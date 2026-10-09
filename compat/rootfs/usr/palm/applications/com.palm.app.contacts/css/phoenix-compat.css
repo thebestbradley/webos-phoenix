@@ -44,15 +44,34 @@
 		padding: 10px 52px 10px 6px !important;
 	}
 
-	/* Cancel and Done are styled width:15rem inline. */
+	/* Cancel and Done are styled width:15rem inline: they share the
+	   toolbar's width instead (a fixed 8.5rem was 170 px each with the
+	   page's 20 px rem, and Done ran off a 320 px card). */
 	.edit [style*="15rem"] {
-		width: 8.5rem !important;
+		width: 0 !important;
+		-webkit-box-flex: 1;
+		max-width: 15rem;
 	}
 
 	.edit .avatar {
-		zoom: 0.5;
+		zoom: 0.4;
 		margin-right: 8px;
 	}
+
+	/* The name field's star and info buttons, framed (below): side by side
+	   with the name hint beside them in the narrow column. */
+	.edit .field-button[style*="margin-right"] {
+		margin-right: 2px !important;
+	}
+}
+
+/* The star and info buttons in the edit form's name field are framed by a
+   12 px border image (contacts.css .field-button: "border: 12px", which
+   sets no border style). Old WebKit drew -webkit-border-image at those
+   widths anyway; Chromium takes the widths as 0 without a style, so the
+   frames went and the two 32 px buttons overlapped. */
+.edit .field-button {
+	border-style: solid;
 }
 
 /* Edit's Tones group (app/phoenix-tones.js): the tone's name at the row's

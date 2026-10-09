@@ -135,6 +135,13 @@ const SCENARIOS = {
         await h.page.locator("input:visible").first().click();
         await h.type("Taylor Morgan");
         await h.screenshot("new-contact");
+        await h.expect("Cancel and Done fit in the card", async () => h.page.evaluate(() =>
+            [...document.querySelectorAll(".edit .enyo-toolbar .enyo-button")].filter((b) => b.offsetWidth)
+                .every((b) => b.getBoundingClientRect().right <= innerWidth)));
+        await h.expect("the name field's star and info buttons, framed, side by side", async () => h.page.evaluate(() => {
+            const r = [...document.querySelectorAll(".edit .field-button")].filter((b) => b.offsetWidth).slice(0, 2).map((b) => b.getBoundingClientRect());
+            return r.length === 2 && r[0].width >= 32 && r[0].right <= r[1].left;
+        }));
         await h.button("Done").click(); await h.wait(2500);
         await h.screenshot("saved");
         await h.expectText("Taylor Morgan");
