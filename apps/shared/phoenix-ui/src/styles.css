@@ -14,6 +14,16 @@
 /* Command menus, grouped buttons, glyphs (media apps). */
 @import "./media.css";
 
+/* How fast the page's animations run (motion.ts): Settings > Accessibility >
+   Reduce motion stops them, Animation speed "Fast" runs them in 60% of the
+   time; the web runtime sets data-phoenix-motion on the root element. */
+:root { --pui-motion: 1; }
+:root[data-phoenix-motion="fast"] { --pui-motion: 0.6; }
+:root[data-phoenix-motion="reduce"] { --pui-motion: 0; }
+@media (prefers-reduced-motion: reduce) {
+    :root { --pui-motion: 0; }
+}
+
 :root {
     --pui-bg: #e4e4e2;              /* Heritage theme.css body */
     --pui-text: #282828;
@@ -528,9 +538,12 @@ body.pui-app, .pui-app {
 
 /* ---- Drawer ---------------------------------------------------------------------- */
 
+/* Enyo BasicDrawer (BasicDrawer.js:82-103): its height, 250 ms opening and
+   100 ms closing (Drawer sets the time), the Animator's cubicOut
+   (Animation.js:90-96; Math.pow(n - 1, 3) + 1, util.js:56-58). */
 .pui-drawer {
     overflow: hidden;
-    transition: height 0.2s ease-out;
+    transition: height 250ms cubic-bezier(0.215, 0.61, 0.355, 1);
 }
 
 .pui-drawer-divider {
@@ -557,7 +570,14 @@ body.pui-app, .pui-app {
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    animation: pui-fade 0.15s ease-out;
+    /* Its dimness fades in over 0.5 s (Onyx Scrim.css:10-11, the default
+       ease) and goes at once when the dialog closes (Scrim.js:84-90). */
+    animation: pui-scrim-in calc(500ms * var(--pui-motion)) ease;
+}
+.pui-scrim.leaving {
+    background: transparent;
+    animation: none;
+    pointer-events: none;
 }
 
 .pui-dialog {
@@ -569,8 +589,12 @@ body.pui-app, .pui-app {
     border-width: 18px;
     border-image: -webkit-image-set(url(../assets/enyo/popup-heritage.png) 1x, url(../assets/enyo/popup-heritage@2x.png) 2x, url(../assets/enyo/popup-heritage@3x.png) 3x) 24 fill stretch;
     color: var(--pui-text);
-    animation: pui-slide-up 0.2s ease-out;
+    /* Enyo's Dialog is a Toaster from the bottom (Toaster.js:57-95): up from
+       below over the Animator's 350 ms, cubicOut, and back down as it
+       closes (Dialog sets the time, at the page's speed). */
+    animation: pui-toast-in 350ms cubic-bezier(0.215, 0.61, 0.355, 1) both;
 }
+.pui-dialog.leaving { animation-name: pui-toast-out; }
 .pui-dialog-inner {
     margin: -2px;
     padding: 2px;
@@ -594,7 +618,9 @@ body.pui-app, .pui-app {
 .pui-dialog .pui-error { text-align: center; }
 
 @keyframes pui-fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes pui-slide-up { from { transform: translateY(40px); opacity: 0.4; } to { transform: none; opacity: 1; } }
+@keyframes pui-scrim-in { from { background-color: transparent; } }
+@keyframes pui-toast-in { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes pui-toast-out { from { transform: none; } to { transform: translateY(100%); } }
 
 /* ---- Print dialog (Enyo lib/printdialog's, PrintDialog.css) ------------------------ */
 
@@ -648,22 +674,32 @@ body.pui-app, .pui-app {
 /* ---- Spinner --------------------------------------------------------------------- */
 
 .pui-spinner {
-    /* Spinner.css: 12 frames stacked vertically */
+    /* Spinner.css: 32 x 32 (the large one 128 x 128) */
     display: inline-block;
     width: 32px;
     height: 32px;
     flex: none;
+}
+/* Enyo 1.0's Spinner is a RotatingImage: the strip's first frame turned
+   round once a second, linear (RotatingImage.css:1-9). On a pseudo-element,
+   so an app's own transform on the spinner (a smaller one) stays. Reduce
+   motion keeps it turning: it only says that something is going on. */
+.pui-spinner::before {
+    content: "";
+    display: block;
+    width: 100%;
+    height: 100%;
     background: -webkit-image-set(url(../assets/enyo/spinner.png) 1x, url(../assets/enyo/spinner@2x.png) 2x, url(../assets/enyo/spinner@3x.png) 3x) 0 0 no-repeat;
-    animation: pui-spin-small 1s steps(12) infinite;
+    animation: pui-spin 1s linear infinite;
 }
 .pui-spinner.large {
     width: 128px;
     height: 128px;
-    background-image: -webkit-image-set(url(../assets/enyo/spinner-large.png) 1x, url(../assets/enyo/spinner-large@2x.png) 2x, url(../assets/enyo/spinner-large@3x.png) 3x);
-    animation-name: pui-spin-large;
 }
-@keyframes pui-spin-small { from { background-position: 0 0; } to { background-position: 0 -384px; } }
-@keyframes pui-spin-large { from { background-position: 0 0; } to { background-position: 0 -1536px; } }
+.pui-spinner.large::before {
+    background-image: -webkit-image-set(url(../assets/enyo/spinner-large.png) 1x, url(../assets/enyo/spinner-large@2x.png) 2x, url(../assets/enyo/spinner-large@3x.png) 3x);
+}
+@keyframes pui-spin { from { transform: rotate(0deg); } to { transform: rotate(359deg); } }
 
 /* ---- Radio list (used by ListSelector sheets and choice groups) --------------------- */
 

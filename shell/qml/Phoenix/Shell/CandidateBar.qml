@@ -5,7 +5,9 @@
 // fields, on the keyboard's own background, in its key-cap colours. The
 // candidates (VirtualKeyboard.candidates): the word as typed, in quotes when
 // a correction is offered; the correction the space bar puts in, in white
-// and bold; other words. A tap types one. At the right, the microphone
+// and bold; other words. A tap types one. After backspace put back a word
+// a correction replaced: "Add “word”" at the end, which adds it to the
+// personal dictionary (kind "add"; dimmer, to stay out of the way). At the right, the microphone
 // (dictation), when the device has one: tap to talk, tap again to stop;
 // what was said is typed where the cursor is.
 // Phoenix (M6 F2): at the left, the clipboard key (a clipboard, drawn), in
@@ -122,7 +124,10 @@ Item {
                 required property var modelData
                 readonly property bool quoted: modelData.kind === "typed"
                     && bar.keyboard.candidates.some(function (c) { return c.kind === "correction"; })
-                width: cells.width / Math.max(1, bar.keyboard.candidates.length)
+                // "Add" takes half a cell more, for its word to show.
+                readonly property bool adding: modelData.kind === "add"
+                width: cells.width * (adding ? 1.5 : 1) / Math.max(1, bar.keyboard.candidates.length
+                    + (bar.keyboard.candidates.some(function (c) { return c.kind === "add"; }) ? 0.5 : 0))
                 height: cells.height
                 Rectangle {
                     anchors.fill: parent
@@ -138,11 +143,13 @@ Item {
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                     elide: Text.ElideRight
-                    text: cell.quoted ? "“" + cell.modelData.text + "”" : cell.modelData.text
+                    text: cell.adding ? "Add “" + cell.modelData.text + "”"
+                        : cell.quoted ? "“" + cell.modelData.text + "”" : cell.modelData.text
                     color: cell.modelData.kind === "correction" ? bar.strongColor : bar.textColor
                     font.family: Theme.fontFamily
-                    font.pixelSize: bar.fontSize
+                    font.pixelSize: cell.adding ? Math.round(bar.fontSize * 0.9) : bar.fontSize
                     font.bold: cell.modelData.kind === "correction"
+                    opacity: cell.adding ? 0.75 : 1
                 }
                 // Dividers between the candidates.
                 Rectangle {

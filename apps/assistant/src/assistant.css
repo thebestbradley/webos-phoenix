@@ -34,7 +34,15 @@
 .as-bubble.cancelled { opacity: 0.6; }
 .as-via { font-size: 12px; color: var(--pui-text-dim, #777); margin: 3px 6px 0; }
 .as-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; max-width: 100%; }
-.as-actions .pui-button { width: auto; min-width: 120px; margin: 0; padding: 0 16px; }
+/* An answer's buttons (Open Photos, Search the Web, Yes / Cancel) in the
+ * app's own button art, at the size of the shell's assistant view
+ * (AssistantOverlay.qml: an ActionButton 40 px tall, whose PIN-pad art
+ * leaves 4 px clear above and below, so 32 px to see; as wide as its words
+ * and 20 px each side, 16 px words, 8 px apart; Yes / Cancel 120 px wide).
+ * palm-button's 52 px band (about 47 to see, with its shadow) at 36 px:
+ * its 17 px ends scaled to 12. */
+.as-actions .pui-button { width: auto; min-width: 0; height: 36px; margin: 0; padding: 0 8px; border-width: 0 12px; font-size: 16px; }
+.as-actions .pui-button[data-testid^="as-confirm-"] { min-width: 120px; }
 
 .as-thinking { display: flex; gap: 5px; padding: 12px 14px; }
 .as-thinking span { width: 7px; height: 7px; border-radius: 50%; background: #888; animation: as-dot 1.2s infinite ease-in-out; }
@@ -48,6 +56,8 @@
 /* The bird at work, below the conversation, with the dots while it waits. */
 .as-work { display: flex; align-items: flex-end; gap: 6px; margin: 4px 0 8px; }
 .as-work .ab-bird { flex: none; margin-top: 18px; }
+.as-work-say { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+.as-working { margin: 4px 2px 0; font-size: 13px; color: #777; }
 .as-empty p { font-size: 17px; line-height: 1.4; margin: 12px auto; max-width: 420px; }
 .as-off { text-align: center; padding: 40px 24px; font-size: 17px; }
 
@@ -98,15 +108,20 @@
 @media (max-height: 520px) {
     .as-empty { padding-top: 8px; }
     .as-empty p { font-size: 15px; margin: 6px auto; }
-    .as-examples-list { gap: 6px; }
-    .as-chip { padding: 5px 10px; font-size: 13px; }
 }
 .as-examples-label { font-size: 13px; color: var(--pui-text-dim, #777); margin-bottom: 6px; }
 .as-examples-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; transition: opacity 0.25s; }
 .as-examples-list.fading { opacity: 0; }
+/* The size of the shell's (AssistantChip.qml): 32 px tall, 36 on a tablet,
+ * 14 px words (16 on a tablet), 14 px each side, round ends. */
 .as-chip {
-    border: 1px solid #9ab8d0; border-radius: 16px; padding: 6px 12px; background: linear-gradient(#f7fbfe, #e3eef7);
+    box-sizing: border-box; height: 32px; line-height: 30px; padding: 0 14px;
+    border: 1px solid #9ab8d0; border-radius: 16px; background: linear-gradient(#f7fbfe, #e3eef7);
     color: #1d3c55; font: inherit; font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+@media (min-width: 700px) {
+    .as-examples-label { font-size: 15px; }
+    .as-chip { height: 36px; line-height: 34px; border-radius: 18px; font-size: 16px; }
 }
 .as-chip:active { background: linear-gradient(#d6e6f3, #c3d9eb); }
 /* Connect a Model: the kinds, each with what it means. */

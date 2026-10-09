@@ -55,6 +55,10 @@
 // The user's shortcuts (Settings > Text Assist > Shortcuts, as webOS's
 // x_palm_textinput shortcutChecking) go in on the space bar like a
 // correction, in any language and with auto-correct off.
+// The personal dictionary (Settings > Text Assist > Personal Dictionary,
+// x_palm_textinput.userWords): its words are never corrected and are
+// suggested. Backspace putting back a word a correction replaced offers
+// "Add" in the bar, as Android's and iOS's keyboards do.
 // Not ported: keyboard combos (language key),
 // and the emoticon pictures (/usr/palm/emoticons, not in the Apache-2.0
 // images): emoticon keys show their text.
@@ -166,6 +170,36 @@ Item {
     property var dictation: null
     // What the user typed, learned (TextAssist.userData); the shell keeps it.
     property string textAssistData: ""
+    // The words learned that the word list lacks (TextAssist.learnedWords),
+    // for Settings > Text Assist > Personal Dictionary; follows textAssistData.
+    property var learnedWords: []
+    // Settings > Text Assist > Personal Dictionary: the words the user added
+    // (x_palm_textinput.userWords), and the learned words deleted there,
+    // lower case -> when (ms; x_palm_textinput.removedWords).
+    property var userWords: []
+    property var removedWords: ({})
+    onUserWordsChanged: {
+        TA.setDictionary(userWords);
+        _refreshCandidates();
+    }
+    onRemovedWordsChanged: _removeIfAsked()
+    function _removeIfAsked() {
+        var changed = false;
+        for (var w in removedWords)
+            changed = TA.removeLearned(w, removedWords[w]) || changed;
+        if (changed) {
+            _saveTextAssist();
+            _refreshCandidates();
+        }
+    }
+    // "Add" in the candidate bar: the shell saves it in the preference.
+    signal dictionaryWordAdded(string word)
+    function addToDictionary(word) {
+        if (!TA.addToDictionary(word))
+            return;
+        dictionaryWordAdded(word);
+        _refreshCandidates();
+    }
     // Settings > Text Assist > Forget Learned Words: when (ms). Words learned
     // before it are dropped (once: the time is kept in textAssistData).
     property real forgetWordsAt: 0
@@ -183,7 +217,9 @@ Item {
             return;
         _textAssistDataCurrent = textAssistData;
         TA.setUserData(textAssistData);
+        learnedWords = TA.learnedWords();
         _forgetIfAsked();
+        _removeIfAsked();
     }
     // A text field where words are typed (not a password, number, phone,
     // e-mail or web address).
@@ -210,6 +246,8 @@ Item {
     property var _lastCorrection: null
     // The typed word was put back after a correction: not corrected again.
     property string _keepWord: ""
+    // ... put back by backspace, so the bar offers to add it.
+    property bool _keepAdd: false
     property bool _assistOwnText: false
 
     function _assistReset() {
@@ -219,6 +257,7 @@ Item {
         _prevWord = "";
         _lastCorrection = null;
         _keepWord = "";
+        _keepAdd = false;
         _refreshCandidates();
     }
     function _refreshCandidates() {
@@ -238,11 +277,20 @@ Item {
             list = list.filter(function (c) { return c.kind !== "correction" && c.kind !== "typed" && c.text !== sc; });
             list = [{ text: _word, kind: "typed" }, { text: sc, kind: "correction" }].concat(list).slice(0, max);
         }
+        // A word put back after a correction that is not a word to it: "Add"
+        // it to the dictionary, at the end of the bar (it stays as typed
+        // either way).
+        if (_word && _word === _keepWord && _keepAdd && !TA.isWord(_word))
+            list = list.filter(function (c) { return c.text.toLowerCase() !== _word.toLowerCase() || c.kind !== "typed"; })
+                       .slice(0, max - 1).concat([{ text: _word, kind: "add" }]);
         candidates = list;
     }
     function _saveTextAssist() {
         _textAssistDataCurrent = TA.userData();
         textAssistData = _textAssistDataCurrent;
+        var learned = TA.learnedWords();
+        if (JSON.stringify(learned) !== JSON.stringify(learnedWords))
+            learnedWords = learned;
     }
     // Typed text the keyboard puts in itself (a correction, a candidate).
     function _assistBackspaces(n) {
@@ -264,6 +312,7 @@ Item {
         }
         _word = "";
         _keepWord = "";
+        _keepAdd = false;
         _sentenceStart = sentence;
         _refreshCandidates();
     }
@@ -302,13 +351,14 @@ Item {
             return;
         // The user's shortcut, else (with auto-correct) the correction.
         var fix = shortcutsOn ? TA.shortcut(_word) : "";
+        var shortcut = fix !== "";
         if (!fix && autoCorrect)
             fix = TA.correction(_word);
         if (!fix || fix === _word)
             return;
         _assistBackspaces(_word.length);
         _assistCommit(fix);
-        _lastCorrection = { typed: _word, corrected: fix };
+        _lastCorrection = { typed: _word, corrected: fix, shortcut: shortcut };
         _word = fix;
     }
     // Backspace right after a correction and its space: the typed word back.
@@ -320,6 +370,7 @@ Item {
         _assistCommit(c.typed);
         _word = c.typed;
         _keepWord = c.typed;
+        _keepAdd = !c.shortcut;
         _prevWord = "";
         _lastCorrection = null;
         _refreshCandidates();
@@ -389,6 +440,12 @@ Item {
         _swipeWords = true;
     }
     function candidateTapped(index) {
+        var c = candidates[index];
+        if (c && c.kind === "add") {
+            _makeSound(KM.Key.A);
+            addToDictionary(c.text);
+            return;
+        }
         if (_swipeWords)
             _pickSwipe(index);
         else

@@ -44,7 +44,7 @@ above was the plan's command layer; this is the whole 1.0 assistant.
 | Layer | What runs | Where |
 | --- | --- | --- |
 | 1. Speech to text | The shell's dictation: whisper.cpp through `org.webosphoenix.transcriber` | On the device (in phoenix-sim, the same service code on the computer) |
-| 2. Commands | A grammar per language (`apps/assistant/service/lib/lang/en.js`): the 54 commands in the table below (9 October 2026), with the days and times people say; plus commands apps declare in `appinfo.json` (`"assistant": {"commands": [...]}`, Just Type's Quick Action shape with phrases per language; a Quick Action counts as `"<displayName> {text}"`, after the built-in commands) | In the service, no model, no network (weather, distances, currencies and unknown cities fetch Open-Meteo or Frankfurter) |
+| 2. Commands | A grammar per language (`apps/assistant/service/lib/lang/en.js`): the 58 commands in the table below (9 October 2026), with the days and times people say; plus commands apps declare in `appinfo.json` (`"assistant": {"commands": [...]}`, Just Type's Quick Action shape with phrases per language; a Quick Action counts as `"<displayName> {text}"`, after the built-in commands) | In the service, no model, no network (weather, distances, currencies and unknown cities fetch Open-Meteo or Frankfurter) |
 | 3. On-device model | llama.cpp's `llama-server` with a GGUF model the user downloads in Settings > Assistant, called with the same commands as tools (Chat Completions, `--jinja`) | On the device. phoenix-sim runs it from the shell (`LocalModels`, Phoenix.Native); the device service runs it itself (`lib/node-device.js`) |
 | 4. Cloud model or web | "Ask <provider (model)>" and "Search the web" as choices on the answer, and "Connect model" while no cloud model is set up; a thread taken to a cloud model goes on with it | The provider's servers; the browser |
 
@@ -57,6 +57,72 @@ the same arguments (`lib/commands.js` `BUILT_IN`); times a model writes
 one short sentence and offer the app where it helps ("Open Calendar"); the
 bird plays done, asking (a read-back), confused (nothing here can) or oops
 (it could not).
+
+**Casual words** (9 October 2026). Talk rather than dictation reaches the
+commands without a model: when no rule takes the words as said, they are
+said again in the rules' words and tried once more (`lib/lang/en.js`
+`CASUAL`, `lib/grammar.js` `parse`): "kill the wifi for now" (turn off
+wifi), "get the bluetooth going", "it's pitch dark in here, I need some
+light" (the flashlight), "I don't want any calls for a while, go silent",
+"set up a wake up call at 6", "I need to be up by 5:45", "count down three
+minutes for the eggs", "don't let me forget to water the plants tonight at
+8", "ping me about the rent on friday", "pencil in a dentist visit next
+tuesday at 3", "drop Sam a line saying I'm on my way", "let Mary know I'll
+be late", "it's way too loud", "the screen is too bright", "throw on some
+tunes", "what's the forecast looking like for the weekend", "fire up the
+camera". All 18 phrasings that the grammar missed and that the on-device
+model was measured on (below) now reach the right command in the grammar, as do some 40 more
+(`casual.test.ts`), and words such as "let me know what you think", "drop
+it" or "tell me about palm" are left alone.
+
+**One thing about one item** (9 October 2026, the owner: retrieve
+specifics, not just lists). "What time is my meeting with Sam", "where is
+it", "who's invited", "how long is it", "what did I write in my grocery
+memo", "when is Sam's birthday", "when did Mom call", "what did Alex's last
+email say", "what's on my to-do list for today", "when is my next dentist
+appointment": the one field asked for, in a sentence, with the item's card
+(`detail`, `lib/details.js`; `contactInfo`, `callLog {who}`, `readEmail`,
+`taskList {day}`). The item an answer shows (the one thing it opens) is
+the conversation's **focus**, kept with the conversation
+(`assistant.js` `keepFocus`), and "it", "that" or no name at all
+("who's invited") means it. Tests: `details.test.ts`.
+
+**Changing what was found** (9 October 2026). "Rename it to Coffee with
+Sam", "move it to Zoom", "add Alex to it", "remove Priya from it", "move
+it to 4", "change the meeting with Sam to 4", "add milk to my grocery
+list" then "remove eggs from it", "rename my grocery memo to Shopping",
+"change Sam's email to ...", "set my 7am alarm to 6:30", "mark it done":
+the command `edit` (`lib/details.js`) finds the item by its words or the
+focus, changes that one record, says what changed, and offers Undo with
+what it replaced; "it" in `eventMove`, `eventCancel`, `noteAppend` and
+`taskDone` is the focus too. What "add X to it" means is the item's: a
+guest for an event (by their contact's email), a line for a memo, a task
+for a list. Like every write, each change is read back before the answer
+says it was done ("Said only when done").
+
+**How well it understands** (9 October 2026). Three sets, kept as tests:
+
+- `test/eval-phrasings.cjs`, 150 requests as people say them across all
+  the commands, details and edits included. The grammar alone took 135 of
+  the first 147; widened on its misses ("ring my mom", "can you get Sam on
+  the phone", "what does my day look like tomorrow", "get rid of my
+  dentist appointment", "give me a 20 minute timer", "how much battery do
+  I have left", ...), it takes all 150 (`eval.test.ts`, in CI).
+- Its held-out part, 40 written afterwards and never used to change the
+  grammar: 35 (88%) with the grammar alone. The five it misses ("did
+  anyone call while I was out", "get me up at half six", "is it cold out",
+  ...) are what the on-device model is there for.
+- `test/model-eval.json`, 163 requests the grammar does not take (25 of
+  them questions and chat, `"none"`), for the model's choice
+  (`pickCommand`); `eval.test.ts` checks that the grammar takes none of
+  them wrongly, and that none repeats an example. Each command now has up
+  to four examples in other words (`lib/examples.js`, `examples` on
+  `BUILT_IN`), which the model sees beside its description. The model's
+  hit rates on this set are measured with llama-server
+  (opt-in, not in CI).
+
+Writing the sets found a crash: "to-do: renew the car insurance" threw
+in the task rule (`m` stayed null); it is a task now.
 
 | Command | Say, for example | Does | Asks first |
 | --- | --- | --- | --- |
@@ -73,24 +139,27 @@ bird plays done, asking (a read-back), confused (nothing here can) or oops
 | `call` | "call mom", "call Sam on his mobile", "dial 555 123 4567" | Phone dials | Yes (Call) |
 | `text`, `readMessages` | "text Sam I'm running late", "read my last message", "what did Priya say" | Sends an SMS (the words as typed); reads the last one received | Yes (Send) |
 | `email`, `searchEmail` | "send an email to Priya saying see you soon", "email Alex about the report", "search my email for invoice", "do I have any new emails" | Sends (with words) or opens a new email (without); finds email | Yes (Send) |
-| `toggle` | "turn on Wi-Fi", "turn off Bluetooth", "airplane mode on", "turn on the flashlight", "silence the phone", "turn on do not disturb", "turn on location services", "turn on rotation lock" | The switch; Do Not Disturb is the ringer off; Location Services both handlers (`setState`); the rotation lock the system preference | |
-| `media` | "pause", "resume the music", "next song", "previous track", "what's playing" | The media keys, for whichever player plays; what is playing it cannot tell yet (no service says it) and offers Music | |
+| `toggle` | "turn on Wi-Fi", "turn off Bluetooth", "airplane mode on", "turn on the flashlight", "silence the phone", "turn on do not disturb", "turn on location services", "turn on rotation lock", "turn on the hotspot", "turn on VPN" | The switch; Do Not Disturb is the ringer off; Location Services both handlers (`setState`); the rotation lock the system preference; the Wi-Fi hotspot (`org.webosphoenix.tethering setWifi`; without its password it says so and opens Hotspot & Tethering); the first VPN profile (`com.webos.service.vpn connect`; one asking to sign in opens VPN settings) or all down | |
+| `media` | "pause", "resume the music", "next song", "previous track", "what's playing", "what song is this" | The media keys, for whichever player plays; what is playing, as the player last told the system (`org.webosphoenix.system getNowPlaying`), with Pause or Play and Next | |
 | `volume` | "turn up the volume", "set the volume to 30%", "mute", "unmute" | The master volume | |
 | `brightness` | "set brightness to 50%", "turn the brightness up", "make the screen dimmer" | The screen's brightness | |
 | `screenshot`, `lock`, `battery` | "take a screenshot", "lock the screen", "what's my battery" | A screen capture (the assistant's view out of the way); the screen off and locked; the level and charging | |
 | `settings`, `open` | "open Wi-Fi settings", "open settings", "open Maps" | Settings at a pane (or its list); an app | |
-| `navigate`, `distance` | "navigate to the nearest coffee shop", "how far is Paris" | Directions in Maps; the distance as the crow flies | |
+| `navigate`, `distance` | "navigate to the nearest coffee shop", "how do I get to Starbucks", "walk to the park", "how far is Paris" | The place (the closest of a kind, or the nearest of that name, `lib/nearby.js`, as Maps finds them) as a card with the time there by Valhalla, the others offered as cards; Start Navigation (Maps `{destination, navigate: true}`) and Open Maps; Maps opens behind on the directions. The distance as the crow flies | |
 | `play`, `photos` | "play some music by Miles Davis", "show my photos from yesterday / last week", "show my screenshots", "how many photos did I take yesterday" | Music plays; the photos shown in the conversation and in Photos (just those) behind it; how many, only said | |
-| `weather` | "what's the weather tomorrow", "will it rain in London", "what's the weather this week" | Open-Meteo, here (with the Assistant's location permission) or there; "will it rain" by the chance of rain; the week's highs, lows and rainy days | |
+| `weather` | "what's the weather tomorrow", "will it rain in London", "what's the weather this week", "what's the weather at 5pm", "will it rain this afternoon" | Open-Meteo, here (with the Assistant's location permission) or there; "will it rain" by the chance of rain; an hour by its hourly forecast; the week's highs, lows and rainy days | |
 | `convert` | "convert 10 miles to km", "how many cups in a liter", "100 fahrenheit in celsius", "what's 20 USD in EUR" | Units offline; currencies with the day's ECB rates (offline it says so and offers the web) | |
 | `worldTime`, `time` | "what time is it in Tokyo", "what time is it", "what's the date" | The time there (big cities offline), here, the date | |
 | `calculate` | "what's 15% of 80", "twelve times seven" | The sum | |
 | `search` | "search the web for palm pre", "look up webos history" | The browser | |
 | `callBack`, `callLog`, `voicemail` | "call back", "redial", "who called me", "did I miss any calls", "check my voicemail", "call voicemail" | The last caller or number called (the call log, `com.palm.phonecall:1`); the missed calls of the week; how many voicemails (`com.palm.telephony` voicemailQuery), Call Voicemail | Calling |
 | `replyMessage`, `readMessages {unread}` | "reply on my way", "any new texts", "read my new messages" | A text to whoever sent the last one; the unread ones counted and the newest read, with Reply | Yes (Send) |
-| `eventMove`, `eventCancel`, `freeTime` | "move my dentist appointment to 4pm", "reschedule lunch with Priya to Friday at noon", "cancel my 3pm meeting tomorrow", "am I free tomorrow at 3", "when am I free on Friday" | Moves an event (a time keeps the day, a day keeps the time; a repeating one: in Calendar), deletes one (undo puts it back), the free stretches between 8 AM and 8 PM | Cancelling |
+| `eventMove`, `eventCancel`, `freeTime` | "move my dentist appointment to 4pm", "reschedule lunch with Priya to Friday at noon", "cancel my 3pm meeting tomorrow", "move my stand-up to 11am", "move all my stand-ups to 9am", "cancel my stand-up on Friday", "cancel every team stand-up", "am I free tomorrow at 3", "when am I free on Friday" | Moves an event (a time keeps the day, a day keeps the time), deletes one (undo puts it back); of a repeating one the next day only, as the Calendar's "this event only" does it (an exception date on it, `exdates`, and for a move a child event with `parentId` and `recurrenceId`: com.palm.app.calendar EditView.js:1170-1185, DeleteConfirm.js), or with "all"/"every" the whole series (its time; cancelled whole); the free stretches between 8 AM and 8 PM | Cancelling |
 | `noteAppend`, `taskList`, `taskDone` | "add the guest code to my Wi-Fi note", "what's on my shopping list", "what are my tasks", "check off milk", "mark pay rent as done" | Adds a line to a memo; reads a list; completes a task (undo opens it again) | |
-| `nearby`, `website`, `storage`, `appStore` | "coffee near me", "where's the nearest pharmacy", "open example.com", "how much storage do I have", "find Doom in the Marketplace", "install Doom" | Maps searches; the browser opens the site; the free storage; the Marketplace's search (`org.webosphoenix.service.packages`), and its page to install from (it never installs unasked) | |
+| `readEmail`, `emailReply` | "read my latest email", "read the email from Alex", "reply to the email from Alex saying paid, thanks", "reply to my last email" | The newest (from someone): who, when, the subject and the start of its words, with Reply; a reply "Re: ..." sent through `com.palm.smtp` after the read-back, or opened in Email to write | Yes (Send) |
+| `findFiles` | "find my file called budget", "find the trip pdf", "search my files for invoice" | `org.webosphoenix.filemanager` `search`: cards opening each one's folder in Files | |
+| `travelTime` | "how long will it take to drive to the airport", "how long to walk to Union Square", "what's the traffic like to work" | The place by Photon near here, the route by Valhalla (the keyless FOSSGIS servers Maps uses): the time and distance by car, on foot or by bike, without traffic (no keyless source has live traffic: it says so), with Open Maps | |
+| `nearby`, `website`, `storage`, `appStore` | "coffee near me", "where's the nearest pharmacy", "what coffee shops are near me", "open example.com", "how much storage do I have", "find Doom in the Marketplace", "install Doom" | The closest five as cards (name, distance, kind, address; OpenStreetMap has no ratings), each opening Maps on that place (Back returns to the conversation), Maps behind on the whole list (`{nearby}`, what is looked for, never the sentence); offline, Maps finds them; the browser opens the site; the free storage; the Marketplace's search (`org.webosphoenix.service.packages`), and its page to install from (it never installs unasked) | |
 | `help` | "help", "what can you do", "give me some tips", "how do I close an app", "how do I go back", "what is Just Type" | What it can do, by app, with examples (a tap puts one in the field) and what fits now; how to use Phoenix from the Help app's topics (`lib/lang/en-help.js`), with Open Help | |
 | `undo` | "undo", "cancel that", "never mind" | Cancels a read-back waiting; else takes back what was just made (deletes the event, task, memo, contact or alarm, cancels the timer, turns alarms back on) | Yes |
 | (models) | "translate hello into French", questions | Not a command: the on-device model, else "Ask <cloud model>" / "Search the web" (it says why) | |
@@ -124,6 +193,96 @@ needed; the 1.5B and 4B models are recommended where they fit. In
 phoenix-sim the model loaded and answered in about 18 s the first time
 and 2 s after, on four CPU cores.
 
+**Built in: Qwen3 0.6B** (9 October 2026, the owner's decision). The device
+image ships Qwen3 0.6B (the Qwen team's own GGUF, Q8_0, 639 MB; at first
+Unsloth's Q4_K_M, 397 MB, which the measurements below were made with
+unless they say Q8_0) and `./phoenix` puts it in
+`build/models`; it is the on-device model in use until another is chosen
+(`localModel` "": the built-in one; "off": none), listed in Settings as
+**Built in**, never downloaded or removed. The commands still answer
+first (a test checks that what the grammar knows never reaches the
+model). Qwen3's template thinks aloud unless told not to: every request
+says `enable_thinking: false`. A model this small, offered tools, often
+said what it would do instead of calling one ("I'll turn off the Wi-Fi"),
+or was not offered the right one for words it did not share with it
+("throw on some tunes"). So where the words may ask the phone to act it
+works in two steps (`assistant.js` `pickCommand`): it first chooses among
+every command, by name and the first sentence of its description, or
+"none", its answer held to those names by a JSON schema (llama-server
+turns it into a grammar), at temperature 0, with sixteen examples as
+earlier turns (other words than the grammar's); then it gets that one
+tool with `tool_choice: "required"`, which makes it call it and fill in
+the arguments. "None" is answered in words, without tools; what it
+chooses wrongly is still read back unless the words name it
+(`grounded()`). Measured with the real model and llama-server on 28 action
+phrasings the grammar misses ("kill the wifi for now", "pencil in a
+dentist visit next tuesday at 3", "drop Sam a line saying I'm on my way"):
+the right command 7 times before (the closest ten tools offered), 17
+after; the choice alone 20, 9 without the examples; with the official
+Q8_0 the choice alone 17 (as close as 28 phrasings can tell; a request 2.4 s on this machine while it was loaded with other work). A request takes about
+0.8 s here once the server is up (the choice 0.45 s). llama-server runs
+with 8,192 tokens of context (the commands as tools passed 4,096: it
+refused the request), one slot and an 8-bit cache with flash attention:
+1.3 GB in all for Qwen3 0.6B Q4_K_M, as much as 4,096 tokens took before
+(1.8 GB for the official Q8_0). One
+slot against four made no difference here (0.44 s against 0.46 s a
+choice: this llama.cpp shares one cache between its slots), but keeps
+the prompt cached for a phone's single user. Checked in phoenix-sim:
+"please set up a wake up call at 6 tomorrow morning", which the grammar
+does not know, set the alarm through Qwen3 0.6B and was spoken by Kitten
+TTS.
+
+**One deadline for the whole answer** (`assistant.js` `bounded`, 9
+October). llama-server answers a request only when it is done and serves
+one at a time, so on a busy computer the steps (starting the server, the
+choice, the call) each ran into their own HTTP timeout, one after the
+other: "show my photos of flowers" showed the dots for seven minutes and
+then "The on-device model didn't answer (Operation canceled)", the
+simulator's proxy giving up after its 3 minutes without a byte. Now the
+on-device model has 75 s in all; each request is given the time left
+(`timeoutMs`, which phoenix-sim's proxy, `tools/serve-rootfs.py` and
+`lib/node-http.js` honour), so it is closed then. Meanwhile the thread
+says what is happening (`working: {stage, since, until}`) and the app shows
+it under the dots ("Thinking it over on this device · 19 s (I'll stop in
+56 s)"); past it: "I couldn't think that through in time. Want me to
+search the web or open Photos?" with those buttons. llama-server notices a
+closed request only between prompt batches: with its default 2,048
+tokens it went on 46 s for a question nobody waited for (the choice's
+prompt is some 3,100 tokens; 76 tokens a second on this 4-core machine
+under load), keeping the next one waiting; it now reads 512 at a time
+(`-b 512`, 9 s). On that loaded machine Qwen3 0.6B did not get through
+the choice's prompt in 75 s at all, so the deadline is what the user
+sees there: the prompt is worth shortening (or keeping cached across the
+two steps) next.
+
+**What the grammar could not read** (`fillArgs`). When the grammar knows
+the command but not all it needs (a required argument empty: "add an
+event called dentist friday-ish" has no time it can read), or a language
+file marks its parse `partial: true`, the on-device model fills in what
+the words say, before any choosing: its answer held to the command's own
+parameters (their JSON schema, nothing required), at temperature 0. What
+the grammar read stays; a value from the model is kept only when a word
+of it was said (a small model left free invents times); what is still
+missing is asked for as before ("When is it?"), and what the model filled
+is read back unless the words name it.
+
+**Measured on the evaluation set** (`test/model-eval.json`: 163 requests
+the grammar does not take, 25 of them questions or chat; the commands
+with their examples, `lib/examples.js`): the right command chosen for 78 of the 138
+requests to the phone with the built-in Qwen3 0.6B (57%), 114 with Qwen3
+4B (83%); the 25 questions and chat stayed words with 0.6B (25), 4B put
+one in Arithmetic ("how many legs does a spider have": a command that
+reads, so it was taken). End to end, the right command was carried out
+for 49 with 0.6B (before questions reached the choice; on a computer busy
+with other work, where some requests ran out of time). Questions now
+reach the choice too (37 of the 138 are worded as questions, "is my
+thursday afternoon open"): 17 of them right with 0.6B, 30 with 4B; for a
+question only a command that reads is taken, so "how do I make banana
+pudding" (0.6B: append to a memo) stays words. Checked with the real
+0.6B: "add an event called dentist friday-ish" was made for Friday;
+"... in a fortnight" (the model gave nothing the dates understand) and
+"add an event called dentist" (nothing said) were asked "When is it?".
+
 **Never a dead end** (9 October 2026, from the owner's "how do you make
 banana pudding": the commands said "I can't do that on the phone", and the
 model connected later copied it). What nothing here can do gets what can,
@@ -139,7 +298,7 @@ question: Search the web, and what to do with it (Save as Memo for a
 recipe, Show in Maps for a place: `say.related`). A model is offered the
 commands as tools only for words that may ask the device to do something
 (not a question about the world, not small talk) and only the ten nearest
-them: all 54 are some 5,000 tokens. Checked with Qwen3 0.6B in
+them: all of them are some 5,000 tokens. Checked with Qwen3 0.6B in
 llama-server (9 October 2026): the banana pudding has steps and Save as
 Memo, small talk and jokes are answered, "where is the Eiffel Tower" offers
 Show in Maps, "I'd like the bluetooth off please" calls the toggle; at
@@ -155,7 +314,13 @@ the words in the shell's view (`AssistantAttachments.qml`) and the app
 conversation stays in front (the owner: "the chat should stay in focus"):
 an app a command opens waits behind it, and the answer says so ("I've
 opened them in Photos too") and offers Open Photos, which brings it
-forward. Photos opened with several pictures shows just those, titled as
+forward. The app opens behind for real (`applicationManager/launch
+{behind: true}`: in the conversation's stack, which keeps the focus), and
+everything the Assistant opens (the app, a thumbnail, a card, Open X)
+carries the Assistant as its caller (`returnToCaller`, launch params
+`$caller`): Back where it was opened (the picture, the memo, the event,
+the contact, the message, the folder) closes it and the conversation is in
+front again (docs/APP-RUNTIME.md, after "newCard"). Photos opened with several pictures shows just those, titled as
 asked ("Photos from Yesterday"). Only how many ("how many photos did I take
 yesterday") opens nothing. In the simulator the shell gets a small copy of
 a picture from the page (`com.webos.service.mediaindexer
@@ -178,6 +343,24 @@ alert; denied, or Location Services off, it says so with Allow Location or
 Turn On Location Services and Location Settings, then answers what was
 asked.
 
+**Said only when done** (9 October 2026, the owner's "Save as Memo" with
+no memo in Memos). The memo was saved; Memos was already running, and
+"Open Memos" brought its card forward as it was (launched with no
+params, a running app is not relaunched), its grid read before the memo
+was made. Now the Assistant opens Memos on the memo (`{memoId}`, a
+compat overlay of Memos' `GridView.js`: the memos read again, that one
+opened), as Calendar is opened on an event. And every command's db8
+writes are read back before it says it is done (`commands.js` `run`:
+what it put is there with the words, numbers and switches it wrote, what
+it merged has them, what it deleted is gone); otherwise it says "I
+couldn't save it to Memos: ..." with Copy It Instead and the app. Other
+services' failures (`returnValue: false`) already fail the command with
+their reason. `tools/test-assistant.cjs` runs each command that writes
+(memos, events moved and cancelled, alarms, lists, tasks completed,
+reminders, contacts, texts) on the simulated services and reads the
+effect back from the store the app reads; it found a text to "555 0142"
+going to "555".
+
 **Permissions** (9 October 2026). On a device a command can only do what
 luna-service2 and db8 let the service do; `permissions.test.ts` runs every
 command through a recording stand-in and checks each Luna method against
@@ -194,7 +377,7 @@ and for Phoenix's own services are as listed in the test, to check on a
 device. Found and fixed: no db8 grants at all; `location.query` /
 `location.operation`, `audio.query`, `bluetooth.query`,
 `systemsettings.query` / `.management`, `application.launcher` /
-`.operation` missing; `vocabulary` not in the API file. In the simulator
+`.operation` missing; `vocabulary` not in the API file. Later added: `filemanager.operation` (`apps/files/service`'s group), the tethering and VPN services' groups (names to check on a device). In the simulator
 (`tools/test-assistant.cjs`) every command runs on the simulated services
 (none fails for want of a method) and each, turned off in Settings >
 Assistant's Commands, is refused. The user's switches: Settings > Assistant
@@ -219,18 +402,18 @@ Siri or Google Assistant of each built-in app, and where Phoenix stands.
 | --- | --- | --- |
 | Phone | call a contact or number, call back, redial, who called, missed calls, voicemail count and call | answer or end a call by voice (a call in progress has its own screen; 2.0) |
 | Messaging | send (read back), compose, read the last or the new ones, reply | read a whole conversation aloud; group messages |
-| Email | send (read back), compose, find, unread count | reply to an email, read one's body aloud (not yet commands) |
-| Calendar | add (with place, invitees, repeats), what's on a day or week, next, find, move, cancel, free time | change one day of a repeating event (Calendar's own dialog asks which; it says so and offers Calendar) |
+| Email | send (read back), compose, find, unread count, read the latest (from someone), reply (read back) | forward, delete |
+| Calendar | add (with place, invitees, repeats), what's on a day or week, next, find, move, cancel, free time; one day of a repeating event, or all of them | |
 | Contacts | add, a number, email, address or birthday | edit or delete a contact; "call my wife" (relations) |
 | Memos | new, find, add to one | delete one (undo covers a new one) |
 | Tasks | add (lists made as needed), reminders, read a list, complete | delete or move a task |
 | Clock | alarms (set, list, off, delete), timers, stopwatch, world time | (timers ring in the Assistant app, not the Clock) |
-| Weather | now, today, tomorrow, will it rain or snow, this week or weekend, anywhere | hour by hour ("at 5 pm") |
-| Maps | directions, distances, places nearby | traffic, travel time (not yet commands) |
-| Music | play an artist, album or song, pause, next, previous | what's playing (no now-playing service: it says so and offers Music) |
-| Photos | photos by day, screenshots, how many, shown in the conversation | by place or person (no index of either) |
-| Files | | find a file (the file manager service has no search): "I can open Files for you" |
-| Settings | Wi-Fi, Bluetooth, airplane mode, flashlight, ringer, Do Not Disturb, Location Services, rotation lock, volume, brightness, any pane | Hotspot and VPN on or off (not yet commands; "open VPN settings" opens the pane) |
+| Weather | now, at an hour, today, tomorrow, will it rain or snow, this week or weekend, anywhere | |
+| Maps | directions, distances, places nearby, travel time by car, on foot or by bike | live traffic (no keyless source: it says so, gives the time without traffic and offers Maps) |
+| Music | play an artist, album or song, pause, next, previous, what's playing (Music and Podcasts tell the system) | Videos does not tell the system what plays yet |
+| Photos | photos by day, screenshots, how many, shown in the conversation; "photos of flowers" by album or file name, saying so | by what is in them, place or person (no labels or index of any) |
+| Files | find files and folders by name (the file manager's new `search`) | find by what a file says (no content index) |
+| Settings | Wi-Fi, Bluetooth, airplane mode, flashlight, ringer, Do Not Disturb, Location Services, rotation lock, hotspot, VPN, volume, brightness, any pane | USB tethering; choosing a VPN profile by name |
 | Device | battery, storage, lock, screenshot | |
 | Browser | search, open a site | bookmarks, reading a page aloud |
 | Calculator, units | sums, percentages, units, currencies | |
@@ -244,7 +427,8 @@ While no cloud model is set up, an answer nothing here could give offers
 "Search the web" and "Connect model" (with one set up, "Ask <model>" and
 "Search the web", as before). Connect model asks which kind, in a small
 sheet in the shell's view and a dialog in the app: an **on-device model**
-(private and offline, a 0.5 to 2.5 GB download), a **cloud model**
+(private and offline: Qwen3 0.6B comes with it, larger ones are 1.8 to
+19 GB downloads), a **cloud model**
 (Anthropic, OpenAI, Gemini or a compatible server, with the user's key),
 or **both** (the on-device model first, as the router does; "Ask <cloud
 model>" for what it cannot). The service's `connect` keeps the question on
@@ -377,29 +561,99 @@ same origin could use the sealing key; the service only answers
 Settings, and provider changes only for Settings. On a device the
 Phoenix key store (SYNERGY.md) replaces the key file.
 
-**On-device models** (`lib/models.js`; Apache-2.0, the Qwen team's own
-GGUF builds, SHA-256 from Hugging Face, checked after download; nothing
-shipped in the image): Qwen2.5 0.5B Instruct Q4_K_M (491 MB, for 2 GB),
-Qwen2.5 1.5B Instruct Q4_K_M (1.1 GB, for 4 GB), Qwen3 4B Q4_K_M (2.5 GB,
-for 8 GB). Settings offers what fits the device's memory and recommends
-the largest. Llama 3.2 was left out (its licence is not permissive);
-Qwen2.5 3B too (Qwen Research License); Qwen3.5 and Gemma 4 GGUFs were
-not in the Qwen and Google repositories when checked. `llama-server` is
+**On-device models** (`lib/models.js`; Apache-2.0, SHA-256 from Hugging
+Face, checked after download). All the Qwen team's own GGUFs
+(huggingface.co/Qwen, pinned revisions; 9 October 2026, the owner's
+decision), one per size, the smallest quantization they publish:
+
+| Model | File | Size | Device memory (`ram`) | For |
+| --- | --- | --- | --- | --- |
+| Qwen3 0.6B (built in) | Qwen3-0.6B-Q8_0.gguf | 639 MB | 3 GB (1.8 GB while it runs) | every device; the only one at 4 GB or less |
+| Qwen3 1.7B | Qwen3-1.7B-Q8_0.gguf (their only quant) | 1.8 GB | 6 GB | 6 GB phones |
+| Qwen3 4B | Qwen3-4B-Q4_K_M.gguf | 2.5 GB | 8 GB | 8 GB phones and tablets |
+| Qwen3 8B | Qwen3-8B-Q4_K_M.gguf | 5.0 GB | 12 GB | 12-16 GB devices |
+| Qwen3 14B | Qwen3-14B-Q4_K_M.gguf | 9.0 GB | 16 GB | 16 GB devices and computers |
+| Qwen3 30B-A3B (3B active) | Qwen3-30B-A3B-Q4_K_M.gguf | 18.6 GB | 32 GB | computers with 32 GB or more |
+
+Settings shows each one's size and memory, marks what is too big for this
+device, and recommends the largest that fits (a device sold as 8 GB
+reports a little less, so 15% of room is allowed; a test checks the
+recommendation from 4 GB to 64 GB). Downloads stay optional. The newest
+official GGUFs are Qwen3's (May 2025): Qwen3.5 (0.8B to 397B, February
+2026), Qwen3.6 (27B, 35B-A3B), Qwen3.8 (27B and larger) and the Qwen3
+2507 instruct updates (4B, 30B-A3B) have no GGUF from the Qwen team, only
+safetensors (checked 9 October 2026); a GGUF of those would be a third
+party's or our own conversion with llama.cpp's `convert_hf_to_gguf.py`,
+the owner's call. Qwen3-Next-80B-A3B-Instruct has an official GGUF but is
+48 GB, beyond these tiers. Llama 3.2 was left out (its licence is not
+permissive); Qwen2.5 3B too (Qwen Research License). `llama-server` is
 found on the PATH or given (`phoenix-sim --llama-server <path>`); the
 setup scripts install it (below), and on a device meta-phoenix's
 `llama-cpp` recipe does. It stops after five idle minutes to give the
 memory back.
 
-**Speech** (`org.webosphoenix.tts`: `speak {text, lang?}`, `stop`,
-`getStatus`). Qt's TextToSpeech module is not part of the Qt installs
-Phoenix builds with, and QtWebEngine's `speechSynthesis` has no voices
-(it needs speech-dispatcher, which Qt's builds do not use), so the shell
-runs a speech program with the text on its input: `espeak-ng` (GPL-3.0,
-run as a separate program, never linked) where it is installed, `say` on
-a Mac, else Flite (BSD-3-Clause, English only), or `--speech-command`
-(Piper, for instance). The device service does the same. A browser page
-with voices uses `speechSynthesis`. Answers are spoken when **Speak
-answers** is on (on by default).
+**Speech** (`org.webosphoenix.tts`: `speak {text, lang?, voice?}`,
+`stop`, `getStatus` -> `{available, engine, voices}`). Qt's TextToSpeech
+module is not part of the Qt installs Phoenix builds with, and
+QtWebEngine's `speechSynthesis` has no voices (it needs speech-dispatcher,
+which Qt's builds do not use), so the shell runs a speech program with the
+text on its input. Since 9 October 2026 (the owner's decision) that is
+**Kitten TTS**: `phoenix-tts` (`services/tts`, C++), KittenML's nano 0.2
+model (15 million parameters, 24 MB, eight voices, 24 kHz) on ONNX
+Runtime, which it loads at run time (its C API, version 16 or later), as
+the wake word loads libvosk. It speaks sentence by sentence (the first is
+heard while the next is made) through PulseAudio, else ALSA (both loaded
+when needed), or Audio Queue Services on a Mac; it writes one line on
+its standard error, which phoenix-sim's log shows ("phoenix-tts: Kitten
+TTS ..., voice expr-voice-3-f, 2 sentences, 9.8 s of speech; first sound
+after 1.97 s ..., real-time factor 0.32; dictionary phonemes; ALSA").
+Where it cannot speak (no model or ONNX Runtime: exit status 3; no sound
+output: 4), and for languages other than English, the programs before it
+take the same words: `espeak-ng` (GPL-3.0, run as a separate program,
+never linked) where it is installed, `say` on a Mac, else Flite
+(BSD-3-Clause, English only); or `--speech-command` (Piper, for
+instance; `%l` the language, `%v` the voice). The device service does the
+same (`lib/node-device.js` `speech`). A browser page with voices uses
+`speechSynthesis`. Answers are spoken when **Speak answers** is on (on by
+default).
+
+*Phonemes.* Kitten reads phonemes, not letters: it was trained on
+espeak-ng's IPA (en-us, stress marks, punctuation kept, as the Python
+`phonemizer` writes it), and KittenML's own code runs espeak-ng's library.
+espeak-ng is GPL-3.0, which the image avoids (below), so `phoenix-tts`
+makes those phonemes itself by default: the CMU Pronouncing Dictionary
+(BSD-2-Clause, 135,000 words) turned into espeak's en-us IPA by rules
+(`services/tts/src/phonemes.cpp`: stress before the vowel, the flapped t,
+reduced vowels, small words as espeak says them in a sentence, "the" and
+"to" before a vowel), letter-to-sound rules for words it lacks, and
+numbers, times, money, units and abbreviations as words. Against
+espeak-ng on 515 sentences of these docs it differs in 8% of phoneme
+characters (5% without the stress marks); spoken by Kitten and
+transcribed by whisper base.en, 30 assistant answers came out with 3.1%
+of words wrong either way (the same eight, all "ten" written "10" and the
+like). `--phonemizer espeak` uses the espeak-ng program instead, as a
+program of its own run for each stretch between punctuation marks: that
+is an aggregate, not a derived work, and it is opt-in.
+
+*The voice.* Kitten has eight voices (KittenML's names for them in its
+0.8 model: Bella, Jasper, Luna, Bruno, Rosie, Hugo, Kiki, Leo). Chosen
+without listening, by measure: Luna (`expr-voice-3-f`) has the darkest
+tone of the women's voices (spectral centroid about 1,400 Hz against
+1,400-1,900), a mid pitch (about 230 Hz) and an unhurried pace, and
+whisper understood all eight equally. It is the default; **Settings >
+Assistant > Voice** offers the others (`speechVoice`) with **Play
+Sample**, where the engine has voices (not with Flite or espeak-ng).
+
+*Speed.* On this simulator's computer (4 cores of a 2.3 GHz Xeon, one
+thread for Kitten: more did not help a model this small, and ONNX
+Runtime's graph optimizations cost more to load, 0.7 s, than they saved,
+so they are off): a real-time factor of 0.3 (a 3 s sentence in 0.9 s),
+0.3-0.5 s to load the model, the first sound 1-2 s after the words
+arrive for a typical answer; `phoenix-tts --check` (what Speech asks
+first) takes 40 ms. A phone's Cortex-A76 class core should be about half
+as fast (0.6, still faster than real time); a slower A55 class core about
+real time, where the sentence-by-sentence playing keeps the first words
+prompt. Not measured on a device yet.
 
 **What's installed where** (8 October 2026). The command grammar needs
 nothing extra. Everything else is a program or a model beside Phoenix,
@@ -411,27 +665,37 @@ installed by the setup scripts on a computer and by meta-phoenix's
 | Speech recognition: `whisper-cli` | Homebrew `whisper-cpp` | Built from whisper.cpp `d09f61a` into `/usr/local/bin` (3 MB) | `whisper-cpp` (static) | MIT |
 | Its model, `ggml-base.en.bin` (148 MB) | `build/whisper` (`tools/get-whisper-model.py`) | `build/whisper` | `whisper-cpp-model-base-en`, in the image, `/usr/share/whisper` | MIT (OpenAI's Whisper weights) |
 | On-device model runner: `llama-server` | Homebrew `llama.cpp` | Built from llama.cpp b11239 into `/usr/local/bin` (15 MB) | `llama-cpp-server` (static, b11239) | MIT |
-| The language models (0.5 to 2.5 GB) | Downloaded in Settings > Assistant | Same | Same, into `/media/internal/.phoenix/models` | Apache-2.0 (Qwen) |
+| The larger language models (1.8 to 19 GB) | Downloaded in Settings > Assistant | Same | Same, into `/media/internal/.phoenix/models` | Apache-2.0 (Qwen) |
 | Wake word: `phoenix-wakeword` | Built with phoenix-sim | Built with phoenix-sim | `phoenix-shell` | Apache-2.0 (Phoenix) |
 | Wake word: libvosk | `build/wakeword` (`tools/get-wakeword.py`, 13 MB) | `build/wakeword` (26 MB) | `libvosk`, prebuilt from Alpha Cephei's PyPI wheels (x86-64, aarch64, armv7) | Apache-2.0; Kaldi, OpenFST Apache-2.0; OpenBLAS, CLAPACK BSD-3-Clause |
 | Wake word: `vosk-model-small-en-us-0.15` (40 MB download, 71 MB) | `build/wakeword` | `build/wakeword` | `vosk-model-small-en-us`, in the image, `/usr/share/phoenix/wakeword` | Apache-2.0 |
-| Spoken answers | `say` (part of macOS) | `espeak-ng` (apt) | `flite` (meta-multimedia; `PHOENIX_TTS` to change) | Flite BSD-3-Clause; espeak-ng GPL-3.0 |
+| The built-in language model: Qwen3 0.6B Q8_0 (639 MB) | `build/models` (`tools/get-base-model.py`) | `build/models` | `qwen3-0.6b-gguf`, in the image, `/usr/share/phoenix/models` (`PHOENIX_BASE_MODEL`) | Apache-2.0 (Qwen) |
+| The voice: `phoenix-tts` | Built with phoenix-sim | Built with phoenix-sim | `phoenix-shell` | Apache-2.0 (Phoenix); its `onnxruntime_c_api.h` MIT |
+| Kitten TTS nano 0.2 (24 MB) | `build/kitten` (`tools/get-kitten.py`) | `build/kitten` | `kitten-tts-nano`, in the image, `/usr/share/phoenix/kitten` | Apache-2.0 (KittenML: code, weights and voices) |
+| The CMU Pronouncing Dictionary (3.6 MB) | `build/kitten` | `build/kitten` | `cmudict`, `/usr/share/phoenix/kitten` | BSD-2-Clause |
+| ONNX Runtime 1.30 (29 MB) | Homebrew `onnxruntime` | `build/kitten` (Microsoft's build, 11 MB download) | `onnxruntime`, Microsoft's build (x86-64, aarch64; `PHOENIX_KITTEN`) | MIT |
+| Spoken answers when Kitten cannot | `say` (part of macOS) | `espeak-ng` (apt) | `flite` (meta-multimedia; `PHOENIX_TTS` to change) | Flite BSD-3-Clause; espeak-ng GPL-3.0 |
 
 Each setup script installs all of it by default, skips what is already
 there, checks downloads against their SHA-256 (or a pinned git commit),
-and leaves it out with `--no-assistant`. On a Mac it is about 230 MB of
-models plus the two Homebrew packages; on Linux about 280 MB, and a few
-minutes to build the two programs.
+and leaves it out with `--no-assistant`. On a Mac it is about 900 MB of
+models plus the three Homebrew packages; on Linux about 980 MB, and a few
+minutes to build the two programs (the voice is about 40 MB of it, the
+built-in model 639 MB).
 
 In the image, by device class (HARDWARE.md: 4 GB is the practical
 minimum): whisper's base.en and the Vosk model ship in the image, since
 dictation and "Hey Phoenix" must work offline from the first boot and
 together they take about 220 MB of storage, which every supported device
 has; tiny.en (78 MB, about twice as fast, less exact) is the choice to
-make for a 2-3 GB community device. The language models are never in the
-image: they are 0.5 to 2.5 GB, the right one depends on the memory
-(Settings offers what fits), and many users will not want one. Flite is
-the image's voice because it is permissive; espeak-ng (more languages)
+make for a 2-3 GB community device. Qwen3 0.6B (639 MB, 1.8 GB of memory
+while it runs, stopped after five idle minutes) ships too, so the
+Assistant answers what its commands miss offline from the first boot;
+the larger models are 1.8 to 19 GB, the right one depends on the memory
+(Settings offers what fits), and are downloads. Kitten TTS is the image's
+voice (with its dictionary and ONNX Runtime, about 57 MB, all
+permissive), and Flite its fallback, because both are permissive; armv7
+devices have no prebuilt ONNX Runtime and speak with Flite. espeak-ng (more languages)
 is GPL-3.0, which docs/LEGAL.md allows only as a separate program with its
 own licence and source offer, and GPL-3.0 also asks a device maker who
 locks the bootloader to give the user a way to install a changed version.
@@ -445,9 +709,9 @@ When a part is missing the assistant says so instead of failing
 silently: phoenix-sim logs one line per missing part with how to get it,
 and Settings > Assistant lists them under Voice (service method `voice`:
 the simulator's from what phoenix-sim found at start, the device's from
-the transcriber, the wake word's files and the speech program; on a
-device the hint names the meta-phoenix package). The on-device model's
-note says how to get `llama-server`.
+the transcriber, the wake word's files and the speech program, Kitten
+TTS first; on a device the hint names the meta-phoenix package). The
+on-device model's note says how to get `llama-server`.
 
 **Where it shows.** Holding the launcher button opens the system view
 (its heading says "Assistant": Phoenix is the UI's version name):

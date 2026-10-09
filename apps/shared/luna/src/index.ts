@@ -31,6 +31,7 @@ export * from "./marketplace";
 export * from "./share";
 export * from "./search";
 export * from "./certificates";
+export * from "./units";
 export * from "./exhibition";
 export * from "./print";
 export * from "./scene";

@@ -84,7 +84,7 @@ computer() {
     echo model > "$BUILD/kitten/kitten_tts_nano_v0_2.onnx"
     echo words > "$BUILD/kitten/cmudict.dict"
     echo lib > "$BUILD/kitten/libonnxruntime.so.1"
-    echo model > "$BUILD/models/qwen3-0.6b-q4_k_m.gguf"
+    echo model > "$BUILD/models/qwen3-0.6b-q8_0.gguf"
 
     BREW=""
     # php -r CHECK answers yes (exit 0); php -r 'echo PHP_VERSION;' 8.3.6.
@@ -166,7 +166,7 @@ phoenix check
 check "Linux, nothing there: what it would install, with sizes" \
     'has "install  voice: Kitten TTS (model and dictionary, ONNX Runtime) (about 39 MB, 57 MB on disk, checked by their SHA-256)"' \
     'has "get-kitten.py --dest $BUILD/kitten"' \
-    'has "install  built-in language model: Qwen3 0.6B (397 MB, checked by its SHA-256)"' \
+    'has "install  built-in language model: Qwen3 0.6B (639 MB, checked by its SHA-256)"' \
     'has "get-base-model.py --dest $BUILD/models"' '[ ! -e "$BUILD/kitten" ]' \
     '[ $status = 0 ]' 'has "install  apt: build-essential cmake ninja-build"' 'has "espeak-ng"' \
     'has "install  apt:.* php-cli php-sqlite3 "' 'has "skipped  PHP: not there yet"' 'lacks "php-mysql"' \

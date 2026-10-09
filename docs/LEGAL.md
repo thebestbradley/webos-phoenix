@@ -471,6 +471,10 @@ contributors, available under the **Open Database License (ODbL) 1.0**
   it keep the attribution above, which the app shows and this file records.
   Tests (`tools/test-maps.cjs`, `apps/maps/src/lib/offline.test.ts`) use
   the same tiles.
+- `tools/fixtures/maps` holds replies recorded from Photon, Valhalla's
+  FOSSGIS server and Overpass on 9 October 2026 for
+  `tools/test-assistant-maps.cjs`: OpenStreetMap data (© OpenStreetMap
+  contributors, ODbL), a test fixture, not shipped in the image.
 - The label glyphs (`apps/maps/public/fonts`) are **Noto Sans**, SIL Open
   Font License 1.1, rendered to MapLibre's glyph format by OpenFreeMap.
 - Attribution on screen: the map always shows "© OpenStreetMap
@@ -523,15 +527,59 @@ without OpenSSL or the downloaded web UI, and ships llama.cpp's `LICENSE`;
 `scripts/linux-setup.sh` builds the same release for the simulator,
 Homebrew's `llama.cpp` on a Mac.
 
-The on-device models are downloaded by the user, never shipped: Qwen2.5
-0.5B Instruct, Qwen2.5 1.5B Instruct and Qwen3 4B, each **Apache-2.0** per
-its Hugging Face model card (Qwen/Qwen2.5-0.5B-Instruct-GGUF,
-Qwen/Qwen2.5-1.5B-Instruct-GGUF, Qwen/Qwen3-4B-GGUF; checked 7 October
-2026). Left out on purpose: Llama 3.2 (Llama 3.2 Community License, not
+One model is built in: **Qwen3 0.6B**, **Apache-2.0**, the Qwen team's
+own GGUF (Qwen/Qwen3-0.6B-GGUF, Q8_0, its `LICENSE` and model card,
+checked 9 October 2026, pinned revision). Not in the repository:
+`tools/get-base-model.py` fetches it for the simulator, SHA-256 checked;
+the image ships it (meta-phoenix's `qwen3-0.6b-gguf`) with Qwen's
+`LICENSE` beside it (`/usr/share/phoenix/models`). The other on-device
+models are downloaded by the user, never shipped: Qwen3 1.7B, 4B, 8B, 14B
+and 30B-A3B, the Qwen team's own GGUFs, each **Apache-2.0** (its
+repository's `LICENSE` and model card: Qwen/Qwen3-1.7B-GGUF,
+Qwen/Qwen3-4B-GGUF, Qwen/Qwen3-8B-GGUF, Qwen/Qwen3-14B-GGUF,
+Qwen/Qwen3-30B-A3B-GGUF; checked 9 October 2026). Left out on purpose: Llama 3.2 (Llama 3.2 Community License, not
 permissive) and Qwen2.5 3B (Qwen Research License). An image that ships a
 model must carry its licence.
 
-Answers are spoken by a speech program, run as a separate program and
+The voice is **Kitten TTS** (9 October 2026), all of it permissive and
+none of it GPL:
+
+- `phoenix-tts` (`services/tts`) is Phoenix's own code, Apache-2.0. It
+  includes ONNX Runtime's C API header (`services/tts/vendor/onnxruntime/
+  onnxruntime_c_api.h`, v1.16.3, unchanged, **MIT**, Microsoft; its
+  LICENSE beside it) and follows KittenML's Python code (Apache-2.0) for
+  the symbol table, the trimming and the inputs, written anew in C++.
+- The model, **KittenML's kitten-tts-nano-0.2**: its weights
+  (`kitten_tts_nano_v0_2.onnx`), its eight voices (`voices.npz`) and
+  config are **Apache-2.0** per the Hugging Face model card (`license:
+  apache-2.0`, checked 9 October 2026); the code repository,
+  github.com/KittenML/KittenTTS, is Apache-2.0 too (its LICENSE). The
+  model repository has no LICENSE file, so the image carries OE's
+  Apache-2.0 text. Not in this repository: `tools/get-kitten.py` fetches
+  it, SHA-256 checked, at a pinned revision; meta-phoenix's
+  `kitten-tts-nano` ships it.
+- **ONNX Runtime** (Microsoft, **MIT**; its ThirdPartyNotices.txt lists
+  what is built in, all permissive), loaded at run time, never linked:
+  Microsoft's own Linux build, fetched by `tools/get-kitten.py` and
+  shipped by meta-phoenix's prebuilt `onnxruntime` with its notices;
+  Homebrew's `onnxruntime` on a Mac.
+- **The CMU Pronouncing Dictionary** (Carnegie Mellon University,
+  **BSD-2-Clause**, its LICENSE shipped beside it), which `phoenix-tts`
+  turns into phonemes with rules of our own.
+
+Kitten was trained on phonemes from **espeak-ng (GPL-3.0)**, and KittenML's
+own code calls espeak-ng's library through the GPL-3.0 `phonemizer`
+package. Linking either into `phoenix-tts` would make it GPL-3.0, so it
+does not: by default it makes the phonemes itself from the CMU dictionary
+(no espeak-ng code or data; espeak-ng's output was only compared against,
+to measure: docs/AI-AND-MCP.md, Speech), and with `--phonemizer espeak`
+it runs the espeak-ng program as a separate program, text in and IPA out,
+which is aggregation, not a derived work. The image does not ship
+espeak-ng unless the image maker adds it (below).
+
+When Kitten cannot speak, the programs before it do:
+
+a speech program, run as a separate program and
 only called, never linked; Phoenix's code stays Apache-2.0. On the device
 image it is **Flite** (CMU, BSD-3-Clause, meta-multimedia's `flite`), so the
 image stays permissive. In the simulator it is **espeak-ng** (GPL-3.0) on

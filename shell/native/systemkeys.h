@@ -14,6 +14,7 @@
 #pragma once
 
 #include <QObject>
+#include <QSet>
 #include <QVariantList>
 #include <QtQml/qqmlregistration.h>
 
@@ -36,6 +37,10 @@ class SystemKeys : public QObject
     // appears for while it is held): holding(key, true) when one goes down,
     // holding(key, false) when it is let go or another key is pressed.
     Q_PROPERTY(QVariantList watchKeys READ watchKeys WRITE setWatchKeys NOTIFY watchKeysChanged)
+    // Combinations of one of the keys with modifiers that are not taken, as
+    // [{key, modifiers}]: they go on to the program's own shortcuts
+    // (phoenix-sim's Shift+F3, Hold Power Button, beside F3, Power).
+    Q_PROPERTY(QVariantList passChords READ passChords WRITE setPassChords NOTIFY passChordsChanged)
 
 public:
     explicit SystemKeys(QObject *parent = nullptr);
@@ -51,6 +56,8 @@ public:
     void setSoloKeys(const QVariantList &keys);
     QVariantList watchKeys() const { return m_watchKeys; }
     void setWatchKeys(const QVariantList &keys);
+    QVariantList passChords() const { return m_passChords; }
+    void setPassChords(const QVariantList &chords);
 
 signals:
     void pressed(int key, bool autoRepeat);
@@ -61,6 +68,7 @@ signals:
     void tapped(int key);
     void holding(int key, bool down);
     void watchKeysChanged();
+    void passChordsChanged();
     void keysChanged();
     void soloKeysChanged();
     void chordsChanged();
@@ -74,6 +82,8 @@ private:
     QVariantList m_chords;
     QVariantList m_soloKeys;
     QVariantList m_watchKeys;
+    QVariantList m_passChords;
+    QSet<int> m_down;           // keys whose press was taken, until let go
     int m_held = 0;
     bool m_enabled = true;
     int m_lastPressed = 0;

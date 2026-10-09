@@ -36,7 +36,10 @@ html:has(> body.phone-app), body.phone-app {
        the height the dial pad leaves (the pad grows first, below), the
        number staying at its foot just above the keys. */
     flex: 1 1 96px;
-    min-height: 96px;
+    /* When the card is shorter than a Pre's 452 (a dashboard showing below
+       it, a 320x400 screen) it gives up the number row's spare height, down
+       to the contact line and the number. */
+    min-height: 82px;
     padding: 10px 12px 0 16px;
     box-sizing: border-box;
     background: linear-gradient(#303234, #121314 70%, #0b0b0b);
@@ -59,11 +62,10 @@ html:has(> body.phone-app), body.phone-app {
 .dialer-error { color: #ff6b5e; }
 
 .dialer-number-row {
-    height: 64px;
-    flex: none;
+    flex: 0 1 64px;
+    min-height: 50px;
     display: flex;
     align-items: center;
-    min-height: 0;
 }
 .dialer-number {
     flex: 1;
@@ -91,6 +93,9 @@ html:has(> body.phone-app), body.phone-app {
     --pui-dialpad-row-max: 96px;
     flex: 1000 1 230px;
     height: auto;
+    /* ...and the rows give up height too, so the dial button always shows
+       above the command menu (it was covered by it with a dashboard up). */
+    min-height: 176px;
     background-color: #111;
 }
 .dialer .pui-dialpad-digit { font-size: clamp(30px, 4.6vh, 38px); line-height: 1.05; }
@@ -265,6 +270,12 @@ html:has(> body.phone-app), body.phone-app {
     text-align: center;
 }
 .incall-avatar { margin-bottom: 10px; border-radius: 10px; }
+.incall-who > * { flex: none; }   /* never squeeze the name (it clipped) */
+@media (max-height: 420px) {
+    /* A Pre-sized card during a call is 405 tall (the call's dashboard
+       shows under it): a smaller picture leaves the name room. */
+    .incall-avatar { width: 72px !important; height: 72px !important; }
+}
 .incall-name {
     font-size: 26px;
     font-weight: bold;

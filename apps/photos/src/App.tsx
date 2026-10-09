@@ -26,6 +26,8 @@ import { Viewer } from "./Viewer";
 
 interface LaunchParams {
     imageList?: { results?: { file_path?: string; uri?: string }[]; title?: string };
+    /** The app that opened Photos to show these ({returnToCaller}): Back at what it opened goes back there. */
+    $caller?: string;
     target?: string;
     dockMode?: boolean;
     windowType?: string;
@@ -114,18 +116,23 @@ function Photos() {
 
     const params = useLaunchParams<LaunchParams>();
     const [picked, setPicked] = useState<{ paths: string[]; title: string } | null>(null);
+    // What another app opened ({$caller}): Back there is not Photos' to
+    // take; the runtime closes the card and the caller comes back.
+    const [opened, setOpened] = useState<{ album: string; viewing: string | null } | null>(null);
     useEffect(() => {
         const several = launchPicked(params);
         if (several) {
             setPicked({ paths: several, title: params.imageList?.title || "Selected Photos" });
             setAlbumId(PICKED);
             setViewing(null);
+            setOpened(params.$caller ? { album: PICKED, viewing: null } : null);
             return;
         }
         const path = launchTarget(params);
         if (!path) return;
         setAlbumId(folderOf(path));
         setViewing(path);
+        setOpened(params.$caller ? { album: folderOf(path), viewing: path } : null);
     }, [params]);
     // The pictures a launch named, as an album of their own.
     const pickedAlbum = useMemo<Album | null>(() => {
@@ -138,8 +145,9 @@ function Photos() {
     const album = albumId === PICKED ? pickedAlbum : albums.find((a) => a.id === albumId) ?? null;
     const index = album && viewing ? album.items.findIndex((it) => it.file_path === viewing) : -1;
 
-    useBack(() => { setViewing(null); return true; }, viewing !== null);
-    useBack(() => { setAlbumId(null); return true; }, viewing === null && albumId !== null);
+    const atOpened = !!opened && albumId === opened.album && viewing === opened.viewing;
+    useBack(() => { setViewing(null); return true; }, viewing !== null && !atOpened);
+    useBack(() => { setAlbumId(null); return true; }, viewing === null && albumId !== null && !atOpened);
 
     if (!loaded) {
         return (
@@ -164,7 +172,8 @@ function Photos() {
                 items={album.items}
                 index={index}
                 onIndex={(i) => setViewing(album.items[i].file_path)}
-                onClose={() => setViewing(null)}
+                // Its own Back arrow too: what another app opened goes back there.
+                onClose={() => (atOpened ? window.close() : setViewing(null))}
                 onDeleted={(i) => {
                     const rest = album.items.filter((_, j) => j !== i);
                     setViewing(rest.length ? rest[Math.min(i, rest.length - 1)].file_path : null);

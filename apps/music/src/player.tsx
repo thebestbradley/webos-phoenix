@@ -20,7 +20,7 @@
 // Music holds the audio focus (it played last).
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { audio as audioService, audioFocus, mediaUrl, watchMediaKeys, type AudioItem, type Subscription } from "@phoenix/luna";
+import { audio as audioService, audioFocus, mediaUrl, postNowPlaying, watchMediaKeys, type AudioItem, type Subscription } from "@phoenix/luna";
 import { artistOf, playOrder, titleOf } from "./library";
 
 export type Repeat = "off" | "all" | "one";
@@ -61,7 +61,6 @@ export function usePlayer(): Player {
     return p;
 }
 
-type Host = { postToHost?: (type: string, payload: object) => void };
 type Palm = { addBannerMessage?: (msg: string, params: string, icon?: string) => void; isActivated?: () => boolean };
 
 function onDevice(): boolean {
@@ -174,11 +173,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     const announced = useRef<string | undefined>(undefined);
     useEffect(() => {
         if (!current) return;
-        const host = (globalThis as { phoenixHost?: Host }).phoenixHost;
         const palm = (globalThis as { PalmSystem?: Palm }).PalmSystem;
-        host?.postToHost?.("nowPlaying", {
-            title: titleOf(current), artist: artistOf(current), album: current.album ?? "", playing: s.playing,
-        });
+        postNowPlaying({ title: titleOf(current), artist: artistOf(current), album: current.album ?? "", playing: s.playing, appId: "org.webosphoenix.music" });
         if (s.playing && announced.current !== current.uri) {
             announced.current = current.uri;
             if (document.hidden || palm?.isActivated?.() === false)

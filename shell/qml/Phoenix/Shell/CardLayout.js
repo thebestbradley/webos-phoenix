@@ -102,6 +102,8 @@ function compute(groups, p) {
     // their index's distance, the second from where that put them (the
     // original also uses the widths of its previous layout).
     var aw = p.cardWidth * p.activeScale;
+    // Set by layOut (declared first: Qt warned of their use before it).
+    var anchors, scroll;
     function layOut(openness) {
         laid = []; lefts = []; rights = [];
         for (var g = 0; g < G; ++g) {
@@ -156,7 +158,6 @@ function compute(groups, p) {
         return Math.max(1, aw - Math.abs(offset)) / aw;
     }
 
-    var anchors, scroll;
     layOut(function (g) { return amountOpen((g - p.position) * aw); });
     var offsets = [];
     for (var g = 0; g < G; ++g)

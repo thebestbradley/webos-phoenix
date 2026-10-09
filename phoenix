@@ -466,12 +466,12 @@ assistant_models() {
         installing "voice: Kitten TTS (model and dictionary$([ "$OS" = Darwin ] || echo ', ONNX Runtime'))" "$size, checked by their SHA-256"
         run "$PYTHON" "$REPO_DIR/tools/get-kitten.py" --dest "$kitten"
     fi
-    if [ -s "$BUILD_DIR/models/qwen3-0.6b-q4_k_m.gguf" ]; then
+    if [ -s "$BUILD_DIR/models/qwen3-0.6b-q8_0.gguf" ]; then
         ok "built-in language model: Qwen3 0.6B"
     elif [ $OFFLINE = 1 ]; then
         skip "built-in language model (--offline): only the commands answer, until one is downloaded in Settings"
     else
-        installing "built-in language model: Qwen3 0.6B" "397 MB, checked by its SHA-256"
+        installing "built-in language model: Qwen3 0.6B" "639 MB, checked by its SHA-256"
         run "$PYTHON" "$REPO_DIR/tools/get-base-model.py" --dest "$BUILD_DIR/models"
     fi
 }

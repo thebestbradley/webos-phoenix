@@ -31,11 +31,13 @@ const ipk = ipkLib.createIpk({ gzip });
 function makeService(sources: Any[]) {
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-mkt-"));
     const world = { state: null as Any, installed: {} as Record<string, Any>, installs: [] as Any[], toasts: [] as Any[], fail: null as string | null,
-                    devMode: false };
+                    devMode: false, noIcons: false, pending: [] as Any[] };
     const luna = {
         call: async (uri: string, params: Any) => {
             if (uri.endsWith("/getDevMode")) return { returnValue: true, status: world.devMode ? "enabled" : "disabled" };
-            if (uri.endsWith("/listLaunchPoints")) return { returnValue: true, launchPoints: Object.keys(world.installed).map((id) => ({ id, removable: true })) };
+            // As the launcher has them: the app's own icon, on the device (none when world.noIcons).
+            if (uri.endsWith("/listLaunchPoints")) return { returnValue: true, launchPoints: Object.keys(world.installed).map((id) => ({
+                id, launchPointId: id + "_default", removable: true, icon: world.noIcons ? "" : `/usr/palm/applications/${id}/icon.png` })) };
             if (uri.endsWith("/createToast")) { world.toasts.push(params); return { returnValue: true }; }
             return { returnValue: true };
         },
@@ -67,7 +69,9 @@ function makeService(sources: Any[]) {
         },
         state: { load: () => (world.state ? JSON.parse(JSON.stringify(world.state)) : null), save: (o: Any) => { world.state = JSON.parse(JSON.stringify(o)); } },
         temp: { write: (name: string, bytes: Uint8Array) => { const f = path.join(temp, name); fs.writeFileSync(f, bytes); return f; }, remove: (f: string) => fs.rmSync(f, { force: true }) },
-        defaultSources: () => sources
+        defaultSources: () => sources,
+        // The launcher's pending icons, as the runtime passes them on.
+        pending: (st: Any) => world.pending.push(st)
     });
     return { service, world };
 }
@@ -151,8 +155,18 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
                                      phoenix: { pwa: { scope: site.url + "/app/", display: "standalone", themeColor: "#1d4f7a" } } });
         const icon = pkg.files.find((f: Any) => f.path.endsWith("/icon.png"));
         expect(Buffer.from(icon.data).subarray(16, 24).readUInt32BE(0)).toBe(192);   // the 192 px icon, not the maskable one
-        expect((await service.listInstalled()).apps).toEqual([expect.objectContaining({ id: "org.webosphoenix.pwa.tides", kind: "pwa", update: null })]);
-        expect((await service.getApp({ sourceId: "phoenix", id: "org.webosphoenix.pwa.tides" })).app.installed).toMatchObject({ sourceId: "phoenix" });
+        // Its icon: its own on the device, as the launcher shows it; the catalog's kept as the fallback.
+        const catalogIcon = (await service.getApp({ sourceId: "phoenix", id: "org.webosphoenix.pwa.tides" })).app.icon;
+        expect((await service.listInstalled()).apps).toEqual([expect.objectContaining({ id: "org.webosphoenix.pwa.tides", kind: "pwa", update: null,
+            icon: "/usr/palm/applications/org.webosphoenix.pwa.tides/icon.png", catalogIcon })]);
+        expect(catalogIcon).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v1\/icons\/copy\//);
+        const page = (await service.getApp({ sourceId: "phoenix", id: "org.webosphoenix.pwa.tides" })).app;
+        expect(page.installed).toMatchObject({ sourceId: "phoenix" });
+        expect(page.ownIcon).toBe("/usr/palm/applications/org.webosphoenix.pwa.tides/icon.png");
+        // A launcher with no icon for it: the catalog's.
+        world.noIcons = true;
+        expect((await service.listInstalled()).apps[0]).toMatchObject({ icon: catalogIcon, catalogIcon });
+        world.noIcons = false;
         expect((await service.remove({ id: "org.webosphoenix.pwa.tides" })).returnValue).toBe(true);
         expect((await service.listInstalled()).apps).toEqual([]);
     });
@@ -240,6 +254,14 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         expect((await service.search({ query: "mojo" })).apps.map((a: Any) => a.id)).toEqual(["appmuseum.9002"]);
         const ok = await service.install({ sourceId: "appmuseum", id: "appmuseum.9001" });
         expect(ok).toMatchObject({ returnValue: true, appId: "com.example.classicnotes" });
+        // The launcher's pending icon: none from the App Museum's details (the
+        // launcher draws the initial), then the package's own once read.
+        const icons = world.pending.filter((st: Any) => st.appId === "com.example.classicnotes" || st.catalogId === "appmuseum.9001")
+            .map((st: Any) => [st.state, st.icon.slice(0, 22)]);
+        expect(icons[0]).toEqual(["downloading", ""]);
+        expect(icons.filter(([state]: string[]) => state === "installing" || state === "installed"))
+            .toEqual(expect.arrayContaining([["installing", "data:image/png;base64,"]]));
+        expect(icons.every(([state, icon]: string[]) => state === "downloading" || state === "checking" || icon === "data:image/png;base64,")).toBe(true);
         expect(world.installs.at(-1).id).toBe("com.example.classicnotes");
         await new Promise((r) => setTimeout(r, 50));
         expect(museum.counted).toEqual(["9001"]);

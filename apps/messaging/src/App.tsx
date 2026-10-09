@@ -99,7 +99,12 @@ function Messaging() {
             <div className="msg-scroll">
                 {tab === "conversations"
                     ? <ThreadList threads={threads} people={people} buddies={buddies} selected={view.kind === "thread" ? view.id : null}
-                                  onOpen={(t) => t._id && setView({ kind: "thread", id: t._id })} />
+                                  onOpen={(t) => t._id && setView({ kind: "thread", id: t._id })}
+                                  onDelete={(t) => {
+                                      if (!t._id) return;
+                                      if (view.kind === "thread" && view.id === t._id) setView({ kind: "list" });
+                                      void messaging.deleteThread(t._id).catch(() => undefined);
+                                  }} />
                     : <Buddies accounts={accounts} buddies={buddies} people={people} onOpen={openBuddy}
                                onSetPresence={(id, a) => { void messaging.setPresence(id, a).catch(() => undefined); }} />}
             </div>

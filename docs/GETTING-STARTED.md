@@ -39,7 +39,7 @@ plus the incremental build.
 | `./phoenix run tablet --scene cards` | Anything after the mode goes to `phoenix-sim` (`--help` lists it all) |
 | `./phoenix check` | Only say what is there and what would be installed (also `--dry-run`) |
 | `./phoenix setup` | Install what is missing, without building |
-| `--no-assistant` | Without the assistant's parts (whisper.cpp, llama.cpp, their models, the wake word) |
+| `--no-assistant` | Without the assistant's parts (whisper.cpp, llama.cpp, their models, the wake word, the voice) |
 | `--offline` | Download nothing; it fails only when something the build needs is missing |
 | `./phoenix run --marketplace` | With the Marketplace's catalog running on this computer, and the Marketplace open |
 | `--tests` | Also the test tools (Playwright, Radicale, WsgiDAV, PHP's MySQL driver, xvfb) |
@@ -48,8 +48,8 @@ What it checks, and installs when missing (it prints each one's size first):
 
 - **Mac:** Xcode's command line tools (Apple's installer opens; run it again
   after), Homebrew (asks for your password), then Homebrew's `qt`, `cmake`,
-  `ninja`, `node@22`, `git`, `python@3.12`, `php`, `whisper-cpp` and
-  `llama.cpp`, in one `brew install`.
+  `ninja`, `node@22`, `git`, `python@3.12`, `php`, `whisper-cpp`,
+  `llama.cpp` and `onnxruntime`, in one `brew install`.
 - **Ubuntu:** the apt packages (build tools, the libraries Qt loads, and
   `php-cli` and `php-sqlite3` for the Marketplace's catalog),
   Qt 6.8.1 into `/opt/Qt` with aqtinstall (Ubuntu's own Qt is 6.4),
@@ -223,14 +223,19 @@ stops with the simulator; if another simulator already runs one, it is used.
 
 The keyboard's microphone, Voice Memos, Voice Dial and the assistant
 transcribe with whisper.cpp; the assistant's on-device model runs on
-llama.cpp, "Hey Phoenix" on Vosk, and answers are spoken with `say`.
-`./phoenix` installs them by default: Homebrew's `whisper-cpp`
-and `llama.cpp`, whisper's English model (148 MB) into `build/whisper`
-and the wake word (Vosk, 84 MB) into `build/wakeword`, each checked by its
-SHA-256 (`tools/get-whisper-model.py` and `tools/get-wakeword.py` fetch
-them on their own). phoenix-sim finds them there; it logs a line for
-anything missing, and Settings > Assistant says what is missing and how
-to get it. The language models are downloaded in Settings > Assistant.
+llama.cpp (Qwen3 0.6B built in), "Hey Phoenix" on Vosk, and answers are
+spoken by Kitten TTS (`phoenix-tts`; `say` when it cannot).
+`./phoenix` installs them by default: Homebrew's `whisper-cpp`,
+`llama.cpp` and `onnxruntime`, whisper's English model (148 MB) into
+`build/whisper`, the wake word (Vosk, 84 MB) into `build/wakeword`, Kitten
+TTS's model and the CMU dictionary (28 MB) into `build/kitten` and Qwen3
+0.6B (639 MB) into `build/models`, each checked by its SHA-256
+(`tools/get-whisper-model.py`, `tools/get-wakeword.py`,
+`tools/get-kitten.py` and `tools/get-base-model.py` fetch them on their
+own). phoenix-sim finds them there; it logs a line for anything missing,
+and Settings > Assistant says what is missing and how to get it. Larger
+language models are downloaded in Settings > Assistant; Settings >
+Assistant > Voice chooses the speaking voice.
 What goes where, on the simulator and the device:
 [AI-AND-MCP.md](AI-AND-MCP.md), "What's installed where".
 
@@ -250,11 +255,15 @@ macOS asks for microphone access the first time. Without a microphone,
 | `./phoenix --tests` | Also the test tools |
 | `./phoenix --no-assistant` | Without the assistant's parts |
 
-The assistant's parts, installed by default: espeak-ng (apt), whisper.cpp's
-`whisper-cli` and llama.cpp's `llama-server` built from the commits
-meta-phoenix pins into `/usr/local/bin` (a few minutes), whisper's English
-model into `build/whisper` and the wake word into `build/wakeword` (about
-280 MB in all). As on a Mac, phoenix-sim and Settings > Assistant say what
+The assistant's parts, installed by default: espeak-ng (apt; the voice's
+fallback), whisper.cpp's `whisper-cli` and llama.cpp's `llama-server`
+built from the commits meta-phoenix pins into `/usr/local/bin` (a few
+minutes), whisper's English model into `build/whisper`, the wake word into
+`build/wakeword`, Kitten TTS with its dictionary and ONNX Runtime into
+`build/kitten` (57 MB) and Qwen3 0.6B into `build/models` (about 980 MB
+in all). In a container without sound, phoenix-tts says "no sound
+output"; an `~/.asoundrc` of `pcm.!default { type null }` lets it speak
+into nothing. As on a Mac, phoenix-sim and Settings > Assistant say what
 is missing.
 
 Then `./phoenix run` (or `./build/phoenix-sim`). Without a display

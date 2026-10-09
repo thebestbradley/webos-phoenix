@@ -4,7 +4,9 @@
 // The request() the assistant needs (the model providers, Open-Meteo), on
 // Node's http and https modules (the device service, and the tests; OSE's
 // Node.js may predate the global fetch). Redirects are not followed: the
-// APIs it calls do not redirect.
+// APIs it calls do not redirect. req.timeoutMs: the most this one request
+// may take in all (the on-device model's deadline, assistant.js bounded);
+// then it is closed, which llama-server takes as the end of the task.
 
 "use strict";
 
@@ -32,6 +34,10 @@ function createRequest(options) {
                 res.on("error", reject);
             });
             r.setTimeout(timeout, function () { r.destroy(new Error("request timed out: " + req.method + " " + req.url)); });
+            if (req.timeoutMs > 0) {
+                var all = setTimeout(function () { r.destroy(new Error("request timed out: " + req.method + " " + req.url)); }, req.timeoutMs);
+                r.on("close", function () { clearTimeout(all); });
+            }
             r.on("error", reject);
             if (body) r.write(body);
             r.end();

@@ -17,5 +17,10 @@
     <string>Phoenix WebOS Simulator</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>The simulated device's microphone: dictation and Voice Dial.</string>
+    <!-- Simulate > Location > This Computer's Location (Qt Positioning, CoreLocation). -->
+    <key>NSLocationUsageDescription</key>
+    <string>The simulated device can be where this Mac is (Simulate &gt; Location).</string>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>The simulated device can be where this Mac is (Simulate &gt; Location).</string>
 </dict>
 </plist>

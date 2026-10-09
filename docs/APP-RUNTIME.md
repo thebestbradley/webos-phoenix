@@ -737,6 +737,10 @@ apps) or grey diamond (system apps), rendered by `tools/render-app-icons.cjs`
   Settings, as on the TouchPad; a layout saved before Favorites keeps its
   three pages.
 - `hidden`: leave the app itself out of the launcher (its launch points stay)
+- `developer`: `true` makes it a [developer app](#developer-apps), shown
+  and opened only while Developer Mode is on; `"unlock"` (a launch point:
+  Settings' Developer Mode) shows once Developer Mode was revealed. A
+  launch point may say its own, else it is as its app.
 - `quickLaunch`: put the app in this quick launch slot (1-4); Phone is 1 and
   Messaging 3 (Email 2 and Calendar 4 are set by title in `SimWindowSource`)
 - `launchPoints`: extra launcher icons for the same app. Each is its own
@@ -814,6 +818,32 @@ Card uses it (`{conversationId}`). Tests: `tst_apprelaunch.qml`
 device yet (`LsmWindowSource` leaves launches to SAM, which brings the
 running card to the front).
 
+An app can also open another one behind itself, or as its child
+(Phoenix): `applicationManager/launch {id, params, behind: true}` opens
+or relaunches the card without bringing it forward; when the asking card
+is the one in front, the new card joins its stack and the asking card
+keeps the focus (`SimWindowSource._hostMessage`, `CardView.focusLaunched`).
+`returnToCaller: true` adds `$caller` (the asking app's id) to the launch
+params. Back in an app opened that way, at what it was opened on, closes
+its card, and the caller beside it in the stack is in front again: the
+runtime's `runtime.back` closes the window when the app did not take the
+Back itself (no `preventDefault` on the Escape keydown/keyup, as webOS
+apps said they had taken the gesture) and the launch params hold
+`$caller`. Apps that would take that Back to show more of themselves leave
+it when they are still where they were opened: Photos (`App.tsx`, the
+picture or album it was given), Contacts (compat `phoenix-phone.js`, the
+person it was opened on, on a phone) and Email (compat
+`mail/source/phoenix-compat.js`, the message; the mail window closes
+itself, as its params come from the headless app page). Memos, Calendar
+and Files leave that Back alone already. The Assistant opens what it
+found behind its conversation (`lib/commands.js` `launch`) and its
+buttons, thumbnails and cards with `returnToCaller`. Tests:
+`tst_apprelaunch.qml` `test_behindAndBackToTheCaller`,
+`tools/test-assistant.cjs` (Photos). Not on a device yet: SAM's launch
+knows neither `behind` nor `returnToCaller` (the card comes to the
+front, with no `$caller`), and Back at an app's root goes to card view,
+as on webOS.
+
 ## Settings
 
 `apps/settings` is one app with one launch point per pane, like the separate
@@ -834,13 +864,13 @@ same request and reply shapes:
 
 | Pane | Service and methods | Source |
 | --- | --- | --- |
-| Wi-Fi | `com.webos.service.wifi`: `setstate`, `getstatus`, `findnetworks`, `connect` (`ssid` + `security.simpleSecurity.passKey`, or `profileId`; error 10 = wrong password), `deleteprofile` | `webos-connman-adapter` `src/wifi_service.c` |
+| Wi-Fi | `com.webos.service.wifi`: `setstate`, `getstatus`, `findnetworks`, `connect` (`ssid` + `security.simpleSecurity.passKey`, or `profileId`; error 10 = wrong password), `deleteprofile`. The shell's Wi-Fi drawer gets the networks from `systemStatus` `wifiNetworks` and sends `{wifiConnect}` to join one | `webos-connman-adapter` `src/wifi_service.c` |
 | Airplane Mode | `com.webos.service.connectionmanager`: `getstatus` (`offlineMode`), `setstate {offlineMode}` | `webos-connman-adapter` `src/connectionmanager_service.c` |
 | Bluetooth | `com.webos.service.bluetooth2`: `adapter/getStatus`, `adapter/setState {powered}`, `adapter/startDiscovery`, `adapter/cancelDiscovery`, `adapter/pair`, `adapter/unpair`, `device/getStatus` | `com.webos.service.bluetooth2` `src/bluetoothmanagerservice.cpp`, `bluetoothmanageradapter.cpp` |
 | Screen & Lock | `com.webos.settingsservice` `get/setSystemSettings {category: "picture", backlight}`; `com.webos.service.systemservice` `get/setPreferences` (`screenTimeout`, `rotationLock`, `wallpaper`, `showAlertsWhenLocked`, `blinkNotifications`) | `settingsservice` `inc/SettingsServiceApi.h`; `luna-sysservice` `Src/PrefsFactory.cpp` (stores any key) |
 | Screen & Lock (PIN) | `com.palm.systemmanager` `getDeviceLockMode`, `setDevicePasscode`, `matchDevicePasscode` (and `getSecurityPolicy`: a security policy's rules; see [Device security](#device-security-erase-usb-drive-mode-and-debugging)): the legacy webOS API; OSE has none, so Phoenix will have to provide it | `openwebos/luna-sysmgr` `Src/base/SystemService.cpp` |
 | Sounds | `com.webos.service.audio` `master/getVolume`, `master/setVolume`, `master/muteVolume`, `getInputVolume` / `setInputVolume` (`streamType` `pringtones`, `palerts`, `pfeedback`, `pmedia`), `playFeedback`, `playSound`, `controlPlayback`; system service `ringtone`, `alerttone`, `notificationtone` (`{name, fullPath}`: Open webOS's alert.wav and notification.wav or any ringtone; the shell plays them for alerts, alarms and reminders, and for notifications, that name no sound of their own, as LunaSysMgr's `AlertWindow` and `BannerMessageHandler` did), `systemSounds`, `x_palm_virtualkeyboard_prefs` (`TapSounds`: Keyboard clicks), `ringtone/listRingtones` | `audiod-pro` `src/modules/masterVolumeManager`, `audioPolicyManager`, `systemSoundsManager`; `luna-sysmgr` `conf/defaultPreferences.txt`, `Src/base/settings/Preferences.cpp` |
-| Text Assist | system service `get/setPreferences`: `x_palm_virtualkeyboard_prefs` (`WordSuggestions`, `AutoCorrect`, `SwipeTyping`, `spaces2period`, `ForgetWords`, `keyboards`), `keyboardShortcuts`, `keyboardNumberRow`, `keyboardStyle` (Phoenix: the keys' look, `"auto"` = black on a phone and the TouchPad's on a tablet, `"black"`, `"touchpad"`; systemStatus `tweaks.keyboardStyle`), and `x_palm_textinput` (`shortcutChecking` `"autoCorrect"` / `"off"`; Phoenix adds `shortcuts: [{shortcut, text}]`, the user's text replacements). The runtime gives the shell's keyboard `systemStatus` `textAssist` (`suggestions`, `autoCorrect`, `swipe`, `spaces2period`, `forgetWords`, `shortcuts` as `{typed: text}`, `shortcutsOn`); the space bar puts a shortcut's text in (`TextAssist.js` `shortcut()`), in any keyboard language, and backspace puts the shortcut back | `luna-sysmgr` `conf/defaultPreferences.txt` (`x_palm_textinput`), `Src/ime/VirtualKeyboardPreferences.cpp` |
+| Text Assist | system service `get/setPreferences`: `x_palm_virtualkeyboard_prefs` (`WordSuggestions`, `AutoCorrect`, `SwipeTyping`, `spaces2period`, `ForgetWords`, `keyboards`), `keyboardShortcuts`, `keyboardNumberRow`, `keyboardStyle` (Phoenix: the keys' look, `"auto"` = black on a phone and the TouchPad's on a tablet, `"black"`, `"touchpad"`; systemStatus `tweaks.keyboardStyle`), and `x_palm_textinput` (`shortcutChecking` `"autoCorrect"` / `"off"`; Phoenix adds `shortcuts: [{shortcut, text}]`, the user's text replacements). The runtime gives the shell's keyboard `systemStatus` `textAssist` (`suggestions`, `autoCorrect`, `swipe`, `spaces2period`, `forgetWords`, `shortcuts` as `{typed: text}`, `shortcutsOn`); the space bar puts a shortcut's text in (`TextAssist.js` `shortcut()`), in any keyboard language, and backspace puts the shortcut back. Personal Dictionary (Phoenix): `x_palm_textinput.userWords` (the words added) and `removedWords` (`{word: ms}`, learned words deleted, which the keyboard drops once) reach the keyboard as `textAssist.userWords` / `removedWords`; the shell reports the words it learned that its list lacks as host status `learnedWords` (getSystemStatus `learnedWords`), and its "Add" after an undone correction as `dictionaryWordAdded`, which the writer page adds to `userWords` | `luna-sysmgr` `conf/defaultPreferences.txt` (`x_palm_textinput`), `Src/ime/VirtualKeyboardPreferences.cpp` |
 | Date & Time | system service `get/setPreferences` (`timeFormat`, `useNetworkTime`, `useNetworkTimeZone`, `timeZone`), `getPreferenceValues {key: "timeZone"}`, `time/getSystemTime`, `time/setSystemTime {utc}` | `luna-sysservice` `Src/TimePrefsHandler.cpp` |
 | Language & Region | `com.webos.settingsservice` `get/setSystemSettings {keys: ["localeInfo"]}` (`locales.UI`, `locales.FMT`) | `settingsservice` |
 | Device Info | system service `deviceInfo/query`, `osInfo/query`; `com.palm.power` `batteryStatusQuery` (legacy); `com.palm.telephony` `platformQuery` (IMEI/MEID, carrier), `subscriberIdQuery` (`msisdn`: the phone number), `simStatusQuery`, `networkStatusQuery`; settings service `resetSystemSettings`; `org.webosphoenix.service.reset` `eraseUserData` (apps' data and settings; the user's files on the USB drive are kept, as legacy webOS's "Erase Apps & Data") and `fullErase` (everything, files too) (Phoenix, simulator only so far); "Help and tips" and "Run setup again" launch Help and First Use (`{rerun: true}`) | `luna-sysservice` `Src/DeviceInfoService.cpp`, `OsInfoService.cpp` |
@@ -1226,7 +1256,7 @@ the Enyo 1.0 art:
 
 | What | Service and methods | Source |
 | --- | --- | --- |
-| Files and folders | `org.webosphoenix.filemanager` `list {path}` -> `{entries: [{name, path, type, size, mtime, mode, readOnly?}]}`, `stat {path}` -> `{entry}` (folders add `count`), `mkdir {path}`, `copy` / `move {from, to, overwrite?}` (folders recursively), `remove {path, recursive?}`, `read {path, encoding: "utf8" \| "base64", maxBytes?}` -> `{data, size}`, `write {path, data, encoding, overwrite?}`. Errors: `errorCode` 1 not found, 2 exists, 3 read-only, 4 not a folder, 5 is a folder, 6 not empty, 7 too large, 8 invalid (a folder into itself), -1 bad parameters | Phoenix; `apps/files/service` on a device, simulated in the runtime |
+| Files and folders | `org.webosphoenix.filemanager` `list {path}` -> `{entries: [{name, path, type, size, mtime, mode, readOnly?}]}`, `stat {path}` -> `{entry}` (folders add `count`), `mkdir {path}`, `copy` / `move {from, to, overwrite?}` (folders recursively), `remove {path, recursive?}`, `read {path, encoding: "utf8" \| "base64", maxBytes?}` -> `{data, size}`, `write {path, data, encoding, overwrite?}`, `search {query, path?, limit?}` -> `{entries}` (names with every word, under `path`, default `/media/internal`, hidden ones skipped, newest first; the Assistant's "find my file called ..."). Errors: `errorCode` 1 not found, 2 exists, 3 read-only, 4 not a folder, 5 is a folder, 6 not empty, 7 too large, 8 invalid (a folder into itself), -1 bad parameters | Phoenix; `apps/files/service` on a device, simulated in the runtime |
 | Install a package | `com.palm.appinstaller` `installNoVerify {target, subscribe}` -> `{ticket, status}`: `STARTING`, `IPKG_INSTALL`, then `SUCCESS` or `FAILED_*` | legacy webOS (as Preware-era file managers called it); both it and OSE's `com.webos.appInstallService` install for real in the simulator ([Installing apps](#installing-apps)) |
 | Open with | `com.webos.applicationManager` `listAllHandlersForMime {mime}` -> `{resources: [{appId}]}`, `launch {id, params: {target}}`, `open {target}` | legacy webOS / SAM |
 
@@ -1973,7 +2003,7 @@ show the result at once:
 | `email`, `searchEmail` | `com.palm.smtp/sendMail {accountId, email}` (read back first); without a body Email's compose `{recipients, summary}`; `com.palm.email:1` by words, sender or unread |
 | `call` | Phone `{number, dial}` (read back first) |
 | `toggle` | Wi-Fi, Bluetooth, airplane mode, the torch, the ringtone volume; Do Not Disturb is the ringer off (webOS had none; its ringer switch silenced calls and alerts) |
-| `media` | `org.webosphoenix.system/mediaKey {key}`: the shell sends the `com.palm.keys` `/media` key to every page, as the hardware key; the player with the audio focus acts |
+| `media` | `org.webosphoenix.system/mediaKey {key}`: the shell sends the `com.palm.keys` `/media` key to every page, as the hardware key; the player with the audio focus acts. "What's playing": `org.webosphoenix.system/getNowPlaying` -> `{nowPlaying: {title, artist, album, playing, appId, time} \| null}`, what the player last said with `setNowPlaying` (`@phoenix/luna` `postNowPlaying`: Music, Podcasts) |
 | `volume`, `brightness` | `com.webos.service.audio` `master/getVolume`, `setVolume`, `muteVolume`; `com.palm.display` `control/getProperty`, `control/setProperty {maximumBrightness}` |
 | `screenshot`, `lock`, `battery`, `settings` | `com.palm.systemmanager/takeScreenShot` (phoenix-sim closes the assistant's view first); `com.palm.display/control/setState {state: "off"}`; `com.palm.power` battery and charger queries; Settings `{page}` (Settings' list without one) |
 | `open`, `navigate`, `play`, `photos`, `search` | `applicationManager/launch` (a launch point's own params: Settings' panes); Maps `{target: "mapto:<place>"}`; Music `{play}`; Photos `{imageList}` of the `com.palm.media.image.file:1` taken those days; the browser with Just Type's default engine |
@@ -2375,7 +2405,8 @@ which runs unchanged in the simulator:
   (`sources.json` without `depends.js`: Palm's Mojo was never released).
   One that runs install scripts, has services or puts files outside its
   app needs [Developer Mode](#developer-mode) (`NEEDS_DEVMODE`; the app
-  page then links to Settings > Developer Mode), and is installed with
+  page then links to Settings > Developer Mode once it was revealed, and
+  until then says to type the Konami code in Just Type), and is installed with
   `developerMode: true`.
 - **Screenshots**: the app page's strip leaves out the ones that do not
   load (the webOS Archive lists some it no longer has); a tap opens them
@@ -2458,6 +2489,24 @@ part through `runtime.hostOp`, phoenix-sim's `SimWindowSource` or
 
 ### Developer Mode
 
+As on legacy webOS, Developer Mode is out of sight until it is found:
+typing `upupdowndownleftrightleftrightbastart` (the Konami code) or webOS
+1.x's `webos20090606` in Just Type offers "Developer Mode Enabler".
+That is the original's own result: luna-applauncher shows it when the
+search field holds exactly one of those strings, as typed, case and all
+(`app/LaunchPointSearch.js:30-36, 137-139`), and launches
+`com.palm.app.devmodeswitcher`, Palm's Developer Mode Switcher, on a tap or
+Enter (`:194-214, 226-231`). Phoenix has no switcher app: the runtime's
+application manager turns that launch into the `devModeUnlocked` system
+preference, set for good, and opens Settings > Developer Mode
+(`revealDeveloperMode`; the shell's built-in Just Type does the same,
+`Shell.revealDeveloperMode`). The result's icon is Settings' Developer
+Mode icon, at the path the original names (`runtime/rootfs.json`). From
+then on the pane is in Settings' list and has its launch point (the
+launcher's Settings page); while Developer Mode is off it offers Hide
+Developer Mode, which sets the preference back. Settings launched straight
+into the pane before it was revealed shows the list instead.
+
 Settings > Developer Mode (the last pane, under Advanced) turns on what
 ordinary apps may not do: packages that run install scripts, have
 background services or put files outside their app, and later the
@@ -2469,6 +2518,26 @@ and offers Screen & Lock. Turning it off asks nothing. The state is OSE's
 device turns it off. While it is on, its Debugging switches show the
 shell's frame rate counter and touch plot (`enableFpsCounter`,
 `enableTouchPlot`; see [Device security](#device-security-erase-usb-drive-mode-and-debugging)).
+
+#### Developer apps
+
+An app whose `appinfo.json` says `"phoenix": {"developer": true}` is for
+developers: Notification Lab, the framework demos (Enyo 2 Demo, the Enact
+Notes, Ionic Notes, Flutter Notes) and Terminal. Third-party apps can say
+so too. While Developer Mode is off such an app is left out of the
+launcher and the dock (the shell's `developerShown`), Just Type and the
+Assistant (`listLaunchPoints` and `searchApps` leave it out), and it does
+not open: the window source refuses the launch (`developerAppRefused`).
+Once Developer Mode was revealed the shell then says "Turn on Developer
+Mode to use <app>." with Open Developer Mode; before, the app is as good as
+not there. (The original had no developer-only apps, so there is no
+precedent to follow.) Turning Developer Mode on or off changes all of this
+at once in the simulator: `launchPointChanges` reports the launch points
+added and removed in every page, the shell hears `devMode` and
+`devModeUnlocked` in its host status and rebuilds the launcher, and the
+developer apps' cards close as it turns off. On a device OSE's
+`setDevMode` restarts it, so the same follows from the restart.
+`tools/test-apps.cjs` runs the developer apps with Developer Mode on.
 
 The installer takes such a package only when Developer Mode is on and the
 request says `developerMode: true` (`com.webos.appInstallService install`;

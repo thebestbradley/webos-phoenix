@@ -39,19 +39,28 @@
 	.edit .enyo-scroller [style*="700px"] {
 		width: auto !important;
 		-webkit-box-flex: 1;
-		/* Room on the right for the type labels (MOBILE, HOME, ...), which
-		   hang outside the fields. */
-		padding: 10px 52px 10px 6px !important;
+		padding: 10px 6px !important;
 	}
 
-	/* Cancel and Done are styled width:15rem inline. */
+	/* Cancel and Done are styled width:15rem inline: they share the
+	   toolbar's width instead (a fixed 8.5rem was 170 px each with the
+	   page's 20 px rem, and Done ran off a 320 px card). */
 	.edit [style*="15rem"] {
-		width: 8.5rem !important;
+		width: 0 !important;
+		-webkit-box-flex: 1;
+		max-width: 15rem;
 	}
 
 	.edit .avatar {
-		zoom: 0.5;
+		zoom: 0.4;
 		margin-right: 8px;
+	}
+
+	/* The name field's star and info buttons, framed (the runtime's legacy
+	   border images): side by side with the name hint beside them in the
+	   narrow column. */
+	.edit .field-button[style*="margin-right"] {
+		margin-right: 2px !important;
 	}
 }
 

@@ -783,6 +783,17 @@ Item {
         // system menu's tab covers the system group only). Its caps lie
         // outside the icons with some padding (Theme.statusBarTabCap), so
         // every icon is on the tab's solid part.
+        // The group fades in with the first notification and out after the
+        // last, 300 ms linear (StatusBarItemGroup::show / hide, :185-232;
+        // Theme.statusBarTabFadeDuration); its icons fade out while a banner
+        // shows and back after it, 300 ms linear (StatusBarNotificationArea::
+        // setIconsShown, :368-397).
+        property real groupOpacity: root.overlay && root.hasNotifications ? 1 : 0
+        Behavior on groupOpacity { NumberAnimation { objectName: "notificationGroupFade"; duration: Theme.statusBarTabFadeDuration } }
+        property real iconsOpacity: root.bannerActive ? 0 : 1
+        Behavior on iconsOpacity { NumberAnimation { objectName: "notificationIconsFade"; duration: Theme.notificationIconsFadeDuration } }
+        readonly property real groupShown: groupOpacity * iconsOpacity
+
         ArtBorderImage {
             id: notifTab
             objectName: "notificationTab"
@@ -805,7 +816,7 @@ Item {
             width: Theme.artWidth(source)
             height: Theme.artHeight(source)
             source: Theme.asset("statusBar/status-bar-separator.png")
-            opacity: 1 - notifTab.opacity
+            opacity: (1 - notifTab.opacity) * tabletIcons.opacity
         }
         // At most ten icons' width (MAX_NOTIF_ICONS x (24 + 5), StatusBar.
         // cpp:128); past it the leftmost is cut off (StatusBarNotificationArea::
@@ -813,7 +824,8 @@ Item {
         Item {
             id: tabletIcons
             objectName: "tabletNotificationIcons"
-            visible: root.overlay && root.hasNotifications && !root.bannerActive
+            visible: root.overlay && opacity > 0
+            opacity: normalLayer.groupShown
             anchors.right: parent.right
             anchors.rightMargin: root.statusBarRightInset + Theme.px(6)
             y: -Theme.statusBarHeight + (Theme.statusBarHeight - height) / 2
@@ -840,7 +852,7 @@ Item {
             }
         }
         MouseArea {
-            visible: tabletIcons.visible
+            visible: root.overlay && root.hasNotifications && !root.bannerActive
             x: tabletIcons.x - Theme.px(5)
             y: -Theme.statusBarHeight
             width: tabletIcons.width + Theme.px(10)
@@ -940,7 +952,32 @@ Item {
                 required property var model
                 readonly property string key: model.id
                 readonly property bool selectable: root.selecting && !ongoing
+                // Swiped (or swiping) off its place.
+                readonly property bool slidOut: content.x !== 0
                 width: list.width
+
+                // A row its app takes away (not a swipe) slides on a width
+                // and a half over 200 ms, linear, before it goes and the rows
+                // under it close up (DashboardWindowContainer::removeWindow,
+                // :653-709, slotDeleteAnimationFinished, :724-741); a row
+                // swiped away has made that move already and goes at once.
+                // (Not a remove transition: the list shrinks with the
+                // dashboard as the row goes, which ends a transition at once.)
+                ListView.onRemove: if (!item.slidOut) leave.start()
+                readonly property alias leaveAnimation: leaveSlide
+                SequentialAnimation {
+                    id: leave
+                    PropertyAction { target: item; property: "ListView.delayRemove"; value: true }
+                    NumberAnimation {
+                        id: leaveSlide
+                        objectName: "dashboardRowLeave"
+                        target: content
+                        property: "x"
+                        to: Theme.dashboardDeleteTravel * content.width
+                        duration: Theme.dashboardDeleteDuration
+                    }
+                    PropertyAction { target: item; property: "ListView.delayRemove"; value: false }
+                }
                 height: Theme.dashboardItemHeight
 
                 // A trackpad's swipe (the list's TrackpadSwipe): as the
@@ -986,7 +1023,8 @@ Item {
                     distance: Math.abs(content.x)
                     rowWidth: item.width
                     fromRight: content.x < 0
-                    visible: !item.ongoing && content.x !== 0
+                    // Not for a row its app took away (leave): nobody swiped.
+                    visible: !item.ongoing && content.x !== 0 && !leave.running
                 }
                 DashboardItem {
                     id: content

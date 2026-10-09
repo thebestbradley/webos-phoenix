@@ -14,7 +14,7 @@
 // (views/Emergency).
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { apps, primaryCall, ringingCall, telephony, telTarget, type Call } from "@phoenix/luna";
+import { apps, primaryCall, ringingCall, setWindowOrientation, telephony, telTarget, type Call } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, RadioToolGroup, ToolBar, dialable, useBack } from "@phoenix/ui";
 import { callLog, otherParty, type PhoneCall } from "./lib/calllog";
@@ -59,6 +59,11 @@ function Phone() {
     const people = usePeople();
     const voicemail = useVoicemail();
     const wide = useWide();
+    // On a phone the Phone app stays upright, as webOS phones' did: turned,
+    // a 480 x 292 card has no room for the dial pad, the dial button and the
+    // command menu (the bottom two rows and the dial button were cut off).
+    // On a tablet it turns with the device (its wide layout).
+    useEffect(() => { setWindowOrientation(wide ? "free" : "up"); }, [wide]);
     // {number}: on the dial pad; {number, dial: true}: called at once
     // (Voice Dial, after you said yes); {target: "tel:..."}: a tel: link
     // (the application manager's, @phoenix/luna links.ts), on the dial pad.

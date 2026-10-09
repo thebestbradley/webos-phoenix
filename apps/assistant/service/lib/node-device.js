@@ -188,10 +188,12 @@ function llamaServer(options) {
                 // 8,192 tokens (the commands as tools and the system prompt are
                 // some 4,900), one slot (the tools stay cached between
                 // requests), an 8-bit cache with flash attention (as small as
-                // 4,096 was: 1.3 GB in all for Qwen3 0.6B); as the simulator's
-                // shell/native/localmodels.cpp.
+                // 4,096 was: 1.3 GB in all for Qwen3 0.6B), prompts read 512
+                // tokens at a time so that a request given up on (the
+                // assistant's deadline) ends soon; as the simulator's
+                // shell/native/localmodels.cpp, which says why.
                 var args = ["-m", file, "--host", "127.0.0.1", "--port", String(port), "--jinja", "-c", "8192", "-np", "1",
-                            "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0"].concat(options.args || []);
+                            "-fa", "on", "-ctk", "q8_0", "-ctv", "q8_0", "-b", "512"].concat(options.args || []);
                 log("starting " + bin + " " + args.join(" "));
                 var child = childProcess.spawn(bin, args, { stdio: ["ignore", "ignore", "pipe"] });
                 var errText = "";

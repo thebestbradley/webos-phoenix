@@ -302,6 +302,27 @@ Item {
             tryCompare(pill, "opacity", 0, 1000);
         }
 
+        // Just Type closed gives the keyboard back: its field does not take
+        // it again with the shell's focus and eat the dashboard's Delete.
+        function test_closedJustTypeLetsGoOfTheKeyboard() {
+            shell.startJustType("abc");
+            verify(shell.justTypeOpen);
+            shell.gestureBack();
+            verify(!shell.justTypeOpen);
+            shell.forceActiveFocus();
+            verify(shell.Window.activeFocusItem.objectName !== "justTypeInput");
+            var notes = shell.notifications;
+            windows.notify("org.webosphoenix.messaging", "One", "");
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            keyClick(Qt.Key_Down);
+            compare(notes.keyRow, 0);
+            keyClick(Qt.Key_Delete);
+            tryCompare(windows.notifications, "count", 0, 1000);
+            notes.dashboardOpen = false;
+            tryCompare(notes, "negativeSpace", 0, 2000);
+        }
+
         // Phones: notifications take space from the bottom of the app, never
         // cover it (SystemUiController::changeNegativeSpace).
         function test_notificationShrinksTheAppInsteadOfCoveringIt() {
@@ -1032,6 +1053,11 @@ Item {
             compare(plane.opacity, 1);
             // Leftmost of the indicators, as StatusBarInfo paints it last.
             compare(plane.x, 0);
+            // The only plane: the signal bars go (StatusBarServicesConnector
+            // updateRSSIIcon(false, RSSI_FLIGHT_MODE), :947-952), not turn
+            // into a second one.
+            var rssi = findChild(shell, "rssiIcon");
+            tryVerify(function() { return !rssi.visible; }, 2500);
             sys.rotationLocked = false;
             sys.muted = false;
             sys.airplaneMode = false;
@@ -1355,6 +1381,7 @@ Item {
             keyClick(Qt.Key_A, Qt.MetaModifier);
             keyRelease(Qt.Key_Super_L);
             verify(!shell.launcherOpen);
+            verify(!shell.justTypeOpen, "a shortcut does not start Just Type");
             // Not over the lock screen.
             shell.lock();
             keyClick(Qt.Key_Search);
@@ -1450,6 +1477,11 @@ Item {
             compare(bar.title, shell.system.carrier);
             verify(!bar.titleBorder);
             verify(!bar.titleActionable);
+            // In airplane mode, "Airplane Mode" in its place.
+            shell.system.airplaneMode = true;
+            compare(bar.title, "Airplane Mode");
+            shell.system.airplaneMode = false;
+            compare(bar.title, shell.system.carrier);
             // An app: its title on the pill, the arrow fading in; the new
             // title cross-fades in over 300 ms.
             windows.launch("org.webosphoenix.email", "");

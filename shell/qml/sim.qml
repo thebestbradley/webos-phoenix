@@ -161,6 +161,7 @@ Item {
             formFactor: typeof simFormFactor !== "undefined" ? simFormFactor : "auto"
             density: typeof simDensity !== "undefined" ? simDensity : 1
             hardwareHomeButton: typeof simHomeButton !== "undefined" && simHomeButton
+            systemKeyPassChords: root.modifiedFunctionKeys
             // The phones and the TouchPad of luna-sysmgr's day had one
             // ([VirtualKeyboard] VirtualKeyboardEnabled).
             virtualKeyboard: true
@@ -561,6 +562,12 @@ Item {
             // LunaSysMgr read them at boot (user-exhibition-apps.json).
             if (s.exhibitionApps && typeof simSettings !== "undefined")
                 simSettings.setValue("dockmode/exhibitionApps", JSON.stringify(s.exhibitionApps));
+            // Developer Mode and its pane, so the launcher shows the
+            // developer apps from the start next time (before a page reports).
+            if (s.devMode !== undefined && typeof simSettings !== "undefined")
+                simSettings.setValue("developer/devMode", s.devMode ? "1" : "0");
+            if (s.devModeUnlocked !== undefined && typeof simSettings !== "undefined")
+                simSettings.setValue("developer/unlocked", s.devModeUnlocked ? "1" : "0");
         }
     }
     Connections {
@@ -611,6 +618,8 @@ Item {
     Connections {
         target: status
         function onVpnRequested(request) { windows.pushSystemStatus(request); }
+        // ... and a Wi-Fi network's row.
+        function onWifiRequested(request) { windows.pushSystemStatus(request); }
     }
 
     function statusChanged(name) {
@@ -751,6 +760,15 @@ Item {
         }
     }
 
+    // Simulate > Location: where the device is, a city, a place, this
+    // computer's, or moving along Maps' route (SimLocation.qml).
+    SimLocation {
+        id: simLocation
+        windows: windows
+        askText: typeof simChrome !== "undefined" && simChrome ? function (title, label, text) { return simChrome.askText(title, label, text); } : null
+        alert: typeof simChrome !== "undefined" && simChrome ? function (text) { simChrome.alert(text, "", ""); } : null
+    }
+
     // ---- The simulator's functions ------------------------------------------------------
     // Every key and command the simulator adds, once: the keyboard shortcuts
     // below are made from this list, and phoenix-sim builds its menus,
@@ -777,6 +795,25 @@ Item {
     //             function, the icon now
     // { separator: true, menu } separates; Help > Keyboard Shortcuts lists
     // them in this order.
+    // The entries' function keys with modifiers (Shift+F3, Shift+F2, ...),
+    // as [{key, modifiers}]: the shell takes F2 and F3 with any modifiers
+    // (SystemKeys), so their shortcuts below never fired (Shift+F3 pressed
+    // Power, Shift+F2 showed the demo notification) unless it lets them by.
+    readonly property var modifiedFunctionKeys: {
+        var out = [];
+        var mods = { Shift: Qt.ShiftModifier, Ctrl: Qt.ControlModifier, Alt: Qt.AltModifier, Meta: Qt.MetaModifier };
+        simActions.forEach(function (a) {
+            (a.run && a.keys ? a.keys : []).forEach(function (k) {
+                var m = /^((?:(?:Shift|Ctrl|Alt|Meta)\+)+)F(\d+)$/.exec(k);
+                if (!m)
+                    return;
+                var mask = 0;
+                m[1].split("+").forEach(function (p) { mask |= mods[p] || 0; });
+                out.push({ key: Qt.Key_F1 + Number(m[2]) - 1, modifiers: mask });
+            });
+        });
+        return out;
+    }
     readonly property var simActions: [
         // Device: the buttons and switches, how it is held.
         { id: "power", menu: "device", text: qsTr("Power Button"), keys: ["F3"], press: [Qt.Key_F3], icon: "power",
@@ -998,7 +1035,7 @@ Item {
               if (!root.adaptive)
                   root.restartSim(["tablet", "phone", "adaptive"], ["--adaptive"]);
           } }
-    ].concat(devicePresets.map(function (p) {
+    ].concat(simLocation.actions).concat(devicePresets.map(function (p) {
         return { id: "size-" + p.id, menu: "view", submenu: qsTr("Device Size"), text: p.text, radio: "deviceSize",
                  tip: qsTr("The window at %1x%2, upright (%3 layout when adaptive)").arg(p.width).arg(p.height)
                       .arg(Theme.tabletLayoutFor(p.width, p.height, 1) ? qsTr("tablet") : qsTr("phone")),
@@ -1534,6 +1571,14 @@ Item {
                 simSettings.setValue("keyboard/emoji", shell.keyboard.emojiPrefs);
         }
         function onTextAssistDataChanged() { textAssistSave.restart(); }
+        // Settings > Text Assist > Personal Dictionary lists them
+        // (getSystemStatus learnedWords).
+        function onLearnedWordsChanged() { windows.pushSystemStatus({ learnedWords: shell.keyboard.learnedWords }); }
+    }
+    // The keyboard's "Add": the runtime keeps it in x_palm_textinput.userWords.
+    Connections {
+        target: status
+        function onDictionaryWordAdded(word) { windows.pushSystemStatus({ dictionaryWordAdded: word }); }
     }
     Timer {
         id: textAssistSave
@@ -1579,6 +1624,8 @@ Item {
                 if (Array.isArray(exhibitions))
                     status.exhibitionApps = exhibitions;
             } catch (e) { /* the default */ }
+            status.devMode = simSettings.value("developer/devMode") === "1";
+            status.devModeUnlocked = simSettings.value("developer/unlocked") === "1";
         }
         // The "Dismissing Cards" tutorial, until it has been shown once
         // (not in a demo scene).

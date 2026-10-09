@@ -113,7 +113,13 @@ function chatRequest(p, req, key) {
                  messages: [{ role: "system", content: system }].concat(msgs.map(function (m) { return { role: m.role, content: m.text }; })) };
         if (tools.length) body.tools = tools.map(function (t) { return { type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }; });
         // Qwen3's template thinks aloud unless told not to (llama-server passes this to it).
-        if (p.type === "local") { body.chat_template_kwargs = { enable_thinking: false }; body.max_tokens = 512; }
+        if (p.type === "local") { body.chat_template_kwargs = { enable_thinking: false }; body.max_tokens = req.maxTokens || 512; }
+        // The on-device model's two steps (assistant.js askLocal): a tool
+        // call it must make ("required": llama-server constrains the output
+        // to a call), and an answer in a JSON schema (its grammar).
+        if (req.toolChoice) body.tool_choice = req.toolChoice;
+        if (req.schema) body.response_format = { type: "json_schema", json_schema: { name: "answer", schema: req.schema } };
+        if (req.temperature !== undefined) body.temperature = req.temperature;
         break;
     default:
         throw new Error("unknown provider type: " + p.type);

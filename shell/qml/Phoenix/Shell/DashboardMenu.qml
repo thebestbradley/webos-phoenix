@@ -38,11 +38,13 @@
 // down to the screen's height, where a header offers Select and Clear All
 // (Notifications.qml keeps the drawer's state: `drawer`).
 //
-// Not reproduced: a row removed by its app rather than by a swipe does not
-// slide out first (removeWindow, :653-709): the Repeater drops it at once
-// and the rows below close up as after a swipe. Grouped notification
-// windows that take their own horizontal drags (isManualDragWindow,
-// :194-222) are not known here.
+// A row its app takes away (rather than a swipe) slides on a width and a
+// half over 200 ms, linear, as removeWindow (:653-709) did: the Repeater
+// drops the row at once, so a copy of it (its icon and text: the app's
+// window goes with the notification) makes the move. Unlike the original
+// the rows below close up meanwhile rather than after it. Grouped
+// notification windows that take their own horizontal drags
+// (isManualDragWindow, :194-222) are not known here.
 
 import QtQuick
 
@@ -112,6 +114,19 @@ Item {
 
     // Shown, or fading: rows animate into place only then (isVisible()).
     readonly property bool shown: opacity > 0
+
+    // A row gone from the model while the menu shows: unless a swipe took
+    // it (it has slid off already), a copy slides out in its place
+    // (removeWindow, :689-709).
+    function _rowLeft(r) {
+        if (!shown || !r || r.removing || r.swipeX !== 0)
+            return;
+        leavingRow.createObject(container, {
+            y: r.y, width: r.width, height: r.height, source: null, windowKey: "",
+            title: r.title, body: r.body, color: r.color, glyph: r.glyph, icon: r.icon,
+            progress: r.progress
+        });
+    }
     visible: shown
     opacity: open ? 1 : 0
     Behavior on opacity { NumberAnimation { duration: Theme.systemMenuFadeDuration } }
@@ -493,7 +508,25 @@ Item {
                     model: menu.open || menu.shown ? menu.model : null
                     delegate: MenuRow {}
                     onItemAdded: Qt.callLater(function() { menu.rowsRevision++; })
-                    onItemRemoved: Qt.callLater(function() { menu.rowsRevision++; })
+                    onItemRemoved: (index, item) => {
+                        menu._rowLeft(item);
+                        Qt.callLater(function() { menu.rowsRevision++; });
+                    }
+                }
+                Component {
+                    id: leavingRow
+                    DashboardItem {
+                        id: leaving
+                        objectName: "dashboardMenuLeavingRow"
+                        enabled: false
+                        z: 2                                    // raiseChild, :698
+                        NumberAnimation on x {
+                            objectName: "dashboardMenuLeavingSlide"
+                            to: Theme.dashboardDeleteTravel * leaving.width
+                            duration: Theme.dashboardDeleteDuration
+                            onFinished: leaving.destroy()
+                        }
+                    }
                 }
             }
         }

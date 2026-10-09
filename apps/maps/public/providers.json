@@ -8,5 +8,6 @@
     },
     "search": { "kind": "photon", "url": "https://photon.komoot.io" },
     "routing": { "kind": "valhalla", "url": "https://valhalla1.openstreetmap.de", "clientId": "webos-phoenix-maps" },
+    "details": { "kind": "overpass", "url": "https://overpass-api.de/api/interpreter" },
     "renderer": "auto"
 }

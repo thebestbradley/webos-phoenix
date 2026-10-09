@@ -119,6 +119,13 @@ const SCENARIOS = {
         await h.tap(".enyo-radiobutton:nth-child(2)");
         await h.button("New Alarm").click(); await h.wait(1200);
         await h.screenshot("new-alarm");
+        await h.expect("Occurs' list selector holds its label (Daily), not hanging out under the arrow", async () => h.page.evaluate(() => {
+            const sel = [...document.querySelectorAll(".enyo-listselector")].find((e) => e.offsetWidth && /Daily/.test(e.textContent));
+            const label = sel && [...sel.querySelectorAll("*")].find((e) => !e.children.length && /Daily/.test(e.textContent));
+            if (!label) return false;
+            const s = sel.getBoundingClientRect(), l = label.getBoundingClientRect();
+            return l.left >= s.left && l.right <= s.right && s.right <= innerWidth;
+        }));
         await h.button("Done").click(); await h.wait(1200);
         await h.screenshot("alarms");
         await h.expect("an alarm in db8", async () => (await h.db("com\\.palm\\.clock\\.alarm:1")).length === 1);
@@ -135,6 +142,22 @@ const SCENARIOS = {
         await h.page.locator("input:visible").first().click();
         await h.type("Taylor Morgan");
         await h.screenshot("new-contact");
+        await h.expect("Cancel and Done fit in the card", async () => h.page.evaluate(() =>
+            [...document.querySelectorAll(".edit .enyo-toolbar .enyo-button")].filter((b) => b.offsetWidth)
+                .every((b) => b.getBoundingClientRect().right <= innerWidth)));
+        await h.expect("the name field's star and info buttons, framed, side by side", async () => h.page.evaluate(() => {
+            const r = [...document.querySelectorAll(".edit .field-button")].filter((b) => b.offsetWidth).slice(0, 2).map((b) => b.getBoundingClientRect());
+            return r.length === 2 && r[0].width >= 32 && r[0].right <= r[1].left;
+        }));
+        await h.expect("the type label (MOBILE) framed round its text", async () => h.page.evaluate(() => {
+            const l = [...document.querySelectorAll(".edit .editable-label")].find((e) => e.offsetWidth);
+            const t = l && [...l.querySelectorAll("*")].find((e) => /MOBILE/i.test(e.textContent) && !e.children.length);
+            if (!l || !t) return false;
+            const a = l.getBoundingClientRect(), b = t.getBoundingClientRect();
+            return parseFloat(getComputedStyle(l).borderTopWidth) === 12 && b.left >= a.left && b.right <= a.right;
+        }));
+        await h.expect("text fields keep no border (border: none is not a border image)", async () => h.page.evaluate(() =>
+            [...document.querySelectorAll(".edit input")].filter((i) => i.offsetWidth).every((i) => getComputedStyle(i).borderTopWidth === "0px")));
         await h.button("Done").click(); await h.wait(2500);
         await h.screenshot("saved");
         await h.expectText("Taylor Morgan");
@@ -156,6 +179,10 @@ const SCENARIOS = {
         await h.screenshot("month");
         await views.nth(0).click(); await h.wait(1000);
         await h.button("New event").click(); await h.wait(1500);
+        await h.expect("the new event's calendar picker shows the calendar's name", async () => h.page.evaluate(() => {
+            const c = document.querySelector("[id$=calendarPicker] [id$=_caption]");
+            return !!c && c.getBoundingClientRect().width > 40 && /\S/.test(c.textContent);
+        }));
         await h.tap(".event-name", 300);
         await h.type("Pick up bike");
         await h.screenshot("new-event");
@@ -166,6 +193,17 @@ const SCENARIOS = {
     },
 
     "com.palm.app.email": async (h, context) => {
+        // The inbox newest first (its sort keys, which Email's change
+        // processor writes once db8 finds its messages: _del = false).
+        await h.expect("the inbox is in date order, newest first", async () => {
+            for (let i = 0; i < 40; i++) {
+                const order = await h.page.evaluate(() => ["Alex Rivera", "Priya Natarajan", "Northwind Labs IT"]
+                    .map((n) => document.body.innerText.indexOf(n)));
+                if (order.every((x, j) => x >= 0 && (j === 0 || x > order[j - 1]))) return true;
+                await h.wait(250);
+            }
+            return false;
+        });
         await h.tapText("Launcher mock-ups for Thursday", 2000);
         await h.screenshot("message");
         await h.expectText("Larger touch targets in the quick launch bar");

@@ -322,6 +322,16 @@ def resolve(path):
     return None
 
 
+def developer_of(o, fallback):
+    """A developer app's or launch point's gate (docs/APP-RUNTIME.md "Developer
+    apps"): "devmode" for "developer": true, "unlock" for "unlock", else
+    fallback (shell/sim/rootfs.cpp developerOf)."""
+    d = o.get("developer")
+    if isinstance(d, bool):
+        return "devmode" if d else ""
+    return "unlock" if d == "unlock" else fallback
+
+
 def app_list():
     """Installed apps and their launch points, as the launcher sees them.
 
@@ -329,8 +339,10 @@ def app_list():
     launcherTab (0 Apps, 1 Downloads, 2 Settings), hidden (keep the app
     itself out of the launcher), quickLaunch (quick launch slot 1-4) and
     launchPoints: extra launcher icons, each {id, title, icon, params},
-    that start the app with those launch params. shell/sim/rootfs.cpp reads
-    the same fields.
+    that start the app with those launch params; developer (true: only
+    while Developer Mode is on, "unlock": once it was revealed; a launch
+    point's own, else its app's). shell/sim/rootfs.cpp reads the same
+    fields.
     """
     out = []
     pages = ["apps", "downloads", "prefs", "favorites"]
@@ -343,6 +355,7 @@ def app_list():
         phoenix = info.get("phoenix") or {}
         tab = phoenix.get("launcherTab", 0)
         page = pages[tab] if "launcherTab" in phoenix and 0 <= tab < len(pages) else ""
+        developer = developer_of(phoenix, "")
         out.append({
             "id": app_id,
             "title": info.get("title", app_id),
@@ -357,6 +370,7 @@ def app_list():
             "hidden": bool(phoenix.get("hidden", False)),
             "quickLaunch": int(phoenix.get("quickLaunch", 0)),
             "noWindow": bool(info.get("noWindow", False)),
+            "developer": developer,
         })
         for lp in phoenix.get("launchPoints", []):
             params = lp.get("params", {})
@@ -371,6 +385,7 @@ def app_list():
                 "tab": lp_tab,
                 "page": pages[lp_tab] if "launcherTab" in lp and 0 <= lp_tab < len(pages) else page,
                 "params": params,
+                "developer": developer_of(lp, developer),
             })
     # Launch points apps added (addLaunchPoint): on Favorites.
     for lp in dynamic_launch_points():
@@ -384,6 +399,7 @@ def app_list():
             "main": main + "?launchParams=" + urllib.parse.quote(json.dumps(params, separators=(",", ":"))),
             "icon": lp.get("icon") or "/usr/palm/applications/%s/%s" % (lp["id"], info.get("icon", "icon.png")),
             "tab": 0, "page": "favorites", "dynamic": True, "params": params, "removable": lp.get("removable", True),
+            "developer": developer_of((info.get("phoenix") or {}), ""),
         })
     return out
 
@@ -405,6 +421,7 @@ def launch_points():
             "icon": a["icon"],
             "params": a.get("params", {}),
             "hidden": a.get("hidden", False),
+            "developer": a.get("developer", ""),
             "removable": a.get("removable", True) if a.get("dynamic") else (app_id in INSTALLED and "appId" not in a),
             "version": info.get("version", ""),
         }
@@ -593,7 +610,9 @@ def proxy_request(req):
             target = url.path or "/"
             if url.query:
                 target += "?" + url.query
-            conn = cls(url.hostname, url.port, timeout=60)
+            # {timeoutMs}: the on-device model's deadline (assistant.js bounded).
+            asked = req.get("timeoutMs")
+            conn = cls(url.hostname, url.port, timeout=min(60, asked / 1000) if isinstance(asked, (int, float)) and asked > 0 else 60)
             conn.request(method, target, body=body.encode("utf-8") if body is not None else None,
                          headers=req.get("headers") or {})
             res = conn.getresponse()

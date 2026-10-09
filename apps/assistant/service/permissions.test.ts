@@ -47,6 +47,10 @@ const GROUPS: [RegExp, string][] = [
     [/^com\.palm\.display\/control\/(?:getProperty|setProperty|setState)$/, "devices.display.control"],   // services/devices
     [/^org\.webosphoenix\.service\.packages\/search$/, "marketplace.management"],                         // apps/marketplace/service
     [/^org\.webosphoenix\.transcriber\//, "transcriber.operation"],                                       // apps/voicememos/service
+    [/^org\.webosphoenix\.filemanager\/search$/, "filemanager.operation"],                               // apps/files/service
+    [/^org\.webosphoenix\.tethering\//, "phoenix.tethering"],
+    [/^org\.webosphoenix\.clipboard\/add$/, "phoenix.clipboard"],
+    [/^com\.webos\.service\.vpn\//, "vpn.management"],                                                     // LuneOS's luneos-vpn-adapter
     [/^org\.webosphoenix\.service\.location\//, "phoenix.location.permissions"],
     [/^org\.webosphoenix\.system\/mediaKey$/, "phoenix.system.media"],
     [/^com\.webos\.service\.wifi\//, "wifi.management"],
@@ -66,7 +70,7 @@ const DB_PERMS = JSON.parse(readFileSync(resolve(__dirname, "../public/configura
 // A request for each command (test/phrases.cjs); confirm: accept the read-back.
 const PHRASES = req("./test/phrases.cjs") as Record<string, string>;
 // Commands run as another one's action (locationAccess: the Allow button).
-const ACTIONS: Record<string, true> = { locationAccess: true };
+const ACTIONS: Record<string, true> = { locationAccess: true, copyText: true };
 
 const NOW = new Date(2026, 9, 7, 10, 0, 0).getTime();
 const at = (d: number, h: number) => new Date(2026, 9, d, h, 0, 0).getTime();
@@ -86,14 +90,14 @@ function device() {
     put({ _kind: "com.palm.note:1", text: "Wifi code", position: "m" });
     put({ _kind: "com.palm.clock.alarm:1", key: "a1", hour: 18, minute: 30, occurs: "once", enabled: true });
     put({ _kind: "com.palm.mail.account:1", accountId: "acct", email: "me@example.com" });
-    put({ _kind: "com.palm.email:1", subject: "Hi", flags: { read: false } });
+    put({ _kind: "com.palm.email:1", subject: "Hi", flags: { read: false }, from: { addr: "alex@example.com", name: "Alex" }, timestamp: NOW - 1000 });
     put({ _kind: "com.palm.smsmessage:1", folder: "inbox", messageText: "Hi", from: { addr: "3035550135" }, localTimestamp: NOW - 1000 });
     put({ _kind: "com.palm.phonecall:1", type: "missed", timestamp: NOW - 1000, from: { addr: "3035550135" }, to: [] });
     put({ _kind: "com.palm.media.image.file:1", path: "/media/internal/DCIM/a.jpg", createdTime: at(6, 12) });
     // What it did: [method, kind, operation].
     const used: [string, string, string][] = [];
     // eslint-disable-next-line prefer-const
-    let dev: { allowed: boolean | null } = { allowed: true };
+    let dev: { allowed: boolean | null; lose: string } = { allowed: true, lose: "" };
     const kindOf = (o: any) => o && (o._kind || db.get(o._id)?._kind);
     const ok = (o: object = {}) => Promise.resolve({ returnValue: true, ...o });
     const luna = {
@@ -102,7 +106,11 @@ function device() {
             const record = (kind: string, op: string) => used.push([m, kind, op]);
             if (m === "com.palm.db/find") { record(p.query.from, "read"); return ok({ results: [...db.values()].filter((o) => o._kind === p.query.from) }); }
             if (m === "com.palm.db/get") { p.ids.forEach((id: string) => record(kindOf({ _id: id }), "read")); return ok({ results: p.ids.map((id: string) => db.get(id)).filter(Boolean) }); }
-            if (m === "com.palm.db/put") { p.objects.forEach((o: any) => record(o._kind, db.has(o._id) ? "update" : "create")); return ok({ results: p.objects.map((o: any) => ({ id: put(o) })) }); }
+            if (m === "com.palm.db/put") {
+                p.objects.forEach((o: any) => record(o._kind, db.has(o._id) ? "update" : "create"));
+                // dev.lose: a kind db8 answers for but does not keep (what the read-back catches).
+                return ok({ results: p.objects.map((o: any) => (o._kind === dev.lose ? { id: "lost" + ++n } : { id: put(o) })) });
+            }
             if (m === "com.palm.db/merge") { p.objects.forEach((o: any) => { record(kindOf(o), "update"); db.set(o._id, { ...db.get(o._id), ...o }); }); return ok(); }
             if (m === "com.palm.db/del") { (p.ids || []).forEach((id: string) => { record(kindOf({ _id: id }), "delete"); db.delete(id); }); return ok(); }
             if (m === "com.palm.db/reserveIds") { used.push([m, "", ""]); return ok({ ids: Array.from({ length: p.count }, () => "r" + ++n) }); }
@@ -117,6 +125,8 @@ function device() {
             if (m === "com.palm.display/control/getProperty") return ok({ maximumBrightness: 50 });
             if (m === "com.palm.power/com/palm/power/batteryStatusQuery") return ok({ percent: 50 });
             if (m === "com.palm.telephony/voicemailQuery") return ok({ number: "5550100", count: 1, waiting: true });
+            if (m === "com.webos.service.vpn/getProfileList") return ok({ vpnProfiles: [{ vpnProfileName: "Work" }] });
+            if (m === "org.webosphoenix.filemanager/search") return ok({ entries: [{ name: "budget.ods", path: "/media/internal/Documents/budget.ods", type: "file", size: 100, mtime: NOW }] });
             if (m === "org.webosphoenix.service.packages/search") return ok({ apps: [{ id: "doom", sourceId: "s", title: "Doom" }] });
             if (m === "com.webos.service.wifi/getstatus") return ok({ status: "connected" });
             return ok();
@@ -142,6 +152,20 @@ describe("what each command may do on a device", () => {
         expect(BUILT_IN.map((c) => c.id).filter((id) => !(id in PHRASES)), "commands without a request here").toEqual([]);
     });
 
+    // The settings toggle reaches through services of their own.
+    for (const text of ["turn on the hotspot", "turn on vpn", "turn off vpn", "turn on location services", "turn on rotation lock"]) {
+        it(`toggle "${text}": its Luna calls are in its client permissions`, async () => {
+            const d = device();
+            const r = await d.svc.ask({ text, newThread: true });
+            expect(r.messages.at(-1)).toMatchObject({ command: "toggle", status: "done" });
+            for (const [method] of d.used) {
+                const g = GROUPS.find(([re]) => re.test(method));
+                expect(g, `${text}: ${method}`).toBeTruthy();
+                expect(PERM, `${text}: ${method}`).toContain(g![1]);
+            }
+        });
+    }
+
     for (const c of BUILT_IN) {
         it(`${c.id}: its Luna calls are in its client permissions, its db8 kinds granted`, async () => {
             const d = device();
@@ -154,13 +178,20 @@ describe("what each command may do on a device", () => {
             };
             if (c.id === "undo") await ask("new note: something");
             let m: any;
-            if (ACTIONS[c.id]) {
+            if (c.id === "locationAccess") {
                 // Run as its button: the Assistant asks before it uses the location; Allow.
                 d.allowed = null;
                 m = await ask("what's the weather");
                 const r = await d.svc.choose({ threadId: thread, messageId: m.id, choice: "do:0" });
                 expect(r.messages.map((x: Reply) => x.command)).toContain(c.id);
                 expect(r.messages.at(-1).text).toMatch(/°/);
+            } else if (c.id === "copyText") {
+                // Run as its button: a memo db8 took but does not have; Copy It Instead.
+                d.lose = "com.palm.note:1";
+                m = await ask("new note: buy flowers");
+                expect(m).toMatchObject({ status: "failed", text: "I couldn't save it to Memos: it isn't there when I check." });
+                const r = await d.svc.choose({ threadId: thread, messageId: m.id, choice: "do:0" });
+                expect(r.messages.at(-1)).toMatchObject({ command: "copyText", text: "Copied. You can paste it anywhere." });
             } else {
                 m = await ask(PHRASES[c.id]);
                 expect(m.command, `"${PHRASES[c.id]}" runs ${c.id}`).toBe(c.id);

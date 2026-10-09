@@ -11,7 +11,7 @@
     "extraLargeIcon": "icon-512x512.png",
     "uiRevision": 2,
     "phoenix": {
-        "//": "Phoenix launcher metadata: launcherTab 0 = Apps, 1 = Downloads, 2 = Settings. hidden keeps the app itself out of the launcher; each launch point is its own icon and card, and starts the app with its params.",
+        "//": "Phoenix launcher metadata: launcherTab 0 = Apps, 1 = Downloads, 2 = Settings. hidden keeps the app itself out of the launcher; each launch point is its own icon and card, and starts the app with its params. developer \"unlock\": shown once Developer Mode was revealed (Just Type's Konami code), true: only while it is on (docs/APP-RUNTIME.md).",
         "launcherTab": 2,
         "hidden": true,
         "launchPoints": [
@@ -42,7 +42,7 @@
             { "id": "org.webosphoenix.settings.backup", "title": "Backup", "icon": "icons/backup.png", "params": { "page": "backup" } },
             { "id": "org.webosphoenix.settings.updates", "title": "Updates", "icon": "icons/updates.png", "params": { "page": "updates" } },
             { "id": "org.webosphoenix.settings.certificates", "title": "Certificate Manager", "icon": "icons/certificates.png", "params": { "page": "certificates" } },
-            { "id": "org.webosphoenix.settings.devmode", "title": "Developer Mode", "icon": "icons/devmode.png", "params": { "page": "devmode" } },
+            { "id": "org.webosphoenix.settings.devmode", "title": "Developer Mode", "icon": "icons/devmode.png", "params": { "page": "devmode" }, "developer": "unlock" },
             { "id": "org.webosphoenix.settings.advanced", "title": "Advanced", "icon": "icons/advanced.png", "params": { "page": "advanced" } }
         ]
     }

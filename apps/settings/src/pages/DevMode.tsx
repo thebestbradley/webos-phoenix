@@ -6,10 +6,17 @@
 // sudo and SSH. Turning it on shows what it allows and asks for the device
 // PIN or password; with no secure unlock set, it asks for one to be set
 // first in Screen & Lock. Turning it off needs nothing. Phoenix addition
-// (legacy webOS had the "webos20090606" Konami code in Just Type; OSE has
-// the Developer Mode app and com.webos.service.devmode).
+// (OSE has the Developer Mode app and com.webos.service.devmode). As on
+// legacy webOS, it stays out of sight until Just Type's Konami code
+// ("upupdowndownleftrightleftrightbastart", or 1.x's "webos20090606")
+// reveals it (luna-applauncher app/LaunchPointSearch.js:30-36: the
+// "Developer Mode Enabler"): the devModeUnlocked system preference. While
+// Developer Mode is off, Hide Developer Mode puts it out of sight again.
+// The developer apps (Notification Lab, the framework demos, Terminal)
+// show only while it is on (docs/APP-RUNTIME.md "Developer apps").
 // Services:
 //   com.webos.service.devmode getDevMode {subscribe} / setDevMode {status}
+//   com.webos.service.systemservice getPreferences / setPreferences {devModeUnlocked}
 //   com.palm.systemmanager getDeviceLockMode / matchDevicePasscode;
 //   getDebugOverlays, enableFpsCounter, enableTouchPlot (the shell's
 //   frame rate counter and touch plot, under Debugging while it is on)
@@ -21,6 +28,7 @@ import { Button, Dialog, ErrorText, Group, Note, Page, PageHeader, Row, TextFiel
 
 export function DevModePage() {
     const on = useLuna<boolean>((cb, err) => devMode.watch(cb, err), []).value;
+    const unlocked = useLuna<boolean>((cb, err) => devMode.watchUnlocked(cb, err), []).value;
     const [lockMode, setLockMode] = useState<LockMode | null>(null);
     const [asking, setAsking] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -31,7 +39,16 @@ export function DevModePage() {
 
     async function turnOff() {
         setError(null);
-        try { await devMode.set(false); } catch (e) { setError(e instanceof LunaError ? e.errorText : String(e)); }
+        try {
+            // On without having been revealed (before the Konami code was
+            // needed): it stays in sight now that it is off.
+            if (unlocked === false) await devMode.setUnlocked(true);
+            await devMode.set(false);
+        } catch (e) { setError(e instanceof LunaError ? e.errorText : String(e)); }
+    }
+    async function hide() {
+        setError(null);
+        try { await devMode.setUnlocked(false); } catch (e) { setError(e instanceof LunaError ? e.errorText : String(e)); }
     }
 
     return (
@@ -45,11 +62,18 @@ export function DevModePage() {
             </Group>
             {error && <ErrorText>{error}</ErrorText>}
             <Note>
-                With Developer Mode on, the Marketplace can install apps that run their own install scripts or
+                With Developer Mode on, the developer apps (Terminal, Notification Lab and the framework demos)
+                are in the launcher, and the Marketplace can install apps that run their own install scripts or
                 background services. They run with more access to the device than other apps, so only install
                 them from people you trust.
             </Note>
             {on && <DebugOverlays />}
+            {on === false && (
+                <>
+                    <Button data-testid="devmode-hide" onClick={() => void hide()}>Hide Developer Mode</Button>
+                    <Note>Hiding takes Developer Mode out of Settings and the launcher, until it is found again.</Note>
+                </>
+            )}
             <DevModeDialog open={asking} lockMode={lockMode} onDone={() => setAsking(false)} />
         </Page>
     );

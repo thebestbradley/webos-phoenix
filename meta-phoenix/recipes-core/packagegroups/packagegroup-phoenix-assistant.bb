@@ -33,7 +33,7 @@ PHOENIX_KITTEN ?= "${@'onnxruntime kitten-tts-nano cmudict' if d.getVar('TARGET_
 # fallback out.
 PHOENIX_TTS ?= "flite"
 
-# The built-in on-device model (397 MB): "" leaves it out (the Assistant
+# The built-in on-device model (639 MB): "" leaves it out (the Assistant
 # then has its commands and the models Settings downloads).
 PHOENIX_BASE_MODEL ?= "qwen3-0.6b-gguf"
 

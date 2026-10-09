@@ -10,6 +10,7 @@
 // rest, threads.
 
 import { createRequire } from "node:module";
+import http from "node:http";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 type Reply = { returnValue: boolean; errorCode?: number; errorText?: string; [k: string]: any };
@@ -33,7 +34,7 @@ const PEOPLE = [
 ];
 const APPS = [{ id: "org.webosphoenix.maps", title: "Maps" }, { id: "org.webosphoenix.music", title: "Music" }];
 
-function setup(opts: { llm?: object; voice?: () => unknown } = {}) {
+function setup(opts: { llm?: object; voice?: () => unknown; deadlineMs?: number } = {}) {
     const data = new Map<string, unknown>();
     const calls: { uri: string; params: any }[] = [];
     const spoken: string[] = [];
@@ -67,7 +68,7 @@ function setup(opts: { llm?: object; voice?: () => unknown } = {}) {
     const svc = createAssistantService({
         luna, storage, secrets, request: createRequest({ timeoutMs: 5000 }), now: () => NOW,
         caller: () => who, tts: { speak: (t: string, _l: string, v: string) => { spoken.push(t); voices.push(v); return Promise.resolve(); }, stop() {} },
-        llm: opts.llm, voice: opts.voice, locale: () => "en-GB",
+        llm: opts.llm, voice: opts.voice, locale: () => "en-GB", localDeadlineMs: opts.deadlineMs,
     });
     return {
         svc, calls, data, spoken, voices,
@@ -93,6 +94,15 @@ async function addProvider(t: ReturnType<typeof setup>, type: string, extra: obj
 }
 
 beforeEach(() => { mock.requests.length = 0; });
+
+// The launch an answer made, without the flags every command's launch has
+// (behind, returnToCaller: checked once on their own).
+function launched(x: { called(part: string): { params: any }[] }) {
+    const p = { ...x.called("applicationManager/launch").at(-1)!.params };
+    delete p.behind;
+    delete p.returnToCaller;
+    return p;
+}
 
 describe("the command layer", () => {
     it("runs a command at once, offline, and says what it did", async () => {
@@ -139,11 +149,11 @@ describe("the command layer", () => {
         const t = setup();
         expect(last(await ask(t, "what's 15% of 80")).text).toBe("15% × 80 = 12");
         expect(last(await ask(t, "open maps")).text).toBe("Opening Maps.");
-        expect(t.called("applicationManager/launch").at(-1)!.params).toEqual({ id: "org.webosphoenix.maps", params: {} });
+        expect(launched(t)).toEqual({ id: "org.webosphoenix.maps", params: {} });
         await ask(t, "play daft punk");
-        expect(t.called("applicationManager/launch").at(-1)!.params).toEqual({ id: "org.webosphoenix.music", params: { play: "daft punk" } });
+        expect(launched(t)).toEqual({ id: "org.webosphoenix.music", params: { play: "daft punk" } });
         await ask(t, "navigate to the station");
-        expect(t.called("applicationManager/launch").at(-1)!.params).toEqual({ id: "org.webosphoenix.maps", params: { target: "mapto:station" } });
+        expect(launched(t)).toEqual({ id: "org.webosphoenix.maps", params: { target: "mapto:station" } });
     });
 
     it("does not run a command turned off in Settings", async () => {
@@ -188,7 +198,7 @@ describe("confirmation for what sends or calls", () => {
         expect(last(r)).toMatchObject({ status: "pending", text: "Call Mary Spetzler (555-0199)?" });
         expect(t.called("applicationManager/launch")).toHaveLength(0);
         await t.svc.confirm({ threadId: r.thread.id, messageId: last(r).id, accept: true });
-        expect(t.called("applicationManager/launch")[0].params).toEqual({ id: "org.webosphoenix.phone", params: { number: "555-0199", dial: true } });
+        expect(launched(t)).toEqual({ id: "org.webosphoenix.phone", params: { number: "555-0199", dial: true } });
     });
 
     it("says so when the contact is unknown", async () => {
@@ -229,7 +239,7 @@ describe("Connect model", () => {
         const offer = last(r);
         const c = await t.svc.connect({ threadId: r.thread.id, messageId: offer.id, mode: "cloud" });
         expect(c).toMatchObject({ returnValue: true, mode: "cloud", waiting: true });
-        expect(t.called("applicationManager/launch").at(-1)!.params).toEqual(
+        expect(launched(t)).toEqual(
             { id: "org.webosphoenix.settings", params: { page: "assistant", connect: "cloud", threadId: r.thread.id } });
         // Not taken: the buttons stay until a model answers.
         expect((await t.svc.thread({ id: r.thread.id })).messages.find((m: Reply) => m.id === offer.id).chosen).toBeUndefined();
@@ -256,7 +266,7 @@ describe("Connect model", () => {
     });
 
     it("asks the on-device model first when both are there", async () => {
-        const MODEL = "qwen2.5-0.5b-instruct-q4_k_m";
+        const MODEL = "qwen3-1.7b-q8_0";
         const t = setup({ llm: {
             status: () => Promise.resolve({ available: true, installed: [{ id: MODEL }], ramBytes: 4 * 2 ** 30 }),
             ensure: () => Promise.resolve({ baseUrl: mock.url + "/v1" }),
@@ -295,7 +305,7 @@ describe("Connect model", () => {
 });
 
 describe("never a dead end (the owner's banana pudding, 9 October 2026)", () => {
-    const MODEL = "qwen2.5-0.5b-instruct-q4_k_m";
+    const MODEL = "qwen3-1.7b-q8_0";
     const local = () => ({
         status: () => Promise.resolve({ available: true, installed: [{ id: MODEL }], ramBytes: 4 * 2 ** 30 }),
         ensure: () => Promise.resolve({ baseUrl: mock.url + "/v1" }),
@@ -361,7 +371,7 @@ describe("never a dead end (the owner's banana pudding, 9 October 2026)", () => 
         expect(last(r).text).toMatch(/^I don't have the tools for that yet, but I can open Music for you\. Did you mean/);
         expect(last(r).choices.map((c: Reply) => c.id)).toEqual(["open:0", "web", "connect"]);
         await t.svc.choose({ threadId: r.thread.id, messageId: last(r).id, choice: "open:0" });
-        expect(t.called("applicationManager/launch").at(-1)!.params).toEqual({ id: "org.webosphoenix.music", params: {} });
+        expect(launched(t)).toEqual({ id: "org.webosphoenix.music", params: {} });
     });
 });
 
@@ -409,7 +419,7 @@ describe("the permission gate", () => {
     it("lets a cloud model act only after Settings allows it", async () => {
         const t = setup();
         const p = await addProvider(t, "openai");
-        const r = await ask(t, "it's dark in here");
+        const r = await ask(t, "hmm, where was I");
         await t.svc.choose({ threadId: r.thread.id, messageId: last(r).id, choice: "cloud:" + p.id });
         // A provider that calls a tool it was never given is refused.
         const forced = await ask(t, "force a tool", { threadId: r.thread.id });
@@ -458,7 +468,7 @@ describe("the permission gate", () => {
 });
 
 describe("the on-device model", () => {
-    const MODEL = "qwen2.5-0.5b-instruct-q4_k_m";
+    const MODEL = "qwen3-1.7b-q8_0";
     const llm = () => ({
         status: () => Promise.resolve({ available: true, installed: [{ id: MODEL }], ramBytes: 4 * 2 ** 30 }),
         ensure: () => Promise.resolve({ baseUrl: mock.url + "/v1" }),
@@ -471,14 +481,13 @@ describe("the on-device model", () => {
         expect((await t.svc.selectModel({ id: MODEL })).returnValue).toBe(true);
         t.as("com.palm.systemui");
         const r = await ask(t, "why is the sky blue");
-        expect(last(r)).toMatchObject({ text: "chat says: why is the sky blue", via: "on-device", source: "Qwen2.5 0.5B Instruct" });
+        expect(last(r)).toMatchObject({ text: "chat says: why is the sky blue", via: "on-device", source: "Qwen3 1.7B" });
         // A question about the world: no tools (a short prompt, no misfires).
         expect(mock.requests.at(-1)!.body.tools).toBeUndefined();
         const act = await ask(t, "it's dark, put the flashlight on for me");
-        // A request of the device: the tools near its words only (a short prompt).
+        // A request of the device: the one tool it chose (pickCommand), to call.
         const offered = mock.requests.at(-1)!.body.tools.map((x: Reply) => x.function?.name ?? x.name);
-        expect(offered).toContain("toggle");
-        expect(offered.length).toBeLessThanOrEqual(10);
+        expect(offered).toEqual(["toggle"]);
         expect(last(act)).toMatchObject({ via: "on-device", status: "done", text: "The flashlight is on." });
         // Its times as said: "tomorrow at 6:30 am".
         const wake = await ask(t, "please could you wake me early tomorrow");
@@ -502,12 +511,23 @@ describe("the on-device model", () => {
         const t = setup({ llm: llm() });
         const m = await t.svc.models();
         expect(m.models.map((x: Reply) => [x.id, x.fits, x.recommended, x.installed, x.builtIn])).toEqual([
-            ["qwen3-0.6b-q4_k_m", true, false, false, true], [MODEL, true, false, true, false],
-            ["qwen2.5-1.5b-instruct-q4_k_m", true, true, false, false], ["qwen3-4b-q4_k_m", false, false, false, false]]);
+            // 4 GB: the built-in model is the one that fits (and so recommended).
+            ["qwen3-0.6b-q8_0", true, true, false, true], [MODEL, false, false, true, false],
+            ["qwen3-4b-q4_k_m", false, false, false, false], ["qwen3-8b-q4_k_m", false, false, false, false],
+            ["qwen3-14b-q4_k_m", false, false, false, false], ["qwen3-30b-a3b-q4_k_m", false, false, false, false]]);
+    });
+
+    it("recommends the largest that fits each kind of device", async () => {
+        const models = req("./lib/models.js") as { forDevice(r: number): { id: string; recommended: boolean }[] };
+        const best = (gb: number) => models.forDevice(gb * 2 ** 30).find((m) => m.recommended)!.id;
+        // As devices report their memory: a little under what they are sold as.
+        expect([3.7, 5.6, 7.5, 11.4, 15.5, 31, 62].map(best)).toEqual([
+            "qwen3-0.6b-q8_0", "qwen3-1.7b-q8_0", "qwen3-4b-q4_k_m", "qwen3-8b-q4_k_m", "qwen3-14b-q4_k_m",
+            "qwen3-30b-a3b-q4_k_m", "qwen3-30b-a3b-q4_k_m"]);
     });
 
     describe("built in: Qwen3 0.6B", () => {
-        const BUILT_IN = "qwen3-0.6b-q4_k_m";
+        const BUILT_IN = "qwen3-0.6b-q8_0";
         const withBuiltIn = () => ({
             ...llm(),
             status: () => Promise.resolve({ available: true, installed: [{ id: BUILT_IN, builtIn: true }], ramBytes: 2 * 2 ** 30 }),
@@ -528,10 +548,16 @@ describe("the on-device model", () => {
             const r = await ask(t, "turn on the flashlight");
             expect(last(r)).toMatchObject({ via: "commands", text: "The flashlight is on." });
             expect(mock.requests.length).toBe(before);
-            // What it does not know goes to the model, with the commands as tools.
+            // What it does not know goes to the model in two steps: it chooses
+            // a command (its answer held to their names), then calls that one.
             const act = await ask(t, "it's dark, put the flashlight on for me");
-            expect(mock.requests.length).toBe(before + 1);
-            expect(mock.requests.at(-1)!.body.chat_template_kwargs).toEqual({ enable_thinking: false });
+            expect(mock.requests.length).toBe(before + 2);
+            const [pick, call] = mock.requests.slice(-2).map((q) => q.body);
+            expect(pick.response_format.json_schema.schema.properties.command.enum).toContain("toggle");
+            expect(pick.temperature).toBe(0);
+            expect(call.tools.map((x: Reply) => x.function.name)).toEqual(["toggle"]);
+            expect(call.tool_choice).toBe("required");
+            expect(call.chat_template_kwargs).toEqual({ enable_thinking: false });
             expect(last(act)).toMatchObject({ via: "on-device", status: "done", text: "The flashlight is on." });
         });
 
@@ -549,6 +575,16 @@ describe("the on-device model", () => {
             expect(mock.requests.length).toBe(before);
         });
 
+        it("answers a question with a command that reads, never one that changes", async () => {
+            const t = setup({ llm: withBuiltIn() });
+            const r = await ask(t, "how busy is my friday looking");
+            expect(last(r)).toMatchObject({ via: "on-device", command: "agenda" });
+            // The choice says toggle, but a question is not asked to switch anything.
+            const q = await ask(t, "is it true a flashlight attracts moths?");
+            expect(mock.requests.at(-1)!.body.tools).toBeUndefined();
+            expect(last(q)).toMatchObject({ via: "on-device", text: "chat says: is it true a flashlight attracts moths?" });
+        });
+
         it("is not used where it is not installed", async () => {
             const t = setup({ llm: llm() });
             const r = await ask(t, "why is the sky blue");
@@ -564,6 +600,76 @@ describe("the on-device model", () => {
         const r = await ask(t, "why is the sky blue");
         expect(last(r).text).toMatch(/^The on-device model didn't answer \(llama-server is not installed\)/);
         expect(last(r).choices[0].id).toBe("web");
+    });
+
+    // One deadline for the whole answer (assistant.js bounded): a model
+    // that never answers (llama-server busy behind another request) is
+    // given up on then, not after each step's own HTTP timeout; its request
+    // is closed; the thread says what it is doing meanwhile.
+    it("gives up at one deadline, says so, and closes the request", async () => {
+        const held: { closed: boolean }[] = [];
+        const stall = http.createServer((rq) => { const h = { closed: false }; held.push(h); rq.socket.on("close", () => { h.closed = true; }); });
+        await new Promise<void>((r) => stall.listen(0, "127.0.0.1", () => r()));
+        const url = `http://127.0.0.1:${(stall.address() as { port: number }).port}/v1`;
+        try {
+            const t = setup({ llm: { ...llm(), ensure: () => Promise.resolve({ baseUrl: url }) }, deadlineMs: 600 });
+            t.as("org.webosphoenix.settings");
+            await t.svc.selectModel({ id: MODEL });
+            t.as("com.palm.systemui");
+            const started = Date.now();
+            const asking = ask(t, "why is the sky blue");
+            await new Promise((r) => setTimeout(r, 200));
+            const th = await t.svc.thread({});
+            expect(th.thread.working).toMatchObject({ stage: "thinking" });
+            expect(th.thread.working.until - started).toBeLessThanOrEqual(700);
+            const r = await asking;
+            expect(Date.now() - started).toBeLessThan(2000);
+            expect(last(r).text).toBe("I couldn't think that through in time. Want me to search the web?");
+            expect(last(r).choices.map((c: Reply) => c.id)).toContain("web");
+            expect((await t.svc.thread({})).thread.working).toBeUndefined();
+            for (let i = 0; i < 50 && !(held[0] && held[0].closed); ++i) await new Promise((r) => setTimeout(r, 20));
+            expect(held.length).toBe(1);
+            expect(held[0].closed).toBe(true);
+        } finally {
+            stall.close();
+        }
+    });
+});
+
+describe("the grammar knew the command, not all it needs: the model fills it in", () => {
+    const BUILT_IN = "qwen3-0.6b-q8_0";
+    const withModel = () => ({
+        status: () => Promise.resolve({ available: true, installed: [{ id: BUILT_IN, builtIn: true }], ramBytes: 2 * 2 ** 30 }),
+        ensure: () => Promise.resolve({ baseUrl: mock.url + "/v1" }),
+        download: () => Promise.resolve(), cancel: () => Promise.resolve(), remove: () => Promise.resolve(),
+    });
+
+    it("a time the grammar could not read, held to the command's parameters", async () => {
+        const t = setup({ llm: withModel() });
+        const before = mock.requests.length;
+        const r = await ask(t, "add an event called dentist friday-ish");
+        expect(mock.requests.length).toBe(before + 1);
+        const fill = mock.requests.at(-1)!.body;
+        expect(Object.keys(fill.response_format.json_schema.schema.properties)).toContain("start");
+        expect(fill.response_format.json_schema.schema.required).toEqual([]);
+        expect(fill.temperature).toBe(0);
+        // The model's Friday 9 AM is the start: the event is made (this test has
+        // no calendar to make it in), not asked "When is it?".
+        expect(last(r)).toMatchObject({ via: "on-device", source: "Qwen3 0.6B", command: "event" });
+        expect(last(r).data?.awaiting).toBeUndefined();
+        expect(last(r).text).toMatch(/no calendar/);
+    });
+
+    it("what the words never said is dropped, and asked for as before", async () => {
+        const t = setup({ llm: withModel() });
+        const r = await ask(t, "add an event called dentist");
+        expect(last(r)).toMatchObject({ via: "commands", command: "event", data: { awaiting: { command: "event" } } });
+    });
+
+    it("without an on-device model, the grammar asks as before", async () => {
+        const t = setup();
+        const r = await ask(t, "add an event called dentist friday-ish");
+        expect(last(r)).toMatchObject({ via: "commands", data: { awaiting: { command: "event" } } });
     });
 });
 

@@ -234,6 +234,9 @@ describe("people, messages and email", () => {
         expect(args("read my last message")).toEqual({ who: "", unread: false });
         expect(args("what did Sam say")).toEqual({ who: "sam", unread: false });
         expect(args("any new texts")).toEqual({ who: "", unread: true });
+        // A number said in groups is all of it (the effect harness caught "555").
+        expect(args("text 555 0142 hello from the harness")).toEqual({ who: "555 0142", message: "hello from the harness" });
+        expect(args("text (408) 555-0100 on my way")).toEqual({ who: "(408) 555-0100", message: "on my way" });
         expect(args("read my messages from Priya")).toEqual({ who: "priya", unread: false });
     });
     it("contacts: added, and asked about", () => {

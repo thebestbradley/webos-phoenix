@@ -133,6 +133,32 @@ async function main() {
         check(await page.evaluate(() => document.activeElement === document.body || !document.activeElement), "imeRemoveFocus blurs the field");
         check(last().focused === false, "and the shell hears it lost the focus");
 
+        // ---- The focused field leaves the page (a view gone under Back) -------------------------
+        await page.evaluate(() => { const d = document.createElement("div"); d.id = "kbGone"; d.innerHTML = '<input type="text">'; document.body.appendChild(d); });
+        await page.focus("#kbGone input");
+        await settle();
+        check(last().focused === true, "a field in a view about to go: focused");
+        // Qt WebEngine 6.8's Chromium 122 sends no focusout for a removed
+        // element (newer ones do): swallow it here to be that Chromium.
+        await page.evaluate(() => {
+            const stop = (e) => e.stopImmediatePropagation();
+            window.addEventListener("focusout", stop, true);
+            document.getElementById("kbGone").remove();
+            window.removeEventListener("focusout", stop, true);
+        });
+        await settle();
+        check(last().focused === false, "its view is removed: the shell hears the focus went (Chromium sends no focusout)");
+        // ...and a view hidden with its field focused (Memos' editor under Back).
+        await page.evaluate(() => { const d = document.createElement("div"); d.id = "kbHidden"; d.innerHTML = '<textarea></textarea>'; document.body.appendChild(d); });
+        await page.focus("#kbHidden textarea");
+        await settle();
+        check(last().focused === true, "a field in a view about to hide: focused");
+        await page.evaluate(() => { document.getElementById("kbHidden").style.display = "none"; });
+        await settle();
+        check(last().focused === false && await page.evaluate(() => document.activeElement === document.body),
+              "its view hides: the field loses the focus and the keyboard goes");
+        await page.evaluate(() => document.getElementById("kbHidden").remove());
+
         // ---- Enyo's manual mode -------------------------------------------------------------------
         await page.evaluate(() => enyo.keyboard.forceShow(enyo.keyboard.typeEmail));
         await settle();

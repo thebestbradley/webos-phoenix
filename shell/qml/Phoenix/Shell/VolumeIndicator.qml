@@ -52,7 +52,7 @@ Item {
     height: _contentHeight + 2 * _margin
     visible: opacity > 0
     opacity: _shown ? 1 : 0
-    Behavior on opacity { NumberAnimation { duration: 400; easing.type: Easing.Linear } }
+    Behavior on opacity { NumberAnimation { duration: Theme.alertFadeDuration; easing.type: Easing.Linear } }
 
     ArtBorderImage {
         anchors.fill: parent

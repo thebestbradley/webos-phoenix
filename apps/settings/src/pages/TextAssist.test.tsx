@@ -51,7 +51,7 @@ describe("shortcut rules", () => {
         expect(withoutShortcut(two, "OMW")).toEqual([{ shortcut: "brb", text: "be right back" }]);
     });
     it("reads the preference with LunaSysMgr's defaults", () => {
-        expect(textInputPrefs(undefined)).toEqual({ spellChecking: "autoCorrect", grammarChecking: "autoCorrect", shortcutChecking: "autoCorrect", shortcuts: [] });
+        expect(textInputPrefs(undefined)).toEqual({ spellChecking: "autoCorrect", grammarChecking: "autoCorrect", shortcutChecking: "autoCorrect", shortcuts: [], userWords: [], removedWords: {} });
         expect(textInputPrefs({ shortcutChecking: "off", shortcuts: [{ shortcut: "a" }] }).shortcuts).toEqual([]);
     });
 });
@@ -92,7 +92,7 @@ describe("Text Assist > Shortcuts", () => {
         const p = await new Promise<Record<string, unknown>>((res) => {
             const sub = system.watchPreferences(["x_palm_textinput"], (v) => { sub.cancel(); res(v); });
         });
-        expect(p.x_palm_textinput).toMatchObject({ spellChecking: "autoCorrect", shortcutChecking: "autoCorrect", shortcuts: [] });
+        expect(p.x_palm_textinput).toMatchObject({ spellChecking: "autoCorrect", shortcutChecking: "autoCorrect", shortcuts: [], userWords: [], removedWords: {} });
     });
 });
 

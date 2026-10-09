@@ -84,6 +84,31 @@ async function enyoApp(context) {
     await page.waitForFunction(() => window.enyo && enyo.appMenu && document.body.children.length > 0, null, { timeout: 15000 });
     await page.waitForTimeout(500);
 
+    // A memo on the wall keeps its lines (compat phoenix-compat.css): in the
+    // sample groceries memo each item starts a line of its own, under
+    // "Groceries", rather than running on after it.
+    const lineStarts = await page.waitForFunction(() => {
+        const el = [...document.querySelectorAll(".memo-preview-content")].find((e) => /^Groceries/.test(e.textContent));
+        const t = el && el.firstChild;
+        if (!t || t.nodeType !== 3) return null;
+        const at = (word) => {
+            const i = t.data.indexOf(word), r = document.createRange();
+            r.setStart(t, i); r.setEnd(t, i + 1);
+            return Math.round(r.getBoundingClientRect().left);
+        };
+        return [at("Groceries"), at("Milk"), at("Coffee")];
+    }, null, { timeout: 10000 }).then((h) => h.jsonValue(), () => null);
+    check(!!lineStarts && lineStarts[1] === lineStarts[0] && lineStarts[2] === lineStarts[0],
+          `a memo on the wall keeps its lines: its items start lines of their own (${JSON.stringify(lineStarts)})`);
+    // Back in the editor (compat app/phoenix-back.js): back to the wall.
+    await page.click(".new-memo");
+    await page.waitForTimeout(500);
+    const editing = () => page.evaluate(() => enyo.$.appView_edit.showing);
+    check(await editing(), "a memo opens in the editor");
+    await page.evaluate(() => __phoenixRuntime.back());
+    await page.waitForTimeout(500);
+    check(!(await editing()), "Back in the editor goes back to the wall");
+
     // Fields of our own, beside the app's.
     await page.evaluate(() => {
         const add = (html) => { const d = document.createElement("div"); d.innerHTML = html; document.body.appendChild(d.firstChild); };

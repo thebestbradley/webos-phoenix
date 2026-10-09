@@ -264,6 +264,18 @@ export const devMode = {
     set(on: boolean) {
         return call("luna://com.webos.service.devmode/setDevMode", { status: on ? "enabled" : "disabled" });
     },
+    /**
+     * The devModeUnlocked system preference {subscribe} (Phoenix): Settings'
+     * Developer Mode shows once Just Type's Konami code revealed it.
+     */
+    watchUnlocked(cb: (unlocked: boolean) => void, onError?: OnError): Subscription {
+        return subscribe("luna://com.webos.service.systemservice/getPreferences", { keys: ["devModeUnlocked"] },
+            (r) => { if ("devModeUnlocked" in r) cb(r.devModeUnlocked === true); else cb(false); }, onError);
+    },
+    /** setPreferences {devModeUnlocked}: false hides Settings' Developer Mode again. */
+    setUnlocked(unlocked: boolean) {
+        return call("luna://com.webos.service.systemservice/setPreferences", { devModeUnlocked: unlocked });
+    },
 };
 
 // ---- Applications: com.webos.applicationManager (SAM) ---------------------------------

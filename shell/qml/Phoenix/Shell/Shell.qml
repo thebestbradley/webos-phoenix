@@ -89,6 +89,10 @@ FocusScope {
     // no gesture bar, and on a tablet the bottom-edge flick stands in for
     // its swipe up, as on the TouchPad.
     property bool hardwareHomeButton: false
+    // System keys with modifiers left to the program's own shortcuts, as
+    // [{key, modifiers}] (SystemKeys.passChords): phoenix-sim's Shift+F3
+    // and Shift+F2 beside its F3 (Power) and F2.
+    property var systemKeyPassChords: []
     Binding { target: Theme; property: "hardwareHomeButton"; value: shell.hardwareHomeButton }
     // Settings > Accessibility > Reduce motion.
     Binding { target: Theme; property: "reduceMotion"; value: !!(shell.system && shell.system.reduceMotion) }
@@ -147,9 +151,61 @@ FocusScope {
         when: shell.source !== null && shell.source !== undefined && shell.source.appRelaunch !== undefined
         value: shell.appRelaunch
     }
+    // ---- Developer apps (docs/APP-RUNTIME.md "Developer apps") -------------------------
+    // Apps whose appinfo.json says "phoenix": {"developer": true} (the
+    // window source's apps entry developer "devmode": Notification Lab, the
+    // framework demos, Terminal) are left out of the launcher, the dock and
+    // Just Type, and do not open, while Developer Mode is off; "unlock"
+    // (Settings' Developer Mode) until it was revealed: Just Type's Konami
+    // code (luna-applauncher app/LaunchPointSearch.js:30-36), which sets the
+    // devModeUnlocked system preference for good. On a device, OSE's
+    // setDevMode restarts it; the simulator follows at once.
+    readonly property bool developerMode: !!(shell.system && shell.system.devMode)
+    readonly property bool developerUnlocked: developerMode || !!(shell.system && shell.system.devModeUnlocked)
+    // The original's switcher app, which Just Type's Konami result launches.
+    readonly property string devModeSwitcherId: "com.palm.app.devmodeswitcher"
+    function developerShown(entry) {
+        var d = entry && entry.developer ? String(entry.developer) : "";
+        return d === "" || developerMode || (d === "unlock" && developerUnlocked);
+    }
+    onDeveloperModeChanged: Qt.callLater(rebuildLauncherLayout)
+    onDeveloperUnlockedChanged: Qt.callLater(rebuildLauncherLayout)
+    Binding {
+        target: shell.source
+        property: "developerMode"
+        when: shell.source !== null && shell.source !== undefined && shell.source.developerMode !== undefined
+        value: shell.developerMode
+    }
+    // The Konami code's result chosen (Just Type): Settings' Developer Mode
+    // shows from now on, and opens. (The original Just Type's own result
+    // launches com.palm.app.devmodeswitcher, which the runtime turns into
+    // the same: runtime/phoenix-runtime.js revealDeveloperMode.)
+    function revealDeveloperMode() {
+        if (shell.system)
+            shell.system.devModeUnlocked = true;
+        if (source && typeof source.lunaCall === "function")
+            source.lunaCall("luna://com.webos.service.systemservice/setPreferences", { devModeUnlocked: true }, function() {});
+        return launch("org.webosphoenix.settings", { page: "devmode" });
+    }
+    // A developer app asked to open while Developer Mode is off (the window
+    // source refused it): once Developer Mode was revealed, the user is
+    // told and offered it; before, the app is as good as not there (no
+    // precedent in the original, which had no developer-only apps).
+    function developerAppRefused(appId, title) {
+        if (developerUnlocked)
+            deleteDialog.askDeveloper(appId, title);
+    }
+    Connections {
+        target: shell.source
+        ignoreUnknownSignals: true
+        function onDeveloperAppRefused(appId, title) { shell.developerAppRefused(appId, title); }
+    }
+
     // The user opening an app (its icon in the launcher, the dock or the
     // wave; Just Type's app results): as appRelaunch says.
     function openApp(appId) {
+        if (appId === devModeSwitcherId)
+            return revealDeveloperMode();
         return launch(appId, null, appRelaunch);
     }
 
@@ -1439,7 +1495,7 @@ FocusScope {
             return;
         }
         // Typed while Just Type's page is still taking its first letter.
-        if (justType.open && event.text.length === 1 && !(event.modifiers & Qt.ControlModifier)
+        if (justType.open && event.text.length === 1 && !(event.modifiers & (Qt.ControlModifier | Qt.MetaModifier))
                 && justType.typeAhead(event.text)) {
             event.accepted = true;
             return;
@@ -1492,8 +1548,10 @@ FocusScope {
             }
         }
         if (!locked && !firstUse && !cards.maximized && !justType.open && event.text.length === 1
-                   && event.text.trim() !== "" && !(event.modifiers & Qt.ControlModifier)) {
-            // Just Type: typing in card view starts a search.
+                   && event.text.trim() !== "" && !(event.modifiers & (Qt.ControlModifier | Qt.MetaModifier))) {
+            // Just Type: typing in card view starts a search (not a
+            // shortcut: Super, the card-view key, held with a letter is a
+            // modifier).
             startJustType(event.text);
             event.accepted = true;
         }
@@ -1542,6 +1600,7 @@ FocusScope {
                              .concat(gesture.metaHeld ? metaChords.map(function (c) { return { key: c.key, modifiers: c.modifiers }; }) : [])
         // Held on its own, the scheme's modifier lists them (ShortcutSheet).
         watchKeys: [KeyboardShortcuts.sheetKey(shell.keyboardShortcuts)]
+        passChords: shell.systemKeyPassChords
         onHolding: (key, down) => {
             if (down && !shell.locked && !shell.firstUse && backlight.on)
                 sheetDelay.restart();
@@ -1888,7 +1947,9 @@ FocusScope {
             // dynamic: a launch point an app added (addLaunchPoint), for
             // Favorites; category, keywords and installed place the rest
             // (LauncherLayout.pageFor).
-            entries.push({ id: a.appId, appId: a.webAppId || a.appId, title: a.title, tab: a.tab, quickLaunch: a.quickLaunch,
+            // A developer app while Developer Mode is off: hidden (tab -1).
+            entries.push({ id: a.appId, appId: a.webAppId || a.appId, title: a.title,
+                           tab: developerShown(a) ? a.tab : -1, quickLaunch: a.quickLaunch,
                            page: a.page || "", dynamic: !!a.dynamic, category: a.category || "",
                            keywords: a.keywords ? String(a.keywords).split("\n").filter(function(k) { return k !== ""; }) : [],
                            installed: !!a.installed });
@@ -2779,8 +2840,11 @@ FocusScope {
                 // (uiComponents/AppInfoDialog; LauncherObject::appDeleteDecoratorActivated,
                 // showAppInfoDialog): "Remove Application?", its title and
                 // version, Cancel and Remove (both black: the launcher never set
-                // their type), on popup-bg.png over the scrim, fading in and out
-                // over 300 ms.
+                // their type), on popup-bg.png over the scrim, fading in over
+                // 400 ms and out over 600 ms, linear (fade(), AppInfoDialog.qml:
+                // 55-68, with DynamicsSettings' appInfoDialogFadeInTime /
+                // FadeOutTime, dynamicssettings.cpp:106-107, dimensionslauncher.cpp:
+                // 3223-3224, 3265-3266).
                 Item {
                     id: deleteDialog
                     objectName: "deleteDialog"
@@ -2796,7 +2860,9 @@ FocusScope {
                     anchors.fill: parent
                     visible: opacity > 0
                     opacity: appId !== "" ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: 300 } }
+                    readonly property int fadeDuration: appId !== "" ? Theme.appInfoDialogFadeInDuration
+                                                                     : Theme.appInfoDialogFadeOutDuration
+                    Behavior on opacity { NumberAnimation { duration: deleteDialog.fadeDuration } }
                     z: 1001
                     // What the dialog says, set when it opens.
                     property string titleText: ""
@@ -2832,6 +2898,17 @@ FocusScope {
                         messageText = lines.join("\n");
                         canRetry = false;
                         canUninstall = !!e.removable && !e.installState;
+                        appId = id;
+                    }
+                    // A developer app while Developer Mode is off
+                    // (shell.developerAppRefused): Open Developer Mode.
+                    function askDeveloper(id, appTitle) {
+                        mode = "developer";
+                        shownId = id;
+                        titleText = qsTr("Developer Mode Is Off");
+                        messageText = qsTr("Turn on Developer Mode to use %1.").arg(appTitle || id);
+                        canRetry = false;
+                        canUninstall = false;
                         appId = id;
                     }
                     property bool canUninstall: false
@@ -2947,9 +3024,21 @@ FocusScope {
                                     objectName: "deleteDialogRemove"
                                     width: parent.width
                                     height: Theme.px(52)
-                                    visible: deleteDialog.mode !== "info"
+                                    visible: deleteDialog.mode !== "info" && deleteDialog.mode !== "developer"
                                     caption: qsTr("Remove")
                                     onAction: deleteDialog.remove()
+                                }
+                                ActionButton {
+                                    objectName: "deleteDialogDevMode"
+                                    width: parent.width
+                                    height: Theme.px(52)
+                                    visible: deleteDialog.mode === "developer"
+                                    affirmative: true
+                                    caption: qsTr("Open Developer Mode")
+                                    onAction: {
+                                        deleteDialog.appId = "";
+                                        shell.launch("org.webosphoenix.settings", { page: "devmode" });
+                                    }
                                 }
                             }
                         }
@@ -2993,6 +3082,7 @@ FocusScope {
                     bottomInset: notes.negativeSpace
                     apps: shell.source ? shell.source.apps : null
                     source: shell.source
+                    appShown: (entry) => shell.developerShown(entry)
                     onLaunchRequested: (appId) => shell.openApp(appId)
                     onCloseRequested: { justType.open = false; shell.forceActiveFocus(); }
                     onCopied: (text) => clipboardClient.record(text, "com.palm.systemui")
@@ -3142,7 +3232,10 @@ FocusScope {
                     : launcher.open ? "launcher" : cards.maximized ? "app" : ""
                 title: _mode === "dock" ? (dockLayer.menuOpen ? qsTr("Choose an App") : dockLayer.currentTitle)
                      : _mode === "justtype" ? qsTr("Just Type") : _mode === "launcher" ? qsTr("Launcher")
-                     : _mode === "app" ? cards.currentTitle : (shell.system ? shell.system.carrier : "")
+                     : _mode === "app" ? cards.currentTitle
+                     // In airplane mode the carrier's name says so
+                     // (StatusBarServicesConnector.cpp:947-952).
+                     : !shell.system ? "" : shell.system.airplaneMode ? qsTr("Airplane Mode") : shell.system.carrier
                 titleBorder: _mode !== ""
                 titleActionable: _mode === "app" || _mode === "dock"
                                  || (_mode === "justtype" && justType.surface !== null
@@ -3315,6 +3408,11 @@ FocusScope {
                 shortcutsOn: _assistPrefs.shortcutsOn !== false
                 spaces2period: _assistPrefs.spaces2period !== false
                 forgetWordsAt: _assistPrefs.forgetWords || 0
+                // Settings > Text Assist > Personal Dictionary; "Add" in the
+                // candidate bar goes back to the system (x_palm_textinput.userWords).
+                userWords: _assistPrefs.userWords || []
+                removedWords: _assistPrefs.removedWords || ({})
+                onDictionaryWordAdded: (word) => { if (shell.system && shell.system.addDictionaryWord) shell.system.addDictionaryWord(word); }
                 // Settings > Text Assist > Keyboards, and the one in use: the
                 // language key's choice goes back to the system (kept as
                 // x_palm_virtualkeyboard_settings).

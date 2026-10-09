@@ -115,6 +115,19 @@ async function main() {
         check(last().wifiConnected === true && last().wifiBars === 2, "shell gets the new network's signal (2 bars)");
         await shot("wifi-connected");
 
+        // ---- Developer Mode, out of sight until Just Type's Konami code -----------
+        await open("devmode");
+        check(await page.locator("[data-testid='hub-advanced']").count() === 1
+              && await page.locator("[data-testid='hub-devmode']").count() === 0
+              && await page.locator("[data-testid='devmode-toggle']").count() === 0,
+              "Developer Mode is out of sight (the list of panes shows, without it) until revealed");
+        // Just Type's "Developer Mode Enabler" (LaunchPointSearch.js:30-36).
+        await svc("luna://com.palm.applicationManager/launch", { id: "com.palm.app.devmodeswitcher", params: {} });
+        check(last().devModeUnlocked === true && last().devMode === false, "the Konami code's result reveals Developer Mode (the shell hears it)");
+        await open("");
+        await page.waitForSelector("[data-testid='hub-devmode']");
+        check(true, "Developer Mode is in the list of panes once revealed");
+
         // ---- Developer Mode without a PIN: set one first --------------------------
         await open("devmode");
         await page.click("[data-testid='devmode-toggle']");
@@ -229,6 +242,10 @@ async function main() {
         await page.click("[data-testid='devmode-toggle']");
         await page.waitForSelector("[data-testid='devmode-toggle'][aria-checked='false']");
         check(await devStatus() === "disabled", "turning Developer Mode off needs no PIN");
+        await page.click("[data-testid='devmode-hide']");
+        await page.waitForSelector("[data-testid='hub-advanced']");
+        check(await page.locator("[data-testid='hub-devmode']").count() === 0 && last().devModeUnlocked === false,
+              "Hide Developer Mode (while off) puts it out of sight again");
 
         // ---- Airplane mode, Bluetooth ----------------------------------------------
         await open("airplane");
@@ -304,11 +321,30 @@ async function main() {
         await page.click("[data-testid='ta-swipe']");
         await page.waitForSelector("[data-testid='ta-swipe'][aria-checked='false']");
         check(last().textAssist.swipe === false, "Swipe typing off reaches the shell");
+        // Personal Dictionary: the learned words the keyboard reports, a word
+        // added and one deleted reach the keyboard, and Forget Learned Words.
+        await page.evaluate(() => window.__phoenixRuntime.applyHostStatus({ learnedWords: ["Kwyjibo"] }));
+        await page.click("[data-testid='ta-dictionary']");
+        await page.waitForSelector("[data-testid='ta-dict-kwyjibo']");
+        await page.click("[data-testid='ta-dict-add']");
+        await page.fill("[data-testid='ta-dict-field']", "webOS");
+        await page.click("[data-testid='ta-dict-save']");
+        await page.waitForSelector("[data-testid='ta-dict-webos']");
+        for (let i = 0; i < 50 && !(last().textAssist && (last().textAssist.userWords || []).includes("webOS")); ++i) await page.waitForTimeout(100);
+        check((last().textAssist.userWords || []).includes("webOS"), `a word added reaches the keyboard (${JSON.stringify(last().textAssist.userWords)})`);
+        await shot("textassist-dictionary");
+        await page.click("[data-testid='ta-dict-kwyjibo']");
+        await page.click("[data-testid='ta-dict-delete']");
+        await page.waitForSelector("[data-testid='ta-dict-kwyjibo']", { state: "detached" });
+        for (let i = 0; i < 50 && !(last().textAssist.removedWords || {}).kwyjibo; ++i) await page.waitForTimeout(100);
+        check((last().textAssist.removedWords || {}).kwyjibo > 0, "a learned word deleted reaches the keyboard");
         await page.click("[data-testid='ta-forget']");
         await page.click("[data-testid='ta-forget-confirm']");
         await page.waitForFunction(() => /forgotten/.test(document.querySelector("[data-testid='ta-learned-note']")?.textContent || ""));
         for (let i = 0; i < 50 && !(last().textAssist && last().textAssist.forgetWords > 0); ++i) await page.waitForTimeout(100);
         check(last().textAssist.forgetWords > 0, "Forget Learned Words reaches the shell");
+        await page.keyboard.press("Escape");
+        await page.waitForSelector("[data-testid='ta-dictionary']");
         // Keyboards: English alone, which cannot be turned off; Deutsch added.
         check(JSON.stringify(last().keyboards) === '[{"layout":"qwerty","language":"en"}]', "one keyboard by default (English, QWERTY)");
         check(await page.locator("[data-testid='ta-kb-qwerty-en']").isDisabled(), "the last keyboard stays on");

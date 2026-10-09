@@ -16,8 +16,25 @@ Item {
 
     SimWindowSource { id: windows }
     SimSystemStatus { id: status }
+    // One that hears the runtime's Wi-Fi networks (test_wifiFromTheRuntime).
+    SimSystemStatus { id: wifiStatus }
+    SignalSpy { id: wifiAsked; target: wifiStatus; signalName: "wifiRequested" }
 
     SignalSpy { id: reported; target: windows; signalName: "systemStatusReported" }
+
+    // Stands in for phoenix-sim's settings (simSettings).
+    Component {
+        id: fakeStore
+        QtObject {
+            property var values: ({})
+            function value(key) { return values[key] || ""; }
+            function setValue(key, v) { var o = Object.assign({}, values); o[key] = v; values = o; }
+        }
+    }
+    Component {
+        id: sourceComponent
+        SimWindowSource {}
+    }
 
     // Stands in for a WebAppWindow: records the scripts the shell runs in it.
     Component {
@@ -47,6 +64,7 @@ Item {
         function init() {
             reported.clear();
             windows._pendingStatus = null;
+            windows._pendingChanges = [];
         }
 
         function test_webAppReplacesPlaceholderInSettingsTab() {
@@ -72,6 +90,27 @@ Item {
             compare(status.airplaneMode, true);
             compare(status.bluetoothOn, true);
             compare(status.applyingAppStatus, false);
+        }
+
+        // The system menu's Wi-Fi drawer lists the runtime's networks (those
+        // of Settings > Wi-Fi), not a list of its own, and joining one asks
+        // the runtime (the menu said "Phoenix" with Sunnyvale Cafe joined in
+        // Settings, and listed a "Palm Guest" Settings had never seen).
+        function test_wifiFromTheRuntime() {
+            var nets = [{ ssid: "Phoenix", bars: 3, security: "psk", known: true, state: "" },
+                        { ssid: "Sunnyvale Cafe", bars: 3, security: "", known: true, state: "ipConfigured" },
+                        { ssid: "Lab 5G", bars: 2, security: "psk", known: false, state: "" }];
+            wifiStatus.applyAppStatus({ wifiEnabled: true, wifiConnected: true, wifiBars: 3, wifiNetworks: nets });
+            compare(wifiStatus.wifiNetworks.map(function (n) { return n.ssid; }), ["Phoenix", "Sunnyvale Cafe", "Lab 5G"]);
+            compare(wifiStatus.wifiSsid, "Sunnyvale Cafe");
+            wifiStatus.connectWifi("Phoenix");
+            compare(wifiAsked.count, 1);
+            compare(wifiAsked.signalArguments[0][0], { wifiConnect: "Phoenix" });
+            compare(wifiStatus.wifiNetworks[0].state, "connecting", "shown joining at once");
+            // The radio off: no networks reported, the list kept for when it is back.
+            wifiStatus.applyAppStatus({ wifiEnabled: false, wifiNetworks: [] });
+            compare(wifiStatus.wifiNetworks.length, 3);
+            compare(wifiStatus.wifiBars, -1);
         }
 
         function test_appStatusFor() {
@@ -114,6 +153,41 @@ Item {
             windows._hostMessage("a", "w1", "systemStatus", { bluetoothOn: true });
             compare(windows._pendingStatus, null);
             page.destroy();
+        }
+
+        // Pushed while no page runs, then the simulator quits before one
+        // loads: the next start hands it on, in order, an event pushed
+        // twice (two words added to the dictionary) both times; the
+        // shell's own state (pushed afresh at each start) is not kept.
+        function test_pendingPushesOutliveAQuit() {
+            var store = fakeStore.createObject(root);
+            var first = sourceComponent.createObject(root, { pendingStore: store });
+            first.pushSystemStatus({ dictionaryWordAdded: "Phoenix" });
+            first.pushSystemStatus({ keyboard: "de" });
+            first.pushSystemStatus({ dictionaryWordAdded: "Lunasys", deviceLocked: true });
+            verify(store.value(first.pendingStoreKey) !== "", "kept in the settings");
+            first.destroy();
+
+            var next = sourceComponent.createObject(root, { pendingStore: store });
+            var page = fakePage.createObject(root);
+            next._pageLoaded(page);
+            var js = page.scripts.join("\n");
+            var a = js.indexOf("{\"dictionaryWordAdded\":\"Phoenix\",\"keyboard\":\"de\"}");
+            var b = js.indexOf("{\"dictionaryWordAdded\":\"Lunasys\"}");
+            verify(a > 0 && b > a, "both words, in order: " + js);
+            verify(js.indexOf("deviceLocked") < 0, "not the shell's own state");
+            compare(store.value(next.pendingStoreKey), "", "handed on: gone from the settings");
+            next.destroy();
+
+            // A third start has nothing to hand on.
+            var third = sourceComponent.createObject(root, { pendingStore: store });
+            var page2 = fakePage.createObject(root);
+            third._pageLoaded(page2);
+            compare(page2.scripts.length, 0);
+            third.destroy();
+            page.destroy();
+            page2.destroy();
+            store.destroy();
         }
 
         function test_pushGoesToRunningPages() {

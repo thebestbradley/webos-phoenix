@@ -8,7 +8,8 @@ export { Page, PageHeader, Group, Row, Divider, Note, ErrorText, Checkmark, cx, 
 export type { PageProps, PageHeaderProps, GroupProps, RowProps } from "./layout";
 export { ToggleButton, Slider, Button, Spinner, TextField, CheckBox } from "./controls";
 export type { ToggleButtonProps, SliderProps, ButtonProps, ButtonVariant, TextFieldProps, CheckBoxProps } from "./controls";
-export { PopupMenu, ListSelector, Picker, Drawer, DividerDrawer, Dialog } from "./popups";
+export { PopupMenu, ListSelector, Picker, Drawer, DividerDrawer, Dialog, DRAWER_OPEN_MS, DRAWER_CLOSE_MS, DIALOG_SLIDE_MS } from "./popups";
+export { motion, motionScale } from "./motion";
 export type { Option, PopupMenuProps, ListSelectorProps, PickerProps, DrawerProps, DialogProps } from "./popups";
 export { icons, art, srcSet, cssImage } from "./assets";
 export { Dialpad, DialButton, BackspaceButton, ToolBar, RadioToolGroup, ToolButton, Avatar, DIALPAD_KEYS, phoneArt } from "./telephony";

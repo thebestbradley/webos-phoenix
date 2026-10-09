@@ -12,6 +12,11 @@
 //     (flashlight on); "text <name> <words>": a call of the text tool
 //   - "force a tool": a toggle call even when no tools were offered (a
 //     provider misbehaving: the permission gate must refuse it)
+//   - asked for a command's name in a JSON schema (the on-device model's
+//     first step): {"command": "toggle" | "text" | "alarm" | "agenda" |
+//     "none"} by the same words ("how busy": agenda)
+//   - asked for a command's arguments in a JSON schema: {"start": "friday
+//     at 9 am"} for "friday-ish", else a time nobody said
 //   - otherwise words: "<shape> says: <the message>"
 // Keys: Anthropic "test-anthropic", OpenAI "test-openai", Gemini
 // "test-gemini"; Chat Completions takes any key or none. Every request is
@@ -48,12 +53,26 @@ function hasTools(shape, body) {
 // What to say: {text} or {tool: {name, args}}.
 function decide(shape, body) {
     const said = lastUser(shape, body);
+    // The on-device model's first step (assistant.js pickCommand): a
+    // command's name, held to a JSON schema; the same rules as the calls.
+    const schema = body.response_format && body.response_format.json_schema && body.response_format.json_schema.schema;
+    if (schema && schema.properties && schema.properties.command) {
+        const pick = /force a tool|flashlight|torch/i.test(said) ? "toggle" : /^text \w+ /i.test(said) ? "text" : /wake me/i.test(said) ? "alarm"
+            : /how busy/i.test(said) ? "agenda" : "none";
+        return { text: JSON.stringify({ command: pick }) };
+    }
+    // Filling in a command's arguments (assistant.js fillArgs): a time for
+    // "friday-ish"; anything else gets one the words never said (to be dropped).
+    if (schema && schema.properties) {
+        return { text: JSON.stringify(/friday-ish/i.test(said) ? { title: "Dentist", start: "friday at 9 am" } : { start: "tomorrow at 10 am" }) };
+    }
     const tools = hasTools(shape, body);
     if (/force a tool/i.test(said)) return { tool: { name: "toggle", args: { setting: "flashlight", state: "on" } } };
     if (tools && /flashlight|torch/i.test(said)) return { tool: { name: "toggle", args: { setting: "flashlight", state: "on" } } };
     const t = /^text (\w+) (.+)$/i.exec(said);
     if (tools && t) return { tool: { name: "text", args: { who: t[1], message: t[2] } } };
     if (tools && /wake me/i.test(said)) return { tool: { name: "alarm", args: { time: "tomorrow at 6:30 am" } } };
+    if (tools && /how busy/i.test(said)) return { tool: { name: "agenda", args: { when: "friday" } } };
     return { text: `${shape} says: ${said}` };
 }
 

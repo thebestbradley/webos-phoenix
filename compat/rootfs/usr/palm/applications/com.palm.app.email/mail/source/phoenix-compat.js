@@ -25,6 +25,13 @@
 //    heading (subject, from, to, date as the header shows them) and its
 //    sanitized HTML, as a page of its own, through the print manager
 //    (__phoenixRuntime.print.renderHtml; on a device, the print service).
+//
+// 4. Opened by another app to show a message (launch params {emailId,
+//    $caller}: the Assistant's "Open Email", applicationManager launch
+//    {returnToCaller}). Back there closes the card (MailApp's backHandler
+//    would slide to the folders), so the caller is in front again, as
+//    runtime.back does for other apps (runtime/phoenix-runtime.js). Once the user picks a folder or a message, Back walks
+//    the panes as before.
 
 /*global enyo, DivHtmlView, MailApp */
 (function () {
@@ -68,6 +75,27 @@
     }
     var app = MailApp.prototype;
     var folderChosen = app.folderChosen, selectMessage = app.selectMessage;
+    var displayMessageLaunch = app.handleDisplayMessageLaunch, backHandler = app.backHandler;
+
+    app.handleDisplayMessageLaunch = function (inParams) {
+        var r = displayMessageLaunch.apply(this, arguments);
+        this.phoenixFromCaller = !!(r && inParams && typeof inParams.$caller === "string" && inParams.$caller);
+        return r;
+    };
+
+    app.backHandler = function (inSender, e) {
+        if (this.phoenixFromCaller) {
+            // The mail window is opened by the app's headless page
+            // (enyo.windows.activate), so its own launch params do not
+            // carry $caller for the runtime to see: close it here.
+            if (e && e.preventDefault) {
+                e.preventDefault();
+            }
+            window.close();
+            return true;
+        }
+        return backHandler.apply(this, arguments);
+    };
 
     function singleView(inApp) {
         var pane = inApp.$.slidingPane;
@@ -75,6 +103,7 @@
     }
 
     app.folderChosen = function (inSender, inFolder) {
+        this.phoenixFromCaller = false;
         var r = folderChosen.apply(this, arguments);
         if (singleView(this)) {
             this.$.slidingPane.selectView(this.$.mailSliding);
@@ -83,6 +112,9 @@
     };
 
     app.selectMessage = function (inSender, inMessage, inUserActivated) {
+        if (inUserActivated) {
+            this.phoenixFromCaller = false;
+        }
         var r = selectMessage.apply(this, arguments);
         if (singleView(this) && inMessage && inUserActivated) {
             this.$.slidingPane.selectView(this.$.bodySliding);

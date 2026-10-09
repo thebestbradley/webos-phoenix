@@ -75,6 +75,13 @@
 //   (installing: "installApp" / "removeApp" host messages, phoenix-sim's
 //   simInstaller; deleting an installed app in the launcher removes it)
 //   apps also has removable: whether the launcher offers to delete the app
+//   apps also has developer: "" for everyone's apps, "devmode" for a developer
+//                            app (appinfo.json "phoenix": {"developer": true}),
+//                            "unlock" for one shown once Developer Mode was
+//                            revealed (Settings' Developer Mode)
+//   developerMode            (set by the shell) Developer Mode is on; while
+//                            off, launching a developer app is refused:
+//   developerAppRefused(appId, title)  signal: so the shell can say so
 //
 // Optional, for the launcher's icon menu (Shell.iconMenuItems):
 //   launchNewInstance(appId) -> uid  another window of an app whose entry
@@ -235,7 +242,9 @@ Item {
                  size: a.size || 0,
                  // A site's part of the web (an installed web app's manifest
                  // scope): its links out of it go elsewhere (Links.js).
-                 scope: a.scope || "" });
+                 scope: a.scope || "",
+                 // A developer app (Rootfs::apps: "devmode" or "unlock").
+                 developer: a.developer || "" });
     }
 
     // The launcher's fields every entry has (Shell._launcherEntries,
@@ -247,7 +256,7 @@ Item {
         return { page: "", dynamic: false, category: "", keywords: "", installed: false,
                  installState: "", progress: -1, pending: false, installReason: "",
                  exhibition: false, exhibitionTitle: "", tapToShare: false,
-                 multipleInstances: false, size: 0, scope: "" };
+                 multipleInstances: false, size: 0, scope: "", developer: "" };
     }
 
     // Apps that run in several windows at once whose appinfo.json cannot
@@ -681,12 +690,16 @@ Item {
             // own, e.g. the Assistant opening a conversation in a new card
             // (apps/assistant: its "Open in New Card").
             var newCard = payload.newCard === true && !background;
+            // {behind: true} (Phoenix, the application manager's launch): the
+            // card opens, or hears its params, without coming to the front
+            // (the Assistant's "I've opened them in Photos too").
+            var behind = payload.behind === true;
             var how = newCard ? "new" : background || appId === target ? "front" : appRelaunch;
             if (running !== "" && !_opensNewCard(target, how)) {
                 var refresh = how === "refresh";
                 if ((refresh || (target === payload.id && Object.keys(params).length > 0)) && _windows[running] && _windows[running].relaunch)
                     _windows[running].relaunch(target === payload.id ? params : {}, refresh);
-                if (!background)
+                if (!background && !behind)
                     cardFocusRequested(running);
                 return;
             }
@@ -695,8 +708,11 @@ Item {
             // (CardWindowManager::prepareAddWindow, :561-567).
             var joins = uid !== "" && uid === focusedUid && !background && !newCard;
             var launched = launch(target, uid, target === payload.id ? params : null, joins, how);
-            if (launched !== "" && !background)
+            if (launched !== "" && !background && !behind)
                 cardFocusRequested(launched);
+            // Behind: the caller's card keeps the front.
+            else if (launched !== "" && behind && uid !== "" && uid === focusedUid)
+                cardFocusRequested(uid);
         } else if (type === "browserData") {
             // The browser's Clear Cookies and Clear Cache (com.palm.browserServer):
             // the page views' profile (phoenix-sim's simBrowser).
@@ -876,7 +892,8 @@ Item {
                 launcherLayoutRestored(payload.json);
         } else if (type === "systemStatus") {
             // The pages are in step with the shell again.
-            _pendingStatus = null;
+            if (_pendingStatus || _pendingChanges.length > 0)
+                _clearPending();
             var st = {};
             for (var k in payload)
                 st[k] = payload[k];
@@ -1689,8 +1706,63 @@ Item {
     }
 
     // What the user changed while no web page was running, for the next
-    // page that loads (pages share their state through the runtime's store).
+    // page that loads (pages share their state through the runtime's store):
+    // _pendingStatus all of it merged, _pendingChanges the pushes in order
+    // (merged while their keys do not clash, so an event such as
+    // dictionaryWordAdded twice keeps both words). The queue is kept in
+    // pendingStore as well (phoenix-sim's settings), but for the shell's own
+    // state, which it pushes afresh: quit before any page loaded, the next
+    // start hands it on, so nothing the user did is lost.
     property var _pendingStatus: null
+    property var _pendingChanges: []
+    property var pendingStore: typeof simSettings !== "undefined" && simSettings ? simSettings : null
+    readonly property string pendingStoreKey: "runtime/pendingStatus"
+    property bool _pendingRestored: false
+    function _restorePending() {
+        if (_pendingRestored)
+            return;
+        _pendingRestored = true;
+        if (!pendingStore)
+            return;
+        var saved = [];
+        try {
+            saved = JSON.parse(pendingStore.value(pendingStoreKey) || "[]");
+        } catch (e) {
+            saved = [];
+        }
+        if (!Array.isArray(saved) || saved.length === 0)
+            return;
+        // Before what was pushed in this run.
+        var queue = saved.concat(_pendingChanges);
+        var merged = {};
+        for (var i = 0; i < queue.length; ++i)
+            for (var k in queue[i])
+                merged[k] = queue[i][k];
+        _pendingChanges = queue;
+        _pendingStatus = merged;
+    }
+    function _savePending() {
+        if (!pendingStore)
+            return;
+        var keep = [];
+        for (var i = 0; i < _pendingChanges.length; ++i) {
+            var c = {}, any = false;
+            for (var k in _pendingChanges[i]) {
+                if (_shellOwned.indexOf(k) < 0) {
+                    c[k] = _pendingChanges[i][k];
+                    any = true;
+                }
+            }
+            if (any)
+                keep.push(c);
+        }
+        pendingStore.setValue(pendingStoreKey, keep.length > 0 ? JSON.stringify(keep) : "");
+    }
+    function _clearPending() {
+        _pendingStatus = null;
+        _pendingChanges = [];
+        _savePending();
+    }
 
     // writer: whether this page stores the change (runtime applyHostStatus):
     // one page does, so pages do not write their copies of the shared state
@@ -1760,7 +1832,7 @@ Item {
     // not the pages' to overrule.
     readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout", "gestureArea", "dockMode",
                                         "debugOverlays", "usbHost", "gamepads", "usbDrives", "formFactor", "screen",
-                                        "marketplaceCatalog"]
+                                        "marketplaceCatalog", "learnedWords"]
     property var _shellStatus: ({})
 
     function pushSystemStatus(changes) {
@@ -1769,10 +1841,28 @@ Item {
                 _shellStatus[s] = changes[s];
         var pages = _webPages();
         if (pages.length === 0) {
+            _restorePending();
             var p = _pendingStatus || {};
             for (var k in changes)
                 p[k] = changes[k];
             _pendingStatus = p;
+            var queue = _pendingChanges.slice();
+            var last = queue.length > 0 ? queue[queue.length - 1] : null;
+            var clash = !last;
+            for (k in changes)
+                if (last && (k in last) && JSON.stringify(last[k]) !== JSON.stringify(changes[k]))
+                    clash = true;
+            if (clash) {
+                var c = {};
+                for (k in changes)
+                    c[k] = changes[k];
+                queue.push(c);
+            } else {
+                for (k in changes)
+                    last[k] = changes[k];
+            }
+            _pendingChanges = queue;
+            _savePending();
             return;
         }
         var writer = _writerPage();
@@ -1827,11 +1917,15 @@ Item {
         }
         var writer = _writerPage();
         var writes = !writer || win === writer;
-        if (_pendingStatus) {
-            // Kept until the page that stores it has it.
-            win.runScript(_statusScript(_pendingStatus, writes));
+        _restorePending();
+        if (_pendingChanges.length > 0) {
+            // In order; kept until the page that stores it has it.
+            var js = [];
+            for (var q = 0; q < _pendingChanges.length; ++q)
+                js.push(_statusScript(_pendingChanges[q], writes));
+            win.runScript(js.join(";\n"));
             if (writes)
-                _pendingStatus = null;
+                _clearPending();
         }
         if (Object.keys(_shellStatus).length > 0)
             win.runScript(_statusScript(_shellStatus, writes));
@@ -2089,15 +2183,25 @@ Item {
             notify(phoneAppId, "Incoming call", "Priya Nair");
             return;
         }
+        // Its card's page, or the one started at boot without a card
+        // (launchAtBootApps, kept parked): asking for it with launch()
+        // brought that page's card up and then waited for a load that had
+        // long happened, and no call came in.
         var uid = runningUid(phoneAppId);
-        var fresh = uid === "";
-        if (fresh)
+        var parked = uid === "" ? _parkedUid(phoneAppId) : "";
+        var page = _windows[uid !== "" ? uid : parked] || _headless[phoneAppId] || null;
+        var fresh = false;
+        if (!page) {
             uid = launch(phoneAppId, "");
-        if (uid === "" || !_windows[uid] || !_windows[uid].runScript)
+            page = uid !== "" ? _windows[uid] : null;
+            fresh = true;
+        }
+        if (!page || !page.runScript)
             return;
         // Phone raises its incoming-call popup alert itself; its card only
         // comes up when the call is answered (PalmSystem.activate).
-        _runWhenLoaded(_windows[uid], "window.__phoenixRuntime && __phoenixRuntime.simulateIncomingCall()", fresh);
+        _runWhenLoaded(page, "window.__phoenixRuntime && __phoenixRuntime.simulateIncomingCall()",
+                       fresh || (page.view && page.view.loading));
     }
 
     // A text arrives. Any running page can play the telephony service; the
@@ -2168,6 +2272,11 @@ Item {
         // taps on its icon).
         if (!info || info.pending)
             return "";
+        // A developer app while Developer Mode is off.
+        if (info.developer === "devmode" && !developerMode) {
+            developerAppRefused(appId, info.title);
+            return "";
+        }
         if (info.web && info.noWindow && _headless[appId]) {
             // Running without a card: the app opens one when told; a
             // window of it kept alive comes back when the page activates
@@ -2211,6 +2320,19 @@ Item {
     // set by the shell): how launches the user makes treat an app that
     // already has a card (launch's how).
     property string appRelaunch: "front"
+    // Developer Mode is on (SimSystemStatus.devMode, set by the shell):
+    // developer apps open only then (docs/APP-RUNTIME.md "Developer apps").
+    // Turned off, those running close, as OSE's setDevMode restarts the
+    // device.
+    property bool developerMode: false
+    signal developerAppRefused(string appId, string title)
+    onDeveloperModeChanged: {
+        if (developerMode)
+            return;
+        for (var i = 0; i < apps.count; ++i)
+            if (apps.get(i).developer === "devmode")
+                closeApp(apps.get(i).webAppId || apps.get(i).appId);
+    }
     // Apps that keep one card whatever the setting: the phone (its card is
     // the call), and those without a card of their own.
     property var singleCardApps: [phoneAppId]

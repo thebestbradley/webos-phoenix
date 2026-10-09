@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 type Reply = { returnValue: boolean; errorCode?: number; errorText?: string; [k: string]: unknown };
-type Api = Record<"list" | "stat" | "mkdir" | "copy" | "move" | "remove" | "read" | "write", (p: object) => Promise<Reply>>;
+type Api = Record<"list" | "stat" | "mkdir" | "copy" | "move" | "remove" | "read" | "write" | "search", (p: object) => Promise<Reply>>;
 const { createFileManager, ERRORS, METHODS } = createRequire(import.meta.url)("./filemanager.js") as {
     createFileManager(o: { writableRoots: string[] }): Api;
     ERRORS: Record<string, number>;
@@ -35,8 +35,19 @@ afterEach(() => rmSync(root, { recursive: true, force: true }));
 const names = (r: Reply) => (r.entries as { name: string }[]).map((e) => e.name).sort();
 
 describe("org.webosphoenix.filemanager (device service)", () => {
-    it("has the eight methods", () => {
-        expect(METHODS).toEqual(["list", "stat", "mkdir", "copy", "move", "remove", "read", "write"]);
+    it("has the nine methods", () => {
+        expect(METHODS).toEqual(["list", "stat", "mkdir", "copy", "move", "remove", "read", "write", "search"]);
+    });
+
+    it("searches names under a folder, every word, hidden ones skipped", async () => {
+        mkdirSync(join(home, "Documents", "Trips"));
+        writeFileSync(join(home, "Documents", "Trips", "Paris trip plan.pdf"), "x");
+        writeFileSync(join(home, "Documents", ".paris trip secret"), "x");
+        const r = await fm.search({ path: home, query: "trip paris" });
+        expect(r.returnValue).toBe(true);
+        expect((r.entries as { path: string }[]).map((e) => e.path)).toEqual([join(home, "Documents", "Trips", "Paris trip plan.pdf")]);
+        expect(names(await fm.search({ path: home, query: "trip" }))).toEqual(["Paris trip plan.pdf", "Trips"]);
+        expect(await fm.search({ path: home, query: " " })).toMatchObject({ returnValue: false, errorCode: ERRORS.BAD_PARAMS });
     });
 
     it("lists and stats", async () => {

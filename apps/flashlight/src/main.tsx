@@ -4,6 +4,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { Refreshed } from "@phoenix/luna/react";
+import { BackProvider } from "@phoenix/ui";
 import "@phoenix/ui/styles.css";
 import "./flashlight.css";
 import { App } from "./App";
@@ -11,7 +12,9 @@ import { App } from "./App";
 createRoot(document.getElementById("root")!).render(
     <StrictMode>
         <Refreshed>
-            <App />
+            <BackProvider>
+                <App />
+            </BackProvider>
         </Refreshed>
     </StrictMode>,
 );

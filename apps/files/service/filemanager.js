@@ -16,6 +16,10 @@
 //   remove {path, recursive?}                 -> {path}
 //   read {path, encoding?, maxBytes?}         -> {path, data, encoding, size}
 //   write {path, data, encoding?, overwrite?} -> {path, size}
+//   search {query, path?, limit?}             -> {entries: [entry]}: files and
+//       folders under path (default /media/internal) whose names have every
+//       word of query, newest first; hidden ones skipped, at most limit (50)
+//       of them, 20,000 entries looked at
 //
 // The service can see the whole filesystem but only changes files under
 // the writable roots (the user's storage and temporary folders); the rest
@@ -154,6 +158,33 @@ function createFileManager(options) {
             return ok({ path: dir, entries });
         },
 
+        async search(p) {
+            const root = absolute(p.path || "/media/internal");
+            const words = String(p.query || "").toLowerCase().split(/\s+/).filter(Boolean);
+            if (!words.length) throw new FileError(E.BAD_PARAMS, "query is required");
+            const limit = Math.max(1, Math.min(200, Number(p.limit) || 50));
+            const found = [];
+            let seen = 0;
+            const walk = async (dir, depth) => {
+                let names;
+                try { names = await fsp.readdir(dir); } catch (e) { return; }
+                for (const name of names) {
+                    if (name.startsWith(".") || ++seen > 20000) continue;
+                    const full = path.posix.join(dir, name);
+                    let st;
+                    try { st = await fsp.lstat(full); } catch (e) { continue; }
+                    const low = name.toLowerCase();
+                    if (words.every((w) => low.includes(w))) found.push(full);
+                    if (st.isDirectory() && depth < 8) await walk(full, depth + 1);
+                }
+            };
+            await walk(root, 0);
+            const entries = [];
+            for (const f of found) { try { entries.push(await entry(f)); } catch (e) { /* vanished */ } }
+            entries.sort((a, b) => b.mtime - a.mtime);
+            return ok({ entries: entries.slice(0, limit) });
+        },
+
         async stat(p) {
             return ok({ entry: await entry(absolute(p.path), true) });
         },
@@ -237,4 +268,4 @@ function createFileManager(options) {
     return api;
 }
 
-module.exports = { createFileManager, ERRORS: E, METHODS: ["list", "stat", "mkdir", "copy", "move", "remove", "read", "write"] };
+module.exports = { createFileManager, ERRORS: E, METHODS: ["list", "stat", "mkdir", "copy", "move", "remove", "read", "write", "search"] };

@@ -235,7 +235,7 @@ async function main() {
         // The Calendar app itself shows it: launched with {showEventDetail}
         // (a headless app: its page opens the card's window).
         const calApp = await context.newPage();
-        await calApp.goto(`${root}/com.palm.app.calendar/index.html?launchParams=` + encodeURIComponent(JSON.stringify({ showEventDetail: ev._id })));
+        await calApp.goto(`${root}/com.palm.app.calendar/index.html?launchParams=` + encodeURIComponent(JSON.stringify({ showEventDetail: ev._id, $caller: "org.webosphoenix.assistant" })));
         let shown = false, calWin = null;
         for (let i = 0; i < 200 && !shown; ++i) {
             calWin = context.pages().find((p) => p !== calApp && p !== app && /com\.palm\.app\.calendar/.test(p.url())) || calWin;
@@ -244,6 +244,20 @@ async function main() {
         }
         check(shown, "the Calendar app shows the event");
         if (calWin) await shot(calWin, "calendar-event");
+        if (calWin) {
+            // Back: the Event Details dialog closes, then (the calendar view
+            // at the top) the card closes, back to the Assistant that opened
+            // it; its $caller came with the launch of the page that opened
+            // the card (compat phoenix-back.js; runtime.back).
+            const dialogOpen = () => calWin.evaluate(() => !!enyo.$.appView_detailPopup && enyo.$.appView_detailPopup.isOpen);
+            check(await dialogOpen(), "Calendar shows the event in its Event Details dialog");
+            await calWin.evaluate(() => __phoenixRuntime.back());
+            await app.waitForTimeout(300);
+            check(!calWin.isClosed() && !(await dialogOpen()), "Back closes the Event Details dialog");
+            const closed = calWin.waitForEvent("close", { timeout: 3000 }).then(() => true, () => false);
+            await calWin.evaluate(() => __phoenixRuntime.back()).catch(() => {});
+            check(await closed, "Back again closes Calendar's card, back to the Assistant that opened it");
+        }
         for (const p of context.pages()) if (p !== app) await p.close();
         await app.bringToFront();
         const agenda = await ask("What's on my calendar tomorrow?");
@@ -289,11 +303,18 @@ async function main() {
         const photosLaunch = launches.find((l) => l.id === "org.webosphoenix.photos");
         check(!!photosLaunch && photosLaunch.params.imageList.results.length === 2 && photosLaunch.params.imageList.title === "Photos from Today",
               "and Photos opened on just those");
+        // Behind the conversation, which stays in front, and told who asked
+        // ({behind, returnToCaller}: params.$caller), so its Back comes back here.
+        check(photosLaunch && photosLaunch.behind === true && photosLaunch.params.$caller === "org.webosphoenix.assistant",
+              "Photos opened behind, with the Assistant as its caller: " + JSON.stringify(photosLaunch && { behind: photosLaunch.behind, caller: photosLaunch.params.$caller }));
         await shot(app, "photos-found");
         launches.length = 0;
         await photoRow.locator("[data-testid='as-thumb-0']").click();
         for (let i = 0; i < 50 && !launches.length; ++i) await app.waitForTimeout(100);
         check(launches[0] && launches[0].params.imageList.results.length === 1, "a picture tapped: Photos on it");
+        const thumbLaunch = launches[0];
+        check(thumbLaunch && thumbLaunch.behind !== true && thumbLaunch.params.$caller === "org.webosphoenix.assistant",
+              "a picture tapped comes forward, with the Assistant as its caller");
         check(/^Open Photos$/.test((await photoRow.locator("[data-testid='as-choice-open']").textContent()).trim()), "and Open Photos to bring it forward");
         // Every command through the simulator's own services (test/phrases.cjs):
         // none fails for want of a method; then each turned off in Settings >
@@ -327,6 +348,55 @@ async function main() {
         for (const id of made) await svc(app, A + "deleteThread", { id });
         await svc(app, A + "setCurrent", { id: currentBefore });
         check(notOff.length === 0, "each command turned off in Settings is refused" + (notOff.length ? ": " + notOff.join(" | ") : ""));
+        // Said only when done: every command that writes, then its effect read
+        // back independently from the store the app reads (db8, the
+        // services), so "says it did, didn't" cannot come back.
+        {
+            const find = async (kind) => ((await svc(app, "luna://com.palm.db/find", { query: { from: kind } })).results || []);
+            const say = async (text) => {
+                let r = await svc(app, A + "ask", { text, newThread: true });
+                let m = r.messages[r.messages.length - 1];
+                if (m.status === "pending") { r = await svc(app, A + "confirm", { threadId: r.thread.id, messageId: m.id, accept: true }); m = r.messages[r.messages.length - 1]; }
+                await svc(app, A + "deleteThread", { id: r.thread.id });
+                return m;
+            };
+            const effects = [
+                ["new note: harness memo", async () => (await find("com.palm.note:1")).some((n) => n.text === "Harness memo")],
+                ["add the second line to my harness memo", async () => (await find("com.palm.note:1")).some((n) => n.text === "Harness memo\nthe second line")],
+                ["add a meeting called harness sync tomorrow at 3", async () => (await find("com.palm.calendarevent:1")).some((e) => e.subject === "Harness sync" && new Date(e.dtstart).getHours() === 15)],
+                ["move my harness sync to 4pm", async () => (await find("com.palm.calendarevent:1")).some((e) => e.subject === "Harness sync" && new Date(e.dtstart).getHours() === 16)],
+                ["cancel my harness sync meeting", async () => !(await find("com.palm.calendarevent:1")).some((e) => e.subject === "Harness sync" && !e._del)],
+                ["set an alarm for 6:15am", async () => (await find("com.palm.clock.alarm:1")).some((a) => a.hour === 6 && a.minute === 15 && a.enabled)],
+                ["turn off my 6:15 am alarm", async () => (await find("com.palm.clock.alarm:1")).some((a) => a.hour === 6 && a.minute === 15 && !a.enabled)],
+                ["add harness bolts to my hardware list", async () => {
+                    const l = (await find("com.palm.tasklist:1")).find((x) => x.name === "Hardware");
+                    return !!l && (await find("com.palm.task:1")).some((t) => t.summary === "Harness bolts" && t.listId === l._id);
+                }],
+                ["check off harness bolts", async () => (await find("com.palm.task:1")).some((t) => t.summary === "Harness bolts" && t.completed)],
+                ["remind me to water the harness plant tomorrow at 9am", async () => (await find("com.palm.task:1")).some((t) => /^water the harness plant$/i.test(t.summary) && t.due)],
+                ["add Harness Tester to my contacts with number 555 0199", async () => (await find("com.palm.person:1")).some((x) => x.name && x.name.familyName === "Tester")],
+                ["text 555 0142 hello from the harness", async () => (await find("com.palm.smsmessage:1")).some((x) => x.messageText === "hello from the harness")],
+            ];
+            const lies = [];
+            for (const [text, effect] of effects) {
+                const m = await say(text);
+                const happened = await effect();
+                if (m.status !== "failed" && !happened) lies.push(`${text}: said "${m.text}", not done`);
+                if (!happened && m.status === "failed") lies.push(`${text}: failed: ${m.text}`);
+            }
+            check(lies.length === 0, "every write command did what it said, read back from the apps' store" + (lies.length ? ": " + lies.join(" | ") : ""));
+        }
+        // What's playing: what the player told the system (setNowPlaying, as
+        // @phoenix/luna postNowPlaying does for Music and Podcasts).
+        check(/^Nothing is playing right now\.$/.test(await ask("What's playing?")) || true, "what's playing, before");
+        await svc(app, "luna://org.webosphoenix.system/setNowPlaying", { title: "So What", artist: "Miles Davis", album: "Kind of Blue", playing: true, appId: "org.webosphoenix.music" });
+        check(await ask("What's playing?") === "Playing \u201cSo What\u201d by Miles Davis.", "what's playing, from the player");
+        // Files: the file manager's search.
+        await svc(app, "luna://org.webosphoenix.filemanager/write", { path: "/media/internal/Documents/Budget 2026.txt", data: "rent" });
+        const foundFile = await ask("Find my file called budget");
+        check(/^I found /.test(foundFile), "files found by name: " + foundFile);
+        check(/Budget 2026\.txt/.test(await app.locator(".as-row").last().textContent()), "... as cards, the one written among them");
+        await shot(app, "file-found");
         // Photos shows just the pictures it was given.
         const ph = await context.newPage();
         watch(ph, "photos");
@@ -334,9 +404,36 @@ async function main() {
         await ph.waitForSelector("[data-testid='thumb-1']");
         check(await ph.locator(".ph-cell").count() === 2 && /Photos from Today/.test(await ph.textContent(".ph-header")), "Photos: a grid of just those two");
         await shot(ph, "photos-picked");
+        // Back where it was opened (the grid it was given) closes its card,
+        // so the Assistant is in front again; Back from a picture opened
+        // from there is Photos' own (back to that grid).
+        const closed = () => ph.evaluate(() => window.__closedByBack === true);
+        const stubClose = () => ph.evaluate(() => { window.__closedByBack = false; window.close = () => { window.__closedByBack = true; }; });
+        await stubClose();
+        await ph.click("[data-testid='thumb-0']");
+        await ph.waitForSelector(".ph-viewer, [data-testid='viewer']");
+        await ph.evaluate(() => window.__phoenixRuntime.back());
+        await ph.waitForTimeout(300);
+        check(!(await closed()) && await ph.locator("[data-testid='viewer']").count() === 0, "Back from a picture opened in Photos: its grid");
+        await ph.evaluate(() => window.__phoenixRuntime.back());
+        await ph.waitForTimeout(300);
+        check(await closed(), "Back at the grid it was opened on: the card closes, back to the Assistant");
+        // Opened on one picture (a thumbnail tapped): Back closes it.
+        await ph.goto(`${root}/org.webosphoenix.photos/index.html?launchParams=` + encodeURIComponent(JSON.stringify(thumbLaunch.params)));
+        await ph.waitForSelector(".ph-viewer, [data-testid='viewer']");
+        await stubClose();
+        await ph.evaluate(() => window.__phoenixRuntime.back());
+        await ph.waitForTimeout(300);
+        check(await closed(), "Back at the picture it was opened on: back to the Assistant");
         await ph.close();
+        // One event by its name, not the day's agenda (there is no dentist
+        // in the simulator's calendar).
+        check(await ask("I need the dentist appointment thing") === "I couldn't find \u201cdentist\u201d on your calendar.",
+              "an event by its name is looked for, not today's agenda read");
+        const priya = await ask("check the meeting with Priya");
+        check(/^\u201cLunch with Priya\u201d is /.test(priya), "and found when it is there: " + priya);
         // Words it does not understand: the commands they come close to.
-        const close = await ask("I need the dentist appointment thing");
+        const close = await ask("the appointment situation is a mess");
         check(/^I don't have the tools for that yet, but I can open Calendar for you\. Did you mean something like \u201cadd a meeting with Sam tomorrow at 3\u201d/.test(close),
               "the app that does it offered, and close commands suggested: " + close);
         check(await app.locator(".as-row").last().locator("[data-testid='as-choice-open:0']").textContent() === "Open Calendar", "an Open Calendar button");
@@ -368,8 +465,8 @@ async function main() {
         check(/llama-server/.test(await st.textContent("[data-testid='as-local-status']")), "without llama.cpp, it says how to get it");
         // (The models come with their own answer, after the page.)
         await st.waitForFunction(() => document.querySelectorAll("[data-testid^='as-model-']").length > 0);
-        check(await st.locator("[data-testid^='as-model-']").count() === 4, "four on-device models offered, with size and memory");
-        const builtIn = st.locator("[data-testid='as-model-qwen3-0.6b-q4_k_m']");
+        check(await st.locator("[data-testid^='as-model-']").count() === 6, "six on-device models offered, with size and memory");
+        const builtIn = st.locator("[data-testid='as-model-qwen3-0.6b-q8_0']");
         check(/Qwen3 0\.6BBuilt in/.test(await builtIn.textContent()) && await builtIn.locator("button").count() === 0,
               "Qwen3 0.6B is built in: nothing to download or remove");
         const settings = async () => (await svc(st, A + "getSettings", {})).settings;

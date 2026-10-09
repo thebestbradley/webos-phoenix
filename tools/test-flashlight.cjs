@@ -158,6 +158,11 @@ async function main() {
         await page.click("[data-testid='screen-light']");
         await page.waitForSelector("[data-testid='screen-light']", { state: "detached" });
         check(true, "screen: a tap turns it off");
+        await page.click("[data-testid='power']");
+        await page.waitForSelector("[data-testid='screen-light']");
+        await page.evaluate(() => window.__phoenixRuntime.back());
+        await page.waitForSelector("[data-testid='screen-light']", { state: "detached", timeout: 2000 }).then(() => check(true, "screen: Back turns it off"),
+            () => check(false, "screen: Back turns it off"));
         await page.click("[data-testid='mode-led']");
 
         // ---- No torch ------------------------------------------------------------------------------

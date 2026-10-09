@@ -15,6 +15,12 @@ import { VectorTile, type VectorTileFeature } from "@mapbox/vector-tile";
 import { PbfReader } from "pbf";
 import { COLORS } from "./lib/style";
 
+const LANG = (typeof navigator !== "undefined" && navigator.language ? navigator.language : "en").slice(0, 2).toLowerCase();
+/** A label in the device's language where the tile has it (as lib/style.ts's labelField). */
+function label(p: Record<string, unknown>): string {
+    return String(p[`name:${LANG}`] ?? p["name:latin"] ?? p.name ?? "");
+}
+
 export type TileLoader = (z: number, x: number, y: number) => Promise<ArrayBuffer>;
 
 type Style = { fill?: string; stroke?: string; width?: number; dash?: number[]; alpha?: number };
@@ -44,7 +50,10 @@ function fillFor(layer: string, cls: string): string | null {
     return null;
 }
 
-function draw(ctx: CanvasRenderingContext2D, vt: VectorTile, z: number, size: number, sub: { scale: number; dx: number; dy: number }) {
+/** A point of interest a tile drew, in the tile's pixels: what a tap on it picks (poiAt). */
+export interface DrawnPoi { x: number; y: number; name: string; category: string }
+
+function draw(ctx: CanvasRenderingContext2D, vt: VectorTile, z: number, size: number, sub: { scale: number; dx: number; dy: number }, pois: DrawnPoi[] = []) {
     const tx = (f: VectorTileFeature) => {
         const s = (size / f.extent) * sub.scale;
         return (p: { x: number; y: number }): [number, number] => [p.x * s - sub.dx, p.y * s - sub.dy];
@@ -133,7 +142,7 @@ function draw(ctx: CanvasRenderingContext2D, vt: VectorTile, z: number, size: nu
         ctx.font = "10px 'Noto Sans', 'Open Sans', sans-serif";
         for (let i = 0; i < street.length; i++) {
             const f = street.feature(i);
-            const n = String(f.properties.name ?? "");
+            const n = label(f.properties);
             if (!n || done.has(n)) continue;
             const t = tx(f);
             const ring = f.loadGeometry()[0];
@@ -173,7 +182,8 @@ function draw(ctx: CanvasRenderingContext2D, vt: VectorTile, z: number, size: nu
             ctx.arc(x, y, 3, 0, Math.PI * 2);
             ctx.fillStyle = COLORS.poi;
             ctx.fill();
-            text(String(f.properties.name ?? ""), x, y - 10, "10px 'Noto Sans', 'Open Sans', sans-serif", COLORS.poi);
+            text(label(f.properties), x, y - 10, "10px 'Noto Sans', 'Open Sans', sans-serif", COLORS.poi);
+            pois.push({ x, y, name: label(f.properties), category: String(f.properties.subclass ?? f.properties.class ?? "").replace(/_/g, " ") });
         }
     }
     const place = vt.layers.place;
@@ -188,7 +198,7 @@ function draw(ctx: CanvasRenderingContext2D, vt: VectorTile, z: number, size: nu
             if (!p) continue;
             const [x, y] = tx(f)(p);
             if (!free(x, y, 110, 18)) continue;
-            text(String(f.properties.name ?? ""), x, y, big ? "bold 15px 'Noto Sans', sans-serif" : "bold 11px 'Noto Sans', sans-serif", big ? COLORS.label : "#6b645a");
+            text(label(f.properties), x, y, big ? "bold 15px 'Noto Sans', sans-serif" : "bold 11px 'Noto Sans', sans-serif", big ? COLORS.label : "#6b645a");
         }
     }
 }
@@ -209,8 +219,11 @@ export function vectorCanvasLayer(load: TileLoader, attribution: string): L.Grid
             const k = 2 ** (coords.z - z);
             const x = Math.floor(coords.x / k), y = Math.floor(coords.y / k);
             const sub = { scale: k, dx: (coords.x - x * k) * size, dy: (coords.y - y * k) * size };
+            const pois: DrawnPoi[] = [];
+            (tile as HTMLCanvasElement & { pois?: DrawnPoi[] }).pois = pois;
+            tile.classList.add("mp-canvas-tile");
             load(z, x, y).then((buf) => {
-                if (buf.byteLength) draw(ctx, new VectorTile(new PbfReader(new Uint8Array(buf))), coords.z, size, sub);
+                if (buf.byteLength) draw(ctx, new VectorTile(new PbfReader(new Uint8Array(buf))), coords.z, size, sub, pois);
                 else { ctx.fillStyle = COLORS.land; ctx.fillRect(0, 0, size, size); }
                 done(null, tile);
             }, (e: Error) => done(e, tile));
@@ -218,6 +231,26 @@ export function vectorCanvasLayer(load: TileLoader, attribution: string): L.Grid
         },
     });
     return new (Layer as unknown as new (o: L.GridLayerOptions) => L.GridLayer)({ attribution, maxZoom: 19, maxNativeZoom: 19, tileSize: 256 });
+}
+
+/**
+ * The point of interest drawn nearest a tap (client coordinates), within
+ * r pixels, and where it is on the screen; null if none.
+ */
+export function poiAt(clientX: number, clientY: number, r = 14): (DrawnPoi & { clientX: number; clientY: number }) | null {
+    let best: (DrawnPoi & { clientX: number; clientY: number }) | null = null, bestD = r;
+    for (const el of Array.from(document.querySelectorAll<HTMLCanvasElement & { pois?: DrawnPoi[] }>("canvas.mp-canvas-tile"))) {
+        const b = el.getBoundingClientRect();
+        if (clientX < b.left - r || clientX > b.right + r || clientY < b.top - r || clientY > b.bottom + r || !el.pois?.length) continue;
+        const k = b.width / 256;
+        for (const p of el.pois) {
+            const cx = b.left + p.x * k, cy = b.top + p.y * k;
+            // The dot or its name above it.
+            const d = Math.min(Math.hypot(clientX - cx, clientY - cy), Math.hypot(clientX - cx, clientY - (cy - 10 * k)));
+            if (d < bestD) { bestD = d; best = { ...p, clientX: cx, clientY: cy }; }
+        }
+    }
+    return best;
 }
 
 /** Does this runtime have WebGL 2 (what MapLibre GL 6 needs)? */

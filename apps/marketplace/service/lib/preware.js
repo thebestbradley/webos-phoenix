@@ -15,6 +15,16 @@
 var ipk = require("./ipk");
 var version = require("./version");
 
+// An address in the feed (an icon), absolute or relative to the feed: an
+// http(s) address, or "".
+function feedUrlOf(ref, base) {
+    if (typeof ref !== "string" || !ref) return "";
+    try {
+        var u = new URL(ref, base).href;
+        return /^https?:/.test(u) ? u : "";
+    } catch (e) { return ""; }
+}
+
 function parse(text, feedUrl, sourceId) {
     var base = String(feedUrl).replace(/\/*$/, "/");
     var out = [], seen = {};
@@ -30,7 +40,7 @@ function parse(text, feedUrl, sourceId) {
             summary: String(c.Description || "").slice(0, 300),
             description: String(src.FullDescription || "").replace(/\\n/g, "\n").slice(0, 8000),
             categories: src.Category ? [String(src.Category)] : c.Section ? [c.Section] : [],
-            icon: typeof src.Icon === "string" && /^https?:/.test(src.Icon) ? src.Icon : "",
+            icon: feedUrlOf(src.Icon, base),
             screenshots: Array.isArray(src.Screenshots) ? src.Screenshots.filter(function (s) { return /^https?:/.test(s); }).slice(0, 8) : [],
             license: String(src.License || ""), homepage: typeof src.Homepage === "string" && /^https?:/.test(src.Homepage) ? src.Homepage : "",
             donation: "", featured: false, rating: null, version: c.Version || "",

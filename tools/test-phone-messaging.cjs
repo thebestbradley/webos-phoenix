@@ -91,11 +91,27 @@ async function main() {
         await phone.waitForSelector("[data-testid='dialpad']");
         await phone.waitForTimeout(300);
         await shot(phone, "phone-dialpad");
+        // Upright on a phone (no room for the dial pad turned); free on a tablet.
+        const turned = host.filter((m) => m.page === "phone" && m.type === "windowOrientation").pop();
+        check(turned && turned.payload.orientation === (tablet ? "free" : "up"),
+              `the Phone app asks to be held ${tablet ? "any way (tablet)" : "upright (phone)"}: ${JSON.stringify(turned && turned.payload)}`);
         for (const k of "2125550164") await phone.click(`[data-testid='dialpad'] [data-key='${k}']`);
         check((await phone.textContent("[data-testid='number-display']")) === "(212) 555-0164", "typed number is formatted");
         await phone.waitForFunction(() => /Lena Okafor/.test(document.querySelector("[data-testid='dialer-contact']").textContent));
         check(true, "the number is matched to a contact (com.palm.person:1)");
         await shot(phone, "phone-dialpad-number");
+        if (!tablet) {
+            // A card shorter than a Pre's (a dashboard showing under it): the
+            // dial pad gives up height, the dial button stays above the command menu.
+            await phone.setViewportSize({ width: 320, height: 400 });
+            await phone.waitForTimeout(100);
+            const [dialBottom, menuTop] = await phone.evaluate(() => [
+                document.querySelector("[data-testid='dial-button']").getBoundingClientRect().bottom,
+                document.querySelector(".phone-toolbar").getBoundingClientRect().top]);
+            check(dialBottom <= menuTop, `a short card keeps the dial button above the command menu (${dialBottom} <= ${menuTop})`);
+            await shot(phone, "phone-dialpad-short");
+            await phone.setViewportSize(viewport);
+        }
 
         // ---- Place, hold and end a call ----------------------------------------------------------
         await phone.click("[data-testid='dial-button']");
@@ -104,6 +120,19 @@ async function main() {
         await shot(phone, "phone-dialing");
         await phone.waitForSelector("[data-testid='incall'][data-state='active']", { timeout: 5000 });
         check(true, "the call connects");
+        if (!tablet) {
+            // During a call a Pre-sized card is 405 tall (the call's dashboard
+            // under it): the caller's name must not be squeezed and clipped.
+            await phone.setViewportSize({ width: 320, height: 405 });
+            await phone.waitForTimeout(100);
+            const name = await phone.evaluate(() => {
+                const e = document.querySelector("[data-testid='incall-name']");
+                return { client: e.clientHeight, scroll: e.scrollHeight, top: e.getBoundingClientRect().top };
+            });
+            check(name.scroll <= name.client && name.top >= 0, `the caller's name shows whole on a short card (${JSON.stringify(name)})`);
+            await shot(phone, "phone-incall-short");
+            await phone.setViewportSize(viewport);
+        }
         await phone.click("[data-testid='mute']");
         await phone.waitForSelector("[data-testid='mute'][aria-pressed='true']");
         check(true, "mute");
@@ -412,6 +441,24 @@ async function main() {
         await msg.waitForSelector("[data-testid='buddy']", { state: "detached", timeout: 4000 });
         check(/sign in/.test(await msg.textContent(".buddies")), "going Offline signs out: no buddies, a note to sign in");
         await shot(msg, "messaging-buddies-offline");
+
+        // Swipe a conversation across: Delete takes it and its messages.
+        await msg.click("[data-testid='msg-tabs'] [data-value='conversations']");
+        await msg.waitForSelector("[data-testid='thread-row']");
+        const before = await msg.locator("[data-testid='thread-row']").count();
+        const gone = await msg.textContent("[data-testid='thread-row'] .thread-summary");
+        const box = await msg.locator("[data-testid='thread-swipe']").first().boundingBox();
+        await msg.mouse.move(box.x + 20, box.y + box.height / 2);   // on the contact's photo
+        await msg.mouse.down();
+        await msg.mouse.move(box.x + box.width * 0.4, box.y + box.height / 2, { steps: 5 });
+        await msg.mouse.move(box.x + box.width * 0.7, box.y + box.height / 2, { steps: 5 });
+        await msg.mouse.up();
+        await msg.waitForSelector("[data-testid='thread-swipe-delete']");
+        await shot(msg, "messaging-swipe-delete");
+        await msg.click("[data-testid='thread-swipe-delete']");
+        await msg.waitForFunction((n) => document.querySelectorAll("[data-testid='thread-row']").length === n - 1, before, { timeout: 4000 });
+        const left = await msg.locator("[data-testid='thread-row'] .thread-summary").allTextContents();
+        check(!left.includes(gone), `a conversation swiped across and deleted goes ("${gone}")`);
 
         check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
         await browser.close();

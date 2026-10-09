@@ -9,6 +9,7 @@ import { createElement, Fragment, useEffect, useState, type ReactNode } from "re
 import type { LunaError, Subscription } from "./bridge";
 import { fileUrl } from "./files";
 import { mediaUrl } from "./media";
+import { devMode } from "./services";
 
 export interface LunaState<T> {
     value: T | undefined;
@@ -51,6 +52,18 @@ export function useLuna<T>(
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, deps);
     return state;
+}
+
+/**
+ * Settings' Developer Mode shows (its launch point, the list of panes, the
+ * Marketplace's way there): Developer Mode is on, or Just Type's Konami
+ * code revealed it (devModeUnlocked). undefined until both are known.
+ */
+export function useDevModeShown(): boolean | undefined {
+    const on = useLuna<boolean>((cb, err) => devMode.watch(cb, err), []).value;
+    const unlocked = useLuna<boolean>((cb, err) => devMode.watchUnlocked(cb, err), []).value;
+    if (on === true || unlocked === true) return true;
+    return on === undefined || unlocked === undefined ? undefined : false;
 }
 
 /**

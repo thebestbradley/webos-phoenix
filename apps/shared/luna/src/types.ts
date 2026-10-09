@@ -190,6 +190,8 @@ export interface SystemPreferences {
      *  as it is ("front", the default), relaunched to reload its data
      *  ("refresh"), or another card of it ("new"). */
     appRelaunch?: "front" | "refresh" | "new";
+    /** Settings' Developer Mode was revealed (Just Type's Konami code; Phoenix). */
+    devModeUnlocked?: boolean;
     /** Phoenix: the shell's hardware keyboard shortcuts, iPad-style or desktop-style. */
     keyboardShortcuts?: "ipad" | "desktop";
     /** Text Assist's checks and the user's shortcuts (see TextInputPrefs). */
@@ -259,6 +261,10 @@ export interface TextInputPrefs {
     grammarChecking?: "autoCorrect" | "off";
     shortcutChecking?: "autoCorrect" | "off";
     shortcuts?: TextAssistShortcut[];
+    /** Phoenix: the personal dictionary, words the user added (never corrected, suggested). */
+    userWords?: string[];
+    /** Phoenix: learned words deleted from the personal dictionary, lower case -> when (ms). */
+    removedWords?: Record<string, number>;
 }
 
 /** Settings > Exhibition (Phoenix): when dock mode starts and its night mode. */
@@ -364,6 +370,8 @@ export interface SystemStatus {
     orientation?: { ui: string; device: string };
     /** The device has a gesture area (the strip below the screen). */
     gestureArea?: boolean;
+    /** Phoenix: the words the keyboard learned that its word list lacks. */
+    learnedWords?: string[];
 }
 
 // ---- The map -----------------------------------------------------------------------

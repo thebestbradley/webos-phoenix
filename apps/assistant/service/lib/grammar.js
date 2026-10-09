@@ -89,6 +89,15 @@ function parse(text, ctx) {
     var t = lang.clean(text);
     if (!t) return null;
     var c = { now: ctx.now || Date.now(), original: String(text), apps: ctx.apps || [], names: ctx.names || [], appCommands: ctx.appCommands || [] };
+    var found = byRules(lang, t, c);
+    if (found || !lang.casual) return found;
+    // Casual words ("kill the wifi for now"), said again as the rules know them.
+    var again = lang.casual(t);
+    for (var k = 0; k < again.length; ++k)
+        if ((found = byRules(lang, again[k], c))) return found;
+    return null;
+}
+function byRules(lang, t, c) {
     for (var i = 0; i < lang.rules.length; ++i) {
         var args = lang.rules[i][1](t, c);
         if (args) return { command: lang.rules[i][0], args: args };

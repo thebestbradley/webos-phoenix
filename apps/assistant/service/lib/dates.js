@@ -142,7 +142,12 @@ function occurrences(ev, from, to) {
         if (rule.ruleType === "BYMONTHDAY") bymonthday = (rule.ruleValue || []).map(function (v) { return Number(v.ord); });
     });
     var ex = {};
-    (ev.exdates || []).forEach(function (x) { ex[String(x)] = true; });
+    // An exception as the Calendar app writes one (Utilities.js
+    // addException: UTC "YYYYMMDDTHHMMSSZ"), or as ms.
+    (ev.exdates || []).forEach(function (x) {
+        var m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(String(x));
+        ex[m ? String(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])) : String(x)] = true;
+    });
     var s = new Date(start), n = 0;
     // Walk the days from the first one; at most ten years of them.
     for (var i = 0; i < 3660; ++i) {
@@ -162,7 +167,15 @@ function occurrences(ev, from, to) {
     return out;
 }
 
+// A time as the Calendar app's exception dates and recurrenceIds write it
+// (com.palm.app.calendar app/shared/Utilities.js getUTCFormatDateString).
+function utcString(ms) {
+    var d = new Date(ms), two = function (n) { return (n < 10 ? "0" : "") + n; };
+    return "" + d.getUTCFullYear() + two(d.getUTCMonth() + 1) + two(d.getUTCDate()) + "T" + two(d.getUTCHours()) + two(d.getUTCMinutes()) + two(d.getUTCSeconds()) + "Z";
+}
+
 module.exports = {
+    utcString: utcString,
     DAY_MS: DAY_MS,
     startOfDay: startOfDay,
     addDays: addDays,

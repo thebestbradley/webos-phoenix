@@ -249,6 +249,7 @@ function createPackagesService(deps) {
         var o = clone(e);
         o.installed = inst ? { version: inst.version, sourceId: inst.sourceId } : null;
         if (found) o.appId = found.appId;
+        if (found && ownIcons[found.appId]) o.ownIcon = ownIcons[found.appId];
         o.update = inst && inst.sourceId === e.sourceId && e.version && version.compare(e.version, inst.version) > 0 ? e.version : null;
         if (e.kind === "preware" && e.architecture !== "all")
             o.verdict = { ok: false, text: "Not for this device yet: " + nativeText(e.architecture) };
@@ -370,6 +371,23 @@ function createPackagesService(deps) {
         });
     }
 
+    // An app's icon from its package (appinfo's icon, beside it), as a data:
+    // address the launcher can draw before the app is installed: a PNG, JPEG
+    // or GIF by its own bytes, at most 256 KB; else "".
+    var ICON_TYPES = [["image/png", [0x89, 0x50, 0x4e, 0x47]], ["image/jpeg", [0xff, 0xd8, 0xff]], ["image/gif", [0x47, 0x49, 0x46, 0x38]]];
+    function packageIcon(c) {
+        var name = String((c.app.appinfo && c.app.appinfo.icon) || "icon.png").replace(/^\.?\//, "");
+        var f = c.pkg.files.filter(function (x) { return x.path === c.app.dir + name; })[0];
+        var data = f && (typeof f.data === "string" ? new TextEncoder().encode(f.data) : f.data);
+        if (!data || !data.length || data.length > 256 * 1024) return "";
+        for (var i = 0; i < ICON_TYPES.length; ++i) {
+            var sig = ICON_TYPES[i][1];
+            if (sig.every(function (b, k) { return data[k] === b; }))
+                return "data:" + ICON_TYPES[i][0] + ";base64," + b64.toBase64(data);
+        }
+        return "";
+    }
+
     function sha256Hex(bytes) {
         return Promise.resolve(deps.crypto.sha256(bytes)).then(function (h) { return b64.hex(new Uint8Array(h)); });
     }
@@ -467,6 +485,10 @@ function createPackagesService(deps) {
                 body: words[st.state] || "", progress: st.progress, params: { sourceId: p.sourceId, id: p.id }
             }).then(null, function () {});
         };
+        // The launcher's pending icon: the package's own once it has been
+        // read (packageIcon), else the catalog's (none for an App Museum app;
+        // the launcher then draws the app's initial, as for one it cannot load).
+        var ownIcon = "";
         // Only an install that got going has an icon to mark failed.
         var pendingShown = false;
         var pending = function (st) {
@@ -475,7 +497,7 @@ function createPackagesService(deps) {
             try {
                 deps.pending(Object.assign({
                     appId: appId || (entry && (entry.appId || entry.id)) || p.id, catalogId: p.id, sourceId: p.sourceId,
-                    title: (entry && entry.title) || "", icon: (entry && entry.icon) || ""
+                    title: (entry && entry.title) || "", icon: ownIcon || (entry && entry.icon) || ""
                 }, st));
             } catch (e) { log("pending: " + e.message); }
         };
@@ -494,6 +516,7 @@ function createPackagesService(deps) {
             var bytes = got[0];
             return check(bytes, entry, got[1]).then(function (c) {
                 appId = c.app.id;
+                ownIcon = packageIcon(c);
                 if (entry.kind !== "classic" && entry.kind !== "preware" && appId !== entry.id) throw err("BAD_PACKAGE", "The package holds another app");
                 var owner = load().installed[appId];
                 if (owner && owner.sourceId !== entry.sourceId)
@@ -562,12 +585,23 @@ function createPackagesService(deps) {
         });
     }
 
+    // The installed apps' own icons as the launcher draws them (their
+    // default launch points'), by app id: what the Marketplace shows for an
+    // app on the device. A catalog's icon can be missing (the App Museum's
+    // details name none) or out of reach (a feed's server); the app's own is
+    // on the device.
+    var ownIcons = {};
+
     // Apps removed some other way (the launcher) are forgotten here too.
     function reconcile() {
         return deps.luna.call("luna://com.webos.applicationManager/listLaunchPoints", {}).then(function (r) {
             if (!r || !Array.isArray(r.launchPoints)) return;
             var present = {};
-            r.launchPoints.forEach(function (lp) { present[lp.id] = true; });
+            ownIcons = {};
+            r.launchPoints.forEach(function (lp) {
+                present[lp.id] = true;
+                if (lp.icon && (!lp.launchPointId || lp.launchPointId === lp.id + "_default")) ownIcons[lp.id] = String(lp.icon);
+            });
             var s = load(), changed = false;
             Object.keys(s.installed).forEach(function (id) {
                 if (!present[id]) { delete s.installed[id]; changed = true; }
@@ -594,7 +628,8 @@ function createPackagesService(deps) {
             updatesOf(s).forEach(function (u) { ups[u.id] = u.entry.version; });
             return { returnValue: true, apps: Object.keys(s.installed).sort().map(function (id) {
                 var i = s.installed[id];
-                return { id: id, catalogId: i.catalogId || id, title: i.title, icon: i.icon, version: i.version, sourceId: i.sourceId,
+                return { id: id, catalogId: i.catalogId || id, title: i.title, icon: ownIcons[id] || i.icon || "", catalogIcon: i.icon || "",
+                         version: i.version, sourceId: i.sourceId,
                          kind: i.kind, installedAt: i.installedAt, update: ups[id] || null };
             }) };
         });
@@ -688,10 +723,12 @@ function createPackagesService(deps) {
         browse: browse,
         search: search,
         getApp: function (p) {
-            var s = load();
-            return findApp(s, p && p.sourceId, p && p.id).then(function (e) {
-                return { returnValue: true, app: withState(s, e) };
-            }, errorReply);
+            return reconcile().then(function () {
+                var s = load();
+                return findApp(s, p && p.sourceId, p && p.id).then(function (e) {
+                    return { returnValue: true, app: withState(s, e) };
+                }, errorReply);
+            });
         },
         install: install,
         remove: remove,

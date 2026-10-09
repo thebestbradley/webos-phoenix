@@ -27,6 +27,9 @@ export function textInputPrefs(value: unknown): TextInputPrefs {
         grammarChecking: v.grammarChecking ?? "autoCorrect",
         shortcutChecking: v.shortcutChecking ?? "autoCorrect",
         shortcuts: Array.isArray(v.shortcuts) ? v.shortcuts.filter((s) => s && typeof s.shortcut === "string" && typeof s.text === "string") : [],
+        // The personal dictionary (dictionary.ts), kept as it is.
+        userWords: Array.isArray(v.userWords) ? v.userWords.filter((w) => typeof w === "string") : [],
+        removedWords: v.removedWords && typeof v.removedWords === "object" ? v.removedWords : {},
     };
 }
 

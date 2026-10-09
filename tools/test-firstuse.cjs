@@ -86,6 +86,11 @@ async function main() {
         const step = async (id) => {
             await page.waitForSelector(`[data-testid=step-${id}]`, { timeout: 5000 });
             await page.waitForTimeout(400);
+            // The step's Back and Next show their whole label (a long one,
+            // Restore's "Set Up as New", was cut off at both ends on a phone).
+            const cut = await page.evaluate(() => [...document.querySelectorAll(".fu-buttons .pui-button")]
+                .filter((b) => b.scrollWidth > b.clientWidth + 1).map((b) => b.textContent));
+            check(cut.length === 0, `${id}: the buttons' labels fit${cut.length ? " (cut: " + cut.join(", ") + ")" : ""}`);
         };
         const next = () => page.click("[data-testid=next]");
         const pref = async (key) => (await luna(page, "luna://com.webos.service.systemservice/getPreferences", { keys: [key] }))[key];
@@ -198,6 +203,18 @@ async function main() {
         // ---- Passcode ---------------------------------------------------------------
         await step("passcode");
         await page.click("[data-testid=lock-pin]");
+        // The keyboard comes up for the PIN: the window shrinks under it,
+        // and the field stays in view above it (it went under it).
+        await page.focus("[data-testid=code-confirm]");
+        await page.setViewportSize({ width: viewport.width, height: tablet ? 400 : 180 });
+        await page.waitForTimeout(400);
+        const inView = await page.evaluate(() => {
+            const r = document.activeElement.getBoundingClientRect();
+            return r.height > 0 && r.top >= 0 && r.bottom <= window.innerHeight + 0.5 ? true : [r.top, r.bottom, window.innerHeight].join();
+        });
+        check(inView === true, "Passcode: with the keyboard up, the field typed in is in view" + (inView === true ? "" : ` (${inView})`));
+        await shot("5a-passcode-keyboard");
+        await page.setViewportSize(viewport);
         await page.fill("[data-testid=code]", "1357");
         await page.fill("[data-testid=code-confirm]", "1358");
         await next();
@@ -223,6 +240,19 @@ async function main() {
         const h2 = await luna(page, "luna://com.webos.service.location/getAllLocationHandlers", {});
         check(h2.handlers.find((x) => x.name === "gps").state && !h2.handlers.find((x) => x.name === "network").state,
               "Privacy: GPS on, network location off");
+        // The Assistant (no more "Coming later"): on, and its wake word.
+        check(!/Coming later/.test(await text()), "Privacy: the Assistant is not \"coming later\"");
+        const A = "luna://org.webosphoenix.assistant/";
+        await page.waitForSelector("[data-testid=assistant-wake]");
+        await page.click("[data-testid=assistant-wake]");
+        await page.waitForTimeout(300);
+        const as1 = (await luna(page, A + "getSettings", {})).settings;
+        await page.click("[data-testid=assistant-toggle]");
+        await page.waitForTimeout(300);
+        const as2 = (await luna(page, A + "getSettings", {})).settings;
+        check(as1.enabled && as1.wakeWord && !as2.enabled, "Privacy: the Assistant's wake word, then the Assistant off");
+        await page.click("[data-testid=assistant-toggle]");
+        await page.waitForTimeout(300);
         await shot("6-privacy");
         await next();
 
@@ -236,6 +266,13 @@ async function main() {
             await page.waitForTimeout(1300);
             await shot("7-tutorial-" + lesson);
             if (await page.locator("[data-testid=step-tutorial]").count() === 0) break;
+            // Its buttons are on the screen as it opens, not below it (on a
+            // phone they were cut off at the bottom; a click scrolls to them).
+            const fits = await page.evaluate(() => {
+                const r = document.querySelector("[data-testid=lesson-next]").getBoundingClientRect();
+                return r.bottom <= window.innerHeight + 0.5 ? true : `${Math.round(r.bottom)} > ${window.innerHeight}`;
+            });
+            check(fits === true, `Tutorial (${lesson}): its buttons fit on the screen` + (fits === true ? "" : ` (${fits})`));
             await page.click("[data-testid=lesson-next]");
             await page.waitForTimeout(200);
             if (await page.locator("[data-testid=step-tutorial]").count() === 0) break;
@@ -309,6 +346,31 @@ async function main() {
         check(/A PIN already locks this device/.test(await text()), "run again, the passcode step leaves the PIN alone");
 
         check(errors.length === 0, "no errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
+
+        // A new device takes the computer's time zone, and Date & Time's
+        // picker shows it: "UTC" (a container's) is the list's Etc/UTC, and
+        // a zone the list lacks is added to it.
+        for (const [tz, want, label] of [["UTC", "Etc/UTC", "UTC"], ["Europe/Vienna", "Europe/Vienna", "Vienna"]]) {
+            const c = await browser.newContext({ viewport, timezoneId: tz });
+            const p = await c.newPage();
+            await p.goto(appUrl(APP));
+            await p.evaluate(() => localStorage.clear());
+            await p.goto(appUrl(APP));
+            await p.click("[data-testid=next]");
+            await p.waitForSelector("[data-testid=step-wifi]");
+            await p.click("[data-testid=skip]");
+            await p.waitForSelector("[data-testid=step-hardware]");
+            await p.click("[data-testid=skip]");
+            await p.waitForSelector("[data-testid=step-restore]");
+            await p.click("[data-testid=skip]");
+            await p.waitForSelector("[data-testid=step-datetime]");
+            await p.waitForTimeout(400);
+            const zone = (await luna(p, "luna://com.webos.service.systemservice/getPreferences", { keys: ["timeZone"] })).timeZone;
+            const shown = (await p.textContent("[data-testid=timezone]")).trim();
+            check(zone.ZoneID === want && zone.City === label && shown.includes(label),
+                  `a computer in ${tz}: the zone is ${zone.ZoneID} (${zone.City}), the picker shows "${shown}"`);
+            await c.close();
+        }
         await browser.close();
     } finally {
         server.kill();

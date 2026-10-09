@@ -48,6 +48,13 @@ QtObject {
     property string exhibitionNightStart: "22:00"
     property string exhibitionNightEnd: "07:00"
     property url dockWallpaper: ""
+
+    // ---- Developer Mode (com.webos.service.devmode; the runtime's devMode) -----
+    // On: the developer apps show (docs/APP-RUNTIME.md "Developer apps").
+    // devModeUnlocked: Developer Mode was revealed (Just Type's Konami code;
+    // the system preference), so Settings' Developer Mode shows.
+    property bool devMode: false
+    property bool devModeUnlocked: false
     property int wifiBars: 3          // 0..3 connected, 0 = on but not connected, -1 = off
     property int signalBars: 5        // 0..5, -1 = no modem
     property bool airplaneMode: false
@@ -80,8 +87,27 @@ QtObject {
     property bool tapSounds: true
     // Settings > Text Assist: {suggestions, autoCorrect, swipe, spaces2period,
     // forgetWords (when the learned words were forgotten, ms)}.
+    // userWords (the personal dictionary), removedWords (learned words
+    // deleted there: lower case -> ms).
     property var textAssist: ({ suggestions: true, autoCorrect: true, swipe: true, spaces2period: true, forgetWords: 0,
-                                shortcuts: {}, shortcutsOn: true })
+                                shortcuts: {}, shortcutsOn: true, userWords: [], removedWords: {} })
+    // The keyboard's "Add" (after backspace put back a corrected word): the
+    // word joins the personal dictionary here at once, and goes to the
+    // runtime (dictionaryWordAdded: sim.qml sends it on), which keeps it in
+    // x_palm_textinput.userWords.
+    signal dictionaryWordAdded(string word)
+    function addDictionaryWord(word) {
+        var w = String(word || "").trim();
+        if (!w)
+            return;
+        var t = {};
+        for (var k in textAssist)
+            t[k] = textAssist[k];
+        var words = (t.userWords || []).filter(function (x) { return x.toLowerCase() !== w.toLowerCase(); });
+        t.userWords = words.concat([w]);
+        textAssist = t;
+        dictionaryWordAdded(w);
+    }
     // Settings > Text Assist > Keyboards: [{layout, language}] turned on,
     // and the one in use (the keyboard's language key picks another).
     property var keyboards: [{ layout: "qwerty", language: "en" }]
@@ -193,6 +219,11 @@ QtObject {
         { name: "Office", state: "disconnected" }
     ]
     property bool _runtimeVpn: false
+    // The web runtime has reported its Wi-Fi networks: joining one asks it
+    // (wifiRequested), the system menu and Settings > Wi-Fi then agree.
+    property bool _runtimeWifi: false
+    // {wifiConnect: ssid}, for the web pages.
+    signal wifiRequested(var request)
     // The system menu connects or disconnects a profile the runtime has:
     // {vpnConnect: name} or {vpnDisconnect: name}, for the web pages.
     signal vpnRequested(var request)
@@ -214,6 +245,9 @@ QtObject {
         }
         wifiBars = 0;
         scanWifi();
+        // The runtime joins a known network itself as the radio comes on.
+        if (_runtimeWifi)
+            return;
         _later(_scanTime, function() {
             for (var i = 0; i < wifiNetworks.length; ++i)
                 if (wifiNetworks[i].known)
@@ -237,6 +271,13 @@ QtObject {
     function connectWifi(ssid) {
         if (wifiBars < 0)
             return;
+        if (_runtimeWifi) {
+            wifiNetworks = wifiNetworks.map(function(n) {
+                return _with(n, { state: n.ssid === ssid ? "connecting" : n.state === "ipConfigured" ? "" : n.state });
+            });
+            wifiRequested({ wifiConnect: ssid });
+            return;
+        }
         wifiBars = 0;
         wifiNetworks = wifiNetworks.map(function(n) {
             return _with(n, { state: n.ssid === ssid ? "connecting" : "" });
@@ -306,7 +347,7 @@ QtObject {
                 });
             if (wifiBars < 0)
                 wifiScanning = false;
-        } else if (_named(wifiNetworks, "ssid", "ipConfigured") === "") {
+        } else if (!_runtimeWifi && _named(wifiNetworks, "ssid", "ipConfigured") === "") {
             var done = false;
             wifiNetworks = wifiNetworks.map(function(n) {
                 if (done || !n.known)
@@ -331,7 +372,7 @@ QtObject {
     // volume, streams, systemSounds, tapSounds, textAssist, keyboards,
     // keyboard, ringtone, alerttone,
     // notificationtone, callForwarding, reduceMotion, keyboardAccess, tweaks, browser, proxy,
-    // vpnProfiles, exhibitionApps, dockModeSound, exhibition {enabled,
+    // vpnProfiles, exhibitionApps, devMode, devModeUnlocked, dockModeSound, exhibition {enabled,
     // startAfter, nightMode, nightStart, nightEnd}, dockWallpaperUrl,
     // automaticBrightness, displayOnWhenConnected.
     // Missing keys are left alone.
@@ -411,8 +452,19 @@ QtObject {
             _runtimeVpn = true;
             vpnProfiles = s.vpnProfiles;
         }
+        // The runtime's networks (Settings > Wi-Fi's), in place of the demo
+        // list; with the radio off it has none, and the list stays.
+        if (s.wifiNetworks !== undefined) {
+            _runtimeWifi = true;
+            if (s.wifiNetworks.length > 0)
+                wifiNetworks = s.wifiNetworks;
+        }
         if (s.exhibitionApps !== undefined && s.exhibitionApps !== null)
             exhibitionApps = s.exhibitionApps;
+        if (s.devMode !== undefined)
+            devMode = !!s.devMode;
+        if (s.devModeUnlocked !== undefined)
+            devModeUnlocked = !!s.devModeUnlocked;
         if (s.dockModeSound !== undefined)
             dockModeSound = s.dockModeSound === "mute" ? "mute" : "systemsettings";
         if (s.exhibition !== undefined && s.exhibition !== null) {

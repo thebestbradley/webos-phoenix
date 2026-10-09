@@ -41,8 +41,12 @@ QtObject {
     }
 
     // Settings > Accessibility > Reduce motion (set by Shell.qml from
-    // system.reduceMotion): cards, the launcher and the lock screen appear
-    // and go without animating. A Phoenix addition.
+    // system.reduceMotion): cards, the launcher, the lock screen, the status
+    // bar and its menus, the dashboard, banners, alerts and rotation appear
+    // and go without animating (every duration through motion(); the
+    // animations themselves are the original's, docs/spec/ANIMATIONS.md).
+    // Indicators that only say something is going on (spinners, the loading
+    // card's pulse) keep their pace. A Phoenix addition.
     property bool reduceMotion: false
     // Settings > Advanced > Animation speed (docs/M6-PLAN.md F4; the
     // community's Faster Card Animations patches): "fast" runs the shell's
@@ -107,7 +111,7 @@ QtObject {
 
     readonly property int statusBarHeight: px(28)
     readonly property int statusBarTitleMaxWidth: px(140)   // Src/base/settings/Settings.cpp:179
-    readonly property int statusBarFadeDuration: 300                 // conf/lunaAnimations.conf:112-113 (linear)
+    readonly property int statusBarFadeDuration: motion(300)                 // conf/lunaAnimations.conf:112-113 (linear)
     readonly property int statusBarIconSpacing: px(5)                // StatusBarIcon.h:35 ICON_SPACING
     // The battery state for a charge level: the first of these at or above
     // it (StatusBarBattery.cpp:34, 200-212).
@@ -130,20 +134,31 @@ QtObject {
     readonly property int statusBarTitleBorderPadding: px(13 - 4)
     readonly property int statusBarTitlePadding: px(7)
     readonly property int statusBarTitleBaselineOffset: px(-2)
-    readonly property int statusBarTitleChangeDuration: 300
+    readonly property int statusBarTitleChangeDuration: motion(300)
     // Tablets: menu-arrow.png 5 px after the title while it opens a menu, fading
     // over 500 ms InOutQuad (StatusBarItemGroup.cpp:137-158, 412-424,
     // ITEM_SPACING 5; lunaAnimations.conf:120-121).
     readonly property int statusBarArrowSpacing: px(5)
-    readonly property int statusBarArrowFadeDuration: 500
+    readonly property int statusBarArrowFadeDuration: motion(500)
     // Tablets: the fill under the art lerps over 300 ms between the default
     // #515558 and the launcher's / Just Type's #4F545A
     // (StatusBar.cpp:47, setBackgroundColor; SystemUiController.cpp:69-70;
     // lunaAnimations.conf:114-115).
     readonly property color statusBarLauncherFill: "#4F545A"
-    readonly property int statusBarColorChangeDuration: 300
-    readonly property int statusBarItemSlideDuration: 1000           // lunaAnimations.conf:122-123 (curve 3 InOutQuad on the width)
-    readonly property int statusBarMenuFadeDuration: 200             // lunaAnimations.conf:124-125 (linear)
+    readonly property int statusBarColorChangeDuration: motion(300)
+    readonly property int statusBarItemSlideDuration: motion(1000)           // lunaAnimations.conf:122-123 (curve 3 InOutQuad on the width)
+    readonly property int statusBarMenuFadeDuration: motion(200)             // lunaAnimations.conf:124-125 (linear)
+    // Tablets: the notification group (its separator and icons) fades in
+    // as the first notification comes and out after the last
+    // (StatusBarItemGroup::show / hide, :185-232; StatusBar.cpp:688-697):
+    // statusBarTabFade, 300 ms (lunaAnimations.conf:118). The conf names its
+    // curve "statusBarTabFadeeCurve" (:119), a key nothing reads, so the
+    // curve stays AnimationSettings.cpp:121's 0, Linear.
+    readonly property int statusBarTabFadeDuration: motion(300)
+    // ... and its icons fade out while a banner scrolls through the bar,
+    // and back once the banners are done: 300 ms, linear
+    // (StatusBarNotificationArea::setIconsShown, :368-397; FADED_ICONS_OPACITY 0, :31).
+    readonly property int notificationIconsFadeDuration: motion(300)
     // Tablets: the drop-down tab behind a status bar group while its menu
     // is open (status-bar-menu-dropdown-tab.png) has 11 px caps, the
     // tab's edge with its shadow (StatusBarItemGroup.cpp:358 margin): the
@@ -187,11 +202,11 @@ QtObject {
     readonly property color systemMenuTextDim: "#AAAAAA"             // DateElement.qml:15, BatteryElement.qml:19
     // Opening and closing fade: 200 ms, curve 0 = Linear
     // (conf/lunaAnimations.conf:124-125, StatusBarItemGroup.cpp:252-306).
-    readonly property int systemMenuFadeDuration: 200
+    readonly property int systemMenuFadeDuration: motion(200)
     // Drawers open and close over 350 ms OutCubic (Drawer.qml:98-103); a
     // list changing size in an open drawer animates over 200 ms (:77).
-    readonly property int systemMenuDrawerDuration: 350
-    readonly property int systemMenuDrawerResizeDuration: 200
+    readonly property int systemMenuDrawerDuration: motion(350)
+    readonly property int systemMenuDrawerResizeDuration: motion(200)
     // The menu closes 250 ms after a toggle (SystemMenu.qml:247,263,280),
     // 300 ms after a preferences or radio-off row, 350 ms after a Bluetooth
     // or VPN entry, 1 s after the Wi-Fi network picked connects
@@ -205,7 +220,7 @@ QtObject {
     // (SystemMenu.cpp:61 MINIMUM_BRIGHTNESS, :873-882).
     readonly property real minimumBrightness: 0.10
     // Scroll fades show over 70 ms (SystemMenu.qml:309,332).
-    readonly property int systemMenuScrollFadeDuration: 70
+    readonly property int systemMenuScrollFadeDuration: motion(70)
     // AnimatedSpinner: spinner.png turned in 60 steps a second (SystemMenu.cpp:1006-1012).
     readonly property int spinnerFrames: 60
     readonly property int spinnerDuration: 1000
@@ -338,7 +353,7 @@ QtObject {
 
     readonly property int bannerHeight: positiveSpaceBottomPadding   // BannerMessageHandler.cpp:201
     readonly property int bannerFontSize: px(16)                     // BannerMessageHandler.cpp:67
-    readonly property int bannerSlideDuration: 1000                  // BannerMessageHandler.cpp:122-130
+    readonly property int bannerSlideDuration: motion(1000)                  // BannerMessageHandler.cpp:122-130
     readonly property int bannerShowTime: 5000                       // BannerMessageHandler.cpp:69
     readonly property int bannerShowTimeQueued: 2000                 // BannerMessageHandler.cpp:70
     readonly property int dashboardItemHeight: px(52)                // DashboardWindowContainer.cpp:48
@@ -356,7 +371,7 @@ QtObject {
     readonly property int lockDashboardMaxItems: 6                   // LockWindow.cpp:2611-2613
     readonly property int lockDashboardTopPadding: px(1)             // LockWindow.cpp:2615
     readonly property int lockDashboardBottomPadding: px(3)          // LockWindow.cpp:2614
-    readonly property int alertFadeDuration: 400                     // DashboardWindowManager.cpp:559,589
+    readonly property int alertFadeDuration: motion(400)                     // DashboardWindowManager.cpp:559,589
     // Phones: room above a web page's popup alert (luna-systemui's Low
     // Battery, an alarm, a reminder) in the negative space. The phone's alert
     // container put the window at its very top (DashboardWindowManager.cpp:
@@ -365,12 +380,12 @@ QtObject {
     // against the app's bottom edge. 10 px, as the shell's own alerts have
     // above their titles (6 px margin + 4 px, uiComponents/MemoryAlert).
     readonly property int phoneAlertTopPadding: px(10)
-    readonly property int positiveSpaceDuration: 400                 // conf/lunaAnimations.conf:73-74, curve 6 OutCubic
+    readonly property int positiveSpaceDuration: motion(400)                 // conf/lunaAnimations.conf:73-74, curve 6 OutCubic
     readonly property real dashboardDismissRatio: 0.25               // DashboardWindowContainer.cpp:350-363
     readonly property int dashboardTopPadding: px(10)                // DashboardWindowContainer.cpp:107 (phones)
     // Dismissed: slides a width and a half to the right (:700-708).
-    readonly property int dashboardDeleteDuration: 200               // AnimationSettings.cpp:117, curve 0 Linear
-    readonly property int dashboardSnapDuration: 500                 // conf/lunaAnimations.conf:69-70, curve 6 OutCubic
+    readonly property int dashboardDeleteDuration: motion(200)               // AnimationSettings.cpp:117, curve 0 Linear
+    readonly property int dashboardSnapDuration: motion(500)                 // conf/lunaAnimations.conf:69-70, curve 6 OutCubic
     readonly property real dashboardDeleteTravel: 1.5                // DashboardWindowContainer.cpp:702
     // Where the bottom scroll mask sits above the viewport's bottom (:106, 1317).
     readonly property int dashboardBottomMaskOffset: px(10)
@@ -454,7 +469,7 @@ QtObject {
     readonly property int cardLoadingTimeBeforePulse: 900
     readonly property int cardLoadingPulseDuration: 1000             // half up, half down
     readonly property int cardLoadingPulsePause: 1000
-    readonly property int cardLoadingCrossFadeDuration: 300          // curve 0 = Linear
+    readonly property int cardLoadingCrossFadeDuration: motion(300)          // curve 0 = Linear
     readonly property int splashIconSize: tablet ? 192 : 128         // luna.conf SplashIconSize; 192 on tablets
     readonly property int cardShuffleReorderDuration: motion(350)            // curve 6 = OutCubic
     readonly property int cardGroupReorderDuration: motion(500)              // conf/lunaAnimations.conf:43-46
@@ -470,7 +485,7 @@ QtObject {
     // Touch to Share's glow: one 1000 ms pulse after another, the curve
     // reticleCurve = 0 Linear (TouchToShareGlow.cpp:99-127; lunaAnimations.conf:93).
     readonly property int touchToShareGlowDuration: 1000
-    readonly property int launcherReorderDuration: 300               // dynamicssettings.cpp:92-93 iconReorderIconMoveAnimTime, InQuad
+    readonly property int launcherReorderDuration: motion(300)               // dynamicssettings.cpp:92-93 iconReorderIconMoveAnimTime, InQuad
     // Dragging an icon to a page's left or right edge (the 50 px border,
     // layoutsettings.cpp:61) takes it to the page beside at once; held
     // there, again every 1500 ms (PageMovementControl's restriction,
@@ -484,6 +499,20 @@ QtObject {
     readonly property int launcherScrollDelay: 800
     readonly property int launcherScrollAmount: px(150)
     readonly property int launcherScrollDuration: motion(300)
+    // Going to a page (dimensionslauncher.cpp:3287-3348 gotoPageIndex): a
+    // tab's tap, or a drag let go short of a flick, glides to the page over
+    // 250 ms InQuad (DynamicsSettings snapbackAnimTime / snapbackAnimCurve,
+    // dynamicssettings.cpp:86-87; :1990-2010 for the snap back). A flick goes
+    // on to the page beside the one it began on (:3624-3645) in
+    // distance / speed, at least 200 and at most 1200 ms, OutCubic (:3330-3339;
+    // the flick's speed is px/ms x 100, FlickGestureRecognizer.cpp:46, 98-101).
+    readonly property int launcherPageSnapDuration: motion(250)
+    // The app info dialog (Remove Application?) fades in over 400 ms and out
+    // over 600, linear (dynamicssettings.cpp:106-107; AppInfoDialog.qml:55-68).
+    readonly property int appInfoDialogFadeInDuration: motion(400)
+    readonly property int appInfoDialogFadeOutDuration: motion(600)
+    readonly property int launcherPageFlickMinDuration: 200
+    readonly property int launcherPageFlickMaxDuration: 1200
     readonly property real launcherInstallingOpacity: 0.5            // dynamicssettings.cpp:105 iconInstallModeOpacity
     readonly property int launcherProgressFrames: 19                 // iconheap.cpp:47 loading-strip.png's frames
     // App groups (LunaCE): a dragged icon this near another's centre (a

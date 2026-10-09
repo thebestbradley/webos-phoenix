@@ -13,7 +13,8 @@
     "uiRevision": 2,
     "keywords": ["Notifications", "Live Activities", "Background", "Dashboard", "Banner", "Developer"],
     "phoenix": {
-        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
-        "launcherTab": 0
+        "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings; developer: shown only while Developer Mode is on.",
+        "launcherTab": 0,
+        "developer": true
     }
 }

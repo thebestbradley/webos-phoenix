@@ -1,6 +1,7 @@
 // Phoenix compat overlay: the Calendar window's original depends.js plus
 // phoenix-compat.css, which fits the day, week and month views and their
-// toolbar into a phone card. Nothing else is changed.
+// toolbar into a phone card, and phoenix-back.js, the back gesture (after
+// AppView.js, whose backHandler it replaces). Nothing else is changed.
 //
 // @@@LICENSE
 //
@@ -32,6 +33,7 @@ enyo.depends(
     "AppMenu.js",
     "AppView.css",
     "AppView.js",
+    "phoenix-back.js",
     "CalendarView.js",
     "header/CalendarList.css",
     "header/CalendarList.js",

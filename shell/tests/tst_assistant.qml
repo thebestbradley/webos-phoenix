@@ -76,6 +76,10 @@ Item {
                     added.push(msg({ role: "assistant", text: "Send \"hi\" to Sam?", command: "text", status: "pending", confirm: { command: "text", args: {} } }));
                 else if (/^break/.test(params.text))
                     added.push(msg({ role: "assistant", text: "That didn't work: no torch.", command: "flashlight", status: "failed" }));
+                else if (/^long/.test(params.text))
+                    added.push(msg({ role: "assistant", text: "When should I remind you about the milk? I can do it tomorrow morning, this weekend, "
+                                     + "next week, or not at all; whichever you pick, it shows on the lock screen too.",
+                                     choices: [{ id: "week", label: "Next week" }, { id: "skip", label: "Skip" }] }));
                 else if (/^hello/.test(params.text))
                     added.push(msg({ role: "assistant", text: "Hello!" }));
                 else if (/^add a meeting/.test(params.text))
@@ -364,6 +368,26 @@ Item {
             } finally {
                 shell.dictationInputFiles = [];
             }
+        }
+
+        // With the keyboard up a phone has room for a line or two: an
+        // answer taller than that shows from its start (its last line and
+        // buttons showed, the question above them out of sight).
+        function test_aLongAnswerShowsFromItsStart() {
+            openByHold();
+            var input = findChild(overlay, "assistantInput");
+            if (!input.activeFocus)
+                mouseClick(input, input.width / 2, input.height / 2);
+            tryCompare(shell, "keyboardOpen", true, 2000);
+            var list = findChild(overlay, "assistantMessages");
+            type("long question");
+            var row = arrived(fake.messages[1].text);
+            verify(row.height > list.height, "the answer is taller than the room: " + row.height + " > " + list.height);
+            // Once the keyboard and the bird have settled.
+            wait(500);
+            row = arrived(fake.messages[1].text);
+            var top = row.mapToItem(list, 0, 0).y;
+            verify(top >= 0 && top < list.height / 2, "the answer's start in view: " + top);
         }
 
         function test_readBackWaitsForSend() {

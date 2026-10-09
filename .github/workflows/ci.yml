@@ -123,6 +123,9 @@ jobs:
           cmake --build build -j
 
       - name: Behaviour tests
+        # A test that waits forever (a QML file that fails to load) fails
+        # here in minutes, with its log, instead of holding the job for hours.
+        timeout-minutes: 40
         # Failures also become annotations, readable without the log.
         run: |
           set -o pipefail
@@ -178,6 +181,10 @@ jobs:
       - name: The Assistant's on-device model runner and speech
         timeout-minutes: 10
         run: build/localmodels-test
+
+      - name: The Assistant's voice (phoenix-tts, with Kitten TTS's model and ONNX Runtime)
+        timeout-minutes: 10
+        run: python3 tools/get-kitten.py && build/tts-test
 
       - name: Trademark overlays up to date
         run: python3 tools/debrand-overlays.py --check
@@ -257,6 +264,8 @@ jobs:
           t node tools/test-weather.cjs --tablet --out app-tests/weather-tablet
           t node tools/test-maps.cjs --out app-tests/maps-phone
           t node tools/test-maps.cjs --tablet --out app-tests/maps-tablet
+          t node tools/test-assistant-maps.cjs --out app-tests/assistant-maps-phone
+          t node tools/test-assistant-maps.cjs --tablet --out app-tests/assistant-maps-tablet
           t node tools/test-passwords.cjs --out app-tests/passwords-phone
           t node tools/test-passwords.cjs --tablet --out app-tests/passwords-tablet
           t node tools/test-authenticator.cjs --out app-tests/authenticator-phone
@@ -269,6 +278,8 @@ jobs:
           t node tools/test-sharing.cjs --tablet --out app-tests/sharing-tablet
           t node tools/test-assistant.cjs --out app-tests/assistant-phone
           t node tools/test-assistant.cjs --tablet --out app-tests/assistant-tablet
+          t node tools/test-assistant-followups.cjs --out app-tests/assistant-followups-phone
+          t node tools/test-assistant-followups.cjs --tablet --out app-tests/assistant-followups-tablet
           t node tools/test-terminal.cjs --out app-tests/terminal-phone
           t node tools/test-terminal.cjs --tablet --out app-tests/terminal-tablet
           t node tools/test-videos.cjs --out app-tests/videos-phone
@@ -345,7 +356,8 @@ jobs:
           submodules: recursive
 
       - name: Qt 6, CMake and Ninja (Homebrew)
-        run: brew install qt cmake ninja
+        # onnxruntime: the Assistant's voice (tts-test, with Kitten TTS's model).
+        run: brew install qt cmake ninja onnxruntime
 
       - uses: actions/setup-node@v4
         with:
@@ -383,6 +395,7 @@ jobs:
         run: defaults write NSGlobalDomain NSAppSleepDisabled -bool YES
 
       - name: Behaviour tests
+        timeout-minutes: 60
         env:
           QT_QUICK_BACKEND: software
         # Failures also become annotations, readable without the log.
@@ -407,6 +420,7 @@ jobs:
           build/dictation-test
           python3 tools/get-wakeword.py && build/wakeword-test
           build/localmodels-test
+          python3 tools/get-kitten.py && build/tts-test
           build/simnet-test
           build/simmarketplace-test
 

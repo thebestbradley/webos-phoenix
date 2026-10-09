@@ -108,6 +108,29 @@ describe("English", () => {
         expect(parse("open the pod bay doors")).toBeNull();
     });
 
+    it("finds places and the way there: what is looked for, never the whole sentence", () => {
+        // The owner's report: Maps' search field got the whole question.
+        const q = (t: string) => parse(t)?.args.query;
+        expect(q("find coffee shops near me")).toBe("coffee shops");
+        expect(q("Can you find coffee shops near me?")).toBe("coffee shops");
+        expect(q("find me a coffee shop nearby")).toBe("coffee shop");
+        expect(q("what coffee shops are near me")).toBe("coffee shops");
+        expect(q("where can I get coffee")).toBe("coffee");
+        expect(q("I need a pharmacy")).toBe("pharmacy");
+        expect(q("nearest coffee shop")).toBe("coffee shop");
+        expect(q("coffee shops")).toBe("coffee shops");
+        expect(q("where's the closest Starbucks")).toBe("starbucks");
+        expect(parse("where's the nearest coffee shop")).toEqual({ command: "nearby", args: { query: "coffee shop" } });
+        expect(parse("find a file called coffee")?.command).toBe("findFiles");
+        expect(parse("play coffee")?.command).toBe("play");
+        expect(parse("directions to the nearest coffee shop")).toEqual({ command: "navigate", args: { destination: "nearest coffee shop" } });
+        expect(parse("get me directions to the closest gas station")).toEqual({ command: "navigate", args: { destination: "closest gas station" } });
+        expect(parse("how do I get to Starbucks")).toEqual({ command: "navigate", args: { destination: "starbucks" } });
+        expect(parse("walk to the nearest coffee shop")).toEqual({ command: "navigate", args: { destination: "nearest coffee shop", mode: "walk" } });
+        expect(parse("how do I get to the park by bike")).toEqual({ command: "navigate", args: { destination: "park", mode: "bike" } });
+        expect(parse("navigate to 1 Infinite Loop")).toEqual({ command: "navigate", args: { destination: "1 infinite loop" } });
+        expect(parse("how long to drive to the airport")).toEqual({ command: "travelTime", args: { place: "airport", mode: "drive", traffic: false } });
+    });
     it("navigates, plays music, searches", () => {
         expect(parse("navigate home")).toEqual({ command: "navigate", args: { destination: "home" } });
         expect(parse("directions to the Eiffel Tower")).toEqual({ command: "navigate", args: { destination: "eiffel tower" } });

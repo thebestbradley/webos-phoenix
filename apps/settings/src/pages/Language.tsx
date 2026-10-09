@@ -3,9 +3,11 @@
 //
 // Language & Region. Service: com.webos.settingsservice get/setSystemSettings
 // {keys:["localeInfo"]}: localeInfo.locales.UI is the language, FMT the
-// region used for dates, times and numbers.
+// region used for dates, times and numbers. Units (Phoenix's
+// {measurementUnits}, @phoenix/luna units.ts): the one setting Maps, the
+// Weather and the Assistant follow; Automatic goes by the region.
 
-import { settings, type LocaleInfo } from "@phoenix/luna";
+import { settings, systemFor, UNITS_KEY, units, type LocaleInfo, type UnitsSetting } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
 import { Group, ListSelector, Note, Page, PageHeader, Row } from "@phoenix/ui";
 
@@ -59,6 +61,7 @@ function currencyOf(locale: string) {
 
 export function LanguagePage() {
     const info = useLuna<LocaleInfo | undefined>((cb, err) => settings.watch("", ["localeInfo"], (s) => cb(s.localeInfo), err), []).value;
+    const unitsSetting = useLuna<UnitsSetting>((cb, err) => settings.watch("", [UNITS_KEY], (s) => cb((s[UNITS_KEY] as UnitsSetting) ?? "auto"), err), []).value ?? "auto";
     const ui = info?.locales.UI ?? "en-US";
     const fmt = info?.locales.FMT ?? ui;
     const update = (locales: LocaleInfo["locales"]) =>
@@ -76,6 +79,16 @@ export function LanguagePage() {
                 <ListSelector title="Region" value={fmt} options={REGIONS} disabled={!info} testId="region"
                               onChange={(v) => update({ FMT: v })} />
             </Group>
+            <Group label="Units">
+                <ListSelector title="Units" value={unitsSetting} testId="units" disabled={!info}
+                              options={[
+                                  { label: `Automatic (${systemFor("auto", fmt) === "imperial" ? "miles, °F" : "km, °C"})`, value: "auto" as const },
+                                  { label: "Metric (km, °C)", value: "metric" as const },
+                                  { label: "Imperial (miles, °F)", value: "imperial" as const },
+                              ]}
+                              onChange={(v) => void units.set(v)} />
+            </Group>
+            <Note>Maps, the Weather and the Assistant use these units.</Note>
             {ex && (
                 <Group label="Formats">
                     <Row title="Date" value={ex.date} />

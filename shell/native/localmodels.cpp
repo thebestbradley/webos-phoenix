@@ -22,6 +22,10 @@
 #include <sys/sysctl.h>
 #include <sys/types.h>
 #endif
+#if defined(Q_OS_LINUX)
+#include <csignal>
+#include <sys/prctl.h>
+#endif
 
 LocalModels::LocalModels(QObject *parent)
     : QObject(parent)
@@ -315,14 +319,27 @@ void LocalModels::ensure(const QString &id, const QString &requestId)
     // size"); one slot, so the tools stay cached between requests; the
     // cache in 8 bits with flash attention, which keeps it as small as
     // 4,096 was (Qwen3 0.6B: 1.3 GB in all, measured; lib/node-device.js
-    // the same on a device).
+    // the same on a device). Prompts read 512 tokens at a time (-b; the
+    // physical batch is 512 anyway): llama-server sees that a request was
+    // given up on (the assistant's deadline) only between batches, and with
+    // its default 2,048 it went on 46 s for one nobody waited for, the next
+    // question queued behind it (measured on a busy 4-core computer; 9 s
+    // with 512).
     args << QStringLiteral("-m") << file << QStringLiteral("--host") << QStringLiteral("127.0.0.1")
          << QStringLiteral("--port") << QString::number(m_port) << QStringLiteral("--jinja") << QStringLiteral("-c") << QStringLiteral("8192")
          << QStringLiteral("-np") << QStringLiteral("1") << QStringLiteral("-fa") << QStringLiteral("on")
-         << QStringLiteral("-ctk") << QStringLiteral("q8_0") << QStringLiteral("-ctv") << QStringLiteral("q8_0");
+         << QStringLiteral("-ctk") << QStringLiteral("q8_0") << QStringLiteral("-ctv") << QStringLiteral("q8_0")
+         << QStringLiteral("-b") << QStringLiteral("512");
     m_server->setProgram(program);
     m_server->setArguments(args);
     m_server->setProcessChannelMode(QProcess::SeparateChannels);
+#if defined(Q_OS_LINUX)
+    // It ends with the shell however the shell ends: stop() runs only on a
+    // clean exit, and phoenix-sim killed (a test's timeout, xvfb-run gone)
+    // left llama-server behind, the model in memory and, mid-request, its
+    // cores busy for whatever ran next (several found on a build machine).
+    m_server->setChildProcessModifier([]() { ::prctl(PR_SET_PDEATHSIG, SIGTERM); });
+#endif
     connect(m_server, &QProcess::readyReadStandardError, this, [this]() {
         if (m_server)
             m_stderr = (m_stderr + QString::fromLocal8Bit(m_server->readAllStandardError())).right(2000);

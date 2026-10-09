@@ -854,6 +854,10 @@
 
         function matchClause(obj, c) {
             var v = getPath(obj, c.prop);
+            // Every db8 object is deleted or not: _del is false until it is
+            // (Email's change processor asks for _del = false, and found
+            // nothing: its messages were never sorted).
+            if (c.prop === "_del" && v === undefined) v = false;
             var target = c.val;
             var vals = Array.isArray(v) ? v : [v];
             var targets = Array.isArray(target) ? target : [target];
@@ -1176,7 +1180,15 @@
         locale: { languageCode: "en", countryCode: "us", phoneRegion: { countryCode: "us" } },
         region: { countryCode: "us" },
         timeFormat: "HH12",
-        timeZone: { ZoneID: PalmSystem.TZ, City: "", Country: "" },
+        // The computer's zone; its UTC aliases are the zone list's Etc/UTC
+        // (a container's "UTC" matched no zone: First Use's Time zone
+        // picker showed nothing).
+        // Its city is the zone's last part (Settings > Date & Time showed
+        // "Etc/UTC" or "America/Chicago" as the city).
+        timeZone: (function (z) {
+            z = /^(Etc\/)?(UTC|UCT|GMT|Universal|Zulu)$/.test(z) ? "Etc/UTC" : z;
+            return { ZoneID: z, City: z.split("/").pop().replace(/_/g, " "), Country: "" };
+        })(PalmSystem.TZ),
         useNetworkTime: true,
         wallpaper: { wallpaperName: "", wallpaperFile: "" },
         // Dock mode's own wallpaper (Preferences.cpp "dockwallpaper"), behind
@@ -1361,6 +1373,21 @@
         return out;
     }
 
+    // Settings > Accessibility > Reduce motion and Settings > Advanced >
+    // Animation speed, for the page's own animations: @phoenix/ui reads
+    // data-phoenix-motion on the root element ("reduce", "fast" or "normal";
+    // motion.ts), as the shell's Theme.motion() does the same settings.
+    function applyMotion() {
+        try {
+            var root = global.document && global.document.documentElement;
+            if (!root) return;
+            var p = prefs();
+            root.setAttribute("data-phoenix-motion", p.accessibility && p.accessibility.reduceMotion ? "reduce"
+                                                     : p.animationSpeed === "fast" ? "fast" : "normal");
+        } catch (e) { /* no document */ }
+    }
+    applyMotion();
+
     var prefWatchers = [];
     // Another page (another card, Settings) changed the preferences: this
     // page's getPreferences subscribers hear the keys that changed, as on
@@ -1375,6 +1402,7 @@
             for (k in after)
                 if (JSON.stringify(after[k]) !== JSON.stringify(before[k])) { changed[k] = after[k]; any = true; }
             if (any) prefWatchers.forEach(function (w) { w(changed); });
+            if ("accessibility" in changed || "animationSpeed" in changed) applyMotion();
         });
     } catch (e) { /* no window */ }
 
@@ -1447,6 +1475,7 @@
             store.set("prefs", saved);
             prefsSeen = JSON.stringify(saved);
             reply(ok());
+            if ("accessibility" in p || "animationSpeed" in p) applyMotion();
             prefWatchers.forEach(function (w) { w(p); });
             host.postToHost("preferences", p);
         },
@@ -1504,7 +1533,55 @@
     runtime.appsChanged = appsChanged;
 
     function visibleLaunchPoints() {
-        return launchPoints().filter(function (lp) { return !lp.hidden; });
+        return launchPoints().filter(function (lp) { return !lp.hidden && developerShown(lp); });
+    }
+
+    // ---- Developer apps (docs/APP-RUNTIME.md "Developer apps") --------------------------
+    //
+    // appinfo.json "phoenix": {"developer": true} (the record's developer
+    // "devmode"): the app or launch point is left out of listLaunchPoints
+    // and searchApps (the launcher, Just Type, the Assistant) unless
+    // Developer Mode is on. "unlock": unless Developer Mode was revealed
+    // (the devModeUnlocked system preference: Just Type's Konami code) or
+    // is on; Settings' Developer Mode launch point. Each change of either
+    // tells launchPointChanges the launch points that came and went, in
+    // every page (the storage event), as an install would.
+    function developerShown(lp) {
+        if (!lp.developer || store.get("devMode", false)) return true;
+        return lp.developer === "unlock" && !!prefs().devModeUnlocked;
+    }
+    var developerSeen = null;   // launchPointId -> shown, for the developer ones
+    function developerGateChanged() {
+        var before = developerSeen, now = {}, changes = [];
+        launchPoints().forEach(function (lp) {
+            if (!lp.developer || lp.hidden) return;
+            now[lp.launchPointId] = developerShown(lp);
+            if (before && now[lp.launchPointId] !== !!before[lp.launchPointId])
+                changes.push(Object.assign({ change: now[lp.launchPointId] ? "added" : "removed" }, lp));
+        });
+        developerSeen = now;
+        changes.forEach(function (c) {
+            launchPointWatchers = launchPointWatchers.filter(function (w) { return w(c) !== false; });
+        });
+    }
+    runtime.developerGateChanged = developerGateChanged;
+    try {
+        global.addEventListener("storage", function (e) {
+            if (e.key === "phoenix:devMode" || e.key === "phoenix:prefs") developerGateChanged();
+        });
+    } catch (e) { /* no window */ }
+    // Just Type's Konami code: luna-applauncher shows "Developer Mode
+    // Enabler" (com.palm.app.devmodeswitcher) when the search field holds
+    // exactly "upupdowndownleftrightleftrightbastart" or "webos20090606"
+    // (app/LaunchPointSearch.js:30-36, 137-139), and launches it when tapped
+    // or on Enter (:194-214, 226-231). Phoenix has no switcher app: its
+    // launch reveals Settings' Developer Mode (devModeUnlocked, for good)
+    // and opens it there (APP_ALIASES).
+    var DEVMODE_SWITCHER = "com.palm.app.devmodeswitcher";
+    function revealDeveloperMode(id) {
+        if (id !== DEVMODE_SWITCHER || prefs().devModeUnlocked === true) return;
+        dispatch("palm://com.palm.systemservice/setPreferences", { devModeUnlocked: true }, function () {},
+                 { cancelled: function () { return false; } });
     }
 
     var resourceHandlers = null;
@@ -1579,7 +1656,9 @@
         // the Agenda exhibition, and Exhibition preferences, a Settings page now.
         "com.palm.app.photos": "org.webosphoenix.photos",
         "com.palm.app.agendaview": "org.webosphoenix.agenda",
-        "com.palm.app.exhibitionpreferences": { id: "org.webosphoenix.settings", params: { page: "exhibition" } }
+        "com.palm.app.exhibitionpreferences": { id: "org.webosphoenix.settings", params: { page: "exhibition" } },
+        // The Developer Mode Enabler (Just Type's Konami code; revealDeveloperMode).
+        "com.palm.app.devmodeswitcher": { id: "org.webosphoenix.settings", params: { page: "devmode" } }
     };
     var HELP_TOPICS = { universalsearch: "justtype", accountsmgr: "accounts", phone: "phone", messaging: "messaging",
                         camera: "camera", photos: "photos", music: "music", launcher: "launcher", notifications: "notifications" };
@@ -1640,9 +1719,21 @@
         // {newCard: true} (Phoenix): another card of the app in a stack of
         // its own, even while one runs (the shell's appRelaunch "new" for
         // this launch; one-card apps such as the phone keep theirs).
+        // {behind: true} (Phoenix): the app opens (or hears its new params)
+        // without its card coming to the front: the Assistant's "I've opened
+        // them in Photos too", while the conversation stays in front.
+        // {returnToCaller: true} (Phoenix): Back at the opened app's first
+        // view returns to the app that opened it (runtime.back below): the
+        // caller rides in the params as $caller.
         "/launch": function (p, reply) {
-            host.postToHost("launch", Object.assign({ id: appId(p.id), params: aliasParams(p.id, p.params) },
-                                                    p.newCard === true ? { newCard: true } : {}));
+            revealDeveloperMode(p.id);
+            var params = aliasParams(p.id, p.params);
+            var caller = appIdFromLocation();
+            if (p.returnToCaller === true && caller && ["com.palm.systemui", "com.palm.launcher", "com.webos.phoenix.unknown"].indexOf(caller) < 0 && caller !== appId(p.id))
+                params = Object.assign({}, params || {}, { $caller: caller });
+            host.postToHost("launch", Object.assign({ id: appId(p.id), params: params },
+                                                    p.newCard === true ? { newCard: true } : {},
+                                                    p.behind === true ? { behind: true } : {}));
             reply(ok({ processId: String(Date.now()) }));
         },
         // As on webOS: {id, params} launches the app; {target} goes to the
@@ -1653,6 +1744,7 @@
         // $from (the shell's, for a link in a card that has no runtime of
         // its own): the card the app is opened from.
         "/open": function (p, reply) {
+            revealDeveloperMode(p.id);
             var handler = appId(p.id) || (p.target && resourceHandler(p.target));
             var from = typeof p.$from === "string" ? { from: p.$from } : {};
             if (handler) {
@@ -1680,6 +1772,7 @@
         // installed or removed), {change: "added" | "removed", ...launch point}.
         "/launchPointChanges": function (p, reply, ctx) {
             launchPoints();   // what there is now, to tell changes from
+            if (!developerSeen) developerGateChanged();
             reply(ok({ subscribed: !!p.subscribe }));
             if (p.subscribe) launchPointWatchers.push(function (change) {
                 if (ctx.cancelled()) return false;
@@ -2712,6 +2805,17 @@
         // "next song"): the shell sends it to every page as the hardware
         // key's com.palm.keys /media events, down then up, and the player
         // holding the audio focus acts (@phoenix/luna mediakeys.ts).
+        // What plays, as the player last said (@phoenix/luna postNowPlaying:
+        // Music, Podcasts): setNowPlaying {title, artist?, album?, playing,
+        // appId?}; getNowPlaying -> {nowPlaying: {..., appId, time} | null}.
+        // The Assistant's "what's playing" reads it.
+        "/setNowPlaying": function (p, reply) {
+            if (typeof p.title !== "string") return reply(fail(-1, "title is required"));
+            store.set("media:nowPlaying", { title: p.title, artist: String(p.artist || ""), album: String(p.album || ""), playing: !!p.playing,
+                                            appId: String(p.appId || appIdFromLocation()), time: Date.now() });
+            reply(ok());
+        },
+        "/getNowPlaying": function (p, reply) { reply(ok({ nowPlaying: store.get("media:nowPlaying", null) })); },
         "/mediaKey": function (p, reply) {
             if (["play", "pause", "togglePausePlay", "stop", "next", "prev"].indexOf(p.key) < 0)
                 return reply(fail(-1, "key: play, pause, togglePausePlay, stop, next or prev"));
@@ -3470,7 +3574,17 @@
                 if (!s) continue;
                 var prop = s.getPropertyValue("-webkit-border-image") ? "-webkit-border-image" : "border-image-source";
                 var img = s.getPropertyValue(prop);
-                if (!img || s.getPropertyValue("border-top-style"))
+                var style = s.getPropertyValue("border-top-style");
+                // No image of the rule's own ("border: none" leaves it
+                // "initial").
+                if (!img || img === "initial" || img === "inherit" || img === "unset")
+                    continue;
+                // A rule's own line style stays, but not "none" beside an
+                // image: the old WebKit drew a border image whatever the
+                // style (BorderData::borderLeftWidth gave the width whenever
+                // an image was set), and "border: 12px" (Contacts' edit
+                // buttons) reads as style "none" in the CSSOM.
+                if (img === "none" ? style : style && style !== "none" && style !== "initial")
                     continue;
                 s.setProperty("border-style", img === "none" ? "none" : "solid", s.getPropertyPriority(prop));
             }
@@ -3515,6 +3629,30 @@
             st.textContent = ".enyo-popup {" +
                 " -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); border-radius: 12px; }" +
                 " .enyo-popup.enyo-appmenu { border-radius: 0 0 12px 12px; }";
+            doc.head.appendChild(st);
+        }
+        if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", add);
+        else add();
+    })();
+
+    // Enyo 1.0's list selectors (Clock's "Occurs  Daily", Contacts' MOBILE /
+    // HOME type labels): FlexLayout gives a flexed child width 0, "exactly
+    // the left over space" (base/layout/FlexLayout.js:75-79), and in a list
+    // selector sized to its content that left Chromium nothing for the
+    // label: the selector was its arrow alone, the label hanging out of it
+    // under the arrow and off the row. Sized to its label, the content
+    // still takes any space the selector is given, and so does the item in
+    // it: an item flexed inside in turn (Calendar's calendar picker: its
+    // colour and name, width 0 with a flex) otherwise showed nothing.
+    (function () {
+        var doc = global.document;
+        if (!doc || !doc.createElement) return;
+        function add() {
+            if (doc.getElementById("phoenix-enyo-listselector") || !doc.head) return;
+            var st = doc.createElement("style");
+            st.id = "phoenix-enyo-listselector";
+            st.textContent = ".enyo-listselector > .enyo-hflexbox { width: auto !important; }" +
+                " .enyo-listselector > .enyo-hflexbox > :first-child { -webkit-box-flex: 1; }";
             doc.head.appendChild(st);
         }
         if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", add);
@@ -3722,8 +3860,15 @@
 
     // Back gesture: the shell calls this; Mojo/Enyo 1.0 apps treat Escape
     // (and keyIdentifier U+1200001 on devices) as "back".
+    // An app opened by another one to show something ({returnToCaller}:
+    // launch params $caller, e.g. Photos from the Assistant's thumbnail): a
+    // Back it does not handle itself (no preventDefault, as webOS apps said
+    // they took the gesture) closes its card, and the caller's card, the one
+    // beside it in the stack it joined, comes back. As LunaSysMgr's back at
+    // an app's root went to card view, this goes back to where the user was.
     runtime.back = function () {
         var target = global.document.activeElement || global.document.body || global.document;
+        var handled = false;
         ["keydown", "keyup"].forEach(function (type) {
             var e = new KeyboardEvent(type, { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true });
             try {
@@ -3731,7 +3876,24 @@
                 Object.defineProperty(e, "keyIdentifier", { get: function () { return "U+1200001"; } });
             } catch (x) { /* ignore */ }
             target.dispatchEvent(e);
+            if (e.defaultPrevented) handled = true;
         });
+        if (!handled) {
+            var lp = {};
+            try { lp = JSON.parse(PalmSystem.launchParams || "{}") || {}; } catch (x) { lp = {}; }
+            // An app whose launch page opens its card (Calendar's index.html
+            // opens app/calendar.html): the launch, and its $caller, went to
+            // the page that opened this one.
+            if (!(lp && lp.$caller)) {
+                try {
+                    var op = global.opener && global.opener.PalmSystem;
+                    if (op) lp = JSON.parse(op.launchParams || "{}") || {};
+                } catch (x) { /* another origin, or closed */ }
+            }
+            if (lp && typeof lp.$caller === "string" && lp.$caller) {
+                try { global.close(); } catch (x) { /* ignore */ }
+            }
+        }
         return true;
     };
 
@@ -3820,6 +3982,40 @@
             reportInput(true, editorState(el));
         else
             reportInput(false);
+        watchRemoval(editable(el) ? el : null);
+    }
+
+    // Chromium moves the focus to the body without a focusout when the
+    // focused element leaves the page (a view that goes away under Back
+    // while its field is focused), and keeps it on a field whose view is
+    // hidden (display: none; Memos' editor under Back); WebKit told the
+    // IMEController the focus had gone and the keyboard hid. Watch the page
+    // while a field has the focus: a field gone, the focus is followed; a
+    // field hidden loses the focus.
+    var removalWatch = null;
+    function watchRemoval(el) {
+        if (removalWatch) {
+            removalWatch.observer.disconnect();
+            if (removalWatch.sizes) removalWatch.sizes.disconnect();
+            removalWatch = null;
+        }
+        if (!el || typeof global.MutationObserver !== "function" || !global.document.documentElement)
+            return;
+        var observer = new global.MutationObserver(function () {
+            if (!el.isConnected || global.document.activeElement !== el)
+                followFocus();
+        });
+        observer.observe(global.document.documentElement, { childList: true, subtree: true });
+        // A box that goes to nothing: hidden (or removed, handled above).
+        var sizes = null;
+        if (typeof global.ResizeObserver === "function") {
+            sizes = new global.ResizeObserver(function () {
+                if (el.isConnected && global.document.activeElement === el && el.getClientRects().length === 0)
+                    el.blur();
+            });
+            sizes.observe(el);
+        }
+        removalWatch = { observer: observer, sizes: sizes, el: el };
     }
 
     if (global.document) {
@@ -3860,6 +4056,27 @@
             try { mojo.keyboardShown(!!shown); } catch (e) { console.error("[phoenix-runtime] keyboardShown failed", e); }
         }
     };
+
+    // The window shrank for the keyboard: the focused field scrolls into
+    // view, as Enyo's keyboard did for its apps on every resize
+    // (enyo-1.0 palm/system/keyboard.js:39-48, 104-106: a 100 ms job that
+    // scrolls the focused scroller to the caret); Mojo's scenes did the
+    // same. Enyo's and Mojo's apps still do it themselves; for the others
+    // (Phoenix's React apps) a field low on the page went under the
+    // keyboard and stayed there.
+    if (global.addEventListener) {
+        var revealTimer = 0;
+        global.addEventListener("resize", function () {
+            clearTimeout(revealTimer);
+            revealTimer = setTimeout(function () {
+                if (global.enyo || global.Mojo)
+                    return;
+                var el = global.document && global.document.activeElement;
+                if (editable(el) && typeof el.scrollIntoView === "function")
+                    el.scrollIntoView({ block: "nearest" });
+            }, 100);
+        });
+    }
 
     // ---- Editing: Cut, Copy, Paste, Select All ---------------------------------------
     //
@@ -4211,6 +4428,15 @@
                 wifiEnabled: !!s.wifi.enabled,
                 wifiConnected: !!ap,
                 wifiBars: !s.wifi.enabled ? -1 : ap ? bars(ap.signalLevel) : 0,
+                // The networks in range for the system menu's Wi-Fi drawer,
+                // the same as Settings > Wi-Fi lists (the shell had a list of
+                // its own): ssid, bars, security ("" open), known (a profile
+                // is kept), state "" | "connecting" | "ipConfigured".
+                wifiNetworks: !s.wifi.enabled ? [] : AIR.map(function (a) {
+                    return { ssid: a.ssid, bars: bars(a.signalLevel), security: a.security[0] || "",
+                             known: s.wifi.profiles.some(function (x) { return x.ssid === a.ssid; }),
+                             state: s.wifi.connected === a.ssid ? "ipConfigured" : connecting === a.ssid ? "connecting" : "" };
+                }),
                 bluetoothOn: !!s.bluetooth.powered,
                 airplaneMode: !!s.offlineMode,
                 brightness: s.settings.picture.backlight,
@@ -4272,6 +4498,11 @@
                 // sounds and when it starts; night mode.
                 dockWallpaperFile: (p.dockwallpaper && p.dockwallpaper.wallpaperFile) || "",
                 exhibitionApps: runtime.exhibitionApps ? runtime.exhibitionApps() : [],
+                // Developer Mode (com.webos.service.devmode) and whether its
+                // pane was revealed (Just Type's Konami code): the shell
+                // shows the developer apps and Settings' launch point by them.
+                devMode: !!store.get("devMode", false),
+                devModeUnlocked: p.devModeUnlocked === true,
                 dockModeSound: p.dockModeSoundPref === "mute" ? "mute" : "systemsettings",
                 exhibition: exhibitionPrefs(p),
                 // The system menu's VPN drawer: each profile's name, its state
@@ -4356,7 +4587,23 @@
             return { suggestions: kb.WordSuggestions !== false, autoCorrect: kb.AutoCorrect !== false,
                      swipe: kb.SwipeTyping !== false, spaces2period: kb.spaces2period !== false,
                      forgetWords: typeof kb.ForgetWords === "number" ? kb.ForgetWords : 0,
-                     shortcuts: shortcuts, shortcutsOn: ti.shortcutChecking !== "off" };
+                     shortcuts: shortcuts, shortcutsOn: ti.shortcutChecking !== "off",
+                     userWords: dictionaryWords(ti), removedWords: removedWords(ti) };
+        }
+        // Settings > Text Assist > Personal Dictionary (Phoenix): the words the
+        // user added (x_palm_textinput.userWords), never corrected and
+        // suggested, and the learned words deleted there, lower case -> when
+        // (removedWords; the keyboard drops each once).
+        var DICTIONARY_WORD = /^[A-Za-z\u00C0-\u024F][A-Za-z\u00C0-\u024F']*$/;
+        function dictionaryWords(ti) {
+            return (Array.isArray(ti.userWords) ? ti.userWords : []).filter(function (w) {
+                return typeof w === "string" && w.length <= 48 && DICTIONARY_WORD.test(w);
+            });
+        }
+        function removedWords(ti) {
+            var out = {}, r = ti.removedWords && typeof ti.removedWords === "object" ? ti.removedWords : {};
+            Object.keys(r).forEach(function (w) { if (typeof r[w] === "number" && r[w] > 0) out[w.toLowerCase()] = r[w]; });
+            return out;
         }
 
         function changed() {
@@ -4883,7 +5130,13 @@
 
         sys["/getPreferenceValues"] = function (p, reply) {
             if (p.key === "timeZone") {
-                reply(ok({ timeZone: ZONES.map(function (z) {
+                // The device's zone is always one of them: one taken from
+                // the computer may not be in the list (Europe/Vienna, say).
+                var cur = (prefs().timeZone || {}).ZoneID;
+                var list = ZONES.slice();
+                if (cur && !ZONES.some(function (z) { return z[0] === cur; }))
+                    list.push([cur, cur.split("/").pop().replace(/_/g, " "), "", ""]);
+                reply(ok({ timeZone: list.map(function (z) {
                     return { ZoneID: z[0], City: z[1], Country: z[2], CountryCode: z[3], Description: z[1],
                              offsetFromUTC: zoneOffset(z[0]), supportsDST: 1 };
                 }) }));
@@ -4911,7 +5164,8 @@
             if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "lockScreenPreviews", "notificationRepeat", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "appRelaunch", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
                  "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility",
                  "dockwallpaper", "dockModeSoundPref", "exhibition", "browserContentBlocker", "browserUserAgent",
-                 "networkProxy"].concat(TWEAK_KEYS).some(function (k) { return k in p; })) {
+                 "networkProxy", "devModeUnlocked"].concat(TWEAK_KEYS).some(function (k) { return k in p; })) {
+                if ("devModeUnlocked" in p && runtime.developerGateChanged) runtime.developerGateChanged();
                 if (!suppressHost) host.postToHost("systemStatus", hostStatus());
                 changed();
             }
@@ -5174,8 +5428,10 @@
                 watch(p, reply, ctx, function () {
                     var o = store.get("orientation", null) || {};
                     // gestureArea (Phoenix): the shell says whether there is one.
+                    // learnedWords (Phoenix): what the keyboard learned that
+                    // its word list lacks, as the shell last said.
                     return ok({ ime: { visible: !!store.get("imeVisible", false) }, orientation: { ui: o.ui || "up", device: o.device || "up" },
-                                gestureArea: !!store.get("gestureArea", false) });
+                                gestureArea: !!store.get("gestureArea", false), learnedWords: store.get("learnedWords", []) });
                 });
             },
             "/getDeviceLockMode": function (p, reply, ctx) {
@@ -5274,6 +5530,10 @@
                 reply(ok({ status: devMode() }));
                 devModeWatchers = devModeWatchers.filter(function (w) { return !w.ctx.cancelled(); });
                 devModeWatchers.forEach(function (w) { w.reply(ok({ status: devMode() })); });
+                // The developer apps come and go (launchPointChanges, and
+                // the shell's launcher: systemStatus devMode).
+                if (runtime.developerGateChanged) runtime.developerGateChanged();
+                if (runtime.hostStatus) host.postToHost("systemStatus", runtime.hostStatus());
             }
         });
 
@@ -5869,6 +6129,13 @@
             if (writer) {
                 if ("airplaneMode" in st) setOffline(s, !!st.airplaneMode);
                 if ("wifiEnabled" in st && !!st.wifiEnabled !== !!s.wifi.enabled) setWifi(s, !!st.wifiEnabled);
+                // A network picked in the system menu's Wi-Fi drawer: a known
+                // or open one joins at once (a secured one it has no key for
+                // opens Settings > Wi-Fi instead), once this state is saved.
+                if (st.wifiConnect && s.wifi.enabled && airFor(st.wifiConnect)) {
+                    var join = st.wifiConnect;
+                    setTimeout(function () { wifi["/connect"]({ ssid: join }, function () {}); }, 0);
+                }
                 if ("bluetoothOn" in st) s.bluetooth.powered = !!st.bluetoothOn;
                 if ("brightness" in st) s.settings.picture.backlight = Math.round(st.brightness);
                 if ("muted" in st) s.audio.muted = !!st.muted;
@@ -5912,6 +6179,12 @@
                 store.set("imeVisible", !!st.ime.visible);
                 changed();
             }
+            // The words the keyboard learned that its list lacks (Settings >
+            // Text Assist > Personal Dictionary; getSystemStatus learnedWords).
+            if (Array.isArray(st.learnedWords) && toJson(st.learnedWords) !== toJson(store.get("learnedWords", []))) {
+                store.set("learnedWords", st.learnedWords.filter(function (w) { return typeof w === "string"; }));
+                changed();
+            }
             if (!writer) {
                 changed();
                 return;
@@ -5922,6 +6195,18 @@
                 if (st.keyboard && keyboardCombo(st.keyboard))
                     sys["/setPreferences"]({ x_palm_virtualkeyboard_settings: JSON.stringify(keyboardCombo(st.keyboard)) },
                                            function () {}, { cancelled: function () { return false; } });
+                // The keyboard's "Add" (after backspace put back a corrected
+                // word): into the personal dictionary.
+                if (typeof st.dictionaryWordAdded === "string" && DICTIONARY_WORD.test(st.dictionaryWordAdded)) {
+                    var ti = prefs().x_palm_textinput && typeof prefs().x_palm_textinput === "object" ? prefs().x_palm_textinput : {};
+                    var w = st.dictionaryWordAdded, words = dictionaryWords(ti);
+                    if (!words.some(function (x) { return x.toLowerCase() === w.toLowerCase(); })) {
+                        var next = {};
+                        Object.keys(ti).forEach(function (k) { next[k] = ti[k]; });
+                        next.userWords = words.concat([w]);
+                        sys["/setPreferences"]({ x_palm_textinput: next }, function () {}, { cancelled: function () { return false; } });
+                    }
+                }
                 if ("rotationLocked" in st && !!st.rotationLocked !== !!prefs().rotationLock)
                     sys["/setPreferences"]({ rotationLock: !!st.rotationLocked }, function () {}, { cancelled: function () { return false; } });
                 if (toJson(s) !== before) save(s);
@@ -7517,6 +7802,8 @@
     //   remove {path, recursive?}            -> {path}
     //   read {path, encoding?, maxBytes?}    -> {path, data, encoding, size}
     //   write {path, data, encoding?, overwrite?} -> {path, size}
+    //   search {query, path?, limit?}        -> {entries}: names with every word of
+    //                                           query under path (/media/internal), newest first
     //   entry: {name, path, type: "file"|"directory", size, mtime (ms), mode, readOnly?}
     //
     // Here the filesystem is virtual: one map of path -> node in the shared
@@ -8050,6 +8337,29 @@
                 touch(v, parentOf(path));
                 save(v);
                 reply(ok({ path: path }));
+            },
+            "/search": function (p, reply) {
+                var root = norm(p.path || MEDIA_ROOT);
+                var words = String(p.query || "").toLowerCase().split(/\s+/).filter(Boolean);
+                if (!root) return reply(fail(E.BAD_PARAMS, "path must be an absolute path"));
+                if (!words.length) return reply(fail(E.BAD_PARAMS, "query is required"));
+                var limit = Math.max(1, Math.min(200, Number(p.limit) || 50));
+                syncMedia().then(function () {
+                    var v = load();
+                    var hits = Object.keys(v.nodes).filter(function (k) {
+                        if (k === root || k.indexOf(root === "/" ? "/" : root + "/") !== 0) return false;
+                        var rel = k.slice(root.length);
+                        if (/\/\./.test(rel)) return false;
+                        var name = k.replace(/^.*\//, "").toLowerCase();
+                        return words.every(function (w) { return name.indexOf(w) >= 0; });
+                    });
+                    return fillSizes(hits).then(function () {
+                        var v2 = load();
+                        var out = hits.filter(function (k) { return v2.nodes[k]; }).map(function (k) { return entry(v2, k); })
+                            .sort(function (a, b) { return b.mtime - a.mtime; }).slice(0, limit);
+                        reply(ok({ entries: out }));
+                    });
+                }).then(null, ioError(reply));
             },
             "/copy": copyOrMove(false),
             "/move": copyOrMove(true),
@@ -13843,6 +14153,12 @@
                     voice: voiceParts,
                     caller: function () { return PalmSystem.appIdentifier; },
                     locale: function () { return (global.navigator && global.navigator.language) || "en-US"; },
+                    // The device's units (Settings > Language & Region >
+                    // Units, the region when "auto"), as every app reads them.
+                    units: function () {
+                        var st = store.get("settings:state", null);
+                        return loadModule("lib/region.js").deviceUnits(st && st.settings && st.settings[""], global.navigator && global.navigator.language);
+                    },
                     // A follow-up question later (lib/followups.js): the
                     // Assistant's notification, with its answers as buttons
                     // ({actions}), or {tag, remove} to take it back.
@@ -13899,14 +14215,25 @@
         // time one is due, again until one is shown as a notification (past
         // the quiet hours, Do Not Disturb and calls) or none waits. Resolves
         // the last wake's {queued, delivered, dropped, postponed, at}.
-        function fastForward(limit) {
-            var m = service(), n = limit || 8;
+        // {all: true}: on until every question waiting has been shown once
+        // (those queued a moment apart are due a moment apart), the counts
+        // summed; what the tests need, whatever the hour (an hour on from
+        // 01:00 is in the quiet hours and sends them together at 08:00; one
+        // on from 11:00 sends one at a time).
+        function fastForward(opts) {
+            var o = typeof opts === "number" ? { limit: opts } : (opts || {});
+            var m = service(), n = o.limit || 8, sum = null;
+            function add(r) {
+                if (!sum) { sum = r; return; }
+                ["queued", "delivered", "dropped", "postponed"].forEach(function (k) { sum[k] = (sum[k] || 0) + (r[k] || 0); });
+                sum.at = r.at;
+            }
             function step(last) {
                 return m.followUps({}).then(function (q) {
-                    var waiting = q.followUps || [];
-                    if (!waiting.length || n-- <= 0 || (last && last.delivered)) return last || { delivered: 0 };
+                    var waiting = (q.followUps || []).filter(function (f) { return !o.all || f.state !== "delivered"; });
+                    if (!waiting.length || n-- <= 0 || (!o.all && last && last.delivered)) return (o.all ? sum : last) || { delivered: 0 };
                     var at = Math.max(Date.now(), Math.min.apply(null, waiting.map(function (f) { return f.nextAt; })));
-                    return m.followUpWake({ at: at }).then(function (r) { r.at = at; return step(r); });
+                    return m.followUpWake({ at: at }).then(function (r) { r.at = at; add(Object.assign({}, r)); return step(r); });
                 });
             }
             return step(null);

@@ -10,7 +10,9 @@
 //
 // Markers (search results, route ends, saved places) and the blue "you
 // are here" dot are DOM elements on both; the route is a line layer.
-// A long press drops a pin (onLongPress).
+// A long press drops a pin (onLongPress). A tap on one of the map's own
+// points of interest (a café's dot or name) picks it (onPoiTap; MapLibre
+// only: the canvas renderer draws them as pixels).
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import * as maplibre from "maplibre-gl";
@@ -18,7 +20,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
-import { hasWebGL2, vectorCanvasLayer } from "./canvasmap";
+import { hasWebGL2, poiAt, vectorCanvasLayer } from "./canvasmap";
 import type { LngLat } from "./lib/geo";
 import type { Fix } from "./lib/location";
 import type { Providers } from "./lib/providers";
@@ -33,6 +35,9 @@ export interface MapMarker {
     kind: "result" | "selected" | "start" | "end" | "saved";
     label?: string;
 }
+
+/** A point of interest drawn by the map (OpenMapTiles' poi layer). */
+export interface MapPoi { id: string; name: string; category: string; lon: number; lat: number }
 
 export interface Camera { center: LngLat; zoom: number; bearing: number }
 
@@ -54,6 +59,7 @@ export interface MapViewProps {
     me: Fix | null;
     onMarkerTap?: (id: string) => void;
     onLongPress?: (p: LngLat) => void;
+    onPoiTap?: (p: MapPoi) => void;
     onMove?: (c: Camera) => void;
     onRenderer?: (r: "vector" | "canvas") => void;
 }
@@ -246,6 +252,19 @@ function vectorImpl(el: HTMLElement, latest: Latest, cam: Camera): Impl {
                        paint: { "line-color": COLORS.route, "line-width": ["interpolate", ["linear"], ["zoom"], 10, 3, 18, 10] } }, before);
     };
     map.on("load", () => { styleReady = true; addRoute(); el.dataset.ready = "1"; });
+    map.on("click", (e) => {
+        const tap = latest.current.onPoiTap;
+        const layers = ["poi-dot", "poi-label"].filter((l) => map.getLayer(l));
+        if (!tap || !layers.length) return;
+        const r = 8;
+        const hits = map.queryRenderedFeatures([[e.point.x - r, e.point.y - r], [e.point.x + r, e.point.y + r]], { layers });
+        const f = hits.find((h) => h.properties?.name);
+        if (!f) return;
+        const g = f.geometry.type === "Point" ? (f.geometry.coordinates as LngLat) : (e.lngLat.toArray() as LngLat);
+        const props = f.properties as Record<string, string>;
+        tap({ id: `poi:${f.id ?? `${g[0].toFixed(6)},${g[1].toFixed(6)}`}`, name: props["name:latin"] || props.name,
+              category: String(props.subclass || props.class || "").replace(/_/g, " "), lon: g[0], lat: g[1] });
+    });
     map.on("idle", () => { el.dataset.idle = String(Date.now()); });
     map.on("moveend", () => latest.current.onMove?.(camera()));
     const camera = (): Camera => ({ center: map.getCenter().toArray() as LngLat, zoom: map.getZoom(), bearing: map.getBearing() });
@@ -293,6 +312,14 @@ function canvasImpl(el: HTMLElement, latest: Latest, cam: Camera): Impl {
     let line: L.Polyline[] = [];
     const camera = (): Camera => { const c = map.getCenter(); return { center: [c.lng, c.lat], zoom: map.getZoom(), bearing: 0 }; };
     map.on("moveend", () => latest.current.onMove?.(camera()));
+    map.on("click", (e) => {
+        const tap = latest.current.onPoiTap, ev = e.originalEvent as MouseEvent;
+        const hit = tap && poiAt(ev.clientX, ev.clientY);
+        if (!hit || !hit.name) return;
+        const r = el.getBoundingClientRect();
+        const at = map.containerPointToLatLng([hit.clientX - r.left, hit.clientY - r.top]);
+        tap({ id: `poi:${at.lng.toFixed(6)},${at.lat.toFixed(6)}`, name: hit.name, category: hit.category, lon: at.lng, lat: at.lat });
+    });
     const stopLong = longPress(el, (x, y) => { const q = map.containerPointToLatLng([x, y]); latest.current.onLongPress?.([q.lng, q.lat]); });
     const icon = (e: HTMLElement) => L.divIcon({ html: e, className: "mp-leaflet-icon", iconSize: [0, 0] });
     // Leaflet does not notice its box changing size (the side panel).
