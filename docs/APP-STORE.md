@@ -194,7 +194,11 @@ Rules: prefer an icon with `purpose: "any"`; if only `maskable` exists,
 crop to its safe zone (the inner 80%) and put it on a rounded webOS icon
 plate; draw a letter icon on `theme_color` if no icon can be fetched.
 Classic webOS icons were free-form shapes with a drop shadow, not squircles,
-so `any` icons are drawn as they are with the legacy shadow. SVG icons are
+so `any` icons are drawn as they are with the legacy shadow; but one that
+fills its whole square (opaque corners: Lichess's) sits on a rounded plate a
+little inside its tile (`AppIcon.qml`, 56 of 64 px with 8 px corners and a
+dark edge), the frame Phoenix gives a page added to the launcher, as the
+Marketplace rounds it. SVG icons are
 rasterised with `resvg` (MPL-2.0, run as a program) or Chromium itself.
 appinstalld2 copies only files named `icon*`, so every picture the app
 needs must be named that way.

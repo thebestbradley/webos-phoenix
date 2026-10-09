@@ -6,6 +6,7 @@
 // original Palm app icons are not part of the open-source release.
 
 import QtQuick
+import Qt5Compat.GraphicalEffects
 import Phoenix.Native
 
 Item {
@@ -35,6 +36,8 @@ Item {
     // Screenshots/Group-2.jpg), instead of an icon of its own.
     property var groupIcons: []
     readonly property bool isGroup: groupIcons && groupIcons.length > 0
+    // Its picture fills the whole square: drawn on a rounded plate (below).
+    readonly property bool plated: source != "" && !isGroup && HiDpi.fullBleed(source)
 
     signal clicked
 
@@ -107,6 +110,15 @@ Item {
             id: iconImage
             objectName: "iconImage"
             anchors.fill: parent
+            // A picture that fills its whole square (a site's icon, made for
+            // a mask: Lichess's) sits on a rounded plate a little inside the
+            // tile, as webOS icons leave a margin: the frame Phoenix gives a
+            // page added to the launcher, which stood in for BrowserServer's
+            // (SimSnapshots::launcherIcon: 56 of 64 px, corners 8 px, a dark
+            // edge), and the Marketplace's rounded icons.
+            anchors.margins: icon.plated ? icon.size * 4 / 64 : 0
+            layer.enabled: icon.plated
+            layer.effect: OpacityMask { maskSource: plateShape }
             visible: icon.source != "" && !icon.isGroup && status !== Image.Error
             // The icon, or a bigger one the app ships once the icon would
             // be magnified (Theme.appIcon). A file bigger than the drawn
@@ -123,6 +135,23 @@ Item {
             source: best
             sourceSize: larger ? Qt.size(pixels, pixels) : Qt.size(-1, -1)
             smooth: true
+        }
+
+        Rectangle {
+            id: plateShape
+            visible: false
+            width: iconImage.width
+            height: iconImage.height
+            radius: icon.size * 8 / 64
+        }
+        Rectangle {
+            objectName: "iconPlateEdge"
+            visible: icon.plated && iconImage.visible
+            anchors.fill: iconImage
+            radius: plateShape.radius
+            color: "transparent"
+            border.color: Qt.rgba(0, 0, 0, 110 / 255)
+            border.width: Math.max(1, Theme.px(1))
         }
 
         // No icon, or one that does not load (an icon address out of reach,

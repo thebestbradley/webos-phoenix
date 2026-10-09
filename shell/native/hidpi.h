@@ -58,6 +58,10 @@ public:
     // An image file's size in pixels, read from its header; (-1, -1) if it
     // cannot be read.
     Q_INVOKABLE QSize imageSize(const QUrl &url) const;
+    // Whether an icon's picture fills its whole square, corners opaque (a
+    // site's icon, made for a mask), rather than a webOS icon's shape with
+    // a margin around it. AppIcon puts such a picture on a rounded plate.
+    Q_INVOKABLE bool fullBleed(const QUrl &url) const;
     // Files in `twin` count as icon()'s siblings of the files in `dir` (and
     // in its subdirectories, matched by path). On a device the compat
     // overlay's files are installed beside the original app's, so an icon's
@@ -72,5 +76,6 @@ private:
     QList<QPair<QString, QString>> m_twins;
     mutable QHash<QString, QUrl> m_variants;
     mutable QHash<QString, QSize> m_sizes;
+    mutable QHash<QString, bool> m_fullBleed;
     mutable QHash<QString, QStringList> m_siblings;
 };
