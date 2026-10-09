@@ -701,8 +701,15 @@ function createAssistantService(deps) {
     function askLocal(thread, model, cat) {
         return deps.llm.ensure(model).then(function (srv) {
             var p = { type: "local", baseUrl: srv.baseUrl, model: model.id };
-            if (!mayAct(thread)) return callModel(p, "", thread, []);
+            // Small talk is answered in words. A question goes to the choice
+            // too ("is my thursday afternoon open", "how can I reach Priya"
+            // are the calendar's and Contacts'), but only a command that
+            // reads may answer it: "how do I make banana pudding" is never
+            // made a memo (measured: docs/AI-AND-MCP.md).
+            var ctx = lang().say.context ? lang().say.context(lastAsked(thread)) : { question: false, smallTalk: false };
+            if (ctx.smallTalk) return callModel(p, "", thread, []);
             return pickCommand(p, thread, cat).then(function (c) {
+                if (c && ctx.question && c.risk !== "read") c = null;
                 if (!c) return callModel(p, "", thread, []);
                 return callModel(p, "", thread, [{ name: commands.toolName(c.id), description: c.description, parameters: c.parameters }], "required");
             });

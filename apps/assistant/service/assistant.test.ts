@@ -574,6 +574,16 @@ describe("the on-device model", () => {
             expect(mock.requests.length).toBe(before);
         });
 
+        it("answers a question with a command that reads, never one that changes", async () => {
+            const t = setup({ llm: withBuiltIn() });
+            const r = await ask(t, "how busy is my friday looking");
+            expect(last(r)).toMatchObject({ via: "on-device", command: "agenda" });
+            // The choice says toggle, but a question is not asked to switch anything.
+            const q = await ask(t, "is it true a flashlight attracts moths?");
+            expect(mock.requests.at(-1)!.body.tools).toBeUndefined();
+            expect(last(q)).toMatchObject({ via: "on-device", text: "chat says: is it true a flashlight attracts moths?" });
+        });
+
         it("is not used where it is not installed", async () => {
             const t = setup({ llm: llm() });
             const r = await ask(t, "why is the sky blue");
