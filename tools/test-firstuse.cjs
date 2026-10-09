@@ -86,6 +86,11 @@ async function main() {
         const step = async (id) => {
             await page.waitForSelector(`[data-testid=step-${id}]`, { timeout: 5000 });
             await page.waitForTimeout(400);
+            // The step's Back and Next show their whole label (a long one,
+            // Restore's "Set Up as New", was cut off at both ends on a phone).
+            const cut = await page.evaluate(() => [...document.querySelectorAll(".fu-buttons .pui-button")]
+                .filter((b) => b.scrollWidth > b.clientWidth + 1).map((b) => b.textContent));
+            check(cut.length === 0, `${id}: the buttons' labels fit${cut.length ? " (cut: " + cut.join(", ") + ")" : ""}`);
         };
         const next = () => page.click("[data-testid=next]");
         const pref = async (key) => (await luna(page, "luna://com.webos.service.systemservice/getPreferences", { keys: [key] }))[key];
