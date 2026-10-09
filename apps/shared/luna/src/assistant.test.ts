@@ -88,7 +88,7 @@ describe("simulated org.webosphoenix.assistant", () => {
 
     it("lists the on-device models without the shell, and says how to get llama-server", async () => {
         const m = await assistant.models();
-        expect(m.models.map((x) => x.id)).toEqual(["qwen3-0.6b-q8_0", "qwen3-1.7b-q8_0", "qwen3-4b-q4_k_m", "qwen3-8b-q4_k_m", "qwen3-14b-q4_k_m", "qwen3-30b-a3b-q4_k_m"]);
+        expect(m.models.map((x) => x.id)).toEqual(["qwen3-0.6b-q8_0", "qwen3.5-2b-q8_0", "qwen3.5-4b-q4_k_m", "qwen3.5-9b-q4_k_m", "qwen3-14b-q4_k_m", "qwen3-30b-a3b-q4_k_m"]);
         expect(m.models[0]).toMatchObject({ builtIn: true, installed: false });
         expect(m.status.available).toBe(false);
         expect(m.status.howToInstall).toMatch(/llama-server/);
