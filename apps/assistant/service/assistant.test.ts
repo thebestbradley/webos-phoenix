@@ -572,8 +572,11 @@ describe("the on-device model", () => {
         const m = await t.svc.models();
         expect(m.models.map((x: Reply) => [x.id, x.fits, x.recommended, x.installed, x.builtIn])).toEqual([
             // 4 GB: the built-in model is the one that fits (and so recommended).
+            // Qwen3 1.7B stays listed beside the Qwen3.5 2B that replaces it:
+            // it is installed.
             ["qwen3-0.6b-q8_0", true, true, false, true], [MODEL, false, false, true, false],
-            ["qwen3-4b-q4_k_m", false, false, false, false], ["qwen3-8b-q4_k_m", false, false, false, false],
+            ["qwen3.5-2b-q8_0", false, false, false, false],
+            ["qwen3.5-4b-q4_k_m", false, false, false, false], ["qwen3.5-9b-q4_k_m", false, false, false, false],
             ["qwen3-14b-q4_k_m", false, false, false, false], ["qwen3-30b-a3b-q4_k_m", false, false, false, false]]);
     });
 
@@ -582,7 +585,7 @@ describe("the on-device model", () => {
         const best = (gb: number) => models.forDevice(gb * 2 ** 30).find((m) => m.recommended)!.id;
         // As devices report their memory: a little under what they are sold as.
         expect([3.7, 5.6, 7.5, 11.4, 15.5, 31, 62].map(best)).toEqual([
-            "qwen3-0.6b-q8_0", "qwen3-1.7b-q8_0", "qwen3-4b-q4_k_m", "qwen3-8b-q4_k_m", "qwen3-14b-q4_k_m",
+            "qwen3-0.6b-q8_0", "qwen3.5-2b-q8_0", "qwen3.5-4b-q4_k_m", "qwen3.5-9b-q4_k_m", "qwen3-14b-q4_k_m",
             "qwen3-30b-a3b-q4_k_m", "qwen3-30b-a3b-q4_k_m"]);
     });
 
@@ -592,7 +595,8 @@ describe("the on-device model", () => {
     it("offers a newer model once there is a file for it, official first", () => {
         type Cat = { find(id: string): { sources: { kind: string; files: { url: string }[] }[]; size: number } | null;
                      forDevice(r: number, keep?: string[]): { id: string; recommended: boolean }[] };
-        const models = req("./lib/models.js") as Cat & { catalog(c: object): Cat };
+        // Without conversions (models-converted.js empty): only the official files.
+        const models = (req("./lib/models.js") as { catalog(c: object): Cat & { catalog(c: object): Cat } }).catalog({});
         expect(models.find("qwen3.5-4b-q4_k_m")!.sources).toEqual([]);
         expect(models.forDevice(0).map((m) => m.id)).not.toContain("qwen3.5-4b-q4_k_m");
         expect(models.find("qwen3-4b-q4_k_m")!.sources.map((x) => x.kind)).toEqual(["official"]);

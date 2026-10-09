@@ -716,7 +716,12 @@ offered once a conversion is recorded:
   does that on a runner for every model still wanted whose weights fit its
   disk (up to 25 GB: the three Qwen3.5), publishes each as the release
   `models-<id>` of this repository and opens a pull request recording
-  them. The 27B and 35B-A3B need some 150-200 GB free: the script on a
+  them. Done on 9 October 2026 for the three Qwen3.5 models (run
+  37981513464); the 2B checked end to end: downloaded from the release by
+  `lib/node-device.js` (both parts verified), served by our llama-server,
+  a clean tool call. Actions may not open the pull request itself
+  (the repository's setting): then its branch, `models/converted-<run>`,
+  is merged by hand. The 27B and 35B-A3B need some 150-200 GB free: the script on a
   computer with that, the parts uploaded to the release by hand. Every
   Monday it also looks for an official GGUF of each, and fails when one
   appears so it can be added ahead of ours.
