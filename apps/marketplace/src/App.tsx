@@ -153,15 +153,17 @@ function useLocalCatalog(reload: () => void) {
     return { status, start };
 }
 
+const capitalized = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
 function LocalCatalog({ local }: { local: ReturnType<typeof useLocalCatalog> }) {
     const s = local.status!;
     const starting = s.state === "starting";
     return (
         <>
             <p className="mk-muted">It runs on this computer for now, and the simulator can start it.</p>
-            {s.state === "failed" && <ErrorText testId="local-catalog-error">{s.error.split("\n")[0]}</ErrorText>}
+            {s.state === "failed" && <ErrorText testId="local-catalog-error">{capitalized(s.error.split("\n")[0].replace(/:$/, ""))}</ErrorText>}
             <Button variant="affirmative" busy={starting} data-testid="catalog-start" onClick={() => void local.start()}>
-                {!starting ? "Start Local Catalog" : s.settingUp ? "Setting Up the Catalog…" : "Starting…"}
+                {!starting ? "Start Local Catalog" : s.settingUp ? "Setting Up…" : "Starting…"}
             </Button>
             {starting && s.settingUp && <p className="mk-muted" data-testid="catalog-setting-up">The first time it sets itself up, which takes a minute.</p>}
         </>

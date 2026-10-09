@@ -9710,13 +9710,16 @@
                     : fail(E.FAILED, catalog.error || "The catalog service did not start."));
             });
         }
+        function changed() {
+            watching = watching.filter(function (w) { return !w.ctx.cancelled(); });
+            watching.forEach(function (w) { w.reply(status()); });
+        }
         runtime.hostStatusHooks = runtime.hostStatusHooks || [];
         runtime.hostStatusHooks.push(function (st) {
             var c = st && st.marketplaceCatalog;
             if (!c || typeof c !== "object" || typeof c.state !== "string") return;
             catalog = { state: c.state, url: String(c.url || catalog.url), error: String(c.error || ""), settingUp: !!c.settingUp };
-            watching = watching.filter(function (w) { return !w.ctx.cancelled(); });
-            watching.forEach(function (w) { w.reply(status()); });
+            changed();
             settle();
         });
         register(["org.webosphoenix.simulator"], {
@@ -9732,6 +9735,8 @@
                 // The shell answers with the state (applyHostStatus), the
                 // final one once it runs or fails.
                 catalog.state = "starting";
+                catalog.error = "";
+                changed();
                 host.postToHost("simulator", { op: "startMarketplaceCatalog" });
             }
         });
