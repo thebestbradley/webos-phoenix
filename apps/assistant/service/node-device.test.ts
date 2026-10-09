@@ -98,6 +98,20 @@ describe("the on-device model", () => {
         expect((await llm.status()).running).toBe(false);
     });
 
+    it("ships the same built-in model everywhere: lib/models.js, ./phoenix's fetcher, meta-phoenix's recipe", () => {
+        const models = req("./lib/models.js") as { BUILT_IN: string; find(id: string): { url: string; sha256: string; size: number; builtIn: boolean } };
+        const m = models.find(models.BUILT_IN);
+        expect(m.builtIn).toBe(true);
+        const repo = resolve(__dirname, "../../..");
+        const fetcher = readFileSync(join(repo, "tools/get-base-model.py"), "utf8");
+        const value = (name: string) => (fetcher.match(new RegExp(`^${name} = "?([^"\\n]+)"?$`, "m")) || [])[1];
+        expect([value("ID"), value("URL"), value("SHA256"), Number(value("SIZE"))]).toEqual([models.BUILT_IN, m.url, m.sha256, m.size]);
+        const recipe = readFileSync(join(repo, "meta-phoenix/recipes-support/qwen3-gguf/qwen3-0.6b-gguf.bb"), "utf8");
+        expect(recipe).toContain(m.sha256);
+        expect(recipe).toContain(m.url.replace(/\/[^/]+$/, ""));
+        expect(recipe).toContain(models.BUILT_IN + ".gguf");
+    });
+
     it("runs a built-in model where the image keeps it, and never removes it", async () => {
         const bin = join(dir, "llama-server");
         const shipped = join(dir, "usr-share-phoenix-models");

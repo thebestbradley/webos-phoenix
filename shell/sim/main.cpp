@@ -174,7 +174,7 @@ int main(int argc, char *argv[])
     QCommandLineOption noHostShellOpt(QStringLiteral("no-host-shell"), QStringLiteral("Do not give the Terminal app a real shell on this computer (it gets the runtime's simulated shell)."));
     QCommandLineOption llamaServerOpt(QStringLiteral("llama-server"), QStringLiteral("llama.cpp's llama-server program for the Assistant's on-device model (default: llama-server on the PATH)."), QStringLiteral("path"));
     QCommandLineOption marketplaceOpt(QStringLiteral("marketplace"), QStringLiteral("Start the Marketplace's catalog service on this computer (server/marketplace/bin/serve.sh: PHP 8; set up the first time) where the simulator's Marketplace reads it, http://127.0.0.1:8088/, and open the Marketplace. It stops with the simulator; one already running is used. The Services menu starts and stops it too."));
-    QCommandLineOption speechCommandOpt(QStringLiteral("speech-command"), QStringLiteral("The program (and arguments, %l for the language) that speaks the Assistant's answers, given the text on its input (default: espeak-ng, or say on a Mac)."), QStringLiteral("command"));
+    QCommandLineOption speechCommandOpt(QStringLiteral("speech-command"), QStringLiteral("The program (and arguments, %l for the language, %v for the voice) that speaks the Assistant's answers, given the text on its input (default: Kitten TTS, phoenix-tts; else espeak-ng, say or Flite)."), QStringLiteral("command"));
     QCommandLineOption wakeModelOpt(QStringLiteral("wake-model"), QStringLiteral("The wake word's Vosk model folder (default: wakeword/vosk-model-small-en-us-0.15 beside phoenix-sim, which tools/get-wakeword.py fetches)."), QStringLiteral("dir"));
     QCommandLineOption voskLibraryOpt(QStringLiteral("vosk-library"), QStringLiteral("libvosk for the wake word (default: wakeword/libvosk.so, or .dylib, beside phoenix-sim)."), QStringLiteral("file"));
     QCommandLineOption wakeFileOpt(QStringLiteral("wake-file"), QStringLiteral("The WAV file Simulate > Say \"Hey Phoenix\" plays into the microphone (default: the tests' hey-phoenix.wav)."), QStringLiteral("file"));
@@ -493,13 +493,30 @@ int main(int argc, char *argv[])
             if (QFileInfo(p).isAbsolute() ? QFileInfo(p).isExecutable() : !QStandardPaths::findExecutable(p).isEmpty())
                 speaker = QFileInfo(p).fileName();
         } else {
+            // Kitten TTS first (phoenix-tts beside this program, with its
+            // model in build/kitten: tools/get-kitten.py), as Speech does.
+            QString kittenWhy;
+            const QString tts = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("phoenix-tts"));
+            if (QFileInfo(tts).isExecutable()) {
+                QProcess check;
+                check.start(tts, { QStringLiteral("--check") });
+                check.waitForFinished(5000);
+                const QJsonObject r = QJsonDocument::fromJson(check.readAllStandardOutput()).object();
+                if (r.value(QStringLiteral("ok")).toBool())
+                    speaker = QStringLiteral("Kitten TTS");
+                else
+                    kittenWhy = r.value(QStringLiteral("error")).toString();
+            }
             for (const char *name : { "espeak-ng", "say", "flite" })
                 if (speaker.isEmpty() && !QStandardPaths::findExecutable(QLatin1String(name)).isEmpty())
                     speaker = QLatin1String(name);
+            if (!kittenWhy.isEmpty())
+                qInfo("phoenix-sim: the voice: Kitten TTS cannot speak (%s); run tools/get-kitten.py (%s does it)%s",
+                      qPrintable(kittenWhy), qPrintable(setup), speaker.isEmpty() ? "" : qPrintable(QStringLiteral(", %1 speaks meanwhile").arg(speaker)));
         }
         part("speech", "spoken answers", !speaker.isEmpty(), speaker,
              parser.isSet(speechCommandOpt) ? QStringLiteral("the --speech-command program was not found.")
-             : QStringLiteral("no speech program; sudo apt install espeak-ng (%1 does it), or start phoenix-sim with --speech-command.").arg(setup));
+             : QStringLiteral("no speech program; run tools/get-kitten.py for Kitten TTS (%1 does it), or sudo apt install espeak-ng, or start phoenix-sim with --speech-command.").arg(setup));
         hostInfo.insert(QStringLiteral("voice"), voice);
         if (!parser.isSet(llamaServerOpt) && QStandardPaths::findExecutable(QStringLiteral("llama-server")).isEmpty())
 #ifdef Q_OS_MACOS

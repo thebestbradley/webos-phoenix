@@ -77,10 +77,14 @@ computer() {
 
     # The build directory (not configured) with the assistant's models.
     BUILD=$T/build
-    mkdir -p "$BUILD/whisper" "$BUILD/wakeword/vosk-model-small-en-us-0.15"
+    mkdir -p "$BUILD/whisper" "$BUILD/wakeword/vosk-model-small-en-us-0.15" "$BUILD/kitten" "$BUILD/models"
     echo model > "$BUILD/whisper/ggml-base.en.bin"
     echo lib > "$BUILD/wakeword/libvosk.so"
     echo lib > "$BUILD/wakeword/libvosk.dylib"
+    echo model > "$BUILD/kitten/kitten_tts_nano_v0_2.onnx"
+    echo words > "$BUILD/kitten/cmudict.dict"
+    echo lib > "$BUILD/kitten/libonnxruntime.so.1"
+    echo model > "$BUILD/models/qwen3-0.6b-q4_k_m.gguf"
 
     BREW=""
     # php -r CHECK answers yes (exit 0); php -r 'echo PHP_VERSION;' 8.3.6.
@@ -104,7 +108,7 @@ fmt=""; for a in "$@"; do case "$a" in -f=*) fmt=${a#-f=} ;; -*) ;; *)
         mkdir -p "$BREW/bin"
         printf '#!/bin/sh\necho "brew $*"\n' > "$BREW/bin/brew"
         chmod +x "$BREW/bin/brew"
-        for f in qt cmake ninja node@22 git python@3.12 php whisper-cpp llama.cpp; do mkdir -p "$BREW/opt/$f"; done
+        for f in qt cmake ninja node@22 git python@3.12 php whisper-cpp llama.cpp onnxruntime; do mkdir -p "$BREW/opt/$f"; done
         fake_qt "$BREW/opt/qt" 6.10.0
     fi
 }
@@ -143,6 +147,7 @@ phoenix check
 check "Linux, everything there: nothing to install" \
     '[ $status = 0 ]' 'has "dry run"' 'has "ok       Qt 6.8.1"' 'has "ok       Node.js v22.11.0"' \
     'has "ok       whisper-cli"' 'has "ok       whisper base.en model"' 'has "Nothing to install"' \
+    'has "ok       voice: Kitten TTS"' 'has "ok       built-in language model: Qwen3 0.6B"' \
     'has "ok       PHP 8.3.6 with sodium and pdo_sqlite"' \
     'lacks "  install  "' 'has "would run: cmake -S .*-DCMAKE_PREFIX_PATH=$QT"' \
     'has "would run: cmake --build $BUILD --parallel"'
@@ -156,9 +161,13 @@ check "build --dry-run is check" '[ $status = 0 ]' 'has "Nothing to install"' 'l
 computer Linux
 printf 'git\nsed\n' > "$T/dpkg"
 unmock node; unmock whisper-cli; unmock llama-server; unmock php
-rm -rf "$BUILD/whisper" "$BUILD/wakeword"
+rm -rf "$BUILD/whisper" "$BUILD/wakeword" "$BUILD/kitten" "$BUILD/models"
 phoenix check
 check "Linux, nothing there: what it would install, with sizes" \
+    'has "install  voice: Kitten TTS (model and dictionary, ONNX Runtime) (about 39 MB, 57 MB on disk, checked by their SHA-256)"' \
+    'has "get-kitten.py --dest $BUILD/kitten"' \
+    'has "install  built-in language model: Qwen3 0.6B (397 MB, checked by its SHA-256)"' \
+    'has "get-base-model.py --dest $BUILD/models"' '[ ! -e "$BUILD/kitten" ]' \
     '[ $status = 0 ]' 'has "install  apt: build-essential cmake ninja-build"' 'has "espeak-ng"' \
     'has "install  apt:.* php-cli php-sqlite3 "' 'has "skipped  PHP: not there yet"' 'lacks "php-mysql"' \
     'has "apt-get install -y --no-install-recommends"' \
@@ -171,10 +180,11 @@ check "Linux, nothing there: what it would install, with sizes" \
 computer Linux
 printf 'git\nsed\n' > "$T/dpkg"
 unmock node; unmock whisper-cli; unmock llama-server
-rm -rf "$BUILD/whisper" "$BUILD/wakeword"
+rm -rf "$BUILD/whisper" "$BUILD/wakeword" "$BUILD/kitten" "$BUILD/models"
 phoenix check --no-assistant
 check "--no-assistant leaves out the assistant's parts" \
-    '[ $status = 0 ]' 'lacks "espeak-ng"' 'lacks "whisper"' 'lacks "llama"' 'lacks "wake word"' 'has "install  Qt 6.8.1"'
+    '[ $status = 0 ]' 'lacks "espeak-ng"' 'lacks "whisper"' 'lacks "llama"' 'lacks "wake word"' 'lacks "Kitten"' 'lacks "Qwen3"' \
+    'has "install  Qt 6.8.1"'
 
 computer Linux
 phoenix build --offline
@@ -265,14 +275,15 @@ check "--help" '[ $status = 0 ]' 'has "./phoenix run \[MODE\]"' 'has "--no-assis
 
 # ---- macOS ---------------------------------------------------------------------------
 computer Darwin
-rm -rf "$BREW/opt/qt" "$BREW/opt/node@22" "$BREW/opt/python@3.12" "$BREW/opt/php" "$BREW/opt/whisper-cpp" "$BREW/opt/llama.cpp"
+rm -rf "$BREW/opt/qt" "$BREW/opt/node@22" "$BREW/opt/python@3.12" "$BREW/opt/php" "$BREW/opt/whisper-cpp" "$BREW/opt/llama.cpp" "$BREW/opt/onnxruntime"
 unmock php
 phoenix check
 check "Mac: the missing Homebrew packages in one brew install, with sizes" \
     '[ $status = 0 ]' 'has "ok       Xcode command line tools"' 'has "ok       Homebrew"' 'has "ok       cmake"' \
     'has "install  qt (about 1.3 GB"' 'has "install  node@22"' 'has "install  whisper-cpp"' 'has "install  llama.cpp"' \
     'has "install  php (about 120 MB"' 'has "skipped  PHP: not there yet"' \
-    'has "would run: $BREW/bin/brew install qt node@22 python@3.12 php whisper-cpp llama.cpp$"' \
+    'has "install  onnxruntime (about 40 MB"' \
+    'has "would run: $BREW/bin/brew install qt node@22 python@3.12 php whisper-cpp llama.cpp onnxruntime$"' \
     'has "-DCMAKE_PREFIX_PATH=$BREW/opt/qt"'
 
 computer Darwin
@@ -280,6 +291,25 @@ phoenix check
 check "Mac, everything there: nothing to install" \
     '[ $status = 0 ]' 'lacks "  install  "' 'has "Nothing to install"' 'lacks "brew install"' \
     'has "-DCMAKE_PREFIX_PATH=$BREW/opt/qt"'
+
+# The voice on a Mac: Homebrew's ONNX Runtime, so no library of its own.
+computer Darwin
+rm -f "$BUILD/kitten/libonnxruntime.so.1"
+phoenix check
+check "Mac: Kitten TTS without a library of its own (Homebrew's onnxruntime)" '[ $status = 0 ]' 'has "ok       voice: Kitten TTS"'
+rm -rf "$BUILD/kitten"
+phoenix check
+check "Mac: the voice fetched without ONNX Runtime" \
+    'has "install  voice: Kitten TTS (model and dictionary) (about 28 MB, checked by their SHA-256)"' 'has "get-kitten.py --dest $BUILD/kitten"'
+
+# --offline: the voice and the built-in model are skipped, with what then.
+computer Linux
+QT_ASK=$QT
+rm -rf "$BUILD/kitten" "$BUILD/models"
+phoenix check --offline
+check "--offline without the voice or the built-in model: says what that means" '[ $status = 0 ]' \
+    'has "skipped  voice (--offline): answers are spoken with espeak-ng, say or Flite"' \
+    'has "skipped  built-in language model (--offline)"' 'lacks "get-kitten.py"' 'lacks "get-base-model.py"'
 
 computer Darwin
 mock xcode-select 'exit 2'

@@ -23,7 +23,7 @@
 #
 # Options (anywhere before the simulator's own arguments):
 #   --no-assistant   without the assistant's parts (whisper.cpp, llama.cpp,
-#                    their models, the wake word, the speech program)
+#                    their models, the wake word, the voice)
 #   --offline        download nothing; fails only if something the build
 #                    needs is missing
 #   --tests          also the test tools (Playwright, Radicale, WsgiDAV,
@@ -34,15 +34,17 @@
 # What it checks and installs, only what is missing:
 #   macOS   Xcode's command line tools, Homebrew, then from Homebrew: qt,
 #           cmake, ninja, node@22, git, python@3.12, php (+ whisper-cpp,
-#           llama.cpp)
+#           llama.cpp, onnxruntime)
 #   Ubuntu  apt packages (build tools, the libraries Qt loads, PHP 8 with
 #           SQLite for the Marketplace's catalog), Qt 6.8.1
 #           into /opt/Qt (aqtinstall; Ubuntu's own Qt is too old), Node.js 22
 #           (NodeSource), whisper-cli and llama-server built from pinned
 #           commits into /usr/local/bin, espeak-ng
-#   Both    git submodules, the apps' npm packages, whisper's base.en model
-#           and the wake word's Vosk model into build/ (checked by SHA-256),
-#           then CMake (configured with the Qt it found) and the build.
+#   Both    git submodules, the apps' npm packages, whisper's base.en model,
+#           the wake word's Vosk model, the voice (Kitten TTS's model, the
+#           CMU dictionary; ONNX Runtime on Linux) and the built-in language
+#           model (Qwen3 0.6B) into build/ (checked by SHA-256), then CMake
+#           (configured with the Qt it found) and the build.
 #
 # Environment: PHOENIX_BUILD_DIR (default build), PHOENIX_QT_DIR (a Qt 6.8+
 # to use), QT_PREFIX (where Qt is installed on Linux, default /opt/Qt),
@@ -200,7 +202,7 @@ mac_prerequisites() {
     # php: the Marketplace's catalog service (server/marketplace), which
     # the simulator starts (Services > Marketplace Catalog).
     formulae="qt:1.3_GB cmake:60_MB ninja:1_MB node@22:80_MB git:60_MB python@3.12:70_MB php:120_MB"
-    [ $ASSISTANT = 1 ] && formulae="$formulae whisper-cpp:10_MB llama.cpp:30_MB"
+    [ $ASSISTANT = 1 ] && formulae="$formulae whisper-cpp:10_MB llama.cpp:30_MB onnxruntime:40_MB"
     step "Homebrew packages"
     missing=""
     for fs in $formulae; do
@@ -450,6 +452,27 @@ assistant_models() {
     else
         installing "wake word: Vosk and its small English model" "about 90 MB, checked by their SHA-256"
         run "$PYTHON" "$REPO_DIR/tools/get-wakeword.py" --dest "$BUILD_DIR/wakeword"
+    fi
+    # The voice: Kitten TTS's model and the CMU dictionary (and, on Linux,
+    # ONNX Runtime; a Mac has Homebrew's onnxruntime, above).
+    kitten="$BUILD_DIR/kitten"
+    if [ -s "$kitten/kitten_tts_nano_v0_2.onnx" ] && [ -s "$kitten/cmudict.dict" ] &&
+        { [ "$OS" = Darwin ] || [ -s "$kitten/libonnxruntime.so.1" ]; }; then
+        ok "voice: Kitten TTS, its dictionary and ONNX Runtime"
+    elif [ $OFFLINE = 1 ]; then
+        skip "voice (--offline): answers are spoken with espeak-ng, say or Flite"
+    else
+        if [ "$OS" = Darwin ]; then size="about 28 MB"; else size="about 39 MB, 57 MB on disk"; fi
+        installing "voice: Kitten TTS (model and dictionary$([ "$OS" = Darwin ] || echo ', ONNX Runtime'))" "$size, checked by their SHA-256"
+        run "$PYTHON" "$REPO_DIR/tools/get-kitten.py" --dest "$kitten"
+    fi
+    if [ -s "$BUILD_DIR/models/qwen3-0.6b-q4_k_m.gguf" ]; then
+        ok "built-in language model: Qwen3 0.6B"
+    elif [ $OFFLINE = 1 ]; then
+        skip "built-in language model (--offline): only the commands answer, until one is downloaded in Settings"
+    else
+        installing "built-in language model: Qwen3 0.6B" "397 MB, checked by its SHA-256"
+        run "$PYTHON" "$REPO_DIR/tools/get-base-model.py" --dest "$BUILD_DIR/models"
     fi
 }
 
