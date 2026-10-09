@@ -9,7 +9,7 @@
 //   {type: "cards", items: [{title, subtitle?, detail?, open?}]}  a card
 //       each (an event, a contact, a memo, an email);
 //   {type: "examples", title, items: [{text}]}  things to ask (help), as
-//       chips under their app's name: a tap asks it (asked(index)).
+//       chips under their app's name: a tap puts it in the field (asked(index)).
 // A tap on one is shown(index), index across every attachment's items (the
 // service's choice "show:<index>" opens its app on it). The conversation
 // stays in front: the app is only brought forward by that tap or "Open ...".

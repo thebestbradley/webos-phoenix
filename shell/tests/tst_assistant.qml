@@ -498,7 +498,7 @@ Item {
             tryVerify(function () { return fake.calls.indexOf("choose show:2") >= 0; }, 2000, "the card's index counts the pictures before it");
         }
 
-        // Help: things to ask, by app; a tap asks one.
+        // Help: things to ask, by app; a tap puts one in the field.
         function test_helpExamplesAreAsked() {
             openByHold();
             type("what can you do");
@@ -507,7 +507,8 @@ Item {
             var chip = findChild(row, "assistantHelp-2");
             verify(chip && chip.visible && chip.text === "hello again");
             mouseClick(chip, chip.width / 2, chip.height / 2);
-            tryVerify(function () { return fake.asks.length === 2 && fake.asks[1].text === "hello again"; }, 2000, "asked");
+            tryCompare(findChild(overlay, "assistantInput"), "text", "hello again", 2000);
+            compare(fake.asks.length, 1, "in the field, not asked");
             verify(overlay.open);
         }
 

@@ -360,7 +360,7 @@ Item {
         for (var i = 0; i < list.length; ++i)
             all = all.concat(list[i].items || []);
         if (all[index] && all[index].text)
-            ask(all[index].text);
+            suggest(all[index].text);
     }
     function confirm(message, accept) {
         if (busy)
@@ -1066,7 +1066,9 @@ Item {
                     source: ov.source
                     opacity: row.appear
                     onShown: function (index) { ov.show(row.modelData, index); }
-                    // An example (help) asked here, as if typed.
+                    // An example (help) to the field, to change or send, as
+                    // the empty conversation's (it could make a meeting
+                    // nobody meant if it were asked at once).
                     onAsked: function (index) { ov.askExample(row.modelData, index); }
                 }
                 Flow {

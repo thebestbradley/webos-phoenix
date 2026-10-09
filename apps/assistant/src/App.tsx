@@ -106,7 +106,7 @@ function Bubble({ m, busy, onChoose, onConfirm, onSuggest, avatar, onMenu }: {
                     {m.text}
                 </div>
             </div>
-            <Attachments m={m} onShow={(i) => onChoose(m, `show:${i}`)} />
+            <Attachments m={m} onShow={(i) => onChoose(m, `show:${i}`)} onSuggest={onSuggest} />
             {m.followUp && choices.length > 0 && <QuickReplies m={m} busy={busy} onChoose={onChoose} />}
             {!mine && (m.source || m.via) && (
                 <div className="as-via">{m.source || VIA[m.via ?? ""] || ""}</div>

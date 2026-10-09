@@ -7,8 +7,9 @@
 //   {type: "images", total, items: [{path, open}]}  thumbnails, "+N more"
 //   {type: "cards", items: [{title, subtitle?, detail?, open?}]}  a card each
 //   {type: "examples", title, items: [{text}]}  things to ask (help), by app
-// A tap shows it in its app, or asks the example: choose "show:<index>",
-// index across every attachment's items. The conversation stays where it is.
+// A tap shows it in its app (choose "show:<index>", index across every
+// attachment's items); an example goes to the field (onSuggest), to change
+// or send, as the empty conversation's do. The conversation stays where it is.
 
 import type { AssistantMessage } from "@phoenix/luna";
 import { useMediaUrl } from "@phoenix/luna/react";
@@ -31,7 +32,7 @@ function Thumb({ path, onClick, index }: { path: string; onClick: () => void; in
     );
 }
 
-export function Attachments({ m, onShow }: { m: AssistantMessage; onShow: (index: number) => void }) {
+export function Attachments({ m, onShow, onSuggest }: { m: AssistantMessage; onShow: (index: number) => void; onSuggest?: (words: string) => void }) {
     const list = attachmentsOf(m);
     if (!list.length) return null;
     let base = 0;
@@ -56,7 +57,8 @@ export function Attachments({ m, onShow }: { m: AssistantMessage; onShow: (index
                             {a.title && <div className="as-examples-title">{a.title}</div>}
                             <div className="as-thumbs">
                                 {a.items.map((it, i) => (
-                                    <button type="button" key={i} className="as-chip" data-testid={`as-ex-${first + i}`} onClick={() => onShow(first + i)}>{it.text}</button>
+                                    <button type="button" key={i} className="as-chip" data-testid={`as-ex-${first + i}`}
+                                            onClick={() => (onSuggest ? onSuggest(it.text ?? "") : onShow(first + i))}>{it.text}</button>
                                 ))}
                             </div>
                         </div>
