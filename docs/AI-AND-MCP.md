@@ -332,6 +332,18 @@ services that keep nothing, so a read-back check fails either way):
 | the call's mean time | 13.3 s | 3.0 s |
 | the call's mean tokens written | 84 | 22 |
 
+With a stand-in device that keeps what is saved (`test/device.ts`: the
+alarms, reminders, tasks, events and memos made are there to read back;
+`model-calls.test.ts`, run with `PHOENIX_TEST_LLAMA_URL`, a read-back
+confirmed), the same 80 phrasings measure whether the arguments were right:
+the right command 47 times, and 41 of those ran (their arguments good
+enough to do it and find it again; no read-back fails from the stand-in
+any more). The 6 that did not: 5 times the model gave the whole sentence
+as the thing's name ("milk's bought" for the task Milk, "I'm not going to
+the dentist, take it off my calendar" for the event Dentist), once the
+contact has no email to write to. 55 of the 80 answers ran in all; the
+call took 3.0 s and 22 tokens on average.
+
 **What the grammar could not read** (`fillArgs`). When the grammar knows
 the command but not all it needs (a required argument empty: "add an
 event called dentist friday-ish" has no time it can read), or a language
