@@ -19,6 +19,10 @@ const seeded = () => device({ seed: (put) => {
     put({ _id: "task-today", _kind: "com.palm.task:1", summary: "Pay rent", listId: "list-inbox", completed: false, due: at(7, 17), createdTime: 4 });
     put({ _id: "task-later", _kind: "com.palm.task:1", summary: "Renew passport", listId: "list-inbox", completed: false, due: at(20, 9), createdTime: 5 });
     put({ _id: "p-mom", _kind: "com.palm.person:1", name: { givenName: "Mom" }, phoneNumbers: [{ value: "(303) 555-0199", type: "type_mobile" }], birthday: "1961-03-14" });
+    put({ _id: "p-alex", _kind: "com.palm.person:1", name: { givenName: "Alex", familyName: "Rivera" }, phoneNumbers: [], emails: [{ value: "alex@example.com", type: "type_work" }],
+          contactIds: ["c-alex"] });
+    put({ _id: "c-alex", _kind: "com.palm.contact.palmprofile:1", name: { givenName: "Alex", familyName: "Rivera" }, emails: [{ value: "alex@example.com", type: "type_work" }] });
+    put({ _id: "task-stamps", _kind: "com.palm.task:1", summary: "Buy stamps", listId: "list-inbox", completed: false, createdTime: 6 });
     put({ _id: "call-mom", _kind: "com.palm.phonecall:1", type: "incoming", timestamp: at(7, 8, 15), duration: 120000, from: { addr: "(303) 555-0199", name: "Mom" }, to: [] });
 } });
 
@@ -72,5 +76,58 @@ describe("one thing about the rest", () => {
         expect((await d.ask("what's on my to-do list for today")).text).toBe("Today on your tasks: “Pay rent”.");
         expect((await d.ask("what did Alex's last email say")).text).toBe("From Alex Rivera, today at 9:00 AM: “Invoice 2231”. Your invoice");
         expect((await d.ask("what time is my alarm set for")).command).toBe("alarmList");
+    });
+});
+
+describe("changing what was found", () => {
+    it("changes the event the conversation is about, each read back, each undone", async () => {
+        const d = seeded();
+        const ev = () => d.db.get("ev-sam");
+        await d.ask("what time is my meeting with Sam");
+        expect((await d.ask("rename it to Coffee with Sam")).text).toBe("Renamed “Meeting with Sam” to “Coffee with Sam”.");
+        expect(ev().subject).toBe("Coffee with Sam");
+        expect((await d.ask("move it to Zoom")).text).toBe("“Coffee with Sam” is at Zoom now.");
+        expect(ev().location).toBe("Zoom");
+        expect((await d.ask("add Alex to it")).text).toBe("Added Alex Rivera to “Coffee with Sam”.");
+        expect(ev().attendees.map((a: any) => a.email)).toEqual(["me@example.com", "sam@example.com", "priya@example.net", "alex@example.com"]);
+        expect((await d.ask("remove Priya from it")).text).toBe("Took Priya Nair off “Coffee with Sam”.");
+        expect(ev().attendees.map((a: any) => a.commonName)).toEqual(["Jordan Avery", "Sam Delgado", "Alex Rivera"]);
+        expect((await d.ask("move it to 4")).text).toBe("Moved “Coffee with Sam” to tomorrow at 4:00 PM.");
+        expect(ev()).toMatchObject({ dtstart: at(8, 16), dtend: at(8, 17, 30) });
+        // Undo takes back the last change (the move), after Yes.
+        await d.confirm(await d.ask("undo"));
+        expect(ev()).toMatchObject({ dtstart: at(8, 15), dtend: at(8, 16, 30) });
+    });
+    it("changes events by their words", async () => {
+        const d = seeded();
+        expect((await d.ask("rename my meeting with Sam to Planning")).text).toBe("Renamed “Meeting with Sam” to “Planning”.");
+        expect((await d.ask("change the meeting with Sam to 4")).text).toBe("I couldn't find “with sam” on your calendar.");
+        expect((await d.ask("invite Alex to the planning meeting")).text).toBe("Added Alex Rivera to “Planning”.");
+        expect((await d.ask("rename it to Retro")).text).toBe("Renamed “Planning” to “Retro”.");
+    });
+    it("changes lists, memos, contacts and alarms", async () => {
+        const d = seeded();
+        expect((await d.ask("add milk to my groceries list")).text).toBe("Added “Milk” to your Groceries list.");
+        expect((await d.ask("remove eggs from it")).text).toBe("Took “Eggs” off your Groceries list.");
+        expect(d.db.has("task-eggs")).toBe(false);
+        await d.confirm(await d.ask("undo"));
+        expect(d.db.get("task-eggs")).toMatchObject({ summary: "Eggs", listId: "list-shop" });
+        expect((await d.ask("mark buy stamps done")).text).toBe("Marked “Buy stamps” as done.");
+        expect((await d.ask("rename my grocery memo to Shopping")).text).toBe("Renamed “Grocery” to “Shopping”.");
+        expect(d.db.get("memo-groc").text).toBe("Shopping\nMilk\nEggs\nCoffee");
+        expect((await d.ask("remove eggs from it")).text).toBe("Took “eggs” out of your “Shopping” memo.");
+        expect(d.db.get("memo-groc").text).toBe("Shopping\nMilk\nCoffee");
+        expect((await d.ask("change Alex's email to alex@new.example.com")).text).toBe("Alex Rivera's email is alex@new.example.com now.");
+        expect(d.db.get("p-alex").emails[0].value).toBe("alex@new.example.com");
+        expect(d.db.get("c-alex").emails[0].value).toBe("alex@new.example.com");
+        expect((await d.ask("set my 7am alarm to 6:30")).text).toBe("Your 7:00 AM alarm is at 6:30 AM now.");
+        expect(d.db.get("alarm-7")).toMatchObject({ hour: 6, minute: 30, niceTime: "6:30 AM" });
+        expect(d.state.activities.get("clockAlarm1")).toBeTruthy();
+        expect((await d.ask("change my 6:30 pm alarm to 7")).text).toBe("Your 6:30 PM alarm is at 7:00 PM now.");
+    });
+    it("asks which, when nothing is in focus", async () => {
+        const d = seeded();
+        expect((await d.ask("rename it to Lunch")).text).toBe("Which one? Say its name, like “rename my meeting with Sam to Coffee with Sam”.");
+        expect((await d.ask("change my alarm to 6")).text).toBe("You have alarms at 7:00 AM and 6:30 PM: which one? Say “set my 7:00 AM alarm to…”.");
     });
 });

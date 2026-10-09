@@ -245,8 +245,9 @@ var BUILT_IN = [
       parameters: { type: "object", properties: {} } }
 ];
 // One thing about one item, and the item a conversation is about (lib/details.js).
-var details = require("./details")({ D: D, lunaCall: lunaCall, dbFind: dbFind, findEvent: findEvent, matches: matches,
-                                     whenShown: whenShown, cards: cards });
+var details = require("./details")({ D: D, lunaCall: lunaCall, dbFind: dbFind, findEvent: findEvent, matches: matches, words: words,
+                                     whenShown: whenShown, cards: cards, findPerson: findPerson, personName: personName, emailOf: emailOf,
+                                     addTask: addTask, scheduleAlarm: scheduleAlarm, nextRing: nextRing });
 Array.prototype.push.apply(BUILT_IN, details.COMMANDS);
 
 // Every command: the built-in ones, then the apps' (lib/grammar.js compileAppCommands).
@@ -479,7 +480,11 @@ function fromModel(cmd, args, env) {
 
 // ---- Prepare: resolve, decide whether to ask ----------------------------------------------------
 
+// "it" first (the item the conversation is about: lib/details.js).
 function prepare(cmd, args, env) {
+    return details.prepare(cmd, Object.assign({}, args || {}), env).then(function (a) { return prepareInner(cmd, a, env); });
+}
+function prepareInner(cmd, args, env) {
     var say = env.lang.say;
     args = Object.assign({}, args || {});
     function reply(text) { return Promise.resolve({ args: args, reply: text }); }

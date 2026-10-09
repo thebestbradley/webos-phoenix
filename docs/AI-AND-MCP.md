@@ -87,6 +87,19 @@ the conversation's **focus**, kept with the conversation
 (`assistant.js` `keepFocus`), and "it", "that" or no name at all
 ("who's invited") means it. Tests: `details.test.ts`.
 
+**Changing what was found** (9 October 2026). "Rename it to Coffee with
+Sam", "move it to Zoom", "add Alex to it", "remove Priya from it", "move
+it to 4", "change the meeting with Sam to 4", "add milk to my grocery
+list" then "remove eggs from it", "rename my grocery memo to Shopping",
+"change Sam's email to ...", "set my 7am alarm to 6:30", "mark it done":
+the command `edit` (`lib/details.js`) finds the item by its words or the
+focus, changes that one record, says what changed, and offers Undo with
+what it replaced; "it" in `eventMove`, `eventCancel`, `noteAppend` and
+`taskDone` is the focus too. What "add X to it" means is the item's: a
+guest for an event (by their contact's email), a line for a memo, a task
+for a list. Like every write, each change is read back before the answer
+says it was done ("Said only when done").
+
 | Command | Say, for example | Does | Asks first |
 | --- | --- | --- | --- |
 | `event` | "add a meeting with Sam tomorrow at 3", "create an event called dentist on Friday at 10am", "schedule lunch with Priya next Tuesday at noon at Bistro Verde", "put yoga on my calendar every Monday at 7pm for 90 minutes", "team offsite on the 20th all day" | A calendar event: title, day and time, end or length (an hour by default), place, invitees (contacts with an email), repeats; without a time it asks "When is it?" and the next words say it | |

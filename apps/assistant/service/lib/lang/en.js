@@ -1492,6 +1492,78 @@ function tasksDue(t) {
     return { list: name, day: day };
 }
 
+// "change the meeting with Sam to 4", "move it to 3:30": a move to a time
+// said without "at" (eventMove reads "at 4").
+function eventMoveBare(t, ctx) {
+    var m = /^((?:move|reschedule|push(?: back)?|shift|bring forward|change|switch) .+? (?:to|until|till|for)) (\d{1,2}(?::\d{2})?(?: ?[ap]\.?m\.?)?|noon|midday)$/.exec(t);
+    return m ? eventMove(m[1] + " at " + m[2], ctx) : null;
+}
+// ---- Edits: changing what was found ----------------------------------------------------------
+// "rename it to Coffee with Sam", "add Alex to it", "move it to Zoom",
+// "remove eggs from it", "change Sam's email to sam@new.com", "set my 7am
+// alarm to 6:30", "rename my grocery memo to Shopping": lib/details.js
+// "edit" finds the item (by its words, or "it": the conversation's focus),
+// changes it, reads it back, and offers Undo. What "add X to it" means is
+// the item's: a guest for an event, a line for a memo, a task for a list.
+function editTarget(s) {
+    s = String(s || "").replace(/^(?:my|the|our) /, "").trim();
+    if (!s || IT_WORDS.test(s)) return { it: true, query: "", kind: "" };
+    if (/ (?:memo|note)$/.test(" " + s)) return { it: false, query: s.replace(/ ?(?:memo|note)$/, ""), kind: "memo" };
+    if (/ list$/.test(" " + s)) return { it: false, query: s.replace(/ ?list$/, ""), kind: "list" };
+    if (eventish(s)) return { it: false, query: s, kind: "event" };
+    return null;
+}
+function edit(t, ctx) {
+    var m, target, out;
+    var withTarget = function (said, change, value) {
+        var tg = editTarget(said);
+        return tg ? { kind: tg.kind, query: tg.query, it: tg.it, change: change, value: value } : null;
+    };
+    // Rename: "rename it to X", "call it X", "change the title of X to Y".
+    if ((m = /^(?:rename|retitle) (.+?) (?:to|as) (.+)$/.exec(t)) || (m = /^(?:call|name) (it|that|this|that one|this one) (.+)$/.exec(t))
+        || (m = /^(?:change|set) (?:the )?(?:title|name) (?:of (.+?) )?to (.+)$/.exec(t)) || (m = /^(?:change|set) (?:its|it's) (?:title|name) to ()(.+)$/.exec(t)))
+        return withTarget(m[1] || "", "title", capital(cased(m[2].replace(/^["“]|["”]$/g, ""), ctx)));
+    // The place: "move it to Zoom", "change the location to Room 2", "it's at Bistro Verde now".
+    if ((m = /^(?:change|set|update|switch) (?:the )?(?:location|place|venue|room)(?: (?:of|for) (.+?))? to (.+)$/.exec(t))
+        || (m = /^(?:move|switch|shift|change) (.+?) to (?:(?:the )?(?:location|place|room|venue) )?(.+)$/.exec(t))
+        || (m = /^(it|that)(?:'s| is) (?:at|in|on) (.+?) now$/.exec(t))) {
+        // A time is a move (eventMove), not a place: "change the meeting with Sam to 4".
+        var timeSaid = when("at " + m[2].replace(/^at /, ""), ctx.now) !== null;
+        out = !timeSaid && !/\b(?:alarm|timer|list|memo|note)\b/.test(m[1] || "") ? withTarget(m[1] || "", "place", cased(m[2], ctx)) : null;
+        if (out && (out.it || out.kind === "event")) return Object.assign(out, { kind: "event" });
+    }
+    // Add to it: a guest, a line, a task.
+    if ((m = /^(?:add|invite|put) (.+?) (?:to|on|in|into) (it|that|this|that one|this one|the (?:event|meeting|list|memo|note))$/.exec(t)))
+        return { kind: "", query: "", it: true, change: "add", value: cased(m[1], ctx) };
+    if ((m = /^invite (.+?) to (.+)$/.exec(t)) && (target = editTarget(m[2])) && (target.it || target.kind === "event"))
+        return { kind: "event", query: target.query, it: target.it, change: "add", value: cased(m[1], ctx) };
+    // "add Alex to my meeting with Sam" (not "add a task to call the bank", "add Robin to my contacts").
+    if ((m = /^add (.+?) to (.+)$/.exec(t)) && !/^(?:an?|the|some|my) /.test(m[1]) && !/\d|@/.test(t)
+        && !/\b(?:contacts?|calendar|schedule|agenda|diary|lists?|tasks?|to-?dos?|notes?|memos?|favou?rites?)\b/.test(m[2])
+        && (target = editTarget(m[2])) && target.kind === "event" && /^(?:my|the|our|that) /.test(m[2]))
+        return { kind: "event", query: target.query, it: false, change: "add", value: cased(m[1], ctx) };
+    // Take out of it.
+    if ((m = /^(?:remove|take|delete|drop|uninvite|cross) (.+?) (?:from|off|out of) (.+)$/.exec(t)) && (target = editTarget(m[2])))
+        return { kind: target.kind, query: target.query, it: target.it, change: "remove", value: cased(m[1].replace(/^(?:the )/, ""), ctx) };
+    if ((m = /^uninvite (.+)$/.exec(t))) return { kind: "event", query: "", it: true, change: "remove", value: cased(m[1], ctx) };
+    // A contact's details: "change Sam's email to sam@new.com".
+    if ((m = /^(?:change|update|set|make|edit) (.+?)(?:'s|s') (e-?mail(?: address)?|(?:phone |mobile |cell |work |home )?number|phone|mobile|address|birthday) (?:to|as|is) (.+)$/.exec(t))
+        && !/^(?:my|your|its|it)$/.test(m[1])) {
+        var field = /mail/.test(m[2]) ? "email" : /address/.test(m[2]) ? "address" : /birthday/.test(m[2]) ? "birthday" : "phone";
+        return { kind: "contact", query: m[1], it: false, change: field, value: field === "address" ? cased(m[3], ctx) : m[3].trim() };
+    }
+    // An alarm's time: "set my 7am alarm to 6:30", "change my alarm to 6:30".
+    if ((m = /^(?:set|change|move|make|switch|push|reset|update) (?:my |the )?(?:(.+?) )?alarm(?: (?:for|at) (.+?))? (?:to|for) (.+)$/.exec(t))) {
+        var from = ((m[1] || "") + " " + (m[2] || "")).replace(/\b(?:wake[- ]?up|morning|o'clock)\b/g, " ").trim();
+        var fc = from ? clock(from) : null, tc = clock(m[3].replace(/^at /, "").replace(/ o'clock$/, ""));
+        if ((from && !fc) || !tc) return null;
+        // The new time's half of the day, when said; else the alarm's own (commands: details.js).
+        return { kind: "alarm", query: from, it: false, change: "time", value: "", to: { hour: tc.hour, minute: tc.minute, meridiem: tc.meridiem || "" },
+                 hour: fc ? fc.hour : null, minute: fc ? fc.minute : null, meridiem: fc ? fc.meridiem || "" : "" };
+    }
+    return null;
+}
+
 var rules = [
     ["help", help],
     ["undo", undo],
@@ -1518,6 +1590,8 @@ var rules = [
     ["callLog", callFrom],
     ["taskList", tasksDue],
     ["detail", detail],
+    ["eventMove", eventMoveBare],
+    ["edit", edit],
     ["agenda", agenda],
     ["app", appCommand(false)],
     ["noteAppend", noteAppend],
@@ -2023,6 +2097,22 @@ var say = {
     },
     memoSays: function (title, text) { return text ? "Your " + quote(excerpt(title, 40)) + " memo says: " + excerpt(text, 400) : "Your " + quote(excerpt(title, 40)) + " memo is empty."; },
     nothingInFocus: function () { return "Which one? Ask about it by name, like “where is my meeting with Sam”."; },
+    // Edits (lib/details.js)
+    renamed: function (from, to) { return "Renamed " + quote(from) + " to " + quote(to) + "."; },
+    placeSet: function (title, place) { return quote(title) + " is at " + place + " now."; },
+    invited: function (name, title) { return "Added " + name + " to " + quote(title) + "."; },
+    alreadyInvited: function (name, title) { return name + " is already invited to " + quote(title) + "."; },
+    uninvited: function (name, title) { return "Took " + name + " off " + quote(title) + "."; },
+    notInvited: function (name, title) { return name + " isn't invited to " + quote(title) + "."; },
+    noEmailFor: function (name) { return name + " has no email address in your contacts, so I can't invite them."; },
+    lineRemoved: function (text, memo) { return "Took " + quote(text) + " out of your " + quote(excerpt(memo, 40)) + " memo."; },
+    taskRemoved: function (text, list) { return "Took " + quote(text) + " off " + (list ? "your " + list + " list" : "your tasks") + "."; },
+    contactChanged: function (name, what, value) { return name + "'s " + (what === "phone" ? "number" : what) + " is " + value + " now."; },
+    alarmChanged: function (from, to) { return "Your " + from + " alarm is at " + to + " now."; },
+    noAlarmAt: function (time) { return time ? "You don't have a " + time + " alarm." : "You don't have an alarm to change."; },
+    whichAlarm: function (times) { return "You have alarms at " + list(times) + ": which one? Say “set my " + times[0] + " alarm to…”."; },
+    cantEdit: function (what) { return "I can't change that " + (what || "item") + " here yet. Open it to change it."; },
+    whatToChange: function () { return "Which one? Say its name, like “rename my meeting with Sam to Coffee with Sam”."; },
     callsFrom: function (name, c, now) {
         if (!c) return "There's no call from " + name + " in your call log.";
         var when = whenText(c.at, null, false, now);
@@ -2113,6 +2203,7 @@ var say = {
         move: function (title) { return "move " + quote(title) + " back"; },
         restoreEvent: function (title) { return "put " + quote(title) + " back on your calendar"; },
         memoBack: function () { return "take that out of the memo"; },
+        edit: function (what) { return "change " + what + " back"; },
         taskBack: function (t) { return "mark " + quote(t) + " as not done"; }
     },
     beyond: function (what) { return what === "translate" ? "I can't translate without a language model yet, but I can search the web for it." : ""; },
