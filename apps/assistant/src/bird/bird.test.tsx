@@ -74,18 +74,19 @@ describe("the drawing", () => {
     });
     afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
-    it("shows each pose's lids and extras, and only those", () => {
-        for (const pose of BIRD_POSES) {
-            const { getByTestId, unmount } = render(<Bird pose={pose} still speed={1} />);
-            const svg = getByTestId("as-bird");
-            expect(svg.getAttribute("data-pose")).toBe(pose);
-            const p = BIRD.poses[pose];
-            for (const g of svg.querySelectorAll<SVGGElement>("[data-extra]"))
-                expect(g.style.opacity, `${pose} ${g.dataset.extra}`).toBe((p.extras as readonly string[]).includes(g.dataset.extra!) ? "1" : "0");
-            for (const g of svg.querySelectorAll<SVGGElement>("[data-overlay]"))
-                expect(g.style.opacity, `${pose} ${g.dataset.overlay}`).toBe((BIRD.eyes[p.eyes].overlays as readonly string[]).includes(g.dataset.overlay!) ? "1" : "0");
-            unmount();
-        }
+    // One pose a test: each is a whole drawing for React to make (30-100 ms
+    // on an idle desktop), and all twelve in one test (0.3-0.5 s) went past
+    // its 5 s on a machine busy with other builds.
+    it.each(BIRD_POSES)("shows the %s pose's lids and extras, and only those", (pose) => {
+        const { getByTestId, unmount } = render(<Bird pose={pose} still speed={1} />);
+        const svg = getByTestId("as-bird");
+        expect(svg.getAttribute("data-pose")).toBe(pose);
+        const p = BIRD.poses[pose];
+        for (const g of svg.querySelectorAll<SVGGElement>("[data-extra]"))
+            expect(g.style.opacity, `${pose} ${g.dataset.extra}`).toBe((p.extras as readonly string[]).includes(g.dataset.extra!) ? "1" : "0");
+        for (const g of svg.querySelectorAll<SVGGElement>("[data-overlay]"))
+            expect(g.style.opacity, `${pose} ${g.dataset.overlay}`).toBe((BIRD.eyes[p.eyes].overlays as readonly string[]).includes(g.dataset.overlay!) ? "1" : "0");
+        unmount();
     });
 
     it("moves only when it may: no animation classes held still", () => {
