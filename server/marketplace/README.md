@@ -67,16 +67,25 @@ Outlook's); the probe still checks it. A site is listed only with a manifest
 that has a name and a picture icon that is there on the web (the probe
 loads it, and prefers one another site's page may show); the others stay in
 the file's `notFound` with the reason, naming the bot check (Cloudflare,
-DataDome, Akamai) when one refused the probe. Its start page is the
+DataDome, Akamai) when one refused the probe. A site whose manifest is good
+but whose icons are all missing is listed anyway, with an icon the catalog
+makes: the probe records `iconGenerated` (the letters, from the title: "GN",
+"NYT", "F1", and the manifest's `theme_color`, else its `background_color`,
+else a colour of its own), `seed` draws it as a plain SVG (its letters on a
+rounded square of that colour; `Catalog::generatedIcon`) into the published
+files, `/v1/icons/<id>.svg`, and the index marks the app `"iconGenerated":
+true`; a device installing the web app uses it when none of the site's own
+icons comes (`apps/marketplace/service/packagesservice.js`). It is our own
+lettering, not the brand's logo. Its start page is the
 manifest's `start_url` when that is on the site, else the site (as
 browsers do, so a manifest kept on a CDN still starts on the site).
 
-Today 132 of the 160 sites are listed. Of the rest, some show a visitor
-who is not signed in no manifest at all (Bluesky, Discord, Notion, Trello,
-Word, OneDrive, Tuta, Zoho Mail, Yahoo Mail, Evernote, McDonald's,
-trivago), three name
-icons that are all missing (Ground News, NYT Games, Formula 1), and the
-others turned the probe away with a bot check from the cloud network it ran
+Today 135 of the 160 sites are listed, three of them (Ground News, NYT
+Games, Formula 1) with generated icons, as all the icons their manifests
+name are missing (probed again 9 October 2026). Of the rest, some show a
+visitor who is not signed in no manifest at all (Bluesky, Discord, Notion,
+Trello, Word, OneDrive, Tuta, Zoho Mail, Yahoo Mail, Evernote, McDonald's,
+trivago), and the others turned the probe away with a bot check from the cloud network it ran
 on (Canva, The New York Times, Reuters, The Economist, Skyscanner,
 Tripadvisor, DoorDash, Revolut, Stack Overflow, CodePen, Yelp, VSCO,
 Reddit). ChatGPT's Cloudflare check lets the probe through only at times.
@@ -91,7 +100,9 @@ servers and cloud networks):
     git diff --stat server/marketplace/catalog/curated-pwas.json
 
 It prints `ok` or `skip` (with the reason) for each site and rewrites
-`curated-pwas.json`; look at what came and went before committing it. (If
+`curated-pwas.json`; look at what came and went before committing it.
+`probe-pwas.py ID ...` (ids or titles) probes only those sites and keeps
+the others as they were. (If
 Python cannot check certificates, run `/Applications/Python 3.x/Install
 Certificates.command` once.) Then load it into the catalog and publish:
 

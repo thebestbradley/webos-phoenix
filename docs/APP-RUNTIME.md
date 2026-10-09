@@ -2370,8 +2370,9 @@ app site, an App Museum stand-in and a Preware feed), `tools/test-marketplace.cj
 The catalog service is `server/marketplace` (PHP 8 + PDO; MySQL/MariaDB on a
 server, SQLite on one computer): accounts, submissions with the same
 automatic checks, a review queue (`/admin`), ratings and reviews, reports,
-opt-outs for the curated web apps (132 popular sites' PWAs, found and
-checked by `bin/probe-pwas.py`), and publishing the signed index (its
+opt-outs for the curated web apps (135 popular sites' PWAs, found and
+checked by `bin/probe-pwas.py`; a site whose icons are all broken gets one
+the catalog generates, `/v1/icons/<id>.svg`), and publishing the signed index (its
 README).
 
 ### Installing apps

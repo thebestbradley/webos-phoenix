@@ -240,8 +240,15 @@ final class Catalog
             if (in_array(strtolower($e['origin']), $optedOut, true)) {
                 continue;
             }
+            $icon = $e['icon'] ?? '';
+            // A good manifest whose icons are all broken (the probe's
+            // iconGenerated): an icon made here, served with the catalog.
+            if (!empty($e['iconGenerated']) && is_array($e['iconGenerated'])) {
+                $icon = $this->writeGeneratedIcon($e['id'], (string) ($e['iconGenerated']['text'] ?? ''),
+                                                  (string) ($e['iconGenerated']['color'] ?? ''), $e['title']);
+            }
             $row = ['title' => $e['title'], 'developer' => $e['developer'] ?? '', 'summary' => $e['summary'] ?? '',
-                    'categories' => $e['categories'] ?? [], 'icon' => $e['icon'] ?? '', 'featured' => !empty($e['featured']),
+                    'categories' => $e['categories'] ?? [], 'icon' => $icon, 'featured' => !empty($e['featured']),
                     'homepage' => $e['origin'] . '/'];
             if ($this->db->one('SELECT id FROM apps WHERE id = ?', [$e['id']])) {
                 $this->db->run("UPDATE apps SET title = ?, developer_name = ?, summary = ?, categories = ?, icon = ?, featured = ?,
@@ -265,6 +272,49 @@ final class Catalog
         return $n;
     }
 
+    // ---- Generated icons ----------------------------------------------------------------------
+
+    /** Where a generated icon is published (under the catalog's own URL). */
+    public function generatedIconUrl(string $id): string
+    {
+        return $this->config['base_url'] . 'icons/' . preg_replace('/[^A-Za-z0-9._-]/', '_', $id) . '.svg';
+    }
+
+    /**
+     * An icon for a site whose manifest's icons are all broken: its initials
+     * (the probe's, e.g. "GN", "NYT", "F1"; else the title's first letter) in
+     * white, or near black on a light colour, on a rounded square of $color
+     * (the manifest's theme_color, as the probe found it). A plain SVG with no
+     * scripts or outside references.
+     */
+    public static function generatedIcon(string $text, string $color, string $title = ''): string
+    {
+        $text = mb_strtoupper(trim($text) !== '' ? mb_substr(trim($text), 0, 3) : mb_substr(trim($title), 0, 1)) ?: '?';
+        if (!preg_match('/^#[0-9a-fA-F]{6}$/', $color)) {
+            $color = '#37474f';
+        }
+        [$r, $g, $b] = array_map('hexdec', str_split(substr($color, 1), 2));
+        // Relative luminance (WCAG): light colours get dark letters.
+        $lin = fn ($c) => ($c /= 255) <= 0.03928 ? $c / 12.92 : (($c + 0.055) / 1.055) ** 2.4;
+        $light = 0.2126 * $lin($r) + 0.7152 * $lin($g) + 0.0722 * $lin($b) > 0.4;
+        $ink = $light ? '#1a1a1a' : '#ffffff';
+        $size = [1 => 120, 2 => 104, 3 => 80][mb_strlen($text)];
+        $t = htmlspecialchars($text, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+        return '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">'
+            . '<rect x="8" y="8" width="240" height="240" rx="52" fill="' . strtolower($color) . '"/>'
+            . '<text x="128" y="128" dy="0.35em" text-anchor="middle" font-family="Open Sans, Helvetica, Arial, sans-serif"'
+            . ' font-weight="700" font-size="' . $size . '" fill="' . $ink . '">' . $t . '</text></svg>' . "\n";
+    }
+
+    /** Write $id's generated icon into the published files; its URL. */
+    private function writeGeneratedIcon(string $id, string $text, string $color, string $title): string
+    {
+        $dir = $this->publicDir() . '/icons';
+        @mkdir($dir, 0755, true);
+        file_put_contents("$dir/" . preg_replace('/[^A-Za-z0-9._-]/', '_', $id) . '.svg', self::generatedIcon($text, $color, $title));
+        return $this->generatedIconUrl($id);
+    }
+
     // ---- Publishing ---------------------------------------------------------------------------
 
     public function publish(): array
@@ -282,6 +332,10 @@ final class Catalog
             ];
             if ($a['kind'] === 'pwa') {
                 $e['pwa'] = ['manifest' => $a['manifest'], 'origin' => $a['origin']];
+                // Its icon made here (the site's are broken): devices install it.
+                if ($a['icon'] === $this->generatedIconUrl($a['id'])) {
+                    $e['iconGenerated'] = true;
+                }
             } else {
                 $r = $this->db->one("SELECT * FROM releases WHERE app_id = ? AND state = 'approved' ORDER BY id DESC", [$a['id']]);
                 if (!$r) {

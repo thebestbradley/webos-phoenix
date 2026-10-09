@@ -87,6 +87,8 @@ function extOf(type, src) {
     if (/webp/i.test(type) || /\.webp(\?|$)/i.test(src)) return "webp";
     if (/jpe?g/i.test(type) || /\.jpe?g(\?|$)/i.test(src)) return "jpg";
     if (/x-icon|vnd\.microsoft/i.test(type) || /\.ico(\?|$)/i.test(src)) return "ico";
+    // The catalog's own icon for a site whose icons are broken (iconGenerated).
+    if (/svg/i.test(type) || /\.svg(\?|$)/i.test(src)) return "svg";
     return "png";
 }
 

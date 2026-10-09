@@ -19,7 +19,9 @@
 > [APP-RUNTIME.md](APP-RUNTIME.md#marketplace). Still to do: the server
 > online, A1 and A4 on a device, the Android catalog.
 >
-> **Curated web apps (8 October 2026):** 132 of 160 sites in 23 categories
+> **Curated web apps (8 October 2026; 9 October: 135, as a site whose
+> manifest is good but whose icons are all broken is listed with an icon the
+> catalog generates, its initials on its theme colour):** 135 of 160 sites in 23 categories
 > (`server/marketplace/catalog/curated-sites.json`; `bin/probe-pwas.py`
 > checks each manifest live and leaves out the ones it cannot find, with the
 > reason, in `curated-pwas.json`): social networks and messaging, Google's and

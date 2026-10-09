@@ -98,6 +98,22 @@ check($idx['version'] === 1 && $idx['build'] === $pub['build'] && count($idx['ap
 $x = array_values(array_filter($idx['apps'], fn ($a) => $a['id'] === 'org.webosphoenix.pwa.x'))[0] ?? null;
 check($x && $x['kind'] === 'pwa' && str_starts_with($x['pwa']['manifest'], 'https://x.com/') && $x['pwa']['origin'] === 'https://x.com',
       'a curated web app: its manifest and origin');
+check(!isset($x['iconGenerated']) && str_starts_with($x['icon'], 'https://'), '... with its own icon');
+// A good manifest whose icons are all broken (the probe's iconGenerated): listed, with an icon made here.
+foreach (['org.webosphoenix.pwa.groundnews' => 'GN', 'org.webosphoenix.pwa.nytgames' => 'NYT', 'org.webosphoenix.pwa.formula1' => 'F1'] as $gid => $letters) {
+    $g = array_values(array_filter($idx['apps'], fn ($a) => $a['id'] === $gid))[0] ?? null;
+    $file = "$tmp/data/public/v1/icons/$gid.svg";
+    $svg = is_file($file) ? file_get_contents($file) : '';
+    check($g && ($g['iconGenerated'] ?? false) === true && $g['icon'] === "http://127.0.0.1:9999/v1/icons/$gid.svg"
+          && str_contains($svg, ">$letters</text>") && str_starts_with($svg, '<svg ') && !str_contains($svg, '<script'),
+          "$gid: listed with a generated icon ($letters), published with the catalog");
+}
+$light = Phoenix\Marketplace\Catalog::generatedIcon('ab', '#ffeb3b');
+$dark = Phoenix\Marketplace\Catalog::generatedIcon('', '#000000', 'Wordle <&>');
+$bad = Phoenix\Marketplace\Catalog::generatedIcon('x"><script>', 'red');
+check(str_contains($light, '>AB</text>') && str_contains($light, 'fill="#1a1a1a"') && str_contains($dark, '>W</text>')
+      && str_contains($dark, 'fill="#ffffff"') && !str_contains($bad, '<script') && str_contains($bad, 'fill="#37474f"'),
+      'a generated icon: up to three letters, dark on a light colour, escaped, a default colour');
 
 // ---- A developer's package ------------------------------------------------------------------
 [$s, $r] = $call('POST', '/api/apps/packages', ipk($tmp, 'com.example.notes', '1.0.0'));
