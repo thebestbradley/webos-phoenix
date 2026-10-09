@@ -18,19 +18,6 @@
 		margin: 0 8px;
 	}
 
-	/* The wall's title bar (GridView.js): search, "N memos", Edit, each in
-	   a quarter of the bar; the search field, at least 250 px wide
-	   (grid.css), ran over the count, half hidden on a phone on its side.
-	   The field and Edit keep their own widths and the count is centred
-	   between them; upright there is no room for it, and the field takes
-	   what Edit leaves. */
-	#appView_grid_search,
-	#appView_grid_gridTitleBar_client > .memo-count,
-	#appView_grid_gridTitleBar_client > :last-child {
-		-webkit-box-flex: 0 !important;
-		width: auto !important;   /* Enyo's flex items are width: 0 */
-	}
-
 	/* Rows set their packing inline (start). */
 	.memo-list .enyo-hflexbox {
 		-webkit-box-pack: center !important;
@@ -64,28 +51,89 @@
 	}
 }
 
-@media (max-width: 400px) {
-	/* The count and the spacers around it. */
-	#appView_grid_gridTitleBar_client > :nth-child(2),
-	#appView_grid_gridTitleBar_client > :nth-child(3),
-	#appView_grid_gridTitleBar_client > :nth-child(4),
+/* The wall's title bar (GridView.js: the search field, a spacer, "N memos",
+ * a spacer, Edit), at any width but the TouchPad's (memos.css lays it out
+ * for 769 px and more; that is left as it was). The original gives each a
+ * share of the bar, but the field is at least 250 px wide (grid.css), so
+ * below the TouchPad's width it ran over the count, and on a phone pushed
+ * Edit off the right edge. Here Edit keeps its own width and place, the
+ * count its text, and the field takes the rest, from 250 px down to 140;
+ * where even that leaves no room for the count (a bar under 400 px), the
+ * count goes. Never anything over another. */
+@media (max-width: 768px), (max-height: 480px) {
+	#appView_grid_gridTitleBar {
+		container-type: inline-size;
+	}
+
+	#appView_grid_gridTitleBar_client {
+		display: -webkit-flex !important;
+		display: flex !important;
+		-webkit-align-items: center;
+		align-items: center;
+	}
+
+	#appView_grid_gridTitleBar_client > * {
+		width: auto !important;   /* Enyo's flex items are width: 0 */
+		min-width: 0;
+	}
+
+	/* The field: 250 px (its own width) if there is room, down to 140. */
+	#appView_grid_search {
+		display: -webkit-flex !important;
+		display: flex !important;
+		-webkit-flex: 0 1 250px;
+		flex: 0 1 250px;
+		min-width: 140px !important;
+	}
+
 	#appView_grid_search > :last-child {
 		display: none;
 	}
 
-	#appView_grid_search {
-		-webkit-box-flex: 1 !important;
-		width: 0 !important;
-		margin-right: 8px;
-	}
-
 	#appView_grid_search .search-input {
+		-webkit-flex: 1 1 auto;
+		flex: 1 1 auto;
 		min-width: 0;
-		-webkit-box-flex: 1;
 	}
 
 	#appView_grid_search .search-input .enyo-input-input {
 		min-width: 0;
+	}
+
+	/* The spacers around the count. */
+	#appView_grid_gridTitleBar_client > :nth-child(2),
+	#appView_grid_gridTitleBar_client > :nth-child(4) {
+		-webkit-flex: 1 1 8px;
+		flex: 1 1 8px;
+	}
+
+	/* Whole: the field gives way first. */
+	.memo-count {
+		-webkit-flex: 0 0 auto;
+		flex: 0 0 auto;
+	}
+
+	/* Edit, as it was: its own width, the bar's padding at its right. */
+	#appView_grid_gridTitleBar_client > :last-child {
+		-webkit-flex: 0 0 auto;
+		flex: 0 0 auto;
+	}
+
+	@container (max-width: 399px) {
+		#appView_grid_gridTitleBar_client > :nth-child(2),
+		#appView_grid_gridTitleBar_client > .memo-count {
+			display: none;
+		}
+
+		#appView_grid_search {
+			-webkit-flex: 1 1 auto;
+			flex: 1 1 auto;
+		}
+
+		#appView_grid_gridTitleBar_client > :nth-child(4) {
+			-webkit-flex: 0 0 8px;
+			flex: 0 0 8px;
+		}
 	}
 }
 

@@ -6,7 +6,11 @@
     },
     "com.palm.app.notes": {
         "status": "works",
-        "note": "Phone: one memo per row; the editor's back button shows its arrow only"
+        "note": "Phone: one memo per row; the editor's back button shows its arrow only; the wall's title bar fits any width (the count goes under 400 px)",
+        "fits": {
+            "selector": "#appView_grid_gridTitleBar_client",
+            "sizes": [[320, 452], [360, 700], [393, 800], [412, 900], [430, 880], [480, 272], [600, 900], [673, 800], [800, 360], [1024, 740]]
+        }
     },
     "com.palm.app.accounts": {
         "status": "works",

@@ -138,6 +138,43 @@ async function main() {
                 for (const want of expect.openedBy.shows || [])
                     if (!text.includes(want)) errors.push(`shows no "${want}"`);
             }
+            // A bar that must fit at every size ("fits"): its visible children
+            // inside it, none over another, no text cut. The page is resized
+            // in place, as a phone turning or a window changing does.
+            if (expect.fits) {
+                for (const [w, h] of expect.fits.sizes) {
+                    await shown.setViewportSize({ width: w, height: h });
+                    await shown.waitForTimeout(300);
+                    const bad = await shown.evaluate((sel) => {
+                        const bar = document.querySelector(sel);
+                        if (!bar) return ["no " + sel];
+                        const b = bar.getBoundingClientRect(), out = [];
+                        const kids = [...bar.children].filter((c) => c.getClientRects().length && c.getBoundingClientRect().width > 0);
+                        const name = (c) => c.id || c.className || c.tagName;
+                        // What a child draws: its box and whatever of its own spills out of it.
+                        const extent = (c) => {
+                            let l = Infinity, r = -Infinity;
+                            for (const e of [c, ...c.querySelectorAll("*")]) {
+                                const q = e.getBoundingClientRect();
+                                if (q.width > 0 && q.height > 0 && getComputedStyle(e).visibility !== "hidden") { l = Math.min(l, q.left); r = Math.max(r, q.right); }
+                            }
+                            return { left: l, right: r };
+                        };
+                        kids.forEach((c, i) => {
+                            const r = extent(c);
+                            if (r.left < b.left - 0.5 || r.right > b.right + 0.5 || r.right > window.innerWidth + 0.5) out.push(`${name(c)} outside the bar`);
+                            if (c.textContent.trim() && c.scrollWidth > c.clientWidth + 1) out.push(`${name(c)} cut`);
+                            for (const d of kids.slice(i + 1)) {
+                                const q = extent(d);
+                                if (r.left < q.right - 0.5 && q.left < r.right - 0.5) out.push(`${name(c)} over ${name(d)}`);
+                            }
+                        });
+                        return out;
+                    }, expect.fits.selector);
+                    for (const x of bad) errors.push(`at ${w}x${h}: ${x}`);
+                }
+                await shown.setViewportSize(viewport);
+            }
             const real = errors.filter((e) => !ignorable(e));
             const pass = rendered && real.length === 0;
             const mustPass = expect.status === "works" || (tablet ? expect.tablet === "works" : expect.phone === "works");
