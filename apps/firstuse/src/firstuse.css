@@ -48,6 +48,13 @@ html:has(> body.pui-app), body.pui-app { overflow: hidden; }
 .fu-link { display: block; margin: 6px auto 10px; }
 .fu-intro { font-size: 16px; line-height: 1.4; color: #c9d6e2; padding: 2px 4px 8px; }
 .fu-body { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 8px; }
+/* The window shrunk by the keyboard: the whole step scrolls, so the field
+   being typed in can be scrolled into view above it (the body alone had
+   no height left on a phone). */
+@media (max-height: 340px) {
+    .fu-step { overflow-y: auto; }
+    .fu-body { flex: none; overflow: visible; }
+}
 .fu-buttons { flex: none; display: flex; justify-content: space-between; gap: 10px; padding: 8px 0 10px; }
 /* Each about half the width, but never narrower than its label: a long one
    (Restore's "Set Up as New" on a 320px phone) takes room from the other. */

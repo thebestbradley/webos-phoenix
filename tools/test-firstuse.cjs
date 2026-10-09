@@ -203,6 +203,18 @@ async function main() {
         // ---- Passcode ---------------------------------------------------------------
         await step("passcode");
         await page.click("[data-testid=lock-pin]");
+        // The keyboard comes up for the PIN: the window shrinks under it,
+        // and the field stays in view above it (it went under it).
+        await page.focus("[data-testid=code-confirm]");
+        await page.setViewportSize({ width: viewport.width, height: tablet ? 400 : 180 });
+        await page.waitForTimeout(400);
+        const inView = await page.evaluate(() => {
+            const r = document.activeElement.getBoundingClientRect();
+            return r.height > 0 && r.top >= 0 && r.bottom <= window.innerHeight + 0.5 ? true : [r.top, r.bottom, window.innerHeight].join();
+        });
+        check(inView === true, "Passcode: with the keyboard up, the field typed in is in view" + (inView === true ? "" : ` (${inView})`));
+        await shot("5a-passcode-keyboard");
+        await page.setViewportSize(viewport);
         await page.fill("[data-testid=code]", "1357");
         await page.fill("[data-testid=code-confirm]", "1358");
         await next();

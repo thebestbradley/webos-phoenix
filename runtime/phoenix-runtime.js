@@ -3971,6 +3971,27 @@
         }
     };
 
+    // The window shrank for the keyboard: the focused field scrolls into
+    // view, as Enyo's keyboard did for its apps on every resize
+    // (enyo-1.0 palm/system/keyboard.js:39-48, 104-106: a 100 ms job that
+    // scrolls the focused scroller to the caret); Mojo's scenes did the
+    // same. Enyo's and Mojo's apps still do it themselves; for the others
+    // (Phoenix's React apps) a field low on the page went under the
+    // keyboard and stayed there.
+    if (global.addEventListener) {
+        var revealTimer = 0;
+        global.addEventListener("resize", function () {
+            clearTimeout(revealTimer);
+            revealTimer = setTimeout(function () {
+                if (global.enyo || global.Mojo)
+                    return;
+                var el = global.document && global.document.activeElement;
+                if (editable(el) && typeof el.scrollIntoView === "function")
+                    el.scrollIntoView({ block: "nearest" });
+            }, 100);
+        });
+    }
+
     // ---- Editing: Cut, Copy, Paste, Select All ---------------------------------------
     //
     // The app menu's Edit submenu (Enyo's EditMenu, Mojo's editItem) and the
