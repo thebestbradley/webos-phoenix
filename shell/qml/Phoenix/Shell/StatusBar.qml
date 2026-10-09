@@ -226,22 +226,25 @@ Item {
     // fading in and out over 200 ms (StatusBarItemGroup::activate /
     // deactivate and paint, :282-330, 381-396; statusBarMenuFade*,
     // lunaAnimations.conf:124-125).
-    // Tablets: as the original's tabRect (StatusBarItemGroup.cpp:360-366)
-    // its right cap lies past the screen's edge, and its left cap and some
-    // padding before the leftmost icon, so the tab holds every icon
-    // (Theme.statusBarTabCap). Phones: the pressed art behind the group.
+    // As the original's tabRect (StatusBarItemGroup.cpp:360-366) its right
+    // cap lies past the screen's edge, so the solid part reaches it, and its
+    // left cap and some padding go before the leftmost icon, so the tab
+    // holds every icon (Theme.statusBarTabCap), the microphone's too. Phones
+    // (which had no tab: the original drew one only with tabletUi, :117-132)
+    // show the pressed art behind the group, in the same three slices: it
+    // has the same transparent 10 px down each side, which stretched whole
+    // left the microphone outside the tab and a gap after the battery.
     ArtBorderImage {
         id: menuTab
         objectName: "systemMenuTab"
         anchors.right: parent.right
-        anchors.rightMargin: Theme.tablet ? -Theme.statusBarTabCap : 0
+        anchors.rightMargin: -Theme.statusBarTabCap
         anchors.top: parent.top
         height: parent.height
-        width: Theme.tablet ? indicators.width + indicators.anchors.rightMargin + 2 * Theme.statusBarTabCap + Theme.statusBarTabPadding
-                            : indicators.width + Theme.px(12)
+        width: indicators.width + indicators.anchors.rightMargin + 2 * Theme.statusBarTabCap + Theme.statusBarTabPadding
         source: Theme.tablet || !bar.systemMenuOpen ? Theme.asset("statusBar/status-bar-menu-dropdown-tab.png")
                                                     : Theme.asset("statusBar/status-bar-menu-dropdown-tab-pressed.png")
-        border { left: Theme.artBorder(Theme.tablet ? 11 : 0, source); right: Theme.artBorder(Theme.tablet ? 11 : 0, source); top: 0; bottom: 0 }
+        border { left: Theme.artBorder(11, source); right: Theme.artBorder(11, source); top: 0; bottom: 0 }
         opacity: bar.systemMenuOpen ? 1 : 0
         Behavior on opacity {
             enabled: Theme.tablet
