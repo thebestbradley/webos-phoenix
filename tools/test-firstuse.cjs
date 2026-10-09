@@ -4,7 +4,8 @@
 //
 // Goes through First Use (apps/firstuse, built into dist/) in headless
 // Chromium with the simulator's runtime, as a new owner would: language,
-// Wi-Fi (a wrong password, then the right one), time zone and the 24-hour
+// Wi-Fi (a wrong password, then the right one), the hardware that needs
+// firmware, time zone and the 24-hour
 // clock, accounts (Add an account opens Accounts), a PIN (mismatched, then
 // set), location off in Privacy, the cards and gestures tutorial, and All
 // Set, which opens Help and then finishes: the system preference
@@ -138,6 +139,12 @@ async function main() {
         await page.waitForFunction(() => document.querySelector("[data-testid='network-Lab 5G']")?.textContent.includes("Connected"));
         check(true, "Wi-Fi: joined Lab 5G");
         await shot("2-wifi");
+        await next();
+
+        // ---- Hardware (the simulated dongle needs firmware; tools/test-hardware.cjs installs it) ----
+        await step("hardware");
+        check(await page.locator("[data-testid='fu-hw-usb:1-2']").count() === 1, "Hardware: the Wi-Fi dongle that needs firmware is offered");
+        await shot("2a-hardware");
         await next();
 
         // ---- Restore -----------------------------------------------------------------
@@ -283,7 +290,7 @@ async function main() {
         check(!!again && again.payload.params.rerun === true, "Settings > Device Info runs it again");
         await start({ rerun: true });
         await step("welcome");
-        for (let i = 0; i < 8; ++i) {
+        for (let i = 0; i < 9; ++i) {
             if (await page.locator("[data-testid=skip]").count()) await page.click("[data-testid=skip]");
             else await next();
             await page.waitForTimeout(200);
@@ -293,7 +300,7 @@ async function main() {
         await start({ rerun: true });
         await step("welcome");
         await next();
-        for (const id of ["wifi", "restore", "datetime", "accounts"]) {
+        for (const id of ["wifi", "hardware", "restore", "datetime", "accounts"]) {
             await step(id);
             await page.click("[data-testid=skip]");
         }

@@ -94,6 +94,20 @@ export interface HardwareReport {
     devices: { bus: string; ids: string[]; firmwareMissing: string[] }[];
 }
 
+/** A device's name with its maker ("Realtek RTL8821CU USB Wi-Fi Adapter"). */
+export function deviceTitle(d: { name: string; vendor: string }): string {
+    return d.vendor && !d.name.toLowerCase().startsWith(d.vendor.toLowerCase()) ? `${d.vendor} ${d.name}` : d.name;
+}
+
+/**
+ * A licence file's text for a narrow or wide box: the lines a paragraph was
+ * wrapped into joined again; blank lines, indented lines and list items
+ * ("*", "-", "1.", "(a)") kept as they are.
+ */
+export function reflowLicense(text: string): string {
+    return text.replace(/\r\n/g, "\n").replace(/([^\n])\n(?=[^\n\s*•\-(\d])/g, "$1 ");
+}
+
 /** Devices that need something installed to work. */
 export function needsAttention(d: HardwareDevice): boolean {
     return d.status === "needs-firmware" || d.status === "needs-driver";

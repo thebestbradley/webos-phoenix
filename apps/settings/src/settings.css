@@ -371,7 +371,7 @@ div.license-text { font-family: var(--pui-font); font-size: 13px; }
 .hw-ids { font-family: "DejaVu Sans Mono", monospace; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
 .hw-license-text, .hw-report-ids {
     max-height: 240px; overflow: auto; margin: 4px 0 10px; padding: 8px 10px; border-radius: 6px;
-    background: rgba(255, 255, 255, 0.85); color: #222; font-size: 13px; line-height: 1.35; white-space: pre-wrap; word-break: break-word;
+    background: rgba(255, 255, 255, 0.85); color: #222; font-family: inherit; font-size: 13px; line-height: 1.35; white-space: pre-wrap; word-break: break-word;
 }
 .hw-report-ids { font-family: "DejaVu Sans Mono", monospace; font-size: 12px; word-break: break-all; }
 .hw-license-url { font-size: 12px; color: #ddd; word-break: break-all; margin-bottom: 8px; }

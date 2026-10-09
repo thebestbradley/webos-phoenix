@@ -10890,9 +10890,9 @@
         var DEVICES = [
             { id: "pci:0000:02:00.0", bus: "pci", name: "AR9462 Wireless Network Adapter", vendor: "Qualcomm Atheros", category: "wifi",
               modaliases: ["pci:v0000168Cd00000034sv0000105Bsd0000E052bc02sc80i00"], driver: "ath9k" },
-            { id: "usb:1-2", bus: "usb", name: "802.11ac WLAN Adapter (RTL8821CU)", vendor: "Realtek", category: "wifi",
+            { id: "usb:1-2", bus: "usb", name: "RTL8821CU USB Wi-Fi Adapter", vendor: "Realtek", category: "wifi",
               modaliases: ["usb:v0BDApC811d0200dc00dsc00dp00icFFiscFFipFFin00"], driver: "rtw88_8821cu", firmware: ["rtw88/rtw8821c_fw.bin"] },
-            { id: "usb:1-3", bus: "usb", name: "802.11ac WLAN Adapter (RTL8812AU)", vendor: "Realtek", category: "wifi",
+            { id: "usb:1-3", bus: "usb", name: "RTL8812AU USB Wi-Fi Adapter", vendor: "Realtek", category: "wifi",
               modaliases: ["usb:v0BDAp8812d0000dc00dsc00dp00icFFiscFFipFFin00"], driver: "88XXau", module: "88XXau" },
             { id: "pci:0000:01:00.0", bus: "pci", name: "TU117 [GeForce GTX 1650]", vendor: "NVIDIA", category: "graphics",
               modaliases: ["pci:v000010DEd00001F82sv00001043sd000087B4bc03sc00i00"], driver: "nouveau" },

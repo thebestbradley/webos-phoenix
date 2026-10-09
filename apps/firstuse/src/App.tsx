@@ -25,7 +25,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import {
-    apps, backup, backupErrorCode, BACKUP_PARTS, call, deviceLock, firstUse, hardware, installable, LunaError, location, needsAttention, settings,
+    apps, backup, backupErrorCode, BACKUP_PARTS, call, deviceLock, deviceTitle, firstUse, hardware, installable, LunaError, location, needsAttention, reflowLicense, settings,
     system, wifi, WIFI_ERROR_INVALID_KEY,
     type BackupDestination, type BackupFile, type DriverOffer, type HardwareDevice, type HardwareList,
     type LocaleInfo, type LocationHandler, type LockMode, type SystemPreferences, type TimeZone, type WifiNetworkInfo, type WifiStatus,
@@ -217,14 +217,14 @@ function HardwareStep(nav: NavProps & { list: HardwareList | null }) {
     };
     return (
         <StepPage testId="hardware" title="Hardware" {...nav}
-                  intro="Some of your hardware needs firmware or a driver that is not open source, so it does not come with Phoenix. Its makers allow passing it on.">
+                  intro="Some of your hardware needs firmware or a driver that does not come with Phoenix. Install it now, or later.">
             <Group>
                 {devices.map((d) => {
                     const o = neededOffer(d)!;
                     return (
-                        <Row key={d.id} title={d.name} testId={`fu-hw-${d.id}`} className="fu-hw-row"
-                             subtitle={done[d.id] ?? `${o.title} · ${o.license.free ? "open source" : o.license.name}`}
-                             icon={done[d.id] ? <Checkmark /> : <span className="fu-check-space" />}>
+                        <Row key={d.id} title={deviceTitle(d)} testId={`fu-hw-${d.id}`} className="fu-hw-row"
+                             subtitle={done[d.id] ?? `${o.title}${o.license.free ? "" : " (not open source)"}`}
+                             icon={done[d.id] ? <Checkmark /> : undefined}>
                             {busy === d.id ? <Spinner /> : !done[d.id] && (
                                 <Button variant="affirmative" className="fu-hw-install" disabled={busy !== null} data-testid={`fu-hw-install-${d.id}`}
                                         onClick={() => (o.license.free ? void install(d, o) : setAsking({ device: d, offer: o }))}>Install</Button>
@@ -237,7 +237,7 @@ function HardwareStep(nav: NavProps & { list: HardwareList | null }) {
             <Note>Skip this to install them later from Settings &gt; Hardware, which also has optional drivers.</Note>
             <Dialog open={!!asking} title={asking?.offer.license.name ?? ""} onClose={() => setAsking(null)} testId="fu-hw-license"
                     message={asking ? `${asking.offer.title} is not open source. Read its licence before installing it.` : undefined}>
-                <pre className="fu-license-text">{asking?.offer.license.text}</pre>
+                <pre className="fu-license-text">{reflowLicense(asking?.offer.license.text ?? "")}</pre>
                 <Button variant="affirmative" data-testid="fu-hw-accept" onClick={() => asking && void install(asking.device, asking.offer)}>
                     Accept and Install
                 </Button>

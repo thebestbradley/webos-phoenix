@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { setBridgeFactory, type HardwareDevice } from "@phoenix/luna";
+import { deviceTitle, reflowLicense, setBridgeFactory, type HardwareDevice } from "@phoenix/luna";
 import { HardwarePage, statusText } from "./Hardware";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -123,6 +123,13 @@ describe("Settings > Hardware", () => {
         expect(statusText(device({ status: "needs-firmware", offers: [{ ...offer, optional: false }] }))).toBe("Needs firmware, available to install");
         expect(statusText(device({ status: "no-driver", offers: [{ ...offer, available: false, reason: "x" }] }))).toBe("No driver for this device yet");
         expect(statusText(device({ status: "restart" }))).toBe("Restart to finish installing");
+    });
+
+    it("names devices with their maker, and reflows licence files", () => {
+        expect(deviceTitle({ name: "RTL8821CU USB Wi-Fi Adapter", vendor: "Realtek" })).toBe("Realtek RTL8821CU USB Wi-Fi Adapter");
+        expect(deviceTitle({ name: "Realtek 802.11ac NIC", vendor: "Realtek" })).toBe("Realtek 802.11ac NIC");
+        expect(reflowLicense("Redistribution and use in binary\nform are permitted:\n\n* Redistributions must\n  reproduce it\n* No reverse\nengineering.\n1. One\n"))
+            .toBe("Redistribution and use in binary form are permitted:\n\n* Redistributions must\n  reproduce it\n* No reverse engineering.\n1. One\n");
     });
 
     it("lists the hardware, installs firmware after its licence, and the device works", async () => {

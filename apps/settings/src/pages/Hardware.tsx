@@ -17,7 +17,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-    hardware, installable, needsAttention, LunaError, call,
+    deviceTitle, hardware, installable, needsAttention, reflowLicense, LunaError, call,
     type DriverOffer, type HardwareCategory, type HardwareDevice, type HardwareList, type HardwareReport, type DriverInstallProgress,
 } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
@@ -67,7 +67,7 @@ function LicenseDialog({ offer, onAccept, onClose }: { offer: DriverOffer; onAcc
     return (
         <Dialog open title={offer.license.name} onClose={onClose} testId="hw-license"
                 message={`${offer.title} is not open source. Its maker allows passing it on under this licence; read it before installing.`}>
-            <pre className="hw-license-text" data-testid="hw-license-text">{offer.license.text}</pre>
+            <pre className="hw-license-text" data-testid="hw-license-text">{reflowLicense(offer.license.text)}</pre>
             {offer.license.url && <div className="hw-license-url">{offer.license.url}</div>}
             <Button variant="affirmative" data-testid="hw-license-accept" onClick={onAccept}>Accept and Install</Button>
             <Button variant="dark" onClick={onClose}>Cancel</Button>
@@ -112,7 +112,7 @@ function Offer({ device, offer, onDone }: { device: HardwareDevice; offer: Drive
         <Group label={`${kindText(offer)}${offer.optional ? " (optional)" : ""}`}>
             <Row title={offer.title} subtitle={offer.summary || undefined} className="wrap-subtitle" testId={`hw-offer-${offer.driverId}`} />
             <Row title="Licence" value={offer.license.name} testId="hw-offer-license"
-                 subtitle={offer.license.free ? "Open source" : "Not open source; may be passed on"} />
+                 subtitle={offer.license.free ? "Open source" : "Not open source"} />
             <Row title="Download" value={size(offer.size)} testId="hw-offer-size" />
             {offer.installedSize !== null && <Row title="On the device" value={size(offer.installedSize)} />}
             <Row title="Version" value={offer.installed && offer.installedVersion ? offer.installedVersion : offer.version} />
@@ -136,7 +136,7 @@ function Offer({ device, offer, onDone }: { device: HardwareDevice; offer: Drive
             {error && <ErrorText testId="hw-error">{error}</ErrorText>}
             {asking && <LicenseDialog offer={offer} onAccept={() => void install()} onClose={() => setAsking(false)} />}
             <Dialog open={removing} title={`Remove ${offer.title}?`} onClose={() => setRemoving(false)} testId="hw-remove-dialog"
-                    message={offer.optional ? `${device.name} goes back to the built-in driver.` : `${device.name} stops working until it is installed again.`}>
+                    message={offer.optional ? `${deviceTitle(device)} goes back to the built-in driver.` : `${deviceTitle(device)} stops working until it is installed again.`}>
                 <Button variant="negative" data-testid="hw-remove-confirm" onClick={() => void remove()}>Remove</Button>
                 <Button variant="dark" onClick={() => setRemoving(false)}>Cancel</Button>
             </Dialog>
@@ -148,11 +148,10 @@ function DeviceDetails({ device, onRestart }: { device: HardwareDevice; onRestar
     const [notice, setNotice] = useState<string | null>(null);
     return (
         <Page>
-            <PageHeader title={device.name} icon={ICON} />
+            <PageHeader title={deviceTitle(device)} icon={ICON} />
             <Group>
-                <Row title="Status" value={statusText(device)} testId="hw-detail-status"
-                     className={needsAttention(device) || device.status === "no-driver" ? "hw-attention" : undefined} />
-                {device.vendor && <Row title="Maker" value={device.vendor} />}
+                <Row title="Status" subtitle={statusText(device)} testId="hw-detail-status"
+                     className={`wrap-subtitle${needsAttention(device) || device.status === "no-driver" ? " hw-attention" : ""}`} />
                 <Row title="Driver" value={device.driver ?? "None"} testId="hw-detail-driver" />
                 {device.firmwareMissing.length > 0 && (
                     <Row title="Missing firmware" subtitle={device.firmwareMissing.join(", ")} className="wrap-subtitle" testId="hw-detail-missing" />
@@ -244,7 +243,7 @@ export function HardwarePage() {
     const attention = data.devices.filter((d) => needsAttention(d) || d.status === "restart");
     const rest = data.devices.filter((d) => !attention.includes(d));
     const row = (d: HardwareDevice) => (
-        <Row key={d.id} title={d.name} subtitle={statusText(d)} chevron testId={`hw-device-${d.id}`} onClick={() => setShown(d.id)}
+        <Row key={d.id} title={deviceTitle(d)} subtitle={statusText(d)} chevron testId={`hw-device-${d.id}`} onClick={() => setShown(d.id)}
              className={needsAttention(d) || d.status === "no-driver" ? "hw-attention" : undefined} />
     );
     const cat = data.catalog;
