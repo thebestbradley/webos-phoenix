@@ -341,7 +341,7 @@ Item {
                         objectName: "launcherTab_" + index
                         anchors.fill: parent
                         pressAndHoldInterval: Theme.iconMenuHoldInterval
-                        onClicked: { launcher.addTabShown = false; pages.currentIndex = index; }
+                        onClicked: { launcher.addTabShown = false; launcher.showPage(index); }
                         onPressAndHold: launcher.askRenameTab(index)
                     }
                 }
@@ -509,7 +509,7 @@ Item {
             return;
         _ensurePageModels(layout.pages.length);
         if (pages.currentIndex >= layout.pages.length)
-            pages.currentIndex = layout.pages.length - 1;
+            showPage(layout.pages.length - 1, true);
         for (var p = 0; p < pageModels.length; ++p) {
             var m = pageModels[p], ids = layout.pages[p] || [];
             for (var i = 0; i < ids.length; ++i) {
@@ -614,7 +614,65 @@ Item {
         return ly >= pages.y && ly < pages.y + pages.height;
     }
     readonly property int currentPage: pages.currentIndex
-    function showPage(i) { pages.currentIndex = i; }
+    // Going to page i: it is the current page at once, and the pages glide
+    // there over 250 ms InQuad (gotoPageIndex with no speed,
+    // dimensionslauncher.cpp:3326-3329; Theme.launcherPageSnapDuration).
+    // immediate: there at once (a page gone, the size changed).
+    function showPage(i, immediate) {
+        i = Math.max(0, i);
+        pageSettle.stop();
+        pages.currentIndex = i;
+        _glideTo(i, immediate ? 0 : Theme.launcherPageSnapDuration, Easing.InQuad);
+    }
+    function _pageX(i) { return pages.originX + i * pages.width; }
+    function _glideTo(i, duration, easing) {
+        pageGlide.stop();
+        if (duration <= 0 || Math.abs(pages.contentX - _pageX(i)) < 0.5) {
+            pages.contentX = _pageX(i);
+            return;
+        }
+        pageGlide.to = _pageX(i);
+        pageGlide.duration = duration;
+        pageGlide.easing.type = easing;
+        pageGlide.start();
+    }
+    // A finger's drag across the pages, let go (LauncherObject's pan and
+    // flick, dimensionslauncher.cpp:1990-2010, 3610-3645): a flick (the
+    // whole drag's speed, as FlickGestureRecognizer's, :44-45, 95-104) goes
+    // to the page beside the one it began on, in the time the distance takes
+    // at the flick's speed (px/ms x 100 / 1000), 200 to 1200 ms, OutCubic
+    // (:3330-3339); otherwise the page nearest the middle, as a tab's tap.
+    property real _dragStartX: 0
+    property real _dragStartTime: 0
+    property int _dragStartPage: 0
+    function _pagesDragStarted() {
+        pageGlide.stop();
+        pageSettle.stop();
+        _dragStartX = pages.contentX;
+        _dragStartTime = Date.now();
+        _dragStartPage = pages.currentIndex;
+    }
+    function _pagesDragEnded() {
+        var w = Math.max(1, pages.width);
+        var dt = Math.max(1, Date.now() - _dragStartTime);
+        var vx = -(pages.contentX - _dragStartX) / dt;      // the finger's, px/ms
+        var speed = Math.abs(vx);
+        var to;
+        if (speed >= Theme.flickMinVelocity && speed <= Theme.flickMaxVelocity) {
+            to = Math.max(0, Math.min(tabs.length - 1, _dragStartPage + (vx > 0 ? -1 : 1)));
+            if (to !== _dragStartPage) {
+                pages.currentIndex = to;
+                var ms = Math.abs(_pageX(to) - pages.contentX) / (speed * 100 / 1000);
+                _glideTo(to, Theme.motion(Math.max(Theme.launcherPageFlickMinDuration,
+                                                   Math.min(Theme.launcherPageFlickMaxDuration, Math.round(ms)))),
+                         Easing.OutCubic);
+                return;
+            }
+        }
+        to = Math.max(0, Math.min(tabs.length - 1, Math.round((pages.contentX - pages.originX) / w)));
+        pages.currentIndex = to;
+        _glideTo(to, Theme.launcherPageSnapDuration, Easing.InQuad);
+    }
 
     // ---- Page edges while an icon is dragged ------------------------------------
     // ReorderablePage::detectAndHandleSpecialMoveAreas: the icon at a page's
@@ -724,11 +782,22 @@ Item {
                 launcher._edgeAction();
         }
     }
+    // 150 px over 300 ms, linear: the original set only a duration
+    // (page.cpp:1708-1711, 1748-1751; pageScrollAnimTime).
     NumberAnimation {
         id: pageScroll
+        objectName: "launcherPageScroll"
         property: "contentY"
         duration: Theme.launcherScrollDuration
-        easing.type: Easing.OutCubic
+        easing.type: Easing.Linear
+    }
+
+    // The pages' glide to a page (showPage, a drag let go).
+    NumberAnimation {
+        id: pageGlide
+        objectName: "launcherPageGlide"
+        target: pages
+        property: "contentX"
     }
 
     ListView {
@@ -738,9 +807,16 @@ Item {
         anchors.bottomMargin: launcher.dockHeight
         width: parent.width
         orientation: ListView.Horizontal
-        snapMode: ListView.SnapOneItem
-        highlightRangeMode: ListView.StrictlyEnforceRange
-        highlightMoveDuration: Theme.cardSlideDuration
+        // The launcher moves the pages itself (showPage, _pagesDragEnded):
+        // the current page is what it says, the view does not follow it,
+        // and a drag let go does not fly on.
+        snapMode: ListView.NoSnap
+        highlightRangeMode: ListView.NoHighlightRange
+        highlightFollowsCurrentItem: false
+        maximumFlickVelocity: 0
+        onDragStarted: launcher._pagesDragStarted()
+        onDragEnded: launcher._pagesDragEnded()
+        onWidthChanged: if (!pageGlide.running && !dragging) contentX = launcher._pageX(currentIndex)
         boundsBehavior: Flickable.StopAtBounds
         interactive: !launcher.dragging
         clip: true

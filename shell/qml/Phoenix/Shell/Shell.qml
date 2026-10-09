@@ -2833,8 +2833,11 @@ FocusScope {
                 // (uiComponents/AppInfoDialog; LauncherObject::appDeleteDecoratorActivated,
                 // showAppInfoDialog): "Remove Application?", its title and
                 // version, Cancel and Remove (both black: the launcher never set
-                // their type), on popup-bg.png over the scrim, fading in and out
-                // over 300 ms.
+                // their type), on popup-bg.png over the scrim, fading in over
+                // 400 ms and out over 600 ms, linear (fade(), AppInfoDialog.qml:
+                // 55-68, with DynamicsSettings' appInfoDialogFadeInTime /
+                // FadeOutTime, dynamicssettings.cpp:106-107, dimensionslauncher.cpp:
+                // 3223-3224, 3265-3266).
                 Item {
                     id: deleteDialog
                     objectName: "deleteDialog"
@@ -2850,7 +2853,9 @@ FocusScope {
                     anchors.fill: parent
                     visible: opacity > 0
                     opacity: appId !== "" ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: 300 } }
+                    readonly property int fadeDuration: appId !== "" ? Theme.appInfoDialogFadeInDuration
+                                                                     : Theme.appInfoDialogFadeOutDuration
+                    Behavior on opacity { NumberAnimation { duration: deleteDialog.fadeDuration } }
                     z: 1001
                     // What the dialog says, set when it opens.
                     property string titleText: ""

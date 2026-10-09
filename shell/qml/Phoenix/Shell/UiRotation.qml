@@ -63,7 +63,7 @@ Item {
     readonly property int noAnimation: 0
     readonly property int rotateAndCrossFade: 1
     readonly property int crossFadeOnly: 2
-    readonly property int animationDuration: 300          // conf/lunaAnimations.conf:128
+    readonly property int animationDuration: Theme.motion(300)  // conf/lunaAnimations.conf:128
     readonly property int deferredOrientationInterval: 200 // WS:130
     readonly property int resizePendingInterval: 100       // WS:129
 
