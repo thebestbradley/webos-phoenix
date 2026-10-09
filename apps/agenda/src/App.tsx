@@ -9,7 +9,8 @@
 // Calendar app keeps in db8 (com.palm.calendarevent:1, com.palm.calendar:1;
 // agenda.ts). It follows changes as they are made (a db8 watch) and moves on
 // as time passes, while it is the exhibition in front ("phoenixcardactivation").
-// A tap on an event opens Calendar, which ends dock mode.
+// A tap on an event opens it in Calendar ({showEventDetail}, its Event
+// Details), which ends dock mode.
 //
 // Services: com.palm.db find {watch}; com.webos.service.systemservice
 // getPreferences {timeFormat}; com.webos.applicationManager launch.
@@ -70,7 +71,7 @@ export function App() {
                         {d.items.length === 0 && <div className="ag-note" data-testid="agenda-none">No more events today</div>}
                         {d.items.map((o) => (
                             <div role="button" tabIndex={0} key={o.key} className="ag-event" data-testid="agenda-event"
-                                    onClick={() => { void apps.launch(CALENDAR_APP, {}).catch(() => {}); }}>
+                                    onClick={() => { void apps.launch(CALENDAR_APP, o.eventId ? { showEventDetail: o.eventId } : {}).catch(() => {}); }}>
                                 <span className="ag-bar" style={{ background: o.color }} />
                                 <span className="ag-when">{whenLabel(o, d.date, twentyFour)}</span>
                                 <span className="ag-subject">{o.subject}</span>

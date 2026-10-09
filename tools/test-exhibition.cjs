@@ -179,7 +179,8 @@ async function main() {
         await page.click("[data-testid='agenda-event']");
         await page.waitForTimeout(200);
         const launch = lastHost("launch");
-        check(launch && launch.payload.id === "com.palm.app.calendar", "agenda: a tap opens Calendar");
+        check(launch && launch.payload.id === "com.palm.app.calendar" && launch.payload.params && /\S/.test(launch.payload.params.showEventDetail || ""),
+              "agenda: a tap opens the event in Calendar " + JSON.stringify(launch && launch.payload.params));
 
         // ---- settings --------------------------------------------------------------
         await page.goto(appUrl("org.webosphoenix.settings", { page: "exhibition" }));
