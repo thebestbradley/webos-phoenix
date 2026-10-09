@@ -136,6 +136,12 @@ final class Catalog
             if (!$ok) {
                 throw new CheckFailed("A $kind package cannot put a file at /$path");
             }
+            // The kernel looks for a firmware file uncompressed in every
+            // folder before it looks for .zst and .xz, so a compressed update
+            // would lose to the system's uncompressed file.
+            if (preg_match('#^lib/firmware/updates/.+\.(xz|zst)$#', $path)) {
+                throw new CheckFailed("Newer firmware goes in uncompressed (/$path would lose to the system's own file)");
+            }
             if (preg_match('#^lib/modules/([^/]+)/#', $path, $m)) {
                 if ($kernel !== null && $kernel !== $m[1]) {
                     throw new CheckFailed('The package has modules for more than one kernel');

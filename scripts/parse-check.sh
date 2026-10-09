@@ -22,6 +22,10 @@
 # Environment:
 #   PHOENIX_PARSE_DIR     build directory (default: ${TMPDIR:-/tmp}/webos-phoenix-parse);
 #                         keep it to rerun quickly, delete it to free the space
+#   PHOENIX_PARSE_COMPRESS  firmware compression switches to resolve too, on the
+#                         first MACHINE (default: "xz zstd"; "" for none): the
+#                         image and linux-firmware again with
+#                         PHOENIX_FIRMWARE_COMPRESS set to each
 #   PHOENIX_PARSE_TARGET  what to resolve (default: webos-phoenix-image, plus
 #                         the torchd stub, which is not in it, whisper-cpp and
 #                         phoenix-driver-feed, the Hardware app's firmware packages)
@@ -126,6 +130,8 @@ bb() (
     . ./oe-init-build-env >/dev/null
     MACHINE=$m bitbake "$@"
 )
+COMPRESS=${PHOENIX_PARSE_COMPRESS-xz zstd}
+first=$1
 set -- "$@" --
 failed=
 summary=
@@ -149,6 +155,23 @@ while [ "$1" != -- ]; do
     grep -E '^(ERROR|WARNING):' "$log" | sort -u || true
     [ "$parse$dry" = okok ] || tail -n 30 "$log"
     summary="$summary$(printf '%-18s parse %-7s dry run %s' "$m" "$parse" "$dry")
+"
+done
+
+# The firmware compression switch (meta-phoenix linux-firmware bbappend):
+# resolve the image with it on, as a case of its own.
+for c in $COMPRESS; do
+    echo
+    echo "=== $first, PHOENIX_FIRMWARE_COMPRESS = \"$c\": bitbake -n webos-phoenix-image linux-firmware"
+    printf 'PHOENIX_FIRMWARE_COMPRESS = "%s"\n' "$c" > "$BUILD_DIR/parse-compress-$c.conf"
+    log="$BUILD_DIR/parse-check-$first-compress-$c.log"
+    if bb "$first" -R "$BUILD_DIR/parse-compress-$c.conf" -n webos-phoenix-image linux-firmware >"$log" 2>&1; then
+        dry=ok
+    else
+        dry=FAILED; failed=1
+        tail -n 30 "$log"
+    fi
+    summary="$summary$(printf '%-18s compress %-4s dry run %s' "$first" "$c" "$dry")
 "
 done
 

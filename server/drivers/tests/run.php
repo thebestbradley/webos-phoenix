@@ -84,6 +84,9 @@ refused(fn () => Catalog::check($iwl, [PackageWriter::ipk('linux-firmware-iwlwif
 $upd = Catalog::check(['id' => 'firmware-rtw88-update', 'optional' => true, 'supersedes' => ['linux-firmware-rtl8821', 'Bad Name']] + $manifest,
                       [PackageWriter::ipk('linux-firmware-rtw88-update', '20250311-r0', 'all', ['lib/firmware/updates/rtw88/rtw8821c_fw.bin' => 'new'])]);
 check($upd['supersedes'] === ['linux-firmware-rtl8821'] && $upd['optional'], 'a newer firmware: in /lib/firmware/updates, naming the image package it replaces');
+refused(fn () => Catalog::check(['id' => 'firmware-rtw88-update', 'supersedes' => ['linux-firmware-rtl8821']] + $manifest,
+                                [PackageWriter::ipk('linux-firmware-rtw88-update', '1', 'all', ['lib/firmware/updates/rtw88/rtw8821c_fw.bin.zst' => 'z'])]),
+        '/uncompressed/', 'a newer firmware compressed (the kernel would take the system\'s uncompressed file first)');
 refused(fn () => Catalog::check(['kind' => 'service'] + $mod, [PackageWriter::ipk('fprintd-goodix', '1', 'x86_64', ['usr/libexec/x' => 'x'])]), '/review/', 'a service package needs a review');
 refused(fn () => Catalog::check(['kind' => 'service'] + $mod, [PackageWriter::ipk('evil', '1', 'all', ['etc/shadow' => 'x'])], true), '/cannot put a file/', 'a service package cannot replace system accounts');
 

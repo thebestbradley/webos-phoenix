@@ -370,7 +370,10 @@ out of the box, as on Ubuntu and Debian. The rules that follow from it:
    the upstream `linux-firmware` repository: **unmodified, with its licence
    files** (each firmware package depends on its `linux-firmware-*-license`
    package, installed with it in `/lib/firmware`). Machine firmware from
-   `meta-raspberrypi` likewise. The image build checks every firmware
+   `meta-raspberrypi` likewise. A build may compress the files losslessly
+   (`PHOENIX_FIRMWARE_COMPRESS`, off by default), as Fedora and Arch ship
+   them; the kernel gets the same bytes back, and the licence files stay as
+   they are. The image build checks every firmware
    package's licence against an allow-list of licences that permit
    redistribution and fails otherwise (`phoenix-firmware-policy.bbclass`,
    `PHOENIX_FIRMWARE_LICENSES`); adding a licence to it needs a note here.

@@ -211,14 +211,42 @@ licence package it depends on (`linux-firmware-rtl-license`, ...):
 | Broadcom/Cypress, Marvell/NXP | `bcm43430`, `bcm43455`, `bcm4350`, `bcm4354`, `bcm4356-pcie`, `bcm43602`, `bcm4373`; `sd8887`, `sd8897`, `sd8997`, `pcie8997`, `usb8997`; `bnx2` | about 20 MB, plus the Marvell files used |
 | Machines | the Raspberry Pi 4's Wi-Fi and Bluetooth (`linux-firmware-rpidistro-bcm43455`/`43456`, `bluez-firmware-rpidistro-*`, recommended by `meta-raspberrypi`); a phone's adaptation package | a few MB |
 
-**Size cost:** about 550-600 MB uncompressed for the whole set (measured from
-the 20240909 release's file list; all of `linux-firmware` is 1.23 GB), of
-which Intel's Wi-Fi files and the GPUs are most. The image build logs the
-exact figure (`phoenix-firmware-policy`: "Phoenix firmware: N packages, X
-MB"). Ways to shrink it, none taken yet: compress the files (the kernel
-reads `.xz`/`.zst`; OE's scarthgap `linux-firmware` recipe has no switch for
-it, so it would be a bbappend), keep only the newest `iwlwifi` version per
-chip, and `PHOENIX_FIRMWARE_EXCLUDE` (below).
+**Size cost:** about 570 MB uncompressed for the whole set, all of
+`linux-firmware` being 1.23 GB; Intel's Wi-Fi files and the GPUs are most.
+Measured from the 20240909 release, each file compressed on its own as the
+switch below does:
+
+| | Uncompressed (default) | `xz` (CRC32) | `zstd` (-19) |
+| --- | --- | --- | --- |
+| The set in the image | 570 MB | 216 MB | 232 MB |
+| Of which: iwlwifi / amdgpu / nvidia / ath / Intel BT | 201 / 93 / 66 / 85 / 29 MB | 62 / 27 / 40 / 29 / 18 MB | 67 / 30 / 41 / 32 / 19 MB |
+| All of linux-firmware | 1228 MB | 499 MB | 528 MB |
+
+The image build logs the exact figure (`phoenix-firmware-policy`: "Phoenix
+firmware: N packages, X MB", from the packages' installed sizes, compressed
+or not; the linux-firmware build logs "compressed with xz: X MB to Y MB").
+
+- **`PHOENIX_FIRMWARE_COMPRESS`** (in `local.conf`, as it changes the
+  `linux-firmware` packages; owner's decision: off by default, the files as
+  shipped): `"xz"` or `"zstd"` compresses every firmware file after
+  `linux-firmware`'s `do_install` (`meta-phoenix`'s bbappend), as upstream's
+  `copy-firmware.sh --xz/--zstd` does: `file.xz` or `file.zst`, links remade
+  to the compressed names, licence files left as they are, and each
+  package's file patterns matching the new names. The kernel reads them
+  (`CONFIG_FW_LOADER_COMPRESS_XZ`/`_ZSTD`, in `phoenix-hardware.cfg` either
+  way); xz is the smaller, zstd the faster to load. `scripts/parse-check.sh`
+  resolves the image with each value. The Hardware app works either way: it
+  finds a firmware file with or without the suffix, and newer firmware goes
+  in **uncompressed** to `/lib/firmware/updates`, because the kernel looks for
+  the plain name in every folder before it tries `.zst` and `.xz` (the
+  catalog tool refuses a compressed update).
+- **Keeping only the newest `iwlwifi` version per chip** (it would save about
+  155 MB, 49 MB compressed) is **not** offered: each kernel asks for the
+  newest firmware API *it* supports, which is often older than the newest
+  file in `linux-firmware` (6.6 predates many), so "newest only" would leave
+  some cards without firmware. Doing it right needs each kernel's supported
+  API range per chip; a later bbappend could read it from the kernel's
+  `iwlwifi` sources.
 
 - **`PHOENIX_FIRMWARE_EXCLUDE`** (in the image or `local.conf`): firmware
   packages to leave out of a small image, e.g.
@@ -424,8 +452,10 @@ hand-over.
 Open, for the owner:
 
 1. **Image size** (decided): the owner chose to ship all of it as is, about
-   550-600 MB uncompressed, so as much hardware as possible works out of the
-   box. `PHOENIX_FIRMWARE_EXCLUDE` stays for anyone building a small image.
+   570 MB uncompressed, so as much hardware as possible works out of the
+   box. `PHOENIX_FIRMWARE_COMPRESS = "xz"` (216 MB) or `"zstd"` (232 MB) is
+   there for builds that want it, and `PHOENIX_FIRMWARE_EXCLUDE` for anyone
+   building a small image.
 2. **Synaptics' Pi firmware**: `meta-raspberrypi` puts the BCM43456 firmware
    (Pi 400, CM4) under `Synaptics-rpidistro` with a licence flag
    (`synaptics-killswitch`, which OSE's `webos.conf` accepts). It allows
