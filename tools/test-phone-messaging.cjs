@@ -442,6 +442,24 @@ async function main() {
         check(/sign in/.test(await msg.textContent(".buddies")), "going Offline signs out: no buddies, a note to sign in");
         await shot(msg, "messaging-buddies-offline");
 
+        // Swipe a conversation across: Delete takes it and its messages.
+        await msg.click("[data-testid='msg-tabs'] [data-value='conversations']");
+        await msg.waitForSelector("[data-testid='thread-row']");
+        const before = await msg.locator("[data-testid='thread-row']").count();
+        const gone = await msg.textContent("[data-testid='thread-row'] .thread-summary");
+        const box = await msg.locator("[data-testid='thread-swipe']").first().boundingBox();
+        await msg.mouse.move(box.x + 20, box.y + box.height / 2);   // on the contact's photo
+        await msg.mouse.down();
+        await msg.mouse.move(box.x + box.width * 0.4, box.y + box.height / 2, { steps: 5 });
+        await msg.mouse.move(box.x + box.width * 0.7, box.y + box.height / 2, { steps: 5 });
+        await msg.mouse.up();
+        await msg.waitForSelector("[data-testid='thread-swipe-delete']");
+        await shot(msg, "messaging-swipe-delete");
+        await msg.click("[data-testid='thread-swipe-delete']");
+        await msg.waitForFunction((n) => document.querySelectorAll("[data-testid='thread-row']").length === n - 1, before, { timeout: 4000 });
+        const left = await msg.locator("[data-testid='thread-row'] .thread-summary").allTextContents();
+        check(!left.includes(gone), `a conversation swiped across and deleted goes ("${gone}")`);
+
         check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
         await browser.close();
     } finally {

@@ -282,7 +282,10 @@ export function Swipeable({ children, onConfirm, confirmCaption = "Delete", canc
     };
     return (
         <div className={cx("pui-swipeable", asking && "asking")} data-testid={testId}>
+            {/* No native drag of a picture in the item (a contact's photo):
+                it cancels the pointer (pointercancel) and the swipe with it. */}
             <div className="pui-swipeable-item" style={dx ? { transform: `translateX(${dx}px)` } : undefined} onPointerDown={down}
+                 onDragStart={(e) => e.preventDefault()}
                  onClickCapture={(e) => { if (swiped.current) { e.stopPropagation(); e.preventDefault(); swiped.current = false; } }}>
                 {children}
             </div>
