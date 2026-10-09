@@ -91,6 +91,10 @@ Item {
         _starting = false;
         _typedAhead = "";
         editPopup.close();
+        // The stand-in's field lets go of the keyboard: left with the focus
+        // in the shell's scope, it would take it back with the shell's and
+        // keep keys (Delete, Backspace) from the dashboard and card view.
+        input.focus = false;
         if (surface)
             source.justTypeStop();
     }

@@ -1495,7 +1495,7 @@ FocusScope {
             return;
         }
         // Typed while Just Type's page is still taking its first letter.
-        if (justType.open && event.text.length === 1 && !(event.modifiers & Qt.ControlModifier)
+        if (justType.open && event.text.length === 1 && !(event.modifiers & (Qt.ControlModifier | Qt.MetaModifier))
                 && justType.typeAhead(event.text)) {
             event.accepted = true;
             return;
@@ -1548,8 +1548,10 @@ FocusScope {
             }
         }
         if (!locked && !firstUse && !cards.maximized && !justType.open && event.text.length === 1
-                   && event.text.trim() !== "" && !(event.modifiers & Qt.ControlModifier)) {
-            // Just Type: typing in card view starts a search.
+                   && event.text.trim() !== "" && !(event.modifiers & (Qt.ControlModifier | Qt.MetaModifier))) {
+            // Just Type: typing in card view starts a search (not a
+            // shortcut: Super, the card-view key, held with a letter is a
+            // modifier).
             startJustType(event.text);
             event.accepted = true;
         }

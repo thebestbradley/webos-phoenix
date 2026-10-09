@@ -302,6 +302,27 @@ Item {
             tryCompare(pill, "opacity", 0, 1000);
         }
 
+        // Just Type closed gives the keyboard back: its field does not take
+        // it again with the shell's focus and eat the dashboard's Delete.
+        function test_closedJustTypeLetsGoOfTheKeyboard() {
+            shell.startJustType("abc");
+            verify(shell.justTypeOpen);
+            shell.gestureBack();
+            verify(!shell.justTypeOpen);
+            shell.forceActiveFocus();
+            verify(shell.Window.activeFocusItem.objectName !== "justTypeInput");
+            var notes = shell.notifications;
+            windows.notify("org.webosphoenix.messaging", "One", "");
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            keyClick(Qt.Key_Down);
+            compare(notes.keyRow, 0);
+            keyClick(Qt.Key_Delete);
+            tryCompare(windows.notifications, "count", 0, 1000);
+            notes.dashboardOpen = false;
+            tryCompare(notes, "negativeSpace", 0, 2000);
+        }
+
         // Phones: notifications take space from the bottom of the app, never
         // cover it (SystemUiController::changeNegativeSpace).
         function test_notificationShrinksTheAppInsteadOfCoveringIt() {
@@ -1360,6 +1381,7 @@ Item {
             keyClick(Qt.Key_A, Qt.MetaModifier);
             keyRelease(Qt.Key_Super_L);
             verify(!shell.launcherOpen);
+            verify(!shell.justTypeOpen, "a shortcut does not start Just Type");
             // Not over the lock screen.
             shell.lock();
             keyClick(Qt.Key_Search);
