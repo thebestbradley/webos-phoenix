@@ -253,6 +253,13 @@ async function main() {
             await page.waitForTimeout(1300);
             await shot("7-tutorial-" + lesson);
             if (await page.locator("[data-testid=step-tutorial]").count() === 0) break;
+            // Its buttons are on the screen as it opens, not below it (on a
+            // phone they were cut off at the bottom; a click scrolls to them).
+            const fits = await page.evaluate(() => {
+                const r = document.querySelector("[data-testid=lesson-next]").getBoundingClientRect();
+                return r.bottom <= window.innerHeight + 0.5 ? true : `${Math.round(r.bottom)} > ${window.innerHeight}`;
+            });
+            check(fits === true, `Tutorial (${lesson}): its buttons fit on the screen` + (fits === true ? "" : ` (${fits})`));
             await page.click("[data-testid=lesson-next]");
             await page.waitForTimeout(200);
             if (await page.locator("[data-testid=step-tutorial]").count() === 0) break;

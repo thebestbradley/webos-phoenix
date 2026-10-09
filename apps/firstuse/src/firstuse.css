@@ -73,8 +73,12 @@ html:has(> body.pui-app), body.pui-app { overflow: hidden; }
 
 /* ---- Tutorial ----------------------------------------------------------------------- */
 
-.tutorial { display: flex; flex-direction: column; align-items: center; min-height: 100%; }
-.tut-text { text-align: center; padding: 10px 6px 4px; min-height: 84px; }
+/* As tall as the step's body: on a short phone the device's screen gives up
+   height (down to 110px) so that the buttons stay on the screen. */
+.tutorial { display: flex; flex-direction: column; align-items: center; height: 100%; min-height: 0; }
+.tutorial > * { flex: none; }
+/* Room for three lines, so that the device keeps its size from one lesson to the next. */
+.tut-text { text-align: center; padding: 10px 6px 4px; min-height: 107px; }
 .tut-title { font-size: 20px; font-weight: bold; }
 .tut-body { font-size: 16px; color: #c9d6e2; margin-top: 4px; line-height: 1.35; }
 .tut-dots { display: flex; gap: 8px; padding: 6px 0; }
@@ -86,7 +90,10 @@ html:has(> body.pui-app), body.pui-app { overflow: hidden; }
 /* The device: a phone with its gesture area, or a tablet on its side. */
 .tut-device {
     position: relative;
-    flex: none;
+    flex: 0 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
     width: 132px;
     padding: 9px 8px 0;
     margin-top: 6px;
@@ -97,13 +104,14 @@ html:has(> body.pui-app), body.pui-app { overflow: hidden; }
 .tut-device.tablet { width: 250px; padding: 10px; border-radius: 14px; }
 .tut-screen {
     position: relative;
-    height: 180px;
+    flex: 0 1 180px;
+    min-height: 110px;
     border-radius: 3px;
     background: linear-gradient(#10243d, #2f5a86 70%, #c0703f);
 }
-.tut-device.tablet .tut-screen { height: 150px; }
+.tut-device.tablet .tut-screen { flex-basis: 150px; }
 .tut-clip { position: absolute; inset: 0; overflow: hidden; border-radius: 3px; }
-.tut-gesture-area { height: 26px; display: flex; align-items: center; justify-content: center; }
+.tut-gesture-area { flex: none; height: 26px; display: flex; align-items: center; justify-content: center; }
 .tut-lightbar { width: 34px; height: 3px; border-radius: 2px; background: rgba(140, 200, 255, 0.35); }
 .tut-statusbar { position: absolute; left: 0; right: 0; top: 0; height: 7px; background: #000; z-index: 3; }
 
