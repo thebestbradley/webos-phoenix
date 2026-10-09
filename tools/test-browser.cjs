@@ -122,6 +122,25 @@ async function main() {
         await button("menu-icon-forward").click();
         check(await waitForFrame(JUSTTYPE), "history: forward goes on again");
 
+        // The share menu is on screen whole, its frame included (on a phone
+        // the button is mid-bar and the original opened it past the left
+        // edge: phoenix-browser.js).
+        await page.waitForTimeout(1600);
+        await button("menu-icon-share").click();
+        const launcherItem = page.getByText("Add to Launcher", { exact: true }).first();
+        check(await launcherItem.waitFor({ state: "visible", timeout: 5000 }).then(() => true, () => false), "share: the menu offers Add to Launcher");
+        const menuLeft = await launcherItem.evaluate((el) => {
+            let left = Infinity;
+            for (let e = el; e && e !== document.body; e = e.parentElement)
+                if (/(^| )enyo-popup( |$)/.test(e.className))
+                    for (let f = e; f; f = f.firstElementChild) left = Math.min(left, f.getBoundingClientRect().left);
+            return left;
+        });
+        check(menuLeft >= 0, "share: the menu's frame is on screen (left " + menuLeft + ")");
+        await page.keyboard.press("Escape");
+        await page.mouse.click(viewport.width / 2, viewport.height - 20);
+        await page.waitForTimeout(400);
+
         // A mailto: link in a page is handed to Email: the browser's
         // WebView redirects the system's schemes (enyo WebView
         // addSystemRedirects -> BrowserAdapter addUrlRedirect), the page
