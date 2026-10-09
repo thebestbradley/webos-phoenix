@@ -225,6 +225,8 @@ async function main() {
         await say({ state: "error", errorText: "Nothing was heard." });
         await page.waitForSelector("[data-testid='error']");
         check(/Nothing was heard/.test(await page.textContent("[data-testid='error']")), "nothing heard: said so, with Try Again");
+        const againHeight = await page.evaluate(() => document.querySelector("[data-testid='again']").getBoundingClientRect().height);
+        check(againHeight >= 40, `Try Again is a whole button under the error, not squashed (${againHeight}px)`);
         await page.click("[data-testid='mic']");
         await waitOp("start", 3);
         check((await stage()) === "listening", "and the microphone listens again");

@@ -114,6 +114,8 @@
     flex-direction: column;
     margin-top: 16px;
 }
+/* In the column, flex: 1 (a basis of 0) squashed the button to a sliver. */
+.vd-buttons.single > .pui-button { flex: none; }
 .vd-error {
     color: #b8261b;
     font-size: 15px;
