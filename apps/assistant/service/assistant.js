@@ -114,6 +114,7 @@ var DEFAULTS = {
     followUpTopicsOff: []       // follow-up topics turned off (Settings, or "Stop asking"): lib/followups.js KINDS
 };
 var HISTORY = 20;               // turns a model sees
+var CALL_TOKENS = 160;          // the most a call of a command may say (its arguments)
 // The on-device model's whole answer (starting it, choosing a command,
 // calling it) within this; askLocal says why.
 var LOCAL_DEADLINE_MS = 75000;
@@ -479,18 +480,22 @@ function createAssistantService(deps) {
     // what the user asks the phone to do. (The owner's report, 9 October
     // 2026: "You can't do that on the phone" was a model copying the
     // grammar's old refusal and this prompt's "one to three sentences".)
-    function systemPrompt(withTools) {
+    var PERSONA = "You are Assistant, the friendly, helpful assistant on a webOS Phoenix phone. " +
+        "Answer questions directly and accurately: facts, explanations, how-tos, recipes, advice, small talk and jokes. " +
+        "Be concise, since answers may be read aloud, but give every step when steps are needed (a short numbered list is fine). " +
+        "Write plain text without markdown headings or bold. If you are not sure of something, say so briefly.";
+    // What changes from request to request (the time, whether it has
+    // tools): after the persona for a cloud model, in its own message after
+    // the shared prefix for the on-device one (localPrefix).
+    function promptTail(withTools) {
         var d = new Date(now());
-        return "You are Assistant, the friendly, helpful assistant on a webOS Phoenix phone. " +
-            "Answer questions directly and accurately: facts, explanations, how-tos, recipes, advice, small talk and jokes. " +
-            "Be concise, since answers may be read aloud, but give every step when steps are needed (a short numbered list is fine). " +
-            "Write plain text without markdown headings or bold. If you are not sure of something, say so briefly. " +
-            "Today is " + d.toDateString() + ", the time is " + lang().timeText(now()) + "." +
+        return "Today is " + d.toDateString() + ", the time is " + lang().timeText(now()) + "." +
             (withTools ? " You can also control the device with the tools you are given. Call a tool only when the user asks the phone " +
              "to do the very thing the tool does (\"turn on the flashlight\" calls toggle with flashlight on); call at most one. " +
              "Never call a tool for a question you can answer in words."
                        : " In this conversation you cannot operate the phone; if asked to, say which app or setting does it.");
     }
+    function systemPrompt(withTools) { return PERSONA + " " + promptTail(withTools); }
     // The conversation as a model sees it: not the "nothing here can"
     // fallbacks (kind "fallback") nor follow-up questions left unanswered.
     function history(thread) {
@@ -530,9 +535,16 @@ function createAssistantService(deps) {
         });
     }
     // timeoutMs: the time left for it (the on-device model's deadline).
-    function callModel(provider, key, thread, tools, toolChoice, timeoutMs) {
-        var req = providers.chatRequest(provider, { system: systemPrompt(tools.length > 0), messages: history(thread), tools: tools,
-                                                    toolChoice: toolChoice }, key);
+    // prefix: the on-device model's shared prefix (localPrefix): the
+    // system prompt, the rest after it.
+    function callModel(provider, key, thread, tools, toolChoice, timeoutMs, prefix) {
+        var system = prefix ? prefix.text : systemPrompt(tools.length > 0);
+        // After the choice's examples in the shared prompt, the model must
+        // be told this is not a choice ("None." was its whole answer).
+        var tail = promptTail(tools.length > 0) + (tools.length ? "" : " Now answer the user in words, as yourself: never with a command's name or \"none\".");
+        var msgs = prefix ? [{ role: "system", text: tail }].concat(history(thread)) : history(thread);
+        var req = providers.chatRequest(provider, { system: system, messages: msgs, tools: tools, toolChoice: toolChoice,
+                                                    maxTokens: toolChoice ? CALL_TOKENS : undefined }, key);
         if (timeoutMs) req.timeoutMs = timeoutMs;
         return deps.request(req).then(function (r) { return providers.parseChat(provider.type, r.status, r.body); });
     }
@@ -680,25 +692,57 @@ function createAssistantService(deps) {
         ["launch the calculator", "open"], ["will it be sunny tomorrow", "weather"], ["write down: the wifi password is on the fridge", "note"],
         ["why is the sky blue", "none"], ["tell me a joke", "none"]
     ];
-    function pickCommand(p, thread, cat, timeoutMs) {
+    // The on-device model's prompt, the same for every request and both
+    // steps (the choice, then the call or the answer in words), so that
+    // llama-server reads it once and keeps it (cache_prompt, its one slot;
+    // the Qwen3 template puts a call's one tool after it): the persona,
+    // every command by its name and the first sentence of its description,
+    // and the examples of a choice. What changes comes after it: the
+    // examples of the commands that may fit and the words; a call's or an
+    // answer's time and history. The commands' own examples for each were
+    // some 2,000 of the choice's 3,000 tokens: only the likeliest few
+    // commands' are given (pickCommand). The choice's examples as earlier
+    // turns were read again after each call (some 350 tokens): in it, they
+    // stay.
+    // Measured in docs/AI-AND-MCP.md ("One prompt, read once").
+    var prefixCache = null;
+    function localPrefix(cat) {
         var usable = cat.all.filter(function (c) { return allowed(c) && !c.internal; });
         var names = usable.map(function (c) { return commands.toolName(c.id); });
-        // Each command by its description's first sentence and, where it
-        // has them (lib/commands.js examples), up to three ways people ask.
-        var listText = usable.map(function (c, i) {
-            var ex = (c.examples || []).slice(0, 3).map(function (e) { return JSON.stringify(e); });
-            return names[i] + ": " + String(c.description || c.title).split(/\.\s/)[0] + (ex.length ? " (e.g. " + ex.join(", ") + ")" : "");
-        }).join("\n");
-        // A few examples as earlier turns, then the words; deterministic.
-        var shots = [];
-        PICK_EXAMPLES.forEach(function (x) {
-            if (x[1] === "none" || names.indexOf(x[1]) >= 0)
-                shots.push({ role: "user", text: x[0] }, { role: "assistant", text: JSON.stringify({ command: x[1] }) });
+        var key = settings().language + "|" + names.join(",");
+        if (prefixCache && prefixCache.key === key) return prefixCache;
+        var list = usable.map(function (c, i) { return names[i] + ": " + String(c.description || c.title).split(/\.\s/)[0].replace(/\.$/, ""); }).join("\n");
+        var shots = PICK_EXAMPLES.filter(function (x) { return x[1] === "none" || names.indexOf(x[1]) >= 0; })
+            .map(function (x) { return JSON.stringify(x[0]) + ": " + x[1]; }).join("\n");
+        prefixCache = { key: key, usable: usable, names: names,
+                        text: PERSONA + "\n\nThe phone's commands:\n" + list +
+                              "\n\nWhich command does what was asked, for example (none: a question or chat, answered in words):\n" + shots };
+        return prefixCache;
+    }
+    // The commands the words come nearest (words they share with a
+    // command's name, title, description and examples; the language's
+    // mentions), best first: whose examples the choice is shown.
+    var PICK_CANDIDATES = 4;
+    function candidates(usable, asked) {
+        var said = stems(asked), l = lang();
+        return usable.map(function (c) {
+            var known = stems(c.id.replace(/([A-Z])/g, " $1") + " " + c.title + " " + c.description + " " + (c.examples || []).join(" ")), score = 0;
+            said.forEach(function (w) { if (known.indexOf(w) >= 0) score++; });
+            if (c.builtIn && l.mentions && l.mentions(c.id, asked)) score += 2;
+            return { c: c, score: score };
+        }).filter(function (x) { return x.score > 0 && (x.c.examples || []).length; })
+          .sort(function (a, b) { return b.score - a.score; }).slice(0, PICK_CANDIDATES).map(function (x) { return x.c; });
+    }
+    function pickCommand(p, thread, cat, timeoutMs) {
+        var pre = localPrefix(cat), usable = pre.usable, names = pre.names, asked = lastAsked(thread);
+        var near = candidates(usable, asked).map(function (c) {
+            return commands.toolName(c.id) + ": " + c.examples.slice(0, 2).map(function (e) { return JSON.stringify(e); }).join(", ");
         });
+        var ask = "Pick the phone command that does what the user asks the phone to do, or \"none\" when they ask a question or chat." +
+            (near.length ? " Commands that may fit, as people ask for them:\n" + near.join("\n") : "");
         var req = providers.chatRequest(p, {
-            system: "You pick the phone command that does what the user asks the phone to do. The commands:\n" + listText +
-                "\nAnswer \"none\" when the user asks a question, chats, or no command does it.",
-            messages: shots.concat([{ role: "user", text: lastAsked(thread) }]),
+            system: pre.text,
+            messages: [{ role: "system", text: ask }, { role: "user", text: asked }],
             schema: { type: "object", properties: { command: { type: "string", "enum": names.concat(["none"]) } }, required: ["command"] },
             maxTokens: 40, temperature: 0
         }, "");
@@ -766,11 +810,12 @@ function createAssistantService(deps) {
                 // reads may answer it: "how do I make banana pudding" is never
                 // made a memo (measured: docs/AI-AND-MCP.md).
                 var ctx = lang().say.context ? lang().say.context(lastAsked(thread)) : { question: false, smallTalk: false };
-                if (ctx.smallTalk) return callModel(p, "", thread, [], undefined, left());
+                var pre = localPrefix(cat);
+                if (ctx.smallTalk) return callModel(p, "", thread, [], undefined, left(), pre);
                 return pickCommand(p, thread, cat, left()).then(function (c) {
                     if (c && ctx.question && c.risk !== "read") c = null;
-                    if (!c) return callModel(p, "", thread, [], undefined, left());
-                    return callModel(p, "", thread, [{ name: commands.toolName(c.id), description: c.description, parameters: c.parameters }], "required", left());
+                    if (!c) return callModel(p, "", thread, [], undefined, left(), pre);
+                    return callModel(p, "", thread, [{ name: commands.toolName(c.id), description: c.description, parameters: c.parameters }], "required", left(), pre);
                 });
             });
         }).then(function (r) { return answer(thread, r, cat, "on-device", model.name, false, lastAsked(thread)); });

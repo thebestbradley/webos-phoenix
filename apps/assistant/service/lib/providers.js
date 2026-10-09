@@ -49,17 +49,20 @@ function trimSlash(s) { return String(s || "").replace(/\/+$/, ""); }
 function baseOf(p) { return trimSlash(p.baseUrl || (TYPES[p.type] || {}).base); }
 
 // Turns alternate user/assistant and start with the user (Anthropic and
-// Gemini insist); neighbours with the same role are joined.
-function alternate(messages) {
+// Gemini insist); neighbours with the same role are joined. keepSystem
+// (the on-device model: assistant.js localPrefix): system messages among
+// them stay as they are, where they are.
+function alternate(messages, keepSystem) {
     var out = [];
     (messages || []).forEach(function (m) {
-        var role = m.role === "assistant" ? "assistant" : "user";
+        var role = m.role === "assistant" ? "assistant" : keepSystem && m.role === "system" ? "system" : "user";
         var text = String(m.text || "").trim();
         if (!text) return;
-        if (out.length && out[out.length - 1].role === role) out[out.length - 1].text += "\n\n" + text;
+        if (role !== "system" && out.length && out[out.length - 1].role === role) out[out.length - 1].text += "\n\n" + text;
         else out.push({ role: role, text: text });
     });
-    while (out.length && out[0].role !== "user") out.shift();
+    var first = out.filter(function (m) { return m.role !== "system"; })[0];
+    while (first && first.role !== "user") { out.splice(out.indexOf(first), 1); first = out.filter(function (m) { return m.role !== "system"; })[0]; }
     return out;
 }
 
@@ -79,7 +82,7 @@ function geminiSchema(s) {
 }
 
 function chatRequest(p, req, key) {
-    var msgs = alternate(req.messages), tools = req.tools || [], system = req.system || "";
+    var msgs = alternate(req.messages, p.type === "local"), tools = req.tools || [], system = req.system || "";
     var headers = { "Content-Type": "application/json" };
     var body, url;
     switch (p.type) {
@@ -113,7 +116,9 @@ function chatRequest(p, req, key) {
                  messages: [{ role: "system", content: system }].concat(msgs.map(function (m) { return { role: m.role, content: m.text }; })) };
         if (tools.length) body.tools = tools.map(function (t) { return { type: "function", function: { name: t.name, description: t.description, parameters: t.parameters } }; });
         // Qwen3's template thinks aloud unless told not to (llama-server passes this to it).
-        if (p.type === "local") { body.chat_template_kwargs = { enable_thinking: false }; body.max_tokens = req.maxTokens || 512; }
+        // Its one slot, the prompt kept there: what a request shares with the
+        // one before is not read again (assistant.js localPrefix).
+        if (p.type === "local") { body.chat_template_kwargs = { enable_thinking: false }; body.max_tokens = req.maxTokens || 512; body.cache_prompt = true; body.id_slot = 0; }
         // The on-device model's two steps (assistant.js askLocal): a tool
         // call it must make ("required": llama-server constrains the output
         // to a call), and an answer in a JSON schema (its grammar).

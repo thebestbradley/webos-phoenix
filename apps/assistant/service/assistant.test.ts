@@ -494,6 +494,45 @@ describe("the on-device model", () => {
         expect(last(wake).text).toBe("Alarm set for 6:30 AM tomorrow.");
     });
 
+    // One prompt, read once (assistant.js localPrefix): the choice and the
+    // call (or the answer in words) start with the same system prompt, the
+    // same for every request; llama-server keeps it (cache_prompt, slot 0).
+    // The choice shows examples only for the few commands the words come near.
+    it("shares one prompt between the choice and the call, and across requests", async () => {
+        const t = setup({ llm: llm() });
+        t.as("org.webosphoenix.settings");
+        await t.svc.selectModel({ id: MODEL });
+        t.as("com.palm.systemui");
+        const from = mock.requests.length;
+        await ask(t, "it's dark, put the flashlight on for me");
+        await ask(t, "why is the sky blue");
+        const sent = mock.requests.slice(from).map((r) => r.body);
+        const [pick, call, pick2, chat] = sent;
+        expect(pick.response_format).toBeDefined();
+        expect(call.tools.map((x: Reply) => x.function.name)).toEqual(["toggle"]);
+        expect(pick2.response_format).toBeDefined();
+        expect(chat.tools).toBeUndefined();
+        const system = pick.messages[0];
+        expect(system.role).toBe("system");
+        for (const b of [call, pick2, chat]) expect(b.messages[0]).toEqual(system);
+        // Every command by name and the choice's examples, no command's own examples, no time.
+        expect(system.content).toMatch(/\ntoggle: /);
+        expect(system.content).toMatch(/\n"why is the sky blue": none/);
+        expect(system.content).not.toMatch(/e\.g\.|Today is/);
+        // What fits the words comes after it.
+        expect(pick.messages).toHaveLength(3);
+        const hint = pick.messages.at(-2).content as string;
+        expect(hint).toMatch(/^Pick the phone command/);
+        expect((hint.match(/\n[a-zA-Z]+: "/g) || []).length).toBeLessThanOrEqual(4);
+        expect(hint).toMatch(/\ntoggle: "/);
+        expect(pick.messages.at(-1)).toEqual({ role: "user", content: "it's dark, put the flashlight on for me" });
+        for (const b of sent) expect([b.cache_prompt, b.id_slot]).toEqual([true, 0]);
+        // The time and the tools' rule come after the shared prompt.
+        expect(call.messages[1].role).toBe("system");
+        expect(call.messages[1].content).toMatch(/^Today is /);
+        expect(call.max_tokens).toBe(160);
+    });
+
     it("reads back a choice the words did not ask for", async () => {
         const t = setup({ llm: llm() });
         t.as("org.webosphoenix.settings");

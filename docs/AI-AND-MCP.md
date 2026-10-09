@@ -252,8 +252,41 @@ prompt is some 3,100 tokens; 76 tokens a second on this 4-core machine
 under load), keeping the next one waiting; it now reads 512 at a time
 (`-b 512`, 9 s). On that loaded machine Qwen3 0.6B did not get through
 the choice's prompt in 75 s at all, so the deadline is what the user
-sees there: the prompt is worth shortening (or keeping cached across the
-two steps) next.
+saw there; the prompt is now shorter and read once (below).
+
+**One prompt, read once** (`assistant.js` `localPrefix`, 9 October).
+The choice's prompt was some 3,000 tokens, two thirds of them each
+command's own examples, and the call's began with another system prompt,
+so llama-server read most of every question afresh: 77 s for the first
+choice on this machine. Now the on-device model's requests all begin with
+one system prompt, the same for every request and both steps: the
+persona, every command by its name and the first sentence of its
+description, and the sixteen examples of a choice. What changes comes
+after it in messages of its own: for the choice, the examples of the four
+commands the words come nearest (a lexical score over each command's
+name, description and examples; two each) and the words; for the call or
+the answer, the time and the history (the Qwen3 template puts a call's
+one tool after the system prompt, so it is shared too). Requests say
+`cache_prompt` and slot 0. Measured with Qwen3 0.6B Q8_0 and llama-server
+on this 4-core machine (busy with other work, load 6 to 9, so the times
+are long and vary; the token counts do not):
+
+| | before | after |
+|---|---|---|
+| first choice after the server starts (tokens read) | 3,028 (77 s) | 1,365 (14 s) |
+| a choice after a call (read / kept) | 17-22 / 3,014 | 145-160 / 1,314 |
+| the call or the answer (read / kept) | 150-355 / 4-113 | 64-320 / 1,314-1,319 |
+| the choice right on the evaluation set (`model-eval.json`, 163) | 97 | 105 |
+
+Two things had to be said for the shared prompt: its choice examples made
+the answer in words come back "None." until the message after it says to
+answer in words, never with a command's name; and a call may say at most
+160 tokens (its arguments), where a call that rambled had gone on to
+512. A first question with the server cold read about 1,400 tokens and
+took 18 s in all, pick and answer; later ones read some 150 for the
+choice and 300 for the call, so their time is the model's writing (2 to
+6 tokens a second under that load: 15 to 40 s for a call's arguments;
+idle, several times faster).
 
 **What the grammar could not read** (`fillArgs`). When the grammar knows
 the command but not all it needs (a required argument empty: "add an
