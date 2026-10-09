@@ -195,6 +195,33 @@ async function main() {
         }
         check(/Music/.test(await text()) && /Not allowed/.test(await text()), "Settings lists Music, not allowed");
 
+        // The alert lives as long as the app that asked: when the app is
+        // closed (the shell tells the system UI, runtime.appClosed), its
+        // alert goes, unanswered.
+        const tasks = await context.newPage();
+        watch(tasks);
+        await tasks.goto(appUrl("org.webosphoenix.tasks"));
+        await tasks.waitForTimeout(800);
+        popups.length = 0;
+        luna(tasks, "luna://com.webos.service.location/getLocationUpdates", {}).catch(() => {});
+        alert = null;
+        for (let i = 0; i < 40 && !alert; ++i) {
+            await new Promise((res) => setTimeout(res, 150));
+            alert = popups.find((p) => /systemmanageralerts/.test(p.url()) && !p.isClosed()) || null;
+        }
+        check(!!alert, "another app's request raises the alert again");
+        if (alert) {
+            await alert.bringToFront();
+            await alert.waitForTimeout(800);
+            check(await sysui.evaluate(() => __phoenixRuntime.appClosed("org.webosphoenix.music")) === false && !alert.isClosed(),
+                  "another app closing leaves the alert");
+            await tasks.close();
+            check(await sysui.evaluate(() => __phoenixRuntime.appClosed("org.webosphoenix.tasks")) === true,
+                  "the app that asked closes: the system UI closes its alert");
+            for (let i = 0; i < 20 && !alert.isClosed(); ++i) await new Promise((res) => setTimeout(res, 100));
+            check(alert.isClosed(), "the alert's window is gone");
+        }
+
         check(errors.length === 0, "no errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
         await browser.close();
     } finally {

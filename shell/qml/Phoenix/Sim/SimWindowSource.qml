@@ -1574,6 +1574,11 @@ Item {
         _clearOngoingOf(appId);
         if (activeCallBanner !== null && activeCallBanner.appId === appId)
             activeCallBanner = null;
+        // The system UI's alerts for it (its location alert) close too.
+        var sysui = _headless["com.palm.systemui"];
+        if (sysui && sysui.runScript)
+            sysui.runScript("window.__phoenixRuntime && __phoenixRuntime.appClosed && __phoenixRuntime.appClosed("
+                            + JSON.stringify(appId) + ")");
     }
 
     // The apps running (applicationManager/running): with cards, headless,

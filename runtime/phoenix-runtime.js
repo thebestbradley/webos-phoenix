@@ -15399,6 +15399,22 @@
             store.set("systemui:events", q);
             changed();
         }
+        // The shell, in the system UI's page: appId has closed (its last
+        // card, nothing of it left running). The location alert raised for it
+        // goes with it: an alert stands for its app, as one an app opens
+        // itself closes with it (WebAppMgr closes all of an app's windows).
+        // Unanswered, the app is asked again next time.
+        runtime.appClosed = function (appId) {
+            var w = null;
+            var ew = global.enyo && global.enyo.windows;
+            try { w = ew && ew.fetchWindow ? ew.fetchWindow("LocationAlert") : null; } catch (e) { w = null; }
+            if (!w || w.closed) return false;
+            var params = null;
+            try { params = w.enyo && w.enyo.windowParams; } catch (e) { params = null; }
+            if (!params || params.appId !== appId) return false;
+            w.close();
+            return true;
+        };
         sm["/subscribeToSystemUI"] = function (p, reply, ctx) {
             reply(ok({ subscribed: !!p.subscribe }));
             if (!p.subscribe) return;
