@@ -3944,13 +3944,16 @@
 
     // Chromium moves the focus to the body without a focusout when the
     // focused element leaves the page (a view that goes away under Back
-    // while its field is focused); WebKit told the IMEController the focus
-    // had gone and the keyboard hid. Watch the page while a field has the
-    // focus and follow the focus when that field is gone.
+    // while its field is focused), and keeps it on a field whose view is
+    // hidden (display: none; Memos' editor under Back); WebKit told the
+    // IMEController the focus had gone and the keyboard hid. Watch the page
+    // while a field has the focus: a field gone, the focus is followed; a
+    // field hidden loses the focus.
     var removalWatch = null;
     function watchRemoval(el) {
         if (removalWatch) {
             removalWatch.observer.disconnect();
+            if (removalWatch.sizes) removalWatch.sizes.disconnect();
             removalWatch = null;
         }
         if (!el || typeof global.MutationObserver !== "function" || !global.document.documentElement)
@@ -3960,7 +3963,16 @@
                 followFocus();
         });
         observer.observe(global.document.documentElement, { childList: true, subtree: true });
-        removalWatch = { observer: observer, el: el };
+        // A box that goes to nothing: hidden (or removed, handled above).
+        var sizes = null;
+        if (typeof global.ResizeObserver === "function") {
+            sizes = new global.ResizeObserver(function () {
+                if (el.isConnected && global.document.activeElement === el && el.getClientRects().length === 0)
+                    el.blur();
+            });
+            sizes.observe(el);
+        }
+        removalWatch = { observer: observer, sizes: sizes, el: el };
     }
 
     if (global.document) {
