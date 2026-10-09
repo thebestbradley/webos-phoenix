@@ -97,8 +97,10 @@ export interface AssistantSettings {
     speak: boolean;
     language: string;
     units: "metric" | "imperial" | "auto";
-    /** The on-device model in use (an id from models()), or "". */
+    /** The on-device model chosen (an id from models()); "" the built-in one, "off" none. */
     localModel: string;
+    /** The voice answers are spoken with (one of tts.status().voices), "" the default. */
+    speechVoice: string;
     defaultProvider: string;
     /** Cloud models may run commands (off by default). */
     allowCloudControl: boolean;
@@ -172,6 +174,8 @@ export interface LocalModel {
     fits: boolean;
     recommended: boolean;
     installed: boolean;
+    /** Comes with the system (Qwen3 0.6B): in use until another is chosen, never removed. */
+    builtIn?: boolean;
     downloading: { received: number; total: number } | null;
 }
 
@@ -320,11 +324,14 @@ export const assistant = {
 
 export const tts = {
     /** Say it with the device's voice (org.webosphoenix.tts). */
-    async speak(text: string, lang?: string): Promise<void> { await call("luna://org.webosphoenix.tts/speak", { text, ...(lang ? { lang } : {}) }); },
+    async speak(text: string, lang?: string, voice?: string): Promise<void> {
+        await call("luna://org.webosphoenix.tts/speak", { text, ...(lang ? { lang } : {}), ...(voice ? { voice } : {}) });
+    },
     async stop(): Promise<void> { await call("luna://org.webosphoenix.tts/stop", {}); },
-    async status(): Promise<{ available: boolean; engine: string }> {
+    /** voices: the engine's (Kitten TTS's expr-voice-3-f, ...), [] when it has no choice. */
+    async status(): Promise<{ available: boolean; engine: string; voices: string[] }> {
         const r: Any = await call("luna://org.webosphoenix.tts/getStatus", {});
-        return { available: !!r.available, engine: r.engine || "" };
+        return { available: !!r.available, engine: r.engine || "", voices: Array.isArray(r.voices) ? r.voices : [] };
     },
 };
 

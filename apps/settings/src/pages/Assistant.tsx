@@ -17,8 +17,9 @@
 //   Voice            listen for "Hey Phoenix" (off by default), also with
 //                    the screen off or locked (off by default), voice
 //                    replies (on by default), and what listening means for
-//                    privacy (docs/AI-AND-MCP.md, Voice); what the voice
-//                    is missing here and how to get it (AssistantVoice.tsx)
+//                    privacy (docs/AI-AND-MCP.md, Voice); the speaking
+//                    voice and Play Sample (AssistantSpeech.tsx); what the
+//                    voice is missing here and how to get it (AssistantVoice.tsx)
 //   On device        llama.cpp models to download, use or remove, with their
 //                    size and the memory they want (what fits is offered);
 //                    how to get llama-server when it is missing
@@ -47,6 +48,7 @@ import { Button, Dialog, Group, ListSelector, Note, Page, PageHeader, PopupMenu,
 import { useBack } from "../nav";
 import { FollowUpQuestions } from "./AssistantFollowUps";
 import { VoiceMissing } from "./AssistantVoice";
+import { SpeakingVoice } from "./AssistantSpeech";
 import { AssistantPermissions } from "./AssistantPermissions";
 
 const errorText = (e: unknown) => (e as LunaError).errorText ?? (e instanceof Error ? e.message : String(e));
@@ -146,13 +148,15 @@ function LocalModels({ m, onDownload }: { m: Models; onDownload?: (id: string) =
     return (
         <>
             <Group label="On-device model">
-                <ListSelector title="Use" value={m.selected} testId="as-local-use"
-                              options={[{ label: "None", value: "" }, ...m.models.filter((x) => x.installed).map((x) => ({ label: x.name, value: x.id }))]}
+                {/* "off": none, not even the built-in one ("" is the built-in one). */}
+                <ListSelector title="Use" value={m.selected || "off"} testId="as-local-use"
+                              options={[{ label: "None", value: "off" }, ...m.models.filter((x) => x.installed).map((x) => ({ label: x.name, value: x.id }))]}
                               onChange={(id) => act(assistant.selectModel(id))} />
                 {m.models.map((x) => (
-                    <Row key={x.id} testId={`as-model-${x.id}`} title={<>{x.name}{x.recommended && <span className="as-badge">Recommended</span>}</>}
-                         subtitle={`${formatBytes(x.size)} · needs ${gb(x.ram)} of memory · ${x.licence}${x.fits ? "" : " · too big for this device"}${x.downloading ? ` · ${Math.round(100 * x.downloading.received / Math.max(1, x.downloading.total))}%` : ""}`}>
-                        {x.downloading ? <button type="button" className="as-small" data-testid={`as-cancel-${x.id}`} onClick={() => act(assistant.cancelDownload(x.id))}>Cancel</button>
+                    <Row key={x.id} testId={`as-model-${x.id}`}
+                         title={<>{x.name}{x.builtIn ? <span className="as-badge">Built in</span> : x.recommended && <span className="as-badge">Recommended</span>}</>}
+                         subtitle={`${formatBytes(x.size)} · needs ${gb(x.ram)} of memory · ${x.licence}${x.fits ? "" : " · too big for this device"}${x.builtIn && !x.installed ? " · not installed here" : ""}${x.downloading ? ` · ${Math.round(100 * x.downloading.received / Math.max(1, x.downloading.total))}%` : ""}`}>
+                        {x.builtIn ? null : x.downloading ? <button type="button" className="as-small" data-testid={`as-cancel-${x.id}`} onClick={() => act(assistant.cancelDownload(x.id))}>Cancel</button>
                          : x.installed ? <button type="button" className="as-small negative" data-testid={`as-remove-${x.id}`} onClick={() => act(assistant.removeModel(x.id))}>Remove</button>
                          : <button type="button" className="as-small" disabled={!x.fits || !!m.models.some((y) => y.downloading)} data-testid={`as-download-${x.id}`}
                                    onClick={() => { onDownload?.(x.id); act(assistant.downloadModel(x.id)); }}>Download</button>}
@@ -332,6 +336,7 @@ export function AssistantPage() {
                 <Row title="Voice replies" subtitle="Answer spoken requests aloud" disabled={off}>
                     <ToggleButton value={s.voiceReplies} label="Voice replies" testId="as-voice-replies" disabled={off} onChange={(v) => set({ voiceReplies: v })} />
                 </Row>
+                <SpeakingVoice settings={s} set={set} off={off} />
             </Group>
             <VoiceMissing />
             <Note testId="as-voice-privacy">{"Listening for \u201cHey Phoenix\u201d happens on this phone. The microphone goes only to the wake word spotter, which keeps the last few seconds in memory and nothing more; nothing is recorded, sent or saved until it hears the phrase, and what you say after it is turned into text on the phone too. A microphone in the status bar shows whenever it is open: faint while it waits for the phrase, orange while it listens to you."}</Note>

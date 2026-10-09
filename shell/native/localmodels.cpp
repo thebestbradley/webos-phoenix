@@ -3,6 +3,7 @@
 
 #include "localmodels.h"
 
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
@@ -25,6 +26,8 @@
 LocalModels::LocalModels(QObject *parent)
     : QObject(parent)
 {
+    m_builtInDirs = { QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("models")),
+                      QStringLiteral("/usr/share/phoenix/models") };
     m_idle = new QTimer(this);
     m_idle->setSingleShot(true);
     m_idle->setInterval(m_idleMs);
@@ -94,6 +97,17 @@ QString LocalModels::fileFor(const QString &id) const
     return QDir(m_dir).filePath(safe + QStringLiteral(".gguf"));
 }
 
+QString LocalModels::builtInFile(const QString &id) const
+{
+    const QString name = QFileInfo(fileFor(id)).fileName();
+    for (const QString &d : m_builtInDirs) {
+        const QString f = QDir(d).filePath(name);
+        if (QFileInfo::exists(f))
+            return f;
+    }
+    return QString();
+}
+
 void LocalModels::setError(const QString &e)
 {
     m_error = e;
@@ -125,10 +139,24 @@ QVariantMap LocalModels::status() const
 {
     QVariantList installed;
     const QFileInfoList files = QDir(m_dir).entryInfoList({ QStringLiteral("*.gguf") }, QDir::Files, QDir::Name);
-    for (const QFileInfo &fi : files)
+    QStringList ids;
+    for (const QFileInfo &fi : files) {
+        ids << fi.completeBaseName();
         installed.append(QVariantMap{ { QStringLiteral("id"), fi.completeBaseName() },
                                       { QStringLiteral("file"), fi.absoluteFilePath() },
                                       { QStringLiteral("size"), double(fi.size()) } });
+    }
+    for (const QString &d : m_builtInDirs) {
+        for (const QFileInfo &fi : QDir(d).entryInfoList({ QStringLiteral("*.gguf") }, QDir::Files, QDir::Name)) {
+            if (ids.contains(fi.completeBaseName()))
+                continue;
+            ids << fi.completeBaseName();
+            installed.append(QVariantMap{ { QStringLiteral("id"), fi.completeBaseName() },
+                                          { QStringLiteral("file"), fi.absoluteFilePath() },
+                                          { QStringLiteral("size"), double(fi.size()) },
+                                          { QStringLiteral("builtIn"), true } });
+        }
+    }
     QVariantMap st{
         { QStringLiteral("available"), available() },
         { QStringLiteral("server"), serverProgram() },
@@ -259,8 +287,8 @@ void LocalModels::ensure(const QString &id, const QString &requestId)
         m_waiting.append(requestId);   // starting
         return;
     }
-    const QString file = fileFor(id);
-    if (!QFileInfo::exists(file)) {
+    const QString file = QFileInfo::exists(fileFor(id)) ? fileFor(id) : builtInFile(id);
+    if (file.isEmpty()) {
         QTimer::singleShot(0, this, [this, requestId, id]() { emit failed(requestId, tr("%1 is not downloaded").arg(id)); });
         return;
     }

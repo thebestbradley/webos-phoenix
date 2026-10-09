@@ -73,7 +73,7 @@
 //   {seal(text) -> Promise<sealed>, unseal(sealed) -> Promise<text>},
 //   llm (the on-device model runner: status(), download(model), cancel(id),
 //   remove(id), ensure(model) -> Promise<{baseUrl}>), tts: {speak(text,
-//   lang), stop()}, voice() -> parts as voice answers them (optional), caller() -> app id, now() -> ms, changed(what), log,
+//   lang, voice), stop()}, voice() -> parts as voice answers them (optional), caller() -> app id, now() -> ms, changed(what), log,
 //   notify(n) (a notification: lib/followups.js)}
 
 "use strict";
@@ -96,7 +96,8 @@ var DEFAULTS = {
     speak: true,                // answers spoken (on-device text to speech)
     language: "en",
     units: "auto",              // weather: "metric", "imperial", or from the language
-    localModel: "",             // the chosen on-device model (lib/models.js id), "" for none
+    localModel: "",             // the chosen on-device model (lib/models.js id); "" the built-in one, "off" none
+    speechVoice: "",            // the voice answers are spoken with (Kitten's, expr-voice-3-f ...), "" its default
     defaultProvider: "",        // the cloud provider "Ask ..." offers
     allowCloudControl: false,   // cloud models may run commands
     voiceReplies: true,         // answers to spoken requests spoken (ask {voice})
@@ -557,10 +558,15 @@ function createAssistantService(deps) {
         return t ? list.filter(function (a) { return String(a.title).toLowerCase() === t; })[0] || null : null;
     }
 
-    function localReady() {
+    // The on-device model in use: the one chosen, else the built-in one
+    // (lib/models.js), unless "off".
+    function localChoice() {
         var s = settings();
-        if (!s.localModel || !deps.llm) return Promise.resolve(null);
-        var m = models.find(s.localModel);
+        return s.localModel === "off" ? "" : s.localModel || models.BUILT_IN;
+    }
+    function localReady() {
+        if (!localChoice() || !deps.llm) return Promise.resolve(null);
+        var m = models.find(localChoice());
         if (!m) return Promise.resolve(null);
         return Promise.resolve(deps.llm.status()).then(function (st) {
             var installed = st && (st.installed || []).some(function (i) { return i.id === m.id; });
@@ -670,7 +676,7 @@ function createAssistantService(deps) {
             // A follow-up question is said after what was done.
             var before = list[list.length - 2], words = last.text;
             if (last.followUp && before && before.role === "assistant" && before.text) words = before.text + " " + last.text;
-            try { Promise.resolve(deps.tts.speak(words, settings().language)).catch(function () {}); } catch (e) { /* no speech */ }
+            try { Promise.resolve(deps.tts.speak(words, settings().language, settings().speechVoice)).catch(function () {}); } catch (e) { /* no speech */ }
         }
     }
     function privileged() {
@@ -727,8 +733,6 @@ function createAssistantService(deps) {
                 // An item shown in the conversation, tapped: its app on it
                 // (the buttons stay: nothing was chosen).
                 var item = [].concat.apply([], ((m.data && m.data.attachments) || []).map(function (x) { return x.items || []; }))[Number(p.choice.slice(5))];
-                // An example (help's "Right now", "Calendar" ...): asked, as if said.
-                if (item && item.text && !item.open) return methods.ask({ text: item.text, threadId: thread.id, speak: p.speak });
                 if (!item || !item.open) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to show there"));
                 return deps.luna.call("luna://com.palm.applicationManager/launch", { id: item.open.appId, params: item.open.params || {} })
                     .then(function () { return ok({ thread: summary(thread), messages: [] }); });
@@ -901,7 +905,8 @@ function createAssistantService(deps) {
                 else if (k === "followUpAgain" && AGAIN_CHOICES.indexOf(v) < 0) bad = "followUpAgain: minutes, one of " + AGAIN_CHOICES.join(", ");
                 else if (k === "followUpTopicsOff" && !(Array.isArray(v) && v.every(function (x) { return TOPICS.indexOf(x) >= 0; }))) bad = "followUpTopicsOff: a list of " + TOPICS.join(", ");
                 else if (k === "disabledCommands" && !Array.isArray(v)) bad = "disabledCommands: a list of command ids";
-                else if (k === "localModel" && v !== "" && !models.find(v)) bad = "localModel: unknown model";
+                else if (k === "localModel" && v !== "" && v !== "off" && !models.find(v)) bad = "localModel: unknown model";
+                else if (k === "speechVoice" && !/^[A-Za-z0-9._-]{0,40}$/.test(String(v))) bad = "speechVoice: a voice name";
                 else if (k === "defaultProvider" && v !== "" && !getProvider(v)) bad = "defaultProvider: unknown provider";
                 else if (k === "units" && ["metric", "imperial", "auto"].indexOf(v) < 0) bad = "units: metric, imperial or auto";
                 else if (k === "language" && grammar.LANGUAGES.indexOf(String(v)) < 0) bad = "language: one of " + grammar.LANGUAGES.join(", ");
@@ -936,7 +941,8 @@ function createAssistantService(deps) {
         },
         commands: function () {
             return catalogue().then(function (cat) {
-                return ok({ commands: cat.all.map(function (c) {
+                // Not locationAccess: Settings > Assistant > Permissions' Location row is it.
+                return ok({ commands: cat.all.filter(function (c) { return c.id !== "locationAccess"; }).map(function (c) {
                     return { id: c.id, title: c.title, risk: c.risk, builtIn: !!c.builtIn, appId: c.appId || "",
                              enabled: allowed(c), confirms: commands.needsConfirm(c) };
                 }) });
@@ -1026,10 +1032,10 @@ function createAssistantService(deps) {
                 var list = models.forDevice(st.ramBytes || 0).map(function (m) {
                     var d = st.downloading && st.downloading.id === m.id ? st.downloading : null;
                     return { id: m.id, name: m.name, params: m.params, licence: m.licence, source: m.source, size: m.size, ram: m.ram,
-                             note: m.note, fits: m.fits, recommended: m.recommended, installed: !!installed[m.id],
+                             note: m.note, fits: m.fits, recommended: m.recommended, installed: !!installed[m.id], builtIn: !!m.builtIn,
                              downloading: d ? { received: d.received || 0, total: d.total || m.size } : null };
                 });
-                return ok({ models: list, selected: settings().localModel,
+                return ok({ models: list, selected: localChoice(),
                             status: { available: !!st.available, running: !!st.running, server: st.server || "", error: st.error || "",
                                       ramBytes: st.ramBytes || 0, howToInstall: st.howToInstall || "" } });
             });
@@ -1037,6 +1043,7 @@ function createAssistantService(deps) {
         downloadModel: function (p) {
             var m = models.find(p.id);
             if (!m) return Promise.resolve(fail(ERRORS.NOT_FOUND, "No such model: " + p.id));
+            if (m.builtIn) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, m.name + " comes with the system"));
             if (!deps.llm) return Promise.resolve(fail(ERRORS.FAILED, "On-device models are not available here"));
             return Promise.resolve(deps.llm.download(m)).then(function () { changed("models"); return ok({}); },
                 function (e) { return fail(ERRORS.FAILED, e.message); });
@@ -1048,6 +1055,7 @@ function createAssistantService(deps) {
         removeModel: function (p) {
             var m = models.find(p.id);
             if (!m) return Promise.resolve(fail(ERRORS.NOT_FOUND, "No such model: " + p.id));
+            if (m.builtIn) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, m.name + " is built in and cannot be removed"));
             return Promise.resolve(deps.llm && deps.llm.remove(m)).then(function () {
                 if (settings().localModel === m.id) {
                     var s = storage.get("assistant:settings") || {};
@@ -1122,7 +1130,9 @@ function createAssistantService(deps) {
         },
         speak: function (p) {
             if (!deps.tts) return Promise.resolve(fail(ERRORS.FAILED, "No speech here"));
-            return Promise.resolve(deps.tts.speak(String(p.text || ""), settings().language)).then(function () { return ok({}); },
+            // voice: this one (Settings' Play Sample), else the chosen one.
+            var voice = typeof p.voice === "string" && /^[A-Za-z0-9._-]{1,40}$/.test(p.voice) ? p.voice : settings().speechVoice;
+            return Promise.resolve(deps.tts.speak(String(p.text || ""), settings().language, voice)).then(function () { return ok({}); },
                 function (e) { return fail(ERRORS.FAILED, e.message); });
         },
         stopSpeaking: function () {

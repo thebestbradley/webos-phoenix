@@ -13690,8 +13690,9 @@
     // commands with {subscribe: true} answer again after every change in any
     // page (the store's storage events, "assistant:" keys).
     //
-    // org.webosphoenix.tts: speak {text, lang?}, stop {}, getStatus {} ->
-    // {available, engine}: the same speech for any app.
+    // org.webosphoenix.tts: speak {text, lang?, voice?}, stop {}, getStatus {}
+    // -> {available, engine, voices}: the same speech for any app (voices:
+    // Kitten TTS's, Settings > Assistant > Voice).
     //
     // __phoenixRuntime.assistant: service() (the methods), hostEvent, for tests.
     (function assistantService() {
@@ -13762,9 +13763,9 @@
             try { return ss && ss.getVoices ? ss.getVoices() : []; } catch (e) { return []; }
         }
         var tts = {
-            speak: function (text, lang) {
+            speak: function (text, lang, voice) {
                 if (!text) return Promise.resolve();
-                if (hostHas()) return hostAsk("speak", { text: String(text).slice(0, 2000), lang: lang || "en" });
+                if (hostHas()) return hostAsk("speak", { text: String(text).slice(0, 2000), lang: lang || "en", voice: voice || "" });
                 var ss = global.speechSynthesis;
                 if (ss && pageVoices().length && global.SpeechSynthesisUtterance) {
                     var u = new global.SpeechSynthesisUtterance(String(text));
@@ -13781,7 +13782,7 @@
                 return Promise.resolve();
             },
             status: function () {
-                if (hostHas()) return hostAsk("speechStatus", {}).catch(function () { return { available: false, engine: "" }; });
+                if (hostHas()) return hostAsk("speechStatus", {}).catch(function () { return { available: false, engine: "", voices: [] }; });
                 return Promise.resolve({ available: pageVoices().length > 0, engine: pageVoices().length ? "speechSynthesis" : "" });
             }
         };
@@ -13884,10 +13885,13 @@
         register(["org.webosphoenix.tts"], {
             "/speak": function (p, reply) {
                 if (typeof p.text !== "string" || !p.text.trim()) return reply(fail(-1, "need \"text\""));
-                tts.speak(p.text, p.lang).then(function () { reply(ok({})); }, function (e) { reply(fail(1, e.message)); });
+                var voice = typeof p.voice === "string" && /^[A-Za-z0-9._-]{1,40}$/.test(p.voice) ? p.voice : "";
+                tts.speak(p.text, p.lang, voice).then(function () { reply(ok({})); }, function (e) { reply(fail(1, e.message)); });
             },
             "/stop": function (p, reply) { tts.stop().then(function () { reply(ok({})); }); },
-            "/getStatus": function (p, reply) { tts.status().then(function (s) { reply(ok({ available: !!s.available, engine: s.engine || "" })); }); }
+            "/getStatus": function (p, reply) {
+                tts.status().then(function (s) { reply(ok({ available: !!s.available, engine: s.engine || "", voices: s.voices || [] })); });
+            }
         });
 
         // The simulator's and the tests' fast-forward for follow-up questions

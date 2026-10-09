@@ -5,7 +5,7 @@
 // device: assistant.js's methods registered with webos-service (OSE's
 // nodejs-module-webos-service, as apps/dav/service/service.js does), with
 // lib/node-device.js for storage, the device key, llama.cpp's llama-server
-// and espeak-ng. run-js-service starts it on demand
+// and speech (Kitten TTS, else espeak-ng or Flite). run-js-service starts it on demand
 // (sysbus/org.webosphoenix.assistant.service); tools/install-rootfs.py
 // installs it with its luna-service2 role and permission files.
 //
@@ -24,7 +24,7 @@ var device = require("./lib/node-device");
 
 var DATA = "/var/lib/phoenix/assistant";
 var service = new Service(assistant.SERVICE);
-var tts = device.speech({});
+var tts = device.speech({ log: function (m) { console.log("[tts] " + m); } });
 var watchers = [];
 
 var methods = assistant.createAssistantService({
@@ -88,10 +88,12 @@ assistant.METHODS.forEach(function (name) {
 
 var ttsService = new Service("org.webosphoenix.tts");
 ttsService.register("speak", function (m) {
-    tts.speak(String((m.payload || {}).text || ""), (m.payload || {}).lang).then(function () { m.respond({ returnValue: true }); },
+    var p = m.payload || {};
+    var voice = typeof p.voice === "string" && /^[A-Za-z0-9._-]{1,40}$/.test(p.voice) ? p.voice : "";
+    tts.speak(String(p.text || ""), p.lang, voice).then(function () { m.respond({ returnValue: true }); },
         function (e) { m.respond({ returnValue: false, errorCode: 1, errorText: e.message }); });
 });
 ttsService.register("stop", function (m) { tts.stop(); m.respond({ returnValue: true }); });
 ttsService.register("getStatus", function (m) {
-    tts.status().then(function (s) { m.respond({ returnValue: true, available: s.available, engine: s.engine }); });
+    tts.status().then(function (s) { m.respond({ returnValue: true, available: s.available, engine: s.engine, voices: s.voices || [] }); });
 });

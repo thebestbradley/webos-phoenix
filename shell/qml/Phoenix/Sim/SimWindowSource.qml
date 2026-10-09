@@ -2378,7 +2378,7 @@ Item {
             break;
         case "speak":
             if (!sp || !sp.available) { answer({ error: qsTr("No text-to-speech here.") }); break; }
-            sp.speak(String(p.text || ""), String(p.lang || "en"));
+            sp.speak(String(p.text || ""), String(p.lang || "en"), String(p.voice || ""));
             answer({});
             break;
         case "stopSpeaking":
@@ -2386,7 +2386,7 @@ Item {
             answer({});
             break;
         case "speechStatus":
-            answer({ available: !!(sp && sp.available), engine: sp ? sp.engine : "" });
+            answer({ available: !!(sp && sp.available), engine: sp ? sp.engine : "", voices: sp ? sp.voices : [] });
             break;
         default:
             answer({ error: "unknown op " + p.op });

@@ -37,6 +37,7 @@ function setup(opts: { llm?: object; voice?: () => unknown } = {}) {
     const data = new Map<string, unknown>();
     const calls: { uri: string; params: any }[] = [];
     const spoken: string[] = [];
+    const voices: string[] = [];
     let who = "com.palm.systemui";
     let n = 0;
     const luna = {
@@ -65,11 +66,11 @@ function setup(opts: { llm?: object; voice?: () => unknown } = {}) {
     };
     const svc = createAssistantService({
         luna, storage, secrets, request: createRequest({ timeoutMs: 5000 }), now: () => NOW,
-        caller: () => who, tts: { speak: (t: string) => { spoken.push(t); return Promise.resolve(); }, stop() {} },
+        caller: () => who, tts: { speak: (t: string, _l: string, v: string) => { spoken.push(t); voices.push(v); return Promise.resolve(); }, stop() {} },
         llm: opts.llm, voice: opts.voice, locale: () => "en-GB",
     });
     return {
-        svc, calls, data, spoken,
+        svc, calls, data, spoken, voices,
         as(id: string) { who = id; },
         called: (part: string) => calls.filter((c) => c.uri.includes(part)),
     };
@@ -500,8 +501,59 @@ describe("the on-device model", () => {
     it("lists the models for the device's memory", async () => {
         const t = setup({ llm: llm() });
         const m = await t.svc.models();
-        expect(m.models.map((x: Reply) => [x.id, x.fits, x.recommended, x.installed])).toEqual([
-            [MODEL, true, false, true], ["qwen2.5-1.5b-instruct-q4_k_m", true, true, false], ["qwen3-4b-q4_k_m", false, false, false]]);
+        expect(m.models.map((x: Reply) => [x.id, x.fits, x.recommended, x.installed, x.builtIn])).toEqual([
+            ["qwen3-0.6b-q4_k_m", true, false, false, true], [MODEL, true, false, true, false],
+            ["qwen2.5-1.5b-instruct-q4_k_m", true, true, false, false], ["qwen3-4b-q4_k_m", false, false, false, false]]);
+    });
+
+    describe("built in: Qwen3 0.6B", () => {
+        const BUILT_IN = "qwen3-0.6b-q4_k_m";
+        const withBuiltIn = () => ({
+            ...llm(),
+            status: () => Promise.resolve({ available: true, installed: [{ id: BUILT_IN, builtIn: true }], ramBytes: 2 * 2 ** 30 }),
+        });
+
+        it("is the one in use until another is chosen, and answers what the commands do not", async () => {
+            const t = setup({ llm: withBuiltIn() });
+            const m = await t.svc.models();
+            expect(m.selected).toBe(BUILT_IN);
+            expect(m.models[0]).toMatchObject({ id: BUILT_IN, installed: true, builtIn: true, name: "Qwen3 0.6B" });
+            const r = await ask(t, "why is the sky blue");
+            expect(last(r)).toMatchObject({ via: "on-device", source: "Qwen3 0.6B" });
+        });
+
+        it("comes after the commands: what the grammar knows never reaches it", async () => {
+            const t = setup({ llm: withBuiltIn() });
+            const before = mock.requests.length;
+            const r = await ask(t, "turn on the flashlight");
+            expect(last(r)).toMatchObject({ via: "commands", text: "The flashlight is on." });
+            expect(mock.requests.length).toBe(before);
+            // What it does not know goes to the model, with the commands as tools.
+            const act = await ask(t, "it's dark, put the flashlight on for me");
+            expect(mock.requests.length).toBe(before + 1);
+            expect(mock.requests.at(-1)!.body.chat_template_kwargs).toEqual({ enable_thinking: false });
+            expect(last(act)).toMatchObject({ via: "on-device", status: "done", text: "The flashlight is on." });
+        });
+
+        it("cannot be removed or downloaded, and \"off\" turns it off", async () => {
+            const t = setup({ llm: withBuiltIn() });
+            t.as("org.webosphoenix.settings");
+            expect((await t.svc.removeModel({ id: BUILT_IN })).errorCode).toBe(ERRORS.NOT_ALLOWED);
+            expect((await t.svc.downloadModel({ id: BUILT_IN })).errorCode).toBe(ERRORS.NOT_ALLOWED);
+            expect((await t.svc.selectModel({ id: "off" })).returnValue).toBe(true);
+            expect((await t.svc.models()).selected).toBe("");
+            t.as("com.palm.systemui");
+            const before = mock.requests.length;
+            const r = await ask(t, "why is the sky blue");
+            expect(last(r).via).toBe("commands");
+            expect(mock.requests.length).toBe(before);
+        });
+
+        it("is not used where it is not installed", async () => {
+            const t = setup({ llm: llm() });
+            const r = await ask(t, "why is the sky blue");
+            expect(last(r).via).toBe("commands");
+        });
     });
 
     it("falls back to the offer when the model does not answer", async () => {
@@ -512,6 +564,21 @@ describe("the on-device model", () => {
         const r = await ask(t, "why is the sky blue");
         expect(last(r).text).toMatch(/^The on-device model didn't answer \(llama-server is not installed\)/);
         expect(last(r).choices[0].id).toBe("web");
+    });
+});
+
+describe("the voice", () => {
+    it("speaks with the chosen voice; Play Sample with the one asked for", async () => {
+        const t = setup();
+        t.as("org.webosphoenix.settings");
+        expect((await t.svc.setSettings({ speechVoice: "expr-voice-5-m" })).returnValue).toBe(true);
+        expect((await t.svc.setSettings({ speechVoice: "../../etc" })).errorCode).toBe(ERRORS.BAD_PARAMS);
+        await t.svc.speak({ text: "Hello." });
+        await t.svc.speak({ text: "Sample.", voice: "expr-voice-2-f" });
+        expect(t.voices).toEqual(["expr-voice-5-m", "expr-voice-2-f"]);
+        t.as("com.palm.systemui");
+        await ask(t, "turn on the flashlight");
+        expect(t.voices.at(-1)).toBe("expr-voice-5-m");
     });
 });
 
