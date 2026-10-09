@@ -1032,6 +1032,11 @@ Item {
             compare(plane.opacity, 1);
             // Leftmost of the indicators, as StatusBarInfo paints it last.
             compare(plane.x, 0);
+            // The only plane: the signal bars go (StatusBarServicesConnector
+            // updateRSSIIcon(false, RSSI_FLIGHT_MODE), :947-952), not turn
+            // into a second one.
+            var rssi = findChild(shell, "rssiIcon");
+            tryVerify(function() { return !rssi.visible; }, 2500);
             sys.rotationLocked = false;
             sys.muted = false;
             sys.airplaneMode = false;
@@ -1450,6 +1455,11 @@ Item {
             compare(bar.title, shell.system.carrier);
             verify(!bar.titleBorder);
             verify(!bar.titleActionable);
+            // In airplane mode, "Airplane Mode" in its place.
+            shell.system.airplaneMode = true;
+            compare(bar.title, "Airplane Mode");
+            shell.system.airplaneMode = false;
+            compare(bar.title, shell.system.carrier);
             // An app: its title on the pill, the arrow fading in; the new
             // title cross-fades in over 300 ms.
             windows.launch("org.webosphoenix.email", "");

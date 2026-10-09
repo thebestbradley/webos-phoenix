@@ -3225,7 +3225,10 @@ FocusScope {
                     : launcher.open ? "launcher" : cards.maximized ? "app" : ""
                 title: _mode === "dock" ? (dockLayer.menuOpen ? qsTr("Choose an App") : dockLayer.currentTitle)
                      : _mode === "justtype" ? qsTr("Just Type") : _mode === "launcher" ? qsTr("Launcher")
-                     : _mode === "app" ? cards.currentTitle : (shell.system ? shell.system.carrier : "")
+                     : _mode === "app" ? cards.currentTitle
+                     // In airplane mode the carrier's name says so
+                     // (StatusBarServicesConnector.cpp:947-952).
+                     : !shell.system ? "" : shell.system.airplaneMode ? qsTr("Airplane Mode") : shell.system.carrier
                 titleBorder: _mode !== ""
                 titleActionable: _mode === "app" || _mode === "dock"
                                  || (_mode === "justtype" && justType.surface !== null

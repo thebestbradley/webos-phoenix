@@ -342,13 +342,14 @@ Item {
             shown: !!bar.system && bar.system.bluetoothOn
             source: Theme.asset("statusBar/bluetooth-on.png")
         }
-        // RSSI, or the flight-mode bars (StatusBar::RSSI_FLIGHT_MODE).
+        // RSSI. In airplane mode it goes: the airplane icon above says so
+        // ("Airplane mode now has its own icon in the status bar, so hide
+        // the rssi icon", StatusBarServicesConnector.cpp:947-952,
+        // updateRSSIIcon(false, RSSI_FLIGHT_MODE)); it showed a second plane.
         Indicator {
             objectName: "rssiIcon"
-            shown: !!bar.system && (bar.system.airplaneMode || bar.system.signalBars >= 0)
-            source: !bar.system ? ""
-                    : bar.system.airplaneMode ? Theme.asset("statusBar/rssi-flightmode.png")
-                    : Theme.asset("statusBar/rssi-" + Math.max(0, bar.system.signalBars) + ".png")
+            shown: !!bar.system && !bar.system.airplaneMode && bar.system.signalBars >= 0
+            source: !bar.system ? "" : Theme.asset("statusBar/rssi-" + Math.max(0, bar.system.signalBars) + ".png")
         }
         // The charge, in the bar's 14 px bold beside the icon, coloured as
         // the patches did: red when low (the battery's own red states, at
