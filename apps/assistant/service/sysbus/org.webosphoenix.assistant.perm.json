@@ -24,7 +24,10 @@
         "transcriber.operation",
         "marketplace.management",
         "phoenix.location.permissions",
-        "phoenix.system.media"
+        "phoenix.system.media",
+        "filemanager.operation",
+        "phoenix.tethering",
+        "vpn.management"
     ],
     "org.webosphoenix.tts": []
 }

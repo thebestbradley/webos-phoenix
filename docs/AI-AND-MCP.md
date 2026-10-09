@@ -44,7 +44,7 @@ above was the plan's command layer; this is the whole 1.0 assistant.
 | Layer | What runs | Where |
 | --- | --- | --- |
 | 1. Speech to text | The shell's dictation: whisper.cpp through `org.webosphoenix.transcriber` | On the device (in phoenix-sim, the same service code on the computer) |
-| 2. Commands | A grammar per language (`apps/assistant/service/lib/lang/en.js`): the 54 commands in the table below (9 October 2026), with the days and times people say; plus commands apps declare in `appinfo.json` (`"assistant": {"commands": [...]}`, Just Type's Quick Action shape with phrases per language; a Quick Action counts as `"<displayName> {text}"`, after the built-in commands) | In the service, no model, no network (weather, distances, currencies and unknown cities fetch Open-Meteo or Frankfurter) |
+| 2. Commands | A grammar per language (`apps/assistant/service/lib/lang/en.js`): the 58 commands in the table below (9 October 2026), with the days and times people say; plus commands apps declare in `appinfo.json` (`"assistant": {"commands": [...]}`, Just Type's Quick Action shape with phrases per language; a Quick Action counts as `"<displayName> {text}"`, after the built-in commands) | In the service, no model, no network (weather, distances, currencies and unknown cities fetch Open-Meteo or Frankfurter) |
 | 3. On-device model | llama.cpp's `llama-server` with a GGUF model the user downloads in Settings > Assistant, called with the same commands as tools (Chat Completions, `--jinja`) | On the device. phoenix-sim runs it from the shell (`LocalModels`, Phoenix.Native); the device service runs it itself (`lib/node-device.js`) |
 | 4. Cloud model or web | "Ask <provider (model)>" and "Search the web" as choices on the answer, and "Connect model" while no cloud model is set up; a thread taken to a cloud model goes on with it | The provider's servers; the browser |
 
@@ -73,23 +73,26 @@ bird plays done, asking (a read-back), confused (nothing here can) or oops
 | `call` | "call mom", "call Sam on his mobile", "dial 555 123 4567" | Phone dials | Yes (Call) |
 | `text`, `readMessages` | "text Sam I'm running late", "read my last message", "what did Priya say" | Sends an SMS (the words as typed); reads the last one received | Yes (Send) |
 | `email`, `searchEmail` | "send an email to Priya saying see you soon", "email Alex about the report", "search my email for invoice", "do I have any new emails" | Sends (with words) or opens a new email (without); finds email | Yes (Send) |
-| `toggle` | "turn on Wi-Fi", "turn off Bluetooth", "airplane mode on", "turn on the flashlight", "silence the phone", "turn on do not disturb", "turn on location services", "turn on rotation lock" | The switch; Do Not Disturb is the ringer off; Location Services both handlers (`setState`); the rotation lock the system preference | |
-| `media` | "pause", "resume the music", "next song", "previous track", "what's playing" | The media keys, for whichever player plays; what is playing it cannot tell yet (no service says it) and offers Music | |
+| `toggle` | "turn on Wi-Fi", "turn off Bluetooth", "airplane mode on", "turn on the flashlight", "silence the phone", "turn on do not disturb", "turn on location services", "turn on rotation lock", "turn on the hotspot", "turn on VPN" | The switch; Do Not Disturb is the ringer off; Location Services both handlers (`setState`); the rotation lock the system preference; the Wi-Fi hotspot (`org.webosphoenix.tethering setWifi`; without its password it says so and opens Hotspot & Tethering); the first VPN profile (`com.webos.service.vpn connect`; one asking to sign in opens VPN settings) or all down | |
+| `media` | "pause", "resume the music", "next song", "previous track", "what's playing", "what song is this" | The media keys, for whichever player plays; what is playing, as the player last told the system (`org.webosphoenix.system getNowPlaying`), with Pause or Play and Next | |
 | `volume` | "turn up the volume", "set the volume to 30%", "mute", "unmute" | The master volume | |
 | `brightness` | "set brightness to 50%", "turn the brightness up", "make the screen dimmer" | The screen's brightness | |
 | `screenshot`, `lock`, `battery` | "take a screenshot", "lock the screen", "what's my battery" | A screen capture (the assistant's view out of the way); the screen off and locked; the level and charging | |
 | `settings`, `open` | "open Wi-Fi settings", "open settings", "open Maps" | Settings at a pane (or its list); an app | |
 | `navigate`, `distance` | "navigate to the nearest coffee shop", "how far is Paris" | Directions in Maps; the distance as the crow flies | |
 | `play`, `photos` | "play some music by Miles Davis", "show my photos from yesterday / last week", "show my screenshots", "how many photos did I take yesterday" | Music plays; the photos shown in the conversation and in Photos (just those) behind it; how many, only said | |
-| `weather` | "what's the weather tomorrow", "will it rain in London", "what's the weather this week" | Open-Meteo, here (with the Assistant's location permission) or there; "will it rain" by the chance of rain; the week's highs, lows and rainy days | |
+| `weather` | "what's the weather tomorrow", "will it rain in London", "what's the weather this week", "what's the weather at 5pm", "will it rain this afternoon" | Open-Meteo, here (with the Assistant's location permission) or there; "will it rain" by the chance of rain; an hour by its hourly forecast; the week's highs, lows and rainy days | |
 | `convert` | "convert 10 miles to km", "how many cups in a liter", "100 fahrenheit in celsius", "what's 20 USD in EUR" | Units offline; currencies with the day's ECB rates (offline it says so and offers the web) | |
 | `worldTime`, `time` | "what time is it in Tokyo", "what time is it", "what's the date" | The time there (big cities offline), here, the date | |
 | `calculate` | "what's 15% of 80", "twelve times seven" | The sum | |
 | `search` | "search the web for palm pre", "look up webos history" | The browser | |
 | `callBack`, `callLog`, `voicemail` | "call back", "redial", "who called me", "did I miss any calls", "check my voicemail", "call voicemail" | The last caller or number called (the call log, `com.palm.phonecall:1`); the missed calls of the week; how many voicemails (`com.palm.telephony` voicemailQuery), Call Voicemail | Calling |
 | `replyMessage`, `readMessages {unread}` | "reply on my way", "any new texts", "read my new messages" | A text to whoever sent the last one; the unread ones counted and the newest read, with Reply | Yes (Send) |
-| `eventMove`, `eventCancel`, `freeTime` | "move my dentist appointment to 4pm", "reschedule lunch with Priya to Friday at noon", "cancel my 3pm meeting tomorrow", "am I free tomorrow at 3", "when am I free on Friday" | Moves an event (a time keeps the day, a day keeps the time; a repeating one: in Calendar), deletes one (undo puts it back), the free stretches between 8 AM and 8 PM | Cancelling |
+| `eventMove`, `eventCancel`, `freeTime` | "move my dentist appointment to 4pm", "reschedule lunch with Priya to Friday at noon", "cancel my 3pm meeting tomorrow", "move my stand-up to 11am", "move all my stand-ups to 9am", "cancel my stand-up on Friday", "cancel every team stand-up", "am I free tomorrow at 3", "when am I free on Friday" | Moves an event (a time keeps the day, a day keeps the time), deletes one (undo puts it back); of a repeating one the next day only, as the Calendar's "this event only" does it (an exception date on it, `exdates`, and for a move a child event with `parentId` and `recurrenceId`: com.palm.app.calendar EditView.js:1170-1185, DeleteConfirm.js), or with "all"/"every" the whole series (its time; cancelled whole); the free stretches between 8 AM and 8 PM | Cancelling |
 | `noteAppend`, `taskList`, `taskDone` | "add the guest code to my Wi-Fi note", "what's on my shopping list", "what are my tasks", "check off milk", "mark pay rent as done" | Adds a line to a memo; reads a list; completes a task (undo opens it again) | |
+| `readEmail`, `emailReply` | "read my latest email", "read the email from Alex", "reply to the email from Alex saying paid, thanks", "reply to my last email" | The newest (from someone): who, when, the subject and the start of its words, with Reply; a reply "Re: ..." sent through `com.palm.smtp` after the read-back, or opened in Email to write | Yes (Send) |
+| `findFiles` | "find my file called budget", "find the trip pdf", "search my files for invoice" | `org.webosphoenix.filemanager` `search`: cards opening each one's folder in Files | |
+| `travelTime` | "how long will it take to drive to the airport", "how long to walk to Union Square", "what's the traffic like to work" | The place by Photon near here, the route by Valhalla (the keyless FOSSGIS servers Maps uses): the time and distance by car, on foot or by bike, without traffic (no keyless source has live traffic: it says so), with Open Maps | |
 | `nearby`, `website`, `storage`, `appStore` | "coffee near me", "where's the nearest pharmacy", "open example.com", "how much storage do I have", "find Doom in the Marketplace", "install Doom" | Maps searches; the browser opens the site; the free storage; the Marketplace's search (`org.webosphoenix.service.packages`), and its page to install from (it never installs unasked) | |
 | `help` | "help", "what can you do", "give me some tips", "how do I close an app", "how do I go back", "what is Just Type" | What it can do, by app, with examples (a tap puts one in the field) and what fits now; how to use Phoenix from the Help app's topics (`lib/lang/en-help.js`), with Open Help | |
 | `undo` | "undo", "cancel that", "never mind" | Cancels a read-back waiting; else takes back what was just made (deletes the event, task, memo, contact or alarm, cancels the timer, turns alarms back on) | Yes |
@@ -139,7 +142,7 @@ question: Search the web, and what to do with it (Save as Memo for a
 recipe, Show in Maps for a place: `say.related`). A model is offered the
 commands as tools only for words that may ask the device to do something
 (not a question about the world, not small talk) and only the ten nearest
-them: all 54 are some 5,000 tokens. Checked with Qwen3 0.6B in
+them: all of them are some 5,000 tokens. Checked with Qwen3 0.6B in
 llama-server (9 October 2026): the banana pudding has steps and Save as
 Memo, small talk and jokes are answered, "where is the Eiffel Tower" offers
 Show in Maps, "I'd like the bluetooth off please" calls the toggle; at
@@ -194,7 +197,7 @@ and for Phoenix's own services are as listed in the test, to check on a
 device. Found and fixed: no db8 grants at all; `location.query` /
 `location.operation`, `audio.query`, `bluetooth.query`,
 `systemsettings.query` / `.management`, `application.launcher` /
-`.operation` missing; `vocabulary` not in the API file. In the simulator
+`.operation` missing; `vocabulary` not in the API file. Later added: `filemanager.operation` (`apps/files/service`'s group), the tethering and VPN services' groups (names to check on a device). In the simulator
 (`tools/test-assistant.cjs`) every command runs on the simulated services
 (none fails for want of a method) and each, turned off in Settings >
 Assistant's Commands, is refused. The user's switches: Settings > Assistant
@@ -219,18 +222,18 @@ Siri or Google Assistant of each built-in app, and where Phoenix stands.
 | --- | --- | --- |
 | Phone | call a contact or number, call back, redial, who called, missed calls, voicemail count and call | answer or end a call by voice (a call in progress has its own screen; 2.0) |
 | Messaging | send (read back), compose, read the last or the new ones, reply | read a whole conversation aloud; group messages |
-| Email | send (read back), compose, find, unread count | reply to an email, read one's body aloud (not yet commands) |
-| Calendar | add (with place, invitees, repeats), what's on a day or week, next, find, move, cancel, free time | change one day of a repeating event (Calendar's own dialog asks which; it says so and offers Calendar) |
+| Email | send (read back), compose, find, unread count, read the latest (from someone), reply (read back) | forward, delete |
+| Calendar | add (with place, invitees, repeats), what's on a day or week, next, find, move, cancel, free time; one day of a repeating event, or all of them | |
 | Contacts | add, a number, email, address or birthday | edit or delete a contact; "call my wife" (relations) |
 | Memos | new, find, add to one | delete one (undo covers a new one) |
 | Tasks | add (lists made as needed), reminders, read a list, complete | delete or move a task |
 | Clock | alarms (set, list, off, delete), timers, stopwatch, world time | (timers ring in the Assistant app, not the Clock) |
-| Weather | now, today, tomorrow, will it rain or snow, this week or weekend, anywhere | hour by hour ("at 5 pm") |
-| Maps | directions, distances, places nearby | traffic, travel time (not yet commands) |
-| Music | play an artist, album or song, pause, next, previous | what's playing (no now-playing service: it says so and offers Music) |
+| Weather | now, at an hour, today, tomorrow, will it rain or snow, this week or weekend, anywhere | |
+| Maps | directions, distances, places nearby, travel time by car, on foot or by bike | live traffic (no keyless source: it says so, gives the time without traffic and offers Maps) |
+| Music | play an artist, album or song, pause, next, previous, what's playing (Music and Podcasts tell the system) | Videos does not tell the system what plays yet |
 | Photos | photos by day, screenshots, how many, shown in the conversation | by place or person (no index of either) |
-| Files | | find a file (the file manager service has no search): "I can open Files for you" |
-| Settings | Wi-Fi, Bluetooth, airplane mode, flashlight, ringer, Do Not Disturb, Location Services, rotation lock, volume, brightness, any pane | Hotspot and VPN on or off (not yet commands; "open VPN settings" opens the pane) |
+| Files | find files and folders by name (the file manager's new `search`) | find by what a file says (no content index) |
+| Settings | Wi-Fi, Bluetooth, airplane mode, flashlight, ringer, Do Not Disturb, Location Services, rotation lock, hotspot, VPN, volume, brightness, any pane | USB tethering; choosing a VPN profile by name |
 | Device | battery, storage, lock, screenshot | |
 | Browser | search, open a site | bookmarks, reading a page aloud |
 | Calculator, units | sums, percentages, units, currencies | |

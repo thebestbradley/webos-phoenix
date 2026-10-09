@@ -2712,6 +2712,17 @@
         // "next song"): the shell sends it to every page as the hardware
         // key's com.palm.keys /media events, down then up, and the player
         // holding the audio focus acts (@phoenix/luna mediakeys.ts).
+        // What plays, as the player last said (@phoenix/luna postNowPlaying:
+        // Music, Podcasts): setNowPlaying {title, artist?, album?, playing,
+        // appId?}; getNowPlaying -> {nowPlaying: {..., appId, time} | null}.
+        // The Assistant's "what's playing" reads it.
+        "/setNowPlaying": function (p, reply) {
+            if (typeof p.title !== "string") return reply(fail(-1, "title is required"));
+            store.set("media:nowPlaying", { title: p.title, artist: String(p.artist || ""), album: String(p.album || ""), playing: !!p.playing,
+                                            appId: String(p.appId || appIdFromLocation()), time: Date.now() });
+            reply(ok());
+        },
+        "/getNowPlaying": function (p, reply) { reply(ok({ nowPlaying: store.get("media:nowPlaying", null) })); },
         "/mediaKey": function (p, reply) {
             if (["play", "pause", "togglePausePlay", "stop", "next", "prev"].indexOf(p.key) < 0)
                 return reply(fail(-1, "key: play, pause, togglePausePlay, stop, next or prev"));
@@ -7517,6 +7528,8 @@
     //   remove {path, recursive?}            -> {path}
     //   read {path, encoding?, maxBytes?}    -> {path, data, encoding, size}
     //   write {path, data, encoding?, overwrite?} -> {path, size}
+    //   search {query, path?, limit?}        -> {entries}: names with every word of
+    //                                           query under path (/media/internal), newest first
     //   entry: {name, path, type: "file"|"directory", size, mtime (ms), mode, readOnly?}
     //
     // Here the filesystem is virtual: one map of path -> node in the shared
@@ -8050,6 +8063,29 @@
                 touch(v, parentOf(path));
                 save(v);
                 reply(ok({ path: path }));
+            },
+            "/search": function (p, reply) {
+                var root = norm(p.path || MEDIA_ROOT);
+                var words = String(p.query || "").toLowerCase().split(/\s+/).filter(Boolean);
+                if (!root) return reply(fail(E.BAD_PARAMS, "path must be an absolute path"));
+                if (!words.length) return reply(fail(E.BAD_PARAMS, "query is required"));
+                var limit = Math.max(1, Math.min(200, Number(p.limit) || 50));
+                syncMedia().then(function () {
+                    var v = load();
+                    var hits = Object.keys(v.nodes).filter(function (k) {
+                        if (k === root || k.indexOf(root === "/" ? "/" : root + "/") !== 0) return false;
+                        var rel = k.slice(root.length);
+                        if (/\/\./.test(rel)) return false;
+                        var name = k.replace(/^.*\//, "").toLowerCase();
+                        return words.every(function (w) { return name.indexOf(w) >= 0; });
+                    });
+                    return fillSizes(hits).then(function () {
+                        var v2 = load();
+                        var out = hits.filter(function (k) { return v2.nodes[k]; }).map(function (k) { return entry(v2, k); })
+                            .sort(function (a, b) { return b.mtime - a.mtime; }).slice(0, limit);
+                        reply(ok({ entries: out }));
+                    });
+                }).then(null, ioError(reply));
             },
             "/copy": copyOrMove(false),
             "/move": copyOrMove(true),

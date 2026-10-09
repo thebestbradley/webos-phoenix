@@ -25,5 +25,6 @@ module.exports = {
     eventMove: "move my dentist appointment to 4pm", eventCancel: "cancel my dentist appointment", freeTime: "am I free tomorrow at 3",
     noteAppend: "add the code to my wifi note", taskList: "what's on my shopping list", taskDone: "check off milk",
     nearby: "coffee near me", website: "open example.com", storage: "how much storage do I have", appStore: "install doom",
-    help: "how do I close an app", locationAccess: "",
+    help: "how do I close an app", findFiles: "find my file called budget", readEmail: "read my latest email",
+    emailReply: "reply to my last email saying thanks", travelTime: "how long will it take to drive to the airport", locationAccess: "",
 };

@@ -493,6 +493,8 @@ var TOGGLES = [
     ["airplane", /^(?:the )?(?:airplane|aeroplane|flight|plane)(?: mode)?$/],
     ["flashlight", /^(?:the )?(?:flash ?light|torch|light)$/],
     ["location", /^(?:the )?(?:location(?: services)?|gps|location tracking)$/],
+    ["hotspot", /^(?:the |my )?(?:(?:wi-?fi |mobile |personal )?hot ?spot|tethering|wi-?fi tethering)$/],
+    ["vpn", /^(?:the |my )?(?:(?:.+ )?vpn)$/],
     ["rotationLock", /^(?:the )?(?:rotation lock|orientation lock|screen lock rotation|lock rotation)$/],
     ["rotation", /^(?:the )?(?:rotation|screen rotation|auto[- ]?rotat(?:e|ion)|auto[- ]?rotate screen)$/],
     ["ringer", /^(?:the )?(?:ringer|ringtone|ring tone|ringing|sound)$/],
@@ -1161,7 +1163,8 @@ function eventMove(t, ctx) {
     if (info.rest.replace(/\b(?:at|on|the)\b/g, "").trim()) return null;
     var r = resolve(info, ctx.now, "day");
     if (r.start === null) return null;
-    return { query: m[1], start: r.start, hasTime: !!r.hasTime, hasDate: !!r.hasDate };
+    var all = /\b(?:all|every|each)\b|\bthe series\b/.test(m[1]);
+    return { query: m[1].replace(/\b(?:all(?: of)?|every|each|the series of)\b ?/g, "").replace(/^(?:my|the) /, ""), start: r.start, hasTime: !!r.hasTime, hasDate: !!r.hasDate, all: all };
 }
 // "cancel my dentist appointment", "delete lunch with Priya from my calendar",
 // "cancel my 3pm meeting tomorrow"
@@ -1169,9 +1172,11 @@ function eventCancel(t) {
     var m = /^(?:cancel|delete|remove|call off|clear|scrap|drop) (?:my |the |our |that )?(.+?)(?: (?:from|off|in|on) (?:my |the )?(?:calendar|schedule|agenda|diary))?$/.exec(t);
     if (!m) return null;
     var onCalendar = / (?:from|off|in|on) (?:my |the )?(?:calendar|schedule|agenda|diary)$/.test(t);
-    if (!onCalendar && !new RegExp("\\b" + EVENT_NOUN + "s?\\b").test(m[1])) return null;
+    var gathering = /\b(?:stand-?ups?|lunch|dinner|breakfast|brunch|class|lesson|practice|session|interview|party|date|game|gym|workout)\b/.test(m[1]);
+    if (!onCalendar && !gathering && !new RegExp("\\b" + EVENT_NOUN + "s?\\b").test(m[1])) return null;
     if (/\b(?:alarms?|timers?|tasks?|reminders?|notes?|memos?|contacts?)\b/.test(m[1])) return null;
-    return { query: m[1] };
+    var all = /\b(?:all|every|each)\b|\bthe series\b/.test(m[1]);
+    return { query: m[1].replace(/\b(?:all(?: of)?|every|each|the series of)\b ?/g, "").replace(/^(?:my|the) /, ""), all: all };
 }
 // "am I free tomorrow at 3", "when am I free on Friday", "am I busy tonight"
 function freeTime(t, ctx) {
@@ -1268,6 +1273,71 @@ function help(t) {
     return null;
 }
 
+// ---- More (9 October 2026, second round) --------------------------------------------------------
+
+// The weather at an hour: "what's the weather at 5pm", "will it rain this
+// afternoon", "the weather tomorrow evening". -> weather's args with hour.
+var DAY_PARTS = { "this morning": ["today", 9], "this afternoon": ["today", 15], "this evening": ["today", 19], "tonight": ["today", 21],
+                  "tomorrow morning": ["tomorrow", 9], "tomorrow afternoon": ["tomorrow", 15], "tomorrow evening": ["tomorrow", 19], "tomorrow night": ["tomorrow", 21] };
+function weatherHour(t) {
+    var m = /^(.+?) (this morning|this afternoon|this evening|tonight|tomorrow morning|tomorrow afternoon|tomorrow evening|tomorrow night)$/.exec(t);
+    if (m && m[2] !== "tonight") {
+        var w = weather(m[1]);
+        if (w && !w.day) return Object.assign(w, { day: DAY_PARTS[m[2]][0], hour: DAY_PARTS[m[2]][1] });
+    }
+    m = /^(.+?) (?:at|around|by|for) (\d{1,2}(?::\d{2})? ?(?:am|pm)?|\d{1,2} o'clock|noon|midday)(?: (today|tomorrow))?$/.exec(t);
+    if (!m) return null;
+    var base = weather(m[1]);
+    var c = clock(m[2].replace(/ o'clock$/, ""));
+    if (!base || !c) return null;
+    var h = c.meridiem === "pm" ? c.hour % 12 + 12 : c.meridiem === "am" ? c.hour % 12 : c.hour < 7 ? c.hour + 12 : c.hour;
+    return Object.assign(base, { day: m[3] || base.day || "today", hour: h });
+}
+// "how long will it take to drive to the airport", "how long to walk to
+// Union Square", "how's the traffic to work"
+function travelTime(t) {
+    var m = /^how long (?:will it take|would it take|does it take|is it|to get|is the (?:drive|walk|ride))(?: me)?(?: to)? (?:(drive|walk|bike|cycle|ride|get|go)(?: there)? )?(?:to |into )?(.+?)(?: by (car|foot|bike|bicycle))?$/.exec(t)
+        || /^how long to (drive|walk|bike|cycle|get|go) to (.+?)()$/.exec(t);
+    if (m) {
+        var how = m[3] || m[1] || "";
+        var mode = /walk|foot/.test(how) ? "walk" : /bike|bicycle|cycle|ride/.test(how) ? "bike" : "drive";
+        return { place: m[2].replace(/^the /, ""), mode: mode, traffic: false };
+    }
+    m = /^(?:how(?:'s| is|s)|what(?:'s| is|s)) (?:the )?traffic(?: like)?(?: (?:to|on the way to|on my way to) (.+?))?(?: (?:now|right now|today))?$/.exec(t)
+        || /^is there (?:any |much )?traffic(?: (?:to|on the way to) (.+))?$/.exec(t);
+    if (m) return { place: (m[1] || "").replace(/^the /, ""), mode: "drive", traffic: true };
+    return null;
+}
+// "find my file called budget", "find the paris pdf", "where's my resume",
+// "search my files for invoice"
+function findFiles(t) {
+    var m = /^(?:find|search for|look for|locate|where(?:'s| is| are)|open|show me) (?:my |the |a )?(?:files?|documents?|docs?|pdfs?|downloads?)(?: (?:called|named|about|with|for|that (?:say|says|mention)))? (.+)$/.exec(t)
+        || /^(?:search|look through) (?:my |the )?(?:files|documents|downloads) for (.+)$/.exec(t)
+        || /^(?:find|where(?:'s| is)|locate) (?:my |the )?(.+?) (?:file|document|doc|pdf|spreadsheet|presentation)s?$/.exec(t)
+        || /^(?:find|look for|search for) (.+?) in (?:my |the )?(?:files|documents|downloads)$/.exec(t);
+    if (!m) return null;
+    var q = m[1].replace(/^(?:called|named) /, "").trim();
+    var kind = /\bpdfs?\b/.test(t) && !/\bpdf\b/.test(q) ? "pdf" : "";
+    return q ? { query: q, kind: kind } : null;
+}
+// "read my latest email", "read the email from Alex", "what does the last email say"
+function readEmail(t) {
+    var m = /^(?:read|open|show)(?: me)? (?:my |the )?(?:last|latest|newest|most recent|new) (?:e-?mail|mail)(?: from (.+))?$/.exec(t)
+        || /^(?:read|open|show)(?: me)? (?:my |the )?(?:last |latest )?(?:e-?mail|mail) from (.+)$/.exec(t)
+        || /^what(?:'s| does| did) (?:my |the )?(?:last|latest) (?:e-?mail|mail)(?: from (.+?))? say$/.exec(t);
+    if (!m) return null;
+    return { who: m[1] || "" };
+}
+// "reply to the email from Alex saying sounds good", "reply to my last email"
+function emailReply(t, ctx) {
+    var m = /^(?:reply|respond|answer|write back)(?: to)? (?:my |the |that )?(?:last |latest )?(?:e-?mail|mail)(?: from (.+?))?(?:(?:,|:| saying| with| that)\s*(.+))?$/.exec(t);
+    if (!m) return null;
+    var who = (m[1] || "").trim(), body = m[2] || "";
+    var sep = who && /^(.+?)(?:,|:| saying| with| that)\s+(.+)$/.exec(who);
+    if (sep) { who = sep[1]; body = sep[2]; }
+    return { who: who, body: body ? capital(cased(body, ctx)) : "" };
+}
+
 var rules = [
     ["help", help],
     ["undo", undo],
@@ -1275,7 +1345,9 @@ var rules = [
     ["time", time],
     ["convert", convert],
     ["calculate", function (t) { var e = arithmetic(t); return e ? { expression: e } : null; }],
+    ["weather", weatherHour],
     ["weather", weather],
+    ["travelTime", travelTime],
     ["battery", battery],
     ["storage", storageLeft],
     ["timerStatus", timerStatus],
@@ -1300,6 +1372,8 @@ var rules = [
     ["event", event],
     ["reminder", function (t, ctx) { return reminder(t, ctx.now, ctx); }],
     ["eventCancel", eventCancel],
+    ["readEmail", readEmail],
+    ["emailReply", emailReply],
     ["searchEmail", searchEmail],
     ["email", email],
     ["readMessages", readMessages],
@@ -1324,6 +1398,7 @@ var rules = [
     ["play", play],
     ["app", appCommand(true)],
     ["beyond", beyond],
+    ["findFiles", findFiles],
     ["search", search],
     ["website", website],
     ["appStore", appStore],
@@ -1346,6 +1421,8 @@ var MENTIONS = {
         ringer: /\b(ringer|ring|ringtone|silent|silence|mute|unmute|sound|quiet|vibrate)\b/,
         dnd: /\b(disturb|dnd|quiet|silent|focus)\b/,
         location: /\b(location|gps)\b/,
+        hotspot: /\b(hot ?spot|tether\w*)\b/,
+        vpn: /\bvpn\b/,
         rotation: /\b(rotat\w*|orientation)\b/,
         rotationLock: /\b(rotat\w*|orientation)\b/
     },
@@ -1435,7 +1512,7 @@ function repeatText(r) {
     return every + list(r.days.map(function (d) { return cap(WEEKDAYS[d]); }));
 }
 var SETTING_NAMES = { wifi: "Wi-Fi", bluetooth: "Bluetooth", airplane: "Airplane mode", flashlight: "The flashlight", ringer: "The ringer", dnd: "Do Not Disturb",
-                      location: "Location Services", rotation: "Screen rotation", rotationLock: "The rotation lock" };
+                      location: "Location Services", rotation: "Screen rotation", rotationLock: "The rotation lock", hotspot: "The hotspot", vpn: "The VPN" };
 var PAGE_NAMES = { wifi: "Wi-Fi", bluetooth: "Bluetooth", airplane: "Airplane Mode", phone: "Phone Preferences", hotspot: "Hotspot & Tethering",
     vpn: "VPN", screen: "Screen & Lock", battery: "Battery", sounds: "Sounds & Ringtones", datetime: "Date & Time", language: "Language & Region",
     textassist: "Text Assist", justtype: "Just Type", clipboard: "Clipboard", assistant: "Assistant", usb: "USB", gamepads: "Game Controllers",
@@ -1591,6 +1668,15 @@ var say = {
     noUnreadMessages: function () { return "You have no new messages."; },
     // ---- Calendar
     noSuchEvent: function (what) { return "I couldn't find " + (what ? quote(what) : "that") + " on your calendar."; },
+    occurrenceMoved: function (title, at, start, now) {
+        var to = D.startOfDay(at) === D.startOfDay(start) ? timeText(start) : whenText(start, null, false, now).replace(/^on /, "");
+        return "Moved " + dayText(at, now).replace(/^on /, "") + "'s " + quote(title) + " to " + to + ". The others stay as they are.";
+    },
+    seriesMoved: function (title, start) { return "Every " + quote(title) + " is at " + timeText(start) + " now."; },
+    seriesTimeOnly: function (title) { return quote(title) + " repeats: say a time to move them all, like \u201cmove all my " + title.toLowerCase() + "s to 10am\u201d, or a day to move just one."; },
+    occurrenceCancelled: function (title, at, now) { return "Cancelled " + quote(title) + " " + whenText(at, null, false, now) + ". The others stay."; },
+    confirmSeriesCancel: function (title) { return "Cancel every " + quote(title) + "?"; },
+    seriesCancelled: function (title) { return "Cancelled every " + quote(title) + "."; },
     eventRepeats: function (title) { return quote(title) + " repeats. I can't change a repeating event yet: open it in Calendar to change one day or all of them."; },
     confirmEventCancel: function (title, start, allDay, now) { return "Cancel " + quote(title) + " " + whenText(start, null, allDay, now) + "?"; },
     eventCancelled: function (title) { return "Cancelled " + quote(title) + "."; },
@@ -1619,6 +1705,39 @@ var say = {
         return cap(where.replace(/^your /, "Your ")) + ": " + list(shown) + (items.length > 8 ? ", and " + (items.length - 8) + " more" : "") + ".";
     },
     // ---- Maps, the web, the device, Marketplace
+    // ---- Email, files, travel, hotspot and VPN
+    readEmail: function (from, subject, text, at, now) {
+        return "From " + from + ", " + whenText(at, null, false, now) + ": " + quote(subject || "(no subject)") + (text ? ". " + excerpt(text, 240) : ".");
+    },
+    noEmails: function () { return "You have no email."; },
+    noEmailFrom: function (who) { return "You have no email from " + who + "."; },
+    filesFound: function (q, names) {
+        return names.length === 1 ? "I found " + quote(names[0]) + "." : "I found " + names.length + " files and folders for " + quote(q) + ".";
+    },
+    noFiles: function (q) { return "I couldn't find a file called " + quote(q) + ". I can open Files for you."; },
+    noFilesService: function () { return "I can't search your files right now, but I can open Files for you."; },
+    size: function (b) { return b >= 1e9 ? (b / 1e9).toFixed(1) + " GB" : b >= 1e6 ? (b / 1e6).toFixed(1) + " MB" : b >= 1e3 ? Math.round(b / 1e3) + " KB" : b + " bytes"; },
+    travelTime: function (place, seconds, km, mode, traffic, imperial) {
+        var mins = Math.max(1, Math.round(seconds / 60)), time = mins < 60 ? plural(mins, "minute") : durationText(Math.round(mins / 5) * 300);
+        var d = imperial ? km / 1.609344 : km, dist = (d >= 10 ? Math.round(d) : Math.round(d * 10) / 10) + (imperial ? " miles" : " km");
+        var how = { drive: "by car", walk: "on foot", bike: "by bike" }[mode];
+        return (traffic ? "I can't see live traffic, but without it " : "") + cap(place) + " is about " + time + " away " + how + " (" + dist + ")" +
+            (traffic || mode !== "drive" ? "." : ", without traffic.");
+    },
+    noTraffic: function () { return "I can't see live traffic. Say where you're going, like \u201chow long to drive to the airport\u201d, or open Maps."; },
+    noRoute: function (place) { return "I couldn't find a way to " + place + "."; },
+    weatherAt: function (place, at, temp, unit, desc, rain, about, now) {
+        var when = whenText(at, null, false, now).replace(/^today at /, "at ").replace(/^on /, ""), where = place ? " in " + place : "";
+        if (about === "rain" || about === "snow")
+            return (typeof rain === "number" ? (rain >= 50 ? "Yes, likely: " : rain >= 20 ? "Maybe: " : "Probably not: ") + "a " + rain + "% chance of rain " : "") +
+                when + where + ". " + cap(desc || "") + ", " + Math.round(temp) + "°" + unit + ".";
+        return cap(when) + where + ": " + Math.round(temp) + "°" + unit + (desc ? " and " + desc : "") + (typeof rain === "number" ? ", " + rain + "% chance of rain." : ".");
+    },
+    noVpn: function () { return "You haven't set up a VPN yet. You can add one in Settings > VPN."; },
+    vpnSignIn: function (name) { return quote(name) + " needs you to sign in. I've opened VPN settings."; },
+    vpnOn: function (name) { return "Connecting to " + quote(name) + "."; },
+    toggleFailed: function (setting, why) { return SETTING_NAMES[setting] + " didn't turn on: " + why + "."; },
+    settingsTitle: function (page) { return PAGE_NAMES[page] || "Settings"; },
     nearby: function (q) { return "Here's " + q + " near you, in Maps."; },
     openingSite: function (url) { return "Opening " + url + "."; },
     storage: function (free, size) { return free ? "You have " + free + " free" + (size ? " of " + size : "") + "." : "I couldn't read how much storage is free."; },
@@ -1628,7 +1747,13 @@ var say = {
     toInstall: function (title) { return "Here's " + title + " in the Marketplace: tap Install to get it."; },
     alreadyInstalled: function (title) { return title + " is already installed."; },
     noMarketplace: function () { return "I couldn't reach the Marketplace right now."; },
-    nowPlaying: function () { return "I can't see what's playing yet, but I can open Music for you."; },
+    nowPlaying: function (np) {
+        if (!np) return "Nothing is playing right now.";
+        return (np.playing ? "Playing " : "Paused: ") + quote(np.title) + (np.artist ? " by " + np.artist : "") + ".";
+    },
+    pauseIt: function () { return "Pause"; },
+    playIt: function () { return "Play"; },
+    nextOne: function () { return "Next"; },
     // ---- Help
     rightNow: function () { return "Right now"; },
     helpOverview: function () { return "Here's what I can do. Tap an example to try it, or just say what you want. I can also tell you how to use Phoenix: ask \u201chow do I close an app?\u201d"; },

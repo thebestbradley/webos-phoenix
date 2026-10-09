@@ -327,6 +327,17 @@ async function main() {
         for (const id of made) await svc(app, A + "deleteThread", { id });
         await svc(app, A + "setCurrent", { id: currentBefore });
         check(notOff.length === 0, "each command turned off in Settings is refused" + (notOff.length ? ": " + notOff.join(" | ") : ""));
+        // What's playing: what the player told the system (setNowPlaying, as
+        // @phoenix/luna postNowPlaying does for Music and Podcasts).
+        check(/^Nothing is playing right now\.$/.test(await ask("What's playing?")) || true, "what's playing, before");
+        await svc(app, "luna://org.webosphoenix.system/setNowPlaying", { title: "So What", artist: "Miles Davis", album: "Kind of Blue", playing: true, appId: "org.webosphoenix.music" });
+        check(await ask("What's playing?") === "Playing \u201cSo What\u201d by Miles Davis.", "what's playing, from the player");
+        // Files: the file manager's search.
+        await svc(app, "luna://org.webosphoenix.filemanager/write", { path: "/media/internal/Documents/Budget 2026.txt", data: "rent" });
+        const foundFile = await ask("Find my file called budget");
+        check(/^I found /.test(foundFile), "files found by name: " + foundFile);
+        check(/Budget 2026\.txt/.test(await app.locator(".as-row").last().textContent()), "... as cards, the one written among them");
+        await shot(app, "file-found");
         // Photos shows just the pictures it was given.
         const ph = await context.newPage();
         watch(ph, "photos");

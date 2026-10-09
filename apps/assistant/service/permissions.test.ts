@@ -47,6 +47,9 @@ const GROUPS: [RegExp, string][] = [
     [/^com\.palm\.display\/control\/(?:getProperty|setProperty|setState)$/, "devices.display.control"],   // services/devices
     [/^org\.webosphoenix\.service\.packages\/search$/, "marketplace.management"],                         // apps/marketplace/service
     [/^org\.webosphoenix\.transcriber\//, "transcriber.operation"],                                       // apps/voicememos/service
+    [/^org\.webosphoenix\.filemanager\/search$/, "filemanager.operation"],                               // apps/files/service
+    [/^org\.webosphoenix\.tethering\//, "phoenix.tethering"],
+    [/^com\.webos\.service\.vpn\//, "vpn.management"],                                                     // LuneOS's luneos-vpn-adapter
     [/^org\.webosphoenix\.service\.location\//, "phoenix.location.permissions"],
     [/^org\.webosphoenix\.system\/mediaKey$/, "phoenix.system.media"],
     [/^com\.webos\.service\.wifi\//, "wifi.management"],
@@ -86,7 +89,7 @@ function device() {
     put({ _kind: "com.palm.note:1", text: "Wifi code", position: "m" });
     put({ _kind: "com.palm.clock.alarm:1", key: "a1", hour: 18, minute: 30, occurs: "once", enabled: true });
     put({ _kind: "com.palm.mail.account:1", accountId: "acct", email: "me@example.com" });
-    put({ _kind: "com.palm.email:1", subject: "Hi", flags: { read: false } });
+    put({ _kind: "com.palm.email:1", subject: "Hi", flags: { read: false }, from: { addr: "alex@example.com", name: "Alex" }, timestamp: NOW - 1000 });
     put({ _kind: "com.palm.smsmessage:1", folder: "inbox", messageText: "Hi", from: { addr: "3035550135" }, localTimestamp: NOW - 1000 });
     put({ _kind: "com.palm.phonecall:1", type: "missed", timestamp: NOW - 1000, from: { addr: "3035550135" }, to: [] });
     put({ _kind: "com.palm.media.image.file:1", path: "/media/internal/DCIM/a.jpg", createdTime: at(6, 12) });
@@ -117,6 +120,8 @@ function device() {
             if (m === "com.palm.display/control/getProperty") return ok({ maximumBrightness: 50 });
             if (m === "com.palm.power/com/palm/power/batteryStatusQuery") return ok({ percent: 50 });
             if (m === "com.palm.telephony/voicemailQuery") return ok({ number: "5550100", count: 1, waiting: true });
+            if (m === "com.webos.service.vpn/getProfileList") return ok({ vpnProfiles: [{ vpnProfileName: "Work" }] });
+            if (m === "org.webosphoenix.filemanager/search") return ok({ entries: [{ name: "budget.ods", path: "/media/internal/Documents/budget.ods", type: "file", size: 100, mtime: NOW }] });
             if (m === "org.webosphoenix.service.packages/search") return ok({ apps: [{ id: "doom", sourceId: "s", title: "Doom" }] });
             if (m === "com.webos.service.wifi/getstatus") return ok({ status: "connected" });
             return ok();
@@ -141,6 +146,20 @@ describe("what each command may do on a device", () => {
     it("has a request for every command in the catalogue", () => {
         expect(BUILT_IN.map((c) => c.id).filter((id) => !(id in PHRASES)), "commands without a request here").toEqual([]);
     });
+
+    // The settings toggle reaches through services of their own.
+    for (const text of ["turn on the hotspot", "turn on vpn", "turn off vpn", "turn on location services", "turn on rotation lock"]) {
+        it(`toggle "${text}": its Luna calls are in its client permissions`, async () => {
+            const d = device();
+            const r = await d.svc.ask({ text, newThread: true });
+            expect(r.messages.at(-1)).toMatchObject({ command: "toggle", status: "done" });
+            for (const [method] of d.used) {
+                const g = GROUPS.find(([re]) => re.test(method));
+                expect(g, `${text}: ${method}`).toBeTruthy();
+                expect(PERM, `${text}: ${method}`).toContain(g![1]);
+            }
+        });
+    }
 
     for (const c of BUILT_IN) {
         it(`${c.id}: its Luna calls are in its client permissions, its db8 kinds granted`, async () => {

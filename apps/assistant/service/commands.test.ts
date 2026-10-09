@@ -41,7 +41,8 @@ function device(opts: { offline?: boolean; locationAllowed?: boolean | null } = 
     put({ _id: "alarm-7", _kind: "com.palm.clock.alarm:1", key: "clockAlarm1", hour: 7, minute: 0, occurs: "weekdays", enabled: true, niceTime: "7:00 AM" });
     put({ _id: "alarm-630", _kind: "com.palm.clock.alarm:1", key: "clockAlarm2", hour: 18, minute: 30, occurs: "once", enabled: true, niceTime: "6:30 PM" });
     put({ _id: "mail-acct", _kind: "com.palm.mail.account:1", accountId: "acct-mail", email: "jordan@example.com", realName: "Jordan Avery" });
-    put({ _id: "mail-1", _kind: "com.palm.email:1", subject: "Invoice 2231", from: { name: "Alex Rivera", addr: "alex@example.com" }, summary: "Your invoice", timestamp: NOW - 3600e3, flags: { read: false, visible: true } });
+    put({ _id: "mail-1", _kind: "com.palm.email:1", subject: "Invoice 2231", from: { name: "Alex Rivera", addr: "alex@example.com" }, summary: "Your invoice", timestamp: NOW - 3600e3, flags: { read: false, visible: true },
+          parts: [{ type: "body", mimeType: "text/html", content: "Hi,<br>Your invoice 2231 is attached.<br>Alex" }] });
     put({ _id: "mail-2", _kind: "com.palm.email:1", subject: "Lunch today?", from: { name: "Priya Nair", addr: "priya@example.net" }, summary: "Noon?", timestamp: NOW - 7200e3, flags: { read: true, visible: true } });
     put({ _id: "sms-1", _kind: "com.palm.smsmessage:1", folder: "inbox", messageText: "Running 5 min late", from: { addr: "3035550135" }, localTimestamp: NOW - 600e3, threadId: "t-sam",
           flags: { read: false, visible: true } });
@@ -59,7 +60,8 @@ function device(opts: { offline?: boolean; locationAllowed?: boolean | null } = 
     const calls: { uri: string; params: any }[] = [];
     const state = { volume: 50, muted: false, ringtones: 60, brightness: 70, activities: new Map<string, any>(),
                     gps: true, network: true, locationAllowed: (opts.locationAllowed === undefined ? true : opts.locationAllowed) as boolean | null,
-                    prefs: { rotationLock: false } as Record<string, unknown> };
+                    prefs: { rotationLock: false } as Record<string, unknown>, nowPlaying: null as Record<string, unknown> | null,
+                    hotspot: false, hotspotPass: false, vpn: "", vpnProfiles: [] as string[] };
     const okr = (o: object = {}) => Promise.resolve({ returnValue: true, ...o });
     const luna = {
         call(uri: string, p: any): Promise<any> {
@@ -101,6 +103,16 @@ function device(opts: { offline?: boolean; locationAllowed?: boolean | null } = 
             }
             // What OSE's service does not have (getCurrentPosition was the legacy com.palm.location's).
             if (m.startsWith("com.webos.service.location/")) return Promise.resolve({ returnValue: false, errorCode: -1, errorText: "Unknown method" });
+            if (m === "org.webosphoenix.filemanager/search")
+                return okr({ entries: p.query === "budget" ? [{ name: "Budget 2026.pdf", path: "/media/internal/Documents/Budget 2026.pdf", type: "file", size: 52000, mtime: at(6, 12) }] : [] });
+            if (m === "org.webosphoenix.tethering/setWifi") {
+                if (p.enabled && !state.hotspotPass) return Promise.resolve({ returnValue: false, errorCode: -1, errorText: "The password has 8 to 63 characters" });
+                state.hotspot = p.enabled; return okr();
+            }
+            if (m === "com.webos.service.vpn/getProfileList") return okr({ vpnProfiles: state.vpnProfiles.map((n) => ({ vpnProfileName: n })) });
+            if (m === "com.webos.service.vpn/connect") { state.vpn = p.vpnProfileName; return okr(); }
+            if (m === "com.webos.service.vpn/disconnect") { state.vpn = ""; return okr(); }
+            if (m === "org.webosphoenix.system/getNowPlaying") return okr({ nowPlaying: state.nowPlaying });
             if (m === "com.palm.telephony/voicemailQuery") return okr({ number: "(408) 555-0100", waiting: true, count: 2 });
             if (m === "com.webos.service.systemservice/deviceInfo/query") return okr({ storage_free: "5.8 GB", storage_size: "8 GB" });
             if (m === "org.webosphoenix.service.packages/search")
@@ -122,9 +134,19 @@ function device(opts: { offline?: boolean; locationAllowed?: boolean | null } = 
         requests.push(r.url);
         if (opts.offline) return Promise.reject(new Error("offline"));
         if (r.url.includes("frankfurter")) return Promise.resolve({ status: 200, body: JSON.stringify({ amount: 20, base: "USD", date: "2026-10-07", rates: { EUR: 17.3 } }) });
-        if (r.url.includes("api.open-meteo.com/v1/forecast"))
+        if (r.url.includes("api.open-meteo.com/v1/forecast") && !r.url.includes("hourly="))
             return Promise.resolve({ status: 200, body: JSON.stringify({ current: { temperature_2m: 64.4, weather_code: 2 },
                 daily: { weather_code: [2, 61], temperature_2m_max: [70.2, 61.1], temperature_2m_min: [52.3, 50], precipitation_probability_max: [10, 80] } }) });
+        if (r.url.includes("photon.komoot.io")) return Promise.resolve({ status: 200, body: JSON.stringify({ features: [{ geometry: { coordinates: [-121.93, 37.36] }, properties: { name: "San Jose Airport" } }] }) });
+        if (r.url.includes("valhalla1.openstreetmap.de/route")) {
+            const q = JSON.parse(decodeURIComponent(r.url.split("json=")[1]));
+            return Promise.resolve({ status: 200, body: JSON.stringify({ trip: { summary: { time: q.costing === "auto" ? 1080 : 5400, length: 12.4 } } }) });
+        }
+        if (r.url.includes("hourly=")) {
+            const times = Array.from({ length: 48 }, (_, h) => { const d = new Date(2026, 9, 7, h); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${String(d.getHours()).padStart(2, "0")}:00`; });
+            return Promise.resolve({ status: 200, body: JSON.stringify({ current: { temperature_2m: 64, weather_code: 2 }, daily: { temperature_2m_max: [70, 61], temperature_2m_min: [52, 50], weather_code: [2, 61] },
+                hourly: { time: times, temperature_2m: times.map((_, h) => 50 + (h % 24)), weather_code: times.map((_, h) => (h % 24 >= 15 ? 61 : 2)), precipitation_probability: times.map((_, h) => (h % 24 >= 15 ? 70 : 5)) } }) });
+        }
         if (r.url.includes("geocoding")) return Promise.resolve({ status: 200, body: JSON.stringify({ results: [{ name: "Paris", latitude: 48.85, longitude: 2.35, timezone: "Europe/Paris" }] }) });
         return Promise.resolve({ status: 404, body: "" });
     };
@@ -434,7 +456,26 @@ describe("more for each app (docs/AI-AND-MCP.md, what it can do for each app)", 
         expect(d.db.get("ev-dentist")).toMatchObject({ dtstart: at(9, 16), dtend: at(9, 17) });
         await d.confirm(await d.ask("undo"));
         expect(d.db.get("ev-dentist")).toMatchObject({ dtstart: at(9, 14), dtend: at(9, 15) });
-        expect((await d.ask("move my stand-up to 10am")).text).toMatch(/^“Team stand-up” repeats\./);
+        // A repeating one: the next day of it only (the Calendar's "this event only"), or all.
+        const one = await d.ask("move my stand-up to 10am");
+        expect(one.text).toBe("Moved tomorrow's “Team stand-up” to 10:00 AM. The others stay as they are.");
+        const parent = d.db.get("ev-standup");
+        expect(parent.exdates).toEqual([new Date(at(8, 9, 30)).toISOString().replace(/[-:]/g, "").replace(/\.\d+/, "")]);
+        const child = d.of("com.palm.calendarevent:1").find((e) => e.parentId === "ev-standup");
+        expect(child).toMatchObject({ subject: "Team stand-up", dtstart: at(8, 10), dtend: at(8, 10, 30), recurrenceId: parent.exdates[0] });
+        expect(child.rrule).toBeUndefined();
+        expect((await d.ask("what's on my calendar tomorrow")).text).toMatch(/“Team stand-up” at 10:00 AM/);
+        expect((await d.ask("what's on my calendar on Friday")).text).toMatch(/“Team stand-up” at 9:30 AM/);
+        await d.confirm(await d.ask("undo"));
+        expect(d.db.get("ev-standup").exdates).toEqual([]);
+        expect(d.of("com.palm.calendarevent:1").some((e) => e.parentId)).toBe(false);
+        expect((await d.ask("move all my stand-ups to 9am")).text).toBe("Every “Team stand-up” is at 9:00 AM now.");
+        expect(d.db.get("ev-standup")).toMatchObject({ dtstart: at(5, 9), dtend: at(5, 9, 30) });
+        const friday = await d.ask("cancel my stand-up on Friday");
+        expect(friday.text).toBe("Cancel “Team stand-up” on Friday at 9:00 AM?");
+        expect((await d.confirm(friday)).text).toBe("Cancelled “Team stand-up” on Friday at 9:00 AM. The others stay.");
+        expect((await d.ask("what's on my calendar on Friday")).text).not.toMatch(/stand-up/);
+        expect((await d.ask("cancel every team stand-up")).text).toBe("Cancel every “Team stand-up”?");
         const c = await d.ask("cancel my dentist appointment");
         expect(c).toMatchObject({ status: "pending", text: "Cancel “Dentist” on Friday at 2:00 PM?" });
         expect(d.db.has("ev-dentist")).toBe(true);
@@ -472,7 +513,13 @@ describe("more for each app (docs/AI-AND-MCP.md, what it can do for each app)", 
         expect((await d.ask("install doom")).text).toBe("Here's Doom in the Marketplace: tap Install to get it.");
         expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.marketplace", params: { sourceId: "museum", id: "com.example.doom" } });
         expect((await d.ask("install frobnicator")).text).toBe("I couldn't find “frobnicator” in the Marketplace.");
-        expect((await d.ask("what's playing")).text).toBe("I can't see what's playing yet, but I can open Music for you.");
+        expect((await d.ask("what's playing")).text).toBe("Nothing is playing right now.");
+        d.state.nowPlaying = { title: "So What", artist: "Miles Davis", album: "Kind of Blue", playing: true, appId: "org.webosphoenix.music" };
+        const np = await d.ask("what song is this");
+        expect(np.text).toBe("Playing “So What” by Miles Davis.");
+        expect(np.choices!.map((c) => c.label)).toEqual(["Pause", "Next", "Open Music"]);
+        await d.choose(np, "do:0");
+        expect(d.called("org.webosphoenix.system/mediaKey").pop()!.params).toEqual({ key: "pause" });
     });
     it("weather: will it rain, the week", async () => {
         const d = device();
@@ -494,6 +541,58 @@ describe("more for each app (docs/AI-AND-MCP.md, what it can do for each app)", 
         expect(how.choices).toEqual([{ id: "open", label: "Open Help" }]);
         await d.choose(how, "open");
         expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.help", params: { topic: "help-cards" } });
+    });
+});
+
+describe("the gaps closed (9 October 2026, second round)", () => {
+    it("email: the latest read out, a reply read back and sent through com.palm.smtp", async () => {
+        const d = device();
+        const m = await d.ask("read my latest email");
+        expect(m.text).toBe("From Alex Rivera, today at 9:00 AM: “Invoice 2231”. Your invoice");
+        expect(m.choices!.map((c) => c.label)).toEqual(["Reply to Alex Rivera", "Open Email"]);
+        expect((await d.ask("read the email from Priya")).text).toMatch(/^From Priya Nair, today at 8:00 AM: “Lunch today\?”/);
+        const r = await d.ask("reply to the email from Alex saying thanks, paid today");
+        expect(r).toMatchObject({ status: "pending", text: "Email Alex Rivera, subject “Re: Invoice 2231”: “Thanks, paid today”?" });
+        await d.confirm(r);
+        expect(d.called("com.palm.smtp/sendMail")[0].params.email).toMatchObject({ subject: "Re: Invoice 2231", to: [{ addr: "alex@example.com" }] });
+        expect((await d.ask("reply to my last email")).text).toBe("Here's a new email to Alex Rivera.");
+        expect((await d.ask("read the email from Gandalf")).text).toBe("You have no email from gandalf.");
+    });
+    it("files: found by name, as cards opening their folder in Files", async () => {
+        const d = device();
+        const f = await d.ask("find my file called budget");
+        expect(f.text).toBe("I found “Budget 2026.pdf”.");
+        expect(f.data.attachments[0].items[0]).toMatchObject({ title: "Budget 2026.pdf", open: { appId: "org.webosphoenix.files", params: { path: "/media/internal/Documents" } } });
+        expect(f.data.attachments[0].items[0].subtitle).toMatch(/^Internal storage\/Documents · 52 KB · /);
+        expect((await d.ask("find the tax pdf")).text).toBe("I couldn't find a file called “tax”. I can open Files for you.");
+    });
+    it("one day of a repeating event moved or cancelled, as the Calendar does (tested above), and travel time without traffic", async () => {
+        const d = device();
+        expect((await d.ask("how long will it take to drive to the airport")).text).toBe("San Jose Airport is about 18 minutes away by car (7.7 miles), without traffic.");
+        expect((await d.ask("how long to walk to the airport")).text).toBe("San Jose Airport is about 1 hour and 30 minutes away on foot (7.7 miles).");
+        const t = await d.ask("what's the traffic like to the airport");
+        expect(t.text).toBe("I can't see live traffic, but without it San Jose Airport is about 18 minutes away by car (7.7 miles).");
+        expect(t.choices).toEqual([{ id: "open", label: "Open Maps" }]);
+        expect((await d.ask("how's the traffic")).text).toMatch(/^I can't see live traffic\. Say where you're going/);
+    });
+    it("the weather at an hour", async () => {
+        const d = device();
+        expect((await d.ask("what's the weather at 5pm")).text).toBe("At 5:00 PM: 67°F and light rain, 70% chance of rain.");
+        expect((await d.ask("will it rain this morning")).text).toBe("Probably not: a 5% chance of rain at 9:00 AM. Partly cloudy, 59°F.");
+    });
+    it("hotspot and VPN: on and off, or what Settings needs", async () => {
+        const d = device();
+        const h = await d.ask("turn on the hotspot");
+        expect(h).toMatchObject({ status: "failed", text: "The hotspot didn't turn on: The password has 8 to 63 characters." });
+        expect(h.choices).toEqual([{ id: "open", label: "Open Hotspot & Tethering" }]);
+        d.state.hotspotPass = true;
+        expect((await d.ask("turn on the hotspot")).text).toBe("The hotspot is on.");
+        expect(d.state.hotspot).toBe(true);
+        expect((await d.ask("turn on vpn")).text).toBe("You haven't set up a VPN yet. You can add one in Settings > VPN.");
+        d.state.vpnProfiles = ["Work"];
+        expect((await d.ask("turn on vpn")).text).toBe("Connecting to “Work”.");
+        expect(d.state.vpn).toBe("Work");
+        expect((await d.ask("turn off vpn")).text).toBe("The VPN is off.");
     });
 });
 

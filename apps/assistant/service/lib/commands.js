@@ -110,10 +110,13 @@ var MAPS_APP = "org.webosphoenix.maps";
 var ASSISTANT_APP = "org.webosphoenix.assistant";
 var MARKETPLACE_APP = "org.webosphoenix.marketplace";
 var HELP_APP = "org.webosphoenix.help";
+var FILES_APP = "org.webosphoenix.files";
 var AM = "luna://com.palm.activitymanager/";
 var DB = "luna://com.palm.db/";
 var AUDIO = "luna://com.webos.service.audio/";
 var SYSTEM_SERVICE = "luna://com.webos.service.systemservice/";
+var VPN = "luna://com.webos.service.vpn/";
+var FILES = "luna://org.webosphoenix.filemanager/";
 
 var S = { type: "string" }, I = { type: "integer" }, B = { type: "boolean" };
 var WHEN = { type: "string", description: "When, as said (\"tomorrow at 3pm\", \"next Tuesday at noon\", \"in 2 hours\") or ISO 8601 local time" };
@@ -159,9 +162,9 @@ var BUILT_IN = [
       parameters: { type: "object", properties: { name: S, number: S, email: S, label: { type: "string", enum: ["", "mobile", "home", "work"] } }, required: ["name"] } },
     { id: "contactInfo", title: "Contact details", risk: "read", description: "Tell a contact's phone number, email, address or birthday.",
       parameters: { type: "object", properties: { who: S, what: { type: "string", enum: ["phone", "email", "address", "birthday"] }, label: S }, required: ["who"] } },
-    { id: "toggle", title: "Wi-Fi, Bluetooth, airplane mode, flashlight, ringer, Do Not Disturb, Location Services, rotation lock", risk: "change",
+    { id: "toggle", title: "Wi-Fi, Bluetooth, airplane mode, flashlight, ringer, Do Not Disturb, Location Services, rotation lock, hotspot, VPN", risk: "change",
       description: "Turn a device setting on or off (rotation: the screen turning; rotationLock: the lock).",
-      parameters: { type: "object", properties: { setting: { type: "string", enum: ["wifi", "bluetooth", "airplane", "flashlight", "ringer", "dnd", "location", "rotation", "rotationLock"] }, state: { type: "string", enum: ["on", "off", "toggle"] } }, required: ["setting", "state"] } },
+      parameters: { type: "object", properties: { setting: { type: "string", enum: ["wifi", "bluetooth", "airplane", "flashlight", "ringer", "dnd", "location", "rotation", "rotationLock", "hotspot", "vpn"] }, state: { type: "string", enum: ["on", "off", "toggle"] } }, required: ["setting", "state"] } },
     { id: "media", title: "Music controls", risk: "change", description: "Pause, resume, or skip to the next or previous song in the player.",
       parameters: { type: "object", properties: { action: { type: "string", enum: ["pause", "play", "next", "prev", "status"] } }, required: ["action"] } },
     { id: "volume", title: "Volume", risk: "change", description: "Turn the volume up or down, set it (0-100), mute or unmute.",
@@ -186,7 +189,7 @@ var BUILT_IN = [
       parameters: { type: "object", properties: { query: S } } },
     { id: "weather", title: "Weather", risk: "read", description: "Tell the weather now, tomorrow or this week, here or in a named place, or whether it will rain.",
       parameters: { type: "object", properties: { place: { type: "string", description: "City; empty for here" }, day: { type: "string", enum: ["", "today", "tonight", "tomorrow", "this week", "this weekend"] },
-        about: { type: "string", enum: ["", "rain", "snow", "sunny", "hot", "cold", "warm", "windy"] } } } },
+        about: { type: "string", enum: ["", "rain", "snow", "sunny", "hot", "cold", "warm", "windy"] }, hour: { type: "integer", minimum: 0, maximum: 23, description: "An hour of that day, 0-23, for the weather then" } } } },
     { id: "convert", title: "Unit and currency conversions", risk: "read", description: "Convert units (length, weight, volume, temperature, speed, area, data, time) or currencies (ISO codes).",
       parameters: { type: "object", properties: { value: { type: "number" }, from: { type: "string", description: "Unit id (km, mi, kg, lb, l, cup, c, f, ...) or currency code (USD)" }, to: S }, required: ["value", "from", "to"] } },
     { id: "worldTime", title: "Time around the world", risk: "read", description: "Tell the time in a city.", parameters: { type: "object", properties: { place: S }, required: ["place"] } },
@@ -204,10 +207,10 @@ var BUILT_IN = [
       parameters: { type: "object", properties: { action: { type: "string", enum: ["status", "call"] } }, required: ["action"] } },
     { id: "replyMessage", title: "Replying to messages", risk: "send", description: "Reply by text message to whoever sent the last message.",
       parameters: { type: "object", properties: { message: { type: "string", description: "The words to send; empty to write them in Messaging" } } } },
-    { id: "eventMove", title: "Moving events", risk: "change", description: "Move a calendar event to another time or day.",
-      parameters: { type: "object", properties: { query: { type: "string", description: "The event's name, as said (\"dentist appointment\")" }, start: WHEN }, required: ["query", "start"] } },
-    { id: "eventCancel", title: "Cancelling events", risk: "delete", description: "Delete an event from the calendar (read back first).",
-      parameters: { type: "object", properties: { query: { type: "string", description: "The event's name, and its day or time if said" } }, required: ["query"] } },
+    { id: "eventMove", title: "Moving events", risk: "change", description: "Move a calendar event to another time or day; a repeating one's next day, or all of them (all: true).",
+      parameters: { type: "object", properties: { query: { type: "string", description: "The event's name, as said (\"dentist appointment\")" }, start: WHEN, all: B }, required: ["query", "start"] } },
+    { id: "eventCancel", title: "Cancelling events", risk: "delete", description: "Delete an event from the calendar (read back first); a repeating one's day, or all of them (all: true).",
+      parameters: { type: "object", properties: { query: { type: "string", description: "The event's name, and its day or time if said" }, all: B }, required: ["query"] } },
     { id: "freeTime", title: "Free time", risk: "read", description: "Tell whether the user is free at a time, or when they are free on a day.",
       parameters: { type: "object", properties: { day: { type: "string", description: "The day, as said or ISO 8601" }, at: { type: "string", description: "A time that day, if asked" } } } },
     { id: "noteAppend", title: "Adding to memos", risk: "change", description: "Add words to the end of an existing memo.",
@@ -226,6 +229,14 @@ var BUILT_IN = [
     { id: "help", title: "Help and how-tos", risk: "read", description: "Say what the assistant can do, or how to do something in Phoenix (gestures, cards, Just Type).",
       parameters: { type: "object", properties: { topic: { type: "string", enum: ["", "back", "gestures", "switch", "close", "stacks", "launcher", "rearrange", "justtype",
         "notifications", "systemmenu", "unlock", "passcode", "location", "screenshot", "assistant"] } } } },
+    { id: "findFiles", title: "Finding files", risk: "read", description: "Find files and folders on the device by their names.",
+      parameters: { type: "object", properties: { query: { type: "string", description: "Words of the file's name" }, kind: { type: "string", enum: ["", "pdf"] } }, required: ["query"] } },
+    { id: "readEmail", title: "Reading email", risk: "read", description: "Read the latest email, or the latest from someone.",
+      parameters: { type: "object", properties: { who: { type: "string", description: "Who it is from; empty for anyone" } } } },
+    { id: "emailReply", title: "Replying to email", risk: "send", description: "Reply to the latest email (from someone): sent after a read-back, or a reply opened to write.",
+      parameters: { type: "object", properties: { who: S, body: { type: "string", description: "The words; empty to write them in Email" } } } },
+    { id: "travelTime", title: "Travel time", risk: "read", description: "Tell how long it takes to drive, walk or cycle to a place from here (no live traffic).",
+      parameters: { type: "object", properties: { place: S, mode: { type: "string", enum: ["drive", "walk", "bike"] }, traffic: B }, required: ["place"] } },
     { id: "locationAccess", title: "Location", risk: "change", internal: true, description: "Let the Assistant use the device's location, or not.",
       parameters: { type: "object", properties: { allow: B }, required: ["allow"] } },
     { id: "undo", title: "Undo", risk: "delete", internal: true, description: "Take back what the assistant just did.",
@@ -571,22 +582,48 @@ function prepare(cmd, args, env) {
             });
         });
     }
+    if (cmd.id === "emailReply" || cmd.id === "readEmail") {
+        return latestEmail(env, args.who).then(function (e) {
+            if (!e) return { args: args, reply: args.who ? say.noEmailFrom(args.who) : say.noEmails() };
+            args.emailId = e._id; args.from = e.from || {}; args.subject = e.subject || ""; args.summary = e.summary || textOf(e);
+            args.at = e.timestamp || 0;
+            if (cmd.id === "readEmail") return { args: args };
+            args.addr = args.from.addr; args.name = args.from.name || "";
+            args.subject = /^re:/i.test(args.subject) ? args.subject : "Re: " + args.subject;
+            if (!String(args.body || "").trim()) return { args: args };
+            return { args: args, confirm: say.confirmEmail(args.name || args.addr, args.subject, args.body) };
+        });
+    }
     if (cmd.id === "eventMove" || cmd.id === "eventCancel") {
         return findEvent(env, args.query).then(function (hit) {
             if (!hit) return { args: args, reply: say.noSuchEvent(env.lang.eventWords ? env.lang.eventWords(String(args.query)) || args.query : args.query) };
-            var ev = hit.event;
-            if (ev.rrule) return { args: args, reply: say.eventRepeats(hit.title) };
+            var ev = hit.event, repeats = !!(ev.rrule && ev.rrule.freq);
             args.id = ev._id; args.title = hit.title; args.old = { dtstart: Number(ev.dtstart), dtend: Number(ev.dtend), allDay: !!ev.allDay };
+            // A repeating event: the day found (as the Calendar app's "this
+            // event only": an exception date on it, and for a move a child
+            // event), or every one when "all" was said.
+            args.scope = !repeats ? "event" : args.all ? "series" : "occurrence";
+            args.at = hit.start;
+            args.exdates = ev.exdates || [];
+            var len = Number(ev.dtend) - Number(ev.dtstart);
             if (cmd.id === "eventCancel") {
                 args.record = ev;
-                return { args: args, confirm: say.confirmEventCancel(hit.title, Number(ev.dtstart), !!ev.allDay, env.now()) };
+                return { args: args, confirm: args.scope === "series" ? say.confirmSeriesCancel(hit.title)
+                                                                     : say.confirmEventCancel(hit.title, hit.start, !!ev.allDay, env.now()) };
             }
             if (!(args.start > 0)) return { args: args, reply: say.eventWhen() };
-            var len = Number(ev.dtend) - Number(ev.dtstart), start = args.start;
+            var base = args.scope === "occurrence" ? hit.start : Number(ev.dtstart), start = args.start;
+            if (args.scope === "series") {
+                // Every one: their time changes, not their days.
+                if (!args.hasTime || args.hasDate) return { args: args, reply: say.seriesTimeOnly(hit.title) };
+                var ts = new Date(args.start);
+                start = D.at(D.startOfDay(Number(ev.dtstart)), ts.getHours(), ts.getMinutes());
+            }
             // Only a time said: the same day; only a day: the same time.
-            if (args.hasTime && !args.hasDate) { var t = new Date(args.start); start = D.at(D.startOfDay(Number(ev.dtstart)), t.getHours(), t.getMinutes()); }
-            else if (!args.hasTime && !ev.allDay) { var o = new Date(Number(ev.dtstart)); start = D.at(D.startOfDay(args.start), o.getHours(), o.getMinutes()); }
+            else if (args.hasTime && !args.hasDate) { var t = new Date(args.start); start = D.at(D.startOfDay(base), t.getHours(), t.getMinutes()); }
+            else if (!args.hasTime && !ev.allDay) { var o = new Date(base); start = D.at(D.startOfDay(args.start), o.getHours(), o.getMinutes()); }
             args.newStart = start; args.newEnd = start + len;
+            if (args.scope !== "event") args.record = ev;
             return { args: args };
         });
     }
@@ -657,6 +694,22 @@ var TOGGLE_RUN = {
     // "rotation" on is the screen turning, the lock off.
     rotationLock: function (env, on) { return lunaCall(env, SYSTEM_SERVICE + "setPreferences", { rotationLock: on }); },
     rotation: function (env, on) { return lunaCall(env, SYSTEM_SERVICE + "setPreferences", { rotationLock: !on }); },
+    // The Wi-Fi hotspot (org.webosphoenix.tethering setWifi, as Settings >
+    // Hotspot & Tethering); VPN: the first profile, or all down
+    // (com.webos.service.vpn, LuneOS's adapter: Settings > VPN).
+    hotspot: function (env, on) { return lunaCall(env, "luna://org.webosphoenix.tethering/setWifi", { enabled: on }); },
+    vpn: function (env, on) {
+        if (!on) return lunaCall(env, VPN + "disconnect", {});
+        return lunaCall(env, VPN + "getProfileList", {}).then(function (r) {
+            var p = (r.vpnProfiles || [])[0];
+            if (!p) throw Object.assign(new Error("no VPN"), { said: env.lang.say.noVpn() });
+            var name = p.vpnProfileName || p.name;
+            return env.luna.call(VPN + "connect", { vpnProfileName: name }).then(function (c) {
+                if (c && c.returnValue === false) throw Object.assign(new Error(c.errorText || "VPN"), { said: c.errorCode === -7 ? env.lang.say.vpnSignIn(name) : env.lang.say.failed(c.errorText || "") });
+                return { profile: name };
+            });
+        });
+    },
     ringer: ringer,
     dnd: function (env, on) { return ringer(env, !on); }
 };
@@ -666,6 +719,8 @@ var TOGGLE_STATE = {
     airplane: function (env) { return lunaCall(env, "luna://com.webos.service.connectionmanager/getstatus", {}).then(function (r) { return r.offlineMode === "enabled"; }); },
     flashlight: function (env) { return lunaCall(env, "luna://org.webosports.service.torch/getStatus", {}).then(function (r) { return !!r.on; }); },
     ringer: function (env) { return lunaCall(env, AUDIO + "getInputVolume", { streamType: "pringtones" }).then(function (r) { return r.volume > 0; }); },
+    hotspot: function (env) { return lunaCall(env, "luna://org.webosphoenix.tethering/getStatus", {}).then(function (r) { return !!(r.wifi && r.wifi.enabled); }); },
+    vpn: function (env) { return lunaCall(env, VPN + "getStatus", {}).then(function (r) { return !!(r.activeProfiles && r.activeProfiles.length); }); },
     location: function (env) {
         return lunaCall(env, LOCATION + "getAllLocationHandlers", {}).then(function (r) { return (r.handlers || []).some(function (h) { return h.state; }); });
     },
@@ -763,6 +818,7 @@ function weather(args, env) {
     return where.then(function (pl) {
         var url = "https://api.open-meteo.com/v1/forecast?latitude=" + pl.lat + "&longitude=" + pl.lon +
             "&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max" +
+            (typeof args.hour === "number" ? "&hourly=temperature_2m,weather_code,precipitation_probability" : "") +
             "&forecast_days=" + (week ? 7 : 2) + "&timezone=auto" + (imperial ? "&temperature_unit=fahrenheit" : "");
         return getJson(env, url).then(function (f) {
             var unit = imperial ? "F" : "C";
@@ -778,6 +834,15 @@ function weather(args, env) {
                 if (args.day === "this weekend") days = days.filter(function (d) { var w = new Date(d.at).getDay(); return w === 0 || w === 6; });
                 return { text: say.weatherDays(pl.name, days, unit, args.day, now), open: open };
             }
+            if (typeof args.hour === "number" && f.hourly) {
+                // That hour of the day (Open-Meteo's hourly, local times "2026-10-07T17:00").
+                var day0 = new Date(env.now()), want = new Date(day0.getFullYear(), day0.getMonth(), day0.getDate() + i, args.hour);
+                var key = want.getFullYear() + "-" + pad(want.getMonth() + 1) + "-" + pad(want.getDate()) + "T" + pad(args.hour) + ":00";
+                var k = (f.hourly.time || []).indexOf(key);
+                if (k >= 0)
+                    return { text: say.weatherAt(pl.name, want.getTime(), f.hourly.temperature_2m[k], unit, WMO[f.hourly.weather_code[k]] || "",
+                                                 (f.hourly.precipitation_probability || [])[k], args.about, env.now()), open: open };
+            }
             var hi = daily.temperature_2m_max ? daily.temperature_2m_max[i] : null, lo = daily.temperature_2m_min ? daily.temperature_2m_min[i] : null;
             var code = i === 1 ? (daily.weather_code || [])[1] : f.current && f.current.weather_code;
             if (args.about) {
@@ -791,6 +856,37 @@ function weather(args, env) {
         if (e && e.said) return { text: e.said };
         return launch(env, "org.webosphoenix.weather", {}).then(function () { return { text: say.noWeather() }; },
                                                                   function () { return { text: say.noWeather() }; });
+    });
+}
+
+// How long it takes to get somewhere from here: Valhalla's route (the
+// FOSSGIS server Maps uses, apps/maps lib/providers.ts, no key), its time
+// without traffic; no free source has live traffic, so it says so.
+// Places by Photon (as Maps searches), near where the device is.
+var VALHALLA = "https://valhalla1.openstreetmap.de", PHOTON = "https://photon.komoot.io";
+var COSTING = { drive: "auto", walk: "pedestrian", bike: "bicycle" };
+function travel(args, env) {
+    var say = env.lang.say, mode = COSTING[args.mode] ? args.mode : "drive";
+    var maps = function (place) { return { appId: MAPS_APP, params: place ? { target: "mapto:" + place } : {}, title: "Maps" }; };
+    if (!args.place) return Promise.resolve({ text: say.noTraffic(), open: maps("") });
+    return here(env, "distance").then(function (me) {
+        return getJson(env, PHOTON + "/api/?limit=1&lat=" + me.lat + "&lon=" + me.lon + "&q=" + encodeURIComponent(args.place)).then(function (g) {
+            var f = g.features && g.features[0];
+            if (!f) throw Object.assign(new Error("no place"), { said: say.noPlace(args.place) });
+            var to = { lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], name: f.properties.name || args.place };
+            var q = { locations: [{ lat: me.lat, lon: me.lon }, { lat: to.lat, lon: to.lon }], costing: COSTING[mode], units: "kilometers" };
+            return env.request({ method: "GET", url: VALHALLA + "/route?json=" + encodeURIComponent(JSON.stringify(q)),
+                                 headers: { Accept: "application/json", "X-Client-Id": "webos-phoenix-assistant" } }).then(function (r) {
+                var j = r.status === 200 ? JSON.parse(r.body) : null, sum = j && j.trip && j.trip.summary;
+                if (!sum) throw Object.assign(new Error("no route"), { said: say.noRoute(to.name) });
+                return { text: say.travelTime(to.name, sum.time, sum.length, mode, args.traffic, env.units === "imperial"), open: maps(args.place),
+                         data: { seconds: sum.time, km: sum.length } };
+            });
+        });
+    }).catch(function (e) {
+        if (e && e.location) return blockedReply(e, { command: "travelTime", args: args });
+        if (e && e.said) return { text: e.said, open: maps(args.place) };
+        return { text: say.noLookup(args.place), open: maps(args.place) };
     });
 }
 
@@ -833,10 +929,13 @@ function eventsIn(env, from, to) {
     return dbFind(env, "com.palm.calendarevent:1").then(function (all) {
         var out = [];
         all.forEach(function (ev) {
-            if (ev._del || ev.parentId) return;
+            // A child (one day of a repeating event changed, com.palm.app.calendar
+            // EditView.js:1170-1185) is an event of its own; a deleted one is not.
+            if (ev._del) return;
             var len = (Number(ev.dtend) || Number(ev.dtstart)) - Number(ev.dtstart);
             D.occurrences(ev, from, to).forEach(function (s) {
-                out.push({ id: ev._id, title: ev.subject || "(no title)", start: s, end: s + len, allDay: !!ev.allDay, location: ev.location || "" });
+                out.push({ id: ev._id, title: ev.subject || "(no title)", start: s, end: s + len, allDay: !!ev.allDay, location: ev.location || "",
+                           repeats: !!(ev.rrule && ev.rrule.freq) });
             });
         });
         return out.sort(function (a, b) { return (a.allDay === b.allDay ? 0 : a.allDay ? -1 : 1) || a.start - b.start; });
@@ -997,6 +1096,23 @@ function remindTask(env, taskId, due) {
                     params: { id: TASKS_APP, params: { reminder: taskId } } } } });
 }
 
+// ---- Email ---------------------------------------------------------------------------------------
+// The newest email (from who, by name or address), and its words without markup.
+function latestEmail(env, who) {
+    return dbFind(env, "com.palm.email:1").then(function (all) {
+        var w = String(who || "").trim();
+        return all.filter(function (e) {
+            if (e._del || (e.flags && e.flags.visible === false) || e.folderId === "outbox") return false;
+            return !w || matches((e.from ? (e.from.name || "") + " " + (e.from.addr || "") : ""), w);
+        }).sort(function (a, b) { return (b.timestamp || 0) - (a.timestamp || 0); })[0] || null;
+    });
+}
+function textOf(e) {
+    var body = ((e.parts || []).filter(function (p) { return p.type === "body"; })[0] || {}).content || "";
+    return String(body).replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+        .replace(/[ \t]+/g, " ").trim();
+}
+
 // ---- Calls, messages, events, lists: finding things -----------------------------------------------
 
 var TELEPHONY = "luna://com.palm.telephony/";
@@ -1020,10 +1136,12 @@ function findEvent(env, said) {
     var now = env.now(), info = env.lang.extract(String(said || ""), now);
     var q = env.lang.eventWords ? env.lang.eventWords(info.rest) : info.rest;
     var r = env.lang.resolve(info, now, "day");
-    var from = info.day !== undefined ? info.day : D.startOfDay(now), to = info.day !== undefined ? D.addDays(info.day, 1) : D.addDays(D.startOfDay(now), 366);
+    // No day said: the next one still to come.
+    var from = info.day !== undefined ? info.day : now, to = info.day !== undefined ? D.addDays(info.day, 1) : D.addDays(D.startOfDay(now), 366);
+    var singular = q.split(" ").map(function (w) { return w.length > 3 ? w.replace(/s$/, "") : w; }).join(" ");
     return Promise.all([eventsIn(env, from, to), dbFind(env, "com.palm.calendarevent:1")]).then(function (got) {
         var evs = got[0].filter(function (e) {
-            if (q && !matches(e.title + " " + e.location, q)) return false;
+            if (q && !matches(e.title + " " + e.location, q) && !matches(e.title + " " + e.location, singular)) return false;
             if (r.hasTime && info.clock) {
                 var d = new Date(e.start), want = new Date(r.start);
                 if (d.getHours() !== want.getHours() || d.getMinutes() !== want.getMinutes()) return false;
@@ -1053,12 +1171,12 @@ function freeSlots(evs, from, to) {
 // checks that every one is understood as it stands).
 var HELP_GROUPS = [
     { title: "Phone & Messages", examples: ["Call Mom", "Who called me?", "Call back", "Text Sam I'm running late", "Read my new messages", "Reply on my way"] },
-    { title: "Email", examples: ["Do I have any new emails?", "Email Priya saying see you soon"] },
+    { title: "Email", examples: ["Do I have any new emails?", "Read my latest email", "Email Priya saying see you soon"] },
     { title: "Calendar", examples: ["What's on my calendar tomorrow?", "Add lunch with Sam Friday at noon", "Am I free tomorrow at 3?", "Move my dentist appointment to 4pm"] },
     { title: "Reminders, Tasks & Memos", examples: ["Remind me to call Mom at 6", "Add milk to my shopping list", "What's on my shopping list?", "New note: buy flowers"] },
     { title: "Clock", examples: ["Set an alarm for 7am weekdays", "Set a timer for 10 minutes", "What time is it in Tokyo?"] },
-    { title: "Weather & Maps", examples: ["What's the weather tomorrow?", "Will it rain tomorrow?", "Coffee near me", "Navigate to the nearest gas station"] },
-    { title: "Music & Photos", examples: ["Play some music by Miles Davis", "Next song", "Show my photos from yesterday"] },
+    { title: "Weather & Maps", examples: ["What's the weather tomorrow?", "Will it rain this afternoon?", "Coffee near me", "How long to drive to the airport?"] },
+    { title: "Music, Photos & Files", examples: ["Play some music by Miles Davis", "What's playing?", "Show my photos from yesterday", "Find my file called budget"] },
     { title: "Settings & Device", examples: ["Turn on Wi-Fi", "Turn on the flashlight", "Set brightness to 50%", "What's my battery?", "How much storage do I have?"] },
     { title: "Answers", examples: ["What's 15% of 80?", "Convert 10 miles to km", "Search the web for webOS"] },
     { title: "Using Phoenix", examples: ["How do I close an app?", "How do I use Just Type?", "How do I go back?"] }
@@ -1321,12 +1439,31 @@ function run(cmd, args, env) {
         var target = args.state === "toggle"
             ? TOGGLE_STATE[setting](env).then(function (on) { return !on; }) : Promise.resolve(args.state === "on");
         return target.then(function (on) {
-            return fn(env, on).then(function () { return { text: setting === "dnd" ? say.dnd(on) : say.toggled(setting, on) }; });
+            return fn(env, on).then(function (r) { return { text: setting === "dnd" ? say.dnd(on) : setting === "vpn" && on && r && r.profile ? say.vpnOn(r.profile) : say.toggled(setting, on) }; },
+                function (e) {
+                    // Settings knows what is missing (the hotspot's password, a VPN profile).
+                    var page = { hotspot: "hotspot", vpn: "vpn" }[setting];
+                    if (!page) throw e;
+                    return { text: e.said || say.toggleFailed(setting, e.message), failed: true,
+                             open: { appId: SETTINGS_APP, params: { page: page }, title: say.settingsTitle(page) } };
+                });
         });
     }
     case "media":
-        // What is playing: no service tells it yet (docs/AI-AND-MCP.md, gaps).
-        if (args.action === "status") return Promise.resolve({ text: say.nowPlaying(), open: { appId: "org.webosphoenix.music", params: {}, title: "Music" } });
+        // What is playing: what the player last told the system
+        // (org.webosphoenix.system getNowPlaying; @phoenix/luna postNowPlaying).
+        if (args.action === "status") {
+            return lunaCall(env, "luna://org.webosphoenix.system/getNowPlaying", {}).then(function (r) { return r.nowPlaying || null; }, function () { return null; })
+                .then(function (np) {
+                    var appId = (np && np.appId) || "org.webosphoenix.music";
+                    var player = { appId: appId, params: {}, title: appId === "org.webosphoenix.podcasts" ? "Podcasts" : "Music" };
+                    if (!np || !np.title) return { text: say.nowPlaying(null), open: player };
+                    return { text: say.nowPlaying(np), open: player,
+                             attachments: cards([{ title: np.title, subtitle: [np.artist, np.album].filter(Boolean).join(" · "), open: player }]),
+                             actions: [{ label: np.playing ? say.pauseIt() : say.playIt(), run: { command: "media", args: { action: np.playing ? "pause" : "play" } } },
+                                       { label: say.nextOne(), run: { command: "media", args: { action: "next" } } }] };
+                });
+        }
         return lunaCall(env, "luna://org.webosphoenix.system/mediaKey", { key: args.action })
             .then(function () { return { text: say.media(args.action) }; });
     case "volume":
@@ -1474,6 +1611,28 @@ function run(cmd, args, env) {
         return launch(env, "org.webosphoenix.phone", { number: args.number, dial: true }).then(function () {
             return { text: say.calling(cmd.id === "voicemail" ? "voicemail" : args.name || args.number), open: { appId: "org.webosphoenix.phone", params: {}, title: "Phone" } };
         });
+    case "readEmail": {
+        var mail = { appId: EMAIL_APP, params: { emailId: args.emailId }, title: "Email" };
+        var fromName = args.from.name || args.from.addr || "someone";
+        return Promise.resolve({ text: say.readEmail(fromName, args.subject, args.summary, args.at, now), open: mail,
+                                 attachments: cards([{ title: args.subject || "(no subject)", subtitle: fromName + " · " + whenShown(env, args.at, null, false), detail: args.summary, open: mail }]),
+                                 actions: [{ label: say.replyTo(fromName), run: { command: "emailReply", args: { who: args.from.addr || fromName, body: "" } } }] });
+    }
+    case "emailReply":
+        return run(find(BUILT_IN, "email"), { who: args.addr, addr: args.addr, name: args.name, subject: args.subject, body: args.body }, env);
+    case "findFiles":
+        return lunaCall(env, FILES + "search", { query: String(args.query), limit: 20 }).then(function (r) {
+            var hits = (r.entries || []).filter(function (e) { return args.kind !== "pdf" || /\.pdf$/i.test(e.name); });
+            var filesApp = function (e) { return { appId: FILES_APP, params: { path: e && e.type === "directory" ? e.path : e ? e.path.replace(/\/[^\/]*$/, "") || "/" : "/media/internal" }, title: "Files" }; };
+            if (!hits.length) return { text: say.noFiles(args.query), open: filesApp(null) };
+            return { text: say.filesFound(args.query, hits.map(function (e) { return e.name; })), open: filesApp(hits[0]),
+                     attachments: cards(hits.map(function (e) {
+                         return { title: e.name, subtitle: e.path.replace(/\/[^\/]*$/, "").replace(/^\/media\/internal/, "Internal storage") +
+                                  (e.type === "directory" ? " · folder" : " · " + say.size(e.size)) + " · " + whenShown(env, e.mtime, null, true), open: filesApp(e) };
+                     })) };
+        }, function () { return { text: say.noFilesService(), open: { appId: FILES_APP, params: {}, title: "Files" } }; });
+    case "travelTime":
+        return travel(args, env);
     case "callLog":
         return Promise.all([phoneCalls(env), people(env)]).then(function (got) {
             var all = got[0], ppl = got[1];
@@ -1489,16 +1648,41 @@ function run(cmd, args, env) {
         });
     case "replyMessage":
         return run(find(BUILT_IN, "text"), args, env);
-    case "eventMove":
+    case "eventMove": {
+        var shown = function (id) {
+            var cal = { appId: CALENDAR_APP, params: { showEventDetail: id }, title: "Calendar" };
+            return { open: cal, attachments: cards([{ title: args.title, subtitle: whenShown(env, args.newStart, null, args.old.allDay), open: cal }]) };
+        };
+        if (args.scope === "occurrence") {
+            // EditView.js:1170-1185, DatabaseManager updateParentAddChild: the
+            // day an exception of the parent, and a child event in its place.
+            var ex = args.exdates.concat([D.utcString(args.at)]);
+            var child = Object.assign({}, args.record, { parentId: args.id, recurrenceId: D.utcString(args.at), dtstart: args.newStart, dtend: args.newEnd,
+                                                          lastModified: now });
+            ["_id", "_rev", "rrule", "exdates", "remoteId", "_sync"].forEach(function (k) { delete child[k]; });
+            return lunaCall(env, DB + "merge", { objects: [{ _id: args.id, exdates: ex, lastModified: now }] })
+                .then(function () { return dbPut(env, [child]); }).then(function (ids) {
+                    return Object.assign({ text: say.occurrenceMoved(args.title, args.at, args.newStart, now) }, shown(ids[0]), {
+                        undo: { kind: "multi", steps: [{ kind: "merge", objects: [{ _id: args.id, exdates: args.exdates }] }, { kind: "db", ids: ids }],
+                                what: say.undoWhat.move(args.title) } });
+                });
+        }
         return lunaCall(env, DB + "merge", { objects: [{ _id: args.id, dtstart: args.newStart, dtend: args.newEnd, lastModified: now }] }).then(function () {
-            var cal = { appId: CALENDAR_APP, params: { showEventDetail: args.id }, title: "Calendar" };
-            return { text: say.eventMoved(args.title, args.newStart, args.old.allDay, now), open: cal,
-                     attachments: cards([{ title: args.title, subtitle: whenShown(env, args.newStart, null, args.old.allDay), open: cal }]),
-                     undo: { kind: "merge", objects: [{ _id: args.id, dtstart: args.old.dtstart, dtend: args.old.dtend }], what: say.undoWhat.move(args.title) } };
+            return Object.assign({ text: args.scope === "series" ? say.seriesMoved(args.title, args.newStart) : say.eventMoved(args.title, args.newStart, args.old.allDay, now) },
+                                 shown(args.id),
+                                 { undo: { kind: "merge", objects: [{ _id: args.id, dtstart: args.old.dtstart, dtend: args.old.dtend }], what: say.undoWhat.move(args.title) } });
         });
+    }
     case "eventCancel":
+        if (args.scope === "occurrence") {
+            // DeleteConfirm.js deleteSingle: the day an exception of the parent.
+            return lunaCall(env, DB + "merge", { objects: [{ _id: args.id, exdates: args.exdates.concat([D.utcString(args.at)]), lastModified: now }] }).then(function () {
+                return { text: say.occurrenceCancelled(args.title, args.at, now), open: { appId: CALENDAR_APP, params: {}, title: "Calendar" },
+                         undo: { kind: "merge", objects: [{ _id: args.id, exdates: args.exdates }], what: say.undoWhat.restoreEvent(args.title) } };
+            });
+        }
         return lunaCall(env, DB + "del", { ids: [args.id] }).then(function () {
-            return { text: say.eventCancelled(args.title), open: { appId: CALENDAR_APP, params: {}, title: "Calendar" },
+            return { text: args.scope === "series" ? say.seriesCancelled(args.title) : say.eventCancelled(args.title), open: { appId: CALENDAR_APP, params: {}, title: "Calendar" },
                      undo: { kind: "put", objects: [args.record], what: say.undoWhat.restoreEvent(args.title) } };
         });
     case "freeTime": {
@@ -1628,6 +1812,7 @@ function undo(u, env) {
     }
     // What a change replaced (merge), or what a deletion took (put back).
     if (u.kind === "merge") return lunaCall(env, DB + "merge", { objects: u.objects || [] });
+    if (u.kind === "multi") return (u.steps || []).reduce(function (p, step) { return p.then(function () { return undo(step, env); }); }, Promise.resolve());
     if (u.kind === "put") return lunaCall(env, DB + "put", { objects: (u.objects || []).map(function (o) { var c = Object.assign({}, o); delete c._rev; delete c._del; return c; }) });
     return cancel(u.activities).then(function () { return lunaCall(env, DB + "del", { ids: u.ids || [] }); });
 }

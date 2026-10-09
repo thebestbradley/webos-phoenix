@@ -56,9 +56,14 @@ export interface NowPlaying {
 type Host = { postToHost?: (type: string, payload: object) => void };
 type Palm = { addBannerMessage?: (msg: string, params: string, icon?: string) => void; isActivated?: () => boolean };
 
-/** Tell the shell what plays (the "nowPlaying" host message Music posts). */
+/**
+ * Tell the shell what plays (the "nowPlaying" host message), and the system:
+ * org.webosphoenix.system setNowPlaying, which the Assistant's "what's
+ * playing" reads (getNowPlaying).
+ */
 export function postNowPlaying(n: NowPlaying): void {
     (globalThis as { phoenixHost?: Host }).phoenixHost?.postToHost?.("nowPlaying", n);
+    void call("luna://org.webosphoenix.system/setNowPlaying", { ...n }).catch(() => undefined);
 }
 
 /** A banner (PalmSystem.addBannerMessage) when the card is not in front. */

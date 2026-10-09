@@ -7,6 +7,7 @@
         "org.webosphoenix.filemanager/move",
         "org.webosphoenix.filemanager/remove",
         "org.webosphoenix.filemanager/read",
-        "org.webosphoenix.filemanager/write"
+        "org.webosphoenix.filemanager/write",
+        "org.webosphoenix.filemanager/search"
     ]
 }
