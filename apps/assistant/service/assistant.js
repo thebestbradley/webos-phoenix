@@ -508,8 +508,9 @@ function createAssistantService(deps) {
             return { name: commands.toolName(c.id), description: c.description, parameters: c.parameters };
         });
     }
-    function callModel(provider, key, thread, tools) {
-        var req = providers.chatRequest(provider, { system: systemPrompt(tools.length > 0), messages: history(thread), tools: tools }, key);
+    function callModel(provider, key, thread, tools, toolChoice) {
+        var req = providers.chatRequest(provider, { system: systemPrompt(tools.length > 0), messages: history(thread), tools: tools,
+                                                    toolChoice: toolChoice }, key);
         return deps.request(req).then(function (r) { return providers.parseChat(provider.type, r.status, r.body); });
     }
     // An answer: words, or a tool call to run (cloud ones only when allowed).
@@ -584,10 +585,59 @@ function createAssistantService(deps) {
         var c = s.context(asked);
         return !c.question && !c.smallTalk;
     }
+    // The on-device model in two steps where the words may ask the phone to
+    // do something. A small model (Qwen3 0.6B) offered tools often says
+    // what it would do instead of calling one ("I'll turn off the Wi-Fi"),
+    // or is not offered the right one by words it does not share with it
+    // ("throw on some tunes"). So first it only chooses: every command by
+    // its name and title, or "none", its answer held to that list (a JSON
+    // schema llama-server turns into a grammar); then, with that one tool,
+    // it must call it (tool_choice "required"), which fills in the
+    // arguments. "none" (a question, chat) is answered in words, without
+    // tools. Measured on 28 phrasings the grammar misses, with the real
+    // model: 7 right before, 17 after (docs/AI-AND-MCP.md).
+    // Examples for the choice (other words than the grammar's): with them
+    // Qwen3 0.6B chose right 20 times in 28, without them 9.
+    var PICK_EXAMPLES = [
+        ["it's so dark, I need to see", "toggle"], ["switch Bluetooth off", "toggle"], ["wake me up at 7", "alarm"],
+        ["10 minute timer please", "timer"], ["remind me to pay the bills on Monday", "reminder"],
+        ["put a meeting with Ana on Thursday at 2 on my calendar", "event"], ["tell Ana I'm running late", "text"], ["phone Ana", "call"],
+        ["it's too quiet, turn it up", "volume"], ["the screen is too dark", "brightness"], ["I want to hear some jazz", "play"],
+        ["launch the calculator", "open"], ["will it be sunny tomorrow", "weather"], ["write down: the wifi password is on the fridge", "note"],
+        ["why is the sky blue", "none"], ["tell me a joke", "none"]
+    ];
+    function pickCommand(p, thread, cat) {
+        var usable = cat.all.filter(function (c) { return allowed(c) && !c.internal; });
+        var names = usable.map(function (c) { return commands.toolName(c.id); });
+        var listText = usable.map(function (c, i) { return names[i] + ": " + String(c.description || c.title).split(/\.\s/)[0]; }).join("\n");
+        // A few examples as earlier turns, then the words; deterministic.
+        var shots = [];
+        PICK_EXAMPLES.forEach(function (x) {
+            if (x[1] === "none" || names.indexOf(x[1]) >= 0)
+                shots.push({ role: "user", text: x[0] }, { role: "assistant", text: JSON.stringify({ command: x[1] }) });
+        });
+        var req = providers.chatRequest(p, {
+            system: "You pick the phone command that does what the user asks the phone to do. The commands:\n" + listText +
+                "\nAnswer \"none\" when the user asks a question, chats, or no command does it.",
+            messages: shots.concat([{ role: "user", text: lastAsked(thread) }]),
+            schema: { type: "object", properties: { command: { type: "string", "enum": names.concat(["none"]) } }, required: ["command"] },
+            maxTokens: 40, temperature: 0
+        }, "");
+        return deps.request(req).then(function (r) {
+            var out = providers.parseChat(p.type, r.status, r.body), choice = "";
+            try { choice = JSON.parse(out.text).command; } catch (e) { /* not JSON: none */ }
+            var i = names.indexOf(choice);
+            return i >= 0 ? usable[i] : null;
+        });
+    }
     function askLocal(thread, model, cat) {
         return deps.llm.ensure(model).then(function (srv) {
             var p = { type: "local", baseUrl: srv.baseUrl, model: model.id };
-            return callModel(p, "", thread, mayAct(thread) ? toolsFor(cat.all, lastAsked(thread)) : []);
+            if (!mayAct(thread)) return callModel(p, "", thread, []);
+            return pickCommand(p, thread, cat).then(function (c) {
+                if (!c) return callModel(p, "", thread, []);
+                return callModel(p, "", thread, [{ name: commands.toolName(c.id), description: c.description, parameters: c.parameters }], "required");
+            });
         }).then(function (r) { return answer(thread, r, cat, "on-device", model.name, false, lastAsked(thread)); });
     }
     function askCloud(thread, p, cat) {

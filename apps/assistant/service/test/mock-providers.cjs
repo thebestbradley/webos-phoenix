@@ -12,6 +12,9 @@
 //     (flashlight on); "text <name> <words>": a call of the text tool
 //   - "force a tool": a toggle call even when no tools were offered (a
 //     provider misbehaving: the permission gate must refuse it)
+//   - asked for a command's name in a JSON schema (the on-device model's
+//     first step): {"command": "toggle" | "text" | "alarm" | "none"} by the
+//     same words
 //   - otherwise words: "<shape> says: <the message>"
 // Keys: Anthropic "test-anthropic", OpenAI "test-openai", Gemini
 // "test-gemini"; Chat Completions takes any key or none. Every request is
@@ -48,6 +51,13 @@ function hasTools(shape, body) {
 // What to say: {text} or {tool: {name, args}}.
 function decide(shape, body) {
     const said = lastUser(shape, body);
+    // The on-device model's first step (assistant.js pickCommand): a
+    // command's name, held to a JSON schema; the same rules as the calls.
+    const schema = body.response_format && body.response_format.json_schema && body.response_format.json_schema.schema;
+    if (schema && schema.properties && schema.properties.command) {
+        const pick = /force a tool|flashlight|torch/i.test(said) ? "toggle" : /^text \w+ /i.test(said) ? "text" : /wake me/i.test(said) ? "alarm" : "none";
+        return { text: JSON.stringify({ command: pick }) };
+    }
     const tools = hasTools(shape, body);
     if (/force a tool/i.test(said)) return { tool: { name: "toggle", args: { setting: "flashlight", state: "on" } } };
     if (tools && /flashlight|torch/i.test(said)) return { tool: { name: "toggle", args: { setting: "flashlight", state: "on" } } };

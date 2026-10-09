@@ -475,10 +475,9 @@ describe("the on-device model", () => {
         // A question about the world: no tools (a short prompt, no misfires).
         expect(mock.requests.at(-1)!.body.tools).toBeUndefined();
         const act = await ask(t, "it's dark, put the flashlight on for me");
-        // A request of the device: the tools near its words only (a short prompt).
+        // A request of the device: the one tool it chose (pickCommand), to call.
         const offered = mock.requests.at(-1)!.body.tools.map((x: Reply) => x.function?.name ?? x.name);
-        expect(offered).toContain("toggle");
-        expect(offered.length).toBeLessThanOrEqual(10);
+        expect(offered).toEqual(["toggle"]);
         expect(last(act)).toMatchObject({ via: "on-device", status: "done", text: "The flashlight is on." });
         // Its times as said: "tomorrow at 6:30 am".
         const wake = await ask(t, "please could you wake me early tomorrow");
@@ -528,10 +527,16 @@ describe("the on-device model", () => {
             const r = await ask(t, "turn on the flashlight");
             expect(last(r)).toMatchObject({ via: "commands", text: "The flashlight is on." });
             expect(mock.requests.length).toBe(before);
-            // What it does not know goes to the model, with the commands as tools.
+            // What it does not know goes to the model in two steps: it chooses
+            // a command (its answer held to their names), then calls that one.
             const act = await ask(t, "it's dark, put the flashlight on for me");
-            expect(mock.requests.length).toBe(before + 1);
-            expect(mock.requests.at(-1)!.body.chat_template_kwargs).toEqual({ enable_thinking: false });
+            expect(mock.requests.length).toBe(before + 2);
+            const [pick, call] = mock.requests.slice(-2).map((q) => q.body);
+            expect(pick.response_format.json_schema.schema.properties.command.enum).toContain("toggle");
+            expect(pick.temperature).toBe(0);
+            expect(call.tools.map((x: Reply) => x.function.name)).toEqual(["toggle"]);
+            expect(call.tool_choice).toBe("required");
+            expect(call.chat_template_kwargs).toEqual({ enable_thinking: false });
             expect(last(act)).toMatchObject({ via: "on-device", status: "done", text: "The flashlight is on." });
         });
 
