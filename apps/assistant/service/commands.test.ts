@@ -21,7 +21,7 @@ const { createAssistantService } = req("./assistant.js") as { createAssistantSer
 const NOW = new Date(2026, 9, 7, 10, 0, 0).getTime();
 const at = (d: number, h: number, m = 0) => new Date(2026, 9, d, h, m, 0).getTime();
 
-function device(opts: { offline?: boolean } = {}) {
+function device(opts: { offline?: boolean; locationAllowed?: boolean | null } = {}) {
     let n = 0;
     const db = new Map<string, any>();
     const put = (o: any) => { const id = o._id || "db" + ++n; db.set(id, { ...o, _id: id }); return id; };
@@ -50,7 +50,9 @@ function device(opts: { offline?: boolean } = {}) {
     put({ _id: "img-3", _kind: "com.palm.media.image.file:1", path: "/media/internal/DCIM/c.jpg", createdTime: at(1, 9) });
 
     const calls: { uri: string; params: any }[] = [];
-    const state = { volume: 50, muted: false, ringtones: 60, brightness: 70, activities: new Map<string, any>() };
+    const state = { volume: 50, muted: false, ringtones: 60, brightness: 70, activities: new Map<string, any>(),
+                    gps: true, network: true, locationAllowed: (opts.locationAllowed === undefined ? true : opts.locationAllowed) as boolean | null,
+                    prefs: { rotationLock: false } as Record<string, unknown> };
     const okr = (o: object = {}) => Promise.resolve({ returnValue: true, ...o });
     const luna = {
         call(uri: string, p: any): Promise<any> {
@@ -79,7 +81,21 @@ function device(opts: { offline?: boolean } = {}) {
             if (m === "com.palm.display/control/setProperty") { state.brightness = p.maximumBrightness; return okr(); }
             if (m === "com.palm.power/com/palm/power/batteryStatusQuery") return okr({ percent: 76, percent_ui: 76 });
             if (m === "com.palm.power/com/palm/power/chargerStatusQuery") return okr({ Charging: true, Connected: true });
-            if (m === "com.webos.service.location/getCurrentPosition") return okr({ latitude: 37.37, longitude: -122.04, errorCode: 0 });
+            // Location (OSE's methods, and Phoenix's per-app permissions in
+            // front of them, as runtime/phoenix-runtime.js answers them).
+            if (m === "org.webosphoenix.service.location/getPermissions")
+                return okr({ permissions: state.locationAllowed === null ? [] : [{ appId: "org.webosphoenix.assistant", title: "Assistant", allowed: state.locationAllowed }] });
+            if (m === "org.webosphoenix.service.location/setPermission") { state.locationAllowed = p.allowed; return okr(); }
+            if (m === "com.webos.service.location/getAllLocationHandlers") return okr({ handlers: [{ name: "gps", state: state.gps }, { name: "network", state: state.network }] });
+            if (m === "com.webos.service.location/setState") { state[p.Handler as "gps" | "network"] = p.state; return okr(); }
+            if (m === "com.webos.service.location/getLocationUpdates") {
+                if (!state.gps && !state.network) return Promise.resolve({ returnValue: false, errorCode: 5, errorText: "Location services are off" });
+                return okr({ errorCode: 0, latitude: 37.37, longitude: -122.04, horizAccuracy: 8 });
+            }
+            // What OSE's service does not have (getCurrentPosition was the legacy com.palm.location's).
+            if (m.startsWith("com.webos.service.location/")) return Promise.resolve({ returnValue: false, errorCode: -1, errorText: "Unknown method" });
+            if (m === "com.webos.service.systemservice/setPreferences") { Object.assign(state.prefs, p); return okr(); }
+            if (m === "com.webos.service.systemservice/getPreferences") return okr({ ...state.prefs });
             return okr();
         },
     };
@@ -95,6 +111,9 @@ function device(opts: { offline?: boolean } = {}) {
         requests.push(r.url);
         if (opts.offline) return Promise.reject(new Error("offline"));
         if (r.url.includes("frankfurter")) return Promise.resolve({ status: 200, body: JSON.stringify({ amount: 20, base: "USD", date: "2026-10-07", rates: { EUR: 17.3 } }) });
+        if (r.url.includes("api.open-meteo.com/v1/forecast"))
+            return Promise.resolve({ status: 200, body: JSON.stringify({ current: { temperature_2m: 64.4, weather_code: 2 },
+                daily: { weather_code: [2, 61], temperature_2m_max: [70.2, 61.1], temperature_2m_min: [52.3, 50], precipitation_probability_max: [10, 80] } }) });
         if (r.url.includes("geocoding")) return Promise.resolve({ status: 200, body: JSON.stringify({ results: [{ name: "Paris", latitude: 48.85, longitude: 2.35, timezone: "Europe/Paris" }] }) });
         return Promise.resolve({ status: 404, body: "" });
     };
@@ -360,6 +379,46 @@ describe("conversions and the world", () => {
         // From Sunnyvale (the stand-in location), in miles for en-US.
         expect((await d.ask("how far is Paris")).text).toBe("Paris is about 5,580 miles away, as the crow flies.");
         expect((await device({ offline: true }).ask("how far is Paris")).text).toBe("I couldn't look up paris right now: are you online?");
+    });
+    it("the weather here: the position from OSE's location service, with the Assistant's permission", async () => {
+        const d = device();
+        const m = await d.ask("what's the weather");
+        expect(m.text).toBe("It's 64°F and partly cloudy. Today: 70° / 52°.");
+        expect(d.called("getCurrentPosition")).toHaveLength(0);
+        expect(d.called("com.webos.service.location/getLocationUpdates")[0].params).toEqual({});
+        expect(d.requests.at(-1)).toMatch(/latitude=37.37&longitude=-122.04/);
+    });
+    it("the location not answered yet: it asks, and Allow answers the weather", async () => {
+        const d = device({ locationAllowed: null });
+        const m = await d.ask("what's the weather");
+        expect(m.text).toBe("To check the weather where you are, I need your location. Is it OK if I use it?");
+        expect(m.choices!.map((c) => c.label)).toEqual(["Allow", "Don't Allow"]);
+        expect(d.called("getLocationUpdates")).toHaveLength(0);
+        const r = await d.choose(m, "do:0");
+        expect(r.messages.map((x: Msg) => x.text)).toEqual(["OK, I can use your location now.", "It's 64°F and partly cloudy. Today: 70° / 52°."]);
+        expect(d.state.locationAllowed).toBe(true);
+    });
+    it("the location denied: it says so, with Allow Location and the setting", async () => {
+        const d = device({ locationAllowed: false });
+        const m = await d.ask("what's the weather");
+        expect(m.status).toBe("failed");
+        expect(m.text).toMatch(/^I'm not allowed to use your location\. Allow it, here or in Settings > Location Services/);
+        expect(m.choices!.map((c) => [c.id, c.label])).toEqual([["do:0", "Allow Location"], ["open:1", "Location Settings"]]);
+        await d.choose(m, "open:1");
+        expect(d.called("applicationManager/launch").at(-1)!.params).toEqual({ id: "org.webosphoenix.settings", params: { page: "location" } });
+        const r = await d.choose(m, "do:0");
+        expect(r.messages.at(-1).text).toBe("It's 64°F and partly cloudy. Today: 70° / 52°.");
+    });
+    it("Location Services off: it offers to turn them on, then answers", async () => {
+        const d = device();
+        d.state.gps = d.state.network = false;
+        const m = await d.ask("what's the weather");
+        expect(m.text).toBe("Location Services are off. Turn them on and I'll check the weather where you are. Or say a city, like “weather in Paris”.");
+        expect(m.choices!.map((c) => c.label)).toEqual(["Turn On Location Services", "Location Settings"]);
+        const r = await d.choose(m, "do:0");
+        expect(r.messages.map((x: Msg) => x.text)).toEqual(["Location Services are on.", "It's 64°F and partly cloudy. Today: 70° / 52°."]);
+        expect(d.state.gps && d.state.network).toBe(true);
+        expect((await d.ask("turn off location services")).text).toBe("Location Services are off.");
     });
     it("translation goes on to a model or the web", async () => {
         const d = device();

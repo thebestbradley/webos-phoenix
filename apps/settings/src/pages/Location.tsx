@@ -8,7 +8,7 @@
 // that asked for the position, each allowed or not.
 // Services:
 //   com.webos.service.location getAllLocationHandlers / setState {Handler, state}
-//       / getCurrentPosition / getReverseLocation (OSE)
+//       / getLocationUpdates (one fix) / getReverseLocation (OSE)
 //   org.webosphoenix.service.location getPermissions / setPermission /
 //       removePermission (Phoenix: OSE has no per-app location permission)
 

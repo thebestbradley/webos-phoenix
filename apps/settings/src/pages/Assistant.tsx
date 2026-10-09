@@ -29,6 +29,8 @@
 //   Follow-up        questions after something is made (on by default),
 //   questions        their quiet hours, the ones waiting, and a switch per
 //                    topic (AssistantFollowUps.tsx)
+//   Permissions      Location: the Assistant's grant in Location Services
+//                    (AssistantPermissions.tsx)
 //   Commands         which commands the assistant may run
 //   History          clear every conversation
 //
@@ -45,6 +47,7 @@ import { Button, Dialog, Group, ListSelector, Note, Page, PageHeader, PopupMenu,
 import { useBack } from "../nav";
 import { FollowUpQuestions } from "./AssistantFollowUps";
 import { VoiceMissing } from "./AssistantVoice";
+import { AssistantPermissions } from "./AssistantPermissions";
 
 const errorText = (e: unknown) => (e as LunaError).errorText ?? (e instanceof Error ? e.message : String(e));
 const gb = (n: number) => `${Math.round(n / 2 ** 30)} GB`;
@@ -358,6 +361,7 @@ export function AssistantPage() {
             </Group>
             <Note>Whoever chose it, anything that sends a message, calls or deletes is read back to you first.</Note>
 
+            <AssistantPermissions disabled={off} />
             <Group label="Commands">
                 {(cmds ?? []).map((c) => (
                     <Row key={c.id} testId={`as-cmd-${c.id}`} title={c.title} subtitle={c.confirms ? "Asks you first" : c.builtIn ? undefined : "From an app"}>

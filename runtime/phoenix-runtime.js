@@ -9773,7 +9773,10 @@
     // runs the same code in the page: nodeServiceLoader(dir, label) is a
     // require() for its CommonJS modules (relative requires only), read
     // from the virtual rootfs; nodeServiceLuna() is its luna.call(uri,
-    // params) -> Promise<reply> on the simulated bus; proxiedRequest is its
+    // params) -> Promise<reply> on the simulated bus (nodeServiceLuna(id):
+    // the calls are the service's, ctx.caller id, as luna-service2 tells a
+    // service who calls on a device; the location permission is asked of
+    // the caller, not of the page the service happens to run in); proxiedRequest is its
     // HTTP, {method, url, headers, body} -> Promise<{status, headers, body}>.
     // Servers do not allow cross-origin requests, so each goes through a
     // proxy of the host: a page served over HTTP (tools/serve-rootfs.py, the
@@ -9809,14 +9812,14 @@
         return loadModule;
     }
 
-    function nodeServiceLuna() {
+    function nodeServiceLuna(caller) {
         return {
             // A subscription: onReply for each reply until cancel().
             subscribe: function (uri, params, onReply) {
                 var stopped = false;
                 dispatch(uri, clone(params || {}), function (r) {
                     if (!stopped) setTimeout(function () { if (!stopped) onReply(r); }, 0);
-                }, { cancelled: function () { return stopped; }, onCancel: null });
+                }, { cancelled: function () { return stopped; }, onCancel: null, caller: caller });
                 return function () { stopped = true; };
             },
             call: function (uri, params) {
@@ -9826,7 +9829,7 @@
                         if (done) return;
                         done = true;
                         setTimeout(function () { resolve(r); }, 0);
-                    }, { cancelled: function () { return done; }, onCancel: null });
+                    }, { cancelled: function () { return done; }, onCancel: null, caller: caller });
                 });
             }
         };
@@ -13797,7 +13800,9 @@
             if (!methods) {
                 var lib = loadModule("assistant.js");
                 methods = lib.createAssistantService({
-                    luna: nodeServiceLuna(),
+                    // Its calls are the Assistant's (the location permission
+                    // Settings > Location Services lists for it), wherever it runs.
+                    luna: nodeServiceLuna(SERVICE),
                     request: proxiedRequest,
                     storage: {
                         get: function (k) { return store.get(k, null); },
@@ -15118,8 +15123,10 @@
             });
         }
 
+        // Who asks: a service's own id (nodeServiceLuna), else the page's app.
+        function callerOf(ctx) { return (ctx && ctx.caller) || appIdFromLocation(); }
         function tracking(p, reply, ctx) {
-            var appId = appIdFromLocation();
+            var appId = callerOf(ctx);
             if (!p.subscribe) return positionReply(p, reply, ctx, appId);
             checkPermission(appId, ctx, function (allowed) {
                 if (!allowed) return reply(fail(LOC_ERR.denied, "Permission denied"));
@@ -15240,6 +15247,12 @@
             },
             "*": function (p, reply) { reply(ok()); }
         };
+        // Not OSE's (the legacy com.palm.location's, below): luna-service2's
+        // answer to a method a service does not have, not "*"'s silent
+        // success without a position (the Assistant asked this, 9 October 2026).
+        location["/getCurrentPosition"] = function (p, reply) {
+            reply(fail(-1, "Unknown method \"getCurrentPosition\" for category \"/\""));
+        };
         register(["com.webos.service.location"], location);
         // The legacy name (luna-systemui's alert, Mojo and Enyo apps): the
         // same, plus getCurrentPosition and startTracking, with timestamps in
@@ -15254,7 +15267,7 @@
         }
         var legacy = {};
         Object.keys(location).forEach(function (k) { legacy[k] = location[k]; });
-        legacy["/getCurrentPosition"] = inSeconds(function (p, reply, ctx) { positionReply(p, reply, ctx, appIdFromLocation()); });
+        legacy["/getCurrentPosition"] = inSeconds(function (p, reply, ctx) { positionReply(p, reply, ctx, callerOf(ctx)); });
         legacy["/getLocationUpdates"] = legacy["/startTracking"] = inSeconds(tracking);
         register(["com.palm.location"], legacy);
 

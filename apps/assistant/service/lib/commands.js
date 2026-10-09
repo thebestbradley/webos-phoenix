@@ -111,6 +111,7 @@ var ASSISTANT_APP = "org.webosphoenix.assistant";
 var AM = "luna://com.palm.activitymanager/";
 var DB = "luna://com.palm.db/";
 var AUDIO = "luna://com.webos.service.audio/";
+var SYSTEM_SERVICE = "luna://com.webos.service.systemservice/";
 
 var S = { type: "string" }, I = { type: "integer" }, B = { type: "boolean" };
 var WHEN = { type: "string", description: "When, as said (\"tomorrow at 3pm\", \"next Tuesday at noon\", \"in 2 hours\") or ISO 8601 local time" };
@@ -156,8 +157,9 @@ var BUILT_IN = [
       parameters: { type: "object", properties: { name: S, number: S, email: S, label: { type: "string", enum: ["", "mobile", "home", "work"] } }, required: ["name"] } },
     { id: "contactInfo", title: "Contact details", risk: "read", description: "Tell a contact's phone number, email, address or birthday.",
       parameters: { type: "object", properties: { who: S, what: { type: "string", enum: ["phone", "email", "address", "birthday"] }, label: S }, required: ["who"] } },
-    { id: "toggle", title: "Wi-Fi, Bluetooth, airplane mode, flashlight, ringer, Do Not Disturb", risk: "change", description: "Turn a device setting on or off.",
-      parameters: { type: "object", properties: { setting: { type: "string", enum: ["wifi", "bluetooth", "airplane", "flashlight", "ringer", "dnd"] }, state: { type: "string", enum: ["on", "off", "toggle"] } }, required: ["setting", "state"] } },
+    { id: "toggle", title: "Wi-Fi, Bluetooth, airplane mode, flashlight, ringer, Do Not Disturb, Location Services, rotation lock", risk: "change",
+      description: "Turn a device setting on or off (rotation: the screen turning; rotationLock: the lock).",
+      parameters: { type: "object", properties: { setting: { type: "string", enum: ["wifi", "bluetooth", "airplane", "flashlight", "ringer", "dnd", "location", "rotation", "rotationLock"] }, state: { type: "string", enum: ["on", "off", "toggle"] } }, required: ["setting", "state"] } },
     { id: "media", title: "Music controls", risk: "change", description: "Pause, resume, or skip to the next or previous song in the player.",
       parameters: { type: "object", properties: { action: { type: "string", enum: ["pause", "play", "next", "prev"] } }, required: ["action"] } },
     { id: "volume", title: "Volume", risk: "change", description: "Turn the volume up or down, set it (0-100), mute or unmute.",
@@ -191,6 +193,8 @@ var BUILT_IN = [
       parameters: { type: "object", properties: { what: { type: "string", enum: ["time", "date"] } } } },
     { id: "search", title: "Web search", risk: "open", description: "Search the web in the browser.",
       parameters: { type: "object", properties: { query: S }, required: ["query"] } },
+    { id: "locationAccess", title: "Location", risk: "change", internal: true, description: "Let the Assistant use the device's location, or not.",
+      parameters: { type: "object", properties: { allow: B }, required: ["allow"] } },
     { id: "undo", title: "Undo", risk: "delete", internal: true, description: "Take back what the assistant just did.",
       parameters: { type: "object", properties: {} } }
 ];
@@ -528,6 +532,15 @@ var TOGGLE_RUN = {
     bluetooth: function (env, on) { return lunaCall(env, "luna://com.webos.service.bluetooth2/adapter/setState", { powered: on }); },
     airplane: function (env, on) { return lunaCall(env, "luna://com.webos.service.connectionmanager/setstate", { offlineMode: on ? "enabled" : "disabled" }); },
     flashlight: function (env, on) { return lunaCall(env, "luna://org.webosports.service.torch/set", { on: on }); },
+    // Location Services: both handlers, as Settings > Location Services' switch.
+    location: function (env, on) {
+        return lunaCall(env, LOCATION + "setState", { Handler: "gps", state: on })
+            .then(function () { return lunaCall(env, LOCATION + "setState", { Handler: "network", state: on }); });
+    },
+    // The rotation lock (Settings > Screen & Lock, the system menu's):
+    // "rotation" on is the screen turning, the lock off.
+    rotationLock: function (env, on) { return lunaCall(env, SYSTEM_SERVICE + "setPreferences", { rotationLock: on }); },
+    rotation: function (env, on) { return lunaCall(env, SYSTEM_SERVICE + "setPreferences", { rotationLock: !on }); },
     ringer: ringer,
     dnd: function (env, on) { return ringer(env, !on); }
 };
@@ -537,6 +550,13 @@ var TOGGLE_STATE = {
     airplane: function (env) { return lunaCall(env, "luna://com.webos.service.connectionmanager/getstatus", {}).then(function (r) { return r.offlineMode === "enabled"; }); },
     flashlight: function (env) { return lunaCall(env, "luna://org.webosports.service.torch/getStatus", {}).then(function (r) { return !!r.on; }); },
     ringer: function (env) { return lunaCall(env, AUDIO + "getInputVolume", { streamType: "pringtones" }).then(function (r) { return r.volume > 0; }); },
+    location: function (env) {
+        return lunaCall(env, LOCATION + "getAllLocationHandlers", {}).then(function (r) { return (r.handlers || []).some(function (h) { return h.state; }); });
+    },
+    rotationLock: function (env) {
+        return lunaCall(env, SYSTEM_SERVICE + "getPreferences", { keys: ["rotationLock"] }).then(function (r) { return !!r.rotationLock; });
+    },
+    rotation: function (env) { return TOGGLE_STATE.rotationLock(env).then(function (l) { return !l; }); },
     dnd: function (env) { return TOGGLE_STATE.ringer(env).then(function (on) { return !on; }); }
 };
 
@@ -560,18 +580,66 @@ function geocode(env, place) {
             return { lat: p.latitude, lon: p.longitude, name: p.name, timezone: p.timezone };
         });
 }
-function here(env) {
-    return lunaCall(env, "luna://com.webos.service.location/getCurrentPosition", { responseTime: 2, maximumAge: 600 })
-        .then(function (r) {
-            if (typeof r.latitude !== "number" || (r.errorCode && r.errorCode !== 0)) throw Object.assign(new Error("no fix"), { said: env.lang.say.noLocation() });
-            return { lat: r.latitude, lon: r.longitude, name: "" };
-        }, function () { throw Object.assign(new Error("no location"), { said: env.lang.say.noLocation() }); });
+// Where the device is. OSE's com.webos.service.location has no
+// getCurrentPosition (that was the legacy com.palm.location's): one fix
+// is getLocationUpdates without subscribe (@phoenix/luna location.ts,
+// https://www.webosose.org/docs/reference/ls2-api/com-webos-service-location/).
+// Asking the OSE name for getCurrentPosition was the owner's "it doesn't
+// have my location" (9 October 2026): the simulator answered returnValue
+// true without a position, a device "Unknown method".
+//
+// Phoenix's per-app permission (org.webosphoenix.service.location, the one
+// Settings > Location Services lists and Settings > Assistant's Location
+// row sets) is asked first: not answered yet, the Assistant asks in the
+// conversation (Allow, Don't Allow) rather than leaving the request
+// waiting on the system UI's alert; denied or Location Services off, it
+// says so, with the switch and the setting as buttons. A device without
+// that service: the location service's own errorCodes (5 off, 6 denied).
+// purpose: "weather" or "distance" (how it says why). Rejects with
+// {said, actions}: the actions' "then" is filled in by the caller.
+var LOCATION = "luna://com.webos.service.location/";
+var LOCATION_PERMISSIONS = "luna://org.webosphoenix.service.location/";
+function locationBlocked(env, why, purpose) {
+    var say = env.lang.say, actions = [];
+    var settings = { label: say.locationSettings(), open: { appId: SETTINGS_APP, params: { page: "location" }, title: "Location Services" } };
+    if (why === "ask") actions = [{ label: say.allow(), run: { command: "locationAccess", args: { allow: true } } },
+                                  { label: say.dontAllow(), run: { command: "locationAccess", args: { allow: false } } }];
+    else if (why === "denied") actions = [{ label: say.allowLocation(), run: { command: "locationAccess", args: { allow: true } } }, settings];
+    else if (why === "off") actions = [{ label: say.turnOnLocation(), run: { command: "toggle", args: { setting: "location", state: "on" } } }, settings];
+    return Object.assign(new Error("location " + why), { said: say.location(why, purpose), actions: actions, location: why });
+}
+function here(env, purpose) {
+    var call = function (uri, p) { return Promise.resolve(env.luna.call(uri, p)).catch(function () { return null; }); };
+    return call(LOCATION_PERMISSIONS + "getPermissions", {}).then(function (r) {
+        if (r && r.returnValue !== false && Array.isArray(r.permissions)) {
+            var mine = r.permissions.filter(function (p) { return p.appId === ASSISTANT_APP; })[0];
+            if (!mine) throw locationBlocked(env, "ask", purpose);
+            if (!mine.allowed) throw locationBlocked(env, "denied", purpose);
+        }
+        return call(LOCATION + "getAllLocationHandlers", {});
+    }).then(function (h) {
+        var list = h && h.returnValue !== false && h.handlers;
+        if (Array.isArray(list) && list.length && !list.some(function (x) { return x.state; })) throw locationBlocked(env, "off", purpose);
+        return call(LOCATION + "getLocationUpdates", {});
+    }).then(function (r) {
+        if (r && r.errorCode === 5) throw locationBlocked(env, "off", purpose);
+        if (r && r.errorCode === 6) throw locationBlocked(env, "denied", purpose);
+        if (!r || r.returnValue === false || typeof r.latitude !== "number") throw locationBlocked(env, "unavailable", purpose);
+        return { lat: r.latitude, lon: r.longitude, name: "" };
+    });
+}
+// A reply for a request that needed the location and could not have it:
+// what to do, and the request again once it is done (then).
+function blockedReply(e, then) {
+    return { text: e.said, failed: e.location !== "ask", actions: (e.actions || []).map(function (a) {
+        return a.run && !(a.run.command === "locationAccess" && !a.run.args.allow) ? { label: a.label, run: Object.assign({}, a.run, { then: then }) } : a;
+    }) };
 }
 
 function weather(args, env) {
     var say = env.lang.say;
     var imperial = env.units === "imperial";
-    var where = args.place ? geocode(env, args.place) : here(env);
+    var where = args.place ? geocode(env, args.place) : here(env, "weather");
     return where.then(function (pl) {
         var url = "https://api.open-meteo.com/v1/forecast?latitude=" + pl.lat + "&longitude=" + pl.lon +
             "&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&forecast_days=2&timezone=auto" +
@@ -585,6 +653,7 @@ function weather(args, env) {
                      open: { appId: "org.webosphoenix.weather", params: {}, title: "Weather" } };
         });
     }).catch(function (e) {
+        if (e && e.location) return blockedReply(e, { command: "weather", args: args });
         if (e && e.said) return { text: e.said };
         return launch(env, "org.webosphoenix.weather", {}).then(function () { return { text: say.noWeather() }; },
                                                                   function () { return { text: say.noWeather() }; });
@@ -1048,16 +1117,22 @@ function run(cmd, args, env) {
             .then(function () { return { text: say.navigating(args.destination) }; });
     case "distance":
         return Promise.all([geocode(env, args.place).catch(function (e) { throw e.said ? e : Object.assign(e, { said: say.noLookup(args.place) }); }),
-                            here(env)]).then(function (r) {
+                            here(env, "distance")]).then(function (r) {
             var a = r[0], b = r[1], rad = Math.PI / 180;
             var x = Math.sin((a.lat - b.lat) * rad / 2), y = Math.sin((a.lon - b.lon) * rad / 2);
             var km = 2 * 6371 * Math.asin(Math.sqrt(x * x + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * y * y));
             return { text: say.distance(a.name || args.place, km, env.units === "imperial"),
                      open: { appId: MAPS_APP, params: { target: "mapto:" + args.place }, title: "Maps" } };
         }).catch(function (e) {
+            if (e && e.location) return blockedReply(e, { command: "distance", args: args });
             if (e && e.said) return { text: e.said };
             throw e;
         });
+    case "locationAccess":
+        // The Assistant's own grant: the row Settings > Location Services
+        // lists (and Settings > Assistant's Location row) changes the same.
+        return lunaCall(env, LOCATION_PERMISSIONS + "setPermission", { appId: ASSISTANT_APP, allowed: !!args.allow })
+            .then(function () { return { text: say.locationAccess(!!args.allow) }; });
     case "photos":
         return dbFind(env, "com.palm.media.image.file:1").then(function (all) {
             var hits = all.filter(function (p) {

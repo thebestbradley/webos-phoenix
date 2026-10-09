@@ -492,6 +492,9 @@ var TOGGLES = [
     ["bluetooth", /^(?:the )?blue ?tooth$/],
     ["airplane", /^(?:the )?(?:airplane|aeroplane|flight|plane)(?: mode)?$/],
     ["flashlight", /^(?:the )?(?:flash ?light|torch|light)$/],
+    ["location", /^(?:the )?(?:location(?: services)?|gps|location tracking)$/],
+    ["rotationLock", /^(?:the )?(?:rotation lock|orientation lock|screen lock rotation|lock rotation)$/],
+    ["rotation", /^(?:the )?(?:rotation|screen rotation|auto[- ]?rotat(?:e|ion)|auto[- ]?rotate screen)$/],
     ["ringer", /^(?:the )?(?:ringer|ringtone|ring tone|ringing|sound)$/],
     // webOS had no Do Not Disturb; its ringer switch silenced calls and
     // alerts, and the assistant's Do Not Disturb is that.
@@ -1164,7 +1167,10 @@ var MENTIONS = {
         airplane: /\b(airplane|aeroplane|flight|plane)\b/,
         flashlight: /\b(flash ?light|torch|light|dark)\b/,
         ringer: /\b(ringer|ring|ringtone|silent|silence|mute|unmute|sound|quiet|vibrate)\b/,
-        dnd: /\b(disturb|dnd|quiet|silent|focus)\b/
+        dnd: /\b(disturb|dnd|quiet|silent|focus)\b/,
+        location: /\b(location|gps)\b/,
+        rotation: /\b(rotat\w*|orientation)\b/,
+        rotationLock: /\b(rotat\w*|orientation)\b/
     },
     timer: /\b(timer|countdown|count down|minutes?|seconds?|hours?)\b/,
     timerCancel: /\b(timer|countdown)\b/,
@@ -1251,7 +1257,8 @@ function repeatText(r) {
     if (!r.days || !r.days.length) return every + "week";
     return every + list(r.days.map(function (d) { return cap(WEEKDAYS[d]); }));
 }
-var SETTING_NAMES = { wifi: "Wi-Fi", bluetooth: "Bluetooth", airplane: "Airplane mode", flashlight: "The flashlight", ringer: "The ringer", dnd: "Do Not Disturb" };
+var SETTING_NAMES = { wifi: "Wi-Fi", bluetooth: "Bluetooth", airplane: "Airplane mode", flashlight: "The flashlight", ringer: "The ringer", dnd: "Do Not Disturb",
+                      location: "Location Services", rotation: "Screen rotation", rotationLock: "The rotation lock" };
 var PAGE_NAMES = { wifi: "Wi-Fi", bluetooth: "Bluetooth", airplane: "Airplane Mode", phone: "Phone Preferences", hotspot: "Hotspot & Tethering",
     vpn: "VPN", screen: "Screen & Lock", battery: "Battery", sounds: "Sounds & Ringtones", datetime: "Date & Time", language: "Language & Region",
     textassist: "Text Assist", justtype: "Just Type", clipboard: "Clipboard", assistant: "Assistant", usb: "USB", gamepads: "Game Controllers",
@@ -1534,7 +1541,7 @@ var say = {
     },
     beyond: function (what) { return what === "translate" ? "I can't translate without a language model yet, but I can search the web for it." : ""; },
     // As before
-    toggled: function (setting, on) { return SETTING_NAMES[setting] + " is " + (on ? "on" : "off") + "."; },
+    toggled: function (setting, on) { return SETTING_NAMES[setting] + (setting === "location" ? " are " : " is ") + (on ? "on" : "off") + "."; },
     noSuchContact: function (who) { return "I couldn't find " + who + " in your contacts."; },
     noNumber: function (who) { return who + " has no phone number in your contacts."; },
     confirmCall: function (who, number) { return "Call " + (who ? who + " (" + number + ")" : number) + "?"; },
@@ -1557,7 +1564,23 @@ var say = {
         return "It's " + Math.round(temp) + "°" + unit + " and " + desc + where + "." + (hi !== null ? " Today: " + Math.round(hi) + "° / " + Math.round(lo) + "°." : "");
     },
     noPlace: function (place) { return "I couldn't find a place called " + place + "."; },
-    noLocation: function () { return "I don't know where you are. Say a city, like \"weather in Paris\", or turn on Location Services."; },
+    // Why the location could not be had (commands.js here): "ask" (not
+    // answered yet), "denied", "off", "unavailable"; purpose "weather" or
+    // "distance".
+    location: function (why, purpose) {
+        var need = purpose === "distance" ? "work out how far that is" : "check the weather where you are";
+        var instead = purpose === "distance" ? "" : " Or say a city, like \u201cweather in Paris\u201d.";
+        if (why === "ask") return "To " + need + ", I need your location. Is it OK if I use it?";
+        if (why === "denied") return "I'm not allowed to use your location. Allow it, here or in Settings > Location Services, and I'll " + need + "." + instead;
+        if (why === "off") return "Location Services are off. Turn them on and I'll " + need + "." + instead;
+        return "I couldn't find where you are right now." + (instead || " Try again in a moment.");
+    },
+    locationAccess: function (allow) { return allow ? "OK, I can use your location now." : "OK, I won't use your location. You can always say a city instead."; },
+    allow: function () { return "Allow"; },
+    dontAllow: function () { return "Don't Allow"; },
+    allowLocation: function () { return "Allow Location"; },
+    turnOnLocation: function () { return "Turn On Location Services"; },
+    locationSettings: function () { return "Location Settings"; },
     noWeather: function () { return "I couldn't get the weather right now. I've opened Weather."; },
     askCloud: function (name) { return "Ask " + name; },
     searchWeb: function () { return "Search the web"; },
