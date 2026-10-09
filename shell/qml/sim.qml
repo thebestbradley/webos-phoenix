@@ -161,6 +161,7 @@ Item {
             formFactor: typeof simFormFactor !== "undefined" ? simFormFactor : "auto"
             density: typeof simDensity !== "undefined" ? simDensity : 1
             hardwareHomeButton: typeof simHomeButton !== "undefined" && simHomeButton
+            systemKeyPassChords: root.modifiedFunctionKeys
             // The phones and the TouchPad of luna-sysmgr's day had one
             // ([VirtualKeyboard] VirtualKeyboardEnabled).
             virtualKeyboard: true
@@ -792,6 +793,25 @@ Item {
     //             function, the icon now
     // { separator: true, menu } separates; Help > Keyboard Shortcuts lists
     // them in this order.
+    // The entries' function keys with modifiers (Shift+F3, Shift+F2, ...),
+    // as [{key, modifiers}]: the shell takes F2 and F3 with any modifiers
+    // (SystemKeys), so their shortcuts below never fired (Shift+F3 pressed
+    // Power, Shift+F2 showed the demo notification) unless it lets them by.
+    readonly property var modifiedFunctionKeys: {
+        var out = [];
+        var mods = { Shift: Qt.ShiftModifier, Ctrl: Qt.ControlModifier, Alt: Qt.AltModifier, Meta: Qt.MetaModifier };
+        simActions.forEach(function (a) {
+            (a.run && a.keys ? a.keys : []).forEach(function (k) {
+                var m = /^((?:(?:Shift|Ctrl|Alt|Meta)\+)+)F(\d+)$/.exec(k);
+                if (!m)
+                    return;
+                var mask = 0;
+                m[1].split("+").forEach(function (p) { mask |= mods[p] || 0; });
+                out.push({ key: Qt.Key_F1 + Number(m[2]) - 1, modifiers: mask });
+            });
+        });
+        return out;
+    }
     readonly property var simActions: [
         // Device: the buttons and switches, how it is held.
         { id: "power", menu: "device", text: qsTr("Power Button"), keys: ["F3"], press: [Qt.Key_F3], icon: "power",

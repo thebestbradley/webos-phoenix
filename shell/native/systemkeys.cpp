@@ -66,6 +66,14 @@ void SystemKeys::setEnabled(bool enabled)
     emit enabledChanged();
 }
 
+void SystemKeys::setPassChords(const QVariantList &chords)
+{
+    if (chords == m_passChords)
+        return;
+    m_passChords = chords;
+    emit passChordsChanged();
+}
+
 bool SystemKeys::eventFilter(QObject *watched, QEvent *event)
 {
     const QEvent::Type type = event->type();
@@ -120,13 +128,26 @@ bool SystemKeys::eventFilter(QObject *watched, QEvent *event)
     }
     if (!m_keys.contains(key->key()))
         return false;
+    if (type == QEvent::KeyRelease) {
+        // Only a key whose press was taken: the release of one that went
+        // to a shortcut (Shift+F3, Shift let go first) was Power let go.
+        if (!m_down.contains(key->key()))
+            return false;
+        if (!key->isAutoRepeat())
+            m_down.remove(key->key());
+        emit released(key->key(), key->isAutoRepeat());
+        return true;
+    }
+    for (const QVariant &v : std::as_const(m_passChords)) {
+        const QVariantMap c = v.toMap();
+        if (key->key() == c.value(QStringLiteral("key")).toInt() && int(mods) == c.value(QStringLiteral("modifiers")).toInt())
+            return false;
+    }
     if (type == QEvent::ShortcutOverride) {
         event->accept();
         return true;
     }
-    if (type == QEvent::KeyPress)
-        emit pressed(key->key(), key->isAutoRepeat());
-    else
-        emit released(key->key(), key->isAutoRepeat());
+    m_down.insert(key->key());
+    emit pressed(key->key(), key->isAutoRepeat());
     return true;
 }

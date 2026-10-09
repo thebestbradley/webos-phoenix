@@ -89,6 +89,10 @@ FocusScope {
     // no gesture bar, and on a tablet the bottom-edge flick stands in for
     // its swipe up, as on the TouchPad.
     property bool hardwareHomeButton: false
+    // System keys with modifiers left to the program's own shortcuts, as
+    // [{key, modifiers}] (SystemKeys.passChords): phoenix-sim's Shift+F3
+    // and Shift+F2 beside its F3 (Power) and F2.
+    property var systemKeyPassChords: []
     Binding { target: Theme; property: "hardwareHomeButton"; value: shell.hardwareHomeButton }
     // Settings > Accessibility > Reduce motion.
     Binding { target: Theme; property: "reduceMotion"; value: !!(shell.system && shell.system.reduceMotion) }
@@ -1594,6 +1598,7 @@ FocusScope {
                              .concat(gesture.metaHeld ? metaChords.map(function (c) { return { key: c.key, modifiers: c.modifiers }; }) : [])
         // Held on its own, the scheme's modifier lists them (ShortcutSheet).
         watchKeys: [KeyboardShortcuts.sheetKey(shell.keyboardShortcuts)]
+        passChords: shell.systemKeyPassChords
         onHolding: (key, down) => {
             if (down && !shell.locked && !shell.firstUse && backlight.on)
                 sheetDelay.restart();
