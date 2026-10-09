@@ -100,6 +100,14 @@ async function enyoApp(context) {
     }, null, { timeout: 10000 }).then((h) => h.jsonValue(), () => null);
     check(!!lineStarts && lineStarts[1] === lineStarts[0] && lineStarts[2] === lineStarts[0],
           `a memo on the wall keeps its lines: its items start lines of their own (${JSON.stringify(lineStarts)})`);
+    // Back in the editor (compat app/phoenix-back.js): back to the wall.
+    await page.click(".new-memo");
+    await page.waitForTimeout(500);
+    const editing = () => page.evaluate(() => enyo.$.appView_edit.showing);
+    check(await editing(), "a memo opens in the editor");
+    await page.evaluate(() => __phoenixRuntime.back());
+    await page.waitForTimeout(500);
+    check(!(await editing()), "Back in the editor goes back to the wall");
 
     // Fields of our own, beside the app's.
     await page.evaluate(() => {
