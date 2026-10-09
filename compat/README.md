@@ -19,6 +19,15 @@ instead.
 
 JSON files cannot say why they are here, so they are listed here:
 
+- `rootfs/usr/palm/frameworks/tellurium/tellurium_config.json`: empty.
+  Enyo 1.0 asks for it at start-up (`source/palm/tellurium/startup.js`)
+  and loads Tellurium, HP's test automation nub, only when it has
+  something in it. Retail devices never had the file (Tellurium came with
+  test builds), and the request failed quietly there; Chromium throws on a
+  synchronous request for a missing file, and every Enyo 1.0 app logged
+  "enyo.xhr.request() exception". Empty, it reads as on a retail device:
+  no Tellurium.
+
 - `rootfs/etc/palm/backup/com.webos.service.systemservice.backupRegistration.json`:
   luna-sysservice's backup registration (`files/conf/`, Apache-2.0),
   unchanged. On a device luna-sysservice installs it; the simulator's
