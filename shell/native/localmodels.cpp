@@ -282,8 +282,16 @@ void LocalModels::ensure(const QString &id, const QString &requestId)
     m_waiting = { requestId };
     m_server = new QProcess(this);
     QStringList args = m_command.mid(1);
+    // 8,192 tokens: the commands as tools are some 4,900 with the system
+    // prompt (4,096 no longer held them: "exceeds the available context
+    // size"); one slot, so the tools stay cached between requests; the
+    // cache in 8 bits with flash attention, which keeps it as small as
+    // 4,096 was (Qwen3 0.6B: 1.3 GB in all, measured; lib/node-device.js
+    // the same on a device).
     args << QStringLiteral("-m") << file << QStringLiteral("--host") << QStringLiteral("127.0.0.1")
-         << QStringLiteral("--port") << QString::number(m_port) << QStringLiteral("--jinja") << QStringLiteral("-c") << QStringLiteral("4096");
+         << QStringLiteral("--port") << QString::number(m_port) << QStringLiteral("--jinja") << QStringLiteral("-c") << QStringLiteral("8192")
+         << QStringLiteral("-np") << QStringLiteral("1") << QStringLiteral("-fa") << QStringLiteral("on")
+         << QStringLiteral("-ctk") << QStringLiteral("q8_0") << QStringLiteral("-ctv") << QStringLiteral("q8_0");
     m_server->setProgram(program);
     m_server->setArguments(args);
     m_server->setProcessChannelMode(QProcess::SeparateChannels);
