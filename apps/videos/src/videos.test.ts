@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { VideoItem } from "@phoenix/luna";
 import { durationLabel, forgetPosition, loadPositions, loadPrefs, progressOf, resumeAt, savePosition, savePrefs, sortVideos, titleOf } from "./library";
 import { cueText, parseSubtitles, parseTime, subtitleTracks } from "./subtitles";
+import { isBlank } from "./Poster";
 
 const SAMPLES = resolve(__dirname, "../../media-samples/media/videos");
 
@@ -86,5 +87,18 @@ describe("library and resume", () => {
         expect(durationLabel(65)).toBe("1:05");
         expect(durationLabel(3723)).toBe("1:02:03");
         expect(durationLabel(undefined)).toBe("");
+    });
+});
+
+describe("posters", () => {
+    const pixels = (r: number, g: number, b: number) => {
+        const d = new Uint8ClampedArray(4 * 16);
+        for (let i = 0; i < d.length; i += 4) { d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255; }
+        return d;
+    };
+    it("takes an undecoded (black) frame for blank, so it is drawn again and not kept", () => {
+        expect(isBlank(pixels(0, 0, 0))).toBe(true);
+        expect(isBlank(pixels(1, 2, 1))).toBe(true);
+        expect(isBlank(pixels(40, 30, 60))).toBe(false);
     });
 });
