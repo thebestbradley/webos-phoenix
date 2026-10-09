@@ -143,30 +143,40 @@ jobs:
         run: QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen "$QT_ROOT_DIR/bin/qmltestrunner" -import shell/qml -import build/qml -input shell/tests/tst_hidpi.qml
 
       - name: Terminal PTY service (core and Luna methods, services/pty)
+        # A native test that hangs fails here, with its log, not after the job's limit.
+        timeout-minutes: 10
         run: build/pty/pty-test
 
       - name: Device services (display, keys, vibrator, light sensor; services/devices)
+        timeout-minutes: 10
         run: build/devices/devices-test
 
       - name: The simulator's installed apps (SimInstaller)
+        timeout-minutes: 10
         run: build/siminstaller-test
 
       - name: The colour emoji font's fontconfig setup (SimFonts)
+        timeout-minutes: 10
         run: build/simfonts-test
 
       - name: The keyboard's dictation (recording format, transcriber replies)
+        timeout-minutes: 10
         run: build/dictation-test
 
       - name: The wake word ("Hey Phoenix" in the test recordings, with Vosk's model)
+        timeout-minutes: 10
         run: python3 tools/get-wakeword.py && build/wakeword-test
 
       - name: The simulator's network (content blocker, user agents, DropShare's server)
+        timeout-minutes: 10
         run: build/simnet-test
 
       - name: The simulator's Marketplace catalog service (started, stopped, failing)
+        timeout-minutes: 10
         run: build/simmarketplace-test
 
       - name: The Assistant's on-device model runner and speech
+        timeout-minutes: 10
         run: build/localmodels-test
 
       - name: Trademark overlays up to date
@@ -389,6 +399,8 @@ jobs:
           done || true
 
       - name: Terminal PTY service, installed apps, dictation
+        # A native test that hangs fails here, with its log, not after the job's limit.
+        timeout-minutes: 10
         run: |
           build/pty/pty-test
           build/siminstaller-test

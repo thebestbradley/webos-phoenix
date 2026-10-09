@@ -111,14 +111,21 @@ void SimMarketplace::probe()
     }
     auto *socket = new QTcpSocket(this);
     m_probe = socket;
-    connect(socket, &QTcpSocket::connected, this, [this, socket]() {
+    // A connection that neither opens nor fails (a port that drops what
+    // comes) counts as not answering: every try ends within a second.
+    auto *giveUp = new QTimer(socket);
+    giveUp->setSingleShot(true);
+    connect(socket, &QTcpSocket::connected, this, [this, socket, giveUp]() {
+        giveUp->stop();
         socket->disconnect(this);
         socket->deleteLater();
         if (m_state == Starting)
             setState(Running);
     });
-    connect(socket, &QTcpSocket::errorOccurred, this, [this, socket]() {
+    const auto notYet = [this, socket, giveUp]() {
+        giveUp->stop();
         socket->disconnect(this);
+        socket->abort();
         socket->deleteLater();
         if (m_state != Starting)
             return;
@@ -130,7 +137,10 @@ void SimMarketplace::probe()
         } else {
             m_poll->start();
         }
-    });
+    };
+    connect(socket, &QTcpSocket::errorOccurred, this, notYet);
+    connect(giveUp, &QTimer::timeout, this, notYet);
+    giveUp->start(1000);
     socket->connectToHost(QHostAddress(QHostAddress::LocalHost), m_port);
 }
 
@@ -225,7 +235,14 @@ bool SimMarketplace::start(int timeoutMs)
             if (m_state != Starting)
                 loop.quit();
         });
+        // The deadline ends it as failed; this only makes sure the wait
+        // ends whatever happens.
+        QTimer::singleShot(timeoutMs + 5000, &loop, &QEventLoop::quit);
         loop.exec();
+    }
+    if (m_state == Starting) {
+        setState(Failed, QStringLiteral("the catalog service did not answer at %1 in time (see %2)").arg(url(), logFile()));
+        stop();
     }
     return m_state == Running;
 }

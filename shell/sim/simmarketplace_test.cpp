@@ -24,12 +24,20 @@
 #include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <atomic>
+#include <chrono>
 #include <cstdio>
+#include <thread>
+
+#include <unistd.h>
 
 static int failures = 0;
+static std::atomic<int> checks{ 0 };
 static void check(bool ok, const char *what)
 {
+    ++checks;
     std::printf("%s %s\n", ok ? "ok  " : "FAIL", what);
+    std::fflush(stdout);
     if (!ok)
         ++failures;
 }
@@ -74,15 +82,33 @@ static void write(const QString &path, const QByteArray &text, bool executable =
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
-    // The stand-in for PHP's server: listens on the port until stopped.
+    // The stand-in for PHP's server: listens on the port until stopped
+    // (SIGTERM, which it leaves to its default: it ends). Without Linux's
+    // parent-death signal (a Mac) it also ends when the test does, or
+    // after a minute: nothing is left behind.
     if (argc == 3 && qstrcmp(argv[1], "--serve") == 0) {
         QTcpServer server;
         if (!server.listen(QHostAddress::LocalHost, quint16(QByteArray(argv[2]).toUInt())))
             return 2;
         std::printf("listening\n");
         std::fflush(stdout);
+        const pid_t parent = ::getppid();
+        QTimer orphaned;
+        QObject::connect(&orphaned, &QTimer::timeout, [parent]() {
+            if (::getppid() != parent)
+                ::_exit(0);
+        });
+        orphaned.start(250);
+        QTimer::singleShot(60000, [] { ::_exit(0); });
         return app.exec();
     }
+    // Whatever happens, the test ends: a stuck wait fails it after two
+    // minutes (it takes about ten seconds), saying where.
+    std::thread([] {
+        std::this_thread::sleep_for(std::chrono::seconds(120));
+        std::fprintf(stderr, "FAIL simmarketplace-test is stuck (after %d checks); stopped by its watchdog\n", checks.load());
+        ::_exit(3);
+    }).detach();
     qputenv("FAKE_CATALOG_SERVER", QFile::encodeName(QCoreApplication::applicationFilePath()));
     QTemporaryDir root;
     // A PATH with php (a stand-in); and one without php.
