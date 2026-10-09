@@ -150,3 +150,12 @@
 		height: max(687px, calc(100vh - 81px));
 	}
 }
+
+/* A memo on the wall keeps its lines. The wall shows the memo's text as the
+   text indexer gives it back (GridAgent.js refreshMemos), lines and all;
+   the editor turns them into <br/> (Memo.js displayText), and the wall,
+   with white-space: normal, ran them into one paragraph ("Groceries Milk,
+   eggs, spinach Coffee beans ..."). */
+.memo-preview-content {
+	white-space: pre-line;
+}
