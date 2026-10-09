@@ -61,6 +61,7 @@ import type { BirdPose } from "./bird/birdData";
 import { beatsFor, birdPose, outcomeOf, type Beat } from "./bird/pose";
 import { EXAMPLES, examplesFrom } from "./examples";
 import { Avatar, QuickReplies, restingPose, waitingFollowUp, withoutFollowUps } from "./chat";
+import { Attachments } from "./Attachments";
 import { ConversationList, copyText, openInNewCard } from "./conversations";
 
 const errorText = (e: unknown) => (e as LunaError).errorText ?? (e instanceof Error ? e.message : String(e));
@@ -105,6 +106,7 @@ function Bubble({ m, busy, onChoose, onConfirm, onSuggest, avatar, onMenu }: {
                     {m.text}
                 </div>
             </div>
+            <Attachments m={m} onShow={(i) => onChoose(m, `show:${i}`)} />
             {m.followUp && choices.length > 0 && <QuickReplies m={m} busy={busy} onChoose={onChoose} />}
             {!mine && (m.source || m.via) && (
                 <div className="as-via">{m.source || VIA[m.via ?? ""] || ""}</div>

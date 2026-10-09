@@ -995,9 +995,19 @@ function distance(t) {
 }
 // "show my photos from yesterday", "photos from last week", "pictures I
 // took on Friday"
+// "show my photos from yesterday", "show my screenshots", "how many photos
+// did I take last week" (count: only said, Photos not opened).
 function photos(t, ctx) {
-    var m = /^(?:show|open|find|view|display|see|get|look at)(?: me)? (?:all )?(?:my |the )?(?:photos|pictures|pics|images|photographs|snaps|screenshots)(?: (?:i took|taken|from|of|on|that i took|i made))?(?: (.+))?$/.exec(t)
-        || /^(?:my )?(?:photos|pictures|pics) (?:from|of|taken) (.+)$/.exec(t);
+    var r = photosSaid(t, ctx);
+    if (!r) return null;
+    r.screenshots = /\bscreen ?shots?\b/.test(t);
+    r.count = /^how many /.test(t);
+    return r;
+}
+function photosSaid(t, ctx) {
+    var m = /^(?:show|open|find|view|display|see|get|look at)(?: me)? (?:all )?(?:my |the )?(?:(?:recent|latest|last|new) )?(?:photos|pictures|pics|images|photographs|snaps|screen ?shots)(?: (?:i took|taken|from|of|on|that i took|i made))?(?: (.+))?$/.exec(t)
+        || /^(?:my )?(?:photos|pictures|pics) (?:from|of|taken) (.+)$/.exec(t)
+        || /^how many (?:photos|pictures|pics|screen ?shots)(?: (?:did i take|have i taken|do i have|i took))?(?: (.+?))?$/.exec(t);
     if (!m) return null;
     var said = (m[1] || "").replace(/^(?:from|on|of|taken) /, "");
     if (!said) return { from: null, to: null, label: "" };
@@ -1523,9 +1533,16 @@ var say = {
         var n = d >= 100 ? Math.round(d / 10) * 10 : d >= 10 ? Math.round(d) : Math.round(d * 10) / 10;
         return cap(place) + " is about " + n.toLocaleString("en") + (imperial ? " miles" : " km") + " away, as the crow flies.";
     },
-    photos: function (n, label) {
-        if (!n) return "I found no photos" + (label ? " from " + label : "") + ".";
-        return "Here " + (n === 1 ? "is 1 photo" : "are " + n + " photos") + (label ? " from " + label : "") + ".";
+    // The title Photos gives the pictures: "Photos from Yesterday".
+    photosTitle: function (label, what) { return cap(what || "photo") + "s from " + label.replace(/\b[a-z]/g, function (c) { return c.toUpperCase(); }); },
+    // n found from label ("yesterday"); what: "photo" or "screenshot";
+    // opened: Photos shows them too; count: only how many was asked.
+    photos: function (n, label, what, opened, count) {
+        var noun = what || "photo", from = label ? " from " + label : "";
+        if (!n) return "You don't have any " + noun + "s" + from + ".";
+        if (count) return "You have " + plural(n, noun) + from + ".";
+        return "Here " + (n === 1 ? "is 1 " + noun : "are " + n + " " + noun + "s") + from + "." +
+            (opened ? (n === 1 ? " I've opened it in Photos too." : " I've opened them in Photos too.") : "");
     },
     // Undo
     nothingToUndo: function () { return "There's nothing to undo."; },

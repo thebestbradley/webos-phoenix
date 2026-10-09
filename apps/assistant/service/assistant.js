@@ -387,6 +387,9 @@ function createAssistantService(deps) {
             choices.push({ id: (a.open ? "open:" : "do:") + i, label: a.label });
         });
         if (r.actions && r.actions.length) data.actions = r.actions;
+        // What it found, shown in the conversation (pictures, cards); each
+        // item's open is the app on it (choice "show:<n>", n across them all).
+        if (r.attachments && r.attachments.length) data.attachments = r.attachments;
         if (r.open) choices.push({ id: "open", label: lang().say.openApp(r.open.title) });
         if (r.offerWeb) choices.push({ id: "web", label: lang().say.searchWeb() });
         if (choices.length) extra.choices = choices;
@@ -683,8 +686,17 @@ function createAssistantService(deps) {
         choose: function (p) {
             if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
             var thread = getThread(p.threadId), m = thread && getMessage(thread.id, p.messageId);
-            if (!m || !m.choices) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to choose there"));
-            if (!m.choices.some(function (c) { return c.id === p.choice; })) return Promise.resolve(fail(ERRORS.BAD_PARAMS, "No such choice"));
+            var shows = /^show:\d+$/.test(String(p.choice));
+            if (!m || (!m.choices && !shows)) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to choose there"));
+            if (!shows && !m.choices.some(function (c) { return c.id === p.choice; })) return Promise.resolve(fail(ERRORS.BAD_PARAMS, "No such choice"));
+            if (shows) {
+                // An item shown in the conversation, tapped: its app on it
+                // (the buttons stay: nothing was chosen).
+                var item = [].concat.apply([], ((m.data && m.data.attachments) || []).map(function (x) { return x.items || []; }))[Number(p.choice.slice(5))];
+                if (!item || !item.open) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to show there"));
+                return deps.luna.call("luna://com.palm.applicationManager/launch", { id: item.open.appId, params: item.open.params || {} })
+                    .then(function () { return ok({ thread: summary(thread), messages: [] }); });
+            }
             if (p.choice === "connect") return methods.connect({ threadId: thread.id, messageId: m.id });
             var asked = askedBefore(thread, m.id);
             m.chosen = p.choice;

@@ -322,10 +322,13 @@ describe("conversions, the world, photos, undo", () => {
         expect(cmd("what time is it")).toBe("time");
     });
     it("photos by day", () => {
-        expect(args("show my photos from yesterday")).toEqual({ from: day(6), to: day(7), label: "yesterday" });
-        expect(args("show me pictures from last week")).toEqual({ from: day(28, 8), to: day(5), label: "last week" });
-        expect(args("photos from friday")).toEqual({ from: day(2), to: day(3), label: "" });
-        expect(args("show my photos")).toEqual({ from: null, to: null, label: "" });
+        const no = { screenshots: false, count: false };
+        expect(args("show my photos from yesterday")).toEqual({ from: day(6), to: day(7), label: "yesterday", ...no });
+        expect(args("show me pictures from last week")).toEqual({ from: day(28, 8), to: day(5), label: "last week", ...no });
+        expect(args("photos from friday")).toEqual({ from: day(2), to: day(3), label: "", ...no });
+        expect(args("show my photos")).toEqual({ from: null, to: null, label: "", ...no });
+        expect(args("show my recent screenshots")).toEqual({ from: null, to: null, label: "", screenshots: true, count: false });
+        expect(args("how many photos did i take yesterday")).toEqual({ from: day(6), to: day(7), label: "yesterday", screenshots: false, count: true });
     });
     it("undo and cancel; what only a model can do", () => {
         expect(args("undo")).toEqual({ pending: false });

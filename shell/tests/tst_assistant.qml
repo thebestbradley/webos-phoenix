@@ -81,6 +81,11 @@ Item {
                 else if (/^add a meeting/.test(params.text))
                     added.push(msg({ role: "assistant", text: "Added \u201cMeeting with Sam\u201d to your calendar, tomorrow at 3:00 PM.", via: "commands",
                                      command: "event", status: "done", choices: [{ id: "open", label: "Open Calendar" }] }));
+                else if (/^show my photos/.test(params.text))
+                    added.push(msg({ role: "assistant", text: "Here are 5 photos from yesterday. I've opened them in Photos too.", via: "commands",
+                                     command: "photos", status: "done", choices: [{ id: "open", label: "Open Photos" }],
+                                     data: { attachments: [{ type: "images", total: 5, items: [{ path: "/media/internal/DCIM/a.jpg" }, { path: "/media/internal/DCIM/b.jpg" }] },
+                                                           { type: "cards", items: [{ title: "Dentist", subtitle: "On Friday at 2:00 PM", open: { appId: "com.palm.app.calendar" } }] }] } }));
                 else if (/odyssey/.test(params.text))
                     added.push(msg({ role: "assistant", text: "I can't do that on the phone.",
                                      choices: [{ id: "web", label: "Search the web" }, { id: "connect", label: "Connect model" }] }));
@@ -97,6 +102,10 @@ Item {
                     held.push(function () { cb(reply); });
                     return;
                 }
+            } else if (method === "thumbnail") {
+                reply = { returnValue: false };     // as on a device: the file itself
+            } else if (method === "choose" && /^show:/.test(params.choice)) {
+                reply.messages = [];
             } else if (method === "confirm" || method === "choose") {
                 var copy = messages.slice();
                 for (var i = 0; i < copy.length; ++i)
@@ -456,6 +465,33 @@ Item {
             mouseClick(open, open.width / 2, open.height / 2);
             tryVerify(function () { return fake.calls.indexOf("choose open") >= 0; }, 2000);
             tryCompare(overlay, "open", false, 2000);
+        }
+
+        // What an answer found shows under it (thumbnails, "+N more", cards);
+        // the view stays up while the app it opened waits behind; a tap on
+        // one shows it in its app, which comes forward ("show:<n>").
+        function test_foundShowsUnderTheAnswer() {
+            openByHold();
+            type("show my photos from yesterday");
+            var row = arrived("Here are 5 photos from yesterday. I've opened them in Photos too.");
+            var strip = findChild(row, "assistantImages");
+            verify(strip && strip.visible, "the pictures under the words");
+            var second = findChild(strip, "assistantImage-1");
+            verify(second && second.visible && second.width > 0);
+            tryCompare(second, "url", "file:///media/internal/DCIM/b.jpg", 2000);
+            var card = findChild(row, "assistantCard-0");
+            verify(card && card.visible, "and the event's card");
+            verify(overlay.open, "the conversation stays in front");
+            mouseClick(second, second.width / 2, second.height / 2);
+            tryVerify(function () { return fake.calls.indexOf("choose show:1") >= 0; }, 2000);
+            tryCompare(overlay, "open", false, 2000);
+            openByHold();
+            fake.calls = [];
+            type("show my photos again");
+            row = arrived("Here are 5 photos from yesterday. I've opened them in Photos too.");
+            card = findChild(row, "assistantCard-0");
+            mouseClick(card, card.width / 2, card.height / 2);
+            tryVerify(function () { return fake.calls.indexOf("choose show:2") >= 0; }, 2000, "the card's index counts the pictures before it");
         }
 
         // Each opening is a conversation of its own: the first request makes

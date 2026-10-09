@@ -670,6 +670,19 @@ function defaultSearchUrl(env, query) {
     });
 }
 
+// ---- What an answer shows (attachments) --------------------------------------------------------
+// Cards under the words ({type: "cards", items: [{title, subtitle,
+// detail, open}]}), each opening its app on itself.
+function whenShown(env, start, end, allDay) {
+    var w = env.lang.whenText(start, end, allDay, env.now());
+    return w.charAt(0).toUpperCase() + w.slice(1);
+}
+function cards(items) { return items.length ? [{ type: "cards", items: items.slice(0, 6) }] : undefined; }
+function eventCard(env, e) {
+    return { title: e.title, subtitle: whenShown(env, e.start, e.allDay ? null : e.end, e.allDay), detail: e.location || "",
+             open: { appId: CALENDAR_APP, params: { showEventDetail: e.id }, title: "Calendar" } };
+}
+
 // ---- Calendar ----------------------------------------------------------------------------------
 
 // The calendar a new event goes in: the first one that can take it, the
@@ -730,18 +743,21 @@ function agenda(args, env) {
             if (args.range === "next") {
                 var next = evs.filter(function (e) { return !e.allDay && e.start >= now; }).sort(function (a, b) { return a.start - b.start; })[0]
                     || evs.filter(function (e) { return e.start >= today; })[0];
-                return { text: say.agendaNext(next || null, now), open: next ? { appId: CALENDAR_APP, params: { showEventDetail: next.id }, title: "Calendar" } : open };
+                return { text: say.agendaNext(next || null, now), open: next ? { appId: CALENDAR_APP, params: { showEventDetail: next.id }, title: "Calendar" } : open,
+                         attachments: next ? cards([eventCard(env, next)]) : undefined };
             }
             var q = String(args.query || "").replace(/\b(?:my|the|appointment|meeting|event)\b/g, " ");
             var hit = evs.filter(function (e) { return matches(e.title + " " + e.location, q); }).sort(function (a, b) { return a.start - b.start; })[0];
-            return { text: say.agendaFound(args.query, hit || null, now), open: hit ? { appId: CALENDAR_APP, params: { showEventDetail: hit.id }, title: "Calendar" } : open };
+            return { text: say.agendaFound(args.query, hit || null, now), open: hit ? { appId: CALENDAR_APP, params: { showEventDetail: hit.id }, title: "Calendar" } : open,
+                     attachments: hit ? cards([eventCard(env, hit)]) : undefined };
         });
     }
     var from = args.from !== undefined ? args.from : today, to = args.to !== undefined ? args.to : D.addDays(today, 1);
     var label = args.label || say.dayLabel(from, now);
     return eventsIn(env, from, to).then(function (evs) {
         if (args.range === "week") evs.sort(function (a, b) { return a.start - b.start; });
-        return { text: say.agenda(evs, label, now), data: { count: evs.length }, open: open };
+        return { text: say.agenda(evs, label, now), data: { count: evs.length }, open: open,
+                 attachments: cards(evs.map(function (e) { return eventCard(env, e); })) };
     });
 }
 
@@ -854,11 +870,11 @@ function run(cmd, args, env) {
     switch (cmd.id) {
     case "call":
         return launch(env, "org.webosphoenix.phone", { number: args.number, dial: true })
-            .then(function () { return { text: say.calling(args.name || args.number) }; });
+            .then(function () { return { text: say.calling(args.name || args.number), open: { appId: "org.webosphoenix.phone", params: {}, title: "Phone" } }; });
     case "text":
         if (!String(args.message || "").trim())
             return launch(env, MESSAGING_APP, { to: args.number, name: args.name || "" })
-                .then(function () { return { text: say.composing(args.name || args.number) }; });
+                .then(function () { return { text: say.composing(args.name || args.number), open: { appId: MESSAGING_APP, params: { to: args.number, name: args.name || "" }, title: "Messaging" } }; });
         return lunaCall(env, "luna://org.webosports.service.messaging/putMessage", { message: {
             _kind: "com.palm.smsmessage:1", folder: "outbox", status: "pending", serviceName: "sms",
             messageText: String(args.message), to: [{ addr: args.number, name: args.name || "" }],
@@ -876,15 +892,17 @@ function run(cmd, args, env) {
                 var last = msgs[0];
                 if (!last) return { text: p ? say.noMessagesFrom(personName(p)) : say.lastMessage("") };
                 var from = (last.from && (last.from.name || nameForPhone(all, last.from.addr) || last.from.addr)) || "Someone";
-                return { text: say.lastMessage(from, last.messageText || "", last.localTimestamp || last.timestamp, now),
-                         open: { appId: MESSAGING_APP, params: last.threadId ? { threadId: last.threadId } : {}, title: "Messaging" } };
+                var thread = { appId: MESSAGING_APP, params: last.threadId ? { threadId: last.threadId } : {}, title: "Messaging" };
+                return { text: say.lastMessage(from, last.messageText || "", last.localTimestamp || last.timestamp, now), open: thread,
+                         attachments: cards([{ title: from, subtitle: whenShown(env, last.localTimestamp || last.timestamp, null, false),
+                                               detail: last.messageText || "", open: thread }]) };
             });
         });
     case "email":
         if (!String(args.body || "").trim())
             return launch(env, EMAIL_APP, { recipients: [{ type: "email", role: 1, value: args.addr, contactDisplay: args.name || args.addr }],
                                             summary: String(args.subject || "") })
-                .then(function () { return { text: say.emailComposing(args.name || args.addr) }; });
+                .then(function () { return { text: say.emailComposing(args.name || args.addr), open: { appId: EMAIL_APP, params: {}, title: "Email" } }; });
         return dbFind(env, "com.palm.mail.account:1").then(function (accounts) {
             var acct = accounts[0];
             if (!acct) return { text: say.noMailAccount() };
@@ -906,7 +924,11 @@ function run(cmd, args, env) {
                 return args.from ? matches(from, q) : matches([e.subject, from, e.summary].join(" "), q);
             }).sort(function (a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
             return { text: say.emailsFound(args.unread ? (q || "") : q, hits.map(function (e) { return { subject: e.subject, from: e.from && (e.from.name || e.from.addr) }; }), args.unread),
-                     open: { appId: EMAIL_APP, params: hits.length === 1 ? { emailId: hits[0]._id } : {}, title: "Email" } };
+                     open: { appId: EMAIL_APP, params: hits.length === 1 ? { emailId: hits[0]._id } : {}, title: "Email" },
+                     attachments: cards(hits.map(function (e) {
+                         return { title: e.subject || "(no subject)", subtitle: e.from ? e.from.name || e.from.addr : "", detail: e.summary || "",
+                                  open: { appId: EMAIL_APP, params: { emailId: e._id }, title: "Email" } };
+                     })) };
         });
     case "event":
         return addEvent(args, env);
@@ -1014,7 +1036,11 @@ function run(cmd, args, env) {
             var q = String(args.query || "").trim();
             var hits = memos.filter(function (n) { return !q || matches(n.text || n.title, q); })
                 .sort(function (a, b) { return (b.modifiedTimestamp || 0) - (a.modifiedTimestamp || 0); });
-            return { text: say.notesFound(q, hits), open: { appId: MEMOS_APP, params: {}, title: "Memos" } };
+            return { text: say.notesFound(q, hits), open: { appId: MEMOS_APP, params: {}, title: "Memos" },
+                     attachments: cards(hits.map(function (n) {
+                         var text = String(n.text || n.title || "");
+                         return { title: text.split("\n")[0].slice(0, 60), detail: text.split("\n").slice(1).join("\n").trim(), open: { appId: MEMOS_APP, params: {}, title: "Memos" } };
+                     })) };
         });
     case "contactAdd": {
         // As runtime/sample-data.js and the contacts linker store a local
@@ -1060,8 +1086,9 @@ function run(cmd, args, env) {
                 var a = (p.addresses || [])[0];
                 value = a ? [a.streetAddress, a.locality, a.region, a.postalCode].filter(Boolean).join(", ") : "";
             } else value = numberOf(p, args.label) || "";
-            return { text: say.contactInfo(personName(p), args.what || "phone", value),
-                     open: { appId: CONTACTS_APP, params: { launchType: "showPerson", id: p._id }, title: "Contacts" } };
+            var person = { appId: CONTACTS_APP, params: { launchType: "showPerson", id: p._id }, title: "Contacts" };
+            return { text: say.contactInfo(personName(p), args.what || "phone", value), open: person,
+                     attachments: cards([{ title: personName(p), subtitle: [numberOf(p), emailOf(p)].filter(Boolean).join(" · "), open: person }]) };
         });
     case "toggle": {
         var setting = args.setting, fn = TOGGLE_RUN[setting];
@@ -1108,13 +1135,17 @@ function run(cmd, args, env) {
                          open: { appId: SETTINGS_APP, params: { page: "battery" }, title: "Battery" } };
             });
     case "settings":
-        return launch(env, SETTINGS_APP, args.page ? { page: args.page } : {}).then(function () { return { text: say.openingSettings(args.page) }; });
+        return launch(env, SETTINGS_APP, args.page ? { page: args.page } : {}).then(function () {
+            return { text: say.openingSettings(args.page), open: { appId: SETTINGS_APP, params: args.page ? { page: args.page } : {}, title: "Settings" } };
+        });
     case "open":
         // A launch point's own params (Settings' panes: {page}).
-        return launch(env, args.appId, args.params || {}).then(function () { return { text: say.opening(args.title || args.appId) }; });
+        return launch(env, args.appId, args.params || {}).then(function () {
+            return { text: say.opening(args.title || args.appId), open: { appId: args.appId, params: args.params || {}, title: args.title || args.appId } };
+        });
     case "navigate":
         return launch(env, MAPS_APP, { target: "mapto:" + args.destination })
-            .then(function () { return { text: say.navigating(args.destination) }; });
+            .then(function () { return { text: say.navigating(args.destination), open: { appId: MAPS_APP, params: { target: "mapto:" + args.destination }, title: "Maps" } }; });
     case "distance":
         return Promise.all([geocode(env, args.place).catch(function (e) { throw e.said ? e : Object.assign(e, { said: say.noLookup(args.place) }); }),
                             here(env, "distance")]).then(function (r) {
@@ -1134,18 +1165,32 @@ function run(cmd, args, env) {
         return lunaCall(env, LOCATION_PERMISSIONS + "setPermission", { appId: ASSISTANT_APP, allowed: !!args.allow })
             .then(function () { return { text: say.locationAccess(!!args.allow) }; });
     case "photos":
+        // The pictures shown in the conversation (attachments: the first 12,
+        // each opening Photos on itself) and, unless only how many was
+        // asked, in Photos too: just those (its imageList of several), behind
+        // the conversation; "Open Photos" brings it forward.
         return dbFind(env, "com.palm.media.image.file:1").then(function (all) {
             var hits = all.filter(function (p) {
                 var t = Number(p.createdTime) || Number(p.modifiedTime) || 0;
+                if (args.screenshots && !/\/screencaptures\//.test(String(p.path))) return false;
                 return args.from === undefined || args.from === null || (t >= args.from && t < args.to);
             }).sort(function (a, b) { return (Number(b.createdTime) || 0) - (Number(a.createdTime) || 0); });
-            var params = hits.length ? { imageList: { results: hits.slice(0, 200).map(function (p) { return { file_path: p.path }; }) } } : {};
-            if (!hits.length) return { text: say.photos(0, args.label), open: { appId: PHOTOS_APP, params: {}, title: "Photos" } };
-            return launch(env, PHOTOS_APP, params).then(function () { return { text: say.photos(hits.length, args.label) }; });
+            var what = args.screenshots ? "screenshot" : "photo";
+            var photosApp = function (params) { return { appId: PHOTOS_APP, params: params, title: "Photos" }; };
+            if (!hits.length) return { text: say.photos(0, args.label, what), open: photosApp({}) };
+            var list = { results: hits.slice(0, 200).map(function (p) { return { file_path: p.path }; }),
+                         title: args.label ? say.photosTitle(args.label, what) : "" };
+            var shown = { type: "images", total: hits.length, items: hits.slice(0, 12).map(function (p) {
+                return { path: p.path, open: photosApp({ imageList: { results: [{ file_path: p.path }] } }) };
+            }) };
+            var out = { text: say.photos(hits.length, args.label, what, !args.count, args.count), open: photosApp({ imageList: list }),
+                        attachments: [shown], data: { count: hits.length } };
+            if (args.count) return out;
+            return launch(env, PHOTOS_APP, { imageList: list }).then(function () { return out; });
         });
     case "play":
         return launch(env, "org.webosphoenix.music", { play: String(args.query || "") })
-            .then(function () { return { text: say.playing(args.query) }; });
+            .then(function () { return { text: say.playing(args.query), open: { appId: "org.webosphoenix.music", params: {}, title: "Music" } }; });
     case "weather":
         return weather(args, env);
     case "convert": {

@@ -7279,7 +7279,33 @@
             };
         }
 
+        // A picture made small, as a data: URL (the simulator's only: the
+        // shell cannot read IndexedDB, as wallpaperUrl above; on a device it
+        // loads "file://" + path). The Assistant's view shows the photos it
+        // found with it.
+        //   phoenix/thumbnail {path, size?: px (default 160)} -> {url}
+        function thumbnail(p, reply) {
+            if (!isMediaPath(p.path)) return reply(fail(-1, "path: a file under " + MEDIA_ROOT));
+            var size = Math.max(16, Math.min(512, Number(p.size) || 160));
+            files.read(p.path).then(function (blob) { return blob || readUrl(p.path); }).then(function (blob) {
+                if (!blob) return reply(fail(-1, "No such file: " + p.path));
+                var u = URL.createObjectURL(blob), img = new Image();
+                img.onload = function () {
+                    var k = Math.min(1, size / Math.max(img.naturalWidth, img.naturalHeight));
+                    var c = document.createElement("canvas");
+                    c.width = Math.max(1, Math.round(img.naturalWidth * k));
+                    c.height = Math.max(1, Math.round(img.naturalHeight * k));
+                    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+                    URL.revokeObjectURL(u);
+                    reply(ok({ url: c.toDataURL("image/jpeg", 0.85) }));
+                };
+                img.onerror = function () { URL.revokeObjectURL(u); reply(fail(-1, "Not a picture: " + p.path)); };
+                img.src = u;
+            }, function (e) { reply(fail(-1, String(e && e.message || e))); });
+        }
+
         register(["com.webos.service.mediaindexer"], {
+            "/phoenix/thumbnail": thumbnail,
             "/getImageList": listMethod("image"),
             "/getAudioList": listMethod("audio"),
             "/getVideoList": listMethod("video"),

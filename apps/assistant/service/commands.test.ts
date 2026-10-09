@@ -186,7 +186,13 @@ describe("calendar", () => {
         const week = await d.ask("what's on my calendar this week");
         expect(week.text).toMatch(/^This week you have 5 events: .*“Dentist” Friday 2:00 PM/);
         expect((await d.ask("what's my next meeting")).text).toBe("Next: “Team stand-up” tomorrow at 9:30 AM.");
-        expect((await d.ask("when is my dentist appointment")).text).toBe("“Dentist” is on Friday at 2:00 PM, at Downtown Dental.");
+        const dentist = await d.ask("when is my dentist appointment");
+        expect(dentist.text).toBe("“Dentist” is on Friday at 2:00 PM, at Downtown Dental.");
+        // The event shown as a card, which opens it in Calendar.
+        expect(dentist.data.attachments).toEqual([{ type: "cards", items: [{ title: "Dentist", subtitle: "On Friday at 2:00 PM", detail: "Downtown Dental",
+            open: { appId: "com.palm.app.calendar", params: { showEventDetail: "ev-dentist" }, title: "Calendar" } }] }]);
+        await d.choose(dentist, "show:0");
+        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "com.palm.app.calendar", params: { showEventDetail: "ev-dentist" } });
         expect((await d.ask("what's on my calendar on Sunday")).text).toBe("Nothing on your calendar on Sunday.");
     });
     it("undo takes the event back, after Yes", async () => {
@@ -302,7 +308,9 @@ describe("email and messages", () => {
     });
     it("finds email; reads the last message", async () => {
         const d = device();
-        expect((await d.ask("search my email for invoice")).text).toBe("One email about “invoice”: “Invoice 2231” from Alex Rivera.");
+        const inv = await d.ask("search my email for invoice");
+        expect(inv.text).toBe("One email about “invoice”: “Invoice 2231” from Alex Rivera.");
+        expect(inv.data.attachments[0].items[0]).toMatchObject({ title: "Invoice 2231", subtitle: "Alex Rivera", open: { params: { emailId: "mail-1" } } });
         expect((await d.ask("do I have any new emails")).text).toBe("1 unread email: “Invoice 2231” from Alex Rivera.");
         expect((await d.ask("read my last message")).text).toBe("Sam Delgado said, today at 9:50 AM: “Running 5 min late”");
         const p = await d.ask("what did Priya say");
@@ -346,12 +354,35 @@ describe("the device", () => {
         expect((await d.ask("open sounds & ringtones")).text).toBe("Opening Sounds & Ringtones.");
         expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.settings", params: { page: "sounds" } });
     });
-    it("photos from a day open in Photos", async () => {
+    it("photos from a day: shown in the conversation, and in Photos (just those) behind it", async () => {
         const d = device();
-        expect((await d.ask("show my photos from yesterday")).text).toBe("Here are 2 photos from yesterday.");
-        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.photos", params: { imageList: { results: [
-            { file_path: "/media/internal/DCIM/b.jpg" }, { file_path: "/media/internal/DCIM/a.jpg" }] } } });
-        expect((await d.ask("show my photos from last week")).text).toBe("Here is 1 photo from last week.");
+        const m = await d.ask("show my photos from yesterday");
+        expect(m.text).toBe("Here are 2 photos from yesterday. I've opened them in Photos too.");
+        const list = { results: [{ file_path: "/media/internal/DCIM/b.jpg" }, { file_path: "/media/internal/DCIM/a.jpg" }], title: "Photos from Yesterday" };
+        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.photos", params: { imageList: list } });
+        // The pictures in the reply, and Open Photos to bring it forward.
+        expect(m.data.attachments).toEqual([{ type: "images", total: 2, items: [
+            { path: "/media/internal/DCIM/b.jpg", open: { appId: "org.webosphoenix.photos", title: "Photos", params: { imageList: { results: [{ file_path: "/media/internal/DCIM/b.jpg" }] } } } },
+            { path: "/media/internal/DCIM/a.jpg", open: { appId: "org.webosphoenix.photos", title: "Photos", params: { imageList: { results: [{ file_path: "/media/internal/DCIM/a.jpg" }] } } } }] }]);
+        expect(m.choices).toEqual([{ id: "open", label: "Open Photos" }]);
+        // A picture tapped: Photos on it; the buttons stay.
+        await d.choose(m, "show:1");
+        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.photos", params: { imageList: { results: [{ file_path: "/media/internal/DCIM/a.jpg" }] } } });
+        expect((await d.svc.thread({ id: m.threadId })).messages.find((x: Msg) => x.id === m.id).chosen).toBeUndefined();
+        await d.choose(m, "open");
+        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.photos", params: { imageList: list } });
+        expect((await d.ask("show my photos from last week")).text).toBe("Here is 1 photo from last week. I've opened it in Photos too.");
+    });
+    it("no photos: says so and offers Photos; how many: only said", async () => {
+        const d = device();
+        const launches = () => d.called("applicationManager/launch").length;
+        const m = await d.ask("show my photos from today");
+        expect(m.text).toBe("You don't have any photos from today.");
+        expect(m.choices).toEqual([{ id: "open", label: "Open Photos" }]);
+        const before = launches();
+        expect((await d.ask("how many photos did I take yesterday")).text).toBe("You have 2 photos from yesterday.");
+        expect((await d.ask("show my screenshots")).text).toBe("You don't have any screenshots.");
+        expect(launches()).toBe(before);
     });
 });
 

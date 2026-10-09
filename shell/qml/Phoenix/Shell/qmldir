@@ -42,6 +42,7 @@ EmergencyWindow 1.0 EmergencyWindow.qml
 EditPopup 1.0 EditPopup.qml
 MicGlyph 1.0 MicGlyph.qml
 AssistantChip 1.0 AssistantChip.qml
+AssistantAttachments 1.0 AssistantAttachments.qml
 IconMenu 1.0 IconMenu.qml
 EmojiPanel 1.0 EmojiPanel.qml
 EmojiSearchBar 1.0 EmojiSearchBar.qml

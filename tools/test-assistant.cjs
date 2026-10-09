@@ -267,6 +267,42 @@ async function main() {
         check(/^Volume \d+%\.$/.test(await ask("Turn up the volume")), "the volume up");
         check(await ask("Set brightness to 50%") === "Brightness 50%.", "the brightness set");
         await shot(app, "thread-everyday");
+        // Photos found: shown in the conversation and opened in Photos (just
+        // those), behind; a picture tapped opens Photos on it.
+        for (const name of ["harbor-dusk", "alpine-lake"]) {
+            const data = fs.readFileSync(path.join(REPO, `apps/media-samples/media/photos/${name}.jpg`)).toString("base64");
+            const w = await svc(app, "luna://org.webosphoenix.service.mediafiles/write", { path: `/media/internal/DCIM/100PHNX/${name}.jpg`, data, mimeType: "image/jpeg" });
+            check(w.returnValue !== false, "a photo taken today: " + name);
+        }
+        await svc(app, "luna://com.webos.service.mediaindexer/requestMediaScan", { path: "/media/internal" });
+        // Indexed (the legacy kind the assistant reads is mirrored from the index).
+        const dcim = async () => ((await svc(app, "luna://com.palm.db/find", { query: { from: "com.palm.media.image.file:1" } })).results || [])
+            .filter((o) => /\/DCIM\/100PHNX\//.test(o.path));
+        for (let i = 0; i < 50 && (await dcim()).length < 2; ++i) await app.waitForTimeout(100);
+        check((await dcim()).length === 2, "indexed: " + JSON.stringify((await dcim()).map((o) => [o.path, o.createdTime])));
+        launches.length = 0;
+        const photosSaid = await ask("Show my photos from today");
+        check(photosSaid === "Here are 2 photos from today. I've opened them in Photos too.", "photos from today: " + photosSaid);
+        const photoRow = app.locator(".as-row").last();
+        await photoRow.locator("[data-testid='as-thumb-1'] img").waitFor();
+        check(await photoRow.locator(".as-thumb").count() === 2, "the two pictures in the conversation");
+        const photosLaunch = launches.find((l) => l.id === "org.webosphoenix.photos");
+        check(!!photosLaunch && photosLaunch.params.imageList.results.length === 2 && photosLaunch.params.imageList.title === "Photos from Today",
+              "and Photos opened on just those");
+        await shot(app, "photos-found");
+        launches.length = 0;
+        await photoRow.locator("[data-testid='as-thumb-0']").click();
+        for (let i = 0; i < 50 && !launches.length; ++i) await app.waitForTimeout(100);
+        check(launches[0] && launches[0].params.imageList.results.length === 1, "a picture tapped: Photos on it");
+        check(/^Open Photos$/.test((await photoRow.locator("[data-testid='as-choice-open']").textContent()).trim()), "and Open Photos to bring it forward");
+        // Photos shows just the pictures it was given.
+        const ph = await context.newPage();
+        watch(ph, "photos");
+        await ph.goto(`${root}/org.webosphoenix.photos/index.html?launchParams=` + encodeURIComponent(JSON.stringify(photosLaunch.params)));
+        await ph.waitForSelector("[data-testid='thumb-1']");
+        check(await ph.locator(".ph-cell").count() === 2 && /Photos from Today/.test(await ph.textContent(".ph-header")), "Photos: a grid of just those two");
+        await shot(ph, "photos-picked");
+        await ph.close();
         // Words it does not understand: the commands they come close to.
         const close = await ask("I need the dentist appointment thing");
         check(/^I don't have the tools for that yet, but I can open Calendar for you\. Did you mean something like \u201cadd a meeting with Sam tomorrow at 3\u201d/.test(close),

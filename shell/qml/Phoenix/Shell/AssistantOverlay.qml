@@ -345,6 +345,16 @@ Item {
                 ov.closeRequested();
         });
     }
+    // An item an answer shows (a photo, an event), tapped: its app comes
+    // forward on it, on purpose, so the view makes way.
+    function show(message, index) {
+        if (busy)
+            return;
+        _call("choose", { threadId: threadId, messageId: message.id, choice: "show:" + index }, function (r) {
+            if (r && r.returnValue !== false)
+                ov.closeRequested();
+        });
+    }
     function confirm(message, accept) {
         if (busy)
             return;
@@ -951,7 +961,7 @@ Item {
                 property real appear: 1
                 property real choicesAppear: 1
                 width: list.width
-                height: bubble.height + (actions.visible ? actions.height + Theme.px(6) : 0)
+                height: bubble.height + (found.visible ? found.height + Theme.px(6) : 0) + (actions.visible ? actions.height + Theme.px(6) : 0)
 
                 Component.onCompleted: {
                     if (ov._arrives(modelData)) {
@@ -1038,9 +1048,21 @@ Item {
                         }
                     }
                 }
+                // What it found (photos, events, contacts): a tap opens its app on it.
+                AssistantAttachments {
+                    id: found
+                    anchors.top: bubble.bottom
+                    anchors.topMargin: Theme.px(6)
+                    anchors.left: parent.left
+                    maxWidth: list.width * 0.86
+                    attachments: !row.mine && row.modelData.data && row.modelData.data.attachments ? row.modelData.data.attachments : []
+                    source: ov.source
+                    opacity: row.appear
+                    onShown: function (index) { ov.show(row.modelData, index); }
+                }
                 Flow {
                     id: actions
-                    anchors.top: bubble.bottom
+                    anchors.top: found.visible ? found.bottom : bubble.bottom
                     anchors.topMargin: Theme.px(6)
                     width: list.width
                     spacing: Theme.px(8)
