@@ -620,7 +620,12 @@ function createAssistantService(deps) {
     function pickCommand(p, thread, cat) {
         var usable = cat.all.filter(function (c) { return allowed(c) && !c.internal; });
         var names = usable.map(function (c) { return commands.toolName(c.id); });
-        var listText = usable.map(function (c, i) { return names[i] + ": " + String(c.description || c.title).split(/\.\s/)[0]; }).join("\n");
+        // Each command by its description's first sentence and, where it
+        // has them (lib/commands.js examples), up to three ways people ask.
+        var listText = usable.map(function (c, i) {
+            var ex = (c.examples || []).slice(0, 3).map(function (e) { return JSON.stringify(e); });
+            return names[i] + ": " + String(c.description || c.title).split(/\.\s/)[0] + (ex.length ? " (e.g. " + ex.join(", ") + ")" : "");
+        }).join("\n");
         // A few examples as earlier turns, then the words; deterministic.
         var shots = [];
         PICK_EXAMPLES.forEach(function (x) {

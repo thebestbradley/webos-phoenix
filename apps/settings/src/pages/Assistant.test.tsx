@@ -75,7 +75,7 @@ describe("Settings > Assistant: Connect model", () => {
         try {
             render(<AssistantPage />);
             await waitFor(() => expect(screen.getByTestId("as-connect-both")).toBeTruthy());
-            expect(screen.getByTestId("as-connect-local").textContent).toMatch(/Private and offline.*0\.5 to 2\.5 GB/);
+            expect(screen.getByTestId("as-connect-local").textContent).toMatch(/Private and offline.*Qwen3 0\.6B comes with it.*1\.8 to 19 GB/);
             expect(screen.getByTestId("as-connect-cloud").textContent).toMatch(/Anthropic, OpenAI, Google Gemini or any OpenAI-compatible server/);
             fireEvent.click(screen.getByTestId("as-connect-cloud"));
             await waitFor(() => expect(screen.getByTestId("as-connect-add-anthropic")).toBeTruthy());

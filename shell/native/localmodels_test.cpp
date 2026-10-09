@@ -158,20 +158,20 @@ int main(int argc, char **argv)
     // A built-in model: listed, run from where it is, never removed.
     QDir().mkpath(shipped);
     {
-        QFile f(shipped + QStringLiteral("/qwen3-0.6b-q4_k_m.gguf"));
+        QFile f(shipped + QStringLiteral("/qwen3-0.6b-q8_0.gguf"));
         f.open(QIODevice::WriteOnly);
         f.write(files.body);
     }
     const QVariantMap builtIn = lm.status().value(QStringLiteral("installed")).toList().value(0).toMap();
-    check(builtIn.value(QStringLiteral("id")) == QStringLiteral("qwen3-0.6b-q4_k_m") && builtIn.value(QStringLiteral("builtIn")).toBool(),
+    check(builtIn.value(QStringLiteral("id")) == QStringLiteral("qwen3-0.6b-q8_0") && builtIn.value(QStringLiteral("builtIn")).toBool(),
           "a built-in model is installed");
     QString builtInUrl;
     QObject::connect(&lm, &LocalModels::ready, [&](const QString &id, const QString &url) { if (id == QStringLiteral("r4")) builtInUrl = url; });
-    lm.ensure(QStringLiteral("qwen3-0.6b-q4_k_m"), QStringLiteral("r4"));
+    lm.ensure(QStringLiteral("qwen3-0.6b-q8_0"), QStringLiteral("r4"));
     waitFor([&]() { return !builtInUrl.isEmpty(); }, 20000);
     check(!builtInUrl.isEmpty(), "and runs from where it is");
-    lm.remove(QStringLiteral("qwen3-0.6b-q4_k_m"));
-    check(QFile::exists(shipped + QStringLiteral("/qwen3-0.6b-q4_k_m.gguf")), "and is never removed");
+    lm.remove(QStringLiteral("qwen3-0.6b-q8_0"));
+    check(QFile::exists(shipped + QStringLiteral("/qwen3-0.6b-q8_0.gguf")), "and is never removed");
     lm.stop();
 
     // Speech: a program reading the text.

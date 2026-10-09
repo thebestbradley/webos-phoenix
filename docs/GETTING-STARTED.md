@@ -229,7 +229,7 @@ spoken by Kitten TTS (`phoenix-tts`; `say` when it cannot).
 `llama.cpp` and `onnxruntime`, whisper's English model (148 MB) into
 `build/whisper`, the wake word (Vosk, 84 MB) into `build/wakeword`, Kitten
 TTS's model and the CMU dictionary (28 MB) into `build/kitten` and Qwen3
-0.6B (397 MB) into `build/models`, each checked by its SHA-256
+0.6B (639 MB) into `build/models`, each checked by its SHA-256
 (`tools/get-whisper-model.py`, `tools/get-wakeword.py`,
 `tools/get-kitten.py` and `tools/get-base-model.py` fetch them on their
 own). phoenix-sim finds them there; it logs a line for anything missing,
@@ -260,7 +260,7 @@ fallback), whisper.cpp's `whisper-cli` and llama.cpp's `llama-server`
 built from the commits meta-phoenix pins into `/usr/local/bin` (a few
 minutes), whisper's English model into `build/whisper`, the wake word into
 `build/wakeword`, Kitten TTS with its dictionary and ONNX Runtime into
-`build/kitten` (57 MB) and Qwen3 0.6B into `build/models` (about 740 MB
+`build/kitten` (57 MB) and Qwen3 0.6B into `build/models` (about 980 MB
 in all). In a container without sound, phoenix-tts says "no sound
 output"; an `~/.asoundrc` of `pcm.!default { type null }` lets it speak
 into nothing. As on a Mac, phoenix-sim and Settings > Assistant say what

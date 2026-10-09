@@ -2,8 +2,8 @@
 # Copyright (c) 2026 webOS Phoenix contributors
 # SPDX-License-Identifier: Apache-2.0
 """Fetches the Assistant's built-in on-device model for the simulator:
-Qwen3 0.6B in Q4_K_M (397 MB, Apache-2.0; Unsloth's quantization of the
-Qwen team's weights, at a pinned revision), checked against its SHA-256,
+Qwen3 0.6B, the Qwen team's own GGUF (Q8_0, 639 MB, Apache-2.0, at a
+pinned revision), checked against its SHA-256,
 into build/models, where phoenix-sim's LocalModels finds models that come
 with the system. The same file and hash as apps/assistant/service/lib/
 models.js (BUILT_IN; a test there checks they agree); on a device
@@ -18,10 +18,10 @@ import os
 import sys
 import urllib.request
 
-ID = "qwen3-0.6b-q4_k_m"
-URL = "https://huggingface.co/unsloth/Qwen3-0.6B-GGUF/resolve/50968a4468ef4233ed78cd7c3de230dd1d61a56b/Qwen3-0.6B-Q4_K_M.gguf"
-SHA256 = "ac2d97712095a558e31573f62f466a3f9d93990898b0ec79d7c974c1780d524a"
-SIZE = 396705472
+ID = "qwen3-0.6b-q8_0"
+URL = "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/23749fefcc72300e3a2ad315e1317431b06b590a/Qwen3-0.6B-Q8_0.gguf"
+SHA256 = "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031"
+SIZE = 639446688
 
 
 def main():
@@ -38,7 +38,7 @@ def main():
     print("downloading", URL, f"({SIZE / 1e6:.0f} MB)")
     part = path + ".part"
     h = hashlib.sha256()
-    # In pieces: 400 MB need not be in memory at once.
+    # In pieces: 640 MB need not be in memory at once.
     with urllib.request.urlopen(URL) as r, open(part, "wb") as out:
         while True:
             chunk = r.read(1 << 20)

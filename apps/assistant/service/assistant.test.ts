@@ -265,7 +265,7 @@ describe("Connect model", () => {
     });
 
     it("asks the on-device model first when both are there", async () => {
-        const MODEL = "qwen2.5-0.5b-instruct-q4_k_m";
+        const MODEL = "qwen3-1.7b-q8_0";
         const t = setup({ llm: {
             status: () => Promise.resolve({ available: true, installed: [{ id: MODEL }], ramBytes: 4 * 2 ** 30 }),
             ensure: () => Promise.resolve({ baseUrl: mock.url + "/v1" }),
@@ -304,7 +304,7 @@ describe("Connect model", () => {
 });
 
 describe("never a dead end (the owner's banana pudding, 9 October 2026)", () => {
-    const MODEL = "qwen2.5-0.5b-instruct-q4_k_m";
+    const MODEL = "qwen3-1.7b-q8_0";
     const local = () => ({
         status: () => Promise.resolve({ available: true, installed: [{ id: MODEL }], ramBytes: 4 * 2 ** 30 }),
         ensure: () => Promise.resolve({ baseUrl: mock.url + "/v1" }),
@@ -467,7 +467,7 @@ describe("the permission gate", () => {
 });
 
 describe("the on-device model", () => {
-    const MODEL = "qwen2.5-0.5b-instruct-q4_k_m";
+    const MODEL = "qwen3-1.7b-q8_0";
     const llm = () => ({
         status: () => Promise.resolve({ available: true, installed: [{ id: MODEL }], ramBytes: 4 * 2 ** 30 }),
         ensure: () => Promise.resolve({ baseUrl: mock.url + "/v1" }),
@@ -480,7 +480,7 @@ describe("the on-device model", () => {
         expect((await t.svc.selectModel({ id: MODEL })).returnValue).toBe(true);
         t.as("com.palm.systemui");
         const r = await ask(t, "why is the sky blue");
-        expect(last(r)).toMatchObject({ text: "chat says: why is the sky blue", via: "on-device", source: "Qwen2.5 0.5B Instruct" });
+        expect(last(r)).toMatchObject({ text: "chat says: why is the sky blue", via: "on-device", source: "Qwen3 1.7B" });
         // A question about the world: no tools (a short prompt, no misfires).
         expect(mock.requests.at(-1)!.body.tools).toBeUndefined();
         const act = await ask(t, "it's dark, put the flashlight on for me");
@@ -510,12 +510,23 @@ describe("the on-device model", () => {
         const t = setup({ llm: llm() });
         const m = await t.svc.models();
         expect(m.models.map((x: Reply) => [x.id, x.fits, x.recommended, x.installed, x.builtIn])).toEqual([
-            ["qwen3-0.6b-q4_k_m", true, false, false, true], [MODEL, true, false, true, false],
-            ["qwen2.5-1.5b-instruct-q4_k_m", true, true, false, false], ["qwen3-4b-q4_k_m", false, false, false, false]]);
+            // 4 GB: the built-in model is the one that fits (and so recommended).
+            ["qwen3-0.6b-q8_0", true, true, false, true], [MODEL, false, false, true, false],
+            ["qwen3-4b-q4_k_m", false, false, false, false], ["qwen3-8b-q4_k_m", false, false, false, false],
+            ["qwen3-14b-q4_k_m", false, false, false, false], ["qwen3-30b-a3b-q4_k_m", false, false, false, false]]);
+    });
+
+    it("recommends the largest that fits each kind of device", async () => {
+        const models = req("./lib/models.js") as { forDevice(r: number): { id: string; recommended: boolean }[] };
+        const best = (gb: number) => models.forDevice(gb * 2 ** 30).find((m) => m.recommended)!.id;
+        // As devices report their memory: a little under what they are sold as.
+        expect([3.7, 5.6, 7.5, 11.4, 15.5, 31, 62].map(best)).toEqual([
+            "qwen3-0.6b-q8_0", "qwen3-1.7b-q8_0", "qwen3-4b-q4_k_m", "qwen3-8b-q4_k_m", "qwen3-14b-q4_k_m",
+            "qwen3-30b-a3b-q4_k_m", "qwen3-30b-a3b-q4_k_m"]);
     });
 
     describe("built in: Qwen3 0.6B", () => {
-        const BUILT_IN = "qwen3-0.6b-q4_k_m";
+        const BUILT_IN = "qwen3-0.6b-q8_0";
         const withBuiltIn = () => ({
             ...llm(),
             status: () => Promise.resolve({ available: true, installed: [{ id: BUILT_IN, builtIn: true }], ramBytes: 2 * 2 ** 30 }),

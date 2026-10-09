@@ -150,7 +150,7 @@ function useBeats(speed: number): [BirdPose | null, (beats: Beat[]) => void] {
 // ---- Connect model: which kind -------------------------------------------------------------------
 
 const KINDS: { mode: ConnectMode; title: string; detail: string }[] = [
-    { mode: "local", title: "On-Device Model", detail: "Private and offline: nothing leaves the phone. A 0.5 to 2.5 GB download." },
+    { mode: "local", title: "On-Device Model", detail: "Private and offline: nothing leaves the phone. One comes with it; larger ones are 1.8 to 19 GB downloads." },
     { mode: "cloud", title: "Cloud Model", detail: "Anthropic, OpenAI, Gemini or a compatible server, with your API key." },
     { mode: "both", title: "Both", detail: "On-device first; the cloud model for what it can't do." },
 ];

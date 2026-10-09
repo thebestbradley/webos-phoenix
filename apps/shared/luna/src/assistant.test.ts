@@ -88,11 +88,12 @@ describe("simulated org.webosphoenix.assistant", () => {
 
     it("lists the on-device models without the shell, and says how to get llama-server", async () => {
         const m = await assistant.models();
-        expect(m.models.map((x) => x.id)).toEqual(["qwen3-0.6b-q4_k_m", "qwen2.5-0.5b-instruct-q4_k_m", "qwen2.5-1.5b-instruct-q4_k_m", "qwen3-4b-q4_k_m"]);
+        expect(m.models.map((x) => x.id)).toEqual(["qwen3-0.6b-q8_0", "qwen3-1.7b-q8_0", "qwen3-4b-q4_k_m", "qwen3-8b-q4_k_m", "qwen3-14b-q4_k_m", "qwen3-30b-a3b-q4_k_m"]);
         expect(m.models[0]).toMatchObject({ builtIn: true, installed: false });
         expect(m.status.available).toBe(false);
         expect(m.status.howToInstall).toMatch(/llama-server/);
-        expect(formatBytes(m.models[1].size)).toBe("491 MB");
+        expect(formatBytes(m.models[0].size)).toBe("639 MB");
+        expect(formatBytes(m.models[5].size)).toBe("18.6 GB");
     });
 
     it("has no speech without the shell or page voices", async () => {

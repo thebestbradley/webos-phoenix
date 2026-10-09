@@ -194,7 +194,9 @@ phoenix-sim the model loaded and answered in about 18 s the first time
 and 2 s after, on four CPU cores.
 
 **Built in: Qwen3 0.6B** (9 October 2026, the owner's decision). The device
-image ships Qwen3 0.6B (Q4_K_M, 397 MB) and `./phoenix` puts it in
+image ships Qwen3 0.6B (the Qwen team's own GGUF, Q8_0, 639 MB; at first
+Unsloth's Q4_K_M, 397 MB, which the measurements below were made with
+unless they say Q8_0) and `./phoenix` puts it in
 `build/models`; it is the on-device model in use until another is chosen
 (`localModel` "": the built-in one; "off": none), listed in Settings as
 **Built in**, never downloaded or removed. The commands still answer
@@ -216,11 +218,13 @@ chooses wrongly is still read back unless the words name it
 phrasings the grammar misses ("kill the wifi for now", "pencil in a
 dentist visit next tuesday at 3", "drop Sam a line saying I'm on my way"):
 the right command 7 times before (the closest ten tools offered), 17
-after; the choice alone 20, 9 without the examples. A request takes about
+after; the choice alone 20, 9 without the examples; with the official
+Q8_0 the choice alone 17 (as close as 28 phrasings can tell; a request 2.4 s on this machine while it was loaded with other work). A request takes about
 0.8 s here once the server is up (the choice 0.45 s). llama-server runs
 with 8,192 tokens of context (the commands as tools passed 4,096: it
 refused the request), one slot and an 8-bit cache with flash attention:
-1.3 GB in all for Qwen3 0.6B, as much as 4,096 tokens took before. One
+1.3 GB in all for Qwen3 0.6B Q4_K_M, as much as 4,096 tokens took before
+(1.8 GB for the official Q8_0). One
 slot against four made no difference here (0.44 s against 0.46 s a
 choice: this llama.cpp shares one cache between its slots), but keeps
 the prompt cached for a phone's single user. Checked in phoenix-sim:
@@ -372,7 +376,8 @@ While no cloud model is set up, an answer nothing here could give offers
 "Search the web" and "Connect model" (with one set up, "Ask <model>" and
 "Search the web", as before). Connect model asks which kind, in a small
 sheet in the shell's view and a dialog in the app: an **on-device model**
-(private and offline, a 0.5 to 2.5 GB download), a **cloud model**
+(private and offline: Qwen3 0.6B comes with it, larger ones are 1.8 to
+19 GB downloads), a **cloud model**
 (Anthropic, OpenAI, Gemini or a compatible server, with the user's key),
 or **both** (the on-device model first, as the router does; "Ask <cloud
 model>" for what it cannot). The service's `connect` keeps the question on
@@ -506,15 +511,31 @@ Settings, and provider changes only for Settings. On a device the
 Phoenix key store (SYNERGY.md) replaces the key file.
 
 **On-device models** (`lib/models.js`; Apache-2.0, SHA-256 from Hugging
-Face, checked after download). Built in: Qwen3 0.6B Q4_K_M (397 MB; the
-Qwen team publishes only a Q8_0 GGUF of it, 639 MB, so this is Unsloth's
-quantization of their weights, `unsloth/Qwen3-0.6B-GGUF` at a pinned
-revision). To download, the Qwen team's own GGUF builds: Qwen2.5 0.5B Instruct Q4_K_M (491 MB, for 2 GB),
-Qwen2.5 1.5B Instruct Q4_K_M (1.1 GB, for 4 GB), Qwen3 4B Q4_K_M (2.5 GB,
-for 8 GB). Settings offers what fits the device's memory and recommends
-the largest. Llama 3.2 was left out (its licence is not permissive);
-Qwen2.5 3B too (Qwen Research License); Qwen3.5 and Gemma 4 GGUFs were
-not in the Qwen and Google repositories when checked. `llama-server` is
+Face, checked after download). All the Qwen team's own GGUFs
+(huggingface.co/Qwen, pinned revisions; 9 October 2026, the owner's
+decision), one per size, the smallest quantization they publish:
+
+| Model | File | Size | Device memory (`ram`) | For |
+| --- | --- | --- | --- | --- |
+| Qwen3 0.6B (built in) | Qwen3-0.6B-Q8_0.gguf | 639 MB | 3 GB (1.8 GB while it runs) | every device; the only one at 4 GB or less |
+| Qwen3 1.7B | Qwen3-1.7B-Q8_0.gguf (their only quant) | 1.8 GB | 6 GB | 6 GB phones |
+| Qwen3 4B | Qwen3-4B-Q4_K_M.gguf | 2.5 GB | 8 GB | 8 GB phones and tablets |
+| Qwen3 8B | Qwen3-8B-Q4_K_M.gguf | 5.0 GB | 12 GB | 12-16 GB devices |
+| Qwen3 14B | Qwen3-14B-Q4_K_M.gguf | 9.0 GB | 16 GB | 16 GB devices and computers |
+| Qwen3 30B-A3B (3B active) | Qwen3-30B-A3B-Q4_K_M.gguf | 18.6 GB | 32 GB | computers with 32 GB or more |
+
+Settings shows each one's size and memory, marks what is too big for this
+device, and recommends the largest that fits (a device sold as 8 GB
+reports a little less, so 15% of room is allowed; a test checks the
+recommendation from 4 GB to 64 GB). Downloads stay optional. The newest
+official GGUFs are Qwen3's (May 2025): Qwen3.5 (0.8B to 397B, February
+2026), Qwen3.6 (27B, 35B-A3B), Qwen3.8 (27B and larger) and the Qwen3
+2507 instruct updates (4B, 30B-A3B) have no GGUF from the Qwen team, only
+safetensors (checked 9 October 2026); a GGUF of those would be a third
+party's or our own conversion with llama.cpp's `convert_hf_to_gguf.py`,
+the owner's call. Qwen3-Next-80B-A3B-Instruct has an official GGUF but is
+48 GB, beyond these tiers. Llama 3.2 was left out (its licence is not
+permissive); Qwen2.5 3B too (Qwen Research License). `llama-server` is
 found on the PATH or given (`phoenix-sim --llama-server <path>`); the
 setup scripts install it (below), and on a device meta-phoenix's
 `llama-cpp` recipe does. It stops after five idle minutes to give the
@@ -593,11 +614,11 @@ installed by the setup scripts on a computer and by meta-phoenix's
 | Speech recognition: `whisper-cli` | Homebrew `whisper-cpp` | Built from whisper.cpp `d09f61a` into `/usr/local/bin` (3 MB) | `whisper-cpp` (static) | MIT |
 | Its model, `ggml-base.en.bin` (148 MB) | `build/whisper` (`tools/get-whisper-model.py`) | `build/whisper` | `whisper-cpp-model-base-en`, in the image, `/usr/share/whisper` | MIT (OpenAI's Whisper weights) |
 | On-device model runner: `llama-server` | Homebrew `llama.cpp` | Built from llama.cpp b11239 into `/usr/local/bin` (15 MB) | `llama-cpp-server` (static, b11239) | MIT |
-| The language models (0.5 to 2.5 GB) | Downloaded in Settings > Assistant | Same | Same, into `/media/internal/.phoenix/models` | Apache-2.0 (Qwen) |
+| The larger language models (1.8 to 19 GB) | Downloaded in Settings > Assistant | Same | Same, into `/media/internal/.phoenix/models` | Apache-2.0 (Qwen) |
 | Wake word: `phoenix-wakeword` | Built with phoenix-sim | Built with phoenix-sim | `phoenix-shell` | Apache-2.0 (Phoenix) |
 | Wake word: libvosk | `build/wakeword` (`tools/get-wakeword.py`, 13 MB) | `build/wakeword` (26 MB) | `libvosk`, prebuilt from Alpha Cephei's PyPI wheels (x86-64, aarch64, armv7) | Apache-2.0; Kaldi, OpenFST Apache-2.0; OpenBLAS, CLAPACK BSD-3-Clause |
 | Wake word: `vosk-model-small-en-us-0.15` (40 MB download, 71 MB) | `build/wakeword` | `build/wakeword` | `vosk-model-small-en-us`, in the image, `/usr/share/phoenix/wakeword` | Apache-2.0 |
-| The built-in language model: Qwen3 0.6B Q4_K_M (397 MB) | `build/models` (`tools/get-base-model.py`) | `build/models` | `qwen3-0.6b-gguf`, in the image, `/usr/share/phoenix/models` (`PHOENIX_BASE_MODEL`) | Apache-2.0 (Qwen; Unsloth's quantization) |
+| The built-in language model: Qwen3 0.6B Q8_0 (639 MB) | `build/models` (`tools/get-base-model.py`) | `build/models` | `qwen3-0.6b-gguf`, in the image, `/usr/share/phoenix/models` (`PHOENIX_BASE_MODEL`) | Apache-2.0 (Qwen) |
 | The voice: `phoenix-tts` | Built with phoenix-sim | Built with phoenix-sim | `phoenix-shell` | Apache-2.0 (Phoenix); its `onnxruntime_c_api.h` MIT |
 | Kitten TTS nano 0.2 (24 MB) | `build/kitten` (`tools/get-kitten.py`) | `build/kitten` | `kitten-tts-nano`, in the image, `/usr/share/phoenix/kitten` | Apache-2.0 (KittenML: code, weights and voices) |
 | The CMU Pronouncing Dictionary (3.6 MB) | `build/kitten` | `build/kitten` | `cmudict`, `/usr/share/phoenix/kitten` | BSD-2-Clause |
@@ -606,20 +627,20 @@ installed by the setup scripts on a computer and by meta-phoenix's
 
 Each setup script installs all of it by default, skips what is already
 there, checks downloads against their SHA-256 (or a pinned git commit),
-and leaves it out with `--no-assistant`. On a Mac it is about 650 MB of
-models plus the three Homebrew packages; on Linux about 740 MB, and a few
+and leaves it out with `--no-assistant`. On a Mac it is about 900 MB of
+models plus the three Homebrew packages; on Linux about 980 MB, and a few
 minutes to build the two programs (the voice is about 40 MB of it, the
-built-in model 397 MB).
+built-in model 639 MB).
 
 In the image, by device class (HARDWARE.md: 4 GB is the practical
 minimum): whisper's base.en and the Vosk model ship in the image, since
 dictation and "Hey Phoenix" must work offline from the first boot and
 together they take about 220 MB of storage, which every supported device
 has; tiny.en (78 MB, about twice as fast, less exact) is the choice to
-make for a 2-3 GB community device. Qwen3 0.6B (397 MB, 1.3 GB of memory
+make for a 2-3 GB community device. Qwen3 0.6B (639 MB, 1.8 GB of memory
 while it runs, stopped after five idle minutes) ships too, so the
 Assistant answers what its commands miss offline from the first boot;
-the larger models are 1.1 to 2.5 GB, the right one depends on the memory
+the larger models are 1.8 to 19 GB, the right one depends on the memory
 (Settings offers what fits), and are downloads. Kitten TTS is the image's
 voice (with its dictionary and ONNX Runtime, about 57 MB, all
 permissive), and Flite its fallback, because both are permissive; armv7

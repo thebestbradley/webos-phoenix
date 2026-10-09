@@ -527,19 +527,17 @@ without OpenSSL or the downloaded web UI, and ships llama.cpp's `LICENSE`;
 `scripts/linux-setup.sh` builds the same release for the simulator,
 Homebrew's `llama.cpp` on a Mac.
 
-One model is built in: **Qwen3 0.6B**, **Apache-2.0** (the Qwen team's
-`LICENSE` in Qwen/Qwen3-0.6B, checked 9 October 2026), in the Q4_K_M
-GGUF that Unsloth made of the Qwen team's weights
-(unsloth/Qwen3-0.6B-GGUF, model card: apache-2.0, pinned revision; the Qwen
-team publishes only a Q8_0 GGUF of it). Not in the repository:
+One model is built in: **Qwen3 0.6B**, **Apache-2.0**, the Qwen team's
+own GGUF (Qwen/Qwen3-0.6B-GGUF, Q8_0, its `LICENSE` and model card,
+checked 9 October 2026, pinned revision). Not in the repository:
 `tools/get-base-model.py` fetches it for the simulator, SHA-256 checked;
 the image ships it (meta-phoenix's `qwen3-0.6b-gguf`) with Qwen's
 `LICENSE` beside it (`/usr/share/phoenix/models`). The other on-device
-models are downloaded by the user, never shipped: Qwen2.5
-0.5B Instruct, Qwen2.5 1.5B Instruct and Qwen3 4B, each **Apache-2.0** per
-its Hugging Face model card (Qwen/Qwen2.5-0.5B-Instruct-GGUF,
-Qwen/Qwen2.5-1.5B-Instruct-GGUF, Qwen/Qwen3-4B-GGUF; checked 7 October
-2026). Left out on purpose: Llama 3.2 (Llama 3.2 Community License, not
+models are downloaded by the user, never shipped: Qwen3 1.7B, 4B, 8B, 14B
+and 30B-A3B, the Qwen team's own GGUFs, each **Apache-2.0** (its
+repository's `LICENSE` and model card: Qwen/Qwen3-1.7B-GGUF,
+Qwen/Qwen3-4B-GGUF, Qwen/Qwen3-8B-GGUF, Qwen/Qwen3-14B-GGUF,
+Qwen/Qwen3-30B-A3B-GGUF; checked 9 October 2026). Left out on purpose: Llama 3.2 (Llama 3.2 Community License, not
 permissive) and Qwen2.5 3B (Qwen Research License). An image that ships a
 model must carry its licence.
 

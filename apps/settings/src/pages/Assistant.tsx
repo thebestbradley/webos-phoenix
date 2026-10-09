@@ -179,7 +179,7 @@ function LocalModels({ m, onDownload }: { m: Models; onDownload?: (id: string) =
 
 const KINDS: { mode: ConnectMode; title: string; subtitle: string }[] = [
     { mode: "local", title: "On-Device Model",
-      subtitle: "Private and offline: it runs on this device and nothing you ask leaves it. A one-time download of 0.5 to 2.5 GB, for the memory here." },
+      subtitle: "Private and offline: it runs on this device and nothing you ask leaves it. Qwen3 0.6B comes with it; larger ones are a one-time download of 1.8 to 19 GB, for the memory here." },
     { mode: "cloud", title: "Cloud Model",
       subtitle: "Anthropic, OpenAI, Google Gemini or any OpenAI-compatible server, with your API key. Best at open questions; what you ask goes to the provider." },
     { mode: "both", title: "Both",
