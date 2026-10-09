@@ -1174,8 +1174,12 @@ FocusScope {
             // The launcher's tab name dialog, open group or "+" went first.
         } else if (launcher.open)
             launcher.open = false;
-        else if (cards.maximized && !source.back(cards.currentUid))
-            _backUnhandled(cards.currentUid);
+        else if (cards.maximized) {
+            _backUid = cards.currentUid;
+            _backMoves = _cardMoves;
+            if (!source.back(cards.currentUid))
+                _backUnhandled(cards.currentUid);
+        }
     }
     // The app did not take Back (nothing left to go back to): its card
     // minimizes to card view (SystemUiController::slotKeyEventRejected,
@@ -1183,6 +1187,18 @@ FocusScope {
     function _backUnhandled(uid) {
         if (cards.maximized && !cards.minimizing && cards.currentUid === uid && !launcher.open && !justType.open)
             cards.minimize();
+    }
+    // A page's answer comes later (backUnhandled): it counts only for the
+    // last Back, and only if the cards have not moved since (the user
+    // switched away and back, maximized or minimized a card): the user has
+    // gone on, and a late answer must not pull the card from under them.
+    property int _cardMoves: 0
+    property string _backUid: ""
+    property int _backMoves: -1
+    function _lateBackUnhandled(uid) {
+        if (uid === _backUid && _backMoves === _cardMoves)
+            _backUnhandled(uid);
+        _backUid = "";
     }
 
     // The forward swipe (left to right; Key_CoreNavi_Menu, or Next turned
@@ -1264,7 +1280,7 @@ FocusScope {
         ignoreUnknownSignals: true
         function onCardFocusRequested(uid) { Qt.callLater(cards.focusLaunched, uid); }
         function onCardCloseRequested(uid) { cards.close(uid, true); }
-        function onBackUnhandled(uid) { shell._backUnhandled(uid); }
+        function onBackUnhandled(uid) { shell._lateBackUnhandled(uid); }
         function onJustTypeDismissed() { justType.open = false; }
         function onBannerRequested(appId, text, icon, params, soundClass, soundFile, soundDuration, bannerId) {
             var a = null;
@@ -1365,7 +1381,10 @@ FocusScope {
     }
     Connections {
         target: cards
+        function onCurrentUidChanged() { shell._cardMoves++; }
+        function onCardMinimized(uid) { shell._cardMoves++; }
         function onCardMaximized(uid) {
+            shell._cardMoves++;
             // A card about to maximize, whoever asked (an app or a service
             // launching one, a window it opened): the launcher, Just Type
             // and the dashboard give way, and dock mode ends, so the card is
