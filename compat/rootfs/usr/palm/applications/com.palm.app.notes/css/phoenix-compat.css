@@ -18,6 +18,19 @@
 		margin: 0 8px;
 	}
 
+	/* The wall's title bar (GridView.js): search, "N memos", Edit, each in
+	   a quarter of the bar; the search field, at least 250 px wide
+	   (grid.css), ran over the count, half hidden on a phone on its side.
+	   The field and Edit keep their own widths and the count is centred
+	   between them; upright there is no room for it, and the field takes
+	   what Edit leaves. */
+	#appView_grid_search,
+	#appView_grid_gridTitleBar_client > .memo-count,
+	#appView_grid_gridTitleBar_client > :last-child {
+		-webkit-box-flex: 0 !important;
+		width: auto !important;   /* Enyo's flex items are width: 0 */
+	}
+
 	/* Rows set their packing inline (start). */
 	.memo-list .enyo-hflexbox {
 		-webkit-box-pack: center !important;
@@ -48,6 +61,31 @@
 	.memo-input {
 		width: auto;
 		padding: 16px 12px;
+	}
+}
+
+@media (max-width: 400px) {
+	/* The count and the spacers around it. */
+	#appView_grid_gridTitleBar_client > :nth-child(2),
+	#appView_grid_gridTitleBar_client > :nth-child(3),
+	#appView_grid_gridTitleBar_client > :nth-child(4),
+	#appView_grid_search > :last-child {
+		display: none;
+	}
+
+	#appView_grid_search {
+		-webkit-box-flex: 1 !important;
+		width: 0 !important;
+		margin-right: 8px;
+	}
+
+	#appView_grid_search .search-input {
+		min-width: 0;
+		-webkit-box-flex: 1;
+	}
+
+	#appView_grid_search .search-input .enyo-input-input {
+		min-width: 0;
 	}
 }
 
