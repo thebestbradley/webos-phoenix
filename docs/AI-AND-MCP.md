@@ -58,6 +58,23 @@ one short sentence and offer the app where it helps ("Open Calendar"); the
 bird plays done, asking (a read-back), confused (nothing here can) or oops
 (it could not).
 
+**Casual words** (9 October 2026). Talk rather than dictation reaches the
+commands without a model: when no rule takes the words as said, they are
+said again in the rules' words and tried once more (`lib/lang/en.js`
+`CASUAL`, `lib/grammar.js` `parse`): "kill the wifi for now" (turn off
+wifi), "get the bluetooth going", "it's pitch dark in here, I need some
+light" (the flashlight), "I don't want any calls for a while, go silent",
+"set up a wake up call at 6", "I need to be up by 5:45", "count down three
+minutes for the eggs", "don't let me forget to water the plants tonight at
+8", "ping me about the rent on friday", "pencil in a dentist visit next
+tuesday at 3", "drop Sam a line saying I'm on my way", "let Mary know I'll
+be late", "it's way too loud", "the screen is too bright", "throw on some
+tunes", "what's the forecast looking like for the weekend", "fire up the
+camera". All 18 phrasings that the grammar missed and that the on-device
+model was measured on (below) now reach the right command in the grammar, as do some 40 more
+(`casual.test.ts`), and words such as "let me know what you think", "drop
+it" or "tell me about palm" are left alone.
+
 | Command | Say, for example | Does | Asks first |
 | --- | --- | --- | --- |
 | `event` | "add a meeting with Sam tomorrow at 3", "create an event called dentist on Friday at 10am", "schedule lunch with Priya next Tuesday at noon at Bistro Verde", "put yoga on my calendar every Monday at 7pm for 90 minutes", "team offsite on the 20th all day" | A calendar event: title, day and time, end or length (an hour by default), place, invitees (contacts with an email), repeats; without a time it asks "When is it?" and the next words say it | |

@@ -10,6 +10,8 @@
 //   clean(text) -> text          lower case, no politeness, no end punctuation
 //   rules: [[command, fn(text, ctx) -> args | null]], tried in order; the
 //          commands and their arguments are lib/commands.js's
+//   casual(text) -> [text]       the words said again in the rules' words,
+//                                tried when no rule took them (optional)
 //   duration(text) -> seconds | null
 //   clock(text) -> {hour, minute, meridiem} | null
 //   extract(text, now) -> what a sentence says about when, and the rest
@@ -556,6 +558,8 @@ function textMessage(t, ctx) {
     if (!m) return null;
     var rest = m[1];
     if (/^(?:an? )?e-?mail\b/.test(rest)) return null;
+    // "send Mom a message saying call me back": who, without the message's name.
+    rest = rest.replace(/^(.+?) (?:a |an )?(?:quick )?(?:text|message|sms|note|line)(?: message)?(?=,|:| saying| that says| to say| and say| that)/, "$1");
     var sep = /^(.+?)(?:,|:| saying| that says| to say| and say| that)\s+(.+)$/.exec(rest);
     if (/^tell /.test(t) && !sep) return null;  // "tell me a joke"
     if (sep && !/^(?:me|us)$/.test(sep[1])) return { who: sep[1], message: cased(sep[2], ctx) };
@@ -1339,6 +1343,84 @@ function emailReply(t, ctx) {
     var sep = who && /^(.+?)(?:,|:| saying| with| that)\s+(.+)$/.exec(who);
     if (sep) { who = sep[1]; body = sep[2]; }
     return { who: who, body: body ? capital(cased(body, ctx)) : "" };
+}
+
+// ---- Casual words ---------------------------------------------------------------------------
+// What people say when they talk rather than dictate ("kill the wifi for
+// now", "throw on some tunes", "pencil in a dentist visit next tuesday at
+// 3", "drop Sam a line saying I'm on my way"): said again in the words the
+// rules know, tried only when no rule took the words as they were
+// (lib/grammar.js parse). The voice and model work's 28 phrasings the
+// grammar missed (docs/AI-AND-MCP.md) are among casual.test.ts's.
+var MUSIC_WORDS = "(?:some )?(?:tunes|music|songs|jams|beats|tracks|something(?: to listen to)?)";
+var LET_KNOW = "(?: (?:via|by|over|in a|with a) (?:sms|text|message|imessage))?";
+var CASUAL = [
+    // Fillers at the end.
+    [/^(.+?)(?:,)? (?:for now|for a bit|for a sec(?:ond)?|real quick|right now|now|thanks|thank you|cheers|mate|buddy|ok|okay)$/, "$1"],
+    [/^(?:yo|hey|um|uh|so|ok so|okay so|alright|right),? (.+)$/, "$1"],
+    // The flashlight.
+    [/^(?:it's |it is )?(?:(?:pitch|really|so|too) )?dark(?: in here| out here)?(?:,? i (?:need|want) (?:some |a )?light)?$/, "turn on the flashlight"],
+    [/^(?:i )?(?:need|want) (?:some |a little |a bit of )?light(?: in here)?$|^light me up\b.*$|^(?:give me|i need) some light\b.*$|^i can't see (?:a thing|anything)(?: in here)?$/, "turn on the flashlight"],
+    // Switches: "get the bluetooth going", "kill the wifi", "fire up the hotspot".
+    [/^(?:get|fire up|power up|kick on|bring up|start up|crank up) (?:the |my )?(.+?)(?: going| running| started| up| on| back on)?$/, function (m) { return toggleTarget(m[1]) ? "turn on " + m[1] : null; }],
+    [/^(?:kill|cut|shut off|shut down|shut|nix|ditch|lose|drop|knock off|power down) (?:off )?(?:the |my )?(.+?)(?: off)?$/, function (m) {
+        return toggleTarget(m[1]) ? "turn off " + m[1] : null; }],
+    [/^(?:i )?(?:don't|do not) want (?:any )?(?:calls|interruptions|to be disturbed)\b.*$|^(?:hold|block) (?:all )?(?:my )?calls\b.*$|^no (?:more )?(?:calls|interruptions)\b.*$|^(?:.+,\s*)?go (?:silent|quiet)$|^(?:put|set) (?:the |my )?phone (?:on|to) (?:silent|vibrate)$|^stop (?:the )?ringing$|^shush$|^(?:shh+|hush)(?: phone)?$/, "go silent"],
+    // Alarms: "set up a wake up call at 6", "I need to be up by 5:45".
+    [/^(?:set up|set|make|book|schedule|give me|get me|i need|i want|order) (?:me )?(?:a )?wake[- ]?up call(?: (?:at|for))? (.+)$|^wake[- ]?up call(?: (?:at|for))? (.+)$/, function (m) { return "wake me up at " + (m[1] || m[2]); }],
+    [/^(?:i (?:have|need|got) to |i've got to |i gotta |gotta |have to |need to )?(?:be up|get up|be awake|wake up|be out of bed)(?: by| at| for| before)? (.+)$/, "wake me up at $1"],
+    [/^(?:get|wake) me (?:up )?(?:by|at|for|before) (.+)$/, "wake me up at $1"],
+    // Timers: "count down three minutes for the eggs", "give me ten minutes".
+    [/^(?:count ?down|time|countdown) (.+?) for (?:the |my )?(.+)$/, "set a timer for $1 called $2"],
+    [/^(?:give me|start|put on|set) (?:a )?(.+? (?:seconds?|secs?|minutes?|mins?|hours?|hrs?))(?: on the clock| timer)?$/, "set a timer for $1"],
+    [/^(?:let me know|tell me|ping me|buzz me|beep(?: me)?|shout) (?:in|after) (.+? (?:seconds?|secs?|minutes?|mins?|hours?|hrs?))$/, "set a timer for $1"],
+    // Reminders: "don't let me forget to water the plants tonight at 8".
+    [/^(?:don't|do not) let me forget (?:to |about |that )?(.+)$|^make sure i (?:remember to |don't forget to )?(.+)$|^(?:i )?(?:mustn't|must not|shouldn't|can't|cannot) forget (?:to |about )?(.+)$|^(?:don't|do not) forget (?:to |about )?(.+)$/, function (m) {
+        return "remind me to " + (m[1] || m[2] || m[3] || m[4]); }],
+    [/^(?:ping|nudge|buzz|bug|poke|alert) me (?:about|to|that|re|regarding) (.+)$/, "remind me about $1"],
+    [/^(?:ping|nudge|buzz|bug|poke|alert) me (.+)$/, "remind me $1"],
+    // Calendar: "pencil in a dentist visit next tuesday at 3".
+    [/^(?:pencil|slot|squeeze|fit|block|jot|write|pop) (?:me )?(?:in|out|off|down)? ?(?:some )?(?:time (?:for )?)?(.+)$/, function (m, t) {
+        return /^(?:jot|write) /.test(t) ? null : "schedule " + m[1]; }],
+    // Messages: "drop Sam a line saying I'm on my way", "let Mary know I'll be late".
+    [/^(?:drop|shoot|send|fire off|flick|ping) (.+?) (?:a |an )?(?:line|note|text|message|msg|sms)(?:,|:| saying| that says| to say| that|$)\s*(.*)$/, function (m) {
+        return /^(?:me|us)$/.test(m[1]) || !m[2] ? null : "text " + m[1] + " saying " + m[2]; }],
+    [new RegExp("^let (.+?) know(?: that)? (.+?)" + LET_KNOW + "$"), function (m) {
+        return /^(?:me|us)$/.test(m[1]) ? null : "text " + m[1] + " saying " + m[2]; }],
+    [/^(?:hit up|ping|text|message) (.+?) (?:and )?(?:say|tell (?:him|her|them)) (.+)$/, "text $1 saying $2"],
+    // Volume and brightness: "it's way too loud, quieter please".
+    [/^(?:(?:the )?screen(?: is|'s)|it's|it is|display(?: is|'s)) (?:way |much |a bit |a little |really |so )?too bright\b.*$|^(?:tone|turn) (?:the )?(?:screen|display) down$|^dim (?:it|the screen|the display)(?: down)?$|^too bright$/, "the screen is too bright"],
+    [/^(?:(?:the )?screen(?: is|'s)|it's|it is|display(?: is|'s)) (?:way |much |a bit |a little |really |so )?too dark\b.*$|^i can't see the screen$|^(?:light|brighten) up the screen$|^brighten (?:it|the screen|the display)(?: up)?$/, "the screen is too dark"],
+    [/^(?:it's |it is |that's |this is )?(?:way |much |a bit |a little |really |so |far )?too loud\b.*$|^(?:.+,\s*)?(?:quieter|softer)$|^(?:turn|tone) it down\b.*$|^keep it down$|^pipe down$|^(?:not so|less) loud$/, "quieter"],
+    [/^(?:it's |it is |that's |this is )?(?:way |much |a bit |a little |really |so |far )?too quiet\b.*$|^i can't hear (?:it|anything|that|the music)\b.*$|^(?:crank|pump|turn) it up\b.*$|^(?:.+,\s*)?louder$|^(?:make it |a bit )?louder(?: please)?$/, "louder"],
+    // Music: "throw on some tunes".
+    [new RegExp("^(?:throw on|put on|spin|blast|bump|crank|crank up|queue up|play me|fire up|let's hear|let me hear|i want to hear|i wanna hear|gimme) " + MUSIC_WORDS + "$"), "play music"],
+    [/^(?:throw on|spin|blast|bump|crank|crank up|queue up|play me|let me hear|i want to hear|i wanna hear) (.+)$/, "play $1"],
+    // Weather: "what's the forecast looking like for the weekend".
+    [/^(?:what's|what is|how's|how is) (?:the )?(weather|forecast)(?: looking)?(?: like)?(?: for| on)? (?:the |this )?(weekend|week|today|tonight|tomorrow)$/, function (m) {
+        return "what's the " + m[1] + " " + (/^week/.test(m[2]) ? "this " + m[2] : m[2]); }],
+    [/^(?:what's|what is|how's|how is) (?:the )?(?:weather|forecast) (?:looking|gonna be|going to be)(?: like)?(?: (?:in|for|at) (.+))?$/, function (m) { return "what's the weather" + (m[1] ? " in " + m[1] : ""); }],
+    [/^(?:what's it|what is it) (?:gonna|going to) be like(?: outside)?(?: (today|tonight|tomorrow))?$/, function (m) { return "what's the weather" + (m[1] ? " " + m[1] : ""); }],
+    // Apps: "fire up the camera".
+    [/^(?:fire up|pull up|boot up|load up|start up|crack open|pop open|jump into|take me to|get me into|get into|hop into|i want|i need|gimme) (?:the |my )?(.+?)(?: app| application)?$/, "open $1"]
+];
+// The words said again, each way that fits ("kill the wifi for now" ->
+// "kill the wifi" -> "turn off wifi"), for the rules to try in turn.
+function casual(t) {
+    var out = [], seen = {}, queue = [t];
+    seen[t] = true;
+    while (queue.length && out.length < 8) {
+        var s = queue.shift();
+        for (var i = 0; i < CASUAL.length; ++i) {
+            var re = CASUAL[i][0], to = CASUAL[i][1], m = re.exec(s);
+            if (!m) continue;
+            var said = typeof to === "function" ? to(m, s) : s.replace(re, to);
+            if (!said) continue;
+            said = said.replace(/\s+/g, " ").trim();
+            if (said && !seen[said]) { seen[said] = true; out.push(said); queue.push(said); }
+        }
+    }
+    return out;
 }
 
 var rules = [
@@ -2216,6 +2298,7 @@ module.exports = {
     name: "English",
     clean: clean,
     rules: rules,
+    casual: casual,
     number: number,
     digits: digits,
     duration: duration,

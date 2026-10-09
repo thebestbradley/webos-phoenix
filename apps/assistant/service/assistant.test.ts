@@ -418,7 +418,7 @@ describe("the permission gate", () => {
     it("lets a cloud model act only after Settings allows it", async () => {
         const t = setup();
         const p = await addProvider(t, "openai");
-        const r = await ask(t, "it's dark in here");
+        const r = await ask(t, "hmm, where was I");
         await t.svc.choose({ threadId: r.thread.id, messageId: last(r).id, choice: "cloud:" + p.id });
         // A provider that calls a tool it was never given is refused.
         const forced = await ask(t, "force a tool", { threadId: r.thread.id });
