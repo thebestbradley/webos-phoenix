@@ -235,7 +235,7 @@ async function main() {
         // The Calendar app itself shows it: launched with {showEventDetail}
         // (a headless app: its page opens the card's window).
         const calApp = await context.newPage();
-        await calApp.goto(`${root}/com.palm.app.calendar/index.html?launchParams=` + encodeURIComponent(JSON.stringify({ showEventDetail: ev._id })));
+        await calApp.goto(`${root}/com.palm.app.calendar/index.html?launchParams=` + encodeURIComponent(JSON.stringify({ showEventDetail: ev._id, $caller: "org.webosphoenix.assistant" })));
         let shown = false, calWin = null;
         for (let i = 0; i < 200 && !shown; ++i) {
             calWin = context.pages().find((p) => p !== calApp && p !== app && /com\.palm\.app\.calendar/.test(p.url())) || calWin;
@@ -244,6 +244,20 @@ async function main() {
         }
         check(shown, "the Calendar app shows the event");
         if (calWin) await shot(calWin, "calendar-event");
+        if (calWin) {
+            // Back: the Event Details dialog closes, then (the calendar view
+            // at the top) the card closes, back to the Assistant that opened
+            // it; its $caller came with the launch of the page that opened
+            // the card (compat phoenix-back.js; runtime.back).
+            const dialogOpen = () => calWin.evaluate(() => !!enyo.$.appView_detailPopup && enyo.$.appView_detailPopup.isOpen);
+            check(await dialogOpen(), "Calendar shows the event in its Event Details dialog");
+            await calWin.evaluate(() => __phoenixRuntime.back());
+            await app.waitForTimeout(300);
+            check(!calWin.isClosed() && !(await dialogOpen()), "Back closes the Event Details dialog");
+            const closed = calWin.waitForEvent("close", { timeout: 3000 }).then(() => true, () => false);
+            await calWin.evaluate(() => __phoenixRuntime.back()).catch(() => {});
+            check(await closed, "Back again closes Calendar's card, back to the Assistant that opened it");
+        }
         for (const p of context.pages()) if (p !== app) await p.close();
         await app.bringToFront();
         const agenda = await ask("What's on my calendar tomorrow?");

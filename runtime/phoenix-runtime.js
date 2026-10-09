@@ -3838,6 +3838,15 @@
         if (!handled) {
             var lp = {};
             try { lp = JSON.parse(PalmSystem.launchParams || "{}") || {}; } catch (x) { lp = {}; }
+            // An app whose launch page opens its card (Calendar's index.html
+            // opens app/calendar.html): the launch, and its $caller, went to
+            // the page that opened this one.
+            if (!(lp && lp.$caller)) {
+                try {
+                    var op = global.opener && global.opener.PalmSystem;
+                    if (op) lp = JSON.parse(op.launchParams || "{}") || {};
+                } catch (x) { /* another origin, or closed */ }
+            }
             if (lp && typeof lp.$caller === "string" && lp.$caller) {
                 try { global.close(); } catch (x) { /* ignore */ }
             }
