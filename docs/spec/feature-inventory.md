@@ -5,6 +5,7 @@ Checklist of every user-facing system-UI feature that the Open webOS `luna-sysmg
 [`GAPS.md`](GAPS.md) and [`../ROADMAP.md`](../ROADMAP.md). Partly done items stay unticked, with a *Phoenix:* note on what is done
 and what is missing. Items with nothing to port (dead code, test fixtures) are ticked and marked *N/A*. (Last checked against the code on 5 October 2026.)
 The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legacy-ui-spec.md), with section numbers in brackets.
+Every animation of the original system UI and the Enyo widgets, against Phoenix's, is in [`ANIMATIONS.md`](ANIMATIONS.md).
 
 ## 1. Card view / multitasking [spec §1]
 
