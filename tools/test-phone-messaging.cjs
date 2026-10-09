@@ -91,6 +91,10 @@ async function main() {
         await phone.waitForSelector("[data-testid='dialpad']");
         await phone.waitForTimeout(300);
         await shot(phone, "phone-dialpad");
+        // Upright on a phone (no room for the dial pad turned); free on a tablet.
+        const turned = host.filter((m) => m.page === "phone" && m.type === "windowOrientation").pop();
+        check(turned && turned.payload.orientation === (tablet ? "free" : "up"),
+              `the Phone app asks to be held ${tablet ? "any way (tablet)" : "upright (phone)"}: ${JSON.stringify(turned && turned.payload)}`);
         for (const k of "2125550164") await phone.click(`[data-testid='dialpad'] [data-key='${k}']`);
         check((await phone.textContent("[data-testid='number-display']")) === "(212) 555-0164", "typed number is formatted");
         await phone.waitForFunction(() => /Lena Okafor/.test(document.querySelector("[data-testid='dialer-contact']").textContent));
