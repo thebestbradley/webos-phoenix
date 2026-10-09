@@ -212,6 +212,13 @@ describe("the driver catalog", () => {
         expect(driversLib.packagesFor(e, { arch: "x86_64", kernel: "6.6.21-phoenix" }).packages).toHaveLength(1);
         expect(driversLib.packagesFor(e, { arch: "x86_64", kernel: "6.6.22-phoenix" }).reason).toMatch(/kernel \(6\.6\.22-phoenix\)/);
         expect(driversLib.packagesFor(e, { arch: "aarch64", kernel: "6.6.21-phoenix" }).reason).toMatch(/processor \(aarch64\)/);
+        // On a device: opkg's architectures, the most specific package wins.
+        const oe = driversLib.normalize({ ...world.entries.rtl8812, packages: [
+            { ...world.entries.rtl8812.packages[0], arch: "core2-64" }, { ...world.entries.rtl8812.packages[0], arch: "qemux86_64", sha256: "f".repeat(64) },
+            { ...world.entries.rtl8812.packages[0], arch: "raspberrypi4_64" }] }, BASE);
+        const sys = { arch: "x86_64", archs: ["all", "any", "noarch", "core2-64", "qemux86_64"], kernel: "6.6.21-phoenix" };
+        expect(driversLib.packagesFor(oe, sys).packages.map((p: Any) => p.arch)).toEqual(["qemux86_64"]);
+        expect(driversLib.packagesFor(oe, { ...sys, archs: ["all", "aarch64", "cortexa53"] }).reason).toMatch(/processor/);
     });
 
     it("takes only a catalog signed with the pinned key, not expired and not older", async () => {

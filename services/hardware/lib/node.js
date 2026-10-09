@@ -136,6 +136,20 @@ function arch() {
     return { x64: "x86_64", arm64: "aarch64", arm: "armv7", ia32: "i686" }[a] || a;
 }
 
+// The package architectures opkg installs here, least specific first
+// (/etc/opkg/arch.conf: "arch all 1", "arch core2-64 16", "arch qemux86_64 21").
+function opkgArchs(file) {
+    var out = [];
+    try {
+        fs.readFileSync(file || "/etc/opkg/arch.conf", "utf8").split("\n").forEach(function (line) {
+            var m = /^arch\s+(\S+)\s+(\d+)/.exec(line.trim());
+            if (m) out.push({ arch: m[1], prio: parseInt(m[2], 10) });
+        });
+    } catch (e) { /* no opkg configuration */ }
+    out.sort(function (x, y) { return x.prio - y.prio; });
+    return out.map(function (x) { return x.arch; });
+}
+
 function send(req, binary, redirects) {
     return new Promise(function (resolve, reject) {
         var url = new URL(req.url);
@@ -172,7 +186,7 @@ function send(req, binary, redirects) {
 
 module.exports = {
     createFs: createFs, createOpkg: createOpkg, createActivator: createActivator, createNames: createNames,
-    kernelLog: kernelLog, arch: arch, run: run,
+    kernelLog: kernelLog, arch: arch, opkgArchs: opkgArchs, run: run,
     request: function (req) { return send(req, false, 0); },
     requestBytes: function (req) { return send(req, true, 0); }
 };

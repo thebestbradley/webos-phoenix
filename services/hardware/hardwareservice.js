@@ -87,7 +87,7 @@ function hex(bytes) {
 // deps:
 //   system.scan() -> Promise<[{id, bus, name, vendor, category, modaliases,
 //                    driver (null: none bound), firmwareMissing, hidden?}]>
-//   system.info() -> Promise<{arch, kernel}>
+//   system.info() -> Promise<{arch, archs (opkg's, least specific first), kernel}>
 //   system.activate({after, modules, deviceId}) -> Promise: load the new
 //                    driver or firmware (reload the modules, rebind the device)
 //   system.bootId() -> this start's id (optional): a restart has happened

@@ -151,23 +151,28 @@ function matches(entry, device) {
     return entry._re.some(function (re) { return aliases.some(function (a) { return re.test(a); }); });
 }
 
-// The packages of an entry for this system: one per package name, for the
-// device's architecture (or "all") and, for kernel modules, its running
-// kernel. null when something is missing (with why).
+// The packages of an entry for this system: one per package name, for one
+// of the device's package architectures (system.archs, opkg's arch.conf
+// order, least specific first: "all", "core2-64", "qemux86_64"; or
+// system.arch) and, for kernel modules, its running kernel. null when
+// something is missing (with why).
 function packagesFor(entry, system) {
+    var archs = system.archs && system.archs.length ? system.archs : ["all", system.arch];
+    var rank = function (a) { return a === "all" || a === "noarch" || a === "any" ? 0 : archs.indexOf(a) + 1; };
+    var fits = function (p) { return rank(p.arch) > 0 || p.arch === "all" || p.arch === "noarch" || p.arch === "any"; };
     var byName = {}, order = [];
     entry.packages.forEach(function (p) {
-        if (p.arch !== "all" && p.arch !== system.arch) return;
+        if (!fits(p)) return;
         if (p.kernel && p.kernel !== system.kernel) return;
         if (!byName[p.name]) order.push(p.name);
-        // A package for this exact architecture wins over "all".
-        if (!byName[p.name] || (byName[p.name].arch === "all" && p.arch !== "all")) byName[p.name] = p;
+        // The most specific architecture wins ("qemux86_64" over "core2-64" over "all").
+        if (!byName[p.name] || rank(p.arch) > rank(byName[p.name].arch)) byName[p.name] = p;
     });
     var names = {};
     entry.packages.forEach(function (p) { names[p.name] = true; });
     var missing = Object.keys(names).filter(function (n) { return !byName[n]; });
     if (missing.length || !order.length) {
-        var kernelOnly = entry.packages.some(function (p) { return p.kernel && (p.arch === "all" || p.arch === system.arch); });
+        var kernelOnly = entry.packages.some(function (p) { return p.kernel && fits(p); });
         return { packages: null, reason: kernelOnly ? "Not built for this system's kernel (" + system.kernel + ") yet"
                                                        : "Not available for this device's processor (" + system.arch + ")" };
     }

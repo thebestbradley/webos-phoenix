@@ -145,6 +145,13 @@ describe("opkg and the driver reload on a device", () => {
         return path.join(bin, name);
     };
 
+    it("reads opkg's architectures, least specific first", () => {
+        const conf = path.join(bin, "arch.conf");
+        fs.writeFileSync(conf, "arch all 1\narch any 6\narch noarch 11\narch qemux86_64 21\narch core2-64 16\n");
+        expect(node.opkgArchs(conf)).toEqual(["all", "any", "noarch", "core2-64", "qemux86_64"]);
+        expect(node.opkgArchs(path.join(bin, "none"))).toEqual([]);
+    });
+
     it("lists, installs and removes packages with opkg", async () => {
         const opkg = node.createOpkg({ command: tool("opkg", `
 case "$1" in

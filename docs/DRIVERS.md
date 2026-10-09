@@ -60,7 +60,7 @@ licensing rules in [LEGAL.md](LEGAL.md#firmware-and-drivers).
 | `after` | `reload` (unload and load `modules`), `rebind` (unbind and probe the device), `reboot` (it starts with the next restart), `none` |
 | `license` | `id` (SPDX, or `LicenseRef-…`), `name`, `url`, `free` (an open source licence: no acceptance needed), `redistributable` (must be `true`). The text: `text`, or `textFile` (next to the manifest), or `textInPackage` (a file in one of the packages, as linux-firmware's licence packages carry them). Required in full when `free` is false: the user reads it before installing |
 | `source` | Where the files come from (the upstream repository) |
-| `packages` | The `.ipk` files, next to the manifest. Several architectures of the same package may be given; the device picks its own (or `all`) |
+| `packages` | The `.ipk` files, next to the manifest. Several architectures of the same package may be given; the device picks the most specific one opkg installs there (`/etc/opkg/arch.conf`: the machine's, then the CPU tune's, then `all`) |
 
 ## The packages
 

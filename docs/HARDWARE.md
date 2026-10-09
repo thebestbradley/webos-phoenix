@@ -274,8 +274,10 @@ an entry names its devices as its driver does; `firmware` (names or globs)
 also matches a device whose driver asked for one of those files. `kind` is
 `firmware`, `module` (an out-of-tree kernel module, built per kernel:
 `kernel` must equal `uname -r`) or `service` (a user-space HAL or daemon,
-reviewed by a person). Packages are picked per architecture (`arch`, or
-`all`). The full format and the checks: [DRIVERS.md](DRIVERS.md).
+reviewed by a person). Packages are picked by architecture: one of those
+opkg installs on the device (`/etc/opkg/arch.conf`: `all`, the CPU's tune
+such as `core2-64` or `cortexa72`, the machine's such as `qemux86_64`), the
+most specific there is. The full format and the checks: [DRIVERS.md](DRIVERS.md).
 
 **Trust: the same Ed25519 model as the Marketplace, with one change.**
 Drivers install as root, so the driver catalog's key is **pinned in the

@@ -38,7 +38,7 @@ function readJson(file) {
 var methods = hardware.createHardwareService({
     system: {
         scan: function () { return node.kernelLog().then(function (log) { return scanner.scan(log); }); },
-        info: function () { return Promise.resolve({ arch: node.arch(), kernel: require("os").release() }); },
+        info: function () { return Promise.resolve({ arch: node.arch(), archs: node.opkgArchs(), kernel: require("os").release() }); },
         activate: node.createActivator({}),
         bootId: function () { try { return fs.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim(); } catch (e) { return ""; } }
     },
