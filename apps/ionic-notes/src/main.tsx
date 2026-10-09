@@ -4,6 +4,7 @@
 import { setupIonicReact } from "@ionic/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { Refreshed } from "@phoenix/luna/react";
 
 // Ionic's required CSS, its optional utilities used here, and the dark
 // palette switched by a class (Settings > Appearance).
@@ -37,7 +38,9 @@ window.addEventListener("keydown", (e) => {
 
 createRoot(document.getElementById("root")!).render(
     <StrictMode>
-        <App />
+        <Refreshed>
+            <App />
+        </Refreshed>
     </StrictMode>,
 );
 

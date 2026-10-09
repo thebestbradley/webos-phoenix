@@ -3,6 +3,7 @@
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { Refreshed } from "@phoenix/luna/react";
 import "@phoenix/ui/styles.css";
 import "./phone.css";
 import { App } from "./App";
@@ -13,7 +14,9 @@ if (isIncomingAlert())
 
 createRoot(document.getElementById("root")!).render(
     <StrictMode>
-        <App />
+        <Refreshed>
+            <App />
+        </Refreshed>
     </StrictMode>,
 );
 

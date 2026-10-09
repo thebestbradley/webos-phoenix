@@ -588,7 +588,7 @@ Item {
         // A page gone lets go of what it held.
         if (win.gone)
             win.gone.connect(function() { source._pageGone(pageKey); });
-        win.windowRequested.connect(function(request) { source._openWindow(appId, request); });
+        win.windowRequested.connect(function(request) { source._openWindow(appId, request, uid); });
         if (win.linkRequested)
             win.linkRequested.connect(function(url) { source.openLink(appId, uid, url); });
         if (system)
@@ -600,7 +600,9 @@ Item {
 
     // A page opened a window: it becomes a card in its app's stack, or the
     // app's first card if it has none yet (headless apps).
-    function _openWindow(appId, request) {
+    // fromUid: the card whose page opened it (a second card of the app
+    // keeps its windows in its own stack).
+    function _openWindow(appId, request, fromUid) {
         // Popup alerts and dashboards (enyo.windows.openPopup / openDashboard;
         // the runtime tags their URL with the window type).
         var url = String(request.requestedUrl);
@@ -610,7 +612,7 @@ Item {
             return;
         }
         var info = appInfo(appId);
-        var existing = runningUid(appId);
+        var existing = fromUid && cardIndex(fromUid) >= 0 ? fromUid : runningUid(appId);
         var uid;
         if (existing !== "")
             uid = _createWindow(appId, info.title, _afterGroupOf(existing), cards.get(cardIndex(existing)).groupId, request);
@@ -670,9 +672,15 @@ Item {
             var background = !!params.$activity;
             var target = _launchTarget(payload.id, params);
             var running = runningUid(target);
-            if (running !== "") {
-                if (target === payload.id && Object.keys(params).length > 0 && _windows[running] && _windows[running].relaunch)
-                    _windows[running].relaunch(params);
+            // An app (a link, the assistant's "Open Memos") opening one
+            // that runs: as the user chose (appRelaunch); a background
+            // launch, or an app launching itself (its dashboard or banner
+            // tapped), only tells its page.
+            var how = background || appId === target ? "front" : appRelaunch;
+            if (running !== "" && !_opensNewCard(target, how)) {
+                var refresh = how === "refresh";
+                if ((refresh || (target === payload.id && Object.keys(params).length > 0)) && _windows[running] && _windows[running].relaunch)
+                    _windows[running].relaunch(target === payload.id ? params : {}, refresh);
                 if (!background)
                     cardFocusRequested(running);
                 return;
@@ -681,7 +689,7 @@ Item {
             // e.g. the browser opened from a link in Email
             // (CardWindowManager::prepareAddWindow, :561-567).
             var joins = uid !== "" && uid === focusedUid && !background;
-            var launched = launch(target, uid, target === payload.id ? params : null, joins);
+            var launched = launch(target, uid, target === payload.id ? params : null, joins, how);
             if (launched !== "" && !background)
                 cardFocusRequested(launched);
         } else if (type === "browserData") {
@@ -2114,7 +2122,12 @@ Item {
     // of its own.
     // A launch point whose params match wins, as for apps launching apps
     // (the system menu's "Wi-Fi Preferences" opens the Wi-Fi card).
-    function launch(appId, afterUid, params, joinStack) {
+    // how: what opening it does while it runs (Settings > Apps > Opening a
+    // running app, appRelaunch): "front" (the default) its card as it is,
+    // new params going to the page; "refresh" its card, relaunched even
+    // without params so it reloads its data; "new" another card of it
+    // (_opensNewCard).
+    function launch(appId, afterUid, params, joinStack, how) {
         if (params && Object.keys(params).length > 0) {
             var target = _launchTarget(appId, params);
             if (target !== appId) {
@@ -2123,10 +2136,13 @@ Item {
             }
         }
         var existing = runningUid(appId);
-        if (existing !== "") {
-            // Running already: new params go to the page (webOSRelaunch).
-            if (params && Object.keys(params).length > 0 && _windows[existing] && _windows[existing].relaunch)
-                _windows[existing].relaunch(params);
+        if (existing !== "" && !_opensNewCard(appId, how)) {
+            // Running already: new params go to the page (webOSRelaunch);
+            // with "refresh", always (as LunaSysMgr relaunched a running
+            // app on every launch).
+            var refresh = how === "refresh";
+            if ((refresh || (params && Object.keys(params).length > 0)) && _windows[existing] && _windows[existing].relaunch)
+                _windows[existing].relaunch(params || {}, refresh);
             return existing;
         }
         var info = appInfo(appId);
@@ -2145,7 +2161,7 @@ Item {
         // Kept alive (or started at boot): its window comes back as a card,
         // and the page hears of the launch (relaunch, as webOS relaunched a
         // running app).
-        var kept = info.noWindow ? "" : _parkedUid(appId);
+        var kept = info.noWindow || existing !== "" ? "" : _parkedUid(appId);
         if (kept !== "") {
             _unpark(kept);
             if (_windows[kept] && _windows[kept].relaunch)
@@ -2171,6 +2187,21 @@ Item {
         var at = afterUid ? _afterGroupOf(afterUid) : cards.count;
         var join = joinStack && afterUid ? cardIndex(afterUid) : -1;
         return _createWindow(appId, info.title, at, join >= 0 ? cards.get(join).groupId : newGroupId(), null, url);
+    }
+
+    // Settings > Apps > Opening a running app (SimSystemStatus.appRelaunch,
+    // set by the shell): how launches the user makes treat an app that
+    // already has a card (launch's how).
+    property string appRelaunch: "front"
+    // Apps that keep one card whatever the setting: the phone (its card is
+    // the call), and those without a card of their own.
+    property var singleCardApps: [phoneAppId]
+    // Opening appId, running, makes another card of it (how "new").
+    function _opensNewCard(appId, how) {
+        if (how !== "new" || singleCardApps.indexOf(appId) >= 0)
+            return false;
+        var info = appInfo(appId);
+        return !!info && !info.pending && !info.noWindow;
     }
 
     // Another window of an app that runs several at once (apps

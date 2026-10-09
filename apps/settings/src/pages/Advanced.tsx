@@ -32,6 +32,12 @@
 //   emailDashboardCycling    Email's new-mail dashboard goes through the new
 //                            emails one at a time, with a delete button
 //                            (Uber Cycling Email Dashboard)
+//   appRelaunch              opening an app that already has a card (its
+//                            icon, Just Type, a link, the assistant):
+//                            Bring to front (the default, its card as it
+//                            is), Refresh (relaunched to reload its data,
+//                            as webOS relaunched a running app) or New card
+//                            (another card of it) (Phoenix)
 
 import { system, systemStatus, type SystemPreferences, type SystemStatus } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
@@ -39,7 +45,7 @@ import { Group, ListSelector, Note, Page, PageHeader, Row, ToggleButton } from "
 
 const KEYS: (keyof SystemPreferences)[] = ["launcherGridDensity", "infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges",
     "sysUiEnableWaveLauncher", "animationSpeed", "gestureSensitivity", "showReticleAnimation", "hapticFeedback",
-    "showBatteryPercent", "emailDashboardCycling", "sysUiEnableNextPrevGestures"];
+    "showBatteryPercent", "emailDashboardCycling", "sysUiEnableNextPrevGestures", "appRelaunch"];
 
 export function AdvancedPage() {
     const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(KEYS, cb, err), []).value;
@@ -60,6 +66,16 @@ export function AdvancedPage() {
                               options={[{ label: "Normal", value: "normal" as const }, { label: "Dense", value: "dense" as const }]}
                               onChange={(v) => set({ launcherGridDensity: v })} />
             </Group>
+            <Group label="Apps">
+                <ListSelector title="Opening a running app" value={prefs?.appRelaunch ?? "front"} testId="adv-appRelaunch"
+                              options={[{ label: "Bring to front", value: "front" as const },
+                                        { label: "Refresh", value: "refresh" as const },
+                                        { label: "New card", value: "new" as const }]}
+                              onChange={(v) => set({ appRelaunch: v })} />
+            </Group>
+            <Note testId="adv-appRelaunch-note">{prefs?.appRelaunch === "refresh" ? "Its card comes to the front and reloads its data."
+                  : prefs?.appRelaunch === "new" ? "Another card of the app opens beside the one there is."
+                  : "Its card comes to the front as you left it."}</Note>
             <Group label="Cards">
                 {toggle("infiniteCardCyclingEnabled", "Infinite card cycling", "Past the last card is the first")}
                 {toggle("sysUiEnableMaximizeEdges", "Open side cards", "A tap on a card at the edge opens it")}

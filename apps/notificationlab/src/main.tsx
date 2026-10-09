@@ -3,6 +3,7 @@
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { Refreshed } from "@phoenix/luna/react";
 import "@phoenix/ui/styles.css";
 import "./notificationlab.css";
 import { Alert, App, Dashboard } from "./App";
@@ -14,7 +15,9 @@ if (view)
 
 createRoot(document.getElementById("root")!).render(
     <StrictMode>
-        {view === "dashboard" ? <Dashboard /> : view === "alert" ? <Alert /> : <App />}
+        <Refreshed>
+            {view === "dashboard" ? <Dashboard /> : view === "alert" ? <Alert /> : <App />}
+        </Refreshed>
     </StrictMode>,
 );
 

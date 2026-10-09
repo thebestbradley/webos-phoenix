@@ -115,8 +115,10 @@ FocusScope {
     // ---- Navigation -----------------------------------------------------------
 
     // params (optional): launch params, e.g. from a tapped notification.
+    // how (optional): what it does if the app runs (the window source's
+    // launch): "front" (default), "refresh" or "new".
     // Returns the card's uid ("" for apps without a card).
-    function launch(appId, params) {
+    function launch(appId, params, how) {
         if (!source)
             return "";
         // An app coming up ends dock mode (cardWindowAdded).
@@ -124,10 +126,31 @@ FocusScope {
             exitDockMode(true);
         launcher.open = false;
         justType.open = false;
-        var uid = source.launch(appId, cards.currentUid, params || null);
+        var uid = source.launch(appId, cards.currentUid, params || null, false, how || "front");
         if (uid !== "")
             Qt.callLater(cards.focusLaunched, uid);
         return uid;
+    }
+
+    // Settings > Apps > Opening a running app (system preference
+    // appRelaunch, Phoenix): what opening an app that already has a card
+    // does. "front": its card comes to the front as it is (the original's
+    // behaviour, CardWindowManager focusWindow); "refresh": also relaunched,
+    // so it reloads its data; "new": another card of it.
+    readonly property string appRelaunch: shell.system && (shell.system.appRelaunch === "refresh" || shell.system.appRelaunch === "new")
+                                          ? shell.system.appRelaunch : "front"
+    // The window source follows it for launches apps make (a link, the
+    // assistant's "Open Memos").
+    Binding {
+        target: shell.source
+        property: "appRelaunch"
+        when: shell.source !== null && shell.source !== undefined && shell.source.appRelaunch !== undefined
+        value: shell.appRelaunch
+    }
+    // The user opening an app (its icon in the launcher, the dock or the
+    // wave; Just Type's app results): as appRelaunch says.
+    function openApp(appId) {
+        return launch(appId, null, appRelaunch);
     }
 
     // A tap on an app the launcher shows as being installed: the original
@@ -2425,7 +2448,7 @@ FocusScope {
                         apps: shell.source ? shell.source.apps : null
                         layout: shell.launcherLayout
                         draggedId: iconDrag.appId
-                        onLaunchRequested: (appId) => shell.launch(appId)
+                        onLaunchRequested: (appId) => shell.openApp(appId)
                         onCloseRequested: launcher.open = false
                         onDeleteRequested: (appId) => deleteDialog.ask(appId)
                         onPendingTapped: (appId) => shell.pendingAppTapped(appId)
@@ -2485,7 +2508,7 @@ FocusScope {
                     backdrop: sceneBackdrop
                     dock: shell.launcherLayout ? shell.launcherLayout.dock : []
                     draggedId: iconDrag.appId
-                    onLaunchRequested: (appId) => shell.launch(appId)
+                    onLaunchRequested: (appId) => shell.openApp(appId)
                     onLauncherToggled: launcher.open = !launcher.open
                     onAssistantRequested: {
                         // The view grows out of the held button.
@@ -2516,7 +2539,7 @@ FocusScope {
                     anchors.fill: parent
                     anchors.bottomMargin: notes.negativeSpace
                     z: 997
-                    onLaunchRequested: (appId) => shell.launch(appId)
+                    onLaunchRequested: (appId) => shell.openApp(appId)
                     onLauncherRequested: {
                         justType.open = false;
                         launcher.open = true;
@@ -2958,7 +2981,7 @@ FocusScope {
                     bottomInset: notes.negativeSpace
                     apps: shell.source ? shell.source.apps : null
                     source: shell.source
-                    onLaunchRequested: (appId) => shell.launch(appId)
+                    onLaunchRequested: (appId) => shell.openApp(appId)
                     onCloseRequested: { justType.open = false; shell.forceActiveFocus(); }
                     onCopied: (text) => clipboardClient.record(text, "com.palm.systemui")
                 }

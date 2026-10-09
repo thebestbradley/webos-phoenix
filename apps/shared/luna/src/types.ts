@@ -186,6 +186,10 @@ export interface SystemPreferences {
     lockTimeout?: number;
     /** Screen & Lock > Advanced gestures: a long swipe across the gesture area switches apps. */
     sysUiEnableNextPrevGestures?: boolean;
+    /** Settings > Apps > Opening a running app (Phoenix): its card in front
+     *  as it is ("front", the default), relaunched to reload its data
+     *  ("refresh"), or another card of it ("new"). */
+    appRelaunch?: "front" | "refresh" | "new";
     /** Phoenix: the shell's hardware keyboard shortcuts, iPad-style or desktop-style. */
     keyboardShortcuts?: "ipad" | "desktop";
     /** Text Assist's checks and the user's shortcuts (see TextInputPrefs). */

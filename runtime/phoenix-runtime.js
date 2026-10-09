@@ -1231,6 +1231,13 @@
         // Phoenix (the owner's choice; LunaSysMgr shipped it off): a choice
         // the user saved is kept, only the default changed.
         sysUiEnableNextPrevGestures: true,
+        // Settings > Apps > Opening a running app (Phoenix): what opening an
+        // app that already has a card does. "front" brings its card to the
+        // front as it is (the original's card, keeping its state); "refresh"
+        // also relaunches it, as LunaSysMgr relaunched a running app on
+        // every launch (Mojo's handleLaunch, Enyo's windowParamsChange), so
+        // it reloads its data; "new" opens another card of it.
+        appRelaunch: "front",
         // Settings > Text Assist > Hardware keyboard: the shell's shortcut
         // scheme, "ipad" or "desktop" (Phoenix).
         keyboardShortcuts: "ipad",
@@ -1291,6 +1298,11 @@
         if (r.apps && typeof r.apps === "object")
             for (var a in r.apps) apps[a] = r.apps[a] !== false;
         return { enabled: !!r.enabled, minutes: typeof r.minutes === "number" && r.minutes > 0 ? r.minutes : 2, apps: apps };
+    }
+
+    // Settings > Apps > Opening a running app, as the shell takes it.
+    function appRelaunch(v) {
+        return v === "refresh" || v === "new" ? v : "front";
     }
 
     // Settings > Advanced, as the shell takes them (hostStatus tweaks).
@@ -4238,6 +4250,7 @@
                 automaticBrightness: p.enableALS !== false,
                 displayOnWhenConnected: runtime.devices ? runtime.devices.onWhenConnected() : false,
                 advancedGestures: p.sysUiEnableNextPrevGestures !== false,
+                appRelaunch: appRelaunch(p.appRelaunch),
                 keyboardShortcuts: p.keyboardShortcuts === "desktop" ? "desktop" : "ipad",
                 // Settings > Accessibility: the shell's animations.
                 reduceMotion: !!(p.accessibility && p.accessibility.reduceMotion),
@@ -4891,7 +4904,7 @@
                     save(st);
                 }
             }
-            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "lockScreenPreviews", "notificationRepeat", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
+            if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "lockScreenPreviews", "notificationRepeat", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "appRelaunch", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
                  "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility",
                  "dockwallpaper", "dockModeSoundPref", "exhibition", "browserContentBlocker", "browserUserAgent",
                  "networkProxy"].concat(TWEAK_KEYS).some(function (k) { return k in p; })) {
@@ -5940,16 +5953,24 @@
         // (enyo-1.0 palm/system/windows/events.js: windowParamsChange,
         // applicationRelaunch); OSE apps through the "webOSRelaunch" document
         // event (detail = params), as WebAppMgr does.
-        runtime.relaunch = function (params) {
+        // refresh (Settings > Apps > Opening a running app: Refresh): the
+        // user opened the app again and wants its data fresh; Phoenix's
+        // apps also hear "phoenixRefresh" (@phoenix/luna's Refreshed starts
+        // the app's root again on it).
+        runtime.relaunch = function (params, refresh) {
             PalmSystem.launchParams = toJson(params || {});
-            if (global.Mojo && typeof global.Mojo.relaunch === "function") {
+            var event = function (name, detail) {
+                var e;
+                try { e = new CustomEvent(name, { detail: detail }); }
+                catch (x) { e = global.document.createEvent("CustomEvent"); e.initCustomEvent(name, false, false, detail); }
+                global.document.dispatchEvent(e);
+            };
+            if (global.Mojo && typeof global.Mojo.relaunch === "function")
                 global.Mojo.relaunch();
-                return true;
-            }
-            var e;
-            try { e = new CustomEvent("webOSRelaunch", { detail: params || {} }); }
-            catch (x) { e = global.document.createEvent("CustomEvent"); e.initCustomEvent("webOSRelaunch", false, false, params || {}); }
-            global.document.dispatchEvent(e);
+            else
+                event("webOSRelaunch", params || {});
+            if (refresh)
+                event("phoenixRefresh", params || {});
             return true;
         };
 

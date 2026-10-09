@@ -3,6 +3,7 @@
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { Refreshed } from "@phoenix/luna/react";
 import "@xterm/xterm/css/xterm.css";
 import "@phoenix/ui/styles.css";
 import "./terminal.css";
@@ -16,7 +17,9 @@ palm?.setWindowOrientation?.("free");
 
 createRoot(document.getElementById("root")!).render(
     <StrictMode>
-        <App />
+        <Refreshed>
+            <App />
+        </Refreshed>
     </StrictMode>,
 );
 

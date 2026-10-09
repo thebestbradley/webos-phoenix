@@ -768,6 +768,41 @@ params, the page gets OSE's `webOSRelaunch` document event
 both. A `launch` host message (`applicationManager/launch {id, params}`) whose
 params match a launch point opens that launch point's card.
 
+### Opening an app that is already running
+
+Settings > Advanced > Apps > "Opening a running app" (system preference
+`appRelaunch`, Phoenix; the runtime's systemStatus `appRelaunch`,
+`SimSystemStatus.appRelaunch`, `Shell.appRelaunch`) decides what opening an
+app that already has a card does:
+
+- **Bring to front** (`"front"`, the default): its card comes to the front as
+  it was left (CardWindowManager's focusWindow); new launch params still go to
+  the page as a relaunch.
+- **Refresh** (`"refresh"`): its card comes to the front and the app is
+  relaunched even without params, as LunaSysMgr relaunched a running app on
+  every launch (Mojo's `AppAssistant.handleLaunch`, Enyo 1's
+  `windowParamsChange` / `applicationRelaunch`; OSE's `webOSRelaunch`). The
+  runtime also fires `phoenixRefresh` in the page (`__phoenixRuntime.relaunch(params, true)`):
+  every Phoenix app's root is wrapped in `Refreshed` (`@phoenix/luna/react`),
+  which starts the app again on it, so it loads everything anew for the
+  params; `useRefresh()` gives the count for an effect's deps. An installed
+  site (a PWA) reloads.
+- **New card** (`"new"`): another card of the app, in a stack of its own,
+  with the launch params as its own; each card is its own page and closes on
+  its own, and windows a card's page opens join that card's stack. Apps
+  without a card of their own (`noWindow`: the original Email, Calendar,
+  Contacts open their cards from a hidden page) and the Phone (its card is
+  the call) keep one card.
+
+The setting applies where the user opens an app: the launcher, the dock, the
+wave launcher and Just Type's results (`Shell.openApp`), and an app opening
+another (a link, the assistant's "Open Memos", `applicationManager/launch`
+or `open`; `SimWindowSource._hostMessage`). A tapped notification, the
+system menu and the like go to the card there is; so do an app launching
+itself (its dashboard or banner) and background launches (`$activity`).
+Tests: `shell/tests/tst_apprelaunch.qml`, `apps/shared/luna/src/relaunch.test.tsx`.
+On a device, `LsmWindowSource.launch` still leaves it to SAM (front).
+
 ## Settings
 
 `apps/settings` is one app with one launch point per pane, like the separate
