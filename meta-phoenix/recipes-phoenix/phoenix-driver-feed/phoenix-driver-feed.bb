@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 
 SUMMARY = "Driver packages for the Hardware app's catalog"
-DESCRIPTION = "Collects the firmware packages Phoenix offers in the Hardware app \
-(and leaves out of the image: phoenix-firmware-policy) with a driver manifest \
-for each (files/drivers/*.json: the hardware it is for, its licence, which \
-packages): ${DEPLOY_DIR_IMAGE}/phoenix-drivers/<id>/driver.json and the .ipk \
-files next to it, ready for server/drivers/bin/drivers.php add. \
-See docs/DRIVERS.md."
+DESCRIPTION = "Collects what the Hardware app offers beyond the image, with a \
+driver manifest each (files/drivers/*.json: the hardware it is for, its \
+licence, which packages): the out-of-tree drivers built per kernel \
+(rtl8812au, rtl8814au), and firmware packages for images built without them \
+(PHOENIX_FIRMWARE_EXCLUDE), into ${DEPLOY_DIR_IMAGE}/phoenix-drivers/<id>/ \
+driver.json and the .ipk files next to it, ready for \
+server/drivers/bin/drivers.php add. See docs/DRIVERS.md."
 HOMEPAGE = "https://github.com/thebestbradley/webos-phoenix"
 LICENSE = "Apache-2.0"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/Apache-2.0;md5=89aea4e17d99a7cacdbeed46a0096b10"
@@ -21,9 +22,9 @@ do_configure[noexec] = "1"
 do_compile[noexec] = "1"
 
 # The recipes whose packages the manifests name (linux-firmware's are split
-# per chip: linux-firmware-rtl8821, ...; out-of-tree kernel modules would be
-# added here with their recipes).
-PHOENIX_DRIVER_RECIPES ?= "linux-firmware"
+# per chip: linux-firmware-rtl8821, ...; a kernel module's package is named
+# for the kernel: kernel-module-88xxau-<version>, named with a glob).
+PHOENIX_DRIVER_RECIPES ?= "linux-firmware rtl8812au rtl8814au"
 do_deploy[depends] += "${@' '.join('%s:do_package_write_ipk' % r for r in d.getVar('PHOENIX_DRIVER_RECIPES').split())}"
 
 python do_deploy () {
