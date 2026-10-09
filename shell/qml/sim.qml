@@ -1830,9 +1830,16 @@ Item {
         property bool inApp: false
         property bool up: false         // the service answers (the system UI page is up)
         property int serial: 0
+        property bool asking: false     // a request is out: no other until it is answered
+        property double askedAt: 0      // (or until it is clearly lost: 4 minutes)
         interval: 3000
         onTriggered: next()
         function next() {
+            // An answer can take longer than a tick (the on-device model):
+            // asking again then would ask twice and drop the first answer.
+            if (asking && Date.now() - askedAt < 240000)
+                return;
+            asking = false;
             var mine = ++serial;
             restart();
             if (!up) {
@@ -1853,16 +1860,23 @@ Item {
                 return;
             }
             var answered = function (r) {
-                if (mine !== assistantSceneSteps.serial || !r || r.returnValue === false)
+                if (mine !== assistantSceneSteps.serial)
                     return;
+                assistantSceneSteps.asking = false;
+                if (!r || r.returnValue === false)
+                    return;     // asked again at the next tick
                 assistantSceneSteps.stop();
                 assistantSceneSteps.asks = assistantSceneSteps.asks.slice(1);
                 assistantSceneSteps.next();
             };
             var view = shell.assistantOverlay;
             if (inApp || !view.open) {
+                asking = true;
+                askedAt = Date.now();
                 windows.lunaCall("luna://org.webosphoenix.assistant/ask", { text: asks[0], speak: false }, answered);
             } else if (!view.busy) {
+                asking = true;
+                askedAt = Date.now();
                 // A request that failed (no page up yet) is taken back.
                 view.ask(asks[0], function (r) {
                     if (!r || r.returnValue === false) {

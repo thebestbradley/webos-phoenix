@@ -574,7 +574,12 @@ void RootfsSchemeHandler::proxy(QWebEngineUrlRequestJob *job)
     if (!m_network)
         m_network = new QNetworkAccessManager(this);
     QNetworkRequest nr(url);
-    nr.setTransferTimeout(60000);
+    // A minute without a byte ends a request; three for the on-device
+    // model on the loopback (llama-server answers only when done: loading
+    // the model and reading the commands as tools can take over a minute on
+    // a busy computer, as the device's service allows, lib/node-device.js).
+    const bool loopback = url.host() == QLatin1String("127.0.0.1") || url.host() == QLatin1String("localhost");
+    nr.setTransferTimeout(loopback ? 180000 : 60000);
     nr.setAttribute(QNetworkRequest::RedirectPolicyAttribute, req.value(QStringLiteral("follow")).toBool()
                     ? QNetworkRequest::NoLessSafeRedirectPolicy : QNetworkRequest::ManualRedirectPolicy);
     const QJsonObject headers = req.value(QStringLiteral("headers")).toObject();
