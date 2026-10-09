@@ -3406,6 +3406,11 @@ FocusScope {
                 shortcutsOn: _assistPrefs.shortcutsOn !== false
                 spaces2period: _assistPrefs.spaces2period !== false
                 forgetWordsAt: _assistPrefs.forgetWords || 0
+                // Settings > Text Assist > Personal Dictionary; "Add" in the
+                // candidate bar goes back to the system (x_palm_textinput.userWords).
+                userWords: _assistPrefs.userWords || []
+                removedWords: _assistPrefs.removedWords || ({})
+                onDictionaryWordAdded: (word) => { if (shell.system && shell.system.addDictionaryWord) shell.system.addDictionaryWord(word); }
                 // Settings > Text Assist > Keyboards, and the one in use: the
                 // language key's choice goes back to the system (kept as
                 // x_palm_virtualkeyboard_settings).
@@ -3484,11 +3489,6 @@ FocusScope {
     function _appIdOf(uid) {
         var w = uid && source && typeof source.windowFor === "function" ? source.windowFor(uid) : null;
         return w && w.appId ? String(w.appId) : "";
-                // Settings > Text Assist > Personal Dictionary; "Add" in the
-                // candidate bar goes back to the system (x_palm_textinput.userWords).
-                userWords: _assistPrefs.userWords || []
-                removedWords: _assistPrefs.removedWords || ({})
-                onDictionaryWordAdded: (word) => { if (shell.system && shell.system.addDictionaryWord) shell.system.addDictionaryWord(word); }
     }
     function _appTitle(appId) {
         var apps = source ? source.apps : null;

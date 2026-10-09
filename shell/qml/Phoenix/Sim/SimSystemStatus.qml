@@ -87,6 +87,8 @@ QtObject {
     property bool tapSounds: true
     // Settings > Text Assist: {suggestions, autoCorrect, swipe, spaces2period,
     // forgetWords (when the learned words were forgotten, ms)}.
+    // userWords (the personal dictionary), removedWords (learned words
+    // deleted there: lower case -> ms).
     property var textAssist: ({ suggestions: true, autoCorrect: true, swipe: true, spaces2period: true, forgetWords: 0,
                                 shortcuts: {}, shortcutsOn: true, userWords: [], removedWords: {} })
     // The keyboard's "Add" (after backspace put back a corrected word): the
@@ -111,8 +113,6 @@ QtObject {
     property var keyboards: [{ layout: "qwerty", language: "en" }]
     property var keyboard: ({ layout: "qwerty", language: "en" })
     property string ringtone: "/usr/palm/sounds/ringtone.mp3"
-    // userWords (the personal dictionary), removedWords (learned words
-    // deleted there: lower case -> ms).
     property string alerttone: "/usr/palm/sounds/alert.wav"
     property string notificationtone: "/usr/palm/sounds/notification.wav"
     // The clock's format (system preference timeFormat "HH24").
