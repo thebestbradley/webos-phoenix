@@ -70,6 +70,64 @@ Item {
             }
         }
 
+        // Services > Marketplace Catalog: the catalog service's state in
+        // the menu, started and stopped from it, and the Marketplace's
+        // Start Local Catalog (a "simulator" host message) only from the
+        // Marketplace. SimMarketplace itself: build/simmarketplace-test.
+        QtObject {
+            id: fakeCatalog
+            property string state: "stopped"
+            property string error: ""
+            property bool settingUp: false
+            property bool ownsServer: state === "running"
+            readonly property string url: "http://127.0.0.1:8088/"
+            readonly property string logFile: "/tmp/simulator.log"
+            property int starts: 0
+            property int stops: 0
+            function startAsync() { starts++; }
+            function stop() { stops++; }
+        }
+        function test_servicesMenu() {
+            var e = entry("marketplaceCatalog");
+            compare(e.menu, "services");
+            verify(e.dynamic && e.checkable && e.run);
+            var none = sim.item.simActionState("marketplaceCatalog");
+            verify(!none.enabled && /needs web apps/.test(none.text), "without web apps: there is none to start");
+
+            sim.item.catalog = fakeCatalog;
+            compare(sim.item.simActionState("marketplaceCatalog").text, "Marketplace Catalog");
+            verify(sim.item.simActionState("marketplaceCatalog").enabled);
+            verify(!sim.item.simActionChecked("marketplaceCatalog"));
+            verify(!sim.item.simActionState("marketplaceCatalogBrowser").enabled, "nothing to open while stopped");
+
+            sim.item.simTrigger("marketplaceCatalog");
+            compare(fakeCatalog.starts, 1, "the menu item starts it");
+            fakeCatalog.settingUp = true;
+            fakeCatalog.state = "starting";
+            verify(sim.item.simActionChecked("marketplaceCatalog"));
+            verify(/setting up/.test(sim.item.simActionState("marketplaceCatalog").text));
+            fakeCatalog.settingUp = false;
+            fakeCatalog.state = "running";
+            compare(sim.item.simActionState("marketplaceCatalog").text, "Marketplace Catalog: running at 127.0.0.1:8088");
+            verify(sim.item.simActionState("marketplaceCatalogBrowser").enabled && sim.item.simActionState("marketplaceCatalogLog").enabled);
+            sim.item.simTrigger("marketplaceCatalog");
+            compare(fakeCatalog.stops, 1, "and stops it");
+
+            fakeCatalog.error = "the catalog service stopped with exit code 255:\nPHP Fatal error";
+            fakeCatalog.state = "failed";
+            var failed = sim.item.simActionState("marketplaceCatalog");
+            compare(failed.text, "Marketplace Catalog: failed (the catalog service stopped with exit code 255)");
+            compare(failed.tip, fakeCatalog.error, "the whole reason in its tip");
+            verify(!sim.item.simActionChecked("marketplaceCatalog") && sim.item.simActionState("marketplaceCatalogLog").enabled);
+
+            sim.item.simulatorRequest("org.webosphoenix.notes", { op: "startMarketplaceCatalog" });
+            compare(fakeCatalog.starts, 1, "another app cannot start it");
+            sim.item.simulatorRequest("org.webosphoenix.marketplace", { op: "startMarketplaceCatalog" });
+            compare(fakeCatalog.starts, 2, "the Marketplace can");
+            fakeCatalog.state = "stopped";
+            sim.item.catalog = null;
+        }
+
         // The key and the menu item (simTrigger) are the same entry.
         function test_keyAndMenuItem() {
             verify(!sim.item.simActionChecked("ringer"));

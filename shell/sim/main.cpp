@@ -173,7 +173,7 @@ int main(int argc, char *argv[])
     QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
     QCommandLineOption noHostShellOpt(QStringLiteral("no-host-shell"), QStringLiteral("Do not give the Terminal app a real shell on this computer (it gets the runtime's simulated shell)."));
     QCommandLineOption llamaServerOpt(QStringLiteral("llama-server"), QStringLiteral("llama.cpp's llama-server program for the Assistant's on-device model (default: llama-server on the PATH)."), QStringLiteral("path"));
-    QCommandLineOption marketplaceOpt(QStringLiteral("marketplace"), QStringLiteral("Start the Marketplace's catalog service on this computer (server/marketplace/bin/serve.sh: PHP 8; set up the first time) where the simulator's Marketplace reads it, http://127.0.0.1:8088/, and open the Marketplace. It stops with the simulator; one already running is used."));
+    QCommandLineOption marketplaceOpt(QStringLiteral("marketplace"), QStringLiteral("Start the Marketplace's catalog service on this computer (server/marketplace/bin/serve.sh: PHP 8; set up the first time) where the simulator's Marketplace reads it, http://127.0.0.1:8088/, and open the Marketplace. It stops with the simulator; one already running is used. The Services menu starts and stops it too."));
     QCommandLineOption speechCommandOpt(QStringLiteral("speech-command"), QStringLiteral("The program (and arguments, %l for the language) that speaks the Assistant's answers, given the text on its input (default: espeak-ng, or say on a Mac)."), QStringLiteral("command"));
     QCommandLineOption wakeModelOpt(QStringLiteral("wake-model"), QStringLiteral("The wake word's Vosk model folder (default: wakeword/vosk-model-small-en-us-0.15 beside phoenix-sim, which tools/get-wakeword.py fetches)."), QStringLiteral("dir"));
     QCommandLineOption voskLibraryOpt(QStringLiteral("vosk-library"), QStringLiteral("libvosk for the wake word (default: wakeword/libvosk.so, or .dylib, beside phoenix-sim)."), QStringLiteral("file"));
@@ -311,13 +311,19 @@ int main(int argc, char *argv[])
     // The browser's page pictures (saveViewToFile, generateIconFromFile).
     SimSnapshots snapshots(&rootfs);
 
-    // --marketplace: the catalog service, answering before the Marketplace
-    // first reads it.
+    // The Marketplace's catalog service (Services > Marketplace Catalog,
+    // the Marketplace's Start Local Catalog). --marketplace: started,
+    // answering before the Marketplace first reads it; with Services >
+    // Start Catalog with the Simulator ("marketplace/autostart"), started
+    // without waiting.
     QStringList launch = parser.values(launchOpt);
 #ifdef PHOENIX_HAVE_WEBENGINE
-    std::unique_ptr<SimMarketplace> marketplace;
+    auto marketplace = std::make_unique<SimMarketplace>(repoDir);
+    if (!parser.isSet(marketplaceOpt) && SimSettings().value(QStringLiteral("marketplace/autostart")) == QLatin1String("1")) {
+        qInfo("phoenix-sim: starting the Marketplace's catalog (Services > Start Catalog with the Simulator)");
+        marketplace->startAsync();
+    }
     if (parser.isSet(marketplaceOpt)) {
-        marketplace = std::make_unique<SimMarketplace>(repoDir);
         if (marketplace->start())
             qInfo("phoenix-sim: the Marketplace's catalog at %s%s", qPrintable(marketplace->url()),
                   marketplace->ownsServer() ? qPrintable(QStringLiteral(" (log: ") + marketplace->logFile() + QLatin1Char(')')) : " (already running)");
@@ -337,6 +343,11 @@ int main(int argc, char *argv[])
     // apps too: org.webosphoenix.dictation (Voice Dial).
     SimPty *simPty = nullptr;
     QJsonObject hostInfo{ { QStringLiteral("dictation"), true }, { QStringLiteral("assistant"), true } };
+#ifdef PHOENIX_HAVE_WEBENGINE
+    // The simulator starts the catalog service when the Marketplace asks
+    // (the runtime's org.webosphoenix.simulator).
+    hostInfo.insert(QStringLiteral("marketplaceCatalog"), true);
+#endif
     if (!parser.isSet(noHostShellOpt)) {
         simPty = new SimPty(&app);
         simPty->setShellOverride(parser.value(hostShellOpt));
@@ -507,6 +518,11 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simSpeechCommand"),
         parser.isSet(speechCommandOpt) ? QProcess::splitCommand(parser.value(speechCommandOpt)) : QStringList());
     view.rootContext()->setContextProperty(QStringLiteral("simSettings"), &settings);
+#ifdef PHOENIX_HAVE_WEBENGINE
+    view.rootContext()->setContextProperty(QStringLiteral("simMarketplace"), marketplace.get());
+#else
+    view.rootContext()->setContextProperty(QStringLiteral("simMarketplace"), nullptr);
+#endif
     view.rootContext()->setContextProperty(QStringLiteral("simPty"), simPty);
     view.rootContext()->setContextProperty(QStringLiteral("simInstaller"), rootfs.isValid() ? &installer : nullptr);
     view.rootContext()->setContextProperty(QStringLiteral("simSnapshots"), rootfs.isValid() ? &snapshots : nullptr);

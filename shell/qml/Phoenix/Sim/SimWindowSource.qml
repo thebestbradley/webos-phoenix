@@ -798,6 +798,11 @@ Item {
                 _dictationRequest(uid, payload || {});
         } else if (type === "assistant") {
             _assistantRequest(appId, uid, payload || {});
+        } else if (type === "simulator") {
+            // What the simulator does on this computer for a page (the
+            // runtime's org.webosphoenix.simulator): sim.qml's, by the
+            // app the shell knows the window is.
+            simulatorRequest(appId, payload || {});
         } else if (type === "lunaReply") {
             var cb = _lunaCallbacks[payload.id];
             if (!payload.keep)
@@ -896,6 +901,9 @@ Item {
     // and a screen capture asked for (com.palm.systemmanager/takeScreenShot).
     signal mediaKeyRequested(string key)
     signal screenshotRequested
+    // A page asked the simulator for something it does on this computer
+    // ("simulator" host messages: {op: "startMarketplaceCatalog"}).
+    signal simulatorRequest(string appId, var payload)
     // The device was erased; it restarts into First Use.
     signal eraseRequested
     // USB drive mode was asked for (com.palm.storage diskmode/enterMSM).
@@ -1746,7 +1754,8 @@ Item {
     // are turned), which every page gets as it loads; unlike the rest it is
     // not the pages' to overrule.
     readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout", "gestureArea", "dockMode",
-                                        "debugOverlays", "usbHost", "gamepads", "usbDrives", "formFactor", "screen"]
+                                        "debugOverlays", "usbHost", "gamepads", "usbDrives", "formFactor", "screen",
+                                        "marketplaceCatalog"]
     property var _shellStatus: ({})
 
     function pushSystemStatus(changes) {

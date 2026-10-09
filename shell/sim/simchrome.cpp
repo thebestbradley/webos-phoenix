@@ -9,6 +9,7 @@
 #include <QBuffer>
 #include <QCloseEvent>
 #include <QDialog>
+#include <QDesktopServices>
 #include <QDialogButtonBox>
 #include <QFile>
 #include <QHeaderView>
@@ -22,12 +23,14 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QPixmap>
+#include <QPushButton>
 #include <QQuickItem>
 #include <QQuickView>
 #include <QSettings>
 #include <QTimer>
 #include <QToolBar>
 #include <QTreeWidget>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QWindow>
 
@@ -118,6 +121,7 @@ void SimChrome::build()
         e.hold = m.value(QStringLiteral("hold")).toBool();
         e.run = m.value(QStringLiteral("run")).toBool();
         e.checkable = m.value(QStringLiteral("checkable")).toBool();
+        e.dynamic = m.value(QStringLiteral("dynamic")).toBool();
         m_entries << e;
     }
 
@@ -126,6 +130,7 @@ void SimChrome::build()
     menuFor(QStringLiteral("device"), QString());
     menuFor(QStringLiteral("simulate"), QString());
     menuFor(QStringLiteral("view"), QString());
+    menuFor(QStringLiteral("services"), QString());
     QHash<QString, QActionGroup *> groups;
     for (const Entry &e : std::as_const(m_entries)) {
         if (e.menu.isEmpty())
@@ -198,7 +203,8 @@ QMenu *SimChrome::menuFor(const QString &menu, const QString &submenu)
     if (submenu.isEmpty()) {
         const QString title = menu == QLatin1String("device") ? tr("Device")
                             : menu == QLatin1String("simulate") ? tr("Simulate")
-                            : menu == QLatin1String("view") ? tr("View") : menu;
+                            : menu == QLatin1String("view") ? tr("View")
+                            : menu == QLatin1String("services") ? tr("Services") : menu;
         m = menuBar()->addMenu(title);
     } else {
         m = menuFor(menu, QString())->addMenu(submenu);
@@ -280,14 +286,29 @@ void SimChrome::refreshChecks()
     if (!root)
         return;
     for (const Entry &e : std::as_const(m_entries)) {
-        if (!e.checkable)
+        if (!e.checkable && !e.dynamic)
             continue;
         QAction *a = m_actions.value(e.id);
         if (!a)
             continue;
-        QVariant on;
-        QMetaObject::invokeMethod(root, "simActionChecked", Q_RETURN_ARG(QVariant, on), Q_ARG(QVariant, e.id));
-        a->setChecked(on.toBool());
+        if (e.checkable) {
+            QVariant on;
+            QMetaObject::invokeMethod(root, "simActionChecked", Q_RETURN_ARG(QVariant, on), Q_ARG(QVariant, e.id));
+            a->setChecked(on.toBool());
+        }
+        if (e.dynamic) {
+            // {text, enabled, tip}: what the item says now.
+            QVariant v;
+            QMetaObject::invokeMethod(root, "simActionState", Q_RETURN_ARG(QVariant, v), Q_ARG(QVariant, e.id));
+            const QVariantMap st = plain(v).toMap();
+            const QString text = st.value(QStringLiteral("text"), e.text).toString();
+            const QString keys = menuKeys(e);
+            a->setText(keys.isEmpty() ? text : kMac ? QStringLiteral("%1  (%2)").arg(text, keys) : text + QLatin1Char('\t') + keys);
+            a->setEnabled(st.value(QStringLiteral("enabled"), true).toBool());
+            const QString tip = st.value(QStringLiteral("tip")).toString();
+            a->setStatusTip(tip.isEmpty() ? e.tip : tip);
+            a->setToolTip(tip.isEmpty() ? text : tip);
+        }
     }
 }
 
@@ -480,6 +501,20 @@ void SimChrome::showShortcuts()
     dialog->resize(900, 700);
     m_shortcuts = dialog;
     dialog->show();
+}
+
+void SimChrome::alert(const QString &text, const QString &details, const QString &logFile)
+{
+    auto *box = new QMessageBox(QMessageBox::Warning, displayName(), text, QMessageBox::Close, this);
+    box->setAttribute(Qt::WA_DeleteOnClose);
+    box->setInformativeText(details);
+    if (!logFile.isEmpty() && QFile::exists(logFile)) {
+        QPushButton *log = box->addButton(tr("Show Log"), QMessageBox::ActionRole);
+        // Opens it, and the box stays.
+        log->disconnect();
+        connect(log, &QPushButton::clicked, this, [logFile]() { QDesktopServices::openUrl(QUrl::fromLocalFile(logFile)); });
+    }
+    box->open();
 }
 
 void SimChrome::showAbout()

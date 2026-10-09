@@ -47,6 +47,10 @@ public:
     // What the screen is ("393x852, phone (adaptive)"), after the name in
     // the window's title (sim.qml, as the window is resized).
     Q_INVOKABLE void setScreenInfo(const QString &info);
+    // A problem to tell (sim.qml: the catalog service failed to start from
+    // the Services menu): a warning with the details, and a Show Log button
+    // when there is a log to open.
+    Q_INVOKABLE void alert(const QString &text, const QString &details, const QString &logFile);
 
     // How a key sequence reads on this computer: Qt's portable text ("Ctrl+F5")
     // in the platform's way ("⌘F5"), and on a Mac F1 to F12 with fn.
@@ -63,6 +67,8 @@ private:
         QStringList keys;
         QList<int> press;
         bool separator = false, hold = false, run = false, checkable = false;
+        // Its text or whether it can be chosen changes (sim.qml: label, enabled).
+        bool dynamic = false;
     };
 
     void trigger(const Entry &entry, bool checked);

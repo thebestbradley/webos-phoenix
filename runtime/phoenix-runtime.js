@@ -9665,6 +9665,79 @@
     })();
 
     // ================================================================================
+    // The simulator's own (org.webosphoenix.simulator)
+    // ================================================================================
+    //
+    // What phoenix-sim does on this computer for the apps; only there
+    // (/usr/share/phoenix/host.json {"marketplaceCatalog": true}): on a
+    // device, or in a browser, the methods answer NOT_AVAILABLE and the
+    // apps leave out what they would offer.
+    //
+    //   marketplaceCatalog {subscribe} -> {state: "stopped" | "starting" |
+    //       "running" | "failed", url, error, settingUp}: the Marketplace's
+    //       catalog service (server/marketplace) on this computer, which
+    //       the simulator's Marketplace reads (phoenix-sim's SimMarketplace;
+    //       its Services menu starts and stops it too).
+    //   startMarketplaceCatalog -> the same, once it runs; fails with its
+    //       reason (FAILED) when it does not start. Only the Marketplace
+    //       may ask (the shell checks which app's window asks).
+    //
+    // The shell passes the state to every page (applyHostStatus
+    // {marketplaceCatalog}); "simulator" host messages ({op}) ask it.
+    (function simulatorServices() {
+        var E = { NOT_AVAILABLE: 1, FAILED: 2 };
+        var hostInfo = null;
+        function available() {
+            if (hostInfo === null) {
+                try { hostInfo = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/host.json") || "{}") || {}; }
+                catch (e) { hostInfo = {}; }
+            }
+            return hostInfo.marketplaceCatalog === true;
+        }
+        var catalog = { state: "stopped", url: "http://127.0.0.1:8088/", error: "", settingUp: false };
+        var watching = [];   // {reply, ctx} of marketplaceCatalog subscribers
+        var starting = [];   // {reply, ctx} of startMarketplaceCatalog calls waiting
+        function status() {
+            return ok({ state: catalog.state, url: catalog.url, error: catalog.error, settingUp: catalog.settingUp });
+        }
+        function settle() {
+            if (catalog.state !== "running" && catalog.state !== "failed" && catalog.state !== "stopped") return;
+            var waiting = starting;
+            starting = [];
+            waiting.forEach(function (w) {
+                if (w.ctx.cancelled()) return;
+                w.reply(catalog.state === "running" ? status()
+                    : fail(E.FAILED, catalog.error || "The catalog service did not start."));
+            });
+        }
+        runtime.hostStatusHooks = runtime.hostStatusHooks || [];
+        runtime.hostStatusHooks.push(function (st) {
+            var c = st && st.marketplaceCatalog;
+            if (!c || typeof c !== "object" || typeof c.state !== "string") return;
+            catalog = { state: c.state, url: String(c.url || catalog.url), error: String(c.error || ""), settingUp: !!c.settingUp };
+            watching = watching.filter(function (w) { return !w.ctx.cancelled(); });
+            watching.forEach(function (w) { w.reply(status()); });
+            settle();
+        });
+        register(["org.webosphoenix.simulator"], {
+            "/marketplaceCatalog": function (p, reply, ctx) {
+                if (!available()) return reply(fail(E.NOT_AVAILABLE, "Only in the simulator."));
+                reply(status());
+                if (p.subscribe) watching.push({ reply: reply, ctx: ctx });
+            },
+            "/startMarketplaceCatalog": function (p, reply, ctx) {
+                if (!available()) return reply(fail(E.NOT_AVAILABLE, "Only in the simulator."));
+                if (catalog.state === "running") return reply(status());
+                starting.push({ reply: reply, ctx: ctx });
+                // The shell answers with the state (applyHostStatus), the
+                // final one once it runs or fails.
+                catalog.state = "starting";
+                host.postToHost("simulator", { op: "startMarketplaceCatalog" });
+            }
+        });
+    })();
+
+    // ================================================================================
     // Voice Dial (com.palm.sysapp.voicedial)
     // ================================================================================
     //

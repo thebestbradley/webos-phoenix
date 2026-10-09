@@ -3,29 +3,41 @@
 
 #include "simmarketplace.h"
 
-#include <QDeadlineTimer>
 #include <QDir>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QHostAddress>
 #include <QProcessEnvironment>
 #include <QStandardPaths>
 #include <QTcpSocket>
-#include <QThread>
+#include <QTimer>
 
 #ifdef Q_OS_LINUX
 #include <signal.h>
 #include <sys/prctl.h>
 #endif
 
-SimMarketplace::SimMarketplace(const QString &repoDir, quint16 port)
-    : m_dir(QDir(repoDir).filePath(QStringLiteral("server/marketplace")))
+SimMarketplace::SimMarketplace(const QString &repoDir, quint16 port, QObject *parent)
+    : QObject(parent)
+    , m_dir(QDir(repoDir).filePath(QStringLiteral("server/marketplace")))
     , m_port(port)
+    , m_poll(new QTimer(this))
 {
+    m_poll->setSingleShot(true);
+    m_poll->setInterval(150);
+    connect(m_poll, &QTimer::timeout, this, &SimMarketplace::probe);
+    connect(&m_process, &QProcess::finished, this, &SimMarketplace::onFinished);
+    connect(&m_process, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
+        if (e == QProcess::FailedToStart && m_state == Starting)
+            setState(Failed, QStringLiteral("could not run %1: %2")
+                .arg(QDir(m_dir).filePath(QStringLiteral("bin/serve.sh")), m_process.errorString()));
+    });
 }
 
 SimMarketplace::~SimMarketplace()
 {
+    m_process.disconnect(this);
     if (m_process.state() == QProcess::NotRunning)
         return;
     m_process.terminate();
@@ -33,6 +45,17 @@ SimMarketplace::~SimMarketplace()
         m_process.kill();
         m_process.waitForFinished(1000);
     }
+}
+
+QString SimMarketplace::stateName() const
+{
+    switch (m_state) {
+    case Starting: return QStringLiteral("starting");
+    case Running: return QStringLiteral("running");
+    case Failed: return QStringLiteral("failed");
+    case Stopped: break;
+    }
+    return QStringLiteral("stopped");
 }
 
 QString SimMarketplace::url() const
@@ -46,35 +69,93 @@ QString SimMarketplace::logFile() const
     return QDir(data).filePath(QStringLiteral("simulator.log"));
 }
 
-bool SimMarketplace::answers(int timeoutMs) const
+void SimMarketplace::setState(State state, const QString &error)
 {
-    QTcpSocket socket;
-    socket.connectToHost(QHostAddress(QHostAddress::LocalHost), m_port);
-    return socket.waitForConnected(timeoutMs);
+    if (state != Starting)
+        m_poll->stop();
+    if (state != Starting && m_probe) {
+        m_probe->disconnect(this);
+        m_probe->deleteLater();
+    }
+    if (state == m_state && error == m_error)
+        return;
+    m_state = state;
+    m_error = error;
+    if (state != Starting)
+        m_settingUp = false;
+    emit stateChanged();
 }
 
-bool SimMarketplace::start(int timeoutMs)
+void SimMarketplace::startAsync(int timeoutMs)
 {
-    m_error.clear();
-    if (answers(300))
-        return true;
+    // Already on its way, or ours and running. One found running is looked
+    // for again: it may have stopped with its simulator.
+    if (m_state == Starting || ownsServer())
+        return;
+    m_launched = false;
+    m_stopping = false;
+    m_deadline = QDeadlineTimer(timeoutMs);
+    setState(Starting);
+    probe();
+}
 
+// One connection to the port: it answers (running), or not yet (serve.sh
+// is started the first time, then tried again until the deadline).
+void SimMarketplace::probe()
+{
+    if (m_state != Starting)
+        return;
+    if (m_probe) {
+        m_probe->disconnect(this);
+        m_probe->deleteLater();
+    }
+    auto *socket = new QTcpSocket(this);
+    m_probe = socket;
+    connect(socket, &QTcpSocket::connected, this, [this, socket]() {
+        socket->disconnect(this);
+        socket->deleteLater();
+        if (m_state == Starting)
+            setState(Running);
+    });
+    connect(socket, &QTcpSocket::errorOccurred, this, [this, socket]() {
+        socket->disconnect(this);
+        socket->deleteLater();
+        if (m_state != Starting)
+            return;
+        if (!m_launched) {
+            launch();
+        } else if (m_deadline.hasExpired()) {
+            setState(Failed, QStringLiteral("the catalog service did not answer at %1 in time (see %2)").arg(url(), logFile()));
+            stop();
+        } else {
+            m_poll->start();
+        }
+    });
+    socket->connectToHost(QHostAddress(QHostAddress::LocalHost), m_port);
+}
+
+void SimMarketplace::launch()
+{
+    m_launched = true;
     const QString serve = QDir(m_dir).filePath(QStringLiteral("bin/serve.sh"));
     if (!QFile::exists(serve)) {
-        m_error = QStringLiteral("%1 is missing").arg(serve);
-        return false;
+        setState(Failed, QStringLiteral("%1 is missing").arg(serve));
+        return;
     }
     if (QStandardPaths::findExecutable(QStringLiteral("php")).isEmpty()) {
 #ifdef Q_OS_MACOS
-        m_error = QStringLiteral("PHP 8 is needed: brew install php (or scripts/mac-setup.sh)");
+        setState(Failed, QStringLiteral("PHP 8 is needed: brew install php (./phoenix installs it)"));
 #else
-        m_error = QStringLiteral("PHP 8 with sodium and pdo_sqlite is needed: sudo apt install php-cli php-sqlite3 (or scripts/linux-setup.sh)");
+        setState(Failed, QStringLiteral("PHP 8 with sodium and pdo_sqlite is needed: sudo apt install php-cli php-sqlite3 (./phoenix installs it)"));
 #endif
-        return false;
+        return;
     }
 
     const QString log = logFile();
-    QDir().mkpath(QFileInfo(log).absolutePath());
+    const QString data = QFileInfo(log).absolutePath();
+    QDir().mkpath(data);
+    // serve.sh sets the catalog up when it has no signing key yet.
+    m_settingUp = !QFileInfo::exists(QDir(data).filePath(QStringLiteral("signing.key")));
     m_process.setWorkingDirectory(m_dir);
     m_process.setStandardOutputFile(log);
     m_process.setProcessChannelMode(QProcess::MergedChannels);
@@ -89,27 +170,62 @@ bool SimMarketplace::start(int timeoutMs)
     m_process.setChildProcessModifier([] { ::prctl(PR_SET_PDEATHSIG, SIGTERM); });
 #endif
     m_process.start(QStringLiteral("/bin/sh"), { serve, QString::number(m_port) });
-    if (!m_process.waitForStarted(5000)) {
-        m_error = QStringLiteral("could not run %1: %2").arg(serve, m_process.errorString());
-        return false;
-    }
+    // settingUp changed: the menu says so.
+    emit stateChanged();
+    m_poll->start();
+}
 
-    const QDeadlineTimer deadline(timeoutMs);
-    while (!deadline.hasExpired()) {
-        if (m_process.waitForFinished(0) || m_process.state() == QProcess::NotRunning) {
-            QFile f(log);
-            const QString tail = f.open(QIODevice::ReadOnly)
-                ? QString::fromUtf8(f.readAll().right(2000)).trimmed() : QString();
-            m_error = QStringLiteral("the catalog service stopped (exit code %1)%2")
-                .arg(m_process.exitCode())
-                .arg(tail.isEmpty() ? QString() : QStringLiteral(":\n") + tail);
-            return false;
-        }
-        if (answers(200))
-            return true;
-        QThread::msleep(100);
+QString SimMarketplace::logTail() const
+{
+    QFile f(logFile());
+    return f.open(QIODevice::ReadOnly) ? QString::fromUtf8(f.readAll().right(2000)).trimmed() : QString();
+}
+
+void SimMarketplace::onFinished(int exitCode, QProcess::ExitStatus status)
+{
+    if (m_stopping) {
+        m_stopping = false;
+        if (m_state != Failed)
+            setState(Stopped);
+        return;
     }
-    m_error = QStringLiteral("the catalog service did not answer at %1 within %2 s (see %3)")
-        .arg(url()).arg(timeoutMs / 1000).arg(log);
-    return false;
+    if (m_state != Starting && m_state != Running)
+        return;
+    const QString tail = logTail();
+    setState(Failed, QStringLiteral("the catalog service %1%2")
+        .arg(status == QProcess::CrashExit ? QStringLiteral("crashed") : QStringLiteral("stopped with exit code %1").arg(exitCode),
+             tail.isEmpty() ? QString() : QStringLiteral(":\n") + tail));
+}
+
+void SimMarketplace::stop()
+{
+    if (m_process.state() != QProcess::NotRunning) {
+        m_stopping = true;
+        m_poll->stop();
+        m_process.terminate();
+        // PHP's server goes on SIGTERM; should it not, it is killed.
+        QTimer::singleShot(3000, &m_process, [this]() {
+            if (m_process.state() != QProcess::NotRunning)
+                m_process.kill();
+        });
+        return;
+    }
+    // Another simulator's goes on, and is used.
+    if (m_state == Running)
+        return;
+    setState(Stopped);
+}
+
+bool SimMarketplace::start(int timeoutMs)
+{
+    startAsync(timeoutMs);
+    if (m_state == Starting) {
+        QEventLoop loop;
+        connect(this, &SimMarketplace::stateChanged, &loop, [this, &loop]() {
+            if (m_state != Starting)
+                loop.quit();
+        });
+        loop.exec();
+    }
+    return m_state == Running;
 }

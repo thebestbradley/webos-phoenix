@@ -41,6 +41,8 @@
 //                  from the start (Shift+F7 / Ctrl+F7)
 //   simChrome      phoenix-sim's window around the screen, with its menus and
 //                  toolbar (SimChrome), or null: resizeScreen(w, h)
+//   simMarketplace the Marketplace's catalog service (SimMarketplace), or
+//                  null: the Services menu
 
 import QtQuick
 import Phoenix.Native
@@ -1020,6 +1022,38 @@ Item {
               root.debugOverlay({ touchPlot: { collection: on, trails: on, crosshairs: on } });
           } },
 
+        // Services: what the simulator runs on this computer for the
+        // device. The Marketplace's catalog (SimMarketplace): checked while
+        // it runs or starts; its state in the item's text.
+        { id: "marketplaceCatalog", menu: "services", text: qsTr("Marketplace Catalog"),
+          tip: qsTr("The Phoenix Marketplace's catalog service on this computer (server/marketplace, PHP 8), "
+                    + "where the simulator's Marketplace reads it; it stops with the simulator"),
+          checked: function () { return root.catalogState === "running" || root.catalogState === "starting"; },
+          label: function () { return root.catalogMenuText(); },
+          tipNow: function () { return root.catalogState === "failed" ? root.catalog.error : ""; },
+          enabled: function () { return root.catalog !== null; },
+          run: function () { root.toggleCatalog(); } },
+        { id: "marketplaceCatalogBrowser", menu: "services", text: qsTr("Open Catalog in Browser"),
+          tip: qsTr("The catalog's review page (/admin; its token is server/marketplace/data/admin.token) in this computer's browser"),
+          enabled: function () { return root.catalogState === "running"; },
+          run: function () { Qt.openUrlExternally(root.catalog.url + "admin"); } },
+        { id: "marketplaceCatalogLog", menu: "services", text: qsTr("Show Catalog Log"),
+          tip: qsTr("server/marketplace/data/simulator.log"),
+          enabled: function () {
+              return root.catalogState === "starting" || root.catalogState === "failed"
+                  || (root.catalogState === "running" && root.catalog.ownsServer);
+          },
+          run: function () { Qt.openUrlExternally("file://" + root.catalog.logFile); } },
+        { separator: true, menu: "services" },
+        { id: "marketplaceCatalogAuto", menu: "services", text: qsTr("Start Catalog with the Simulator"),
+          tip: qsTr("Start the Marketplace's catalog every time the simulator starts"),
+          checked: function () { return typeof simSettings !== "undefined" && simSettings.value("marketplace/autostart") === "1"; },
+          enabled: function () { return root.catalog !== null; },
+          run: function () {
+              if (typeof simSettings !== "undefined")
+                  simSettings.setValue("marketplace/autostart", simSettings.value("marketplace/autostart") === "1" ? "0" : "1");
+          } },
+
         // Keys of the shell's own, for Help > Keyboard Shortcuts.
         { id: "justType", menu: "", text: qsTr("Just Type"), keyText: qsTr("Type in card view, or the Search key") },
         { id: "cardView", menu: "", text: qsTr("Card View"), keyText: Qt.platform.os === "osx" ? "" : qsTr("Super, on its own") }
@@ -1064,12 +1098,100 @@ Item {
             return { id: a.id || "", separator: !!a.separator, menu: a.menu || "", submenu: a.submenu || "",
                      text: a.text || "", tip: a.tip || "", keys: a.keys || [], keyText: a.keyText || "",
                      press: a.press || [], hold: !!a.hold, run: !!a.run, checkable: !!a.checked,
-                     radio: a.radio || "", icon: a.icon || "" };
+                     radio: a.radio || "", icon: a.icon || "", dynamic: !!(a.label || a.enabled) };
         });
     }
     function simActionChecked(id) {
         var a = _simAction(id);
         return !!(a && a.checked && a.checked());
+    }
+    // An entry whose text (label), availability (enabled) or tip (tipNow)
+    // changes: {text, enabled, tip} now.
+    function simActionState(id) {
+        var a = _simAction(id);
+        if (!a)
+            return {};
+        var text = a.label ? a.label() : a.text;
+        return { text: text, enabled: a.enabled ? !!a.enabled() : true, tip: a.tipNow ? a.tipNow() : "" };
+    }
+
+    // ---- The Marketplace's catalog (Services) --------------------------------------
+    // phoenix-sim's SimMarketplace (null without web apps, and in the
+    // tests). Its state goes to the pages (the runtime's
+    // org.webosphoenix.simulator), for the Marketplace's Start Local Catalog.
+    // (A stand-in in the tests.)
+    property var catalog: typeof simMarketplace !== "undefined" && simMarketplace ? simMarketplace : null
+    readonly property string catalogState: catalog ? catalog.state : "stopped"
+    // Started from the menu: the Marketplace opens once it runs, and a
+    // failure is told in a box.
+    property bool _catalogFromMenu: false
+    function catalogMenuText() {
+        if (!catalog)
+            return qsTr("Marketplace Catalog (needs web apps)");
+        var where = catalog.url.replace(/^http:\/\//, "").replace(/\/$/, "");
+        switch (catalogState) {
+        case "starting":
+            return catalog.settingUp ? qsTr("Marketplace Catalog: setting up (the first time)…")
+                                     : qsTr("Marketplace Catalog: starting…");
+        case "running":
+            return catalog.ownsServer ? qsTr("Marketplace Catalog: running at %1").arg(where)
+                                      : qsTr("Marketplace Catalog: running at %1 (started elsewhere)").arg(where);
+        case "failed":
+            var why = catalog.error.split("\n")[0].replace(/:$/, "");
+            return qsTr("Marketplace Catalog: failed (%1)").arg(why.length > 70 ? why.slice(0, 69) + "…" : why);
+        }
+        return qsTr("Marketplace Catalog");
+    }
+    function toggleCatalog() {
+        if (!catalog)
+            return;
+        if (catalogState === "running" || catalogState === "starting") {
+            _catalogFromMenu = false;
+            catalog.stop();
+            return;
+        }
+        _catalogFromMenu = true;
+        catalog.startAsync();
+        // One already running: open the Marketplace now.
+        if (catalogState === "running")
+            _catalogStarted();
+    }
+    function _catalogStarted() {
+        if (!_catalogFromMenu)
+            return;
+        _catalogFromMenu = false;
+        shell.unlock();
+        shell.launch("org.webosphoenix.marketplace");
+    }
+    function pushCatalogState() {
+        windows.pushSystemStatus({ marketplaceCatalog: catalog
+            ? { state: catalog.state, url: catalog.url, error: catalog.error, settingUp: catalog.settingUp }
+            : { state: "unavailable" } });
+    }
+    Connections {
+        target: root.catalog
+        function onStateChanged() {
+            root.pushCatalogState();
+            if (root.catalogState === "running") {
+                root._catalogStarted();
+            } else if (root.catalogState === "failed" && root._catalogFromMenu) {
+                root._catalogFromMenu = false;
+                if (typeof simChrome !== "undefined" && simChrome)
+                    simChrome.alert(qsTr("The Marketplace's catalog service did not start."),
+                                    root.catalog.error.charAt(0).toUpperCase() + root.catalog.error.slice(1), root.catalog.logFile);
+            }
+        }
+    }
+    // The Marketplace's Start Local Catalog (a "simulator" host message).
+    function simulatorRequest(appId, payload) {
+        if (payload.op === "startMarketplaceCatalog" && appId === "org.webosphoenix.marketplace" && catalog)
+            catalog.startAsync();
+        // Whatever it is now, the asking page hears it.
+        pushCatalogState();
+    }
+    Connections {
+        target: windows
+        function onSimulatorRequest(appId, payload) { root.simulatorRequest(appId, payload); }
     }
     function simTrigger(id) {
         var a = _simAction(id);
@@ -1388,6 +1510,8 @@ Item {
 
     // Build a demo scene, as if the user had been using the phone for a bit.
     Component.onCompleted: {
+        // The catalog's state, for every page as it loads.
+        pushCatalogState();
         // Icons the system UI names by device path find their HiDPI variants
         // in the compat overlay as on a device, where it is installed beside
         // the submodule's files (luna-systemui's notification icons).
