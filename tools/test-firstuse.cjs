@@ -240,6 +240,19 @@ async function main() {
         const h2 = await luna(page, "luna://com.webos.service.location/getAllLocationHandlers", {});
         check(h2.handlers.find((x) => x.name === "gps").state && !h2.handlers.find((x) => x.name === "network").state,
               "Privacy: GPS on, network location off");
+        // The Assistant (no more "Coming later"): on, and its wake word.
+        check(!/Coming later/.test(await text()), "Privacy: the Assistant is not \"coming later\"");
+        const A = "luna://org.webosphoenix.assistant/";
+        await page.waitForSelector("[data-testid=assistant-wake]");
+        await page.click("[data-testid=assistant-wake]");
+        await page.waitForTimeout(300);
+        const as1 = (await luna(page, A + "getSettings", {})).settings;
+        await page.click("[data-testid=assistant-toggle]");
+        await page.waitForTimeout(300);
+        const as2 = (await luna(page, A + "getSettings", {})).settings;
+        check(as1.enabled && as1.wakeWord && !as2.enabled, "Privacy: the Assistant's wake word, then the Assistant off");
+        await page.click("[data-testid=assistant-toggle]");
+        await page.waitForTimeout(300);
         await shot("6-privacy");
         await next();
 

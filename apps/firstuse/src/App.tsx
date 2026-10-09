@@ -25,9 +25,9 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import {
-    apps, backup, backupErrorCode, BACKUP_PARTS, call, deviceLock, deviceTitle, firstUse, hardware, installable, LunaError, location, needsAttention, reflowLicense, settings,
+    apps, assistant, backup, backupErrorCode, BACKUP_PARTS, call, deviceLock, deviceTitle, firstUse, hardware, installable, LunaError, location, needsAttention, reflowLicense, settings,
     system, wifi, WIFI_ERROR_INVALID_KEY,
-    type BackupDestination, type BackupFile, type DriverOffer, type HardwareDevice, type HardwareList,
+    type AssistantSettings, type BackupDestination, type BackupFile, type DriverOffer, type HardwareDevice, type HardwareList,
     type LocaleInfo, type LocationHandler, type LockMode, type SystemPreferences, type TimeZone, type WifiNetworkInfo, type WifiStatus,
 } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
@@ -498,6 +498,7 @@ function PasscodeStep(nav: NavProps) {
 function PrivacyStep(nav: NavProps) {
     const h = useLuna<Record<LocationHandler, boolean>>((cb, err) => location.watchHandlers(cb, err), []).value;
     const on = !!h && (h.gps || h.network);
+    const as = useLuna<AssistantSettings>((cb, err) => assistant.watchSettings(cb, err), []).value;
     return (
         <StepPage testId="privacy" title="Privacy" {...nav} intro="Your data stays on this device unless you add an account or allow an app.">
             <Group label="Location">
@@ -514,8 +515,18 @@ function PrivacyStep(nav: NavProps) {
             </Group>
             <Note>Each app asks before it gets your position; change your answers in Settings &gt; Location Services.</Note>
             <Group label="Assistant">
-                <Row title="Coming later" subtitle="It will run on the device first, and ask before using a cloud model" />
+                <Row title="Assistant" subtitle="Hold the launcher button to ask">
+                    <ToggleButton value={!!as?.enabled} disabled={!as} label="Assistant" testId="assistant-toggle"
+                                  onChange={(v) => void assistant.setSettings({ enabled: v })} />
+                </Row>
+                {as?.enabled && (
+                    <Row title={"Listen for \u201cHey Phoenix\u201d"} subtitle="The microphone stays on for it">
+                        <ToggleButton value={!!as.wakeWord} label="Listen for Hey Phoenix" testId="assistant-wake"
+                                      onChange={(v) => void assistant.setSettings({ wakeWord: v })} />
+                    </Row>
+                )}
             </Group>
+            <Note>It answers on the device; it asks before it uses a cloud model or the web. More in Settings &gt; Assistant.</Note>
         </StepPage>
     );
 }
