@@ -13,12 +13,17 @@ sets itself up the first time (`bin/marketplace.php init`: the database, the
 signing key, the curated web apps, an admin account, a first publish) and
 serves at <http://127.0.0.1:8088/>, which is where the simulator's
 Marketplace looks (`apps/marketplace/service/etc/palm/marketplace/sources.json`).
-Or let the simulator do it: `./build/phoenix-sim --marketplace` starts
-`serve.sh` (setting it up the first time), waits until it answers, opens
-the Marketplace, and stops it on quitting (one already running is used as
-it is; its log is `data/simulator.log`). It needs PHP 8 with sodium and
-pdo_sqlite, which `scripts/mac-setup.sh` and `scripts/linux-setup.sh`
-install.
+Or let the simulator do it: **Services > Marketplace Catalog** in its menu
+bar (or **Start Local Catalog** on the Marketplace's "Can't reach" card, or
+`./phoenix run --marketplace`, or `./build/phoenix-sim --marketplace`)
+starts `serve.sh` without blocking the simulator (`shell/sim/simmarketplace.h`),
+setting it up the first time; the menu item shows it starting, running or
+failed with the reason, and the Marketplace opens once it answers. It stops
+on quitting (one already running, another simulator's, is used as it is);
+its log is `data/simulator.log` (Services > Show Catalog Log). **Services >
+Start Catalog with the Simulator** starts it with every run. It needs PHP 8
+with sodium and pdo_sqlite, which `./phoenix` installs (Homebrew's `php`;
+apt's `php-cli` and `php-sqlite3`, whose `php-common` has sodium).
 
 The first time the Marketplace reads it, it shows the key's fingerprint
 (`php server/marketplace/bin/marketplace.php key` prints it) and asks to

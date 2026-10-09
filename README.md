@@ -208,7 +208,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `apps/` | New Phoenix web apps in React + TypeScript (Settings, Phone, Messaging, Camera, Photos, Music, Files, Tasks, Voice Memos, Flashlight, QR Scanner, Weather, Maps, Passwords, Authenticator, Terminal, Videos, Podcasts, PDF View, Doc View, First Use, Help, Print Manager, Voice Dial), with the shared `@phoenix/ui` components, `@phoenix/luna` service client and `@phoenix/secrets` (TOTP, sealing, auto-lock), generated demo media (`apps/media-samples`), the Node.js Luna services of Files (`apps/files/service`) and Voice Memos (`apps/voicememos/service`, speech to text with whisper.cpp), and the CardDAV & CalDAV Synergy account with its sync service (`apps/dav`, see [docs/SYNERGY.md](docs/SYNERGY.md)) |
 | `services/pty` | `org.webosphoenix.pty`, the Terminal's PTY Luna service (C++), whose core phoenix-sim also uses |
 | `services/devices` | `phoenix-devices`: LunaSysMgr's `com.palm.display`, `com.palm.keys`, `com.palm.vibrate` and `com.palm.ambientLightSensor` on a device, which OSE lacks (C++; docs/HARDWARE.md); finds the hardware by looking and follows it as it comes and goes; `phoenix-devices --probe` prints what it finds |
-| `services/hardware` | `org.webosphoenix.hardware`: the device's hardware matched against the signed driver catalog, firmware and drivers installed with opkg and rolled back when they do not work (Settings > Hardware; docs/HARDWARE.md, docs/DRIVERS.md); its catalog tool is `server/drivers` |
+| `services/hardware` | `org.webosphoenix.hardware`: the device's hardware matched against the signed driver catalog, the gaps the image leaves (newer firmware, out-of-tree drivers) installed with opkg and rolled back when they do not work (Settings > Hardware; docs/HARDWARE.md, docs/DRIVERS.md); its catalog tool is `server/drivers` |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
@@ -222,6 +222,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 ./phoenix run                       # adaptive: a phone or a tablet by the window's size
 ./phoenix run phone                 # the Pre, 320x480
 ./phoenix run tablet --scene cards  # the TouchPad; what follows goes to phoenix-sim
+./phoenix run --marketplace         # with the Marketplace's catalog on this computer
 ./phoenix                           # install what is missing and build, no run
 ./phoenix check                     # what is there, what would be installed (a dry run)
 ```
@@ -295,7 +296,8 @@ and chargers, a USB cable, the Touchstones, Touch to Share, a headset and its
 button, the play/pause key, the light), **View** the device (phone, tablet
 or adaptive; in the adaptive simulator Phone, Tablet and Device Size resize
 the window and the layout follows live, otherwise they, the scale and a demo
-scene restart it) and the developer overlays, and **Help > Keyboard Shortcuts…** lists every key below
+scene restart it) and the developer overlays, **Services** what it runs on
+this computer for the device (the Marketplace's catalog, below), and **Help > Keyboard Shortcuts…** lists every key below
 in a window. Each menu item shows its key, so the menus teach them; they are
 made from one list in `shell/qml/sim.qml` (`simActions`), as the keys are.
 The toolbar has icons for the most used: Power, Home, Back, rotate, screen
@@ -306,6 +308,19 @@ the screen keeps its size and `--screenshot` saves the screen alone; **View >
 Show Toolbar** or `--no-toolbar` hides it. Its icons need Qt's SVG plugin
 (`libqt6svg6` on Ubuntu; Homebrew's `qt` has it); without it its buttons
 show their names.
+
+**The Marketplace's catalog.** The Marketplace reads the Phoenix catalog
+from `http://127.0.0.1:8088/`, a PHP service in `server/marketplace` that
+runs on this computer for now. Start it with **Services > Marketplace
+Catalog**: the item says how it goes (setting up, the first time; running
+at 127.0.0.1:8088; or failed, with the reason and **Show Catalog Log**),
+and the Marketplace opens once it answers. Or tap **Start Local Catalog**
+on the Marketplace's "Can't reach" card, or start the simulator with
+`--marketplace` (`./phoenix run --marketplace`). **Services > Start Catalog
+with the Simulator** starts it every time (off by default), and **Open
+Catalog in Browser** opens its review page. It stops with the simulator;
+one another simulator started is used as it is. It needs PHP 8 with sodium
+and pdo_sqlite, which `./phoenix` installs.
 
 Controls: drag with the mouse as you would with a finger. In card view a
 two-finger trackpad swipe sideways moves between cards and a swipe up throws
@@ -459,7 +474,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-docs.cjs` | PDF View and Doc View |
 | `node tools/test-orientation.cjs` | Apps asking for and following an orientation |
 | `node tools/test-firstuse.cjs` | First Use, every step |
-| `node tools/test-hardware.cjs` | Settings > Hardware and First Use's Hardware step: firmware after its licence, a failed install rolled back, an optional driver after a restart, a catalog with the wrong key refused, the hardware report (needs PHP) |
+| `node tools/test-hardware.cjs` | Settings > Hardware and First Use's Hardware step: newer firmware after its licence, a driver the kernel lacks (a failed install rolled back), another catalog with Developer Mode, a catalog with the wrong key refused, the hardware report, the firmware licences in Device Info (needs PHP) |
 | `node tools/test-help.cjs` | Help, and Just Type finding it |
 | `node tools/test-emergency.cjs` | Emergency Info, restricted Phone, Accessibility |
 | `node tools/test-location.cjs` | Location Services and permissions |

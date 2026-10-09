@@ -41,15 +41,17 @@ plus the incremental build.
 | `./phoenix setup` | Install what is missing, without building |
 | `--no-assistant` | Without the assistant's parts (whisper.cpp, llama.cpp, their models, the wake word) |
 | `--offline` | Download nothing; it fails only when something the build needs is missing |
-| `--tests` | Also the test tools (Playwright, Radicale, WsgiDAV, PHP, xvfb) |
+| `./phoenix run --marketplace` | With the Marketplace's catalog running on this computer, and the Marketplace open |
+| `--tests` | Also the test tools (Playwright, Radicale, WsgiDAV, PHP's MySQL driver, xvfb) |
 
 What it checks, and installs when missing (it prints each one's size first):
 
 - **Mac:** Xcode's command line tools (Apple's installer opens; run it again
   after), Homebrew (asks for your password), then Homebrew's `qt`, `cmake`,
-  `ninja`, `node@22`, `git`, `python@3.12`, `whisper-cpp` and `llama.cpp`,
-  in one `brew install`.
-- **Ubuntu:** the apt packages (build tools and the libraries Qt loads),
+  `ninja`, `node@22`, `git`, `python@3.12`, `php`, `whisper-cpp` and
+  `llama.cpp`, in one `brew install`.
+- **Ubuntu:** the apt packages (build tools, the libraries Qt loads, and
+  `php-cli` and `php-sqlite3` for the Marketplace's catalog),
   Qt 6.8.1 into `/opt/Qt` with aqtinstall (Ubuntu's own Qt is 6.4),
   Node.js 22 (NodeSource), espeak-ng, and `whisper-cli` and `llama-server`
   built from the commits meta-phoenix pins into `/usr/local/bin`. It asks
@@ -160,6 +162,7 @@ cmake --build build
 | `./build/phoenix-sim --tablet --size 2560x1600 --scale 2` | A large tablet |
 | `./build/phoenix-sim --launch com.palm.app.notes` | Open an app at start-up |
 | `./build/phoenix-sim --no-toolbar` | Without the toolbar beside the screen |
+| `./build/phoenix-sim --marketplace` | With the Marketplace's catalog (below), the Marketplace open |
 | `./build/phoenix-sim --help` | Every option |
 
 On a Retina screen it draws at 2x by itself.
@@ -169,8 +172,8 @@ menu bar at the top of the screen) do everything the simulator can: **Device**
 (Power, Home, Back, volume, rotate, screen capture, the key chords),
 **Simulate** (calls, messages, notifications, battery, chargers, USB,
 Touchstone, Touch to Share, headset, light), **View** (phone, tablet or adaptive, device sizes, scale,
-demo scenes, developer overlays) and **Help > Keyboard Shortcuts…**, a window
-listing every key. The toolbar beside the screen has the most used ones as
+demo scenes, developer overlays), **Services** (the Marketplace's catalog,
+below) and **Help > Keyboard Shortcuts…**, a window listing every key. The toolbar beside the screen has the most used ones as
 icons (hover for the key); **View > Show Toolbar** or `--no-toolbar` hides it.
 
 Keys: **Esc** is Back and **Home** the Home button. The function keys are
@@ -189,6 +192,23 @@ runs First Use again. Full Erase (hold F3 and F11, then Home) wipes the
 device's data the way a phone does. On Linux they are
 `~/.local/share/webos-phoenix/phoenix-sim/` and
 `~/.config/webos-phoenix/phoenix-sim.conf`.
+
+**The Marketplace's catalog.** The Marketplace app reads the Phoenix
+catalog from a service on this computer for now (`server/marketplace`, PHP 8
+with sodium and pdo_sqlite, which `./phoenix` installs), at
+`http://127.0.0.1:8088/`. To start it, pick **Services > Marketplace
+Catalog**. The first time it sets itself up (its database, its signing key,
+the curated web apps), which takes a moment; the menu item says "setting
+up", then "running at 127.0.0.1:8088", and the Marketplace opens. The first
+time, the Marketplace shows the catalog's key: tap **Trust This Catalog**.
+Other ways in: **Start Local Catalog** on the Marketplace's "Can't reach
+Phoenix Marketplace" card, `./phoenix run --marketplace`, or **Services >
+Start Catalog with the Simulator**, which starts it with every run (off by
+default). If it fails, a box says why (most often PHP missing or without
+sodium) with **Show Log** (`server/marketplace/data/simulator.log`; the menu
+has **Show Catalog Log** too). **Open Catalog in Browser** opens its review
+page, `/admin`, whose token is in `server/marketplace/data/admin.token`. It
+stops with the simulator; if another simulator already runs one, it is used.
 
 ### 4. Voice and the assistant
 
