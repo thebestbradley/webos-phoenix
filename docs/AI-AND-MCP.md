@@ -337,6 +337,26 @@ microphone (`AssistantOverlay.qml`). The Assistant app has the
 conversations (new, open, delete). Both show the same thread through the
 service; each thread and message is its own stored key.
 
+The app is laid out as a TouchPad (Enyo 1.0) app, with `@phoenix/ui`'s
+`SlidingPanes` (after Enyo's `SlidingPane`): wider than 500 px,
+Conversations (320 px) at the left and the conversation beside it, which
+can be dragged over the list and back (its edge, or the grip in its
+compose bar); narrower, the conversation slides in over the list and Back
+shows the list. It follows the card's width live (the simulator's adaptive
+layout, a rotation). Each conversation is titled by its first request;
+New in the list's toolbar starts one; swipe one across to delete it. Hold
+a conversation or a message, or right-click it, for its menu (Open, Open
+in New Card, Delete; Open in New Card, Copy). **Open in New Card** opens
+that conversation in another card of the app, in a stack of its own
+(`applicationManager/launch {id, params: {conversationId}, newCard: true}`):
+several conversations at once, side by side in card view. Each card keeps
+to its own conversation (the one in use only decides what a card shows
+first); all follow the one store, so a message sent in one card shows at
+once in the others' lists. A conversation slid out of sight does not mark
+its follow-ups read. Tests: `apps/assistant/src/App.test.tsx`,
+`apps/shared/phoenix-ui/src/panes.test.tsx`, `tools/test-assistant.cjs`
+(phone and tablet, two cards).
+
 **In 2.0** the same assistant grows into the agent this document plans:
 the MCP hub behind it, language models (local or a provider) for open
 questions and multi-step tasks, memory, Settings > Assistant with

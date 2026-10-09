@@ -473,7 +473,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-clipboard.cjs` | Clipboard history: the Clipboard app and Settings > Clipboard |
 | `node tools/test-sharing.cjs` | Sharing, sync and health (M6 F4): DropShare (Settings, receiving into Downloads, sending, the share sheet, Touch to Share), a subscribed .ics calendar, the temperature warnings |
 | `node tools/test-community.cjs` | The community's features (M6 F4): Settings > Advanced, repeat alerts and lock screen previews reaching the shell, Contacts' tones and a text's tone, Email's cycling dashboard |
-| `node tools/test-assistant.cjs` | The Assistant: the app's commands, read-backs and choices, Settings > Assistant with a stand-in cloud provider, the permission gate, conversations |
+| `node tools/test-assistant.cjs` | The Assistant: the app's commands, read-backs and choices, Settings > Assistant with a stand-in cloud provider, the permission gate, conversations (the panes on a phone and a tablet, swipe to delete, Open in New Card with two cards) |
 | `node tools/test-assistant-followups.cjs` | The Assistant's follow-up questions: asked after an event, answered by a quick reply, sent later as a notification with buttons, unread in Conversations, the app opened from it |
 | `node tools/test-terminal.cjs` | Terminal (simulated shell, then /bin/sh for real) |
 | `build/pty/pty-test` | The Terminal's PTY service |
