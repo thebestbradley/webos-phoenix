@@ -116,6 +116,19 @@ async function main() {
         await shot(phone, "phone-dialing");
         await phone.waitForSelector("[data-testid='incall'][data-state='active']", { timeout: 5000 });
         check(true, "the call connects");
+        if (!tablet) {
+            // During a call a Pre-sized card is 405 tall (the call's dashboard
+            // under it): the caller's name must not be squeezed and clipped.
+            await phone.setViewportSize({ width: 320, height: 405 });
+            await phone.waitForTimeout(100);
+            const name = await phone.evaluate(() => {
+                const e = document.querySelector("[data-testid='incall-name']");
+                return { client: e.clientHeight, scroll: e.scrollHeight, top: e.getBoundingClientRect().top };
+            });
+            check(name.scroll <= name.client && name.top >= 0, `the caller's name shows whole on a short card (${JSON.stringify(name)})`);
+            await shot(phone, "phone-incall-short");
+            await phone.setViewportSize(viewport);
+        }
         await phone.click("[data-testid='mute']");
         await phone.waitForSelector("[data-testid='mute'][aria-pressed='true']");
         check(true, "mute");

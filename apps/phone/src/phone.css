@@ -270,6 +270,12 @@ html:has(> body.phone-app), body.phone-app {
     text-align: center;
 }
 .incall-avatar { margin-bottom: 10px; border-radius: 10px; }
+.incall-who > * { flex: none; }   /* never squeeze the name (it clipped) */
+@media (max-height: 420px) {
+    /* A Pre-sized card during a call is 405 tall (the call's dashboard
+       shows under it): a smaller picture leaves the name room. */
+    .incall-avatar { width: 72px !important; height: 72px !important; }
+}
 .incall-name {
     font-size: 26px;
     font-weight: bold;
