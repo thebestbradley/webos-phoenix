@@ -7,9 +7,10 @@
 // has a backHandler for this narrow mode (views "contacts"/"details"), but
 // the released app never wires it to the back gesture; this does, and
 // otherwise leaves the app's navigation alone. On wider cards nothing
-// changes. Styles: css/phoenix-compat.css.
+// changes. Styles: css/phoenix-compat.css. A contact another app opened
+// Contacts on ($caller) closes on Back instead (callerOpened, below).
 
-/*global enyo, SplitPane, ContactsApp */
+/*global enyo, SplitPane, ContactsApp, PalmSystem */
 (function () {
     "use strict";
 
@@ -38,7 +39,20 @@
         this.resized();
     };
 
+    // The contact another app opened Contacts on to show it (launch params
+    // {id, $caller}: the Assistant's "Open Contacts", applicationManager
+    // launch {returnToCaller}). Back there is not Contacts' to take: the
+    // runtime closes the card and the caller is in front again
+    // (runtime/phoenix-runtime.js runtime.back). A contact tapped in the
+    // list is the user's own navigation, and Back returns to the list.
+    function callerOpened(id) {
+        var p = {};
+        try { p = JSON.parse((window.PalmSystem && PalmSystem.launchParams) || "{}") || {}; } catch (e) { p = {}; }
+        return typeof p.$caller === "string" && p.$caller !== "" && !!id && p.id === id;
+    }
+
     split.contactClick = function (inSender, inPerson) {
+        this.phoenixFromCaller = false;
         var r = contactClick.apply(this, arguments);
         this.phoenixShowDetails(true);
         return r;
@@ -46,6 +60,7 @@
 
     split.showPerson = function (inSender, inPersonId, inPerson) {
         var r = showPerson.apply(this, arguments);
+        this.phoenixFromCaller = !inSender && callerOpened(inPersonId);
         if (inPersonId || inPerson) {
             this.phoenixShowDetails(true);
         }
@@ -63,6 +78,9 @@
     app.phoenixBack = function (inSender, inEvent) {
         var split = this.$.splitPane;
         if (narrow() && this.$.pane.getViewName() === "splitPane" && split.hasClass("phoenix-details")) {
+            if (split.phoenixFromCaller) {
+                return false;
+            }
             split.phoenixShowDetails(false);
             inEvent.preventDefault();
             return true;

@@ -164,6 +164,35 @@ Item {
             compare(cardsOf(windows.phoneAppId).length, 1);
         }
 
+        // {behind: true} (the Assistant's "I've opened them in Photos too"):
+        // the card opens in the asking card's stack without coming to the
+        // front; the same again only hears its params. A later launch that
+        // is not behind (a thumbnail tapped) brings it forward, and when it
+        // closes (Back at what it was opened on: runtime.back with $caller),
+        // the asking card is in front again.
+        function test_behindAndBackToTheCaller() {
+            var a = shell.openApp(email);
+            tryCompare(shell.cardView, "currentUid", a, 2000);
+            tryCompare(windows, "focusedUid", a, 2000);
+            windows._hostMessage(email, a, "launch", { id: calendar, params: { day: 1, $caller: email }, behind: true });
+            var c = windows.runningUid(calendar);
+            verify(c !== "", "opened");
+            compare(windows.cards.get(windows.cardIndex(c)).groupId, windows.cards.get(windows.cardIndex(a)).groupId, "in the asking card's stack");
+            wait(300);
+            compare(shell.cardView.currentUid, a, "the asking card stays in front");
+            windows._hostMessage(email, a, "launch", { id: calendar, params: { day: 2, $caller: email }, behind: true });
+            compare(windows.windowFor(c).relaunchParams.day, 2);
+            wait(300);
+            compare(shell.cardView.currentUid, a, "still in front");
+            windows._hostMessage(email, a, "launch", { id: calendar, params: { day: 3, $caller: email } });
+            tryCompare(shell.cardView, "currentUid", c, 2000);
+            // Its window closes itself: back to the caller, still maximized.
+            windows.cardCloseRequested(c);
+            tryCompare(shell.cardView, "currentUid", a, 3000);
+            tryVerify(function () { return cardsOf(calendar).length === 0; }, 3000, "the child closed");
+            verify(shell.maximized, "the caller full screen again");
+        }
+
         // The setting reaches the shell through the runtime's systemStatus
         // (anything else is "front").
         function test_unknownIsFront() {

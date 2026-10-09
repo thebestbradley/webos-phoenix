@@ -784,7 +784,7 @@ function createAssistantService(deps) {
                 // (the buttons stay: nothing was chosen).
                 var item = [].concat.apply([], ((m.data && m.data.attachments) || []).map(function (x) { return x.items || []; }))[Number(p.choice.slice(5))];
                 if (!item || !item.open) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to show there"));
-                return deps.luna.call("luna://com.palm.applicationManager/launch", { id: item.open.appId, params: item.open.params || {} })
+                return deps.luna.call("luna://com.palm.applicationManager/launch", { id: item.open.appId, params: item.open.params || {}, returnToCaller: true })
                     .then(function () { return ok({ thread: summary(thread), messages: [] }); });
             }
             if (p.choice === "connect") return methods.connect({ threadId: thread.id, messageId: m.id });
@@ -802,14 +802,14 @@ function createAssistantService(deps) {
             } else if (c === "open") {
                 var o = m.data && m.data.open;
                 if (!o || !o.appId) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to open there"));
-                work = deps.luna.call("luna://com.palm.applicationManager/launch", { id: o.appId, params: o.params || {} })
+                work = deps.luna.call("luna://com.palm.applicationManager/launch", { id: o.appId, params: o.params || {}, returnToCaller: true })
                     .then(function () { return []; });
             } else if (/^(?:open|do):\d+$/.test(c)) {
                 // One of the things to do next (outcome, offer, withNext).
                 var a = ((m.data && m.data.actions) || [])[Number(c.split(":")[1])];
                 if (!a) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to do there"));
                 if (a.open) {
-                    work = deps.luna.call("luna://com.palm.applicationManager/launch", { id: a.open.appId, params: a.open.params || {} })
+                    work = deps.luna.call("luna://com.palm.applicationManager/launch", { id: a.open.appId, params: a.open.params || {}, returnToCaller: true })
                         .then(function () { return []; });
                 } else {
                     work = catalogue().then(function (cat) { return runAction(thread, cat, a.run); });

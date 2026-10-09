@@ -284,8 +284,12 @@ function lunaCall(env, uri, params) {
         return r || {};
     });
 }
+// An app a command opens opens behind the conversation (behind: the
+// Assistant's card, or the shell's view, stays in front; "Open <app>"
+// brings it forward), and Back there comes back to the Assistant
+// (returnToCaller). Both Phoenix's (runtime/phoenix-runtime.js launch).
 function launch(env, id, params) {
-    return lunaCall(env, "luna://com.palm.applicationManager/launch", { id: id, params: params || {} });
+    return lunaCall(env, "luna://com.palm.applicationManager/launch", { id: id, params: params || {}, behind: true, returnToCaller: true });
 }
 function dbFind(env, kind, extra) {
     return lunaCall(env, DB + "find", { query: Object.assign({ from: kind, limit: 500 }, extra || {}) })
@@ -309,9 +313,12 @@ function personName(p) {
     return n || p.nickname || (p.organization && p.organization.name) || "";
 }
 function words(s) { return String(s || "").toLowerCase().replace(/[^a-z0-9À-￿@.]+/g, " ").trim(); }
+// Every word of query starts a word of text ("wifi" also finds "Wi-Fi").
 function matches(text, query) {
-    var t = " " + words(text) + " ";
-    return words(query).split(" ").filter(Boolean).every(function (w) { return t.indexOf(" " + w) >= 0; });
+    var t = " " + words(text) + " ", squashed = String(text || "").toLowerCase().replace(/[^a-z0-9À-￿]+/g, "");
+    return words(query).split(" ").filter(Boolean).every(function (w) {
+        return t.indexOf(" " + w) >= 0 || (w.length >= 4 && squashed.indexOf(w.replace(/[^a-z0-9À-￿]+/g, "")) >= 0);
+    });
 }
 function digitsOnly(s) { return String(s || "").replace(/\D/g, ""); }
 function samePhone(a, b) {

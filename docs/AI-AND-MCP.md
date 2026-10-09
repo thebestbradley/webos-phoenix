@@ -193,7 +193,13 @@ the words in the shell's view (`AssistantAttachments.qml`) and the app
 conversation stays in front (the owner: "the chat should stay in focus"):
 an app a command opens waits behind it, and the answer says so ("I've
 opened them in Photos too") and offers Open Photos, which brings it
-forward. Photos opened with several pictures shows just those, titled as
+forward. The app opens behind for real (`applicationManager/launch
+{behind: true}`: in the conversation's stack, which keeps the focus), and
+everything the Assistant opens (the app, a thumbnail, a card, Open X)
+carries the Assistant as its caller (`returnToCaller`, launch params
+`$caller`): Back where it was opened (the picture, the memo, the event,
+the contact, the message, the folder) closes it and the conversation is in
+front again (docs/APP-RUNTIME.md, after "newCard"). Photos opened with several pictures shows just those, titled as
 asked ("Photos from Yesterday"). Only how many ("how many photos did I take
 yesterday") opens nothing. In the simulator the shell gets a small copy of
 a picture from the page (`com.webos.service.mediaindexer

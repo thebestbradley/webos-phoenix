@@ -289,11 +289,18 @@ async function main() {
         const photosLaunch = launches.find((l) => l.id === "org.webosphoenix.photos");
         check(!!photosLaunch && photosLaunch.params.imageList.results.length === 2 && photosLaunch.params.imageList.title === "Photos from Today",
               "and Photos opened on just those");
+        // Behind the conversation, which stays in front, and told who asked
+        // ({behind, returnToCaller}: params.$caller), so its Back comes back here.
+        check(photosLaunch && photosLaunch.behind === true && photosLaunch.params.$caller === "org.webosphoenix.assistant",
+              "Photos opened behind, with the Assistant as its caller: " + JSON.stringify(photosLaunch && { behind: photosLaunch.behind, caller: photosLaunch.params.$caller }));
         await shot(app, "photos-found");
         launches.length = 0;
         await photoRow.locator("[data-testid='as-thumb-0']").click();
         for (let i = 0; i < 50 && !launches.length; ++i) await app.waitForTimeout(100);
         check(launches[0] && launches[0].params.imageList.results.length === 1, "a picture tapped: Photos on it");
+        const thumbLaunch = launches[0];
+        check(thumbLaunch && thumbLaunch.behind !== true && thumbLaunch.params.$caller === "org.webosphoenix.assistant",
+              "a picture tapped comes forward, with the Assistant as its caller");
         check(/^Open Photos$/.test((await photoRow.locator("[data-testid='as-choice-open']").textContent()).trim()), "and Open Photos to bring it forward");
         // Every command through the simulator's own services (test/phrases.cjs):
         // none fails for want of a method; then each turned off in Settings >
@@ -383,6 +390,27 @@ async function main() {
         await ph.waitForSelector("[data-testid='thumb-1']");
         check(await ph.locator(".ph-cell").count() === 2 && /Photos from Today/.test(await ph.textContent(".ph-header")), "Photos: a grid of just those two");
         await shot(ph, "photos-picked");
+        // Back where it was opened (the grid it was given) closes its card,
+        // so the Assistant is in front again; Back from a picture opened
+        // from there is Photos' own (back to that grid).
+        const closed = () => ph.evaluate(() => window.__closedByBack === true);
+        const stubClose = () => ph.evaluate(() => { window.__closedByBack = false; window.close = () => { window.__closedByBack = true; }; });
+        await stubClose();
+        await ph.click("[data-testid='thumb-0']");
+        await ph.waitForSelector(".ph-viewer, [data-testid='viewer']");
+        await ph.evaluate(() => window.__phoenixRuntime.back());
+        await ph.waitForTimeout(300);
+        check(!(await closed()) && await ph.locator("[data-testid='viewer']").count() === 0, "Back from a picture opened in Photos: its grid");
+        await ph.evaluate(() => window.__phoenixRuntime.back());
+        await ph.waitForTimeout(300);
+        check(await closed(), "Back at the grid it was opened on: the card closes, back to the Assistant");
+        // Opened on one picture (a thumbnail tapped): Back closes it.
+        await ph.goto(`${root}/org.webosphoenix.photos/index.html?launchParams=` + encodeURIComponent(JSON.stringify(thumbLaunch.params)));
+        await ph.waitForSelector(".ph-viewer, [data-testid='viewer']");
+        await stubClose();
+        await ph.evaluate(() => window.__phoenixRuntime.back());
+        await ph.waitForTimeout(300);
+        check(await closed(), "Back at the picture it was opened on: back to the Assistant");
         await ph.close();
         // Words it does not understand: the commands they come close to.
         const close = await ask("I need the dentist appointment thing");
@@ -417,8 +445,8 @@ async function main() {
         check(/llama-server/.test(await st.textContent("[data-testid='as-local-status']")), "without llama.cpp, it says how to get it");
         // (The models come with their own answer, after the page.)
         await st.waitForFunction(() => document.querySelectorAll("[data-testid^='as-model-']").length > 0);
-        check(await st.locator("[data-testid^='as-model-']").count() === 4, "four on-device models offered, with size and memory");
-        const builtIn = st.locator("[data-testid='as-model-qwen3-0.6b-q4_k_m']");
+        check(await st.locator("[data-testid^='as-model-']").count() === 6, "six on-device models offered, with size and memory");
+        const builtIn = st.locator("[data-testid='as-model-qwen3-0.6b-q8_0']");
         check(/Qwen3 0\.6BBuilt in/.test(await builtIn.textContent()) && await builtIn.locator("button").count() === 0,
               "Qwen3 0.6B is built in: nothing to download or remove");
         const settings = async () => (await svc(st, A + "getSettings", {})).settings;

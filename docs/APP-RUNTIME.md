@@ -814,6 +814,32 @@ Card uses it (`{conversationId}`). Tests: `tst_apprelaunch.qml`
 device yet (`LsmWindowSource` leaves launches to SAM, which brings the
 running card to the front).
 
+An app can also open another one behind itself, or as its child
+(Phoenix): `applicationManager/launch {id, params, behind: true}` opens
+or relaunches the card without bringing it forward; when the asking card
+is the one in front, the new card joins its stack and the asking card
+keeps the focus (`SimWindowSource._hostMessage`, `CardView.focusLaunched`).
+`returnToCaller: true` adds `$caller` (the asking app's id) to the launch
+params. Back in an app opened that way, at what it was opened on, closes
+its card, and the caller beside it in the stack is in front again: the
+runtime's `runtime.back` closes the window when the app did not take the
+Back itself (no `preventDefault` on the Escape keydown/keyup, as webOS
+apps said they had taken the gesture) and the launch params hold
+`$caller`. Apps that would take that Back to show more of themselves leave
+it when they are still where they were opened: Photos (`App.tsx`, the
+picture or album it was given), Contacts (compat `phoenix-phone.js`, the
+person it was opened on, on a phone) and Email (compat
+`mail/source/phoenix-compat.js`, the message; the mail window closes
+itself, as its params come from the headless app page). Memos, Calendar
+and Files leave that Back alone already. The Assistant opens what it
+found behind its conversation (`lib/commands.js` `launch`) and its
+buttons, thumbnails and cards with `returnToCaller`. Tests:
+`tst_apprelaunch.qml` `test_behindAndBackToTheCaller`,
+`tools/test-assistant.cjs` (Photos). Not on a device yet: SAM's launch
+knows neither `behind` nor `returnToCaller` (the card comes to the
+front, with no `$caller`), and Back at an app's root goes to card view,
+as on webOS.
+
 ## Settings
 
 `apps/settings` is one app with one launch point per pane, like the separate

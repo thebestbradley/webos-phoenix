@@ -1640,9 +1640,20 @@
         // {newCard: true} (Phoenix): another card of the app in a stack of
         // its own, even while one runs (the shell's appRelaunch "new" for
         // this launch; one-card apps such as the phone keep theirs).
+        // {behind: true} (Phoenix): the app opens (or hears its new params)
+        // without its card coming to the front: the Assistant's "I've opened
+        // them in Photos too", while the conversation stays in front.
+        // {returnToCaller: true} (Phoenix): Back at the opened app's first
+        // view returns to the app that opened it (runtime.back below): the
+        // caller rides in the params as $caller.
         "/launch": function (p, reply) {
-            host.postToHost("launch", Object.assign({ id: appId(p.id), params: aliasParams(p.id, p.params) },
-                                                    p.newCard === true ? { newCard: true } : {}));
+            var params = aliasParams(p.id, p.params);
+            var caller = appIdFromLocation();
+            if (p.returnToCaller === true && caller && ["com.palm.systemui", "com.palm.launcher", "com.webos.phoenix.unknown"].indexOf(caller) < 0 && caller !== appId(p.id))
+                params = Object.assign({}, params || {}, { $caller: caller });
+            host.postToHost("launch", Object.assign({ id: appId(p.id), params: params },
+                                                    p.newCard === true ? { newCard: true } : {},
+                                                    p.behind === true ? { behind: true } : {}));
             reply(ok({ processId: String(Date.now()) }));
         },
         // As on webOS: {id, params} launches the app; {target} goes to the
@@ -3733,8 +3744,15 @@
 
     // Back gesture: the shell calls this; Mojo/Enyo 1.0 apps treat Escape
     // (and keyIdentifier U+1200001 on devices) as "back".
+    // An app opened by another one to show something ({returnToCaller}:
+    // launch params $caller, e.g. Photos from the Assistant's thumbnail): a
+    // Back it does not handle itself (no preventDefault, as webOS apps said
+    // they took the gesture) closes its card, and the caller's card, the one
+    // beside it in the stack it joined, comes back. As LunaSysMgr's back at
+    // an app's root went to card view, this goes back to where the user was.
     runtime.back = function () {
         var target = global.document.activeElement || global.document.body || global.document;
+        var handled = false;
         ["keydown", "keyup"].forEach(function (type) {
             var e = new KeyboardEvent(type, { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true });
             try {
@@ -3742,7 +3760,15 @@
                 Object.defineProperty(e, "keyIdentifier", { get: function () { return "U+1200001"; } });
             } catch (x) { /* ignore */ }
             target.dispatchEvent(e);
+            if (e.defaultPrevented) handled = true;
         });
+        if (!handled) {
+            var lp = {};
+            try { lp = JSON.parse(PalmSystem.launchParams || "{}") || {}; } catch (x) { lp = {}; }
+            if (lp && typeof lp.$caller === "string" && lp.$caller) {
+                try { global.close(); } catch (x) { /* ignore */ }
+            }
+        }
         return true;
     };
 

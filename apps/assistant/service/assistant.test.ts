@@ -94,6 +94,15 @@ async function addProvider(t: ReturnType<typeof setup>, type: string, extra: obj
 
 beforeEach(() => { mock.requests.length = 0; });
 
+// The launch an answer made, without the flags every command's launch has
+// (behind, returnToCaller: checked once on their own).
+function launched(x: { called(part: string): { params: any }[] }) {
+    const p = { ...x.called("applicationManager/launch").at(-1)!.params };
+    delete p.behind;
+    delete p.returnToCaller;
+    return p;
+}
+
 describe("the command layer", () => {
     it("runs a command at once, offline, and says what it did", async () => {
         const t = setup();
@@ -139,11 +148,11 @@ describe("the command layer", () => {
         const t = setup();
         expect(last(await ask(t, "what's 15% of 80")).text).toBe("15% × 80 = 12");
         expect(last(await ask(t, "open maps")).text).toBe("Opening Maps.");
-        expect(t.called("applicationManager/launch").at(-1)!.params).toEqual({ id: "org.webosphoenix.maps", params: {} });
+        expect(launched(t)).toEqual({ id: "org.webosphoenix.maps", params: {} });
         await ask(t, "play daft punk");
-        expect(t.called("applicationManager/launch").at(-1)!.params).toEqual({ id: "org.webosphoenix.music", params: { play: "daft punk" } });
+        expect(launched(t)).toEqual({ id: "org.webosphoenix.music", params: { play: "daft punk" } });
         await ask(t, "navigate to the station");
-        expect(t.called("applicationManager/launch").at(-1)!.params).toEqual({ id: "org.webosphoenix.maps", params: { target: "mapto:station" } });
+        expect(launched(t)).toEqual({ id: "org.webosphoenix.maps", params: { target: "mapto:station" } });
     });
 
     it("does not run a command turned off in Settings", async () => {
@@ -188,7 +197,7 @@ describe("confirmation for what sends or calls", () => {
         expect(last(r)).toMatchObject({ status: "pending", text: "Call Mary Spetzler (555-0199)?" });
         expect(t.called("applicationManager/launch")).toHaveLength(0);
         await t.svc.confirm({ threadId: r.thread.id, messageId: last(r).id, accept: true });
-        expect(t.called("applicationManager/launch")[0].params).toEqual({ id: "org.webosphoenix.phone", params: { number: "555-0199", dial: true } });
+        expect(launched(t)).toEqual({ id: "org.webosphoenix.phone", params: { number: "555-0199", dial: true } });
     });
 
     it("says so when the contact is unknown", async () => {
@@ -229,7 +238,7 @@ describe("Connect model", () => {
         const offer = last(r);
         const c = await t.svc.connect({ threadId: r.thread.id, messageId: offer.id, mode: "cloud" });
         expect(c).toMatchObject({ returnValue: true, mode: "cloud", waiting: true });
-        expect(t.called("applicationManager/launch").at(-1)!.params).toEqual(
+        expect(launched(t)).toEqual(
             { id: "org.webosphoenix.settings", params: { page: "assistant", connect: "cloud", threadId: r.thread.id } });
         // Not taken: the buttons stay until a model answers.
         expect((await t.svc.thread({ id: r.thread.id })).messages.find((m: Reply) => m.id === offer.id).chosen).toBeUndefined();
@@ -361,7 +370,7 @@ describe("never a dead end (the owner's banana pudding, 9 October 2026)", () => 
         expect(last(r).text).toMatch(/^I don't have the tools for that yet, but I can open Music for you\. Did you mean/);
         expect(last(r).choices.map((c: Reply) => c.id)).toEqual(["open:0", "web", "connect"]);
         await t.svc.choose({ threadId: r.thread.id, messageId: last(r).id, choice: "open:0" });
-        expect(t.called("applicationManager/launch").at(-1)!.params).toEqual({ id: "org.webosphoenix.music", params: {} });
+        expect(launched(t)).toEqual({ id: "org.webosphoenix.music", params: {} });
     });
 });
 

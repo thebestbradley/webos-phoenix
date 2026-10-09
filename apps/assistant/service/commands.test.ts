@@ -177,6 +177,15 @@ function device(opts: { offline?: boolean; locationAllowed?: boolean | null } = 
     return { svc, db, of, calls, called, state, ask, confirm, choose, requests, setNow: (t: number) => { clock = t; } };
 }
 
+// The launch an answer made, without the flags every command's launch has
+// (behind, returnToCaller: checked once on their own).
+function launched(x: { called(part: string): { params: any }[] }) {
+    const p = { ...x.called("applicationManager/launch").at(-1)!.params };
+    delete p.behind;
+    delete p.returnToCaller;
+    return p;
+}
+
 describe("calendar", () => {
     it("adds an event in db8, as the Calendar app saves one, and offers Calendar", async () => {
         const d = device();
@@ -188,7 +197,7 @@ describe("calendar", () => {
         expect(ev.alarm).toEqual([{ action: "display", alarmTrigger: { value: "-PT15M", valueType: "DURATION" } }]);
         expect(m.choices).toEqual([{ id: "open", label: "Open Calendar" }]);
         await d.choose(m, "open");
-        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "com.palm.app.calendar", params: { showEventDetail: ev._id } });
+        expect(launched(d)).toEqual({ id: "com.palm.app.calendar", params: { showEventDetail: ev._id } });
     });
     it("all-day and repeating events, as the Calendar stores them", async () => {
         const d = device();
@@ -225,7 +234,7 @@ describe("calendar", () => {
         expect(dentist.data.attachments).toEqual([{ type: "cards", items: [{ title: "Dentist", subtitle: "On Friday at 2:00 PM", detail: "Downtown Dental",
             open: { appId: "com.palm.app.calendar", params: { showEventDetail: "ev-dentist" }, title: "Calendar" } }] }]);
         await d.choose(dentist, "show:0");
-        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "com.palm.app.calendar", params: { showEventDetail: "ev-dentist" } });
+        expect(launched(d)).toEqual({ id: "com.palm.app.calendar", params: { showEventDetail: "ev-dentist" } });
         expect((await d.ask("what's on my calendar on Sunday")).text).toBe("Nothing on your calendar on Sunday.");
     });
     it("undo takes the event back, after Yes", async () => {
@@ -335,7 +344,7 @@ describe("email and messages", () => {
     it("composes when there is nothing to send yet", async () => {
         const d = device();
         expect((await d.ask("email Sam about the report")).text).toBe("Here's a new email to Sam Delgado.");
-        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "com.palm.app.email", params: {
+        expect(launched(d)).toEqual({ id: "com.palm.app.email", params: {
             recipients: [{ type: "email", role: 1, value: "sam@example.com", contactDisplay: "Sam Delgado" }], summary: "The report" } });
         expect((await d.ask("email Priya about lunch")).text).toBe("Priya Nair has no email address in your contacts.");
     });
@@ -349,7 +358,7 @@ describe("email and messages", () => {
         const p = await d.ask("what did Priya say");
         expect(p.text).toBe("Priya Nair said, today at 9:00 AM: “Lunch at noon?”");
         await d.choose(p, "open");
-        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.messaging", params: { threadId: "t-priya" } });
+        expect(launched(d)).toEqual({ id: "org.webosphoenix.messaging", params: { threadId: "t-priya" } });
     });
 });
 
@@ -379,31 +388,33 @@ describe("the device", () => {
         expect(d.called("display/control/setState")[0].params).toEqual({ state: "off" });
         expect((await d.ask("what's my battery")).text).toBe("Your battery is at 76% and charging.");
         expect((await d.ask("open Wi-Fi settings")).text).toBe("Opening Wi-Fi settings.");
-        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.settings", params: { page: "wifi" } });
+        expect(launched(d)).toEqual({ id: "org.webosphoenix.settings", params: { page: "wifi" } });
         // webOS 2.x has a launch point per pane and none called Settings: the list of them.
         expect((await d.ask("open settings")).text).toBe("Opening Settings.");
-        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.settings", params: {} });
+        expect(launched(d)).toEqual({ id: "org.webosphoenix.settings", params: {} });
         // A pane's launch point opens with its own params.
         expect((await d.ask("open sounds & ringtones")).text).toBe("Opening Sounds & Ringtones.");
-        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.settings", params: { page: "sounds" } });
+        expect(launched(d)).toEqual({ id: "org.webosphoenix.settings", params: { page: "sounds" } });
     });
     it("photos from a day: shown in the conversation, and in Photos (just those) behind it", async () => {
         const d = device();
         const m = await d.ask("show my photos from yesterday");
         expect(m.text).toBe("Here are 2 photos from yesterday. I've opened them in Photos too.");
         const list = { results: [{ file_path: "/media/internal/DCIM/b.jpg" }, { file_path: "/media/internal/DCIM/a.jpg" }], title: "Photos from Yesterday" };
-        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.photos", params: { imageList: list } });
+        expect(launched(d)).toEqual({ id: "org.webosphoenix.photos", params: { imageList: list } });
         // The pictures in the reply, and Open Photos to bring it forward.
         expect(m.data.attachments).toEqual([{ type: "images", total: 2, items: [
             { path: "/media/internal/DCIM/b.jpg", open: { appId: "org.webosphoenix.photos", title: "Photos", params: { imageList: { results: [{ file_path: "/media/internal/DCIM/b.jpg" }] } } } },
             { path: "/media/internal/DCIM/a.jpg", open: { appId: "org.webosphoenix.photos", title: "Photos", params: { imageList: { results: [{ file_path: "/media/internal/DCIM/a.jpg" }] } } } }] }]);
         expect(m.choices).toEqual([{ id: "open", label: "Open Photos" }]);
+        // Opened behind the conversation, and Back there comes back to it.
+        expect(d.called("applicationManager/launch").at(-1)!.params).toMatchObject({ behind: true, returnToCaller: true });
         // A picture tapped: Photos on it; the buttons stay.
         await d.choose(m, "show:1");
-        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.photos", params: { imageList: { results: [{ file_path: "/media/internal/DCIM/a.jpg" }] } } });
+        expect(launched(d)).toEqual({ id: "org.webosphoenix.photos", params: { imageList: { results: [{ file_path: "/media/internal/DCIM/a.jpg" }] } } });
         expect((await d.svc.thread({ id: m.threadId })).messages.find((x: Msg) => x.id === m.id).chosen).toBeUndefined();
         await d.choose(m, "open");
-        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.photos", params: { imageList: list } });
+        expect(launched(d)).toEqual({ id: "org.webosphoenix.photos", params: { imageList: list } });
         expect((await d.ask("show my photos from last week")).text).toBe("Here is 1 photo from last week. I've opened it in Photos too.");
     });
     it("no photos: says so and offers Photos; how many: only said", async () => {
@@ -429,7 +440,7 @@ describe("more for each app (docs/AI-AND-MCP.md, what it can do for each app)", 
         const back = await d.ask("call back");
         expect(back).toMatchObject({ status: "pending", text: "Call Sam Delgado (3035550135)?" });
         await d.confirm(back);
-        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.phone", params: { number: "3035550135", dial: true } });
+        expect(launched(d)).toEqual({ id: "org.webosphoenix.phone", params: { number: "3035550135", dial: true } });
         expect((await d.ask("redial")).text).toBe("Call Priya Nair (4155550123)?");
         const vm = await d.ask("check my voicemail");
         expect(vm.text).toBe("You have 2 new voicemails.");
@@ -503,7 +514,7 @@ describe("more for each app (docs/AI-AND-MCP.md, what it can do for each app)", 
     it("maps, the web, storage, the Marketplace, what's playing", async () => {
         const d = device();
         expect((await d.ask("coffee near me")).text).toBe("Here's coffee near you, in Maps.");
-        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.maps", params: { query: "coffee" } });
+        expect(launched(d)).toEqual({ id: "org.webosphoenix.maps", params: { query: "coffee" } });
         expect((await d.ask("open example.com")).text).toBe("Opening example.com.");
         expect(d.called("applicationManager/open").pop()!.params).toEqual({ target: "https://example.com" });
         expect((await d.ask("how much storage do I have")).text).toBe("You have 5.8 GB free of 8 GB.");
@@ -511,7 +522,7 @@ describe("more for each app (docs/AI-AND-MCP.md, what it can do for each app)", 
         expect(doom.text).toBe("I found Doom in the Marketplace.");
         expect(doom.choices).toEqual([{ id: "open", label: "Open Marketplace" }]);
         expect((await d.ask("install doom")).text).toBe("Here's Doom in the Marketplace: tap Install to get it.");
-        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.marketplace", params: { sourceId: "museum", id: "com.example.doom" } });
+        expect(launched(d)).toEqual({ id: "org.webosphoenix.marketplace", params: { sourceId: "museum", id: "com.example.doom" } });
         expect((await d.ask("install frobnicator")).text).toBe("I couldn't find “frobnicator” in the Marketplace.");
         expect((await d.ask("what's playing")).text).toBe("Nothing is playing right now.");
         d.state.nowPlaying = { title: "So What", artist: "Miles Davis", album: "Kind of Blue", playing: true, appId: "org.webosphoenix.music" };
@@ -540,7 +551,7 @@ describe("more for each app (docs/AI-AND-MCP.md, what it can do for each app)", 
         expect(how.text).toBe("In card view, flick the app's card up and off the top of the screen. Swipe up in the gesture area first to see the cards.");
         expect(how.choices).toEqual([{ id: "open", label: "Open Help" }]);
         await d.choose(how, "open");
-        expect(d.called("applicationManager/launch").pop()!.params).toEqual({ id: "org.webosphoenix.help", params: { topic: "help-cards" } });
+        expect(launched(d)).toEqual({ id: "org.webosphoenix.help", params: { topic: "help-cards" } });
     });
 });
 
@@ -646,7 +657,7 @@ describe("conversions and the world", () => {
         expect(m.text).toMatch(/^I'm not allowed to use your location\. Allow it, here or in Settings > Location Services/);
         expect(m.choices!.map((c) => [c.id, c.label])).toEqual([["do:0", "Allow Location"], ["open:1", "Location Settings"]]);
         await d.choose(m, "open:1");
-        expect(d.called("applicationManager/launch").at(-1)!.params).toEqual({ id: "org.webosphoenix.settings", params: { page: "location" } });
+        expect(launched(d)).toEqual({ id: "org.webosphoenix.settings", params: { page: "location" } });
         const r = await d.choose(m, "do:0");
         expect(r.messages.at(-1).text).toBe("It's 64°F and partly cloudy. Today: 70° / 52°.");
     });

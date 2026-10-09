@@ -681,12 +681,16 @@ Item {
             // own, e.g. the Assistant opening a conversation in a new card
             // (apps/assistant: its "Open in New Card").
             var newCard = payload.newCard === true && !background;
+            // {behind: true} (Phoenix, the application manager's launch): the
+            // card opens, or hears its params, without coming to the front
+            // (the Assistant's "I've opened them in Photos too").
+            var behind = payload.behind === true;
             var how = newCard ? "new" : background || appId === target ? "front" : appRelaunch;
             if (running !== "" && !_opensNewCard(target, how)) {
                 var refresh = how === "refresh";
                 if ((refresh || (target === payload.id && Object.keys(params).length > 0)) && _windows[running] && _windows[running].relaunch)
                     _windows[running].relaunch(target === payload.id ? params : {}, refresh);
-                if (!background)
+                if (!background && !behind)
                     cardFocusRequested(running);
                 return;
             }
@@ -695,8 +699,11 @@ Item {
             // (CardWindowManager::prepareAddWindow, :561-567).
             var joins = uid !== "" && uid === focusedUid && !background && !newCard;
             var launched = launch(target, uid, target === payload.id ? params : null, joins, how);
-            if (launched !== "" && !background)
+            if (launched !== "" && !background && !behind)
                 cardFocusRequested(launched);
+            // Behind: the caller's card keeps the front.
+            else if (launched !== "" && behind && uid !== "" && uid === focusedUid)
+                cardFocusRequested(uid);
         } else if (type === "browserData") {
             // The browser's Clear Cookies and Clear Cache (com.palm.browserServer):
             // the page views' profile (phoenix-sim's simBrowser).

@@ -356,6 +356,12 @@ Item {
         if (g < 0)
             return;
         slideAnim.stop();
+        // A card added without rising (opened behind the card asking for
+        // it, {behind: true}) has taken its place in the stack: when it is
+        // brought forward later it maximizes from there, not rises again.
+        for (var k in _newCards)
+            if (k !== uid)
+                delete _newCards[k];
         if (_newCards[uid]) {
             delete _newCards[uid];
             _prepareRise(uid, g);
