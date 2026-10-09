@@ -16,11 +16,13 @@
 //     within RULES.windowMs: the question is queued (the service's store,
 //     so it survives a restart).
 //   - Later: a queued question comes back as a notification with the same
-//     answers as buttons, RULES.firstMs after it was queued (sooner when
-//     the thing is soon), never in the quiet hours (Settings > Assistant,
-//     22:00-08:00 by default), with Do Not Disturb on or in a call (it waits),
-//     never once the thing's time has passed; at most RULES.attempts
-//     times, RULES.againMs apart, then it is dropped. The activity manager
+//     answers as buttons, RULES.firstMs after it was queued (Settings >
+//     Assistant > First follow-up: 15 minutes, 1 hour or 3 hours; sooner
+//     when the thing is soon), never in the quiet hours (Settings >
+//     Assistant, 22:00-08:00 by default), with Do Not Disturb on or in a
+//     call (it waits), never once the thing's time has passed; once more
+//     RULES.againMs later (Second follow-up: off, 1 hour, 4 hours or the
+//     next day), then it is dropped. The activity manager
 //     wakes the service for it (one activity, ACTIVITY, at the next time
 //     anything is due), as webOS services were woken.
 //   - Restraint: a question whose detail the user filled in themselves
@@ -43,7 +45,8 @@
 //
 // create(deps) -> {afterCreate, answer, answerable, leave, leaveOne, reopen, attach, wake, list, reset}
 //   deps: {storage, now() -> ms, env() -> the commands' env (luna, lang, now),
-//          settings() -> {followUps, quietStart, quietEnd, followUpTopicsOff},
+//          settings() -> {followUps, quietStart, quietEnd, followUpFirst,
+//          followUpAgain (minutes; 0: no second), followUpTopicsOff},
 //          stopTopic(kind) (turns a topic off in the settings),
 //          delivered(question, text, choices) -> messageId (a question sent
 //          later, said in its conversation), notify(n) (a
@@ -73,9 +76,9 @@ var MIN = 60000, HOUR = 60 * MIN;
 // Decided for the owner (8 October 2026); docs/AI-AND-MCP.md says why.
 var RULES = {
     windowMs: 2 * MIN,        // unanswered this long in the conversation: queued
-    firstMs: HOUR,            // queued -> its notification
-    againMs: 4 * HOUR,        // a notification unanswered -> once more; after the last, dropped
-    attempts: 2,              // notifications per question
+    firstMs: HOUR,            // queued -> its notification (the default of settings followUpFirst)
+    againMs: 4 * HOUR,        // a notification unanswered -> once more (followUpAgain); after the last, dropped
+    attempts: 2,              // notifications per question (1 with followUpAgain off)
     perItem: 2,               // questions about one thing, in the conversation
     itemSkips: 2,             // Skips that end the questions about a thing
     kindSkips: 3,             // Skips in a row of one kind, across things, before asking whether it helps
@@ -571,7 +574,7 @@ function create(deps) {
     function queue(r, at) {
         r.state = "queued";
         r.queuedAt = at;
-        var t = at + RULES.firstMs, when = r.item.at;
+        var t = at + timing().firstMs, when = r.item.at;
         // Something soon: before it, if there is still time.
         if (when && t > when - RULES.beforeMs) t = Math.max(at + RULES.soonestMs, when - RULES.beforeMs);
         r.nextAt = t;
@@ -615,6 +618,16 @@ function create(deps) {
     }
 
     // ---- Waking (the activity manager) -------------------------------------------------------------
+    // The reminder brackets the user chose (Settings > Assistant > First /
+    // Second follow-up, in minutes; the service's settings() keeps them to
+    // FIRST_CHOICES / AGAIN_CHOICES): {firstMs, againMs, attempts}. With no
+    // second, an unanswered notification still goes after RULES.againMs.
+    function timing() {
+        var s = settings();
+        var first = typeof s.followUpFirst === "number" && s.followUpFirst > 0 ? s.followUpFirst * MIN : RULES.firstMs;
+        var again = typeof s.followUpAgain === "number" ? s.followUpAgain * MIN : RULES.againMs;
+        return { firstMs: first, againMs: again > 0 ? again : RULES.againMs, attempts: again > 0 ? RULES.attempts : 1 };
+    }
     function minutesOf(hhmm) {
         var m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || ""));
         return m ? Number(m[1]) * 60 + Number(m[2]) : null;
@@ -646,7 +659,9 @@ function create(deps) {
             r.attempts++;
             r.state = "delivered";
             r.deliveredAt = at;
-            r.nextAt = at + RULES.againMs;
+            // The next try, or with none (the second follow-up off) when the
+            // unanswered notification goes.
+            r.nextAt = at + timing().againMs;
             if (r.item.at && r.nextAt > r.item.at) r.nextAt = r.item.at;
             delete r.rec;
             r.item = describe(r.item, rec0, at);
@@ -683,7 +698,7 @@ function create(deps) {
         return due.reduce(function (p, r) {
             return p.then(function () {
                 if (!settings().followUps) { finish(r, "dropped", "off"); out.dropped++; return null; }
-                if (r.state === "delivered" && r.attempts >= RULES.attempts) { finish(r, "dropped", "unanswered"); out.dropped++; return null; }
+                if (r.state === "delivered" && r.attempts >= timing().attempts) { finish(r, "dropped", "unanswered"); out.dropped++; return null; }
                 return check(r, t).then(function (c) {
                     if (c.why) { finish(r, "dropped", c.why); out.dropped++; return null; }
                     var quiet = quietUntil(t);

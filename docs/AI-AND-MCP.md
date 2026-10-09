@@ -189,11 +189,20 @@ an hour before it, but not within ten minutes of queueing), as a
 notification with the same answers as buttons (two and Skip) and as a
 message in the conversation the thing was made in, counted unread there
 until it is opened; unanswered, once more four hours later, then dropped.
+The user chooses these brackets in Settings > Assistant (the owner's
+decision, 9 October 2026; settings `followUpFirst` / `followUpAgain`, in
+minutes): First follow-up 15 minutes, 1 hour (default) or 3 hours; Second
+follow-up off, 1 hour, 4 hours (default) or the next day (24 hours); with
+no second, an unanswered notification goes after four hours. A change
+applies to questions queued after it.
 Never in the quiet hours (22:00 to 08:00, Settings), never with Do Not
 Disturb on (tried again in 30 minutes) or in a call (in 10), and dropped
 once the thing's time has passed, it is gone, or the user filled the
 detail in themselves (the field changed since). With the screen off it is
-posted silently and waits there for the unlock. A button applies the answer
+posted silently and waits there for the unlock; on the lock screen it
+shows the question without the answer buttons (the owner's choice: the
+answers change your things, so they wait for the unlock; `DashboardItem`
+gets no `actions` there, `tst_notifyoptions.qml`). A button applies the answer
 without opening anything and says so in a banner; tapping the notification
 opens the Assistant app on its conversation, where the question waits.
 Where they live: the conversation the thing was made in (it reads best
@@ -204,7 +213,7 @@ Skips in a row of one kind (across things) it asks whether that kind helps
 ("I've been asking about where your meetings are. Is that helpful, or
 should I stop asking?" Keep asking / Stop asking) and stops only on Stop
 asking. Settings > Assistant has Follow-up questions (on by default), the
-quiet hours, the questions waiting and Follow-up topics, a switch per kind
+first and second follow-up's delay, the quiet hours, the questions waiting and Follow-up topics, a switch per kind
 (one stopped shows off there). The app reads like a text chat: the bird is
 the assistant's avatar beside its words and in the header, asking while a
 question waits; the answers are quick replies. phoenix-sim: Simulate >

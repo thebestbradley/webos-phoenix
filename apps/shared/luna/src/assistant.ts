@@ -114,6 +114,10 @@ export interface AssistantSettings {
     /** No follow-up notifications between these ("22:00" to "08:00" by default). */
     quietStart: string;
     quietEnd: string;
+    /** Minutes until a question left unanswered comes back as a notification: 15, 60 (default) or 180. */
+    followUpFirst: number;
+    /** Minutes until it comes once more: 0 (not again), 60, 240 (default) or 1440 (the next day). */
+    followUpAgain: number;
     /** Follow-up topics turned off (Settings, or "Stop asking" when it asked whether they help). */
     followUpTopicsOff: FollowUpKind[];
 }

@@ -77,6 +77,40 @@ Item {
             compare(shell.notifications.model.get(0).body, "Dinner at 8?");
         }
 
+        // A follow-up question (the Assistant's notification with answers,
+        // apps/assistant/service/lib/followups.js) on the lock screen: the
+        // question, without the answer buttons (the owner's choice); a tap
+        // opens it in the Assistant once unlocked. Unlocked, the dashboard
+        // row has them.
+        function test_followUpOnTheLockScreenHasNoAnswers() {
+            shell.lock();
+            windows.notify("org.webosphoenix.assistant", "Hey, where's Friday's meeting happening?", "", { followUp: "q1" },
+                           { tag: "followup:q1",
+                             actions: { uri: "luna://org.webosphoenix.assistant/answerFollowUp", params: { id: "q1" },
+                                        items: [{ id: "fu:0", label: "Video call" }, { id: "fu:skip", label: "Skip" }] } });
+            tryVerify(function() { return lockItems().length === 1; }, 8000);
+            var item = lockItems()[0];
+            compare(item.title, "Hey, where's Friday's meeting happening?");
+            compare(item.actions, "");
+            verify(!findChild(item, "dashboardActions").visible, "no answers over the lock screen");
+            shell.unlock();
+            verify(JSON.parse(shell.notifications.model.get(0).actions).items.length === 2);
+            shell.notifications.dashboardOpen = true;
+            tryVerify(function() {
+                var rows = [];
+                (function walk(o) {
+                    if (o.objectName === "dashboardActions" && o.visible)
+                        rows.push(o);
+                    for (var i = 0; i < o.children.length; ++i)
+                        walk(o.children[i]);
+                })(shell.notifications);
+                return rows.length === 1;
+            }, 3000, "the answers in the dashboard once unlocked");
+            shell.notifications.dashboardOpen = false;
+            // Its banner gone before the next test's.
+            tryVerify(function() { return !shell.notifications.bannerActive; }, 8000);
+        }
+
         // Repeat alerts: the sound again every interval while the app has a
         // notification nobody has looked at; the dashboard opened stops it.
         function test_repeatUntilSeen() {

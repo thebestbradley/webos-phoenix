@@ -106,6 +106,8 @@ var DEFAULTS = {
     followUps: true,            // questions after something is made (lib/followups.js)
     quietStart: "22:00",        // ... never asked later, in a notification, between these
     quietEnd: "08:00",
+    followUpFirst: 60,          // ... a question left unanswered comes back this many minutes later
+    followUpAgain: 240,         // ... and once more this many after that (0: not again)
     followUpTopicsOff: []       // follow-up topics turned off (Settings, or "Stop asking"): lib/followups.js KINDS
 };
 var HISTORY = 20;               // turns a model sees
@@ -116,6 +118,10 @@ var LOCKED_COMMANDS = ["timer", "timerStatus", "timerCancel", "stopwatch", "alar
 
 var MESSAGE_FIELDS = ["id", "threadId", "role", "text", "time", "via", "source", "command", "status", "confirm", "choices", "chosen", "data", "followUp"];
 var HHMM = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+// Settings > Assistant > First and Second follow-up (minutes): the reminder
+// brackets offered (the owner's choice, 9 October 2026).
+var FIRST_CHOICES = [15, 60, 180];
+var AGAIN_CHOICES = [0, 60, 240, 1440];
 // Follow-up answers read even when the words could be a command too ("in
 // an hour", "every day"); the others (a place, a label, a list, names)
 // only when they are not one.
@@ -142,6 +148,8 @@ function createAssistantService(deps) {
         ["enabled", "speak", "allowCloudControl", "voiceReplies", "wakeWord", "wakeWhenLocked", "followUps"].forEach(function (b) { out[b] = !!out[b]; });
         if (!HHMM.test(out.quietStart)) out.quietStart = DEFAULTS.quietStart;
         if (!HHMM.test(out.quietEnd)) out.quietEnd = DEFAULTS.quietEnd;
+        if (FIRST_CHOICES.indexOf(out.followUpFirst) < 0) out.followUpFirst = DEFAULTS.followUpFirst;
+        if (AGAIN_CHOICES.indexOf(out.followUpAgain) < 0) out.followUpAgain = DEFAULTS.followUpAgain;
         out.followUpTopicsOff = Array.isArray(out.followUpTopicsOff) ? out.followUpTopicsOff.filter(function (k) { return TOPICS.indexOf(k) >= 0; }) : [];
         out.disabledCommands = Array.isArray(out.disabledCommands) ? out.disabledCommands.filter(function (x) { return typeof x === "string"; }) : [];
         if (["metric", "imperial", "auto"].indexOf(out.units) < 0) out.units = "auto";
@@ -757,6 +765,8 @@ function createAssistantService(deps) {
                 var v = p[k];
                 if (/^(enabled|speak|allowCloudControl|voiceReplies|wakeWord|wakeWhenLocked|followUps)$/.test(k) && typeof v !== "boolean") bad = k + ": true or false";
                 else if ((k === "quietStart" || k === "quietEnd") && !HHMM.test(String(v))) bad = k + ": a time, \"22:00\"";
+                else if (k === "followUpFirst" && FIRST_CHOICES.indexOf(v) < 0) bad = "followUpFirst: minutes, one of " + FIRST_CHOICES.join(", ");
+                else if (k === "followUpAgain" && AGAIN_CHOICES.indexOf(v) < 0) bad = "followUpAgain: minutes, one of " + AGAIN_CHOICES.join(", ");
                 else if (k === "followUpTopicsOff" && !(Array.isArray(v) && v.every(function (x) { return TOPICS.indexOf(x) >= 0; }))) bad = "followUpTopicsOff: a list of " + TOPICS.join(", ");
                 else if (k === "disabledCommands" && !Array.isArray(v)) bad = "disabledCommands: a list of command ids";
                 else if (k === "localModel" && v !== "" && !models.find(v)) bad = "localModel: unknown model";

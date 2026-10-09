@@ -1924,7 +1924,9 @@ follow-up question is a message with `followUp {id, kind}` (`kind`
 `"doubt"`: whether that kind of question helps) and its answers as
 `choices` (`fu:<n>`, `fu:skip`), answered by `choose` or by the next words;
 a thread counts the ones sent to it later in `unread`. Settings add
-`followUps` (on), `quietStart` / `quietEnd` ("22:00" / "08:00") and
+`followUps` (on), `quietStart` / `quietEnd` ("22:00" / "08:00"),
+`followUpFirst` (minutes: 15, 60 or 180; 60), `followUpAgain` (0, 60, 240
+or 1440; 240) and
 `followUpTopicsOff` (kinds). The runtime gives the service `notify`: the
 "notification" host message, with `tag` (replaces the app's notification
 of that tag; `remove: true` takes it back) and `actions {uri, params,

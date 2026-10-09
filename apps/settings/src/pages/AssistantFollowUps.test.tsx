@@ -71,6 +71,21 @@ describe("Settings > Assistant: Follow-up questions", () => {
         await assistant.setSettings({ followUps: true });
     });
 
+    it("chooses when a question comes back: first after 1 hour, again 4 hours later, by default", async () => {
+        render(<Page />);
+        await waitFor(() => expect(screen.getByTestId("as-followup-first")).toBeTruthy());
+        expect(screen.getByTestId("as-followup-first").textContent).toContain("1 hour");
+        expect(screen.getByTestId("as-followup-again").textContent).toContain("4 hours later");
+        fireEvent.click(screen.getByTestId("as-followup-first"));
+        fireEvent.click(screen.getByRole("option", { name: "After 15 minutes" }));
+        await waitFor(async () => expect((await assistant.settings()).followUpFirst).toBe(15));
+        fireEvent.click(screen.getByTestId("as-followup-again"));
+        fireEvent.click(screen.getByRole("option", { name: "Off" }));
+        await waitFor(async () => expect((await assistant.settings()).followUpAgain).toBe(0));
+        await waitFor(() => expect(screen.getByTestId("as-followup-again").textContent).toContain("Off"));
+        await assistant.setSettings({ followUpFirst: 60, followUpAgain: 240 });
+    });
+
     it("has a switch for every topic, off for one the assistant was told to stop asking", async () => {
         render(<Page />);
         await waitFor(() => expect(screen.getByTestId("as-topic-location")).toBeTruthy());

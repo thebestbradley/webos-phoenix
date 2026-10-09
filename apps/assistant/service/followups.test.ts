@@ -275,6 +275,36 @@ describe("later, as a notification", () => {
         expect((await t.queue())[0].nextAt).toBe(new Date(2026, 9, 7, 12, 0).getTime());
     });
 
+    it("comes back after the delays chosen in Settings: first, second, or no second", async () => {
+        const t = setup();
+        t.as("org.webosphoenix.settings");
+        const s = (await t.svc.getSettings()).settings;
+        expect(s).toMatchObject({ followUpFirst: 60, followUpAgain: 240, quietStart: "22:00", quietEnd: "08:00" });
+        expect((await t.svc.setSettings({ followUpFirst: 45 })).returnValue).toBe(false);
+        expect((await t.svc.setSettings({ followUpAgain: "4h" })).returnValue).toBe(false);
+        await t.svc.setSettings({ followUpFirst: 15, followUpAgain: 1440 });
+        t.as("com.palm.systemui");
+        let q = await queued(t);
+        expect(q.nextAt).toBe(START + 15 * MIN);
+        expect((await t.wake(START + 15 * MIN)).delivered).toBe(1);
+        // The next day, same time (out of the quiet hours).
+        expect((await t.queue())[0].nextAt).toBe(START + 15 * MIN + 24 * HOUR);
+
+        // Three hours, then none: one notification, gone after the default
+        // spacing when it is not answered.
+        const u = setup();
+        u.as("org.webosphoenix.settings");
+        await u.svc.setSettings({ followUpFirst: 180, followUpAgain: 0 });
+        u.as("com.palm.systemui");
+        q = await queued(u, "add a meeting next week on friday at 3");
+        expect(q.nextAt).toBe(START + 3 * HOUR);
+        expect((await u.wake(START + 3 * HOUR)).delivered).toBe(1);
+        const end = await u.wake(START + 3 * HOUR + RULES.againMs);
+        expect(end).toMatchObject({ delivered: 0, dropped: 1 });
+        expect(u.notes.filter((n) => !n.remove)).toHaveLength(1);
+        expect(u.notes[u.notes.length - 1]).toMatchObject({ tag: "followup:" + q.id, remove: true });
+    });
+
     it("drops the question when the user filled it in, the thing went, or its time passed", async () => {
         let t = setup();
         const q = await queued(t);

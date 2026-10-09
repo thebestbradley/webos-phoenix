@@ -2,9 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // Settings > Assistant > Follow-up questions (docs/AI-AND-MCP.md): whether
-// the assistant asks about what it just made (on by default), the quiet
-// hours its questions never come in later (22:00 to 08:00 by default), the
-// questions waiting, and Follow-up topics: a switch per kind of question,
+// the assistant asks about what it just made (on by default), when a
+// question left unanswered comes back as a notification (First follow-up:
+// 15 minutes, 1 hour by default, or 3 hours; Second: off, 1 hour, 4 hours
+// by default, or the next day), the quiet hours its questions never come
+// in later (22:00 to 08:00 by default), the questions waiting, and Follow-up topics: a switch per kind of question,
 // off for one the user told it to stop asking. All through
 // org.webosphoenix.assistant (getSettings / setSettings, followUps).
 
@@ -33,6 +35,10 @@ function hours(current: string) {
     if (!list.includes(current)) list.push(current);
     return list.sort().map((v) => ({ label: hourLabel(v), value: v }));
 }
+const FIRST = [{ label: "After 15 minutes", value: 15 }, { label: "After 1 hour", value: 60 }, { label: "After 3 hours", value: 180 }];
+const AGAIN = [{ label: "Off", value: 0 }, { label: "1 hour later", value: 60 }, { label: "4 hours later", value: 240 },
+               { label: "The next day", value: 1440 }];
+
 function nextText(f: FollowUp, now = Date.now()): string {
     if (f.state === "open") return "Waiting for your answer in the Assistant";
     const t = new Date(f.nextAt), n = new Date(now);
@@ -53,6 +59,10 @@ export function FollowUpQuestions({ settings: s, set, off }: { settings: Assista
                 <Row title="Follow-up questions" subtitle="After making something, ask about what it lacks, like where an event is" disabled={off}>
                     <ToggleButton value={s.followUps} label="Follow-up questions" testId="as-followups" disabled={off} onChange={(v) => set({ followUps: v })} />
                 </Row>
+                <ListSelector title="First follow-up" value={s.followUpFirst ?? 60} disabled={!on} testId="as-followup-first"
+                              options={FIRST} onChange={(v) => set({ followUpFirst: v })} />
+                <ListSelector title="Second follow-up" value={s.followUpAgain ?? 240} disabled={!on} testId="as-followup-again"
+                              options={AGAIN} onChange={(v) => set({ followUpAgain: v })} />
                 <ListSelector title="Quiet from" value={s.quietStart} disabled={!on} testId="as-quiet-start"
                               options={hours(s.quietStart)} onChange={(v) => set({ quietStart: v })} />
                 <ListSelector title="Quiet until" value={s.quietEnd} disabled={!on} testId="as-quiet-end"
