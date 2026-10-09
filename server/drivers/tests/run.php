@@ -81,6 +81,9 @@ $iwl = ['id' => 'firmware-iwlwifi', 'firmware' => ['iwlwifi-*.ucode'], 'match' =
 check(Catalog::check($iwl, [PackageWriter::ipk('linux-firmware-iwlwifi-misc', '1', 'all', ['lib/firmware/iwlwifi-cc-a0-77.ucode.xz' => 'x'])])['firmware'] === ['iwlwifi-*.ucode'],
       'firmware named by a glob, found compressed');
 refused(fn () => Catalog::check($iwl, [PackageWriter::ipk('linux-firmware-iwlwifi-misc', '1', 'all', ['lib/firmware/iwlwifi-cc-a0.pnvm' => 'x'])]), '/no package has/', '... and not found');
+$upd = Catalog::check(['id' => 'firmware-rtw88-update', 'optional' => true, 'supersedes' => ['linux-firmware-rtl8821', 'Bad Name']] + $manifest,
+                      [PackageWriter::ipk('linux-firmware-rtw88-update', '20250311-r0', 'all', ['lib/firmware/updates/rtw88/rtw8821c_fw.bin' => 'new'])]);
+check($upd['supersedes'] === ['linux-firmware-rtl8821'] && $upd['optional'], 'a newer firmware: in /lib/firmware/updates, naming the image package it replaces');
 refused(fn () => Catalog::check(['kind' => 'service'] + $mod, [PackageWriter::ipk('fprintd-goodix', '1', 'x86_64', ['usr/libexec/x' => 'x'])]), '/review/', 'a service package needs a review');
 refused(fn () => Catalog::check(['kind' => 'service'] + $mod, [PackageWriter::ipk('evil', '1', 'all', ['etc/shadow' => 'x'])], true), '/cannot put a file/', 'a service package cannot replace system accounts');
 
@@ -139,6 +142,29 @@ check($cat->publish($signer, 30, $now)['build'] === 2 && count($cat->entries()) 
 file_put_contents("$tmp/data/public/v1/drivers.json", str_replace('Realtek', 'Evil', file_get_contents("$tmp/data/public/v1/drivers.json")));
 refused(fn () => Catalog::verify("$tmp/data/public/v1", $key), '/not signed/', 'verify: a changed index');
 refused(fn () => Catalog::verify("$tmp/data/public/v1", base64_encode(random_bytes(32))), '/not signed/', 'verify: another key');
+
+// ---- Releases: built here, signed elsewhere, checked against the pinned key ------------------
+$owner = "$tmp/usbkey";
+$out = shell_exec('php ' . escapeshellarg(dirname(__DIR__) . '/bin/drivers.php') . ' keygen ' . escapeshellarg($owner) . ' 2>&1');
+check(is_file("$owner/signing.key") && (fileperms("$owner/signing.key") & 0077) === 0 && str_contains((string) $out, 'Public key:'), 'keygen: a key only its owner can read');
+$ownerKey = new Signer($owner);
+$pub = base64_encode($ownerKey->public);
+$cli = fn (string $args) => shell_exec('DRIVERS_DATA=' . escapeshellarg("$tmp/data") . ' php ' . escapeshellarg(dirname(__DIR__) . '/bin/drivers.php') . " $args 2>&1");
+$out = $cli('build --out ' . escapeshellarg("$tmp/rel") . ' --build 202610091200 --public ' . escapeshellarg($pub));
+check(str_contains((string) $out, 'Build 202610091200') && !is_file("$tmp/rel/drivers.json.sig"), 'build: the index, not signed');
+$sig = trim((string) shell_exec('php ' . escapeshellarg(dirname(__DIR__) . '/bin/drivers.php') . ' sign ' . escapeshellarg("$tmp/rel/drivers.json") . ' --key ' . escapeshellarg($owner) . ' 2>/dev/null'));
+check(strlen(base64_decode($sig)) === 64, 'sign: the signature, from the key on the owner\'s drive');
+$bad = $cli('attach ' . escapeshellarg("$tmp/rel") . ' ' . escapeshellarg($sig) . ' --public ' . escapeshellarg(base64_encode($signer->public)));
+check(str_contains((string) $bad, 'not signed') && !is_file("$tmp/rel/drivers.json.sig"), 'attach: refused with another key than the pinned one');
+$good = $cli('attach ' . escapeshellarg("$tmp/rel") . ' ' . escapeshellarg($sig) . ' --public ' . escapeshellarg($pub));
+check(str_contains((string) $good, 'Good signature') && Catalog::verify("$tmp/rel", $pub)['build'] === 202610091200, 'attach: the signature checks out and is published with it');
+$next = new Signer("$tmp/nextkey");
+$h = Catalog::handover($ownerKey, base64_encode($next->public), "$tmp/rel", $now);
+$hj = (string) file_get_contents("$tmp/rel/key-handover.json");
+check($h['from'] === $pub && sodium_crypto_sign_verify_detached(base64_decode(trim((string) file_get_contents("$tmp/rel/key-handover.json.sig"))), $hj, $ownerKey->public),
+      'handover: the old key signs the new one in');
+refused(fn () => Catalog::handover($ownerKey, $pub, "$tmp/rel"), '/another/', 'handover: not to the same key');
+check(str_contains((string) shell_exec('php ' . escapeshellarg(dirname(__DIR__) . '/bin/drivers.php') . ' keygen ' . escapeshellarg($owner) . ' 2>&1'), 'exists already'), 'keygen: never over an existing key');
 
 // ---- Hardware reports ---------------------------------------------------------------------
 $rep = fn ($devices, $extra = []) => json_encode(['format' => 1, 'arch' => 'x86_64', 'kernel' => '6.6.23', 'devices' => $devices] + $extra);

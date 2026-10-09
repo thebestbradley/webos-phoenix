@@ -1,0 +1,7 @@
+Sample: this stands for linux-firmware's LICENCE.nvidia, which a Phoenix
+image installs in full in /lib/firmware with the NVIDIA firmware. In short,
+it allows passing the firmware on, unmodified, with NVIDIA's notice, for use
+with NVIDIA's graphics; it does not allow reverse engineering it; it gives
+no warranty.
+
+Full text: https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/LICENCE.nvidia

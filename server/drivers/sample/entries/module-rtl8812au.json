@@ -2,8 +2,8 @@
     "id": "module-rtl8812au",
     "kind": "module",
     "title": "Realtek RTL8812AU Wi-Fi driver",
-    "summary": "A driver for USB Wi-Fi adapters with the RTL8812AU chip, which the Linux kernel does not include.",
-    "description": "Open source (GPL-2.0), maintained outside the Linux kernel by the aircrack-ng project, and built for each Phoenix kernel.",
+    "summary": "A driver for USB Wi-Fi adapters with the RTL8812AU or RTL8821AU chip, which the system's Linux 6.6 kernel does not include.",
+    "description": "Open source (GPL-2.0), maintained outside the Linux kernel by the aircrack-ng project, built for each Phoenix kernel (meta-phoenix, rtl8812au). Linux 6.14 and later drive these adapters themselves (rtw88); Phoenix never installs this over a driver the kernel has.",
     "category": "wifi",
     "match": [
         "usb:v0BDAp8812d*",
@@ -19,6 +19,7 @@
     ],
     "optional": false,
     "after": "reload",
+    "supersedes": [],
     "license": {
         "id": "GPL-2.0-only",
         "name": "GNU General Public License 2.0",

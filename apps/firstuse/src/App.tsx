@@ -201,6 +201,9 @@ function HardwareStep(nav: NavProps & { list: HardwareList | null }) {
     const [busy, setBusy] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [asking, setAsking] = useState<{ device: HardwareDevice; offer: DriverOffer } | null>(null);
+    // Looked, and nothing is missing: on to the next step.
+    const nothing = !!nav.list && devices.length === 0 && Object.keys(done).length === 0;
+    useEffect(() => { if (nothing) nav.onNext(); }, [nothing]);   // eslint-disable-line react-hooks/exhaustive-deps
 
     const install = async (device: HardwareDevice, offer: DriverOffer) => {
         setAsking(null);
@@ -218,6 +221,7 @@ function HardwareStep(nav: NavProps & { list: HardwareList | null }) {
     return (
         <StepPage testId="hardware" title="Hardware" {...nav}
                   intro="Some of your hardware needs firmware or a driver that does not come with Phoenix. Install it now, or later.">
+            {!nav.list && <Row title="Looking at your hardware…"><Spinner /></Row>}
             <Group>
                 {devices.map((d) => {
                     const o = neededOffer(d)!;
@@ -549,10 +553,12 @@ function FirstUse() {
     const [hw, setHw] = useState<HardwareList | null>(null);
     useEffect(() => {
         let live = true;
-        hardware.list().then((l) => { if (live) setHw(l); }, () => {});
+        // No hardware service (or it failed): nothing to offer.
+        hardware.list().then((l) => { if (live) setHw(l); }, () => { if (live) setHw({ devices: [] } as unknown as HardwareList); });
         return () => { live = false; };
     }, []);
-    const hidden: StepId[] = hw?.devices.some((d) => neededOffer(d)) ? [] : ["hardware"];
+    // Until the hardware has been looked at, the step stays in (it waits for it).
+    const hidden: StepId[] = !hw || hw.devices.some((d) => neededOffer(d)) ? [] : ["hardware"];
 
     const finish = async () => {
         try { await firstUse.complete(); } catch { /* the shell hears the window close anyway */ }

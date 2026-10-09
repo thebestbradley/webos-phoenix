@@ -244,7 +244,7 @@ final class Catalog
         if ($kind === 'firmware') {
             // Each name (or glob, "iwlwifi-*.ucode") is in a package, compressed or not.
             foreach ($firmware as $fw) {
-                if (!array_filter($files, fn ($f) => (bool) preg_match('#^lib/firmware/(.+?)(\.xz|\.zst)?$#', $f, $mm) && fnmatch($fw, $mm[1], FNM_NOESCAPE))) {
+                if (!array_filter($files, fn ($f) => (bool) preg_match('#^lib/firmware/(?:updates/)?(.+?)(\.xz|\.zst)?$#', $f, $mm) && fnmatch($fw, $mm[1], FNM_NOESCAPE))) {
                     throw new CheckFailed("firmware: no package has lib/firmware/$fw");
                 }
             }
@@ -254,6 +254,7 @@ final class Catalog
             'description' => (string) ($m['description'] ?? ''), 'category' => $category,
             'match' => array_values($match), 'firmware' => array_values($firmware), 'modules' => array_values($modules),
             'optional' => (bool) ($m['optional'] ?? false), 'after' => $after,
+            'supersedes' => array_values(array_filter((array) ($m['supersedes'] ?? []), fn ($n) => is_string($n) && preg_match('/^[a-z0-9][a-z0-9.+-]*$/', $n))),
             'license' => ['id' => (string) $lic['id'], 'name' => (string) $lic['name'], 'text' => (string) ($lic['text'] ?? ''),
                           'url' => (string) ($lic['url'] ?? ''), 'free' => ($lic['free'] ?? false) === true, 'redistributable' => true],
             'source' => (string) ($m['source'] ?? ''), 'homepage' => (string) ($m['homepage'] ?? ''),
@@ -329,14 +330,16 @@ final class Catalog
 
     // ---- The index ----------------------------------------------------------------------
 
-    /** Writes and signs drivers.json, a build newer than the last. */
-    public function publish(Signer $signer, int $days = 30, ?\DateTimeImmutable $now = null): array
+    /**
+     * The index as JSON text, not signed: build (default: one more than the
+     * last published), expiring in $days days.
+     */
+    public function buildIndex(?int $build = null, int $days = 30, ?\DateTimeImmutable $now = null): string
     {
         $now ??= new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
-        $dir = $this->dir('public/v1');
-        $last = json_decode((string) @file_get_contents("$dir/drivers.json"), true);
+        $last = json_decode((string) @file_get_contents("$this->data/public/v1/drivers.json"), true);
         $index = [
-            'format' => 1, 'build' => (int) ($last['build'] ?? 0) + 1,
+            'format' => 1, 'build' => $build ?? (int) ($last['build'] ?? 0) + 1,
             'generated' => $now->format('Y-m-d\TH:i:s\Z'), 'expires' => $now->modify("+$days days")->format('Y-m-d\TH:i:s\Z'),
             'source' => ['id' => 'phoenix-drivers', 'name' => $this->name],
             'drivers' => array_map(function ($e) {
@@ -344,7 +347,15 @@ final class Catalog
                 return $e;
             }, $this->entries()),
         ];
-        $json = json_encode($index, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        return json_encode($index, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    }
+
+    /** Writes and signs drivers.json, a build newer than the last (a key on this computer: the sample, tests). */
+    public function publish(Signer $signer, int $days = 30, ?\DateTimeImmutable $now = null): array
+    {
+        $dir = $this->dir('public/v1');
+        $json = $this->buildIndex(null, $days, $now);
+        $index = json_decode($json, true);
         file_put_contents("$dir/drivers.json.new", $json);
         file_put_contents("$dir/drivers.json.sig.new", base64_encode($signer->sign($json)) . "\n");
         file_put_contents("$dir/key.json", json_encode(['key' => base64_encode($signer->public), 'name' => $this->name]) . "\n");
@@ -352,6 +363,29 @@ final class Catalog
         rename("$dir/drivers.json.sig.new", "$dir/drivers.json.sig");
         rename("$dir/drivers.json.new", "$dir/drivers.json");
         return $index;
+    }
+
+    /**
+     * A key hand-over (docs/DRIVERS.md, "If the key is lost or leaked"): the
+     * current key signs that $newKey (base64) signs from now on. Devices that
+     * trust the current key move to the new one when a catalog no longer
+     * verifies with the old.
+     */
+    public static function handover(Signer $current, string $newKey, string $dir, ?\DateTimeImmutable $now = null): array
+    {
+        $raw = base64_decode($newKey, true);
+        if ($raw === false || strlen($raw) !== SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES || $raw === $current->public) {
+            throw new CheckFailed('The new key must be another base64 Ed25519 public key');
+        }
+        $now ??= new \DateTimeImmutable('now', new \DateTimeZone('UTC'));
+        $h = ['format' => 1, 'from' => base64_encode($current->public), 'to' => base64_encode($raw), 'issued' => $now->format('Y-m-d\TH:i:s\Z')];
+        $json = json_encode($h, JSON_UNESCAPED_SLASHES);
+        if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+            throw new \RuntimeException("Cannot make $dir");
+        }
+        file_put_contents("$dir/key-handover.json", $json);
+        file_put_contents("$dir/key-handover.json.sig", base64_encode($current->sign($json)) . "\n");
+        return $h;
     }
 
     /** Checks a published catalog's signature against a key (base64). */

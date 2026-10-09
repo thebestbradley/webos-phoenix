@@ -10909,11 +10909,13 @@
             return out;
         }
 
-        // The simulated device: a PC-like tablet with a Wi-Fi card that works,
-        // a USB Wi-Fi dongle whose firmware is not in the image, another whose
-        // driver is not in the kernel, an NVIDIA card nouveau drives (an
-        // optional firmware makes it faster), and a USB gadget nothing knows.
-        // firmware / module: what the driver needs before it binds.
+        // The simulated device: a PC-like tablet whose image has its drivers
+        // and redistributable firmware, as Phoenix's images do: a Wi-Fi card,
+        // a Realtek dongle (the catalog has newer firmware for it), an NVIDIA
+        // card; the gaps the Hardware app fills: a dongle whose driver is not
+        // in the 6.6 kernel (RTL8812AU, an out-of-tree driver), and a USB
+        // gadget nothing knows. firmware / module: what the driver needs
+        // before it binds.
         var DEVICES = [
             { id: "pci:0000:02:00.0", bus: "pci", name: "AR9462 Wireless Network Adapter", vendor: "Qualcomm Atheros", category: "wifi",
               modaliases: ["pci:v0000168Cd00000034sv0000105Bsd0000E052bc02sc80i00"], driver: "ath9k" },
@@ -10936,12 +10938,17 @@
             { id: "usb:1-4", bus: "usb", name: "USB device (1209:0001)", vendor: "", category: "other",
               modaliases: ["usb:v1209p0001d0100dcFFdsc00dp00icFFisc00ip00in00"], driver: null }
         ];
-        var BASE_PACKAGES = { "kernel-6.6.23-phoenix": "6.6.23-r0", "kernel-module-rtw88-8821cu-6.6.23-phoenix": "6.6.23-r0", "busybox": "1.36.1-r0" };
+        // What the image has (the firmware as meta-phoenix's
+        // packagegroup-phoenix-firmware installs it).
+        var BASE_PACKAGES = { "kernel-6.6.23-phoenix": "6.6.23-r0", "kernel-module-rtw88-8821cu-6.6.23-phoenix": "6.6.23-r0", "busybox": "1.36.1-r0",
+                              "linux-firmware-rtl8821": "20240909-r0", "linux-firmware-rtl8822": "20240909-r0", "linux-firmware-rtl-license": "20240909-r0",
+                              "linux-firmware-nvidia-gpu": "20240909-r0", "linux-firmware-nvidia-license": "20240909-r0" };
+        var IMAGE_FIRMWARE = ["rtw88/rtw8821c_fw.bin", "rtw88/rtw8822b_fw.bin", "rtw88/rtw8822c_fw.bin"];
 
         function sim() {
             var s = store.get("hardware:sim", null) || {};
             s.packages = s.packages || {};
-            s.loaded = s.loaded || { firmware: [], modules: [] };
+            s.loaded = s.loaded || { firmware: IMAGE_FIRMWARE.slice(), modules: [] };
             return s;
         }
         function files() { return store.get("hardware:files", null) || {}; }
@@ -10986,10 +10993,10 @@
         function activate(step) {
             if (step.after === "reboot" || step.after === "none") return Promise.resolve();
             return wait(600).then(function () {
-                var s = sim(), fw = [], mods = [];
+                var s = sim(), fw = IMAGE_FIRMWARE.slice(), mods = [];
                 Object.keys(s.packages).forEach(function (n) {
                     s.packages[n].files.forEach(function (f) {
-                        var m = /^lib\/firmware\/(.+?)(\.xz|\.zst)?$/.exec(f);
+                        var m = /^lib\/firmware\/(?:updates\/)?(.+?)(\.xz|\.zst)?$/.exec(f);
                         if (m) fw.push(m[1]);
                         var k = /^lib\/modules\/[^/]+\/.*\/([^/]+)\.ko(\.xz|\.zst)?$/.exec(f);
                         if (k) mods.push(k[1]);
@@ -11072,6 +11079,14 @@
                     try { c = JSON.parse(PalmSystem.getResource(SAMPLE + "catalog-sim.json") || "{}"); }
                     catch (e) { c = {}; }
                     return Object.assign(c, store.get("hardware:config", {}));
+                },
+                // /usr/share/phoenix/firmware/licences.json and the licence files.
+                imageFirmware: {
+                    list: function () {
+                        try { return JSON.parse(PalmSystem.getResource(SAMPLE + "firmware-in-image.json") || "{}").packages || []; }
+                        catch (e) { return []; }
+                    },
+                    text: function (path) { return PalmSystem.getResource(SAMPLE + "licences/" + path.split("/").pop()) || null; }
                 },
                 luna: nodeServiceLuna(),
                 log: function (m) { console.info("[hardware] " + m); }

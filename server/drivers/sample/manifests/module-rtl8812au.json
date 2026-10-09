@@ -2,21 +2,55 @@
     "id": "module-rtl8812au",
     "kind": "module",
     "title": "Realtek RTL8812AU Wi-Fi driver",
-    "summary": "A driver for USB Wi-Fi adapters with the RTL8812AU chip, which the Linux kernel does not include.",
-    "description": "Open source (GPL-2.0), maintained outside the Linux kernel by the aircrack-ng project, and built for each Phoenix kernel.",
+    "summary": "A driver for USB Wi-Fi adapters with the RTL8812AU or RTL8821AU chip, which the system's Linux 6.6 kernel does not include.",
+    "description": "Open source (GPL-2.0), maintained outside the Linux kernel by the aircrack-ng project, built for each Phoenix kernel (meta-phoenix, rtl8812au). Linux 6.14 and later drive these adapters themselves (rtw88); Phoenix never installs this over a driver the kernel has.",
     "category": "wifi",
-    "match": ["usb:v0BDAp8812d*", "usb:v0BDAp881Ad*", "usb:v0BDAp881Bd*", "usb:v0BDAp881Cd*", "usb:v2357p0101d*", "usb:v0846p9052d*"],
-    "modules": ["88XXau"],
+    "match": [
+        "usb:v0BDAp8812d*",
+        "usb:v0BDAp881Ad*",
+        "usb:v0BDAp881Bd*",
+        "usb:v0BDAp881Cd*",
+        "usb:v2357p0101d*",
+        "usb:v0846p9052d*"
+    ],
+    "modules": [
+        "88XXau"
+    ],
     "after": "reload",
-    "license": { "id": "GPL-2.0-only", "name": "GNU General Public License 2.0", "url": "https://github.com/aircrack-ng/rtl8812au/blob/v5.6.4.2/LICENSE", "free": true, "redistributable": true },
+    "license": {
+        "id": "GPL-2.0-only",
+        "name": "GNU General Public License 2.0",
+        "url": "https://github.com/aircrack-ng/rtl8812au/blob/v5.6.4.2/LICENSE",
+        "free": true,
+        "redistributable": true
+    },
     "source": "https://github.com/aircrack-ng/rtl8812au",
-    "maintainer": { "name": "webOS Phoenix", "email": "drivers@webosphoenix.org" },
+    "maintainer": {
+        "name": "webOS Phoenix",
+        "email": "drivers@webosphoenix.org"
+    },
     "samplePackages": [
-        { "name": "kernel-module-88xxau-6.6.23-phoenix", "version": "5.6.4.2-r0", "arch": "x86_64",
-          "files": { "lib/modules/6.6.23-phoenix/updates/88XXau.ko": "SAMPLE: stands for the 88XXau module (x86-64)\n" },
-          "scripts": { "postinst": "#!/bin/sh\nif [ -z \"$D\" ]; then\n\tdepmod -a 6.6.23-phoenix\nfi\n" } },
-        { "name": "kernel-module-88xxau-6.6.23-phoenix", "version": "5.6.4.2-r0", "arch": "aarch64",
-          "files": { "lib/modules/6.6.23-phoenix/updates/88XXau.ko": "SAMPLE: stands for the 88XXau module (arm64)\n" },
-          "scripts": { "postinst": "#!/bin/sh\nif [ -z \"$D\" ]; then\n\tdepmod -a 6.6.23-phoenix\nfi\n" } }
+        {
+            "name": "kernel-module-88xxau-6.6.23-phoenix",
+            "version": "5.6.4.2-r0",
+            "arch": "x86_64",
+            "files": {
+                "lib/modules/6.6.23-phoenix/updates/88XXau.ko": "SAMPLE: stands for the 88XXau module (x86-64)\n"
+            },
+            "scripts": {
+                "postinst": "#!/bin/sh\nif [ -z \"$D\" ]; then\n\tdepmod -a 6.6.23-phoenix\nfi\n"
+            }
+        },
+        {
+            "name": "kernel-module-88xxau-6.6.23-phoenix",
+            "version": "5.6.4.2-r0",
+            "arch": "aarch64",
+            "files": {
+                "lib/modules/6.6.23-phoenix/updates/88XXau.ko": "SAMPLE: stands for the 88XXau module (arm64)\n"
+            },
+            "scripts": {
+                "postinst": "#!/bin/sh\nif [ -z \"$D\" ]; then\n\tdepmod -a 6.6.23-phoenix\nfi\n"
+            }
+        }
     ]
 }

@@ -8,19 +8,21 @@
 // org.webosphoenix.hardware service (services/hardware) on the simulated
 // device and the signed sample catalog (server/drivers/sample), and the
 // driver catalog's report endpoint (server/drivers, PHP's built-in server).
-// Covers: the hardware and what each device needs; firmware installed after
-// its licence (progress, the ongoing activity) and the device working; an
-// opkg failure rolled back, then the driver installed; an optional driver
-// that starts after a restart; removing; a catalog signed with another key
-// refused; the hardware report (IDs only) received by the server; and First
-// Use offering what the hardware needs.
+// Covers: the hardware, working with the image's firmware, and the gaps;
+// newer firmware installed after its licence (progress, the ongoing
+// activity) beside the system's, and removed; a driver the kernel lacks, an
+// opkg failure rolled back, then installed; the hardware report (IDs only)
+// received by the server; another catalog with Developer Mode only, trusted
+// by its fingerprint and marked; a catalog signed with another key refused;
+// the image's firmware licences in Device Info; and First Use offering only
+// what is missing.
 //
 //   node tools/test-hardware.cjs [--tablet] [--out DIR]
 //
 // Needs PHP 8 (with sodium) and the apps built.
 
 "use strict";
-const { spawn, execSync } = require("child_process");
+const { spawn, execSync, execFileSync } = require("child_process");
 const fs = require("fs");
 const net = require("net");
 const os = require("os");
@@ -78,6 +80,24 @@ async function main() {
     const reportPort = await freePort();
     const reports = spawn("php", ["-S", "127.0.0.1:" + reportPort, path.join(REPO, "server/drivers/public/router.php")],
                           { stdio: "ignore", env: Object.assign({}, process.env, { DRIVERS_DATA: data }) });
+    // Another driver catalog (someone else's, its own key): made with server/drivers.
+    const other = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-other-drivers-"));
+    const php = (args, env) => execFileSync("php", args, { env: Object.assign({}, process.env, env || {}) }).toString();
+    fs.writeFileSync(path.join(other, "make.php"), `<?php
+require '${path.join(REPO, "server/drivers/src/bootstrap.php")}';
+file_put_contents('${other}/gadget.ipk', Phoenix\\Drivers\\PackageWriter::ipk('kernel-module-gadget', '1.0-r0', 'all', ['lib/modules/6.6.23-phoenix/updates/gadget.ko' => 'x']));
+file_put_contents('${other}/driver.json', json_encode(['id' => 'module-gadget', 'kind' => 'module', 'title' => 'Gadget driver', 'category' => 'usb',
+    'match' => ['usb:v1209p0001d*'], 'modules' => ['gadget'], 'after' => 'none',
+    'license' => ['id' => 'GPL-2.0-only', 'name' => 'GPL 2.0', 'free' => true, 'redistributable' => true], 'packages' => ['gadget.ipk']]));
+`);
+    php([path.join(other, "make.php")]);
+    const otherEnv = { DRIVERS_DATA: path.join(other, "data"), DRIVERS_NAME: "Gadget Fans" };
+    php([path.join(REPO, "server/drivers/bin/drivers.php"), "add", path.join(other, "driver.json")], otherEnv);
+    php([path.join(REPO, "server/drivers/bin/drivers.php"), "publish"], otherEnv);
+    const otherFingerprint = php([path.join(REPO, "server/drivers/bin/drivers.php"), "pubkey", "--key", path.join(other, "data")]).trim().split("\n")[1];
+    const otherPort = await freePort();
+    const otherServer = spawn("php", ["-S", "127.0.0.1:" + otherPort, path.join(REPO, "server/drivers/public/router.php")],
+                              { stdio: "ignore", env: Object.assign({}, process.env, otherEnv) });
     const port = await freePort();
     const origin = `http://127.0.0.1:${port}`;
     const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port)], { stdio: "ignore" });
@@ -86,6 +106,7 @@ async function main() {
     try {
         await waitFor(origin + "/apps.json");
         await waitFor(`http://127.0.0.1:${reportPort}/v1/report`);
+        await waitFor(`http://127.0.0.1:${otherPort}/v1/key.json`);
         browser = await chromium.launch();
         const context = await browser.newContext({ viewport });
         const page = await context.newPage();
@@ -118,21 +139,21 @@ async function main() {
         }, `http://127.0.0.1:${reportPort}/v1/report`);
         await open();
 
-        // ---- The hardware -------------------------------------------------------------------
+        // ---- The hardware: the image has its firmware; the gaps -------------------------------
         const status = async (id) => text(`[data-testid='hw-device-${id}']`);
-        check(/Needs firmware, available to install/.test(await status("usb:1-2")), "the Realtek dongle needs firmware, which the catalog has");
-        check(/Needs a driver, available to install/.test(await status("usb:1-3")), "the RTL8812AU needs a driver, which the catalog has");
-        check(/Working · optional driver available/.test(await status("pci:0000:01:00.0")), "the NVIDIA card works, with an optional extra");
+        check(/Working · newer firmware available/.test(await status("usb:1-2")), "the Realtek dongle works with the image's firmware; the catalog has newer");
+        check(/Needs a driver, available to install/.test(await status("usb:1-3")), "the RTL8812AU needs a driver the 6.6 kernel lacks, which the catalog has");
+        check(/Working$/.test(await status("pci:0000:01:00.0")), "the NVIDIA card works (its firmware is in the image)");
         check(/No driver/.test(await status("usb:1-4")), "the USB gadget has no driver");
         check(/Working$/.test(await status("pci:0000:02:00.0")), "the Atheros Wi-Fi card works");
         check(/Phoenix Drivers \(sample\)/.test(await text("[data-testid=hw-catalog]")), "the signed sample catalog was read");
         await shot("1-hardware");
 
-        // ---- Firmware, after its licence ---------------------------------------------------------
+        // ---- Newer firmware, after its licence --------------------------------------------------
         await device("usb:1-2");
-        check(/rtw88\/rtw8821c_fw\.bin/.test(await text("[data-testid=hw-detail-missing]")), "the device page names the missing firmware");
+        check(/20240909-r0/.test(await text("[data-testid=hw-offer-included]")), "the device page says which firmware the system has");
         await shot("2-device");
-        await page.click("[data-testid=hw-install-firmware-rtw88]");
+        await page.click("[data-testid=hw-install-firmware-rtw88-update]");
         await page.waitForSelector("[data-testid=hw-license]");
         check(/LICENCE\.rtlwifi_firmware\.txt/.test(await text("[data-testid=hw-license-text]")), "the licence is shown before installing");
         await page.waitForTimeout(600);   // the dialog slides up
@@ -144,14 +165,21 @@ async function main() {
         await page.waitForSelector("[data-testid=hw-notice]", { timeout: 15000 });
         check(/is installed/.test(await text("[data-testid=hw-notice]")), "installed");
         const ongoing = host.filter((m) => m.type === "ongoing");
-        check(ongoing.some((m) => m.payload.title === "Realtek Wi-Fi firmware (rtw88)" && m.payload.progress >= 0) &&
+        check(ongoing.some((m) => m.payload.title === "Newer Realtek Wi-Fi firmware (rtw88)" && m.payload.progress >= 0) &&
               ongoing.some((m) => m.payload.params && m.payload.params.page === "hardware"), "an ongoing activity while it installed");
-        await page.waitForFunction(() => /Working/.test(document.querySelector("[data-testid=hw-detail-status]").textContent));
-        check(/rtw88_8821cu/.test(await text("[data-testid=hw-detail-driver]")), "the dongle works, with its driver");
+        let sim = await page.evaluate(() => JSON.parse(localStorage.getItem("phoenix:hardware:sim")));
+        check(sim.packages["linux-firmware-rtw88-update"] && sim.packages["linux-firmware-rtw88-update"].files.every((f) => f.startsWith("lib/firmware/updates/")),
+              "it goes beside the system's firmware, in /lib/firmware/updates");
+        await page.waitForFunction(() => /Working$/.test(document.querySelector("[data-testid=hw-detail-status]").textContent));
+        check(/rtw88_8821cu/.test(await text("[data-testid=hw-detail-driver]")), "the dongle works on");
         await shot("5-installed");
+        await page.click("[data-testid=hw-remove-firmware-rtw88-update]");
+        await page.click("[data-testid=hw-remove-confirm]");
+        await page.waitForSelector("[data-testid=hw-install-firmware-rtw88-update]", { timeout: 10000 });
+        check(true, "removing it goes back to the system's firmware, and offers it again");
         await back();
 
-        // ---- A failure, rolled back ----------------------------------------------------------------
+        // ---- A driver the kernel lacks: a failure rolled back, then installed ------------------------
         await page.evaluate(() => localStorage.setItem("phoenix:hardware:sim",
             JSON.stringify(Object.assign(JSON.parse(localStorage.getItem("phoenix:hardware:sim") || "{}"), { fail: { opkg: "Collected errors: check_data_file_clashes" } }))));
         await device("usb:1-3");
@@ -159,7 +187,7 @@ async function main() {
         await page.waitForSelector("[data-testid=hw-error]", { timeout: 15000 });
         check(/check_data_file_clashes\. Your device was put back as it was\./.test(await text("[data-testid=hw-error]")), "an opkg failure is undone and said so");
         await shot("6-failed");
-        const sim = await page.evaluate(() => JSON.parse(localStorage.getItem("phoenix:hardware:sim")));
+        sim = await page.evaluate(() => JSON.parse(localStorage.getItem("phoenix:hardware:sim")));
         check(!sim.packages["kernel-module-88xxau-6.6.23-phoenix"], "nothing of it is left installed");
         await page.evaluate(() => {
             const s = JSON.parse(localStorage.getItem("phoenix:hardware:sim"));
@@ -170,30 +198,6 @@ async function main() {
         await page.waitForSelector("[data-testid=hw-notice]", { timeout: 15000 });
         await page.waitForFunction(() => /Working/.test(document.querySelector("[data-testid=hw-detail-status]").textContent));
         check(/88XXau/.test(await text("[data-testid=hw-detail-driver]")), "then the open source driver installs without a licence to accept, and works");
-        await back();
-
-        // ---- An optional driver, after a restart ------------------------------------------------------
-        await device("pci:0000:01:00.0");
-        await page.click("[data-testid=hw-install-firmware-nvidia-gsp]");
-        await page.click("[data-testid=hw-license-accept]");
-        await page.waitForSelector("[data-testid=hw-restart]", { timeout: 15000 });
-        check(/starts when you restart/.test(await text("[data-testid=hw-notice]")), "an optional firmware that starts with the next restart");
-        await shot("7-restart");
-        await back();
-        check(/Restart to finish/.test(await status("pci:0000:01:00.0")) && await page.locator("[data-testid=hw-restart-all]").count() === 1,
-              "the list asks for a restart");
-        // The simulated restart reloads the page.
-        await Promise.all([page.waitForNavigation({ waitUntil: "load" }), page.click("[data-testid=hw-restart-all]")]);
-        await page.waitForSelector("[data-testid='hw-device-pci:0000:01:00.0']", { timeout: 10000 });
-        check(/^.*Working$/.test(await status("pci:0000:01:00.0")) && await page.locator("[data-testid=hw-restart-all]").count() === 0,
-              "after the restart it has started");
-
-        // ---- Removing ---------------------------------------------------------------------------------
-        await device("usb:1-2");
-        await page.click("[data-testid=hw-remove-firmware-rtw88]");
-        await page.click("[data-testid=hw-remove-confirm]");
-        await page.waitForFunction(() => /Needs firmware/.test(document.querySelector("[data-testid=hw-detail-status]").textContent), null, { timeout: 10000 });
-        check(true, "removing the firmware: the dongle needs it again");
         await back();
 
         // ---- The hardware report --------------------------------------------------------------------
@@ -211,6 +215,33 @@ async function main() {
               Object.keys(kept[0]).join() === "day,arch,kernel,devices", "the catalog service kept the IDs and the day, nothing else");
         await page.keyboard.press("Escape");
 
+        // ---- Another catalog: Developer Mode only, trusted by its fingerprint, marked -----------------
+        check(await page.locator("[data-testid=hw-source-add]").count() === 0, "no other catalogs without Developer Mode");
+        await luna(page, "luna://com.webos.service.devmode/setDevMode", { status: "enabled" });
+        await open();
+        await page.click("[data-testid=hw-source-add]");
+        await page.fill("[data-testid=hw-source-url] input, input[data-testid=hw-source-url]", `http://127.0.0.1:${otherPort}/v1/`);
+        await page.click("[data-testid=hw-source-look]");
+        await page.waitForSelector("[data-testid=hw-source-fingerprint]");
+        const fp = (await page.textContent("[data-testid=hw-source-fingerprint]")).trim();
+        check(fp === otherFingerprint, "the catalog's key fingerprint is shown to check (" + fp + ")");
+        await page.waitForTimeout(600);
+        await shot("9-other-catalog");
+        await page.click("[data-testid=hw-source-trust]");
+        await page.waitForSelector("[data-testid=hw-source-dialog]", { state: "detached" });
+        await page.waitForFunction(() => /needs a driver/i.test(document.querySelector("[data-testid='hw-device-usb:1-4']").textContent), null, { timeout: 10000 });
+        await device("usb:1-4");
+        check(/Gadget Fans, a catalog you added, not Phoenix's/.test(await text("[data-testid=hw-offer-thirdparty]")), "its driver is marked as not Phoenix's");
+        await shot("10-other-driver");
+        await page.click("[data-testid=hw-install-module-gadget]");
+        await page.waitForSelector("[data-testid=hw-notice]", { timeout: 15000 });
+        check(/is installed/.test(await text("[data-testid=hw-notice]")), "and installs");
+        await back();
+        await luna(page, "luna://com.webos.service.devmode/setDevMode", { status: "disabled" });
+        const off = await luna(page, H + "list", {});
+        check(off.devices.find((d) => d.id === "usb:1-4").offers.length === 0 && off.sources.some((x) => x.thirdParty && /Developer Mode/.test(x.error.errorText)),
+              "with Developer Mode off, the other catalog is not used");
+
         // ---- A catalog signed with another key ---------------------------------------------------------------
         await page.evaluate(() => {
             const c = JSON.parse(localStorage.getItem("phoenix:hardware:config"));
@@ -223,22 +254,31 @@ async function main() {
         check(refused.devices.find((d) => d.id === "usb:1-2").offers.length === 1, "... and the last good one is kept");
         await page.evaluate(() => localStorage.removeItem("phoenix:hardware:config"));
 
-        // ---- First Use ---------------------------------------------------------------------------------
+        // ---- The firmware's licences, in Device Info ---------------------------------------------------------
+        await page.goto(appUrl("org.webosphoenix.settings", { page: "deviceinfo" }));
+        await page.click("[data-testid=licenses]");
+        await page.waitForSelector("[data-testid=firmware-packages]");
+        check(/linux-firmware-rtl8821 20240909-r0 \(Firmware-rtlwifi_firmware\)/.test(await text("[data-testid=firmware-packages]")),
+              "Device Info lists the firmware in the system with its licences");
+        await page.click("[data-testid='firmware-license-LICENCE.rtlwifi_firmware.txt']");
+        await page.waitForFunction(() => /Realtek/.test(document.body.innerText));
+        await shot("11-firmware-licences");
+
+        // ---- First Use, on a new device -------------------------------------------------------------------
+        await page.evaluate(() => localStorage.clear());
         await page.goto(appUrl("org.webosphoenix.firstuse", {}));
         await page.waitForSelector("[data-testid=step-welcome]");
         await page.click("[data-testid=next]");
         await page.waitForSelector("[data-testid=step-wifi]");
         await page.click("[data-testid=next]");
-        await page.waitForSelector("[data-testid=step-hardware]");
-        check(await page.locator("[data-testid='fu-hw-usb:1-2']").count() === 1 && await page.locator("[data-testid='fu-hw-pci:0000:01:00.0']").count() === 0,
-              "First Use offers the firmware the dongle needs, not the optional extra");
-        await shot("9-firstuse");
-        await page.click("[data-testid='fu-hw-install-usb:1-2']");
-        await page.waitForSelector("[data-testid=fu-hw-license]");
-        await page.click("[data-testid=fu-hw-accept]");
-        await page.waitForFunction(() => /Installed/.test(document.querySelector("[data-testid='fu-hw-usb:1-2']").textContent), null, { timeout: 15000 });
-        check(true, "First Use installs it after the licence");
-        await shot("10-firstuse-installed");
+        await page.waitForSelector("[data-testid='fu-hw-usb:1-3']");
+        check(await page.locator("[data-testid='fu-hw-usb:1-3']").count() === 1 && await page.locator("[data-testid='fu-hw-usb:1-2']").count() === 0,
+              "First Use offers the driver that is missing, not the newer firmware");
+        await shot("12-firstuse");
+        await page.click("[data-testid='fu-hw-install-usb:1-3']");
+        await page.waitForFunction(() => /Installed/.test(document.querySelector("[data-testid='fu-hw-usb:1-3']").textContent), null, { timeout: 15000 });
+        check(true, "First Use installs it (open source: no licence to accept)");
+        await shot("13-firstuse-installed");
         await page.click("[data-testid=next]");
         await page.waitForSelector("[data-testid=step-restore]");
         check(true, "and goes on to Restore");
@@ -248,7 +288,9 @@ async function main() {
         if (browser) await browser.close();
         rootfs.kill();
         reports.kill();
+        otherServer.kill();
         fs.rmSync(data, { recursive: true, force: true });
+        fs.rmSync(other, { recursive: true, force: true });
     }
     console.log(failures ? `${failures} failed` : "all passed");
     process.exit(failures ? 1 : 0);

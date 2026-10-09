@@ -21,6 +21,7 @@ import { useBack } from "../nav";
 import notice from "../../../../NOTICE?raw";
 import license from "../../../../LICENSE?raw";
 import { LICENSES } from "../licenses";
+import { FirmwareLicenses } from "./Hardware";
 
 type Reset = "settings" | "erase" | "full";
 
@@ -224,6 +225,7 @@ function Licenses() {
             <Group label="webOS Phoenix">
                 <pre className="license-text">{notice}</pre>
             </Group>
+            <FirmwareLicenses />
             {LICENSES.map((l) => (
                 <Group key={l.name} label={l.name}>
                     <div className="license-text">{l.text}</div>

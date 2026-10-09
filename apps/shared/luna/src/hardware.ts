@@ -47,8 +47,43 @@ export interface DriverOffer {
     available: boolean;
     reason: string | null;
     installed: boolean;
+    /** Installed with the system image (nothing to do). */
+    inImage?: boolean;
     installedVersion: string | null;
+    /** The image's version of what this replaces (newer firmware), and whether this is newer. */
+    included?: string | null;
+    update?: boolean;
+    /** From a catalog the user added (Developer Mode), not Phoenix's. */
+    thirdParty?: boolean;
+    sourceName?: string | null;
     installing: { state: DriverInstallState; progress: number } | null;
+}
+
+export interface DriverSource {
+    id: string;
+    name: string;
+    url: string;
+    thirdParty: boolean;
+    fingerprint: string | null;
+    refreshed: string | null;
+    error: { errorCode: string; errorText: string } | null;
+    count: number;
+}
+
+/** A catalog's key, for the user to check before trusting it. */
+export interface PendingDriverSource {
+    url: string;
+    name: string;
+    key: string;
+    fingerprint: string;
+}
+
+/** A firmware package in the system image, with its licence. */
+export interface ImageFirmware {
+    name: string;
+    version: string;
+    license: string;
+    licenseFiles: string[];
 }
 
 export interface HardwareDevice {
@@ -72,6 +107,8 @@ export interface HardwareList {
     /** Drivers installed that start with the next restart. */
     pendingRestart: string[];
     report: { enabled: boolean; lastSent: string | null };
+    sources?: DriverSource[];
+    devMode?: boolean;
 }
 
 export type DriverInstallState = "queued" | "downloading" | "checking" | "installing" | "activating" | "installed" | "restart" | "failed";
@@ -163,6 +200,22 @@ export const hardware = {
     },
     setPreferences(p: { reportEnabled: boolean }): Promise<void> {
         return call(SERVICE + "setPreferences", p).then(() => undefined);
+    },
+    /** Another driver catalog's key, to show the user (Developer Mode only). */
+    addSource(url: string): Promise<PendingDriverSource> {
+        return call(SERVICE + "addSource", { url }).then((r) => (r as unknown as { pending: PendingDriverSource }).pending);
+    },
+    trustSource(p: { url: string; key: string; name?: string }): Promise<HardwareList> {
+        return call(SERVICE + "trustSource", p).then(list);
+    },
+    removeSource(id: string): Promise<HardwareList> {
+        return call(SERVICE + "removeSource", { id }).then(list);
+    },
+    firmwareLicenses(): Promise<ImageFirmware[]> {
+        return call(SERVICE + "firmwareLicenses", {}).then((r) => (r as unknown as { packages: ImageFirmware[] }).packages);
+    },
+    firmwareLicense(path: string): Promise<string> {
+        return call(SERVICE + "firmwareLicense", { path }).then((r) => (r as unknown as { text: string }).text);
     },
 };
 

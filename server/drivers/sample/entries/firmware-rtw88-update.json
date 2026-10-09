@@ -1,9 +1,9 @@
 {
-    "id": "firmware-rtw88",
+    "id": "firmware-rtw88-update",
     "kind": "firmware",
-    "title": "Realtek Wi-Fi firmware (rtw88)",
-    "summary": "Lets Realtek 802.11ac Wi-Fi adapters (RTL8821C, RTL8822B, RTL8822C, USB and PCIe) connect.",
-    "description": "The rtw88 driver is built into Phoenix; the adapter's own program (firmware) is Realtek's and is not open source, so it is not in the system image.",
+    "title": "Newer Realtek Wi-Fi firmware (rtw88)",
+    "summary": "A newer version of the RTL8821C, RTL8822B and RTL8822C firmware than the one in the system, with Realtek's fixes since.",
+    "description": "Phoenix comes with this firmware; this is a newer release from linux-firmware. It is installed beside the system's (in /lib/firmware/updates, which the kernel reads first), so removing it goes back to the system's.",
     "category": "wifi",
     "match": [
         "usb:v0BDApC811d*",
@@ -27,8 +27,12 @@
         "rtw88_8822be",
         "rtw88_8822ce"
     ],
-    "optional": false,
+    "optional": true,
     "after": "reload",
+    "supersedes": [
+        "linux-firmware-rtl8821",
+        "linux-firmware-rtl8822"
+    ],
     "license": {
         "id": "LicenseRef-rtlwifi-firmware",
         "name": "Realtek firmware licence",
@@ -45,14 +49,14 @@
     },
     "packages": [
         {
-            "name": "linux-firmware-rtw88",
-            "version": "20240909-r0",
+            "name": "linux-firmware-rtw88-update",
+            "version": "20250311-r0",
             "arch": "all",
             "kernel": null,
-            "size": 598,
-            "installedSize": 141,
-            "sha256": "f87c5ed6b42efcee3ea241e1f08f70e26d85a3dbc4895b143de683a163a155ca",
-            "url": "packages/linux-firmware-rtw88_20240909-r0_all.ipk"
+            "size": 622,
+            "installedSize": 177,
+            "sha256": "072d3d6ea42b0b0a07534075402ebd958693aa9974e3bea5b7cbe05a3c84313f",
+            "url": "packages/linux-firmware-rtw88-update_20250311-r0_all.ipk"
         }
     ]
 }

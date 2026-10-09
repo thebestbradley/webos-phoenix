@@ -22,6 +22,22 @@
 //   php bin/drivers.php reports
 //       the devices the opt-in hardware reports name that no entry is for
 //       yet, most reported first
+//
+// Releases, with the key kept off the server (docs/DRIVERS.md, "Releasing
+// the catalog"): CI builds, the owner signs on their own computer, CI checks
+// the signature against the key pinned in the image and publishes:
+//
+//   php bin/drivers.php keygen DIR          a new key in DIR/signing.key (a USB
+//                                           drive; back it up), its public half
+//   php bin/drivers.php pubkey --key DIR    the public key and fingerprint
+//   php bin/drivers.php build --out DIR [--build N] [--days N] [--public KEY]
+//       drivers.json, not signed (and key.json with KEY)
+//   php bin/drivers.php sign FILE --key DIR prints FILE's signature (base64)
+//   php bin/drivers.php attach DIR SIGNATURE --public KEY
+//       writes DIR/drivers.json.sig once SIGNATURE checks out with KEY
+//   php bin/drivers.php handover NEWKEY --key DIR --out DIR
+//       key-handover.json(.sig): the key in --key hands over to NEWKEY
+//
 //   php bin/drivers.php sample
 //       the simulator's sample catalog (sample/): its packages made from
 //       sample/manifests, signed with the sample key the simulator pins
@@ -95,12 +111,76 @@ try {
     case 'sample':
         sample();
         break;
+    case 'keygen':
+        $dir = rtrim($args[0] ?? fail('keygen DIR'), '/');
+        if (is_file("$dir/signing.key")) {
+            fail("$dir/signing.key exists already; a new key needs a hand-over (docs/DRIVERS.md)");
+        }
+        $signer = new Signer($dir);
+        echo "Key written to $dir/signing.key (keep it secret; back it up now).\n";
+        echo 'Public key:  ' . base64_encode($signer->public) . "\n";
+        echo 'Fingerprint: ' . $signer->fingerprint() . "\n";
+        break;
+    case 'pubkey':
+        $signer = existingKey($opts);
+        echo base64_encode($signer->public) . "\n" . $signer->fingerprint() . "\n";
+        break;
+    case 'build':
+        $out = rtrim($opts['out'] ?? fail('build --out DIR'), '/');
+        @mkdir($out, 0755, true);
+        $json = $catalog->buildIndex(isset($opts['build']) ? (int) $opts['build'] : null, (int) ($opts['days'] ?? 30));
+        file_put_contents("$out/drivers.json", $json);
+        if (isset($opts['public'])) {
+            file_put_contents("$out/key.json", json_encode(['key' => $opts['public'], 'name' => $catalog->name]) . "\n");
+        }
+        $idx = json_decode($json, true);
+        echo "Build {$idx['build']}: " . count($idx['drivers']) . " drivers, SHA-256 " . hash('sha256', $json) . "\n";
+        break;
+    case 'sign':
+        $file = $args[0] ?? fail('sign FILE --key DIR');
+        $bytes = @file_get_contents($file);
+        if ($bytes === false) {
+            fail("Cannot read $file");
+        }
+        $idx = json_decode($bytes, true);
+        fwrite(STDERR, "Signing build " . ($idx['build'] ?? '?') . " (" . count($idx['drivers'] ?? []) . " drivers), SHA-256 " . hash('sha256', $bytes) . "\n");
+        echo base64_encode(existingKey($opts)->sign($bytes)) . "\n";
+        break;
+    case 'attach':
+        $dir = rtrim($args[0] ?? fail('attach DIR SIGNATURE --public KEY'), '/');
+        $sig = trim($args[1] ?? fail('attach DIR SIGNATURE --public KEY'));
+        file_put_contents("$dir/drivers.json.sig.new", $sig . "\n");
+        rename("$dir/drivers.json.sig.new", "$dir/drivers.json.sig");
+        try {
+            $idx = Catalog::verify($dir, $opts['public'] ?? fail('--public: the key pinned in the image'));
+        } catch (CheckFailed $e) {
+            unlink("$dir/drivers.json.sig");
+            throw $e;
+        }
+        echo "Good signature: build {$idx['build']}\n";
+        break;
+    case 'handover':
+        $h = Catalog::handover(existingKey($opts), $args[0] ?? fail('handover NEWKEY --key DIR --out DIR'), $opts['out'] ?? fail('--out DIR'));
+        echo "Hand-over from {$h['from']} to {$h['to']} written to {$opts['out']}; publish it next to drivers.json.\n";
+        break;
     default:
-        fwrite(STDERR, "usage: drivers.php init | add MANIFEST [--reviewed] | remove ID | publish [--days N] | show | verify DIR [--key K] | reports | sample\n");
+        fwrite(STDERR, "usage: drivers.php init | add MANIFEST [--reviewed] | remove ID | publish [--days N] | show | verify DIR [--key K] | reports | sample\n"
+            . "       | keygen DIR | pubkey --key DIR | build --out DIR [--build N] [--days N] [--public K] | sign FILE --key DIR\n"
+            . "       | attach DIR SIGNATURE --public K | handover NEWKEY --key DIR --out DIR\n");
         exit($cmd === 'help' ? 0 : 1);
     }
 } catch (CheckFailed $e) {
     fail($e->getMessage());
+}
+
+// The key in --key DIR (never made here: keygen makes keys).
+function existingKey(array $opts): Signer
+{
+    $dir = rtrim($opts['key'] ?? fail('--key DIR: the folder with signing.key'), '/');
+    if (!is_file("$dir/signing.key")) {
+        fail("No signing.key in $dir");
+    }
+    return new Signer($dir);
 }
 
 // The simulator's sample catalog: each sample/manifests/*.json is a driver

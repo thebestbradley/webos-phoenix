@@ -5,7 +5,7 @@
 // Goes through First Use (apps/firstuse, built into dist/) in headless
 // Chromium with the simulator's runtime, as a new owner would: language,
 // Wi-Fi (a wrong password, then the right one), the hardware that needs
-// firmware, time zone and the 24-hour
+// a driver, time zone and the 24-hour
 // clock, accounts (Add an account opens Accounts), a PIN (mismatched, then
 // set), location off in Privacy, the cards and gestures tutorial, and All
 // Set, which opens Help and then finishes: the system preference
@@ -141,9 +141,10 @@ async function main() {
         await shot("2-wifi");
         await next();
 
-        // ---- Hardware (the simulated dongle needs firmware; tools/test-hardware.cjs installs it) ----
+        // ---- Hardware (the simulated RTL8812AU has no driver in the kernel; tools/test-hardware.cjs installs it) ----
         await step("hardware");
-        check(await page.locator("[data-testid='fu-hw-usb:1-2']").count() === 1, "Hardware: the Wi-Fi dongle that needs firmware is offered");
+        await page.waitForSelector("[data-testid='fu-hw-usb:1-3']");
+        check(await page.locator("[data-testid='fu-hw-usb:1-3']").count() === 1, "Hardware: the Wi-Fi dongle whose driver the kernel lacks is offered");
         await shot("2a-hardware");
         await next();
 

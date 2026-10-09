@@ -1,9 +1,13 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Hardware: the device's hardware and the drivers and firmware it is
-// missing, as Ubuntu's "Additional Drivers" and Windows' driver installer
-// show them (docs/HARDWARE.md, "Hardware support and the Hardware app").
+// Hardware: the device's hardware and what fills its gaps, as Ubuntu's
+// "Additional Drivers" and Windows' driver installer show them
+// (docs/HARDWARE.md, "Hardware support and the Hardware app"). The system
+// carries the open source drivers and the redistributable firmware; this
+// offers what it does not have: firmware it lacks, newer firmware, drivers
+// outside the kernel, optional extras, and (with Developer Mode) drivers
+// from other catalogs, marked as such.
 // Each device with its state (working, needs firmware, needs a driver, no
 // driver, an optional extra); what the signed driver catalog has for it,
 // with its licence, size and source; installing it (the licence first when
@@ -18,10 +22,11 @@
 import { useEffect, useRef, useState } from "react";
 import {
     deviceTitle, hardware, installable, needsAttention, reflowLicense, LunaError, call,
-    type DriverOffer, type HardwareCategory, type HardwareDevice, type HardwareList, type HardwareReport, type DriverInstallProgress,
+    type DriverOffer, type DriverSource, type HardwareCategory, type HardwareDevice, type HardwareList, type HardwareReport, type DriverInstallProgress,
+    type ImageFirmware, type PendingDriverSource,
 } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
-import { Button, Dialog, ErrorText, Group, Note, Page, PageHeader, Row, Spinner, ToggleButton } from "@phoenix/ui";
+import { Button, Dialog, ErrorText, Group, Note, Page, PageHeader, Row, Spinner, TextField, ToggleButton } from "@phoenix/ui";
 import { useBack } from "../nav";
 import { size } from "./Backup";
 
@@ -46,6 +51,7 @@ export function statusText(d: HardwareDevice): string {
     case "no-driver": return d.offers.some((o) => !o.available && o.reason) ? "No driver for this device yet" : "No driver";
     case "restart": return "Restart to finish installing";
     default:
+        if (installable(d).some((o) => o.update)) return "Working · newer firmware available";
         return installable(d).some((o) => o.optional) ? "Working · optional driver available" : "Working";
     }
 }
@@ -109,8 +115,15 @@ function Offer({ device, offer, onDone }: { device: HardwareDevice; offer: Drive
     };
 
     return (
-        <Group label={`${kindText(offer)}${offer.optional ? " (optional)" : ""}`}>
+        <Group label={`${offer.update ? "Newer firmware" : kindText(offer)}${offer.optional && !offer.update ? " (optional)" : ""}`}>
             <Row title={offer.title} subtitle={offer.summary || undefined} className="wrap-subtitle" testId={`hw-offer-${offer.driverId}`} />
+            {offer.thirdParty && (
+                <Note testId="hw-offer-thirdparty">
+                    From {offer.sourceName}, a catalog you added, not Phoenix's. Phoenix has not checked it: install it only if you trust who made it.
+                </Note>
+            )}
+            {offer.inImage && <Row title="Included with Phoenix" value={offer.installedVersion ?? ""} testId="hw-offer-inimage" />}
+            {offer.included && !offer.installed && <Row title="In the system now" value={offer.included} testId="hw-offer-included" />}
             <Row title="Licence" value={offer.license.name} testId="hw-offer-license"
                  subtitle={offer.license.free ? "Open source" : "Not open source"} />
             <Row title="Download" value={size(offer.size)} testId="hw-offer-size" />
@@ -127,10 +140,10 @@ function Offer({ device, offer, onDone }: { device: HardwareDevice; offer: Drive
             {offer.available && !offer.installed && !busy && (
                 <Button variant="affirmative" data-testid={`hw-install-${offer.driverId}`}
                         onClick={() => (offer.license.free ? void install() : setAsking(true))}>
-                    Install{offer.size ? ` (${size(offer.size)})` : ""}
+                    {offer.update ? "Update" : "Install"}{offer.size ? ` (${size(offer.size)})` : ""}
                 </Button>
             )}
-            {offer.installed && !busy && (
+            {offer.installed && !offer.inImage && !busy && (
                 <Button variant="dark" data-testid={`hw-remove-${offer.driverId}`} onClick={() => setRemoving(true)}>Remove</Button>
             )}
             {error && <ErrorText testId="hw-error">{error}</ErrorText>}
@@ -209,6 +222,91 @@ function ReportDialog({ onClose }: { onClose: () => void }) {
     );
 }
 
+/** Other driver catalogs (Developer Mode): added by their address, trusted by their key's fingerprint. */
+function OtherCatalogs({ data }: { data: HardwareList }) {
+    const others = (data.sources ?? []).filter((x) => x.thirdParty);
+    const [adding, setAdding] = useState(false);
+    const [url, setUrl] = useState("");
+    const [pending, setPending] = useState<PendingDriverSource | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [busy, setBusy] = useState(false);
+    const close = () => { setAdding(false); setPending(null); setUrl(""); setError(null); };
+    const look = async () => {
+        setBusy(true);
+        setError(null);
+        try { setPending(await hardware.addSource(url.trim())); } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
+    };
+    const trust = async () => {
+        if (!pending) return;
+        setBusy(true);
+        try { await hardware.trustSource({ url: pending.url, key: pending.key, name: pending.name }); close(); }
+        catch (e) { setError(errorText(e)); } finally { setBusy(false); }
+    };
+    if (!data.devMode && others.length === 0) return null;
+    return (
+        <Group label="Other driver catalogs">
+            {others.map((x: DriverSource) => (
+                <Row key={x.id} title={x.name} className="wrap-subtitle" testId={`hw-source-${x.id}`}
+                     subtitle={x.error ? x.error.errorText : `${x.count} drivers · key ${x.fingerprint ?? ""}`}>
+                    <Button variant="dark" className="hw-small-button" onClick={() => void hardware.removeSource(x.id)}>Remove</Button>
+                </Row>
+            ))}
+            {data.devMode && <Row title="Add Catalog" chevron testId="hw-source-add" onClick={() => setAdding(true)} />}
+            <Dialog open={adding} title={pending ? `Trust ${pending.name}?` : "Add a Driver Catalog"} onClose={close} testId="hw-source-dialog"
+                    message={pending ? undefined : "Drivers install as the system. Add only a catalog whose makers you trust."}>
+                {!pending && <TextField value={url} onChange={setUrl} placeholder="https://…/v1/" testId="hw-source-url" onSubmit={() => void look()} />}
+                {pending && (
+                    <>
+                        <Note>Its drivers are not Phoenix's and Phoenix has not checked them. Check that this key fingerprint is the one its makers publish:</Note>
+                        <pre className="hw-report-ids" data-testid="hw-source-fingerprint">{pending.fingerprint}</pre>
+                    </>
+                )}
+                {error && <ErrorText testId="hw-source-error">{error}</ErrorText>}
+                {!pending && <Button variant="affirmative" busy={busy} disabled={!url.trim()} data-testid="hw-source-look" onClick={() => void look()}>Next</Button>}
+                {pending && <Button variant="negative" busy={busy} data-testid="hw-source-trust" onClick={() => void trust()}>Trust This Catalog</Button>}
+                <Button variant="dark" onClick={close}>Cancel</Button>
+            </Dialog>
+        </Group>
+    );
+}
+
+/**
+ * The firmware the system image carries (not open source; its makers allow
+ * passing it on), each package with its licence, the licence files' text on
+ * a tap (org.webosphoenix.hardware firmwareLicenses; docs/LEGAL.md,
+ * "Firmware and drivers").
+ */
+export function FirmwareLicenses() {
+    const [packages, setPackages] = useState<ImageFirmware[] | null>(null);
+    const [open, setOpen] = useState<string | null>(null);
+    const [text, setText] = useState<Record<string, string>>({});
+    useEffect(() => {
+        let live = true;
+        hardware.firmwareLicenses().then((p) => { if (live) setPackages(p); }, () => { if (live) setPackages([]); });
+        return () => { live = false; };
+    }, []);
+    if (!packages || packages.length === 0) return null;
+    const files = [...new Set(packages.flatMap((p) => p.licenseFiles))];
+    const show = (f: string) => {
+        setOpen(open === f ? null : f);
+        if (!text[f]) void hardware.firmwareLicense(f).then((t) => setText((x) => ({ ...x, [f]: t })), () => {});
+    };
+    return (
+        <Group label="Firmware">
+            <div className="license-text" data-testid="firmware-packages">
+                Firmware for Wi-Fi, Bluetooth, graphics and other hardware, passed on unmodified as its makers allow:{" "}
+                {packages.map((p) => `${p.name} ${p.version} (${p.license})`).join(", ")}.
+            </div>
+            {files.map((f) => (
+                <div key={f}>
+                    <Row title={f.split("/").pop()} chevron onClick={() => show(f)} testId={`firmware-license-${f.split("/").pop()}`} />
+                    {open === f && <pre className="license-text">{text[f] ?? "…"}</pre>}
+                </div>
+            ))}
+        </Group>
+    );
+}
+
 export function HardwarePage() {
     const sub = useLuna<HardwareList>((cb, err) => hardware.watch(cb, err), []);
     const params = useLaunchParams<{ driverId?: string }>();
@@ -268,6 +366,7 @@ export function HardwarePage() {
                 <Button variant="dark" busy={refreshing} data-testid="hw-refresh"
                         onClick={() => { setRefreshing(true); void hardware.refresh().finally(() => setRefreshing(false)); }}>Check Again</Button>
             </Group>
+            <OtherCatalogs data={data} />
             <Group label="Unsupported hardware">
                 <Row title="Send hardware reports" subtitle="Anonymous: only the IDs of devices without a driver">
                     <ToggleButton value={data.report.enabled} label="Send hardware reports" testId="hw-report-toggle"
@@ -277,8 +376,9 @@ export function HardwarePage() {
                      subtitle={data.report.lastSent ? `Last sent ${new Date(data.report.lastSent).toLocaleDateString()}` : undefined} />
             </Group>
             <Note>
-                Open source drivers come with Phoenix. Firmware and drivers that are not open source, but that their makers allow
-                passing on, are offered here and downloaded only when you choose to install them.
+                Phoenix comes with open source drivers and the firmware its makers allow passing on, so most hardware works as it is.
+                What it does not have is offered here; what is not open source is installed only after you accept its licence.
+                The firmware's licences are in Device Info &gt; Open source licenses.
             </Note>
             {reporting && <ReportDialog onClose={() => setReporting(false)} />}
         </Page>
