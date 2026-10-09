@@ -1166,13 +1166,25 @@ FocusScope {
         cards.switchApp(toRight);
     }
 
+    // A tap on the gesture area: what is open over the cards closes first,
+    // as for the Home key (Key_CoreNavi_Home, SystemUiController.cpp:528-571:
+    // the dashboard, the menu, the launcher, then Universal Search, Just
+    // Type, hides), and as the swipe up does; only then does it toggle
+    // between the app and card view (so a tap in Just Type closes it, rather
+    // than maximizing the card behind it).
     function gestureTap() {
         if (locked || emergencyShown || (firstUse && cards.count < 2))
             return;
-        if (cards.maximizeProgress > 0)
-            cards.minimize();
+        if (notes.dashboardOpen)
+            notes.dashboardOpen = false;
+        else if (systemMenu.open)
+            systemMenu.open = false;
         else if (launcher.open)
             launcher.open = false;
+        else if (justType.open)
+            justType.open = false;
+        else if (cards.maximizeProgress > 0)
+            cards.minimize();
         else if (cards.count > 0)
             cards.maximize();
     }

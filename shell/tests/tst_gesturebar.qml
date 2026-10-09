@@ -101,6 +101,34 @@ Item {
             shell.gestureBack();
         }
 
+        // A tap on the bar closes Just Type, as the swipe up and the Home
+        // key do (SystemUiController.cpp:528-571), in card view and over an
+        // app: it does not maximize the card behind it, nor minimize the app.
+        function test_tapClosesJustType() {
+            shell.unlock();
+            var m = findChild(shell, "gestureMouse");
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximizeProgress = 0;
+            tryCompare(shell.cardView, "maximizeProgress", 0, 2000);
+            shell.startJustType("palm");
+            tryVerify(function() { return shell.justTypeOpen; }, 2000);
+            mouseClick(m, m.width / 2, m.height / 2);
+            tryVerify(function() { return !shell.justTypeOpen; }, 2000, "the tap closes Just Type");
+            wait(300);
+            compare(shell.cardView.maximizeProgress, 0, "the card behind it stays in card view");
+            // Over the app.
+            shell.cardView.maximize(uid);
+            tryVerify(function() { return shell.maximized; }, 2000);
+            shell.startJustType("");
+            tryVerify(function() { return shell.justTypeOpen; }, 2000);
+            mouseClick(m, m.width / 2, m.height / 2);
+            tryVerify(function() { return !shell.justTypeOpen; }, 2000);
+            verify(shell.maximized, "the app stays in front");
+            // With nothing over the cards, the tap toggles again.
+            mouseClick(m, m.width / 2, m.height / 2);
+            tryCompare(shell.cardView, "maximizeProgress", 0, 2000);
+        }
+
         function test_tabletHasTheBarByDefault() {
             shell.unlock();
             compare(Theme.gestureAreaHeight, Theme.px(20));
