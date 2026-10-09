@@ -128,6 +128,17 @@
         "status": "works",
         "note": "Hidden: the CardDAV & CalDAV account's sign-in page and service (apps/dav); its main page only points to Accounts. tools/test-dav-sync.cjs drives it"
     },
+    "org.webosphoenix.sharesheet": {
+        "status": "works",
+        "note": "The share sheet is never launched by itself: the sweep opens it over Help with a link and text to share (org.webosphoenix.share/open), as any app does. tools/test-screenshot.cjs and tools/test-sharing.cjs use it",
+        "openedBy": {
+            "app": "org.webosphoenix.help",
+            "call": "luna://org.webosphoenix.share/open",
+            "params": { "title": "webOS Phoenix", "text": "Cards, gestures and Just Type", "url": "https://github.com/" },
+            "frame": "iframe[data-phoenix-sheet=share]",
+            "shows": ["webOS Phoenix", "Messaging", "Email", "Copy"]
+        }
+    },
     "org.webosphoenix.help": {
         "status": "works",
         "note": "Phoenix Help (React, apps/help): topics in Markdown (apps/help/topics), searchable, found by Just Type; tools/test-help.cjs drives it"
