@@ -1003,6 +1003,8 @@ function distance(t) {
 // took on Friday"
 // "show my photos from yesterday", "show my screenshots", "how many photos
 // did I take last week" (count: only said, Photos not opened).
+// "photos of flowers": what is in them (about), which only an album's or
+// a file's name can tell (commands.js photos); with a day too, or alone.
 function photos(t, ctx) {
     var r = photosSaid(t, ctx);
     if (!r) return null;
@@ -1018,7 +1020,15 @@ function photosSaid(t, ctx) {
     var said = (m[1] || "").replace(/^(?:from|on|of|taken) /, "");
     if (!said) return { from: null, to: null, label: "" };
     var info = extract(said, ctx.now);
-    if (info.rest.replace(/\b(?:from|on|the|of)\b/g, "").trim()) return null;
+    var about = info.rest.replace(/\b(?:from|on|the|of|my|in|at|with|taken|i took|that i took)\b/g, " ").replace(/\s+/g, " ").trim();
+    if (/^(?:it|that|this|them|those|these|me)$/.test(about)) return null;
+    var r = photosWhen(info, ctx);
+    if (!r && !about) return null;
+    r = r || { from: null, to: null, label: "" };
+    if (about) r.about = about;
+    return r;
+}
+function photosWhen(info, ctx) {
     if (info.week) {
         var w = D.weekRange(ctx.now);
         var from = info.week === "last" ? D.addDays(D.mondayOf(ctx.now), -7) : info.week === "next" ? w.to : D.mondayOf(ctx.now);
@@ -2249,6 +2259,12 @@ var say = {
         return "Here " + (n === 1 ? "is 1 " + noun : "are " + n + " " + noun + "s") + from + "." +
             (opened ? (n === 1 ? " I've opened it in Photos too." : " I've opened them in Photos too.") : "");
     },
+    // Photos of something (commands.js photos about): only names can say.
+    photosByContent: function (about, what) {
+        return "I can't search " + (what || "photo") + "s by what's in them: nothing on this device labels them, and none has \u201c" + about +
+            "\u201d in its album or file name. Want me to open Photos?";
+    },
+    photosNamed: function (about, what) { return "I can't see what's in your " + (what || "photo") + "s, so these are the ones with \u201c" + about + "\u201d in their album or file name."; },
     // Undo
     nothingToUndo: function () { return "There's nothing to undo."; },
     confirmUndo: function (what) { return "Undo: " + what + "?"; },

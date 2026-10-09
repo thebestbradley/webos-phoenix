@@ -191,7 +191,8 @@ var BUILT_IN = [
       parameters: { type: "object", properties: { destination: S, mode: { type: "string", enum: ["", "drive", "walk", "bike"] } }, required: ["destination"] } },
     { id: "distance", title: "Distances", risk: "read", description: "Tell how far away a place is.", parameters: { type: "object", properties: { place: S }, required: ["place"] } },
     { id: "photos", title: "Photos by day", risk: "open", description: "Show the photos taken on a day or in a week.",
-      parameters: { type: "object", properties: { day: { type: "string", description: "\"yesterday\", \"last Friday\", \"last week\" or an ISO 8601 date" } } } },
+      parameters: { type: "object", properties: { day: { type: "string", description: "\"yesterday\", \"last Friday\", \"last week\" or an ISO 8601 date" },
+                                                  about: { type: "string", description: "What they are of, \"flowers\" (found by album or file name only)" } } } },
     { id: "play", title: "Music", risk: "open", description: "Play music: an artist, album or song (empty for everything).",
       parameters: { type: "object", properties: { query: S } } },
     { id: "weather", title: "Weather", risk: "read", description: "Tell the weather now, tomorrow or this week, here or in a named place, or whether it will rain.",
@@ -1668,21 +1669,32 @@ function runInner(cmd, args, env) {
         // each opening Photos on itself) and, unless only how many was
         // asked, in Photos too: just those (its imageList of several), behind
         // the conversation; "Open Photos" brings it forward.
+        // What they are of ("photos of flowers"): nothing on the device
+        // labels pictures by what is in them, so only an album's (its
+        // folder's) or a file's name can say; else it says so and offers Photos.
+        var about = String(args.about || "").toLowerCase().trim();
+        var stems = about.split(/[^a-z0-9]+/).filter(function (w) { return w.length > 1; }).map(function (w) { return w.replace(/(?:es|s)$/, "").slice(0, 6); });
         return dbFind(env, "com.palm.media.image.file:1").then(function (all) {
             var hits = all.filter(function (p) {
                 var t = Number(p.createdTime) || Number(p.modifiedTime) || 0;
                 if (args.screenshots && !/\/screencaptures\//.test(String(p.path))) return false;
+                if (stems.length) {
+                    var name = String(p.path).toLowerCase().replace(/^\/media\/internal\//, "");
+                    if (!stems.every(function (w) { return name.indexOf(w) >= 0; })) return false;
+                }
                 return args.from === undefined || args.from === null || (t >= args.from && t < args.to);
             }).sort(function (a, b) { return (Number(b.createdTime) || 0) - (Number(a.createdTime) || 0); });
             var what = args.screenshots ? "screenshot" : "photo";
             var photosApp = function (params) { return { appId: PHOTOS_APP, params: params, title: "Photos" }; };
+            if (stems.length && !hits.length) return { text: say.photosByContent(about, what), open: photosApp({}) };
             if (!hits.length) return { text: say.photos(0, args.label, what), open: photosApp({}) };
             var list = { results: hits.slice(0, 200).map(function (p) { return { file_path: p.path }; }),
                          title: args.label ? say.photosTitle(args.label, what) : "" };
             var shown = { type: "images", total: hits.length, items: hits.slice(0, 12).map(function (p) {
                 return { path: p.path, open: photosApp({ imageList: { results: [{ file_path: p.path }] } }) };
             }) };
-            var out = { text: say.photos(hits.length, args.label, what, !args.count, args.count), open: photosApp({ imageList: list }),
+            var out = { text: (stems.length ? say.photosNamed(about, what) + " " : "") + say.photos(hits.length, args.label, what, !args.count, args.count),
+                        open: photosApp({ imageList: list }),
                         attachments: [shown], data: { count: hits.length } };
             if (args.count) return out;
             return launch(env, PHOTOS_APP, { imageList: list }).then(function () { return out; });

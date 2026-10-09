@@ -430,6 +430,20 @@ describe("the device", () => {
         expect(launched(d)).toEqual({ id: "org.webosphoenix.photos", params: { imageList: list } });
         expect((await d.ask("show my photos from last week")).text).toBe("Here is 1 photo from last week. I've opened it in Photos too.");
     });
+    // "Show my photos of flowers" went to the on-device model (and waited
+    // on it). Nothing labels pictures by what is in them: by album or file
+    // name only, and said so; none: said so, and Photos offered.
+    it("photos of something: by album or file name, else said it can't", async () => {
+        const d = device();
+        const none = await d.ask("Show my photos of flowers");
+        expect(none.text).toBe("I can't search photos by what's in them: nothing on this device labels them, and none has \u201cflowers\u201d in its album or file name. Want me to open Photos?");
+        expect(none.choices).toEqual([{ id: "open", label: "Open Photos" }]);
+        d.db.set("img-f", { _id: "img-f", _kind: "com.palm.media.image.file:1", path: "/media/internal/Pictures/Flowers/tulip.jpg", createdTime: at(2, 9) });
+        d.db.set("img-g", { _id: "img-g", _kind: "com.palm.media.image.file:1", path: "/media/internal/DCIM/flower-show.jpg", createdTime: at(3, 9) });
+        const some = await d.ask("show me pictures of flowers");
+        expect(some.text).toBe("I can't see what's in your photos, so these are the ones with \u201cflowers\u201d in their album or file name. Here are 2 photos. I've opened them in Photos too.");
+        expect(launched(d)).toEqual({ id: "org.webosphoenix.photos", params: { imageList: { results: [{ file_path: "/media/internal/DCIM/flower-show.jpg" }, { file_path: "/media/internal/Pictures/Flowers/tulip.jpg" }], title: "" } } });
+    });
     it("no photos: says so and offers Photos; how many: only said", async () => {
         const d = device();
         const launches = () => d.called("applicationManager/launch").length;
