@@ -314,6 +314,30 @@ async function main() {
         check(/A PIN already locks this device/.test(await text()), "run again, the passcode step leaves the PIN alone");
 
         check(errors.length === 0, "no errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
+
+        // A new device takes the computer's time zone, and Date & Time's
+        // picker shows it: "UTC" (a container's) is the list's Etc/UTC, and
+        // a zone the list lacks is added to it.
+        for (const [tz, want, label] of [["UTC", "Etc/UTC", "UTC"], ["Europe/Vienna", "Europe/Vienna", "Vienna"]]) {
+            const c = await browser.newContext({ viewport, timezoneId: tz });
+            const p = await c.newPage();
+            await p.goto(appUrl(APP));
+            await p.evaluate(() => localStorage.clear());
+            await p.goto(appUrl(APP));
+            await p.click("[data-testid=next]");
+            await p.waitForSelector("[data-testid=step-wifi]");
+            await p.click("[data-testid=skip]");
+            await p.waitForSelector("[data-testid=step-hardware]");
+            await p.click("[data-testid=skip]");
+            await p.waitForSelector("[data-testid=step-restore]");
+            await p.click("[data-testid=skip]");
+            await p.waitForSelector("[data-testid=step-datetime]");
+            await p.waitForTimeout(400);
+            const zone = (await luna(p, "luna://com.webos.service.systemservice/getPreferences", { keys: ["timeZone"] })).timeZone;
+            const shown = (await p.textContent("[data-testid=timezone]")).trim();
+            check(zone.ZoneID === want && shown.includes(label), `a computer in ${tz}: the zone is ${zone.ZoneID}, the picker shows "${shown}"`);
+            await c.close();
+        }
         await browser.close();
     } finally {
         server.kill();

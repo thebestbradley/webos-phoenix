@@ -1176,7 +1176,10 @@
         locale: { languageCode: "en", countryCode: "us", phoneRegion: { countryCode: "us" } },
         region: { countryCode: "us" },
         timeFormat: "HH12",
-        timeZone: { ZoneID: PalmSystem.TZ, City: "", Country: "" },
+        // The computer's zone; its UTC aliases are the zone list's Etc/UTC
+        // (a container's "UTC" matched no zone: First Use's Time zone
+        // picker showed nothing).
+        timeZone: { ZoneID: /^(Etc\/)?(UTC|UCT|GMT|Universal|Zulu)$/.test(PalmSystem.TZ) ? "Etc/UTC" : PalmSystem.TZ, City: "", Country: "" },
         useNetworkTime: true,
         wallpaper: { wallpaperName: "", wallpaperFile: "" },
         // Dock mode's own wallpaper (Preferences.cpp "dockwallpaper"), behind
@@ -5011,7 +5014,13 @@
 
         sys["/getPreferenceValues"] = function (p, reply) {
             if (p.key === "timeZone") {
-                reply(ok({ timeZone: ZONES.map(function (z) {
+                // The device's zone is always one of them: one taken from
+                // the computer may not be in the list (Europe/Vienna, say).
+                var cur = (prefs().timeZone || {}).ZoneID;
+                var list = ZONES.slice();
+                if (cur && !ZONES.some(function (z) { return z[0] === cur; }))
+                    list.push([cur, cur.split("/").pop().replace(/_/g, " "), "", ""]);
+                reply(ok({ timeZone: list.map(function (z) {
                     return { ZoneID: z[0], City: z[1], Country: z[2], CountryCode: z[3], Description: z[1],
                              offsetFromUTC: zoneOffset(z[0]), supportsDST: 1 };
                 }) }));
