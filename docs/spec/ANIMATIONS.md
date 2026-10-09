@@ -73,7 +73,7 @@ durations and curves, never wall-clock time).
 | Dock background opacity | animated over 350 ms but never drawn (`dimensionsmain.cpp:372-379` only stores it) | none | n/a |
 | Search pill fade | 200 ms OutCubic (`:303-306`) | `SearchPill.qml` | matches |
 | **Page change** (a tab's tap, a drag let go) | 250 ms InQuad (`dimensionslauncher.cpp:3326-3329`, snapback `:1990-2010`; `dynamicssettings.cpp:86-87`) | was 300 ms, the ListView's own highlight move and snap | **implemented**: `Launcher.qml` `showPage` / `pageGlide` |
-| **Page flick** | to the page beside the one it began on, distance / speed (speed px/ms x 100 / 1000), 200-1200 ms OutCubic (`:3330-3339, 3610-3645`; `FlickGestureRecognizer.cpp:44-46, 95-104`) | was the ListView's flick deceleration | **implemented**: `Launcher.qml` `_pagesDragEnded` |
+| **Page flick** | to the page beside the one it began on, distance / speed (speed px/ms x 100 / 1000), 200-1200 ms OutCubic (`:3330-3339, 3610-3645`; `FlickGestureRecognizer.cpp:44-46, 95-104`) | was the ListView's flick deceleration | **implemented, snappier by the owner's choice**: `Launcher.qml` `_pagesDragEnded`; the speed as the finger lets go (last 100 ms) from 0.4 px/ms with no upper bound, 150-400 ms |
 | Page autoscroll under a dragged icon | 150 px over 300 ms, linear (`page.cpp:1704-1751`) | was OutCubic | **implemented**: `Launcher.qml` pageScroll |
 | Icons making room while reordering | 300 ms InQuad (`dynamicssettings.cpp:92-93`) | `Launcher.qml` | matches |
 | Remove Application? (app info dialog) | fade in 400 ms, out 600 ms, linear (`dynamicssettings.cpp:106-107`, `dimensionslauncher.cpp:3223-3266`, `AppInfoDialog.qml:55-68`) | was 300 ms both ways | **implemented**: `Shell.qml` deleteDialog, `Theme.appInfoDialogFade*Duration` |

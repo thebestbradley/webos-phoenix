@@ -19,13 +19,15 @@ Item {
     // Stand-ins for the simulator's pages: what they were asked to run.
     property var ran: []
     property var mapsRoute: null
+    // What the system page answers for location.get().
+    property var position: ({ latitude: 37.3337, longitude: -121.8907 })
     QtObject {
         id: systemPage
         property string url: "phoenix://rootfs/usr/palm/applications/com.palm.systemui/index.html"
         property string appId: "com.palm.systemui"
         function runScript(js, done) {
             root.ran.push(js);
-            if (done) done(JSON.stringify({ latitude: 37.3337, longitude: -121.8907 }));
+            if (done) done(JSON.stringify(root.position));
         }
     }
     QtObject {
@@ -46,6 +48,7 @@ Item {
     SimLocation {
         id: loc
         windows: pages
+        followHost: false
         askText: function () { return "48.8584, 2.2945"; }
         property var told: []
         alert: function (text) { told = told.concat([text]); }
@@ -73,6 +76,19 @@ Item {
             verify(loc.goTo("sanjose"));
             compare(lastSet().slice(0, 2), [37.3337, -121.8907], "San Jose: the runtime's home, in Maps' demo region");
             verify(!loc.goTo("atlantis"));
+        }
+
+        // Each position says which entry set it; at start the menu shows
+        // that entry again (a device left in London is still in London).
+        function test_sourceRemembered() {
+            verify(loc.goTo("london"));
+            compare(lastSet()[2].simSource, "london");
+            root.position = { latitude: 35.6812, longitude: 139.7671, simSource: "tokyo" };
+            loc._started = false;
+            loc.start();
+            compare(loc.current, "tokyo");
+            root.position = { latitude: 37.3337, longitude: -121.8907 };
+            loc.goTo("sanjose");
         }
 
         function test_custom() {

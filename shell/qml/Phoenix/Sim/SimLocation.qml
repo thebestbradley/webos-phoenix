@@ -12,6 +12,9 @@
 //   - Custom...: "lat, lon", or a place's name (Photon, as Maps searches).
 //   - This Computer's Location: Qt Positioning (SimHostPosition.qml, loaded
 //     only where the module is: CoreLocation on a Mac, GeoClue on Linux).
+//     The default: a device the simulator has not moved yet (or last left
+//     at this computer's location) goes there as the simulator starts; San
+//     Jose until a fix comes, and where there is none.
 //   - Moving: along the route Maps shows (window.__phoenixMapsRoute: its
 //     directions or navigation), at the route's pace (driving 13 m/s,
 //     cycling 5, walking 1.4), a fix a second with its heading and speed;
@@ -59,12 +62,16 @@ Item {
         var pages = windows && windows._webPages ? windows._webPages() : [];
         return pages.length ? pages[0] : null;
     }
+    // Each position set says which entry set it (simSource), so the menu
+    // shows it again after a restart, and "host" is followed again.
     function setLocation(lat, lon, extra) {
         var p = _page();
         if (!p)
             return false;
+        extra = extra || {};
+        extra.simSource = current;
         p.runScript("window.__phoenixRuntime && __phoenixRuntime.location.set(" + JSON.stringify(lat) + ", " + JSON.stringify(lon)
-                    + ", " + JSON.stringify(extra || {}) + ")");
+                    + ", " + JSON.stringify(extra) + ")");
         return true;
     }
     function goTo(id) {
@@ -137,6 +144,42 @@ Item {
         id: hostPosition
         // Only where Qt Positioning is installed: without it, this fails alone.
         source: Qt.resolvedUrl("SimHostPosition.qml")
+    }
+    // Off: start where the device was left (the tests).
+    property bool followHost: true
+    property bool _started: false
+    // At start, once there is a page: the entry that set the device's
+    // position last; this computer's location if that was it or nothing was.
+    function start() {
+        var p = _page();
+        if (_started || !p)
+            return;
+        _started = true;
+        p.runScript("JSON.stringify(window.__phoenixRuntime && __phoenixRuntime.location.get())", function (r) {
+            var at = null;
+            try { at = JSON.parse(r); } catch (e) { at = null; }
+            var src = at && at.simSource ? String(at.simSource) : "";
+            if (src === "moving")
+                src = "custom";
+            if (src && src !== "host") {
+                loc.current = src;
+                return;
+            }
+            if (loc.followHost && loc.hostAvailable)
+                loc.useHost();
+        });
+    }
+    Timer {
+        // The pages come as the shell loads: look for one for half a minute.
+        interval: 500
+        repeat: true
+        running: !loc._started
+        property int tries: 0
+        onTriggered: {
+            loc.start();
+            if (++tries >= 60)
+                loc._started = true;
+        }
     }
     Connections {
         target: hostPosition.item
