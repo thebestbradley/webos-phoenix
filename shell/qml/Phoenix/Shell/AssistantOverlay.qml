@@ -307,6 +307,7 @@ Item {
         status = "";
         // Shown at once; the thread comes back with the answer.
         _seen["text:" + text] = true;
+        list.revealIds = {};
         messages = messages.concat([{ id: "pending-user-" + (++_pending), role: "user", text: text }]);
         // The first request makes this opening's thread.
         var p = { text: text };
@@ -950,9 +951,36 @@ Item {
             model: ov.messages.concat(ov.busy ? [{ id: "thinking", role: "assistant", text: "", thinking: true }] : []).reverse()
             boundsBehavior: Flickable.StopAtBounds
             interactive: contentHeight + topMargin > height
+            // An answer taller than the conversation's room (a phone with
+            // the keyboard up has about 90 px) shows from its start, not
+            // its last line or buttons: the question asked was out of sight.
+            // The latest of the answers that came since the last request
+            // (revealIds), until the user scrolls or asks again; the
+            // delegates are made again as the thread changes, so it is
+            // shown again then. One that fits stays at the end.
+            property var revealIds: ({})
+            function reveal() { if (Object.keys(revealIds).length) Qt.callLater(_reveal); }
+            function _reveal() {
+                var last = null;
+                for (var i = 0; i < contentItem.children.length; ++i) {
+                    var d = contentItem.children[i];
+                    if (d.modelData !== undefined && d.visible && revealIds[d.modelData.id] && (!last || d.y > last.y))
+                        last = d;
+                }
+                if (!last || last.height <= height)
+                    return;
+                var top = last.mapToItem(list, 0, 0).y;
+                if (top !== 0)
+                    contentY += top;
+            }
+            onModelChanged: reveal()
+            onContentHeightChanged: reveal()
+            onHeightChanged: reveal()
+            // The list keeps its end in place as it lays out again.
+            onContentYChanged: if (!moving) reveal()
             // The bird glances along a scroll, the way the words go.
             property real _from: 0
-            onMovementStarted: { _from = contentY; glanceTimer.restart(); }
+            onMovementStarted: { _from = contentY; glanceTimer.restart(); revealIds = {}; }
             onMovementEnded: { glanceTimer.stop(); ov._glance = 0; }
             Timer {
                 id: glanceTimer
@@ -975,6 +1003,9 @@ Item {
                         appear = 0;
                         choicesAppear = 0;
                         arrival.start();
+                        if (!mine && !thinking && modelData.id)
+                            list.revealIds[modelData.id] = true;
+                        list.reveal();
                     }
                 }
                 // An app's scene push: conf/lunaAnimations.conf:61-62
