@@ -6,7 +6,7 @@
 // and cards, as on webOS 2.x, and each starts this app with {page: "..."}.
 // Without a page it shows the list of all panes.
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { sceneTransition } from "@phoenix/luna";
 import { useDevModeShown, useLaunchParams } from "@phoenix/luna/react";
@@ -32,8 +32,17 @@ function Router() {
     const current = launched ?? (opened === "devmode" && devModeShown === false ? null : opened);
     // Opening a pane pushes a scene and the back gesture pops it, with the
     // card's zoom-fade (Mojo's pushScene / popScene; CardTransition.cpp).
+    // Each scene has its own scroll position, as Mojo's scene scrollers
+    // had: a pane opens at its top (it opened as far down as the list had
+    // been scrolled, its header out of sight), and the list comes back
+    // where it was.
+    const listScroll = useRef(0);
     const open = (id: PageId | null, pop: boolean) =>
-        void sceneTransition(() => flushSync(() => setOpened(id)), { pop });
+        void sceneTransition(() => {
+            if (!pop) listScroll.current = window.scrollY;
+            flushSync(() => setOpened(id));
+            window.scrollTo(0, pop ? listScroll.current : 0);
+        }, { pop });
     useBack(() => {
         open(null, true);
         return true;
