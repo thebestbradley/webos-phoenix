@@ -2328,9 +2328,17 @@ which runs unchanged in the simulator:
 
 - **Sources** (`/etc/palm/marketplace/sources.json`, then the user's):
   the Phoenix Marketplace (a signed catalog; for now at
-  `http://127.0.0.1:8088/v1/`, `server/marketplace/bin/serve.sh`, or
-  `phoenix-sim --marketplace`, which starts it with the simulator and opens
-  the Marketplace), the
+  `http://127.0.0.1:8088/v1/`, `server/marketplace/bin/serve.sh`, or the
+  simulator's Services > Marketplace Catalog or `phoenix-sim --marketplace`,
+  which start it and open the Marketplace). When it cannot be reached, the
+  Marketplace's card offers **Start Local Catalog** in the simulator only:
+  the runtime's `org.webosphoenix.simulator` (`marketplaceCatalog
+  {subscribe}` -> `{state, url, error, settingUp}`, `startMarketplaceCatalog`;
+  `NOT_AVAILABLE` unless phoenix-sim's `host.json` says
+  `"marketplaceCatalog": true`) asks phoenix-sim with a `simulator` host
+  message, and the shell passes the state to every page
+  (`applyHostStatus {marketplaceCatalog}`); the catalogs are read again
+  once it runs. Then the
   webOS Archive's App Museum II and the PreCentral homebrew feed (both off
   until switched on). Catalogs can be added by address.
 - **Signed catalogs** (`lib/catalog.js`, `lib/ed25519.js`): `index.json`,
