@@ -763,6 +763,7 @@ Item {
         id: simLocation
         windows: windows
         askText: typeof simChrome !== "undefined" && simChrome ? function (title, label, text) { return simChrome.askText(title, label, text); } : null
+        alert: typeof simChrome !== "undefined" && simChrome ? function (text) { simChrome.alert(text, "", ""); } : null
     }
 
     // ---- The simulator's functions ------------------------------------------------------

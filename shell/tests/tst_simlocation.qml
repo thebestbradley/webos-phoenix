@@ -47,6 +47,8 @@ Item {
         id: loc
         windows: pages
         askText: function () { return "48.8584, 2.2945"; }
+        property var told: []
+        alert: function (text) { told = told.concat([text]); }
     }
 
     // The last position set: [lat, lon, extra].
@@ -79,6 +81,23 @@ Item {
             loc.askCustom();
             compare(lastSet().slice(0, 2), [48.8584, 2.2945]);
             compare(loc.current, "custom");
+        }
+
+        // A place the search cannot find, or no answer from it: the user is
+        // told (it went only to the log), and the device stays put.
+        function test_customNotFoundIsTold() {
+            loc.told = [];
+            loc.goTo("berlin");
+            var url = loc.searchUrl;
+            loc.searchUrl = "http://127.0.0.1:9/api";
+            try {
+                loc.custom("Atlantis");
+                tryVerify(function () { return loc.told.length === 1; }, 5000);
+                verify(/Atlantis/.test(loc.told[0]), loc.told[0]);
+                compare(loc.current, "berlin");
+            } finally {
+                loc.searchUrl = url;
+            }
         }
 
         function test_movingAlongTheRoute() {

@@ -26,6 +26,14 @@ Item {
     property var windows: null
     // Asks for a line of text (phoenix-sim's SimChrome.askText); "" when cancelled.
     property var askText: null
+    // Tells the user what went wrong (SimChrome.alert): a place not found
+    // went only to the log, and the menu seemed to do nothing.
+    property var alert: null
+    function _tell(text) {
+        console.warn("phoenix-sim: " + text);
+        if (alert)
+            alert(text);
+    }
     // Where Custom... searches a name (Photon's API).
     property string searchUrl: "https://photon.komoot.io/api"
 
@@ -95,10 +103,14 @@ Item {
         xhr.onreadystatechange = function () {
             if (xhr.readyState !== XMLHttpRequest.DONE)
                 return;
+            if (xhr.status !== 200) {
+                _tell(qsTr("Could not look up \u201c%1\u201d: the place search (%2) did not answer.").arg(t).arg(searchUrl));
+                return;
+            }
             var f = null;
             try { f = JSON.parse(xhr.responseText).features[0]; } catch (e) { f = null; }
             if (!f) {
-                console.warn("phoenix-sim: no place called " + t);
+                _tell(qsTr("No place called \u201c%1\u201d.").arg(t));
                 return;
             }
             current = "custom";
@@ -115,7 +127,7 @@ Item {
 
     function useHost() {
         if (!hostAvailable) {
-            console.warn("phoenix-sim: this computer's location is not available (Qt Positioning has no source)");
+            _tell(qsTr("This computer's location is not available (Qt Positioning has no source)."));
             return;
         }
         stopMoving();
