@@ -960,8 +960,11 @@ Item {
 
     // Made once (and again for the other form factor, _reset); the layout
     // changes in place (setLayoutFamily), keeping its size. Not a binding on
-    // layoutName: that would make a new, unsized keymap on each change.
-    property var _km: new KM.Keymap(tablet, "qwerty", numberRow)
+    // anything: a binding on layoutName, tablet or numberRow would make a
+    // new, unsized keymap on each change (the number row setting did: the
+    // keyboard kept its old rows, its repaint failing on the empty keymap).
+    // A placeholder until Component.onCompleted makes the real one.
+    property var _km: new KM.Keymap(false, "qwerty", false)
     onTabletChanged: _reset()
     onLayoutNameChanged: {
         // (Bound to the keyboard in use: it can change before _km is made.)
@@ -1059,6 +1062,7 @@ Item {
     }
     onKeyboardSizeChanged: if (tablet) { _requestedHeight = _presetHeight(); _setKeyboardHeight(_requestedHeight); }
     Component.onCompleted: {
+        _km = new KM.Keymap(tablet, "qwerty", numberRow);
         _km.setLayoutFamily(layoutName);
         _km.setCombos(_comboNames, keyboardIndex);
         TA.setLanguage(language, layoutName);
