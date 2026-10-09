@@ -26,8 +26,13 @@
 #include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QProcess>
 #include <cstdio>
 #include <functional>
+#if defined(Q_OS_LINUX)
+#include <csignal>
+#include <sys/types.h>
+#endif
 
 static int failures = 0;
 static void check(bool ok, const char *what)
@@ -74,9 +79,24 @@ protected:
     }
 };
 
+// The shell's side of "killed, its llama-server goes too": a LocalModels
+// that starts the stand-in and waits to be killed.
+static int runChild(const QString &models)
+{
+    LocalModels lm;
+    lm.setModelsDir(models);
+    lm.setServerCommand({ QStandardPaths::findExecutable(QStringLiteral("node")),
+                          QStringLiteral(PHOENIX_REPO_DIR "/apps/assistant/service/test/mock-providers.cjs") });
+    QObject::connect(&lm, &LocalModels::ready, [](const QString &, const QString &) { std::printf("ready\n"); std::fflush(stdout); });
+    lm.ensure(QStringLiteral("m"), QStringLiteral("c1"));
+    return QCoreApplication::exec();
+}
+
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
+    if (argc == 3 && QByteArray(argv[1]) == "--child")
+        return runChild(QString::fromLocal8Bit(argv[2]));
     QTemporaryDir dir;
     Files files;
     files.body = QByteArray("GGUF stand-in\n").repeated(5000);
@@ -151,6 +171,23 @@ int main(int argc, char **argv)
     lm.ensure(QStringLiteral("m"), QStringLiteral("r3"));
     waitFor([&]() { return !lm.running(); }, 5000);
     check(!lm.running(), "stopped when idle");
+
+#if defined(Q_OS_LINUX)
+    // The shell killed outright (no stop()): its llama-server goes with it.
+    {
+        QProcess child;
+        child.start(QCoreApplication::applicationFilePath(), { QStringLiteral("--child"), dir.filePath(QStringLiteral("models")) });
+        waitFor([&]() { child.waitForReadyRead(50); return child.canReadLine() || child.state() == QProcess::NotRunning; }, 20000);
+        const QByteArray said = child.readLine().trimmed();
+        QFile kids(QStringLiteral("/proc/%1/task/%1/children").arg(child.processId()));
+        const qint64 server = kids.open(QIODevice::ReadOnly) ? kids.readAll().trimmed().split(' ').first().toLongLong() : 0;
+        check(said == "ready" && server > 0, "a shell running llama-server");
+        ::kill(pid_t(child.processId()), SIGKILL);
+        child.waitForFinished(3000);
+        waitFor([&]() { return server <= 0 || ::kill(pid_t(server), 0) != 0; }, 5000);
+        check(server > 0 && ::kill(pid_t(server), 0) != 0, "killed, its llama-server goes too");
+    }
+#endif
 
     lm.remove(QStringLiteral("m"));
     check(lm.status().value(QStringLiteral("installed")).toList().isEmpty(), "removed");

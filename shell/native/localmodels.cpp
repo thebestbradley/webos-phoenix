@@ -22,6 +22,10 @@
 #include <sys/sysctl.h>
 #include <sys/types.h>
 #endif
+#if defined(Q_OS_LINUX)
+#include <csignal>
+#include <sys/prctl.h>
+#endif
 
 LocalModels::LocalModels(QObject *parent)
     : QObject(parent)
@@ -329,6 +333,13 @@ void LocalModels::ensure(const QString &id, const QString &requestId)
     m_server->setProgram(program);
     m_server->setArguments(args);
     m_server->setProcessChannelMode(QProcess::SeparateChannels);
+#if defined(Q_OS_LINUX)
+    // It ends with the shell however the shell ends: stop() runs only on a
+    // clean exit, and phoenix-sim killed (a test's timeout, xvfb-run gone)
+    // left llama-server behind, the model in memory and, mid-request, its
+    // cores busy for whatever ran next (several found on a build machine).
+    m_server->setChildProcessModifier([]() { ::prctl(PR_SET_PDEATHSIG, SIGTERM); });
+#endif
     connect(m_server, &QProcess::readyReadStandardError, this, [this]() {
         if (m_server)
             m_stderr = (m_stderr + QString::fromLocal8Bit(m_server->readAllStandardError())).right(2000);
