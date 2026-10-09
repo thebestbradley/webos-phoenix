@@ -31,11 +31,13 @@ const ipk = ipkLib.createIpk({ gzip });
 function makeService(sources: Any[]) {
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-mkt-"));
     const world = { state: null as Any, installed: {} as Record<string, Any>, installs: [] as Any[], toasts: [] as Any[], fail: null as string | null,
-                    devMode: false };
+                    devMode: false, noIcons: false };
     const luna = {
         call: async (uri: string, params: Any) => {
             if (uri.endsWith("/getDevMode")) return { returnValue: true, status: world.devMode ? "enabled" : "disabled" };
-            if (uri.endsWith("/listLaunchPoints")) return { returnValue: true, launchPoints: Object.keys(world.installed).map((id) => ({ id, removable: true })) };
+            // As the launcher has them: the app's own icon, on the device (none when world.noIcons).
+            if (uri.endsWith("/listLaunchPoints")) return { returnValue: true, launchPoints: Object.keys(world.installed).map((id) => ({
+                id, launchPointId: id + "_default", removable: true, icon: world.noIcons ? "" : `/usr/palm/applications/${id}/icon.png` })) };
             if (uri.endsWith("/createToast")) { world.toasts.push(params); return { returnValue: true }; }
             return { returnValue: true };
         },
@@ -151,8 +153,18 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
                                      phoenix: { pwa: { scope: site.url + "/app/", display: "standalone", themeColor: "#1d4f7a" } } });
         const icon = pkg.files.find((f: Any) => f.path.endsWith("/icon.png"));
         expect(Buffer.from(icon.data).subarray(16, 24).readUInt32BE(0)).toBe(192);   // the 192 px icon, not the maskable one
-        expect((await service.listInstalled()).apps).toEqual([expect.objectContaining({ id: "org.webosphoenix.pwa.tides", kind: "pwa", update: null })]);
-        expect((await service.getApp({ sourceId: "phoenix", id: "org.webosphoenix.pwa.tides" })).app.installed).toMatchObject({ sourceId: "phoenix" });
+        // Its icon: its own on the device, as the launcher shows it; the catalog's kept as the fallback.
+        const catalogIcon = (await service.getApp({ sourceId: "phoenix", id: "org.webosphoenix.pwa.tides" })).app.icon;
+        expect((await service.listInstalled()).apps).toEqual([expect.objectContaining({ id: "org.webosphoenix.pwa.tides", kind: "pwa", update: null,
+            icon: "/usr/palm/applications/org.webosphoenix.pwa.tides/icon.png", catalogIcon })]);
+        expect(catalogIcon).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v1\/icons\/copy\//);
+        const page = (await service.getApp({ sourceId: "phoenix", id: "org.webosphoenix.pwa.tides" })).app;
+        expect(page.installed).toMatchObject({ sourceId: "phoenix" });
+        expect(page.ownIcon).toBe("/usr/palm/applications/org.webosphoenix.pwa.tides/icon.png");
+        // A launcher with no icon for it: the catalog's.
+        world.noIcons = true;
+        expect((await service.listInstalled()).apps[0]).toMatchObject({ icon: catalogIcon, catalogIcon });
+        world.noIcons = false;
         expect((await service.remove({ id: "org.webosphoenix.pwa.tides" })).returnValue).toBe(true);
         expect((await service.listInstalled()).apps).toEqual([]);
     });

@@ -63,13 +63,18 @@ export interface MarketApp {
     verdict?: { ok: boolean; text: string };
     museumId?: string;
     appId?: string;
+    /** Installed: the app's own icon on the device, as the launcher shows it. */
+    ownIcon?: string;
 }
 
 export interface InstalledApp {
     id: string;
     catalogId: string;
     title: string;
+    /** The app's own icon on the device (as the launcher shows it), else the catalog's. */
     icon: string;
+    /** The catalog's icon for it, when it was installed. */
+    catalogIcon: string;
     version: string;
     sourceId: string;
     kind: AppKind;

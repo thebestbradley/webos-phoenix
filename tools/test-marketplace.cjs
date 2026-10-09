@@ -235,7 +235,20 @@ async function main() {
         await page.click("[data-testid=install-app]");
         await page.waitForSelector("[data-testid=open-app]", { timeout: 20000 });
         check((await apps()).some((a) => a.id === "com.example.classicnotes"), "a Classic from the App Museum installs");
-        await page.click("[data-testid=back]");
+        // Installed, it shows its own icon (the App Museum's details name none): the one the launcher shows.
+        await page.goto(appUrl("org.webosphoenix.marketplace", { section: "updates" }));
+        const classicRow = "[data-testid='installed-com.example.classicnotes']";
+        await page.waitForSelector(classicRow, { timeout: 15000 });
+        const drawnIcon = await page.waitForFunction((sel) => {
+            const i = document.querySelector(sel + " img");
+            return i && i.complete && i.naturalWidth > 0 ? i.getAttribute("src") : null;
+        }, classicRow, { timeout: 10000 }).then((h) => h.jsonValue(), () => null);
+        const launcherIcon = ((await apps()).find((a) => a.id === "com.example.classicnotes") || {}).icon;
+        check(!!drawnIcon && drawnIcon === launcherIcon, `an installed Classic's row shows its own icon, as the launcher does (${drawnIcon})`);
+        await shot("8c-installed-classic");
+        await page.goto(appUrl("org.webosphoenix.marketplace"));
+        await page.click("[data-testid=tab-classics]");
+        await page.waitForSelector("[data-testid='app-appmuseum.9002']", { timeout: 15000 });
         await page.click("[data-testid='app-appmuseum.9002']");
         await page.click("[data-testid=install-app]");
         await page.waitForSelector("[data-testid=install-error]", { timeout: 20000 });

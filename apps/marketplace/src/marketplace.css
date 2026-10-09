@@ -94,3 +94,5 @@
     .mk-main { padding: 12px 24px 24px; }
     .mk-main > * { max-width: 760px; margin-left: auto; margin-right: auto; }
 }
+/* An icon that is not there: the app's initial (Icon.tsx). */
+.mk-icon-initial { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; color: #fff; font-weight: 700; }

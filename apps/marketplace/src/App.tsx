@@ -25,6 +25,7 @@ import {
 } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import { Screenshots } from "./Gallery";
+import { Icon } from "./Icon";
 import { AppMenu, BackProvider, Button, Dialog, ErrorText, Group, Note, Row, Spinner, TextField, ToggleButton, useBack } from "@phoenix/ui";
 
 const errorText = (e: unknown) => (e instanceof LunaError ? e.errorText : e instanceof Error ? e.message : String(e));
@@ -54,14 +55,6 @@ function Stars({ rating }: { rating: MarketApp["rating"] }) {
     );
 }
 
-function Icon({ src, size = 48 }: { src?: string; size?: number }) {
-    const [broken, setBroken] = useState(false);
-    return (
-        <span className="mk-icon" style={{ width: size, height: size }}>
-            {src && !broken ? <img src={src} alt="" width={size} height={size} draggable={false} onError={() => setBroken(true)} /> : null}
-        </span>
-    );
-}
 
 function kindText(a: MarketApp): string {
     if (a.kind === "pwa") return a.pwa ? `Web app · ${new URL(a.pwa.origin).host}` : "Web app";
@@ -73,7 +66,7 @@ function kindText(a: MarketApp): string {
 function AppRow({ a, onOpen }: { a: MarketApp; onOpen: () => void }) {
     const right = a.update ? "Update" : a.installed ? "Installed" : a.verdict && !a.verdict.ok ? "" : "Free";
     return (
-        <Row testId={`app-${a.id}`} onClick={onOpen} icon={<Icon src={a.icon} />} chevron
+        <Row testId={`app-${a.id}`} onClick={onOpen} icon={<Icon src={[a.ownIcon, a.icon]} title={a.title || a.id} />} chevron
              title={a.title || a.id}
              subtitle={<>{a.developer.name || kindText(a)}{a.rating ? <> · <Stars rating={a.rating} /></> : null}</>}
              value={right} />
@@ -302,7 +295,7 @@ function AppPage({ sourceId, id, seed, onRemoved }: { sourceId: string; id: stri
     return (
         <div className="mk-app" data-testid="app-page">
             <div className="mk-app-head">
-                <Icon src={app.icon} size={64} />
+                <Icon src={[app.ownIcon, app.icon]} size={64} title={app.title || app.id} />
                 <div>
                     <div className="mk-app-title" data-testid="app-title">{app.title || app.id}</div>
                     <div className="mk-muted">{app.developer.name || kindText(app)}</div>
@@ -384,7 +377,7 @@ function Installed({ open }: { open: (sourceId: string, id: string) => void }) {
                 {list === null ? <Row title="Loading…"><Spinner /></Row>
                     : list.length === 0 ? <Row title="Nothing yet" />
                     : list.map((a) => (
-                        <Row key={a.id} testId={`installed-${a.id}`} icon={<Icon src={a.icon} />} chevron title={a.title}
+                        <Row key={a.id} testId={`installed-${a.id}`} icon={<Icon src={[a.icon, a.catalogIcon]} title={a.title} />} chevron title={a.title}
                              subtitle={a.update ? `${a.version} → ${a.update}` : a.version} value={a.update ? "Update" : ""}
                              onClick={() => open(a.sourceId, a.catalogId)} />
                     ))}

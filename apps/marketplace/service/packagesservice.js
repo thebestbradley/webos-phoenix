@@ -249,6 +249,7 @@ function createPackagesService(deps) {
         var o = clone(e);
         o.installed = inst ? { version: inst.version, sourceId: inst.sourceId } : null;
         if (found) o.appId = found.appId;
+        if (found && ownIcons[found.appId]) o.ownIcon = ownIcons[found.appId];
         o.update = inst && inst.sourceId === e.sourceId && e.version && version.compare(e.version, inst.version) > 0 ? e.version : null;
         if (e.kind === "preware" && e.architecture !== "all")
             o.verdict = { ok: false, text: "Not for this device yet: " + nativeText(e.architecture) };
@@ -562,12 +563,23 @@ function createPackagesService(deps) {
         });
     }
 
+    // The installed apps' own icons as the launcher draws them (their
+    // default launch points'), by app id: what the Marketplace shows for an
+    // app on the device. A catalog's icon can be missing (the App Museum's
+    // details name none) or out of reach (a feed's server); the app's own is
+    // on the device.
+    var ownIcons = {};
+
     // Apps removed some other way (the launcher) are forgotten here too.
     function reconcile() {
         return deps.luna.call("luna://com.webos.applicationManager/listLaunchPoints", {}).then(function (r) {
             if (!r || !Array.isArray(r.launchPoints)) return;
             var present = {};
-            r.launchPoints.forEach(function (lp) { present[lp.id] = true; });
+            ownIcons = {};
+            r.launchPoints.forEach(function (lp) {
+                present[lp.id] = true;
+                if (lp.icon && (!lp.launchPointId || lp.launchPointId === lp.id + "_default")) ownIcons[lp.id] = String(lp.icon);
+            });
             var s = load(), changed = false;
             Object.keys(s.installed).forEach(function (id) {
                 if (!present[id]) { delete s.installed[id]; changed = true; }
@@ -594,7 +606,8 @@ function createPackagesService(deps) {
             updatesOf(s).forEach(function (u) { ups[u.id] = u.entry.version; });
             return { returnValue: true, apps: Object.keys(s.installed).sort().map(function (id) {
                 var i = s.installed[id];
-                return { id: id, catalogId: i.catalogId || id, title: i.title, icon: i.icon, version: i.version, sourceId: i.sourceId,
+                return { id: id, catalogId: i.catalogId || id, title: i.title, icon: ownIcons[id] || i.icon || "", catalogIcon: i.icon || "",
+                         version: i.version, sourceId: i.sourceId,
                          kind: i.kind, installedAt: i.installedAt, update: ups[id] || null };
             }) };
         });
@@ -688,10 +701,12 @@ function createPackagesService(deps) {
         browse: browse,
         search: search,
         getApp: function (p) {
-            var s = load();
-            return findApp(s, p && p.sourceId, p && p.id).then(function (e) {
-                return { returnValue: true, app: withState(s, e) };
-            }, errorReply);
+            return reconcile().then(function () {
+                var s = load();
+                return findApp(s, p && p.sourceId, p && p.id).then(function (e) {
+                    return { returnValue: true, app: withState(s, e) };
+                }, errorReply);
+            });
         },
         install: install,
         remove: remove,
