@@ -852,6 +852,20 @@ knows neither `behind` nor `returnToCaller` (the card comes to the
 front, with no `$caller`), and Back at an app's root goes to card view,
 as on webOS.
 
+Back that no one takes minimizes the card, as on webOS: WebAppMgr handed a
+Back the page did not handle back to LunaSysMgr (`WindowedWebApp.cpp`
+`View_Host_ReturnedKeyEvent`), and `SystemUiController::slotKeyEventRejected`
+minimized the active card. `runtime.back` answers whether the app took it
+(the Escape keydown or keyup default-prevented, or the `$caller` close above);
+`WebAppWindow.back` hands a `false` to the shell (`backUnhandled`), which
+minimizes the card if it is still the one in front. A site (a PWA) with no
+history left answers `false` at once. Enyo 1.0 apps stop the key when they go
+back (`enyo.gesture` passes `preventDefault` to the `back` event, `Pane.back`
+calls it), Phoenix apps when a `useBack` handler returns true, Ionic Notes
+everywhere but at its notes list; Flutter's and Enact's first screens leave it.
+The Terminal keeps Back as Esc for the shell, as the Preware Terminal did.
+Tests: `tools/test-back.cjs`, `tst_shell.qml` `test_backAtTheTopLevelMinimizes`.
+
 ## Settings
 
 `apps/settings` is one app with one launch point per pane, like the separate

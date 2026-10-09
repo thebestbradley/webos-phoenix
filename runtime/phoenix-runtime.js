@@ -3961,6 +3961,12 @@
     // they took the gesture) closes its card, and the caller's card, the one
     // beside it in the stack it joined, comes back. As LunaSysMgr's back at
     // an app's root went to card view, this goes back to where the user was.
+    // Returns whether the app took it: false (nothing stopped the key, no
+    // caller to go back to) and the shell minimizes the card to card view,
+    // as WebAppMgr handed an unhandled Back back to LunaSysMgr
+    // (WindowedWebApp.cpp:823-832, View_Host_ReturnedKeyEvent) and
+    // SystemUiController::slotKeyEventRejected minimized the active card
+    // (SystemUiController.cpp:941-954).
     runtime.back = function () {
         var target = global.document.activeElement || global.document.body || global.document;
         var handled = false;
@@ -3987,9 +3993,10 @@
             }
             if (lp && typeof lp.$caller === "string" && lp.$caller) {
                 try { global.close(); } catch (x) { /* ignore */ }
+                return true;
             }
         }
-        return true;
+        return handled;
     };
 
     // ---- Orientation ------------------------------------------------------------------

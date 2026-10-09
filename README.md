@@ -499,6 +499,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-security.cjs` | Security policy, erase, USB drive mode, debugging |
 | `node tools/test-browser.cjs` | The browser: pages, downloads, printing (Save as PDF), find on page, private browsing, the content blocker, user agent and search engine preferences |
 | `node tools/test-links.cjs` | Links between apps: web, `mailto:`, `tel:`, `sms:` and web app links tapped in app pages open the right app with the link |
+| `node tools/test-back.cjs` | The back gesture: an app takes Back where it can go back (Enyo 1 and 2, Phoenix, Ionic) and leaves it at its top level, where the card minimizes |
 
 ## Build a webOS OSE image (experimental)
 

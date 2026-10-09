@@ -899,6 +899,27 @@ Item {
             windows.windowFor(uid).detail = "Inbox";
             shell.gestureBack();
             compare(windows.windowFor(uid).detail, "");
+            compare(shell.cardView.maximizeProgress, 1, "the app took it: the card stays");
+        }
+
+        // Back at an app's top level, which the app does not take: the card
+        // minimizes to card view (SystemUiController::slotKeyEventRejected).
+        // A web page answers later (backUnhandled), for its own card only.
+        function test_backAtTheTopLevelMinimizes() {
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize(uid);
+            tryCompare(shell.cardView, "maximizeProgress", 1, 2000);
+            shell.gestureBack();
+            tryCompare(shell.cardView, "maximizeProgress", 0, 2000);
+
+            var other = windows.launch("org.webosphoenix.maps", "");
+            shell.cardView.maximize(uid);
+            tryCompare(shell.cardView, "maximizeProgress", 1, 2000);
+            windows.backUnhandled(other);
+            wait(100);
+            compare(shell.cardView.maximizeProgress, 1, "another card's answer does nothing");
+            windows.backUnhandled(uid);
+            tryCompare(shell.cardView, "maximizeProgress", 0, 2000);
         }
 
         function test_upGestureTogglesLauncherInCardView() {

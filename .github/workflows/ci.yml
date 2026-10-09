@@ -244,6 +244,7 @@ jobs:
           t node tools/test-browser.cjs --out app-tests/browser-phone
           t node tools/test-browser.cjs --tablet --out app-tests/browser-tablet
           t node tools/test-links.cjs --out app-tests/links-phone
+          t node tools/test-back.cjs
           t node tools/test-files.cjs --out app-tests/files-phone
           t node tools/test-files.cjs --tablet --out app-tests/files-tablet
           t node tools/test-tasks.cjs --out app-tests/tasks-phone

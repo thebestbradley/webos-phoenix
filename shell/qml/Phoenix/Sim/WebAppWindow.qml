@@ -70,6 +70,11 @@ Item {
     property string scope: ""
     readonly property string _scope: Links.scopeOf(url, scope)
 
+    // The back gesture went unhandled by the app's page (it did not stop
+    // the key; back() answers false at once for a site at its first page).
+    // The shell minimizes the card (SystemUiController::slotKeyEventRejected).
+    signal backUnhandled
+
     function back() {
         if (site) {
             if (!view.canGoBack)
@@ -77,7 +82,10 @@ Item {
             view.goBack();
             return true;
         }
-        view.runJavaScript("window.__phoenixRuntime && __phoenixRuntime.back()");
+        view.runJavaScript("window.__phoenixRuntime ? __phoenixRuntime.back() : false", function (handled) {
+            if (handled === false)
+                win.backUnhandled();
+        });
         return true;
     }
 

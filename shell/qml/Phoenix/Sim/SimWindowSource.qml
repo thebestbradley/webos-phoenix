@@ -184,6 +184,9 @@ Item {
 
     signal cardFocusRequested(string uid)
     signal cardCloseRequested(string uid)
+    // The page in the card did not take the back gesture (WebAppWindow
+    // backUnhandled; back() returned true while the page decided).
+    signal backUnhandled(string uid)
 
     // Quick launch slots for web apps: appinfo.json "phoenix.quickLaunch"
     // (Phone 1, Messaging 3), else by title for the original apps.
@@ -608,6 +611,8 @@ Item {
         win.windowRequested.connect(function(request) { source._openWindow(appId, request, uid); });
         if (win.linkRequested)
             win.linkRequested.connect(function(url) { source.openLink(appId, uid, url); });
+        if (win.backUnhandled && uid !== "" && !system)
+            win.backUnhandled.connect(function() { source.backUnhandled(uid); });
         if (system)
             win.closeRequested.connect(function() { source.closeSystemWindow(uid); });
         else if (uid !== "")
@@ -2599,6 +2604,9 @@ Item {
                 notifications.remove(i);
     }
 
+    // The back gesture for the card's (or system window's) page: false if
+    // it is not taken (the shell minimizes the card); a web page answers
+    // later, backUnhandled(uid) if it did not take it.
     function back(uid) {
         var win = _windows[uid];
         return win ? win.back() : false;

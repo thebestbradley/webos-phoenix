@@ -1174,8 +1174,15 @@ FocusScope {
             // The launcher's tab name dialog, open group or "+" went first.
         } else if (launcher.open)
             launcher.open = false;
-        else if (cards.maximized)
-            source.back(cards.currentUid);
+        else if (cards.maximized && !source.back(cards.currentUid))
+            _backUnhandled(cards.currentUid);
+    }
+    // The app did not take Back (nothing left to go back to): its card
+    // minimizes to card view (SystemUiController::slotKeyEventRejected,
+    // SystemUiController.cpp:941-954). Only if it is still the card in front.
+    function _backUnhandled(uid) {
+        if (cards.maximized && !cards.minimizing && cards.currentUid === uid && !launcher.open && !justType.open)
+            cards.minimize();
     }
 
     // The forward swipe (left to right; Key_CoreNavi_Menu, or Next turned
@@ -1257,6 +1264,7 @@ FocusScope {
         ignoreUnknownSignals: true
         function onCardFocusRequested(uid) { Qt.callLater(cards.focusLaunched, uid); }
         function onCardCloseRequested(uid) { cards.close(uid, true); }
+        function onBackUnhandled(uid) { shell._backUnhandled(uid); }
         function onJustTypeDismissed() { justType.open = false; }
         function onBannerRequested(appId, text, icon, params, soundClass, soundFile, soundDuration, bannerId) {
             var a = null;
