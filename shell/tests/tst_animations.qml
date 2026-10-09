@@ -178,7 +178,7 @@ Item {
             }
             for (i = 1; i <= 4; ++i) {              // then quickly, 20 px a step
                 mouseMove(root, 268 - i * 20, y);
-                wait(10);
+                wait(5);
             }
             mouseRelease(root, 188, y);
             compare(launcher.currentPage, 1);

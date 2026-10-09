@@ -648,7 +648,8 @@ Item {
     property real _dragStartX: 0
     property real _dragStartTime: 0
     property int _dragStartPage: 0
-    // [time, contentX] while dragged, the last launcherFlickWindow ms of it.
+    // [time, contentX] while dragged: the last launcherFlickWindow ms of
+    // it, and the one sample before.
     property var _dragSamples: []
     function _pagesDragStarted() {
         pageGlide.stop();
@@ -662,16 +663,23 @@ Item {
         var now = Date.now();
         var s = _dragSamples;
         s.push([now, pages.contentX]);
-        while (s.length > 2 && now - s[1][0] >= Theme.launcherFlickWindow)
+        while (s.length > 1 && now - s[1][0] > Theme.launcherFlickWindow)
             s.shift();
     }
     function _pagesDragEnded() {
         var w = Math.max(1, pages.width);
         var now = Date.now();
         var s = _dragSamples.length ? _dragSamples : [[_dragStartTime, _dragStartX]];
-        // The window from the oldest sample still in it (or the drag's start).
-        var dt = Math.max(1, now - s[0][0]);
-        var vx = -(pages.contentX - s[0][1]) / dt;      // the finger's, px/ms
+        // From the oldest sample inside the window to the release; only when
+        // none is (the finger held still), from the last one before it, which
+        // reads slow. Not from a sample before the window when there is one
+        // inside: a slow step before a quick flick would count against it.
+        var from = s[s.length - 1];
+        for (var i = 0; i < s.length; ++i) {
+            if (now - s[i][0] <= Theme.launcherFlickWindow) { from = s[i]; break; }
+        }
+        var dt = Math.max(1, now - from[0]);
+        var vx = -(pages.contentX - from[1]) / dt;      // the finger's, px/ms
         var speed = Math.abs(vx);
         var to;
         if (speed >= Theme.launcherFlickMinVelocity) {
