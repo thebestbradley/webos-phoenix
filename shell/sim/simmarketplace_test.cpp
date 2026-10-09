@@ -3,8 +3,12 @@
 //
 // simmarketplace-test: phoenix-sim's catalog service (SimMarketplace)
 // started without blocking, stopped, found running, and failing, against a
-// stand-in checkout whose bin/serve.sh is a small script (Python's HTTP
-// server for PHP's) and a PATH with a stand-in php: no PHP needed.
+// stand-in checkout whose bin/serve.sh is a small script and a PATH with a
+// stand-in php: no PHP needed. PHP's server is this program itself
+// (simmarketplace-test --serve PORT: it listens, nothing else), so the test
+// depends on no other program: a python3 run from the stand-in PATH did
+// not answer on macOS (CI), where the system's python3 is a launcher that
+// finds the real one by its own location and the PATH.
 //
 //   build/simmarketplace-test
 
@@ -70,19 +74,24 @@ static void write(const QString &path, const QByteArray &text, bool executable =
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
-    const QString python = QStandardPaths::findExecutable(QStringLiteral("python3"));
-    if (python.isEmpty()) {
-        std::printf("FAIL python3 is needed for the stand-in server\n");
-        return 1;
+    // The stand-in for PHP's server: listens on the port until stopped.
+    if (argc == 3 && qstrcmp(argv[1], "--serve") == 0) {
+        QTcpServer server;
+        if (!server.listen(QHostAddress::LocalHost, quint16(QByteArray(argv[2]).toUInt())))
+            return 2;
+        std::printf("listening\n");
+        std::fflush(stdout);
+        return app.exec();
     }
+    qputenv("FAKE_CATALOG_SERVER", QFile::encodeName(QCoreApplication::applicationFilePath()));
     QTemporaryDir root;
-    // A PATH with php (a stand-in) and python3; and one without php.
+    // A PATH with php (a stand-in); and one without php.
     const QString bin = root.filePath(QStringLiteral("bin"));
     const QString noPhp = root.filePath(QStringLiteral("bin-no-php"));
     write(bin + QStringLiteral("/php"), "#!/bin/sh\nexit 0\n", true);
     QDir().mkpath(noPhp);
     // And what serve.sh runs besides.
-    for (const char *name : { "python3", "cat", "sleep", "dirname" }) {
+    for (const char *name : { "cat", "sleep", "dirname" }) {
         const QString real = QStandardPaths::findExecutable(QLatin1String(name));
         QFile::link(real, bin + QLatin1Char('/') + QLatin1String(name));
         QFile::link(real, noPhp + QLatin1Char('/') + QLatin1String(name));
@@ -102,7 +111,7 @@ int main(int argc, char **argv)
           "esac\n"
           "[ -f data/signing.key ] || { sleep 0.3; echo key > data/signing.key; }\n"
           "echo \"serving on $1, base $MARKETPLACE_BASE_URL\"\n"
-          "exec python3 -m http.server \"$1\" --bind 127.0.0.1\n",
+          "exec \"$FAKE_CATALOG_SERVER\" --serve \"$1\"\n",
           true);
     const auto mode = [&](const QByteArray &m) { write(data + QStringLiteral("/mode"), m); };
     QDir().mkpath(data);
@@ -167,7 +176,7 @@ int main(int argc, char **argv)
         mode("fail");
         SimMarketplace m(repo, freePort());
         m.startAsync(20000);
-        check(waitFor([&] { return m.state() == SimMarketplace::Failed; }, 10000), qPrintable("a service that exits: failed (" + m.stateName() + " " + m.error() + ")"));
+        check(waitFor([&] { return m.state() == SimMarketplace::Failed; }, 10000), "a service that exits: failed");
         check(m.error().contains(QLatin1String("exit code 3")) && m.error().contains(QLatin1String("no sodium")),
               qPrintable(QStringLiteral("... saying why, from its log (%1)").arg(m.error())));
         m.stop();
