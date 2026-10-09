@@ -1183,7 +1183,12 @@
         // The computer's zone; its UTC aliases are the zone list's Etc/UTC
         // (a container's "UTC" matched no zone: First Use's Time zone
         // picker showed nothing).
-        timeZone: { ZoneID: /^(Etc\/)?(UTC|UCT|GMT|Universal|Zulu)$/.test(PalmSystem.TZ) ? "Etc/UTC" : PalmSystem.TZ, City: "", Country: "" },
+        // Its city is the zone's last part (Settings > Date & Time showed
+        // "Etc/UTC" or "America/Chicago" as the city).
+        timeZone: (function (z) {
+            z = /^(Etc\/)?(UTC|UCT|GMT|Universal|Zulu)$/.test(z) ? "Etc/UTC" : z;
+            return { ZoneID: z, City: z.split("/").pop().replace(/_/g, " "), Country: "" };
+        })(PalmSystem.TZ),
         useNetworkTime: true,
         wallpaper: { wallpaperName: "", wallpaperFile: "" },
         // Dock mode's own wallpaper (Preferences.cpp "dockwallpaper"), behind

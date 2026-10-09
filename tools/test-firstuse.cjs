@@ -367,7 +367,8 @@ async function main() {
             await p.waitForTimeout(400);
             const zone = (await luna(p, "luna://com.webos.service.systemservice/getPreferences", { keys: ["timeZone"] })).timeZone;
             const shown = (await p.textContent("[data-testid=timezone]")).trim();
-            check(zone.ZoneID === want && shown.includes(label), `a computer in ${tz}: the zone is ${zone.ZoneID}, the picker shows "${shown}"`);
+            check(zone.ZoneID === want && zone.City === label && shown.includes(label),
+                  `a computer in ${tz}: the zone is ${zone.ZoneID} (${zone.City}), the picker shows "${shown}"`);
             await c.close();
         }
         await browser.close();
