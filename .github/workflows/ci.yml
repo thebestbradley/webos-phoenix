@@ -1,7 +1,10 @@
 name: shell
 
+# Pull requests, and pushes to main. A branch with a PR is tested once, by
+# the PR's run; a push run on top would test the same commit again.
 on:
   push:
+    branches: [main]
   pull_request:
 
 # A newer push to a branch or PR cancels its older runs, which would only
