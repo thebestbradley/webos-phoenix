@@ -119,6 +119,15 @@ export function closest(places: readonly Place[], near: LngLat): Place[] {
     return out;
 }
 
+const fold = (s: string) => s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+/** A name asked for: the places called that, when there are any (Photon's fuzzy matching also brings "Con Azucar Café" for "Starbucks"). */
+export function named(places: readonly Place[], q: string): Place[] {
+    const words = fold(cleanNearby(q)).split(" ").filter((w) => w.length > 1);
+    const hits = places.filter((p) => { const n = ` ${fold(p.name)} `; return words.every((w) => n.includes(` ${w}`)); });
+    return hits.length ? hits : [...places];
+}
+
 export interface NearbyOutcome { places: Place[]; category: Category | null; radiusKm: number }
 
 /** Places of the kind (or name) around near, closest first: the smallest box with enough of them. */
@@ -137,6 +146,7 @@ export async function searchNearby(p: Providers, q: string, near: LngLat, signal
         places = closest(p.search.kind === "photon" ? parsePhoton(json) : parseNominatim(json), near)
             // Photon lists a closed shop's leftover "vacant" tag too.
             .filter((x) => x.category !== "vacant");
+        if (!category) places = named(places, q);
         if (places.length >= ENOUGH) break;
     }
     return { places, category, radiusKm };

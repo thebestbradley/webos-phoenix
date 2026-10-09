@@ -109,6 +109,15 @@ function sorted(features, me) {
     return out;
 }
 
+// A name asked for: the places called that, when there are any (Photon's
+// fuzzy matching also brings "Con Azucar Café" for "Starbucks").
+function fold(s) { return String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim(); }
+function named(list, q) {
+    var words = fold(clean(q)).split(" ").filter(function (w) { return w.length > 1; });
+    var hits = list.filter(function (p) { var n = " " + fold(p.name) + " "; return words.every(function (w) { return n.indexOf(" " + w) >= 0; }); });
+    return hits.length ? hits : list;
+}
+
 // The places for q around me, closest first: [{id, name, address,
 // category, lat, lon, meters}]. getJson(url) -> Promise of the reply.
 function find(getJson, base, q, me, lang) {
@@ -116,16 +125,16 @@ function find(getJson, base, q, me, lang) {
     function next() {
         var km = RADII[i++];
         return getJson(url(base, q, me, km, lang)).then(function (j) {
-            var list = sorted(j.features, me);
+            var list = cat ? sorted(j.features, me) : named(sorted(j.features, me), q);
             if (list.length >= 3 || (list.length && !cat) || i >= RADII.length) return list.length || cat ? list : anywhere();
             return next();
         });
     }
     // A name not around: anywhere, nearest first by the bias.
     function anywhere() {
-        return getJson(url(base, q, me, 0, lang)).then(function (j) { return sorted(j.features, me); });
+        return getJson(url(base, q, me, 0, lang)).then(function (j) { return named(sorted(j.features, me), q); });
     }
     return next();
 }
 
-module.exports = { CATEGORIES: CATEGORIES, clean: clean, category: category, isNearby: isNearby, url: url, find: find, meters: meters, RADII: RADII };
+module.exports = { CATEGORIES: CATEGORIES, clean: clean, named: named, category: category, isNearby: isNearby, url: url, find: find, meters: meters, RADII: RADII };

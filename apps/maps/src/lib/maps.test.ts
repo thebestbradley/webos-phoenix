@@ -13,7 +13,7 @@ import { instructionFor, modifierFromAngle, osrmUrl, parseOsrm, parseValhalla, v
 import { parseCoords, parseNominatim, parsePhoton, searchUrl } from "./search";
 import { findSaved, fromSaved, toSaved } from "./places";
 import { createRequire } from "node:module";
-import { CATEGORIES, categoryOf, cleanNearby, isNearbyQuery, nearbyUrl, RADII, searchNearby } from "./nearby";
+import { CATEGORIES, categoryOf, cleanNearby, isNearbyQuery, named, nearbyUrl, RADII, searchNearby } from "./nearby";
 import { detailsFromTags, hoursText, openAt, osmElement, overpassQuery } from "./details";
 
 describe("geometry", () => {
@@ -298,6 +298,12 @@ describe("places nearby (the Assistant's \"coffee near me\")", () => {
         expect(asked[1]).toMatch(/bbox=/);
         expect(r.places.map((p) => p.name)).toEqual(["Near Café", "Mid Café", "Far Café"]);
         expect(r.radiusKm).toBe(RADII[1]);
+    });
+
+    it("a name asked for keeps the places called that", () => {
+        const p = (name: string) => ({ id: name, name, detail: "", lon: 0, lat: 0, kind: "poi" as const });
+        expect(named([p("Con Azucar Café"), p("Starbucks Coffee"), p("starbucks")], "the nearest Starbucks").map((x) => x.name)).toEqual(["Starbucks Coffee", "starbucks"]);
+        expect(named([p("Blue Bottle")], "Philz").map((x) => x.name)).toEqual(["Blue Bottle"]);
     });
 
     it("agrees with the Assistant's table (apps/assistant/service/lib/nearby.js)", () => {

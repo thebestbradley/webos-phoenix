@@ -145,7 +145,8 @@ function device(opts: { offline?: boolean; locationAllowed?: boolean | null } = 
             const cafes = [cafe("Peet's Coffee", 3, -122.06, 37.36, "El Camino Real"), cafe("Philz Coffee", 1, -122.035, 37.372, "South Murphy Avenue"),
                            cafe("Starbucks", 2, -122.03, 37.38, "East El Camino Real"), cafe("Starbucks", 4, -122.0, 37.39, "Lawrence Expressway")];
             const features = u.searchParams.getAll("include").includes("osm.amenity.cafe") ? cafes
-                : u.searchParams.get("q") === "starbucks" ? cafes.filter((f) => f.properties.name === "Starbucks")
+                // Photon's fuzzy match brings others too.
+                : u.searchParams.get("q") === "starbucks" ? [cafe("Con Azucar Café", 5, -122.039, 37.37, "Mathilda Avenue"), ...cafes.filter((f) => f.properties.name === "Starbucks")]
                 : [{ geometry: { coordinates: [-121.93, 37.36] }, properties: { name: "San Jose Airport" } }];
             return Promise.resolve({ status: 200, body: JSON.stringify({ features }) });
         }
