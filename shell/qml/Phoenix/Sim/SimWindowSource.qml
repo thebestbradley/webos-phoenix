@@ -2183,15 +2183,25 @@ Item {
             notify(phoneAppId, "Incoming call", "Priya Nair");
             return;
         }
+        // Its card's page, or the one started at boot without a card
+        // (launchAtBootApps, kept parked): asking for it with launch()
+        // brought that page's card up and then waited for a load that had
+        // long happened, and no call came in.
         var uid = runningUid(phoneAppId);
-        var fresh = uid === "";
-        if (fresh)
+        var parked = uid === "" ? _parkedUid(phoneAppId) : "";
+        var page = _windows[uid !== "" ? uid : parked] || _headless[phoneAppId] || null;
+        var fresh = false;
+        if (!page) {
             uid = launch(phoneAppId, "");
-        if (uid === "" || !_windows[uid] || !_windows[uid].runScript)
+            page = uid !== "" ? _windows[uid] : null;
+            fresh = true;
+        }
+        if (!page || !page.runScript)
             return;
         // Phone raises its incoming-call popup alert itself; its card only
         // comes up when the call is answered (PalmSystem.activate).
-        _runWhenLoaded(_windows[uid], "window.__phoenixRuntime && __phoenixRuntime.simulateIncomingCall()", fresh);
+        _runWhenLoaded(page, "window.__phoenixRuntime && __phoenixRuntime.simulateIncomingCall()",
+                       fresh || (page.view && page.view.loading));
     }
 
     // A text arrives. Any running page can play the telephony service; the
