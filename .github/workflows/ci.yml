@@ -160,6 +160,9 @@ jobs:
       - name: The simulator's network (content blocker, user agents, DropShare's server)
         run: build/simnet-test
 
+      - name: The simulator's Marketplace catalog service (started, stopped, failing)
+        run: build/simmarketplace-test
+
       - name: The Assistant's on-device model runner and speech
         run: build/localmodels-test
 
@@ -386,6 +389,7 @@ jobs:
           python3 tools/get-wakeword.py && build/wakeword-test
           build/localmodels-test
           build/simnet-test
+          build/simmarketplace-test
 
       - name: The simulator starts (phone and tablet)
         run: |

@@ -53,7 +53,7 @@ unmock() { rm -f "$BIN/$1"; }
 #   OS         PHOENIX_OS          BREW     Homebrew's prefix (Darwin)
 # Linux: every apt package ($T/dpkg lists them, "all"), node 22,
 # whisper-cli, llama-server. Darwin: the command line tools, Homebrew and
-# every formula, its Qt in opt/qt.
+# every formula, its Qt in opt/qt. Both: PHP 8.3 with sodium and pdo_sqlite.
 computer() {
     cases=$((cases + 1))
     T=$ROOT/case-$cases
@@ -83,6 +83,8 @@ computer() {
     echo lib > "$BUILD/wakeword/libvosk.dylib"
 
     BREW=""
+    # php -r CHECK answers yes (exit 0); php -r 'echo PHP_VERSION;' 8.3.6.
+    mock php 'case "$*" in *PHP_VERSION\;*) printf 8.3.6 ;; esac; exit 0'
     if [ "$OS" = Linux ]; then
         echo all > "$T/dpkg"
         # dpkg-query: the packages in $T/dpkg are installed ("all": every one).
@@ -102,7 +104,7 @@ fmt=""; for a in "$@"; do case "$a" in -f=*) fmt=${a#-f=} ;; -*) ;; *)
         mkdir -p "$BREW/bin"
         printf '#!/bin/sh\necho "brew $*"\n' > "$BREW/bin/brew"
         chmod +x "$BREW/bin/brew"
-        for f in qt cmake ninja node@22 git python@3.12 whisper-cpp llama.cpp; do mkdir -p "$BREW/opt/$f"; done
+        for f in qt cmake ninja node@22 git python@3.12 php whisper-cpp llama.cpp; do mkdir -p "$BREW/opt/$f"; done
         fake_qt "$BREW/opt/qt" 6.10.0
     fi
 }
@@ -141,6 +143,7 @@ phoenix check
 check "Linux, everything there: nothing to install" \
     '[ $status = 0 ]' 'has "dry run"' 'has "ok       Qt 6.8.1"' 'has "ok       Node.js v22.11.0"' \
     'has "ok       whisper-cli"' 'has "ok       whisper base.en model"' 'has "Nothing to install"' \
+    'has "ok       PHP 8.3.6 with sodium and pdo_sqlite"' \
     'lacks "  install  "' 'has "would run: cmake -S .*-DCMAKE_PREFIX_PATH=$QT"' \
     'has "would run: cmake --build $BUILD --parallel"'
 
@@ -152,11 +155,12 @@ check "build --dry-run is check" '[ $status = 0 ]' 'has "Nothing to install"' 'l
 # A computer with nothing of ours: every part would be installed.
 computer Linux
 printf 'git\nsed\n' > "$T/dpkg"
-unmock node; unmock whisper-cli; unmock llama-server
+unmock node; unmock whisper-cli; unmock llama-server; unmock php
 rm -rf "$BUILD/whisper" "$BUILD/wakeword"
 phoenix check
 check "Linux, nothing there: what it would install, with sizes" \
     '[ $status = 0 ]' 'has "install  apt: build-essential cmake ninja-build"' 'has "espeak-ng"' \
+    'has "install  apt:.* php-cli php-sqlite3 "' 'has "skipped  PHP: not there yet"' 'lacks "php-mysql"' \
     'has "apt-get install -y --no-install-recommends"' \
     'has "install  Qt 6.8.1 into $T/qtprefix (aqtinstall) (about"' 'has "aqt install-qt linux desktop 6.8.1"' \
     'has "install  Node.js 22 (NodeSource)"' 'has "install  whisper-cli"' 'has "install  llama-server"' \
@@ -215,6 +219,28 @@ touch -t 202001010000 "$CHECKOUT/apps/node_modules/.package-lock.json"
 phoenix check --no-assistant
 check "npm packages older than the lock: npm ci" 'has "install  npm packages for apps/"' 'has "npm ci"'
 
+# PHP for the Marketplace's catalog: a normal part, its test driver only with --tests.
+computer Linux
+QT_ASK=$QT
+printf 'git\nsed\n' > "$T/dpkg"
+unmock php
+phoenix check --no-assistant --tests
+check "--tests adds PHP's MySQL driver (PHP itself is always installed)" \
+    'has "install  apt:.* php-cli php-sqlite3 .*php-mysql"' 'has "xvfb"'
+
+computer Linux
+QT_ASK=$QT
+mock php 'exit 1'
+phoenix check --no-assistant
+check "a PHP without sodium or pdo_sqlite: says how to get it, and goes on" \
+    '[ $status = 0 ]' 'has "skipped  PHP 8 with sodium and pdo_sqlite is missing ($BIN/php): sudo apt install php-cli php-sqlite3"' \
+    'has "would run: cmake --build"'
+
+computer Darwin
+mock php 'exit 1'
+phoenix check --no-assistant
+check "Mac: a PHP without sodium: brew reinstall php" '[ $status = 0 ]' 'has "brew reinstall php"'
+
 # ---- run -----------------------------------------------------------------------------
 computer Linux
 QT_ASK=$QT
@@ -223,6 +249,10 @@ check "run: adaptive by default" '[ $status = 0 ]' 'has "would run: .*phoenix-si
 phoenix --dry-run --no-assistant run tablet --scene cards --launch org.webosphoenix.settings
 check "run tablet ARGS: the arguments go to the simulator" \
     'has "would run: .*phoenix-sim --tablet --scene cards --launch org.webosphoenix.settings$"'
+phoenix --dry-run --no-assistant run --marketplace
+check "run --marketplace: the catalog's option goes to the simulator" '[ $status = 0 ]' 'has "would run: .*phoenix-sim --adaptive --marketplace$"'
+phoenix --dry-run --no-assistant run tablet --marketplace --scene cards
+check "run tablet --marketplace ARGS" 'has "would run: .*phoenix-sim --tablet --marketplace --scene cards$"'
 phoenix run --dry-run --no-assistant phone -- --help
 check "run phone -- ARGS" 'has "phoenix-sim --phone --help$"'
 phoenix phone
@@ -230,16 +260,19 @@ check "a mode without run: usage error" '[ $status = 2 ]' 'has "only ./phoenix r
 phoenix --bogus
 check "an unknown option: usage error" '[ $status = 2 ]' 'has "unknown command or option: --bogus"'
 phoenix --help
-check "--help" '[ $status = 0 ]' 'has "./phoenix run \[MODE\]"' 'has "--no-assistant"' 'has "--offline"'
+check "--help" '[ $status = 0 ]' 'has "./phoenix run \[MODE\]"' 'has "--no-assistant"' 'has "--offline"' \
+    'has "./phoenix run --marketplace"' 'has "Services > Marketplace Catalog"' 'has "^Environment: PHOENIX_BUILD_DIR"' 'lacks "set -eu"'
 
 # ---- macOS ---------------------------------------------------------------------------
 computer Darwin
-rm -rf "$BREW/opt/qt" "$BREW/opt/node@22" "$BREW/opt/python@3.12" "$BREW/opt/whisper-cpp" "$BREW/opt/llama.cpp"
+rm -rf "$BREW/opt/qt" "$BREW/opt/node@22" "$BREW/opt/python@3.12" "$BREW/opt/php" "$BREW/opt/whisper-cpp" "$BREW/opt/llama.cpp"
+unmock php
 phoenix check
 check "Mac: the missing Homebrew packages in one brew install, with sizes" \
     '[ $status = 0 ]' 'has "ok       Xcode command line tools"' 'has "ok       Homebrew"' 'has "ok       cmake"' \
     'has "install  qt (about 1.3 GB"' 'has "install  node@22"' 'has "install  whisper-cpp"' 'has "install  llama.cpp"' \
-    'has "would run: $BREW/bin/brew install qt node@22 python@3.12 whisper-cpp llama.cpp$"' \
+    'has "install  php (about 120 MB"' 'has "skipped  PHP: not there yet"' \
+    'has "would run: $BREW/bin/brew install qt node@22 python@3.12 php whisper-cpp llama.cpp$"' \
     'has "-DCMAKE_PREFIX_PATH=$BREW/opt/qt"'
 
 computer Darwin

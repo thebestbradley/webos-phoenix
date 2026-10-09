@@ -13,10 +13,12 @@
 # scarthgap), installed with aqtinstall into /opt/Qt (QT_PREFIX to change
 # it): Ubuntu's own Qt packages stop at 6.4.
 #
-#   scripts/linux-setup.sh           install packages, fetch submodules, build
-#                                    (./phoenix build)
+#   scripts/linux-setup.sh           install packages (PHP 8 for the
+#                                    Marketplace's catalog among them), fetch
+#                                    submodules, build (./phoenix build)
 #   scripts/linux-setup.sh --tests   also the test tools (Playwright and its
-#                                    Chromium, Radicale, WsgiDAV, PHP, xvfb)
+#                                    Chromium, Radicale, WsgiDAV, PHP's MySQL
+#                                    driver, xvfb)
 #   scripts/linux-setup.sh --deps    only install packages and the test tools
 #                                    (no build; ./phoenix setup --tests); for
 #                                    a cloud environment's setup script

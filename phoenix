@@ -13,6 +13,10 @@
 #                                 phone or tablet by its size), phone, tablet.
 #                                 ARGS go to phoenix-sim (./phoenix run phone
 #                                 --scene cards; phoenix-sim --help lists them)
+#   ./phoenix run --marketplace   the same, with the Marketplace's catalog
+#                                 service on this computer (PHP 8), and the
+#                                 Marketplace open; or start it in the
+#                                 simulator: Services > Marketplace Catalog
 #   ./phoenix setup               install what is missing, without building
 #   ./phoenix check               only say what is there and what would be
 #                                 installed (the same as --dry-run)
@@ -22,14 +26,17 @@
 #                    their models, the wake word, the speech program)
 #   --offline        download nothing; fails only if something the build
 #                    needs is missing
-#   --tests          also the test tools (Playwright, Radicale, WsgiDAV, PHP)
+#   --tests          also the test tools (Playwright, Radicale, WsgiDAV,
+#                    PHP's MySQL driver)
 #   --dry-run        print what would be installed and run; change nothing
 #   -h, --help       this text
 #
 # What it checks and installs, only what is missing:
 #   macOS   Xcode's command line tools, Homebrew, then from Homebrew: qt,
-#           cmake, ninja, node@22, git, python@3.12 (+ whisper-cpp, llama.cpp)
-#   Ubuntu  apt packages (build tools and the libraries Qt loads), Qt 6.8.1
+#           cmake, ninja, node@22, git, python@3.12, php (+ whisper-cpp,
+#           llama.cpp)
+#   Ubuntu  apt packages (build tools, the libraries Qt loads, PHP 8 with
+#           SQLite for the Marketplace's catalog), Qt 6.8.1
 #           into /opt/Qt (aqtinstall; Ubuntu's own Qt is too old), Node.js 22
 #           (NodeSource), whisper-cli and llama-server built from pinned
 #           commits into /usr/local/bin, espeak-ng
@@ -62,7 +69,8 @@ ASSISTANT=1
 OFFLINE=0
 TESTS=0
 DRY=0
-usage() { sed -n '5,44p' "$REPO_DIR/phoenix" | sed 's/^# \{0,1\}//'; }
+# The comment at the top, from its fifth line.
+usage() { awk 'NR < 5 { next } /^#/ { print; next } { exit }' "$REPO_DIR/phoenix" | sed 's/^# \{0,1\}//'; }
 # Our words first; from the first word that is not ours (or after --), the
 # rest is the simulator's.
 while [ $# -gt 0 ]; do
@@ -189,9 +197,10 @@ mac_prerequisites() {
     export PATH="$BREW_PREFIX/bin:$PATH"
 
     # formula:size: the core, the assistant's, the tests'.
-    formulae="qt:1.3_GB cmake:60_MB ninja:1_MB node@22:80_MB git:60_MB python@3.12:70_MB"
+    # php: the Marketplace's catalog service (server/marketplace), which
+    # the simulator starts (Services > Marketplace Catalog).
+    formulae="qt:1.3_GB cmake:60_MB ninja:1_MB node@22:80_MB git:60_MB python@3.12:70_MB php:120_MB"
     [ $ASSISTANT = 1 ] && formulae="$formulae whisper-cpp:10_MB llama.cpp:30_MB"
-    [ $TESTS = 1 ] && formulae="$formulae php:120_MB"
     step "Homebrew packages"
     missing=""
     for fs in $formulae; do
@@ -238,9 +247,12 @@ APT_CORE="build-essential cmake ninja-build git curl ca-certificates pkg-config
     libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0
     libxcb-xinerama0 libxcb-xkb1 libnss3 libnspr4 libxcomposite1 libxdamage1
     libxrandr2 libxtst6 libxkbfile1 libxshmfence1 libasound2t64 libpulse0 libcups2t64
-    python3 python3-pip python3-venv"
+    python3 python3-pip python3-venv
+    php-cli php-sqlite3"
+# php-cli and php-sqlite3: the Marketplace's catalog service, which the
+# simulator starts (sodium is in Debian's and Ubuntu's php-common).
 APT_ASSISTANT="espeak-ng"
-APT_TESTS="xvfb xauth xdotool libgl1-mesa-dri php-cli php-sqlite3 php-mysql"
+APT_TESTS="xvfb xauth xdotool libgl1-mesa-dri php-mysql"
 
 linux_packages() {
     want="$APT_CORE"
@@ -361,6 +373,23 @@ linux_prerequisites() {
 }
 
 # ---- Both ---------------------------------------------------------------------------
+# PHP 8 with sodium and pdo_sqlite: the Marketplace's catalog service
+# (server/marketplace/bin/serve.sh), which the simulator starts. Installed
+# with the packages above; only checked here, as the simulator runs
+# without it (the catalog then says what is missing).
+marketplace_php() {
+    step "PHP for the Marketplace's catalog"
+    if have php && php -r 'exit(PHP_MAJOR_VERSION >= 8 && extension_loaded("sodium") && extension_loaded("pdo_sqlite") ? 0 : 1);' >/dev/null 2>&1; then
+        ok "PHP $(php -r 'echo PHP_VERSION;' 2>/dev/null) with sodium and pdo_sqlite"
+    elif [ $DRY = 1 ] && ! have php; then
+        skip "PHP: not there yet (installed with the packages above)"
+    elif [ "$OS" = Darwin ]; then
+        skip "PHP 8 with sodium and pdo_sqlite is missing ($(command -v php || echo 'no php')): brew reinstall php; the simulator runs without the Marketplace's catalog"
+    else
+        skip "PHP 8 with sodium and pdo_sqlite is missing ($(command -v php || echo 'no php')): sudo apt install php-cli php-sqlite3 (PHP 8); the simulator runs without the Marketplace's catalog"
+    fi
+}
+
 source_and_packages() {
     step "Source"
     if ! have git; then
@@ -503,6 +532,7 @@ case "$OS" in
     Linux) linux_prerequisites ;;
     *) die "$OS is not supported; the simulator builds on macOS and Linux (docs/GETTING-STARTED.md)." ;;
 esac
+marketplace_php
 source_and_packages
 assistant_models
 test_tools

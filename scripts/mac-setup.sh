@@ -10,7 +10,7 @@
 #   scripts/mac-setup.sh            install what the simulator needs, build it
 #                                   (./phoenix build)
 #   scripts/mac-setup.sh --tests    also what the test suites need (Playwright,
-#                                   Python and PHP packages)
+#                                   Python packages)
 #   scripts/mac-setup.sh --all      the same as --tests
 #   scripts/mac-setup.sh --no-assistant
 #                                   without what the assistant and dictation
