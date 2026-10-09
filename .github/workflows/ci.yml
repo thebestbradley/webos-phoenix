@@ -289,7 +289,7 @@ jobs:
 
       # The menus over the screen, with the keyboard focus on the screen.
       - name: The simulator's menu bar
-        run: xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --check-menu-bar --no-boot-animation --quiet
+        run: xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --check-chrome --no-boot-animation --quiet
 
       - name: Screenshots
         run: |
@@ -410,7 +410,7 @@ jobs:
       # the simulator's: SimChrome's constructor), and the program is a
       # foreground app (AppKit's NSApp.mainMenu and activationPolicy).
       - name: The simulator's menu bar (macOS's, at the top of the screen)
-        run: build/phoenix-sim --check-menu-bar --no-boot-animation --quiet
+        run: build/phoenix-sim --check-chrome --no-boot-animation --quiet
 
       - uses: actions/upload-artifact@v4
         if: always()

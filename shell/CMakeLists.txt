@@ -67,12 +67,12 @@ if(PHOENIX_BUILD_SIM)
         sim/icons/rotate-right.svg sim/icons/screenshot.svg sim/icons/call.svg sim/icons/message.svg
         sim/icons/notification.svg sim/icons/battery.svg sim/icons/charger.svg sim/icons/touchstone.svg
         sim/icons/phone.svg sim/icons/tablet.svg sim/icons/volume-up.svg sim/icons/volume-down.svg
-        sim/icons/ringer.svg sim/icons/keyboard.svg)
+        sim/icons/ringer.svg sim/icons/keyboard.svg sim/icons/keyboard-show.svg sim/icons/keyboard-hide.svg)
     if(APPLE)
         # Its name in the menu bar's application menu and About box: an
         # Info.plist in the program itself (it is not an .app bundle).
         target_link_options(phoenix-sim PRIVATE "LINKER:-sectcreate,__TEXT,__info_plist,${CMAKE_CURRENT_SOURCE_DIR}/sim/Info.plist")
-        # What AppKit says of the menu bar, for --check-menu-bar (CI).
+        # What AppKit says of the menu bar, for --check-chrome (CI).
         enable_language(OBJCXX)
         target_sources(phoenix-sim PRIVATE sim/simmac.mm sim/simmac.h)
         target_link_libraries(phoenix-sim PRIVATE "-framework AppKit")

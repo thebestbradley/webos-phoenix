@@ -300,12 +300,21 @@ scene restart it) and the developer overlays, **Services** what it runs on
 this computer for the device (the Marketplace's catalog, below), and **Help > Keyboard Shortcuts…** lists every key below
 in a window. Each menu item shows its key, so the menus teach them; they are
 made from one list in `shell/qml/sim.qml` (`simActions`), as the keys are.
-The toolbar has icons for the most used: Power, Home, Back, rotate, screen
-capture, incoming call, text, notification, low battery, charger, Touchstone,
-phone and tablet; their tooltips name the keys. It sits beside the screen
-(down the right of an upright screen, along the top of one on its side), so
-the screen keeps its size and `--screenshot` saves the screen alone; **View >
-Show Toolbar** or `--no-toolbar` hides it. Its icons need Qt's SVG plugin
+The toolbar has icons for the most used: Power, Home, Back, the hardware
+keyboard and the virtual one, rotate, screen capture, incoming call, text,
+notification, low battery, charger, Touchstone, phone and tablet; their
+tooltips name the keys. Items that switch something say what they will do
+now: **Attach Hardware Keyboard** / **Detach Hardware Keyboard**
+(Ctrl+Shift+K), **Show Virtual Keyboard** / **Hide Virtual Keyboard**
+(Ctrl+Shift+O, its icon's arrow the way the keyboard will go), **Show
+Toolbar** / **Hide Toolbar**. The toolbar sits beside the screen (down the
+right of an upright screen, along the top of one on its side), so the screen
+keeps its size and `--screenshot` saves the screen alone; **View > Hide
+Toolbar** or `--no-toolbar` hides it. A click on it leaves the keyboard focus
+on the screen. On a Mac the menus are in the menu bar at the top of the
+screen whatever has the focus in the simulator (click its window first if
+another app is in front); `phoenix-sim --check-chrome` prints what the menu
+bar has (CI runs it on Linux and macOS). Its icons need Qt's SVG plugin
 (`libqt6svg6` on Ubuntu; Homebrew's `qt` has it); without it its buttons
 show their names.
 
@@ -377,7 +386,7 @@ connection failed"). Left alone the screen dims and turns off as on a device
 (Settings > Screen & Lock > Turn off after; 5 s on the lock screen); a
 click, **F3** or **Home** turns it on (on a Mac, F3 to F11 need **fn**:
 macOS keeps them for itself). `--stay-awake` keeps it on (as `--screenshot`
-does). `--hardware-keyboard` starts with a hardware keyboard attached, and **Ctrl+Shift+K** attaches or detaches one: the virtual keyboard then stays down when a field takes the focus, a keyboard button above the gesture bar brings it up, and typing on the keyboard puts it away. **Ctrl+Shift+O** (the toolbar's keyboard button) brings the on-screen keyboard up or puts it down; with no text field in use it opens Just Type, whose field it types into. `--low-memory` acts as if memory were low: launching an app shows
+does). `--hardware-keyboard` starts with a hardware keyboard attached, and **Ctrl+Shift+K** attaches or detaches one: the virtual keyboard then stays down when a field takes the focus, a keyboard button above the gesture bar brings it up, and typing on the keyboard puts it away. **Ctrl+Shift+O** (Device > Show Virtual Keyboard, also in the toolbar) brings the on-screen keyboard up or puts it down, with a hardware keyboard attached too; with no text field in use it opens Just Type, whose field it types into. `--low-memory` acts as if memory were low: launching an app shows
 "Sorry, Too Many Cards" instead. On a Touchstone the device goes into dock
 mode, "Exhibition", as on webOS: at once with the screen off (or Power), or
 when the screen would have turned off; an exhibition shows full screen (the

@@ -55,11 +55,12 @@ public:
     // when there is a log to open.
     Q_INVOKABLE void alert(const QString &text, const QString &details, const QString &logFile);
 
-    // --check-menu-bar: whether the menu bar has its menus with the
-    // keyboard focus on the device's screen, as people use it (on a Mac:
-    // the menu bar at the top of the screen, and the app a foreground one),
-    // printed; false if not.
-    bool checkMenuBar();
+    // --check-chrome: whether the menu bar has its menus with the keyboard
+    // focus on the device's screen, as people use it (on a Mac: the menu
+    // bar at the top of the screen, and the app a foreground one), and
+    // whether the focus comes back to the screen when this window takes
+    // it; printed; false if not.
+    bool checkChrome();
 
     // How a key sequence reads on this computer: Qt's portable text ("Ctrl+F5")
     // in the platform's way ("⌘F5"), and on a Mac F1 to F12 with fn.

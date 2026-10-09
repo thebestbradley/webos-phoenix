@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
 <!-- Copyright (c) 2026 webOS Phoenix contributors. SPDX-License-Identifier: Apache-2.0.
      phoenix-sim toolbar icon, drawn for Phoenix (shell/sim/icons/PROVENANCE.md). -->
-<!-- A hardware keyboard: its cord out of the top. -->
-<path d="M12 8.5V6.5c0-1.6 1.2-2.5 2.8-2.5H17c1.2 0 2-.7 2-2"/>
-<rect x="2.5" y="8.5" width="19" height="12" rx="2"/>
-<path d="M6 12h.01M9.3 12h.01M12.6 12h.01M15.9 12h.01M18 12h.01"/>
-<path d="M6 15h.01M9.3 15h.01M12.6 15h.01M15.9 15h.01M18 15h.01"/>
-<path d="M8 17.8h8"/>
+<!-- The on-screen keyboard, and the way it goes: down. -->
+<rect x="2.5" y="3" width="19" height="12" rx="2"/>
+<path d="M6 6.5h.01M9.3 6.5h.01M12.6 6.5h.01M15.9 6.5h.01M18 6.5h.01"/>
+<path d="M6 9.5h.01M9.3 9.5h.01M12.6 9.5h.01M15.9 9.5h.01M18 9.5h.01"/>
+<path d="M8 12.3h8"/>
+<path d="M9 19l3 2.5 3-2.5"/>
 </svg>

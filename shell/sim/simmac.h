@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // What AppKit says about phoenix-sim on a Mac (simmac.mm), for
-// --check-menu-bar (SimChrome::checkMenuBar): the menus the menu bar at
+// --check-chrome (SimChrome::checkChrome): the menus the menu bar at
 // the top of the screen shows, and whether the program is a foreground
 // app (a Dock icon, a menu bar of its own) and the active one.
 

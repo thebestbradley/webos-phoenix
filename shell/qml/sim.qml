@@ -770,7 +770,11 @@ Item {
     //             item is unchecked (a chord to keep holding)
     //   checked   a function: the item is a check box showing it; radio: a
     //             group of which one is checked
-    //   icon      its toolbar icon (shell/sim/icons/NAME.svg)
+    //   label     a function: what it is called now, for an item that says
+    //             what it will do ("Attach ..." / "Detach ..."); tipNow its
+    //             tip now; enabled whether it can be chosen
+    //   icon      its toolbar icon (shell/sim/icons/NAME.svg); iconNow: a
+    //             function, the icon now
     // { separator: true, menu } separates; Help > Keyboard Shortcuts lists
     // them in this order.
     readonly property var simActions: [
@@ -810,25 +814,35 @@ Item {
         { id: "usbDrive", menu: "device", text: qsTr("USB Drive Chord"), keyText: "F3+F10", press: [Qt.Key_F3, Qt.Key_F10],
           tip: qsTr("Power and Volume Down on a USB cable: USB drive mode") },
         { separator: true, menu: "device" },
-        { id: "keyboard", menu: "device", text: qsTr("Hardware Keyboard Attached"), keys: ["Ctrl+Shift+K"],
-          run: function () { status.hardwareKeyboard = !status.hardwareKeyboard; },
-          checked: function () { return status.hardwareKeyboard; } },
+        // A Bluetooth keyboard attached or detached (Shell.hardwareKeyboard).
+        // The menu item and the toolbar button say what they will do.
+        { id: "keyboard", menu: "device", text: qsTr("Attach or Detach Hardware Keyboard"), keys: ["Ctrl+Shift+K"], icon: "keyboard",
+          tip: qsTr("Attached, the on-screen keyboard stays down when a text field takes the focus"),
+          label: function () { return status.hardwareKeyboard ? qsTr("Detach Hardware Keyboard") : qsTr("Attach Hardware Keyboard"); },
+          run: function () { status.hardwareKeyboard = !status.hardwareKeyboard; } },
         // The on-screen keyboard up or down. It types into the field with
         // the focus (as on the device, it has nothing to type into
         // otherwise), so with none Just Type opens, its field focused (not
         // over the lock screen, where only its PIN or password field takes
         // the keyboard, nor in First Use).
-        { id: "virtualKeyboard", menu: "device", text: qsTr("On-Screen Keyboard"), keys: ["Ctrl+Shift+O"], icon: "keyboard",
-          tip: qsTr("Up or down; with no text field in use, Just Type opens with it"),
+        { id: "virtualKeyboard", menu: "device", text: qsTr("Show or Hide Virtual Keyboard"), keys: ["Ctrl+Shift+O"], icon: "keyboard-show",
+          tip: qsTr("The on-screen keyboard; with no text field in use, Just Type opens with it"),
+          label: function () { return shell.keyboardOpen ? qsTr("Hide Virtual Keyboard") : qsTr("Show Virtual Keyboard"); },
+          iconNow: function () { return shell.keyboardOpen ? "keyboard-hide" : "keyboard-show"; },
           run: function () {
               if (shell.keyboardOpen)
                   shell.hideKeyboard();
               else if (shell.imeClient)
                   shell.showVirtualKeyboard();
-              else if (!shell.locked && !shell.firstUse)
+              else if (!shell.locked && !shell.firstUse) {
+                  // With a hardware keyboard a field taking the focus leaves
+                  // the keyboard down; this asked for it, so it comes up
+                  // once Just Type's field has the focus (its page's, a
+                  // moment later).
+                  root._keyboardForJustType = status.hardwareKeyboard;
                   shell.startJustType("");
-          },
-          checked: function () { return shell.keyboardOpen; } },
+              }
+          } },
 
         // Simulate: what happens to the device. Incoming calls and messages
         // (SimWindowSource.simulateIncomingCall / Sms / Mms / Im).
@@ -1059,7 +1073,7 @@ Item {
         { id: "cardView", menu: "", text: qsTr("Card View"), keyText: Qt.platform.os === "osx" ? "" : qsTr("Super, on its own") }
     ])
     // The toolbar's, in order ("|" separates).
-    readonly property var simToolbar: ["power", "volumeUp", "volumeDown", "ringer", "|", "home", "back", "virtualKeyboard", "|",
+    readonly property var simToolbar: ["power", "volumeUp", "volumeDown", "ringer", "|", "home", "back", "|", "keyboard", "virtualKeyboard", "|",
                                        "rotateLeft", "rotateRight", "capture", "|",
                                        "call", "sms", "notification", "|", "lowBattery", "charger", "touchstone", "|",
                                        "phone", "tablet"]
@@ -1070,6 +1084,27 @@ Item {
                                    "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "assistantbird", "assistantbirds", "assistantbirdmoves",
                                    "wakeword", "wakewordlocked", "systemmenu", "empty"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
+
+    // Show Virtual Keyboard opened Just Type with a hardware keyboard
+    // attached: the keyboard comes up for its field (simActions).
+    property bool _keyboardForJustType: false
+    Connections {
+        target: shell
+        function onImeClientChanged() {
+            if (root._keyboardForJustType && shell.imeClient)
+                // After the shell has dealt with the new field (the
+                // hardware keyboard's: the keyboard stays down).
+                Qt.callLater(function () {
+                    root._keyboardForJustType = false;
+                    if (shell.justTypeOpen && shell.imeClient)
+                        shell.showVirtualKeyboard();
+                });
+        }
+        function onJustTypeOpenChanged() {
+            if (!shell.justTypeOpen)
+                root._keyboardForJustType = false;
+        }
+    }
 
     // The keys of the entries that run something, wherever the keyboard
     // focus is (a web app's too).
@@ -1098,21 +1133,22 @@ Item {
             return { id: a.id || "", separator: !!a.separator, menu: a.menu || "", submenu: a.submenu || "",
                      text: a.text || "", tip: a.tip || "", keys: a.keys || [], keyText: a.keyText || "",
                      press: a.press || [], hold: !!a.hold, run: !!a.run, checkable: !!a.checked,
-                     radio: a.radio || "", icon: a.icon || "", dynamic: !!(a.label || a.enabled) };
+                     radio: a.radio || "", icon: a.icon || "", dynamic: !!(a.label || a.enabled || a.iconNow) };
         });
     }
     function simActionChecked(id) {
         var a = _simAction(id);
         return !!(a && a.checked && a.checked());
     }
-    // An entry whose text (label), availability (enabled) or tip (tipNow)
-    // changes: {text, enabled, tip} now.
+    // An entry whose text (label), availability (enabled), tip (tipNow) or
+    // toolbar icon (iconNow) changes: {text, enabled, tip, icon} now.
     function simActionState(id) {
         var a = _simAction(id);
         if (!a)
             return {};
         var text = a.label ? a.label() : a.text;
-        return { text: text, enabled: a.enabled ? !!a.enabled() : true, tip: a.tipNow ? a.tipNow() : "" };
+        return { text: text, enabled: a.enabled ? !!a.enabled() : true, tip: a.tipNow ? a.tipNow() : "",
+                 icon: a.iconNow ? a.iconNow() : (a.icon || "") };
     }
 
     // ---- The Marketplace's catalog (Services) --------------------------------------

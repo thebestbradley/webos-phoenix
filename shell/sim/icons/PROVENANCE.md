@@ -1,7 +1,9 @@
 # Provenance of the simulator's toolbar icons
 
 The SVG line icons in `shell/sim/icons/` (phoenix-sim's toolbar and menus:
-power, volume up and down, ringer switch, home, back, keyboard, rotate left
+power, volume up and down, ringer switch, home, back, the hardware keyboard
+(keyboard: with its cord), the virtual keyboard shown and hidden
+(keyboard-show, keyboard-hide), rotate left
 and right, screenshot, call, message, notification, battery, charger,
 Touchstone, phone, tablet) were drawn for
 Phoenix in October 2026, coordinate by coordinate, and are Apache-2.0 like the
