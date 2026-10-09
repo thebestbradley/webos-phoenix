@@ -735,14 +735,18 @@ Item {
             // service received for Messaging, a Tasks reminder): {appId,
             // title, body, params?}; tapping it launches the app with params.
             // Phoenix: {tag} replaces the app's notification of that tag,
-            // {tag, remove: true} takes it away; {actions: {uri, params,
+            // {tag, remove: true} takes it away (with tagPrefix, also every
+            // tag starting with it: a deleted folder's captures); {actions: {uri, params,
             // items: [{id, label}]}} adds buttons (Notifications.qml
             // runAction), e.g. the Assistant's follow-up answers.
             var target = payload.appId && appInfo(payload.appId) ? payload.appId : appId;
             if (payload.tag)
                 removeTagged(target, String(payload.tag));
-            if (payload.remove)
+            if (payload.remove) {
+                if (payload.tagPrefix)
+                    removeTagged(target, String(payload.tagPrefix), true);
                 return;
+            }
             notify(target, payload.title || "", payload.body || "", payload.params,
                    { tag: payload.tag ? String(payload.tag) : "", actions: payload.actions || null });
             if (payload.soundClass || payload.soundFile) {
@@ -2472,11 +2476,12 @@ Item {
             actions: acts ? JSON.stringify(acts) : ""
         });
     }
-    // The app's notification of that tag, gone (replaced or taken back).
-    function removeTagged(appId, tag) {
+    // The app's notification of that tag, gone (replaced or taken back);
+    // prefix: every one whose tag starts with it.
+    function removeTagged(appId, tag, prefix) {
         for (var i = notifications.count - 1; i >= 0; --i) {
             var n = notifications.get(i);
-            if (n.appId === appId && n.tag === tag)
+            if (n.appId === appId && (prefix ? n.tag !== "" && n.tag.indexOf(tag) === 0 : n.tag === tag))
                 notifications.remove(i);
         }
     }

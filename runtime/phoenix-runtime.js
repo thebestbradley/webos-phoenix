@@ -7359,12 +7359,13 @@
                 return scan(CAPTURE_DIR);
             }).then(function () {
                 // capture: the shell's id for it, so its thumbnail opens
-                // this file and no other.
+                // this file and no other. Tagged with its file, so deleting
+                // it takes the notification back (captureRemoved below).
                 var params = { path: path };
                 if (p.capture) params.capture = String(p.capture);
                 host.postToHost("notification", { appId: SCREENSHOT_APP, title: "Screen captured",
                                                   body: path.slice(CAPTURE_DIR.length + 1).replace(/\.png$/, ""),
-                                                  params: params });
+                                                  params: params, tag: "capture:" + path });
                 return path;
             });
         };
@@ -9546,6 +9547,32 @@
         }
 
         runtime.voiceMemos = { placeholder: PLACEHOLDER, errors: E };
+    })();
+
+    // A screen capture deleted (the preview's Delete, Photos: mediafiles/
+    // remove; Files: filemanager/remove, a capture or a folder holding
+    // some): its "Screen captured" notification goes too (tag "capture:"
+    // + its file, runtime.saveScreenshot), as it would open nothing.
+    (function () {
+        var CAPTURES = "/media/internal/screencaptures";
+        function captureRemoved(path) {
+            path = String(path || "").replace(/\/+$/, "");
+            if (!path || (path.indexOf(CAPTURES + "/") !== 0 && CAPTURES.indexOf(path) !== 0)) return;
+            host.postToHost("notification", { appId: "org.webosphoenix.screenshot", remove: true,
+                                              tag: "capture:" + path, tagPrefix: "capture:" + path + "/" });
+        }
+        runtime.captureRemoved = captureRemoved;
+        ["org.webosphoenix.service.mediafiles", "org.webosphoenix.filemanager"].forEach(function (name) {
+            var svc = runtime.services[name];
+            if (!svc || !svc["/remove"]) return;
+            var base = svc["/remove"];
+            svc["/remove"] = function (p, reply, ctx) {
+                base(p, function (r) {
+                    if (r && r.returnValue) captureRemoved(p.path);
+                    reply(r);
+                }, ctx);
+            };
+        });
     })();
 
     // ================================================================================
