@@ -218,9 +218,12 @@ Item {
             return findChild(iconMenu(), function(o) { return o.objectName === "iconMenu_" + name; });
         }
         // Press and hold an icon, let go without moving: the menu opens.
+        // The holds below wait for what the hold does, not for a fixed time:
+        // a wait() that a busy machine starves past its end returns without
+        // running the hold's timer, and the finger would lift first.
         function holdForMenu(p) {
             mousePress(shell, p.x, p.y);
-            wait(Theme.iconMenuHoldInterval + 150);
+            tryCompare(iconMenu(), "open", true, 3000);
             mouseRelease(shell, p.x, p.y);
             tryCompare(iconMenu(), "open", true, 1000);
             wait(Theme.statusBarMenuFadeDuration + 50);
@@ -250,7 +253,7 @@ Item {
 
         function holdAndDrag(from, to) {
             mousePress(shell, from.x, from.y);
-            wait(Theme.tapAndHoldInterval + 150);
+            tryVerify(function() { return iconMenu().open || launcher.draggedId !== ""; }, 3000, "the hold took");
             var steps = 12;
             for (var i = 1; i <= steps; ++i) {
                 mouseMove(shell, from.x + (to.x - from.x) * i / steps, from.y + (to.y - from.y) * i / steps, 10);
@@ -489,7 +492,7 @@ Item {
             var from = iconPoint(0);
             var edge = launcher.mapToItem(shell, launcher.width - Theme.launcherEdgeWidth / 2, Theme.launcherTabHeight + launcher.pageTopMargin + 100);
             mousePress(shell, from.x, from.y);
-            wait(Theme.tapAndHoldInterval + 150);
+            tryVerify(function() { return iconMenu().open || launcher.draggedId !== ""; }, 3000, "the hold took");
             for (var i = 1; i <= 8; ++i)
                 mouseMove(shell, from.x + (edge.x - from.x) * i / 8, from.y + (edge.y - from.y) * i / 8, 10);
             tryCompare(launcher, "currentPage", 1, 1000);
@@ -640,7 +643,7 @@ Item {
             var first = shell.launcherLayout.pages[0][0];
             var from = iconPoint(0), to = iconPoint(2);
             mousePress(shell, from.x, from.y);
-            wait(Theme.iconMenuHoldInterval + 150);
+            tryVerify(function() { return iconMenu().open; }, 3000, "the menu is open under the finger");
             verify(iconMenu().open, "the menu is open under the finger");
             for (var i = 1; i <= 12; ++i)
                 mouseMove(shell, from.x + (to.x - from.x) * i / 12, from.y + (to.y - from.y) * i / 12, 10);
@@ -667,7 +670,7 @@ Item {
             compare(shell.launcherLayout.pages[0].indexOf(id), 2);
             // In edit mode a hold picks the icon up at once (no menu).
             mousePress(shell, to.x, to.y);
-            wait(Theme.tapAndHoldInterval + 150);
+            tryCompare(launcher, "draggedId", id, 3000);
             verify(!iconMenu().open);
             compare(launcher.draggedId, id);
             mouseRelease(shell, to.x, to.y);
@@ -870,7 +873,7 @@ Item {
             tryVerify(function() { return dock.pinned.length >= 1; }, 1000);
             id = dock.pinned[0].appId;
             mousePress(shell, p.x, p.y);
-            wait(Theme.iconMenuHoldInterval + 150);
+            tryVerify(function() { return iconMenu().open; }, 3000, "the dock icon's menu opens");
             verify(iconMenu().open);
             mouseMove(shell, p.x + 20, p.y - 40, 10);
             compare(iconMenu().open, false);
@@ -1079,7 +1082,7 @@ Item {
             // Hold a built-in tab: rename, no trash.
             var tab0 = findChild(launcher, function(o) { return o.objectName === "launcherTab_2"; });
             mousePress(tab0);
-            wait(Theme.iconMenuHoldInterval + 150);
+            tryCompare(dialog, "open", true, 3000);
             mouseRelease(tab0);
             tryCompare(dialog, "open", true, 1000);
             compare(dialog.heading, "Rename Tab");
@@ -1091,7 +1094,7 @@ Item {
             // Back leaves the dialog without a change.
             var tab4 = findChild(launcher, function(o) { return o.objectName === "launcherTab_4"; });
             mousePress(tab4);
-            wait(Theme.iconMenuHoldInterval + 150);
+            tryCompare(dialog, "open", true, 3000);
             mouseRelease(tab4);
             tryCompare(dialog, "open", true, 1000);
             dialog.field.text = "Other";
@@ -1101,7 +1104,7 @@ Item {
             compare(launcher.tabs[4], "My Stuff");
             // The trash can removes an added tab.
             mousePress(tab4);
-            wait(Theme.iconMenuHoldInterval + 150);
+            tryCompare(dialog, "open", true, 3000);
             mouseRelease(tab4);
             tryCompare(dialog, "open", true, 1000);
             var trash = findChild(dialog, function(o) { return o.objectName === "launcherNameDelete"; });

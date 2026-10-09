@@ -216,7 +216,12 @@ Item {
         // page (Favorites): on an icon, a press that a slow machine holds
         // for iconMenuHoldInterval before the first move arrives opens the
         // icon's menu and keeps the finger (Launcher.qml pageMouse), and the
-        // pages never move; on an empty page a hold does nothing.
+        // pages never move; on an empty page a hold does nothing. The drag
+        // goes most of a page: the Flickable starts following only past its
+        // drag threshold (a 0.6 page drag left the pages at 0.48 of the way,
+        // so the next page came only from the release's flick speed), and
+        // well past half way the next page is where the pages settle whether
+        // the release is taken for a flick or not.
         function test_launcherFingerDragUnchanged() {
             openLauncher();
             var from = -1;
@@ -226,14 +231,16 @@ Item {
             verify(from >= 0, "an empty page with a page after it");
             launcher.showPage(from);
             restAt(from);
-            var y = pages.height / 2, x0 = pages.width * 0.8;
+            var y = pages.height / 2, x0 = pages.width * 0.95, steps = 15;
             mousePress(pages, x0, y);
             // However long the machine takes, no hold gets in the way.
             wait(Theme.iconMenuHoldInterval + 100);
-            for (var i = 1; i <= 10; ++i)
+            for (var i = 1; i <= steps; ++i)
                 mouseMove(pages, x0 - i * pages.width * 0.06, y, 16);
-            mouseRelease(pages, x0 - pages.width * 0.6, y, Qt.LeftButton, Qt.NoModifier, 16);
-            tryCompare(pages, "currentIndex", from + 1, 2000);
+            var dragged = pagePos() - from;
+            verify(dragged > 0.6, "the pages followed the finger: " + dragged);
+            mouseRelease(pages, x0 - steps * pages.width * 0.06, y, Qt.LeftButton, Qt.NoModifier, 16);
+            tryCompare(pages, "currentIndex", from + 1, 5000);
             restAt(from + 1);
             closeLauncher();
         }
