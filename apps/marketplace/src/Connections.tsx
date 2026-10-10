@@ -16,7 +16,7 @@ import { Icon } from "./Icon";
 import {
     applyFilter, capabilityChips, groupAccountTypes, openAccountsLaunch, privacyLines, pushText, serverText, setUpLaunch, signInText, statusBadge,
     addedTemplates, type ConnectorFilter,
-} from "./connections";
+} from "./accountTypes";
 
 /** The catalogs' account types; null while they are read. */
 export function useAccountTypes(version: number) {

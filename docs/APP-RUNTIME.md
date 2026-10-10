@@ -72,7 +72,11 @@ service bus). `runtime/phoenix-runtime.js` runs before the app's own scripts:
   `third_party/app-services`:
   - **accounts** (`com.palm.service.accounts`): accounts in db8, the account
     templates released with Open webOS (HP webOS profile, IMAP/POP/email)
-    read from `/usr/palm/public/accounts/`, credentials; the HP webOS
+    read from `/usr/palm/public/accounts/`, credentials. Templates are found
+    as the service finds them: the folders `runtime/rootfs.json` mounts under
+    `/usr/palm/public/accounts/`, and those in the `public/accounts/` of the
+    apps the user installed (a connector), read again when apps are
+    installed or removed; the HP webOS
     Account server returns the sample owner. Phoenix's CardDAV & CalDAV
     template and its transport are added by the CardDAV and CalDAV block (see
     [CardDAV and CalDAV](#carddav-and-caldav)).

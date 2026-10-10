@@ -139,7 +139,10 @@ export function findMoreFilter(params: unknown): ConnectorFilter | null {
     if (!common || common.sceneType !== "search" || !common.params || common.params.type !== "connector") return null;
     const info = (common.params.connectorInfo ?? {}) as { searchBarTitle?: unknown; types?: unknown };
     const types = (Array.isArray(info.types) ? info.types : [info.types]).filter((c): c is string => typeof c === "string" && c !== "");
-    const title = typeof info.searchBarTitle === "string" && info.searchBarTitle.trim() ? info.searchBarTitle.trim() : "Connections";
+    // The original Accounts names it "HP Synergy Services" (accounts util.js:297,
+    // not debranded there): Palm's and HP's names are not shown.
+    const asked = typeof info.searchBarTitle === "string" ? info.searchBarTitle.trim() : "";
+    const title = asked && !/\b(?:HP|Palm|Synergy)\b/i.test(asked) ? asked : "Connections";
     return { title, types };
 }
 

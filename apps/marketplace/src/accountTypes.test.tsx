@@ -18,7 +18,7 @@ vi.mock("@phoenix/luna", async (orig) => {
 import { AccountTypePage, ConnectionsFiltered, ConnectionsHome } from "./Connections";
 import {
     addedTemplates, applyFilter, capabilityChips, findMoreFilter, groupAccountTypes, privacyLines, pushText, setUpLaunch, signInText, statusBadge,
-} from "./connections";
+} from "./accountTypes";
 
 function type(templateId: string, o: Partial<AccountType> = {}): AccountType {
     return {
@@ -146,5 +146,9 @@ describe("Set up", () => {
 
     it("lists the templates added as accounts", () => {
         expect([...addedTemplates([{ templateId: "com.palm.imap" }, { templateId: 3 }, {}])]).toEqual(["com.palm.imap"]);
+    });
+    it("never shows Palm's or HP's names from the original's Find More", () => {
+        const f = findMoreFilter({ common: { sceneType: "search", params: { type: "connector", connectorInfo: { searchBarTitle: "HP Synergy Services", types: ["MAIL", null] } } } });
+        expect(f).toEqual({ title: "Connections", types: ["MAIL"] });
     });
 });

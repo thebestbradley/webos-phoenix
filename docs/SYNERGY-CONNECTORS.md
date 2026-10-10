@@ -46,6 +46,8 @@ kit**, and a few gaps found in today's code that block third-party connectors.
    does not map that id to the Marketplace, and the Marketplace has no
    connector search. (The shell's launcher already treats both ids as "the
    catalog", `shell/qml/Phoenix/Shell/LauncherLayout.js` line 54.)
+   *Done in C0:* `APP_ALIASES` maps `com.palm.app.enyo-findapps` to the
+   Marketplace, its params unchanged (`tools/test-accounts.cjs`).
 2. **Templates are a fixed list in the simulator.** The original service
    scans two roots, `/usr/palm/public/accounts` and
    `/media/cryptofs/apps/usr/palm/accounts` (for installed apps), and
@@ -53,6 +55,12 @@ kit**, and a few gaps found in today's code that block third-party connectors.
    lines 26-29, `handlers/apps-changed.js`). The runtime reads hard-coded
    files (`TEMPLATE_FILES`, line 3005; `DAV_TEMPLATES`, line 10411), so a
    connector installed from the Marketplace would not appear.
+   *Done in C0:* the runtime's accounts block finds the templates in the
+   folders `runtime/rootfs.json` mounts under `/usr/palm/public/accounts/`
+   and in the installed apps' `public/accounts/<id>/`, reloads them when
+   apps are installed or removed, and signals the change in tempdb as the
+   service does; Accounts launched with `{templateId}` opens that
+   template's sign-in (compat overlay `source/phoenix-launch.js`).
 3. **Services need Developer Mode.** A connector is a background service,
    so it falls under APP-STORE.md phase A5 (sandboxed JS services). Until
    then, third-party connectors can only be side-loaded with Developer Mode.
@@ -251,7 +259,7 @@ called this "HP Synergy Services"; we should use our own name).
 
 **Built (C0), as Connections** (the owner's name for it): the fifth tab
 of the Marketplace, after Classics (`apps/marketplace/src/Connections.tsx`,
-`connections.ts`). The device service reads the index's `accounts`
+`accountTypes.ts`). The device service reads the index's `accounts`
 loosely (`service/lib/accounts.js`: an entry without a usable `templateId`
 is left out, an unknown value falls back to a plain default, an `icon`
 relative to the index is resolved against it; an index without `accounts`
@@ -261,7 +269,7 @@ groups them as above, "Featured" first, and "More" for capabilities in no
 group. The type page has the chips, **Where your data goes**, the sign-in,
 the server, how new data arrives, a Beta / Experimental badge and the help
 link. **Set up** launches `com.palm.app.accounts` with `{templateId}`
-(`setUpLaunch` in `connections.ts`); a template already added as an
+(`setUpLaunch` in `accountTypes.ts`); a template already added as an
 account (`listAccounts`) shows **Open in Accounts**. "Find More..." params
 open the filtered list under its `searchBarTitle`, with **All Connections**.
 Not yet: Install for connector packages (disabled, with a note), the

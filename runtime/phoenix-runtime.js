@@ -1728,7 +1728,15 @@
         "com.palm.app.agendaview": "org.webosphoenix.agenda",
         "com.palm.app.exhibitionpreferences": { id: "org.webosphoenix.settings", params: { page: "exhibition" } },
         // The Developer Mode Enabler (Just Type's Konami code; revealDeveloperMode).
-        "com.palm.app.devmodeswitcher": { id: "org.webosphoenix.settings", params: { page: "devmode" } }
+        "com.palm.app.devmodeswitcher": { id: "org.webosphoenix.settings", params: { page: "devmode" } },
+        // The App Catalog, the Marketplace now. "Find More..." at the end of
+        // the accounts library's "Add an Account" list opens it with
+        // {common: {sceneType: "search", params: {type: "connector",
+        // connectorInfo: {searchBarTitle, searchBarIcon, types}}}}
+        // (enyo-1.0 lib/accounts/source/add-account.js:85-92,
+        // entry-first-launch.js:265-271); the Marketplace gets those params
+        // as they are and opens Connections.
+        "com.palm.app.enyo-findapps": "org.webosphoenix.marketplace"
     };
     var HELP_TOPICS = { universalsearch: "justtype", accountsmgr: "accounts", phone: "phone", messaging: "messaging",
                         camera: "camera", photos: "photos", music: "music", launcher: "launcher", notifications: "notifications" };
@@ -2995,21 +3003,85 @@
     // ---- Accounts (com.palm.service.accounts) ---------------------------------------
     //
     // As in app-services/com.palm.service.accounts: accounts are
-    // com.palm.account:1 objects in db8, templates are the JSON files under
-    // /usr/palm/public/accounts/<templateId>/ (only the templates released
-    // with Open webOS exist: the HP webOS profile and the email templates),
+    // com.palm.account:1 objects in db8, templates are JSON files (below),
     // and listAccounts/getAccountInfo "annotate" accounts with their
-    // template. Credentials are kept per account in localStorage. There are
-    // no transports: a new account is not validated against a server.
+    // template. Credentials are kept per account in localStorage. This block
+    // serves the templates released with Open webOS (com.palm.*: the HP webOS
+    // profile and the email templates), which have no transport here: a new
+    // account is not validated against a server. The others (CardDAV and
+    // CalDAV, the Subscribed Calendar, Jabber, connectors whose service
+    // runs here) go through the block "CardDAV and CalDAV" (Synergy
+    // transport), which calls their callbacks.
+    //
+    // Templates are found as the service finds them: every *.json in each
+    // folder of /usr/palm/public/accounts and of the installed apps' accounts
+    // folder (accounts.js getTemplatePaths, lines 26-66), the first of each
+    // templateId kept (addTemplate, lines 92-96). A page cannot list a
+    // folder, so here they are:
+    //   - /usr/palm/public/accounts/<dir>/<dir>.json for each folder
+    //     runtime/rootfs.json mounts there (BUILTIN_TEMPLATES if it cannot
+    //     be read), and the runtime's own (the simulated Jabber account);
+    //   - for each app the user installed, the templates its package had in
+    //     the app's public/accounts/<dir>/ (the connector layout,
+    //     docs/SYNERGY-CONNECTORS.md 3.1), which installPackage records
+    //     (runtime.recordAccountTemplates); else, for an app installed some
+    //     other way, public/accounts/<appId>/<appId>.json.
+    // The list is read again when apps are installed or removed, as the
+    // service reloads on appsChanged (handlers/apps-changed.js), and a
+    // changed list is signalled in tempdb as updateAppTemplateList does
+    // (accounts.js lines 142-190): the accounts library watches it
+    // (get-templates.js line 28), so an open "Add an Account" list shows a
+    // connector installed meanwhile.
     (function accountsService() {
-        var TEMPLATE_FILES = [
+        var PUBLIC_ACCOUNTS = "/usr/palm/public/accounts/";
+        var BUILTIN_TEMPLATES = [
             "/usr/palm/public/accounts/com.palm.palmprofile/com.palm.palmprofile.json",
             "/usr/palm/public/accounts/com.palm.othermail/com.palm.othermail.json",
             "/usr/palm/public/accounts/com.palm.imap/com.palm.imap.json",
-            "/usr/palm/public/accounts/com.palm.pop/com.palm.pop.json"
+            "/usr/palm/public/accounts/com.palm.pop/com.palm.pop.json",
+            "/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json",
+            "/usr/palm/public/accounts/com.webosphoenix.webcal/com.webosphoenix.webcal.json"
         ];
+        var RUNTIME_TEMPLATES = ["/usr/share/phoenix/runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json"];
+        var PACKAGED = "accountTemplateFiles";   // store: {appId: [paths in the app]}
         var ACCOUNT_KIND = "com.palm.account:1";
+        var SIGNAL_KIND = "com.palm.signaling:1";
         var templateCache = null;
+
+        function builtinFiles() {
+            var mounts;
+            try { mounts = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/runtime/rootfs.json")).mounts; }
+            catch (e) { return BUILTIN_TEMPLATES; }
+            var out = [];
+            Object.keys(mounts || {}).sort().forEach(function (prefix) {
+                if (prefix.indexOf(PUBLIC_ACCOUNTS) !== 0) return;
+                var dir = prefix.slice(PUBLIC_ACCOUNTS.length).replace(/\/$/, "");
+                if (dir && dir.indexOf("/") < 0) out.push(PUBLIC_ACCOUNTS + dir + "/" + dir + ".json");
+            });
+            return out;
+        }
+
+        // The apps the user installed, and the template files in each.
+        function installedFiles() {
+            var packaged = store.get(PACKAGED, {}), seen = {}, out = [];
+            launchPoints().forEach(function (lp) {
+                if (!lp.removable || lp.dynamic || seen[lp.id]) return;
+                seen[lp.id] = true;
+                var base = "/usr/palm/applications/" + lp.id + "/";
+                (packaged[lp.id] || ["public/accounts/" + lp.id + "/" + lp.id + ".json"]).forEach(function (rel) {
+                    out.push(base + rel);
+                });
+            });
+            return out;
+        }
+
+        // An installed app's template files (paths in the app), or null
+        // when it is removed.
+        runtime.recordAccountTemplates = function (appId, paths) {
+            var all = store.get(PACKAGED, {});
+            if (paths && paths.length) all[appId] = paths; else delete all[appId];
+            store.set(PACKAGED, all);
+        };
 
         function absolutize(dir, icons) {
             if (!icons) return;
@@ -3018,15 +3090,18 @@
             });
         }
 
-        function templates() {
+        // Every template, sorted by name.
+        function allTemplates() {
             if (templateCache) return clone(templateCache);
-            var list = [];
-            TEMPLATE_FILES.forEach(function (file) {
+            var list = [], ids = {};
+            builtinFiles().concat(RUNTIME_TEMPLATES, installedFiles()).forEach(function (file) {
                 var text = PalmSystem.getResource(file);
                 if (!text) return;
                 var dir = file.slice(0, file.lastIndexOf("/") + 1), parsed;
                 try { parsed = JSON.parse(text); } catch (e) { console.warn("[phoenix-runtime] bad account template " + file); return; }
                 (Array.isArray(parsed) ? parsed : [parsed]).forEach(function (t) {
+                    if (!t || !t.templateId || ids[t.templateId]) return;
+                    ids[t.templateId] = true;
                     absolutize(dir, t.icon);
                     (t.capabilityProviders || []).forEach(function (cp) { absolutize(dir, cp.icon); });
                     list.push(t);
@@ -3038,7 +3113,35 @@
             templateCache = list;
             return clone(list);
         }
-        runtime.accountTemplates = templates;
+        runtime.accountTemplates = allTemplates;
+
+        // A template the transport block serves: one whose capabilities are
+        // implemented by a service on the simulated bus. The original
+        // release's (com.palm.*) stay here: their mail services are stand-ins
+        // (block "Email transports").
+        function hasTransport(t) {
+            if (/^com\.palm\./.test(t.templateId)) return false;
+            return (t.capabilityProviders || []).some(function (cp) {
+                var m = /^(?:palm|luna):\/\/([^\/]+)/.exec(cp.implementation || "");
+                return !!(m && runtime.services[m[1]]);
+            });
+        }
+        runtime.accountTemplateHasTransport = hasTransport;
+
+        function templates() {
+            return allTemplates().filter(function (t) { return !hasTransport(t); });
+        }
+
+        runtime.onAppsChanged(function () {
+            templateCache = null;
+            var ids = allTemplates().map(function (t) { return t.templateId; }).sort().toString();
+            var was = (callNow("palm://com.palm.tempdb/find", { query: { from: SIGNAL_KIND,
+                where: [{ prop: "appId", op: "=", val: "com.palm.accounts.templates" }] } }).results || [])[0];
+            if (was && was.templates === ids) return;
+            callNow("palm://com.palm.tempdb/del", { query: { from: SIGNAL_KIND,
+                where: [{ prop: "appId", op: "=", val: "com.palm.accounts.templates" }] } });
+            callNow("palm://com.palm.tempdb/put", { objects: [{ _kind: SIGNAL_KIND, appId: "com.palm.accounts.templates", templates: ids }] });
+        });
 
         function templateFor(id) {
             return templates().filter(function (t) { return t.templateId === id; })[0];
@@ -10384,9 +10487,9 @@
     // (docs/SYNERGY.md).
     //
     // It also adds to the blocks above what a Synergy transport needs from
-    // the system, only for accounts of templates listed in DAV_TEMPLATES:
-    //   - com.palm.service.accounts lists the template (read from
-    //     /usr/palm/public/accounts/com.webosphoenix.dav/), creates, modifies
+    // the system, only for accounts of templates whose service is on the
+    // simulated bus (templates(), found by the block "Accounts"):
+    //   - com.palm.service.accounts lists the templates, creates, modifies
     //     and deletes its accounts, and calls the capability callbacks as
     //     app-services' handlers do: onCreate then onEnabled(true) after
     //     createAccount (notify-created.js), onEnabled(true/false) when
@@ -10406,12 +10509,6 @@
     (function davTransport() {
         var SERVICE = "org.webosphoenix.service.dav";
         var SERVICE_DIR = "/usr/palm/applications/org.webosphoenix.dav/service/";
-        // And the simulated Jabber (XMPP) account (block "Instant
-        // messaging"), whose accounts need the same handling.
-        var DAV_TEMPLATES = ["/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json",
-                             // The Subscribed Calendar (a public .ics, one way: lib/webcal.js).
-                             "/usr/palm/public/accounts/com.webosphoenix.webcal/com.webosphoenix.webcal.json",
-                             "/usr/share/phoenix/runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json"];
         var ACCOUNT_KIND = "com.palm.account:1";
         var LOCK_MS = 5 * 60 * 1000;
 
@@ -10480,26 +10577,13 @@
 
         // ---- Accounts: the template, its accounts and their callbacks ------------------------
 
-        var templateCache = null;
+        // The templates this block serves (runtime.accountTemplateHasTransport,
+        // block "Accounts"): CardDAV and CalDAV, the Subscribed Calendar (a
+        // public .ics, one way: lib/webcal.js), the simulated Jabber (XMPP)
+        // account (block "Instant messaging"), and any other whose service
+        // is on the simulated bus.
         function templates() {
-            if (templateCache) return clone(templateCache);
-            var list = [];
-            DAV_TEMPLATES.forEach(function (file) {
-                var text = PalmSystem.getResource(file), t;
-                if (!text) return;
-                try { t = JSON.parse(text); } catch (e) { console.warn("[phoenix-runtime] bad account template " + file); return; }
-                var dir = file.slice(0, file.lastIndexOf("/") + 1);
-                var abs = function (icons) {
-                    Object.keys(icons || {}).forEach(function (k) { if (icons[k].charAt(0) !== "/") icons[k] = dir + icons[k]; });
-                };
-                (Array.isArray(t) ? t : [t]).forEach(function (x) {
-                    abs(x.icon);
-                    (x.capabilityProviders || []).forEach(function (cp) { abs(cp.icon); });
-                    list.push(x);
-                });
-            });
-            templateCache = list;
-            return clone(list);
+            return runtime.accountTemplates().filter(runtime.accountTemplateHasTransport);
         }
         function templateFor(id) { return templates().filter(function (t) { return t.templateId === id; })[0]; }
         function isDav(templateId) { return !!templateFor(templateId); }
@@ -11117,6 +11201,10 @@
                 }
                 report(id, 13, { state: "installing", ipkUrl: path }, each, looks);
                 var files = pkg.files.map(function (f) { return { path: f.path.slice(app.dir.length), data: b64(f.data) }; });
+                // Its account templates, for the accounts service (block "Accounts").
+                runtime.recordAccountTemplates(id, files.map(function (f) { return f.path; }).filter(function (rel) {
+                    return /^public\/accounts\/[^\/]+\/[^\/]+\.json$/i.test(rel);
+                }));
                 return hostInstall("install", id, files).then(function (r) {
                     if (!r.ok) throw Object.assign(new Error(r.error || "Install failed"), { code: "HOST" });
                     report(id, 30, { state: "installed", installBasePath: "/media/cryptofs/apps", skipped: skipped }, each, {});
@@ -11141,6 +11229,7 @@
                     report(id, 25, { state: "remove failed", reason: r.error }, each);
                     throw Object.assign(new Error(r.error || "Remove failed"), { code: -7 });
                 }
+                runtime.recordAccountTemplates(id, null);
                 report(id, 31, { state: "removed" }, each);
             });
         }

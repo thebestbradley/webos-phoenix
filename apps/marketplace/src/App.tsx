@@ -29,7 +29,7 @@ import {
 } from "@phoenix/luna";
 import { useDevModeShown, useLaunchParams } from "@phoenix/luna/react";
 import { AccountTypePage, AccountTypeRow, ConnectionsFiltered, ConnectionsHome, useAccountTypes, useAddedTemplates } from "./Connections";
-import { findMoreFilter, type ConnectorFilter } from "./connections";
+import { findMoreFilter, type ConnectorFilter } from "./accountTypes";
 import { Screenshots } from "./Gallery";
 import { Icon } from "./Icon";
 import { AppMenu, BackProvider, Button, Dialog, ErrorText, Group, Note, Row, Spinner, TextField, ToggleButton, useBack } from "@phoenix/ui";
