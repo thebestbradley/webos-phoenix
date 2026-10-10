@@ -1,0 +1,17 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.gamepads",
+        "org.webosphoenix.usb",
+        "org.webosphoenix.tethering",
+        "org.webosphoenix.battery"
+    ],
+    "phoenix.accessories.query": [
+        "dev"
+    ],
+    "phoenix.accessories.management": [
+        "dev"
+    ],
+    "phoenix.accessories.shell": [
+        "oem"
+    ]
+}

@@ -107,6 +107,25 @@ FocusScope {
         function onUiOrientationChanged() { root._pushOrientation(); }
         function onDeviceOrientationChanged() { root._pushOrientation(); }
     }
+    // Which app is in front with the screen on, for Settings > Battery's
+    // use (org.webosphoenix.battery, services/accessories): every minute
+    // and when the app in front changes, as sim.qml ticks the simulator's.
+    property string _usageApp: ""
+    property real _usageSince: Date.now()
+    function _usageTick() {
+        var now = Date.now(), ms = Math.max(0, now - _usageSince);
+        _usageSince = now;
+        if (ms > 0 && phoenix.display.state !== "off")
+            windows.pushSystemStatus({ usageTick: { appId: phoenix.locked ? "" : _usageApp, ms: ms, at: now } });
+        var i = windows.cardIndex(windows.focusedUid);
+        _usageApp = i >= 0 && phoenix.cardView.maximized ? windows.cards.get(i).appId : "";
+    }
+    Timer { interval: 60000; running: true; repeat: true; onTriggered: root._usageTick() }
+    Connections {
+        target: windows
+        function onFocusedUidChanged() { root._usageTick(); }
+    }
+
     // What the pages ask the shell for (org.webosphoenix.shellhost; as
     // sim.qml answers the simulator's window source).
     Connections {

@@ -279,6 +279,14 @@ Item {
             memos.destroy();
         }
 
+        function test_usageTicksGoToTheBatteryService() {
+            FakeBus.clear();
+            windows.pushSystemStatus({ usageTick: { appId: "com.palm.app.email", ms: 60000, at: 5 } });
+            var c = FakeBus.last("org.webosphoenix.battery", "/phoenix/usageTick");
+            compare(c.params.appId, "com.palm.app.email");
+            compare(c.params.ms, 60000);
+        }
+
         function test_screenCapturesAreFiled() {
             FakeBus.clear();
             var before = windows.notifications.count;

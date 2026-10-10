@@ -355,6 +355,10 @@ Item {
         });
         if (Object.keys(report).length > 0)
             lunaCall("luna://com.palm.systemmanager/phoenix/report", report, function() {});
+        // Which app was in front with the screen on, for Settings > Battery
+        // (services/accessories; sim.qml's usageTick reaches the runtime).
+        if (changes && changes.usageTick)
+            lunaCall("luna://org.webosphoenix.battery/phoenix/usageTick", changes.usageTick, function() {});
     }
 
     function dismissNotification(index) {

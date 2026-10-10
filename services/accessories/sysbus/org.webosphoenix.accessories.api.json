@@ -1,0 +1,17 @@
+{
+    "phoenix.accessories.query": [
+        "org.webosphoenix.gamepads/list",
+        "org.webosphoenix.usb/listDrives",
+        "org.webosphoenix.tethering/getStatus",
+        "org.webosphoenix.battery/usage"
+    ],
+    "phoenix.accessories.management": [
+        "org.webosphoenix.usb/unmount",
+        "org.webosphoenix.usb/mount",
+        "org.webosphoenix.tethering/setWifi",
+        "org.webosphoenix.tethering/setUsb"
+    ],
+    "phoenix.accessories.shell": [
+        "org.webosphoenix.battery/phoenix/usageTick"
+    ]
+}
