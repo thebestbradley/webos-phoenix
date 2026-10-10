@@ -168,9 +168,12 @@ def check(root):
         sysbus = os.path.dirname(svc)
         roles = [read_json(os.path.join(sysbus, r)) for r in os.listdir(sysbus) if r.endswith(".role.json")]
         allowed = {n for r in roles for n in r.get("allowedNames", [])}
-        if name and name.group(1) not in allowed:
+        # Name is a list: one process may provide several names
+        # (luna-service2 src/ls-hubd/file_parser.cpp:469-471, g_key_file_get_string_list).
+        missing = [n for n in (name.group(1).split(";") if name else []) if n and n not in allowed]
+        if missing:
             f.add("service-file", os.path.basename(svc), "%s names %s, which no role file in %s allows"
-                  % (os.path.basename(svc), name.group(1), rel(root, sysbus)), rel(root, svc))
+                  % (os.path.basename(svc), ";".join(missing), rel(root, sysbus)), rel(root, svc))
         if exe and "run-js-service" in exe.group(1):
             m = re.search(r"(/usr/palm/services/[^\s]+)", exe.group(1))
             pkg = os.path.join(os.path.dirname(sysbus), "package.json")

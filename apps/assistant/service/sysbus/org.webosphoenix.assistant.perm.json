@@ -31,7 +31,11 @@
         "phoenix.location.permissions",
         "phoenix.system.media",
         "filemanager.operation",
-        "phoenix.tethering",
+        "phoenix.accessories.query",
+        "phoenix.accessories.management",
+        "phoenix.appmanager.query",
+        "phoenix.appmanager.launch",
+        "devices.power.query",
         "vpn.management",
         "phoenix.clipboard"
     ],

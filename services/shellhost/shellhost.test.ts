@@ -125,6 +125,9 @@ describe("org.webosphoenix.shellhost", () => {
         const all = [...api["phoenix.shellhost.app"], ...api["phoenix.shellhost.shell"]].map((m: string) => m.split("/")[1]).sort();
         expect(all).toEqual([...sh.METHODS].sort());
         expect(api["phoenix.shellhost.app"]).not.toContain("org.webosphoenix.shellhost/send");
+        // Luna Restart (luna-systemui's power menu) is the system's, not a media app's.
+        expect(api["phoenix.system.restart"]).toEqual(["org.webosphoenix.system/restartUi"]);
+        expect(api["phoenix.system.media"]).not.toContain("org.webosphoenix.system/restartUi");
         const perm = JSON.parse(fs.readFileSync(path.join(HERE, "sysbus/org.webosphoenix.shellhost.perm.json"), "utf8"));
         expect(perm["com.webos.surfacemanager"]).toContain("phoenix.shellhost.shell");
         expect(fs.readFileSync(path.join(HERE, "sysbus/org.webosphoenix.shellhost.service"), "utf8"))

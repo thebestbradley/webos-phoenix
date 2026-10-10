@@ -79,6 +79,7 @@
     },
     "requiredPermissions": [
         "accounts.transport",
-        "fediverse.account"
+        "fediverse.account",
+        "phoenix.appmanager.launch"
     ]
 }

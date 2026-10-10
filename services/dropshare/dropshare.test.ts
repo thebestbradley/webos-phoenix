@@ -27,7 +27,7 @@ function world(opts: Any = {}) {
     const ongoing: Any[] = [];
     const notes: Any[] = [];
     const d = ds.createDropShare({
-        downloads: path.join(dir, "Downloads"), address: () => "127.0.0.1", listenHost: "127.0.0.1",
+        downloads: path.join(dir, "Downloads"), address: () => opts.address ?? "127.0.0.1", listenHost: "127.0.0.1",
         pages: (n: string) => Buffer.from("<html>" + n + "</html>"),
         enabled: () => Promise.resolve(opts.enabled !== false),
         ongoing: (o: Any) => ongoing.push(o), notify: (n: Any) => notes.push(n),
@@ -46,6 +46,13 @@ describe("DropShare on a device", () => {
         const w = world({ enabled: false });
         const r = await w.start("receive", {});
         expect(r.first).toMatchObject({ returnValue: false, errorText: "DropShare is off. Turn it on in Settings > DropShare." });
+    });
+
+    it("needs a network: another device cannot reach the phone's loopback", async () => {
+        const w = world({ address: "" });
+        const r = await w.start("receive", {});
+        expect(r.first).toMatchObject({ returnValue: false, errorText: "Connect to a network to use DropShare" });
+        expect(w.d.current()).toBe(null);
     });
 
     it("receives files into Downloads, numbering a name already there", async () => {

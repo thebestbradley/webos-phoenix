@@ -96,7 +96,7 @@ Files: `services/shellhost/shellhost.js`, `service.js`, `sysbus/`,
 | `launchModal`, `dismissModal` | `com.palm.systemmanager/launchModalApp` | `CardView.addModal` | not in `services/systemmanager` yet | ⬜ | runtime `launchModalApp` |
 | `webView`, `browserData` | the browser's page views; Clear Cookies/Cache | `phoenix-sim`'s page views (`simBrowser`) | none: WAM has no `<webview>` (Q38) | ⬜ | runtime `com.palm.browserServer` |
 | `popupalert` | `window.open` dashboards and popup alerts | `SimWindowSource` child windows | none: WAM makes no child windows (Q37) | ⬜ | `SimWindowSource.qml` |
-| `restartUi` | Restart the UI from the power menu | `SimWindowSource` reloads | `org.webosphoenix.system/restartUi` answers "not available" (Q39) | ⬜ | `services/shellhost` |
+| `restartUi` | Restart the UI from the power menu | `SimWindowSource` reloads | `org.webosphoenix.system/restartUi` answers "not available" (Q39); its group `phoenix.system.restart` is oem only, held by luna-systemui (`compat/app-permissions.json`), not by the media apps | ⬜ | `services/shellhost` |
 | `erase`, `enterMSM` | Settings' erase; USB mass storage | `SimStorage.qml` | no `com.palm.storage` on OSE (storaged is LuneOS's) | ⬜ | runtime `com.palm.storage`; Q61 |
 | `inputFocus` | the keyboard follows the focused field | `Shell` keyboard | V5 (Maliit), owned by the keyboard work | 🚫 | HARDWARE.md, keyboard section |
 | `touchToShare` | Touch to Share | `SimWindowSource` | needs an NFC/BT pairing radio | 🚫 | GAPS |
@@ -112,7 +112,7 @@ Files: `services/shellhost/shellhost.js`, `service.js`, `sysbus/`,
 | com.palm.connectionmanager / com.webos.service.connectionmanager | connectivity | runtime | webos-connman-adapter (alias) | ✅ | same |
 | com.webos.service.wifi, bluetooth2, settingsservice, audio, audiofocusmanager, tts, mediaindexer, camera2, devmode, appInstallService, downloadmanager, activitymanager, filecache | OSE services | runtime stand-ins | OSE's own | ✅ (13) | meta-webos |
 | com.palm.activitymanager, com.palm.downloadmanager | legacy names | runtime | aliased to OSE's com.webos.service.* | 🟡 | runtime `serviceAliases`; commit 09e7b1b |
-| com.palm.applicationManager (legacy) | launch, open by type and URL, handlers, listApps, launch points, dock mode | runtime | `services/appmanager` over SAM (OSE's SAM has no open, handlers or dock mode, and launch is oem-only) | 🟡 | `services/appmanager`; `appmanager.test.ts` |
+| com.palm.applicationManager (legacy) | launch, open by type and URL, handlers, listApps, launch points, dock mode, getAppBasePath (Enyo's CrossAppUI) | runtime | `services/appmanager` over SAM (OSE's SAM has no open, handlers or dock mode, and launch is oem-only) | 🟡 | `services/appmanager`; `appmanager.test.ts` |
 | com.palm.power | battery and charger, activities, shutdown, timeouts | runtime | phoenix-devices (`/com/palm/power`, `/shutdown`, signals `batteryStatus`/`USBDockStatus`); `/timeout` in the page as activitymanager activities | 🟡 | `services/devices`; runtime `powerTimeoutStart`; commit 00653a9 |
 | com.palm.display, com.palm.keys, com.palm.vibrate, com.palm.ambientLightSensor | LunaSysMgr's device services | runtime | phoenix-devices | 🟡 | `services/devices` |
 | com.palm.systemmanager | lock, passcode, policies | runtime | `services/systemmanager` | 🟡 | HARDWARE.md |
@@ -123,7 +123,7 @@ Files: `services/shellhost/shellhost.js`, `service.js`, `sysbus/`,
 | org.webosphoenix.share, org.webosphoenix.filepicker | share sheet, file picker | runtime in the page | the same, in the page; targets from SAM `listApps`; data written through the file manager | 🟡 | runtime `shareSheet` |
 | org.webosphoenix.dictation, org.webosphoenix.transcriber, org.webosphoenix.tts | speech | runtime + host models | the shell's local models; `apps/voicememos/service`; `services/tts` | 🟡 | commit e318dcf |
 | org.webosphoenix.ongoing, org.webosphoenix.system | ongoing items; now playing, media keys, restart | runtime | `services/shellhost` | 🟡 (restartUi ⬜) | `services/shellhost` |
-| org.webosphoenix.dropshare | DropShare (send to a computer over HTTP) | `phoenix-sim`'s `simdropshare.cpp` | `services/dropshare`, a Node HTTP server, files into `/media/internal/Downloads` | 🟡 | `services/dropshare`; commit 7f4e36a |
+| org.webosphoenix.dropshare | DropShare (send to a computer over HTTP) | `phoenix-sim`'s `simdropshare.cpp` | `services/dropshare`, a Node HTTP server, files into `/media/internal/Downloads`; with no LAN address it refuses a session (a phone's loopback reaches nothing) | 🟡 | `services/dropshare`; commit 7f4e36a |
 | org.webosphoenix.gamepads, usb, tethering, battery | E4 accessories | runtime + `SimSystemStatus` | `services/accessories` over PDM, connman adapter, `/sys/class/power_supply` | 🟡 | `services/accessories`; commit 3927550 |
 | org.webosphoenix.pty | the Terminal | `phoenix-sim` | `services/pty` | 🟡 | `services/pty` |
 | com.palm.service.accounts, contacts, contacts.linker, calendar.reminders | Open webOS's app services | runtime | the originals under OSE's mojoservicelauncher, with OSE bus files (`compat/app-services`) | 🟡 | install-rootfs `plan_app_services`; commit 7c12e58 |

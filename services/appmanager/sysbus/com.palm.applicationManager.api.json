@@ -2,6 +2,7 @@
     "phoenix.appmanager.query": [
         "com.palm.applicationManager/listApps",
         "com.palm.applicationManager/getAppInfo",
+        "com.palm.applicationManager/getAppBasePath",
         "com.palm.applicationManager/listLaunchPoints",
         "com.palm.applicationManager/searchApps",
         "com.palm.applicationManager/launchPointChanges",
