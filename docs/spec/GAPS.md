@@ -28,47 +28,44 @@ is the device side. Each line names its row; the row has the detail.
   and status bar colour requests through the device source.
 - **P1** M2, S2: Wi-Fi, Bluetooth and VPN lists in the system menu, and the WAN,
   roaming, connecting, TTY and HAC indicators, from the device's services.
-- **P1** A1: WAV copies of the system sounds (OSE's audiod plays WAV only), looping
-  ringtones, the sound preferences.
+- **P1** A1, A2: WAV copies of the system sounds (OSE's audiod plays WAV only), looping
+  ringtones, the sound preferences; the vibration motor (counted, not felt, in the
+  simulator).
 - **P1** E2, E3, E4: the clipboard service on the bus; the Assistant's service with
   llama.cpp and espeak-ng recipes; the services behind game controllers, USB
   drives, tethering and battery use.
-- **P1** C8, C12: the device source does not know the launching app, and declares
-  `cardReturnRequested` (Back to the caller) without sending it.
+- **P1** C4, C8, C12: a card whose client destroyed its surface; the device source
+  does not know the launching app, and declares `cardReturnRequested` (Back to the
+  caller) without sending it.
 - **P2** C11, R5: scene transitions, the card tutorial, Touch to Share, refusing
-  launches in low memory, and dock mode on a device.
+  launches in low memory, and dock mode (powerd's dock state) on a device.
 
 **Shell** (in the simulator too):
 
-- **P1** L1: the dock's background cross-fading to `quicklaunch-bg-solid.png`, and
-  the cards hidden once the launcher is up.
-- **P1** L2: `launcher-scrollfade-top.png` under the tabs.
-- **P1** M2: the dock-mode system menu, Bluetooth's "no paired devices" step, the
-  ringer key from the mute toggle, a VPN page in Settings.
-- **P1** R1: the locked orientation kept across restarts,
-  `HomeButtonOrientationAngle`, cards off screen resized after the turn.
-- **P2** C3, A1: sounds with no shippable file (the angry card's, the launcher's,
-  Email's `emailreceived.mp3`, the Clock's `Flurry.mp3`); vibration is counted, not felt.
-- **P2** S8: the tablet system group's arrow and separator.
+- **P2** C11: modal cards do not move with the positive space (the original's 500 ms
+  move when the keyboard comes up), and Back does not reach the modal's page.
+- **P2** N5: `webosDragMode` set after the dashboard window opened (through
+  `setWindowProperties`) is not followed; only the open attribute is.
 
 **Keyboard and input:**
 
-- **P1** V7: webOS OSE's keyboard among them (with V5, on a device); per-keyboard
-  options; keyboards from the catalog.
-- **P2** V8: Mojo apps' app menus with the arrows; the lock screen PIN pad's keys.
+- **P1** V7: per-keyboard options beyond the Classic look (Keyboard style, Number
+  row); keyboards from the catalog (webOS OSE's keyboard is the device's, with V5).
+- **P2** V8: Mojo apps' app menus with the arrows; the lock screen PIN pad's keys;
+  a layout for keyboards whose platform already sends another layout.
 - **P2** V1: auto-capitalisation from the field (the plugin's, off by default).
 - **P2** V2: word-by-word streaming (the text while speaking comes in steps).
+- **P2** V4: a firm press on the keyboard to select (no pressure on the target hardware).
 
-**Share and files** (E5, [SHARE-AND-FILES.md](../SHARE-AND-FILES.md)):
+**Share and files** (E5, [SHARE-AND-FILES.md](../SHARE-AND-FILES.md); SF1-SF5 are done):
 
-- **P2** SF6: the 2.0 sheet (people, nearby devices, markup); an app
-  that takes audio from the sheet (Voice Memos' "Open in Music").
+- **P2** E5: an app that takes audio from the sheet (Voice Memos' "Open in Music").
 - 2.0: SF6 (the sheet's 2.0 look, people, nearby devices, extensions).
 
 **In the inventory, not in a row here** ([feature-inventory.md](feature-inventory.md)):
 the LED throbber and Blink Notifications (GESTURE-BAR.md GB6), the Pre and
 Veer keyboard slider, the `com.palm.systemmanager` methods that answer
-without acting (`launchModalApp`, `getForegroundApplication`, ...), pinyin
+without acting (`getForegroundApplication`, `clearCache`, ...), pinyin
 and handwriting input (not in the release). App gaps are in
 [APP-GAPS.md](../APP-GAPS.md).
 
