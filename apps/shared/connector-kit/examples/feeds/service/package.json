@@ -1,0 +1,11 @@
+{
+    "name": "org.example.service.feeds",
+    "version": "0.1.0",
+    "private": true,
+    "description": "The hello-world Synergy connector of docs/SYNERGY-SDK.md: an RSS or Atom feed read into db8",
+    "license": "Apache-2.0",
+    "main": "service.js",
+    "dependencies": {
+        "@phoenix/connector-kit": "*"
+    }
+}

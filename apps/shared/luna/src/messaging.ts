@@ -56,7 +56,11 @@ export const IM_LOGIN_KIND = "com.palm.imloginstate:1";
 export const IM_BUDDY_KIND = "com.palm.imbuddystatus:1";
 
 /** The IM transports' message kinds, by serviceName. */
-export const IM_MESSAGE_KINDS: Record<string, string> = { type_jabber: "com.palm.immessage.xmpp:1" };
+export const IM_MESSAGE_KINDS: Record<string, string> = {
+    type_jabber: "com.palm.immessage.xmpp:1",
+    // The Fediverse account's direct mentions (apps/fediverse; docs/SYNERGY-CONNECTORS.md C2).
+    type_fediverse: "com.palm.immessage.fediverse:1",
+};
 
 export const AVAILABILITY = { AVAILABLE: 0, MOBILE: 1, BUSY: 2, INVISIBLE: 3, OFFLINE: 4 } as const;
 
@@ -264,13 +268,27 @@ export const messaging = {
  * Jabber (XMPP) works in the simulator (a simulated server); the closed
  * networks webOS reached through libpurple are gone or closed.
  */
-export const IM_SERVICES: { id: string; label: string; available: boolean }[] = [
+export const IM_SERVICES: { id: string; label: string; available: boolean; presence?: boolean; notPrivate?: string }[] = [
     { id: "type_jabber", label: "Jabber (XMPP)", available: true },
+    // Direct mentions: no presence, and no privacy from the servers' admins
+    // (docs/SYNERGY-MODERN.md 3.1: shown "with a not private label").
+    { id: "type_fediverse", label: "Fediverse", available: true, presence: false,
+      notPrivate: "Not private: direct mentions are not encrypted, and the admins of both servers can read them." },
     { id: "type_aim", label: "AIM", available: false },
     { id: "type_gtalk", label: "Google Talk", available: false },
     { id: "type_yahoo", label: "Yahoo!", available: false },
     { id: "type_skype", label: "Skype", available: false },
 ];
+
+/** Whether an IM service has presence (available, busy, offline) to show. */
+export function hasPresence(service: string | undefined): boolean {
+    return isImService(service) && IM_SERVICES.find((s) => s.id === service)?.presence !== false;
+}
+
+/** For a service whose messages are not private (the Fediverse's direct mentions): what to tell the user. */
+export function notPrivateNote(service: string | undefined): string | undefined {
+    return IM_SERVICES.find((s) => s.id === service)?.notPrivate;
+}
 
 /** "Jabber (XMPP)" for "type_jabber"; "Text" for SMS, "Picture" for MMS. */
 export function serviceLabel(service: string | undefined): string {

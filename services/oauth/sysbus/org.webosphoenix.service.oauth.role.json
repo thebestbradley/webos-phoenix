@@ -1,0 +1,12 @@
+{
+    "appId": "org.webosphoenix.service.oauth",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": ["org.webosphoenix.service.oauth"],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.oauth",
+            "outbound": []
+        }
+    ]
+}

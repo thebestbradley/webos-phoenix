@@ -223,6 +223,11 @@ async function startFeed() {
     const hooked = Buffer.from(await webApp("org.example.hooked", "2.0", {
         title: "Hooked", scripts: { postinst: "#!/bin/sh\necho hi\n" },
         files: [{ path: "usr/palm/services/org.example.hooked.service/service.js", data: "// a 2011 service" }] }));
+    // A Synergy connector: its service in the app's service/ folder (docs/SYNERGY-CONNECTORS.md 3.1).
+    const connector = Buffer.from(await webApp("org.example.feeds", "0.1.0", {
+        title: "News Feeds", appinfo: { phoenix: { hidden: true } },
+        files: [{ path: "usr/palm/applications/org.example.feeds/service/package.json", data: JSON.stringify({ name: "org.example.service.feeds" }) },
+                { path: "usr/palm/applications/org.example.feeds/service/sysbus/org.example.service.feeds.role.json", data: "{}" }] }));
     const md5 = (b) => crypto.createHash("md5").update(b).digest("hex");
     const para = (id, v, arch, file, b, title) => [
         `Package: ${id}`, `Version: ${v}`, "Section: misc", `Architecture: ${arch}`, `MD5Sum: ${md5(b)}`, `Size: ${b.length}`, `Filename: ${file}`,
@@ -231,13 +236,15 @@ async function startFeed() {
     let packages = [para("org.example.homebrew", "0.9.0", "all", "old.ipk", web, "Homebrew Thing"),
                     para("org.example.homebrew", "0.9.1", "all", "org.example.homebrew_0.9.1_all.ipk", web, "Homebrew Thing"),
                     para("org.example.nativelib", "1.0", "armv7", "org.example.nativelib_1.0_armv7.ipk", native, "Native Lib"),
-                    para("org.example.hooked", "2.0", "all", "org.example.hooked_2.0_all.ipk", hooked, "Hooked")].join("\n\n") + "\n";
+                    para("org.example.hooked", "2.0", "all", "org.example.hooked_2.0_all.ipk", hooked, "Hooked"),
+                    para("org.example.feeds", "0.1.0", "all", "org.example.feeds_0.1.0_all.ipk", connector, "News Feeds")].join("\n\n") + "\n";
     let serveWeb = web;
     const f = await listen((req, res) => {
         const u = req.url.split("?")[0];
         if (u === "/feed/Packages") { res.writeHead(200); res.end(packages); return; }
         if (u === "/feed/org.example.homebrew_0.9.1_all.ipk") { res.writeHead(200); res.end(serveWeb); return; }
         if (u === "/feed/org.example.hooked_2.0_all.ipk") { res.writeHead(200); res.end(hooked); return; }
+        if (u === "/feed/org.example.feeds_0.1.0_all.ipk") { res.writeHead(200); res.end(connector); return; }
         res.writeHead(404); res.end();
     });
     return Object.assign(f, { feedUrl: f.url + "/feed/", corrupt: () => { serveWeb = Buffer.concat([web, Buffer.from("x")]); } });

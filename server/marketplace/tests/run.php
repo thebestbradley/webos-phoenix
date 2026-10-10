@@ -104,8 +104,8 @@ check($idx['version'] === 1 && $idx['build'] === $pub['build'] && count($idx['ap
 
 // ---- Account types (Connections): built in, from catalog/accounts.json ------------------------
 $types = array_column($idx['accounts'] ?? [], null, 'templateId');
-check(array_keys($types) === ['com.webosphoenix.dav', 'com.webosphoenix.webcal', 'com.palm.othermail', 'com.webosphoenix.xmpp']
-      && $pub['accounts'] === 4 && !isset($types['com.palm.palmprofile']),
+check(array_keys($types) === ['com.webosphoenix.dav', 'com.webosphoenix.fediverse', 'com.webosphoenix.webcal', 'com.palm.othermail', 'com.webosphoenix.xmpp']
+      && $pub['accounts'] === 5 && !isset($types['com.palm.palmprofile']),
       'the index lists the account types Phoenix connects to (not the HP webOS profile)');
 $shape = ['templateId', 'title', 'provider', 'icon', 'summary', 'capabilities', 'protocols', 'auth', 'server', 'privacy', 'push', 'status', 'package', 'featured'];
 check(!array_filter($types, fn ($t) => array_keys($t) !== $shape || $t['package']['builtin'] !== true || array_keys($t['auth']) !== ['type', 'registration']
@@ -117,6 +117,11 @@ check($dav['title'] === 'CardDAV & CalDAV' && $dav['capabilities'] === [['capabi
       && $dav['privacy'] === ['dataGoesTo' => 'the server you enter', 'e2ee' => false, 'phoenixServers' => 'none']
       && $dav['package'] === ['id' => 'org.webosphoenix.dav', 'builtin' => true] && $dav['featured'] === true,
       'CardDAV & CalDAV: its capabilities as the template names them, app password, the server you enter');
+$fedi = $types['com.webosphoenix.fediverse'];
+check($fedi['title'] === 'Fediverse' && $fedi['auth'] === ['type' => 'oauth', 'registration' => 'none'] && $fedi['server'] === 'discovered'
+      && array_column($fedi['capabilities'], 'capability') === ['CONTACTS', 'MESSAGING', 'SOCIAL'] && $fedi['featured'] === true
+      && $fedi['package'] === ['id' => 'org.webosphoenix.fediverse', 'builtin' => true] && $fedi['privacy']['phoenixServers'] === 'none',
+      'Fediverse (phase C2): OAuth with the server found from the handle, built in, featured');
 check($types['com.webosphoenix.webcal']['capabilities'] === [['capability' => 'CALENDAR', 'direction' => 'read-only']]
       && $types['com.palm.othermail']['capabilities'][0]['capability'] === 'MAIL'
       && $types['com.webosphoenix.xmpp']['capabilities'][0]['capability'] === 'MESSAGING' && $types['com.webosphoenix.xmpp']['status'] === 'experimental',
@@ -241,11 +246,48 @@ $bad = [
     ['native', ipk($tmp, 'com.example.c', '1.0', [], [], ['type' => 'pdk']), 'Only web apps'],
     ['our ids', ipk($tmp, 'org.webosphoenix.fake', '1.0'), 'Phoenix'],
     ['not a package', '<html>no</html>', 'Not an .ipk'],
+    ['a connector', ipk($tmp, 'com.example.d', '1.0', ['usr/palm/applications/com.example.d/service/package.json' => '{}']), 'background service'],
 ];
 foreach ($bad as [$what, $bytes, $why]) {
     [$s, $r] = $call('POST', '/api/apps/packages', $bytes, $dev['token']);
     check($s === 400 && str_contains($r['error'], $why), "refused: $what ($r[error])");
 }
+
+// ---- Connector packages: the profile checks (Connector.php) ------------------------------------
+// The same cases as the connector kit's `phoenix-connector validate`
+// (apps/shared/connector-kit/src/kit.test.ts), so both say the same.
+$cases = json_decode((string) file_get_contents(__DIR__ . '/connector-cases.json'), true);
+$caseFiles = function (array $base, array $set): array {
+    $out = [];
+    foreach (array_merge($base, $set) as $p => $v) {
+        if ($v === null) {
+            continue;
+        }
+        $out[$p] = is_string($v) ? (str_starts_with($v, 'BIN:') ? hex2bin(substr($v, 4)) : $v) : json_encode($v);
+    }
+    return $out;
+};
+$codes = fn (array $errors): array => array_values(array_unique(array_map(fn ($e) => explode(' ', $e)[0], $errors)));
+foreach ($cases['cases'] as $c) {
+    $r = \Phoenix\Marketplace\Connector::check($caseFiles($cases['base'], $c['set']), $c['namespaces'] ?? []);
+    $got = $codes($r['errors']);
+    sort($got);
+    $want = $c['expect'];
+    sort($want);
+    check($got === $want, "connector check: {$c['name']}" . ($got === $want ? '' : ' (got ' . implode(', ', $got) . ': ' . implode('; ', $r['errors']) . ')'));
+}
+$connectorFiles = [];
+foreach ($caseFiles($cases['base'], []) as $p => $v) {
+    $connectorFiles["usr/palm/applications/org.example.foo/$p"] = $v;
+}
+$good = ipk($tmp, 'org.example.foo', '1.0.0', $connectorFiles);
+$r = \Phoenix\Marketplace\Connector::checkIpk($good);
+check($r['errors'] === [] && $r['service'] === 'org.example.service.foo' && $r['templates'] === ['org.example.foo'],
+      'connector .ipk: a good one passes (' . implode('; ', $r['errors']) . ')');
+$r = \Phoenix\Marketplace\Connector::checkIpk(ipk($tmp, 'org.example.foo', '1.0.0', $connectorFiles + ['etc/evil.conf' => 'x'], ['postinst' => "#!/bin/sh\n"]));
+check($codes($r['errors']) === ['C13'] && count($r['errors']) === 2, 'connector .ipk: scripts and files outside the app are refused');
+$r = \Phoenix\Marketplace\Connector::checkIpk(ipk($tmp, 'org.example.foo', '2.0.0', $connectorFiles, [], ['version' => '1.0.0']));
+check(in_array('C13 appinfo.json and the control file must give the same version', $r['errors'], true), 'connector .ipk: control and appinfo.json agree');
 [$s] = $call('GET', '/api/apps/com.example.notes');
 check($s === 404, 'a pending app is not public');
 

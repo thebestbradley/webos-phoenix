@@ -1,0 +1,23 @@
+{
+    "appId": "org.webosphoenix.service.fediverse",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.service.fediverse"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.fediverse",
+            "outbound": [
+                "org.webosphoenix.service.fediverse",
+                "com.palm.db",
+                "com.palm.tempdb",
+                "com.palm.activitymanager",
+                "com.palm.service.accounts",
+                "org.webosphoenix.service.oauth",
+                "com.webos.notification",
+                "org.webosports.service.messaging"
+            ]
+        }
+    ]
+}

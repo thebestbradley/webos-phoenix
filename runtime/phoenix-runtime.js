@@ -2700,7 +2700,10 @@
             }
             var popup = Array.prototype.some.call(global.document.querySelectorAll(".enyo-popup, iframe[data-phoenix-sheet]"), function (e) {
                 return shown(e) && e.getBoundingClientRect().height > 0;
-            });
+            }) || !!global.document.querySelector("iframe[data-phoenix-sheet]");
+            // (A system sheet over the page, block "Share sheet", is a popup
+            // too: nothing in the page draws over a native view. A view in
+            // the sheet itself is in the sheet's document, which has none.)
             // A drawer flown in from a side (enyo.Toaster, class enyo-toaster:
             // the browser's bookmarks, history and downloads) covers part of
             // the page: the view keeps to the part it leaves, since nothing in
@@ -2717,6 +2720,16 @@
             });
             r.width = Math.max(0, r.right - r.left);
             r.height = Math.max(0, r.bottom - r.top);
+            // A view in a frame of the card (the sign-in sheet, block "Share
+            // sheet"): the shell places it in the card's page, so add where
+            // each frame is in its parent.
+            try {
+                for (var w = global; w.parent && w.parent !== w && w.frameElement; w = w.parent) {
+                    var fb = w.frameElement.getBoundingClientRect();
+                    r.left += fb.left + w.frameElement.clientLeft;
+                    r.top += fb.top + w.frameElement.clientTop;
+                }
+            } catch (e) { /* a frame of another origin: as it is */ }
             var hidden = !n.isConnected || n.offsetParent === null || r.width === 0 || r.height === 0 || popup;
             var rect = [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)].join(",");
             if (rect !== this.rect || hidden !== this.hidden) {
@@ -2983,9 +2996,27 @@
     // Native view events from phoenix-sim: name is a BrowserAdapter callback
     // (urlTitleChanged, loadStarted, loadProgressChanged, loadStopped,
     // documentLoadFinished, mainDocumentLoadFailed).
+    // A page going away takes its views along: a frame removed from the card
+    // (the sign-in sheet) runs no more animation frames, so track() would
+    // never see its object go and the shell would keep showing the view.
+    if (nativeWebViews && global.addEventListener) global.addEventListener("pagehide", function () {
+        Object.keys(webViews).forEach(function (id) { if (webViews[id].destroy) webViews[id].destroy(); });
+    });
+
+    // phoenix-sim tells the card's page; a view made in one of its frames
+    // (the sign-in sheet) belongs to that frame's runtime, so pass it down.
     runtime.webViewEvent = function (id, name, args) {
         var a = webViews[id];
-        if (!a) return;
+        if (!a) {
+            var frames = global.frames || [];
+            for (var i = 0; i < frames.length; i++) {
+                try {
+                    var rt = frames[i].__phoenixRuntime;
+                    if (rt && rt !== runtime && rt.webViewEvent) rt.webViewEvent(id, name, args);
+                } catch (e) { /* a frame of another origin */ }
+            }
+            return;
+        }
         if (name === "phoenixFindResult") return a.findResult && a.findResult((args || [])[0] || 0, (args || [])[1] || 0);
         if (name === "urlTitleChanged") { a.url = args[0]; a.title = args[1]; }
         // A picture of the page as the native view stepped aside for a
@@ -7616,8 +7647,20 @@
 
         // The IM transports deliver outgoing instant messages
         // (org.webosphoenix.service.xmpp, block "Instant messaging" below).
-        var imTransports = {};
+        // Others (block "Synergy connectors on the kit") answer by name when
+        // a message is sent: runtime.resolveImTransport(fn(serviceName) ->
+        // send or null), so nothing reads the templates as the page starts.
+        var imTransports = {}, imResolvers = [];
         runtime.registerImTransport = function (service, send) { imTransports[service] = send; };
+        runtime.resolveImTransport = function (fn) { imResolvers.push(fn); };
+        function imTransportOf(name) {
+            if (imTransports[name]) return imTransports[name];
+            for (var i = 0; i < imResolvers.length; i++) {
+                var send = imResolvers[i](name);
+                if (send) return send;
+            }
+            return null;
+        }
 
         register(["org.webosports.service.messaging"], {
             "/putMessage": function (p, reply) {
@@ -7633,8 +7676,8 @@
                     var outgoing = msg.folder === "outbox" && msg.status === "pending";
                     if (outgoing && (msg._kind === "com.palm.smsmessage:1" || mms))
                         setTimeout(sendOutbox, 250);
-                    else if (outgoing && isIm(msg.serviceName) && imTransports[msg.serviceName])
-                        setTimeout(function () { imTransports[msg.serviceName](r.messageId); }, 150);
+                    else if (outgoing && isIm(msg.serviceName) && imTransportOf(msg.serviceName))
+                        setTimeout(function () { imTransportOf(msg.serviceName)(r.messageId); }, 150);
                 });
             }
         });
@@ -11205,8 +11248,8 @@
     // Some Phoenix services are Node.js modules a device runs with
     // run-js-service (apps/dav/service, apps/settings/service). The simulator
     // runs the same code in the page: nodeServiceLoader(dir, label) is a
-    // require() for its CommonJS modules (relative requires only), read
-    // from the virtual rootfs; nodeServiceLuna() is its luna.call(uri,
+    // require() for its CommonJS modules (relative requires, and Phoenix's
+    // shared packages by name: below), read from the virtual rootfs; nodeServiceLuna() is its luna.call(uri,
     // params) -> Promise<reply> on the simulated bus (nodeServiceLuna(id):
     // the calls are the service's, ctx.caller id, as luna-service2 tells a
     // service who calls on a device; the location permission is asked of
@@ -11218,30 +11261,92 @@
     // /__phoenix/proxy?req=... (its RootfsSchemeHandler). Elsewhere it uses
     // fetch directly, which only works with servers that send CORS headers.
     // proxiedRequestBytes is the same with the body as a Uint8Array (bytes).
+    // A request body of bytes goes as bodyBase64 (the proxies send it as
+    // the bytes it is: tools/serve-rootfs.py, shell/sim/rootfs.cpp).
+    // Bare names ("@phoenix/synckit", "@phoenix/connector-kit/lib/x") are
+    // looked up as Node does: in each node_modules from the requiring
+    // module's folder up (a connector package carries the kit in its
+    // service/node_modules: phoenix-connector pack), then in the system's
+    // copy of Phoenix's shared packages, /usr/lib/phoenix/node_modules
+    // (runtime/rootfs.json; tools/install-rootfs.py gives each built-in
+    // service its own copy instead). A package's entry is its
+    // package.json "main".
+    var NODE_MODULES = "/usr/lib/phoenix/node_modules/";
+    var nodeResolveCache = {};
+    function nodeResourceExists(path) {
+        if (!(path in nodeResolveCache)) nodeResolveCache[path] = !!PalmSystem.getResource(path);
+        return nodeResolveCache[path];
+    }
+    function nodeNormPath(p) {
+        var out = [];
+        p.split("/").forEach(function (s) {
+            if (s === "..") out.pop();
+            else if (s && s !== ".") out.push(s);
+        });
+        return "/" + out.join("/");
+    }
+    // top: the folder the lookup stays in (the service's, or a package's own).
+    function nodeResolveBare(name, fromDir, top) {
+        var m = /^((?:@[^\/]+\/)?[^\/@][^\/]*)(\/.*)?$/.exec(name);
+        if (!m) return null;
+        var roots = [], dir = fromDir;
+        while (dir.indexOf(top) === 0) {
+            if (!/\/node_modules\/$/.test(dir)) roots.push(dir + "node_modules/");
+            if (dir === top) break;
+            dir = dir.replace(/[^\/]*\/$/, "");
+        }
+        roots.push(NODE_MODULES);
+        for (var i = 0; i < roots.length; i++) {
+            var pkgDir = roots[i] + m[1] + "/";
+            if (m[2]) {
+                var file = nodeNormPath(pkgDir + m[2].slice(1));
+                if (!/\.js$/.test(file) && nodeResourceExists(file + ".js")) return file + ".js";
+                if (nodeResourceExists(file)) return file;
+                continue;
+            }
+            if (!nodeResourceExists(pkgDir + "package.json")) continue;
+            var pkg;
+            try { pkg = JSON.parse(PalmSystem.getResource(pkgDir + "package.json")); } catch (e) { continue; }
+            var main = nodeNormPath(pkgDir + (pkg.main || "index.js"));
+            return /\.js$/.test(main) ? main : main + ".js";
+        }
+        return null;
+    }
+
     function nodeServiceLoader(serviceDir, label) {
         var modules = {};
-        function normPath(p) {
-            var out = [];
-            p.split("/").forEach(function (s) {
-                if (s === "..") out.pop();
-                else if (s && s !== ".") out.push(s);
-            });
-            return out.join("/");
+        // A module of the service looks in the service's folders; one of a
+        // shared package in that package's, then the system's.
+        function topOf(path) {
+            if (path.indexOf(NODE_MODULES) !== 0) return serviceDir;
+            var m = /^((?:@[^\/]+\/)?[^\/]+\/)/.exec(path.slice(NODE_MODULES.length));
+            return NODE_MODULES + (m ? m[1] : "");
         }
-        function loadModule(rel) {
-            rel = normPath(rel);
-            if (modules[rel]) return modules[rel].exports;
-            var text = PalmSystem.getResource(serviceDir + rel);
-            if (!text) throw new Error(label + " module not found: " + serviceDir + rel);
+        function loadAbsolute(path) {
+            if (modules[path]) return modules[path].exports;
+            var text = PalmSystem.getResource(path);
+            if (!text) throw new Error(label + " module not found: " + path);
             var module = { exports: {} };
-            modules[rel] = module;
-            var dir = rel.indexOf("/") >= 0 ? rel.slice(0, rel.lastIndexOf("/") + 1) : "";
+            modules[path] = module;
+            var dir = path.slice(0, path.lastIndexOf("/") + 1);
             function req(name) {
-                if (name.charAt(0) !== ".") throw new Error(label + ": no module " + name + " in the simulator");
-                return loadModule(dir + name + (/\.js$/.test(name) ? "" : ".js"));
+                if (name.charAt(0) === ".") return loadAbsolute(nodeNormPath(dir + name + (/\.js$/.test(name) ? "" : ".js")));
+                var found = nodeResolveBare(name, dir, topOf(path));
+                if (!found) throw new Error(label + ": no module " + name + " in the simulator");
+                return loadAbsolute(found);
             }
-            new Function("module", "exports", "require", text + "\n//# sourceURL=" + serviceDir + rel)(module, module.exports, req);
+            new Function("module", "exports", "require", text + "\n//# sourceURL=" + path)(module, module.exports, req);
             return module.exports;
+        }
+        // rel: a module of the service ("davservice.js", "lib/sync.js"), or
+        // a package by name as the service would require it ("@phoenix/connector-kit").
+        function loadModule(rel) {
+            if (rel.charAt(0) === "@") {
+                var found = nodeResolveBare(rel, serviceDir, serviceDir);
+                if (!found) throw new Error(label + ": no module " + rel + " in the simulator");
+                return loadAbsolute(found);
+            }
+            return loadAbsolute(nodeNormPath(serviceDir + rel));
         }
         return loadModule;
     }
@@ -11295,7 +11400,8 @@
                 return r;
             });
         }
-        return fetch(req.url, { method: req.method, headers: req.headers, body: req.body, credentials: "omit" })
+        var body = req.bodyBase64 !== undefined ? Uint8Array.from(atob(req.bodyBase64), function (c) { return c.charCodeAt(0); }) : req.body;
+        return fetch(req.url, { method: req.method, headers: req.headers, body: body, credentials: "omit" })
             .then(function (res) {
                 return (req.binary ? res.arrayBuffer() : res.text()).then(function (body) {
                     var h = {};
@@ -11311,6 +11417,313 @@
                 throw err;
             });
     }
+
+    // ================================================================================
+    // OAuth (org.webosphoenix.service.oauth; services/oauth)
+    // ================================================================================
+    //
+    // The OAuth sign-ins of Synergy connectors (docs/SYNERGY-CONNECTORS.md
+    // 4.1): the device's own service code (services/oauth/oauthservice.js,
+    // loaded from /usr/palm/services/org.webosphoenix.service.oauth/), with
+    // what the simulator has for its pieces:
+    //
+    //   the browser sheet   the system's sheet page (org.webosphoenix.sharesheet,
+    //                       kind "signin") over the card in front, showing the
+    //                       provider's page with its address in a web view
+    //                       (BrowserAdapter above: a native view in
+    //                       phoenix-sim, an <iframe> elsewhere). The page
+    //                       asking cannot read it; the sheet hears the address
+    //                       change and closes when it reaches the redirect;
+    //   the redirect        this simulator's own address of the sheet app's
+    //                       signed-in.html (same origin, so even the iframe
+    //                       engine sees it arrive);
+    //   the key store       the runtime's credential storage: the shared store
+    //                       ("oauth:keys"), beside the accounts' credentials
+    //                       ("accountCredentials"). On a device: see
+    //                       services/oauth/service.js (a placeholder file
+    //                       until org.webosphoenix.service.keystore);
+    //   who asks            ctx.caller (a service in the page, nodeServiceLuna),
+    //                       else the page's app. A connector's sign-in page may
+    //                       act for the service its template names.
+    (function oauthService() {
+        var SERVICE = "org.webosphoenix.service.oauth";
+        var loadModule = nodeServiceLoader("/usr/palm/services/" + SERVICE + "/", "OAuth service");
+        var KEYS = "oauth:keys";
+        var methods = null;
+
+        function redirectUri() {
+            var origin = String(global.location.href).replace(/^([a-z][a-z0-9+.-]*:\/\/[^\/]*).*$/i, "$1");
+            return origin + "/usr/palm/applications/org.webosphoenix.sharesheet/signed-in.html";
+        }
+        // The sheet over the card in front: the top page of this card (a
+        // sign-in page is a frame in the Accounts card).
+        function sheet(url, prefix) {
+            var top = global;
+            try { if (global.top && global.top.__phoenixRuntime && global.top.__phoenixRuntime.signInSheet) top = global.top; } catch (e) { top = global; }
+            var rt = top.__phoenixRuntime || runtime;
+            if (!rt.signInSheet) return Promise.reject(Object.assign(new Error("No sign-in sheet in this page"), { errorCode: "UNSUPPORTED" }));
+            return rt.signInSheet(url, prefix);
+        }
+        function service() {
+            if (!methods) {
+                var subtle = global.crypto && global.crypto.subtle;
+                methods = loadModule("oauthservice.js").createOAuthService({
+                    request: function (req) { return proxiedRequest(req); },
+                    keystore: {
+                        get: function (id) { return Promise.resolve(store.get(KEYS, {})[id]); },
+                        put: function (id, v) { var all = store.get(KEYS, {}); all[id] = v; store.set(KEYS, all); return Promise.resolve(); },
+                        del: function (id) { var all = store.get(KEYS, {}); delete all[id]; store.set(KEYS, all); return Promise.resolve(); }
+                    },
+                    sheet: sheet,
+                    crypto: {
+                        randomBytes: function (n) { return global.crypto.getRandomValues(new Uint8Array(n)); },
+                        sha256: function (bytes) { return subtle.digest("SHA-256", bytes).then(function (d) { return new Uint8Array(d); }); }
+                    },
+                    redirectUri: redirectUri(),
+                    // A connector's sign-in page (its template's customUI app)
+                    // signs in for the template's service.
+                    mayActFor: function (caller, owner) {
+                        return (runtime.accountTemplates ? runtime.accountTemplates() : []).some(function (t) {
+                            var v = t.validator && typeof t.validator === "object" ? t.validator : null;
+                            return v && v.customUI && v.customUI.appId === caller &&
+                                (t.capabilityProviders || []).some(function (cp) { return String(cp.implementation || "").indexOf("//" + owner + "/") > 0; });
+                        });
+                    },
+                    log: function (m) { console.info("[oauth] " + m); }
+                });
+            }
+            return methods;
+        }
+        var serviceMethods = {};
+        ["authorize", "token", "forget", "client", "redirectUri"].forEach(function (name) {
+            serviceMethods["/" + name] = function (p, reply, ctx) {
+                var m;
+                try { m = service(); } catch (e) { return reply(fail("UNKNOWN_ERROR", String(e.message || e))); }
+                m[name](p, (ctx && ctx.caller) || PalmSystem.appIdentifier).then(reply);
+            };
+        });
+        register([SERVICE], serviceMethods);
+    })();
+
+    // ================================================================================
+    // Synergy connectors on the kit (@phoenix/connector-kit)
+    // ================================================================================
+    //
+    // A connector written on the kit (docs/SYNERGY-SDK.md) carries its
+    // service in its app's service/ folder; a device runs it with
+    // run-js-service (service.js: the kit's runOnDevice). Here the page runs
+    // the same files: the kit's createConnectorService over the
+    // connector's definition (service/connector.js), with what the device
+    // gives it played by the simulator ("Node.js device services in the
+    // page"): Luna calls as the service, HTTP through the host's proxy
+    // (bytes too: a picture shared), pictures (avatars) kept as files of the
+    // device where Contacts looks for them, the files a user shares from the
+    // media store. Each connector's service is then on the simulated bus, so the
+    // accounts block below ("CardDAV and CalDAV") serves its templates and
+    // calls their callbacks as for DAV.
+    //
+    //   built in    the Fediverse account (apps/fediverse)
+    //   installed   a connector package installed in Developer Mode (block
+    //               "Install and remove": its service/package.json names the
+    //               service; runtime.connectorInstalled(appId, service))
+    //
+    // Also, as for DAV: one sync at a time per account across all pages (a
+    // lock in the shared store); the connector's db8 kinds put from its
+    // configuration/db/kinds files; Messaging's outgoing instant messages of
+    // a connector's IM service (a template's serviceName) handed to the
+    // method its outbox watch names. Interval schedules are not run: there
+    // is no background process in the simulator ("Sync now" works).
+    // __phoenixRuntime.connectors: hosted(), service(name) -> the methods.
+    (function connectors() {
+        var BUILTIN = [{ appId: "org.webosphoenix.fediverse", service: "org.webosphoenix.service.fediverse" }];
+        var INSTALLED = "connectorServices";     // store: {appId: service}
+        var LOCK_MS = 5 * 60 * 1000;
+        var hosted = {};
+
+        function toBase64(bytes) {
+            var s = "";
+            for (var i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            return btoa(s);
+        }
+        function fromBase64(text) {
+            var s = atob(text || ""), out = new Uint8Array(s.length);
+            for (var i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+            return out;
+        }
+        // The kit's request(): bodies of bytes go to the proxy as base64.
+        function request(req) {
+            var r = { method: req.method || "GET", url: req.url, headers: req.headers || {} };
+            if (req.body instanceof Uint8Array) r.bodyBase64 = toBase64(req.body);
+            else if (req.body !== undefined && req.body !== null) r.body = String(req.body);
+            if (req.binary) r.binary = true;
+            if (req.timeoutMs) r.timeoutMs = req.timeoutMs;
+            return proxiedRequest(r).then(function (res) {
+                if (!req.binary) return res;
+                return { status: res.status, headers: res.headers, bytes: res.bytes || fromBase64(res.bodyBase64) };
+            });
+        }
+        var MIME = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", mp4: "video/mp4" };
+        function readFile(path) {
+            var type = MIME[String(path).replace(/^.*\./, "").toLowerCase()] || "application/octet-stream";
+            var fromStore = runtime.mediaFiles ? runtime.mediaFiles.read(path) : Promise.resolve(null);
+            return fromStore.then(function (blob) {
+                // Not a stored file: one of the system's (the samples), from where it is served.
+                return blob || global.fetch(path).then(function (res) {
+                    if (!res.ok) throw Object.assign(new Error("No such file: " + path), { errorCode: "400_BAD_REQUEST" });
+                    return res.blob();
+                });
+            }).then(function (blob) {
+                return blob.arrayBuffer().then(function (buf) { return { bytes: new Uint8Array(buf), mimeType: blob.type || type }; });
+            });
+        }
+
+        // A remote picture (an avatar) as a file of the device, where the
+        // Contacts framework looks for a person's photo (PersonPhotos.js
+        // fileExists, :390-402: palmGetResource): the Files block's store,
+        // under /var/file-cache/<service>/ (a device: lib/device.js keeps
+        // them in /media/internal/.phoenix/connector-photos). Too big for the
+        // store, or not fetched: its address.
+        function hashOf(text) {
+            var h1 = 0x811c9dc5, h2 = 0x01000193;
+            for (var i = 0; i < text.length; i++) {
+                h1 = Math.imul(h1 ^ text.charCodeAt(i), 16777619) >>> 0;
+                h2 = Math.imul(h2 + text.charCodeAt(i), 2246822519) >>> 0;
+            }
+            return ("0000000" + h1.toString(16)).slice(-8) + ("0000000" + h2.toString(16)).slice(-8);
+        }
+        function cachePhoto(service, key, url) {
+            var fm = runtime.fileManager;
+            if (!fm || !fm.store || !/^https?:\/\//.test(url)) return Promise.resolve(url);
+            var ext = (/\.(png|jpe?g|gif|webp)(?:\?|$)/i.exec(url) || [])[1] || "jpg";
+            var path = "/var/file-cache/" + service + "/" + hashOf(key + "\n" + url) + "." + ext.toLowerCase();
+            if (PalmSystem.getResource(path)) return Promise.resolve(path);
+            return request({ method: "GET", url: url, binary: true }).then(function (r) {
+                if (r.status !== 200 || !r.bytes || !r.bytes.length) return url;
+                return fm.store(path, toBase64(r.bytes)) ? path : url;
+            }, function () { return url; });
+        }
+
+        function host(appId, service) {
+            if (hosted[service]) return;
+            var dir = "/usr/palm/applications/" + appId + "/service/";
+            var loadModule = nodeServiceLoader(dir, service);
+            var luna = nodeServiceLuna(service);
+            var made = null;
+            function load() {
+                if (made) return made;
+                var kit = loadModule("@phoenix/connector-kit");
+                var def = loadModule("connector.js");
+                made = { def: def, kit: kit, methods: kit.createConnectorService(def, {
+                    luna: luna, request: request, readFile: readFile,
+                    cachePhoto: function (key, url) { return cachePhoto(service, key, url); },
+                    log: function (m) { console.info("[" + service + "] " + m); }
+                }) };
+                installKinds(appId, service, def);
+                return made;
+            }
+            hosted[service] = { appId: appId, load: load };
+            register([service], {
+                "*": function (p, reply, ctx, method) {
+                    var name = String(method || "").replace(/^\//, ""), m;
+                    try { m = load(); } catch (e) { return reply(fail("UNKNOWN_ERROR", String(e && e.message || e))); }
+                    if (!m.methods[name]) return reply(fail(-1, "No method " + name + " on " + service));
+                    var lock = name === "sync" && p.accountId ? "connector:syncLock:" + service + ":" + p.accountId : null;
+                    if (lock) {
+                        var held = store.get(lock, 0);
+                        if (held && Date.now() - held < LOCK_MS) return reply(ok({ alreadyRunning: true }));
+                        store.set(lock, Date.now());
+                    }
+                    m.methods[name](p).then(function (r) {
+                        if (lock) store.set(lock, 0);
+                        reply(r);
+                    }, function (e) {
+                        if (lock) store.set(lock, 0);
+                        reply(fail("UNKNOWN_ERROR", String(e && e.message || e)));
+                    });
+                }
+            });
+        }
+
+        // The templates of the connector's app (its public/accounts).
+        function templatesOf(service) {
+            return (runtime.accountTemplates ? runtime.accountTemplates() : []).filter(function (t) {
+                return (t.capabilityProviders || []).some(function (cp) { return String(cp.implementation || "").indexOf("//" + service + "/") > 0; });
+            });
+        }
+
+        // Its kinds as db8 knows them on a device (configuration/db/kinds):
+        // the templates' dbkinds and the definition's own, each read from the
+        // file named after it, once per version of the app.
+        function installKinds(appId, service, def) {
+            // The app's own appinfo.json, not launchPoints(): this may run as
+            // the page starts, before the installed apps' list is there, and
+            // launchPoints() would keep an empty list.
+            var version = "0";
+            try { version = String(JSON.parse(PalmSystem.getResource("/usr/palm/applications/" + appId + "/appinfo.json") || "{}").version || "0"); }
+            catch (e) { version = "0"; }
+            var done = store.get("connectorKinds", {});
+            if (done[service] === version) return;
+            var ids = [def.kinds.state].concat(def.kinds.item ? [def.kinds.item] : []);
+            templatesOf(service).forEach(function (t) {
+                (t.capabilityProviders || []).forEach(function (cp) {
+                    Object.keys(cp.dbkinds || {}).forEach(function (k) { if (ids.indexOf(cp.dbkinds[k]) < 0) ids.push(cp.dbkinds[k]); });
+                });
+            });
+            ids.forEach(function (id) {
+                var file = "/usr/palm/applications/" + appId + "/configuration/db/kinds/" + id.replace(/:\d+$/, "");
+                var k = null;
+                try { k = JSON.parse(PalmSystem.getResource(file) || "null"); } catch (e) { k = null; }
+                callNow("palm://com.palm.db/putKind", { id: id, owner: service, extends: (k && k.extends) || [] });
+            });
+            done[service] = version;
+            store.set("connectorKinds", done);
+        }
+
+        // Messaging's outgoing instant messages on a connector's IM service
+        // (its template's MESSAGING provider with that serviceName) go to the
+        // capability's watch method, as the db8 watch does on a device. Looked
+        // up when a message is sent: the templates are not read as the page
+        // starts, before the installed apps' list is there.
+        if (runtime.resolveImTransport) runtime.resolveImTransport(function (serviceName) {
+            var found = null;
+            Object.keys(hosted).some(function (service) {
+                return templatesOf(service).some(function (t) {
+                    return (t.capabilityProviders || []).some(function (cp) {
+                        if (cp.serviceName !== serviceName || cp.capability !== "MESSAGING") return false;
+                        found = function (messageId) {
+                            var m;
+                            try { m = hosted[service].load(); } catch (e) { return; }
+                            var cap = m.def.capabilities[cp.id];
+                            if (!cap || !cap.watch) return;
+                            nodeServiceLuna(PalmSystem.appIdentifier).call("luna://" + service + "/" + cap.watch.method, { messageId: messageId });
+                        };
+                        return true;
+                    });
+                });
+            });
+            return found;
+        });
+
+        BUILTIN.forEach(function (b) { host(b.appId, b.service); });
+        var installed = store.get(INSTALLED, {});
+        Object.keys(installed).forEach(function (appId) {
+            if (launchPoints().some(function (lp) { return lp.id === appId; })) host(appId, installed[appId]);
+        });
+
+        // A connector installed (Developer Mode) or removed.
+        runtime.connectorInstalled = function (appId, service) {
+            var all = store.get(INSTALLED, {});
+            if (service) { all[appId] = service; store.set(INSTALLED, all); host(appId, service); return; }
+            var gone = all[appId];
+            delete all[appId];
+            store.set(INSTALLED, all);
+            if (gone && hosted[gone]) { delete hosted[gone]; delete runtime.services[gone]; }
+        };
+        runtime.connectors = {
+            hosted: function () { return Object.keys(hosted); },
+            service: function (name) { return hosted[name] ? hosted[name].load().methods : null; }
+        };
+    })();
 
     // ================================================================================
     // CardDAV and CalDAV (Synergy transport org.webosphoenix.service.dav; apps/dav)
@@ -12039,6 +12452,16 @@
                     var others = outside.filter(function (f) { return pkg.services.indexOf(f.path) < 0; });
                     if (others.length) skipped.push(others.length + " files outside the app");
                 }
+                // A Synergy connector (its service in the app's service/ folder,
+                // docs/SYNERGY-CONNECTORS.md 3.1): Developer Mode only until the
+                // connector tier (section 5); its service then runs here (block
+                // "Synergy connectors on the kit").
+                var serviceFile = pkg.files.filter(function (f) { return f.path === app.dir + "service/package.json"; })[0];
+                var connectorService = "";
+                if (serviceFile) {
+                    if (!dev) throw Object.assign(new Error("Synergy connectors (an account type with a background service) need Developer Mode"), { code: "NEEDS_DEVMODE" });
+                    try { connectorService = JSON.parse(new TextDecoder().decode(serviceFile.data)).name || ""; } catch (e) { connectorService = ""; }
+                }
                 report(id, 13, { state: "installing", ipkUrl: path }, each, looks);
                 var files = pkg.files.map(function (f) { return { path: f.path.slice(app.dir.length), data: b64(f.data) }; });
                 // Its account templates, for the accounts service (block "Accounts").
@@ -12047,6 +12470,7 @@
                 }));
                 return hostInstall("install", id, files).then(function (r) {
                     if (!r.ok) throw Object.assign(new Error(r.error || "Install failed"), { code: "HOST" });
+                    if (connectorService && runtime.connectorInstalled) runtime.connectorInstalled(id, connectorService);
                     report(id, 30, { state: "installed", installBasePath: "/media/cryptofs/apps", skipped: skipped }, each, {});
                     return { appId: id, version: app.appinfo.version || pkg.control.Version || "", skipped: skipped };
                 });
@@ -12070,6 +12494,7 @@
                     throw Object.assign(new Error(r.error || "Remove failed"), { code: -7 });
                 }
                 runtime.recordAccountTemplates(id, null);
+                if (runtime.connectorInstalled) runtime.connectorInstalled(id, null);
                 report(id, 31, { state: "removed" }, each);
             });
         }
@@ -13546,7 +13971,8 @@
                 var id = "sheet" + (++seq) + "_" + Date.now();
                 var frame = doc.createElement("iframe");
                 frame.setAttribute("data-phoenix-sheet", kind);
-                frame.setAttribute("title", kind === "save" ? "Save to Files" : kind === "pick" ? request.title || "Choose a File" : "Share");
+                frame.setAttribute("title", kind === "save" ? "Save to Files" : kind === "pick" ? request.title || "Choose a File"
+                                            : kind === "signin" ? "Sign In" : "Share");
                 frame.src = SHEET_URL + "?launchParams=" + encodeURIComponent(toJson({ kind: kind, id: id }));
                 var st = frame.style;
                 st.position = "fixed"; st.left = "0"; st.top = "0"; st.width = "100%"; st.height = "100%";
@@ -13617,6 +14043,15 @@
         function inPhotos(path) {
             return /^\/media\/internal\//.test(path) && !/\/\./.test(path) && /\.(jpe?g|png|gif|webp|bmp|heic|mp4|m4v|mov|webm)$/i.test(path);
         }
+
+        // The OAuth service's browser sheet (block "OAuth"): the provider's
+        // page with its address, until it goes to an address starting with
+        // prefix (the redirect) -> that address, or null when closed.
+        runtime.signInSheet = function (url, prefix) {
+            return showSheet("signin", { url: url, redirectPrefix: prefix }).then(function (r) {
+                return r && r.action === "redirect" && typeof r.url === "string" && r.url.indexOf(prefix) === 0 ? r.url : null;
+            });
+        };
 
         // The app menu's Share (and anything else in the page): the sheet.
         runtime.share = function (content) {

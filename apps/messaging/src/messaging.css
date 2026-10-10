@@ -157,6 +157,20 @@ body.messaging-app { overflow: hidden; }
     background: linear-gradient(#ececea, #e4e4e2 120px);
 }
 
+/* A conversation that is not private (the Fediverse's direct mentions). */
+.chat-notice {
+    flex: none;
+    margin: 6px 10px 0;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: rgba(255, 196, 0, 0.18);
+    border: 1px solid rgba(160, 120, 0, 0.35);
+    color: #5a4600;
+    font-size: 13px;
+    line-height: 1.3;
+    text-align: center;
+}
+
 .chat-time {
     text-align: center;
     font-size: 12px;

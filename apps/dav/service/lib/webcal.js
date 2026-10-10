@@ -18,7 +18,7 @@
 
 "use strict";
 
-var ical = require("./ical");
+var ical = require("@phoenix/synckit").ical;
 var KINDS = require("./sync").KINDS;
 
 var EVENT_FIELDS = ["subject", "location", "note", "allDay", "tzId", "dtstart", "dtend", "rrule", "exdates", "alarm",

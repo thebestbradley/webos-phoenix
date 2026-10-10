@@ -1,6 +1,6 @@
 # Synergy accounts, a connector catalog and a developer kit (draft)
 
-*Draft, 10 October 2026. Thoughts and plans only; nothing here is built. The Marketplace view this page calls the Accounts view is named **Connections** (the owner, section 5).*
+*Draft, 10 October 2026, with what is built since: phases C0, C1 (the kit) and C2 (the Fediverse account), each in an "As built" note. The Marketplace view this page calls the Accounts view is named **Connections** (the owner, section 5). Developers: [SYNERGY-SDK.md](SYNERGY-SDK.md).*
 
 The owner asked: which accounts fit our Accounts app and fill Synergy with a
 modern twist; a feed for accounts in the catalog with its own Synergy view;
@@ -32,7 +32,7 @@ kit**, and a few gaps found in today's code that block third-party connectors.
 | Templates | HP profile, IMAP, POP, other mail; CardDAV & CalDAV; Subscribed Calendar (webcal); a simulated Jabber (XMPP) account | `compat/rootfs/usr/palm/public/accounts/`, `apps/dav/public/accounts/`, runtime block "Instant messaging" |
 | Reference connector | `apps/dav`: hidden app + wizard + template + db8 kinds and permissions + Node service with luna-service2 files | `apps/dav/` (layout in section 3.1) |
 | Marketplace | Index kinds `pwa` and `ipk`; web apps only; services refused by the server and need Developer Mode on the device | `server/marketplace/src/Catalog.php` `publish()`, `src/Ipk.php` (header: "no services"), `apps/marketplace/service/packagesservice.js` lines 338-357 |
-| OAuth, key store, push, synckit | Planned, not built. Simulator keeps credentials in localStorage | SYNERGY.md 2.3, 2.9; SYNERGY-MODERN.md 4.2, 4.8 |
+| OAuth, key store, push, synckit | synckit built (C1); the OAuth service's sign-in with PKCE built for the Fediverse (C2), its sheet and key store in the simulator only; push planned. Simulator keeps credentials in localStorage | SYNERGY.md 2.3, 2.9; SYNERGY-MODERN.md 4.2, 4.8; `services/oauth` |
 
 **Gaps that matter for third-party connectors** (found while reading the code):
 
@@ -78,7 +78,7 @@ kit**, and a few gaps found in today's code that block third-party connectors.
    open-source release (`third_party/foundation-frameworks` and
    `loadable-frameworks` have no sync framework; SYNERGY.md 1.4 says the
    same). *(From memory, unverified.)* Phoenix's kit replaces it; it does
-   not reconstruct it.
+   not reconstruct it. *Done in C1:* `@phoenix/connector-kit` (section 3.3).
 
 ## 1. Accounts that fit, with a modern twist
 
@@ -236,6 +236,17 @@ catalog's copy of the template's 96 px icon), not the draft's sizes;
   service, that every kind extends a generic kind and is owned by that
   service, and that no db8 permission grants access to another package's
   kinds. It allows no native code and no scripts.
+  *Built in C1* as `server/marketplace/src/Connector.php` (`check`,
+  `checkIpk`; rules C1 to C13), the same rules as the kit's
+  `phoenix-connector validate` and tested on the same cases
+  (`tests/connector-cases.json`). Until C4, `Ipk::check` refuses a package
+  with a service in its app (`service/package.json` or `service/sysbus/`) as
+  "a Synergy connector, which the catalog does not take yet", and the device's
+  Marketplace service and the simulator install one only in Developer Mode.
+  The layout differs from the draft above in one point: the service is in the
+  app's `service/` folder (as `apps/dav` keeps it), not under
+  `usr/palm/services/`, so the package is one app and C13's "files only under
+  the app" holds.
 - Review is always human for a connector's first release and for any change
   to auth, hosts or kinds (as APP-STORE.md 3.4 does for new ACGs).
 - Admin: a field for the privacy and terms notes, and a "verified with
@@ -401,7 +412,7 @@ plus JSContact/JSCalendar; and a push registration helper.
   checks the template schema, namespaces, kinds and permissions with the
   same checks the Marketplace runs. `pack` builds the `.ipk`.
 - **Test harness**: the in-memory db8 and the accounts service the DAV tests
-  already use (`apps/dav/service/test/memdb.cjs`), recorded HTTP fixtures,
+  already use (`apps/shared/synckit/src/test/memdb.js`), recorded HTTP fixtures,
   and a **conformance suite** every connector must pass to be listed:
   create → enable → sync → disable → delete leaves no data; a second sync
   with nothing changed writes nothing; 401 gives `ERROR`/`401_UNAUTHORIZED`;
@@ -411,6 +422,35 @@ plus JSContact/JSCalendar; and a push registration helper.
 - **Docs**: a `docs/SYNERGY-SDK.md` for developers, with `apps/dav` as the
   worked example. A minimal read-only example (an RSS/FEEDS connector) is
   the "hello world".
+
+**As built in C1** ([SYNERGY-SDK.md](SYNERGY-SDK.md) is the guide):
+
+- `apps/shared/synckit` (`@phoenix/synckit`, plain CommonJS): extracted from
+  `apps/dav`, which now runs on it (its tests unchanged and green). Moved:
+  vCard, iCalendar, date and content-line mappers, the person linker,
+  Node's `request()`, the in-memory db8 and fake bus of the tests; new from
+  `davservice.js`: `createLuna` (db8, tempdb, credentials, account info),
+  `createScheduler` (the periodic activity), `createSerializer` (one sync
+  at a time), `errorCodeOf` / `fail`, `setSyncState`; new: `createHttp`
+  (host allow-list, `Retry-After`, retries, timeouts), item records and
+  `merge3` (the three-way field merge of SM 4.2).
+- `apps/shared/connector-kit` (`@phoenix/connector-kit`, TypeScript, built to
+  `lib/` CommonJS): `defineConnector` as sketched above, with two kinds of
+  capability: a set of objects (`kind`, `pull`, and `push` for two-way) and
+  anything else (`sync`, `remove`, an outbox `watch`); `createConnectorService`
+  makes the callbacks; `lib/device` runs it under `run-js-service`. The
+  simulator runs the same compiled files in the page (runtime "Synergy
+  connectors on the kit": the built-in ones, and packages installed in
+  Developer Mode), finding `@phoenix/*` by name (rootfs
+  `/usr/lib/phoenix/node_modules/`); a device service carries them in its
+  `node_modules` (`tools/install-rootfs.py`, `phoenix-connector pack`).
+- `phoenix-connector new | validate | pack | test`; the conformance suite
+  (`lib/conformance`) with the checks listed above, run on the hello-world
+  FEEDS connector (`examples/feeds`, also run in the simulator by
+  `tools/test-fediverse.cjs`), on a two-way test connector and on the
+  Fediverse account.
+- Not built: JSContact / JSCalendar mappers, push registration (C6),
+  `minVersion` of the kit in packages.
 
 **Compatibility:** the kit emits original-format templates and kinds, so
 the original Contacts, Calendar, Email and Accounts apps keep working.
@@ -471,12 +511,59 @@ Still open:
 | Phase | Work | Size | Depends on |
 | --- | --- | --- | --- |
 | **C0** (simulator, now) | Alias "Find More..." to the Marketplace with its params; dynamic template discovery + reload; `accounts` array in the index with built-in types only; the Accounts view (browse, Set up); calendar directory | M | nothing |
-| **C1** | Extract `synckit` from `apps/dav` (SM phase 1c); `@phoenix/connector-kit`, CLI `new/validate/pack`, conformance suite; `docs/SYNERGY-SDK.md` with a FEEDS example | M | C0 |
-| **C2** | **The Fediverse first** (the flagship): one account type for any ActivityPub server with the Mastodon client API (SM 3.1), on the kit. The handle finds the server (WebFinger, NodeInfo); the app registers itself with that server (`POST /api/v1/apps`) and signs in with OAuth in a browser sheet, its token in the key store: the parts of C3's OAuth service it needs, built here first. Then followed accounts on contact cards (avatar, profile, latest post), notifications as webOS notifications (Web Push to UnifiedPush later, C6; polled until then), direct mentions in Messaging's threads (labelled "not private"), Pixelfed albums in Photos, and the account as a share target in the share sheet (post a photo, a link, a memo) | M–L | C1 |
+| **C1** (built) | Extract `synckit` from `apps/dav` (SM phase 1c); `@phoenix/connector-kit`, CLI `new/validate/pack`, conformance suite; `docs/SYNERGY-SDK.md` with a FEEDS example | M | C0 |
+| **C2** (built, but Pixelfed albums) | **The Fediverse first** (the flagship): one account type for any ActivityPub server with the Mastodon client API (SM 3.1), on the kit. The handle finds the server (WebFinger, NodeInfo); the app registers itself with that server (`POST /api/v1/apps`) and signs in with OAuth in a browser sheet, its token in the key store: the parts of C3's OAuth service it needs, built here first. Then followed accounts on contact cards (avatar, profile, latest post), notifications as webOS notifications (Web Push to UnifiedPush later, C6; polled until then), direct mentions in Messaging's threads (labelled "not private"), Pixelfed albums in Photos, and the account as a share target in the share sheet (post a photo, a link, a memo) | M–L | C1 |
 | **C3** | The rest of the OAuth service (providers that need a registered client), then first-party connectors on the kit: Microsoft (SM 2a, 7c), DAV presets (iCloud, Fastmail, Nextcloud LF v2), CalDAV tasks for Tasks, Immich, gpodder, FreshRSS/Miniflux, Bluesky | L | C2; SYNERGY phase 0 for the device |
 | **C4** | `connector` kind in the backend: profile checks, review, privacy/terms fields; Developer Mode installs from the Marketplace | M | C1 |
 | **C5** | Connector trust tier + db8 permission rule; open submissions to everyone | L | APP-STORE A5, device |
 | **C6** | Push (UnifiedPush) and relay in the kit; per-account app visibility; account health | M | SM phase 5 |
+
+**As built in C2** (the Fediverse account, `apps/fediverse`, template
+`com.webosphoenix.fediverse`, built in and listed in Connections, featured):
+
+- **Sign-in**: the handle (`@you@example.social`) on the account's page in
+  Accounts; WebFinger on the handle's domain finds the server (which may be
+  another host), NodeInfo names its software (Lemmy, PeerTube, Misskey and
+  others without the Mastodon client API are refused for now); the app
+  registers itself with that server once (`POST /api/v1/apps`, kept by the
+  OAuth service per server and redirect address); OAuth authorization code
+  with PKCE in the system's browser sheet (the share sheet's page, kind
+  `signin`: the server's page in a web view, its address above it); the
+  token in the key store (in the simulator the runtime's credential storage;
+  on a device a placeholder file until the key store, and no sheet yet:
+  `services/oauth/service.js`); the account's credentials keep only the key.
+  Scopes: `read:accounts read:follows read:notifications read:statuses
+  write:statuses write:media`.
+- **Contacts** (read only): the accounts you follow, as
+  `com.palm.contact.fediverse:1` (name from the display name without custom
+  emoji, `@handle` as nickname, the profile link and the links the server
+  verified, the avatar kept as a file, the latest post in the note), linked
+  to your people by the linker's rules (same name), as Synergy linked a
+  Facebook friend. Latest posts are read only for those who posted since
+  (`last_status_at`), 30 per sync.
+- **Messaging**: direct mentions as `com.palm.immessage.fediverse:1`
+  (`serviceName` `type_fediverse`), one conversation per person, which
+  Messaging labels **not private** ("direct mentions are not encrypted, and
+  the admins of both servers can read them"); a reply is posted back as a
+  direct mention in reply to the last one (the outbox: a db8 watch on a
+  device, the simulator's IM transport hook). The first sync brings recent
+  ones in as read, without notifications.
+- **Notifications** (capability `SOCIAL`): mentions, follows, boosts and
+  favourites as webOS notifications (five at most per sync, then "n more");
+  a tap opens the post or profile in the browser. Polled every 15 minutes
+  (the kit's schedule); Web Push to UnifiedPush is C6.
+- **Sharing**: the account is a share target (`appinfo.json`
+  `shareTargets`: text, links, pictures); its page posts a link, text, up to
+  four pictures each with its description (alt text), with the visibility
+  chosen (public, unlisted, followers, mentioned only), with an
+  `Idempotency-Key`.
+- **Not done**: Pixelfed albums in Photos (no PHOTO capability or kinds yet;
+  OPEN-QUESTIONS.md Q3), Bluesky, Web Push (C6), the sheet and key store on
+  a device (C3).
+- **Tests**: a fake Mastodon server (`apps/fediverse/service/test/fake-mastodon.cjs`,
+  following docs.joinmastodon.org page by page), the conformance suite and
+  unit tests (`connector.test.ts`), and `tools/test-fediverse.cjs`, the whole
+  flow in the simulated runtime.
 
 C0 and C1 need no registration with anyone and no new server, as DAV
 needed none in phase 1; nor does C2: each Fediverse server registers the

@@ -9,6 +9,7 @@
         "systemApps: single app directories for system UI apps (Just Type, the system alerts), never shown in the launcher.",
         "applicationDirs: each child with an appinfo.json is an app; a child whose built output is in dist/ (e.g. React apps) is used from there.",
         "exclude: device paths that are never served or installed (files of the original apps we do not redistribute; see docs/LEGAL.md).",
+        "/usr/lib/phoenix/node_modules/@phoenix/: Phoenix's shared packages for the Node.js services (the sync layer and the connector kit), where the simulator's service loader finds them by name; a device has a copy in each service that depends on one (tools/install-rootfs.py).",
         "com.palm.app.devmodeswitcher/icon.png: the icon of Just Type's \"Developer Mode Enabler\" result for the Konami code (luna-applauncher app/LaunchPointSearch.js:30-36); Phoenix has no switcher app, so it is Settings' Developer Mode icon."
     ],
     "overlays": [
@@ -41,11 +42,15 @@
         "/usr/palm/public/accounts/com.palm.pop/": "third_party/app-services/mojomail/pop/files/usr/palm/public/accounts/com.palm.pop/",
         "/usr/palm/public/accounts/com.webosphoenix.dav/": "apps/dav/public/accounts/com.webosphoenix.dav/",
         "/usr/palm/public/accounts/com.webosphoenix.webcal/": "apps/dav/public/accounts/com.webosphoenix.webcal/",
+        "/usr/palm/public/accounts/com.webosphoenix.fediverse/": "apps/fediverse/public/accounts/com.webosphoenix.fediverse/",
         "/usr/share/phoenix/runtime/": "runtime/",
+        "/usr/lib/phoenix/node_modules/@phoenix/synckit/": "apps/shared/synckit/",
+        "/usr/lib/phoenix/node_modules/@phoenix/connector-kit/": "apps/shared/connector-kit/",
         "/usr/palm/services/org.webosphoenix.service.backup/": "apps/settings/service/",
         "/usr/palm/services/org.webosphoenix.assistant/": "apps/assistant/service/",
         "/usr/palm/services/org.webosphoenix.service.packages/": "apps/marketplace/service/",
         "/usr/palm/services/com.palm.update/": "services/updates/",
+        "/usr/palm/services/org.webosphoenix.service.oauth/": "services/oauth/",
         "/usr/palm/services/org.webosphoenix.hardware/": "services/hardware/",
         "/etc/palm/hardware/": "services/hardware/etc/palm/hardware/",
         "/usr/share/phoenix/hardware/sample/": "server/drivers/sample/public/",

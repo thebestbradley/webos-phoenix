@@ -1,0 +1,16 @@
+{
+    "id": "org.example.feeds",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix (example)",
+    "type": "web",
+    "main": "index.html",
+    "title": "News Feeds (example)",
+    "icon": "icon.png",
+    "phoenix": {
+        "//": "Not in the launcher: the app carries the connector (docs/SYNERGY-SDK.md).",
+        "hidden": true
+    },
+    "requiredPermissions": [
+        "accounts.transport"
+    ]
+}

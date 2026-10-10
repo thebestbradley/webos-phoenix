@@ -1,0 +1,11 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.service.fediverse"
+    ],
+    "accounts.transport": [
+        "oem"
+    ],
+    "fediverse.account": [
+        "oem"
+    ]
+}

@@ -1,0 +1,15 @@
+{
+    "id": "org.webosphoenix.fediverse.state:1",
+    "owner": "org.webosphoenix.service.fediverse",
+    "sync": false,
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        }
+    ]
+}

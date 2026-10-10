@@ -1,0 +1,8 @@
+{
+    "allowedNames": [
+        "org.example.service.feeds"
+    ],
+    "accounts.transport": [
+        "oem"
+    ]
+}

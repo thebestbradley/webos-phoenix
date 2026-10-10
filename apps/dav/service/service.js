@@ -19,7 +19,7 @@ var fs = require("fs");
 var path = require("path");
 var Service = require("webos-service");
 var davservice = require("./davservice");
-var nodeHttp = require("./lib/node-http");
+var synckit = require("@phoenix/synckit");
 
 var PHOTO_DIR = "/media/internal/.phoenix/dav-photos";
 
@@ -44,7 +44,7 @@ var methods = davservice.createDavService({
             });
         }
     },
-    request: nodeHttp.createRequest(),
+    request: synckit.createRequest(),
     savePhoto: savePhoto,
     log: function (msg) { console.log("[dav] " + msg); }
 });

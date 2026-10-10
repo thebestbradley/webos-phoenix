@@ -1,0 +1,19 @@
+{
+    "appId": "org.example.service.feeds",
+    "type": "regular",
+    "allowedNames": [
+        "org.example.service.feeds"
+    ],
+    "permissions": [
+        {
+            "service": "org.example.service.feeds",
+            "outbound": [
+                "org.example.service.feeds",
+                "com.palm.db",
+                "com.palm.tempdb",
+                "com.palm.activitymanager",
+                "com.palm.service.accounts"
+            ]
+        }
+    ]
+}

@@ -6,18 +6,23 @@
 // (lib/vcard.js, lib/ical.js), and the pieces under them (content lines,
 // dates and time zones, the WebDAV XML reader).
 
-import { createRequire } from "node:module";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import * as synckit from "@phoenix/synckit";
+import { loadCommonJs } from "../../shared/connector-kit/src/test-support";
 
-const require = createRequire(import.meta.url);
+// The service's CommonJS files, with the shared sync layer's sources
+// (@phoenix/synckit), as the simulator's loader runs them: no build and
+// no node_modules link needed.
+const load = (file: string) => loadCommonJs(join(__dirname, file));
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Any = any;
-const vcard = require("./lib/vcard.js") as Any;
-const ical = require("./lib/ical.js") as Any;
-const CL = require("./lib/contentline.js") as Any;
-const DT = require("./lib/datetime.js") as Any;
-const X = require("./lib/xml.js") as Any;
-const { parseMultistatus } = require("./lib/davclient.js") as Any;
+const vcard = synckit.vcard as Any;
+const ical = synckit.ical as Any;
+const CL = synckit.contentline as Any;
+const DT = synckit.datetime as Any;
+const X = load("lib/xml.js") as Any;
+const { parseMultistatus } = load("lib/davclient.js") as Any;
 
 const card = (...lines: string[]) => ["BEGIN:VCARD", ...lines, "END:VCARD", ""].join("\r\n");
 const cal = (...lines: string[]) => ["BEGIN:VCALENDAR", "VERSION:2.0", ...lines, "END:VCALENDAR", ""].join("\r\n");

@@ -1,0 +1,57 @@
+<!doctype html>
+<!-- Copyright (c) 2026 webOS Phoenix contributors
+     SPDX-License-Identifier: Apache-2.0
+
+     org.webosphoenix.fediverse is not in the launcher: it carries the
+     Fediverse account (its sign-in page accounts/wizard.html, its template
+     in public/accounts, its kinds and its service) and this page, which the
+     share sheet opens to post what is shared (appinfo.json shareTargets):
+     a link, text, pictures with their descriptions, and who may see it.
+     Launched with {open: address} (a notification tapped), it opens the
+     post or profile in the browser. -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Fediverse</title>
+    <link rel="stylesheet" href="compose.css">
+</head>
+<body>
+    <header class="bar">
+        <img src="icon.png" width="32" height="32" alt="">
+        <h1 id="heading">Post to the Fediverse</h1>
+    </header>
+    <main id="main">
+        <section id="none" hidden>
+            <p>Add your Fediverse account to post from Phoenix: your server's address and a sign-in on its own page.</p>
+            <button id="setup" class="primary" type="button">Add a Fediverse Account</button>
+        </section>
+        <section id="compose" hidden>
+            <label class="caption" for="account" id="accountLabel">Post as</label>
+            <select id="account"></select>
+            <div class="caption" id="asOne"></div>
+            <textarea id="text" rows="6" maxlength="5000" placeholder="What's on your mind?" aria-label="Your post"></textarea>
+            <div class="count" id="count"></div>
+            <div id="pictures"></div>
+            <div class="caption">Who can see it</div>
+            <div class="visibility" role="radiogroup" id="visibility">
+                <button type="button" role="radio" data-v="public" aria-checked="true">Public</button>
+                <button type="button" role="radio" data-v="unlisted" aria-checked="false">Unlisted</button>
+                <button type="button" role="radio" data-v="private" aria-checked="false">Followers</button>
+                <button type="button" role="radio" data-v="direct" aria-checked="false">Mentioned</button>
+            </div>
+            <p class="hint" id="visibilityHint"></p>
+            <p class="error" id="error" role="alert"></p>
+            <div class="buttons">
+                <button id="cancel" type="button">Cancel</button>
+                <button id="post" class="primary" type="button">Post</button>
+            </div>
+        </section>
+        <section id="done" hidden>
+            <p>Posted.</p>
+            <p><a id="link" href="#"></a></p>
+        </section>
+    </main>
+    <script src="compose.js"></script>
+</body>
+</html>

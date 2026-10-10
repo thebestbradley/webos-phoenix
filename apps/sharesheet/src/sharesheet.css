@@ -193,3 +193,30 @@ html:has(> body.ss-body), body.pui-app.ss-body { background: transparent; }
     cursor: grab;
 }
 .ss-crop-frame img { position: absolute; left: 0; top: 0; max-width: none; user-select: none; pointer-events: none; }
+
+/* Sign in (OAuth): the provider's page over most of the card, its address
+   above it, as a browser's: who you are talking to is always in sight. */
+.ss-sheet.ss-signin { top: 24px; bottom: 6px; max-height: none; width: min(calc(100% - 12px), 640px); gap: 6px; }
+.ss-signin-bar { display: flex; align-items: center; gap: 8px; margin-top: -10px; }
+.ss-signin-lock {
+    flex: none; width: 14px; height: 16px; border-radius: 3px; position: relative; top: 3px;
+    background: #9a9a9a;
+}
+.ss-signin-lock::before {
+    content: ""; position: absolute; left: 3px; top: -7px; width: 6px; height: 8px;
+    border: 2px solid #9a9a9a; border-bottom: 0; border-radius: 5px 5px 0 0;
+}
+.ss-signin-lock.secure, .ss-signin-lock.secure::before { background-color: #3d8a3d; border-color: #3d8a3d; }
+.ss-signin-lock.secure::before { background: transparent; }
+.ss-signin-address {
+    flex: 1; min-width: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    background: rgba(255, 255, 255, 0.85); border: 1px solid rgba(0, 0, 0, 0.25); border-radius: 6px; padding: 6px 8px;
+}
+.ss-signin-address span { color: var(--pui-text-dim); }
+.ss-signin-note { font-size: 13px; color: var(--pui-text-dim); text-align: center; }
+.ss-signin-view { flex: 1; min-height: 120px; width: 100%; display: block; background: #fff; border-radius: 6px; overflow: hidden; }
+.ss-signin-bar .pui-spinner, .ss-signin-bar .spinner { flex: none; }
+.ss-signin-cancel {
+    flex: none; font: inherit; font-size: 15px; padding: 6px 12px; border-radius: 6px;
+    border: 1px solid rgba(0, 0, 0, 0.35); background: linear-gradient(#fdfdfd, #e2e2e2); color: #333;
+}

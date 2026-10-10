@@ -277,7 +277,8 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         const { service } = makeService(defaults());
         await service.setSource({ id: "precentral", enabled: true });
         const all = (await service.browse({ section: "classics" })).apps.filter((a: Any) => a.kind === "preware");
-        expect(all.map((a: Any) => [a.id, a.version])).toEqual([["org.example.homebrew", "0.9.1"], ["org.example.nativelib", "1.0"], ["org.example.hooked", "2.0"]]);
+        expect(all.map((a: Any) => [a.id, a.version])).toEqual([["org.example.homebrew", "0.9.1"], ["org.example.nativelib", "1.0"], ["org.example.hooked", "2.0"],
+                                                                ["org.example.feeds", "0.1.0"]]);
         expect(all[0]).toMatchObject({ description: "Line one\nLine two", license: "GPL-2.0", developer: { name: "Homebrewer" } });
         expect(all[1].verdict).toMatchObject({ ok: false });
         const native = await service.install({ sourceId: "precentral", id: "org.example.nativelib" });
@@ -301,5 +302,17 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         expect(await service.install({ sourceId: "precentral", id: "org.example.hooked" })).toMatchObject({ returnValue: true, appId: "org.example.hooked" });
         expect(world.installs.at(-1)).toMatchObject({ id: "org.example.hooked", developerMode: true });
         expect(world.installs.at(-1).pkg.scripts).toEqual(["postinst"]);
+    });
+
+    it("installs a Synergy connector only in Developer Mode (docs/SYNERGY-CONNECTORS.md section 5)", async () => {
+        const { service, world } = makeService(defaults());
+        await service.setSource({ id: "precentral", enabled: true });
+        await service.refresh({ id: "precentral" });
+        const refused = await service.install({ sourceId: "precentral", id: "org.example.feeds" });
+        expect(refused).toMatchObject({ errorCode: "NEEDS_DEVMODE" });
+        expect(refused.errorText).toMatch(/Synergy connector.*Developer Mode/);
+        world.devMode = true;
+        expect(await service.install({ sourceId: "precentral", id: "org.example.feeds" })).toMatchObject({ returnValue: true, appId: "org.example.feeds" });
+        expect(world.installs.at(-1)).toMatchObject({ id: "org.example.feeds", developerMode: true });
     });
 });

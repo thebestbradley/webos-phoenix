@@ -1,0 +1,90 @@
+{
+    "//": [
+        "The connector profile checks' cases (docs/SYNERGY-CONNECTORS.md 2.2): the same for the Marketplace's own checks",
+        "(src/Connector.php, tests/run.php) and the connector kit's `phoenix-connector validate` (apps/shared/connector-kit,",
+        "src/tools/checks.ts, src/tools/checks.test.ts), so both say the same of a package. `base` is a good package (its files",
+        "by path in the app's folder; an object is written as JSON, \"BIN:<hex>\" as bytes); each case changes some files",
+        "(null removes one) and lists the rule codes of the errors it must give (each code once), nothing more."
+    ],
+    "base": {
+        "appinfo.json": { "id": "org.example.foo", "version": "1.0.0", "vendor": "Example", "type": "web", "main": "index.html", "title": "Foo", "phoenix": { "hidden": true } },
+        "index.html": "<!doctype html><p>Foo</p>",
+        "accounts/signin.html": "<!doctype html><p>Sign in</p>",
+        "public/accounts/org.example.foo/org.example.foo.json": {
+            "templateId": "org.example.foo",
+            "loc_name": "Foo",
+            "icon": { "loc_32x32": "images/foo-32.png", "loc_48x48": "images/foo-48.png" },
+            "validator": { "customUI": { "appId": "org.example.foo", "name": "accounts/signin.html" }, "address": "palm://org.example.service.foo/checkCredentials" },
+            "capabilityProviders": [
+                {
+                    "capability": "CONTACTS", "id": "org.example.foo.contacts", "loc_name": "Contacts",
+                    "dbkinds": { "contact": "com.palm.contact.foo:1" },
+                    "implementation": "palm://org.example.service.foo/",
+                    "onCreate": "palm://org.example.service.foo/onCreate", "onEnabled": "palm://org.example.service.foo/onEnabled",
+                    "onDelete": "palm://org.example.service.foo/onDelete", "sync": "palm://org.example.service.foo/sync"
+                }
+            ]
+        },
+        "public/accounts/org.example.foo/images/foo-32.png": "BIN:89504e470d0a1a0a",
+        "public/accounts/org.example.foo/images/foo-32@2x.png": "BIN:89504e470d0a1a0a",
+        "public/accounts/org.example.foo/images/foo-48.png": "BIN:89504e470d0a1a0a",
+        "public/accounts/org.example.foo/images/foo-48@2x.png": "BIN:89504e470d0a1a0a",
+        "configuration/db/kinds/com.palm.contact.foo": { "id": "com.palm.contact.foo:1", "owner": "org.example.service.foo", "extends": ["com.palm.contact:1"] },
+        "configuration/db/kinds/org.example.foo.state": { "id": "org.example.foo.state:1", "owner": "org.example.service.foo" },
+        "configuration/db/permissions/com.palm.contact.foo": [
+            { "type": "db.kind", "object": "com.palm.contact.foo:1", "caller": "com.palm.app.contacts", "operations": { "read": "allow" } }
+        ],
+        "service/package.json": { "name": "org.example.service.foo", "version": "1.0.0", "main": "service.js" },
+        "service/service.js": "require('./connector');",
+        "service/connector.js": "module.exports = {};",
+        "service/sysbus/org.example.service.foo.service": "[D-BUS Service]\nName=org.example.service.foo\n",
+        "service/sysbus/org.example.service.foo.role.json": {
+            "appId": "org.example.service.foo", "type": "regular", "allowedNames": ["org.example.service.foo"],
+            "permissions": [{ "service": "org.example.service.foo", "outbound": ["org.example.service.foo", "com.palm.db", "com.palm.tempdb", "com.palm.activitymanager", "com.palm.service.accounts"] }]
+        },
+        "service/sysbus/org.example.service.foo.api.json": { "accounts.transport": ["org.example.service.foo/sync"] }
+    },
+    "cases": [
+        { "name": "the good package", "set": {}, "expect": [] },
+        { "name": "no appinfo.json", "set": { "appinfo.json": null }, "expect": ["C1"] },
+        { "name": "a native app", "set": { "appinfo.json": { "id": "org.example.foo", "version": "1.0.0", "type": "native" } }, "expect": ["C1"] },
+        { "name": "no template", "set": { "public/accounts/org.example.foo/org.example.foo.json": null }, "expect": ["C2"] },
+        { "name": "a template that breaks the schema", "set": { "public/accounts/org.example.foo/org.example.foo.json": { "templateId": "org.example.foo", "loc_name": 7, "capabilityProviders": {} } }, "expect": ["C3"] },
+        { "name": "a template in another folder's name", "set": {
+            "public/accounts/org.example.foo/org.example.foo.json": null,
+            "public/accounts/org.example.bar/org.example.bar.json": { "templateId": "org.example.foo", "loc_name": "Foo", "capabilityProviders": [] } }, "expect": ["C4"] },
+        { "name": "a template outside the namespace", "set": {
+            "public/accounts/org.example.foo/org.example.foo.json": null,
+            "public/accounts/com.google.mail/com.google.mail.json": { "templateId": "com.google.mail", "loc_name": "Mail", "capabilityProviders": [] } }, "expect": ["C5"] },
+        { "name": "the same template with the namespace given", "namespaces": ["org.example", "com.google"], "set": {
+            "public/accounts/org.example.foo/org.example.foo.json": null,
+            "public/accounts/com.google.mail/com.google.mail.json": { "templateId": "com.google.mail", "loc_name": "Mail", "capabilityProviders": [] } }, "expect": [] },
+        { "name": "an icon that is not there", "set": { "public/accounts/org.example.foo/images/foo-48.png": null }, "expect": ["C6"] },
+        { "name": "a validator on another service", "set": { "public/accounts/org.example.foo/org.example.foo.json": {
+            "templateId": "org.example.foo", "loc_name": "Foo", "validator": "palm://com.palm.service.accounts/checkCredentials", "capabilityProviders": [] } }, "expect": ["C7"] },
+        { "name": "a sign-in page of another app", "set": { "public/accounts/org.example.foo/org.example.foo.json": {
+            "templateId": "org.example.foo", "loc_name": "Foo", "validator": { "customUI": { "appId": "com.palm.app.email", "name": "accounts/wizard.html" }, "address": "palm://org.example.service.foo/checkCredentials" },
+            "capabilityProviders": [] } }, "expect": ["C7"] },
+        { "name": "a callback on another service", "set": { "public/accounts/org.example.foo/org.example.foo.json": {
+            "templateId": "org.example.foo", "loc_name": "Foo",
+            "capabilityProviders": [{ "capability": "CONTACTS", "id": "org.example.foo.contacts", "implementation": "palm://org.example.service.foo/",
+                                      "onDelete": "palm://com.palm.service.contacts/deleteAll" }] } }, "expect": ["C8"] },
+        { "name": "dbkinds not of the package", "set": { "public/accounts/org.example.foo/org.example.foo.json": {
+            "templateId": "org.example.foo", "loc_name": "Foo",
+            "capabilityProviders": [{ "capability": "CONTACTS", "id": "org.example.foo.contacts", "implementation": "palm://org.example.service.foo/",
+                                      "dbkinds": { "contact": "com.palm.contact.dav:1" } }] } }, "expect": ["C8"] },
+        { "name": "no service", "set": { "service/package.json": null }, "expect": ["C7", "C8", "C9"] },
+        { "name": "a missing sysbus file", "set": { "service/sysbus/org.example.service.foo.api.json": null }, "expect": ["C9"] },
+        { "name": "a role that calls the telephony service", "set": { "service/sysbus/org.example.service.foo.role.json": {
+            "appId": "org.example.service.foo", "allowedNames": ["org.example.service.foo"],
+            "permissions": [{ "service": "org.example.service.foo", "outbound": ["com.palm.db", "com.palm.telephony"] }] } }, "expect": ["C9"] },
+        { "name": "a contacts kind that does not extend com.palm.contact:1", "set": {
+            "configuration/db/kinds/com.palm.contact.foo": { "id": "com.palm.contact.foo:1", "owner": "org.example.service.foo" } }, "expect": ["C10"] },
+        { "name": "a kind owned by another service", "set": {
+            "configuration/db/kinds/org.example.foo.state": { "id": "org.example.foo.state:1", "owner": "com.palm.service.accounts" } }, "expect": ["C10"] },
+        { "name": "a permission on another package's kind", "set": { "configuration/db/permissions/com.palm.contact.foo": [
+            { "type": "db.kind", "object": "com.palm.contact:1", "caller": "org.example.foo", "operations": { "read": "allow" } }] }, "expect": ["C11"] },
+        { "name": "native code", "set": { "service/lib/helper.node": "BIN:7f454c46020101" }, "expect": ["C12"] },
+        { "name": "an ELF file by another name", "set": { "service/bin/helper": "BIN:7f454c46020101" }, "expect": ["C12"] }
+    ]
+}
