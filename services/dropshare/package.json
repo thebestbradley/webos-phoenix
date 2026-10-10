@@ -1,0 +1,8 @@
+{
+  "name": "org.webosphoenix.dropshare",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix's DropShare on a device (Luna): the web server another phone or computer opens to send files to the device or take its files, with a one-time token in every address",
+  "license": "Apache-2.0",
+  "main": "service.js"
+}

@@ -1,0 +1,8 @@
+{
+    "phoenix.dropshare": [
+        "org.webosphoenix.dropshare/receive",
+        "org.webosphoenix.dropshare/send",
+        "org.webosphoenix.dropshare/stop",
+        "org.webosphoenix.dropshare/getStatus"
+    ]
+}

@@ -1,0 +1,18 @@
+{
+    "appId": "org.webosphoenix.dropshare",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.dropshare"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.dropshare",
+            "outbound": [
+                "com.webos.service.systemservice",
+                "org.webosphoenix.ongoing",
+                "org.webosphoenix.shellhost"
+            ]
+        }
+    ]
+}
