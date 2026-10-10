@@ -157,6 +157,35 @@ int main(int argc, char **argv)
     check(installer.removeLaunchPoint(lpId).isEmpty() && entry(rootfs, lpId).isEmpty(), "removeLaunchPoint");
     check(installer.freeSpaceKB() > 0, "free space where apps go");
     check(entry(rootfs, QStringLiteral("com.palm.app.browser")).value(QStringLiteral("size")).toLongLong() > 10000, "apps know their size");
+
+    // The connector packages Phoenix comes with (rootfs.json "preinstalled": the Fediverse):
+    // installed apps, put there for a new device, removable, and not put back once removed.
+    {
+        const QString fedi = QStringLiteral("org.webosphoenix.fediverse");
+        check(rootfs.preinstalledIds().contains(fedi), "the Fediverse is a pre-installed package");
+        QTemporaryDir fresh;
+        Rootfs device(QStringLiteral(PHOENIX_REPO_DIR));
+        check(!device.hasApp(fedi), "... not a built-in app");
+        device.setInstalledDir(fresh.path());
+        SimInstaller inst(&device);
+        const QString markers = fresh.path() + QStringLiteral("/var/lib/phoenix/preinstalled/");
+        check(device.isInstalled(fedi) && QFile::exists(fresh.path() + QStringLiteral("/usr/palm/applications/") + fedi + QStringLiteral("/service/connector.js"))
+              && QFile::exists(markers + fedi + QStringLiteral(".offered")) && QFile::exists(markers + fedi + QStringLiteral(".seeded")),
+              "a new device has it among the installed apps, with its service");
+        check(entry(device, fedi).value(QStringLiteral("installed")).toBool(), "... removable");
+        check(inst.remove(fedi).isEmpty() && !device.isInstalled(fedi) && !QFile::exists(markers + fedi + QStringLiteral(".seeded")), "removed like any installed app");
+        Rootfs again(QStringLiteral(PHOENIX_REPO_DIR));
+        again.setInstalledDir(fresh.path());
+        check(!again.isInstalled(fedi), "once removed it is not put back at the next start");
+        // Installed again (from the catalog): the user's copy, not refreshed from the checkout.
+        SimInstaller inst2(&again);
+        check(inst2.install(fedi, { file(QStringLiteral("appinfo.json"), "{\"id\": \"org.webosphoenix.fediverse\", \"version\": \"9.9.9\"}") }).isEmpty()
+              && again.isInstalled(fedi), "installed again");
+        Rootfs third(QStringLiteral(PHOENIX_REPO_DIR));
+        third.setInstalledDir(fresh.path());
+        QFile info(fresh.path() + QStringLiteral("/usr/palm/applications/") + fedi + QStringLiteral("/appinfo.json"));
+        check(info.open(QIODevice::ReadOnly) && info.readAll().contains("9.9.9"), "... and kept as installed, not replaced by the checkout's copy");
+    }
     std::printf(failures ? "%d failed\n" : "all passed\n", failures);
     return failures ? 1 : 0;
 }
