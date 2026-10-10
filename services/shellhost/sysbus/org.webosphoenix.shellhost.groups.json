@@ -15,5 +15,8 @@
     ],
     "phoenix.system.media": [
         "dev"
+    ],
+    "phoenix.system.restart": [
+        "oem"
     ]
 }

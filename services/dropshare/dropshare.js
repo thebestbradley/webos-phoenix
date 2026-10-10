@@ -55,7 +55,10 @@ function cleanName(name) {
 }
 
 // The device's first LAN address (IPv4, up, not loopback), as SimDropShare
-// advertises it.
+// advertises it; "" when the device is on no network. (SimDropShare then
+// falls back to the computer's own loopback, which a browser on the same
+// computer can reach, shell/sim/simdropshare.cpp:133-134; nothing else can
+// reach a phone's, so start() refuses the session instead.)
 function lanAddress() {
     var nifs = os.networkInterfaces();
     for (var name in nifs) {
@@ -64,7 +67,7 @@ function lanAddress() {
             if (list[i].family === "IPv4" && !list[i].internal)
                 return list[i].address;
     }
-    return "127.0.0.1";
+    return "";
 }
 
 function sizeOf(n) {
@@ -272,6 +275,8 @@ function createDropShare(opts) {
     }
 
     function start(mode, files) {
+        var host = address();
+        if (!host) return Promise.resolve(fail("Connect to a network to use DropShare"));
         if (session) end(session, "stopped");
         var s = { mode: mode, token: crypto.randomBytes(16).toString("base64url"), url: "", server: null, state: "waiting",
                   files: files || [], bytes: 0, idle: null, subscribers: [], notified: 0, showing: false, sockets: new Set(), ended: false };
@@ -282,7 +287,7 @@ function createDropShare(opts) {
             // Every network the device is on, a port of its own.
             server.listen(0, opts.listenHost || "0.0.0.0", function () {
                 s.server = server;
-                s.url = "http://" + address() + ":" + server.address().port + "/" + s.token + "/";
+                s.url = "http://" + host + ":" + server.address().port + "/" + s.token + "/";
                 session = s;
                 touch(s);
                 resolve(ok({ session: s }));

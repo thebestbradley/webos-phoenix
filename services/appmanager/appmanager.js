@@ -34,6 +34,7 @@
 //   listApps, getAppInfo, listLaunchPoints, searchApps, launchPointChanges,
 //   running, close, addLaunchPoint, removeLaunchPoint: SAM's, in the
 //                                 legacy shapes
+//   getAppBasePath {appId}        the app's main file, luna-sysmgr's shape
 //   getHandlerForMimeType, getResourceInfo, listAllHandlersForMime,
 //   mimeTypeForExtension, getHandlerForExtension, getHandlerForUrl,
 //   addResourceHandler, swapResourceHandler, removeHandlersForAppId,
@@ -377,6 +378,22 @@ function createAppManager(opts) {
                 return ok({ appInfo: r.appInfo });
             });
         },
+        // The app's main file, which Enyo's CrossAppUI loads in an iframe
+        // (third_party/enyo-1.0/framework/source/palm/system/CrossAppUI.js:19,51):
+        // luna-sysmgr's {appId, basePath: the entry point} and its errors
+        // (Src/base/application/ApplicationManagerService.cpp:7540-7605).
+        getAppBasePath: function (p) {
+            var id = typeof p.appId === "string" ? p.appId : "";
+            if (!id) return Promise.resolve(fail(-1, "Provide an appId"));
+            return sam("getAppInfo", { id: id }).then(function (r) {
+                var info = r && r.returnValue !== false ? r.appInfo : null;
+                if (!info || !info.folderPath) return fail(-1, "Invalid appId specified: " + id);
+                var main = String(info.main || "index.html");
+                var entry = /^[a-z]+:/i.test(main) ? main
+                    : "file://" + (main.charAt(0) === "/" ? main : String(info.folderPath).replace(/\/$/, "") + "/" + main);
+                return ok({ appId: id, basePath: entry });
+            });
+        },
         listLaunchPoints: function () {
             return sam("listLaunchPoints", {}).then(function (r) {
                 return r.returnValue === false ? r : ok({ launchPoints: Array.isArray(r.launchPoints) ? r.launchPoints : [] });
@@ -655,8 +672,8 @@ function createAppManager(opts) {
     } };
 }
 
-var METHODS = ["launch", "open", "listApps", "getAppInfo", "listLaunchPoints", "searchApps", "running", "close",
-               "addLaunchPoint", "removeLaunchPoint", "getSizeOfApps", "listPendingLaunchPoints", "listDockPoints",
+var METHODS = ["launch", "open", "listApps", "getAppInfo", "getAppBasePath", "listLaunchPoints", "searchApps",
+               "running", "close", "addLaunchPoint", "removeLaunchPoint", "getSizeOfApps", "listPendingLaunchPoints", "listDockPoints",
                "getHandlerForMimeType", "getResourceInfo", "listAllHandlersForMime", "mimeTypeForExtension",
                "getHandlerForExtension", "getHandlerForUrl", "addResourceHandler", "swapResourceHandler",
                "removeHandlersForAppId", "listResourceHandlers", "listExtensionMap", "addRedirectHandler",

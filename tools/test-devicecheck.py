@@ -82,10 +82,27 @@ def main():
         call(`${SVC}/t`, {});
         call(SVC + "/u", {});
         call("luna://a.d/" + name, {});
+        LSSignalSend(m_h.power, "luna://a.e/cat/changed", json.c_str(), &err);
+        signal("luna://a.e/cat/changedToo", json());
+        kAlarmSchedulerUri: "luna://a.f/timeout/",
     '''
     got = sorted((s, m or "") for s, m, _ in calls_in(text))
     ok(got == sorted([("a.b", "c/d"), ("a.b", "cat/m"), ("a.b", "n"), ("a.b", "q/r"), ("a.c", ""),
-                      ("a.c", "t"), ("a.c", "u"), ("a.d", "")]), "Luna URIs are read in every form: %s" % got)
+                      ("a.c", "t"), ("a.c", "u"), ("a.d", ""), ("a.f", "")]),
+       "Luna URIs are read in every form (signals sent are not calls; a bare base URI has no method): %s" % got)
+
+    # A luna-service2 .service file may name several services, ';'-separated.
+    import tempfile
+    with tempfile.TemporaryDirectory() as tree:
+        sysbus = os.path.join(tree, "services", "multi", "sysbus")
+        os.makedirs(sysbus)
+        with open(os.path.join(sysbus, "org.example.multi.service"), "w") as f:
+            f.write("[D-BUS Service]\nName=org.example.one;org.example.two\nExec=/usr/sbin/multi\nType=dynamic\n")
+        with open(os.path.join(sysbus, "org.example.multi.role.json"), "w") as f:
+            json.dump({"allowedNames": ["org.example.one", "org.example.two"], "permissions": []}, f)
+        status, out = run("recipes", tree, "--allowlist", "none")
+        ok(out is not None and not [x for x in out["new"] if x["id"].startswith("recipes:service-file")],
+           "a .service file naming several services its role file allows passes")
 
     # install-rootfs.py: each app gets its ACG files, as meta-webos writes them.
     import importlib.util
@@ -106,7 +123,6 @@ def main():
 
     # phoenix-diag (the device's diagnostics bundle): it runs here too, with
     # what this machine has, and makes its archive.
-    import tempfile
     diag = os.path.join(REPO, "meta-phoenix", "recipes-phoenix", "phoenix-diag", "files", "phoenix-diag")
     ok(subprocess.run(["sh", "-n", diag]).returncode == 0, "phoenix-diag parses")
     with tempfile.TemporaryDirectory() as out:

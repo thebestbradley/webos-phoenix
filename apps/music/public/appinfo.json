@@ -23,6 +23,7 @@
         "application.operation",
         "mediaindexer.operation",
         "media.operation",
-        "audio.operation"
+        "audio.operation",
+        "phoenix.system.media"
     ]
 }

@@ -58,10 +58,6 @@
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
  },
- "luna:missing-permission:org.webosphoenix.fediverse->com.webos.applicationManager/launch": {
-  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
-  "row": "C4"
- },
  "luna:missing-permission:org.webosphoenix.maps->com.webos.settingsservice/getSystemSettings": {
   "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
   "row": "C4"
@@ -270,14 +266,6 @@
   "owner": "the app's or service's owner",
   "row": "C6"
  },
- "luna:unknown-group:org.webosphoenix.assistant:phoenix.system.media": {
-  "owner": "the app's or service's owner",
-  "row": "C6"
- },
- "luna:unknown-group:org.webosphoenix.assistant:phoenix.tethering": {
-  "owner": "the app's or service's owner",
-  "row": "C6"
- },
  "luna:unknown-group:org.webosphoenix.assistant:systemui.searchprovider": {
   "owner": "the app's or service's owner",
   "row": "C6"
@@ -362,19 +350,7 @@
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C5"
  },
- "luna:unknown-method:com.webos.applicationManager/addDockModeLaunchPoint": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C5"
- },
- "luna:unknown-method:com.webos.applicationManager/launchPointChanges": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C5"
- },
  "luna:unknown-method:com.webos.applicationManager/listAllHandlersForMime": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C5"
- },
- "luna:unknown-method:com.webos.applicationManager/listDockModeLaunchPoints": {
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C5"
  },
@@ -382,20 +358,16 @@
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C5"
  },
- "luna:unknown-method:com.webos.applicationManager/removeDockModeLaunchPoint": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C5"
- },
- "luna:unknown-method:com.webos.applicationManager/searchApps": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C5"
- },
- "luna:unknown-method:com.webos.applicationManager/setDockModeLaunchPoints": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+ "luna:unknown-method:com.webos.service.activitymanager/getDetails": {
+  "owner": "OSE's activitymanager (not ours): its api file has getActivityInfo, not webOS's getDetails (luna-systemui's System-Service.js, a third_party original; Podcasts' scheduled refresh falls back to create when it fails)",
   "row": "C5"
  },
  "luna:unknown-method:com.webos.service.audio/playFeedback": {
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.webos.service.downloadmanager/filesysStatusCheck": {
+  "owner": "OSE's luna-downloadmgr (not ours): no filesysStatusCheck, so luna-systemui's low-storage alerts (SystemManagerService.js, a third_party original) never fire on a device",
   "row": "C5"
  },
  "luna:unknown-method:com.webos.service.mediaindexer/phoenix/thumbnail": {
@@ -430,10 +402,6 @@
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C1"
  },
- "luna:unknown-service:com.palm.applicationManager": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C1"
- },
  "luna:unknown-service:com.palm.audio": {
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C1"
@@ -465,10 +433,6 @@
  "luna:unknown-service:com.palm.deviceprofile": {
   "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
   "row": "C2"
- },
- "luna:unknown-service:com.palm.downloadmanager": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C1"
  },
  "luna:unknown-service:com.palm.eas": {
   "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
@@ -513,10 +477,6 @@
  "luna:unknown-service:com.palm.pop": {
   "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
   "row": "C2"
- },
- "luna:unknown-service:com.palm.power": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C1"
  },
  "luna:unknown-service:com.palm.preferences": {
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
@@ -638,27 +598,11 @@
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C1"
  },
- "luna:unknown-service:org.webosphoenix.battery": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C3"
- },
  "luna:unknown-service:org.webosphoenix.dictation": {
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C3"
  },
- "luna:unknown-service:org.webosphoenix.dropshare": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C3"
- },
  "luna:unknown-service:org.webosphoenix.filepicker": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C3"
- },
- "luna:unknown-service:org.webosphoenix.gamepads": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C3"
- },
- "luna:unknown-service:org.webosphoenix.ongoing": {
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C3"
  },
@@ -683,18 +627,6 @@
   "row": "C3"
  },
  "luna:unknown-service:org.webosphoenix.simulator": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C3"
- },
- "luna:unknown-service:org.webosphoenix.system": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C3"
- },
- "luna:unknown-service:org.webosphoenix.tethering": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C3"
- },
- "luna:unknown-service:org.webosphoenix.usb": {
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C3"
  },
@@ -732,6 +664,10 @@
  },
  "simrefs:loopback:apps/shared:0.0.0.0": {
   "owner": "intended: a server on the device itself (see the row)",
+  "row": "N4"
+ },
+ "simrefs:loopback:services/dropshare:0.0.0.0": {
+  "owner": "intended: DropShare's server listens on every network the device is on, for the other device's browser (see the row)",
   "row": "N4"
  },
  "simrefs:loopback:services/oauth:127.0.0.1": {
