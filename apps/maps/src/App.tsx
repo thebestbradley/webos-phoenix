@@ -19,7 +19,7 @@
 //
 // Services (see lib/): com.webos.service.location for the position,
 // com.palm.db for saved places, com.webos.service.tts for voice,
-// com.webos.applicationManager to share with Messaging and Email; map
+// the system's share sheet (org.webosphoenix.share) for Share; map
 // tiles, search and routing from the servers in Preferences
 // (lib/providers.ts), or offline from saved areas (lib/offline.ts).
 //
@@ -37,7 +37,7 @@
 // the card; apps/photos does the same).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { apps, systemFor, units as unitsService } from "@phoenix/luna";
+import { shareSheet, systemFor, units as unitsService } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, Dialog, Button, IconToolButton, PopupMenu, Toolbar, ToolSpacer, cx, useBack, type Option } from "@phoenix/ui";
 import { MapView, prepareMapWorker, type Camera, type MapHandle, type MapMarker, type MapPoi } from "./MapView";
@@ -48,7 +48,7 @@ import { bounds as boundsOf, distance, type LngLat, type Units } from "./lib/geo
 import { cleanNearby, isNearbyQuery, searchNearby } from "./lib/nearby";
 import { placeDetails, type PlaceDetails } from "./lib/details";
 import { directions as getDirections, findPlaces, whatIsHere } from "./lib/engine";
-import { geoUri, osmLink, parseLaunch, shareText, type Intent, type LaunchPlace, type MapsLaunchParams } from "./lib/launch";
+import { geoUri, parseLaunch, shareText, type Intent, type LaunchPlace, type MapsLaunchParams } from "./lib/launch";
 import { watchLocation, type Fix } from "./lib/location";
 import { dueAnnouncement, progress as navProgress, stepOffsets, type Progress } from "./lib/nav";
 import { findSaved, fromSaved, places as placesDb, type SavedPlace } from "./lib/places";
@@ -127,7 +127,7 @@ function MapsApp() {
     const [nav, setNav] = useState<{ route: Route; progress: Progress } | null>(null);
     const [page, setPage] = useState<Page>(null);
     const [saved, setSaved] = useState<SavedPlace[]>([]);
-    const [menu, setMenu] = useState<{ kind: "share"; anchor: HTMLElement; place: Place } | { kind: "from"; anchor: HTMLElement } | null>(null);
+    const [menu, setMenu] = useState<{ kind: "from"; anchor: HTMLElement } | null>(null);
     const [toast, setToast] = useState("");
     const [download, setDownload] = useState<{ progress: DownloadProgress | null; error: string; abort?: AbortController }>({ progress: null, error: "" });
     const [bearing, setBearing] = useState(0);
@@ -449,16 +449,11 @@ function MapsApp() {
 
     // ---- Share ------------------------------------------------------------------------------------
 
-    const share = (how: string, p: Place) => {
-        const text = shareText(p.name, p.detail, p.lat, p.lon);
-        if (how === "messaging") void apps.launch("org.webosphoenix.messaging", { messageText: text });
-        else if (how === "email") void apps.launch("com.palm.app.email", { summary: p.name, text: text.replace(/\n/g, "<br>") });
-        else if (how === "copy") {
-            const done = () => say("Link copied");
-            if (navigator.clipboard) void navigator.clipboard.writeText(osmLink(p.lat, p.lon)).then(done, () => say(geoUri(p.lat, p.lon)));
-            else say(geoUri(p.lat, p.lon));
-        }
-    };
+    // Share Location opens the system's share sheet (docs/SHARE-AND-FILES.md
+    // SF5) with the text its own menu sent Messaging and Email (the place,
+    // its address and its link): the sheet offers those apps, Copy and the rest.
+    const placeShare = (p: Place) => ({ title: p.name, text: shareText(p.name, p.detail, p.lat, p.lon) });
+    const share = (p: Place) => { void shareSheet.open(placeShare(p)).catch(() => say(geoUri(p.lat, p.lon))); };
 
     const toggleSave = async (p: Place) => {
         const s = findSaved(saved, p);
@@ -567,7 +562,7 @@ function MapsApp() {
     ) : selected ? (
         <PlaceCard place={selected} details={details?.id === selected.id ? details.d : undefined} saved={!!findSaved(saved, selected)} near={me} units={unitsNow}
                    onDirections={() => startDirections(selected)} onStart={() => startDirections(selected, "me", true)} onSave={() => void toggleSave(selected)}
-                   onShare={(anchor) => setMenu({ kind: "share", anchor, place: selected })} onClose={() => setSelected(null)} />
+                   onShare={() => share(selected)} onClose={() => setSelected(null)} />
     ) : results ? (
         <Results places={results.places} busy={results.busy} note={results.note} near={me ?? null} units={unitsNow} onPick={choose} />
     ) : null;
@@ -673,10 +668,6 @@ function MapsApp() {
             {toast && <div className="mp-toast" data-testid="toast">{toast}</div>}
             {locError && !fix && !page && <div className="mp-locstatus" data-testid="location-status">{locError}</div>}
 
-            {menu?.kind === "share" && (
-                <PopupMenu anchor={menu.anchor} onClose={() => setMenu(null)} onSelect={(v: string) => share(v, menu.place)}
-                           options={[{ label: "Messaging", value: "messaging" }, { label: "Email", value: "email" }, { label: "Copy Link", value: "copy" }]} />
-            )}
             {menu?.kind === "from" && dir && (
                 <PopupMenu anchor={menu.anchor} onClose={() => setMenu(null)} options={fromOptions}
                            onSelect={(v: string) => {
@@ -692,7 +683,7 @@ function MapsApp() {
                     </div>
                 </Dialog>
             )}
-            <AppMenu items={appMenu} />
+            <AppMenu items={appMenu} share={() => (selected ? placeShare(selected) : null)} />
         </div>
     );
 }

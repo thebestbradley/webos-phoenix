@@ -247,6 +247,7 @@ jobs:
           t node tools/test-back.cjs
           t node tools/test-files.cjs --out app-tests/files-phone
           t node tools/test-files.cjs --tablet --out app-tests/files-tablet
+          t node tools/test-filepicker.cjs --out app-tests/filepicker
           t node tools/test-tasks.cjs --out app-tests/tasks-phone
           t node tools/test-tasks.cjs --tablet --out app-tests/tasks-tablet
           t node tools/test-db8-pages.cjs --out app-tests/db8-pages

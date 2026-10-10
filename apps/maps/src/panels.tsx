@@ -44,7 +44,7 @@ export function Results({ places, near, units, busy, note, onPick }: {
 
 export function PlaceCard({ place, details, saved, near, units, onDirections, onStart, onSave, onShare, onClose }: {
     place: Place; details?: PlaceDetails; saved: boolean; near: LngLat | null; units: Units;
-    onDirections: () => void; onStart?: () => void; onSave: () => void; onShare: (anchor: HTMLElement) => void; onClose: () => void;
+    onDirections: () => void; onStart?: () => void; onSave: () => void; onShare: () => void; onClose: () => void;
 }) {
     return (
         <div className="mp-card" data-testid="place-card">
@@ -81,7 +81,7 @@ export function PlaceCard({ place, details, saved, near, units, onDirections, on
                     </svg>
                     {saved ? "Saved" : "Save"}
                 </button>
-                <button type="button" className="mp-action" data-testid="share" onClick={(e) => onShare(e.currentTarget)}>Share</button>
+                <button type="button" className="mp-action" data-testid="share" onClick={() => onShare()}>Share</button>
             </div>
         </div>
     );

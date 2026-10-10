@@ -35,16 +35,61 @@ export const shareSheet = {
     },
 };
 
+/** Where a picture was cropped (Enyo 1's CroppableImage names, in the picture's pixels). */
+export interface CropInfo {
+    /** Displayed pixels per picture pixel. */
+    scale: number;
+    suggestedXtop: number;
+    suggestedYtop: number;
+    /** scale, in percent. */
+    suggestedScale: number;
+    suggestedXsize: number;
+    suggestedYsize: number;
+    sourceWidth: number;
+    sourceHeight: number;
+    sourceImage: string;
+    /** The crop's centre, 0-1 of the picture's width and height. */
+    focusX: number;
+    focusY: number;
+}
+
 export interface PickedFile {
     fullPath: string;
     mimeType: string;
     name: string;
+    size?: number;
+    /** With a crop size: the part of the picture the user framed... */
+    cropInfo?: CropInfo;
+    /** ...and that part at the size asked (a JPEG). */
+    croppedPath?: string;
+}
+
+/** The original picker's kinds (image, video, audio, document) and any file, by folder. */
+export type PickKind = "image" | "video" | "audio" | "document" | "file";
+
+export interface PickRequest {
+    /** What may be picked (default pictures); with several, the user picks the kind first. */
+    kinds?: PickKind[];
+    /** Several files at once. */
+    multiple?: boolean;
+    /** A crop of this size for one picture (either side alone: a square). */
+    cropWidth?: number;
+    cropHeight?: number;
+    /** Only files with these extensions ("pdf"), for documents and files. */
+    extensions?: string[];
+    title?: string;
 }
 
 export const filePicker = {
-    /** Choose a picture (SF2: pictures only so far), from the pictures Photos has. */
-    async pick(req: { kinds?: "image"[]; title?: string } = {}): Promise<{ files: PickedFile[] } | { canceled: true }> {
-        const r = await call("luna://org.webosphoenix.filepicker/pick", { kinds: req.kinds ?? ["image"], ...(req.title ? { title: req.title } : {}) });
+    /** The system's file picker (SF2): pictures by album, videos, music, documents or any file. */
+    async pick(req: PickRequest = {}): Promise<{ files: PickedFile[] } | { canceled: true }> {
+        const params: Record<string, unknown> = { kinds: req.kinds ?? ["image"] };
+        if (req.multiple) params.multiple = true;
+        if (req.cropWidth) params.cropWidth = req.cropWidth;
+        if (req.cropHeight) params.cropHeight = req.cropHeight;
+        if (req.extensions?.length) params.extensions = req.extensions;
+        if (req.title) params.title = req.title;
+        const r = await call("luna://org.webosphoenix.filepicker/pick", params);
         return r.canceled ? { canceled: true } : { files: (r.files as PickedFile[]) ?? [] };
     },
     /** Save to Files: the user picks a folder (the last one used first) and a name. */

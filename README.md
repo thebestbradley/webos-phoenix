@@ -466,6 +466,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-voicedial.cjs` | Voice Dial |
 | `node tools/test-media.cjs` | Camera, Photos, Music |
 | `node tools/test-files.cjs` | Files |
+| `node tools/test-filepicker.cjs` | The file pickers: luna-systemui's for Clock, Email and Contacts; `org.webosphoenix.filepicker/pick` |
 | `node tools/test-tasks.cjs` | Tasks and reminders |
 | `node tools/test-db8-pages.cjs` | Db8 shared by pages writing at once |
 | `node tools/test-alarm.cjs` | A Clock alarm rings as a popup alert |
