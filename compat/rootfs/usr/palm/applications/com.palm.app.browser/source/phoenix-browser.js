@@ -18,6 +18,12 @@
 //                     applies it: shell/sim/simbrowser.h).
 //   Websites          Preferences: Mobile Site (webOS's user agent, the
 //                     default) or Desktop Site (browserUserAgent).
+//   Share             Share Link (the share menu, a link's press-and-hold
+//                     menu) opens the system's share sheet with the
+//                     address (docs/SHARE-AND-FILES.md SF5) instead of
+//                     the original's own dialog (ShareLinkDialog.js: Email,
+//                     Messaging, Facebook); the app menu's Share shares
+//                     the page shown.
 // Default Web Search Engine: the original's list, then Phoenix's other
 // engines (DuckDuckGo, Bing, Startpage and a custom one from Settings >
 // Just Type: com.palm.universalsearch's OptionalSearchList in the
@@ -269,5 +275,23 @@
 		this.$.count.setContent("");
 		this.doFind("");
 		if (this.owner && this.owner.phoenixFindClosed) this.owner.phoenixFindClosed();
+	};
+
+	// Share: the system's sheet (Browser.js:345 shareLink showed
+	// ShareLinkDialog). Without the runtime's sheet, the original dialog.
+	var rt = window.__phoenixRuntime;
+	var shareLink = Browser.prototype.shareLink;
+	Browser.prototype.shareLink = function (inUrl, inTitle) {
+		if (!rt || !rt.share || !inUrl) return shareLink.apply(this, arguments);
+		rt.share({ title: inTitle && inTitle !== inUrl ? inTitle : "", url: inUrl });
+	};
+	var appCreate = enyo.BrowserApp.prototype.create;
+	enyo.BrowserApp.prototype.create = function () {
+		appCreate.apply(this, arguments);
+		var app = this;
+		if (rt && rt.setShareContent)
+			rt.setShareContent(function () {
+				return app.url && !/^about:/.test(app.url) ? { title: app.title || "", url: app.url } : null;
+			});
 	};
 })();

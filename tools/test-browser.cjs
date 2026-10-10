@@ -137,8 +137,32 @@ async function main() {
             return left;
         });
         check(menuLeft >= 0, "share: the menu's frame is on screen (left " + menuLeft + ")");
-        await page.keyboard.press("Escape");
-        await page.mouse.click(viewport.width / 2, viewport.height - 20);
+        // Share Link: the system's share sheet with the page's address
+        // (phoenix-browser.js), not the original's own dialog.
+        const sheetFrame = async () => {
+            const el = await page.waitForSelector("iframe[data-phoenix-sheet=share]", { timeout: 5000 });
+            const f = await el.contentFrame();
+            await f.waitForSelector("[data-testid=share-sheet]");
+            await page.waitForTimeout(400);
+            return f;
+        };
+        const sheetGone = () => page.waitForSelector("iframe[data-phoenix-sheet]", { state: "detached" });
+        await page.getByText("Share Link", { exact: true }).first().click();
+        let sf = await sheetFrame();
+        const sharedUrl = await sf.textContent(".ss-subtitle");
+        check(sharedUrl.endsWith(JUSTTYPE), "share: Share Link opens the system sheet with the address (" + sharedUrl + ")");
+        check(await sf.locator("[data-testid=share-copy]").textContent() === "Copy Link", "share: the sheet offers Copy Link");
+        await shot("share-link");
+        await page.evaluate(() => __phoenixRuntime.back());
+        await sheetGone();
+        // The app menu's Share: the page shown.
+        await page.evaluate(() => __phoenixRuntime.openAppMenu());
+        await page.waitForTimeout(400);
+        await page.locator(".enyo-menuitem", { hasText: /^Share$/ }).first().click();
+        sf = await sheetFrame();
+        check((await sf.locator("[data-testid=share-copy]").count()) === 1, "share: the app menu's Share shares the page");
+        await page.evaluate(() => __phoenixRuntime.back());
+        await sheetGone();
         await page.waitForTimeout(400);
 
         // A mailto: link in a page is handed to Email: the browser's

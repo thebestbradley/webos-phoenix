@@ -4216,6 +4216,24 @@
         return { editable: !!el, canSelectAll: !!el, canCut: !!el && hasSelection, canCopy: hasSelection, canPaste: !!el };
     };
 
+    // ---- Share: what the app menu's Share shares --------------------------------------
+    //
+    // Every app menu has Share after Edit (a Phoenix addition: webOS had no
+    // system share; docs/SHARE-AND-FILES.md). It shares what the app says
+    // it is showing, __phoenixRuntime.setShareContent(function () {return
+    // {title, text, url, files}}) (Memos: the memo; the browser: the page),
+    // or else the text selected on the page; nothing, and Share is dimmed.
+    // Phoenix's React apps say it with AppMenu's `share`.
+    var shareProvider = null;
+    runtime.setShareContent = function (fn) { shareProvider = typeof fn === "function" ? fn : null; };
+    runtime.shareContent = function () {
+        var c = null;
+        try { c = shareProvider ? shareProvider() : null; } catch (e) { c = null; }
+        if (c && (c.text || c.url || (c.files && c.files.length))) return c;
+        var text = selectedText().replace(/^\s+|\s+$/g, "");
+        return text ? { text: text } : null;
+    };
+
     function pasteText() {
         var clip = global.navigator && global.navigator.clipboard;
         if (!clip || !clip.readText)
@@ -4287,6 +4305,37 @@
             var at = this.controls ? this.controls.indexOf(edit) : -1;
             if (at > 0)
                 this.controls.unshift(this.controls.splice(at, 1)[0]);
+            // Share right after Edit (runtime.shareContent), its own item.
+            if (this.$.phoenixShare)
+                return;
+            var share = this.createComponent({ name: "phoenixShare", caption: "Share", onclick: "phoenixShareClick" }, { owner: this });
+            at = this.controls ? this.controls.indexOf(share) : -1;
+            var editAt = this.controls ? this.controls.indexOf(edit) : -1;
+            if (at > editAt + 1 && editAt >= 0) {
+                this.controls.splice(at, 1);
+                this.controls.splice(editAt + 1, 0, share);
+            }
+            if (this.$.client && this.$.client.children) {
+                var kids = this.$.client.children, ci = kids.indexOf(share), ei = kids.indexOf(edit);
+                if (ci > ei + 1 && ei >= 0) {
+                    kids.splice(ci, 1);
+                    kids.splice(ei + 1, 0, share);
+                }
+            }
+        };
+        // Share is dimmed when there is nothing to share, read as the menu opens.
+        var prepareOpen = proto.prepareOpen;
+        proto.prepareOpen = function () {
+            var r = prepareOpen.apply(this, arguments);
+            if (r && this.$.phoenixShare && this.$.phoenixShare.setDisabled)
+                this.$.phoenixShare.setDisabled(!runtime.shareContent());
+            return r;
+        };
+        proto.phoenixShareClick = function () {
+            var c = runtime.shareContent();
+            this.close();
+            if (c && runtime.share)
+                runtime.share(c);
         };
     }
 
@@ -12526,7 +12575,6 @@
             if (!open) return;
             var o = open;
             open = null;
-            global.removeEventListener("message", onMessage);
             if (o.frame.parentNode) o.frame.parentNode.removeChild(o.frame);
             try { if (o.focus && o.focus.focus) o.focus.focus(); } catch (e) { /* gone */ }
             o.resolve(result);
@@ -12538,6 +12586,20 @@
             else if (m.type === "leaving") open.frame.style.background = "rgba(0, 0, 0, 0)";
             else if (m.type === "done") closeSheet(m.result || { action: "cancel" });
         }
+        // The sheet's messages are the runtime's alone: taken first (this
+        // listener is added before the page's scripts run) and kept from
+        // the page's own listeners. Enyo 1's (windows/manager.js:156-158,
+        // CrossAppUI.js:110, Dashboard.js:137) read every message's data
+        // as a string and threw on these objects.
+        global.addEventListener("message", function (e) {
+            var m = e.data;
+            // Only the messages of a sheet this page opened (the sheet's own
+            // page runs this runtime too, and its messages are its page's).
+            if (!m || typeof m !== "object" || !open || m.phoenixSheet !== open.id)
+                return;
+            e.stopImmediatePropagation();
+            onMessage(e);
+        }, true);
         function showSheet(kind, request) {
             if (open) closeSheet({ action: "cancel" });
             return new Promise(function (resolve) {
@@ -12557,7 +12619,6 @@
                 frame.setAttribute("allowtransparency", "true");
                 frame.addEventListener("load", function () { st.background = "rgba(0, 0, 0, 0.45)"; });
                 open = { frame: frame, id: id, resolve: resolve, request: request, focus: doc.activeElement };
-                global.addEventListener("message", onMessage);
                 (doc.body || doc.documentElement).appendChild(frame);
                 try { frame.focus(); } catch (e) { /* ignore */ }
             });
@@ -12617,6 +12678,11 @@
             return /^\/media\/internal\//.test(path) && !/\/\./.test(path) && /\.(jpe?g|png|gif|webp|bmp|heic|mp4|m4v|mov|webm)$/i.test(path);
         }
 
+        // The app menu's Share (and anything else in the page): the sheet.
+        runtime.share = function (content) {
+            return callP("luna://org.webosphoenix.share/open", content || {});
+        };
+
         register(["org.webosphoenix.share"], {
             "/open": function (p, reply) {
                 var files = (p.files || []).filter(function (f) { return f && f.path; }).map(function (f) {
@@ -12631,12 +12697,21 @@
                         return reply(ok({ action: "app", appId: r.appId }));
                     }
                     if (r.action === "photos") {
-                        var f = s.files[0];
-                        if (inPhotos(f.path) && f.path.indexOf(MEDIA + "/samples/") !== 0)
-                            return reply(ok({ action: "photos", path: f.path, already: true }));
-                        var dest = CAMERA_DIR + "/" + f.path.replace(/^.*\//, "");
-                        return writeTo(dest, { from: f.path }, false).then(function () {
-                            reply(ok({ action: "photos", path: dest }));
+                        // Every file shared (Files shares several), one by
+                        // one; those Photos has already stay where they are.
+                        var saved = [], already = true;
+                        var chain = s.files.reduce(function (prev, f) {
+                            return prev.then(function () {
+                                if (inPhotos(f.path) && f.path.indexOf(MEDIA + "/samples/") !== 0) { saved.push(f.path); return; }
+                                already = false;
+                                var dest = CAMERA_DIR + "/" + f.path.replace(/^.*\//, "");
+                                return writeTo(dest, { from: f.path }, false).then(function () { saved.push(dest); });
+                            });
+                        }, Promise.resolve());
+                        return chain.then(function () {
+                            var res = { action: "photos", path: saved[0], paths: saved };
+                            if (already) res.already = true;
+                            reply(ok(res));
                         }, function (e) { reply(fail(-1, String(e && e.message || e))); });
                     }
                     if (r.action === "files") {

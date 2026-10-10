@@ -10,8 +10,15 @@
 // and Enyo's EditMenu gave every app; its items act on the focused field
 // or the page's selection through the web runtime (__phoenixRuntime.edit),
 // and are dimmed when they cannot apply.
+//
+// Share comes after Edit in every app menu, as Edit does (a Phoenix
+// addition: webOS had no system share, docs/SHARE-AND-FILES.md). It opens
+// the system's share sheet (__phoenixRuntime.share, the runtime's
+// org.webosphoenix.share/open) with what the app says it is showing (the
+// `share` prop: the picture, the note, the page) or, when the app says
+// nothing, the text selected on the page; dimmed when there is nothing.
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cx } from "./layout";
 import { Drawer } from "./popups";
@@ -22,10 +29,24 @@ export interface AppMenuItem {
     disabled?: boolean;
 }
 
+/** What Share shares (org.webosphoenix.share/open's parameters). */
+export interface ShareContent {
+    title?: string;
+    text?: string;
+    url?: string;
+    files?: { path: string; mimeType?: string }[];
+}
+
 export interface AppMenuProps {
     items: AppMenuItem[];
     /** The Edit submenu first (default: yes). */
     edit?: boolean;
+    /** What Share shares (read as the menu opens); false leaves Share out.
+        Default: the text selected on the page. */
+    share?: ShareContent | (() => ShareContent | null | undefined) | null | false;
+    /** The app's own Share (its toolbar's), run instead of the sheet
+        alone, when there is something to share. */
+    onShare?: () => void;
 }
 
 type EditAction = "selectAll" | "cut" | "copy" | "paste";
@@ -40,6 +61,7 @@ interface EditState {
 interface Runtime {
     editState?: () => EditState;
     edit?: (action: EditAction) => boolean;
+    share?: (content: ShareContent) => Promise<unknown>;
 }
 
 const runtime = (): Runtime | undefined => (globalThis as { __phoenixRuntime?: Runtime }).__phoenixRuntime;
@@ -65,6 +87,26 @@ function runEdit(action: EditAction): void {
     else if (action !== "paste") document.execCommand(action);
 }
 
+/** The text selected on the page, in a field or not. */
+function selection(): string {
+    const el = document.activeElement as HTMLInputElement | HTMLTextAreaElement | null;
+    if (el && (el.tagName === "TEXTAREA" || el.tagName === "INPUT") && typeof el.selectionStart === "number" && el.selectionEnd !== null)
+        return el.value.substring(el.selectionStart, el.selectionEnd);
+    return String(globalThis.getSelection?.() ?? "");
+}
+
+/** What Share would share now, or null when there is nothing. */
+function shareContent(share: AppMenuProps["share"]): ShareContent | null {
+    if (share === false) return null;
+    const c = typeof share === "function" ? share() : share;
+    if (c && (c.text || c.url || c.files?.length)) return c;
+    if (c === undefined) {
+        const text = selection().trim();
+        return text ? { text } : null;
+    }
+    return null;
+}
+
 /** Toggles when the user taps the app name in the status bar. */
 export function useAppMenuToggle(): [boolean, (open: boolean) => void] {
     const [open, setOpen] = useState(false);
@@ -77,16 +119,23 @@ export function useAppMenuToggle(): [boolean, (open: boolean) => void] {
 }
 
 /** The app menu, dropping from the top left (Onyx AppMenu.css). Tap outside to close. */
-export function AppMenu({ items, edit = true }: AppMenuProps) {
+export function AppMenu({ items, edit = true, share, onShare }: AppMenuProps) {
     const [open, setOpen] = useAppMenuToggle();
     const [editOpen, setEditOpen] = useState(false);
     const [state, setState] = useState<EditState>(() => editState());
-    // What Edit can do is read as the menu opens, before any tap in it.
+    const [content, setContent] = useState<ShareContent | null>(null);
+    const shareProp = useRef(share);
+    shareProp.current = share;
+    // What Edit and Share can do is read as the menu opens, before any tap in it.
     useEffect(() => {
-        if (open) setState(editState());
-        else setEditOpen(false);
+        if (open) {
+            setState(editState());
+            setContent(shareContent(shareProp.current));
+        } else setEditOpen(false);
     }, [open]);
-    if (!open || (items.length === 0 && !edit)) return null;
+    const withShare = share !== false;
+    if (!open || (items.length === 0 && !edit && !withShare)) return null;
+    const shareDisabled = !content || (!onShare && !runtime()?.share);
     return createPortal(
         <>
             <div className="pui-popup-scrim" onClick={() => setOpen(false)} />
@@ -100,7 +149,7 @@ export function AppMenu({ items, edit = true }: AppMenuProps) {
                                 role="menuitem"
                                 aria-haspopup="menu"
                                 aria-expanded={editOpen}
-                                className={cx("pui-appmenu-item", "pui-appmenu-parent", items.length === 0 && !editOpen && "last")}
+                                className={cx("pui-appmenu-item", "pui-appmenu-parent", items.length === 0 && !withShare && !editOpen && "last")}
                                 onClick={() => setEditOpen((o) => !o)}
                             >
                                 Edit
@@ -118,7 +167,7 @@ export function AppMenu({ items, edit = true }: AppMenuProps) {
                                         role="menuitem"
                                         aria-disabled={disabled || undefined}
                                         className={cx("pui-appmenu-item", "pui-appmenu-subitem",
-                                            items.length === 0 && i === EDIT_ITEMS.length - 1 && "last", disabled && "disabled")}
+                                            items.length === 0 && !withShare && i === EDIT_ITEMS.length - 1 && "last", disabled && "disabled")}
                                         onClick={() => {
                                             if (disabled) return;
                                             setOpen(false);
@@ -131,6 +180,22 @@ export function AppMenu({ items, edit = true }: AppMenuProps) {
                             })}
                             </Drawer>
                         </>
+                    )}
+                    {withShare && (
+                        <div
+                            role="menuitem"
+                            aria-disabled={shareDisabled || undefined}
+                            data-testid="appmenu-share"
+                            className={cx("pui-appmenu-item", items.length === 0 && "last", shareDisabled && "disabled")}
+                            onClick={() => {
+                                if (shareDisabled || !content) return;
+                                setOpen(false);
+                                if (onShare) onShare();
+                                else void runtime()?.share?.(content)?.catch?.(() => {});
+                            }}
+                        >
+                            Share
+                        </div>
                     )}
                     {items.map((item, i) => (
                         <div

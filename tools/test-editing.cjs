@@ -138,6 +138,39 @@ async function enyoApp(context) {
     });
     check(menu.first && menu.edits === 1 && menu.count > 1 && /^Edit/.test(menu.dom) && menu.last, "Enyo app menu: Edit first, once, before the app's items (" + JSON.stringify(menu) + ")");
 
+    // Share follows Edit (the runtime adds it to every Enyo app menu); in
+    // the editor it shares the open memo (compat app/phoenix-share.js).
+    check(await page.evaluate(() => {
+        const m = Object.values(enyo.$).find((c) => c instanceof enyo.AppMenu);
+        const c = m.getControls();
+        return c[1] && c[1].caption === "Share" && c.filter((x) => x.caption === "Share").length === 1;
+    }), "Enyo app menu: Share right after Edit, once");
+    await page.evaluate(() => { getSelection().removeAllRanges(); document.activeElement && document.activeElement.blur(); });
+    await page.evaluate(() => __phoenixRuntime.openAppMenu());
+    await page.waitForTimeout(400);
+    check(await page.evaluate(() => Object.values(enyo.$).find((c) => c instanceof enyo.AppMenu).$.phoenixShare.disabled), "Memos on the wall, nothing selected: Share is dimmed");
+    await page.evaluate(() => enyo.appMenu.close());
+    await page.waitForTimeout(300);
+    await page.locator(".memo-preview-content", { hasText: /^Groceries/ }).first().click();
+    await page.waitForFunction(() => enyo.$.appView_edit.showing, null, { timeout: 5000 });
+    await page.waitForTimeout(400);
+    await page.evaluate(() => __phoenixRuntime.openAppMenu());
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(outDir, "memos-menu-share.png") });
+    await page.locator(".enyo-menuitem", { hasText: /^Share$/ }).first().click();
+    const sheetEl = await page.waitForSelector("iframe[data-phoenix-sheet=share]", { timeout: 5000 });
+    const sheet = await sheetEl.contentFrame();
+    await sheet.waitForSelector("[data-testid=share-sheet]");
+    const sharedTitle = await sheet.textContent("[data-testid=share-title]");
+    check(sharedTitle === "Groceries", "Memos: the app menu's Share shares the open memo (" + JSON.stringify(sharedTitle) + ")");
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: path.join(outDir, "memos-share.png") });
+    await page.evaluate(() => __phoenixRuntime.back());
+    await page.waitForSelector("iframe[data-phoenix-sheet]", { state: "detached" });
+    check(await editing(), "Back closes the sheet, the memo stays open");
+    await page.evaluate(() => __phoenixRuntime.back());
+    await page.waitForTimeout(500);
+
     const state = () => page.evaluate(() => __phoenixRuntime.editState());
     await page.evaluate(() => { document.activeElement && document.activeElement.blur(); getSelection().removeAllRanges(); });
     let s = await state();

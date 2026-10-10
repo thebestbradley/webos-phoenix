@@ -18,7 +18,7 @@ export { BackProvider, useBack } from "./back";
 export { FileIcon } from "./fileicon";
 export type { FileIconKind } from "./fileicon";
 export { AppMenu, useAppMenuToggle } from "./appmenu";
-export type { AppMenuItem, AppMenuProps } from "./appmenu";
+export type { AppMenuItem, AppMenuProps, ShareContent } from "./appmenu";
 export { formatNumber, dialable, formatDuration, formatTime, daysAgo, dayLabel, shortWhen } from "./format";
 export { Glyph, Toolbar, ToolSpacer, IconToolButton, GroupedToolButtons, formatSeconds } from "./media";
 export type { GlyphName, ToolbarProps, IconToolButtonProps, GroupedToolButtonsProps } from "./media";

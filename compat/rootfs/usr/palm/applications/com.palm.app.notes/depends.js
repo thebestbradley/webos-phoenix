@@ -1,6 +1,7 @@
 // Phoenix compat overlay: the original depends.js plus css/phoenix-compat.css,
 // which fits the TouchPad memo wall and memo editor into a phone card, and
-// app/phoenix-back.js, the back gesture. Nothing else is changed.
+// app/phoenix-back.js, the back gesture, and app/phoenix-share.js, what the
+// app menu's Share shares. Nothing else is changed.
 //
 // @@@LICENSE
 //
@@ -43,6 +44,7 @@ enyo.depends(
     "app/views/GridView.js",
     "app/views/AppView.js",
     "app/phoenix-back.js",  // Phoenix: see that file
+    "app/phoenix-share.js",  // Phoenix: see that file
     "css/memos.css",
     "css/grid.css",
     "css/grid-edit.css",

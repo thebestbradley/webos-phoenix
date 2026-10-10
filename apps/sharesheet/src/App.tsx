@@ -20,7 +20,7 @@
 // request; "done" with the choice. The back gesture comes as "back".
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fileManager, joinPath, LunaError, mediaIndexer, parentOf, type FileEntry, type ImageItem } from "@phoenix/luna";
+import { fileManager, fileUrl, joinPath, LunaError, mediaIndexer, mediaUrl, parentOf, type FileEntry, type ImageItem } from "@phoenix/luna";
 import { useLaunchParams, useMediaUrl } from "@phoenix/luna/react";
 import { Button, Dialog, FileIcon, Spinner, TextField } from "@phoenix/ui";
 
@@ -122,12 +122,26 @@ interface SheetProps<R> {
 
 // ---- Share ---------------------------------------------------------------------------
 
+/** A picture's URL wherever it is: the file store (Files' folders), else the
+    media store (a capture just saved). */
+function usePictureUrl(path: string | undefined): string | undefined {
+    const [url, setUrl] = useState<{ path: string; url: string }>();
+    useEffect(() => {
+        if (!path) return;
+        let live = true;
+        fileUrl(path).then((u) => (u === path ? mediaUrl(path) : u)).then((u) => { if (live) setUrl({ path, url: u }); }, () => {});
+        return () => { live = false; };
+    }, [path]);
+    return url && url.path === path ? url.url : undefined;
+}
+
 function ShareSheet({ request, finish, backHandler }: SheetProps<ShareRequest>) {
     const { share, targets } = request;
     const first = share.files[0];
-    const thumb = useMediaUrl(first && isPicture(first) ? first.path : undefined);
+    const thumb = usePictureUrl(first && isPicture(first) ? first.path : undefined);
     backHandler.current = () => finish({ action: "cancel" });
-    const title = share.title || (first ? baseName(first.path) : share.url || "Share");
+    const title = share.title || (share.files.length > 1 ? `${baseName(first.path)} and ${share.files.length - 1} more`
+        : first ? baseName(first.path) : share.url || "Share");
     const subtitle = share.files.length > 1 ? `${share.files.length} files`
         : first ? (isPicture(first) ? "Picture" : isVideo(first) ? "Video" : "File")
         : share.url ? share.url : "Text";
@@ -157,13 +171,13 @@ function ShareSheet({ request, finish, backHandler }: SheetProps<ShareRequest>) 
                 </div>
             )}
             <div className="ss-actions">
-                {first && (isPicture(first) || isVideo(first)) && (
+                {first && share.files.every((f) => isPicture(f) || isVideo(f)) && (
                     <div className="pui-menu-item" role="button" data-testid="share-photos" onClick={() => finish({ action: "photos" })}>
                         <span className="pui-menu-label">Save to Photos</span>
                         <img className="ss-action-icon" src={PHOTOS_ICON} alt="" />
                     </div>
                 )}
-                {first && (
+                {share.files.length === 1 && (
                     <div className="pui-menu-item" role="button" data-testid="share-files" onClick={() => finish({ action: "files" })}>
                         <span className="pui-menu-label">Save to Files…</span>
                         <span className="ss-action-icon"><FileIcon kind="folder" size={28} /></span>
