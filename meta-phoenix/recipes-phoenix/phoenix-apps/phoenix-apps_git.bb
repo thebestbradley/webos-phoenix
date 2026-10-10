@@ -7,9 +7,11 @@ Calendar, Clock, Contacts, Email, Memos), Enyo 1.0, MojoLoader and the \
 foundation/loadable frameworks at their original device paths \
 (/usr/palm/applications, /usr/palm/frameworks), plus Phoenix web apps, their \
 Node.js Luna services (/usr/palm/services, e.g. org.webosphoenix.filemanager \
-for Files, org.webosphoenix.transcriber for Voice Memos and \
-org.webosphoenix.service.dav for CardDAV & CalDAV accounts, with \
-luna-service2 role and permission files), account templates \
+for Files, org.webosphoenix.transcriber for Voice Memos, \
+org.webosphoenix.service.dav for CardDAV & CalDAV accounts, the shell's \
+line to the pages, the legacy application manager, DropShare and the \
+accessories, and Open webOS's app services, with luna-service2 role and \
+permission files), db8 kinds and activities (/etc/palm), account templates \
 (/usr/palm/public/accounts), phoenix-runtime.js and the system sounds \
 (/usr/palm/sounds from Open webOS, /usr/share/phoenix/sounds), using \
 tools/install-rootfs.py."
@@ -58,7 +60,7 @@ FILES:${PN} = " \
     ${datadir}/phoenix/runtime \
     ${datadir}/phoenix/sounds \
     ${datadir}/luna-service2 \
-    ${sysconfdir}/palm/db \
+    ${sysconfdir}/palm \
 "
 
 # Web apps run in WebAppMgr; their data lives in db8. The apps' own Luna
@@ -66,4 +68,7 @@ FILES:${PN} = " \
 # run-js-service and webos-service. Voice Memos' transcriber also wants
 # whisper.cpp (the whisper-cpp recipe stub) and answers "not installed"
 # without it.
-RDEPENDS:${PN} = "${VIRTUAL-RUNTIME_webappmanager} db8 nodejs nodejs-module-webos-service"
+# Open webOS's app services (accounts, contacts, the linker, calendar
+# reminders: compat/app-services) are Mojo-era services, which OSE's
+# mojoservicelauncher runs.
+RDEPENDS:${PN} = "${VIRTUAL-RUNTIME_webappmanager} db8 nodejs nodejs-module-webos-service mojoservicelauncher"

@@ -1,0 +1,19 @@
+{
+    "id": "com.palm.service.calendar.reminders.service",
+    "version": "0.1.0",
+    "roleFiles": [
+        "/usr/share/luna-service2/roles.d/com.palm.service.calendar.reminders.role.json"
+    ],
+    "serviceFiles": [
+        "/usr/share/luna-service2/services.d/com.palm.service.calendar.reminders.service"
+    ],
+    "apiPermissionFiles": [
+        "/usr/share/luna-service2/api-permissions.d/com.palm.service.calendar.reminders.api.json"
+    ],
+    "clientPermissionFiles": [
+        "/usr/share/luna-service2/client-permissions.d/com.palm.service.calendar.reminders.perm.json"
+    ],
+    "groupsFiles": [
+        "/usr/share/luna-service2/groups.d/com.palm.service.calendar.reminders.groups.json"
+    ]
+}

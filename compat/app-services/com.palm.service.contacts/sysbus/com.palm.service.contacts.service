@@ -1,0 +1,12 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The contacts service of Open webOS (third_party/app-services), run by OSE's
+# mojoservicelauncher (run-js-service).
+# The original's sysbus files are luna-service 1's; these are OSE's
+# (compat/app-services/README.md).
+
+[D-BUS Service]
+Name=com.palm.service.contacts
+Exec=/usr/bin/run-js-service -n /usr/palm/services/com.palm.service.contacts
+Type=dynamic

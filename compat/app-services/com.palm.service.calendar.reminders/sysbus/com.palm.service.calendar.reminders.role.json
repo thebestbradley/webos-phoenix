@@ -1,0 +1,16 @@
+{
+    "appId": "com.palm.service.calendar.reminders",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "com.palm.service.calendar.reminders"
+    ],
+    "permissions": [
+        {
+            "service": "com.palm.service.calendar.reminders",
+            "outbound": [
+                "*"
+            ]
+        }
+    ]
+}

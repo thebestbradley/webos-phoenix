@@ -1,0 +1,5 @@
+{
+    "phoenix.appservices.contacts": [
+        "com.palm.service.contacts/*"
+    ]
+}

@@ -1,0 +1,7 @@
+{
+    "com.palm.service.calendar.reminders": [
+        "database.operation",
+        "phoenix.appmanager.query",
+        "phoenix.appmanager.launch"
+    ]
+}
