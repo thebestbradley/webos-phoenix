@@ -460,6 +460,67 @@ async function main() {
         const left = await msg.locator("[data-testid='thread-row'] .thread-summary").allTextContents();
         check(!left.includes(gone), `a conversation swiped across and deleted goes ("${gone}")`);
 
+        // ---- Open in New Card ----------------------------------------------------------------------------------
+        // A conversation held (a long press) or right-clicked: Open, Open in
+        // New Card, Delete. Open in New Card launches another card of
+        // Messaging ({newCard: true}) with {threadId}, the param a message's
+        // notification opens the conversation with; that card shows the
+        // conversation alone, Back goes to its list.
+        const first = msg.locator("[data-testid='thread-row']").first();
+        const firstId = await first.getAttribute("data-thread");
+        const firstName = (await first.locator(".thread-name").textContent()).trim();
+        const wasSelected = /\bselected\b/.test(await first.getAttribute("class"));
+        const rowBox = await first.boundingBox();
+        await msg.mouse.move(rowBox.x + rowBox.width / 2, rowBox.y + rowBox.height / 2);
+        await msg.mouse.down();
+        await msg.waitForSelector("[data-testid='thread-menu-newcard']", { timeout: 2000 });
+        await msg.mouse.up();
+        const menu = await msg.locator("[role='option']").allTextContents();
+        check(menu.join(",") === "Open,Open in New Card,Delete", "a held conversation's menu: " + menu.join(", "));
+        await shot(msg, "messaging-newcard-menu");
+        await msg.waitForTimeout(300);
+        check(/\bselected\b/.test(await first.getAttribute("class")) === wasSelected &&
+              (tablet || await msg.locator("[data-testid='thread-title']").count() === 0), "the hold does not open the conversation");
+        const sent = host.length;
+        await msg.click("[data-testid='thread-menu-newcard']");
+        for (let i = 0; i < 40 && !host.slice(sent).some((m) => m.type === "launch"); ++i) await msg.waitForTimeout(100);
+        const launched = host.slice(sent).find((m) => m.type === "launch");
+        check(!!launched && launched.payload.id === "org.webosphoenix.messaging" && launched.payload.newCard === true &&
+              launched.payload.params.threadId === firstId, "Open in New Card: another card of Messaging on it: " + JSON.stringify(launched && launched.payload));
+        const notified = host.find((m) => m.type === "notification" && m.payload.appId === "org.webosphoenix.messaging");
+        check(!!notified && Object.keys(notified.payload.params).join() === "threadId", "the same launch param as a message's notification ({threadId})");
+        // The new card (a cold launch with those params).
+        const card = await context.newPage();
+        watch(card, "second card");
+        await card.goto(`${APPS}/org.webosphoenix.messaging/index.html?launchParams=` + encodeURIComponent(JSON.stringify(launched.payload.params)));
+        await card.waitForSelector("[data-testid='thread-title']");
+        check((await card.textContent("[data-testid='thread-title']")).includes(firstName), `the new card opens on the conversation (${firstName})`);
+        await shot(card, "messaging-newcard-card");
+        await card.keyboard.press("Escape");
+        if (!tablet) {
+            await card.waitForSelector("[data-testid='thread-row']");
+            check(true, "Back in the new card: its list");
+        }
+        // A relaunch with another conversation's {threadId} goes there.
+        const otherId = await card.locator("[data-testid='thread-row']").nth(1).getAttribute("data-thread");
+        await card.evaluate((id) => document.dispatchEvent(new CustomEvent("webOSRelaunch", { detail: { threadId: id } })), otherId);
+        await card.waitForFunction((id) => document.querySelector("[data-testid='thread-row'].selected")?.dataset.thread === id ||
+                                            !!document.querySelector("[data-testid='thread-title']"), otherId);
+        check(await card.locator("[data-testid='thread-title']").count() === 1, "a relaunch with {threadId} opens that conversation");
+        // Right-clicked: the same menu; the app menu offers it in a conversation.
+        await msg.click("[data-testid='thread-row'] >> nth=1", { button: "right" });
+        await msg.waitForSelector("[data-testid='thread-menu-open']");
+        await msg.click("[data-testid='thread-menu-open']");
+        await msg.waitForSelector("[data-testid='thread-title']");
+        const sent2 = host.length;
+        await msg.evaluate(() => window.__phoenixRuntime.openAppMenu());
+        await msg.click(".pui-appmenu-item >> text=Open in New Card");
+        for (let i = 0; i < 40 && !host.slice(sent2).some((m) => m.type === "launch"); ++i) await msg.waitForTimeout(100);
+        const fromMenu = host.slice(sent2).find((m) => m.type === "launch");
+        check(!!fromMenu && fromMenu.payload.newCard === true && fromMenu.payload.params.threadId === otherId,
+              "the app menu's Open in New Card, in a conversation: " + JSON.stringify(fromMenu && fromMenu.payload));
+        await card.close();
+
         check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
         await browser.close();
     } finally {

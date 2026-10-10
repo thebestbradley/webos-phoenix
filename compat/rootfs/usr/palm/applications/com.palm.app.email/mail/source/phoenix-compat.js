@@ -32,10 +32,46 @@
 //    would slide to the folders), so the caller is in front again, as
 //    runtime.back does for other apps (runtime/phoenix-runtime.js). Once the user picks a folder or a message, Back walks
 //    the panes as before.
+//
+// 5. Open Email in New Card. The original has it: MailApp's app menu
+//    lists "Open Email in New Card" (mail/source/MailApp.js:87), the
+//    message view's handler sends the message on (MessagePane.js:350-355,
+//    doOpenNewCard("email", {message})), and MailApp.openNewCard
+//    (MailApp.js:634-641) opens the message viewer, a card of its own
+//    (emailviewer/, EmailViewerWindow.js: the message alone, with Reply,
+//    Forward and Delete), with enyo.windows.activate and {message} as its
+//    window params; each one a new card ("emailviewer-<n>"). The release
+//    left it unreachable: the message view hid the item
+//    (getAppMenuConfigs, MessagePane.js:243: showing: false) and the
+//    viewer could not show a message (its depends.js missed DivHtmlView,
+//    see emailviewer/depends.js here; EmailViewerWindow.js:69-70 calls
+//    MessagePane.currentMessage(), which the release no longer has). Here:
+//    - currentMessage() is the message view's MessageLoader (a
+//      MessageDisplay: hookupSenderPhoto, resize), what the viewer asks it
+//      for;
+//    - the app menu shows "Open Email in New Card" while a message is in
+//      view (on a phone, while the message pane is the one shown);
+//    - a message held in the list (or right-clicked, in the simulator)
+//      opens a menu in the app's own PopupSelect, as the message body's
+//      hold menu does (MessageDisplay.js:166, 235-258): Open in New Card
+//      (the same MailApp.openNewCard), Mark As Read / Mark As Unread (the
+//      message view's toggle, MessagePane.js:86, 407) and Delete (asked as
+//      the message view asks, MessagePane.js:251-258, when the
+//      confirm-delete preference is on; then as a swipe deletes,
+//      Mail.deleteMessage, Mail.js:943-954). Drafts and the outbox open in
+//      Compose rather than a message view (Mail.itemClick, Mail.js:758-761),
+//      so their messages have no Open in New Card. A hold no longer goes on
+//      to open the message when the finger lifts.
 
-/*global enyo, DivHtmlView, MailApp */
+/*global enyo, DivHtmlView, MailApp, MessagePane, Mail, Email, MailDialogPrompt, $L */
 (function () {
     "use strict";
+
+    if (typeof MessagePane === "function" && !MessagePane.prototype.currentMessage) {
+        MessagePane.prototype.currentMessage = function () {
+            return this.$.messageLoader;
+        };
+    }
 
     if (typeof DivHtmlView === "function" && !DivHtmlView.prototype.setRedirects) {
         DivHtmlView.prototype.setRedirects = function () {};
@@ -120,5 +156,139 @@
             this.$.slidingPane.selectView(this.$.bodySliding);
         }
         return r;
+    };
+})();
+
+// 5. Open Email in New Card (see the top of this file).
+(function () {
+    "use strict";
+
+    if (typeof MessagePane === "function") {
+        var paneMenu = MessagePane.prototype.getAppMenuConfigs;
+        MessagePane.prototype.getAppMenuConfigs = function () {
+            var r = paneMenu.apply(this, arguments);
+            var app = this.owner, pane = app && app.$ && app.$.slidingPane;
+            // In view: beside the list (multiView), or the pane shown.
+            var inView = !pane || pane.multiView || pane.view === app.$.bodySliding;
+            if (r && r.openNewCard) {
+                r.openNewCard.showing = !this.standalone && !!this.$.messageLoader.email && inView;
+            }
+            return r;
+        };
+    }
+
+    if (typeof Mail !== "function") {
+        return;
+    }
+    var list = Mail.prototype;
+    var create = list.create, destroy = list.destroy, rendered = list.rendered, itemClick = list.itemClick;
+
+    list.create = function () {
+        create.apply(this, arguments);
+        this.createComponent({name: "phoenixItemMenu", kind: "PopupSelect", onSelect: "phoenixItemMenuSelect"}, {owner: this});
+        this.$.mailItem.onmousehold = "phoenixItemHold";
+        // A new press: the click that ends a hold is past.
+        this.phoenixPress = enyo.bind(this, function () { this.phoenixHeld = false; });
+        document.addEventListener("mousedown", this.phoenixPress, true);
+    };
+
+    list.destroy = function () {
+        document.removeEventListener("mousedown", this.phoenixPress, true);
+        return destroy.apply(this, arguments);
+    };
+
+    // A right-click in the simulator (a mouse) holds a message too; Enyo 1.0
+    // has no contextmenu event, so it is read from the list's node: the row
+    // under it carries its index (enyo.RowServer, rowIndex).
+    list.rendered = function () {
+        rendered.apply(this, arguments);
+        var node = this.$.mailList.hasNode();
+        if (node && !node.phoenixContextMenu) {
+            node.phoenixContextMenu = true;
+            node.addEventListener("contextmenu", enyo.bind(this, function (e) {
+                for (var el = e.target; el && el !== node; el = el.parentNode) {
+                    var i = el.getAttribute && el.getAttribute("rowIndex");
+                    if (i !== null && i !== undefined && i !== "") {
+                        e.preventDefault();
+                        this.phoenixShowItemMenu(Number(i), e);
+                        return;
+                    }
+                }
+            }));
+        }
+    };
+
+    list.phoenixItemHold = function (inSender, inEvent) {
+        if (this.$.mailList.getSelection().multi || inEvent.rowIndex === undefined) {
+            return;
+        }
+        this.phoenixHeld = true;
+        this.phoenixShowItemMenu(inEvent.rowIndex, inEvent);
+        return true;
+    };
+
+    list.itemClick = function () {
+        if (this.phoenixHeld) {
+            this.phoenixHeld = false;
+            return;
+        }
+        return itemClick.apply(this, arguments);
+    };
+
+    list.phoenixShowItemMenu = function (inIndex, inEvent) {
+        var msg = this.$.mailList.fetch(inIndex);
+        if (!msg || !this.folder) {
+            return;
+        }
+        this.phoenixMenuIndex = inIndex;
+        this.phoenixMenuMessage = msg;
+        var items = [];
+        var account = this._getAccountFromFolder(this.folder);
+        var composed = account && (account.getOutboxFolderId() === msg.folderId || account.getDraftsFolderId() === msg.folderId);
+        if (!composed && this.owner && this.owner.openNewCard) {
+            items.push({caption: $L("Open in New Card"), value: "newCard"});
+        }
+        var read = (msg.flags || {read: true}).read;
+        items.push({caption: read ? $L("Mark As Unread") : $L("Mark As Read"), value: "toggleRead"});
+        items.push({caption: $L("Delete"), value: "delete"});
+        this.$.phoenixItemMenu.setItems(items);
+        this.$.phoenixItemMenu.openAtEvent(inEvent);
+    };
+
+    list.phoenixItemMenuSelect = function (inSender, inSelected) {
+        var msg = this.phoenixMenuMessage;
+        if (!msg) {
+            return;
+        }
+        switch (inSelected.getValue()) {
+        case "newCard":
+            this.owner.openNewCard(this, "email", {message: msg});
+            break;
+        case "toggleRead":
+            Email.setEmailFlags({ids: [msg._id]}, {read: !(msg.flags || {read: true}).read}, null);
+            break;
+        case "delete":
+            if (enyo.application.prefs.get("confirmDeleteOnSwipe")) {
+                MailDialogPrompt.displayPrompt(this, {
+                    caption: $L("Delete Message"),
+                    message: $L("Delete the selected message?"),
+                    acceptButtonCaption: $L("Delete"),
+                    onAccept: "phoenixConfirmDelete"
+                });
+            } else {
+                this.phoenixConfirmDelete();
+            }
+            break;
+        }
+    };
+
+    list.phoenixConfirmDelete = function () {
+        var msg = this.phoenixMenuMessage, i = this.phoenixMenuIndex;
+        if (!msg) {
+            return;
+        }
+        var newer = this.$.mailList.fetch(i - 1), older = this.$.mailList.fetch(i + 1);
+        Email.deleteEmails({id: msg._id});
+        this.doMessageDeleted({next: newer || older});
     };
 })();

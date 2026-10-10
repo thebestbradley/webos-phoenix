@@ -10,7 +10,10 @@
 // accounts' buddies with their presence) are conversations alike; the
 // Conversations badge counts what is unread in all of them.
 //
-// Launch params: {threadId} opens a conversation; {to, name?} starts a
+// Launch params: {threadId} opens a conversation (a message's notification;
+// Open in New Card, which launches another card of Messaging with it, from
+// a conversation's menu in the list or from the app menu while one is
+// open; a cold launch and a relaunch alike); {to, name?} starts a
 // message to that number; {messageText} (webOS 2.x's name for it) starts a
 // message with that text, e.g. a location shared from Maps; {share: {text,
 // url, files}} (the share sheet) starts one with the text and the first
@@ -23,7 +26,7 @@ import { useLaunchParams } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, RadioToolGroup, ToolBar, ToolButton, useBack } from "@phoenix/ui";
 import { useBuddies, useImAccounts, usePeople, useThreads, useWide } from "./lib/hooks";
 import type { Recipient } from "./lib/threads";
-import { ThreadList } from "./views/ThreadList";
+import { openInNewCard, ThreadList } from "./views/ThreadList";
 import { Conversation } from "./views/Conversation";
 import { Compose } from "./views/Compose";
 import { Buddies } from "./views/Buddies";
@@ -124,6 +127,10 @@ function Messaging() {
             { label: "New Message", onSelect: () => setView({ kind: "compose" }) },
             { label: "Conversations", onSelect: () => { setTab("conversations"); setView({ kind: "list" }); } },
             { label: "Buddies", onSelect: () => { setTab("buddies"); setView({ kind: "list" }); } },
+            // While a conversation is open: the same as its menu in the list.
+            ...(view.kind === "thread"
+                ? [{ label: "Open in New Card", onSelect: () => { void openInNewCard(view.id).catch(() => undefined); } }]
+                : []),
         ]} />
     );
 
