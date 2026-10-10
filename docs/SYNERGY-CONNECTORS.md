@@ -122,6 +122,7 @@ the earlier pages.
 | **new** LoRa mesh (Meshtastic, MeshCore): off-grid text through a paired radio | The radio's client protocol over Bluetooth LE, USB serial or TCP | none (a channel key) | none | Added by the owner (10 October 2026, section 7). Needs a radio; licences to check (Meshtastic GPL-3.0, MeshCore MIT) | P2 |
 | **new** IRC with a bouncer | IRCv3 (`chathistory`, `soju` / `ergo` bouncers) | PW / SASL | none | The user runs the bouncer; one thread per channel or person | P3 |
 | WhatsApp, Signal, iMessage, RCS | - | - | - | Positions in SYNERGY.md 2.12 and SM 6 stand | - |
+| Discord | - | - | - | Not a connector (the owner asked, 10 October 2026): its API is for bots; using a person's own account from another client (a "self-bot") is against Discord's terms and gets accounts banned. Sign in with Discord gives only the name, avatar, servers and linked accounts. Instead: the Discord web app in the catalog (its web push to check) | no |
 
 ### Social and feeds (SOCIAL, new FEEDS)
 
