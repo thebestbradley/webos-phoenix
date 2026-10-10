@@ -138,8 +138,9 @@ class PersonSummary {
     final numbers = ((p['phoneNumbers'] as List?) ?? const []).map((x) => (x as Map)['value'] as String).toList();
     final emails = ((p['emails'] as List?) ?? const []).map((x) => (x as Map)['value'] as String).toList();
     var name = [n['givenName'], n['middleName'], n['familyName']].whereType<String>().where((s) => s.isNotEmpty).join(' ');
-    if (name.isEmpty)
+    if (name.isEmpty) {
       name = (p['nickname'] as String?) ?? ((p['organization'] as Map?)?['name'] as String?) ?? (numbers.isEmpty ? '' : numbers.first);
+    }
     return PersonSummary(
       id: (p['_id'] ?? '') as String,
       name: name,
