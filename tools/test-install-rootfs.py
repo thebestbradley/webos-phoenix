@@ -70,9 +70,9 @@ for svc in ("com.palm.service.accounts", "com.palm.service.contacts", "com.palm.
           svc + ": not its luna-service 1 files or tests")
 check("/etc/palm/db/kinds/com.palm.service.accounts/com.palm.account" in paths, "app services: db8 kinds in /etc/palm/db")
 check("/etc/palm/tempdb/kinds/com.palm.service.accounts/com.palm.signaling" in paths, "app services: tempdb kinds")
-check("/etc/palm/activities/com.palm.app.clock/com.palm.app.clock.update.json" in paths
-      and "/etc/palm/activities/com.palm.service.contacts/com.palm.service.contacts.sortorder.json" in paths,
-      "activities: apps' and services' in /etc/palm/activities")
+check("/etc/palm/activities/applications/com.palm.app.clock/com.palm.app.clock.update.json" in paths
+      and "/etc/palm/activities/services/com.palm.service.contacts/com.palm.service.contacts.sortorder.json" in paths,
+      "activities: apps' and services' where the configurator reads them")
 
 # The device services this work added.
 for name in ("org.webosphoenix.shellhost", "com.palm.applicationManager", "org.webosphoenix.dropshare",

@@ -620,8 +620,9 @@ and `webos-phoenix-image` includes it. Built apps (`dist/`) must be built
 before the recipe runs. Open webOS's app services (`third_party/app-services`)
 go to `/usr/palm/services/<id>` for OSE's mojoservicelauncher, with OSE bus
 files from `compat/app-services`; their kinds to `/etc/palm/db` and
-`/etc/palm/tempdb`, and every app's and service's activities to
-`/etc/palm/activities` (`tools/test-install-rootfs.py`).
+`/etc/palm/tempdb`, and apps' activities to `/etc/palm/activities/applications`,
+services' to `/etc/palm/activities/services`, where OSE's configurator reads
+them (`ActivityConfigurator.cpp:36-37`; `tools/test-install-rootfs.py`).
 
 On a device the runtime runs in WebAppMgr's page (`installDevice`): it
 replaces the `PalmSystem` methods WebAppMgr defines but drops (banners,

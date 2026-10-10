@@ -203,8 +203,10 @@ def plan_app_services(plan):
                         copy_tree(os.path.join(path, kind), "/etc/palm/%s/%s" % (fn, kind), plan)
                 continue
             if fn == "activities":
-                # activities/<id>/<activity>.json, as activitymanager reads them.
-                copy_tree(path, "/etc/palm/activities", plan)
+                # activities/<id>/<activity>.json: OSE's configurator registers
+                # services' from /etc/palm/activities/services/ (configurator
+                # src/ActivityConfigurator.cpp:37, SERVICE_DIR).
+                copy_tree(path, "/etc/palm/activities/services", plan)
                 continue
             copy_tree(path, dest + "/" + fn, plan)
         for fn in sorted(os.listdir(sysbus)):
@@ -328,7 +330,7 @@ def build_plan():
         # Activities the app schedules from the start (the Clock's alarm
         # updates, the Calendar's reminders): OSE's configurator registers
         # them with the activity manager from /etc/palm/activities/applications/
-        # <id>/ (configurator src/ActivityConfigurator.cpp:36), where
+        # <id>/ (configurator src/ActivityConfigurator.cpp:36, APP_DIR), where
         # openwebos/build-desktop put them; in the app's folder nobody reads them.
         for sub in (os.path.join("configuration", "activities"), "activities"):
             d = os.path.join(app_dir, sub)
