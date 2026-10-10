@@ -11,7 +11,8 @@
 //   viewer, text in the editor, .ipk packages go to the app installer and
 //   anything else to "Open with".
 // - Hold an item (or the select button) to select several; then copy, cut,
-//   delete, rename or show the info sheet.
+//   delete, share (the system's share sheet, docs/SHARE-AND-FILES.md SF5),
+//   rename or show the info sheet.
 // - The header menu sorts by name, size or date, shows hidden files and
 //   adds the folder to the favourites (the star in the command menu).
 // - The back gesture goes back through the folders visited.
@@ -23,7 +24,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
-    fileManager, formatSize, isHidden, joinPath, kindOf, LunaError, opensAsText, parentOf, sortEntries, type FileEntry, type SortKey,
+    fileManager, formatSize, isHidden, joinPath, kindOf, LunaError, mimeOf, opensAsText, parentOf, shareSheet, sortEntries, type FileEntry, type SortKey,
 } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import {
@@ -263,6 +264,22 @@ function Browser() {
         else if (v === "open-with" && one) setSheet({ kind: "open-with", entry: one });
         else if (v === "all") setSelected(chosen.length === shown.length ? new Set() : new Set(shown.map((e) => e.path)));
     };
+    // Share: files only (a folder is not something another app takes).
+    const shareable = chosen.length > 0 && chosen.every((e) => e.type === "file");
+    const sharedFiles = () => chosen.map((e) => ({ path: e.path, mimeType: mimeOf(e.name) }));
+    const share = async () => {
+        const files = sharedFiles();
+        try {
+            const r = await shareSheet.open({ files });
+            if (r.action === "cancel") return;
+            if (r.action === "photos") say(files.length === 1 ? "Saved to Photos" : `Saved ${files.length} items to Photos`);
+            else if (r.action === "files") say(`Saved to ${folderTitle(parentOf(r.path))}`);
+            endSelect();
+            reload();
+        } catch (e) {
+            say(errorText(e));
+        }
+    };
     const copyOrCut = (mode: Clipboard["mode"]) => {
         setClip({ mode, paths: chosen.map((e) => e.path) });
         say(`${chosen.length} item${chosen.length === 1 ? "" : "s"} ${mode === "cut" ? "cut" : "copied"}: go to a folder and paste`);
@@ -299,7 +316,7 @@ function Browser() {
 
     return (
         <div className={cx("fm-app", wide && "wide")}>
-            <AppMenu items={appMenu} />
+            <AppMenu items={appMenu} share={selecting && shareable ? () => ({ files: sharedFiles() }) : undefined} onShare={() => void share()} />
             {wide && favorites}
             <div className="fm-main">
                 {header}
@@ -336,6 +353,7 @@ function Browser() {
                                         onClick={() => copyOrCut("cut")} />
                         <IconToolButton icon="trash" label="Delete" testId="delete" disabled={!chosen.length || chosen.some((e) => e.readOnly)}
                                         onClick={() => setSheet({ kind: "delete", entries: chosen })} />
+                        <IconToolButton icon="share" label="Share" testId="share" disabled={!shareable} onClick={() => void share()} />
                         <IconToolButton icon="menu" label="More" testId="more"
                                         onClick={() => { const a = document.querySelector<HTMLElement>("[data-testid='more']"); if (a) setMenu({ anchor: a, kind: "more" }); }} />
                     </Toolbar>

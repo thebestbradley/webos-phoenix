@@ -14,8 +14,21 @@ Files, in a folder the user picks).
 > pictures: `org.webosphoenix.filepicker/pick {kinds: ["image"], title?}`
 > shows Photos' pictures album by album (Camera Roll first) and answers
 > `{files: [{fullPath, mimeType, name}]}` or `{canceled: true}`
-> (`filePicker.pick()`; Messaging's attach button). To do: SF1, SF2 for
-> other kinds, several files and a crop size, and the other apps of SF5.
+> (`filePicker.pick()`; Messaging's attach button). SF5 since: Files
+> (Share in select mode, one file or several: Save to Photos saves every
+> picture, Save to Files is offered for one file), Photos (its Share is the
+> sheet, no longer its own Email/Messaging menu), the browser (Share Link,
+> from the share menu or a link's menu) and, in every app, **Share in the
+> app menu, after Edit** (below). To do: SF1, SF2 for other kinds, several
+> files and a crop size, and Docs, Voice Memos and Maps of SF5.
+
+**Share in every app menu.** As Edit is in every app menu, Share follows
+it: React apps' `AppMenu` (`@phoenix/ui`) takes `share`, what the app is
+showing (Photos: the picture; `false` leaves it out); Enyo 1 apps get it
+from the runtime with Edit, and say what to share with
+`__phoenixRuntime.setShareContent(fn)` (Memos: the open memo; the browser:
+the page). An app that says nothing shares the text selected on the page;
+with nothing selected, Share is dimmed.
 
 ## 1. What the original had
 

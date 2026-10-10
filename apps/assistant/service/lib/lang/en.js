@@ -2569,6 +2569,55 @@ var followUp = {
     }
 };
 
+// ---- Voice sessions (the shell's view, AssistantOverlay.qml) ---------------------------------
+// A spoken conversation stays open a while after each answer (Settings >
+// Assistant > Keep listening); then the assistant checks in once
+// and, with nothing more said, says goodbye. Each personality has its own
+// words (Settings > Assistant > Personality).
+var SESSION = {
+    friendly: {
+        checkIn: ["Is there anything else I can help with?", "Anything else I can do for you?"],
+        goodbye: ["Okay, I'll be right here if you need me. Bye for now!", "All right, talk to you soon!", "Happy to help. Bye for now!"]
+    },
+    cheerful: {
+        checkIn: ["Anything else I can help you with today?", "What else can I do for you?"],
+        goodbye: ["Okay! Have a wonderful day!", "You got it. See you soon!", "Yay, glad I could help. Bye!"]
+    },
+    calm: {
+        checkIn: ["Is there anything else you need?", "Anything else?"],
+        goodbye: ["All right. Take care.", "Okay. I'm here whenever you need me.", "Take it easy. Goodbye."]
+    },
+    professional: {
+        checkIn: ["Is there anything else I can assist you with?", "Will there be anything else?"],
+        goodbye: ["Very well. Goodbye.", "Understood. I'll be here when you need me.", "Thank you. Goodbye."]
+    },
+    playful: {
+        checkIn: ["Anything else, or shall I go back to my nest?", "What else can this bird do for you?"],
+        goodbye: ["Okay, flying off now. Bye!", "Back to my nest. Call me anytime!", "Catch you later, and tweet you soon!"]
+    }
+};
+// Saying the conversation is over, at any point of a spoken one ("I'm
+// done", "that's all", "bye"); right after the check-in, a plain "no"
+// too ("No, thanks").
+var DONE = /^(?:(?:i'?m|i am|we'?re|we are) (?:done|good|all set|finished|all good)(?: for now)?(?:,? thanks?| thank you)?|that'?s (?:all|it|everything)(?: for now)?(?:,? thanks?| thank you)?|that(?:'?ll| will) be all|all done|done|nothing(?: else)?(?:,? thanks?| thank you)?|no(?:pe)?,? (?:that'?s all|that'?s it|i'?m good|i'?m done|thanks?|thank you)|bye(?: bye)?|goodbye|good bye|see (?:you|ya)(?: later)?|later|thanks?,? (?:that'?s all|bye|goodbye)|stop listening|go to sleep|dismiss)$/;
+var NO_MORE = /^(?:no|nope|nah|not really|no thanks?|no thank you|i'?m good|i'?m fine|nothing|that'?s ok(?:ay)?|not now)$/;
+function sessionWords(personality) { return SESSION[personality] || SESSION.friendly; }
+say.personalities = Object.keys(SESSION);
+// The check-in after the wait, and the goodbye (n: which of them, else any).
+say.checkIn = function (personality, n) {
+    var l = sessionWords(personality).checkIn;
+    return l[typeof n === "number" ? Math.abs(n) % l.length : Math.floor(Math.random() * l.length)];
+};
+say.goodbye = function (personality, n) {
+    var l = sessionWords(personality).goodbye;
+    return l[typeof n === "number" ? Math.abs(n) % l.length : Math.floor(Math.random() * l.length)];
+};
+// Whether the words end the conversation (checkIn: just asked "anything else?").
+say.done = function (text, checkIn) {
+    var t = clean(text).replace(/[.!?,\s]+$/, "");
+    return DONE.test(t) || (!!checkIn && NO_MORE.test(t));
+};
+
 module.exports = {
     id: "en",
     name: "English",

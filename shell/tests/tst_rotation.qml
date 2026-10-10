@@ -25,6 +25,18 @@ Item {
         system: SimSystemStatus { id: sys }
     }
 
+    // A second start of the shell, its rotation lock kept on "left".
+    Component {
+        id: restartedShell
+        Shell {
+            anchors.fill: parent
+            formFactor: "phone"
+            density: 1
+            source: SimWindowSource {}
+            system: SimSystemStatus { rotationLocked: true; rotationLockOrientation: "left"; deviceOrientation: "up" }
+        }
+    }
+
     // When the turn starts and ends, taken as it happens: a test polling
     // for it can see it late on a busy machine and mismeasure the 300 ms.
     property double turnStarted: 0
@@ -332,6 +344,67 @@ Item {
             shell.unlock();
             tryCompare(shell, "uiOrientation", "up", 2000);
             settle();
+        }
+
+        // The rotation lock keeps the orientation it holds (the preference,
+        // Preferences::setRotationLockPref, SystemMenu.cpp:857-866), and a
+        // start with it on comes up turned that way whatever the device
+        // says (WindowServer::bootupFinished, WindowServer.cpp:1187-1203).
+        function test_rotationLockKeptAcrossRestarts() {
+            sys.deviceOrientation = "left";
+            tryCompare(shell, "uiOrientation", "left", 1000);
+            settle();
+            sys.rotationLocked = true;
+            compare(shell.rotationLock, "left");
+            compare(sys.rotationLockOrientation, "left");
+            compare(sys.appStatusFor("rotationLocked").rotationLockOrientation, "left");
+            // Off: forgotten.
+            sys.rotationLocked = false;
+            sys.applyAppStatus({ rotationLocked: false });
+            compare(sys.rotationLockOrientation, "");
+            sys.deviceOrientation = "up";
+            tryCompare(shell, "uiOrientation", "up", 1000);
+            settle();
+            // A new start, locked to "left", the device upright.
+            var other = createTemporaryObject(restartedShell, root);
+            verify(other);
+            tryCompare(other.rotator, "booting", false, 2000);
+            compare(other.rotationLock, "left");
+            compare(other.uiOrientation, "left");
+            other.system.deviceOrientation = "right";
+            wait(500);
+            compare(other.uiOrientation, "left");
+        }
+
+        // A card off screen as the UI turns keeps its window's size (turned
+        // back, so it looks as it did) until the turn is over; the one on
+        // screen resizes as it turns (HostWindow.cpp:150-170;
+        // WindowServer::rotatePendingWindows, WindowServer.cpp:2126-2139).
+        function test_cardsOffScreenResizeAfterTheTurn() {
+            var a = windows.launch("org.webosphoenix.email", "");
+            var b = windows.launch("org.webosphoenix.calendar", "");
+            var c = windows.launch("org.webosphoenix.memos", "");
+            shell.cardView.position = 0;
+            var first = shell.cardView.cardItem(a), last = shell.cardView.cardItem(c);
+            tryVerify(function() { return shell.cardView.cardOnScreen(first) && !shell.cardView.cardOnScreen(last); }, 2000);
+            var oldW = last.window.width, oldH = last.window.height;
+            sys.deviceOrientation = "left";
+            tryCompare(shell, "uiOrientation", "left", 1000);
+            verify(rot.rotating);
+            // Mid-turn: the card on screen has its new size, the other its old.
+            verify(!first.flipPending);
+            compare(first.window.width, first.width);
+            verify(last.flipPending);
+            compare(last.window.width, oldW);
+            compare(last.window.height, oldH);
+            compare(last.window.rotation, -90);
+            compare(last.pageOrientation, "up");
+            settle();
+            // Over: resized, upright in its card, told how it is turned.
+            verify(!last.flipPending);
+            compare(last.window.width, last.width);
+            compare(last.window.rotation, 0);
+            compare(last.pageOrientation, "left");
         }
 
         function test_inputBlockedWhileTurning() {

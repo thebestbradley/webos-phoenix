@@ -7,7 +7,8 @@
 // browses /media/internal, shows hidden files and sorts, makes and renames
 // a folder, copies a file into it and pastes it twice, edits and saves a
 // text file, makes a new file, goes back with the back gesture, shows the
-// info sheet, deletes the folder, views pictures, installs an .ipk, opens
+// info sheet, deletes the folder, views pictures, shares one and two
+// pictures (the system's share sheet), installs an .ipk, opens
 // a song with Music, and opens a read-only system file.
 //
 //   node tools/test-files.cjs [--tablet] [--out DIR]
@@ -253,6 +254,62 @@ async function main() {
         await shot("viewer");
         await page.keyboard.press("Escape");
         await page.waitForSelector("[data-testid='image-viewer']", { state: "detached" });
+
+        // ---- Share (the system's share sheet) -------------------------------------------------------
+        const sheet = async () => {
+            const el = await page.waitForSelector("iframe[data-phoenix-sheet=share]");
+            const f = await el.contentFrame();
+            await f.waitForSelector("[data-testid=share-sheet]");
+            await page.waitForTimeout(400);
+            return f;
+        };
+        const sheetGone = () => page.waitForSelector("iframe[data-phoenix-sheet]", { state: "detached" });
+        await page.click("[data-testid='select']");
+        check(await page.locator("[data-testid='share']").isDisabled(), "share: off with nothing selected");
+        await page.click("[data-testid='check-alpine-lake.jpg']");
+        let f = await sheet().catch(() => null);
+        check(f === null, "selecting does not open the sheet");
+        await page.click("[data-testid='share']");
+        f = await sheet();
+        check((await f.textContent("[data-testid=share-title]")) === "alpine-lake.jpg", "share: one picture, its name in the sheet");
+        check(await f.locator("[data-testid=share-photos]").count() === 1 && await f.locator("[data-testid=share-files]").count() === 1,
+            "share: one picture offers Save to Photos and Save to Files");
+        await shot("share-one");
+        await page.keyboard.press("Escape");
+        await sheetGone();
+        check(await page.locator("[data-testid='select-done']").count() === 1, "back closes the sheet; still selecting");
+
+        await page.click("[data-testid='check-aurora.jpg']");
+        await page.click("[data-testid='share']");
+        f = await sheet();
+        check((await f.textContent(".ss-subtitle")) === "2 files" && (await f.textContent("[data-testid=share-title]")) === "alpine-lake.jpg and 1 more",
+            "share: two pictures (alpine-lake.jpg and 1 more, 2 files)");
+        check(await f.waitForFunction(() => document.querySelector("[data-testid=share-thumb]")?.naturalWidth > 0, null, { timeout: 5000 }).then(() => true, () => false),
+            "share: the sheet shows the first picture");
+        check(await f.locator("[data-testid=share-files]").count() === 0, "share: no Save to Files for several files");
+        check(await f.locator("[data-testid='share-app-org.webosphoenix.messaging']").count() === 1, "share: Messaging takes pictures");
+        await shot("share-two");
+        await page.keyboard.press("Escape");
+        await sheetGone();
+        // The app menu's Share: the files selected.
+        await page.evaluate(() => document.dispatchEvent(new CustomEvent("phoenixAppMenu")));
+        await page.click("[data-testid='appmenu-share']");
+        f = await sheet();
+        check((await f.textContent(".ss-subtitle")) === "2 files", "share: the app menu's Share shares the files selected");
+        host.length = 0;
+        await f.click("[data-testid='share-app-org.webosphoenix.messaging']");
+        await sheetGone();
+        const shared = lastHost("launch");
+        check(shared && shared.payload.id === "org.webosphoenix.messaging" && shared.payload.params.share.files.length === 2
+            && shared.payload.params.share.files.every((x) => x.mimeType === "image/jpeg"),
+            "share to Messaging launches it with both pictures");
+        check(await page.locator("[data-testid='select']").count() === 1, "sharing ends select mode");
+
+        await page.click("[data-testid='crumb-2']");
+        await page.waitForSelector(row("Pictures"));
+        await hold(row("Pictures"));
+        check(await page.locator("[data-testid='share']").isDisabled(), "share: off for a folder");
+        await page.keyboard.press("Escape");
 
         // ---- Install a package, open with ----------------------------------------------------------
         await favorite("Downloads");

@@ -30,7 +30,13 @@
 //                                          {id, ok, errorCode, fingerprint}
 //   browse {section, category?, page?}  section: "featured" | "web" | "apps" |
 //                                          "classics" -> {apps, categories, more}
-//   search {query}                      -> {apps} from every source switched on
+//   search {query}                      -> {apps, accountTypes} from every source
+//                                          switched on
+//   listAccountTypes {capability?}      -> {accountTypes}: the account types
+//                                          (Synergy) the Phoenix catalogs list,
+//                                          each template once; capability (a
+//                                          template capability or a list of
+//                                          them) keeps those with any of them
 //   getApp {sourceId, id}               -> {app} with installed, update, verdicts
 //   install {sourceId, id, subscribe}   (also an ongoing activity in the
 //                                       notification area while it runs)
@@ -58,13 +64,14 @@ var ipkLib = require("./lib/ipk");
 var pwa = require("./lib/pwa");
 var appMuseum = require("./lib/appmuseum");
 var preware = require("./lib/preware");
+var accountTypes = require("./lib/accounts");
 var version = require("./lib/version");
 var md5 = require("./lib/md5");
 var b64 = require("./lib/b64");
 
 var SERVICE = "org.webosphoenix.service.packages";
 var METHODS = ["getSources", "addSource", "trustSource", "setSource", "removeSource", "refresh", "browse", "search",
-               "getApp", "install", "remove", "listInstalled", "updateAll", "scheduled"];
+               "getApp", "install", "remove", "listInstalled", "updateAll", "scheduled", "listAccountTypes"];
 var ACTIVITY = "org.webosphoenix.marketplace.updates";
 var PAGE = 20;
 var MAX_PACKAGE = 64 * 1024 * 1024;
@@ -195,7 +202,7 @@ function createPackagesService(deps) {
             if (r[0].status !== 200) throw err("BAD_SERVER", "HTTP " + r[0].status + " from " + base + "index.json");
             return catalog.verifyIndex(r[0].bytes, r[1], src.key, {
                 sha512: deps.crypto.sha512, now: now(), lastBuild: typeof src.lastBuild === "number" ? src.lastBuild : undefined,
-                sourceId: src.id
+                sourceId: src.id, baseUrl: base + "index.json"
             });
         }, function (e) {
             throw e.code ? e : err("CONNECTION_FAILED", "Could not reach " + base + (e && e.message ? " (" + e.message + ")" : ""));
@@ -297,18 +304,42 @@ function createPackagesService(deps) {
                                  categories: Object.keys(cats).sort(), more: apps.length > (page + 1) * PAGE });
     }
 
+    // The account types of the Phoenix catalogs switched on, each template
+    // once (the first catalog's). A catalog read before C0, or an old index,
+    // has none.
+    function catalogAccountTypes(s) {
+        var out = [], seen = {};
+        s.sources.forEach(function (src) {
+            var idx = s.indexes[src.id];
+            if (!src.enabled || src.kind !== "phoenix" || !idx) return;
+            (idx.accounts || []).forEach(function (t) {
+                if (seen[t.templateId]) return;
+                seen[t.templateId] = true;
+                out.push(t);
+            });
+        });
+        return out;
+    }
+    function listAccountTypes(p) {
+        var caps = p && p.capability !== undefined ? [].concat(p.capability).filter(function (c) { return typeof c === "string"; }) : null;
+        var list = catalogAccountTypes(load()).filter(function (t) { return accountTypes.hasCapability(t, caps); });
+        return Promise.resolve({ returnValue: true, accountTypes: clone(list) });
+    }
+
     function search(p) {
         var words = String((p && p.query) || "").toLowerCase().trim();
-        if (!words) return Promise.resolve({ returnValue: true, apps: [] });
+        if (!words) return Promise.resolve({ returnValue: true, apps: [], accountTypes: [] });
         var s = load();
         var terms = words.split(/\s+/);
+        var types = catalogAccountTypes(s).filter(function (t) { return accountTypes.matches(t, terms); });
         var hits = catalogApps(s, ["pwa", "ipk", "preware"]).filter(function (e) {
             var hay = (e.title + " " + e.summary + " " + e.developer.name + " " + e.categories.join(" ")).toLowerCase();
             return terms.every(function (t) { return hay.indexOf(t) >= 0; });
         });
         var am = museum(s);
         return (am ? am.search(words).then(null, function () { return []; }) : Promise.resolve([])).then(function (classics) {
-            return { returnValue: true, apps: hits.concat(classics.slice(0, 30)).map(function (e) { return withState(s, e); }) };
+            return { returnValue: true, apps: hits.concat(classics.slice(0, 30)).map(function (e) { return withState(s, e); }),
+                     accountTypes: clone(types) };
         });
     }
 
@@ -734,7 +765,8 @@ function createPackagesService(deps) {
         remove: remove,
         listInstalled: listInstalled,
         updateAll: updateAll,
-        scheduled: scheduled
+        scheduled: scheduled,
+        listAccountTypes: listAccountTypes
     };
 }
 

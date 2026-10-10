@@ -33,7 +33,9 @@ Item {
 
     property var model            // ListModel: appId, title, body, color, glyph, icon, params (JSON or ""), windowKey,
                                   // ongoing (an ongoing activity: a download, an install; it stays
-                                  // until it ends), progress (0-100, -1: none)
+                                  // until it ends), progress (0-100, -1: none); a dashboard window's
+                                  // persistent (not dismissable: DashboardWindow::persistent) and
+                                  // manualDrag (it takes its own drags: webosDragMode "manual")
     // The window source: its alerts (popup alert windows) and windowFor(key)
     // for alert and dashboard windows.
     property var source
@@ -78,12 +80,12 @@ Item {
         var n = model.get(keyRow);
         if (k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space) {
             activated(n.appId, n.params || "");
-            if (!n.ongoing)
+            if (!kept(n))
                 dismissRequested(keyRow);
             keyRow = -1;
             return true;
         }
-        if ((k === Qt.Key_Delete || k === Qt.Key_Backspace) && !n.ongoing) {
+        if ((k === Qt.Key_Delete || k === Qt.Key_Backspace) && !kept(n)) {
             var at2 = order.indexOf(keyRow);
             dismissRequested(keyRow);
             // The row after it (or before, at the end) keeps the highlight.
@@ -148,11 +150,23 @@ Item {
     // how many lead the list. The open dashboard has a handle that pulls it
     // to the whole screen, whose header offers Select and Clear All.
     property int ongoingCount: 0
+    // Rows nothing but their app takes away: live activities, and dashboard
+    // windows opened {persistent: true} (DashboardWindow::persistent: a drag
+    // or a flick never dismisses one, DashboardWindowContainer.cpp:343-347,
+    // 433-438; luna-systemui's update dashboard opens one,
+    // SysUpdateService.js:184-188).
+    function kept(n) { return !!n && (n.ongoing === true || n.persistent === true); }
+    property int keptCount: 0
     function _countOngoing() {
         var n = 0;
         while (model && n < model.count && model.get(n).ongoing)
             ++n;
         ongoingCount = n;
+        var k = 0;
+        for (var i = 0; model && i < model.count; ++i)
+            if (kept(model.get(i)))
+                ++k;
+        keptCount = k;
     }
     Connections {
         target: root.model
@@ -163,7 +177,7 @@ Item {
         function onModelReset() { root._countOngoing(); }
     }
     onModelChanged: _countOngoing()
-    readonly property int clearableCount: (model ? model.count : 0) - ongoingCount
+    readonly property int clearableCount: (model ? model.count : 0) - keptCount
 
     property bool drawerExpanded: false
     property bool selecting: false
@@ -228,7 +242,7 @@ Item {
     function clearSelected() {
         var list = [];
         for (var i = 0; i < model.count; ++i)
-            if (!model.get(i).ongoing && selectedIds[model.get(i).id])
+            if (!kept(model.get(i)) && selectedIds[model.get(i).id])
                 list.push(i);
         selecting = false;
         selectedIds = {};
@@ -237,7 +251,7 @@ Item {
     function clearAll() {
         var list = [];
         for (var i = 0; i < model.count; ++i)
-            if (!model.get(i).ongoing)
+            if (!kept(model.get(i)))
                 list.push(i);
         selecting = false;
         selectedIds = {};
@@ -951,7 +965,11 @@ Item {
                 required property real progress
                 required property var model
                 readonly property string key: model.id
-                readonly property bool selectable: root.selecting && !ongoing
+                // A dashboard window nothing but its app takes away; one that
+                // takes its own drags (see the swipe MouseArea).
+                readonly property bool persistent: model.persistent === true
+                readonly property bool manualDrag: windowKey !== "" && model.manualDrag === true
+                readonly property bool selectable: root.selecting && !ongoing && !persistent
                 // Swiped (or swiping) off its place.
                 readonly property bool slidOut: content.x !== 0
                 width: list.width
@@ -988,7 +1006,8 @@ Item {
                     content.x = x;
                 }
                 function wheelRelease(vx) {
-                    if (Math.abs(vx) > Theme.wheelFlickVelocity || Math.abs(content.x) > content.width * Theme.dashboardDismissRatio)
+                    if (!item.persistent && (Math.abs(vx) > Theme.wheelFlickVelocity
+                                             || Math.abs(content.x) > content.width * Theme.dashboardDismissRatio))
                         remove.start();
                     else if (content.x !== 0)
                         snap.start();
@@ -1023,8 +1042,24 @@ Item {
                     distance: Math.abs(content.x)
                     rowWidth: item.width
                     fromRight: content.x < 0
-                    // Not for a row its app took away (leave): nobody swiped.
-                    visible: !item.ongoing && content.x !== 0 && !leave.running
+                    // Not for a row its app took away (leave): nobody swiped;
+                    // nor for one a swipe does not clear.
+                    visible: !item.ongoing && !item.persistent && content.x !== 0 && !leave.running
+                }
+
+                // Let go after a drag: dragged more than a quarter of the
+                // width, or flicked sideways, it slides off and is
+                // dismissed; otherwise (or a row a swipe does not clear) it
+                // snaps back (DashboardWindowContainer.cpp:340-360, 426-440,
+                // 700-708).
+                function releaseDrag(vx, vy) {
+                    var speed = Math.abs(vx) + Math.abs(vy);
+                    var flicked = speed >= Theme.flickMinVelocity && speed <= Theme.flickMaxVelocity
+                        && Math.abs(vx) > Math.abs(vy);
+                    if (!item.persistent && (flicked || Math.abs(content.x) > content.width * Theme.dashboardDismissRatio))
+                        remove.start();
+                    else if (content.x !== 0)
+                        snap.start();
                 }
                 DashboardItem {
                     id: content
@@ -1057,39 +1092,90 @@ Item {
                         id: swipe
                         objectName: "dashboardSwipe"
                         anchors.fill: parent
+                        // Over the app's dashboard window: the row has the
+                        // touches and passes them on (below); under the
+                        // answers' buttons otherwise.
+                        z: item.windowKey !== "" ? 3 : 0
                         // An ongoing activity stays until it ends.
-                        drag.target: item.ongoing || root.selecting ? null : content
+                        drag.target: item.ongoing || root.selecting || forwarding ? null : content
                         drag.axis: Drag.XAxis
                         enabled: !remove.running
                         property point start
                         property real startTime: 0
+                        // DashboardWindowContainer had the touches on a
+                        // dashboard window and passed a tap on to it
+                        // (handleTap, :1104-1146: a pen down and up). A
+                        // window that takes its own drags (webosDragMode
+                        // "manual": enyo.Dashboard opens its window so and
+                        // swipes its layers itself, Dashboard.js:107;
+                        // IpcClientHost.cpp:288-291) got the press, the moves
+                        // and the release of a touch that began on it at
+                        // rest right of its 50 px badge
+                        // (sDashboardBadgeWidth): it is not the row's, unless
+                        // it goes up or down first, which cancels it for the
+                        // window (:172-307, 329-412). On the badge the row
+                        // is dragged as any other.
+                        property bool forwarding: false
+                        property bool moved: false
                         onPressed: (m) => {
                             snap.stop();
                             start = mapToItem(root, m.x, m.y);
                             startTime = root.clock();
+                            moved = false;
+                            forwarding = item.manualDrag && !root.selecting && content.x === 0 && m.x > Theme.dashboardBadgeWidth;
+                            if (forwarding)
+                                content.pointer("down", m.x, m.y);
                         }
-                        onReleased: (m) => {
+                        onPositionChanged: (m) => {
+                            if (!forwarding)
+                                return;
                             var p = mapToItem(root, m.x, m.y);
-                            var ms = root.clock() - startTime;
-                            var vx = ms > 0 ? (p.x - start.x) / ms : 0, vy = ms > 0 ? (p.y - start.y) / ms : 0;
-                            var speed = Math.abs(vx) + Math.abs(vy);
-                            var flicked = speed >= Theme.flickMinVelocity && speed <= Theme.flickMaxVelocity
-                                && Math.abs(vx) > Math.abs(vy);
-                            if (flicked || Math.abs(content.x) > content.width * Theme.dashboardDismissRatio)
-                                remove.start();
-                            else if (content.x !== 0)
+                            var dx = p.x - start.x, dy = p.y - start.y;
+                            if (!moved && dx * dx + dy * dy >= Theme.tapRadius * Theme.tapRadius) {
+                                moved = true;
+                                if (Math.abs(dx) <= Math.abs(dy)) {
+                                    content.pointer("cancel", m.x, m.y);
+                                    forwarding = false;
+                                    return;
+                                }
+                            }
+                            content.pointer("move", m.x, m.y);
+                        }
+                        onCanceled: {
+                            if (forwarding)
+                                content.pointer("cancel", start.x, start.y);
+                            forwarding = false;
+                            if (content.x !== 0)
                                 snap.start();
                         }
-                        onClicked: {
-                            if (content.x !== 0)
+                        onReleased: (m) => {
+                            if (forwarding) {
+                                forwarding = false;
+                                // Not past the tap radius: a tap (the page
+                                // makes a click of a pen down and up).
+                                content.pointer(moved ? "up" : "tapup", m.x, m.y);
+                                return;
+                            }
+                            var p = mapToItem(root, m.x, m.y);
+                            var ms = root.clock() - startTime;
+                            item.releaseDrag(ms > 0 ? (p.x - start.x) / ms : 0, ms > 0 ? (p.y - start.y) / ms : 0);
+                        }
+                        onClicked: (m) => {
+                            if (content.x !== 0 || item.manualDrag && moved)
                                 return;
                             if (root.selecting) {
                                 if (item.selectable)
                                     root.toggleSelected(item.key);
                                 return;
                             }
+                            // A dashboard window: the tap is its page's.
+                            if (item.windowKey !== "") {
+                                if (!item.manualDrag || m.x <= Theme.dashboardBadgeWidth)
+                                    content.pointer("tap", m.x, m.y);
+                                return;
+                            }
                             root.activated(item.appId, item.params);
-                            if (!item.ongoing)
+                            if (!item.ongoing && !item.persistent)
                                 root.dismissRequested(item.index);
                         }
                     }

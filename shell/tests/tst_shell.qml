@@ -36,6 +36,18 @@ Item {
         }
     }
 
+    // An app's dashboard window as the window source gives it, recording
+    // the touches the row passes on (WebAppWindow.pointer), without a
+    // browser engine.
+    Component {
+        id: fakeDashboardPage
+        Rectangle {
+            color: "#203040"
+            property var events: []
+            function pointer(type, x, y) { events = events.concat([type]); }
+        }
+    }
+
     TestCase {
         name: "Shell"
         when: windowShown
@@ -101,21 +113,105 @@ Item {
             compare(windows.cards.count, 1);
         }
 
+        // A new card is not there for its first cardPrepareAddDuration
+        // (150 ms, CardWindow::delayPrepare); then it waits full size below
+        // the screen and, its app being ready, rises at once.
         function test_newCardRisesFromBelow() {
+            var cv = shell.cardView;
+            var started = Date.now();
             var uid = shell.launch("org.webosphoenix.email");
-            wait(60);
-            var card = shell.cardView.cardItem(uid);
+            var card = cv.cardItem(uid);
+            tryCompare(cv, "waitingUid", uid, 100, "in its prepare step");
+            verify(!card.visible, "not shown yet");
+            compare(cv.groupCount, 0, "not in the stacks yet");
+            var shownAfter = -1, shownAt = 0, shownScale = 0;
+            var watch = function () {
+                if (card.visible && shownAfter < 0) {
+                    shownAfter = Date.now() - started;
+                    shownAt = card.centerY;
+                    shownScale = card.cardScale;
+                }
+            };
+            card.visibleChanged.connect(watch);
+            tryVerify(function () { return shownAfter >= 0; }, 2000, "shown once prepared");
+            card.visibleChanged.disconnect(watch);
+            // Qt's coarse timers may fire 5 % early.
+            verify(shownAfter >= Theme.cardPrepareAddDuration * 0.95, "after the prepare step (" + shownAfter + " ms)");
             // Full size, below its maximized place, coming up.
-            compare(card.cardScale, 1);
-            verify(card.centerY > shell.cardView.maximizedCenterY + 20);
+            compare(shownScale, 1);
+            verify(shownAt > cv.maximizedCenterY + 20, "below the screen: " + shownAt);
             tryVerify(function() { return shell.maximized; }, 2000);
-            compare(shell.cardView.risingUid, "");
-            fuzzyCompare(card.centerY, shell.cardView.maximizedCenterY, 0.5);
+            compare(cv.risingUid, "");
+            fuzzyCompare(card.centerY, cv.maximizedCenterY, 0.5);
         }
 
-        // Launching from a maximized app: that card zooms out to card view
-        // while the new one waits below, then rises (prepareAddWindowSibling:
-        // slideAllGroups, then maximizeActiveWindow).
+        // Launched from a maximized app: for the prepare step the card in
+        // front stays maximized and the new card's loading screen is not on;
+        // an app ready by then never shows it (loadingTimeout: stop the
+        // loading overlay and addWindow at once, CardWindow.cpp:1471-1477).
+        function test_prepareStepLeavesTheCardInFront() {
+            var cv = shell.cardView;
+            var a = shell.launch("org.webosphoenix.email");
+            tryVerify(function() { return shell.maximized; }, 2000);
+            var moved = 0;
+            var watch = function () { if (cv.waitingUid !== "" && cv.maximizeProgress !== 1) moved++; };
+            cv.maximizeProgressChanged.connect(watch);
+            var b = shell.launch("org.webosphoenix.calendar");
+            var bc = cv.cardItem(b);
+            var everLoading = false;
+            var watchLoading = function () { if (bc.prepared && bc.loading) everLoading = true; };
+            bc.preparedChanged.connect(watchLoading);
+            tryCompare(cv, "waitingUid", b, 100);
+            compare(cv.currentUid, a, "the card in front is still the one in front");
+            verify(cv.maximized);
+            tryCompare(cv, "waitingUid", "", 1000);
+            cv.maximizeProgressChanged.disconnect(watch);
+            bc.preparedChanged.disconnect(watchLoading);
+            compare(moved, 0, "nothing moved while the new card waited");
+            verify(!everLoading, "ready in time: no loading screen");
+            tryVerify(function() { return shell.maximized && cv.currentUid === b; }, 3000);
+        }
+
+        // A slow app: its loading screen comes on when the card is prepared,
+        // not before (startLoadingOverlay, CardWindow.cpp:1486-1490).
+        function test_loadingScreenFromThePrepare() {
+            var cv = shell.cardView;
+            var a = shell.launch("org.webosphoenix.email");
+            tryVerify(function() { return shell.maximized; }, 2000);
+            var b = shell.launch("org.webosphoenix.calendar");
+            windows.windowFor(b).ready = false;
+            var bc = cv.cardItem(b);
+            tryCompare(cv, "waitingUid", b, 100);
+            verify(bc.loading);
+            compare(bc.prepared, false);
+            tryCompare(bc, "prepared", true, 1000);
+            compare(cv.risingUid, b, "waits below the screen, loading");
+            windows.windowFor(b).ready = true;
+            tryVerify(function() { return shell.maximized && cv.currentUid === b; }, 3000);
+        }
+
+        // An app that closes its window before it is shown: gone, nothing
+        // moves.
+        function test_closedInItsPrepareStep() {
+            var cv = shell.cardView;
+            var a = shell.launch("org.webosphoenix.email");
+            tryVerify(function() { return shell.maximized; }, 2000);
+            var b = shell.launch("org.webosphoenix.calendar");
+            tryCompare(cv, "waitingUid", b, 100);
+            windows.cardCloseRequested(b);
+            compare(cv.waitingUid, "");
+            compare(windows.cardIndex(b), -1);
+            wait(Theme.cardPrepareAddDuration + 100);
+            verify(shell.maximized);
+            compare(cv.currentUid, a);
+        }
+
+        // Launching from a maximized app: once the new card is prepared,
+        // that card zooms out to card view while the new one waits below,
+        // and the new one rises as soon as its app is ready, the zoom out
+        // still under way if it already is (prepareAddWindowSibling:
+        // slideAllGroups, then PreparingState::windowAdded ->
+        // maximizeActiveWindow).
         function test_launchFromAppZoomsOutThenRises() {
             var a = shell.launch("org.webosphoenix.email");
             tryVerify(function() { return shell.maximized; }, 2000);
@@ -564,6 +660,93 @@ Item {
             // which takes as long as the machine takes to draw its frames.
             verify(!r.enabled, "the flick dismisses the row");
             tryCompare(windows.notifications, "count", 1, 3000);
+            notes.dashboardOpen = false;
+        }
+
+        // An app's dashboard window as a row: attrs {persistent, manualDrag}.
+        function addDashboardWindow(key, attrs) {
+            var page = fakeDashboardPage.createObject(windows);
+            windows._windows[key] = page;
+            windows.notifications.append(Object.assign({
+                id: key, appId: "org.webosphoenix.messaging", title: "", body: "", color: "#666666", glyph: "!", icon: "",
+                params: "", windowKey: key, clickableWhenLocked: false, ongoing: false, progress: -1, tag: "", actions: "",
+                persistent: false, manualDrag: false }, attrs || {}));
+            return page;
+        }
+        function dragRowFrom(r, x0, dx, dy) {
+            var y = r.height / 2;
+            mousePress(r, x0, y);
+            for (var i = 1; i <= 10; ++i) { wait(20); mouseMove(r, x0 + dx * i / 10, y + (dy || 0) * i / 10); }
+            mouseRelease(r, x0 + dx, y + (dy || 0));
+        }
+
+        // A dashboard window (N5): a tap on it is its page's (handleTap,
+        // DashboardWindowContainer.cpp:1104-1146), a sideways drag the row's,
+        // which goes past a quarter; one opened {persistent: true} always
+        // comes back and is not cleared (DashboardWindow::persistent,
+        // :343-347, 433-438); one that takes its own drags (webosDragMode
+        // "manual") gets a touch that begins right of its 50 px badge, its
+        // moves and its release, while the badge drags the row, and a touch
+        // that goes up or down first is cancelled for it (:193-306).
+        function test_dashboardWindows() {
+            var notes = shell.notifications;
+            var plain = addDashboardWindow("s901");
+            var kept = addDashboardWindow("s902", { persistent: true });
+            var manual = addDashboardWindow("s903", { manualDrag: true });
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            var rows = dashboardRows();
+            compare(rows.length, 3);
+            var rowOf = function (page) {
+                for (var i = 0; i < rows.length; ++i)
+                    if (rows[i].parent.windowKey === Object.keys(windows._windows).filter(function (k) { return windows._windows[k] === page; })[0])
+                        return rows[i];
+                return null;
+            };
+            var rp = rowOf(plain), rk = rowOf(kept), rm = rowOf(manual);
+            verify(rp && rk && rm);
+            compare(notes.clearableCount, 2, "the persistent row is not clearable");
+
+            // A tap: the page's; the row stays.
+            mouseClick(rp, 150, rp.height / 2);
+            compare(plain.events.join(","), "tap");
+            compare(windows.notifications.count, 3);
+
+            // The persistent row follows the finger but comes back.
+            dragRowFrom(rk, 60, 140);
+            tryCompare(rk.parent, "x", 0, 1500);
+            compare(windows.notifications.count, 3);
+            compare(kept.events.length, 0);
+
+            // Right of the badge: the window's own drag, the row stays put.
+            dragRowFrom(rm, 120, 120);
+            compare(manual.events[0], "down");
+            compare(manual.events[manual.events.length - 1], "up");
+            verify(manual.events.indexOf("move") > 0);
+            compare(rm.parent.x, 0, "the row stays");
+            compare(windows.notifications.count, 3);
+            // Up or down first: cancelled for the window.
+            manual.events = [];
+            dragRowFrom(rm, 120, 0, 40);
+            compare(manual.events[0], "down");
+            verify(manual.events.indexOf("cancel") > 0);
+            compare(manual.events.indexOf("up"), -1);
+            // A tap there: a down, then the up that ends a tap.
+            manual.events = [];
+            mouseClick(rm, 150, rm.height / 2);
+            compare(manual.events.join(","), "down,tapup");
+            // On the badge the row is dragged, away past a quarter.
+            manual.events = [];
+            dragRowFrom(rm, 20, 140);
+            compare(manual.events.length, 0);
+            tryCompare(windows.notifications, "count", 2, 1500);
+
+            // Clear All leaves the persistent one.
+            notes.clearAll();
+            tryCompare(windows.notifications, "count", 1, 1500);
+            compare(windows.notifications.get(0).windowKey, "s902");
+            windows.notifications.clear();
             notes.dashboardOpen = false;
         }
 
@@ -1292,7 +1475,19 @@ Item {
             tryCompare(view, "maximizeProgress", 1, 2000);
             compare(view.currentUid, uids[0]);
             view.minimize();
-            tryCompare(view, "maximizeProgress", 0, 2000);
+            // Exactly 0, the animation over: card view takes taps only then
+            // (its TouchArea's enabled), and tryCompare's fuzzy compare
+            // passed on 8e-7, the minimize's last frame not yet drawn.
+            tryVerify(function () { return view.maximizeProgress === 0; }, 2000);
+            // A card that maximizes centres the fan on itself
+            // (moveToActiveCard): card 2 from position 1.
+            p = strip(2);
+            mouseClick(view, p.x, p.y);
+            tryCompare(view, "maximizeProgress", 1, 2000);
+            compare(view.currentUid, uids[2]);
+            compare(view.fanPositions[gid], 2);
+            view.minimize();
+            tryVerify(function () { return view.maximizeProgress === 0; }, 2000);
             // Below the stack's cards, in its column: nothing changes.
             var col = view.layout.columns[0];
             mouseClick(view, (col.left + col.right) / 2, view.height - 5);
@@ -1709,7 +1904,7 @@ Item {
             var uid = windows.launch("org.webosphoenix.email", "");
             windows.windowFor(uid).ready = false;
             shell.cardView.focusLaunched(uid);
-            verify(shell.cardView.risingUid === uid);
+            tryVerify(function () { return shell.cardView.risingUid === uid; }, 1000);
             shell.gestureUp();
             tryCompare(shell, "launcherOpen", true, 2000);
             compare(shell.cardView.risingUid, "");
@@ -1719,6 +1914,66 @@ Item {
             compare(shell.cardView.maximizeProgress, 0);
             shell.gestureUp();
             tryCompare(shell, "launcherOpen", false, 2000);
+        }
+
+        // L1: the cards go once the launcher is fully up, not while it
+        // slides, and come back as soon as it starts down
+        // (OverlayWindowManager.cpp:1438-1448, 1659-1676).
+        function test_launcherHidesTheCardsOnceUp() {
+            windows.launch("org.webosphoenix.email", "");
+            var launcher = findChild(shell, "launcher");
+            var cards = shell.cardView;
+            compare(cards.opacity, 1);
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", true, 2000);
+            // Sliding up: the cards still there behind it.
+            verify(launcher.hidden > 0);
+            compare(cards.opacity, 1);
+            tryCompare(launcher, "fullyOpen", true, 2000);
+            compare(cards.opacity, 0);
+            // Closing: back at once, while it slides down.
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", false, 2000);
+            compare(cards.opacity, 1);
+            verify(launcher.visible);
+            tryCompare(launcher, "visible", false, 2000);
+            compare(cards.opacity, 1);
+        }
+
+        // L2: the scroll shadows: launcher-scrollfade-top.png right under the
+        // tabs, launcher-scrollfade-bottom.png right above the dock, each its
+        // art's height across the launcher; gone once it is fully closed,
+        // back once it is fully up (overlaylayer.cpp:106-140;
+        // dimensionslauncher.cpp:3476-3491).
+        function test_launcherScrollShadows() {
+            var launcher = findChild(shell, "launcher");
+            var top = findChild(launcher, "launcherScrollFadeTop");
+            var bottom = findChild(launcher, "launcherScrollFadeBottom");
+            shell.gestureUp();
+            tryCompare(launcher, "fullyOpen", true, 2000);
+            verify(top.visible);
+            verify(bottom.visible);
+            compare(top.width, launcher.width);
+            compare(top.height, 10);
+            compare(top.y, Theme.launcherTabHeight);
+            compare(bottom.height, 20);
+            compare(bottom.y + bottom.height, launcher.height - launcher.dockHeight);
+            verify(launcher.dockHeight > 0);
+            // The dock's top edge, where the shadow ends.
+            var dock = findChild(shell, "quickLaunch");
+            fuzzyCompare(bottom.mapToItem(null, 0, bottom.height).y, dock.mapToItem(null, 0, 0).y, 0.5);
+            shell.gestureUp();
+            tryCompare(launcher, "visible", false, 2000);
+            verify(!launcher.scrollShadowsShown);
+            // Opening again: not while it slides, then there.
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", true, 2000);
+            verify(!top.visible);
+            tryCompare(launcher, "fullyOpen", true, 2000);
+            verify(top.visible);
+            verify(bottom.visible);
+            shell.gestureUp();
+            tryCompare(launcher, "visible", false, 2000);
         }
     }
 }

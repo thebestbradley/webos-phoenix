@@ -98,7 +98,7 @@ var ttsService = new Service("org.webosphoenix.tts");
 ttsService.register("speak", function (m) {
     var p = m.payload || {};
     var voice = typeof p.voice === "string" && /^[A-Za-z0-9._-]{1,40}$/.test(p.voice) ? p.voice : "";
-    tts.speak(String(p.text || ""), p.lang, voice).then(function () { m.respond({ returnValue: true }); },
+    tts.speak(String(p.text || ""), p.lang, voice, p.rate).then(function () { m.respond({ returnValue: true }); },
         function (e) { m.respond({ returnValue: false, errorCode: 1, errorText: e.message }); });
 });
 ttsService.register("stop", function (m) { tts.stop(); m.respond({ returnValue: true }); });

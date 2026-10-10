@@ -625,7 +625,10 @@
     // (enyo.windows.openPopup/openDashboard) and LunaSysMgr read the type
     // from the attributes. Browsers do not pass window features on, so the
     // runtime puts the type, height, icon, window name, clickableWhenLocked
-    // (a dashboard that takes taps on the lock screen) and a popup alert's
+    // (a dashboard that takes taps on the lock screen), a dashboard's
+    // persistent (no swipe dismisses it: SysUpdateService.js's update
+    // dashboard) and webosDragMode "manual" (it takes its own drags:
+    // enyo.Dashboard), and a popup alert's
     // sound and sound class (AlertWindow::setSoundParams: {"sound": path,
     // "soundclass": "ringtones"}) in the new window's URL fragment
     // (#phoenixWindow=popupalert&phoenixHeight=150), where the simulator's
@@ -648,6 +651,8 @@
                      + (attrs.icon ? "&phoenixIcon=" + encodeURIComponent(attrs.icon) : "")
                      + (name ? "&phoenixName=" + encodeURIComponent(name) : "")
                      + (attrs.clickableWhenLocked ? "&phoenixClickableWhenLocked=1" : "")
+                     + (attrs.persistent ? "&phoenixPersistent=1" : "")
+                     + (attrs.webosDragMode === "manual" || attrs.webosDragMode === true ? "&phoenixDragMode=manual" : "")
                      + (attrs.sound ? "&phoenixSound=" + encodeURIComponent(attrs.sound) : "")
                      + (attrs.soundclass ? "&phoenixSoundClass=" + encodeURIComponent(attrs.soundclass) : "");
             }
@@ -1728,7 +1733,15 @@
         "com.palm.app.agendaview": "org.webosphoenix.agenda",
         "com.palm.app.exhibitionpreferences": { id: "org.webosphoenix.settings", params: { page: "exhibition" } },
         // The Developer Mode Enabler (Just Type's Konami code; revealDeveloperMode).
-        "com.palm.app.devmodeswitcher": { id: "org.webosphoenix.settings", params: { page: "devmode" } }
+        "com.palm.app.devmodeswitcher": { id: "org.webosphoenix.settings", params: { page: "devmode" } },
+        // The App Catalog, the Marketplace now. "Find More..." at the end of
+        // the accounts library's "Add an Account" list opens it with
+        // {common: {sceneType: "search", params: {type: "connector",
+        // connectorInfo: {searchBarTitle, searchBarIcon, types}}}}
+        // (enyo-1.0 lib/accounts/source/add-account.js:85-92,
+        // entry-first-launch.js:265-271); the Marketplace gets those params
+        // as they are and opens Connections.
+        "com.palm.app.enyo-findapps": "org.webosphoenix.marketplace"
     };
     var HELP_TOPICS = { universalsearch: "justtype", accountsmgr: "accounts", phone: "phone", messaging: "messaging",
                         camera: "camera", photos: "photos", music: "music", launcher: "launcher", notifications: "notifications" };
@@ -2995,21 +3008,85 @@
     // ---- Accounts (com.palm.service.accounts) ---------------------------------------
     //
     // As in app-services/com.palm.service.accounts: accounts are
-    // com.palm.account:1 objects in db8, templates are the JSON files under
-    // /usr/palm/public/accounts/<templateId>/ (only the templates released
-    // with Open webOS exist: the HP webOS profile and the email templates),
+    // com.palm.account:1 objects in db8, templates are JSON files (below),
     // and listAccounts/getAccountInfo "annotate" accounts with their
-    // template. Credentials are kept per account in localStorage. There are
-    // no transports: a new account is not validated against a server.
+    // template. Credentials are kept per account in localStorage. This block
+    // serves the templates released with Open webOS (com.palm.*: the HP webOS
+    // profile and the email templates), which have no transport here: a new
+    // account is not validated against a server. The others (CardDAV and
+    // CalDAV, the Subscribed Calendar, Jabber, connectors whose service
+    // runs here) go through the block "CardDAV and CalDAV" (Synergy
+    // transport), which calls their callbacks.
+    //
+    // Templates are found as the service finds them: every *.json in each
+    // folder of /usr/palm/public/accounts and of the installed apps' accounts
+    // folder (accounts.js getTemplatePaths, lines 26-66), the first of each
+    // templateId kept (addTemplate, lines 92-96). A page cannot list a
+    // folder, so here they are:
+    //   - /usr/palm/public/accounts/<dir>/<dir>.json for each folder
+    //     runtime/rootfs.json mounts there (BUILTIN_TEMPLATES if it cannot
+    //     be read), and the runtime's own (the simulated Jabber account);
+    //   - for each app the user installed, the templates its package had in
+    //     the app's public/accounts/<dir>/ (the connector layout,
+    //     docs/SYNERGY-CONNECTORS.md 3.1), which installPackage records
+    //     (runtime.recordAccountTemplates); else, for an app installed some
+    //     other way, public/accounts/<appId>/<appId>.json.
+    // The list is read again when apps are installed or removed, as the
+    // service reloads on appsChanged (handlers/apps-changed.js), and a
+    // changed list is signalled in tempdb as updateAppTemplateList does
+    // (accounts.js lines 142-190): the accounts library watches it
+    // (get-templates.js line 28), so an open "Add an Account" list shows a
+    // connector installed meanwhile.
     (function accountsService() {
-        var TEMPLATE_FILES = [
+        var PUBLIC_ACCOUNTS = "/usr/palm/public/accounts/";
+        var BUILTIN_TEMPLATES = [
             "/usr/palm/public/accounts/com.palm.palmprofile/com.palm.palmprofile.json",
             "/usr/palm/public/accounts/com.palm.othermail/com.palm.othermail.json",
             "/usr/palm/public/accounts/com.palm.imap/com.palm.imap.json",
-            "/usr/palm/public/accounts/com.palm.pop/com.palm.pop.json"
+            "/usr/palm/public/accounts/com.palm.pop/com.palm.pop.json",
+            "/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json",
+            "/usr/palm/public/accounts/com.webosphoenix.webcal/com.webosphoenix.webcal.json"
         ];
+        var RUNTIME_TEMPLATES = ["/usr/share/phoenix/runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json"];
+        var PACKAGED = "accountTemplateFiles";   // store: {appId: [paths in the app]}
         var ACCOUNT_KIND = "com.palm.account:1";
+        var SIGNAL_KIND = "com.palm.signaling:1";
         var templateCache = null;
+
+        function builtinFiles() {
+            var mounts;
+            try { mounts = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/runtime/rootfs.json")).mounts; }
+            catch (e) { return BUILTIN_TEMPLATES; }
+            var out = [];
+            Object.keys(mounts || {}).sort().forEach(function (prefix) {
+                if (prefix.indexOf(PUBLIC_ACCOUNTS) !== 0) return;
+                var dir = prefix.slice(PUBLIC_ACCOUNTS.length).replace(/\/$/, "");
+                if (dir && dir.indexOf("/") < 0) out.push(PUBLIC_ACCOUNTS + dir + "/" + dir + ".json");
+            });
+            return out;
+        }
+
+        // The apps the user installed, and the template files in each.
+        function installedFiles() {
+            var packaged = store.get(PACKAGED, {}), seen = {}, out = [];
+            launchPoints().forEach(function (lp) {
+                if (!lp.removable || lp.dynamic || seen[lp.id]) return;
+                seen[lp.id] = true;
+                var base = "/usr/palm/applications/" + lp.id + "/";
+                (packaged[lp.id] || ["public/accounts/" + lp.id + "/" + lp.id + ".json"]).forEach(function (rel) {
+                    out.push(base + rel);
+                });
+            });
+            return out;
+        }
+
+        // An installed app's template files (paths in the app), or null
+        // when it is removed.
+        runtime.recordAccountTemplates = function (appId, paths) {
+            var all = store.get(PACKAGED, {});
+            if (paths && paths.length) all[appId] = paths; else delete all[appId];
+            store.set(PACKAGED, all);
+        };
 
         function absolutize(dir, icons) {
             if (!icons) return;
@@ -3018,15 +3095,18 @@
             });
         }
 
-        function templates() {
+        // Every template, sorted by name.
+        function allTemplates() {
             if (templateCache) return clone(templateCache);
-            var list = [];
-            TEMPLATE_FILES.forEach(function (file) {
+            var list = [], ids = {};
+            builtinFiles().concat(RUNTIME_TEMPLATES, installedFiles()).forEach(function (file) {
                 var text = PalmSystem.getResource(file);
                 if (!text) return;
                 var dir = file.slice(0, file.lastIndexOf("/") + 1), parsed;
                 try { parsed = JSON.parse(text); } catch (e) { console.warn("[phoenix-runtime] bad account template " + file); return; }
                 (Array.isArray(parsed) ? parsed : [parsed]).forEach(function (t) {
+                    if (!t || !t.templateId || ids[t.templateId]) return;
+                    ids[t.templateId] = true;
                     absolutize(dir, t.icon);
                     (t.capabilityProviders || []).forEach(function (cp) { absolutize(dir, cp.icon); });
                     list.push(t);
@@ -3038,7 +3118,35 @@
             templateCache = list;
             return clone(list);
         }
-        runtime.accountTemplates = templates;
+        runtime.accountTemplates = allTemplates;
+
+        // A template the transport block serves: one whose capabilities are
+        // implemented by a service on the simulated bus. The original
+        // release's (com.palm.*) stay here: their mail services are stand-ins
+        // (block "Email transports").
+        function hasTransport(t) {
+            if (/^com\.palm\./.test(t.templateId)) return false;
+            return (t.capabilityProviders || []).some(function (cp) {
+                var m = /^(?:palm|luna):\/\/([^\/]+)/.exec(cp.implementation || "");
+                return !!(m && runtime.services[m[1]]);
+            });
+        }
+        runtime.accountTemplateHasTransport = hasTransport;
+
+        function templates() {
+            return allTemplates().filter(function (t) { return !hasTransport(t); });
+        }
+
+        runtime.onAppsChanged(function () {
+            templateCache = null;
+            var ids = allTemplates().map(function (t) { return t.templateId; }).sort().toString();
+            var was = (callNow("palm://com.palm.tempdb/find", { query: { from: SIGNAL_KIND,
+                where: [{ prop: "appId", op: "=", val: "com.palm.accounts.templates" }] } }).results || [])[0];
+            if (was && was.templates === ids) return;
+            callNow("palm://com.palm.tempdb/del", { query: { from: SIGNAL_KIND,
+                where: [{ prop: "appId", op: "=", val: "com.palm.accounts.templates" }] } });
+            callNow("palm://com.palm.tempdb/put", { objects: [{ _kind: SIGNAL_KIND, appId: "com.palm.accounts.templates", templates: ids }] });
+        });
 
         function templateFor(id) {
             return templates().filter(function (t) { return t.templateId === id; })[0];
@@ -3958,9 +4066,11 @@
     // An app opened by another one to show something ({returnToCaller}:
     // launch params $caller, e.g. Photos from the Assistant's thumbnail): a
     // Back it does not handle itself (no preventDefault, as webOS apps said
-    // they took the gesture) closes its card, and the caller's card, the one
-    // beside it in the stack it joined, comes back. As LunaSysMgr's back at
-    // an app's root went to card view, this goes back to where the user was.
+    // they took the gesture) brings the caller's card, the one beside it in
+    // the stack it joined, back to the front, and this card goes behind it,
+    // still open (the owner: the opened app stays, as a card in the stack,
+    // to come back to). As LunaSysMgr's back at an app's root went to card
+    // view, this goes back to where the user was.
     // Returns whether the app took it: false (nothing stopped the key, no
     // caller to go back to) and the shell minimizes the card to card view,
     // as WebAppMgr handed an unhandled Back back to LunaSysMgr
@@ -3992,7 +4102,9 @@
                 } catch (x) { /* another origin, or closed */ }
             }
             if (lp && typeof lp.$caller === "string" && lp.$caller) {
-                try { global.close(); } catch (x) { /* ignore */ }
+                // {returnTo: true}: the caller's card as it is, in front, this
+                // one going behind it (the shell's cardReturnRequested).
+                host.postToHost("launch", { id: lp.$caller, params: {}, returnTo: true });
                 return true;
             }
         }
@@ -4212,6 +4324,24 @@
         return { editable: !!el, canSelectAll: !!el, canCut: !!el && hasSelection, canCopy: hasSelection, canPaste: !!el };
     };
 
+    // ---- Share: what the app menu's Share shares --------------------------------------
+    //
+    // Every app menu has Share after Edit (a Phoenix addition: webOS had no
+    // system share; docs/SHARE-AND-FILES.md). It shares what the app says
+    // it is showing, __phoenixRuntime.setShareContent(function () {return
+    // {title, text, url, files}}) (Memos: the memo; the browser: the page),
+    // or else the text selected on the page; nothing, and Share is dimmed.
+    // Phoenix's React apps say it with AppMenu's `share`.
+    var shareProvider = null;
+    runtime.setShareContent = function (fn) { shareProvider = typeof fn === "function" ? fn : null; };
+    runtime.shareContent = function () {
+        var c = null;
+        try { c = shareProvider ? shareProvider() : null; } catch (e) { c = null; }
+        if (c && (c.text || c.url || (c.files && c.files.length))) return c;
+        var text = selectedText().replace(/^\s+|\s+$/g, "");
+        return text ? { text: text } : null;
+    };
+
     function pasteText() {
         var clip = global.navigator && global.navigator.clipboard;
         if (!clip || !clip.readText)
@@ -4283,6 +4413,37 @@
             var at = this.controls ? this.controls.indexOf(edit) : -1;
             if (at > 0)
                 this.controls.unshift(this.controls.splice(at, 1)[0]);
+            // Share right after Edit (runtime.shareContent), its own item.
+            if (this.$.phoenixShare)
+                return;
+            var share = this.createComponent({ name: "phoenixShare", caption: "Share", onclick: "phoenixShareClick" }, { owner: this });
+            at = this.controls ? this.controls.indexOf(share) : -1;
+            var editAt = this.controls ? this.controls.indexOf(edit) : -1;
+            if (at > editAt + 1 && editAt >= 0) {
+                this.controls.splice(at, 1);
+                this.controls.splice(editAt + 1, 0, share);
+            }
+            if (this.$.client && this.$.client.children) {
+                var kids = this.$.client.children, ci = kids.indexOf(share), ei = kids.indexOf(edit);
+                if (ci > ei + 1 && ei >= 0) {
+                    kids.splice(ci, 1);
+                    kids.splice(ei + 1, 0, share);
+                }
+            }
+        };
+        // Share is dimmed when there is nothing to share, read as the menu opens.
+        var prepareOpen = proto.prepareOpen;
+        proto.prepareOpen = function () {
+            var r = prepareOpen.apply(this, arguments);
+            if (r && this.$.phoenixShare && this.$.phoenixShare.setDisabled)
+                this.$.phoenixShare.setDisabled(!runtime.shareContent());
+            return r;
+        };
+        proto.phoenixShareClick = function () {
+            var c = runtime.shareContent();
+            this.close();
+            if (c && runtime.share)
+                runtime.share(c);
         };
     }
 
@@ -4466,6 +4627,7 @@
     // when the user flips a toggle in the system menu (docs/APP-RUNTIME.md).
     (function settingsServices() {
         var KEY = "settings:state";
+        var ROTATION_LOCK_ORIENTATIONS = ["up", "down", "left", "right"];
 
         // Simulated access points. "password" is what the simulated AP accepts.
         var AIR = [
@@ -4540,9 +4702,20 @@
                              state: s.wifi.connected === a.ssid ? "ipConfigured" : connecting === a.ssid ? "connecting" : "" };
                 }),
                 bluetoothOn: !!s.bluetooth.powered,
+                // How many devices are paired: none, and the system menu
+                // turning Bluetooth on opens its preferences to pair one (the
+                // original asked the Bluetooth app's "numofprofiles",
+                // StatusBarServicesConnector.cpp:2573-2632).
+                bluetoothPairedCount: s.bluetooth.paired.length,
                 airplaneMode: !!s.offlineMode,
                 brightness: s.settings.picture.backlight,
+                // The rotation lock, and the orientation it holds: the
+                // preference keeps it, as LunaSysMgr's rotationLock kept the
+                // orientation (Preferences.cpp:196-201, read at boot by
+                // WindowServer::bootupFinished). true: locked, the shell
+                // picks how the UI is turned now.
                 rotationLocked: !!p.rotationLock,
+                rotationLockOrientation: ROTATION_LOCK_ORIENTATIONS.indexOf(p.rotationLock) >= 0 ? p.rotationLock : "",
                 timeFormat: p.timeFormat === "HH24" ? "HH24" : "HH12",
                 muted: !!s.audio.muted,
                 // What the shell's system sounds follow (SystemSounds.qml):
@@ -6309,8 +6482,14 @@
                         sys["/setPreferences"]({ x_palm_textinput: next }, function () {}, { cancelled: function () { return false; } });
                     }
                 }
-                if ("rotationLocked" in st && !!st.rotationLocked !== !!prefs().rotationLock)
-                    sys["/setPreferences"]({ rotationLock: !!st.rotationLocked }, function () {}, { cancelled: function () { return false; } });
+                if ("rotationLocked" in st) {
+                    // Locked to the orientation the shell says, else just on.
+                    var lock = !st.rotationLocked ? false
+                             : ROTATION_LOCK_ORIENTATIONS.indexOf(st.rotationLockOrientation) >= 0 ? st.rotationLockOrientation : true;
+                    var was = prefs().rotationLock;
+                    if (lock !== was && !(lock === true && ROTATION_LOCK_ORIENTATIONS.indexOf(was) >= 0))
+                        sys["/setPreferences"]({ rotationLock: lock }, function () {}, { cancelled: function () { return false; } });
+                }
                 if (toJson(s) !== before) save(s);
                 else changed();
             } finally {
@@ -8126,7 +8305,29 @@
 
             var v = { version: SEED_VERSION, nodes: nodes, mediaSeen: {} };
             addSampleFiles(v, samples);
+            addFactoryRingtones(v);
             return v;
+        }
+
+        // The ringtones a device came with on its USB drive
+        // (shell/assets/sounds/phoenix/ringtones, mounted at
+        // /media/internal/ringtones): Phoenix's Flurry.mp3, the Clock's
+        // default alarm (com.palm.app.clock utility/alarm.js:368,
+        // alarmdbmanager.js:100), whose original was never released. Added
+        // once, also to a drive seeded before it shipped; deleting it sticks.
+        var FACTORY_RINGTONES = ["Flurry.mp3"];
+        function addFactoryRingtones(v) {
+            if (v.factoryRingtones) return false;
+            var sm = Date.parse("2026-09-01T08:00:00Z");
+            FACTORY_RINGTONES.forEach(function (n) {
+                var p = MEDIA_ROOT + "/ringtones/" + n;
+                if (v.nodes[p]) return;
+                for (var d = parentOf(p); !v.nodes[d]; d = parentOf(d))
+                    v.nodes[d] = { t: "d", m: sm, mode: 493, ro: false };
+                v.nodes[p] = { t: "f", m: sm, mode: 420, ro: false, ref: p, size: -1 };
+            });
+            v.factoryRingtones = true;
+            return true;
         }
 
         // The demo videos (with their subtitles) and documents, also added
@@ -8175,8 +8376,10 @@
             if (!v || v.version !== SEED_VERSION || !v.nodes) {
                 v = seed();
                 store.set(VFS_KEY, v);
-            } else if (addSampleFiles(v, readSampleIndex())) {
-                save(v);
+            } else {
+                var added = addSampleFiles(v, readSampleIndex());
+                if (addFactoryRingtones(v)) added = true;
+                if (added) save(v);
             }
             syncDocumentIndex(v);
             return v;
@@ -10331,9 +10534,9 @@
     // (docs/SYNERGY.md).
     //
     // It also adds to the blocks above what a Synergy transport needs from
-    // the system, only for accounts of templates listed in DAV_TEMPLATES:
-    //   - com.palm.service.accounts lists the template (read from
-    //     /usr/palm/public/accounts/com.webosphoenix.dav/), creates, modifies
+    // the system, only for accounts of templates whose service is on the
+    // simulated bus (templates(), found by the block "Accounts"):
+    //   - com.palm.service.accounts lists the templates, creates, modifies
     //     and deletes its accounts, and calls the capability callbacks as
     //     app-services' handlers do: onCreate then onEnabled(true) after
     //     createAccount (notify-created.js), onEnabled(true/false) when
@@ -10353,12 +10556,6 @@
     (function davTransport() {
         var SERVICE = "org.webosphoenix.service.dav";
         var SERVICE_DIR = "/usr/palm/applications/org.webosphoenix.dav/service/";
-        // And the simulated Jabber (XMPP) account (block "Instant
-        // messaging"), whose accounts need the same handling.
-        var DAV_TEMPLATES = ["/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json",
-                             // The Subscribed Calendar (a public .ics, one way: lib/webcal.js).
-                             "/usr/palm/public/accounts/com.webosphoenix.webcal/com.webosphoenix.webcal.json",
-                             "/usr/share/phoenix/runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json"];
         var ACCOUNT_KIND = "com.palm.account:1";
         var LOCK_MS = 5 * 60 * 1000;
 
@@ -10427,26 +10624,13 @@
 
         // ---- Accounts: the template, its accounts and their callbacks ------------------------
 
-        var templateCache = null;
+        // The templates this block serves (runtime.accountTemplateHasTransport,
+        // block "Accounts"): CardDAV and CalDAV, the Subscribed Calendar (a
+        // public .ics, one way: lib/webcal.js), the simulated Jabber (XMPP)
+        // account (block "Instant messaging"), and any other whose service
+        // is on the simulated bus.
         function templates() {
-            if (templateCache) return clone(templateCache);
-            var list = [];
-            DAV_TEMPLATES.forEach(function (file) {
-                var text = PalmSystem.getResource(file), t;
-                if (!text) return;
-                try { t = JSON.parse(text); } catch (e) { console.warn("[phoenix-runtime] bad account template " + file); return; }
-                var dir = file.slice(0, file.lastIndexOf("/") + 1);
-                var abs = function (icons) {
-                    Object.keys(icons || {}).forEach(function (k) { if (icons[k].charAt(0) !== "/") icons[k] = dir + icons[k]; });
-                };
-                (Array.isArray(t) ? t : [t]).forEach(function (x) {
-                    abs(x.icon);
-                    (x.capabilityProviders || []).forEach(function (cp) { abs(cp.icon); });
-                    list.push(x);
-                });
-            });
-            templateCache = list;
-            return clone(list);
+            return runtime.accountTemplates().filter(runtime.accountTemplateHasTransport);
         }
         function templateFor(id) { return templates().filter(function (t) { return t.templateId === id; })[0]; }
         function isDav(templateId) { return !!templateFor(templateId); }
@@ -11064,6 +11248,10 @@
                 }
                 report(id, 13, { state: "installing", ipkUrl: path }, each, looks);
                 var files = pkg.files.map(function (f) { return { path: f.path.slice(app.dir.length), data: b64(f.data) }; });
+                // Its account templates, for the accounts service (block "Accounts").
+                runtime.recordAccountTemplates(id, files.map(function (f) { return f.path; }).filter(function (rel) {
+                    return /^public\/accounts\/[^\/]+\/[^\/]+\.json$/i.test(rel);
+                }));
                 return hostInstall("install", id, files).then(function (r) {
                     if (!r.ok) throw Object.assign(new Error(r.error || "Install failed"), { code: "HOST" });
                     report(id, 30, { state: "installed", installBasePath: "/media/cryptofs/apps", skipped: skipped }, each, {});
@@ -11088,6 +11276,7 @@
                     report(id, 25, { state: "remove failed", reason: r.error }, each);
                     throw Object.assign(new Error(r.error || "Remove failed"), { code: -7 });
                 }
+                runtime.recordAccountTemplates(id, null);
                 report(id, 31, { state: "removed" }, each);
             });
         }
@@ -12247,7 +12436,10 @@
     // what osInfo/query says (webos_release, webos_build_id). A bundle here is
     // the simulator's stand-in for a RAUC bundle: only its manifest, as text
     // ("[update]" compatible=phoenix-sim, version=, build=;
-    // server/updates/bin/publish.php --simulator makes one). Installing writes
+    // server/updates/bin/updates.php simulator makes one, or the catalog
+    // server's admin API: POST /api/admin/updates?compatible=phoenix-sim).
+    // The feed is the catalog server's (/etc/palm/updates.json:
+    // http://127.0.0.1:8088/updates/, server/marketplace). Installing writes
     // the version to the other slot; com.palm.power/shutdown/machineReboot
     // then starts the primary slot (phoenix-sim restarts itself; a browser
     // page reloads).
@@ -12522,7 +12714,6 @@
             if (!open) return;
             var o = open;
             open = null;
-            global.removeEventListener("message", onMessage);
             if (o.frame.parentNode) o.frame.parentNode.removeChild(o.frame);
             try { if (o.focus && o.focus.focus) o.focus.focus(); } catch (e) { /* gone */ }
             o.resolve(result);
@@ -12534,6 +12725,20 @@
             else if (m.type === "leaving") open.frame.style.background = "rgba(0, 0, 0, 0)";
             else if (m.type === "done") closeSheet(m.result || { action: "cancel" });
         }
+        // The sheet's messages are the runtime's alone: taken first (this
+        // listener is added before the page's scripts run) and kept from
+        // the page's own listeners. Enyo 1's (windows/manager.js:156-158,
+        // CrossAppUI.js:110, Dashboard.js:137) read every message's data
+        // as a string and threw on these objects.
+        global.addEventListener("message", function (e) {
+            var m = e.data;
+            // Only the messages of a sheet this page opened (the sheet's own
+            // page runs this runtime too, and its messages are its page's).
+            if (!m || typeof m !== "object" || !open || m.phoenixSheet !== open.id)
+                return;
+            e.stopImmediatePropagation();
+            onMessage(e);
+        }, true);
         function showSheet(kind, request) {
             if (open) closeSheet({ action: "cancel" });
             return new Promise(function (resolve) {
@@ -12553,7 +12758,6 @@
                 frame.setAttribute("allowtransparency", "true");
                 frame.addEventListener("load", function () { st.background = "rgba(0, 0, 0, 0.45)"; });
                 open = { frame: frame, id: id, resolve: resolve, request: request, focus: doc.activeElement };
-                global.addEventListener("message", onMessage);
                 (doc.body || doc.documentElement).appendChild(frame);
                 try { frame.focus(); } catch (e) { /* ignore */ }
             });
@@ -12613,6 +12817,11 @@
             return /^\/media\/internal\//.test(path) && !/\/\./.test(path) && /\.(jpe?g|png|gif|webp|bmp|heic|mp4|m4v|mov|webm)$/i.test(path);
         }
 
+        // The app menu's Share (and anything else in the page): the sheet.
+        runtime.share = function (content) {
+            return callP("luna://org.webosphoenix.share/open", content || {});
+        };
+
         register(["org.webosphoenix.share"], {
             "/open": function (p, reply) {
                 var files = (p.files || []).filter(function (f) { return f && f.path; }).map(function (f) {
@@ -12627,12 +12836,21 @@
                         return reply(ok({ action: "app", appId: r.appId }));
                     }
                     if (r.action === "photos") {
-                        var f = s.files[0];
-                        if (inPhotos(f.path) && f.path.indexOf(MEDIA + "/samples/") !== 0)
-                            return reply(ok({ action: "photos", path: f.path, already: true }));
-                        var dest = CAMERA_DIR + "/" + f.path.replace(/^.*\//, "");
-                        return writeTo(dest, { from: f.path }, false).then(function () {
-                            reply(ok({ action: "photos", path: dest }));
+                        // Every file shared (Files shares several), one by
+                        // one; those Photos has already stay where they are.
+                        var saved = [], already = true;
+                        var chain = s.files.reduce(function (prev, f) {
+                            return prev.then(function () {
+                                if (inPhotos(f.path) && f.path.indexOf(MEDIA + "/samples/") !== 0) { saved.push(f.path); return; }
+                                already = false;
+                                var dest = CAMERA_DIR + "/" + f.path.replace(/^.*\//, "");
+                                return writeTo(dest, { from: f.path }, false).then(function () { saved.push(dest); });
+                            });
+                        }, Promise.resolve());
+                        return chain.then(function () {
+                            var res = { action: "photos", path: saved[0], paths: saved };
+                            if (already) res.already = true;
+                            reply(ok(res));
                         }, function (e) { reply(fail(-1, String(e && e.message || e))); });
                     }
                     if (r.action === "files") {
@@ -14176,13 +14394,16 @@
             try { return ss && ss.getVoices ? ss.getVoices() : []; } catch (e) { return []; }
         }
         var tts = {
-            speak: function (text, lang, voice) {
+            // rate: how fast (1 normal; Settings > Assistant > Speaking speed).
+            speak: function (text, lang, voice, rate) {
                 if (!text) return Promise.resolve();
-                if (hostHas()) return hostAsk("speak", { text: String(text).slice(0, 2000), lang: lang || "en", voice: voice || "" });
+                rate = typeof rate === "number" && rate >= 0.5 && rate <= 2 ? rate : 1;
+                if (hostHas()) return hostAsk("speak", { text: String(text).slice(0, 2000), lang: lang || "en", voice: voice || "", rate: rate });
                 var ss = global.speechSynthesis;
                 if (ss && pageVoices().length && global.SpeechSynthesisUtterance) {
                     var u = new global.SpeechSynthesisUtterance(String(text));
                     u.lang = lang || "en";
+                    u.rate = rate;
                     ss.cancel();
                     ss.speak(u);
                     return Promise.resolve();
@@ -14278,7 +14499,7 @@
         var serviceMethods = {};
         ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
          "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
-         "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary",
+         "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "sessionPhrase", "vocabulary",
          "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps", "markRead",
          "connect", "retry", "voice"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
@@ -14305,7 +14526,7 @@
             "/speak": function (p, reply) {
                 if (typeof p.text !== "string" || !p.text.trim()) return reply(fail(-1, "need \"text\""));
                 var voice = typeof p.voice === "string" && /^[A-Za-z0-9._-]{1,40}$/.test(p.voice) ? p.voice : "";
-                tts.speak(p.text, p.lang, voice).then(function () { reply(ok({})); }, function (e) { reply(fail(1, e.message)); });
+                tts.speak(p.text, p.lang, voice, p.rate).then(function () { reply(ok({})); }, function (e) { reply(fail(1, e.message)); });
             },
             "/stop": function (p, reply) { tts.stop().then(function () { reply(ok({})); }); },
             "/getStatus": function (p, reply) {
@@ -15155,6 +15376,11 @@
     //   getBootStatus {subscribe}  -> {finished, firstUse}: firstUse while the
     //                      shell runs First Use (its minimal UI), as the
     //                      shell last said (applyHostStatus {firstUse})
+    //   launchModalApp {subscribe, callerId, launchId, params}  launchId as a
+    //                      modal card over the maximized caller's card:
+    //                      {launchResult, modalId}, then launched or
+    //                      {errorText, errorCode}, then {dismissResult}
+    //   dismissModalApp {subscribe, modalId}  takes it away
     //   subscribeToSystemUI {subscribe}  events for luna-systemui, which it
     //                      turns into popup alerts (data/SystemManagerService.js):
     //                      here only "registerForLocationServiceNotifications"
@@ -15365,6 +15591,40 @@
             if (typeof p.appid !== "string") return reply(fail(-1, "appid (string) is required"));
             host.postToHost("touchToShare", { op: "transferred", appId: p.appid });
             reply(ok());
+        };
+        // Modal cards (SystemService.cpp:4200-4600 launchModalApp,
+        // 4030-4190 dismissModalApp): the calling app, maximized, launches
+        // another as a 320 x 480 card over its own; on the subscription it
+        // hears that the launch began ({launchResult, modalId}), then that
+        // it was launched or why not ({errorText, errorCode}), then why the
+        // modal card went ({dismissResult}). The shell decides
+        // (CardView.addModal) and answers through modalStatus.
+        var modalCalls = {}, modalCount = 0;
+        sm["/launchModalApp"] = function (p, reply, ctx) {
+            if (!p.subscribe) return reply(fail(-1, "Missing parameter: subscribe"));
+            if (typeof p.callerId !== "string" || !p.callerId) return reply(fail(1, "Missing parameter: callerId"));
+            if (typeof p.launchId !== "string" || !p.launchId) return reply(fail(1, "Missing parameter: launchId"));
+            var modalId = "MODAL_WINDOW_" + p.callerId + "_" + p.launchId + "_" + (++modalCount);
+            modalCalls[modalId] = { launch: reply, dismiss: null };
+            reply(ok({ launchResult: "Modal window launch initiated", modalId: modalId, subscribed: true }));
+            host.postToHost("launchModal", { modalId: modalId, callerId: p.callerId, launchId: p.launchId,
+                                             params: p.params && typeof p.params === "object" ? p.params : null });
+        };
+        sm["/dismissModalApp"] = function (p, reply) {
+            if (!p.subscribe) return reply(fail(-1, "Missing parameter: subscribe"));
+            var m = typeof p.modalId === "string" ? modalCalls[p.modalId] : null;
+            if (!m) return reply(fail(-1, "No modal window is active"));
+            m.dismiss = reply;
+            reply(ok({ dismissResult: "Initiating removal of active modal window", subscribed: true }));
+            host.postToHost("dismissModal", { modalId: p.modalId });
+        };
+        // The shell: how the modal card modalId went.
+        runtime.modalStatus = function (modalId, r) {
+            var m = modalCalls[modalId];
+            if (!m) return;
+            m.launch(r);
+            if (r && r.dismissResult !== undefined && m.dismiss) m.dismiss(r);
+            if (!(r && r.returnValue === true && r.launchResult !== undefined)) delete modalCalls[modalId];
         };
         // An app answering {sendDataToShare} (the Isis browser:
         // {data: {target: url, type: "rawdata", mimetype: "text/html"}}).

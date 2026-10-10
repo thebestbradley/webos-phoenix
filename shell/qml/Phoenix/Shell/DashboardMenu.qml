@@ -163,11 +163,15 @@ Item {
         required property real progress
         required property var model
 
-        // Ongoing activities (a download, an install) are persistent: they
-        // stay until they end (DashboardWindow::persistent, honoured at
-        // :345-347; the window attribute that made one was set in the closed
-        // WebAppManager, and its name is not in the open sources).
-        readonly property bool persistent: ongoing
+        // Persistent: nothing but its app takes it away
+        // (DashboardWindow::persistent, honoured at :345-347): ongoing
+        // activities (a download, an install) until they end, and dashboard
+        // windows opened {persistent: true} (luna-systemui's update
+        // dashboard, SysUpdateService.js:184-188).
+        readonly property bool persistent: ongoing || model.persistent === true
+        // A dashboard window that takes its own drags (webosDragMode
+        // "manual"; see the swipe MouseArea).
+        readonly property bool manualDrag: windowKey !== "" && model.manualDrag === true
 
         // Where the row goes back to: newest at the top (:541-560, 863-894),
         // under the live activities (Phoenix).
@@ -284,6 +288,7 @@ Item {
                 fillMode: Image.Stretch
             }
             SwipeClearLabel {
+                visible: !row.persistent
                 distance: content.x
                 rowWidth: row.width
             }
@@ -333,12 +338,24 @@ Item {
                 id: swipe
                 objectName: "dashboardSwipe"
                 anchors.fill: parent
+                // Over the app's dashboard window: the row has the touches
+                // and passes them on (below); under the answers' buttons
+                // otherwise.
+                z: row.windowKey !== "" ? 3 : 0
                 enabled: !remove.running
                 // 0: not yet past the tap radius, a tap; 1: sideways, the
                 // row follows; 2: up or down, the list's (:231-257).
                 property int mode: 0
                 property point start
                 property real lastX: 0
+                // The container had the touches on a dashboard window and
+                // passed a tap on to it (handleTap, :1104-1146). A window
+                // that takes its own drags (webosDragMode "manual":
+                // enyo.Dashboard, Dashboard.js:107) got the press, moves and
+                // release of a touch that began on it at rest right of its
+                // 50 px badge, unless it went up or down first, which
+                // cancels it for the window (:193-217, 245-306, 386-412).
+                property bool forwarding: false
 
                 onPressed: (m) => {
                     snap.stop();
@@ -346,6 +363,10 @@ Item {
                     start = p;
                     lastX = p.x;
                     mode = 0;
+                    forwarding = row.manualDrag && !(menu.drawer && menu.drawer.selecting)
+                                 && content.x === 0 && m.x > Theme.dashboardBadgeWidth;
+                    if (forwarding)
+                        content.pointer("down", m.x, m.y);
                 }
                 onPositionChanged: (m) => {
                     var p = mapToItem(menu, m.x, m.y);
@@ -353,6 +374,8 @@ Item {
                         var dx = p.x - start.x, dy = p.y - start.y;
                         if (dx * dx + dy * dy < Theme.tapRadius * Theme.tapRadius) {
                             lastX = p.x;
+                            if (forwarding)
+                                content.pointer("move", m.x, m.y);
                             return;
                         }
                         if (Math.abs(dx) > Math.abs(dy)) {
@@ -361,18 +384,31 @@ Item {
                             menu.dragging = true;
                         } else {
                             mode = 2;
+                            if (forwarding) {
+                                content.pointer("cancel", m.x, m.y);
+                                forwarding = false;
+                            }
                         }
                     }
-                    if (mode === 1 && !(menu.drawer && menu.drawer.selecting))
+                    if (forwarding)
+                        content.pointer("move", m.x, m.y);
+                    else if (mode === 1 && !(menu.drawer && menu.drawer.selecting))
                         content.x = Math.max(0, content.x + p.x - lastX);
                     lastX = p.x;
                 }
                 // :329-400: dropped past a quarter of the width, gone;
                 // otherwise back to its place. Taken by the list (a scroll,
                 // mouseWasGrabbedByParent, DashboardMenu.qml:9-11): back.
-                onReleased: {
+                onReleased: (m) => {
                     preventStealing = false;
                     menu.dragging = false;
+                    if (forwarding) {
+                        forwarding = false;
+                        // Not past the tap radius: a tap.
+                        content.pointer(mode === 0 ? "tapup" : "up", m.x, m.y);
+                        mode = 3;
+                        return;
+                    }
                     if (mode === 1 && !row.persistent
                             && Math.abs(content.x) > content.width * Theme.dashboardDismissRatio)
                         remove.start();
@@ -380,19 +416,27 @@ Item {
                         snap.start();
                 }
                 onCanceled: {
+                    if (forwarding)
+                        content.pointer("cancel", lastX, start.y);
+                    forwarding = false;
                     mode = 2;
                     preventStealing = false;
                     menu.dragging = false;
                     if (content.x !== 0)
                         snap.start();
                 }
-                // A tap: its app, and the notification is done with.
-                onClicked: {
+                // A tap: its app, and the notification is done with; on a
+                // dashboard window, the window's.
+                onClicked: (m) => {
                     if (mode !== 0 || content.x !== 0)
                         return;
                     if (menu.drawer && menu.drawer.selecting) {
                         if (row.selectable)
                             menu.drawer.toggleSelected(row.key);
+                        return;
+                    }
+                    if (row.windowKey !== "") {
+                        content.pointer("tap", m.x, m.y);
                         return;
                     }
                     menu.activated(row.appId, row.params);

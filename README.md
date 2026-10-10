@@ -496,6 +496,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-emergency.cjs` | Emergency Info, restricted Phone, Accessibility |
 | `node tools/test-location.cjs` | Location Services and permissions |
 | `node tools/test-appmanager.cjs` | Launch points apps add, handlers, the installer's queries |
+| `node tools/test-accounts.cjs` | Account templates found and reloaded as connectors are installed and removed, Accounts' "Find More ..." opening the Marketplace, Accounts launched with `{templateId}` |
 | `node tools/test-security.cjs` | Security policy, erase, USB drive mode, debugging |
 | `node tools/test-browser.cjs` | The browser: pages, downloads, printing (Save as PDF), find on page, private browsing, the content blocker, user agent and search engine preferences |
 | `node tools/test-links.cjs` | Links between apps: web, `mailto:`, `tel:`, `sms:` and web app links tapped in app pages open the right app with the link |

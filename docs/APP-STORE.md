@@ -395,6 +395,7 @@ layout, as the other Phoenix apps are.
 | Updates | Installed apps with updates; "Update all"; auto-update toggle (Wi-Fi only, charging) |
 | Installed | Everything installed from any source, with App info and Uninstall |
 | Settings | Sources (add a mirror or third-party index by URL, shows its key fingerprint), "Show adult apps" (the App Museum flags them), compatibility reports on/off |
+| Connections | The account types Phoenix connects to (Synergy), from the signed index's `accounts`: by capability, a page per type with where its data goes, and **Set up** (opens Accounts at the template). The Accounts app's "Find More..." opens it filtered. [SYNERGY-CONNECTORS.md](SYNERGY-CONNECTORS.md) 2.3 |
 
 The launcher's own "Add to Launcher" for PWAs and Files' `.ipk` install
 sheet go through the same device service, so there is one list of

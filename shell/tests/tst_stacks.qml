@@ -23,6 +23,21 @@ Item {
         system: SimSystemStatus {}
     }
 
+    // The lowest maximizeProgress since it was reset (test_returnToTheCaller).
+    property real lowestProgress: 1
+    // While set, every frame of a maximize or minimize is checked with it
+    // (test_backCardKeepsItsPlaceInTheStack): polling can miss the frames
+    // in the middle of a 300 ms animation on a slow machine.
+    property var onProgress: null
+    Connections {
+        target: shell.cardView
+        function onMaximizeProgressChanged() {
+            root.lowestProgress = Math.min(root.lowestProgress, shell.cardView.maximizeProgress);
+            if (root.onProgress)
+                root.onProgress(shell.cardView.maximizeProgress);
+        }
+    }
+
     TestCase {
         name: "Stacks"
         when: windowShown
@@ -30,6 +45,7 @@ Item {
         property var cv: shell.cardView
 
         function init() {
+            root.onProgress = null;
             while (windows.cards.count > 0)
                 windows.close(windows.cards.get(0).uid);
             cv.reorderUid = "";
@@ -199,6 +215,102 @@ Item {
             compare(cv.position, 0);
         }
 
+        // A finger moving through a long fan sends its cards to their new
+        // places over 200 ms OutCubic on each move (adjustHorizontally, then
+        // slideAllGroups -> CardGroup::animateOpen(200, OutCubic),
+        // CardWindowManager.cpp:1482-1490, 2495): the cards ease after the
+        // finger. Once the fan is at its end the stacks follow the finger
+        // directly (slideAllGroupsOnTouchUpdate).
+        function test_fanEasesAfterTheFinger() {
+            var first = windows.launch("org.webosphoenix.email", "");
+            for (var i = 0; i < 5; ++i)
+                windows.openChild(first);
+            wait(50);
+            cv.jumpTo(0);
+            wait(50);
+            var uid = cv.groups[0].uids[3];
+            var card = cv.cardItem(uid);
+            var y = cv.cardOriginY;
+            mousePress(cv, 60, y);
+            mouseMove(cv, 60 + Theme.tapRadius + 2, y);
+            // Each move restarts the 200 ms ease from where the card is.
+            var steps = 0;
+            var lag = 0;
+            for (var k = 1; k <= 4; ++k) {
+                var before = card.x;
+                mouseMove(cv, 60 + Theme.tapRadius + 2 + 12 * k, y);
+                compare(cv.layoutAnimationDuration, Theme.cardFanDuration, "a move in the fan eases");
+                var target = cv.layout.cards[uid].cx - card.width / 2;
+                if (Math.abs(target - before) > 1) {
+                    steps++;
+                    // Not there on the move itself: it eases after it.
+                    if (Math.abs(card.x - target) > 0.5)
+                        lag++;
+                }
+                wait(20);
+            }
+            verify(steps > 0, "the fan moved");
+            compare(lag, steps, "the cards ease after the finger, not jump with it");
+            var last = cv.layout.cards[uid].cx - card.width / 2;
+            tryVerify(function () { return Math.abs(card.x - last) < 0.5; }, 1000, "and arrive");
+            // On to the end of the fan and beyond: the stacks themselves now
+            // follow the finger, at once.
+            for (k = 1; k <= 30 && cv.position === 0; ++k)
+                mouseMove(cv, 60 + Theme.tapRadius + 2 + 48 + 25 * k, y);
+            verify(cv.position < 0, "past the fan's end the stack pans (rubber band)");
+            compare(cv.layoutAnimationDuration, 0, "following the finger directly");
+            mouseRelease(cv, 300, y);
+            tryCompare(cv, "position", 0, 2000);
+        }
+
+        // On a minimize the stack in front's own cards go to their places in
+        // the fan over 200 ms OutCubic, while the stacks slide over 300 ms
+        // OutQuart (minimizeActiveWindow -> slideAllGroups: animateOpen(200,
+        // OutCubic) for the active group, cardSlide for the groups' x;
+        // CardWindowManager.cpp:1142-1160, 2481-2537): the card is in its
+        // place in the fan before the neighbouring stacks are.
+        function test_minimizeFansTheStackOnItsOwnClock() {
+            var s = makeStacks();
+            cv.maximize(s.c1);
+            tryVerify(function () { return shell.maximized; }, 2000);
+            var settledEarly = false, ahead = true, frames = 0;
+            var check = function () {
+                if (!cv._stackOwn)
+                    return;
+                frames++;
+                // OutCubic over 200 ms is ahead of OutQuart over 300 ms all
+                // the way (the same start): never further from card view.
+                if (cv.stackProgress > cv.maximizeProgress + 0.02)
+                    ahead = false;
+                if (cv.stackProgress === 0 && cv.maximizeProgress > 0) {
+                    settledEarly = true;
+                    // The card is in its fan place: card view's scale, level
+                    // with the stack.
+                    fuzzyCompare(cv.layout.cards[s.c1].scale, cv.activeScale, 0.0001);
+                    fuzzyCompare(cv.layout.cards[s.c1].cy, cv.cardOriginY + Math.max(0, (cv.layout.cards[s.c1].cx - cv.width / 2)) / 15, 1);
+                }
+            };
+            root.onProgress = check;
+            cv.minimize();
+            tryVerify(function () { return cv.maximizeProgress === 0; }, 2000);
+            root.onProgress = null;
+            verify(frames > 0, "frames of the minimize");
+            verify(ahead, "the stack's cards ahead of the slide");
+            verify(settledEarly, "the stack in its fan while the slide goes on");
+            tryCompare(cv, "_stackOwn", false, 1000);
+            // A maximize that takes over a minimize carries the stack on
+            // from where it is (no jump back to the slide's progress).
+            cv.maximize(s.c1);
+            tryVerify(function () { return shell.maximized; }, 2000);
+            cv.minimize();
+            tryVerify(function () { return cv.stackProgress < 0.5 && cv.maximizeProgress > 0.1; }, 2000);
+            var startCx = cv.layout.cards[s.c1].cx;
+            cv.maximize(s.c1);
+            verify(Math.abs(cv.layout.cards[s.c1].cx - startCx) < 1, "the card carries on from where it is");
+            tryVerify(function () { return shell.maximized; }, 2000);
+            fuzzyCompare(cv.layout.cards[s.c1].scale, 1, 0.0001);
+        }
+
         function test_closeInStackKeepsStack() {
             var s = makeStacks();
             cv.setFocus(s.c2);
@@ -283,6 +395,155 @@ Item {
             // The other cards of the stack fly off either side.
             verify(cv.layout.cards[s.msg].cx < 0);
             verify(cv.layout.cards[s.c2].cx > cv.width);
+        }
+
+        // A card from the back of a stack keeps its place in the stack's
+        // order while it maximizes and minimizes (z is CardGroup's list
+        // order, raiseCards; nothing in lunaui/cards changes z): the cards
+        // in front stay over it as they slide off and back. It was lifted
+        // above them while maximized and dropped behind as the minimize
+        // ended, which looked like it dissolved through the card in front.
+        function test_backCardKeepsItsPlaceInTheStack() {
+            var s = makeStacks();
+            var z = function (uid) { return cv.layout.cards[uid].z; };
+            var below = z(s.c1) < z(s.c2) && z(s.msg) < z(s.c1);
+            verify(below, "front to back: c2, c1, msg");
+            // Every frame between card view and maximized: under the card
+            // in front.
+            var frames = 0, over = 0;
+            root.onProgress = function (p) {
+                if (p > 0 && p < 1) {
+                    frames++;
+                    if (!(z(s.c1) < z(s.c2)))
+                        over++;
+                }
+            };
+            cv.maximize(s.c1);
+            tryVerify(function () { return shell.maximized; }, 2000);
+            root.onProgress = null;
+            verify(frames > 0, "maximizing: frames between card view and maximized");
+            compare(over, 0, "maximizing: still under the card in front");
+            verify(z(s.c1) < z(s.c2) && z(s.msg) < z(s.c1), "maximized: the same order");
+            // The card in front sits level, at the maximized card's height,
+            // off to the right (CardGroup.cpp:344-370).
+            compare(cv.layout.cards[s.c2].rot, 0);
+            fuzzyCompare(cv.layout.cards[s.c2].cy, cv.maximizedCenterY, 0.5);
+            var before = z(s.c1);
+            var moved = 0;
+            root.onProgress = function () { if (z(s.c1) !== before) moved++; };
+            cv.minimize();
+            tryVerify(function () { return cv.maximizeProgress === 0; }, 2000);
+            root.onProgress = null;
+            compare(moved, 0, "minimizing: no change in z on any frame");
+            compare(z(s.c1), before, "minimized: no change in z");
+            compare(uidsOf(1), [s.msg, s.c1, s.c2].join(","));
+        }
+
+        // A maximized card its app closes slides straight up off the top at
+        // full size (removeWindowNoModality, CardWindowManager.cpp:672-696)
+        // while the rest go back to card view: its stack's other cards over
+        // 200 ms from where they were, the card behind it now the stack's
+        // active card (CardGroup::removeFromGroup); nothing re-maximizes for
+        // a card nobody launched.
+        function test_maximizedCardFliesOffTheTop() {
+            var s = makeStacks();
+            cv.maximize(s.c2);
+            tryVerify(function () { return shell.maximized; }, 2000);
+            var card = cv.cardItem(s.c2);
+            var cx = card.centerX;
+            var frames = 0, bad = 0, lastOffset = 0, rose = 0;
+            var watch = function () {
+                frames++;
+                if (card.scale !== 1 || card.centerX !== cx || card.opacity !== 1)
+                    bad++;
+                if (card.flickOffset > lastOffset)
+                    rose++;
+                lastOffset = card.flickOffset;
+            };
+            card.flickOffsetChanged.connect(watch);
+            windows.cardCloseRequested(s.c2);
+            compare(cv.maximizeProgress, 0, "back to card view");
+            compare(cv.currentUid, s.c1, "the card behind it is in front of its stack");
+            compare(cv.cardItem(s.c1).layoutAnimationDuration, Theme.cardFanDuration, "its stack eases into the fan over 200 ms");
+            compare(cv.cardItem(s.email).layoutAnimationDuration, Theme.cardSlideDuration, "the other stacks slide over 300 ms");
+            verify(card.z > cv.cardItem(s.c1).z, "over the rest while it goes");
+            tryVerify(function () { return windows.cardIndex(s.c2) < 0; }, 2000, "closed once off the top");
+            verify(frames > 2, "frames of the slide");
+            compare(bad, 0, "full size, straight up, not faded");
+            compare(rose, 0, "only up");
+            wait(Theme.cardSlideDuration + 100);
+            verify(!shell.maximized, "stays in card view");
+            compare(cv.restoreUid, "");
+        }
+
+        // A card the app in front launched joins its stack (C8); when the app
+        // closes it while it is maximized, card view settles and then the
+        // card that launched it maximizes again (restoreCardToMaximized,
+        // CardWindowManager.cpp:561-568, 2812-2821;
+        // MinimizeState::animationsFinished, CardWindowManagerStates.cpp:
+        // 158-165).
+        function test_closedChildReMaximizesItsLauncher() {
+            var a = windows.launch("org.webosphoenix.messaging", "");
+            wait(0);
+            cv.maximize(a);
+            tryVerify(function () { return shell.maximized; }, 2000);
+            windows._hostMessage("org.webosphoenix.messaging", a, "launch", { id: "org.webosphoenix.photos" });
+            var ph = windows.runningUid("org.webosphoenix.photos");
+            tryVerify(function () { return shell.maximized && cv.currentUid === ph; }, 3000, "Photos maximized");
+            compare(cv.restoreUid, a, "launched by the card in front, in its stack");
+            root.lowestProgress = 1;
+            var restoredAt = -1, closedAt = Date.now();
+            var watch = function () { if (restoredAt < 0 && cv.maximizeProgress > 0) restoredAt = Date.now() - closedAt; };
+            cv.maximizeProgressChanged.connect(watch);
+            windows.cardCloseRequested(ph);
+            tryVerify(function () { return shell.maximized && cv.currentUid === a; }, 3000, "the launcher maximized again");
+            cv.maximizeProgressChanged.disconnect(watch);
+            compare(root.lowestProgress, 0, "through card view");
+            verify(restoredAt >= Theme.cardSlideDuration * 0.95, "once card view settled (" + restoredAt + " ms)");
+            compare(cv.restoreUid, "");
+            compare(windows.cardIndex(ph), -1);
+
+            // Minimized by the user first: no restore (minimizeActiveWindow
+            // -> disableCardRestoreToMaximized, :1144).
+            windows._hostMessage("org.webosphoenix.messaging", a, "launch", { id: "org.webosphoenix.photos" });
+            ph = windows.runningUid("org.webosphoenix.photos");
+            tryVerify(function () { return shell.maximized && cv.currentUid === ph; }, 3000);
+            compare(cv.restoreUid, a);
+            cv.minimize();
+            compare(cv.restoreUid, "");
+            tryCompare(cv, "maximizeProgress", 0, 2000);
+            cv.maximize(ph);
+            tryVerify(function () { return shell.maximized; }, 2000);
+            windows.cardCloseRequested(ph);
+            wait(Theme.cardSlideDuration + 300);
+            verify(!shell.maximized, "stays in card view");
+            compare(cv.currentUid, a);
+        }
+
+        // Back in an app another one opened (the window source's
+        // cardReturnRequested): the app's card goes back into card view, the
+        // card that opened it maximizes again with the app sliding off over
+        // it, and then the app is behind it in the stack, still open.
+        function test_returnToTheCaller() {
+            var a = windows.launch("org.webosphoenix.messaging", "");
+            wait(0);
+            cv.maximize(a);
+            tryVerify(function () { return shell.maximized; }, 2000, "the caller maximized");
+            windows._hostMessage("org.webosphoenix.messaging", a, "launch", { id: "org.webosphoenix.photos" });
+            var ph = windows.runningUid("org.webosphoenix.photos");
+            verify(ph !== "");
+            tryVerify(function () { return shell.maximized && cv.currentUid === ph; }, 3000, "Photos maximized");
+            compare(cv.groups[0].uids.join(","), [a, ph].join(","), "Photos in front of the card that opened it");
+            root.lowestProgress = 1;
+            windows._hostMessage("org.webosphoenix.photos", ph, "launch", { id: "org.webosphoenix.messaging", params: {}, returnTo: true });
+            // Card view first...
+            // ...then the caller maximized, Photos sliding off over it. (Card
+            // view lasts a moment: the lowest progress on the way tells.)
+            tryVerify(function () { return shell.maximized && cv.currentUid === a; }, 2000, "the caller maximized again");
+            compare(root.lowestProgress, 0, "through card view");
+            verify(windows.cardIndex(ph) >= 0, "Photos still open");
+            tryCompare(cv, "_returning", null, 2000);
+            compare(cv.groups[0].uids.join(","), [ph, a].join(","), "and behind the caller in the stack");
         }
     }
 }

@@ -130,23 +130,48 @@ QString Speech::engine() const
     return name == QLatin1String("phoenix-tts") ? QStringLiteral("Kitten TTS") : name;
 }
 
-bool Speech::speak(const QString &text, const QString &lang, const QString &voice)
+bool Speech::speak(const QString &text, const QString &lang, const QString &voice, double rate)
 {
     const QString l = lang.isEmpty() ? QStringLiteral("en") : lang.left(5);
     const QStringList c = resolved(l);
     if (c.isEmpty() || text.trimmed().isEmpty())
         return false;
     stop();
-    return run(c, text, l, voice.isEmpty() ? m_voice : voice);
+    return run(c, text, l, voice.isEmpty() ? m_voice : voice, rate);
 }
 
-bool Speech::run(const QStringList &c, const QString &text, const QString &lang, const QString &voice)
+// How each engine is told the speed (175 words a minute is espeak-ng's and
+// say's usual rate; Flite stretches each sound by 1 / rate).
+QStringList Speech::rateArguments(const QString &program, double rate) const
 {
+    if (qFuzzyCompare(rate, 1.0))
+        return {};
+    const QString name = QFileInfo(program).fileName();
+    const QString wpm = QString::number(qRound(175 * rate));
+    if (name == QLatin1String("phoenix-tts"))
+        return { QStringLiteral("--speed"), QString::number(rate, 'g', 3) };
+    if (name == QLatin1String("espeak-ng") || name == QLatin1String("espeak"))
+        return { QStringLiteral("-s"), wpm };
+    if (name == QLatin1String("say"))
+        return { QStringLiteral("-r"), wpm };
+    if (name == QLatin1String("flite"))
+        return { QStringLiteral("--setf"), QStringLiteral("duration_stretch=") + QString::number(1.0 / rate, 'g', 3) };
+    return {};
+}
+
+bool Speech::run(const QStringList &c, const QString &text, const QString &lang, const QString &voice, double rate)
+{
+    rate = qBound(0.5, rate > 0 ? rate : 1.0, 2.0);
     QStringList args = c.mid(1);
     for (QString &a : args) {
         a.replace(QStringLiteral("%l"), lang);
         a.replace(QStringLiteral("%v"), voice);
+        a.replace(QStringLiteral("%r"), QString::number(rate, 'g', 3));
+        a.replace(QStringLiteral("%w"), QString::number(qRound(175 * rate)));
     }
+    // A command of its own takes the speed through %r / %w only.
+    if (m_command.isEmpty())
+        args += rateArguments(c.first(), rate);
     const bool kitten = m_command.isEmpty() && QFileInfo(c.first()).fileName() == QLatin1String("phoenix-tts");
     auto *p = new QProcess(this);
     p->setProgram(c.first());
@@ -154,7 +179,7 @@ bool Speech::run(const QStringList &c, const QString &text, const QString &lang,
     // Its one line about what it said and how fast goes to the log.
     p->setProcessChannelMode(QProcess::ForwardedErrorChannel);
     p->setStandardOutputFile(QProcess::nullDevice());
-    connect(p, &QProcess::finished, this, [this, p, kitten, text, lang, voice](int code, QProcess::ExitStatus status) {
+    connect(p, &QProcess::finished, this, [this, p, kitten, text, lang, voice, rate](int code, QProcess::ExitStatus status) {
         if (m_process != p)
             return;
         m_process = nullptr;
@@ -166,7 +191,7 @@ bool Speech::run(const QStringList &c, const QString &text, const QString &lang,
             qInfo("Speech: Kitten TTS could not speak; %s instead", qPrintable(QFileInfo(other.first()).fileName()));
             if (code == 3)
                 m_kitten = -1;  // look again next time (the model may come)
-            if (run(other, text, lang, voice))
+            if (run(other, text, lang, voice, rate))
                 return;
         }
         emit speakingChanged();

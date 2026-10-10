@@ -260,6 +260,28 @@ Item {
             verify(!fakeSystem.muted);
         }
 
+        // The system menu's Mute Sound sends the ringer key, down when
+        // muted and up when not (SystemMenu::slotMuteSoundChanged,
+        // SystemMenu.cpp:900-915): com.palm.keys reports the ringer off.
+        // The switch muting the system does not send it twice.
+        function test_muteSendsTheRingerKey() {
+            var n = fakeSource.keys().length;
+            fakeSystem.muted = true;
+            compare(devices.ringerState, "down");
+            compare(fakeSource.keys().length, n + 1);
+            compare(JSON.stringify(fakeSource.keys().pop()), JSON.stringify({ category: "/switches", key: "ringer", state: "down" }));
+            fakeSystem.muted = false;
+            compare(devices.ringerState, "up");
+            compare(JSON.stringify(fakeSource.keys().pop()), JSON.stringify({ category: "/switches", key: "ringer", state: "up" }));
+            n = fakeSource.keys().length;
+            fakeSystem.ringerSwitch = "down";
+            verify(fakeSystem.muted);
+            compare(fakeSource.keys().length, n + 1, "one ringer key for the switch");
+            fakeSystem.ringerSwitch = "up";
+            verify(!fakeSystem.muted);
+            compare(fakeSource.keys().length, n + 2);
+        }
+
         function test_headsetInAndOut() {
             fakeSystem.headset = "headset-mic";
             compare(JSON.stringify(fakeSource.keys().pop()), JSON.stringify({ category: "/headset", key: "headset-mic", state: "down" }));

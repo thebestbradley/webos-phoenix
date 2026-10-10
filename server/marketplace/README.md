@@ -37,6 +37,24 @@ Everything it keeps is in `data/` (git-ignored). **Keep a copy of
 `data/signing.key`**: with a new key every device has to trust the catalog
 again.
 
+## System updates
+
+The same server serves the system update feed devices read
+(`com.palm.update`, `services/updates`): `/updates/<compatible>/<channel>.json`
+next to its RAUC bundles, in `data/updates` (`MARKETPLACE_UPDATES`
+elsewhere), written by `server/updates/src/UpdateFeed.php`. An admin
+publishes a release with the bundle as the request body:
+
+    curl -X POST -H "Authorization: Bearer $TOKEN" --data-binary @phoenix.raucb \
+        "https://…/api/admin/updates?compatible=phoenix-pinephone&version=1.1.0&build=110&channel=stable&note=…"
+
+(`note=` repeats, one line each; for `compatible=phoenix-sim` with no body,
+the simulator's stand-in bundle.) `POST /api/admin/updates/withdraw
+{compatible, channel}` takes a release back; `GET /api/updates` lists every
+channel. A device's default feed (`services/updates/etc/palm/updates.json`)
+is this server's `/updates/`. The feed is not signed; the bundles are
+(RAUC, on the device), and builds only go up.
+
 ## On a server
 
 Point Apache or nginx (with PHP-FPM) at `public/router.php` for every
@@ -150,6 +168,26 @@ elsewhere, set `MARKETPLACE_DSN` (and the account) and `MARKETPLACE_DATA`
 as on the server first, or run the two commands there. Add a site by
 adding a line to `curated-sites.json` (our own summary, its developer,
 categories from the ones already used) and running the probe.
+
+## Account types (Connections)
+
+The index also lists the **account types** Phoenix can connect to, for the
+Marketplace's Connections view (`docs/SYNERGY-CONNECTORS.md` 2.1, phase C0):
+`"accounts": [{templateId, title, provider, icon, summary, capabilities:
+[{capability, direction?}], protocols, auth: {type, registration}, server,
+privacy: {dataGoesTo, e2ee, phoenixServers}, push, status, package: {id,
+builtin}, help?, featured}]`. For now these are the built-in templates only
+(CardDAV & CalDAV, Subscribed Calendar, Email Account, the simulator's
+Jabber), each `package.builtin: true`; connector packages come later (C4).
+
+The list is `catalog/accounts.json`, edited by hand. It is not kept in the
+database: every `publish` reads it, checks each entry (required fields, the
+allowed values in `Catalog::ACCOUNT_ENUMS`, capabilities as the template
+names them) and stops on a bad one, so the published index stays as it was;
+`init` and `seed` check it too. Each entry's `iconFrom` is the template's own
+icon in this checkout (open-source release or Phoenix art, with its
+provenance where it lives); `publish` copies it to
+`/v1/icons/accounts/<templateId>.png`, and the index gives its full address.
 
 ## Tests
 

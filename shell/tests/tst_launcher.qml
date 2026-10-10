@@ -173,6 +173,10 @@ Item {
         function init() {
             startLayout = shell.launcherLayout;
             shell.unlock();
+            // An app the last test launched has had its prepare step
+            // (cardPrepareAddDuration) and risen, which closes the launcher.
+            tryVerify(function() { return shell.cardView.waitingUid === "" && !shell.cardView.preparing; }, 3000);
+            tryVerify(function() { return !shell.cardView.maximizing; }, 3000);
             shell.cardView.maximizeProgress = 0;
             launcher.editMode = false;
             launcher.showPage(0);

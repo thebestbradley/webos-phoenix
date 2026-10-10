@@ -13,6 +13,7 @@
         "org.webosphoenix.service.packages/remove",
         "org.webosphoenix.service.packages/listInstalled",
         "org.webosphoenix.service.packages/updateAll",
-        "org.webosphoenix.service.packages/scheduled"
+        "org.webosphoenix.service.packages/scheduled",
+        "org.webosphoenix.service.packages/listAccountTypes"
     ]
 }

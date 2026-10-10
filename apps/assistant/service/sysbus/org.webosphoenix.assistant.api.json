@@ -19,7 +19,8 @@
         "org.webosphoenix.assistant/markRead",
         "org.webosphoenix.assistant/vocabulary",
         "org.webosphoenix.assistant/speak",
-        "org.webosphoenix.assistant/stopSpeaking"
+        "org.webosphoenix.assistant/stopSpeaking",
+        "org.webosphoenix.assistant/sessionPhrase"
     ],
     "assistant.settings": [
         "org.webosphoenix.assistant/getSettings",

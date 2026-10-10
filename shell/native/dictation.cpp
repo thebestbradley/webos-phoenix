@@ -248,10 +248,17 @@ void Dictation::spotterOutput()
         const qint64 at = qint64((o.value(QStringLiteral("start")).toDouble() - kPhraseLeadS) * kWhisperRate);
         const qint64 from = qBound<qint64>(0, at - m_ringStart, m_ring.size() / 2);
         m_preroll = m_ring.mid(from * 2);
+        // Where the phrase ends in it: the end of speech listens from
+        // there. The phrase itself is speech, so with it counted a pause
+        // after "Hey Phoenix" (the chime, the view opening) ended the
+        // recording before anything was asked.
+        const qint64 end = qint64(o.value(QStringLiteral("end")).toDouble(o.value(QStringLiteral("start")).toDouble()) * kWhisperRate);
+        m_prerollPhraseEnd = qBound<qint64>(0, end - m_ringStart - from, m_preroll.size() / 2) * 2;
         m_inWake = true;
         emit wakeHeard(o.value(QStringLiteral("heard")).toString());
         m_inWake = false;
         m_preroll.clear();
+        m_prerollPhraseEnd = 0;
     }
 }
 
@@ -397,7 +404,7 @@ void Dictation::start()
         // next file).
         if (m_inWake) {
             m_pcm = m_preroll;
-            for (qsizetype i = 0; i < m_pcm.size(); i += kWhisperRate / 1000 * kFileChunkMs * 2) {
+            for (qsizetype i = m_prerollPhraseEnd; i < m_pcm.size(); i += kWhisperRate / 1000 * kFileChunkMs * 2) {
                 const QByteArray part = m_pcm.mid(i, kWhisperRate / 1000 * kFileChunkMs * 2);
                 m_end.feed(level(part, 1, false), int(part.size() / 2 * 1000 / kWhisperRate));
             }

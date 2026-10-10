@@ -221,7 +221,7 @@ describe("AppMenu", () => {
             expect(screen.queryByText("Paste")).toBeNull();
             fireEvent.click(items[0]);
             expect(items[0].getAttribute("aria-expanded")).toBe("true");
-            expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Edit", "Select All", "Cut", "Copy", "Paste", "Help"]);
+            expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Edit", "Select All", "Cut", "Copy", "Paste", "Share", "Help"]);
             fireEvent.click(screen.getByText("Cut"));
             expect(edit).not.toHaveBeenCalled();
             expect(screen.getByRole("menu")).toBeTruthy();
@@ -242,6 +242,59 @@ describe("AppMenu", () => {
             render(<AppMenu edit={false} items={[{ label: "Help", onSelect: () => {} }]} />);
             tapAppName();
             expect(screen.queryByText("Edit")).toBeNull();
+        });
+    });
+
+    describe("Share", () => {
+        const g = globalThis as { __phoenixRuntime?: unknown };
+        afterEach(() => { delete g.__phoenixRuntime; });
+
+        it("comes after Edit and shares what the app says it shows", () => {
+            const share = vi.fn(() => Promise.resolve({}));
+            g.__phoenixRuntime = { share };
+            render(<AppMenu share={() => ({ title: "Lake", files: [{ path: "/media/internal/a.jpg", mimeType: "image/jpeg" }] })}
+                            items={[{ label: "Help", onSelect: () => {} }]} />);
+            tapAppName();
+            expect(screen.getAllByRole("menuitem").map((i) => i.textContent)).toEqual(["Edit", "Share", "Help"]);
+            fireEvent.click(screen.getByText("Share"));
+            expect(share).toHaveBeenCalledWith({ title: "Lake", files: [{ path: "/media/internal/a.jpg", mimeType: "image/jpeg" }] });
+            expect(screen.queryByRole("menu")).toBeNull();
+        });
+
+        it("shares the selected text by default, and is dimmed without any", () => {
+            const share = vi.fn(() => Promise.resolve({}));
+            g.__phoenixRuntime = { share };
+            render(<><p>Hello there</p><AppMenu items={[]} /></>);
+            tapAppName();
+            expect(screen.getByText("Share").getAttribute("aria-disabled")).toBe("true");
+            fireEvent.click(screen.getByText("Share"));
+            expect(share).not.toHaveBeenCalled();
+            tapAppName();
+            const range = document.createRange();
+            range.selectNodeContents(screen.getByText("Hello there"));
+            getSelection()!.removeAllRanges();
+            getSelection()!.addRange(range);
+            tapAppName();
+            fireEvent.click(screen.getByText("Share"));
+            expect(share).toHaveBeenCalledWith({ text: "Hello there" });
+            getSelection()!.removeAllRanges();
+        });
+
+        it("runs the app's own Share when it has one", () => {
+            const share = vi.fn(() => Promise.resolve({}));
+            const onShare = vi.fn();
+            g.__phoenixRuntime = { share };
+            render(<AppMenu share={{ text: "hi" }} onShare={onShare} items={[]} />);
+            tapAppName();
+            fireEvent.click(screen.getByText("Share"));
+            expect(onShare).toHaveBeenCalledOnce();
+            expect(share).not.toHaveBeenCalled();
+        });
+
+        it("can be left out", () => {
+            render(<AppMenu share={false} items={[{ label: "Help", onSelect: () => {} }]} />);
+            tapAppName();
+            expect(screen.queryByText("Share")).toBeNull();
         });
     });
 });

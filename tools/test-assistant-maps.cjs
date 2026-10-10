@@ -282,8 +282,11 @@ async function main() {
         await back();
         await place.waitForSelector(tid("place-card"));
         check(!(await place.evaluate(() => window.__closed)), "Back leaves navigation, then directions, in Maps");
+        launches.length = 0;
         await back();
-        check(await place.evaluate(() => window.__closed), "Back on the place the Assistant opened goes back to the Assistant");
+        const ret = await until(() => launches.find((l) => l.id === ASSISTANT));
+        check(!!ret && ret.returnTo === true && !(await place.evaluate(() => window.__closed)),
+              "Back on the place the Assistant opened brings the Assistant back, Maps staying open behind it");
         await place.close();
 
         // ---- "Directions to the nearest coffee shop" -----------------------------------------------

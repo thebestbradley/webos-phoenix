@@ -71,14 +71,39 @@ files match the script. On the device they live in
 when it hears "Hey Phoenix" (webOS had none), is made the same way: two
 soft bell notes up (E6, A6).
 
+Made the same way (CC0 1.0, nothing sampled or downloaded), for the other
+names LunaSysMgr asked audiod for:
+
+| File | What it is | Played by (original) |
+|---|---|---|
+| `carddrag.wav` | a rubber band's creak: a buzzy tone rising 140 to 330 Hz, 0.4 s | the angry card stretched past 15 % of the screen, upside down (`CardWindowManager.cpp:1280-1283, 1523-1527`) |
+| `birdappclose.wav` | a whistle sliding up from 600 Hz to 2 kHz over a rush of air, 0.6 s | the angry card let go, upside down, instead of `appclose` (`:2890-2893`) |
+| `LauncherOpenApp.wav`, `LauncherCloseApp.wav` | a short breath of filtered noise, brightening / darkening, 0.18 / 0.16 s | the launcher shown / hidden (`SystemUiController.cpp:760-768`) |
+
+## `phoenix/ringtones/` and the compat overlay: Phoenix tones (CC0 1.0)
+
+Two tones the original apps name by path, whose files were never released
+or cannot be shipped, are synthesized by the same script (bell-like notes:
+a few sine partials with a fast attack and an exponential decay) and
+encoded as MP3 (LAME through ffmpeg, 128 kbit/s, no tags). CC0 1.0.
+
+| File | What it is | Played by |
+|---|---|---|
+| `phoenix/ringtones/Flurry.mp3` (`/media/internal/ringtones/Flurry.mp3`) | a flurry of marimba-like notes, a pentatonic run down and up in C, four bars, 6.4 s | the Clock's default alarm (`com.palm.app.clock` `utility/alarm.js:368`, `alarmdbmanager.js:100`); the Pre's own `Flurry.mp3` was never open-sourced |
+| `compat/rootfs/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3` | three quick bell notes up (G5, C6, E6) and a held G6, 1.2 s | Email's new-mail sound (`source/DashboardManager.js:419`), in place of the original (see below) |
+
+`python3 tools/make-feedback-sounds.py --check` decodes them and compares
+them with what the script renders.
+
 ## Not shipped
 
-- `com.palm.app.email/sounds/emailreceived.mp3` (Open webOS core-apps,
-  in the `third_party/core-apps` submodule): its ID3 tags name a copyright
-  holder ("@ Peter Steinbach", WCOP frame) and an album ("Top 500 Rock and
-  Roll Songs"), which contradicts the repository's blanket LG / Apache-2.0
-  statement. `runtime/rootfs.json` excludes it, so the simulator and device
-  images leave it out and Email's new-mail sound falls back to the alert
-  tone.
-- The Pre's ringtones (`Pre.mp3`, the Clock's `Flurry.mp3`, ...) and
+- The original `com.palm.app.email/sounds/emailreceived.mp3` (Open webOS
+  core-apps, in the `third_party/core-apps` submodule): its ID3 tags name a
+  copyright holder ("@ Peter Steinbach", WCOP frame) and an album ("Top 500
+  Rock and Roll Songs"), which contradicts the repository's blanket LG /
+  Apache-2.0 statement. The compat overlay puts Phoenix's own (above) at
+  its path, and overlays win over the submodule in the simulator, the dev
+  server and `tools/install-rootfs.py`, so the original is never served or
+  installed.
+- The Pre's ringtones (`Pre.mp3`, the original `Flurry.mp3`, ...) and
   audiod's feedback set: never open-sourced.

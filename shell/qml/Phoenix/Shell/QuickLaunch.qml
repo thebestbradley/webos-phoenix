@@ -48,7 +48,14 @@ Item {
     }
 
     // quicklaunch-bg.png (10 x 105) tiled from the bar's top left, cut at
-    // its height (QuickLaunchBar::paintBackground, :283-290).
+    // its height (QuickLaunchBar::paintBackground, :283-290). Also with the
+    // launcher up: the original loads quicklaunch-bg-solid.png (:111-114)
+    // but only ever paints the translucent art (m_qp_currentBg, set once at
+    // :115), and the dock's "backgroundOpacity" that OverlayWindowManager
+    // animates with the launcher (OverlayWindowManager.cpp:295-297,
+    // 1459-1462, 1474-1477, 1543-1546) is stored and nothing paints with it
+    // (Quicklauncher::setBackgroundOpacity, dimensionsmain.cpp:372-378), so
+    // the dock never turned solid on a device.
     Item {
         anchors.fill: parent
         clip: true

@@ -101,6 +101,89 @@ check(sodium_crypto_sign_verify_detached($sig, $index, $key), 'the index is sign
 $idx = json_decode($index, true);
 check($idx['version'] === 1 && $idx['build'] === $pub['build'] && count($idx['apps']) === $curated && strtotime($idx['expires']) > time() + 13 * 86400,
       'version 1, a build number, every listed app, expiring in 14 days');
+
+// ---- Account types (Connections): built in, from catalog/accounts.json ------------------------
+$types = array_column($idx['accounts'] ?? [], null, 'templateId');
+check(array_keys($types) === ['com.webosphoenix.dav', 'com.webosphoenix.webcal', 'com.palm.othermail', 'com.webosphoenix.xmpp']
+      && $pub['accounts'] === 4 && !isset($types['com.palm.palmprofile']),
+      'the index lists the account types Phoenix connects to (not the HP webOS profile)');
+$shape = ['templateId', 'title', 'provider', 'icon', 'summary', 'capabilities', 'protocols', 'auth', 'server', 'privacy', 'push', 'status', 'package', 'featured'];
+check(!array_filter($types, fn ($t) => array_keys($t) !== $shape || $t['package']['builtin'] !== true || array_keys($t['auth']) !== ['type', 'registration']
+                                       || array_keys($t['privacy']) !== ['dataGoesTo', 'e2ee', 'phoenixServers']),
+      '... each with the fields devices read, in order, built in, and nothing else (no iconFrom)');
+$dav = $types['com.webosphoenix.dav'];
+check($dav['title'] === 'CardDAV & CalDAV' && $dav['capabilities'] === [['capability' => 'CONTACTS', 'direction' => 'two-way'], ['capability' => 'CALENDAR', 'direction' => 'two-way']]
+      && $dav['auth'] === ['type' => 'app-password', 'registration' => 'none'] && $dav['server'] === 'user'
+      && $dav['privacy'] === ['dataGoesTo' => 'the server you enter', 'e2ee' => false, 'phoenixServers' => 'none']
+      && $dav['package'] === ['id' => 'org.webosphoenix.dav', 'builtin' => true] && $dav['featured'] === true,
+      'CardDAV & CalDAV: its capabilities as the template names them, app password, the server you enter');
+check($types['com.webosphoenix.webcal']['capabilities'] === [['capability' => 'CALENDAR', 'direction' => 'read-only']]
+      && $types['com.palm.othermail']['capabilities'][0]['capability'] === 'MAIL'
+      && $types['com.webosphoenix.xmpp']['capabilities'][0]['capability'] === 'MESSAGING' && $types['com.webosphoenix.xmpp']['status'] === 'experimental',
+      'the Subscribed Calendar reads only; mail is MAIL, Jabber MESSAGING (experimental)');
+// Every template the list names exists, with those capabilities.
+$templateFiles = ['com.webosphoenix.dav' => 'apps/dav/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json',
+                  'com.webosphoenix.webcal' => 'apps/dav/public/accounts/com.webosphoenix.webcal/com.webosphoenix.webcal.json',
+                  'com.palm.othermail' => 'third_party/app-services/mojomail/imap/files/usr/palm/public/accounts/com.palm.othermail/com.palm.othermail.json',
+                  'com.webosphoenix.xmpp' => 'runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json'];
+$mismatch = [];
+foreach ($templateFiles as $tid => $f) {
+    $t = json_decode((string) @file_get_contents(dirname(__DIR__, 3) . "/$f"), true);
+    $t = isset($t[0]) ? $t[0] : $t;
+    if (($t['templateId'] ?? null) !== $tid
+        || array_column($t['capabilityProviders'] ?? [], 'capability') !== array_column($types[$tid]['capabilities'], 'capability')) {
+        $mismatch[] = $tid;
+    }
+}
+check(!$mismatch, 'each account type matches its template\'s id and capabilities (' . implode(' ', $mismatch) . ')');
+$iconFile = "$tmp/data/public/v1/icons/accounts/com.webosphoenix.dav.png";
+check($dav['icon'] === 'http://127.0.0.1:9999/v1/icons/accounts/com.webosphoenix.dav.png' && is_file($iconFile)
+      && hash_file('sha256', $iconFile) === hash_file('sha256', dirname(__DIR__, 3) . '/apps/dav/public/accounts/com.webosphoenix.dav/images/dav-48x48@2x.png'),
+      'an account type\'s icon is the template\'s own, published with the catalog');
+// Bad entries: the publish stops, and the index stays as it was.
+$good = json_decode(file_get_contents(dirname(__DIR__) . '/catalog/accounts.json'), true);
+$badApp = new App(['accounts' => "$tmp/accounts-bad.json"] + marketplace_config());
+$badEntries = [
+    'no title' => fn ($e) => array_diff_key($e, ['title' => 1]),
+    'unknown auth' => fn ($e) => ['auth' => ['type' => 'magic', 'registration' => 'none']] + $e,
+    'unknown server' => fn ($e) => ['server' => 'anywhere'] + $e,
+    'e2ee not a boolean' => fn ($e) => ['privacy' => ['dataGoesTo' => 'x', 'e2ee' => 'no', 'phoenixServers' => 'none']] + $e,
+    'unknown status' => fn ($e) => ['status' => 'done'] + $e,
+    'lower-case capability' => fn ($e) => ['capabilities' => [['capability' => 'contacts']]] + $e,
+    'unknown direction' => fn ($e) => ['capabilities' => [['capability' => 'CONTACTS', 'direction' => 'sideways']]] + $e,
+    'no capabilities' => fn ($e) => ['capabilities' => []] + $e,
+    'a connector package' => fn ($e) => ['package' => ['id' => 'com.example.connector', 'builtin' => false]] + $e,
+    'an unknown field' => fn ($e) => $e + ['secret' => 1],
+    'an icon outside icons/accounts' => fn ($e) => ['icon' => '../index.json'] + $e,
+    'an icon from outside the checkout' => fn ($e) => ['iconFrom' => '../../etc/passwd'] + $e,
+    'an icon that is not a PNG' => fn ($e) => ['iconFrom' => 'server/marketplace/catalog/accounts.json'] + $e,
+];
+$before = file_get_contents("$tmp/data/public/v1/index.json");
+$notRefused = [];
+foreach ($badEntries as $what => $mutate) {
+    $list = $good;
+    $list['accounts'][0] = $mutate($list['accounts'][0]);
+    file_put_contents("$tmp/accounts-bad.json", json_encode($list));
+    try {
+        $badApp->catalog->publish();
+        $notRefused[] = $what;
+    } catch (Phoenix\Marketplace\CheckFailed $e) {
+        if (!str_starts_with($e->getMessage(), 'account type com.webosphoenix.dav: ')) {
+            $notRefused[] = "$what ({$e->getMessage()})";
+        }
+    }
+}
+$list = $good;
+$list['accounts'][] = $good['accounts'][0];
+file_put_contents("$tmp/accounts-bad.json", json_encode($list));
+try {
+    $badApp->catalog->publish();
+    $notRefused[] = 'twice';
+} catch (Phoenix\Marketplace\CheckFailed $e) {
+}
+check(!$notRefused && file_get_contents("$tmp/data/public/v1/index.json") === $before,
+      'bad account types are refused, naming the entry, and the published index stays as it was (' . implode('; ', $notRefused) . ')');
+
 $x = array_values(array_filter($idx['apps'], fn ($a) => $a['id'] === 'org.webosphoenix.pwa.x'))[0] ?? null;
 check($x && $x['kind'] === 'pwa' && str_starts_with($x['pwa']['manifest'], 'https://x.com/') && $x['pwa']['origin'] === 'https://x.com',
       'a curated web app: its manifest and origin');
@@ -337,6 +420,50 @@ check($local->get("$base/big.png", 1 << 20) === null && str_contains($local->ref
 check($local->get('http://10.0.0.1/i.png', 1 << 20) === null && $local->get('https://[fe80::1]/i.png', 1 << 20) === null,
       'SafeFetch local mode: still nothing internal besides 127.0.0.1');
 proc_terminate($site);
+
+// ---- The system update feed (served at /updates/, published by the admin API) ----------------
+$bundle = str_repeat("\x00\x01raucb", 64);
+$q = ['compatible' => 'phoenix-pinephone', 'version' => '1.1.0', 'build' => '110', 'notes' => ['Faster cards', 'Share everywhere']];
+[$s] = $api->handle('POST', '/api/admin/updates', $bundle, "Bearer {$dev['token']}", $q);
+check($s === 403, 'updates: only an admin publishes one');
+[$s, $r] = $api->handle('POST', '/api/admin/updates', $bundle, "Bearer $admin", $q);
+check($s === 200 && $r['feed']['format'] === 1 && $r['feed']['compatible'] === 'phoenix-pinephone' && $r['feed']['channel'] === 'stable'
+      && $r['feed']['release']['version'] === '1.1.0' && $r['feed']['release']['build'] === 110
+      && $r['feed']['release']['notes'] === ['Faster cards', 'Share everywhere'], 'updates: a release on the stable channel');
+$feedFile = getenv('MARKETPLACE_DATA') . '/updates/phoenix-pinephone/stable.json';
+$onDisk = json_decode((string) @file_get_contents($feedFile), true);
+check(is_array($onDisk) && $onDisk['release']['sha256'] === hash('sha256', $bundle) && $onDisk['release']['size'] === strlen($bundle)
+      && hash_file('sha256', dirname($feedFile) . '/' . $onDisk['release']['url']) === hash('sha256', $bundle),
+      'updates: the feed file and the bundle beside it, as com.palm.update reads them');
+[$s, $r] = $api->handle('POST', '/api/admin/updates', $bundle, "Bearer $admin", ['build' => '109'] + $q);
+check($s === 400 && str_contains($r['error'], 'higher build number'), 'updates: builds only go up');
+[$s, $r] = $api->handle('POST', '/api/admin/updates', $bundle, "Bearer $admin", ['compatible' => '../etc'] + $q);
+check($s === 400, 'updates: device types are names, not paths');
+[$s, $r] = $api->handle('POST', '/api/admin/updates', '', "Bearer $admin", ['compatible' => 'phoenix-sim', 'version' => '0.2.0', 'build' => '2', 'channel' => 'beta']);
+check($s === 200 && $r['feed']['release']['url'] === 'phoenix-sim-0.2.0-2.raucb', "updates: the simulator's stand-in bundle when none is sent");
+[$s, $r] = $call('GET', '/api/updates');
+check($s === 200 && array_map(fn ($f) => $f['compatible'] . '/' . $f['channel'], $r['feeds']) === ['phoenix-pinephone/stable', 'phoenix-sim/beta'],
+      'updates: GET /api/updates lists every channel');
+[$s, $r] = $call('POST', '/api/admin/updates/withdraw', ['compatible' => 'phoenix-pinephone', 'channel' => 'stable'], $admin);
+check($s === 200 && $r['feed']['release'] === null && $r['feed']['withdrawn']['build'] === 110, 'updates: withdrawn');
+
+// The router serves it (PHP's built-in server, as bin/serve.sh runs it).
+$port = 18000 + random_int(0, 999);
+$server = proc_open(['php', '-S', "127.0.0.1:$port", __DIR__ . '/../public/router.php'], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes,
+                    null, ['MARKETPLACE_DATA' => getenv('MARKETPLACE_DATA'), 'PATH' => getenv('PATH')]);
+$get = function (string $path) use ($port): ?string {
+    for ($i = 0; $i < 50; $i++) {
+        $r = @file_get_contents("http://127.0.0.1:$port$path");
+        if ($r !== false || (isset($http_response_header[0]) && str_contains($http_response_header[0], '404'))) return $r === false ? null : $r;
+        usleep(100000);
+    }
+    return null;
+};
+$served = json_decode((string) $get('/updates/phoenix-sim/beta.json'), true);
+check(is_array($served) && $served['release']['build'] === 2, 'updates: the router serves /updates/<compatible>/<channel>.json');
+check($get('/updates/phoenix-sim/phoenix-sim-0.2.0-2.raucb') === "[update]\ncompatible=phoenix-sim\nversion=0.2.0\nbuild=2\n", 'updates: and its bundle');
+check($get('/updates/../marketplace.sqlite') === null && $get('/updates/') === null, 'updates: nothing outside the feed');
+proc_terminate($server);
 
 exec('rm -rf ' . escapeshellarg($tmp));
 echo $failures ? "\n$failures failed\n" : "\nall passed\n";

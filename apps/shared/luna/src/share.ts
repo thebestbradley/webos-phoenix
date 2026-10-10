@@ -12,7 +12,8 @@ export interface SharedFile { path: string; mimeType?: string }
 export interface ShareRequest { title?: string; text?: string; url?: string; files?: SharedFile[] }
 export type ShareResult =
     | { action: "app"; appId: string }
-    | { action: "photos" | "files"; path: string; already?: boolean }
+    | { action: "photos"; path: string; paths?: string[]; already?: boolean }
+    | { action: "files"; path: string }
     | { action: "copy" | "cancel" };
 
 export interface SaveRequest {

@@ -6,8 +6,10 @@
 // rings pulse out from the middle of the bottom edge, where the phone is to
 // touch (TouchToShareGlow.cpp; LunaSysMgr adds it to the UI elements group
 // over everything, WindowServer.cpp:516). No art: LunaSysMgr painted it.
-//  - a screen-sized rectangle centred on the bottom edge's middle
-//    (:39-64, homeButtonOrientationAngle 0), filled with a radial gradient
+//  - a screen-sized rectangle centred on the middle of the edge the Home
+//    button is on (:39-64: angle, homeButtonOrientationAngle, 0 the bottom,
+//    90 the left, 180 the top, 270 the right; turned by it, its width and
+//    height swapped for 90 and 270), filled with a radial gradient
 //    of radius a quarter of the screen's height, its focus a quarter of
 //    that above the centre, stops white at 0xAF, 0x1F, 0xFF, 0x1F, 0x01
 //    alpha (:66-78);
@@ -24,16 +26,23 @@ Item {
 
     // A phone is in range.
     property bool active: false
+    // Shell.homeButtonAngle: which edge the glow comes from.
+    property int angle: 0
+    readonly property bool _sideways: angle === 90 || angle === 270
     readonly property bool running: pulse.running
 
     // TouchToShareGlow::m_boundingRect, centred on the bottom edge's middle.
     Item {
         id: rings
         objectName: "touchToShareGlowRings"
-        width: glow.width
-        height: glow.height
-        x: 0
-        y: glow.height / 2
+        width: glow._sideways ? glow.height : glow.width
+        height: glow._sideways ? glow.width : glow.height
+        // Its centre: the middle of the button's edge.
+        readonly property real cx: glow.angle === 90 ? 0 : glow.angle === 270 ? glow.width : glow.width / 2
+        readonly property real cy: glow.angle === 180 ? 0 : glow._sideways ? glow.height / 2 : glow.height
+        x: cx - width / 2
+        y: cy - height / 2
+        rotation: glow.angle
         visible: glow.active
         transformOrigin: Item.Center
 

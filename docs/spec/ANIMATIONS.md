@@ -35,6 +35,7 @@ durations and curves, never wall-clock time).
 | Bar fill colour change | 300 ms linear (`StatusBar.cpp:257-258`; conf `:114-115`) | `StatusBar.qml` ColorAnimation | matches |
 | Title cross-fade (app name / carrier) | 300 ms linear (`StatusBarTitle.cpp:210-211`; conf `:116-117`) | `StatusBar.qml` titleFade | matches |
 | App menu arrow beside the title (tablet) | 500 ms InOutQuad (`StatusBarItemGroup.cpp:137-158`; conf `:120-121`) | `StatusBar.qml` `_arrowProgress` | matches |
+| System group arrow and separator (tablet), at start | 500 ms InOutQuad (`StatusBarItemGroup.cpp:136-158`, actionable from `StatusBar.cpp:138`; conf `:120-121`) | `StatusBar.qml` `_systemArrowFade` | matches |
 | Status icon sliding in/out (Wi-Fi, Bluetooth, mute...) | 1000 ms, width InOutQuad in the first half, fade linear (`StatusBarIcon.cpp:84-205`; conf `:122-123`) | `StatusBar.qml` Indicator | matches |
 | Menu tab behind a group while its menu is open (system menu, app menu, dashboard) | 200 ms linear (`StatusBarItemGroup.cpp:252-306`; conf `:124-125`) | `StatusBar.qml` systemMenuTab, `Notifications.qml` notificationTab | matches |
 | **App menu** (status bar title) open/close | drawn by the app: `enyo.AppMenu` has no animation (its transition is commented out, `enyo: palm/themes/Onyx/css/AppMenu.css:11-24`) | phoenix-ui `AppMenu` appears at once | matches |
@@ -86,13 +87,15 @@ durations and curves, never wall-clock time).
 
 | Animation | Original | Phoenix | Verdict |
 |---|---|---|---|
-| Maximize / minimize (min/max) | 300 ms OutQuart (`CardGroup.cpp:335-366`, minimize is a slide `CardWindowManager.cpp:2491-2685`; conf `:31-32`; conf's `cardMinimize*` is read by nothing) | `CardView.qml`, `Theme.cardMaximizeDuration` | matches |
-| Card throw (close) | 300 ms OutCubic (`CardWindowManager.cpp:687-688, 2872-2873`) | `CardView.qml` flick | matches |
+| Maximize / minimize (min/max) | 300 ms OutQuart (`CardGroup.cpp:335-366`, minimize is a slide `CardWindowManager.cpp:2491-2685`; conf `:31-32`; conf's `cardMinimize*` is read by nothing); on a minimize the stack in front's own cards, the minimizing one among them, go to their fan places over 200 ms OutCubic (`animateOpen(200, OutCubic)`, `:2495`) while the stacks slide over 300 ms | `CardView.qml` (`maximizeProgress`, and `stackProgress` for the stack's own cards), `Theme.cardMaximizeDuration`, `Theme.cardFanDuration`; the stack keeps its z order throughout (GAPS C12) | matches |
+| A finger moving through a long fan | each move sends the stack's cards to their new places over 200 ms OutCubic from where they are (`adjustHorizontally` then `slideAllGroups`, `CardWindowManager.cpp:1482-1490`); past the fan's end the stacks follow the finger (`slideAllGroupsOnTouchUpdate`) | `CardView.qml` touch (`animateLayout(Theme.cardFanDuration)`) | matches |
+| New card | nothing for 150 ms (`cardPrepareAddDuration`, `CardWindow::delayPrepare`), then it waits full size below the screen while the card in front zooms out, and rises when the app is ready (`cardMaximize`), or slides into its stack loading after 750 ms (`cardAddMaxDuration`) (`CardWindow.cpp:1395-1494`; `CardWindowManagerStates.cpp:600-700`) | `CardView.qml` (`waitingUid`, `risingUid`), rising at `Theme.cardLaunchDuration` | matches, but the rise takes 400 ms (Phoenix's launch pace) |
+| Card throw (close) | 300 ms OutCubic (`CardWindowManager.cpp:687-688, 2872-2873`); a maximized card slides straight up at full size while the rest go to card view (`removeWindowNoModality`, `:672-696`) | `CardView.qml` flick, `close` | matches |
 | Slide between cards, reorder, group reorder, dimming | 300 OutQuart / 350 OutCubic / 500 OutCubic / 300 OutCubic (conf `:25-66`) | `CardView.qml`, `Card.qml` | matches |
 | Loading card pulse and cross-fade | `CardLoading.cpp:141-142`; conf `:55-60` | `CardLoading.qml` | matches |
 | Scene push/pop (an app's own scenes) | 300 ms easeOutQuad (`CardTransition.cpp`; conf `:61-62`) | `Card.qml` | matches |
 | Touch to Share ghost and glow | 750 ms OutQuart; 1000 ms linear (`CardWindowManager.cpp:2941-2942`, `TouchToShareGlow.cpp:99-127`) | `CardView.qml`, `TouchToShareGlow.qml` | matches |
-| Modal card | 500 ms (`CardWindow.cpp:75, 2210-2211`) | no modal cards (GAPS C11) | n/a |
+| Modal card | appears at once; fades out over 45 ms when the minimize gesture takes it away (`CardWindowManager.cpp:66, 877-884`); moves over 500 ms OutCubic when the positive space changes (`CardWindow.cpp:75, 2210-2211`) | `CardView.qml` (`modalFading`, `Theme.modalCardFadeDuration`) | matches, but no move with the keyboard yet (GAPS C11) |
 
 ## Lock screen, keyboard, rotation, system screens
 

@@ -192,6 +192,77 @@ async function main() {
         await page.waitForSelector("[data-testid='app-org.webosphoenix.pwa.tides']");
         check(/Installed/.test(await page.textContent("[data-testid='app-org.webosphoenix.pwa.tides']")), "search finds it, installed");
 
+        // ---- Connections: the account types of the catalog's index (its "accounts") -------------------
+        const index = JSON.parse(fs.readFileSync(catalog.indexFile, "utf8"));
+        check(Array.isArray(index.accounts) && index.accounts.some((a) => a.templateId === "com.webosphoenix.dav"),
+              "the catalog's signed index lists account types (accounts)");
+        await page.goto(appUrl("org.webosphoenix.marketplace"));
+        await page.click("[data-testid=tab-connections]");
+        await page.waitForSelector("[data-testid=connections]", { timeout: 15000 });
+        const groups = await page.$$eval("[data-testid^=group-]", (l) => l.map((g) => g.getAttribute("data-testid")));
+        check(groups[0] === "group-featured" && groups.includes("group-contacts") && groups.includes("group-mail"),
+              `Connections: Featured, then by capability (${groups.join(", ")})`);
+        const davIcon = page.locator("[data-testid=group-contacts] [data-testid='account-com.webosphoenix.dav'] img");
+        await page.waitForFunction((sel) => { const i = document.querySelector(sel); return i && i.complete && i.naturalWidth > 0; },
+                                   "[data-testid=group-contacts] [data-testid='account-com.webosphoenix.dav'] img", { timeout: 10000 }).catch(() => {});
+        const davSrc = await davIcon.evaluate((i) => ({ src: i.src, w: i.naturalWidth })).catch(() => ({ src: "", w: 0 }));
+        check(davSrc.src.startsWith(catalog.catalogUrl + "icons/accounts/") && davSrc.w > 0, `an account type's icon, resolved against the index, shows (${davSrc.src})`);
+        await shot("5b-connections");
+        await page.click("[data-testid=group-contacts] [data-testid='account-com.webosphoenix.dav']");
+        await page.waitForSelector("[data-testid=account-page]");
+        const davPage = await page.textContent("[data-testid=account-page]");
+        check(/Contacts/.test(await page.textContent("[data-testid=capability-chips]")) && /two-way/.test(await page.textContent("[data-testid=capability-chips]"))
+              && /Your data goes to the server you enter/.test(await page.textContent("[data-testid=privacy]"))
+              && /Phoenix's servers: none/.test(davPage) && /Checks for new data every few minutes/.test(davPage) && /App password/.test(davPage),
+              "an account type's page: capabilities, where the data goes, the sign-in, polling");
+        await shot("5c-connection-page");
+        host.length = 0;
+        await page.click("[data-testid=set-up]");
+        await page.waitForTimeout(300);
+        const setUp = host.find((m) => m.type === "launch" && m.payload.id === "com.palm.app.accounts");
+        check(!!setUp && setUp.payload.params && setUp.payload.params.templateId === "com.webosphoenix.dav",
+              "Set up launches Accounts at the template (" + JSON.stringify(setUp && setUp.payload.params) + ")");
+        // Added as an account: Open in Accounts instead.
+        await luna("luna://com.palm.db/put", { objects: [{ _kind: "com.palm.account:1", templateId: "com.palm.othermail", username: "dana@example.com",
+                                                             beingDeleted: false, capabilityProviders: [{ id: "com.palm.othermail.mail", capability: "MAIL" }] }] });
+        await page.goto(appUrl("org.webosphoenix.marketplace"));
+        await page.click("[data-testid=tab-connections]");
+        await page.waitForSelector("[data-testid='account-com.palm.othermail']", { timeout: 15000 });
+        check(/Added/.test(await page.textContent("[data-testid='account-com.palm.othermail']")), "an account type already added says so");
+        await page.click("[data-testid='account-com.palm.othermail']");
+        await page.waitForSelector("[data-testid=open-accounts]");
+        check(await page.locator("[data-testid=set-up]").count() === 0, "... and its page opens Accounts instead of Set up");
+
+        // The Accounts app's "Find More..." (add-account.js:85-92), aliased here.
+        const findMore = { common: { sceneType: "search", params: { type: "connector", connectorInfo: {
+            searchBarTitle: "Email Accounts", searchBarIcon: "/usr/palm/frameworks/enyo/1.0/framework/lib/accounts/images/acounts-48x48.png", types: ["MAIL"] } } } };
+        await page.goto(appUrl("org.webosphoenix.marketplace", findMore));
+        await page.waitForSelector("[data-testid=connections-filtered] [data-testid='account-com.palm.othermail']", { timeout: 15000 });
+        check((await page.textContent("[data-testid=filter-title]")) === "Email Accounts"
+              && await page.locator("[data-testid=connections-filtered] [data-testid='account-com.webosphoenix.dav']").count() === 0,
+              "Find More opens Connections with the capabilities it asked for, under its title");
+        await shot("5d-find-more");
+        await page.click("[data-testid=show-all-connections]");
+        await page.waitForSelector("[data-testid=connections] [data-testid='account-com.webosphoenix.dav']");
+        check(await page.locator("[data-testid=tab-connections].on").count() === 1, "... and All Connections shows every one");
+        // A relaunch with other capabilities (Accounts still open): those.
+        await page.evaluate((p) => document.dispatchEvent(new CustomEvent("webOSRelaunch", { detail: p })),
+                            { common: { sceneType: "search", params: { type: "connector", connectorInfo: { searchBarTitle: "Contacts", types: ["CONTACTS"] } } } });
+        await page.waitForSelector("[data-testid=connections-filtered] [data-testid='account-com.webosphoenix.dav']");
+        check((await page.textContent("[data-testid=filter-title]")) === "Contacts"
+              && await page.locator("[data-testid=connections-filtered] [data-testid='account-com.palm.othermail']").count() === 0,
+              "relaunched from Find More: the new capabilities");
+
+        // Search finds account types by protocol, in their own group.
+        await page.goto(appUrl("org.webosphoenix.marketplace"));
+        await page.fill("[data-testid=search]", "caldav");
+        await page.press("[data-testid=search]", "Enter");
+        await page.waitForSelector("[data-testid=search-connections] [data-testid='account-com.webosphoenix.dav']", { timeout: 15000 });
+        await shot("5e-search-connections");
+        await page.click("[data-testid=search-connections] [data-testid='account-com.webosphoenix.dav']");
+        await page.waitForSelector("[data-testid=account-page]");
+        check(/CardDAV/.test(await page.textContent("[data-testid=account-title]")), "search finds an account type by protocol, and opens its page");
+
         // ---- Classics (an App Museum stand-in) --------------------------------------------------------------
         await page.evaluate((u) => {
             const st = JSON.parse(localStorage.getItem("phoenix:marketplace:state"));

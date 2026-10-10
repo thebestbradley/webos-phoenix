@@ -174,7 +174,8 @@ export interface SystemPreferences {
     systemSounds?: boolean;
     /** The virtual keyboard's preferences, a JSON string (see keyboardPrefs). */
     x_palm_virtualkeyboard_prefs?: string;
-    rotationLock?: boolean;
+    /** Rotation lock: off (false), or the orientation the UI is locked in (true: on, the shell picks how the UI is turned now), as LunaSysMgr kept it. */
+    rotationLock?: boolean | "up" | "down" | "left" | "right";
     showAlertsWhenLocked?: boolean;
     /** Phoenix: the lock screen shows who sent what (off: "New Message"). */
     lockScreenPreviews?: boolean;

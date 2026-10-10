@@ -27,6 +27,14 @@ Item {
         system: SimSystemStatus { id: sys }
     }
 
+    // Every sound the shell played through phoenix-sim's window source (its
+    // soundLog keeps only the last 50).
+    property var heard: []
+    Connections {
+        target: windows
+        function onLastSoundChanged() { if (windows.lastSound) root.heard.push(windows.lastSound.path); }
+    }
+
     // A player that records: playSound / stopSound / soundExists / appDir.
     QtObject {
         id: fakePlayer
@@ -122,8 +130,7 @@ Item {
             compare(Policy.forBanner("alerts", "sounds/ding.wav", 0, false, env()).file,
                     "/usr/palm/applications/com.example.app/sounds/ding.wav");
             compare(Policy.forBanner("alerts", "charging.mp3", 0, false, env()).file, "/usr/palm/sounds/charging.mp3");
-            // A file that is not there (Email's emailreceived.mp3 is not
-            // shipped): the tone for the class.
+            // A file that is not there: the tone for the class.
             compare(Policy.forBanner("alerts", "/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3", 3000, false, env()).file,
                     "/usr/palm/sounds/alert.wav");
             // No tone set: alert.wav (lunaDefaultAlertSound).
@@ -169,8 +176,13 @@ Item {
         function test_feedback() {
             compare(Policy.forFeedback("key", "", {}), "/usr/share/phoenix/sounds/feedback/key.wav");
             compare(Policy.forFeedback("appclose", "", {}), "/usr/share/phoenix/sounds/feedback/appclose.wav");
+            // The angry card's and the launcher's (Phoenix's mimics too).
+            compare(Policy.forFeedback("carddrag", "", {}), "/usr/share/phoenix/sounds/feedback/carddrag.wav");
+            compare(Policy.forFeedback("birdappclose", "", {}), "/usr/share/phoenix/sounds/feedback/birdappclose.wav");
+            compare(Policy.forFeedback("LauncherOpenApp", "", {}), "/usr/share/phoenix/sounds/feedback/LauncherOpenApp.wav");
+            compare(Policy.forFeedback("LauncherCloseApp", "", {}), "/usr/share/phoenix/sounds/feedback/LauncherCloseApp.wav");
             // audiod's other names have no sound here.
-            compare(Policy.forFeedback("carddrag", "", {}), "");
+            compare(Policy.forFeedback("sysmgr_alert", "", {}), "");
             // "System Sounds" off: silent, unless a sink is named.
             compare(Policy.forFeedback("appclose", "", { systemSounds: false }), "");
             compare(Policy.forFeedback("appclose", "palerts", { systemSounds: false }), "/usr/share/phoenix/sounds/feedback/appclose.wav");
@@ -329,9 +341,14 @@ Item {
         function test_appSounds() {
             windows._hostMessage("com.palm.app.email", "", "sound",
                                  { soundClass: "alerts", soundFile: "/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3", duration: 3000 });
-            // emailreceived.mp3 does not ship (docs/LEGAL.md): the alert tone.
-            compare(windows.lastSound.path, "/usr/palm/sounds/alert.wav");
+            // Phoenix's own emailreceived.mp3 (the original's cannot ship,
+            // docs/LEGAL.md; the compat overlay has one in its place).
+            compare(windows.lastSound.path, "/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3");
             compare(windows.lastSound.duration, 3000);
+            // One that is not there: the alert tone.
+            windows._hostMessage("com.palm.app.email", "", "sound",
+                                 { soundClass: "alerts", soundFile: "/usr/palm/applications/com.palm.app.email/sounds/gone.mp3", duration: 3000 });
+            compare(windows.lastSound.path, "/usr/palm/sounds/alert.wav");
             windows._hostMessage("org.webosphoenix.messaging", "", "notification",
                                  { appId: "org.webosphoenix.messaging", title: "Sam", body: "Lunch?", soundClass: "notifications" });
             compare(windows.lastSound.path, "/usr/palm/sounds/notification.wav");
@@ -347,7 +364,7 @@ Item {
         function test_chosenTonesPlay() {
             sys.applyAppStatus({ alerttone: "/usr/palm/sounds/phone.wav", notificationtone: "/usr/palm/sounds/ringtone.mp3" });
             windows._hostMessage("com.palm.app.email", "", "sound",
-                                 { soundClass: "alerts", soundFile: "/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3", duration: 3000 });
+                                 { soundClass: "alerts", soundFile: "/usr/palm/applications/com.palm.app.email/sounds/gone.mp3", duration: 3000 });
             compare(windows.lastSound.path, "/usr/palm/sounds/phone.wav");
             windows._hostMessage("org.webosphoenix.messaging", "", "notification",
                                  { appId: "org.webosphoenix.messaging", title: "Sam", body: "Lunch?", soundClass: "notifications" });
@@ -438,6 +455,53 @@ Item {
             shell.cardView.close(uid);
             compare(windows.soundCount, n);
             tryCompare(windows.cards, "count", 0, 2000);
+        }
+
+        // Upside down, the angry card creaks as it is pulled past 15 % of
+        // the screen and flies off with "birdappclose" instead of "appclose"
+        // (CardWindowManager.cpp:1280-1283, 1523-1527, 2890-2893); upright,
+        // no creak and "appclose".
+        function angryPull(cv) {
+            var x = cv.width / 2, y = cv.cardOriginY;
+            mousePress(cv, x, y);
+            for (var i = 1; i <= 14; ++i)
+                mouseMove(cv, x, y + i * 25, 10);
+            mouseRelease(cv, x, y + 350);
+        }
+        function soundsSince(n) {
+            return root.heard.slice(n).map(function (p) { return p.replace(/.*\//, ""); });
+        }
+        function test_angryCardSounds() {
+            var cv = shell.cardView;
+            windows.launch("org.webosphoenix.email", "");
+            wait(50);
+            var n = root.heard.length;
+            angryPull(cv);
+            tryCompare(windows.cards, "count", 0, 2000);
+            compare(soundsSince(n).join(), "appclose.wav");
+            sys.deviceOrientation = "down";
+            tryCompare(shell, "uiOrientation", "down", 2000);
+            tryVerify(function() { return !shell.rotator.rotating; }, 3000);
+            windows.launch("org.webosphoenix.email", "");
+            wait(50);
+            n = root.heard.length;
+            angryPull(cv);
+            tryCompare(windows.cards, "count", 0, 2000);
+            compare(soundsSince(n).join(), "carddrag.wav,birdappclose.wav");
+            sys.deviceOrientation = "up";
+            tryCompare(shell, "uiOrientation", "up", 2000);
+            tryVerify(function() { return !shell.rotator.rotating; }, 3000);
+        }
+
+        // The launcher shown and hidden (SystemUiController::setLauncherShown).
+        function test_launcherSounds() {
+            var n = root.heard.length;
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", true, 1000);
+            compare(soundsSince(n).join(), "LauncherOpenApp.wav");
+            shell.homeKey();
+            tryCompare(shell, "launcherOpen", false, 1000);
+            compare(soundsSince(n).join(), "LauncherOpenApp.wav,LauncherCloseApp.wav");
         }
 
         function test_batteryFull() {

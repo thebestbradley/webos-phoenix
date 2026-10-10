@@ -204,10 +204,34 @@ async function main() {
         }));
         check(prefs.wallpaper && prefs.wallpaper.wallpaperFile === st.payload.wallpaperFile, "photos: getPreferences returns the same wallpaper Settings reads");
 
+        // Share: the system's share sheet, with the picture.
+        const sheetFrame = async () => {
+            const el = await page.waitForSelector("iframe[data-phoenix-sheet=share]");
+            const f = await el.contentFrame();
+            await f.waitForSelector("[data-testid=share-sheet]");
+            await page.waitForTimeout(400);
+            return f;
+        };
         await page.click("[data-testid='share']");
-        await page.waitForSelector(".pui-popup");
+        let sf = await sheetFrame();
+        check(await sf.locator("[data-testid='share-app-org.webosphoenix.messaging']").count() === 1
+            && await sf.locator("[data-testid='share-app-com.palm.app.email']").count() === 1,
+            "photos: Share opens the system sheet (Email, Messaging)");
         await shot(page, "photos-share");
+        host.length = 0;
+        await sf.click("[data-testid='share-app-org.webosphoenix.messaging']");
+        await page.waitForSelector("iframe[data-phoenix-sheet]", { state: "detached" });
+        const sharedTo = lastHost("launch");
+        check(sharedTo && sharedTo.payload.id === "org.webosphoenix.messaging"
+            && /\/samples\/photos\/.+\.jpg$/.test(sharedTo.payload.params.share.files[0].path),
+            "photos: sharing to Messaging launches it with the picture");
+        // The app menu's Share shares the same picture.
+        await page.evaluate(() => document.dispatchEvent(new CustomEvent("phoenixAppMenu")));
+        await page.click("[data-testid='appmenu-share']");
+        sf = await sheetFrame();
+        check((await sf.textContent("[data-testid=share-title]")) === current, "photos: the app menu's Share shares the picture shown");
         await page.keyboard.press("Escape");
+        await page.waitForSelector("iframe[data-phoenix-sheet]", { state: "detached" });
 
         // Delete the camera photo.
         await page.goto(appUrl("org.webosphoenix.photos", { target: shots[0].file_path }));

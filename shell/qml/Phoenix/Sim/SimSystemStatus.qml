@@ -67,6 +67,13 @@ QtObject {
     // The Bluetooth radio is coming up ("Turning on Bluetooth...").
     property bool bluetoothTurningOn: false
     property bool rotationLocked: false
+    // The orientation the rotation lock holds ("up", "down", "left",
+    // "right"; "" not known yet: the shell locks the UI as it is turned and
+    // says so here). Kept across restarts, as LunaSysMgr's rotationLock
+    // preference kept the orientation (Preferences.cpp:196-201).
+    property string rotationLockOrientation: ""
+    // Unlocked, the orientation is forgotten (Orientation_Invalid).
+    onRotationLockedChanged: if (!rotationLocked) rotationLockOrientation = ""
     // How the simulated device is held: "up", "down", "left" (turned
     // counter-clockwise) or "right" (phoenix-sim --orientation, Ctrl+Left /
     // Ctrl+Right). The shell turns the UI to follow (UiRotation).
@@ -232,6 +239,13 @@ QtObject {
     // headers show them (SystemMenu.cpp:397-412, 568-610, 776-800).
     readonly property string wifiSsid: _named(wifiNetworks, "ssid", "ipConfigured")
     readonly property string bluetoothDevice: _named(bluetoothDevices, "name", "connected")
+    // How many devices Settings > Bluetooth has paired, as the runtime
+    // reports it (-1 until it has: then the sample devices above count).
+    // None: the system menu turning Bluetooth on opens its preferences
+    // (SystemMenu::slotBluetoothTurnedOn).
+    property int bluetoothPairedCount: -1
+    readonly property bool bluetoothPairedDevicesAvailable: bluetoothPairedCount < 0 ? bluetoothDevices.length > 0
+                                                                                     : bluetoothPairedCount > 0
     readonly property string vpnProfile: _named(vpnProfiles, "name", "connected")
 
     // Turn the Wi-Fi radio on or off. On, it looks for networks and joins a
@@ -392,8 +406,15 @@ QtObject {
             automaticBrightness = !!s.automaticBrightness;
         if (s.displayOnWhenConnected !== undefined)
             onWhenConnected = !!s.displayOnWhenConnected;
-        if (s.rotationLocked !== undefined)
+        if (s.rotationLockOrientation !== undefined && s.rotationLockOrientation !== "")
+            rotationLockOrientation = s.rotationLockOrientation;
+        if (s.rotationLocked !== undefined) {
             rotationLocked = !!s.rotationLocked;
+            if (!rotationLocked)
+                rotationLockOrientation = "";
+        }
+        if (s.bluetoothPairedCount !== undefined)
+            bluetoothPairedCount = s.bluetoothPairedCount;
         if (s.muted !== undefined)
             muted = !!s.muted;
         if (s.callForwarding !== undefined)
@@ -486,7 +507,9 @@ QtObject {
         case "airplaneMode": return { airplaneMode: airplaneMode };
         case "bluetoothOn": return { bluetoothOn: bluetoothOn };
         case "brightness": return { brightness: Math.round(brightness * 100) };
-        case "rotationLocked": return { rotationLocked: rotationLocked };
+        case "rotationLocked":
+        case "rotationLockOrientation":
+            return { rotationLocked: rotationLocked, rotationLockOrientation: rotationLockOrientation };
         case "muted": return { muted: muted };
         case "volume": return { volume: volume };
         case "keyboard": return { keyboard: keyboard };

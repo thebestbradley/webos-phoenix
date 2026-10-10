@@ -72,7 +72,11 @@ service bus). `runtime/phoenix-runtime.js` runs before the app's own scripts:
   `third_party/app-services`:
   - **accounts** (`com.palm.service.accounts`): accounts in db8, the account
     templates released with Open webOS (HP webOS profile, IMAP/POP/email)
-    read from `/usr/palm/public/accounts/`, credentials; the HP webOS
+    read from `/usr/palm/public/accounts/`, credentials. Templates are found
+    as the service finds them: the folders `runtime/rootfs.json` mounts under
+    `/usr/palm/public/accounts/`, and those in the `public/accounts/` of the
+    apps the user installed (a connector), read again when apps are
+    installed or removed; the HP webOS
     Account server returns the sample owner. Phoenix's CardDAV & CalDAV
     template and its transport are added by the CardDAV and CalDAV block (see
     [CardDAV and CalDAV](#carddav-and-caldav)).
@@ -1964,13 +1968,14 @@ are the clients.
 | `confirm {threadId, messageId, accept}` | a read-back (`status: "pending"`): run it, or not |
 | `threads` / `thread {id?}` | `{threads, current}` / `{thread, messages}` (the one in use without an id) |
 | `newThread`, `setCurrent {id}`, `deleteThread {id}`, `clearHistory` | conversations |
-| `getSettings` / `setSettings {...}` | `{enabled, speak, language, units, localModel, defaultProvider, allowCloudControl, disabledCommands}`; only Settings may set `allowCloudControl` |
+| `getSettings` / `setSettings {...}` | `{enabled, speak, language, units, localModel, speechVoice, speechRate, personality, voiceWait, defaultProvider, allowCloudControl, voiceReplies, wakeWord, wakeWhenLocked, disabledCommands, followUps, quietStart, quietEnd, followUpFirst, followUpAgain, followUpTopicsOff}`; `speechRate` one of 0.8, 0.9, 1, 1.15, 1.3; `personality` friendly, cheerful, calm, professional or playful; `voiceWait` (seconds a spoken conversation stays open after an answer) 15, 30, 45, 60, 90 or 120; only Settings may set `allowCloudControl` |
 | `commands` | `{commands: [{id, title, risk, builtIn, appId, enabled, confirms}]}` |
 | `providers` | `{providers: [{id, type, name, model, baseUrl, hasKey, keyHint, label}], defaultProvider, types}` |
 | `setProvider {id?, type, name?, model?, baseUrl?, key?}`, `removeProvider {id}`, `testProvider {id \| type, model, baseUrl, key}`, `listModels {...}` | Settings only. A key is sealed at once; `testProvider` answers `{ok, text}` or `{ok: false, error}` |
 | `models` | the on-device catalogue with `fits`, `recommended`, `installed`, `downloading`, and `status: {available, running, ramBytes, error, howToInstall}` |
 | `downloadModel {id}`, `cancelDownload {id}`, `removeModel {id}`, `selectModel {id}` | on-device models |
-| `speak {text}`, `stopSpeaking` | the device's voice |
+| `speak {text, voice?, rate?}`, `stopSpeaking` | the device's voice (the chosen voice and speed unless given: Settings' Play Sample) |
+| `sessionPhrase {kind: "checkIn" \| "goodbye", threadId?}` | a spoken conversation's check-in or goodbye (the shell's view), in the chosen personality: `{text, messages}`, put in the conversation (the goodbye with `status: "goodbye"`) and spoken. System UI, Assistant and Settings only. `ask {voice, checkIn?}` answers "I'm done" (and "no" with `checkIn`) with a goodbye the same way |
 | `followUps` | follow-up questions waiting (`lib/followups.js`): `{followUps: [{id, kind, meta, question, item: {type, id, title, at}, state: "open" \| "queued" \| "delivered", attempts, nextAt, threadId, choices}], topicsOff}` |
 | `answerFollowUp {id, action: "fu:<n>" \| "fu:skip"}` | a follow-up's notification button: the answer applied, said in its conversation, `{text, answered}` (the banner's words). System UI, Assistant and Settings only |
 | `followUpOpen {id}` | a follow-up's notification tapped: `{thread, messages}`, the question in its conversation (not again if it is waiting there), unread cleared |
@@ -2009,7 +2014,7 @@ the app's own service called with `{action}` as the system UI, the reply's
 its own stored key, so the shell's view and the app never write over each
 other (PR 7).
 
-`luna://org.webosphoenix.tts/`: `speak {text, lang?}`, `stop`, `getStatus`
+`luna://org.webosphoenix.tts/`: `speak {text, lang?, voice?, rate?}` (rate: 1 normal, 0.5 to 2), `stop`, `getStatus`
 -> `{available, engine}`.
 
 **What the commands do** (`lib/commands.js`; the full list with phrasings
@@ -2617,8 +2622,21 @@ system back.
 In the simulator the service runs unchanged over a simulated RAUC: two slots in
 the shared store; osInfo's `webos_release` and `webos_build_id` are the running
 slot's. A simulator bundle is only a RAUC manifest
-(`php server/updates/bin/updates.php simulator --version 0.2.0 --build 2`,
-served by `server/updates/bin/serve.sh` at `http://127.0.0.1:8089/`).
+(`UPDATES_FEED=server/marketplace/data/updates php server/updates/bin/updates.php
+simulator --version 0.2.0 --build 2`, or the catalog server's admin API).
+
+**The feed is built into Phoenix's own catalog server** (the owner, 10
+October 2026: our own API and catalog, not a third party's host): the
+server that publishes the Marketplace's signed catalog (`server/marketplace`)
+also serves the update feed at `/updates/<compatible>/<channel>.json` with
+its bundles, and publishes releases with its admin API (`POST
+/api/admin/updates?compatible=&version=&build=&channel=&note=...` with the
+bundle as the body; `POST /api/admin/updates/withdraw`; `GET /api/updates`
+lists every channel). Both it and `server/updates/bin/updates.php` write the
+feed with `server/updates/src/UpdateFeed.php`. A device's default
+(`/etc/palm/updates.json`) is that server: `http://127.0.0.1:8088/updates/`
+on this computer (the simulator's Services > Marketplace Catalog starts it),
+the catalog server's public address once it is hosted.
 `com.palm.power/shutdown/machineReboot` restarts phoenix-sim (`simProcess`),
 or reloads the page under `tools/serve-rootfs.py`; for a system update
 (`reason: "System update"`) phoenix-sim starts again with `--updating`, and

@@ -235,6 +235,41 @@ Item {
             tryCompare(boot, "running", false, 1500);
         }
 
+        // HomeButtonOrientationAngle: the boot animation is drawn turned so
+        // it is upright with the Home button below (BootupAnimation.cpp:
+        // 167-180, 587-596); anything but 0/90/180/270 is 0, -90 is 270
+        // (Settings.cpp:662-672).
+        function test_bootTurnedToTheHomeButton() {
+            var boot = screens.boot;
+            compare(boot.angle, 0);
+            shell.homeButtonOrientationAngle = 270;
+            compare(shell.homeButtonAngle, 270);
+            compare(boot.angle, 270);
+            screens.startBoot(true);
+            var activity = findChild(shell, "bootActivity");
+            compare(activity.rotation, 270);
+            // Its width and height swapped: the lines sit at the button's edge
+            // (the screen's right).
+            compare(activity.width, shell.height);
+            compare(activity.height, shell.width);
+            var line = findChild(shell, "bootActivityLine1");
+            var p = line.mapToItem(shell, line.width / 2, line.height / 2);
+            verify(p.x > shell.width - 60, "beside the right edge: " + p.x);
+            fuzzyCompare(p.y, shell.height / 2, 2);
+            screens.bootProgress(100, 100);
+            tryCompare(boot, "mode", "logo", 500);
+            compare(findChild(shell, "bootLogo").parent.rotation, 270);
+            screens.finishBoot();
+            tryCompare(boot, "running", false, 1500);
+            shell.homeButtonOrientationAngle = -90;
+            compare(shell.homeButtonAngle, 270);
+            shell.homeButtonOrientationAngle = 45;
+            compare(shell.homeButtonAngle, 0);
+            shell.homeButtonOrientationAngle = 450;
+            compare(shell.homeButtonAngle, 90);
+            shell.homeButtonOrientationAngle = 0;
+        }
+
         // enableFpsCounter / enableTouchPlot.
         function test_debugOverlays() {
             var fps = findChild(shell, "fpsCounter");

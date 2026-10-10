@@ -13,7 +13,7 @@ import { resolve } from "node:path";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
 import { assistant, call } from "@phoenix/luna";
-import { AssistantPage } from "./Assistant";
+import { AssistantPage, waitLabel } from "./Assistant";
 
 type PS = { getResource(p: string): string | undefined; appIdentifier: string };
 const ps = () => (window as unknown as { PalmSystem: PS }).PalmSystem;
@@ -65,6 +65,31 @@ describe("Settings > Assistant: Voice", () => {
         fireEvent.click(toggle("as-enabled"));
         await waitFor(() => expect(toggle("as-wake").disabled).toBe(true));
         expect(toggle("as-wake-locked").disabled).toBe(true);
+    });
+});
+
+describe("Settings > Assistant: personality and the wait after answering", () => {
+    it("chooses a personality, friendly by default, and how long a spoken conversation waits, 45 seconds by default", async () => {
+        // (The test before turns the assistant off.)
+        await assistant.setSettings({ enabled: true });
+        render(<AssistantPage />);
+        await waitFor(() => expect(screen.getByTestId("as-personality")).toBeTruthy());
+        expect(screen.getByTestId("as-personality").textContent).toContain("Friendly");
+        expect(screen.getByTestId("as-voice-wait").textContent).toContain("45 seconds");
+        expect(screen.getByTestId("as-voice-wait-note").textContent).toMatch(/anything else.*goodbye.*I\u2019m done/);
+        fireEvent.click(screen.getByTestId("as-personality"));
+        fireEvent.click(screen.getByRole("option", { name: "Playful" }));
+        await waitFor(async () => expect((await assistant.settings()).personality).toBe("playful"));
+        fireEvent.click(screen.getByTestId("as-voice-wait"));
+        fireEvent.click(screen.getByRole("option", { name: "1 minute" }));
+        await waitFor(async () => expect((await assistant.settings()).voiceWait).toBe(60));
+        await assistant.setSettings({ personality: "friendly", voiceWait: 45 });
+    });
+
+    it("says the waits as people do", () => {
+        expect(waitLabel(15)).toBe("15 seconds");
+        expect(waitLabel(60)).toBe("1 minute");
+        expect(waitLabel(120)).toBe("2 minutes");
     });
 });
 

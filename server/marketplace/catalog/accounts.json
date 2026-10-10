@@ -1,0 +1,79 @@
+{
+    "//": "The account types the Marketplace's Connections view lists (docs/SYNERGY-CONNECTORS.md 2.1, phase C0): the templates Phoenix has today, all built in. Catalog::publish() checks each one and writes it into the signed index as `accounts`; iconFrom (a file in this repository, not published) is copied to `icon` under the published folder. capabilities use each template's own capabilityProviders[].capability.",
+    "accounts": [
+        {
+            "templateId": "com.webosphoenix.dav",
+            "title": "CardDAV & CalDAV",
+            "provider": "Any CardDAV or CalDAV server",
+            "icon": "icons/accounts/com.webosphoenix.dav.png",
+            "iconFrom": "apps/dav/public/accounts/com.webosphoenix.dav/images/dav-48x48@2x.png",
+            "summary": "Your contacts and calendars from Nextcloud, Radicale or any other CardDAV and CalDAV server, kept in step both ways.",
+            "capabilities": [
+                { "capability": "CONTACTS", "direction": "two-way" },
+                { "capability": "CALENDAR", "direction": "two-way" }
+            ],
+            "protocols": ["carddav", "caldav"],
+            "auth": { "type": "app-password", "registration": "none" },
+            "server": "user",
+            "privacy": { "dataGoesTo": "the server you enter", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "beta",
+            "package": { "id": "org.webosphoenix.dav", "builtin": true },
+            "featured": true
+        },
+        {
+            "templateId": "com.webosphoenix.webcal",
+            "title": "Subscribed Calendar",
+            "provider": "Any calendar address (webcal or .ics)",
+            "icon": "icons/accounts/com.webosphoenix.webcal.png",
+            "iconFrom": "apps/dav/public/accounts/com.webosphoenix.dav/images/dav-48x48@2x.png",
+            "summary": "A public calendar (holidays, a team's fixtures, a school's terms) in Calendar, read only and refreshed now and then.",
+            "capabilities": [
+                { "capability": "CALENDAR", "direction": "read-only" }
+            ],
+            "protocols": ["webcal", "ics"],
+            "auth": { "type": "none", "registration": "none" },
+            "server": "user",
+            "privacy": { "dataGoesTo": "nowhere: Phoenix only reads the calendar address you enter", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "beta",
+            "package": { "id": "org.webosphoenix.dav", "builtin": true }
+        },
+        {
+            "templateId": "com.palm.othermail",
+            "title": "Email Account",
+            "provider": "Any IMAP or POP mail server",
+            "icon": "icons/accounts/com.palm.othermail.png",
+            "iconFrom": "compat/rootfs/usr/palm/public/accounts/com.palm.othermail/images/othermail48@2x.png",
+            "summary": "Mail from your own provider in Email, over IMAP or POP, sent over SMTP: webOS's own mail transports.",
+            "capabilities": [
+                { "capability": "MAIL", "direction": "two-way" }
+            ],
+            "protocols": ["imap", "pop3", "smtp"],
+            "auth": { "type": "password", "registration": "none" },
+            "server": "user",
+            "privacy": { "dataGoesTo": "the mail servers you enter", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "beta",
+            "package": { "id": "com.palm.app.email", "builtin": true }
+        },
+        {
+            "templateId": "com.webosphoenix.xmpp",
+            "title": "Jabber (XMPP)",
+            "provider": "Any XMPP server",
+            "icon": "icons/accounts/com.webosphoenix.xmpp.png",
+            "iconFrom": "runtime/accounts/com.webosphoenix.xmpp/images/xmpp-48x48@2x.png",
+            "summary": "Chats and buddies' presence in Messaging and Contacts. Simulator only for now, against the simulated server chat.example.",
+            "capabilities": [
+                { "capability": "MESSAGING", "direction": "two-way" }
+            ],
+            "protocols": ["xmpp"],
+            "auth": { "type": "password", "registration": "none" },
+            "server": "discovered",
+            "privacy": { "dataGoesTo": "the server in your Jabber ID", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental",
+            "package": { "id": "org.webosphoenix.service.xmpp", "builtin": true }
+        }
+    ]
+}

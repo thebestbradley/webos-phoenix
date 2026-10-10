@@ -7,9 +7,11 @@
 //
 //   <data>/public/v1/key.json        {"key": base64 public key, "name", "fingerprint"}
 //   <data>/public/v1/index.json      every listed app (kind pwa, or ipk with
-//                                    an approved release), newest release each
+//                                    an approved release), newest release each,
+//                                    and the account types (catalog/accounts.json)
 //   <data>/public/v1/index.json.sig  base64 Ed25519 signature of index.json
 //   <data>/public/v1/packages/       approved .ipk files
+//   <data>/public/v1/icons/accounts/ the account types' icons
 //
 // Each publish is a new build number; the index expires after 14 days, so
 // a mirror cannot serve an old one forever, and devices refuse a build
@@ -30,6 +32,12 @@ final class Catalog
     private function publicDir(): string
     {
         return $this->config['data'] . '/public/v1';
+    }
+
+    /** The checkout the account types' icons are copied from. */
+    private function repo(): string
+    {
+        return $this->config['repo'] ?? dirname(__DIR__, 3);
     }
 
     private function uploadDir(): string
@@ -444,10 +452,154 @@ final class Catalog
         };
     }
 
+    // ---- Account types (the Marketplace's Connections view) -------------------------------------
+
+    /** The values each account type's fields may take (docs/SYNERGY-CONNECTORS.md 2.1). */
+    public const ACCOUNT_ENUMS = [
+        'direction' => ['two-way', 'read-only', 'write-only'],
+        'auth.type' => ['password', 'app-password', 'oauth', 'api-key', 'none'],
+        'auth.registration' => ['none', 'required'],
+        'server' => ['user', 'fixed', 'discovered'],
+        'privacy.phoenixServers' => ['none', 'push-relay', 'token-relay'],
+        'push' => ['poll', 'unifiedpush', 'relay'],
+        'status' => ['stable', 'beta', 'experimental'],
+    ];
+
+    /**
+     * The account types in $file (catalog/accounts.json), checked, as the index gives them, with
+     * where each icon is copied from: [[entry, iconFrom | null], ...]. A bad entry throws
+     * CheckFailed, naming it, so a publish never writes half a list. Phase C0 lists the built-in
+     * types only; connector packages (builtin false) come with phase C4.
+     */
+    public function accountTypes(?string $file = null): array
+    {
+        $file ??= $this->config['accounts'] ?? dirname(__DIR__) . '/catalog/accounts.json';
+        $list = json_decode((string) @file_get_contents($file), true);
+        if (!is_array($list) || !isset($list['accounts']) || !is_array($list['accounts']) || !array_is_list($list['accounts'])) {
+            throw new CheckFailed("$file: not a list of account types ({\"accounts\": [...]})");
+        }
+        $out = [];
+        $seen = [];
+        foreach ($list['accounts'] as $i => $e) {
+            $id = is_array($e) && is_string($e['templateId'] ?? null) ? $e['templateId'] : "#$i";
+            try {
+                $checked = $this->accountType(is_array($e) ? $e : []);
+            } catch (CheckFailed $x) {
+                throw new CheckFailed("account type $id: " . $x->getMessage());
+            }
+            if (isset($seen[$id])) {
+                throw new CheckFailed("account type $id: listed twice");
+            }
+            $seen[$id] = true;
+            $out[] = $checked;
+        }
+        return $out;
+    }
+
+    /** One account type, checked: [entry as published, iconFrom | null]. */
+    private function accountType(array $e): array
+    {
+        $fields = ['templateId', 'title', 'provider', 'icon', 'iconFrom', 'summary', 'capabilities', 'protocols', 'auth', 'server',
+                   'privacy', 'push', 'status', 'package', 'help', 'featured'];
+        if ($extra = array_diff(array_keys($e), $fields)) {
+            throw new CheckFailed('unknown fields: ' . implode(', ', $extra));
+        }
+        $text = function (string $k, int $max) use ($e): string {
+            if (!is_string($e[$k] ?? null) || trim($e[$k]) === '' || mb_strlen($e[$k]) > $max) {
+                throw new CheckFailed("$k: a text of 1 to $max characters");
+            }
+            return $e[$k];
+        };
+        $oneOf = function (string $name, $v): string {
+            if (!is_string($v) || !in_array($v, self::ACCOUNT_ENUMS[$name], true)) {
+                throw new CheckFailed("$name: one of " . implode(', ', self::ACCOUNT_ENUMS[$name]));
+            }
+            return $v;
+        };
+        if (!is_string($e['templateId'] ?? null) || !self::validId($e['templateId'])) {
+            throw new CheckFailed('templateId: a template id (reverse-DNS, as com.example.account)');
+        }
+        $caps = [];
+        if (!is_array($e['capabilities'] ?? null) || !$e['capabilities'] || !array_is_list($e['capabilities'])) {
+            throw new CheckFailed('capabilities: at least one {capability, direction?}');
+        }
+        foreach ($e['capabilities'] as $c) {
+            // The template's own names (capabilityProviders[].capability): CONTACTS, MAIL, ...
+            if (!is_array($c) || array_diff(array_keys($c), ['capability', 'direction'])
+                || !is_string($c['capability'] ?? null) || !preg_match('/^[A-Z][A-Z0-9_]*(\.[A-Z0-9_]+)*$/', $c['capability'])) {
+                throw new CheckFailed('capabilities: {capability: an upper-case name as the template has it, direction?}');
+            }
+            $caps[] = ['capability' => $c['capability']] + (isset($c['direction']) ? ['direction' => $oneOf('direction', $c['direction'])] : []);
+        }
+        $protocols = $e['protocols'] ?? null;
+        if (!is_array($protocols) || !array_is_list($protocols)
+            || array_filter($protocols, fn ($p) => !is_string($p) || !preg_match('/^[a-z0-9][a-z0-9.+-]{0,39}$/', $p))) {
+            throw new CheckFailed('protocols: a list of lower-case protocol names ("caldav", "imap")');
+        }
+        $auth = $e['auth'] ?? null;
+        $privacy = $e['privacy'] ?? null;
+        $package = $e['package'] ?? null;
+        if (!is_array($auth) || array_diff(array_keys($auth), ['type', 'registration'])) {
+            throw new CheckFailed('auth: {type, registration}');
+        }
+        if (!is_array($privacy) || array_diff(array_keys($privacy), ['dataGoesTo', 'e2ee', 'phoenixServers'])
+            || !is_string($privacy['dataGoesTo'] ?? null) || trim($privacy['dataGoesTo']) === '' || mb_strlen($privacy['dataGoesTo']) > 200
+            || !is_bool($privacy['e2ee'] ?? null)) {
+            throw new CheckFailed('privacy: {dataGoesTo: a text, e2ee: true or false, phoenixServers}');
+        }
+        if (!is_array($package) || array_diff(array_keys($package), ['id', 'builtin'])
+            || !is_string($package['id'] ?? null) || !self::validId($package['id'])) {
+            throw new CheckFailed('package: {id: the providing app or service, builtin}');
+        }
+        if (($package['builtin'] ?? null) !== true) {
+            throw new CheckFailed('package: only built-in account types for now (builtin: true); connector packages come later');
+        }
+        // The icon: a file under the published icons/accounts/, copied from iconFrom (a file in
+        // this checkout), or an https:// address.
+        $icon = $e['icon'] ?? null;
+        $from = $e['iconFrom'] ?? null;
+        if (is_string($icon) && preg_match('#^https://[^\s]+$#i', $icon)) {
+            if ($from !== null) {
+                throw new CheckFailed('iconFrom: only for an icon published here (icons/accounts/...)');
+            }
+        } elseif (!is_string($icon) || !preg_match('#^icons/accounts/[A-Za-z0-9][A-Za-z0-9._-]*\.png$#', $icon)) {
+            throw new CheckFailed('icon: icons/accounts/<name>.png (published here) or an https:// address');
+        } elseif (!is_string($from) || str_contains($from, '..') || str_starts_with($from, '/')
+                  || !is_file($this->repo() . '/' . $from)
+                  || self::imageType((string) file_get_contents($this->repo() . '/' . $from)) !== 'png') {
+            throw new CheckFailed('iconFrom: a PNG in this checkout, by its path from the top (apps/dav/...)');
+        }
+        if (isset($e['help']) && (!is_string($e['help']) || !preg_match('#^https://[^\s]{1,490}$#i', $e['help']))) {
+            throw new CheckFailed('help: an https:// address');
+        }
+        if (isset($e['featured']) && !is_bool($e['featured'])) {
+            throw new CheckFailed('featured: true or false');
+        }
+        $entry = [
+            'templateId' => $e['templateId'], 'title' => $text('title', 80), 'provider' => $text('provider', 80),
+            'icon' => str_starts_with($icon, 'icons/') ? $this->config['base_url'] . $icon : $icon,
+            'summary' => $text('summary', 300), 'capabilities' => $caps, 'protocols' => $protocols,
+            'auth' => ['type' => $oneOf('auth.type', $auth['type'] ?? null), 'registration' => $oneOf('auth.registration', $auth['registration'] ?? null)],
+            'server' => $oneOf('server', $e['server'] ?? null),
+            'privacy' => ['dataGoesTo' => $privacy['dataGoesTo'], 'e2ee' => $privacy['e2ee'],
+                          'phoenixServers' => $oneOf('privacy.phoenixServers', $privacy['phoenixServers'] ?? null)],
+            'push' => $oneOf('push', $e['push'] ?? null), 'status' => $oneOf('status', $e['status'] ?? null),
+            'package' => ['id' => $package['id'], 'builtin' => true],
+        ];
+        if (isset($e['help'])) {
+            $entry['help'] = $e['help'];
+        }
+        $entry['featured'] = !empty($e['featured']);
+        return [$entry, str_starts_with($icon, 'icons/') ? [$from, $icon] : null];
+    }
+
     // ---- Publishing ---------------------------------------------------------------------------
 
     public function publish(): array
     {
+        // The account types first: a bad catalog/accounts.json stops the publish, and the
+        // index devices have stays as it was.
+        $accountTypes = $this->accountTypes();
         $apps = [];
         $categories = [];
         foreach ($this->db->all("SELECT id FROM apps WHERE status = 'listed' ORDER BY featured DESC, title") as $row) {
@@ -487,10 +639,18 @@ final class Catalog
             'expires' => gmdate('Y-m-d\TH:i:s\Z', $now + self::EXPIRES_DAYS * 86400),
             'source' => ['id' => 'phoenix', 'name' => $this->config['name']],
             'categories' => array_keys($categories), 'apps' => $apps,
+            'accounts' => array_column($accountTypes, 0),
         ];
         $json = json_encode($index, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n";
         $dir = $this->publicDir();
         @mkdir($dir, 0755, true);
+        // The account types' icons, before the index that names them.
+        foreach ($accountTypes as [, $copy]) {
+            if ($copy) {
+                @mkdir(dirname("$dir/{$copy[1]}"), 0755, true);
+                copy($this->repo() . '/' . $copy[0], "$dir/{$copy[1]}");
+            }
+        }
         // The signature first, then the index: a reader never sees an index without its signature.
         file_put_contents("$dir/index.json.sig.new", base64_encode($this->signer->sign($json)) . "\n");
         file_put_contents("$dir/index.json.new", $json);
@@ -499,6 +659,6 @@ final class Catalog
         file_put_contents("$dir/key.json", json_encode(['key' => base64_encode($this->signer->public), 'name' => $this->config['name'],
                                                          'fingerprint' => $this->signer->fingerprint()], JSON_UNESCAPED_SLASHES) . "\n");
         $this->db->run('INSERT INTO index_builds (build, generated, sha256) VALUES (?, ?, ?)', [$build, $index['generated'], hash('sha256', $json)]);
-        return ['build' => $build, 'apps' => count($apps)];
+        return ['build' => $build, 'apps' => count($apps), 'accounts' => count($accountTypes)];
     }
 }

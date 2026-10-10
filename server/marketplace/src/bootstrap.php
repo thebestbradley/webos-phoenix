@@ -20,6 +20,8 @@
 //                         tests' local sites); never set on a server
 //   MARKETPLACE_FETCH_PROXY  an egress proxy the operator trusts for those
 //                         copies (it resolves the names; default: none)
+//   MARKETPLACE_UPDATES   the system update feed it serves at /updates/
+//                         (default: <data>/updates; server/updates/src/UpdateFeed.php)
 
 declare(strict_types=1);
 
@@ -32,6 +34,8 @@ spl_autoload_register(function (string $class): void {
         }
     }
 });
+// The system update feed (server/updates), which this server serves and publishes.
+require_once dirname(__DIR__, 2) . '/updates/src/UpdateFeed.php';
 
 function marketplace_config(): array
 {
@@ -45,5 +49,9 @@ function marketplace_config(): array
         'name' => getenv('MARKETPLACE_NAME') ?: 'Phoenix Marketplace',
         'fetch_local' => getenv('MARKETPLACE_FETCH_LOCAL') === '1',
         'fetch_proxy' => getenv('MARKETPLACE_FETCH_PROXY') ?: null,
+        'updates' => rtrim(getenv('MARKETPLACE_UPDATES') ?: rtrim($data, '/') . '/updates', '/'),
+        // The account types (Connections) and the checkout their icons come from.
+        'accounts' => dirname(__DIR__) . '/catalog/accounts.json',
+        'repo' => dirname(__DIR__, 3),
     ];
 }

@@ -10,18 +10,18 @@
 //       Screen & Lock pane sets (luna-sysservice stores any key).
 //   Delete: the file (org.webosphoenix.service.mediafiles/remove), then the
 //       index entry (com.webos.service.mediaindexer requestDelete).
-//   Share: launches Email with the picture attached ({attachments:
-//       [{fullPath, mimeType}]}, the legacy compose API core-apps' Email
-//       reads) or Messaging ({attachment}).
+//   Share (the command menu and the app menu): the system's share sheet
+//       (docs/SHARE-AND-FILES.md SF5), with the picture or video: the apps
+//       that take it (Email, Messaging, ...), Save to Files.
 //   Play in Videos: videos play here, in place, as in the webOS 2.x Photos &
 //       Videos app; the Videos app (launch {target}) adds resuming,
 //       subtitles and turning the device.
 //   Print (app menu, pictures): PrintPhoto.tsx, through the print manager.
 
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { apps, deleteMedia, system, type MediaItem } from "@phoenix/luna";
+import { apps, deleteMedia, shareSheet, system, type MediaItem } from "@phoenix/luna";
 import { useMediaUrl } from "@phoenix/luna/react";
-import { AppMenu, Button, Dialog, PopupMenu, IconToolButton, Toolbar, ToolSpacer, cssImage, icons } from "@phoenix/ui";
+import { AppMenu, Button, Dialog, IconToolButton, Toolbar, ToolSpacer, cssImage, icons } from "@phoenix/ui";
 import { isVideo } from "./albums";
 import { PrintPhoto } from "./PrintPhoto";
 
@@ -68,8 +68,6 @@ export function Viewer({ items, index, onIndex, onClose, onDeleted }: ViewerProp
     const [drag, setDrag] = useState<number | null>(null);
     const start = useRef<{ x: number; y: number; t: number; id: number } | null>(null);
     const pager = useRef<HTMLDivElement>(null);
-    const shareButton = useRef<HTMLDivElement>(null);
-    const [sharing, setSharing] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [printing, setPrinting] = useState(false);
     const [toast, setToast] = useState<string | null>(null);
@@ -124,11 +122,14 @@ export function Viewer({ items, index, onIndex, onClose, onDeleted }: ViewerProp
         setToast("Wallpaper set");
     };
 
-    const share = (target: string) => {
-        if (target === "email")
-            void apps.launch("com.palm.app.email", { attachments: [{ fullPath: item.file_path, mimeType: item.mime }] });
-        else
-            void apps.launch("org.webosphoenix.messaging", { attachment: item.file_path });
+    const shared = () => ({ title: item.title ?? "", files: [{ path: item.file_path, mimeType: item.mime ?? "" }] });
+    const share = async () => {
+        try {
+            const r = await shareSheet.open(shared());
+            if (r.action === "files") setToast("Saved to Files");
+        } catch {
+            setToast("Could not share");
+        }
     };
 
     const remove = async () => {
@@ -171,9 +172,7 @@ export function Viewer({ items, index, onIndex, onClose, onDeleted }: ViewerProp
 
             <div className={"ph-viewer-bottom" + (chrome ? "" : " hidden")}>
                 <Toolbar kind="fade">
-                    <div ref={shareButton}>
-                        <IconToolButton icon="share" label="Share" testId="share" onClick={() => setSharing(true)} />
-                    </div>
+                    <IconToolButton icon="share" label="Share" testId="share" onClick={() => void share()} />
                     <ToolSpacer />
                     {kind === "photo" && <IconToolButton icon="wallpaper" label="Set as wallpaper" testId="wallpaper" onClick={() => void setWallpaper()} />}
                     {kind === "video" && (
@@ -185,14 +184,6 @@ export function Viewer({ items, index, onIndex, onClose, onDeleted }: ViewerProp
                 </Toolbar>
             </div>
 
-            {sharing && (
-                <PopupMenu
-                    anchor={shareButton.current}
-                    options={[{ label: "Email", value: "email" }, { label: "Messaging", value: "messaging" }]}
-                    onSelect={share}
-                    onClose={() => setSharing(false)}
-                />
-            )}
             <Dialog open={confirmDelete} title={`Delete this ${kind}?`} message={`The ${kind} will be removed from this device.`}
                     onClose={() => setConfirmDelete(false)} testId="delete-dialog">
                 <Button variant="negative" onClick={() => void remove()} data-testid="delete-confirm">Delete</Button>
@@ -200,7 +191,7 @@ export function Viewer({ items, index, onIndex, onClose, onDeleted }: ViewerProp
             </Dialog>
             {printing && <PrintPhoto item={item} onClose={() => setPrinting(false)}
                                      onDone={(text) => { setPrinting(false); setToast(text); }} />}
-            <AppMenu items={[{ label: "Print", onSelect: () => setPrinting(true), disabled: kind !== "photo" }]} />
+            <AppMenu share={shared} items={[{ label: "Print", onSelect: () => setPrinting(true), disabled: kind !== "photo" }]} />
             {toast && <div className="ph-toast" role="status">{toast}</div>}
         </div>
     );

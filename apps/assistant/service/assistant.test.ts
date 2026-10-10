@@ -39,6 +39,7 @@ function setup(opts: { llm?: object; voice?: () => unknown; deadlineMs?: number 
     const calls: { uri: string; params: any }[] = [];
     const spoken: string[] = [];
     const voices: string[] = [];
+    const rates: number[] = [];
     let who = "com.palm.systemui";
     let n = 0;
     const luna = {
@@ -67,11 +68,11 @@ function setup(opts: { llm?: object; voice?: () => unknown; deadlineMs?: number 
     };
     const svc = createAssistantService({
         luna, storage, secrets, request: createRequest({ timeoutMs: 5000 }), now: () => NOW,
-        caller: () => who, tts: { speak: (t: string, _l: string, v: string) => { spoken.push(t); voices.push(v); return Promise.resolve(); }, stop() {} },
+        caller: () => who, tts: { speak: (t: string, _l: string, v: string, r: number) => { spoken.push(t); voices.push(v); rates.push(r); return Promise.resolve(); }, stop() {} },
         llm: opts.llm, voice: opts.voice, locale: () => "en-GB", localDeadlineMs: opts.deadlineMs,
     });
     return {
-        svc, calls, data, spoken, voices,
+        svc, calls, data, spoken, voices, rates,
         as(id: string) { who = id; },
         called: (part: string) => calls.filter((c) => c.uri.includes(part)),
     };
@@ -112,7 +113,11 @@ describe("the command layer", () => {
         expect(last(r)).toMatchObject({ text: "The flashlight is on.", via: "commands", command: "toggle", status: "done" });
         expect(t.called("torch/set")[0].params).toEqual({ on: true });
         expect(mock.requests).toHaveLength(0);
-        expect(t.spoken).toEqual(["The flashlight is on."]);
+        // Typed: shown, not spoken (Answer aloud > When you type, off by
+        // default); said: spoken too (When you speak, on).
+        expect(t.spoken).toEqual([]);
+        await ask(t, "Turn off the flashlight", { voice: true });
+        expect(t.spoken).toEqual(["The flashlight is off."]);
     });
 
     it("sets a timer as an activity that opens the Assistant when it is done", async () => {
@@ -496,6 +501,22 @@ describe("the on-device model", () => {
         expect(last(wake).text).toBe("Alarm set for 6:30 AM tomorrow.");
     });
 
+    it("tells the model the personality chosen, and a new one is not the cached prompt", async () => {
+        const t = setup({ llm: llm() });
+        t.as("org.webosphoenix.settings");
+        await t.svc.selectModel({ id: MODEL });
+        t.as("com.palm.systemui");
+        await ask(t, "why is the sky blue");
+        expect(mock.requests.at(-1)!.body.messages[0].content).toContain("Be friendly and warm.");
+        t.as("org.webosphoenix.settings");
+        await t.svc.setSettings({ personality: "professional" });
+        t.as("com.palm.systemui");
+        await ask(t, "why is the grass green");
+        const system = mock.requests.at(-1)!.body.messages[0].content;
+        expect(system).toContain("Be precise and businesslike");
+        expect(system).not.toContain("Be friendly and warm.");
+    });
+
     // One prompt, read once (assistant.js localPrefix): the choice and the
     // call (or the answer in words) start with the same system prompt, the
     // same for every request; llama-server keeps it (cache_prompt, its one slot).
@@ -783,8 +804,65 @@ describe("the voice", () => {
         await t.svc.speak({ text: "Sample.", voice: "expr-voice-2-f" });
         expect(t.voices).toEqual(["expr-voice-5-m", "expr-voice-2-f"]);
         t.as("com.palm.systemui");
-        await ask(t, "turn on the flashlight");
+        await ask(t, "turn on the flashlight", { voice: true });
         expect(t.voices.at(-1)).toBe("expr-voice-5-m");
+    });
+});
+
+describe("speed, personality and the end of a spoken conversation (the owner, 10 October 2026)", () => {
+    it("speaks at the speed chosen; Play Sample at the one asked for", async () => {
+        const t = setup();
+        expect((await t.svc.getSettings({})).settings).toMatchObject({ speechRate: 1, personality: "friendly", voiceWait: 45 });
+        t.as("org.webosphoenix.settings");
+        expect((await t.svc.setSettings({ speechRate: 1.3 })).returnValue).toBe(true);
+        expect((await t.svc.setSettings({ speechRate: 5 })).errorCode).toBe(ERRORS.BAD_PARAMS);
+        await t.svc.speak({ text: "Hello." });
+        await t.svc.speak({ text: "Sample.", rate: 0.8 });
+        expect(t.rates).toEqual([1.3, 0.8]);
+        t.as("com.palm.systemui");
+        await ask(t, "turn on the flashlight", { voice: true });
+        expect(t.rates.at(-1)).toBe(1.3);
+    });
+
+    it("keeps the personality and the wait to those offered", async () => {
+        const t = setup();
+        t.as("org.webosphoenix.settings");
+        expect((await t.svc.setSettings({ personality: "playful", voiceWait: 60 })).returnValue).toBe(true);
+        expect((await t.svc.setSettings({ personality: "grumpy" })).errorCode).toBe(ERRORS.BAD_PARAMS);
+        expect((await t.svc.setSettings({ voiceWait: 7 })).errorCode).toBe(ERRORS.BAD_PARAMS);
+        expect((await t.svc.getSettings({})).settings).toMatchObject({ personality: "playful", voiceWait: 60 });
+    });
+
+    it("checks in and says goodbye in its personality, in the conversation and aloud", async () => {
+        const t = setup();
+        t.as("org.webosphoenix.settings");
+        await t.svc.setSettings({ personality: "calm" });
+        t.as("com.palm.systemui");
+        const r = await ask(t, "turn on the flashlight", { voice: true });
+        const check = await t.svc.sessionPhrase({ kind: "checkIn", threadId: r.thread.id });
+        expect(["Is there anything else you need?", "Anything else?"]).toContain(check.text);
+        const bye = await t.svc.sessionPhrase({ kind: "goodbye", threadId: r.thread.id });
+        expect(["All right. Take care.", "Okay. I'm here whenever you need me.", "Take it easy. Goodbye."]).toContain(bye.text);
+        expect(last(bye)).toMatchObject({ role: "assistant", status: "goodbye", text: bye.text });
+        expect(t.spoken.slice(-2)).toEqual([check.text, bye.text]);
+        const th = await t.svc.thread({ id: r.thread.id });
+        expect(th.messages.slice(-2).map((m: Reply) => m.text)).toEqual([check.text, bye.text]);
+        expect((await t.svc.sessionPhrase({ kind: "hello" })).errorCode).toBe(ERRORS.BAD_PARAMS);
+        t.as("org.webosphoenix.somebody");
+        expect((await t.svc.sessionPhrase({ kind: "goodbye" })).errorCode).toBe(ERRORS.NOT_ALLOWED);
+    });
+
+    it("ends a spoken conversation on \"I'm done\", and on \"no\" after the check-in", async () => {
+        const t = setup();
+        const r = await ask(t, "turn on the flashlight", { voice: true });
+        const done = await ask(t, "I'm done.", { threadId: r.thread.id, voice: true });
+        expect(last(done)).toMatchObject({ role: "assistant", status: "goodbye" });
+        expect(t.spoken.at(-1)).toBe(last(done).text);
+        // A plain "no" only right after "Anything else?".
+        expect(last(await ask(t, "no", { threadId: r.thread.id, voice: true })).status).not.toBe("goodbye");
+        expect(last(await ask(t, "No.", { threadId: r.thread.id, voice: true, checkIn: true })).status).toBe("goodbye");
+        // Typed, the words are just words.
+        expect(last(await ask(t, "I'm done", { threadId: r.thread.id })).status).not.toBe("goodbye");
     });
 });
 

@@ -3,9 +3,10 @@
 Goal: the full legacy webOS phone and tablet experience, pixel for pixel and
 feature for feature, on webOS OSE. Once that works, modernize it.
 
-Last brought up to date on 29 September 2026. Where the work stands today
+Last brought up to date on 10 October 2026. Where the work stands today
 and what comes next is in [STATUS.md](STATUS.md); this page is the whole
-plan, milestone by milestone.
+plan, milestone by milestone. Every gap still open, by area and priority:
+[spec/GAPS.md](spec/GAPS.md#open-gaps-at-a-glance).
 
 ## Two lines: 1.x and 2.0
 
@@ -183,11 +184,20 @@ simulator, the P2 rows are listed there.
 - [x] Check Just Type in tablet portrait: no overlap at start-up or after
       turning either way (the card thumbnails show dimmed through its
       translucent backdrop, as in landscape)
-- [ ] Advanced gestures: long swipe to switch apps while maximized (G5)
-- [ ] Exhibition / dock mode (clock, slideshow while charging) (R5)
-- [ ] Just Type: search suggestions, remote (GAL) contacts, its preferences screen
-- [ ] The remaining P2 rows in GAPS.md
-- ~~Wave launcher~~: not in the open sources (GAPS Q3)
+- [x] Advanced gestures: long swipe to switch apps while maximized (G5)
+- [x] Exhibition / dock mode (clock, slideshow while charging) (R5; in the simulator)
+- [x] Card stacks keep their order while a card maximizes and minimizes, and
+      Back in an app another opened returns to the caller, the app staying
+      open behind it (C12); Back that an app does not take minimizes its
+      card (G2). To do: the fan's 200 ms easing, re-maximizing the launching
+      card when a child closes, the device side
+- [ ] Just Type: search suggestions and remote (GAL) contacts in the results
+      (its preferences screen is done: Settings > Just Type)
+- [ ] The remaining rows in GAPS.md ("Open gaps at a glance"): in the
+      simulator, chiefly the launcher's solid dock background and top scroll
+      fade (L1, L2), modal cards and persistent dashboards (C11, N5)
+- [x] Wave launcher: not in the open sources (GAPS Q3); drawn after
+      descriptions as an option (M6 F4)
 
 ## M3: phones and tablets
 
@@ -239,12 +249,12 @@ Still to do:
       cloud drives, the Fediverse and Bluesky, push
 - [ ] Synergy on a device: the accounts service and contacts linker on OSE,
       the key store, the activity manager for periodic sync
-- [ ] Phone and Messaging on a device: telephony service, MMS, IM transports,
-      active-call banner
+- [ ] Phone and Messaging on a device: telephony service, MMS, IM transports
+      (the active-call banner is done in the simulator, GAPS N7)
 - [ ] Device side of the new apps (torch, PTY service, key store, location
       permissions, WAV sounds, TTS, media indexer, camera capture): the list
       is in [STATUS.md](STATUS.md#next-work)
-- [ ] Lock screen asks for the PIN / password set in Screen & Lock
+- [x] Lock screen asks for the PIN / password set in Screen & Lock (in the simulator; the device's lock service is GAPS K1)
 - [ ] Notification actions (e.g. Snooze / Done on a reminder)
 - [x] Ongoing activities: downloads and installs (system updates,
       Marketplace installs) as items with their progress in the
@@ -283,9 +293,11 @@ dark and light themes go to 2.0.
       ([SCREENSHOTS.md](SCREENSHOTS.md) SC1-SC2). Done in the simulator;
       to do: the compositor's capture on a device, secure cards
 - [ ] The light bar's animations, and buttons at the ends of the gesture
-      area ([GESTURE-BAR.md](GESTURE-BAR.md) GB1-GB3)
-- [ ] Community features for 1.x, as picked by the owner on 7 October 2026
-      ([M6-PLAN.md](M6-PLAN.md) F4)
+      area ([GESTURE-BAR.md](GESTURE-BAR.md) GB1-GB3). The animations are
+      done in the simulator (GAPS G8); to do: the light bar's Settings switch,
+      the end buttons and `setButton` (open questions in GESTURE-BAR.md)
+- [x] Community features for 1.x, as picked by the owner on 7 October 2026
+      ([M6-PLAN.md](M6-PLAN.md) F4; in the simulator, see M6)
 
 ## M6: the last 1.0 features
 
@@ -342,17 +354,26 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
       emoji (V6, done in the simulator), cursor control by holding the space bar or the gesture
       bar (V4, done in the simulator), the keyboards as the device's input method (V5), and
       keyboards chosen in Settings as on iOS: webOS Classic, webOS OSE's and
-      a new Phoenix keyboard (V7)
+      a new Phoenix keyboard (V7; layouts and languages done, several
+      keyboards side by side to do)
 - [ ] Hardware keyboards, especially on tablets: the TouchPad keyboard's
       keys, shortcuts, full keyboard navigation of the shell, keyboard
       accessibility (sticky, slow and bounce keys, Full Keyboard Access) and
-      Settings > Hardware Keyboard (V8)
+      Settings > Hardware Keyboard (V8). Done in the simulator: the keys,
+      both shortcut schemes, sticky, slow and bounce keys, the hardware
+      keyboard keeping the virtual one down, focus navigation of most of the shell;
+      to do: the web apps' menus and popup alerts, Settings > Hardware
+      Keyboard
 - [x] Editing: the Edit submenu (Select All, Cut, Copy, Paste) in every
       app menu, and the same on a long press in a text field (E1)
 - [ ] One share sheet and one file picker for every app: the original's
       file picker back for legacy apps, a save picker (Save to Files in a
       chosen folder), and a share sheet apps join through `appinfo.json`
-      ([SHARE-AND-FILES.md](SHARE-AND-FILES.md))
+      ([SHARE-AND-FILES.md](SHARE-AND-FILES.md), GAPS E5). Done in the
+      simulator: the share sheet, the save picker, the picture picker, Share
+      in Screenshot, Files, Photos and the browser, and Share after Edit in
+      every app menu; to do: the original file picker for legacy apps (SF1),
+      other kinds than pictures (SF2), Share in Docs, Voice Memos and Maps
 - [x] The Assistant, like Siri: on-device speech recognition and
       commands, an optional on-device model, cloud models with permission,
       an Assistant app with threads, spoken answers, "Hey Phoenix" (in the simulator)
@@ -362,8 +383,12 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
 - [ ] OTA updates with A/B slots ([HARDWARE.md](HARDWARE.md#ota-with-ab-updates)).
       Done in the simulator: `com.palm.update` (Palm's API, so luna-systemui's
       update alerts work) on RAUC, Settings > Updates, the feed publisher
-      `server/updates` ([APP-RUNTIME.md](APP-RUNTIME.md#system-updates)); to do:
-      the A/B image, RAUC's bootloader setup and signing keys per device
+      `server/updates`, and the feed built into Phoenix's own catalog server
+      (`server/marketplace`: `/updates/`, published with its admin API; the
+      device's default feed) ([APP-RUNTIME.md](APP-RUNTIME.md#system-updates)); to do:
+      the A/B image, RAUC's bootloader setup and signing keys per device,
+      and hosting the catalog server (its public address in
+      `/etc/palm/updates.json` and the Marketplace's sources)
 
 ## 2.0: modern webOS
 

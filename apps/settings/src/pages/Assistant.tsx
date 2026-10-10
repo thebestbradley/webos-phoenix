@@ -13,12 +13,16 @@
 // once a model is there "Back to Your Question", which opens the Assistant
 // app on the conversation with {retry: true} to ask it again.
 //
-//   Assistant        on or off (on by default), speak answers
+//   Assistant        on or off (on by default), speak answers, its
+//                    personality (friendly by default: its tone, and its
+//                    words when a spoken conversation ends)
 //   Voice            listen for "Hey Phoenix" (off by default), also with
 //                    the screen off or locked (off by default), voice
-//                    replies (on by default), and what listening means for
-//                    privacy (docs/AI-AND-MCP.md, Voice); the speaking
-//                    voice and Play Sample (AssistantSpeech.tsx); what the
+//                    replies (on by default), how long a spoken
+//                    conversation stays open after an answer (45 s by
+//                    default), and what listening means for privacy
+//                    (docs/AI-AND-MCP.md, Voice); the speaking voice, its
+//                    speed and Play Sample (AssistantSpeech.tsx); what the
 //                    voice is missing here and how to get it (AssistantVoice.tsx)
 //   On device        llama.cpp models to download, use or remove, with their
 //                    size and the memory they want (what fits is offered);
@@ -40,7 +44,7 @@
 
 import { useEffect, useState } from "react";
 import {
-    apps, assistant, formatBytes, ASSISTANT_APP_ID, type ConnectMode, type AssistantCommand, type AssistantProvider, type AssistantSettings, type LocalModel,
+    apps, assistant, formatBytes, ASSISTANT_APP_ID, PERSONALITIES, VOICE_WAITS, type ConnectMode, type AssistantCommand, type AssistantProvider, type AssistantSettings, type LocalModel,
     type LocalModelStatus, type LunaError, type ProviderType, type ProviderTypeInfo,
 } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
@@ -50,6 +54,11 @@ import { FollowUpQuestions } from "./AssistantFollowUps";
 import { VoiceMissing } from "./AssistantVoice";
 import { SpeakingVoice } from "./AssistantSpeech";
 import { AssistantPermissions } from "./AssistantPermissions";
+
+/** "45 seconds", "2 minutes". */
+export function waitLabel(seconds: number): string {
+    return seconds % 60 === 0 ? `${seconds / 60} minute${seconds === 60 ? "" : "s"}` : `${seconds} seconds`;
+}
 
 const errorText = (e: unknown) => (e as LunaError).errorText ?? (e instanceof Error ? e.message : String(e));
 const gb = (n: number) => `${Math.round(n / 2 ** 30)} GB`;
@@ -317,12 +326,23 @@ export function AssistantPage() {
                 <Row title="Assistant" subtitle="Hold the launcher button to ask">
                     <ToggleButton value={s.enabled} label="Assistant" testId="as-enabled" onChange={(v) => set({ enabled: v })} />
                 </Row>
-                <Row title="Speak answers" subtitle="With the device's voice, also when you type" disabled={off}>
-                    <ToggleButton value={s.speak} label="Speak answers" testId="as-speak" disabled={off} onChange={(v) => set({ speak: v })} />
-                </Row>
+                <ListSelector title="Personality" value={s.personality} disabled={off} testId="as-personality"
+                              options={PERSONALITIES} onChange={(v) => set({ personality: v })} />
                 <ListSelector title="Weather units" value={s.units} disabled={off} testId="as-units"
                               options={[{ label: "Automatic", value: "auto" as const }, { label: "°C", value: "metric" as const }, { label: "°F", value: "imperial" as const }]}
                               onChange={(v) => set({ units: v })} />
+            </Group>
+
+            {/* Two choices, not one: an answer to something typed is shown
+                (and spoken only if asked for); to something said, spoken and
+                shown (unless turned off). */}
+            <Group label="Answer aloud">
+                <Row title="When you type" subtitle="Read answers to typed requests aloud too" disabled={off}>
+                    <ToggleButton value={s.speak} label="Answer aloud when you type" testId="as-speak" disabled={off} onChange={(v) => set({ speak: v })} />
+                </Row>
+                <Row title="When you speak" subtitle={"Answers to \u201cHey Phoenix\u201d and the microphone, aloud and on screen"} disabled={off}>
+                    <ToggleButton value={s.voiceReplies} label="Answer aloud when you speak" testId="as-voice-replies" disabled={off} onChange={(v) => set({ voiceReplies: v })} />
+                </Row>
             </Group>
 
             <Group label="Voice">
@@ -333,11 +353,12 @@ export function AssistantPage() {
                     <ToggleButton value={s.wakeWhenLocked} label="When the screen is off or locked" testId="as-wake-locked" disabled={off || !s.wakeWord}
                                   onChange={(v) => set({ wakeWhenLocked: v })} />
                 </Row>
-                <Row title="Voice replies" subtitle="Answer spoken requests aloud" disabled={off}>
-                    <ToggleButton value={s.voiceReplies} label="Voice replies" testId="as-voice-replies" disabled={off} onChange={(v) => set({ voiceReplies: v })} />
-                </Row>
+                <ListSelector title="Keep listening" value={s.voiceWait} disabled={off} testId="as-voice-wait"
+                              options={VOICE_WAITS.map((n) => ({ label: waitLabel(n), value: n }))}
+                              onChange={(v) => set({ voiceWait: v })} />
                 <SpeakingVoice settings={s} set={set} off={off} />
             </Group>
+            <Note testId="as-voice-wait-note">{"After answering something you said, it keeps listening this long, so you can go on talking; then it asks if there is anything else, and says goodbye if not. Say \u201cI\u2019m done\u201d to end it sooner."}</Note>
             <VoiceMissing />
             <Note testId="as-voice-privacy">{"Listening for \u201cHey Phoenix\u201d happens on this phone. The microphone goes only to the wake word spotter, which keeps the last few seconds in memory and nothing more; nothing is recorded, sent or saved until it hears the phrase, and what you say after it is turned into text on the phone too. A microphone in the status bar shows whenever it is open: faint while it waits for the phrase, orange while it listens to you."}</Note>
 

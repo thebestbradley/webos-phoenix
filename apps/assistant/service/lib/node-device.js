@@ -458,11 +458,26 @@ function speech(options) {
         return kitten;
     }
     function fallback() { return o.fallback !== undefined ? o.fallback : (o.command || defaultSpeechCommand()); }
-    // Resolves with the exit code.
-    function run(cmd, text, lang, voice) {
+    // Resolves with the exit code. rate: how fast (1 normal), as the shell's
+    // Speech passes it (shell/native/speech.cpp rateArguments): Kitten's
+    // --speed, espeak-ng's -s in words a minute (175 at 1), Flite's
+    // duration_stretch; a command of its own takes "%r" and "%w".
+    function rateArgs(program, rate) {
+        if (rate === 1) return [];
+        var name = path.basename(program);
+        if (name === "phoenix-tts") return ["--speed", String(rate)];
+        if (name === "espeak-ng" || name === "espeak") return ["-s", String(Math.round(175 * rate))];
+        if (name === "flite") return ["--setf", "duration_stretch=" + (1 / rate).toFixed(3)];
+        return [];
+    }
+    function run(cmd, text, lang, voice, rate) {
         if (child) { try { child.kill(); } catch (e) { /* done */ } }
+        rate = typeof rate === "number" && rate >= 0.5 && rate <= 2 ? rate : 1;
         return new Promise(function (resolve, reject) {
-            var args = cmd.slice(1).map(function (a) { return a.replace("%l", lang).replace("%v", voice || ""); });
+            var args = cmd.slice(1).map(function (a) {
+                return a.replace("%l", lang).replace("%v", voice || "").replace("%r", String(rate)).replace("%w", String(Math.round(175 * rate)));
+            });
+            if (!o.command) args = args.concat(rateArgs(cmd[0], rate));
             var me = childProcess.spawn(cmd[0], args, { stdio: ["pipe", "ignore", "pipe"] });
             var err = "";
             child = me;
@@ -478,17 +493,17 @@ function speech(options) {
         });
     }
     return {
-        speak: function (text, lang, voice) {
+        speak: function (text, lang, voice, rate) {
             var l = String(lang || "en").slice(0, 5);
             var k = /^en/.test(l) ? kittenNow() : null;
             var cmd = k ? [k.program, "--voice", "%v"] : fallback();
             if (!cmd) return Promise.reject(new Error("No text-to-speech program (Kitten TTS, Flite or espeak-ng)"));
-            return run(cmd, text, l, voice).then(function (code) {
+            return run(cmd, text, l, voice, rate).then(function (code) {
                 var other = fallback();
                 if (!k || (code !== 3 && code !== 4) || !other) return;
                 if (code === 3) kitten = undefined;  // look again next time
                 log("Kitten TTS could not speak; " + path.basename(other[0]) + " instead");
-                return run(other, text, l, voice).then(function () {});
+                return run(other, text, l, voice, rate).then(function () {});
             });
         },
         stop: function () { if (child) { try { child.kill(); } catch (e) { /* done */ } } },

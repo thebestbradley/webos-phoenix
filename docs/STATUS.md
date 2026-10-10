@@ -1,6 +1,6 @@
 # Where the project stands
 
-A snapshot for picking the work up again (29 September 2026). The detail is
+A snapshot for picking the work up again (10 October 2026). The detail is
 in the documents linked from each item.
 
 ## Done in the simulator
@@ -14,6 +14,16 @@ in the documents linked from each item.
   Podcasts, PDF View, Doc View, First Use, Help, Emergency Info, Location
   Services. See [APP-GAPS.md](APP-GAPS.md) and [APP-RUNTIME.md](APP-RUNTIME.md).
 - The CardDAV and CalDAV Synergy account ([SYNERGY.md](SYNERGY.md)).
+- The last 1.0 features of M6 ([M6-PLAN.md](M6-PLAN.md)): press and hold on
+  launcher icons, the clipboard history, the Assistant, and the community
+  features picked for 1.0. Also the keyboard's dictation, word suggestions,
+  swipe typing, emoji and cursor control (GAPS V2-V6), hardware keyboard
+  shortcuts and accessibility (V8), Edit in every app menu (E1), Developer
+  Mode behind the Konami code, and the share sheet with Share in every app
+  menu ([SHARE-AND-FILES.md](SHARE-AND-FILES.md)).
+- Cards: stacks keep their order while a card maximizes and minimizes, and
+  Back in an app another opened returns to the caller, the app staying open
+  behind it (GAPS C12).
 - Plans: modern Synergy with cloud drives, the Fediverse, the messaging
   networks Phoenix can use and RCS ([SYNERGY-MODERN.md](SYNERGY-MODERN.md)); LuneOS
   ([LUNEOS.md](LUNEOS.md)); how Phoenix differs from webOS Community
@@ -68,7 +78,8 @@ From the new apps:
 4. Authenticator: require a PIN of 6 or more digits until the key store
    exists; lock on minimize at once or after 30 s.
 5. Sounds: core-apps' `emailreceived.mp3` carries a third-party copyright
-   tag and is not shipped.
+   tag and is not shipped; Phoenix's own synthesized one (CC0) takes its
+   place through the compat overlay.
 6. The Emergency Call button on the PIN pad is our design; the medical ID
    is a system preference.
 7. phoenix-sim shows First Use on a developer's first run.
@@ -123,5 +134,10 @@ The whole plan, milestone by milestone, with the decisions taken so far:
   app for phones and tablets, in Downloads with the Enact demos and on the
   same notes ([APP-RUNTIME.md](APP-RUNTIME.md#ionic-and-flutter-apps)).
 - **Synergy build**, in the order of [SYNERGY-MODERN.md](SYNERGY-MODERN.md#5-roadmap).
-- **Shell gaps**: the P2 rows left in [spec/GAPS.md](spec/GAPS.md) (C5, C7,
-  C9-C11, L8, N7, N8, R3-R5, K7, G4, G5, G8, A2, S2) and the rest of A1.
+- **Open gaps**: one list by area and priority in
+  [spec/GAPS.md](spec/GAPS.md#open-gaps-at-a-glance). In the simulator the
+  biggest left are the launcher's solid dock background and top scroll fade
+  (L1, L2), the fan's easing and the launching card coming back when a child
+  closes (C12), several keyboards side by side (V7), and the original file
+  picker for legacy apps (SF1); everything else waits on a device (K1, G1,
+  G2, V5, R1, A1).

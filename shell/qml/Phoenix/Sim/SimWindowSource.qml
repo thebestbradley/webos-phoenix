@@ -23,6 +23,10 @@
 //   setCardGroup(uid, groupId), newGroupId()
 //   cardFocusRequested(uid)  signal: show this card maximized (e.g. a new
 //                            child window opened by an app)
+//   modalCardRequested(uid)  signal: a modal card (cards' modal: true, over
+//                            its modalParent's card) to show; the shell says
+//                            how it went with modalResult(uid, result)
+//   modalDismissRequested(uid) signal: the app that launched it dismisses it
 //   notifications ListModel  id, appId, title, body, color, glyph, icon, params (launch
 //                            params for the app when tapped, as JSON, or ""),
 //                            windowKey (a dashboard window: windowFor(windowKey)
@@ -183,6 +187,10 @@ Item {
     property ListModel notifications: ListModel {}
 
     signal cardFocusRequested(string uid)
+    // Back in an app another one opened ({returnToCaller}; the runtime's
+    // back, a "launch" {returnTo}): the caller's card uid comes back to the
+    // front, and fromUid, still open, goes behind it.
+    signal cardReturnRequested(string uid, string fromUid)
     signal cardCloseRequested(string uid)
     // The page in the card did not take the back gesture (WebAppWindow
     // backUnhandled; back() returned true while the page decided).
@@ -578,7 +586,7 @@ Item {
         // appinfo.json requestedWindowOrientation (ApplicationDescription.cpp:
         // 464-469, handed to WebAppMgr) until the page asks for another.
         cards.insert(at, { uid: uid, appId: appId, title: titleText, groupId: groupId, fullScreen: false, blockScreenTimeout: false, statusBarColor: -1,
-                           orientation: _windowOrientation(info.orientation) });
+                           orientation: _windowOrientation(info.orientation), modal: false, modalParent: "" });
         _pidOf(appId);
         return uid;
     }
@@ -685,6 +693,20 @@ Item {
             bannerRequested(appId, qsTr("No app can open this link"), _iconUrl("", appId), "", "", "", 0, "");
             return;
         }
+        if (type === "launchModal") {
+            // com.palm.systemmanager/launchModalApp (the runtime): the page's
+            // app is the caller, whatever the payload says.
+            launchModal(String(payload.launchId || ""), payload.params || null, uid, String(payload.modalId || ""),
+                                       String(payload.callerId || "") === appId);
+            return;
+        }
+        if (type === "dismissModal") {
+            // com.palm.systemmanager/dismissModalApp.
+            for (var mu in _modals)
+                if (_modals[mu].modalId === String(payload.modalId || ""))
+                    modalDismissRequested(mu);
+            return;
+        }
         if (type === "launch" && payload.id) {
             // A launch point whose params match wins (e.g. {id: settings,
             // params: {page: "wifi"}} opens the Wi-Fi card).
@@ -707,7 +729,14 @@ Item {
             // card opens, or hears its params, without coming to the front
             // (the Assistant's "I've opened them in Photos too").
             var behind = payload.behind === true;
-            var how = newCard ? "new" : background || appId === target ? "front" : appRelaunch;
+            // {returnTo: true} (the runtime's back): the caller's card as it
+            // is, whatever appRelaunch says; the card asking goes behind it.
+            var returnTo = payload.returnTo === true && !newCard && !background;
+            var how = newCard ? "new" : background || appId === target || returnTo ? "front" : appRelaunch;
+            if (returnTo && running !== "") {
+                cardReturnRequested(running, uid);
+                return;
+            }
             if (running !== "" && !_opensNewCard(target, how)) {
                 var refresh = how === "refresh";
                 if ((refresh || (target === payload.id && Object.keys(params).length > 0)) && _windows[running] && _windows[running].relaunch)
@@ -1130,7 +1159,8 @@ Item {
     property int _nextSound: 1
 
     // The system sounds that ship (runtime/rootfs.json: /usr/palm/sounds,
-    // /usr/share/phoenix/sounds), for soundExists without a rootfs (tests).
+    // /usr/share/phoenix/sounds, and the compat overlay's new-mail sound for
+    // Email), for soundExists without a rootfs (tests).
     property var shippedSounds: [
         "/usr/palm/sounds/alert.wav", "/usr/palm/sounds/notification.wav", "/usr/palm/sounds/phone.wav",
         "/usr/palm/sounds/ringtone.mp3", "/usr/palm/sounds/boot.mp3", "/usr/palm/sounds/shutdown.mp3",
@@ -1138,7 +1168,11 @@ Item {
         "/usr/palm/sounds/error.mp3", "/usr/palm/sounds/panel.mp3", "/usr/palm/sounds/tap_to_share.mp3",
         "/usr/share/phoenix/sounds/feedback/key.wav", "/usr/share/phoenix/sounds/feedback/space.wav",
         "/usr/share/phoenix/sounds/feedback/backspace.wav", "/usr/share/phoenix/sounds/feedback/return.wav",
-        "/usr/share/phoenix/sounds/feedback/appclose.wav"
+        "/usr/share/phoenix/sounds/feedback/appclose.wav", "/usr/share/phoenix/sounds/feedback/shutter.wav",
+        "/usr/share/phoenix/sounds/feedback/listen.wav", "/usr/share/phoenix/sounds/feedback/carddrag.wav",
+        "/usr/share/phoenix/sounds/feedback/birdappclose.wav", "/usr/share/phoenix/sounds/feedback/LauncherOpenApp.wav",
+        "/usr/share/phoenix/sounds/feedback/LauncherCloseApp.wav",
+        "/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3"
     ]
 
     function soundExists(path) {
@@ -1284,7 +1318,15 @@ Item {
                 color: info.color, glyph: info.glyph, icon: _iconUrl(_param(url, "phoenixIcon"), appId),
                 params: "", windowKey: key,
                 clickableWhenLocked: _param(url, "phoenixClickableWhenLocked") === "1",
-                ongoing: false, progress: -1, tag: "", actions: ""
+                ongoing: false, progress: -1, tag: "", actions: "",
+                // Its window attributes {persistent: true} (no swipe or flick
+                // dismisses it: DashboardWindow::persistent; luna-systemui's
+                // update dashboard, SysUpdateService.js:184-188) and
+                // {webosDragMode: "manual"} (it takes its own drags:
+                // DashboardWindow::isManualDragWindow; enyo.Dashboard,
+                // Dashboard.js:107).
+                persistent: _param(url, "phoenixPersistent") === "1",
+                manualDrag: _param(url, "phoenixDragMode") === "manual"
             });
         }
     }
@@ -2267,6 +2309,90 @@ Item {
     // new params going to the page; "refresh" its card, relaunched even
     // without params so it reloads its data; "new" another card of it
     // (_opensNewCard).
+    // ---- Modal cards (com.palm.systemmanager/launchModalApp, SystemService.cpp:
+    // 4282-4600; CardWindowManager.cpp:425-470, 499-550) ----------------------------
+    // An app launched as a modal window of the maximized card: a 320 x 480
+    // window over its parent, which it takes the touches of; not in any
+    // stack. The shell shows it (modalCardRequested) and says how it went
+    // (modalResult); the page that asked hears it on its subscription
+    // (the runtime's modalStatus): first that the launch began, then that it
+    // was launched or why not, then why it went.
+    signal modalCardRequested(string uid)
+    signal modalDismissRequested(string uid)
+    // What the caller's subscription hears (tests, and the page through
+    // the runtime's modalStatus).
+    signal modalStatusReported(string modalId, var reply)
+    property var _modals: ({})            // uid -> { modalId, callerUid }
+    // SystemUiController::getModalWindowLaunchErrReason /
+    // getModalWindowDismissErrReason (SystemUiController.cpp:650-690) and
+    // the launch errors (ModalWinLaunchErrorReason, SystemUiController.h:229-243).
+    readonly property var modalResults: ({
+        launched: [0, "Modal window was launched successfully"],
+        noMaximizedCard: [2, "Modal window could not be launched as there is no active window"],
+        parentDifferent: [3, "Modal window could not be launched as the currently active window is different from what was specified"],
+        anotherModalActive: [4, "Another modal window is already active"],
+        appDoesntExist: [5, "App to launch doesnt exist"],
+        alreadyRunning: [7, "Another instance of the app to be launched as modal window is already running"],
+        homeButton: [13, "Modal card was dismissed as the user pressed home button"],
+        service: [14, "Modal card was dismissed by the service"],
+        parentClosed: [15, "Modal card was dismissed as the parent of the modal window was dismissed or closed"],
+        switched: [16, "Modal card was dismissed as the active card window was switched"],
+        minimized: [17, "Modal card was dismissed because system got minimize active card gesture"],
+        closed: [12, "An Unknown Error occurred dismissing the modal window"]
+    })
+    // launchId as a modal window of callerUid's card; modalId names it to its
+    // caller. callerOk: the caller is who it says it is.
+    function launchModal(launchId, params, callerUid, modalId, callerOk) {
+        var info = appInfo(launchId);
+        var fail = "";
+        if (callerOk === false)
+            fail = "parentDifferent";
+        else if (cardIndex(callerUid) < 0)
+            fail = "noMaximizedCard";
+        else if (!info || info.pending || (info.web && info.noWindow))
+            fail = "appDoesntExist";
+        else if (runningUid(launchId) !== "")
+            fail = "alreadyRunning";
+        if (fail !== "") {
+            _modalStatus(callerUid, modalId, fail);
+            return "";
+        }
+        var url = params ? mainUrl(launchId, params) : "";
+        var uid = _createWindow(launchId, info.title, _afterGroupOf(callerUid), cards.get(cardIndex(callerUid)).groupId, null, url);
+        var i = cardIndex(uid);
+        cards.setProperty(i, "modal", true);
+        cards.setProperty(i, "modalParent", callerUid);
+        var m = Object.assign({}, _modals);
+        m[uid] = { modalId: modalId, callerUid: callerUid };
+        _modals = m;
+        modalCardRequested(uid);
+        return uid;
+    }
+    // The shell: the modal card uid was launched ("launched") or not (a
+    // launch error), or went (a dismiss reason).
+    function modalResult(uid, result) {
+        var m = _modals[uid];
+        if (!m)
+            return;
+        if (result !== "launched") {
+            var rest = Object.assign({}, _modals);
+            delete rest[uid];
+            _modals = rest;
+        }
+        _modalStatus(m.callerUid, m.modalId, result);
+    }
+    function _modalStatus(callerUid, modalId, result) {
+        var r = modalResults[result] || modalResults.closed;
+        var reply = r[0] === 0 ? { returnValue: true, launchResult: r[1] }
+                  : r[0] > 11 ? { returnValue: true, returnMessage: "", dismissResult: r[1] }
+                  : { returnValue: false, errorText: r[1], errorCode: r[0] };
+        modalStatusReported(modalId, reply);
+        var w = _windows[callerUid];
+        if (w && typeof w.runScript === "function" && modalId !== "")
+            w.runScript("window.__phoenixRuntime && __phoenixRuntime.modalStatus && __phoenixRuntime.modalStatus("
+                        + JSON.stringify(modalId) + ", " + JSON.stringify(reply) + ")");
+    }
+
     function launch(appId, afterUid, params, joinStack, how) {
         if (params && Object.keys(params).length > 0) {
             var target = _launchTarget(appId, params);
@@ -2522,7 +2648,7 @@ Item {
             break;
         case "speak":
             if (!sp || !sp.available) { answer({ error: qsTr("No text-to-speech here.") }); break; }
-            sp.speak(String(p.text || ""), String(p.lang || "en"), String(p.voice || ""));
+            sp.speak(String(p.text || ""), String(p.lang || "en"), String(p.voice || ""), Number(p.rate) || 1);
             answer({});
             break;
         case "stopSpeaking":

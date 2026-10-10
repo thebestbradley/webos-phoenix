@@ -25,6 +25,8 @@ Item {
 
     // The shell connects to this to maximize a newly mapped card.
     signal cardFocusRequested(string uid)
+    // As SimWindowSource's (an opened app's Back to its caller); not sent here yet.
+    signal cardReturnRequested(string uid, string fromUid)
 
     property var _hosts: ({})       // uid -> SurfaceHost
     property var _surfaces: []      // [{ uid, item }]

@@ -1,14 +1,15 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Settings > Assistant, Voice: the voice answers are spoken with, and Play
-// Sample to hear it (org.webosphoenix.tts speak with the voice). Only where
-// the speech engine has voices to choose from: Kitten TTS's eight
-// (docs/AI-AND-MCP.md, Speech); with Flite, espeak-ng or say nothing shows.
-// The choice is the assistant's speechVoice setting.
+// Settings > Assistant, Voice: the voice answers are spoken with, how fast,
+// and Play Sample to hear them (org.webosphoenix.tts speak with the voice
+// and the speed). The voice only where the speech engine has voices to
+// choose from: Kitten TTS's eight (docs/AI-AND-MCP.md, Speech); the speed
+// wherever there is speech (every engine takes one: shell/native/speech.cpp).
+// The choices are the assistant's speechVoice and speechRate settings.
 
 import { useEffect, useState } from "react";
-import { tts, type AssistantSettings } from "@phoenix/luna";
+import { SPEECH_RATES, tts, type AssistantSettings } from "@phoenix/luna";
 import { Button, ListSelector, Row } from "@phoenix/ui";
 
 /** Kitten's voices by the names KittenML gave them (its 0.8 model's voice_aliases). */
@@ -27,25 +28,31 @@ export function voiceLabel(id: string): string {
 }
 
 export function SpeakingVoice({ settings, set, off }: { settings: AssistantSettings; set: (c: Partial<AssistantSettings>) => void; off: boolean }) {
-    const [voices, setVoices] = useState<string[]>([]);
+    const [speech, setSpeech] = useState<{ available: boolean; voices: string[] }>({ available: false, voices: [] });
     const [playing, setPlaying] = useState(false);
     useEffect(() => {
         let live = true;
-        tts.status().then((s) => { if (live) setVoices(s.voices); }, () => {});
+        tts.status().then((s) => { if (live) setSpeech({ available: s.available, voices: s.voices }); }, () => {});
         return () => { live = false; };
     }, []);
-    if (!voices.length) return null;
+    const { voices } = speech;
+    if (!speech.available && !voices.length) return null;
     const value = settings.speechVoice && voices.includes(settings.speechVoice) ? settings.speechVoice
         : voices.includes(DEFAULT_VOICE) ? DEFAULT_VOICE : voices[0];
+    const rate = SPEECH_RATES.some((r) => r.value === settings.speechRate) ? settings.speechRate : 1;
     const play = () => {
         setPlaying(true);
-        tts.speak(SAMPLE, "en", value).catch(() => {}).finally(() => setPlaying(false));
+        tts.speak(SAMPLE, "en", value, rate).catch(() => {}).finally(() => setPlaying(false));
     };
     return (
         <>
-            <ListSelector title="Speaking voice" value={value} disabled={off} testId="as-speech-voice"
-                          options={voices.map((v) => ({ label: voiceLabel(v), value: v }))}
-                          onChange={(v) => set({ speechVoice: v })} />
+            {voices.length > 0 && (
+                <ListSelector title="Speaking voice" value={value} disabled={off} testId="as-speech-voice"
+                              options={voices.map((v) => ({ label: voiceLabel(v), value: v }))}
+                              onChange={(v) => set({ speechVoice: v })} />
+            )}
+            <ListSelector title="Speaking speed" value={rate} disabled={off} testId="as-speech-rate"
+                          options={SPEECH_RATES} onChange={(v) => set({ speechRate: v })} />
             <Row title="Hear it" disabled={off}>
                 <Button data-testid="as-speech-sample" busy={playing} disabled={off} onClick={play}>Play Sample</Button>
             </Row>

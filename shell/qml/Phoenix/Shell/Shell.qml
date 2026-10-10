@@ -89,6 +89,22 @@ FocusScope {
     // no gesture bar, and on a tablet the bottom-edge flick stands in for
     // its swipe up, as on the TouchPad.
     property bool hardwareHomeButton: false
+    // Where the Home button is, as the angle from the screen's own bottom
+    // edge (luna.conf [UI] HomeButtonOrientationAngle: 0, 90, 180 or 270;
+    // the TouchPad 270, its button on the right of its landscape screen,
+    // luna-topaz.conf:32). The boot animation is drawn turned by it, upright
+    // with the button below (BootupAnimation.cpp:167-180, 587-596), and the
+    // Touch to Share glow comes from that edge (TouchToShareGlow.cpp:39-64).
+    // Anything else counts as 0, and -90 as 270 (Settings.cpp:662-672).
+    property int homeButtonOrientationAngle: 0
+    readonly property int homeButtonAngle: {
+        var a = homeButtonOrientationAngle;
+        if (a >= 360)
+            a = a % 360;
+        if (a === -90)
+            a = 270;
+        return a === 90 || a === 180 || a === 270 ? a : 0;
+    }
     // System keys with modifiers left to the program's own shortcuts, as
     // [{key, modifiers}] (SystemKeys.passChords): phoenix-sim's Shift+F3
     // and Shift+F2 beside its F3 (Power) and F2.
@@ -1279,6 +1295,11 @@ FocusScope {
         target: shell.source
         ignoreUnknownSignals: true
         function onCardFocusRequested(uid) { Qt.callLater(cards.focusLaunched, uid); }
+        // An app the card in front launched as a modal window (launchModalApp).
+        function onModalCardRequested(uid) { Qt.callLater(cards.addModal, uid); }
+        // Back in an app another opened ({returnToCaller}): its caller's card
+        // comes back to the front; the app stays open behind it.
+        function onCardReturnRequested(uid, fromUid) { Qt.callLater(cards.returnTo, uid, fromUid); }
         function onCardCloseRequested(uid) { cards.close(uid, true); }
         function onBackUnhandled(uid) { shell._lateBackUnhandled(uid); }
         function onJustTypeDismissed() { justType.open = false; }
@@ -2403,19 +2424,26 @@ FocusScope {
     // Preferences::rotationLock: the orientation the rotation lock holds,
     // "" when rotation is free. The system menu's toggle
     // (system.rotationLocked) locks the UI as it is turned now
-    // (SystemMenu::slotRotationLockTriggered, SystemMenu.cpp:857-866).
+    // (SystemMenu::slotRotationLockTriggered, SystemMenu.cpp:857-866), and
+    // the system keeps that orientation (system.rotationLockOrientation, the
+    // preference), so the next start is locked the same way
+    // (WindowServer::bootupFinished, WindowServer.cpp:1187-1203).
     property string rotationLock: ""
     Connections {
         target: shell.system
         ignoreUnknownSignals: true
         function onRotationLockedChanged() { shell._followRotationLock(); }
+        function onRotationLockOrientationChanged() { shell._followRotationLock(); }
     }
     function _followRotationLock() {
         var on = !!(system && system.rotationLocked);
+        var kept = system && typeof system.rotationLockOrientation === "string" ? system.rotationLockOrientation : "";
         if (on && rotationLock === "")
-            rotationLock = uiRotation.uiOrientation;
+            rotationLock = uiRotation.isFourWay(kept) ? kept : uiRotation.uiOrientation;
         else if (!on)
             rotationLock = "";
+        if (on && system && system.rotationLockOrientation !== undefined && kept !== rotationLock)
+            system.rotationLockOrientation = rotationLock;
     }
 
     // The card in front, from when it starts to maximize until it starts to
@@ -2541,7 +2569,14 @@ FocusScope {
                         id: cards
                         anchors.fill: parent
                         source: shell.source
-                        onCardClosing: (uid, byApp) => { if (!byApp) shell.sounds.feedback("appclose"); }
+                        onCardClosing: (uid, byApp) => {
+                            if (!byApp)
+                                shell.sounds.feedback(uid === cards._angryUid ? "birdappclose" : "appclose");
+                            if (uid === cards._angryUid)
+                                cards._angryUid = "";
+                        }
+                        // The angry card's stretch, upside down.
+                        onFeedbackSound: (name) => shell.sounds.feedback(name)
                         topInset: shell.fullScreen ? 0 : Theme.statusBarHeight
                         // The app's positive space ends where the notifications' negative space begins.
                         bottomInset: notes.negativeSpace
@@ -2552,6 +2587,15 @@ FocusScope {
                         // Settings > Advanced (docs/M6-PLAN.md F4).
                         infiniteCycling: shell.tweak("infiniteCardCycling")
                         maximizeEdges: shell.tweak("maximizeEdges")
+                        // Hidden under the opaque launcher once it is fully up,
+                        // and back as soon as it starts to close
+                        // (OverlayWindowManager::launcherAnimationFinished and
+                        // slotStartHideLauncherSequence, OverlayWindowManager.cpp:
+                        // 1438-1448, 1659-1676: CardWindowManager::setVisible).
+                        // Opacity, not visible: the original's QGraphicsItem
+                        // visibility told the apps nothing, while an item made
+                        // invisible here tells its web views they are hidden.
+                        opacity: launcher.fullyOpen ? 0 : 1
                     }
 
                     Launcher {
@@ -2668,6 +2712,12 @@ FocusScope {
                 Connections {
                     target: launcher
                     function onOpenChanged() {
+                        // OverlayWindowManager's launcher states played
+                        // these as the launcher showed and went
+                        // (slotLauncherOpenState / slotLauncherClosedState ->
+                        // SystemUiController::setLauncherShown,
+                        // SystemUiController.cpp:760-768); not at start-up.
+                        shell.sounds.feedback(launcher.open ? "LauncherOpenApp" : "LauncherCloseApp");
                         if (!launcher.open && iconMenu.from === "page")
                             iconMenu.open = false;
                         if (!launcher.open && iconDrag.held && iconDrag.from === "page")
@@ -3143,6 +3193,8 @@ FocusScope {
                     dictation: shell.dictation
                     speech: shell.speech
                     locked: shell.locked
+                    // Settings > Assistant > Keep listening.
+                    voiceWaitMs: (shell.assistantSettings && shell.assistantSettings.voiceWait > 0 ? shell.assistantSettings.voiceWait : 45) * 1000
                     // Over the lock screen it blurs nothing: the apps
                     // behind the lock stay hidden (the lock screen shows
                     // through the dim instead).
@@ -3378,6 +3430,8 @@ FocusScope {
                 anchors.fill: parent
                 system: shell.system
                 source: shell.source
+                // Dock mode's menu is the restricted one (DockModeMenuManager.cpp:142).
+                restricted: shell.dockMode
                 // The positive space, plus 10 (SystemMenu.cpp:945-953).
                 availableHeight: ui.height - Theme.statusBarHeight - notes.negativeSpace + Theme.px(10)
                 onCloseRequested: systemMenu.open = false
@@ -3519,6 +3573,10 @@ FocusScope {
             screenLocked: shell.locked
             fingerDown: fingers.active
             okToResize: shell.okToResizeUi
+            // Cards off screen resize after the turn (rotatePendingWindows,
+            // WindowServer.cpp:1990, 2084): only those on screen as it turns.
+            onRotationStarting: cards.queueFlips()
+            onRotationComplete: cards.rotatePendingWindows()
         }
     }
 
@@ -3765,6 +3823,7 @@ FocusScope {
     TouchToShareGlow {
         anchors.fill: parent
         z: 99997
+        angle: shell.homeButtonAngle
         active: !!(shell.source && shell.source.touchToShareInRange)
     }
     Connections {
@@ -3812,6 +3871,7 @@ FocusScope {
         locked: shell.locked
         onCall: notes.incomingCall || !!(shell.source && shell.source.activeCallBanner)
         displayOn: backlight.on
+        bootAngle: shell.homeButtonAngle
         onBootFinished: sounds.bootFinished()
         // storaged could not take the drive: "USB Drive connection failed".
         onBrickModeFailed: if (shell.source && shell.source.showMsmEntryFailedAlert) shell.source.showMsmEntryFailedAlert()
