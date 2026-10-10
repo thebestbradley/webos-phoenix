@@ -486,3 +486,39 @@ developer's, show up in one place.
 When parts of this are built, update `docs/spec/feature-inventory.md` and
 `docs/spec/GAPS.md`, and move the agreed parts into SYNERGY-MODERN.md and
 APP-STORE.md.
+
+## 7. Added by the owner, 10 October 2026
+
+**Apple iCloud with an app-specific password** (C3, first of the DAV
+presets): contacts (CardDAV, `contacts.icloud.com`), calendars (CalDAV,
+`caldav.icloud.com`) and iCloud Mail (IMAP `imap.mail.me.com:993`, SMTP
+`smtp.mail.me.com:587`). The user makes the password at account.apple.com
+(Sign-In and Security, App-Specific Passwords; two-factor on); it reaches
+only mail, contacts and calendars and can be revoked. The setup page says
+how, with a link to Apple's page. Not reachable: iCloud Drive and Photos
+(no public API; the tools that reach them use Apple's private web API with
+the real password, against Apple's terms), the new Reminders (since iOS
+13), Notes beyond the old IMAP ones.
+
+**Drives and cloud storage, as places in the Files app** (a new
+DOCUMENTS/files capability; also in the file picker and the share sheet's
+Save to Files): first the ones needing no registration, WebDAV (Nextcloud,
+ownCloud, any server; an app password), SFTP and S3-compatible storage
+(Backblaze B2, MinIO, Wasabi); then with the OAuth service (C3) Dropbox,
+OneDrive (Microsoft Graph) and Google Drive (its restricted scope needs
+Google's verification; the per-file scope avoids most of it). iCloud Drive:
+not planned.
+
+**Telegram** (C3, after Bluesky): a Messaging and Contacts connector on
+TDLib (Telegram's own client library, Boost Software License), driven from
+Node through its JSON interface. Sign-in with the phone number, the code
+and the two-step password; chats, groups and channels as Messaging
+conversations; contacts linked; notifications from TDLib's updates (web
+push registration later, C6); secret chats on this device only, as in
+Telegram's apps. Its chats other than secret ones are not end-to-end
+encrypted (Telegram's design): the setup page says so. It needs an app id
+and hash from my.telegram.org (free; OPEN-QUESTIONS Q16), kept out of the
+public tree as a build-time setting; Telegram's terms: the app is not
+called "Telegram" nor made to look like the official one. WhatsApp (no
+client API) and Signal (only through unofficial AGPL tools, against the
+licence rule) stay out.
