@@ -186,6 +186,94 @@ Item {
             compare(unlocked.count, 1);
         }
 
+        // GAPS V8: the PIN pad from a hardware keyboard, as the original's
+        // Keys handlers (UnlockPanel.qml:191-230): digits, Backspace, Enter;
+        // a letter types nothing into a PIN.
+        function test_pinFromTheKeyboard() {
+            lockService.lockMode = "pin";
+            lockService.passcode = "2580";
+            lock.requestUnlock();
+            var panel = findChild(lock, "unlockPanel");
+            verify(panel.activeFocus);
+            keyClick(Qt.Key_2);
+            keyClick(Qt.Key_5);
+            keyClick("x");
+            keyClick(Qt.Key_9);
+            compare(panel.enteredText, "259");
+            keyClick(Qt.Key_Backspace);
+            keyClick(Qt.Key_8, Qt.KeypadModifier);
+            keyClick(Qt.Key_0, Qt.KeypadModifier);
+            compare(panel.enteredText, "2580");
+            keyClick(Qt.Key_Enter, Qt.KeypadModifier);
+            compare(unlocked.count, 1);
+        }
+
+        // However the panel is shown, it takes the keys (the simulator's
+        // "pin" scene sets it up and shows it directly).
+        function test_shownPanelTakesTheKeys() {
+            var panel = findChild(lock, "unlockPanel");
+            root.forceActiveFocus();
+            panel.setupDialog(true, "Device Locked", "Enter PIN", false, 0);
+            panel.shown = true;
+            verify(panel.activeFocus);
+            keyClick(Qt.Key_7);
+            compare(panel.enteredText, "7");
+            panel.shown = false;
+        }
+
+        // GAPS V8 (3): a focus ring over the keypad and the buttons.
+        function test_pinPadFocusRing() {
+            lockService.lockMode = "pin";
+            lockService.passcode = "15";
+            lock.emergencyAvailable = true;
+            lock.requestUnlock();
+            var panel = findChild(lock, "unlockPanel");
+            compare(panel.keyItem, null);
+            // The arrows: the first key, then the nearest each way.
+            keyClick(Qt.Key_Down);
+            compare(panel.keyItem.caption, "1");
+            verify(findChild(panel.keyItem, "pinKeyFocus").visible);
+            keyClick(Qt.Key_Return);
+            compare(panel.enteredText, "1");
+            keyClick(Qt.Key_Down);
+            keyClick(Qt.Key_Right);
+            compare(panel.keyItem.caption, "5");
+            keyClick(Qt.Key_Space);
+            compare(panel.enteredText, "15");
+            // Past the right column it stays; down past the keys, the buttons.
+            keyClick(Qt.Key_Right);
+            keyClick(Qt.Key_Right);
+            compare(panel.keyItem.caption, "6");
+            keyClick(Qt.Key_Down);
+            keyClick(Qt.Key_Down);
+            compare(panel.keyItem.caption, "\b");
+            keyClick(Qt.Key_Down);
+            compare(panel.keyItem.objectName, "unlockEmergency");
+            keyClick(Qt.Key_Down);
+            compare(panel.keyItem.objectName, "unlockCancel");
+            verify(findChild(panel.keyItem, "actionButtonKeyFocus").visible);
+            keyClick(Qt.Key_Right);
+            compare(panel.keyItem.objectName, "unlockDone");
+            // Tab in reading order, wrapping: Cancel, then Done, then 1.
+            keyClick(Qt.Key_Backtab);
+            compare(panel.keyItem.objectName, "unlockCancel");
+            keyClick(Qt.Key_Tab);
+            keyClick(Qt.Key_Tab);
+            compare(panel.keyItem.caption, "1");
+            // Typing takes the ring away, so Enter submits.
+            keyClick(Qt.Key_9);
+            compare(panel.keyItem, null);
+            keyClick(Qt.Key_Backspace);
+            compare(panel.enteredText, "15");
+            // Enter on the ringed Done submits.
+            keyClick(Qt.Key_Backtab);
+            compare(panel.keyItem.objectName, "unlockDone");
+            keyClick(Qt.Key_Return);
+            compare(unlocked.count, 1);
+            compare(panel.keyItem, null);
+            lock.emergencyAvailable = false;
+        }
+
         function test_doneNeedsAKey() {
             lockService.lockMode = "pin";
             lock.requestUnlock();
