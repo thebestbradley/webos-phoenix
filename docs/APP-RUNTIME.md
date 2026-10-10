@@ -56,7 +56,18 @@ service bus). `runtime/phoenix-runtime.js` runs before the app's own scripts:
   (`com.palm.systemservice` → `com.webos.service.systemservice`,
   `com.palm.applicationManager` → `com.webos.applicationManager`,
   `com.palm.connectionmanager` → `com.webos.service.connectionmanager`).
-  OSE still registers db8 as `com.palm.db` and `com.palm.tempdb`.
+  OSE still registers db8 as `com.palm.db` and `com.palm.tempdb`. It also
+  tells the device shell what WebAppMgr does not, through WebAppMgr's
+  window properties (`installDevice`; `shell/qml/Phoenix/Lsm/LsmCards.js`
+  has the list): `PalmSystem.setWindowOrientation`, `enableFullScreenMode`
+  and `setWindowProperties` (WebAppMgr has none of them), appinfo's
+  `requestedWindowOrientation`, the caller to go back to (a
+  `{returnToCaller}` launch passes `$caller`, as below), and a Back the page
+  did not take (the webOS Back key, 461, goes on as Escape first, which
+  Mojo, Enyo 1.0 and `@phoenix/ui` know). The page's copies go to the
+  clipboard history's service (`services/clipboard`). *Written against
+  WebAppMgr's source and `tools/test-runtime-device.cjs`; not yet run on a
+  device.*
 - **In the simulator or a browser**, it provides both itself, with simulated
   services that store their data in localStorage: db8 (`put`, `get`, `merge`,
   `del`, `find`/`search` with `where`/`orderBy`/`limit`, `watch`, kind

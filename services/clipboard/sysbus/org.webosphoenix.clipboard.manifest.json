@@ -1,0 +1,9 @@
+{
+    "id": "org.webosphoenix.clipboard.service",
+    "version": "0.1.0",
+    "roleFiles": ["/usr/share/luna-service2/roles.d/org.webosphoenix.clipboard.role.json"],
+    "serviceFiles": ["/usr/share/luna-service2/services.d/org.webosphoenix.clipboard.service"],
+    "apiPermissionFiles": ["/usr/share/luna-service2/api-permissions.d/org.webosphoenix.clipboard.api.json"],
+    "clientPermissionFiles": ["/usr/share/luna-service2/client-permissions.d/org.webosphoenix.clipboard.perm.json"],
+    "groupsFiles": ["/usr/share/luna-service2/groups.d/org.webosphoenix.clipboard.groups.json"]
+}

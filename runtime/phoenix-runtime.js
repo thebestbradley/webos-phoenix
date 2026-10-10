@@ -347,17 +347,226 @@
     }
 
     if (runtime.onDevice) {
+        installDevice();
+        return;
+    }
+
+    // ---- On a device: WebAppMgr's PalmSystem, and what the shell needs ------------
+    //
+    // WebAppMgr has the bus and PalmSystem; what Phoenix's shell needs from a
+    // page beyond them goes as window properties on the page's surface
+    // (WebAppMgr's setWindowProperty, wam src/platform/webengine/
+    // palm_system_blink.cc:100-108, a string each), which LsmWindowSource
+    // reads (shell/qml/Phoenix/Lsm/LsmCards.js has the list):
+    //   - PalmSystem.setWindowOrientation, enableFullScreenMode and
+    //     setWindowProperties {blockScreenTimeout, statusBarColor}, which
+    //     WebAppMgr does not have (its windowOrientation is always "free",
+    //     palm_system_webos.h:42-43), and appinfo.json's
+    //     requestedWindowOrientation, which it reads but does not use
+    //     (application_description.cc:160): phoenixOrientation,
+    //     phoenixFullScreen, phoenixBlockScreenTimeout, phoenixStatusBarColor.
+    //   - {returnToCaller} on a launch: the caller rides in the params as
+    //     $caller (as off the device, /launch below); the app it opens says
+    //     whom to go back to (phoenixReturnTo), at its start and on each
+    //     relaunch (WebAppMgr's webOSRelaunch event).
+    //   - Back: the webOS Back key (keyCode 461) reaches the page; Mojo,
+    //     Enyo 1.0 and @phoenix/ui know Back as Escape (with keyIdentifier
+    //     U+1200001), so a 461 the page does not take goes on as that (as
+    //     runtime.back does off the device), and one it still does not take
+    //     is said to the shell (phoenixBack, a new value each time), which
+    //     minimizes the card or returns to the caller, as LunaSysMgr did with
+    //     a Back WebAppMgr handed back (SystemUiController.cpp:941-954).
+    //     tools/install-rootfs.py marks the image's apps
+    //     disableBackHistoryAPI, so WebAppMgr gives them every Back.
+    // tools/test-runtime-device.cjs drives this with a fake WebAppMgr.
+    // STATUS: written against WebAppMgr's source; not yet run on a device.
+    // Which name WebAppMgr's page API gives setWindowProperty is taken from
+    // the first of webOSSystem.window.setProperty, webOSSystem.setWindowProperty,
+    // PalmSystem.window.setProperty and PalmSystem.setWindowProperty there is.
+    function installDevice() {
         var NativeBridge = global.PalmServiceBridge;
+        var me = appIdFromLocation();
+        var notCallers = ["com.palm.systemui", "com.palm.launcher", "com.webos.phoenix.unknown"];
+        // A launch with {returnToCaller: true}: params.$caller, as off the device.
+        function deviceJson(url, json) {
+            if (!/^(palm|luna):\/\/com\.webos\.applicationManager\/launch$/.test(url))
+                return json;
+            var p;
+            try { p = JSON.parse(json); } catch (e) { return json; }
+            if (!p || p.returnToCaller !== true)
+                return json;
+            delete p.returnToCaller;
+            if (me && notCallers.indexOf(me) < 0 && me !== p.id) {
+                var params = {};
+                for (var k in p.params || {}) params[k] = p.params[k];
+                params.$caller = me;
+                p.params = params;
+            }
+            return toJson(p);
+        }
         global.PalmServiceBridge = function () {
             var b = new NativeBridge();
             var self = this;
             b.onservicecallback = function (json) {
                 if (self.onservicecallback) self.onservicecallback(json);
             };
-            this.call = function (url, json) { return b.call(aliasUrl(url), json); };
+            this.call = function (url, json) {
+                var u = aliasUrl(url);
+                return b.call(u, deviceJson(u, json));
+            };
             this.cancel = function () { return b.cancel(); };
         };
-        return;
+
+        function setWindowProperty(name, value) {
+            var v = String(value);
+            var ws = global.webOSSystem, ps = global.PalmSystem;
+            var tries = [
+                [ws && ws.window, "setProperty"], [ws, "setWindowProperty"],
+                [ps && ps.window, "setProperty"], [ps, "setWindowProperty"]
+            ];
+            for (var i = 0; i < tries.length; ++i) {
+                var o = tries[i][0], f = tries[i][1];
+                if (o && typeof o[f] === "function") {
+                    try { o[f](name, v); return true; } catch (e) { return false; }
+                }
+            }
+            return false;
+        }
+        runtime.setWindowProperty = setWindowProperty;
+
+        var orientations = ["free", "up", "down", "left", "right", "landscape", "portrait"];
+        function orientation(o) {
+            o = String(o || "").toLowerCase();
+            return orientations.indexOf(o) >= 0 ? o : "free";
+        }
+        var ps = global.PalmSystem;
+        function shim(name, fn) {
+            if (ps && typeof ps[name] !== "function") {
+                try { ps[name] = fn; } catch (e) { /* not extensible */ }
+            }
+        }
+        shim("setWindowOrientation", function (o) { setWindowProperty("phoenixOrientation", orientation(o)); });
+        shim("enableFullScreenMode", function (on) { setWindowProperty("phoenixFullScreen", on ? "true" : "false"); });
+        shim("setWindowProperties", function (props) {
+            if (!props || typeof props !== "object") return;
+            if ("blockScreenTimeout" in props)
+                setWindowProperty("phoenixBlockScreenTimeout", props.blockScreenTimeout ? "true" : "false");
+            if (typeof props.statusBarColor === "number" && isFinite(props.statusBarColor))
+                setWindowProperty("phoenixStatusBarColor", String(props.statusBarColor & 0xFFFFFF));
+        });
+
+        // appinfo.json: the orientation the window starts in, and whether the
+        // app takes Back itself.
+        var takesBack = false;
+        try {
+            var x = new global.XMLHttpRequest();
+            x.open("GET", "file:///usr/palm/applications/" + me + "/appinfo.json", true);
+            x.onload = function () {
+                var info = null;
+                try { info = JSON.parse(x.responseText); } catch (e) { return; }
+                if (!info) return;
+                takesBack = info.disableBackHistoryAPI === true;
+                if (info.requestedWindowOrientation)
+                    setWindowProperty("phoenixOrientation", orientation(info.requestedWindowOrientation));
+            };
+            x.send();
+        } catch (e) { /* no appinfo: not an app */ }
+
+        function launchParams() {
+            try { return JSON.parse((ps && ps.launchParams) || "{}") || {}; } catch (e) { return {}; }
+        }
+        function tellCaller() {
+            var lp = launchParams();
+            setWindowProperty("phoenixReturnTo", lp && typeof lp.$caller === "string" ? lp.$caller : "");
+        }
+        tellCaller();
+        if (global.document)
+            global.document.addEventListener("webOSRelaunch", function () { global.setTimeout(tellCaller, 0); });
+
+        function legacyBack() {
+            var target = (global.document && (global.document.activeElement || global.document.body)) || global.document;
+            var handled = false;
+            ["keydown", "keyup"].forEach(function (type) {
+                var e = new global.KeyboardEvent(type, { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true });
+                try {
+                    Object.defineProperty(e, "keyCode", { get: function () { return 27; } });
+                    Object.defineProperty(e, "keyIdentifier", { get: function () { return "U+1200001"; } });
+                } catch (x) { /* ignore */ }
+                target.dispatchEvent(e);
+                if (e.defaultPrevented) handled = true;
+            });
+            return handled;
+        }
+        var backs = 0;
+        runtime.deviceBack = function (e) {
+            if (!takesBack || e.defaultPrevented || legacyBack())
+                return true;
+            setWindowProperty("phoenixBack", Date.now() + "-" + (++backs));
+            return false;
+        };
+        global.addEventListener("keydown", function (e) {
+            if (e.keyCode !== 461 && e.key !== "GoBack" && e.key !== "BrowserBack")
+                return;
+            // After the page's own handlers (they may stop it).
+            global.setTimeout(function () { runtime.deviceBack(e); }, 0);
+        }, false);
+
+        // The clipboard history: this page's copies go to the history's
+        // service on the bus (services/clipboard runs this runtime's
+        // org.webosphoenix.clipboard there), as off the device they go to
+        // the runtime's own: copy and cut events, navigator.clipboard
+        // writes, and what an app marks as a secret first
+        // (runtime.clipboard.markSensitive: @phoenix/secrets' SecretClipboard).
+        // Copy in a password field (the simulator's passwordCopy) is not
+        // here yet.
+        var marks = [];
+        function takeMark(text) {
+            var now = Date.now();
+            marks = marks.filter(function (m) { return now - m.at < 5000; });
+            for (var i = 0; i < marks.length; ++i)
+                if (marks[i].text === text)
+                    return marks.splice(i, 1)[0];
+            return null;
+        }
+        function recordCopy(text) {
+            if (!text || !String(text).trim()) return;
+            var mark = takeMark(String(text));
+            var item = { text: String(text) };
+            if (mark) {
+                item.sensitive = true;
+                if (mark.kind) item.kind = mark.kind;
+            }
+            var b = new NativeBridge();
+            b.onservicecallback = function () {};
+            b.call("luna://org.webosphoenix.clipboard/add", toJson(item));
+        }
+        runtime.recordCopy = recordCopy;
+        function selectedText() {
+            var el = global.document && global.document.activeElement;
+            var tag = el && el.tagName ? el.tagName.toLowerCase() : "";
+            if ((tag === "input" || tag === "textarea") && typeof el.selectionStart === "number")
+                return String(el.value || "").substring(el.selectionStart, el.selectionEnd);
+            var sel = global.getSelection && global.getSelection();
+            return sel ? String(sel) : "";
+        }
+        global.addEventListener("copy", function () { recordCopy(selectedText()); });
+        global.addEventListener("cut", function () { recordCopy(selectedText()); });
+        var nc = global.navigator && global.navigator.clipboard;
+        if (nc && typeof nc.writeText === "function") {
+            var writeText = nc.writeText.bind(nc);
+            try {
+                nc.writeText = function (text) {
+                    var r = writeText(text);
+                    Promise.resolve(r).then(function () { recordCopy(text); }, function () {});
+                    return r;
+                };
+            } catch (e) { /* read-only: not recorded */ }
+        }
+        runtime.clipboard = {
+            markSensitive: function (text, kind) {
+                if (typeof text === "string" && text) marks.push({ text: text, kind: kind ? String(kind) : "", at: Date.now() });
+            }
+        };
     }
 
     // ================================================================================

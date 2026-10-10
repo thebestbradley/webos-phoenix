@@ -1,0 +1,4 @@
+{
+    "com.palm.systemmanager": ["database.operation", "systemsettings.query"],
+    "com.webos.surfacemanager": ["systemmanager.query", "systemmanager.passcode", "systemmanager.shell"]
+}

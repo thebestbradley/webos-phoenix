@@ -316,8 +316,9 @@ Item {
         // StatusBarInfo paints right to left from the battery: RSSI, WAN,
         // Bluetooth, Wi-Fi, TTY, HAC, call forward, roaming, VPN, rotation
         // lock, mute, airplane (StatusBarInfo.cpp:143-275). This Row runs
-        // left to right, so the reverse. Not shown yet, for want of the
-        // state: WAN, TTY, HAC, roaming.
+        // left to right, so the reverse. WAN, TTY, HAC and roaming come from
+        // a modem's services (LsmSystemStatus on a device; the simulator has
+        // no modem, so they stay off there unless set).
         // Leftmost, the microphone: orange while recording, a dim outline
         // of itself while it waits for the wake word.
         Item {
@@ -364,6 +365,14 @@ Item {
             shown: !!bar.system && !!bar.system.vpnProfile
             source: Theme.asset("statusBar/vpn-status-icon.png")
         }
+        // Roaming (StatusBarInfo::setRoaming, network-roaming.png, :258-262;
+        // the modem's registration "roaming" or "roamblink",
+        // StatusBarServicesConnector::handleNetworkStatus, :1079-1086).
+        Indicator {
+            objectName: "roamingIcon"
+            shown: !!bar.system && !bar.system.airplaneMode && bar.system.roaming === true
+            source: Theme.asset("statusBar/network-roaming.png")
+        }
         // Unconditional call forwarding on (StatusBarInfo::setCallForward,
         // from com.palm.telephony forwardQuery; off with the radio).
         Indicator {
@@ -371,15 +380,58 @@ Item {
             shown: !!bar.system && !bar.system.airplaneMode && !!bar.system.callForwarding
             source: Theme.asset("statusBar/call-forward.png")
         }
+        // Hearing aid compatibility and TTY on (StatusBarInfo::setHAC /
+        // setTTY, :236-246; telephony hacQuery / ttyQuery).
         Indicator {
-            objectName: "wifiIcon"
-            shown: !!bar.system && !bar.system.airplaneMode && bar.system.wifiBars >= 0
-            source: bar.system ? Theme.asset("statusBar/wifi-" + Math.max(0, bar.system.wifiBars) + ".png") : ""
+            objectName: "hacIcon"
+            shown: !!bar.system && bar.system.hac === true
+            source: Theme.asset("statusBar/hac.png")
         }
         Indicator {
+            objectName: "ttyIcon"
+            shown: !!bar.system && bar.system.tty === true
+            source: Theme.asset("statusBar/tty.png")
+        }
+        // Wi-Fi: the bars, or wifi-connecting.png while a network is being
+        // joined (WIFI_CONNECTING, StatusBarInfo.cpp:220-228; the
+        // connection manager's associating / associated,
+        // StatusBarServicesConnector::wifiEventsCallback, :2921-2925).
+        Indicator {
+            objectName: "wifiIcon"
+            readonly property bool connecting: !!bar.system && bar.system.wifiBars === 0 && !!bar.system.wifiNetworks
+                                               && bar.system.wifiNetworks.some(function(n) { return n.state === "connecting"; })
+            shown: !!bar.system && !bar.system.airplaneMode && bar.system.wifiBars >= 0
+            source: !bar.system ? "" : connecting ? Theme.asset("statusBar/wifi-connecting.png")
+                    : Theme.asset("statusBar/wifi-" + Math.max(0, bar.system.wifiBars) + ".png")
+        }
+        // Bluetooth: on, connecting, or a device connected
+        // (StatusBarServicesConnector::updateBluetoothIcon, :2304-2321).
+        Indicator {
             objectName: "bluetoothIcon"
+            readonly property var devices: bar.system && bar.system.bluetoothDevices ? bar.system.bluetoothDevices : []
+            readonly property string btState: devices.some(function(d) { return d.state === "connected"; }) ? "connected"
+                                            : devices.some(function(d) { return d.state === "connecting"; }) ? "connecting" : "on"
             shown: !!bar.system && bar.system.bluetoothOn
-            source: Theme.asset("statusBar/bluetooth-on.png")
+            source: Theme.asset("statusBar/bluetooth-" + btState + ".png")
+        }
+        // Mobile data (StatusBarInfo.cpp:195-210, getWanIndex,
+        // StatusBarServicesConnector.cpp:1702-1731): the network type's
+        // icon, connected or dormant (1x and EV-DO only); EV-DO as 3G when
+        // the show3GForEvdo preference says so (system.show3GForEvdo).
+        Indicator {
+            objectName: "wanIcon"
+            readonly property string type: bar.system && typeof bar.system.wanType === "string" ? bar.system.wanType : ""
+            readonly property bool dormant: !!bar.system && bar.system.wanDormant === true
+            readonly property string art: {
+                var evdo = bar.system && bar.system.show3GForEvdo ? "3g" : "evdo";
+                var names = { "1x": "1x", "edge": "edge", "evdo": evdo, "gprs": "gprs", "umts": "3g", "hsdpa": "3g",
+                              "hspa-4g": "hsdpa-plus" };
+                if (!names[type] || (dormant && type !== "1x" && type !== "evdo"))
+                    return "";
+                return "statusBar/network-" + names[type] + (dormant ? "-dormant.png" : "-connected.png");
+            }
+            shown: !!bar.system && !bar.system.airplaneMode && art !== ""
+            source: art !== "" ? Theme.asset(art) : ""
         }
         // RSSI. In airplane mode it goes: the airplane icon above says so
         // ("Airplane mode now has its own icon in the status bar, so hide

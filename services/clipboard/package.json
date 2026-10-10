@@ -1,0 +1,8 @@
+{
+  "name": "org.webosphoenix.clipboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix's clipboard history on a device (Luna): phoenix-runtime.js's org.webosphoenix.clipboard run as a service, its store in one 0600 file, the device passcode from com.palm.systemmanager",
+  "license": "Apache-2.0",
+  "main": "service.js"
+}

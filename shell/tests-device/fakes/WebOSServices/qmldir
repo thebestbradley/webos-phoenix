@@ -1,0 +1,3 @@
+module WebOSServices
+Service 1.0 Service.qml
+singleton FakeBus 1.0 FakeBus.qml

@@ -254,6 +254,11 @@ endif()
 # QML modules and the Open webOS artwork keep their relative layout, so
 # Theme.asset() resolves the same way in the tree and on the device.
 install(DIRECTORY qml/ DESTINATION ${PHOENIX_DATA_DIR}/qml)
+# The OSE services the device shell calls beyond luna-surfacemanager's own
+# groups (its client permissions): Wi-Fi, Bluetooth, the preferences,
+# audiod's playSound, bootd (LsmSystemStatus, LsmWindowSource, PhoenixViewsRoot).
+install(FILES sysbus/com.webos.surfacemanager.phoenix.perm.json
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/luna-service2/client-permissions.d)
 install(DIRECTORY assets/ DESTINATION ${PHOENIX_DATA_DIR}/assets
         PATTERN "noto-color-emoji" EXCLUDE)
 # The Prelude stand-in, where the web apps find it too

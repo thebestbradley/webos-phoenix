@@ -1,0 +1,16 @@
+{
+    "systemmanager.query": [
+        "com.palm.systemmanager/getDeviceLockMode",
+        "com.palm.systemmanager/getSecurityPolicy",
+        "com.palm.systemmanager/getLockStatus",
+        "com.palm.systemmanager/getDockModeStatus",
+        "com.palm.systemmanager/getSystemStatus"
+    ],
+    "systemmanager.passcode": [
+        "com.palm.systemmanager/setDevicePasscode",
+        "com.palm.systemmanager/matchDevicePasscode"
+    ],
+    "systemmanager.shell": [
+        "com.palm.systemmanager/phoenix/report"
+    ]
+}

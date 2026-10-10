@@ -20,6 +20,8 @@
 //   report {state, timeout, blockDisplay, active, dockMode, brightness,
 //           maximumBrightness, onWhenConnected}     (any of them)
 //   report {powerKey: "released"}                   Power while an app blocks it
+//   orientation {subscribe} -> {orientation: "up" | "down" | "left" | "right" |
+//               "faceup" | "facedown"}   the accelerometer's, while the display is on
 //   requests -> {holds: {requestBlock, powerKeyBlock, proximity, alsDisabled}}
 //            -> {setState: "on" | "dimmed" | "off" | "unlock" | "dock" | "undock"}
 //            -> {setProperty: {timeout?, maximumBrightness?, onWhenConnected?}}
@@ -63,6 +65,7 @@ public:
         Backlight *backlight = nullptr;
         Vibrator *vibrator = nullptr;
         LightSensor *lightSensor = nullptr;
+        Accelerometer *accelerometer = nullptr;
         InputDevices *input = nullptr;
     };
 
@@ -82,6 +85,9 @@ public:
     void inputEvents(const std::vector<InputDevices::Event> &events);
     void headsetTimeout();
     void lightReading(int lux);
+    // A reading of the accelerometer (m/s^2): the orientation to the shell
+    // when it changes.
+    void accelReading(double x, double y, double z);
     // Read the switches' states now (at start, and after the input devices
     // changed): what changed goes to the subscribers. A switch no device
     // has any more is off (a USB headset's jack unplugged with it).
@@ -102,6 +108,8 @@ public:
     const Holds &holds() const { return m_holds; }
     int lightRegion() const { return m_light.region(); }
     bool lightSensorOn() const { return m_alsOn; }
+    bool accelerometerOn() const { return m_accelOn; }
+    const std::string &orientation() const { return m_orientation.orientation(); }
     std::string switchState(const std::string &name) const;
     int headsetTimerMs() const { return m_headset.timerMs(); }
 
@@ -112,6 +120,7 @@ public:
     static bool onSetProperty(LSHandle *sh, LSMessage *msg, void *ctx);
     static bool onShellReport(LSHandle *sh, LSMessage *msg, void *ctx);
     static bool onShellRequests(LSHandle *sh, LSMessage *msg, void *ctx);
+    static bool onShellOrientation(LSHandle *sh, LSMessage *msg, void *ctx);
     static bool onAudioStatus(LSHandle *sh, LSMessage *msg, void *ctx);
     static bool onMediaStatus(LSHandle *sh, LSMessage *msg, void *ctx);
     static bool onHeadsetStatus(LSHandle *sh, LSMessage *msg, void *ctx);
@@ -122,7 +131,7 @@ public:
     static bool onCancel(LSHandle *sh, LSMessage *msg, void *ctx);
 
 private:
-    enum Kind { DisplayStatus, ShellRequests, Hold, KeyStatus, Vibration, AlsStatus };
+    enum Kind { DisplayStatus, ShellRequests, Hold, KeyStatus, Vibration, AlsStatus, Orientation };
     struct Sub
     {
         Kind kind;
@@ -157,6 +166,8 @@ private:
     void startHeadsetTimer();
     static gboolean headsetTimerFired(gpointer self);
     static gboolean lightTimerFired(gpointer self);
+    void accelFollowDisplay();
+    static gboolean accelTimerFired(gpointer self);
     static gboolean vibrationRepeat(gpointer data);
     void stopVibrationIfIdle();
 
@@ -174,6 +185,9 @@ private:
     LightRegions m_light;
     bool m_alsOn = false;
     guint m_lightTimer = 0;
+    OrientationFilter m_orientation;
+    bool m_accelOn = false;
+    guint m_accelTimer = 0;
     std::string m_ringer = "up", m_headsetJack = "up", m_headsetMic = "up", m_power = "up";
     bool m_headphoneIn = false, m_micIn = false;
 

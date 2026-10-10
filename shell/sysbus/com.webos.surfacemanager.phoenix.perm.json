@@ -1,0 +1,17 @@
+{
+    "com.webos.surfacemanager": [
+        "audio.management",
+        "audio.query",
+        "audio.operation",
+        "boot.query",
+        "wifi.query",
+        "wifi.management",
+        "networkconnection.query",
+        "bluetooth.query",
+        "bluetooth.management",
+        "systemsettings.query",
+        "systemsettings.management",
+        "vpn.management",
+        "telephony.query"
+    ]
+}

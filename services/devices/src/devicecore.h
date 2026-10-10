@@ -128,6 +128,34 @@ private:
     std::vector<int> m_samples;
 };
 
+// ---- The orientation sensor ----------------------------------------------------------------
+
+// How the device is held, from the accelerometer: what LunaSysMgr got from
+// nyx's orientation sensor (NYXOrientationSensorConnector, luna-sysmgr-common
+// Src/base/hosts/HostArm.cpp:755-791) as OrientationEvent's Orientation:
+// "up", "down", "left" (turned counter-clockwise: its right edge up),
+// "right", "faceup", "facedown". nyx's own rules (the Pre's sensor module)
+// were not released, so these are Phoenix's: the reading in the device's
+// axes (IIO's: x to the right, y up, z out of the screen; held upright, y
+// reads +g), a reading far from 1 g (shaken, falling) is ignored; lying
+// within ~30 degrees of flat (|z| over 0.87 g) is face up or down; else
+// the edge most up, changing only once the tilt is 15 degrees past the
+// diagonal between two edges, so it does not flicker there. The shell
+// waits for it to settle before turning (UiRotation, 200 ms).
+class OrientationFilter
+{
+public:
+    // A reading in m/s^2 (any unit works: only the ratios count, with g
+    // taken as 9.80665). Returns whether the orientation changed.
+    bool update(double x, double y, double z);
+    const std::string &orientation() const { return m_orientation; }
+    void reset() { m_orientation.clear(); }
+
+private:
+    std::string m_orientation;     // "" until the first good reading
+};
+std::string orientationJson(const std::string &orientation, bool subscribed);
+
 // ---- The backlight ----------------------------------------------------------------------
 
 // The sysfs brightness for a level 0-100 on a panel of maxRaw steps: at
