@@ -11,6 +11,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { catalogDetailsProblem, catalogRoot, isLocal, publish } from "./publish";
 import { main } from "./cli";
+import { pack } from "./package";
 import { scaffold, squarePng } from "./scaffold";
 
 const cp = require("child_process");
@@ -124,8 +125,11 @@ describe.skipIf(!hasPhp)("publishing to a development catalog", () => {
         const out: string[] = [], err: string[] = [];
         const io = { log: (s: string) => out.push(s), err: (s: string) => err.push(s) };
         process.env.MARKETPLACE_DATA = data;
+        // An .ipk packed without the kit inside (vendor: false, as the tests
+        // above), so the command does not need the kit built first.
+        const ipk = pack(FEEDS, fs.mkdtempSync(path.join(tmp, "ipk-")), { vendor: false }).file;
         try {
-            expect(await main(["publish", FEEDS, "--catalog", url], io)).toBe(1);   // uploaded already (above)
+            expect(await main(["publish", ipk, "--catalog", url], io)).toBe(1);   // uploaded already (above)
             expect(err.join("\n")).toMatch(/uploaded already/);
             expect(await main(["publish"], io)).toBe(2);
         } finally { delete process.env.MARKETPLACE_DATA; }
