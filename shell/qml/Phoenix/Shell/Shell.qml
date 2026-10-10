@@ -2555,6 +2555,15 @@ FocusScope {
                         // Settings > Advanced (docs/M6-PLAN.md F4).
                         infiniteCycling: shell.tweak("infiniteCardCycling")
                         maximizeEdges: shell.tweak("maximizeEdges")
+                        // Hidden under the opaque launcher once it is fully up,
+                        // and back as soon as it starts to close
+                        // (OverlayWindowManager::launcherAnimationFinished and
+                        // slotStartHideLauncherSequence, OverlayWindowManager.cpp:
+                        // 1438-1448, 1659-1676: CardWindowManager::setVisible).
+                        // Opacity, not visible: the original's QGraphicsItem
+                        // visibility told the apps nothing, while an item made
+                        // invisible here tells its web views they are hidden.
+                        opacity: launcher.fullyOpen ? 0 : 1
                     }
 
                     Launcher {
