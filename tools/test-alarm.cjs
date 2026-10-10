@@ -13,8 +13,10 @@
 //   3. Dismiss closes the alert.
 //
 // And the system sounds the alarm and the ringtone picker draw on: Open
-// webOS's /usr/palm/sounds are served, the ringtone list starts with them,
-// and Email's emailreceived.mp3 is left out (docs/LEGAL.md).
+// webOS's /usr/palm/sounds are served, the ringtone list starts with them;
+// the Clock's default alarm, Flurry.mp3, and Email's emailreceived.mp3 are
+// Phoenix's own (tools/make-feedback-sounds.py; the originals were never
+// released or cannot be shipped, docs/LEGAL.md), and they play.
 //
 //   node tools/test-alarm.cjs [--out DIR]
 
@@ -68,34 +70,51 @@ async function main() {
         await page.waitForFunction(() => window.enyo && enyo.application && enyo.application.utilities, null, { timeout: 15000 });
 
         // An alarm a minute from now, and the activity the Clock schedules
-        // for it (ActivityManager.setAlarmTimeout). Its sound is a demo song:
-        // the Clock's default, the Pre's Flurry.mp3, was never open-sourced
-        // (docs/spec/GAPS.md A1).
+        // for it (ActivityManager.setAlarmTimeout), with the Clock's default
+        // sound (alarmdbmanager.js:100): Phoenix's Flurry.mp3 on the drive.
+        const FLURRY = "/media/internal/ringtones/Flurry.mp3";
+        const EMAIL = "/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3";
         for (const [p, want] of [["/usr/palm/sounds/ringtone.mp3", 200], ["/usr/palm/sounds/alert.wav", 200],
                                  ["/usr/share/phoenix/sounds/feedback/key.wav", 200],
-                                 ["/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3", 404]]) {
+                                 ["/usr/share/phoenix/sounds/feedback/birdappclose.wav", 200],
+                                 [FLURRY, 200], [EMAIL, 200]]) {
             const r = await fetch(origin + p);
             check(r.status === want, `${p}: ${r.status}`);
         }
+        // Email's is Phoenix's own, not the original (whose ID3 tags name
+        // another copyright holder): no tags at all.
+        const mail = Buffer.from(await (await fetch(origin + EMAIL)).arrayBuffer());
+        check(mail.slice(0, 3).toString() !== "ID3" && !mail.includes(Buffer.from("Steinbach")), "emailreceived.mp3 is Phoenix's (no ID3 tags)");
         const tones = await page.evaluate(() => new Promise((resolve) => __phoenixRuntime.dispatch(
             "luna://com.webos.service.systemservice/ringtone/listRingtones", {}, resolve, { cancelled: () => false })));
         check(tones.ringtones.slice(0, 2).map((t) => t.fullPath).join() === "/usr/palm/sounds/ringtone.mp3,/usr/palm/sounds/phone.wav",
               "the ringtones start with Open webOS's ringtone.mp3 and phone.wav");
-        const due = await page.evaluate((key) => new Promise((resolve) => {
+        check(tones.ringtones.some((t) => t.fullPath === FLURRY && t.name === "Flurry"), "the user's ringtones have Flurry");
+        // Both decode and play in the page (Chromium's MP3 decoder).
+        const played = await page.evaluate((files) => Promise.all(files.map((f) => new Promise((resolve) => {
+            const a = new Audio(f);
+            a.muted = true;
+            a.addEventListener("playing", () => { a.pause(); resolve(a.duration); }, { once: true });
+            a.addEventListener("error", () => resolve(-1), { once: true });
+            a.play().catch(() => resolve(-2));
+        }))), [FLURRY, EMAIL]);
+        check(played[0] > 6 && played[0] < 7, `Flurry.mp3 plays (${played[0]} s)`);
+        check(played[1] > 1 && played[1] < 1.5, `emailreceived.mp3 plays (${played[1]} s)`);
+        const due = await page.evaluate(([key, flurry]) => new Promise((resolve) => {
             const at = new Date(Date.now() + 60000);
             at.setSeconds(0, 0);
             const call = (url, params) => new Promise((r) => __phoenixRuntime.dispatch(url, params, r, { cancelled: () => false }));
             const when = enyo.application.utilities.getActivityDateString(at);
             call("palm://com.palm.db/put", { objects: [{ _kind: "com.palm.clock.alarm:1", key, title: "Wake up",
                 occurs: "daily", hour: at.getHours(), minute: at.getMinutes(), niceTime: "", niceDay: "--", enabled: true,
-                alarmSoundFile: "/media/internal/samples/music/prelude.ogg", alarmSoundTitle: "Prelude", snoozed: false, hideSnoozeTime: false }] })
+                alarmSoundFile: flurry, alarmSoundTitle: "Flurry", snoozed: false, hideSnoozeTime: false }] })
                 .then(() => call("palm://com.palm.activitymanager/create", { start: true, replace: true, activity: {
                     name: key, description: "com.palm.app.clock alarm: Wake up", type: { foreground: true, persist: true },
                     callback: { method: "palm://com.palm.applicationManager/launch",
                                 params: { id: "com.palm.app.clock", params: { action: "ring", key, setTime: when } } },
                     schedule: { start: when, local: true } } }))
                 .then(() => resolve(at.getTime()));
-        }), KEY);
+        }), [KEY, FLURRY]);
 
         // Time passes: the activity fires on the Clock's own page.
         const popupPromise = context.waitForEvent("page", { timeout: 15000 });

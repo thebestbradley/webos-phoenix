@@ -78,7 +78,8 @@ From the new apps:
 4. Authenticator: require a PIN of 6 or more digits until the key store
    exists; lock on minimize at once or after 30 s.
 5. Sounds: core-apps' `emailreceived.mp3` carries a third-party copyright
-   tag and is not shipped.
+   tag and is not shipped; Phoenix's own synthesized one (CC0) takes its
+   place through the compat overlay.
 6. The Emergency Call button on the PIN pad is our design; the medical ID
    is a system preference.
 7. phoenix-sim shows First Use on a developer's first run.

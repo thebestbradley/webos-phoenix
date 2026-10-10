@@ -76,6 +76,42 @@ Item {
         var turned = (appOrientation === "landscape" && uiPortrait) || (appOrientation === "portrait" && !uiPortrait);
         return ["up", "left", "down", "right"][((u + (turned ? 90 : 0)) % 360) / 90];
     }
+    // ---- Off screen as the UI turns: resized after the turn ----------------------
+    // A card off screen when the UI turns keeps its window's size (and how
+    // the page is turned) until the turn is over; meanwhile the card has its
+    // new size and shows the window turned back by the UI's turn, so it looks
+    // as it did (HostWindow::resizeEventSync queues a window not on screen,
+    // HostWindow.cpp:150-170; CardWindow::queueUpWindowForFlip,
+    // CardWindow.cpp:946-998, painting it with m_tempRotatedBrush turned by
+    // -getRotationAngle()). WindowServer::rotatePendingWindows resizes them
+    // once the turn's animation has finished (WindowServer.cpp:1990, 2084,
+    // 2126-2139): flip() here. Only the cards on screen resize as it turns.
+    property bool flipPending: false
+    property real _heldWidth: 0
+    property real _heldHeight: 0
+    property string _heldOrientation: "up"
+    property int _heldTurn: 0
+    readonly property int _turn: Math.max(0, _angle(uiOrientation)) + adjustmentAngle
+    // How much the held window is turned back in the card.
+    readonly property int flipCompensation: {
+        if (!flipPending)
+            return 0;
+        var d = ((_heldTurn - _turn) % 360 + 360) % 360;
+        return d > 180 ? d - 360 : d;
+    }
+    function queueFlip() {
+        if (flipPending || !window)
+            return;
+        _heldWidth = appHost.width;
+        _heldHeight = appHost.height;
+        _heldOrientation = windowOrientation;
+        _heldTurn = _turn;
+        flipPending = true;
+    }
+    function flip() { flipPending = false; }
+    // What the page is told of how it is turned: as it was until it flips.
+    readonly property string pageOrientation: flipPending ? _heldOrientation : windowOrientation
+
     function _angle(o) {
         switch (o) {
         case "up": return 0;
@@ -351,13 +387,16 @@ Item {
         if (!window)
             return;
         window.parent = appHost;
-        window.x = 0;
-        window.y = 0;
-        window.width = Qt.binding(function() { return appHost.width; });
-        window.height = Qt.binding(function() { return appHost.height; });
+        // The size the card gives it, or, while a flip is pending, the size
+        // it had, centred and turned back (queueFlip).
+        window.x = Qt.binding(function() { return card.flipPending ? (appHost.width - card._heldWidth) / 2 : 0; });
+        window.y = Qt.binding(function() { return card.flipPending ? (appHost.height - card._heldHeight) / 2 : 0; });
+        window.width = Qt.binding(function() { return card.flipPending ? card._heldWidth : appHost.width; });
+        window.height = Qt.binding(function() { return card.flipPending ? card._heldHeight : appHost.height; });
+        window.rotation = Qt.binding(function() { return card.flipCompensation; });
         // Windows that want to know how they are turned (web app windows).
         if ("orientation" in window)
-            window.orientation = Qt.binding(function() { return card.windowOrientation; });
+            window.orientation = Qt.binding(function() { return card.pageOrientation; });
         window.visible = true;
     }
 }

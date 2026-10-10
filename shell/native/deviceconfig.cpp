@@ -28,3 +28,8 @@ bool DeviceConfig::hardwareHomeButton() const
 {
     return m_values.value(QStringLiteral("hardwareHomeButton")).toBool(false);
 }
+
+int DeviceConfig::homeButtonOrientationAngle() const
+{
+    return m_values.value(QStringLiteral("homeButtonOrientationAngle")).toInt(0);
+}

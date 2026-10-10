@@ -16,9 +16,14 @@
 // LsmSystemStatus): its lists and functions stand in for the services
 // StatusBarServicesConnector asked.
 //
-// Not reproduced: the restricted (dock mode) menu, and the drawers asking
-// the view to scroll to show an opened list (commented out in the
-// original too, SystemMenu.qml:182-186).
+// In dock mode the menu is restricted (DockModeMenuManager's own
+// SystemMenu(320, 480, true), DockModeMenuManager.cpp:142): the Wi-Fi, VPN
+// and Bluetooth drawers show their state but are greyed and do not open,
+// and airplane mode cannot be changed (SystemMenu.cpp:188-241); brightness,
+// rotation lock and mute work as ever.
+//
+// Not reproduced: the drawers asking the view to scroll to show an opened
+// list (commented out in the original too, SystemMenu.qml:182-186).
 
 import QtQuick
 
@@ -30,6 +35,8 @@ Item {
     // torch (the Flashlight row).
     property var source: null
     property bool open: false
+    // The restricted menu of dock mode (SystemMenu::m_restricted).
+    property bool restricted: false
     signal closeRequested
     // Open an app (the preferences rows): Shell.launch.
     signal launchRequested(string appId, var params)
@@ -88,6 +95,40 @@ Item {
     onOpenChanged: {
         if (open) { closeTimer.stop(); date.refresh(); refreshTorch(); }
         _setKeyItem(null);
+    }
+    // Restricted, the radio drawers do not open (their signals were not
+    // connected, SystemMenu.cpp:190-239): one left open shuts.
+    onRestrictedChanged: {
+        if (restricted) {
+            wifi.close(true);
+            vpn.close(true);
+            bluetooth.close(true);
+        }
+    }
+
+    // Bluetooth turned on from the menu with nothing paired: its
+    // preferences open, to pair something (SystemMenu::slotBluetoothTurnedOn,
+    // SystemMenu.cpp:552-558; m_btTurnOnRequested, set by the toggle,
+    // :477-486, cleared when the drawer opens, :461-469). Whether anything
+    // is paired: the system's bluetoothPairedDevicesAvailable (the
+    // com.palm.bluetooth "numofprofiles" the original asked,
+    // StatusBarServicesConnector.cpp:2573-2632), taken as yes when the
+    // system cannot tell, as the original did on any error.
+    property bool _btTurnOnRequested: false
+    readonly property bool bluetoothPairedDevicesAvailable: !sys || sys.bluetoothPairedDevicesAvailable === undefined
+                                                            || !!sys.bluetoothPairedDevicesAvailable
+    Connections {
+        target: menu.sys
+        ignoreUnknownSignals: true
+        function onBluetoothOnChanged() {
+            if (!menu.sys.bluetoothOn)
+                return;
+            if (menu._btTurnOnRequested && !menu.bluetoothPairedDevicesAvailable) {
+                menu.openPreferences("bluetooth");
+                menu.closeAfter(Theme.systemMenuRowCloseDelay);
+            }
+            menu._btTurnOnRequested = false;
+        }
     }
 
     // ---- The torch (Phoenix; the community's Device Menu Megamix) ----------------------
@@ -718,7 +759,7 @@ Item {
                         stateText: !menu.wifiOn ? qsTr("OFF") : menu.sys.wifiSsid ? menu.sys.wifiSsid : qsTr("ON")
                         spinnerOffset: 18
                         stateGap: 60
-                        active: !menu.airplaneModeInProgress
+                        active: !menu.restricted && !menu.airplaneModeInProgress
                         // Scanning when opened, or turning on (WiFiElement.qml:22-36, 286-296).
                         spinning: isOpen && menu.wifiOn && !!menu.sys.wifiScanning
                         // The list shows once a scan has answered, and goes when
@@ -836,7 +877,7 @@ Item {
                         objectName: "systemMenuVpn"
                         title: qsTr("VPN")
                         stateText: menu.vpnInUse !== "" ? menu.vpnInUse : qsTr("Off")
-                        active: !menu.airplaneModeInProgress
+                        active: !menu.restricted && !menu.airplaneModeInProgress
                         property string joining: ""
                         onOpened: joining = ""
 
@@ -912,10 +953,10 @@ Item {
                         // SystemMenu.cpp:562-610: OFF while coming up, the device when connected.
                         stateText: !menu.bluetoothOn ? qsTr("OFF")
                                    : menu.sys.bluetoothDevice ? menu.sys.bluetoothDevice : qsTr("ON")
-                        active: !menu.airplaneModeInProgress
+                        active: !menu.restricted && !menu.airplaneModeInProgress
                         spinning: menu.bluetoothTurningOn && isOpen
                         property string joining: ""
-                        onOpened: joining = ""
+                        onOpened: { joining = ""; menu._btTurnOnRequested = false; }
 
                         // BluetoothElement.qml:261-276.
                         function pick(d) {
@@ -948,9 +989,12 @@ Item {
                             readonly property string label: menu.bluetoothTurningOn ? qsTr("Turning on Bluetooth...")
                                 : menu.bluetoothOn ? qsTr("Turn off Bluetooth") : qsTr("Turn on Bluetooth")
                             onAction: {
-                                // BluetoothElement.qml:200-205; SystemMenu.cpp:462-471.
+                                // BluetoothElement.qml:200-205; SystemMenu.cpp:477-486.
+                                menu._btTurnOnRequested = false;
                                 if (menu.bluetoothOn && !menu.bluetoothTurningOn)
                                     menu.closeAfter(Theme.systemMenuRowCloseDelay);
+                                if (!menu.bluetoothOn && !menu.bluetoothTurningOn)
+                                    menu._btTurnOnRequested = true;
                                 if (!menu.bluetoothTurningOn)
                                     menu.sys.setBluetoothOn(!menu.bluetoothOn);
                             }
@@ -995,7 +1039,8 @@ Item {
                         readonly property string label: menu.airplaneModeInProgress
                             ? (on ? qsTr("Turning off Airplane Mode") : qsTr("Turning on Airplane Mode"))
                             : (on ? qsTr("Turn off Airplane Mode") : qsTr("Turn on Airplane Mode"))
-                        selectable: !menu.airplaneModeInProgress
+                        // Restricted: not selectable (SystemMenu.cpp:231-235).
+                        selectable: !menu.restricted && !menu.airplaneModeInProgress
                         onAction: {
                             menu.sys.airplaneMode = !menu.sys.airplaneMode;
                             menu.closeAfter(Theme.systemMenuToggleCloseDelay);

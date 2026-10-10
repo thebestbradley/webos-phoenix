@@ -310,6 +310,8 @@ Item {
             mouseClick(bar, bar.width - 10, bar.height / 2);
             verify(!dock.menuOpen);
             verify(findChild(shell, "systemMenu").open);
+            // Dock mode's own, restricted (DockModeMenuManager.cpp:142).
+            verify(findChild(shell, "systemMenu").restricted);
             shell.gestureBack();
             verify(!findChild(shell, "systemMenu").open);
             verify(shell.dockMode);

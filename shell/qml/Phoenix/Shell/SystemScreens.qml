@@ -24,6 +24,9 @@ Item {
     property bool locked: false
     property bool onCall: false
     property bool displayOn: true
+    // The boot animation turned so it is upright with the Home button below
+    // (Shell.homeButtonAngle).
+    property int bootAngle: 0
 
     // Something here keeps the screen on (DisplayManager::pushDNAST:
     // "brickmode-local", "progress-sequence").
@@ -316,5 +319,6 @@ Item {
     BootAnimation {
         id: boot
         anchors.fill: parent
+        angle: screens.bootAngle
     }
 }

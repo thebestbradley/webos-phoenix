@@ -54,13 +54,12 @@
         "/usr/lib/luna/system/luna-applauncher/": "third_party/luna-applauncher/",
         "/usr/lib/luna/system/luna-systemui/": "third_party/luna-systemui/",
         "/media/internal/samples/": "apps/media-samples/media/",
+        "/media/internal/ringtones/": "shell/assets/sounds/phoenix/ringtones/",
         "/usr/share/fonts/open-sans/": "shell/assets/fonts/open-sans/",
         "/usr/palm/sounds/": "shell/assets/sounds/openwebos/",
         "/usr/share/phoenix/sounds/": "shell/assets/sounds/phoenix/"
     },
-    "exclude": [
-        "/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3"
-    ],
+    "exclude": [],
     "applicationDirs": [
         "third_party/core-apps",
         "third_party/isis",

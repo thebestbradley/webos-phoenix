@@ -39,6 +39,15 @@ JSON files cannot say why they are here, so they are listed here:
   left out: it is usually a picture on the USB drive, which a backup does
   not hold.
 
+Sounds cannot say why they are here either:
+
+- `rootfs/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3`:
+  Email's new-mail sound (`source/DashboardManager.js:419`), Phoenix's own,
+  synthesized by `tools/make-feedback-sounds.py` (CC0 1.0). The original's
+  ID3 tags name another copyright holder, so it is not shipped
+  (`docs/LEGAL.md`, `shell/assets/sounds/PROVENANCE.md`); this one takes its
+  place.
+
 Pictures cannot say why they are here either:
 
 - `*@2x.*`, `*@3x.*` under `rootfs/usr/palm/applications/<id>/`,

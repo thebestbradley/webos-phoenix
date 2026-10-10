@@ -200,8 +200,11 @@ jobs:
           node tools/render-app-icons.cjs --check
           python3 tools/upscale-app-icons.py --check
 
-      - name: Feedback sounds match their generator
-        run: python3 tools/make-feedback-sounds.py --check
+      - name: Feedback sounds and tones match their generator
+        run: |
+          # The MP3 tones are checked by decoding them.
+          command -v ffmpeg >/dev/null || sudo apt-get install -y --no-install-recommends ffmpeg
+          python3 tools/make-feedback-sounds.py --check
 
       - name: The Assistant's bird matches its source (art/assistant-bird/bird.json)
         run: python3 tools/gen-assistant-bird.py --check

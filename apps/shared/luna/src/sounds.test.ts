@@ -183,7 +183,9 @@ describe("ringtones and preferences", () => {
             { name: "Ringtone", fullPath: "/usr/palm/sounds/ringtone.mp3", system: true },
             { name: "Phone", fullPath: "/usr/palm/sounds/phone.wav", system: true },
         ]);
-        expect(list.slice(2)).toEqual([{ name: "Arcade Ring", fullPath: "/media/internal/ringtones/Arcade Ring.ogg" }]);
+        // The user's: a demo song, and Phoenix's Flurry.mp3, the Clock's default alarm.
+        expect(list.slice(2)).toEqual([{ name: "Arcade Ring", fullPath: "/media/internal/ringtones/Arcade Ring.ogg" },
+                                       { name: "Flurry", fullPath: "/media/internal/ringtones/Flurry.mp3" }]);
     });
 
     it("defaults to Open webOS's tones", async () => {

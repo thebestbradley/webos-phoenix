@@ -46,6 +46,7 @@ Item {
             status.bluetoothOn = false;
             status.bluetoothTurningOn = false;
             status.setWifiOn(true);
+            menu.restricted = false;
             launched.target = menu;
             launched.clear();
             shell.openSystemMenu();
@@ -129,6 +130,92 @@ Item {
             verify(!findChild(menu, "systemMenuWifi").active);
             status.airplaneModeInProgress = false;
             verify(row.selectable);
+        }
+
+        // Dock mode's menu (SystemMenu(320, 480, true), DockModeMenuManager.cpp:142):
+        // the radio drawers show their state, greyed, and do not open;
+        // airplane mode cannot be changed; rotation lock and mute work
+        // (SystemMenu.cpp:188-241).
+        function test_restrictedMenu() {
+            menu.restricted = true;
+            var wifi = findChild(menu, "systemMenuWifi");
+            var vpn = findChild(menu, "systemMenuVpn");
+            var bt = findChild(menu, "systemMenuBluetooth");
+            var air = findChild(menu, "systemMenuAirplane");
+            verify(!wifi.active && !vpn.active && !bt.active);
+            compare(wifi.stateText, status.wifiSsid);
+            compare(bt.stateText, "OFF");
+            // A tap on a drawer's header does nothing.
+            mouseClick(wifi, 40, 21);
+            mouseClick(bt, 40, 21);
+            wait(400);
+            verify(!wifi.isOpen && !bt.isOpen);
+            compare(wifi.height, 42);
+            verify(!air.selectable);
+            mouseClick(air);
+            verify(!status.airplaneMode);
+            verify(menu.open);
+            // The keyboard skips them: the brightness slider, the volume,
+            // then the rotation lock.
+            keyClick(Qt.Key_Down);
+            keyClick(Qt.Key_Down);
+            keyClick(Qt.Key_Down);
+            compare(menu.keyItem.objectName, "systemMenuRotation");
+            keyClick(Qt.Key_Escape);
+            tryCompare(menu, "open", false, 1000);
+            shell.openSystemMenu();
+            tryCompare(menu, "opacity", 1, 1000);
+            mouseClick(findChild(menu, "systemMenuRotation"));
+            verify(status.rotationLocked);
+            tryCompare(menu, "open", false, 1000);
+            // An open drawer shuts when the menu becomes restricted.
+            menu.restricted = false;
+            shell.openSystemMenu();
+            tryCompare(menu, "opacity", 1, 1000);
+            wifi.open();
+            menu.restricted = true;
+            verify(!wifi.isOpen);
+            menu.restricted = false;
+            verify(wifi.active);
+        }
+
+        // Turned on from the menu with nothing paired, Bluetooth opens its
+        // preferences to pair something (SystemMenu::slotBluetoothTurnedOn,
+        // SystemMenu.cpp:552-558); with devices paired it stays in the menu.
+        function test_bluetoothNoPairedDevices() {
+            compare(status.bluetoothPairedCount, -1);
+            verify(menu.bluetoothPairedDevicesAvailable, "the sample devices count until the runtime says");
+            status.applyAppStatus({ bluetoothPairedCount: 0 });
+            verify(!menu.bluetoothPairedDevicesAvailable);
+            var bt = findChild(menu, "systemMenuBluetooth");
+            bt.open();
+            tryVerify(function() { return bt.height > 42 * 3; }, 1000);
+            mouseClick(findChild(menu, "systemMenuBluetoothToggle"));
+            compare(launched.count, 0);
+            tryVerify(function() { return status.bluetoothOn; }, 1000);
+            compare(launched.count, 1);
+            compare(launched.signalArguments[0][0], "org.webosphoenix.settings");
+            compare(launched.signalArguments[0][1].page, "bluetooth");
+            tryCompare(menu, "open", false, 1000);
+            // Turned on elsewhere (Settings), it does not.
+            status.setBluetoothOn(false);
+            launched.clear();
+            status.setBluetoothOn(true);
+            tryVerify(function() { return status.bluetoothOn; }, 1000);
+            compare(launched.count, 0);
+            // Something paired: the menu stays.
+            status.setBluetoothOn(false);
+            status.applyAppStatus({ bluetoothPairedCount: 1 });
+            shell.openSystemMenu();
+            tryCompare(menu, "opacity", 1, 1000);
+            bt.open();
+            tryVerify(function() { return bt.height > 42 * 3; }, 1000);
+            mouseClick(findChild(menu, "systemMenuBluetoothToggle"));
+            tryVerify(function() { return status.bluetoothOn; }, 1000);
+            wait(400);
+            compare(launched.count, 0);
+            verify(menu.open);
+            status.bluetoothPairedCount = -1;
         }
 
         function test_rotationLockLabelWaitsForClose() {
