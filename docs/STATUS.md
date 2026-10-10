@@ -25,9 +25,10 @@ in the documents linked from each item.
 - The start-up animation: the phoenix's death and rebirth (the dead orb
   burns to ash, a gold bird-orb flies out of it and becomes the Assistant
   bird, which lands and waves; `BootStory.qml`), or the classic glowing
-  logo (Settings > Advanced > Start-up animation). Not yet on a device: the
-  device shell does not show the boot animation, nor read the setting
-  early ([OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q10-Q14).
+  logo (Settings > Advanced > Start-up animation). On a device written, not
+  run: the device shell shows it from its first frame in the chosen style
+  and ends it on bootd's `boot-done` ([OPEN-QUESTIONS.md](OPEN-QUESTIONS.md)
+  Q10-Q16).
 - Cards: stacks keep their order while a card maximizes and minimizes, and
   Back in an app another opened returns to the caller, the app staying open
   behind it (GAPS C12).
@@ -40,7 +41,20 @@ in the documents linked from each item.
   hardware ([HARDWARE.md](HARDWARE.md)); 2.0 docking and TV mode
   ([CONVERGENCE.md](CONVERGENCE.md)).
 
-Nothing has run on a phone yet.
+## Written for the device, not yet run
+
+Nothing has run on a phone yet. The device side is written against OSE's
+own sources and tested here with fakes ([HARDWARE.md](HARDWARE.md#written-for-the-device-not-yet-run)):
+the device window source's launching app, Back (to the page, to the caller,
+or minimizing the card) and the apps' orientation, full-screen and status
+bar colour requests; Wi-Fi, Bluetooth, VPN and a modem's indicators, the
+sound and rotation lock preferences and all of Settings > Advanced from
+OSE's services; the orientation sensor (phoenix-devices, IIO); the device
+lock and the shell's state for the apps (`services/systemmanager`); the
+clipboard history on the bus (`services/clipboard`); the system sounds as
+raw PCM for audiod, with looping ringtones; the start-up animation at boot.
+What the first image must check is listed there; the owner's questions are
+[OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q16-Q20.
 
 ## Direction
 
@@ -146,5 +160,6 @@ The whole plan, milestone by milestone, with the decisions taken so far:
   biggest left are the launcher's solid dock background and top scroll fade
   (L1, L2), the fan's easing and the launching card coming back when a child
   closes (C12), several keyboards side by side (V7), and the original file
-  picker for legacy apps (SF1); everything else waits on a device (K1, G1,
-  G2, V5, R1, A1).
+  picker for legacy apps (SF1); everything else waits on a device: written
+  and tested here, to run on hardware (K1, G1, G2, R1, A1, E2, M2, S2), and
+  the Phoenix keyboard as the device's input method (V5).

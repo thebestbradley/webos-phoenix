@@ -118,7 +118,13 @@ animation.
   code `WebOSSurfaceItem` forwards by. (QML can also send keys through
   `QWaylandSeat.sendKeyEvent`, as LuneOS's shell does; see
   [LUNEOS.md](LUNEOS.md).)
-- **System status.** `LsmSystemStatus` has placeholder values until it is
-  wired to OSE Luna services.
+  A Back the page cannot take (WebAppMgr's `_WEBOS_ACCESS_POLICY_KEYS_BACK`)
+  or did not take (its runtime's `phoenixBack` window property) minimizes the
+  card or returns to its caller (`LsmCards.js`). *Written, not run.*
+- **System status.** `LsmSystemStatus` reads OSE's Wi-Fi, Bluetooth, VPN,
+  audio and preference services, a modem's where there is one, and
+  phoenix-devices' orientation (`LsmStatus.js`); battery, charger and
+  brightness are still placeholders. *Written, not run* (HARDWARE.md,
+  "Written for the device, not yet run").
 - **GraphicalEffects.** Rounded card corners use `Qt5Compat.GraphicalEffects`.
   The recipe depends on `qt5compat`; check that it is in the OSE image.
