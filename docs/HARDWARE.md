@@ -839,6 +839,11 @@ device. Each needs checking on the first image (OPEN-QUESTIONS Q2).
 | Clipboard (E2) | `services/clipboard`: the runtime's clipboard service in a Node page of its own (store 0600, the passcode from com.palm.systemmanager); the pages' copies go there | `services/clipboard/host.test.ts`, `tools/test-runtime-device.cjs`. To check: the service's name beside the app's (Q18) |
 | Orientation (R1) | `phoenix-devices` reads the IIO accelerometer (above) | `devices-test` |
 
+`LsmWindowSource` and `LsmSystemStatus` themselves also run in
+`shell/tests-device` (`tst_lsm`), over fake luna-surfacemanager modules
+(a recording bus the test answers, `LS`, launch points) and fake card
+surfaces with WebAppMgr's window properties.
+
 ### The keyboard as the input method (GAPS V5)
 
 How webOS OSE's input method works (webosose/maliit-framework-webos,
