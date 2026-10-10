@@ -191,6 +191,30 @@ async function main() {
         check(await app.locator(".enyo-button:visible, .enyo-custom-button:visible", { hasText: "Add an Account" }).count() > 0,
               "an unknown templateId leaves Accounts on its main view");
 
+        // ---- "changelogin": the original's own launch (Email's sign-in dashboard) ---------------------
+        const credentials = async (p) => {
+            for (let t = 0; t < 10000; t += 250) {
+                const text = await p.evaluate(() => document.body.innerText);
+                if (/USERNAME/i.test(text) && /me@example\.org/.test(await p.evaluate(() => [...document.querySelectorAll("input")].map((i) => i.value).join(" ")))) return true;
+                await p.waitForTimeout(250);
+            }
+            return false;
+        };
+        const login = await luna(page, ACCOUNTS + "createAccount", { templateId: "org.example.feeds", username: "me@example.org",
+            capabilityProviders: [{ id: "org.example.feeds.feeds" }] });
+        const loginId = login.result && login.result._id;
+        await app.goto(accountsUrl({ launchType: "changelogin", accountId: loginId }));
+        check(await credentials(app), "launched with changelogin, Accounts opens that account's credentials (AccountManager.js:108-116, 186-195)");
+        await app.waitForTimeout(1500);
+        await app.screenshot({ path: path.join(outDir, "4-changelogin.png") });
+        check(!/Loading Accounts/i.test(await app.evaluate(() => [...document.querySelectorAll("*")].filter((e) => e.offsetParent && e.children.length === 0).map((e) => e.textContent).join(" "))),
+              "changelogin: nothing left loading over the credentials");
+        await app.goto(accountsUrl());
+        await app.waitForTimeout(3000);
+        await app.evaluate((id) => __phoenixRuntime.relaunch({ launchType: "changelogin", accountId: id }), loginId);
+        check(await credentials(app), "relaunched with changelogin, too");
+        await luna(page, ACCOUNTS + "deleteAccount", { accountId: loginId });
+
         // ---- Removed ---------------------------------------------------------------------------------
         await page.evaluate(() => new Promise((res) => {
             const b = new PalmServiceBridge();

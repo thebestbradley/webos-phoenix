@@ -1,4 +1,5 @@
-// Phoenix compat: open the add flow of one account type from a launch.
+// Phoenix compat: open the add flow of one account type from a launch, and
+// deliver the original's own "changelogin" launch.
 // Added to the original by depends.js, after AccountManager.js; the
 // original files are unchanged.
 //
@@ -10,8 +11,12 @@
 // A templateId Accounts does not know leaves it on its main view. The
 // original takes no such params: only {launchType: "changelogin",
 // accountId} (AccountManager.js windowParamsChangeHandler and
-// applicationRelaunchHandler, which nothing calls: Enyo 1.0 sends window
-// events only to ApplicationEvents components, Dispatcher.js:280-321).
+// applicationRelaunchHandler, which nothing called: Enyo 1.0 sends window
+// events only to ApplicationEvents components, Dispatcher.js:280-321, and
+// Accounts has none). So Email's "Sign-in problem" dashboard
+// (DashboardManager.js:695) and the sync alerts opened Accounts on its main
+// view; here those two handlers get their params: the account's
+// credentials view opens (AccountManager.js:108-140, 186-195).
 (function () {
 	var proto = AccountManager.prototype;
 
@@ -38,12 +43,16 @@
 	proto.create = function () {
 		create.apply(this, arguments);
 		this.phoenixTemplateId = wanted(enyo.windowParams);
+		this.windowParamsChangeHandler(this, {params: enyo.windowParams});
 		this.createComponent({kind: "ApplicationEvents", onApplicationRelaunch: "phoenixRelaunch"});
 	};
 
 	// Relaunched while running.
 	proto.phoenixRelaunch = function (inSender, inEvent) {
-		var id = wanted(inEvent && inEvent.params);
+		var p = inEvent && inEvent.params;
+		if (p && p.launchType === "changelogin")
+			return this.applicationRelaunchHandler(inSender, inEvent);
+		var id = wanted(p);
 		if (!id)
 			return false;
 		this.phoenixTemplateId = id;
