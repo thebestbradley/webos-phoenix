@@ -221,6 +221,23 @@ async function main() {
         await page.keyboard.press("Escape");
         await pause(page, 800);
 
+        // ---- The Phoenix service plugin for Dart (phoenix_services) ------------
+        await page.evaluate(() => __phoenixRuntime.openAppMenu());
+        await pause(page, 1000);
+        const menuItem = (name) => page.getByRole("menuitem", { name, exact: true }).filter({ visible: true }).first();
+        check(await menuItem("Edit").isVisible() && await menuItem("Share").isVisible() && await menuItem("New Note").isVisible()
+              && await menuItem("Settings").isVisible(), "phoenix_services: the app name opens the menu (Edit, Share, New Note, Settings)");
+        await page.screenshot({ path: path.join(outDir, "phone-appmenu.png") });
+        await page.keyboard.press("Escape");
+        await pause(page, 800);
+        await page.evaluate(() => __phoenixRuntime.relaunch({ share: { title: "Shared to Flutter", text: "From the share sheet" } }));
+        await pause(page, 2000);
+        check(await bodyOf(page, "Shared to Flutter") === "# Shared to Flutter\n\nFrom the share sheet",
+              "phoenix_services: a share received becomes a new note, saved to db8");
+        await page.screenshot({ path: path.join(outDir, "phone-shared.png") });
+        await page.keyboard.press("Escape");
+        await pause(page, 800);
+
         // ---- The Ionic demo, on the same notes ---------------------------------
         const ionic = await open(IONIC, 2500);
         const ionicRow = ionic.locator("ion-item.note-row:has-text(\"Groceries\") >> visible=true").first();

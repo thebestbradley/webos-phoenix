@@ -15,6 +15,22 @@
     "phoenix": {
         "//": "A 2.0 framework demo (apps/flutter-notes/README.md), in the launcher's Downloads tab with the other demos; developer: only while Developer Mode is on (docs/APP-RUNTIME.md).",
         "launcherTab": 1,
-        "developer": true
+        "developer": true,
+        "shareTargets": [
+            {
+                "types": [
+                    "text/plain",
+                    "text/uri-list"
+                ],
+                "label": "Notes (Flutter)"
+            }
+        ]
+    },
+    "universalSearch": {
+        "action": {
+            "displayName": "New Note (Flutter)",
+            "url": "org.webosphoenix.flutternotes",
+            "launchParam": "newNote"
+        }
     }
 }

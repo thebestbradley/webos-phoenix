@@ -6,6 +6,7 @@ export * from "./markdown";
 export * from "./editing";
 export * from "./dates";
 export * from "./search";
+export * from "./share";
 export * from "./store";
 export * from "./sample";
 export * from "./ls2";

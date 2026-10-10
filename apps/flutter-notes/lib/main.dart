@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
+import 'package:phoenix_services/phoenix_services.dart' show Phoenix;
 
 import 'src/notes_model.dart';
 import 'src/platform.dart';
@@ -26,6 +27,6 @@ Future<void> main() async {
     DateFormat.localeExists,
     onFailure: (_) => 'en_US',
   );
-  runApp(NotesApp(model: NotesModel(systemLuna())));
+  runApp(NotesApp(model: NotesModel(systemLuna()), phoenix: Phoenix.system()));
   WidgetsBinding.instance.addPostFrameCallback((_) => stageReady());
 }

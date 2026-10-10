@@ -1,0 +1,17 @@
+{
+  // The package: ES modules and declarations in dist/, importing
+  // @phoenix/sdk as published (its declarations, built first: the
+  // workspaces build in the order apps/package.json lists them).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "paths": {
+      "@phoenix/sdk": ["../sdk/dist/types/sdk/src/index.d.ts"]
+    }
+  },
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+}

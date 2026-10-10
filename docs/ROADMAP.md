@@ -485,6 +485,14 @@ supported alongside it.
       Flutter 3.47 (web build) run beside the Enact ones on the same notes,
       on phones and tablets ([APP-RUNTIME.md](APP-RUNTIME.md#ionic-and-flutter-apps));
       next, native Flutter through LG's webOS embedder
+- [x] The 2.0 app stack (the owner, 10 October 2026): a layer on existing
+      frameworks, not a new framework. Enact is the recommended base with
+      the Phoenix design layer; Ionic, plain web and PWAs, and Flutter are
+      supported. The Phoenix service plugin is built: `@phoenix/sdk` with
+      bindings for Enact, React, Capacitor and Dart, and `phoenix-sdk.js`
+      for pages without a bundler; the four Notes demos use it
+      ([APP-SDK.md](APP-SDK.md)). Next: publishing it (OPEN-QUESTIONS.md
+      Q62), a full Enact theme (Q63)
 - [ ] Screenshots on a par with iOS and Android: preview, markup, full
       page, recording, text in screenshots, Ask and circle to look up
       ([SCREENSHOTS.md](SCREENSHOTS.md) SC3-SC8)

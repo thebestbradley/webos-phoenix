@@ -11,6 +11,9 @@ and how a connector runs in the simulator and on a device.
 The reasoning behind all this, the catalog and the rules for listing a
 connector are in [SYNERGY-CONNECTORS.md](SYNERGY-CONNECTORS.md) (sections 3
 and 4); how webOS's Synergy worked is in [SYNERGY.md](SYNERGY.md).
+An app (rather than an account type) that reads Synergy's data (contacts,
+calendar, accounts) or composes a message or an email uses the Phoenix
+service plugin instead: [APP-SDK.md](APP-SDK.md).
 
 **Status (October 2026).** The kit, the command and the suite are built
 (phase C1). Third-party connectors install **in Developer Mode only** until

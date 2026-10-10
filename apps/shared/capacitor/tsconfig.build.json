@@ -1,0 +1,15 @@
+{
+  // As shared/react/tsconfig.build.json: dist/, @phoenix/sdk as published.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "paths": {
+      "@phoenix/sdk": ["../sdk/dist/types/sdk/src/index.d.ts"]
+    }
+  },
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+}

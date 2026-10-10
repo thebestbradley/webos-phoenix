@@ -1,0 +1,19 @@
+name: phoenix_services
+description: >-
+  The Phoenix service plugin for Flutter and Dart web apps on webOS Phoenix:
+  app lifecycle, the app menu, share, pickers, notifications, Just Type, the
+  Assistant, contacts, calendar, location and more, over the Luna service bus
+  (the same API as the @phoenix/sdk npm package).
+version: 0.1.0
+repository: https://github.com/webos-phoenix/webos-phoenix/tree/main/apps/shared/phoenix_services
+topics: [webos, luna, phoenix]
+
+environment:
+  sdk: ^3.8.0
+
+dependencies:
+  web: ^1.1.1
+
+dev_dependencies:
+  test: ^1.29.0
+  lints: ^6.1.0

@@ -14,8 +14,9 @@ import {Panel} from '@enact/agate/Panels';
 import Popup from '@enact/agate/Popup';
 import PopupMenu from '@enact/agate/PopupMenu';
 import {Cell} from '@enact/ui/Layout';
-import {ALL_NOTES, DEFAULT_FOLDER, DEFAULT_SETTINGS, RECENTLY_DELETED, useNotesApp} from '@phoenix/notes-core';
-import {useEffect, useState} from 'react';
+import {ALL_NOTES, DEFAULT_FOLDER, DEFAULT_SETTINGS, RECENTLY_DELETED, noteFromShare, shareOfNote, useNotesApp} from '@phoenix/notes-core';
+import {PhoenixDecorator, setPhoenixFonts, useAppMenu, useBack, useJustTypeAction, useShareReceiver, useStageReady} from '@phoenix/enact';
+import {useEffect, useRef, useState} from 'react';
 
 import {Row, TabbedPanels, ThemeDecorator} from '../enact';
 import {luna} from '../luna';
@@ -68,21 +69,36 @@ const Notes = ({onTheme}: {onTheme: (t: Theme) => void}) => {
 		return () => window.removeEventListener('resize', onResize);
 	}, []);
 	const noteOpen = narrow && !!app.selected;
+	// The back gesture (@phoenix/enact's useBack): back to the list, taken so the card stays.
+	useBack(() => { app.select(null); return true; }, noteOpen);
+
+	// The Phoenix service plugin: the app menu (Edit and Share first, then
+	// New Note), shares received (appinfo.json shareTargets) and Just
+	// Type's New Note action as new notes, once the notes are loaded.
+	const loaded = useRef(app.loaded);
+	loaded.current = app.loaded;
+	const pending = useRef<string[]>([]);
+	const newNoteWith = (body: string) => {
+		if (!body) return;
+		if (loaded.current) void app.newNote(body);
+		else pending.current.push(body);
+	};
 	useEffect(() => {
-		if (!noteOpen) return;
-		// The back gesture (Escape): back to the list, taken so the card stays.
-		const onKey = (e: KeyboardEvent) => {
-			if (e.key !== 'Escape' || e.defaultPrevented) return;
-			e.preventDefault();
-			app.select(null);
-		};
-		window.addEventListener('keydown', onKey);
-		return () => window.removeEventListener('keydown', onKey);
-	}, [noteOpen, app]);
+		if (!app.loaded) return;
+		for (const body of pending.current.splice(0)) void app.newNote(body);
+	}, [app.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+	useShareReceiver((s) => { setTab(ALL_NOTES); newNoteWith(noteFromShare(s)); });
+	useJustTypeAction('newNote', (text) => { setTab(ALL_NOTES); newNoteWith(text); });
+	useAppMenu({
+		items: [{label: 'New Note', onSelect: () => void app.newNote()}, {label: 'Settings', onSelect: () => setTab(SETTINGS_TAB)}],
+		share: () => (app.selected ? shareOfNote(app.draft) : null)
+	});
+	useStageReady(app.loaded);
 
 	const skin = SKINS.find((k) => k.id === app.settings.skin) ?? SKINS[0];
+	useEffect(() => setPhoenixFonts(skin.id === 'phoenix'), [skin.id]);
 	onTheme({
-		skin: skin.id,
+		skin: skin.agate ?? skin.id,
 		night: skin.night && !!app.settings.extra.night,
 		accent: (app.settings.extra.accent as string) || SKIN_COLORS[skin.id].accent,
 		highlight: (app.settings.extra.highlight as string) || SKIN_COLORS[skin.id].highlight
@@ -258,4 +274,6 @@ const App = () => {
 	);
 };
 
-export default App;
+// The Phoenix service plugin's transport (Enact's LS2Request) and design
+// tokens; Phoenix's fonts only with the Phoenix skin (above).
+export default PhoenixDecorator(App, {fonts: false});

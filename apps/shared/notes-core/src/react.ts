@@ -82,7 +82,8 @@ export interface NotesApp {
     /** The open note's text as being edited (saved shortly after each change). */
     draft: string;
     setDraft(text: string): void;
-    newNote(): Promise<void>;
+    /** A new note in the open folder: empty (the style's heading), or with this text (a share, Just Type). */
+    newNote(body?: string): Promise<void>;
     togglePin(id: string): void;
     moveNote(id: string, folderId: string): void;
     /** To Recently Deleted; from Recently Deleted, gone for good. */
@@ -240,11 +241,12 @@ export function useNotesApp({ appId, luna, settingsKey, defaults = DEFAULT_SETTI
         [notes, query, filters, searching],
     );
 
-    const newNote = useCallback(async () => {
+    const newNote = useCallback(async (body?: string) => {
         flush();
         const target = folderId === ALL_NOTES || folderId === RECENTLY_DELETED ? DEFAULT_FOLDER : folderId;
         if (folderId === RECENTLY_DELETED) setFolderId(DEFAULT_FOLDER);
-        const start = settings.newNoteStyle === "title" ? "# " : settings.newNoteStyle === "heading" ? "## " : "";
+        const start = typeof body === "string" ? body
+            : settings.newNoteStyle === "title" ? "# " : settings.newNoteStyle === "heading" ? "## " : "";
         const n = await store.createNote(target, start);
         setQuery("");
         setFilters([]);
