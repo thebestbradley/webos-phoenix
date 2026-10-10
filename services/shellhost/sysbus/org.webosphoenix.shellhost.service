@@ -1,0 +1,12 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Started by the hub when the shell first subscribes (LsmWindowSource) or
+# a page first posts, or anything sets an ongoing activity
+# (org.webosphoenix.ongoing, served by the same process); it keeps itself running (service.js's keep-alive
+# activity).
+
+[D-BUS Service]
+Name=org.webosphoenix.shellhost;org.webosphoenix.ongoing;org.webosphoenix.system
+Exec=/usr/bin/run-js-service -n /usr/palm/services/org.webosphoenix.shellhost
+Type=dynamic

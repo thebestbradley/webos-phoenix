@@ -1,0 +1,19 @@
+{
+    "id": "org.webosphoenix.accessories.service",
+    "version": "0.1.0",
+    "roleFiles": [
+        "/usr/share/luna-service2/roles.d/org.webosphoenix.accessories.role.json"
+    ],
+    "serviceFiles": [
+        "/usr/share/luna-service2/services.d/org.webosphoenix.accessories.service"
+    ],
+    "apiPermissionFiles": [
+        "/usr/share/luna-service2/api-permissions.d/org.webosphoenix.accessories.api.json"
+    ],
+    "clientPermissionFiles": [
+        "/usr/share/luna-service2/client-permissions.d/org.webosphoenix.accessories.perm.json"
+    ],
+    "groupsFiles": [
+        "/usr/share/luna-service2/groups.d/org.webosphoenix.accessories.groups.json"
+    ]
+}

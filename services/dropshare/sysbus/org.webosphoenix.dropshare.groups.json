@@ -1,0 +1,8 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.dropshare"
+    ],
+    "phoenix.dropshare": [
+        "dev"
+    ]
+}

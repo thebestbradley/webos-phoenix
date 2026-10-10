@@ -1,0 +1,10 @@
+{
+    "org.webosphoenix.shellhost": [],
+    "com.webos.surfacemanager": [
+        "phoenix.shellhost.app",
+        "phoenix.shellhost.shell",
+        "phoenix.ongoing"
+    ],
+    "org.webosphoenix.ongoing": [],
+    "org.webosphoenix.system": []
+}

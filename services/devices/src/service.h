@@ -11,6 +11,11 @@
 //                       /switches/status (InputManager.cpp)
 //   com.palm.vibrate    /vibrate, /vibrateNamedEffect (HapticsController.cpp)
 //   com.palm.ambientLightSensor  /control/status (AmbientLightSensor.cpp)
+//   com.palm.power      /com/palm/power/batteryStatusQuery, chargerStatusQuery
+//                       and their signals batteryStatus, USBDockStatus;
+//                       /shutdown/machineOff, machineReboot (powerd's, which
+//                       OSE does not have: the battery from the kernel's
+//                       power supply class, hardware.h PowerSupplies)
 //
 // with the replies and events luna-sysmgr sent (devicecore.h). The display
 // itself is the shell's (Phoenix.Shell Display.qml): it reports its state
@@ -20,6 +25,7 @@
 //   report {state, timeout, blockDisplay, active, dockMode, brightness,
 //           maximumBrightness, onWhenConnected}     (any of them)
 //   report {powerKey: "released"}                   Power while an app blocks it
+//   report {mediaKey: "play" | "pause" | ...}        a media key the system presses (the Assistant)
 //   orientation {subscribe} -> {orientation: "up" | "down" | "left" | "right" |
 //               "faceup" | "facedown"}   the accelerometer's, while the display is on
 //   requests -> {holds: {requestBlock, powerKeyBlock, proximity, alsDisabled}}
@@ -37,6 +43,8 @@
 
 #include <glib.h>
 #include <luna-service2/lunaservice.h>
+
+#include <functional>
 
 #include <map>
 #include <memory>
@@ -58,6 +66,7 @@ public:
         LSHandle *keys = nullptr;
         LSHandle *vibrate = nullptr;
         LSHandle *als = nullptr;
+        LSHandle *power = nullptr;      // com.palm.power (optional)
     };
     // The hardware may be missing (nullptr), as in the tests.
     struct Hardware
@@ -67,6 +76,10 @@ public:
         LightSensor *lightSensor = nullptr;
         Accelerometer *accelerometer = nullptr;
         InputDevices *input = nullptr;
+        PowerSupplies *power = nullptr;
+        // Turns the device off or restarts it ("off", "reboot"); main.cpp's
+        // runs systemctl. Called after the shell had its moment.
+        std::function<bool(const std::string &)> machine;
     };
 
     DeviceService(const Handles &handles, const Hardware &hardware, const DeviceConfig &config);
@@ -97,6 +110,14 @@ public:
     // probe's input devices and the hotplug monitor on the GLib main
     // context; on a hotplug event, rescan() (once per burst, when idle).
     void attachProbe(DeviceProbe *probe, HotplugMonitor *monitor);
+    // The battery and chargers read again: when they changed, powerd's
+    // signals (batteryStatus, USBDockStatus) go out. main.cpp calls it every
+    // 15 s and on a power supply's uevent; true when something changed.
+    bool readPower();
+    const PowerSupplies::Status &power() const { return m_supply; }
+    // The delay between telling the shell of a shutdown and doing it.
+    void setShutdownDelayMs(int ms) { m_shutdownDelayMs = ms; }
+
     // Re-probe now: log what changed, follow it (watches, switches, the
     // backlight's level, the light sensor), and return it.
     DeviceProbe::Changes rescan();
@@ -128,6 +149,12 @@ public:
     static bool onVibrate(LSHandle *sh, LSMessage *msg, void *ctx);
     static bool onVibrateNamedEffect(LSHandle *sh, LSMessage *msg, void *ctx);
     static bool onAlsStatus(LSHandle *sh, LSMessage *msg, void *ctx);
+    static bool onBatteryStatusQuery(LSHandle *sh, LSMessage *msg, void *ctx);
+    static bool onChargerStatusQuery(LSHandle *sh, LSMessage *msg, void *ctx);
+    static bool onPowerActivity(LSHandle *sh, LSMessage *msg, void *ctx);
+    static bool onMachineOff(LSHandle *sh, LSMessage *msg, void *ctx);
+    static bool onMachineReboot(LSHandle *sh, LSMessage *msg, void *ctx);
+    static bool onPowerTimeout(LSHandle *sh, LSMessage *msg, void *ctx);
     static bool onCancel(LSHandle *sh, LSMessage *msg, void *ctx);
 
 private:
@@ -170,6 +197,11 @@ private:
     static gboolean accelTimerFired(gpointer self);
     static gboolean vibrationRepeat(gpointer data);
     void stopVibrationIfIdle();
+    std::string batteryJson() const;
+    std::string chargerJson() const;
+    void signal(const char *uri, const std::string &json);
+    void shutdown(LSHandle *sh, LSMessage *msg, const char *action);
+    static gboolean shutdownNow(gpointer self);
 
     Handles m_h;
     Hardware m_hw;
@@ -197,6 +229,10 @@ private:
     std::vector<guint> m_hotplugWatches;
     guint m_rescanIdle = 0;
     std::vector<std::string> m_log;
+    PowerSupplies::Status m_supply;
+    std::string m_pendingMachine;
+    guint m_shutdownTimer = 0;
+    int m_shutdownDelayMs = 4500;   // the shutdown sound (sim.qml offDelay: 4.2 s)
 };
 
 } // namespace devices

@@ -1,0 +1,16 @@
+{
+    "appId": "com.palm.service.contacts.linker",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "com.palm.service.contacts.linker"
+    ],
+    "permissions": [
+        {
+            "service": "com.palm.service.contacts.linker",
+            "outbound": [
+                "*"
+            ]
+        }
+    ]
+}

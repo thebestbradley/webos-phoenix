@@ -1,0 +1,8 @@
+{
+  "name": "com.palm.applicationManager",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix's com.palm.applicationManager on webOS OSE (Luna): the legacy application manager's API (open by target, resource and redirect handlers, exhibitions, the legacy reply shapes) over OSE's SAM",
+  "license": "Apache-2.0",
+  "main": "service.js"
+}

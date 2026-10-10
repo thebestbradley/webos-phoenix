@@ -1,3 +1,6 @@
 {
-    "org.webosphoenix.filemanager": []
+    "org.webosphoenix.filemanager": [],
+    "com.webos.surfacemanager": [
+        "filemanager.operation"
+    ]
 }

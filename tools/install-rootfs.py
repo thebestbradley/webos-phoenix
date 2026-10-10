@@ -174,6 +174,46 @@ def plan_service(svc_id, svc_dir, plan):
                     break
 
 
+# Open webOS's app services (the core apps' accounts, contacts, linker and
+# calendar reminders), Mojo-era Node services OSE's mojoservicelauncher
+# runs as they are, with OSE's bus files from compat/app-services (theirs
+# are luna-service 1's): compat/app-services/README.md.
+APP_SERVICES_DIR = os.path.join("third_party", "app-services")
+APP_SERVICES_SYSBUS = os.path.join("compat", "app-services")
+APP_SERVICE_SKIP = {"files", "desktop", "desktop-support", "test.sh", "run_tests.sh", "all-tests.json", "testSpec.json",
+                    "jslint-ignore", ".project", "README.md"}
+
+
+def plan_app_services(plan):
+    base = os.path.join(REPO, APP_SERVICES_DIR)
+    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        src = os.path.join(base, name)
+        sysbus = os.path.join(REPO, APP_SERVICES_SYSBUS, name, "sysbus")
+        if not os.path.isfile(os.path.join(src, "services.json")) or not os.path.isdir(sysbus):
+            continue
+        dest = "/usr/palm/services/" + name
+        for fn in sorted(os.listdir(src)):
+            if fn in APP_SERVICE_SKIP or fn in SKIP_NAMES or fn.endswith(".service"):
+                continue
+            path = os.path.join(src, fn)
+            if fn in ("db", "tempdb"):
+                # db8's kinds and permissions, where db8 reads them.
+                for kind in ("kinds", "permissions"):
+                    if os.path.isdir(os.path.join(path, kind)):
+                        copy_tree(os.path.join(path, kind), "/etc/palm/%s/%s" % (fn, kind), plan)
+                continue
+            if fn == "activities":
+                # activities/<id>/<activity>.json, as activitymanager reads them.
+                copy_tree(path, "/etc/palm/activities", plan)
+                continue
+            copy_tree(path, dest + "/" + fn, plan)
+        for fn in sorted(os.listdir(sysbus)):
+            for suffix, sub in SYSBUS_DIRS:
+                if fn.endswith(suffix):
+                    plan.append((os.path.join(sysbus, fn), "/usr/share/luna-service2/%s/%s" % (sub, fn)))
+                    break
+
+
 def copy_tree(src, dst, plan, skip_top=()):
     if os.path.isfile(src):
         plan.append((src, dst))
@@ -296,6 +336,7 @@ def build_plan():
                 copy_tree(d, "/etc/palm/activities/applications", plan)
     for svc_id, svc_dir in services:
         plan_service(svc_id, svc_dir, plan)
+    plan_app_services(plan)
     for overlay in cfg.get("overlays", []):
         base = os.path.join(REPO, overlay)
         for root, dirs, files in os.walk(base):

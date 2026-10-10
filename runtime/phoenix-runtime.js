@@ -330,13 +330,21 @@
 
     // Legacy service names that webOS OSE serves under a different name,
     // checked against the services' sysbus files (webosose/luna-sysservice,
-    // webosose/sam). db8 still registers com.palm.db and com.palm.tempdb.
-    // Only the name changes here; methods whose parameters differ on OSE
-    // need per-method adapters (docs/APP-RUNTIME.md).
+    // webosose/webos-connman-adapter). db8 still registers com.palm.db and
+    // com.palm.tempdb. Only the name changes here; methods whose parameters
+    // differ on OSE need per-method adapters (docs/APP-RUNTIME.md).
+    // com.palm.applicationManager is not one: OSE's SAM has neither its
+    // open {target} nor its handlers, and launches only for oem callers
+    // (sam files/sysbus/com.webos.sam.groups.json), so Phoenix serves the
+    // legacy name itself on a device (services/appmanager).
+    // com.palm.activitymanager and com.palm.downloadmanager are OSE's
+    // activitymanager and luna-downloadmgr under their new names
+    // (webosose/activitymanager, luna-downloadmgr files/sysbus).
     var serviceAliases = {
         "com.palm.systemservice": "com.webos.service.systemservice",
         "com.palm.connectionmanager": "com.webos.service.connectionmanager",
-        "com.palm.applicationManager": "com.webos.applicationManager"
+        "com.palm.activitymanager": "com.webos.service.activitymanager",
+        "com.palm.downloadmanager": "com.webos.service.downloadmanager"
     };
 
     function aliasUrl(url) {
@@ -389,7 +397,7 @@
         var notCallers = ["com.palm.systemui", "com.palm.launcher", "com.webos.phoenix.unknown"];
         // A launch with {returnToCaller: true}: params.$caller, as off the device.
         function deviceJson(url, json) {
-            if (!/^(palm|luna):\/\/com\.webos\.applicationManager\/launch$/.test(url))
+            if (!/^(palm|luna):\/\/com\.(webos|palm)\.applicationManager\/launch$/.test(url))
                 return json;
             var p;
             try { p = JSON.parse(json); } catch (e) { return json; }
@@ -404,18 +412,69 @@
             }
             return toJson(p);
         }
+        // The services this page serves itself (its share sheet and file
+        // picker: shareSheet) answer here, asynchronously as the bus does;
+        // everything else goes to WebAppMgr's bridge.
+        function localService(url) {
+            var m = /^(?:palm|luna):\/\/([^\/]+)\//.exec(url);
+            return !!(m && runtime.services[m[1]]);
+        }
         global.PalmServiceBridge = function () {
             var b = new NativeBridge();
             var self = this;
+            var local = null;
             b.onservicecallback = function (json) {
                 if (self.onservicecallback) self.onservicecallback(json);
             };
             this.call = function (url, json) {
                 var u = aliasUrl(url);
+                if (localService(u)) {
+                    var params = {};
+                    try { params = json ? JSON.parse(json) : {}; } catch (e) { params = {}; }
+                    var cancelled = false;
+                    local = { cancelled: function () { return cancelled; }, onCancel: null,
+                              cancel: function () { cancelled = true; if (local && local.onCancel) local.onCancel(); } };
+                    var ctx = local;
+                    global.setTimeout(function () {
+                        dispatch(u, params, function (r) {
+                            if (cancelled || !self.onservicecallback) return;
+                            try { self.onservicecallback(toJson(r)); } catch (e) { global.setTimeout(function () { throw e; }, 0); }
+                        }, ctx);
+                    }, 0);
+                    return 1;
+                }
                 return b.call(u, deviceJson(u, json));
             };
-            this.cancel = function () { return b.cancel(); };
+            this.cancel = function () {
+                if (local) local.cancel();
+                return b.cancel();
+            };
         };
+        // runtime.busCall(url, params, reply(obj), ctx?): one call on the bus
+        // for the runtime's own code (dispatch sends what the page does not
+        // serve here).
+        runtime.busCall = function (url, params, reply, ctx) {
+            var u = aliasUrl(url);
+            var nb = new NativeBridge();
+            // Held until it answers (a subscription: until cancelled), so
+            // that the page's garbage collector cannot take the call away.
+            liveCalls.push(nb);
+            var forget = function () {
+                var i = liveCalls.indexOf(nb);
+                if (i >= 0) liveCalls.splice(i, 1);
+            };
+            nb.onservicecallback = function (json) {
+                if (!(params && params.subscribe)) forget();
+                if (ctx && ctx.cancelled && ctx.cancelled()) return;
+                var r = null;
+                try { r = JSON.parse(json); } catch (e) { r = { returnValue: false, errorText: "Not JSON: " + json }; }
+                if (reply) reply(r);
+            };
+            if (ctx) ctx.onCancel = function () { forget(); nb.cancel(); };
+            nb.call(u, deviceJson(u, toJson(params || {})));
+            return nb;
+        };
+        var liveCalls = [];
 
         function setWindowProperty(name, value) {
             var v = String(value);
@@ -445,8 +504,22 @@
                 try { ps[name] = fn; } catch (e) { /* not extensible */ }
             }
         }
-        shim("setWindowOrientation", function (o) { setWindowProperty("phoenixOrientation", orientation(o)); });
-        shim("enableFullScreenMode", function (on) { setWindowProperty("phoenixFullScreen", on ? "true" : "false"); });
+        // What WebAppMgr's PalmSystem has but does nothing with: neva's
+        // webOSSystem injection defines the method and sends WebAppMgr the
+        // command (chromium neva/injection/renderer/webossystem/
+        // webossystem_injection.cc:114-172), and PalmSystemBlink::
+        // HandleBrowserControlMessage (wam src/platform/webengine/
+        // palm_system_blink.cc:37-170) has no case for it, so it is lost:
+        // setWindowOrientation, enableFullScreenMode, addBannerMessage,
+        // removeBannerMessage, clearBannerMessages, paste,
+        // simulateMouseClick. Those are replaced, not only added where
+        // missing.
+        function override(name, fn) {
+            if (!ps) return;
+            try { ps[name] = fn; } catch (e) { /* read-only: WebAppMgr's stays */ }
+        }
+        override("setWindowOrientation", function (o) { setWindowProperty("phoenixOrientation", orientation(o)); });
+        override("enableFullScreenMode", function (on) { setWindowProperty("phoenixFullScreen", on ? "true" : "false"); });
         shim("setWindowProperties", function (props) {
             if (!props || typeof props !== "object") return;
             if ("blockScreenTimeout" in props)
@@ -567,6 +640,278 @@
                 if (typeof text === "string" && text) marks.push({ text: text, kind: kind ? String(kind) : "", at: Date.now() });
             }
         };
+
+        installDeviceShell(ps, me, override, shim);
+    }
+
+    // com.palm.power timeout/set {at: "MM/DD/YYYY HH:MM:SS" (UTC) | in:
+    // "HH:MM:SS"} -> the activity's start, "YYYY-MM-DD HH:MM:SSZ", or "".
+    function powerTimeoutStart(p, now) {
+        var m;
+        if (p.at && (m = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/.exec(p.at)))
+            return m[3] + "-" + m[1] + "-" + m[2] + " " + m[4] + ":" + m[5] + ":" + m[6] + "Z";
+        if (p["in"] && (m = /^(\d{2}):(\d{2}):(\d{2})$/.exec(p["in"])))
+            return new Date(now + ((+m[1] * 60 + +m[2]) * 60 + +m[3]) * 1000).toISOString().replace("T", " ").replace(/\.\d+Z$/, "Z");
+        return "";
+    }
+
+    // ---- On a device: the shell, and the page's own features --------------------
+    //
+    // docs/DEVICE-AUDIT.md. In phoenix-sim the shell, the system UI and every
+    // page are one process; on a device each app is a WebAppMgr page of its
+    // own and the shell is luna-surfacemanager. What the runtime tells the
+    // shell (phoenixHost.postToHost: banners, sounds, notifications, the
+    // edit popup, scene transitions, ...) goes on the bus to
+    // org.webosphoenix.shellhost (services/shellhost), which hands it to
+    // the shell with the caller's app id; what the shell tells a page
+    // (paste, the card coming to the front, the app menu, its snapshot is
+    // taken) comes back as that service's events. The page's own features
+    // (fonts, the 2011 WebKit's border images and animation frames, Enyo's
+    // focus taps, card activation, HiDPI art, Edit and Share in every app
+    // menu, the press-and-hold edit popup, links that leave the app, the
+    // share sheet and file picker) are the same functions the simulator
+    // runs, called here.
+    // tools/test-runtime-device.cjs drives this with a fake WebAppMgr.
+    // STATUS: written against WebAppMgr's and neva's sources; not yet run
+    // on a device.
+    function installDeviceShell(ps, me, override, shim) {
+        // The page features below read PalmSystem: WebAppMgr's. Its app id
+        // under the simulator's name too.
+        PalmSystem = ps;
+        if (ps && !ps.appIdentifier && me) {
+            try { ps.appIdentifier = me; } catch (e) { /* read-only */ }
+        }
+        var top = !global.top || global.top === global;
+
+        host.postToHost = function (type, payload) {
+            runtime.busCall("luna://org.webosphoenix.shellhost/post", { type: String(type), payload: payload || {} }, null);
+        };
+
+        // ---- The shell's events for this page ------------------------------------
+        // {type, payload}; runtime.onShellEvent(type, fn(payload)) adds one.
+        // Only the card's own page listens (not the frames in it: the share
+        // sheet's page has the same app's events otherwise).
+        var shellEvents = {
+            cardActivation: function (p) { if (runtime.cardActivated) runtime.cardActivated(!!p.active); },
+            sceneTransitionPrepared: function () { runtime.sceneTransitionPrepared(); },
+            editAction: function (p) {
+                if (["selectAll", "cut", "copy", "paste"].indexOf(p.action) >= 0) runtime.edit(p.action);
+            },
+            openAppMenu: function () { runtime.openAppMenu(); },
+            justType: function (p) { deviceJustType(p, 0); },
+            dictationEvent: function (p) { if (runtime.dictationEvent) runtime.dictationEvent(p); }
+        };
+        // Just Type's page (com.palm.launcher, luna-applauncher) in the
+        // shell's Just Type: the text typed, the stop, Back, as the
+        // simulator's SimWindowSource runs them in the page (justTypeStart,
+        // justTypeType, justTypeStop, justTypeBack). A start before Enyo has
+        // made the page waits for it (up to five seconds).
+        function deviceJustType(p, tries) {
+            var e = global.enyo;
+            var jt = e && e.$ && e.$.justTypeApp && e.$.justTypeApp.$ && e.$.justTypeApp.$.justType;
+            if (p.op === "back") {
+                var menu = e && e.appMenu;
+                if (menu && menu.isOpen) menu.close();
+                else host.postToHost("justTypeDismiss", {});
+                return;
+            }
+            if (!jt) {
+                if ((p.op === "start" || p.op === "type") && tries < 50)
+                    global.setTimeout(function () { deviceJustType(p, tries + 1); }, 100);
+                return;
+            }
+            var field = jt.$.searchField;
+            // The field's text, the cursor after it (SimWindowSource._justTypeSetText).
+            var setText = function (v) {
+                field.setValue(v);
+                var n = field.$.input && field.$.input.hasNode();
+                if (n && n.setSelectionRange) n.setSelectionRange(v.length, v.length);
+                else if (n && global.document.createRange) {
+                    var r = global.document.createRange();
+                    r.selectNodeContents(n);
+                    r.collapse(false);
+                    var sel = global.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(r);
+                }
+                jt.onValueChange(null, null, v);
+            };
+            if (p.op === "start") {
+                jt.forceFocus();
+                setText(String(p.text || ""));
+            } else if (p.op === "type") {
+                setText(field.getValue() + String(p.text || ""));
+            } else if (p.op === "stop") {
+                jt.justTypeDeactivated();
+                // Its window hides until Just Type opens again (WebAppMgr's hide).
+                if (ps && typeof ps.hide === "function") ps.hide();
+            }
+        }
+        runtime.onShellEvent = function (type, fn) { shellEvents[type] = fn; };
+        runtime.shellEvent = function (type, payload) {
+            var fn = shellEvents[type];
+            if (typeof fn !== "function") return false;
+            try { fn(payload && typeof payload === "object" ? payload : {}); }
+            catch (e) { console.error("[phoenix-runtime] shell event " + type + " failed", e); }
+            return true;
+        };
+        if (top && me && me !== "com.webos.phoenix.unknown") {
+            runtime.busCall("luna://org.webosphoenix.shellhost/events", { subscribe: true }, function (r) {
+                var ev = r && r.event;
+                if (ev && typeof ev.type === "string") runtime.shellEvent(ev.type, ev.payload);
+            });
+        }
+
+        // ---- PalmSystem: what WebAppMgr lacks or drops ----------------------------
+        function appPath(icon) {
+            icon = icon ? String(icon) : "";
+            if (!icon || /^(\/|[a-z]+:)/i.test(icon)) return icon;
+            return "/usr/palm/applications/" + me + "/" + icon.replace(/^\.\//, "");
+        }
+        var banners = 0;
+        // (message, launchParams, icon, soundClass, soundFile, duration):
+        // the shell shows it (LsmWindowSource's banner message), as the
+        // simulator's PalmSystem does.
+        override("addBannerMessage", function (msg, params, icon, soundClass, soundFile, duration) {
+            var id = "b" + (++banners) + "-" + Date.now();
+            host.postToHost("banner", { id: id, appId: me, message: String(msg === undefined ? "" : msg), params: params,
+                                        icon: appPath(icon), soundClass: soundClass ? String(soundClass) : "",
+                                        soundFile: soundFile ? String(soundFile) : "", duration: duration | 0 });
+            return id;
+        });
+        override("removeBannerMessage", function (id) { host.postToHost("removeBanner", { id: id }); });
+        override("clearBannerMessages", function () { host.postToHost("clearBanners", {}); });
+        shim("playSoundNotification", function (soundClass, soundFile, duration, wakeupScreen) {
+            host.postToHost("sound", { appId: me, soundClass: soundClass ? String(soundClass) : "",
+                                       soundFile: soundFile ? String(soundFile) : "", duration: duration | 0,
+                                       wakeupScreen: !!wakeupScreen });
+        });
+        shim("addActiveCallBanner", function (icon, message, startTime) {
+            host.postToHost("activeCallBanner", { op: "add", icon: appPath(icon), message: String(message || ""), startTime: +startTime || 0 });
+        });
+        shim("removeActiveCallBanner", function () { host.postToHost("activeCallBanner", { op: "remove" }); });
+        shim("updateActiveCallBanner", function (icon, message, startTime) {
+            host.postToHost("activeCallBanner", { op: "update", icon: appPath(icon), message: String(message || ""), startTime: +startTime || 0 });
+        });
+        shim("runTextIndexer", function (text, options) { return runtime.textIndexer(text, options); });
+        override("simulateMouseClick", simulateMouseClick);
+        // Scene transitions: the shell snapshots the card (its surface).
+        runtime.sceneTransition = makeSceneTransition(250);
+        runtime.sceneTransitionPrepared = function () { runtime.sceneTransition.prepared(); };
+        shim("prepareSceneTransition", function (isPop) { return runtime.sceneTransition.prepare(isPop); });
+        shim("runSceneTransition", function (type, isPop) { runtime.sceneTransition.run(type, isPop); });
+        shim("cancelSceneTransition", function () { runtime.sceneTransition.cancel(); });
+        // Calls the apps of the time make whose absence would throw; nothing
+        // to do with them here (as off the device). The keyboard's
+        // (allowResizeOnPositiveSpaceChange, keyboardShow) are the input
+        // method's: GAPS V5.
+        ["setAlertSound", "receiveKeyEvents", "receivePageUpDownInLandscape", "copiedToClipboard",
+         "pastedFromClipboard", "applyLaunchFeedback", "allowResizeOnPositiveSpaceChange"].forEach(function (name) {
+            shim(name, function () {});
+        });
+        shim("getIdentifierForFrame", function () { return ps.identifier; });
+        shim("getLocalizedString", function (s) { return s; });
+
+        // com.palm.power's timeouts (the pre-activity alarm API): an
+        // activity of the activity manager, as the simulator's runtime
+        // makes it ("Activity manager and alarms"); the rest of
+        // com.palm.power is phoenix-devices' on the bus.
+        register(["com.palm.power"], {
+            "/timeout/set": function (p, reply, ctx) {
+                if (!p.key || !p.uri) return reply(fail(-1, "key and uri are required"));
+                var start = powerTimeoutStart(p, Date.now());
+                if (!start) return reply(fail(-1, "at or in is required"));
+                runtime.busCall("luna://com.webos.service.activitymanager/create", {
+                    start: true, replace: true,
+                    activity: { name: "timeout:" + p.key, description: "com.palm.power timeout", type: { foreground: true, persist: true },
+                                schedule: { start: start }, callback: { method: p.uri, params: p.params || {} } }
+                }, function (r) { reply(r && r.returnValue ? ok({ key: p.key }) : (r || fail(-1, "No reply"))); }, ctx);
+            },
+            "/timeout/clear": function (p, reply, ctx) {
+                runtime.busCall("luna://com.webos.service.activitymanager/cancel", { activityName: "timeout:" + p.key },
+                                function () { reply(ok({ key: p.key })); }, ctx);
+            },
+            "*": function (p, reply, ctx, method) { runtime.busCall("luna://com.palm.power" + method, p, reply, ctx); }
+        });
+
+        // Phoenix's media store (Camera's photos, Screenshot's edits,
+        // Podcasts' episodes): the simulator keeps it in the page; on a
+        // device the files are real, written by the file manager's
+        // service, and OSE's media indexer is told of them.
+        var MEDIA_ROOT = "/media/internal";
+        function mediaPath(p) { return typeof p === "string" && p.indexOf(MEDIA_ROOT + "/") === 0 && p.indexOf("/../") < 0; }
+        register(["org.webosphoenix.service.mediafiles"], {
+            "/write": function (p, reply, ctx) {
+                if (!mediaPath(p.path)) return reply(fail(-1, "path must be under " + MEDIA_ROOT));
+                if (typeof p.data !== "string") return reply(fail(-1, "data (base64) is required"));
+                var dir = p.path.replace(/\/[^\/]*$/, "");
+                runtime.busCall("luna://org.webosphoenix.filemanager/mkdir", { path: dir }, function () {
+                    runtime.busCall("luna://org.webosphoenix.filemanager/write", { path: p.path, data: p.data, encoding: "base64" }, function (r) {
+                        if (!r || r.returnValue === false) return reply(fail(-1, "write failed: " + (r && r.errorText || "no reply")));
+                        runtime.busCall("luna://com.webos.service.mediaindexer/requestMediaScan", { path: dir }, function () {});
+                        reply(ok({ path: p.path, file_size: r.size }));
+                    }, ctx);
+                }, ctx);
+            },
+            "/remove": function (p, reply, ctx) {
+                if (!mediaPath(p.path)) return reply(fail(-1, "path must be under " + MEDIA_ROOT));
+                runtime.busCall("luna://org.webosphoenix.filemanager/remove", { path: p.path }, function (r) {
+                    reply(r && r.returnValue !== false ? ok() : fail(-1, "remove failed: " + (r && r.errorText || "no reply")));
+                }, ctx);
+            }
+        });
+
+        // ---- The page's own features ------------------------------------------------
+        // Each on its own: one that fails on a page leaves the others.
+        [legacyAnimationFrames, aliasPreludeFonts, cardActivation, fixLegacyBorderImages, backdropBlur,
+         enyoListSelectorWidth, hidpiArt, installEditing, watchLinks, shareSheet, dictationServices].forEach(function (feature) {
+            try { feature(); }
+            catch (e) { console.error("[phoenix-runtime] " + feature.name + " failed on this page", e); }
+        });
+        runtime.openAppMenu = pageOpenAppMenu;
+        runtime.linkLeavesApp = linkLeavesApp;
+
+        // The edit popup for a finger: Chromium's long press selects the
+        // word and asks for a context menu (as does a right click), which
+        // WebAppMgr has none of; the shell draws the edit popup over the
+        // selection or the field instead (phoenix-sim does it from
+        // QtWebEngine's touch selection menu, WebAppWindow.qml).
+        if (global.document) global.document.addEventListener("contextmenu", function (e) {
+            var el = editable(e.target) ? e.target : null;
+            var sel = global.getSelection && global.getSelection();
+            var rect = null;
+            if (sel && sel.rangeCount && String(sel)) {
+                var r = sel.getRangeAt(0).getBoundingClientRect();
+                rect = { x: r.left, y: r.top, width: r.width, height: r.height };
+            } else if (el && el.getBoundingClientRect) {
+                var b = el.getBoundingClientRect();
+                rect = { x: e.clientX || b.left, y: b.top, width: 0, height: b.height };
+            }
+            if (!rect) return;
+            e.preventDefault();
+            showEditPopup(rect);
+        }, true);
+
+        // Paste: WebAppMgr does nothing with PalmSystem.paste (above).
+        // Chromium's own paste where WebAppMgr lets a page read the
+        // clipboard; otherwise the newest copy in the clipboard history
+        // (every page's copies go there: installDevice), typed in as
+        // insertText, as the simulator's shell pastes into the field.
+        runtime.paste = function () {
+            var doc = global.document;
+            var done = false;
+            try { done = !!(doc && doc.execCommand && doc.execCommand("paste")); } catch (e) { done = false; }
+            if (done) return;
+            runtime.busCall("luna://org.webosphoenix.clipboard/history", { limit: 1 }, function (r) {
+                var c = r && r.returnValue !== false && r.clips && r.clips[0];
+                if (!c || c.type === "image") return;
+                runtime.busCall("luna://org.webosphoenix.clipboard/paste", { id: c.id }, function (r2) {
+                    var t = r2 && r2.returnValue !== false && r2.clip ? r2.clip.text : "";
+                    if (typeof t === "string" && t && doc && doc.execCommand) doc.execCommand("insertText", false, t);
+                });
+            });
+        };
+        override("paste", function () { runtime.paste(); });
     }
 
     // ================================================================================
@@ -791,7 +1136,9 @@
     // shell has it (sceneTransitionPrepared), or after a while without a
     // shell: pages that can wait for it change the scene after that (the
     // apps' sceneTransition() in @phoenix/luna); Mojo ignores the return.
-    runtime.sceneTransition = (function () {
+    // makeSceneTransition(timeoutMs): installDevice makes one too, its
+    // shell being luna-surfacemanager's (org.webosphoenix.shellhost).
+    function makeSceneTransition(timeoutMs) {
         var waiting = [];
         var prepared = false;
         function settle() {
@@ -800,9 +1147,7 @@
             list.forEach(function (f) { f(); });
         }
         return {
-            // How long a page waits for the shell's snapshot: only
-            // phoenix-sim's pages (phoenix:) have a shell to take one.
-            timeoutMs: global.location && global.location.protocol === "phoenix:" ? 250 : 0,
+            timeoutMs: timeoutMs,
             prepare: function (isPop) {
                 prepared = true;
                 host.postToHost("sceneTransition", { op: "prepare", isPop: !!isPop });
@@ -839,7 +1184,10 @@
             // The shell has its snapshot.
             prepared: function () { settle(); }
         };
-    })();
+    }
+    // How long a page waits for the shell's snapshot: only phoenix-sim's
+    // pages (phoenix:) have a shell to take one.
+    runtime.sceneTransition = makeSceneTransition(global.location && global.location.protocol === "phoenix:" ? 250 : 0);
     runtime.sceneTransitionPrepared = function () { runtime.sceneTransition.prepared(); };
 
     // getResource's flags: "json" (with "const") parses the file (a BOM and
@@ -920,6 +1268,12 @@
         var service = runtime.services[m[1]];
         var method = m[2].replace(/\/+$/, "") || "/";
         var fn = service && (service[method] || service["*"]);
+        // On a device what the page does not serve itself (its share sheet
+        // and file picker) is on the bus.
+        if (!fn && runtime.onDevice && runtime.busCall) {
+            runtime.busCall(url, params || {}, reply, ctx);
+            return;
+        }
         if (!fn) {
             if (!reported[url]) {
                 reported[url] = true;
@@ -3072,22 +3426,26 @@
     // the same. Links to the app's own pages, and clicks the page handles
     // itself (preventDefault), are the page's. phoenix-sim's window also
     // catches what gets past this (WebAppWindow.qml, Links.js).
-    runtime.linkLeavesApp = function (href) {
+    function linkLeavesApp(href) {
         href = String(href || "");
         if (!href || /^(javascript|about|data|blob):/i.test(href)) return false;
         if (!/^https?:/i.test(href)) return !/^(phoenix|file):/i.test(href);
         try { return new URL(href).origin !== global.location.origin; } catch (e) { return false; }
-    };
-    try {
+    }
+    runtime.linkLeavesApp = linkLeavesApp;
+    // (On a device too: installDevice. WebAppMgr would load the other site
+    // in the app's own card.)
+    function watchLinks() {
         if (global.document && global.addEventListener) global.addEventListener("click", function (e) {
             if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
             var a = e.target && e.target.closest && e.target.closest("a[href]");
-            if (!a || a.hasAttribute("download") || !runtime.linkLeavesApp(a.href)) return;
+            if (!a || a.hasAttribute("download") || !linkLeavesApp(a.href)) return;
             e.preventDefault();
             dispatch("luna://com.palm.applicationManager/open", { target: a.href }, function () {},
                      { cancelled: function () { return false; }, onCancel: null });
         }, false);
-    } catch (e) { /* ignore */ }
+    }
+    try { watchLinks(); } catch (e) { /* ignore */ }
 
     // ---- Connectivity, power, accounts and friends -------------------------------------
 
@@ -3960,7 +4318,7 @@
     // to Open Sans, which Phoenix ships at /usr/share/fonts/open-sans/ and
     // the shell uses too (Theme.qml). "Open Sans" itself resolves to the same
     // files for the Phoenix apps.
-    (function aliasPreludeFonts() {
+    function aliasPreludeFonts() {
         if (!global.document || !global.document.fonts || typeof global.FontFace !== "function")
             return;
         var dir = "/usr/share/fonts/open-sans/OpenSans-";
@@ -3989,7 +4347,8 @@
                 doc.fonts.add(new FontFace(family, faces.boldItalic, { weight: "600 900", style: "italic" }));
             } catch (e) { /* ignore */ }
         });
-    })();
+    }
+    aliasPreludeFonts();
 
     // ---- Legacy WebKit APIs (core apps) ------------------------------------------------
     //
@@ -3999,10 +4358,13 @@
     // so Enyo ends up cancelling unrelated timers: a Pane's fade between
     // views stops half-way, leaving both views drawn and a transparent scrim
     // that swallows every tap.
-    if (!global.webkitCancelRequestAnimationFrame && global.cancelAnimationFrame)
-        global.webkitCancelRequestAnimationFrame = global.cancelAnimationFrame.bind(global);
-    if (!global.webkitRequestAnimationFrame && global.requestAnimationFrame)
-        global.webkitRequestAnimationFrame = global.requestAnimationFrame.bind(global);
+    function legacyAnimationFrames() {
+        if (!global.webkitCancelRequestAnimationFrame && global.cancelAnimationFrame)
+            global.webkitCancelRequestAnimationFrame = global.cancelAnimationFrame.bind(global);
+        if (!global.webkitRequestAnimationFrame && global.requestAnimationFrame)
+            global.webkitRequestAnimationFrame = global.requestAnimationFrame.bind(global);
+    }
+    legacyAnimationFrames();
 
     // ---- PalmSystem.simulateMouseClick (Enyo 1.0 focus) -------------------------------
     //
@@ -4013,7 +4375,10 @@
     // arrives. With a no-op, the next real tap is swallowed instead (a text
     // field tapped after a button never gets focus). Replay the tap as
     // mouse events at that point, asynchronously like the device does.
-    PalmSystem.simulateMouseClick = function (x, y, down) {
+    // (WebAppMgr's PalmSystem has the method, but WebAppMgr does nothing with
+    // it: palm_system_blink.cc has no "simulateMouseClick". installDevice
+    // puts this one in its place.)
+    function simulateMouseClick(x, y, down) {
         setTimeout(function () {
             var doc = global.document;
             var sx = x - (global.pageXOffset || 0), sy = y - (global.pageYOffset || 0);
@@ -4024,7 +4389,8 @@
                 clientX: sx, clientY: sy, screenX: sx, screenY: sy, button: 0, buttons: down ? 1 : 0
             }));
         }, 0);
-    };
+    }
+    PalmSystem.simulateMouseClick = simulateMouseClick;
 
     // ---- Card activation (Mojo.stageActivated) ----------------------------------------
     //
@@ -4035,7 +4401,7 @@
     // (opening the first folder) once activated. Do the same when a page
     // has loaded and when it becomes visible or hidden. A headless app's
     // main page ("noWindow" in appinfo.json) is not a card: never activated.
-    (function cardActivation() {
+    function cardActivation() {
         var m = /^(\/usr\/palm\/applications\/[^\/]+\/)(.*)$/.exec(global.location.pathname.replace(/\/{2,}/g, "/"));
         if (!m) return;
         var info = {};
@@ -4068,7 +4434,8 @@
                 global.dispatchEvent(new CustomEvent("phoenixcardactivation", { detail: { active: !!active } }));
             } catch (e) { console.error("[phoenix-runtime] card activation event failed", e); }
         };
-    })();
+    }
+    cardActivation();
 
     // ---- Legacy WebKit border images (core apps) ---------------------------------------
     //
@@ -4081,7 +4448,7 @@
     // Restore the old behaviour: rules that set a border image get
     // border-style: solid (the image replaces the solid line), and rules
     // that clear it get border-style: none, unless the rule says otherwise.
-    (function fixLegacyBorderImages() {
+    function fixLegacyBorderImages() {
         var doc = global.document;
         if (!doc || typeof MutationObserver !== "function")
             return;
@@ -4134,13 +4501,14 @@
         }).observe(doc, { childList: true, subtree: true });
         doc.addEventListener("DOMContentLoaded", fixAll);
         global.addEventListener("load", fixAll);
-    })();
+    }
+    fixLegacyBorderImages();
 
     // A faint blur behind the original apps' translucent popups and menus
     // (Enyo's Heritage and Onyx popup, menu and app menu art), for legibility;
     // they stay see-through. A Phoenix addition, like the shell's
     // BackdropBlur. The radius keeps the blur inside the art's rounded corners.
-    (function () {
+    function backdropBlur() {
         var doc = global.document;
         if (!doc || !doc.createElement) return;
         function add() {
@@ -4154,7 +4522,8 @@
         }
         if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", add);
         else add();
-    })();
+    }
+    backdropBlur();
 
     // Enyo 1.0's list selectors (Clock's "Occurs  Daily", Contacts' MOBILE /
     // HOME type labels): FlexLayout gives a flexed child width 0, "exactly
@@ -4165,7 +4534,7 @@
     // still takes any space the selector is given, and so does the item in
     // it: an item flexed inside in turn (Calendar's calendar picker: its
     // colour and name, width 0 with a flex) otherwise showed nothing.
-    (function () {
+    function enyoListSelectorWidth() {
         var doc = global.document;
         if (!doc || !doc.createElement) return;
         function add() {
@@ -4178,7 +4547,8 @@
         }
         if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", add);
         else add();
-    })();
+    }
+    enyoListSelectorWidth();
 
     // ---- HiDPI art named from script (the original apps) --------------------------
     //
@@ -4196,7 +4566,7 @@
     // own srcset or image set is left alone. So do the pages an app shows in
     // its frames without a runtime of their own (luna-systemui's file
     // picker, which Enyo's FilePicker opens in the app's card).
-    (function hidpiArt() {
+    function hidpiArt() {
         if (!global.document || typeof MutationObserver !== "function" || typeof URL !== "function" ||
             typeof WeakMap !== "function" || typeof WeakSet !== "function")
             return;
@@ -4377,7 +4747,8 @@
         }
         install(global);
         runtime.hidpiArt = { variants: variants };
-    })();
+    }
+    hidpiArt();
 
     // ---- Pictures the media store holds, named by their path -----------------------
     //
@@ -4554,7 +4925,11 @@
     // PalmIME::FieldType (luna-webkit-api palmimedefines.h:33-44), from the
     // element's type as WebKit named it.
     var fieldTypes = { password: 1, search: 2, range: 3, email: 4, number: 5, tel: 6, url: 7, color: 8 };
-    var textInputs = ["", "text", "password", "search", "email", "number", "tel", "url"];
+    // (A function: editable() runs on a device too, where this section's
+    // statements do not: installDevice returns before them.)
+    function isTextInputType(type) {
+        return ["", "text", "password", "search", "email", "number", "tel", "url"].indexOf(type) >= 0;
+    }
 
     function editable(el) {
         if (!el || el.disabled || el.readOnly)
@@ -4563,7 +4938,7 @@
         if (tag === "textarea")
             return true;
         if (tag === "input")
-            return textInputs.indexOf((el.getAttribute("type") || "").toLowerCase()) >= 0;
+            return isTextInputType((el.getAttribute("type") || "").toLowerCase());
         return !!el.isContentEditable;
     }
 
@@ -4756,11 +5131,11 @@
 
     // What the Edit commands can do now (Enyo's EditMenu disabled its items
     // when nothing editable had the focus).
-    runtime.editState = function () {
+    function pageEditState() {
         var el = editTarget();
         var hasSelection = selectedText().length > 0;
         return { editable: !!el, canSelectAll: !!el, canCut: !!el && hasSelection, canCopy: hasSelection, canPaste: !!el };
-    };
+    }
 
     // ---- Share: what the app menu's Share shares --------------------------------------
     //
@@ -4771,14 +5146,14 @@
     // or else the text selected on the page; nothing, and Share is dimmed.
     // Phoenix's React apps say it with AppMenu's `share`.
     var shareProvider = null;
-    runtime.setShareContent = function (fn) { shareProvider = typeof fn === "function" ? fn : null; };
-    runtime.shareContent = function () {
+    function pageSetShareContent(fn) { shareProvider = typeof fn === "function" ? fn : null; }
+    function pageShareContent() {
         var c = null;
         try { c = shareProvider ? shareProvider() : null; } catch (e) { c = null; }
         if (c && (c.text || c.url || (c.files && c.files.length))) return c;
         var text = selectedText().replace(/^\s+|\s+$/g, "");
         return text ? { text: text } : null;
-    };
+    }
 
     function pasteText() {
         var clip = global.navigator && global.navigator.clipboard;
@@ -4790,7 +5165,7 @@
         }, function () { /* no permission: nothing to paste */ });
     }
 
-    runtime.edit = function (action) {
+    function pageEdit(action) {
         var doc = global.document;
         if (!doc)
             return false;
@@ -4805,7 +5180,7 @@
         case "cut":
         case "copy":
             // A password field's copy (see "Clipboard history").
-            if (runtime.clipboard && runtime.clipboard.passwordCopy(action))
+            if (runtime.clipboard && runtime.clipboard.passwordCopy && runtime.clipboard.passwordCopy(action))
                 return true;
             return doc.execCommand(action);
         case "paste":
@@ -4813,15 +5188,16 @@
             return true;
         }
         return false;
-    };
+    }
 
-    // PalmSystem.paste(): the host pastes into the focused field.
-    runtime.paste = function () {
+    // PalmSystem.paste(): the host pastes into the focused field. (On a
+    // device installDevice's: the newest copy in the clipboard history.)
+    function pagePaste() {
         if (nativeWebViews)
             host.postToHost("editAction", { appId: PalmSystem.appIdentifier, action: "paste" });
         else
             pasteText();
-    };
+    }
 
     // Every Enyo 1.0 app menu starts with Edit (Enyo's own EditMenu), as
     // Mojo put Edit in every app's menu; the TouchPad apps did not list it
@@ -4910,14 +5286,11 @@
             set: function (v) { enyoObj = v; hook(v); }
         });
     }
-    watchEnyo();
 
     // Press and hold with a mouse (the simulator on a computer; touch has
     // Chromium's own long press, which the host turns into the same popup):
     // the word under the pointer is selected and the host shows the edit
     // popup over it, as it does for a right click.
-    var HOLD_MS = 500;
-    var HOLD_SLOP = 6;
 
     function wordAround(text, at) {
         var isWord = function (c) { return /[\p{L}\p{N}_'’-]/u.test(c); };
@@ -4974,11 +5347,18 @@
         host.postToHost("editMenu", {
             appId: PalmSystem.appIdentifier,
             x: rect.x, y: rect.y, width: rect.width, height: rect.height,
+            // The page's width in its own pixels: the shell scales the
+            // rectangle to the card it shows (on a device, SurfaceHost).
+            viewportWidth: global.innerWidth || 0,
             canSelectAll: s.canSelectAll, canCut: s.canCut, canCopy: s.canCopy, canPaste: s.canPaste
         });
     }
 
-    if (global.document && global.PointerEvent) {
+    function watchHold() {
+        if (!global.document || !global.PointerEvent)
+            return;
+        var HOLD_MS = 500;
+        var HOLD_SLOP = 6;
         var hold = null;
         var cancelHold = function () {
             if (hold) {
@@ -5013,6 +5393,33 @@
         global.document.addEventListener("pointerup", cancelHold, true);
         global.document.addEventListener("pointercancel", cancelHold, true);
     }
+
+    // The app menu, as the status bar's title asks for it (runtime.openAppMenu;
+    // "Shell <-> runtime" below; on a device the shell's openAppMenu event).
+    function pageOpenAppMenu() {
+        if (global.enyo && global.enyo.appMenu) {
+            global.enyo.appMenu.toggle();
+            return true;
+        }
+        var e;
+        try { e = new CustomEvent("phoenixAppMenu"); }
+        catch (x) { e = global.document.createEvent("CustomEvent"); e.initCustomEvent("phoenixAppMenu", false, false, null); }
+        global.document.dispatchEvent(e);
+        return true;
+    }
+
+    // The page's Edit commands, its app menu's Edit and Share, and the
+    // press and hold: here, and on a device (installDevice).
+    function installEditing() {
+        runtime.editState = pageEditState;
+        runtime.setShareContent = pageSetShareContent;
+        runtime.shareContent = pageShareContent;
+        runtime.edit = pageEdit;
+        runtime.paste = pagePaste;
+        watchEnyo();
+        watchHold();
+    }
+    installEditing();
 
     // ================================================================================
     // Settings services (simulated webOS OSE APIs used by apps/settings)
@@ -7001,17 +7408,7 @@
         // (enyo.windows.events.handleAppMenu); pages call it here, in the
         // card's own window. Other apps get a "phoenixAppMenu" document event
         // (@phoenix/ui AppMenu).
-        runtime.openAppMenu = function () {
-            if (global.enyo && global.enyo.appMenu) {
-                global.enyo.appMenu.toggle();
-                return true;
-            }
-            var e;
-            try { e = new CustomEvent("phoenixAppMenu"); }
-            catch (x) { e = global.document.createEvent("CustomEvent"); e.initCustomEvent("phoenixAppMenu", false, false, null); }
-            global.document.dispatchEvent(e);
-            return true;
-        };
+        runtime.openAppMenu = pageOpenAppMenu;
 
         // Focus navigation with a hardware keyboard (GAPS V8 (3)) in what
         // Chromium's Tab does not reach well: an app's own app menu (Phoenix's
@@ -11089,11 +11486,15 @@
     // messages ({op: "start" | "stop" | "cancel", prompt, autoStop}) go out,
     // and the states come back through __phoenixRuntime.dictationEvent({state,
     // text?, errorText?}). Anywhere else (a browser) there is no microphone
-    // to lend: start fails with NOT_AVAILABLE.
-    (function dictationServices() {
+    // to lend: start fails with NOT_AVAILABLE. On a device the page serves
+    // it too (installDevice), the shell being luna-surfacemanager's
+    // (org.webosphoenix.shellhost; LsmWindowSource._dictationRequest), which
+    // says itself when it has no microphone.
+    function dictationServices() {
         var E = { BAD_PARAMS: -1, NOT_AVAILABLE: 1, IN_USE: 2, NOTHING_HEARD: 3, FAILED: 4 };
         var hostInfo = null;
         function available() {
+            if (runtime.onDevice) return true;
             if (hostInfo === null) {
                 try { hostInfo = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/host.json") || "{}") || {}; }
                 catch (e) { hostInfo = {}; }
@@ -11148,7 +11549,8 @@
             if (current) { current = null; host.postToHost("dictation", { op: "cancel" }); }
         });
         runtime.dictation = { errors: E };
-    })();
+    }
+    dictationServices();
 
     // ================================================================================
     // The simulator's own (org.webosphoenix.simulator)
@@ -13882,7 +14284,18 @@
     //       the file is written there (copied from `from`, or from `data`).
     //
     // The page talks to the runtime of the page under it with postMessage.
-    (function shareSheet() {
+    //
+    // On a device too (installDevice calls shareSheet): the sheet is the
+    // asking page's, so these two services stay in the page (the page's
+    // bridge answers them here, everything else goes to the bus).
+    // WebAppMgr gives frames the file:// access and the PalmSystem they
+    // need (web_page_blink.cc:108 SetAllowUniversalAccessFromFileUrls; neva's
+    // injections load in every frame, app_runtime_render_frame_observer.cc
+    // DidClearWindowObject). The apps that take a share come from SAM's
+    // listApps (its appinfo.json "phoenix" with them), files are written by
+    // the file manager's service, and an app the user picks is launched
+    // by SAM.
+    function shareSheet() {
         var doc = global.document;
         if (!doc) return;
         var SHEET_APP = "org.webosphoenix.sharesheet";
@@ -13921,6 +14334,21 @@
             if (s.url) t.push("text/uri-list");
             return t;
         }
+        // The apps on a device: SAM's (read again as each sheet opens).
+        var deviceApps = [];
+        function readDeviceApps() {
+            if (!runtime.onDevice) return Promise.resolve();
+            return callP("luna://com.webos.applicationManager/listApps",
+                         { properties: ["id", "title", "icon", "folderPath", "phoenix", "noWindow"] }).then(function (r) {
+                if (!r || r.returnValue === false || !Array.isArray(r.apps)) return;
+                deviceApps = r.apps.filter(function (a) { return a && a.id && !a.noWindow; }).map(function (a) {
+                    var icon = String(a.icon || "");
+                    if (icon && icon.charAt(0) !== "/" && a.folderPath) icon = a.folderPath.replace(/\/$/, "") + "/" + icon;
+                    return { id: a.id, launchPointId: a.id + "_default", title: a.title || a.id, icon: icon,
+                             shareTargets: a.phoenix && Array.isArray(a.phoenix.shareTargets) ? a.phoenix.shareTargets : [] };
+                });
+            });
+        }
         // A connector's accounts as the sheet names them: accountLabel
         // ("@{username}") filled in from the account (connector-kit share.ts
         // accountLabel). Accounts being deleted are left out.
@@ -13941,7 +14369,7 @@
         // -> a promise of the targets, sorted by label.
         function targetsFor(types) {
             var out = [], pending = [];
-            launchPoints().forEach(function (lp) {
+            (runtime.onDevice ? deviceApps : launchPoints()).forEach(function (lp) {
                 if (lp.launchPointId !== lp.id + "_default") return;
                 var decl = (lp.shareTargets || []).slice();
                 if (LEGACY_TARGETS[lp.id]) decl.push(LEGACY_TARGETS[lp.id]);
@@ -14044,6 +14472,13 @@
             var mf = runtime.mediaFiles;
             var before = overwrite ? callP("luna://org.webosphoenix.filemanager/remove", { path: dest }) : Promise.resolve();
             return before.then(function () {
+                if (req.data !== undefined && runtime.onDevice) {
+                    return callP("luna://org.webosphoenix.filemanager/write", {
+                        path: dest, data: String(req.data).replace(/^data:[^,]*,/, ""), encoding: "base64"
+                    }).then(function (r) {
+                        if (!r || r.returnValue === false) throw new Error(r && r.errorText || "Could not write " + dest);
+                    });
+                }
                 if (req.data !== undefined) {
                     if (!mf) throw new Error("No media store");
                     var bin = atob(String(req.data).replace(/^data:[^,]*,/, "")), bytes = new Uint8Array(bin.length);
@@ -14104,7 +14539,9 @@
                 if (!files.length && !p.text && !p.url) return reply(fail(-1, "Nothing to share: files, text or url"));
                 var s = { title: p.title || "", text: p.text || "", url: p.url || "", files: files };
                 var targets;
-                targetsFor(shareTypes(s)).then(function (t) {
+                readDeviceApps().then(function () {
+                    return targetsFor(shareTypes(s));
+                }).then(function (t) {
                     targets = t;
                     return showSheet("share", { share: s, targets: t });
                 }).then(function (r) {
@@ -14112,7 +14549,11 @@
                     if (r.action === "app") {
                         var chosen = r.accountId ? targets.filter(function (t) { return t.appId === r.appId && t.accountId === r.accountId; })[0] : null;
                         if (r.accountId && !chosen) return reply(fail(-1, "No such account to share to: " + r.accountId));
-                        host.postToHost("launch", { id: r.appId, params: launchParams(r.appId, s, chosen) });
+                        var lp = launchParams(r.appId, s, chosen);
+                        if (runtime.onDevice)
+                            callP("luna://com.webos.applicationManager/launch", { id: r.appId, params: lp });
+                        else
+                            host.postToHost("launch", { id: r.appId, params: lp });
                         return reply(ok(chosen ? { action: "app", appId: r.appId, accountId: r.accountId } : { action: "app", appId: r.appId }));
                     }
                     if (r.action === "photos") {
@@ -14143,7 +14584,7 @@
                 });
             },
             "/targets": function (p, reply) {
-                targetsFor(p.types || []).then(function (t) {
+                readDeviceApps().then(function () { return targetsFor(p.types || []); }).then(function (t) {
                     reply(ok({ targets: t.map(function (x) {
                         var o = { appId: x.appId, title: x.title, icon: x.icon, label: x.label };
                         if (x.accountId) { o.accountId = x.accountId; o.account = x.account; o.service = x.service; }
@@ -14199,7 +14640,8 @@
                 save(p).then(function (r) { reply(ok(r)); }, function (e) { reply(fail(-1, String(e && e.message || e))); });
             }
         });
-    })();
+    }
+    shareSheet();
 
     // ================================================================================
     // DropShare (org.webosphoenix.dropshare; apps/dropshare)

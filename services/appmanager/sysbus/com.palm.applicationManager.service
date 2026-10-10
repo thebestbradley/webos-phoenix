@@ -1,0 +1,10 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The legacy application manager on OSE, over SAM (services/appmanager).
+# Started by the hub when an app first calls it.
+
+[D-BUS Service]
+Name=com.palm.applicationManager
+Exec=/usr/bin/run-js-service -n /usr/palm/services/com.palm.applicationManager
+Type=dynamic

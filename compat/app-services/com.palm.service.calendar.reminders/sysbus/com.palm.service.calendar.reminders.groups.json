@@ -1,0 +1,8 @@
+{
+    "allowedNames": [
+        "com.palm.service.calendar.reminders"
+    ],
+    "phoenix.appservices.calendar-reminders": [
+        "dev"
+    ]
+}

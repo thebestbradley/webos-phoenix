@@ -1,0 +1,8 @@
+{
+    "allowedNames": [
+        "com.palm.service.contacts.linker"
+    ],
+    "phoenix.appservices.contacts-linker": [
+        "dev"
+    ]
+}

@@ -794,6 +794,101 @@ static void testOrientationService()
     ls2stub::release(shell);
 }
 
+// ---- com.palm.power: the battery from the kernel's power supplies -------------------
+
+static void testPower()
+{
+    LSError err;
+    LSErrorInit(&err);
+    DeviceService::Handles h;
+    LSRegister("com.palm.display", &h.display, &err);
+    LSRegister("com.palm.keys", &h.keys, &err);
+    LSRegister("com.palm.vibrate", &h.vibrate, &err);
+    LSRegister("com.palm.ambientLightSensor", &h.als, &err);
+    LSRegister("com.palm.power", &h.power, &err);
+
+    const std::string root = fakeRoot();
+    const std::string bat = root + "/sys/class/power_supply/BAT0";
+    const std::string usb = root + "/sys/class/power_supply/usb";
+    mkdirs(bat);
+    mkdirs(usb);
+    put(bat + "/type", "Battery");
+    put(bat + "/capacity", "76");
+    put(bat + "/status", "Discharging");
+    put(bat + "/temp", "312");
+    put(bat + "/current_now", "-250000");
+    put(bat + "/voltage_now", "3900000");
+    put(bat + "/charge_full", "1150000");
+    put(usb + "/type", "USB");
+    put(usb + "/online", "0");
+    put(usb + "/usb_type", "Unknown SDP [DCP] CDP");
+
+    PowerSupplies supplies(root);
+    const PowerSupplies::Status st = supplies.read();
+    CHECK(st.present && st.percent == 76 && !st.charging && st.charger == "none" && st.temperatureC > 31.1 && st.temperatureC < 31.3
+          && st.currentmA == -250 && st.voltagemV == 3900 && st.capacitymAh == 1150,
+          "power: the battery from the power supply class");
+
+    std::vector<std::string> machine;
+    DeviceService::Hardware hw;
+    hw.power = &supplies;
+    hw.machine = [&machine](const std::string &a) { machine.push_back(a); return true; };
+    DeviceService svc(h, hw, DeviceConfig());
+    svc.setShutdownDelayMs(0);
+    CHECK(svc.attach(&err), "power: com.palm.power registers its categories");
+
+    LSMessage *q = ls2stub::call(h.power, "/com/palm/power/batteryStatusQuery", "{}", "com.palm.systemui");
+    const Json b = lastReply(q);
+    CHECK(b["returnValue"].boolean() && b["percent"].num() == 76 && b["percent_ui"].num() == 76 && b["temperature_C"].num() == 31
+          && b["capacity_mAh"].num() == 1150, "power: batteryStatusQuery, powerd's payload");
+    ls2stub::release(q);
+    std::vector<std::string> &sig = ls2stub::signals(h.power);
+    CHECK(!sig.empty() && sig.back().compare(0, 52, "luna://com.palm.power/com/palm/power/batteryStatus {") == 0,
+          "power: and the batteryStatus signal luna-systemui listens to");
+    q = ls2stub::call(h.power, "/com/palm/power/chargerStatusQuery", "{}", "com.palm.systemui");
+    CHECK(!lastReply(q)["Connected"].boolean() && lastReply(q)["type"].str() == "none", "power: no charger");
+    ls2stub::release(q);
+
+    // A wall charger in: the charger's signal, then the battery's.
+    sig.clear();
+    put(usb + "/online", "1");
+    put(bat + "/status", "Charging");
+    CHECK(svc.readPower(), "power: a change is seen");
+    CHECK(sig.size() == 2 && sig[0].find("/USBDockStatus") != std::string::npos
+          && Json::parse(sig[0].substr(sig[0].find(' ') + 1))["type"].str() == "wall"
+          && Json::parse(sig[0].substr(sig[0].find(' ') + 1))["Charging"].boolean(),
+          "power: USBDockStatus says a wall charger");
+    CHECK(!svc.readPower() && sig.size() == 2, "power: nothing new, no signal");
+    put(usb + "/usb_type", "Unknown [SDP] DCP");
+    svc.readPower();
+    CHECK(Json::parse(sig.back().substr(sig.back().find(' ') + 1))["percent"].num() == 76
+          && Json::parse(sig[2].substr(sig[2].find(' ') + 1))["type"].str() == "pc", "power: a computer's port is \"pc\"");
+
+    // Off: the shell first, then the machine.
+    LSMessage *shell = ls2stub::call(h.display, "/phoenix/requests", "{\"subscribe\":true}", "", SHELL);
+    LSMessage *off = ls2stub::call(h.power, "/shutdown/machineOff", "{\"reason\":\"power menu\"}", "com.palm.systemui");
+    CHECK(lastReply(off)["returnValue"].boolean(), "power: machineOff answers");
+    CHECK(lastReply(shell)["shutdown"]["reason"].str() == "power menu", "power: the shell hears of the shutdown first");
+    CHECK(machine.empty(), "power: the machine waits for the shell");
+    g_main_context_iteration(nullptr, TRUE);
+    CHECK(machine.size() == 1 && machine[0] == "off", "power: then it goes off");
+    ls2stub::release(off);
+    ls2stub::release(shell);
+    // A media key the system presses (the Assistant's "pause"), from the shell.
+    LSMessage *media = ls2stub::call(h.keys, "/media/status", "{\"subscribe\":true}", "com.palm.app.music");
+    LSMessage *mk = ls2stub::call(h.display, "/phoenix/report", "{\"mediaKey\":\"pause\"}", "", SHELL);
+    CHECK(join(replyField(media, "key")) == "pause,pause" && join(replyField(media, "state")) == "down,up",
+          "keys: the shell's media key goes to /media as down, then up");
+    ls2stub::release(mk);
+    mk = ls2stub::call(h.display, "/phoenix/report", "{\"mediaKey\":\"selfdestruct\"}", "", SHELL);
+    CHECK(replyField(media, "key").size() == 2, "keys: not any name");
+    ls2stub::release(mk);
+    ls2stub::release(media);
+    LSMessage *t = ls2stub::call(h.power, "/timeout/set", "{\"key\":\"k\"}", "com.palm.app.clock");
+    CHECK(!lastReply(t)["returnValue"].boolean(), "power: timeouts point to the activity manager");
+    ls2stub::release(t);
+}
+
 int main()
 {
     testDisplayEvents();
@@ -806,6 +901,7 @@ int main()
     testBitmapsAndUevents();
     testProbe();
     testHotplug();
+    testPower();
     std::printf("%d checks, %d failed\n", checks, failures);
     return failures ? 1 : 0;
 }

@@ -331,6 +331,36 @@ private:
 // phoenix-devices --probe: everything it finds and what it would do with
 // it, for bringing up a new device. Touches nothing (no trigger set, no
 // vibrator taken).
+// The battery and the chargers (the kernel's power supply class,
+// Documentation/ABI/testing/sysfs-class-power), for com.palm.power: OSE has
+// no powerd. Reads only, each time it is asked.
+class PowerSupplies
+{
+public:
+    struct Status
+    {
+        bool present = false;      // a "Battery" supply with a capacity
+        int percent = 100;
+        bool charging = false;     // a charger online, or the battery charging or full
+        std::string charger = "none";   // "none", "wall" (mains, or a USB wall adapter), "pc" (a USB host)
+        double temperatureC = -1000;    // temp is tenths of a degree; -1000: none
+        int currentmA = 0;              // current_now is µA (negative: discharging, as most drivers)
+        int voltagemV = 0;
+        int capacitymAh = 0;            // charge_full (µAh)
+        bool operator==(const Status &o) const
+        {
+            return present == o.present && percent == o.percent && charging == o.charging && charger == o.charger
+                && temperatureC == o.temperatureC;
+        }
+        bool operator!=(const Status &o) const { return !(*this == o); }
+    };
+    explicit PowerSupplies(const std::string &root);
+    Status read() const;
+
+private:
+    std::string m_dir;
+};
+
 std::string probeReport(const std::string &root, const std::string &configPath);
 
 } // namespace devices

@@ -1,0 +1,11 @@
+{
+    "com.palm.applicationManager": [
+        "application.operation",
+        "application.launcher"
+    ],
+    "com.webos.surfacemanager": [
+        "phoenix.appmanager.query",
+        "phoenix.appmanager.launch",
+        "phoenix.appmanager.manage"
+    ]
+}
