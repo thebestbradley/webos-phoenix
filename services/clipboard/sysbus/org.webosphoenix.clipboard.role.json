@@ -1,0 +1,12 @@
+{
+    "appId": "org.webosphoenix.clipboard",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": ["org.webosphoenix.clipboard"],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.clipboard",
+            "outbound": ["com.palm.systemmanager"]
+        }
+    ]
+}

@@ -222,6 +222,29 @@ function page(appId, appinfo, launchParams) {
     check(p.prop("phoenixBack") === undefined, "history API apps: Back is WebAppMgr's");
 }
 
+// ---- The clipboard history: copies go to the service on the bus --------------------------
+
+{
+    const p = page("org.webosphoenix.passwords", { id: "org.webosphoenix.passwords" });
+    p.run();
+    const field = new Target(p.doc);
+    field.tagName = "INPUT";
+    field.value = "hello clipboard";
+    field.selectionStart = 6;
+    field.selectionEnd = 15;
+    p.doc.activeElement = field;
+    p.win.dispatchEvent(new FakeEvent("copy", {}));
+    const add = p.calls.filter((c) => c.url === "luna://org.webosphoenix.clipboard/add");
+    check(add.length === 1 && add[0].json.text === "clipboard" && !add[0].json.sensitive,
+          "a copy goes to org.webosphoenix.clipboard/add with the selected text");
+    p.g.__phoenixRuntime.clipboard.markSensitive("s3cret!", "password");
+    p.g.__phoenixRuntime.recordCopy("s3cret!");
+    const last = p.calls.filter((c) => c.url === "luna://org.webosphoenix.clipboard/add").pop();
+    check(last.json.sensitive === true && last.json.kind === "password", "a copy an app marked a secret goes as sensitive");
+    p.g.__phoenixRuntime.recordCopy("   ");
+    check(p.calls.filter((c) => c.url === "luna://org.webosphoenix.clipboard/add").length === 2, "nothing for an empty copy");
+}
+
 if (failures) {
     console.log(failures + " failed");
     process.exit(1);

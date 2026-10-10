@@ -510,6 +510,63 @@
             // After the page's own handlers (they may stop it).
             global.setTimeout(function () { runtime.deviceBack(e); }, 0);
         }, false);
+
+        // The clipboard history: this page's copies go to the history's
+        // service on the bus (services/clipboard runs this runtime's
+        // org.webosphoenix.clipboard there), as off the device they go to
+        // the runtime's own: copy and cut events, navigator.clipboard
+        // writes, and what an app marks as a secret first
+        // (runtime.clipboard.markSensitive: @phoenix/secrets' SecretClipboard).
+        // Copy in a password field (the simulator's passwordCopy) is not
+        // here yet.
+        var marks = [];
+        function takeMark(text) {
+            var now = Date.now();
+            marks = marks.filter(function (m) { return now - m.at < 5000; });
+            for (var i = 0; i < marks.length; ++i)
+                if (marks[i].text === text)
+                    return marks.splice(i, 1)[0];
+            return null;
+        }
+        function recordCopy(text) {
+            if (!text || !String(text).trim()) return;
+            var mark = takeMark(String(text));
+            var item = { text: String(text) };
+            if (mark) {
+                item.sensitive = true;
+                if (mark.kind) item.kind = mark.kind;
+            }
+            var b = new NativeBridge();
+            b.onservicecallback = function () {};
+            b.call("luna://org.webosphoenix.clipboard/add", toJson(item));
+        }
+        runtime.recordCopy = recordCopy;
+        function selectedText() {
+            var el = global.document && global.document.activeElement;
+            var tag = el && el.tagName ? el.tagName.toLowerCase() : "";
+            if ((tag === "input" || tag === "textarea") && typeof el.selectionStart === "number")
+                return String(el.value || "").substring(el.selectionStart, el.selectionEnd);
+            var sel = global.getSelection && global.getSelection();
+            return sel ? String(sel) : "";
+        }
+        global.addEventListener("copy", function () { recordCopy(selectedText()); });
+        global.addEventListener("cut", function () { recordCopy(selectedText()); });
+        var nc = global.navigator && global.navigator.clipboard;
+        if (nc && typeof nc.writeText === "function") {
+            var writeText = nc.writeText.bind(nc);
+            try {
+                nc.writeText = function (text) {
+                    var r = writeText(text);
+                    Promise.resolve(r).then(function () { recordCopy(text); }, function () {});
+                    return r;
+                };
+            } catch (e) { /* read-only: not recorded */ }
+        }
+        runtime.clipboard = {
+            markSensitive: function (text, kind) {
+                if (typeof text === "string" && text) marks.push({ text: text, kind: kind ? String(kind) : "", at: Date.now() });
+            }
+        };
     }
 
     // ================================================================================
