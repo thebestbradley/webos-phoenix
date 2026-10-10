@@ -71,8 +71,18 @@ OSE's services; the orientation sensor (phoenix-devices, IIO); the device
 lock and the shell's state for the apps (`services/systemmanager`); the
 clipboard history on the bus (`services/clipboard`); the system sounds as
 raw PCM for audiod, with looping ringtones; the start-up animation at boot.
+Everything that only worked because the simulator is one process
+([DEVICE-AUDIT.md](DEVICE-AUDIT.md), 105 items: 23 done by OSE, 54 written
+for the device, 21 to do, 7 waiting on hardware or a decision) now has a
+device path where one could be built without hardware: the pages' line to
+the shell (`services/shellhost`: banners, sounds, the edit popup, scene
+transitions, screen captures, Just Type, dictation, media keys), the runtime
+replacing what WebAppMgr drops, the legacy application manager over SAM
+(`services/appmanager`), com.palm.power and the battery (phoenix-devices),
+DropShare's server, the accessories' services, OSE's toasts as banners and
+Open webOS's app services under mojoservicelauncher.
 What the first image must check is listed there; the owner's questions are
-[OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q19-Q23.
+[OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q19-Q23, Q37-Q39, Q61 and Q62.
 
 ## Direction
 
