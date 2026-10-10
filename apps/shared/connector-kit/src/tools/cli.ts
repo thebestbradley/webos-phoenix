@@ -3,12 +3,15 @@
 //
 // phoenix-connector: the connector developer's command (docs/SYNERGY-SDK.md).
 //
-//   phoenix-connector new <app id> [--capability CONTACTS] [--dir DIR]
-//       a connector's folder, ready to fill in
+//   phoenix-connector new <app id> [--capability CONTACTS] [--share] [--dir DIR]
+//       a connector's folder, ready to fill in; --share: with a share
+//       declaration, the kit's compose page and the share target
+//       (docs/SYNERGY-SDK.md "Sharing to your service")
 //   phoenix-connector validate <folder | .ipk> [--namespace NS]...
 //       the Marketplace's checks (checks.ts; the server runs the same)
 //   phoenix-connector pack <folder> [--out DIR] [--namespace NS]... [--force]
-//       the .ipk the Marketplace takes
+//       the .ipk the Marketplace takes; first writes appinfo.json's share
+//       target and the templates' sign-up link from the definition
 //   phoenix-connector test <folder>
 //       the conformance suite, with the connector's fixture
 //       (service/test/fixture.js: module.exports = {template, validateParams, server(), ...})
@@ -17,11 +20,11 @@
 
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
 import { checkConnector } from "./checks";
-import { checkIpk, pack, readFolder } from "./package";
+import { checkIpk, definitionProblems, pack, readFolder } from "./package";
 import { scaffold, squarePng } from "./scaffold";
 
 const USAGE = [
-    "usage: phoenix-connector new <app id> [--capability CONTACTS] [--dir DIR]",
+    "usage: phoenix-connector new <app id> [--capability CONTACTS] [--share] [--dir DIR]",
     "       phoenix-connector validate <folder | file.ipk> [--namespace NS]...",
     "       phoenix-connector pack <folder> [--out DIR] [--namespace NS]... [--force]",
     "       phoenix-connector test <folder>"
@@ -33,7 +36,7 @@ export function parseArgs(argv: string[]): Args {
     const out: Args = { _: [], namespace: [] };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
-        if (a === "--force" || a === "--json") out[a.slice(2)] = true;
+        if (a === "--force" || a === "--json" || a === "--share") out[a.slice(2)] = true;
         else if (a === "--namespace") out.namespace.push(argv[++i]);
         else if (/^--[a-z]+$/.test(a)) out[a.slice(2)] = argv[++i];
         else out._.push(a);
@@ -56,7 +59,7 @@ export async function main(argv: string[], io?: { log?(s: string): void; err?(s:
         const appId = args._[1];
         if (!appId) { err(USAGE); return 2; }
         let made;
-        try { made = scaffold(appId, args.capability || "CONTACTS"); } catch (e) { err("phoenix-connector new: " + (e as Error).message); return 2; }
+        try { made = scaffold(appId, args.capability || "CONTACTS", { share: !!args.share }); } catch (e) { err("phoenix-connector new: " + (e as Error).message); return 2; }
         const dir = path.resolve(args.dir || appId);
         if (fs.existsSync(dir) && fs.readdirSync(dir).length) { err("phoenix-connector new: " + dir + " is not empty"); return 2; }
         Object.keys(made.files).forEach((rel) => {
@@ -71,7 +74,7 @@ export async function main(argv: string[], io?: { log?(s: string): void; err?(s:
         }));
         fs.writeFileSync(path.join(dir, "icon.png"), squarePng(64, [90, 120, 160]));
         log("Made " + dir + ": the service " + made.service + ", the template " + made.templateId + ".");
-        log("Next: write pull() in service/connector.js, then phoenix-connector validate " + path.relative(process.cwd(), dir));
+        log("Next: write pull()" + (args.share ? " and share.send()" : "") + " in service/connector.js, then phoenix-connector validate " + path.relative(process.cwd(), dir));
         return 0;
     }
 
@@ -80,8 +83,14 @@ export async function main(argv: string[], io?: { log?(s: string): void; err?(s:
         if (!target) { err(USAGE); return 2; }
         let r;
         try {
-            r = /\.ipk$/i.test(target) ? checkIpk(new Uint8Array(fs.readFileSync(target)), { namespaces: ns })
-                                       : checkConnector(readFolder(target), { namespaces: ns });
+            if (/\.ipk$/i.test(target)) r = checkIpk(new Uint8Array(fs.readFileSync(target)), { namespaces: ns });
+            else {
+                // A folder: also its definition's share against appinfo.json (C14).
+                r = checkConnector(readFolder(target), { namespaces: ns });
+                const d = definitionProblems(path.resolve(target));
+                r.errors.push(...d.errors);
+                r.warnings.push(...d.warnings);
+            }
         } catch (e) { err("phoenix-connector validate: " + (e as Error).message); return 2; }
         if (args.json) { log(JSON.stringify(r, null, 2)); return r.errors.length ? 1 : 0; }
         log((r.appId || target) + (r.version ? " " + r.version : "") + (r.service ? ", service " + r.service : "") +
@@ -99,6 +108,7 @@ export async function main(argv: string[], io?: { log?(s: string): void; err?(s:
         try {
             const r = pack(path.resolve(dir), path.resolve(args.out || "."), { namespaces: ns, force: !!args.force });
             print(r.check.warnings.map((w) => "warning " + w), log);
+            r.written.forEach((rel: string) => log("Wrote " + rel + " from the definition (" + (rel === "appinfo.json" ? "its share" : "its signUp") + ")"));
             log("Packed " + r.file + " (" + Math.round(r.size / 1024) + " KB)");
             return 0;
         } catch (e) {

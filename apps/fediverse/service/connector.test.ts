@@ -46,7 +46,12 @@ const fixture = {
             "luna://org.webosphoenix.service.oauth/forget": () => ({ returnValue: true })
         };
     },
-    minObjects: 3
+    minObjects: 3,
+    // What the share checks post: a link and a picture with its description, unlisted.
+    share: { content: { text: "webOS lives", url: "https://example.org/phoenix",
+                        files: [{ path: "/media/internal/DCIM/100PHNX/harbor.jpg", mimeType: "image/jpeg", description: "A harbour at dusk" }] },
+             audience: "unlisted" },
+    files: { "/media/internal/DCIM/100PHNX/harbor.jpg": { bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]), mimeType: "image/jpeg" } }
 };
 
 describe("conformance: the Fediverse account", () => {
@@ -228,22 +233,26 @@ describe("the Fediverse account", () => {
         } finally { await w.server.close(); }
     });
 
-    it("posts what is shared: a link, text, a photo with its description, the visibility chosen", async () => {
+    it("posts what is shared (the kit's share): a link, text, a photo with its description, the visibility chosen", async () => {
         const w = await world();
         try {
             await w.signIn();
-            const r = await w.methods.post({ accountId: ACCOUNT, text: "webOS lives https://example.org/phoenix", visibility: "unlisted",
-                                             media: [{ path: "/media/internal/DCIM/100PHNX/harbor.jpg", description: "A harbour at dusk" }],
-                                             idempotencyKey: "share-1" });
-            expect(r).toMatchObject({ returnValue: true, visibility: "unlisted" });
+            const shared = { accountId: ACCOUNT, content: { text: "webOS lives", url: "https://example.org/phoenix",
+                                                          files: [{ path: "/media/internal/DCIM/100PHNX/harbor.jpg", description: "A harbour at dusk" }] },
+                             audience: "unlisted", idempotencyKey: "share-1" };
+            const r = await w.methods.share(shared);
+            expect(r).toMatchObject({ returnValue: true, posted: { id: expect.any(String) } });
             expect(r.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/@phoenix\/\d+$/);
             const st = w.server.statuses[0];
-            expect(st).toMatchObject({ text: "webOS lives https://example.org/phoenix", visibility: "unlisted" });
+            expect(st).toMatchObject({ text: "webOS lives\n\nhttps://example.org/phoenix", visibility: "unlisted" });
             expect(st.media_attachments).toEqual([expect.objectContaining({ description: "A harbour at dusk", mimeType: "image/jpeg", bytes: 8, filename: "harbor.jpg" })]);
             // The same share again (a retry): the same status.
-            await w.methods.post({ accountId: ACCOUNT, text: "webOS lives https://example.org/phoenix", visibility: "unlisted", idempotencyKey: "share-1" });
+            await w.methods.share(shared);
             expect(w.server.statuses).toHaveLength(1);
-            expect(await w.methods.post({ accountId: ACCOUNT, text: "" })).toMatchObject({ returnValue: false, errorCode: "400_BAD_REQUEST" });
+            expect(await w.methods.share({ accountId: ACCOUNT, content: { text: "" } })).toMatchObject({ returnValue: false, errorCode: "SHARE_NOTHING" });
+            expect(await w.methods.share({ accountId: ACCOUNT, content: { text: "Hi" }, audience: "everyone" }))
+                .toMatchObject({ returnValue: false, errorCode: "SHARE_BAD_AUDIENCE" });
+            expect(w.methods.post).toBeUndefined();
         } finally { await w.server.close(); }
     });
 

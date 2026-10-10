@@ -140,6 +140,13 @@ export function AccountTypePage({ t, added }: { t: AccountType; added: boolean }
                     <Button variant="affirmative" data-testid="set-up" disabled={!t.package.builtin}
                             onClick={() => { const l = setUpLaunch(t); void apps.launch(l.id, l.params); }}>Set up</Button>
                 )}
+                {/* No account yet: the service's own page to get one, in the browser (docs/SYNERGY-SDK.md "Sign-up link"). */}
+                {!added && t.signUp && (
+                    <p className="mk-signup" data-testid="sign-up-line">
+                        Don't have an account?{" "}
+                        <a href={t.signUp} data-testid="sign-up" onClick={(e) => { e.preventDefault(); void apps.open(t.signUp); }}>Sign up</a>
+                    </p>
+                )}
             </div>
             {!t.package.builtin && <Note>It comes in a connector package, which the Marketplace cannot install yet.</Note>}
             {t.summary && <p className="mk-desc">{t.summary}</p>}

@@ -9,10 +9,10 @@ import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { AccountType } from "@phoenix/luna";
 
-const luna = vi.hoisted(() => ({ launch: vi.fn(() => Promise.resolve({ returnValue: true })) }));
+const luna = vi.hoisted(() => ({ launch: vi.fn(() => Promise.resolve({ returnValue: true })), open: vi.fn(() => Promise.resolve({ returnValue: true })) }));
 vi.mock("@phoenix/luna", async (orig) => {
     const real = await orig<typeof import("@phoenix/luna")>();
-    return { ...real, apps: { ...real.apps, launch: luna.launch } };
+    return { ...real, apps: { ...real.apps, launch: luna.launch, open: luna.open } };
 });
 
 import { AccountTypePage, ConnectionsFiltered, ConnectionsHome } from "./Connections";
@@ -25,7 +25,7 @@ function type(templateId: string, o: Partial<AccountType> = {}): AccountType {
         templateId, sourceId: "phoenix", title: templateId, provider: "", icon: "", summary: "", capabilities: [], protocols: [],
         auth: { type: "password", registration: "none" }, server: "user",
         privacy: { dataGoesTo: "the server you enter", e2ee: false, phoenixServers: "none" },
-        push: "poll", status: "stable", package: { id: "", builtin: true }, help: "", featured: false, ...o,
+        push: "poll", status: "stable", package: { id: "", builtin: true }, help: "", signUp: "", featured: false, ...o,
     };
 }
 
@@ -142,6 +142,20 @@ describe("Set up", () => {
         expect(again.queryByTestId("set-up")).toBeNull();
         fireEvent.click(again.getByTestId("open-accounts"));
         expect(luna.launch).toHaveBeenLastCalledWith("com.palm.app.accounts", {});
+    });
+
+    it("offers the service's sign-up page beside Set up, opened in the browser; not once an account is added, nor without one", () => {
+        const FEDI = type("com.webosphoenix.fediverse", { title: "Fediverse", signUp: "https://joinmastodon.org/servers" });
+        const page = render(<AccountTypePage t={FEDI} added={false} />);
+        expect(page.getByTestId("sign-up-line").textContent).toBe("Don't have an account? Sign up");
+        expect(page.getByTestId("sign-up").getAttribute("href")).toBe("https://joinmastodon.org/servers");
+        fireEvent.click(page.getByTestId("sign-up"));
+        expect(luna.open).toHaveBeenLastCalledWith("https://joinmastodon.org/servers");
+        page.unmount();
+        const added = render(<AccountTypePage t={FEDI} added />);
+        expect(added.queryByTestId("sign-up")).toBeNull();
+        added.unmount();
+        expect(render(<AccountTypePage t={DAV} added={false} />).queryByTestId("sign-up")).toBeNull();
     });
 
     it("lists the templates added as accounts", () => {

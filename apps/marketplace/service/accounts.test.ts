@@ -142,4 +142,12 @@ describe("account types in the catalog", () => {
         expect(accounts.iconUrl("data:image/png;base64,AAAA", BASE)).toBe("");
         expect(accounts.iconUrl("", BASE)).toBe("");
     });
+
+    it("a sign-up link only when it is an https address", () => {
+        const signUp = (v: Any) => accounts.normalize(Object.assign({}, DAV, { signUp: v }), BASE, "phoenix").signUp;
+        expect(signUp("https://joinmastodon.org/servers")).toBe("https://joinmastodon.org/servers");
+        expect(signUp("http://example.com/join")).toBe("");
+        expect(signUp("javascript:alert(1)")).toBe("");
+        expect(signUp(undefined)).toBe("");
+    });
 });

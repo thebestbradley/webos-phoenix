@@ -1,0 +1,58 @@
+<!doctype html>
+<!-- Copyright (c) 2026 webOS Phoenix contributors
+     SPDX-License-Identifier: Apache-2.0
+
+     The connector kit's compose page (docs/SYNERGY-SDK.md, "Sharing to your
+     service"): the app's main page, which the system's share sheet opens
+     with {share, accountId, target} when the user picks one of the
+     connector's accounts. It shows what is shared, lets the user write the
+     text, describe each picture and choose who may see the post, as the
+     connector's share declaration allows, and posts it through the
+     connector's service (share). Launched otherwise, it says where the
+     account is added. phoenix-connector new writes it; replace it with a
+     page of your own (apps/fediverse/index.html is one). -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Share</title>
+    <link rel="stylesheet" href="share/compose.css">
+</head>
+<body>
+    <header class="bar">
+        <img id="icon" src="icon.png" width="32" height="32" alt="">
+        <h1 id="heading">Share</h1>
+    </header>
+    <main id="main">
+        <section id="none" hidden>
+            <p id="noneText">Add your account in Accounts to post from here.</p>
+            <button id="setup" class="primary" type="button">Add an Account</button>
+        </section>
+        <section id="compose" hidden>
+            <label class="caption" for="account" id="accountLabel">Post as</label>
+            <select id="account"></select>
+            <div class="caption" id="asOne"></div>
+            <textarea id="text" rows="6" placeholder="Write something" aria-label="Your post" hidden></textarea>
+            <div class="count" id="count"></div>
+            <div class="link" id="link" hidden></div>
+            <p class="hint" id="trimmed" hidden></p>
+            <div id="files"></div>
+            <div id="audienceBox" hidden>
+                <div class="caption" id="audienceLabel">Who can see it</div>
+                <div class="audience" role="radiogroup" id="audience"></div>
+                <p class="hint" id="audienceHint"></p>
+            </div>
+            <p class="error" id="error" role="alert"></p>
+            <div class="buttons">
+                <button id="cancel" type="button">Cancel</button>
+                <button id="post" class="primary" type="button">Post</button>
+            </div>
+        </section>
+        <section id="done" hidden>
+            <p>Posted.</p>
+            <p><a id="posted" href="#"></a></p>
+        </section>
+    </main>
+    <script src="share/compose.js"></script>
+</body>
+</html>

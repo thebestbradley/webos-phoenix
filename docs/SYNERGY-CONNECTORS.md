@@ -1,6 +1,6 @@
 # Synergy accounts, a connector catalog and a developer kit (draft)
 
-*Draft, 10 October 2026, with what is built since: phases C0, C1 (the kit) and C2 (the Fediverse account), each in an "As built" note. The Marketplace view this page calls the Accounts view is named **Connections** (the owner, section 5). Developers: [SYNERGY-SDK.md](SYNERGY-SDK.md).*
+*Draft, 10 October 2026, with what is built since: phases C0, C1 (the kit) and C2 (the Fediverse account), each in an "As built" note; since, sharing in the kit (a connector's accounts in the share sheet, SYNERGY-SDK.md section 7). The Marketplace view this page calls the Accounts view is named **Connections** (the owner, section 5). Developers: [SYNERGY-SDK.md](SYNERGY-SDK.md).*
 
 The owner asked: which accounts fit our Accounts app and fill Synergy with a
 modern twist; a feed for accounts in the catalog with its own Synergy view;
@@ -217,7 +217,12 @@ and `help` are new metadata.
 (Connections)"): the built-in types only, from `catalog/accounts.json`,
 with `templateId, title, provider, icon, summary, capabilities, protocols,
 auth, server, privacy {dataGoesTo, e2ee, phoenixServers}, push, status,
-package {id, builtin}, help?, featured`. `icon` is one address (the
+package {id, builtin}, help?, signUp?, featured`. `signUp` (10 October
+2026, the owner: "the accounts/connectors also need links to sign up and
+register") is an `https://` page where a person without an account gets
+one; the type's page in Connections offers "Don't have an account? Sign
+up" beside Set up, and the template's own `signUp` puts the same link on
+the sign-in step in Accounts (SYNERGY-SDK.md "Sign-up link"). `icon` is one address (the
 catalog's copy of the template's 96 px icon), not the draft's sizes;
 `direction` is `two-way`, `read-only` or `write-only`; `terms`, `regions`,
 `readsFrom`/`writesTo` and `package.minVersion` wait for connector packages
@@ -554,11 +559,13 @@ Still open:
   favourites as webOS notifications (five at most per sync, then "n more");
   a tap opens the post or profile in the browser. Polled every 15 minutes
   (the kit's schedule); Web Push to UnifiedPush is C6.
-- **Sharing**: the account is a share target (`appinfo.json`
-  `shareTargets`: text, links, pictures); its page posts a link, text, up to
-  four pictures each with its description (alt text), with the visibility
-  chosen (public, unlisted, followers, mentioned only), with an
-  `Idempotency-Key`.
+- **Sharing**: the account is a share target, written from the kit's
+  `share` declaration (10 October 2026, SYNERGY-SDK.md section 7): the
+  share sheet lists it once per signed-in account ("Fediverse ·
+  @you@example.social") and not at all without one; its page posts a link,
+  text, up to four pictures each with its description (alt text), with the
+  visibility chosen (public, unlisted, followers, mentioned only), through
+  the kit's `share` method, with an `Idempotency-Key`.
 - **Not done**: Pixelfed albums in Photos (no PHOTO capability or kinds yet;
   OPEN-QUESTIONS.md Q3), Bluesky, Web Push (C6), the sheet and key store on
   a device (C3).

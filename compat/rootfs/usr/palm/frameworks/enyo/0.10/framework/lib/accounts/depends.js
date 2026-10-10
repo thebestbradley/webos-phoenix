@@ -1,7 +1,8 @@
 // Phoenix compat overlay: the Enyo accounts library's original depends.js
 // plus css/phoenix-compat.css, which lets its 500 px account pages (used by
-// Accounts, Contacts, Calendar and Email) fit a phone card. Nothing else is
-// changed.
+// Accounts, Contacts, Calendar and Email) fit a phone card, and
+// source/phoenix-signup.js, the "Don't have an account? Sign up" link of a
+// template with a signUp (docs/SYNERGY-SDK.md). Nothing else is changed.
 enyo.depends(
 	"css/accounts-list.css",
 	"css/phoenix-compat.css",
@@ -12,6 +13,7 @@ enyo.depends(
 	"source/add-account.js",
 	"source/check-first-launch.js",
 	"source/credentials.js",
+	"source/phoenix-signup.js",
 	"source/cross-app.js",
 	"source/entry-add.js",
 	"source/entry-first-launch.js",

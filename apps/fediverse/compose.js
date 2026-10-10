@@ -2,8 +2,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // The share sheet's Fediverse target (index.html): what is shared
-// ({share: {title, text, url, files}}, docs/SHARE-AND-FILES.md) posted to
-// a Fediverse account by org.webosphoenix.service.fediverse/post: the text
+// ({share: {title, text, url, files}, accountId}, docs/SHARE-AND-FILES.md;
+// the sheet lists one entry per signed-in account and gives the one picked)
+// posted to that account by org.webosphoenix.service.fediverse/share, the
+// connector kit's share method (docs/SYNERGY-SDK.md "Sharing to your
+// service"), which checks it against the connector's declaration: the text
 // with the link, up to four pictures each with its description (alt text,
 // which the server shows to people who cannot see the picture), and who may
 // see it: public, unlisted, followers only, or only the people mentioned
@@ -107,12 +110,14 @@
         var media = files.map(function (f, i) {
             return { path: f.path, mimeType: f.mimeType || "", description: $("alt" + i).value.trim() };
         });
-        call(SERVICE + "post", { accountId: $("account").value, text: $("text").value.trim(), visibility: visibility, media: media,
-                                 idempotencyKey: key }).then(function (r) {
-            $("post").textContent = "Post";
+        call(SERVICE + "share", { accountId: $("account").value, content: { text: $("text").value.trim(), files: media },
+                                  audience: visibility, idempotencyKey: key }).then(function (r) {
+            // A retry keeps the key: the server posts it once (Idempotency-Key).
+            $("post").textContent = !r.returnValue && r.retryable ? "Try Again" : "Post";
             if (!r.returnValue) {
                 $("error").textContent = r.errorCode === "401_UNAUTHORIZED" ? "Your server did not accept the account's sign-in: sign in again in Accounts."
-                    : "Not posted: " + (r.errorText || r.errorCode);
+                    : r.retryAt ? "Your server asked to wait. Try again after " + new Date(r.retryAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) + "."
+                    : "Not posted: " + (r.errorText || r.errorCode) + (r.retryable ? ". Try again." : "");
                 update();
                 return;
             }
@@ -151,6 +156,8 @@
             o.textContent = "@" + a.username;
             $("account").appendChild(o);
         });
+        // The account picked in the share sheet; still changeable when there are several.
+        if (p.accountId && accounts.some(function (a) { return a._id === p.accountId; })) $("account").value = p.accountId;
         var one = accounts.length === 1;
         $("account").hidden = one;
         $("accountLabel").hidden = one;

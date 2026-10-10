@@ -77,5 +77,8 @@
             "onCredentialsChanged": "palm://org.webosphoenix.service.fediverse/onCredentialsChanged",
             "sync": "palm://org.webosphoenix.service.fediverse/sync"
         }
-    ]
+    ],
+    "signUp": {
+        "url": "https://joinmastodon.org/servers"
+    }
 }
