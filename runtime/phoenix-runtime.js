@@ -3109,7 +3109,22 @@
     // charge over USB, as on the Pre (luna-systemui PowerdService.js); on the
     // Touchstone powerd said DockConnected with DockPower and DockSerialNo
     // (DisplayManager::usbDockCallback, :967-1060).
-    function powerState() { return store.get("power", { percent: 76, charger: "none" }); }
+    // The battery lasts as long as the device is on: a new run of
+    // phoenix-sim (window.__phoenixRunId, set by its file server) starts
+    // with a fresh one, not the last run's (a simulated Low Battery, 4 %,
+    // came back at every start and luna-systemui raised its alert at boot,
+    // the status bar showing 76 %). Elsewhere (tests) it is kept as is.
+    function powerState() {
+        var fresh = { percent: 76, charger: "none" };
+        var run = global.__phoenixRunId;
+        var st = store.get("power", null);
+        if (!st) return run ? Object.assign(fresh, { run: run }) : fresh;
+        if (run && st.run !== run) {
+            st = Object.assign(fresh, { run: run });
+            store.set("power", st);
+        }
+        return st;
+    }
     function batteryPayload(st) {
         // temperature: the simulator's (Ctrl+Shift+T), 31 °C until it says.
         return { percent: st.percent, percent_ui: st.percent, temperature_C: typeof st.temperature === "number" ? st.temperature : 31,

@@ -9,6 +9,7 @@
 #include <QBuffer>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -756,12 +757,18 @@ void RootfsSchemeHandler::serveFile(QWebEngineUrlRequestJob *job, const QString 
     // app had PalmSystem (WebAppMgr).
     if ((devicePath.startsWith(QLatin1String(kAppsPrefix)) || devicePath.startsWith(QLatin1String(kEnyoPrefix)))
         && file.endsWith(QLatin1String(".html"))) {
+        // This run of phoenix-sim, for the runtime's state that lasts only
+        // as long as the device is on (the battery: a boot starts with a
+        // battery of its own, not the last run's simulated 4 %).
+        static const QByteArray runTag = "<script>window.__phoenixRunId=\""
+            + QByteArray::number(QDateTime::currentMSecsSinceEpoch()) + "\";</script>";
+        const QByteArray tags = runTag + kRuntimeTag;
         const int head = data.toLower().indexOf("<head");
         const int close = head >= 0 ? data.indexOf('>', head) : -1;
         if (close >= 0)
-            data.insert(close + 1, kRuntimeTag);
+            data.insert(close + 1, tags);
         else
-            data.prepend(kRuntimeTag);
+            data.prepend(tags);
         mime = "text/html";
     }
 
