@@ -99,7 +99,11 @@ describe("DropShare on a device", () => {
         const two = await fetch(url + "file/" + list.files[1].id);
         expect(two.headers.get("content-disposition")).toContain("filename*=UTF-8''%C3%9Cn%C3%AFcode.txt");
         expect(await two.text()).toBe("beta");
-        await new Promise((res) => setTimeout(res, 20));
+        // "done" comes on the server's own "finish" for the last file, which
+        // is not ordered against this client having read the body (the same
+        // process, two sockets): wait for it, up to a second.
+        for (let i = 0; i < 100 && r.replies[r.replies.length - 1].state !== "done"; i++)
+            await new Promise((res) => setTimeout(res, 10));
         expect(r.replies[r.replies.length - 1].state).toBe("done");
         // The files themselves stay where they were.
         expect(fs.readFileSync(a, "utf8")).toBe("alpha");
