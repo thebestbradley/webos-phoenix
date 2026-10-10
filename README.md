@@ -212,6 +212,9 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `services/hardware` | `org.webosphoenix.hardware`: the device's hardware matched against the signed driver catalog, the gaps the image leaves (newer firmware, out-of-tree drivers) installed with opkg and rolled back when they do not work (Settings > Hardware; docs/HARDWARE.md, docs/DRIVERS.md); its catalog tool is `server/drivers` |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
+| `shell/tests-device` | The device shell's `Phoenix.Lsm` types over fake luna-surfacemanager modules (`fakes/`: the bus, `LS`, launch points) |
+| `services/systemmanager` | `com.palm.systemmanager` on a device: the device lock (the passcode as scrypt, the security policies), the shell's state for the apps, the shell's start-up preferences (Node) |
+| `services/clipboard` | `org.webosphoenix.clipboard` on a device: the runtime's clipboard history run as a Luna service (Node) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
 | `meta-phoenix` | OpenEmbedded layer that adds Phoenix to a webOS OSE image |
 | `scripts/setup-build.sh` | Sets up a webOS OSE build with `meta-phoenix` |
@@ -456,6 +459,7 @@ Tests:
 
 ```sh
 QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -input shell/tests
+QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -import shell/tests-device/fakes -input shell/tests-device
 (cd apps && npm test && npm run typecheck)
 ```
 

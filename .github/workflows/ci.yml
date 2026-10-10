@@ -154,6 +154,10 @@ jobs:
         timeout-minutes: 10
         run: build/devices/devices-test
 
+      - name: The device shell's Phoenix.Lsm types over fake luna-surfacemanager modules
+        timeout-minutes: 10
+        run: QT_QPA_PLATFORM=offscreen "$QT_ROOT_DIR/bin/qmltestrunner" -import shell/qml -import build/qml -import shell/tests-device/fakes -input shell/tests-device
+
       - name: The runtime on a device (window properties, Back, the launch's caller, copies)
         timeout-minutes: 10
         run: node tools/test-runtime-device.cjs

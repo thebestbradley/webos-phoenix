@@ -126,8 +126,15 @@ Item {
     // WebAppMgr's launchingAppId, joins that one's, CardWindowManager.cpp:
     // 556-578; else a new stack right of the one the shell launched from).
     function addSurface(item) {
-        if (!isCard(item) || uidOf(item) !== "")
-            return;
+        if (isCard(item))
+            _adopt(item);
+    }
+
+    // A card surface becomes a card (shell/tests-device drives this with
+    // fake surfaces). Returns its uid.
+    function _adopt(item) {
+        if (uidOf(item) !== "")
+            return uidOf(item);
         var uid = "s" + (_nextUid++);
         _surfaces.push({ uid: uid, item: item });
         _hosts[uid] = hostComponent.createObject(source, { surface: item });
@@ -146,6 +153,7 @@ Item {
         // (WebOSSurfaceItem::windowPropertiesChanged, webossurfaceitem.cpp:930).
         item.windowPropertiesChanged.connect(function() { source._propertiesChanged(item); });
         cardFocusRequested(uid);
+        return uid;
     }
 
     property var _backSeen: ({})    // uid -> the last phoenixBack heard
