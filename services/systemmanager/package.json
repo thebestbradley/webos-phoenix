@@ -1,0 +1,8 @@
+{
+  "name": "com.palm.systemmanager",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix's com.palm.systemmanager on a device (Luna): the device lock (the passcode checked with scrypt, the security policies), the shell's state for the apps (lock, dock mode, orientation, keyboard) and the shell's start-up preferences",
+  "license": "Apache-2.0",
+  "main": "service.js"
+}

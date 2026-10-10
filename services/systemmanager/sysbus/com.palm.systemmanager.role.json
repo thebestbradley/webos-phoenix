@@ -1,0 +1,12 @@
+{
+    "appId": "com.palm.systemmanager",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": ["com.palm.systemmanager"],
+    "permissions": [
+        {
+            "service": "com.palm.systemmanager",
+            "outbound": ["com.palm.db", "com.webos.service.systemservice", "com.palm.storage"]
+        }
+    ]
+}

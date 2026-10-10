@@ -43,6 +43,7 @@ FILES:${PN} += " \
     ${sysconfdir}/fonts/conf.d/50-phoenix-emoji.conf \
     ${QT6_INSTALL_QMLDIR}/Phoenix \
     ${sysconfdir}/surface-manager.d/product.env \
+    ${datadir}/luna-service2/client-permissions.d/com.webos.surfacemanager.phoenix.perm.json \
 "
 
 # qtsvg-plugins: the launcher shows SVG app icons (the Marketplace's
