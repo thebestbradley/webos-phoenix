@@ -15,6 +15,9 @@
 
 export { defineConnector } from "./define";
 export { createConnectorService, methodNames, CALLBACKS } from "./service";
+export { shareTarget, shareTypes, shareDeclaration, checkShare, accountLabel, SHARE_KINDS } from "./share";
+export { templateSignUp, signUpProblems } from "./signup";
+export type { SignUp } from "./signup";
 export { syncObjects, removeObjects, emptyStats } from "./engine";
 export type { CapabilityStats } from "./engine";
 export * from "./types";

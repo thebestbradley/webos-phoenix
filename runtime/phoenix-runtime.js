@@ -642,7 +642,8 @@
         // enyo.windows.setWindowProperties: blockScreenTimeout keeps the
         // screen on while the card is in front (a video, a flashlight);
         // statusBarColor (0xRRGGBB) tints the tablet's status bar while the
-        // card is maximized (IpcClientHost.cpp:294-296). setSubtleLightbar
+        // card is maximized (IpcClientHost.cpp:294-296); webosDragMode
+        // switches a dashboard window's own drags on or off. setSubtleLightbar
         // and fastAccelerometer have nothing to act on.
         setWindowProperties: function (props) {
             if (!props || typeof props !== "object")
@@ -652,6 +653,11 @@
                 out.blockScreenTimeout = !!props.blockScreenTimeout;
             if (typeof props.statusBarColor === "number" && isFinite(props.statusBarColor))
                 out.statusBarColor = props.statusBarColor & 0xFFFFFF;
+            // A dashboard window's webosDragMode: "manual", it takes its own
+            // drags; any other string, the row is dragged again (WebAppMgr's
+            // PalmSystem::setWindowProperties, PalmSystem.cpp:659-661).
+            if (typeof props.webosDragMode === "string")
+                out.webosDragMode = props.webosDragMode === "manual";
             if (Object.keys(out).length > 1)
                 host.postToHost("windowProperties", out);
         },
@@ -13919,9 +13925,17 @@
     //       {share: {title, text, url, files}} (or the params a legacy app
     //       takes, below).
     //   org.webosphoenix.share/targets {types: [mime]} -> {targets: [{appId,
-    //       title, icon, label}]}: the apps whose appinfo.json says they take
-    //       all of these types ("phoenix": {"shareTargets": [{"types":
-    //       ["image/*"], "label"?}]}), and the legacy apps below.
+    //       title, icon, label, accountId?, account?, service?}]}: the apps
+    //       whose appinfo.json says they take all of these types ("phoenix":
+    //       {"shareTargets": [{"types": ["image/*"], "label"?}]}), and the
+    //       legacy apps below. A Synergy connector's target (one with
+    //       "connector": {templateId, accountLabel?, ...}, which
+    //       phoenix-connector writes from its share declaration,
+    //       docs/SYNERGY-SDK.md "Sharing to your service") is listed once per
+    //       signed-in account of that template, labelled with the account
+    //       ("Fediverse · @me@example.social"), and not at all when none is;
+    //       the accounts are read each time the sheet opens. Choosing one
+    //       launches the connector's app with {share, accountId, target}.
     //   org.webosphoenix.filepicker/pick {kinds?: ["image" | "video" |
     //       "audio" | "document" | "file"] (default ["image"]), multiple?,
     //       cropWidth?, cropHeight?, extensions?, title?} -> {files:
@@ -13976,8 +13990,26 @@
             if (s.url) t.push("text/uri-list");
             return t;
         }
+        // A connector's accounts as the sheet names them: accountLabel
+        // ("@{username}") filled in from the account (connector-kit share.ts
+        // accountLabel). Accounts being deleted are left out.
+        function accountName(pattern, a) {
+            return String(pattern || "{username}").replace(/\{(\w+)\}/g, function (m, k) { return String(a[k] || ""); });
+        }
+        function connectorTargets(lp, d) {
+            var c = d.connector, label = d.label || lp.title;
+            return callP("luna://com.palm.service.accounts/listAccounts", { templateId: c.templateId }).then(function (r) {
+                return (r && r.returnValue !== false ? r.results || [] : []).filter(function (a) { return a && a._id && !a.beingDeleted; })
+                    .map(function (a) {
+                        var name = accountName(c.accountLabel, a);
+                        return { appId: lp.id, title: lp.title, icon: lp.icon, label: label + " \u00b7 " + name, service: label,
+                                 account: name, accountId: a._id, key: lp.id + "/" + a._id, target: d.connector };
+                    });
+            });
+        }
+        // -> a promise of the targets, sorted by label.
         function targetsFor(types) {
-            var out = [];
+            var out = [], pending = [];
             launchPoints().forEach(function (lp) {
                 if (lp.launchPointId !== lp.id + "_default") return;
                 var decl = (lp.shareTargets || []).slice();
@@ -13986,18 +14018,25 @@
                     var d = decl[i], pats = d.types || [];
                     var takes = types.length > 0 && types.every(function (t) { return pats.some(function (p) { return mimeMatches(p, t); }); });
                     if (takes) {
-                        out.push({ appId: lp.id, title: lp.title, icon: lp.icon, label: d.label || lp.title });
+                        if (d.connector && d.connector.templateId) pending.push(connectorTargets(lp, d));
+                        else out.push({ appId: lp.id, title: lp.title, icon: lp.icon, label: d.label || lp.title, key: lp.id });
                         break;
                     }
                 }
             });
-            out.sort(function (a, b) { return a.label.localeCompare(b.label); });
-            return out;
+            return Promise.all(pending).then(function (lists) {
+                lists.forEach(function (l) { out = out.concat(l); });
+                out.sort(function (a, b) { return a.label.localeCompare(b.label); });
+                return out;
+            });
         }
-        function launchParams(appId, s) {
+        function launchParams(appId, s, chosen) {
             var legacy = LEGACY_TARGETS[appId];
             var share = { title: s.title || "", text: s.text || "", url: s.url || "", files: s.files || [] };
-            return legacy ? legacy.params(share) : { share: share };
+            if (legacy) return legacy.params(share);
+            // A connector's account: which one, and the declaration its compose page follows.
+            if (chosen && chosen.accountId) return { share: share, accountId: chosen.accountId, target: chosen.target };
+            return { share: share };
         }
 
         // ---- The overlay -----------------------------------------------------------------
@@ -14133,11 +14172,17 @@
                 });
                 if (!files.length && !p.text && !p.url) return reply(fail(-1, "Nothing to share: files, text or url"));
                 var s = { title: p.title || "", text: p.text || "", url: p.url || "", files: files };
-                showSheet("share", { share: s, targets: targetsFor(shareTypes(s)) }).then(function (r) {
+                var targets;
+                targetsFor(shareTypes(s)).then(function (t) {
+                    targets = t;
+                    return showSheet("share", { share: s, targets: t });
+                }).then(function (r) {
                     r = r || { action: "cancel" };
                     if (r.action === "app") {
-                        host.postToHost("launch", { id: r.appId, params: launchParams(r.appId, s) });
-                        return reply(ok({ action: "app", appId: r.appId }));
+                        var chosen = r.accountId ? targets.filter(function (t) { return t.appId === r.appId && t.accountId === r.accountId; })[0] : null;
+                        if (r.accountId && !chosen) return reply(fail(-1, "No such account to share to: " + r.accountId));
+                        host.postToHost("launch", { id: r.appId, params: launchParams(r.appId, s, chosen) });
+                        return reply(ok(chosen ? { action: "app", appId: r.appId, accountId: r.accountId } : { action: "app", appId: r.appId }));
                     }
                     if (r.action === "photos") {
                         // Every file shared (Files shares several), one by
@@ -14167,7 +14212,13 @@
                 });
             },
             "/targets": function (p, reply) {
-                reply(ok({ targets: targetsFor(p.types || []) }));
+                targetsFor(p.types || []).then(function (t) {
+                    reply(ok({ targets: t.map(function (x) {
+                        var o = { appId: x.appId, title: x.title, icon: x.icon, label: x.label };
+                        if (x.accountId) { o.accountId = x.accountId; o.account = x.account; o.service = x.service; }
+                        return o;
+                    }) }));
+                });
             }
         });
 

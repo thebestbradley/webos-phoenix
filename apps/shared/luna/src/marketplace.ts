@@ -124,6 +124,8 @@ export interface AccountType {
      */
     package: { id: string; builtin: boolean; preinstalled?: boolean };
     help: string;
+    /** Where a person without an account gets one (https); "" when there is none. */
+    signUp: string;
     featured: boolean;
 }
 

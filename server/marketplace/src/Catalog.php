@@ -519,7 +519,7 @@ final class Catalog
     private function accountType(array $e, bool $fromPackage = false): array
     {
         $fields = ['templateId', 'title', 'provider', 'icon', 'iconFrom', 'summary', 'capabilities', 'protocols', 'auth', 'server',
-                   'privacy', 'push', 'status', 'package', 'help', 'featured'];
+                   'privacy', 'push', 'status', 'package', 'help', 'signUp', 'featured'];
         if ($extra = array_diff(array_keys($e), $fields)) {
             throw new CheckFailed('unknown fields: ' . implode(', ', $extra));
         }
@@ -604,6 +604,10 @@ final class Catalog
         if (isset($e['help']) && (!is_string($e['help']) || !preg_match('#^https://[^\s]{1,490}$#i', $e['help']))) {
             throw new CheckFailed('help: an https:// address');
         }
+        // Where a person without an account gets one (docs/SYNERGY-SDK.md "Sign-up link"): https only.
+        if (array_key_exists('signUp', $e) && !Connector::isHttps($e['signUp'])) {
+            throw new CheckFailed('signUp: an https:// address');
+        }
         if (isset($e['featured']) && !is_bool($e['featured'])) {
             throw new CheckFailed('featured: true or false');
         }
@@ -620,6 +624,9 @@ final class Catalog
         ];
         if (isset($e['help'])) {
             $entry['help'] = $e['help'];
+        }
+        if (isset($e['signUp'])) {
+            $entry['signUp'] = $e['signUp'];
         }
         $entry['featured'] = !empty($e['featured']);
         return [$entry, str_starts_with($icon, 'icons/') && !$fromPackage ? [$from, $icon] : null];

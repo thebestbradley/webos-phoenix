@@ -9,13 +9,15 @@
 //    capabilities: [{capability, direction?}], protocols: [...],
 //    auth: {type, registration}, server, privacy: {dataGoesTo, e2ee,
 //    phoenixServers}, push, status, package: {id, builtin, preinstalled?},
-//    help?, featured?}
+//    help?, signUp?, featured?}
 //
 // package.builtin: part of the system, never removed (the generic logins);
 // else a connector package in the catalog (kind "connector"), which
 // Connections installs and removes; package.preinstalled: one of those that
 // comes installed with Phoenix (the Fediverse), removable and installed
 // again from the catalog without Developer Mode.
+// signUp: where a person without an account gets one (an https page; the
+// account type's page offers "Don't have an account? Sign up").
 //
 // Read loosely: an entry without a usable templateId is left out, a field
 // that is not what it should be is dropped or given its plain default, so a
@@ -34,6 +36,7 @@ var STATUS = ["stable", "beta", "experimental"];
 function str(v, max) { return typeof v === "string" ? v.slice(0, max || 4000) : ""; }
 function oneOf(v, list, dflt) { return list.indexOf(v) >= 0 ? v : dflt; }
 function httpUrl(v) { return typeof v === "string" && /^https?:\/\//i.test(v) ? v : ""; }
+function httpsUrl(v) { return typeof v === "string" && v.length <= 500 && /^https:\/\/[^\s\/?#]+[^\s]*$/i.test(v) ? v : ""; }
 
 // An icon: an address relative to the index (base) or absolute; or, as the
 // draft feed has it, {"48": ..., "96": ...}: the largest.
@@ -83,6 +86,7 @@ function normalize(e, base, sourceId) {
         status: oneOf(e.status, STATUS, "stable"),
         package: { id: str(pkg.id, 120), builtin: pkg.builtin === true, preinstalled: pkg.builtin !== true && pkg.preinstalled === true },
         help: httpUrl(e.help),
+        signUp: httpsUrl(e.signUp),
         featured: e.featured === true
     };
 }

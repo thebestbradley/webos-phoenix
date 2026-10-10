@@ -75,7 +75,7 @@ function type(templateId: string, o: Partial<AccountType> = {}): AccountType {
         templateId, sourceId: "phoenix", title: templateId, provider: "", icon: "", summary: "", capabilities: [{ capability: "FEEDS" }], protocols: [],
         auth: { type: "none", registration: "none" }, server: "user",
         privacy: { dataGoesTo: "nowhere", e2ee: false, phoenixServers: "none" },
-        push: "poll", status: "experimental", package: { id: templateId, builtin: false }, help: "", featured: false, ...o,
+        push: "poll", status: "experimental", package: { id: templateId, builtin: false }, help: "", signUp: "", featured: false, ...o,
     };
 }
 const FEEDS = type("org.example.feeds", { title: "News Feed (example)" });

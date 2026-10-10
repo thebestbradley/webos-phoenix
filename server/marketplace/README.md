@@ -176,7 +176,11 @@ Marketplace's Connections view (`docs/SYNERGY-CONNECTORS.md` 2.1, phase C0):
 `"accounts": [{templateId, title, provider, icon, summary, capabilities:
 [{capability, direction?}], protocols, auth: {type, registration}, server,
 privacy: {dataGoesTo, e2ee, phoenixServers}, push, status, package: {id,
-builtin}, help?, featured}]`. For now these are the built-in templates only
+builtin}, help?, signUp?, featured}]`. `signUp` is where a person without an
+account gets one, an `https://` address (the Fediverse's
+joinmastodon.org/servers, XMPP's providers.xmpp.net; none where the server is
+the user's own or no account is needed); the device's account type page
+offers "Don't have an account? Sign up" beside Set up. For now these are the built-in templates only
 (CardDAV & CalDAV, Subscribed Calendar, Email Account, the simulator's
 Jabber), each `package.builtin: true`; connector packages come later (C4).
 

@@ -40,6 +40,8 @@ enyo.kind({
                      autoCapitalize: "lowercase", inputType: "email", changeOnInput: true, onchange: "fieldChanged", onkeydown: "checkForEnter"}
                 ]},
                 {kind: "Control", className: "fediverse-hint", content: "Next, your server's own page asks you to sign in and to allow Phoenix. Phoenix never sees your password."},
+                // No account yet: the template's signUp (joinmastodon.org's list of servers), in the browser.
+                {kind: "Accounts.SignUpLink", name: "signUp"},
                 {name: "errorBox", kind: "enyo.HFlexBox", className: "error-box", align: "center", showing: false, components: [
                     {name: "errorImage", kind: "Image", src: AccountsUtil.libPath + "images/header-warning-icon.png"},
                     {name: "errorMessage", className: "enyo-text-error", flex: 1}
@@ -63,6 +65,8 @@ enyo.kind({
         this.mode = this.params.mode || "create";
         this.$.signInCall.setService(this.SERVICE);
         this.$.signInCall.setMethod("signIn");
+        if (this.mode !== "modify")
+            this.$.signUp.setTemplate(this.params.template || null);
         if (this.mode === "modify" && this.params.account) {
             // Signing in again (the server refused the token): the same account.
             this.$.handle.setValue("@" + (this.params.account.username || ""));

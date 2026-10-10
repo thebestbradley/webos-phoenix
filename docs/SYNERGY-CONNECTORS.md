@@ -1,6 +1,6 @@
 # Synergy accounts, a connector catalog and a developer kit (draft)
 
-*Draft, 10 October 2026, with what is built since: phases C0, C1 (the kit) and C2 (the Fediverse account), each in an "As built" note. The Marketplace view this page calls the Accounts view is named **Connections** (the owner, section 5). Developers: [SYNERGY-SDK.md](SYNERGY-SDK.md).*
+*Draft, 10 October 2026, with what is built since: phases C0, C1 (the kit) and C2 (the Fediverse account), each in an "As built" note; since, sharing in the kit (a connector's accounts in the share sheet, SYNERGY-SDK.md section 7). The Marketplace view this page calls the Accounts view is named **Connections** (the owner, section 5). Developers: [SYNERGY-SDK.md](SYNERGY-SDK.md).*
 
 The owner asked: which accounts fit our Accounts app and fill Synergy with a
 modern twist; a feed for accounts in the catalog with its own Synergy view;
@@ -122,6 +122,7 @@ the earlier pages.
 | **new** LoRa mesh (Meshtastic, MeshCore): off-grid text through a paired radio | The radio's client protocol over Bluetooth LE, USB serial or TCP | none (a channel key) | none | Added by the owner (10 October 2026, section 7). Needs a radio; licences to check (Meshtastic GPL-3.0, MeshCore MIT) | P2 |
 | **new** IRC with a bouncer | IRCv3 (`chathistory`, `soju` / `ergo` bouncers) | PW / SASL | none | The user runs the bouncer; one thread per channel or person | P3 |
 | WhatsApp, Signal, iMessage, RCS | - | - | - | Positions in SYNERGY.md 2.12 and SM 6 stand | - |
+| Discord | - | - | - | Not a connector (the owner asked, 10 October 2026): its API is for bots; using a person's own account from another client (a "self-bot") is against Discord's terms and gets accounts banned. Sign in with Discord gives only the name, avatar, servers and linked accounts. Instead: the Discord web app in the catalog (its web push to check) | no |
 
 ### Social and feeds (SOCIAL, new FEEDS)
 
@@ -216,7 +217,12 @@ and `help` are new metadata.
 (Connections)"): the built-in types only, from `catalog/accounts.json`,
 with `templateId, title, provider, icon, summary, capabilities, protocols,
 auth, server, privacy {dataGoesTo, e2ee, phoenixServers}, push, status,
-package {id, builtin}, help?, featured`. `icon` is one address (the
+package {id, builtin}, help?, signUp?, featured`. `signUp` (10 October
+2026, the owner: "the accounts/connectors also need links to sign up and
+register") is an `https://` page where a person without an account gets
+one; the type's page in Connections offers "Don't have an account? Sign
+up" beside Set up, and the template's own `signUp` puts the same link on
+the sign-in step in Accounts (SYNERGY-SDK.md "Sign-up link"). `icon` is one address (the
 catalog's copy of the template's 96 px icon), not the draft's sizes;
 `direction` is `two-way`, `read-only` or `write-only`; `terms`, `regions`,
 `readsFrom`/`writesTo` and `package.minVersion` wait for connector packages
@@ -553,11 +559,13 @@ Still open:
   favourites as webOS notifications (five at most per sync, then "n more");
   a tap opens the post or profile in the browser. Polled every 15 minutes
   (the kit's schedule); Web Push to UnifiedPush is C6.
-- **Sharing**: the account is a share target (`appinfo.json`
-  `shareTargets`: text, links, pictures); its page posts a link, text, up to
-  four pictures each with its description (alt text), with the visibility
-  chosen (public, unlisted, followers, mentioned only), with an
-  `Idempotency-Key`.
+- **Sharing**: the account is a share target, written from the kit's
+  `share` declaration (10 October 2026, SYNERGY-SDK.md section 7): the
+  share sheet lists it once per signed-in account ("Fediverse ·
+  @you@example.social") and not at all without one; its page posts a link,
+  text, up to four pictures each with its description (alt text), with the
+  visibility chosen (public, unlisted, followers, mentioned only), through
+  the kit's `share` method, with an `Idempotency-Key`.
 - **Not done**: Pixelfed albums in Photos (no PHOTO capability or kinds yet;
   OPEN-QUESTIONS.md Q3), Bluesky, Web Push (C6), the sheet and key store on
   a device (C3).
@@ -680,3 +688,39 @@ mesh come pre-installed at launch, and can be removed and installed again
 like any other; the rest (Jabber, Matrix, Bluesky, LinkedIn, the drives,
 Zoom, Teams, Google Chat with Google, ...) are installed by those who want
 them.
+
+**Slack** (the owner, 10 October 2026; a catalog package, not pre-installed):
+direct messages and channels as Messaging conversations, the workspace's
+people linked to contacts, mentions and direct messages as notifications,
+through Slack's Web API with the user's sign-in (OAuth, a user token). Its
+limits: since 2025 Slack lets apps outside the Slack Marketplace read
+message history only very slowly (about one request a minute, a few
+messages each), too slow for a messaging account, so the Slack app must be
+registered by the Phoenix project account (OPEN-QUESTIONS Q17) and listed
+in the Slack Marketplace (Slack's review); a workspace's admins can also
+refuse outside apps. Until it is listed it is built and tested with those
+limits.
+
+**More platforms** (the owner, 10 October 2026: "add them with the others
+as potentials or not likely"; catalog packages, none pre-installed):
+
+Potentials:
+
+| Platform | What it brings | How | Notes |
+| --- | --- | --- | --- |
+| KDE Connect | An Android phone's texts in Messaging (read and reply from a Phoenix tablet), its notifications mirrored, files and the clipboard shared | Its open protocol over the local network (TLS, paired with a code) | Written from the published protocol: KDE Connect's own code is GPL. A fit for tablets, as the TouchPad's "text from your tablet" was |
+| Mattermost, Zulip, Rocket.Chat | Team chat: direct messages and channels in Messaging, the team's people in Contacts, mentions as notifications | Their REST and websocket APIs with the user's sign-in or a personal token | Self-hosted Slack alternatives with full user APIs: no marketplace review, no history limits |
+| Nostr | Posts in the feed, people as contacts, direct messages in Messaging | Relays over websockets, the user's key (NIP-01, NIP-17 messages) | No registration; keys only. Next to the Fediverse and Bluesky |
+| GitHub, GitLab, Forgejo / Codeberg | Notifications (mentions, reviews, CI, issues), assigned issues as tasks | Their REST APIs with a personal token or OAuth | For the work theme; free APIs |
+| Home Assistant | Smart-home alerts as notifications; "turn off the lights" through Just Type and the Assistant | Its REST and websocket APIs with a long-lived token, on the user's own server | No registration; local |
+| Last.fm, ListenBrainz, Spotify | Scrobbling what Music plays; Spotify's now playing and playlists | Last.fm and ListenBrainz APIs; Spotify Web API (OAuth) | Spotify needs an app registered (OPEN-QUESTIONS Q17) and its playback rules are strict |
+| Reddit | Inbox messages and replies in Messaging, notifications | Reddit's OAuth API, free tier for personal non-commercial use | Its terms limit commercial use |
+
+Not likely, and why:
+
+| Platform | Why not | Instead |
+| --- | --- | --- |
+| Facebook | The original had it built in, but today's Graph API gives no friends' details, posts or Messenger messages to other apps | Its web app in the catalog |
+| Instagram | Its API is only for business and creator accounts; no direct messages for personal ones | Its web app |
+| Threads | Its API posts and reads the user's own posts only | The Fediverse account reaches Threads profiles that share to the fediverse |
+| YouTube as an account | Little an account adds | Channel subscriptions as RSS feeds through the feeds connector |

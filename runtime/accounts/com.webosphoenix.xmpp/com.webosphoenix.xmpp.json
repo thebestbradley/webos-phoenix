@@ -9,6 +9,9 @@
     "loc_usernameLabel": "JABBER ID",
     "loc_usernameExplainLabel": "you@chat.example",
     "loc_passwordLabel": "PASSWORD",
+    "signUp": {
+        "url": "https://providers.xmpp.net/"
+    },
     "validator": "palm://org.webosphoenix.service.xmpp/checkCredentials",
     "readPermissions": [
         "org.webosphoenix.service.xmpp",

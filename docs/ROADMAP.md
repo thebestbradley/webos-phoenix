@@ -71,6 +71,7 @@ Phoenix UI, PixiOS with Bennu UI, an XR bird) are in [BRANDING.md](BRANDING.md).
 | [CONVERGENCE.md](CONVERGENCE.md) | 2.0: desktop mode, TV mode, wireless display | 2.0 |
 | [LUNEOS.md](LUNEOS.md), [WEBOS-FAMILY.md](WEBOS-FAMILY.md) | LuneOS, webOS Community Edition, OSE and Phoenix compared; which LuneOS layers to build on | M1, M3 |
 | [LEGAL.md](LEGAL.md), [BRANDING.md](BRANDING.md) | Licences, artwork and sounds, names and trademarks | all |
+| [PLATFORM.md](PLATFORM.md), [PLATFORM-BUILD-PROMPT.md](PLATFORM-BUILD-PROMPT.md) | The servers: website, account, developer portal, the signed feeds (catalog, updates, drivers), downloads, cloud services; the prompt for building them in Laravel | 1.0 |
 
 ## Decisions so far
 

@@ -1315,6 +1315,12 @@ Item {
         win.transparent = true;
         win.adopt(request);
         win.closeRequested.connect(function() { source._closeSystemWindow(key); });
+        // Its page's PalmSystem.setWindowProperties, later (a dashboard's
+        // webosDragMode).
+        win.hostMessage.connect(function(type, payload) {
+            if (type === "windowProperties")
+                source._systemWindowProperties(key, payload || {});
+        });
         _windows[key] = win;
         if (type === "popupalert") {
             // Most urgent first: an incoming call goes in front of a
@@ -1343,6 +1349,26 @@ Item {
                 persistent: _param(url, "phoenixPersistent") === "1",
                 manualDrag: _param(url, "phoenixDragMode") === "manual"
             });
+        }
+    }
+
+    // PalmSystem.setWindowProperties from a dashboard window's page, at any
+    // time: {webosDragMode} ("manual" or not, PalmSystem.cpp:659-661 in
+    // WebAppMgr) changes whether the window takes its own drags
+    // (IpcClientHost::onSetWindowProperties, IpcClientHost.cpp:289-292 ->
+    // DashboardWindow::setWindowProperties, DashboardWindow.cpp:101-105),
+    // which DashboardWindowContainer reads as each touch begins
+    // (isManualDragWindow, DashboardWindowContainer.cpp:193-197). The
+    // persistent flag has no such way: WebAppMgr sends it once, from the
+    // window's attributes (DashboardWebApp::attach, DashboardWebApp.cpp:86-96).
+    function _systemWindowProperties(key, payload) {
+        if (payload.webosDragMode === undefined)
+            return;
+        for (var i = 0; i < notifications.count; ++i) {
+            if (notifications.get(i).windowKey === key) {
+                notifications.setProperty(i, "manualDrag", !!payload.webosDragMode);
+                return;
+            }
         }
     }
 

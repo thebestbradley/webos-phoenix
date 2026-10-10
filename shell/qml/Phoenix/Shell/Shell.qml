@@ -1052,7 +1052,7 @@ FocusScope {
         }
         if (!cards.maximized || !source || !source.windowFor)
             return;
-        var w = source.windowFor(cards.currentUid);
+        var w = source.windowFor(cards.activeUid);
         if (w && typeof w.edit === "function")
             w.edit(action);
     }
@@ -1230,17 +1230,24 @@ FocusScope {
         } else if (launcher.open)
             launcher.open = false;
         else if (cards.maximized) {
-            _backUid = cards.currentUid;
+            // A modal card up: Back is its page's. The focused window is
+            // the modal child (CardWindowManager::activeWindow,
+            // CardWindowManager.cpp:2970-2982), which the key goes to.
+            var uid = cards.activeUid;
+            _backUid = uid;
             _backMoves = _cardMoves;
-            if (!source.back(cards.currentUid))
-                _backUnhandled(cards.currentUid);
+            if (!source.back(uid))
+                _backUnhandled(uid);
         }
     }
     // The app did not take Back (nothing left to go back to): its card
     // minimizes to card view (SystemUiController::slotKeyEventRejected,
     // SystemUiController.cpp:941-954). Only if it is still the card in front.
+    // A modal card that did not take it goes, faded, as for the minimize
+    // gesture (minimizeActiveWindow with m_addingModalWindow,
+    // CardWindowManager.cpp:1151-1164).
     function _backUnhandled(uid) {
-        if (cards.maximized && !cards.minimizing && cards.currentUid === uid && !launcher.open && !justType.open)
+        if (cards.maximized && !cards.minimizing && cards.activeUid === uid && !launcher.open && !justType.open)
             cards.minimize();
     }
     // A page's answer comes later (backUnhandled): it counts only for the
@@ -2352,9 +2359,11 @@ FocusScope {
     property var _webInput: null                  // {uid, state}: the page's focused field
     readonly property Item _focusItem: Window.activeFocusItem
     // The window that has the keyboard focus: Just Type's, else the
-    // maximized card's (CardWindow focus; a card in card view has none).
+    // maximized card's, or its modal card's while one is up (CardWindow
+    // focus; a card in card view has none; CardWindowManager::activeWindow,
+    // CardWindowManager.cpp:2970-2982).
     readonly property string _focusedWindowUid: emergencyShown ? emergencyWindow.windowKey
-        : justType.open ? "justtype" : (cards.maximized ? cards.currentUid : "")
+        : justType.open ? "justtype" : (cards.maximized ? cards.activeUid : "")
 
     function _isTextField(item) {
         return item !== null && item !== undefined && item.inputMethodHints !== undefined
@@ -2501,7 +2510,7 @@ FocusScope {
         ime.shown = true;
         _imeOwnsSpace = true;
         _setKeyboardSpace(ime.keyboardHeight, false);
-        var uid = cards.maximized ? cards.currentUid : "";
+        var uid = cards.maximized ? cards.activeUid : "";
         if (uid !== "" && source && typeof source.keyboardShown === "function") {
             _keyboardShownUid = uid;
             source.keyboardShown(uid, true);
@@ -2709,6 +2718,9 @@ FocusScope {
                         // resized when the original resized it (cardBottomInset).
                         bottomInset: shell.cardBottomInset
                         keyboardOverlap: notes.keyboardHeight > 0 ? Math.max(0, shell.cardBottomInset - notes.spaceWithoutKeyboard) : 0
+                        // Where the positive space is going: a modal card moves
+                        // there as the slide starts (CardView.modalCenterY).
+                        positiveSpaceTarget: height - topInset - notes.negativeSpaceTarget
                         uiOrientation: uiRotation.uiOrientation
                         uiPortrait: uiRotation.uiPortrait
                         // First Use's card stays until the app closes it.

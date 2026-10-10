@@ -41,7 +41,10 @@ const PHOTOS_ICON = "/usr/palm/applications/org.webosphoenix.photos/icon.png";
 interface SharedFile { path: string; mimeType: string }
 interface Picked extends SharedFile { size?: number; cropInfo?: CropInfo }
 interface Share { title: string; text: string; url: string; files: SharedFile[] }
-interface Target { appId: string; title: string; icon: string; label: string }
+// A connector's target is one per signed-in account (the runtime's
+// targetsFor; docs/SHARE-AND-FILES.md): accountId, the account's name and the
+// service's, shown on two lines under the service's icon.
+interface Target { appId: string; title: string; icon: string; label: string; key?: string; accountId?: string; account?: string; service?: string }
 interface ShareRequest { share: Share; targets: Target[] }
 interface SaveRequest { name: string; title: string; folder: string }
 interface PickRequest { title: string; kinds: PickKind[]; multiple: boolean; crop: { width: number; height: number } | null; extensions: string[] }
@@ -49,7 +52,7 @@ interface SignInRequest { url: string; redirectPrefix: string }
 type Request = ShareRequest | SaveRequest | PickRequest | SignInRequest;
 type Result =
     | { action: "redirect"; url: string }
-    | { action: "app"; appId: string }
+    | { action: "app"; appId: string; accountId?: string }
     | { action: "photos" | "files" | "copy" | "cancel" }
     | { action: "save"; folder: string; name: string; overwrite: boolean }
     | { action: "pick"; files: Picked[] };
@@ -227,6 +230,14 @@ function usePictureUrl(path: string | undefined): string | undefined {
     return url && url.path === path ? url.url : undefined;
 }
 
+// An account's handle on two lines under its icon: the name, then its
+// server ("@me" / "@example.social"), each cut short with an ellipsis.
+function handleLines(account: string) {
+    const at = account.lastIndexOf("@");
+    if (at <= 0) return <span className="ss-account-line">{account}</span>;
+    return <><span className="ss-account-line">{account.slice(0, at)}</span><span className="ss-account-line">{account.slice(at)}</span></>;
+}
+
 function ShareSheet({ request, finish, backHandler }: SheetProps<ShareRequest>) {
     const { share, targets } = request;
     const first = share.files[0];
@@ -254,10 +265,14 @@ function ShareSheet({ request, finish, backHandler }: SheetProps<ShareRequest>) 
             {targets.length > 0 && (
                 <div className="ss-apps" style={{ gridTemplateRows: `repeat(${rows}, auto)` }} data-testid="share-apps">
                     {targets.map((t) => (
-                        <button key={t.appId} type="button" className="ss-app" data-testid={"share-app-" + t.appId}
-                                onClick={() => finish({ action: "app", appId: t.appId })}>
+                        <button key={t.key || t.appId} type="button" className="ss-app" data-testid={"share-app-" + t.appId}
+                                data-account-id={t.accountId} aria-label={t.label} title={t.label}
+                                onClick={() => finish(t.accountId ? { action: "app", appId: t.appId, accountId: t.accountId } : { action: "app", appId: t.appId })}>
                             <img src={t.icon} alt="" />
-                            <span>{t.label}</span>
+                            {t.accountId ? <>
+                                <span>{t.service}</span>
+                                <span className="ss-account" data-testid="share-account">{handleLines(t.account || "")}</span>
+                            </> : <span>{t.label}</span>}
                         </button>
                     ))}
                 </div>

@@ -7,7 +7,7 @@
 //   simScene       "locked" | "cards" | "stacks" | "longstack" | "reorder" | "maximized" | "heldcard" | "launcher" |
 //                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" | "drawer" | "capture" | "capturepreview" |
 //                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistantbird" | "assistantbirds" | "assistantbirdmoves" |
-//                  "wakeword" | "wakewordlocked" |
+//                  "wakeword" | "wakewordlocked" | "modal" |
 //                  "systemmenu" | "empty"
 //   simFirstUse    start with First Use (--first-use); without it First Use
 //                  runs at start-up until it has been done once
@@ -1168,8 +1168,18 @@ Item {
                                    "launcher", "launcheredit", "launchermenu", "launchergroup", "launchergroupopen", "launchertabs", "launcherinstall", "wave", "powermenu", "hot", "pin", "emergency", "firstuse",
                                    "lowbattery", "banner", "notified", "dashboard", "drawer", "capture",
                                    "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "assistantbird", "assistantbirds", "assistantbirdmoves",
-                                   "wakeword", "wakewordlocked", "systemmenu", "empty"]
+                                   "wakeword", "wakewordlocked", "modal", "systemmenu", "empty"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
+    // --scene modal: once Memos is maximized.
+    Timer {
+        id: sceneModalTimer
+        interval: 1200
+        onTriggered: {
+            var parent = shell.cardView.currentUid;
+            windows.launchModal(root.sceneModalApp, null, parent, "SIM_MODAL", true);
+        }
+    }
+    readonly property string sceneModalApp: "org.webosphoenix.tasks"
 
     // Show Virtual Keyboard opened Just Type with a hardware keyboard
     // attached: the keyboard comes up for its field (simActions).
@@ -1793,6 +1803,13 @@ Item {
             });
         } else if (scene === "maximized") {
             shell.cardView.maximizeProgress = 1;
+        } else if (scene === "modal") {
+            // Memos maximized and Phoenix's Tasks over it as its modal card
+            // (com.palm.systemmanager/launchModalApp; GAPS C11): a field
+            // in it brings the keyboard up, and the modal moves.
+            var memos = windows.runningUid(ids[1]);
+            shell.cardView.maximize(memos);
+            sceneModalTimer.start();
         } else if (scene === "heldcard") {
             // Messaging keeps the upright orientation, as if it had called
             // PalmSystem.setWindowOrientation("up"): with the device on its
