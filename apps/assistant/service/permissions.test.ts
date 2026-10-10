@@ -34,8 +34,8 @@ const { BUILT_IN } = req("./lib/commands.js") as { BUILT_IN: { id: string; inter
 const GROUPS: [RegExp, string][] = [
     [/^com\.palm\.db\//, "database.operation"],
     [/^com\.palm\.activitymanager\/(?:create|cancel)$/, "activity.operation"],
-    [/^com\.palm\.applicationManager\/(?:launch|open)$/, "application.launcher"],
-    [/^com\.palm\.applicationManager\/listLaunchPoints$/, "application.operation"],
+    [/^com\.palm\.applicationManager\/(?:launch|open)$/, "phoenix.appmanager.launch"],                 // services/appmanager
+    [/^com\.palm\.applicationManager\/listLaunchPoints$/, "phoenix.appmanager.query"],
     [/^com\.webos\.service\.location\/(?:getLocationUpdates|getAllLocationHandlers)$/, "location.query"],
     [/^com\.webos\.service\.location\/setState$/, "location.operation"],
     [/^com\.webos\.service\.audio\/(?:master\/getVolume|getInputVolume)$/, "audio.query"],
@@ -48,7 +48,8 @@ const GROUPS: [RegExp, string][] = [
     [/^org\.webosphoenix\.service\.packages\/search$/, "marketplace.management"],                         // apps/marketplace/service
     [/^org\.webosphoenix\.transcriber\//, "transcriber.operation"],                                       // apps/voicememos/service
     [/^org\.webosphoenix\.filemanager\/search$/, "filemanager.operation"],                               // apps/files/service
-    [/^org\.webosphoenix\.tethering\//, "phoenix.tethering"],
+    [/^org\.webosphoenix\.tethering\/getStatus$/, "phoenix.accessories.query"],                       // services/accessories
+    [/^org\.webosphoenix\.tethering\/(?:setWifi|setUsb)$/, "phoenix.accessories.management"],
     [/^org\.webosphoenix\.clipboard\/add$/, "phoenix.clipboard"],
     [/^com\.webos\.service\.vpn\//, "vpn.management"],                                                     // LuneOS's luneos-vpn-adapter
     [/^org\.webosphoenix\.service\.location\//, "phoenix.location.permissions"],
@@ -61,7 +62,7 @@ const GROUPS: [RegExp, string][] = [
     [/^com\.palm\.telephony\//, "telephony.query"],
     [/^com\.palm\.universalsearch\//, "systemui.searchprovider"],
     [/^com\.palm\.systemmanager\/takeScreenShot$/, "devices.display.control"],
-    [/^com\.palm\.power\//, "devices.display.control"],
+    [/^com\.palm\.power\/com\/palm\/power\//, "devices.power.query"],                                  // services/devices
 ];
 const PERM = JSON.parse(readFileSync(resolve(__dirname, "sysbus/org.webosphoenix.assistant.perm.json"), "utf8"))["org.webosphoenix.assistant"] as string[];
 const DB_PERMS = JSON.parse(readFileSync(resolve(__dirname, "../public/configuration/db/permissions/org.webosphoenix.assistant"), "utf8")) as

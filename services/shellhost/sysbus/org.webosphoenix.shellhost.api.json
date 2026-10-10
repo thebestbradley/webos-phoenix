@@ -14,7 +14,9 @@
     "phoenix.system.media": [
         "org.webosphoenix.system/setNowPlaying",
         "org.webosphoenix.system/getNowPlaying",
-        "org.webosphoenix.system/mediaKey",
+        "org.webosphoenix.system/mediaKey"
+    ],
+    "phoenix.system.restart": [
         "org.webosphoenix.system/restartUi"
     ]
 }

@@ -45,6 +45,7 @@ CONST = re.compile(r"""(?:\b(?:const|var|let)\s+|readonly\s+property\s+string\s+
 METHOD_AFTER = re.compile(r"""^\s*(?:,\s*(?:\{[^{}]{0,200}?\bmethod\s*:\s*|)|[^;]{0,300}?\bmethod\s*:\s*)(["'])/?([A-Za-z0-9_./\-]+)\1""", re.S)
 QML_SECOND = re.compile(r"""^\s*,\s*(["'])(/[A-Za-z0-9_./\-]+)\1""")
 COMMENT_LINE = re.compile(r"^\s*(//|\*|/\*|#)")
+SIGNAL_SEND = re.compile(r"\b(?:LSSignalSend\w*|signal)\s*\(\s*(?:[\w.\->]+\s*,\s*)?$")
 
 
 def strip_comment_lines(text):
@@ -59,6 +60,14 @@ def calls_in(text):
     out = []
     for m in URI.finditer(text):
         svc, path, templ, rest = m.group(2), m.group(3) or "", m.group(4), m.group(5)
+        if SIGNAL_SEND.search(text[max(0, m.start() - 80):m.start()]):
+            # A signal the service sends (LSSignalSend, or its wrapper): a
+            # publish through the hub, not a call of that method; the hub
+            # checks it as com.webos.service.bus/signal/publish/<category>
+            # (luna-service2 src/ls-hubd/security.cpp:861-887), whose group
+            # servicebus.signal luna-service2.perm.json gives com.palm.*,
+            # com.webos.* and com.lge.*.
+            continue
         if templ or rest:
             # "luna://x/" + ... or `luna://x/${...}`: the method is built at run time.
             out.append((svc, None, m.start()))
@@ -73,6 +82,10 @@ def calls_in(text):
         if mm and (not base or path.endswith("/") or QML_SECOND.match(after) or "Request" in before
                    or re.search(r"\bservice\s*:\s*$", before)):
             method = (base + "/" if base else "") + mm.group(2).strip("/")
+        elif path.endswith("/") and base:
+            # A base URI ("palm://x/category/") with no method beside it:
+            # the method is joined to it elsewhere, at run time.
+            method = None
         else:
             method = base or None
         out.append((svc, method, m.start()))
@@ -397,6 +410,12 @@ def check(root):
         if fnmatch.fnmatchcase(shell.name, pat) and pat != "*" and not pat.endswith(".*"):
             shell.groups.update(entry["groups"])
     shell.groups |= phoenix_perms.get(shell.name, set())
+    # What luna-service2.perm.json gives every client ("*": service.communication,
+    # servicebus.communication: signal/addmatch and the like), the hub's own.
+    everyone = set(ose.get("clients", {}).get("*", {}).get("groups", []))
+    for c in cl:
+        if c.groups is not None and (c.kind != "app" or c.declared):
+            c.groups |= everyone
 
     def provider(name):
         if name in phoenix:

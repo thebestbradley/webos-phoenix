@@ -143,6 +143,9 @@ describe("com.palm.applicationManager on OSE", () => {
         expect(apps.apps.find((a: Any) => a.id === "com.palm.app.email").icon).toBe("/usr/palm/applications/com.palm.app.email/icon.png");
         expect(w.calls.find((c: Any) => c.method === "listApps").params.properties).toContain("mimeTypes");
         expect(await w.m.methods.getAppInfo({ appId: "org.webosphoenix.music" })).toMatchObject({ returnValue: true, appInfo: { title: "Music" } });
+        expect(await w.m.methods.getAppBasePath({ appId: "com.palm.app.email" })).toEqual({ returnValue: true,
+            appId: "com.palm.app.email", basePath: "file:///usr/palm/applications/com.palm.app.email/index.html" });
+        expect(await w.m.methods.getAppBasePath({ appId: "foobar" })).toMatchObject({ returnValue: false, errorText: "Invalid appId specified: foobar" });
         expect((await w.m.methods.searchApps({ keyword: "pho" })).apps).toEqual([
             { launchPoint: "org.webosphoenix.photos_default" }, { launchPoint: "org.webosphoenix.phone_default" }]);
         expect(await w.m.methods.running({})).toEqual({ returnValue: true, running: [{ id: "com.palm.app.email", processid: "1001" }] });

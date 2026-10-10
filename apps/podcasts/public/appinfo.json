@@ -29,6 +29,8 @@
         "downloadmanager.operation",
         "filemanager.operation",
         "media.operation",
-        "audio.operation"
+        "audio.operation",
+        "phoenix.appmanager.launch",
+        "phoenix.system.media"
     ]
 }
