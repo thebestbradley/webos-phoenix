@@ -28,6 +28,14 @@ function loadPlaywright() {
 
 const REPO = path.resolve(__dirname, "..");
 const wsgidav = require(path.join(REPO, "apps/settings/service/test/wsgidav.cjs"));
+
+// A response read to its end: one left unread, its socket closed under it,
+// aborts Node's fetch (undici: assert(!this.paused), seen in CI).
+async function drained(pending) {
+    const r = await pending;
+    try { await r.arrayBuffer(); } catch (e) { /* the status is what counts */ }
+    return r;
+}
 const args = process.argv.slice(2);
 const tablet = args.includes("--tablet");
 const outIdx = args.indexOf("--out");
@@ -49,7 +57,7 @@ function check(cond, what) {
 async function waitForServer(url, ms) {
     const until = Date.now() + ms;
     while (Date.now() < until) {
-        try { if ((await fetch(url)).ok) return; } catch (e) { /* retry */ }
+        try { if ((await drained(fetch(url))).ok) return; } catch (e) { /* retry */ }
         await new Promise((r) => setTimeout(r, 100));
     }
     throw new Error("server did not start");

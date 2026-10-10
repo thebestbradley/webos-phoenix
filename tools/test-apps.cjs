@@ -18,6 +18,14 @@ const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
+// A response read to its end: one left unread, its socket closed under it,
+// aborts Node's fetch (undici: assert(!this.paused), seen in CI).
+async function drained(pending) {
+    const r = await pending;
+    try { await r.arrayBuffer(); } catch (e) { /* the status is what counts */ }
+    return r;
+}
+
 function loadPlaywright() {
     const tries = ["playwright", path.join(require("child_process").execSync("npm root -g").toString().trim(), "playwright")];
     for (const t of tries) {
@@ -53,7 +61,7 @@ async function waitForServer(url, ms) {
     const until = Date.now() + ms;
     while (Date.now() < until) {
         try {
-            const r = await fetch(url);
+            const r = await drained(fetch(url));
             if (r.ok) return;
         } catch (e) { /* retry */ }
         await new Promise((r) => setTimeout(r, 100));
