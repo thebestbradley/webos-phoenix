@@ -10,6 +10,83 @@ Priority: **P0** breaks the webOS feel or basic use, **P1** noticeable,
 **P2** polish. Effort: **S** under a day, **M** days, **L** a week or more.
 Nearly all the art is already in `shell/assets/openwebos/`.
 
+## Open gaps at a glance
+
+Brought up to date on 10 October 2026, against the code. Every row below
+works in the simulator unless it says otherwise, so most of what is left
+is the device side. Each line names its row; the row has the detail.
+
+**On a device** (nothing has run on hardware yet):
+
+- **P0** K1: a device lock service on OSE (the passcode is checked in the simulator only).
+- **P0** G1, G2: the bezel swipe and Back are written for the device but not run on
+  hardware; Back that the page does not take does not minimize the card there yet.
+- **P0** E1: Edit and the long-press popup not checked with WebAppMgr.
+- **P1** V5: the Phoenix keyboard as the device's input method (a Maliit plugin);
+  V2-V4, V6 and E2's keyboard strip wait on it.
+- **P1** R1, R2, S6: the orientation sensor, and the apps' orientation, full-screen
+  and status bar colour requests through the device source.
+- **P1** M2, S2: Wi-Fi, Bluetooth and VPN lists in the system menu, and the WAN,
+  roaming, connecting, TTY and HAC indicators, from the device's services.
+- **P1** A1: WAV copies of the system sounds (OSE's audiod plays WAV only), looping
+  ringtones, the sound preferences.
+- **P1** E2, E3, E4: the clipboard service on the bus; the Assistant's service with
+  llama.cpp and espeak-ng recipes; the services behind game controllers, USB
+  drives, tethering and battery use.
+- **P1** C8, C12: the device source does not know the launching app, and declares
+  `cardReturnRequested` (Back to the caller) without sending it.
+- **P2** C11, R5: scene transitions, the card tutorial, Touch to Share, refusing
+  launches in low memory, and dock mode on a device.
+
+**Shell** (in the simulator too):
+
+- **P1** L1: the dock's background cross-fading to `quicklaunch-bg-solid.png`, and
+  the cards hidden once the launcher is up.
+- **P1** L2: `launcher-scrollfade-top.png` under the tabs.
+- **P1** C12: the fan's own 200 ms OutCubic on minimize and on each drag move; a
+  child closed while maximized re-maximizing the card that launched it.
+- **P1** C4: the fly-off from a maximized card.
+- **P1** M2: the dock-mode system menu, Bluetooth's "no paired devices" step, the
+  ringer key from the mute toggle, a VPN page in Settings.
+- **P1** R1: the locked orientation kept across restarts,
+  `HomeButtonOrientationAngle`, cards off screen resized after the turn.
+- **P1** C1, C2: the 150 ms prepare step (the card waits from the start).
+- **P2** N5: persistent dashboards and windows that take their own drags.
+- **P2** C11: modal cards (no released app calls `launchModalApp`).
+- **P2** C3, A1: sounds with no shippable file (the angry card's, the launcher's,
+  Email's `emailreceived.mp3`, the Clock's `Flurry.mp3`); vibration is counted, not felt.
+- **P2** S8: the tablet system group's arrow and separator.
+
+**Keyboard and input:**
+
+- **P1** V7: several keyboards side by side (webOS Classic, OSE's, a new Phoenix
+  keyboard) with a globe key; the owner's plan.
+- **P1** V8: focus navigation in web apps' menus and luna-systemui's popup alerts;
+  Settings > Hardware Keyboard (layout, repeat, remapping); the keyboard key.
+- **P1** V1: `allowResizeOnPositiveSpaceChange(false)`, the original's resize timing,
+  hiding for a Bluetooth keyboard, emoticon pictures.
+- **P1** V2: punctuation by voice, a status bar indicator, text while speaking.
+- **P1** V3, V6: the text around the cursor from the app; emoji suggestions for words.
+
+**Share and files** (E5, [SHARE-AND-FILES.md](../SHARE-AND-FILES.md)):
+
+- **P1** SF1: the original file picker for legacy apps (Email's attachments,
+  Contacts' photo, Clock's sounds).
+- **P1** SF2: kinds other than pictures, several files, a crop size.
+- **P1** SF5: Share in Docs, Voice Memos and Maps.
+- 2.0: SF6 (the sheet's 2.0 look, people, nearby devices, extensions).
+
+**In the inventory, not in a row here** ([feature-inventory.md](feature-inventory.md)):
+the LED throbber and Blink Notifications (GESTURE-BAR.md GB6), the Pre and
+Veer keyboard slider, the `com.palm.systemmanager` methods that answer
+without acting (`launchModalApp`, `getForegroundApplication`, ...), pinyin
+and handwriting input (not in the release). App gaps are in
+[APP-GAPS.md](../APP-GAPS.md).
+
+**Waiting on the owner:** the Messaging reply bar report (M6-PLAN.md F0);
+which line Live Activities belong to (ROADMAP.md M4); the gesture bar's end
+buttons and `setButton` (GESTURE-BAR.md, open questions).
+
 ## 1. Cards
 
 | # | Original | Phoenix | P · effort |
@@ -25,7 +102,7 @@ Nearly all the art is already in `shell/assets/openwebos/`.
 | C9 | Corners: elliptical factors (0.491 h, 0.478/0.473 v), smoothstep feather (`CardRoundedCornerShaderStage.h:64-127`) | **Done**, the owner's choice of the devices' look (`CardCornerMask.qml`): each corner a quarter ellipse 0.009 of the card's width by 0.022 of its height (0.027 wider than tall), `smoothstep(1, 1 − Δ, r)` with Δ 0.3 while scaled and 0.01 at full size; the dimming inside it, as the shader did. Replaces the 40 px circle | P2 · S |
 | C10 | Stack collapse driven by x offset (`CardGroup.cpp:727-736`) | **Done** (`CardLayout.compute`; `tst_stacks` test_stacksOpenByTheirDistanceFromTheCentre, test_restingStackFoldsTenPixelSteps): every stack is `calculateOpenedPositions(xOffset)` from its centre's distance to the screen's, `max(1, aw − |x|) / aw` open, folded cards 10 px apart, as after `slideAllGroups` and while dragging; the distance comes from a first pass by index | P2 · S |
 | C11 | Scene transitions, modal cards, first-use tutorial, card limit / low-memory alert, Touch-to-Share ghost | **Low-memory alert done** (`MemoryMonitor`, `MemoryAlert.qml`, `SimWindowSource.launch`; `tst_shell` test_tooManyCards; phoenix-sim `--low-memory`): no memory left, a launch is refused and "Sorry, Too Many Cards" takes the popup alert's place until OK (`IpcServer.cpp:232-238`, `uiComponents/MemoryAlert`); low is MemAvailable under 128 MB or 5 % of MemTotal (memchute's thresholds are gone). The card limit is off in the original too (`CardLimit=-1`). **Scene transitions done** (`Card.qml`, runtime "Scene transitions", `@phoenix/luna` `sceneTransition`; `tst_cardpolish`, `scene.test.ts`): `PalmSystem.prepareSceneTransition(isPop)` snapshots the card, `runSceneTransition("zoom-fade" \| "cross-fade", isPop)` zooms the live page in from 0.75 over the fading snapshot (push) or down from 1.25 under it (pop), or cross-fades, on black, 300 ms easeOutQuad (`CardTransition.cpp`; lunaAnimations.conf:61-62); prepare returns a promise for the snapshot since a host message cannot block the page; Settings uses it. **First-use tutorial done** (`DismissCardTutorial.qml`, `SimWindowSource.firstCardAlert`; `tst_cardpolish`): "Dismissing Cards" in the popup alert's place the first time card view is entered with a card, marked as it shows (`CardWindowManager.cpp:1167-1187`), simSettings "cards/usedFirstCard". **Touch to Share done** (`TouchToShareGlow.qml`, the ghost in `CardView.qml`, runtime `touchToShare*` / `com.palm.stservice/shareData`; `tst_cardpolish`, `scene.test.ts`): the glow while a phone is in range, the maximized card to card view and its half-opaque ghost thrown off the top (750 ms OutQuart to 0.85), `tap_to_share.mp3`; phoenix-sim Shift+F7 / Ctrl+F7 / `--touch-to-share` play the phone. Not done: modal cards (`launchModalApp`; no released app calls it); on a device the scene transitions, the tutorial and Touch to Share need the device source and WebAppMgr to pass them on, and the device source does not refuse launches yet | P2 · S–M |
-| C12 | A stack keeps its order when a card in it maximizes and minimizes: z is the list order (`CardGroup::raiseCards`, `CardGroup.cpp:577-592`; no z changes in `lunaui/cards`), the cards in front slide off right over a back card as it grows and back over it as it shrinks, level and at the maximized height (`:344-370`); a tapped card centres the fan on itself (`moveToActiveCard`, `:520-526`; `CardWindowManager.cpp:2162-2165`); the card that launched a child is re-maximized once card view settles (`restoreCardToMaximized`, `CardWindowManager.cpp:2812-2821`) | **Done** (`CardLayout.compute`, `CardView.returnTo`; `tst_stacks` test_backCardKeepsItsPlaceInTheStack, test_returnToTheCaller; `tst_shell` test_tapOnALongFan): the order is kept (a back card was lifted above the stack while maximized and dropped behind it as the minimize ended, seeming to dissolve through the card in front); the fan recentres on a tapped card; Back in an app another opened (`returnToCaller`) minimizes it, re-maximizes the caller with the app sliding off over it, and moves the app behind the caller in the stack, still open (the owner). Not yet: the fan's own 200 ms OutCubic on minimize and on each drag move (`slideAllGroups`, `CardWindowManager.cpp:1482-1490`; Phoenix moves it with the 300 ms maximize progress and follows the finger directly); a child the app closes while maximized re-maximizing its launcher (Phoenix focuses the card behind it) | P1 · S |
+| C12 | A stack keeps its order when a card in it maximizes and minimizes: z is the list order (`CardGroup::raiseCards`, `CardGroup.cpp:577-592`; no z changes in `lunaui/cards`), the cards in front slide off right over a back card as it grows and back over it as it shrinks, level and at the maximized height (`:344-370`); a tapped card centres the fan on itself (`moveToActiveCard`, `:520-526`; `CardWindowManager.cpp:2162-2165`); the card that launched a child is re-maximized once card view settles (`restoreCardToMaximized`, `CardWindowManager.cpp:2812-2821`) | **Done** (`CardLayout.compute`, `CardView.returnTo`; `tst_stacks` test_backCardKeepsItsPlaceInTheStack, test_returnToTheCaller; `tst_shell` test_tapOnALongFan): the order is kept (a back card was lifted above the stack while maximized and dropped behind it as the minimize ended, seeming to dissolve through the card in front); the fan recentres on a tapped card; Back in an app another opened (`returnToCaller`) minimizes it, re-maximizes the caller with the app sliding off over it, and moves the app behind the caller in the stack, still open (the owner). Not yet: the fan's own 200 ms OutCubic on minimize and on each drag move (`slideAllGroups`, `CardWindowManager.cpp:1482-1490`; Phoenix moves it with the 300 ms maximize progress and follows the finger directly); a child the app closes while maximized re-maximizing its launcher (Phoenix focuses the card behind it); on a device, `LsmWindowSource` declares `cardReturnRequested` but does not send it yet, so Back to the caller is the simulator's only | P1 · S |
 
 ## 2. Launcher
 
@@ -46,7 +123,7 @@ Nearly all the art is already in `shell/assets/openwebos/`.
 |---|---|---|---|
 | Q1 | Launcher button fixed in a 128 px cell at the right; apps spread over the rest; `quicklaunch-bg.png` tiled into a 100 px bar (`quicklaunchbar.cpp:283-345,662-722`) | **Done** on tablets: the button centred in the right 128 px cell, its top 20 px down; the apps in 128 px cells each followed by an equal share of the rest; the art tiled from the top left and cut at the bar's height (phones too). Phones keep equal slots: the 2.x dock is not in the open source | — |
 | Q2 | Own show/hide: 350 ms OutCubic slide + 200 ms fade; hides on card added, maximize and Just Type (`OverlayWindowManager.cpp:282-292,372-378,1480-1540`) | **Done**: its own state — hidden when a card is added or maximizes, Just Type opens, or (phones) the dashboard opens; shown as a card starts minimizing, the launcher opens, or Just Type / the dashboard closes in card view, never over Just Type; 350 ms OutCubic slide and 200 ms OutCubic fade | — |
-| Q3 | The "wave" of webOS 1.x–2.x: swipe up and hold, the dock follows the finger | **Not in the reference.** Open webOS 3.0.5 only keeps the state: `OverlayWindowManager.cpp:1005-1009` sets `m_dockHasMetFinger` and `m_dockWasShownBeforeDrag` and grabs the mouse, but nothing reads them and `m_inDrag` is never set; the wave launcher itself was closed source. Nothing to port; building it would mean designing it from videos, so it waits on a decision | — |
+| Q3 | The "wave" of webOS 1.x–2.x: swipe up and hold, the dock follows the finger | **Done as an option** since M6 F4 (E4): the wave launcher (`WaveLauncher.qml`, Settings > Advanced; `tst_tweaks`), drawn after the community's descriptions. **Not in the reference.** Open webOS 3.0.5 only keeps the state: `OverlayWindowManager.cpp:1005-1009` sets `m_dockHasMetFinger` and `m_dockWasShownBeforeDrag` and grabs the mouse, but nothing reads them and `m_inDrag` is never set; the wave launcher itself was closed source. Nothing to port; the wave launcher above is Phoenix's drawing of it | — |
 | Q4 | Dragging dock icons (opacity 0.5, raised 15 px) (`quicklaunchbar.cpp:68,1366`) | **Done** (ce78209), proxy at 0.9 opacity, 1.15 scale | P1 · L |
 
 ## 4. Search pill and Just Type
@@ -111,7 +188,7 @@ tablet drop-down: **done** (7090c64).
 | # | Original | Phoenix | P · effort |
 |---|---|---|---|
 | G1 | Tablet bezel swipe up from the bottom edge (≥60 px with the keyboard up) (`SystemUiController.cpp:2041-2121`) | **Done**: a flick up from an 8 px strip along the bottom edge (60 px with `Shell.keyboardOpen`: the virtual keyboard, V1; on a device OSE's keyboard panel as `PhoenixViewsRoot` reports it, not yet run on hardware) | P0 · S |
-| G2 | Back goes to the app unless an overlay is up | **Done**: the device build sends the webOS Back key (evdev 412) to the card's surface through `Phoenix.Native.KeyInjector`; not yet run on hardware | P0 · M |
+| G2 | Back goes to the app unless an overlay is up; a Back the app does not take minimizes its card (`SystemUiController::slotKeyEventRejected`) | **Done**: the device build sends the webOS Back key (evdev 412) to the card's surface through `Phoenix.Native.KeyInjector`; not yet run on hardware. In the simulator a Back the page does not take (at an app's top level) minimizes the card, as WebAppMgr handed it back (`runtime.back`, `backUnhandled`, `Shell._backUnhandled`; `tst_shell`, `tools/test-back.cjs`); an app opened with `{returnToCaller}` returns to its caller instead (C12). Not yet on a device: the device source has no `backUnhandled` | P0 · M |
 | G3 | Swipe down in card view maximizes the active card (`SystemUiController.cpp:498-525`) | **Done**: a swipe down in the gesture area, unless the dashboard, a menu, the launcher or Just Type is open | P1 · S |
 | G4 | Forward / Menu swipe | **Done** (`Shell.gestureForward`, `tst_shell` test_forwardSwipe): as `Key_CoreNavi_Menu` on its release, it closes the dashboard and the menus at once and is eaten while they or the launcher are up (`SystemUiController.cpp:306-337, 410-422`); otherwise a site or web app goes forward in its history. webOS apps get nothing: Enyo 1.0 has no forward, and the key Mojo heard it as is not in the released sources (webOS-ports' `CoreNavi` leaves it empty too) | P2 · S |
 | G5 | Advanced gestures (switch apps while maximized) | **Done** (`GestureArea.qml`, `CardView.switchApp`, `Shell.gestureSwitchApp`; `tst_shell` test_advancedGestures, `tools/test-settings.cjs`): Settings > Screen & Lock > Advanced gestures (`sysUiEnableNextPrevGestures`, on by default in Phoenix since 9 October 2026, LunaSysMgr's was off; offered where the shell reports a gesture area, `getSystemStatus` `gestureArea`) turns a swipe across the gesture area's centre over half its width (at most 160 px, the Pre's half: a tablet's bar is 1024 px, beyond one mouse or trackpad stroke) into `Key_CoreNavi_Previous` / `Next`; off, it stays Back / forward, as the gesture driver reported it. On the release it closes the dashboard and menus and, unless the launcher is up, shows the card beside the active one, through its stack and into the next, maximized if the active one was; at the last card the maximized card shifts 40 px and slides back (`SystemUiController.cpp:394-408`, `CardWindowManager.cpp:2223-2480`). Also Settings > Advanced > Switch apps; a two-finger trackpad swipe over the bar does it too (`tst_gesturemouse.qml`). Checked in phoenix-sim with xdotool | P2 · M |
@@ -145,12 +222,16 @@ tablet drop-down: **done** (7090c64).
 | E2 | Clipboard history (Phoenix's own, M6 F2; webOS had none) | **Done** in the simulator (7 October 2026; [APP-RUNTIME.md](../APP-RUNTIME.md#clipboard-history), [SECURITY-APPS.md](../SECURITY-APPS.md#clipboard-history)). `org.webosphoenix.clipboard` in the runtime keeps every copy with its app (copy and cut events, `navigator.clipboard` writes, the shell's own copies); pins, categories, expiry, size, clear on lock, per-app exclusions. The keyboard's clipboard key (left of the candidate bar, every field) opens a strip of clip cards; the Clipboard app; Settings > Clipboard. Secrets (password fields, Passwords and Authenticator copies, codes, `otpauth://`, password-like text) are AES-GCM encrypted, masked, revealed with the device passcode, and go to Passwords or the Authenticator. Copy and Cut work in password fields. On a device: the service has to run on the bus (it is in the web runtime only), and the Phoenix keyboard has to be the device's (V5) | P1 · L |
 | E3 | The Assistant 1.0 (Phoenix's own, M6 F3; webOS had none) | **Done** in the simulator (7 October 2026; [APP-RUNTIME.md](../APP-RUNTIME.md#assistant), [AI-AND-MCP.md](../AI-AND-MCP.md#10-as-built-7-october-2026-in-the-simulator)). Hold the launcher button: the conversation over the screen on a blurred backdrop, typed or spoken (V2's dictation). Commands by grammar first, offline (40 of them since 8 October 2026: events and the agenda, alarms, timers, tasks and lists, memos, contacts, email, messages, media, volume, brightness, screenshots, conversions and more, with the days and times people say; AI-AND-MCP.md has the table); an optional on-device model (llama.cpp's llama-server, Qwen GGUFs downloaded in Settings > Assistant) for free-form requests and choosing commands; then "Ask <cloud model>" (Anthropic, OpenAI, Gemini, OpenAI-compatible) or "Search the web". Cloud models act only when Settings allows it; sends and calls are read back. The Assistant app (conversations), Settings > Assistant (models, providers and keys, control, commands, history), spoken answers (espeak-ng or say). On a device: the Node.js service (`apps/assistant/service/service.js`) is written but untested on hardware, and needs llama.cpp and espeak-ng recipes in meta-phoenix (the system view already reaches it: the device's window source sends `lunaCall` to the bus) | P1 · L |
 | E4 | Community features picked for 1.0 (M6 F4; [COMMUNITY-FEATURES.md](../COMMUNITY-FEATURES.md)) | **Done in the simulator** (7 October 2026). Done: the launcher's app groups (folders), tabs renamed, added and removed (up to six), grid density (`LauncherGroup.qml`, `LauncherNameDialog.qml`, `LauncherLayout.js`; `tst_launcher`); card view's infinite cycling and tap-to-maximize side cards, the wave launcher (`CardView.qml`, `WaveLauncher.qml`; `tst_tweaks`); the power menu on a held Power (luna-systemui's PowerOffAlert with webOS CE's restarts, compat overlay), the system menu's Flashlight row, battery percentage (`tst_powermenu`); notifications repeated until seen, private lock screen previews, Email's cycling dashboard, a contact's ringtone and message tone (`tst_notifyoptions`, `tools/test-community.cjs`); Settings > Advanced's animation speed, tap ripple, gesture sensitivity and haptics (`tst_tweaks`); the phone keyboard's number row (`tst_keyboard`); Settings > Advanced (`apps/settings/src/pages/Advanced.tsx`, system preferences the shell follows through the runtime's `tweaks`); the browser's private browsing, find on page, content blocker, user agent, search engines and the system proxy (compat `phoenix-browser.js`, phoenix-sim's `simBrowser`; `tools/test-browser.cjs`, `simnet-test`). DropShare (`apps/dropshare`, `simdropshare.h`; `simnet-test`, `tools/test-sharing.cjs`); subscribed .ics calendars (`lib/webcal.js`); Settings > Game Controllers (the Gamepad API), USB (OTG drives, safe removal), Hotspot & Tethering (phones) and Battery (usage); the temperature warnings (luna-systemui overlay) (`Accessories.test.tsx`, `tst_simactions`). On hardware still to do: the device services behind the controllers, USB drives, tethering and the battery's use (udev, udisks2, connman; docs/APP-RUNTIME.md "Accessories, tethering and the battery"), see [M6-PLAN.md](../M6-PLAN.md) | P1 · L |
+| E5 | One share sheet and one file picker for every app (Phoenix's own, [SHARE-AND-FILES.md](../SHARE-AND-FILES.md); webOS had a file picker for opening, no save picker and a share menu per app) | **Partly done** in the simulator: the share sheet (SF4, `apps/sharesheet`, `org.webosphoenix.share/open`; apps join through `appinfo.json` `shareTargets`), the save picker (SF3) and the picture picker (SF2 for pictures, `org.webosphoenix.filepicker/pick`; Messaging's attach button). Apps (SF5): Screenshot; Files (Share in select mode, one file or several: Save to Photos saves every picture, Save to Files for one file); Photos (its Share opens the sheet instead of its own Email / Messaging menu); the browser (Share Link and the app menu's Share, compat `phoenix-browser.js`); and **Share after Edit in every app menu**: `@phoenix/ui`'s `AppMenu` `share` prop, Enyo 1 apps through the runtime with `__phoenixRuntime.setShareContent` (Memos: the open memo, compat `phoenix-share.js`), else the selected text, dimmed with nothing to share (`components.test.tsx`, `tools/test-files.cjs`, `tools/test-media.cjs`). Not yet: SF1 (the original file picker for legacy apps), SF2 for other kinds, several files and a crop size, SF5 in Docs, Voice Memos and Maps; SF6 is 2.0 | P1 · M |
 | A1 | `appclose`, notification / alert, battery, charging, shutter, keyboard sounds; ringtones | **Done** in the simulator (`SoundPolicy.js`, `SystemSounds.qml`; the runtime's audiod plays them with HTML audio). Open webOS's own `sounds/` ship unmodified in `/usr/palm/sounds` (Apache-2.0 as published; provenance and residual risk in `docs/LEGAL.md`). What plays, as LunaSysMgr and luna-systemui chose: banners and `playSoundNotification` by sound class (the file named, else the notification / alert / ring tone, notifications capped at 5 s; `vibrate` and `none` silent); popup alerts from their `sound` / `soundclass` attributes as they come to the front, stopping when they leave it (the incoming call loops the ringtone: the contact's, else the preference, default Open webOS `ringtone.mp3`, else `phone.wav`; call waiting does not ring; alerts without a class, such as luna-systemui's Low Battery alert and the Clock's alarm popup, get the notification tone, as on the original); the "Charging Battery" banner `charging.mp3`; `battery_full.mp3`; a received text the notification tone; `boot.mp3` at start and `shutdown.mp3` when the window closes (only when interactive: not in tests, `--screenshot`, offscreen or `--quiet`). Feedback sounds (keyboard `key` / `space` / `backspace` / `return`, `appclose`) are CC0 mimics synthesized by `tools/make-feedback-sounds.py`, since audiod's set was never released. "Mute all sounds", the master and stream volumes, "System sounds" and "Keyboard clicks" (Settings > Sounds & Ringtones, which lists the shipped ringtones) are followed. Not yet: Email's `emailreceived.mp3` is left out (its tags name another copyright holder, `docs/LEGAL.md`), so new mail gets the alert tone; the Clock's default alarm `Flurry.mp3` was never released, so a new alarm is silent (the alarm test uses a demo song); no caller in the released sources for `error.mp3` and `panel.mp3` (shipped, unused; `tap_to_share.mp3` plays for Touch to Share, C11); the launcher's `LauncherOpenApp` / `LauncherCloseApp` and the angry card's `birdappclose` have no sound; vibration is counted, not felt; on a device (`LsmWindowSource`) OSE's audiod plays WAV only, so the MP3 sounds are silent until the image carries WAV copies, ringtones do not loop, and the preferences are placeholders (not yet run on hardware) | P1 · M |
 | A2 | Vibrate named effect for "vibrate" banners | **Done** (5 October 2026): a "vibrate" banner or alert is `com.palm.vibrate/vibrateNamedEffect` "notification" or "alert" (`SystemService::vibrate`, :4861-4881), counted by `SystemSounds` and shown by the simulator; on a device `phoenix-devices` runs the motor (docs/HARDWARE.md, "LunaSysMgr's device services") | P2 · S |
 | F1 | Prelude everywhere | **Done**: Prelude when installed, otherwise the bundled Open Sans (Apache-2.0), in the shell and, through the runtime's aliases for every Prelude name, in the original and Phoenix apps | P1 · S |
 | F2 | positiveSpace paddings 28 on every device; `cardMaximize` 300; status bar icon spacing 5 | **Done**: 28 top and bottom everywhere (`conf/luna.conf:122-123`; the banner is the bottom padding), 300 ms OutQuart maximize, 5 px icon spacing | — |
 
 ## Recommended order
+
+The order set at the audit (28 September 2026). All fifteen are done in the
+simulator; what is left of them is listed under "Open gaps at a glance".
 
 1. G1 tablet bezel swipe up
 2. G2 Back delivered on a device
