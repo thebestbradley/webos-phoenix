@@ -357,34 +357,96 @@ Item {
     }
 
     // ---- System sounds (SystemSounds.qml decides; audiod plays) ------------------------
-    // OSE's audiod-pro plays files by path: playSound {fileName, sink}
-    // (PlaybackManager), stopped with controlPlayback {playbackId,
-    // requestType: "stop"}. It takes .wav and .pcm only, so the MP3 sounds
-    // (ringtone.mp3, boot.mp3, charging.mp3, ...) stay silent on a device
-    // until the image carries WAV copies. Loops, durations and per-sound
-    // volume are not in its API: a ringtone plays once, at the stream's volume.
-    // STATUS: not yet run on a device.
-    property var _playback: ({})     // handle -> playbackId
+    // OSE's audiod-pro plays files by path: playSound {fileName, sink,
+    // format, sampleRate, channels} -> {playbackId} (PlaybackManager::
+    // _playSound, playbackManager.cpp:133-240), stopped with controlPlayback
+    // {playbackId, requestType: "stop"}. It takes .wav and .pcm names only
+    // and writes the file's bytes as they are, in the format the call names
+    // (PlaybackThread::play, PulseAudioLink.cpp:925-960): no MP3, and a
+    // WAV's header is played as sound. So the image carries a raw PCM twin
+    // of every sound, "<file>.pcm", 16-bit, 44.1 kHz, stereo
+    // (tools/sounds-to-pcm.sh, run by meta-phoenix's phoenix-apps), and this
+    // plays the twin of the file SystemSounds chose; a file without one (a
+    // ringtone copied to the device later) fails to open, and the
+    // fallback's twin plays. Loops: getPlaybackStatus {playbackId,
+    // subscribe} says "stopped" at the end (playbackManager.cpp:286-345),
+    // and a looping sound (the incoming call's ringtone) starts again;
+    // durations: stopped after durationMs. Per-sound volume is not in its
+    // API: the stream's volume.
+    // STATUS: written against audiod-pro's source; not yet run on a device.
+    readonly property var pcmSpec: ({ format: "PA_SAMPLE_S16LE", sampleRate: 44100, channels: 2 })
+    property var _playback: ({})     // handle -> {id, loop, stopped, timer}
     property int _nextSound: 1
+    function pcmTwin(path) {
+        return !path ? "" : /\.pcm$/i.test(path) ? path : path + ".pcm";
+    }
 
     function playSound(path, stream, loop, duration, volume, fallback) {
         var handle = "snd" + (_nextSound++);
-        var file = /\.(wav|pcm)$/i.test(path) ? path : (fallback && /\.(wav|pcm)$/i.test(fallback) ? fallback : "");
-        if (file === "")
-            return handle;
         var sink = stream === "ringtones" ? "pringtones" : stream === "feedback" ? "pfeedback" : "palerts";
-        lunaCall("luna://com.webos.service.audio/playSound", { fileName: file, sink: sink }, function(r) {
-            if (r && r.playbackId)
-                source._playback[handle] = r.playbackId;
-        });
+        var p = { loop: !!loop, stopped: false, id: "" };
+        _playback[handle] = p;
+        if (duration > 0)
+            p.timer = _later(duration, function() { source.stopSound(handle); });
+        var start = function(file, second) {
+            lunaCall("luna://com.webos.service.audio/playSound",
+                     { fileName: file, sink: sink, format: pcmSpec.format, sampleRate: pcmSpec.sampleRate, channels: pcmSpec.channels },
+                     function(r) {
+                         if (p.stopped)
+                             return r && r.playbackId ? source._stopPlayback(r.playbackId) : undefined;
+                         if (r && r.playbackId) {
+                             p.id = r.playbackId;
+                             if (p.loop)
+                                 source._watchLoop(handle, r.playbackId, function() { start(file, second); });
+                         } else if (!second && fallback && pcmTwin(fallback) !== file) {
+                             start(pcmTwin(fallback), true);
+                         }
+                     });
+        };
+        start(pcmTwin(path), false);
         return handle;
     }
 
+    function _watchLoop(handle, playbackId, again) {
+        var done = false;
+        lunaSubscribe("luna://com.webos.service.audio/getPlaybackStatus", { playbackId: playbackId, subscribe: true }, function(r) {
+            var p = source._playback[handle];
+            if (done || !p || p.stopped || p.id !== playbackId || !r || r.playbackStatus !== "stopped")
+                return;
+            done = true;
+            source._stopPlayback(playbackId);   // lets audiod drop its finished thread
+            again();
+        });
+    }
+
+    function _stopPlayback(id) {
+        lunaCall("luna://com.webos.service.audio/controlPlayback", { playbackId: id, requestType: "stop" }, function() {});
+    }
+
     function stopSound(handle) {
-        var id = _playback[handle];
+        var p = _playback[handle];
         delete _playback[handle];
-        if (id)
-            lunaCall("luna://com.webos.service.audio/controlPlayback", { playbackId: id, requestType: "stop" }, function() {});
+        if (!p)
+            return;
+        p.stopped = true;
+        if (p.timer) {
+            p.timer.stop();
+            p.timer.destroy();
+        }
+        if (p.id)
+            _stopPlayback(p.id);
+    }
+
+    // A one-shot timer (sounds' durations).
+    Component {
+        id: laterTimer
+        Timer { repeat: false }
+    }
+    function _later(ms, fn) {
+        var t = laterTimer.createObject(source, { interval: ms });
+        t.triggered.connect(fn);
+        t.start();
+        return t;
     }
 
     // ---- LunaSysMgr's device services (Phoenix.Shell DeviceServices) -----------------
