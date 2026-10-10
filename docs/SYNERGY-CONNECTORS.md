@@ -680,3 +680,15 @@ mesh come pre-installed at launch, and can be removed and installed again
 like any other; the rest (Jabber, Matrix, Bluesky, LinkedIn, the drives,
 Zoom, Teams, Google Chat with Google, ...) are installed by those who want
 them.
+
+**Slack** (the owner, 10 October 2026; a catalog package, not pre-installed):
+direct messages and channels as Messaging conversations, the workspace's
+people linked to contacts, mentions and direct messages as notifications,
+through Slack's Web API with the user's sign-in (OAuth, a user token). Its
+limits: since 2025 Slack lets apps outside the Slack Marketplace read
+message history only very slowly (about one request a minute, a few
+messages each), too slow for a messaging account, so the Slack app must be
+registered by the Phoenix project account (OPEN-QUESTIONS Q17) and listed
+in the Slack Marketplace (Slack's review); a workspace's admins can also
+refuse outside apps. Until it is listed it is built and tested with those
+limits.
