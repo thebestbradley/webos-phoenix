@@ -1,0 +1,7 @@
+{
+    "id": "org.example.demo",
+    "type": "web",
+    "main": "index.html",
+    "title": "Demo",
+    "requiredPermissions": ["time.query", "made.up.group"]
+}

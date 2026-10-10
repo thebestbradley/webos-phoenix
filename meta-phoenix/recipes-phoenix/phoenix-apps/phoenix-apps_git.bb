@@ -7,9 +7,11 @@ Calendar, Clock, Contacts, Email, Memos), Enyo 1.0, MojoLoader and the \
 foundation/loadable frameworks at their original device paths \
 (/usr/palm/applications, /usr/palm/frameworks), plus Phoenix web apps, their \
 Node.js Luna services (/usr/palm/services, e.g. org.webosphoenix.filemanager \
-for Files, org.webosphoenix.transcriber for Voice Memos and \
-org.webosphoenix.service.dav for CardDAV & CalDAV accounts, with \
-luna-service2 role and permission files), account templates \
+for Files, org.webosphoenix.transcriber for Voice Memos, \
+org.webosphoenix.service.dav for CardDAV & CalDAV accounts, the shell's \
+line to the pages, the legacy application manager, DropShare and the \
+accessories, and Open webOS's app services, with luna-service2 role and \
+permission files), db8 kinds and activities (/etc/palm), account templates \
 (/usr/palm/public/accounts), phoenix-runtime.js and the system sounds \
 (/usr/palm/sounds from Open webOS, /usr/share/phoenix/sounds), using \
 tools/install-rootfs.py."
@@ -23,6 +25,18 @@ PHOENIX_BRANCH ?= "main"
 # gitsm: the original apps and frameworks are git submodules (third_party/).
 SRC_URI = "gitsm://github.com/thebestbradley/webos-phoenix.git;protocol=https;branch=${PHOENIX_BRANCH}"
 SRCREV = "${PHOENIX_SRCREV}"
+
+# The built web apps. React, Enact and Flutter apps install from their dist/
+# and the Node services' shared packages from their lib/, which npm builds;
+# BitBake allows no network in do_compile, so they are built outside it
+# (tools/pack-apps-dist.sh, or CI's "apps-dist" artifact for the commit) and
+# the archive is named in local.conf:
+#   PHOENIX_APPS_DIST = "/path/to/apps-dist.tar.gz"
+# It is unpacked over the checkout. Without it do_install stops with "the
+# app is not built" (tools/install-rootfs.py) instead of an image without
+# them (docs/PRE-IMAGE-CHECKLIST.md B3).
+PHOENIX_APPS_DIST ??= ""
+SRC_URI += "${@'file://%s;subdir=git' % d.getVar('PHOENIX_APPS_DIST') if d.getVar('PHOENIX_APPS_DIST') else ''}"
 PV = "0.1.0+git"
 
 S = "${WORKDIR}/git"
@@ -51,24 +65,33 @@ do_install() {
 # "preinstalled") are installed apps the user may remove, in
 # /media/cryptofs/apps, with the Marketplace's list of them in
 # /etc/palm/marketplace/preinstalled.json (docs/SYNERGY-CONNECTORS.md 7).
+# Everything install-rootfs.py installs (tools/check-image.py checks this
+# list against it: a path left out stops do_package, installed-vs-shipped):
+# the apps, frameworks, services, account templates and sounds under
+# /usr/palm; Just Type and the system alerts' pages under /usr/lib/luna;
+# the services' and apps' luna-service2 files (with each app's generated
+# role and permissions); their /etc/palm configuration (db8 kinds, backup
+# registrations, the update, Marketplace and Hardware sources).
 FILES:${PN} = " \
     /media/cryptofs/apps \
     /media/internal/ringtones \
     /media/internal/samples \
-    ${prefix}/palm/applications \
-    ${prefix}/palm/frameworks \
-    ${prefix}/palm/services \
-    ${prefix}/palm/public \
-    ${prefix}/palm/sounds \
+    ${prefix}/palm \
+    ${prefix}/lib/luna \
     ${datadir}/phoenix/runtime \
     ${datadir}/phoenix/sounds \
     ${datadir}/luna-service2 \
-    ${sysconfdir}/palm/db \
+    ${sysconfdir}/palm \
 "
 
 # Web apps run in WebAppMgr; their data lives in db8. The apps' own Luna
 # services (Files, Voice Memos, CardDAV & CalDAV) are JavaScript services:
-# run-js-service and webos-service. Voice Memos' transcriber also wants
+# run-js-service (mojoservicelauncher, which their .service files' Exec
+# names; webos-image only brings it through a VIRTUAL-RUNTIME that some
+# machines empty) and webos-service. Voice Memos' transcriber also wants
 # whisper.cpp (the whisper-cpp recipe stub) and answers "not installed"
 # without it.
-RDEPENDS:${PN} = "${VIRTUAL-RUNTIME_webappmanager} db8 nodejs nodejs-module-webos-service"
+# Open webOS's app services (accounts, contacts, the linker, calendar
+# reminders: compat/app-services) are Mojo-era services, which OSE's
+# mojoservicelauncher runs.
+RDEPENDS:${PN} = "${VIRTUAL-RUNTIME_webappmanager} db8 nodejs nodejs-module-webos-service mojoservicelauncher"

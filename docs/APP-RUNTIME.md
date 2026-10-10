@@ -218,20 +218,20 @@ status (`gamepads`, `usbDrives`, `formFactor`, `usageTick`; the runtime's
 - **USB drives** (`org.webosphoenix.usb`: `listDrives`, `unmount`,
   `mount`): drives in the device's own port, in host mode with an OTG
   cable (Ctrl+Shift+U in the simulator). A notification says when one
-  goes in, and Safely Remove lets it go. On a device: udisks2 over D-Bus
-  (`org.freedesktop.UDisks2`: `Filesystem.Mount` under `/media/usb/<label>`,
-  `Filesystem.Unmount` then `Drive.PowerOff` for Safely Remove,
-  `InterfacesAdded` / `InterfacesRemoved` for drives coming and going). The
-  kernel needs the port in host or OTG mode (`dr_mode` or the role
-  switch).
+  goes in, and Safely Remove lets it go. On a device (written, not run):
+  `services/accessories` asks OSE's PDM (`com.webos.service.pdm`
+  `getAttachedStorageDeviceList`, which mounts drives itself, and `eject`),
+  with the used space from `statfs`. The kernel needs the port in host or
+  OTG mode (`dr_mode` or the role switch).
 - **Hotspot & Tethering** (`org.webosphoenix.tethering`: `getStatus`,
   `setWifi {enabled, ssid, passphrase, security}`, `setUsb {enabled}`):
   phones only (`available` is false where the shell says "tablet"). An
-  ongoing activity shows while it is on. On a device: OSE's connman
-  (`net.connman.Technology` `SetProperty Tethering` with `TetheringIdentifier`
-  and `TetheringPassphrase` for Wi-Fi, the gadget technology for USB), or
-  NetworkManager where it runs (`nmcli connection add type wifi mode ap
-  ipv4.method shared`, and a shared connection on the USB gadget's `usb0`).
+  ongoing activity shows while it is on. On a device (written, not run):
+  `services/accessories` through OSE's connman adapter
+  (`com.webos.service.wifi/tethering/setState` with the SSID, passphrase and
+  security for Wi-Fi) and `connmanctl tether gadget on|off` for USB;
+  `available` when the connection manager has a cellular or wired
+  connection to share.
 - **Battery** (`org.webosphoenix.battery/usage`): the level over the last
   24 hours (each change powerd reports, `runtime.recordBattery`), and how
   long each app was in front with the screen on (the shell's `usageTick`,
@@ -617,7 +617,24 @@ manifest and service files to `/usr/share/luna-service2/*.d`. Overlays are
 applied and app pages (and framework pages opened as windows, such as
 Enyo's dashboard window) get the runtime `<script>` tag. The `phoenix-apps` recipe in `meta-phoenix` runs it,
 and `webos-phoenix-image` includes it. Built apps (`dist/`) must be built
-before the recipe runs.
+before the recipe runs. Open webOS's app services (`third_party/app-services`)
+go to `/usr/palm/services/<id>` for OSE's mojoservicelauncher, with OSE bus
+files from `compat/app-services`; their kinds to `/etc/palm/db` and
+`/etc/palm/tempdb`, and apps' activities to `/etc/palm/activities/applications`,
+services' to `/etc/palm/activities/services`, where OSE's configurator reads
+them (`ActivityConfigurator.cpp:36-37`; `tools/test-install-rootfs.py`).
+
+On a device the runtime runs in WebAppMgr's page (`installDevice`): it
+replaces the `PalmSystem` methods WebAppMgr defines but drops (banners,
+orientation, full screen, `paste`, `simulateMouseClick`), posts what the
+simulator's host did to the shell through `org.webosphoenix.shellhost`
+(banners, sounds, scene transitions, the edit popup, screen captures,
+dictation) and hears the shell's answers there (card activation, the app
+menu, Just Type, edit commands). The legacy names `com.palm.systemservice`,
+`com.palm.connectionmanager`, `com.palm.activitymanager` and
+`com.palm.downloadmanager` go to OSE's `com.webos.service.*`;
+`com.palm.applicationManager` is Phoenix's own service over SAM
+(`services/appmanager`). docs/DEVICE-AUDIT.md lists every item.
 
 ## Status of the original apps
 

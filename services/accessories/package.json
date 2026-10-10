@@ -1,0 +1,8 @@
+{
+  "name": "org.webosphoenix.accessories",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix's game controller, USB drive, tethering and battery use services on a device (Luna: org.webosphoenix.gamepads, .usb, .tethering, .battery), over OSE's physical device manager, the connman adapter and the kernel's power supplies",
+  "license": "Apache-2.0",
+  "main": "service.js"
+}

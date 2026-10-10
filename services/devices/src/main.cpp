@@ -1,9 +1,10 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// phoenix-devices: com.palm.display, com.palm.keys, com.palm.vibrate and
-// com.palm.ambientLightSensor on the bus (service.h), over the device's
-// backlight, input devices, vibrator and light sensor (hardware.h), found
+// phoenix-devices: com.palm.display, com.palm.keys, com.palm.vibrate,
+// com.palm.ambientLightSensor and com.palm.power on the bus (service.h),
+// over the device's backlight, input devices, vibrator, light sensor and
+// power supplies (hardware.h), found
 // at start-up and followed as they come and go (DeviceProbe,
 // HotplugMonitor: inotify on /dev/input and the kernel's uevents). What it
 // finds, and each change, goes to stderr (the journal).
@@ -43,6 +44,27 @@ static const char *env(const char *name, const char *fallback)
     return v && *v ? v : fallback;
 }
 
+static gboolean readPower(gpointer service)
+{
+    static_cast<DeviceService *>(service)->readPower();
+    return G_SOURCE_CONTINUE;
+}
+
+// com.palm.power's machineOff / machineReboot: systemd's poweroff and
+// reboot (OSE's own power manager, com.webos.service.power2, does the same
+// through systemd).
+static bool machine(const std::string &action)
+{
+    const gchar *argv[] = { "/bin/systemctl", action == "reboot" ? "reboot" : "poweroff", nullptr };
+    GError *error = nullptr;
+    if (!g_spawn_async(nullptr, const_cast<gchar **>(argv), nullptr, G_SPAWN_DEFAULT, nullptr, nullptr, nullptr, &error)) {
+        std::fprintf(stderr, "phoenix-devices: systemctl %s: %s\n", argv[1], error ? error->message : "failed");
+        g_clear_error(&error);
+        return false;
+    }
+    return true;
+}
+
 int main(int argc, char **argv)
 {
     const std::string root = env("PHOENIX_DEVICES_ROOT", "");
@@ -72,6 +94,7 @@ int main(int argc, char **argv)
     const struct { const char *name; LSHandle **slot; } names[] = {
         { "com.palm.display", &h.display }, { "com.palm.keys", &h.keys },
         { "com.palm.vibrate", &h.vibrate }, { "com.palm.ambientLightSensor", &h.als },
+        { "com.palm.power", &h.power },
     };
     for (const auto &n : names) {
         if (!LSRegister(n.name, n.slot, &err)) {
@@ -85,6 +108,9 @@ int main(int argc, char **argv)
     hw.vibrator = probe.vibrator.get();
     hw.lightSensor = probe.lightSensor.get();
     hw.input = probe.input.get();
+    PowerSupplies supplies(root);
+    hw.power = &supplies;
+    hw.machine = machine;
     DeviceService service(h, hw, config);
     std::vector<std::string> shells;
     std::stringstream list(env("PHOENIX_DEVICES_SHELL", "com.webos.surfacemanager"));
@@ -106,6 +132,8 @@ int main(int argc, char **argv)
     }
     // Log what there is, watch the input devices and the hotplug events.
     service.attachProbe(&probe, &hotplug);
+    // The battery and chargers: powerd's signals when they change.
+    g_timeout_add_seconds(15, readPower, &service);
 
     g_unix_signal_add(SIGTERM, quit, nullptr);
     g_unix_signal_add(SIGINT, quit, nullptr);

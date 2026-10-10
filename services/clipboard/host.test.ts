@@ -58,6 +58,12 @@ describe("the clipboard service", () => {
         expect(s.asked.at(-1).uri).toBe("luna://com.palm.systemmanager/matchDevicePasscode");
         // The system UI (the keyboard into a password field) may paste it.
         expect((await s.call("paste", { id: added.id }, "com.palm.systemui")).clip.text).toBe("Tr0ub4dor&3x!");
+        // On a device the system UI's are the shell's and the keyboard's bus
+        // names (the Phoenix keyboard in maliit-server, GAPS V5); an app's
+        // name that merely starts the same is not.
+        expect((await s.call("paste", { id: added.id }, "com.webos.service.ime.phoenixKeyboard")).clip.text).toBe("Tr0ub4dor&3x!");
+        expect((await s.call("paste", { id: added.id }, "com.webos.surfacemanager")).clip.text).toBe("Tr0ub4dor&3x!");
+        expect((await s.call("paste", { id: added.id }, "com.webos.service.ime.other")).errorCode).toBe(-3);
         s.h.flush();
         const file = fs.readFileSync(path.join(s.dir, "store.json"), "utf8");
         expect(file).not.toContain("Tr0ub4dor");

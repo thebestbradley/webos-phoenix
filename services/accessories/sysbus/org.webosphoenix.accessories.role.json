@@ -1,0 +1,57 @@
+{
+    "appId": "org.webosphoenix.accessories",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.gamepads",
+        "org.webosphoenix.usb",
+        "org.webosphoenix.tethering",
+        "org.webosphoenix.battery"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.gamepads",
+            "outbound": [
+                "com.webos.service.pdm",
+                "com.webos.service.wifi",
+                "com.webos.service.connectionmanager",
+                "com.webos.applicationManager",
+                "org.webosphoenix.ongoing",
+                "org.webosphoenix.shellhost"
+            ]
+        },
+        {
+            "service": "org.webosphoenix.usb",
+            "outbound": [
+                "com.webos.service.pdm",
+                "com.webos.service.wifi",
+                "com.webos.service.connectionmanager",
+                "com.webos.applicationManager",
+                "org.webosphoenix.ongoing",
+                "org.webosphoenix.shellhost"
+            ]
+        },
+        {
+            "service": "org.webosphoenix.tethering",
+            "outbound": [
+                "com.webos.service.pdm",
+                "com.webos.service.wifi",
+                "com.webos.service.connectionmanager",
+                "com.webos.applicationManager",
+                "org.webosphoenix.ongoing",
+                "org.webosphoenix.shellhost"
+            ]
+        },
+        {
+            "service": "org.webosphoenix.battery",
+            "outbound": [
+                "com.webos.service.pdm",
+                "com.webos.service.wifi",
+                "com.webos.service.connectionmanager",
+                "com.webos.applicationManager",
+                "org.webosphoenix.ongoing",
+                "org.webosphoenix.shellhost"
+            ]
+        }
+    ]
+}

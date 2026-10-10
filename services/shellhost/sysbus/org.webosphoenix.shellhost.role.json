@@ -1,0 +1,24 @@
+{
+    "appId": "org.webosphoenix.shellhost",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.shellhost",
+        "org.webosphoenix.ongoing",
+        "org.webosphoenix.system"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.shellhost",
+            "outbound": []
+        },
+        {
+            "service": "org.webosphoenix.ongoing",
+            "outbound": []
+        },
+        {
+            "service": "org.webosphoenix.system",
+            "outbound": []
+        }
+    ]
+}

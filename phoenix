@@ -25,6 +25,12 @@
 #   ./phoenix setup               install what is missing, without building
 #   ./phoenix check               only say what is there and what would be
 #                                 installed (the same as --dry-run)
+#   ./phoenix check-device [--all] [--parse]
+#                                 what a device image would trip on: the
+#                                 static checkers (Luna calls and ACG,
+#                                 simulator-only references, image contents,
+#                                 recipes, licences), with a summary
+#                                 (tools/check-device.sh; docs/PRE-IMAGE-CHECKLIST.md)
 #
 # Options (anywhere before the simulator's own arguments):
 #   --no-assistant   without the assistant's parts (whisper.cpp, llama.cpp,
@@ -59,6 +65,11 @@
 set -eu
 
 REPO_DIR=$(cd "$(dirname "$0")" && pwd)
+# The device-readiness checkers need nothing installed but Python 3.
+if [ "${1:-}" = check-device ]; then
+    shift
+    exec sh "$REPO_DIR/tools/check-device.sh" "$@"
+fi
 BUILD_DIR=${PHOENIX_BUILD_DIR:-$REPO_DIR/build}
 case "$BUILD_DIR" in /*) ;; *) BUILD_DIR=$REPO_DIR/$BUILD_DIR ;; esac
 QT_VERSION=6.8.1          # the release a device's webOS OSE image ships (meta-qt6, scarthgap)

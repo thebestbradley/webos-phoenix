@@ -107,6 +107,61 @@ FocusScope {
         function onUiOrientationChanged() { root._pushOrientation(); }
         function onDeviceOrientationChanged() { root._pushOrientation(); }
     }
+    // Which app is in front with the screen on, for Settings > Battery's
+    // use (org.webosphoenix.battery, services/accessories): every minute
+    // and when the app in front changes, as sim.qml ticks the simulator's.
+    property string _usageApp: ""
+    property real _usageSince: Date.now()
+    function _usageTick() {
+        var now = Date.now(), ms = Math.max(0, now - _usageSince);
+        _usageSince = now;
+        if (ms > 0 && phoenix.display.state !== "off")
+            windows.pushSystemStatus({ usageTick: { appId: phoenix.locked ? "" : _usageApp, ms: ms, at: now } });
+        var i = windows.cardIndex(windows.focusedUid);
+        _usageApp = i >= 0 && phoenix.cardView.maximized ? windows.cards.get(i).appId : "";
+    }
+    Timer { interval: 60000; running: true; repeat: true; onTriggered: root._usageTick() }
+    Connections {
+        target: windows
+        function onFocusedUidChanged() { root._usageTick(); }
+    }
+
+    // What the pages ask the shell for (org.webosphoenix.shellhost; as
+    // sim.qml answers the simulator's window source).
+    Connections {
+        target: windows
+        // The Assistant's "take a screenshot".
+        function onScreenshotRequested() { phoenix.takeScreenshot(); }
+        // com.palm.systemmanager enableFpsCounter / enableTouchPlot, runProgressAnimation.
+        function onDebugOverlayRequested(request) { phoenix.systemScreens.debugOverlay(request); }
+        function onProgressAnimationRequested(type, state) {
+            if (state === "start")
+                phoenix.systemScreens.startProgressAnimation(type);
+            else
+                phoenix.systemScreens.stopProgressAnimation();
+        }
+        // Off or restart (com.palm.power, phoenix-devices): the screen goes
+        // dark as the shutdown sound plays, as phoenix-sim's power-off;
+        // phoenix-devices turns the machine off after it.
+        function onShutdownRequested(reason) { root._goingDown(); }
+        function onRebootRequested(reason) { root._goingDown(); }
+    }
+    property bool _down: false
+    function _goingDown() {
+        if (_down)
+            return;
+        _down = true;
+        if (phoenix.bootSound)
+            phoenix.sounds.shutdown();
+    }
+    Rectangle {
+        anchors.fill: parent
+        z: 10000
+        color: "black"
+        visible: root._down
+        MouseArea { anchors.fill: parent }
+    }
+
     Component.onCompleted: {
         windows.lunaSubscribe("luna://com.webos.bootManager/getBootStatus", { subscribe: true }, root._bootStatus);
         windows.pushSystemStatus({ deviceLocked: phoenix.locked, dockMode: phoenix.dockMode,
@@ -150,10 +205,14 @@ FocusScope {
         model: PopupWindowModel {}
     }
 
+    // OSE's alerts and PIN prompts (com.webos.notification createAlert)
+    // stay the stock view's; its toasts are the shell's banners
+    // (LsmWindowSource.toast), so the stock view takes none.
     NotificationView {
         id: notificationViewId
         objectName: "notificationView" + suffix
         anchors.fill: parent
+        acceptToasts: false
     }
 
     KeyboardView {

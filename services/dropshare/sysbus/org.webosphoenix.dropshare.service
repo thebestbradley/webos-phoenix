@@ -1,0 +1,10 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# DropShare's web server (services/dropshare). Started by the hub when the
+# DropShare card calls it.
+
+[D-BUS Service]
+Name=org.webosphoenix.dropshare
+Exec=/usr/bin/run-js-service -n /usr/palm/services/org.webosphoenix.dropshare
+Type=dynamic

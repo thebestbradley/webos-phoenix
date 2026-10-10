@@ -44,6 +44,10 @@ public:
     // IMEController::commitText), as an input method commit.
     Q_INVOKABLE bool commitText(QQuickItem *client, const QString &text);
 
+    // Text being composed at the cursor (KeyboardHost.setPreedit), as an
+    // input method's preedit: shown in the field, not yet in it; "" ends it.
+    Q_INVOKABLE bool setPreedit(QQuickItem *client, const QString &text);
+
     // A wheel event at (x, y) in `item`, delivered through its window as
     // the platform delivers one: a trackpad's has a pixel delta, a scroll
     // phase (Qt::ScrollPhase) and, with natural scrolling, `inverted`; a

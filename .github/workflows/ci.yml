@@ -90,6 +90,17 @@ jobs:
                    settings/service/*.js settings/service/lib/*.js marketplace/service/*.js marketplace/service/lib/*.js \
                    ../services/updates/*.js ../services/updates/lib/*.js; do node --check "$f"; done
 
+      # What a device image would trip on that the simulator hides
+      # (docs/PRE-IMAGE-CHECKLIST.md): Luna calls against their providers
+      # and ACG groups, simulator-only references, the image's contents
+      # against its recipes, the recipes themselves, licences. After the
+      # apps' build, so install-rootfs.py's plan has every app. A finding
+      # not in tools/check-device-allowlist.json fails.
+      - name: Device readiness checkers
+        run: |
+          python3 tools/test-devicecheck.py
+          tools/check-device.sh
+
       # The Enact demos are npm projects of their own (apps/enact-notes-*/
       # README.md); `npm ci` copies in @phoenix/notes-core as built above.
       - name: Enact demo apps - typecheck, build
@@ -115,6 +126,18 @@ jobs:
           dart analyze --fatal-infos
           flutter test
           tool/build.sh
+
+      # The built apps (React, Enact, Flutter; the shared packages' lib/)
+      # for a device image: meta-phoenix's phoenix-apps installs them from
+      # this archive (PHOENIX_APPS_DIST), as BitBake allows no npm in
+      # do_compile (tools/pack-apps-dist.sh, docs/PRE-IMAGE-CHECKLIST.md B3).
+      - name: Pack the built apps for the image
+        run: tools/pack-apps-dist.sh apps-dist.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apps-dist
+          path: apps-dist.tar.gz
+          retention-days: 30
 
       - name: Build simulator
         run: |
@@ -157,6 +180,21 @@ jobs:
       - name: The device shell's Phoenix.Lsm types over fake luna-surfacemanager modules
         timeout-minutes: 10
         run: QT_QPA_PLATFORM=offscreen "$QT_ROOT_DIR/bin/qmltestrunner" -import shell/qml -import build/qml -import shell/tests-device/fakes -input shell/tests-device
+
+      - name: The keyboard as the device's input method (Maliit plugin over a fake host; services/keyboard)
+        timeout-minutes: 10
+        run: QT_QPA_PLATFORM=offscreen build/keyboard/keyboard-test
+
+      # The plugin is built against a stand-in of Maliit's plugin API here
+      # (services/keyboard/maliit-stub); this compiles it against the real
+      # headers too, so the stand-in cannot drift from them.
+      - name: The keyboard plugin against maliit-framework-webos's own headers
+        timeout-minutes: 10
+        run: |
+          git clone -q --depth 1 https://github.com/webosose/maliit-framework-webos.git "$RUNNER_TEMP/maliit"
+          cmake -S services/keyboard -B build-keyboard-realapi -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+                -DPHOENIX_KEYBOARD_TESTS=OFF -DPHOENIX_MALIIT_SOURCE_DIR="$RUNNER_TEMP/maliit"
+          cmake --build build-keyboard-realapi --target phoenix-keyboard-realapi -j
 
       - name: The runtime on a device (window properties, Back, the launch's caller, copies)
         timeout-minutes: 10

@@ -1,0 +1,10 @@
+{
+    "//": "A tiny tree with one of each problem the device checkers find (tools/test-devicecheck.py).",
+    "overlays": [],
+    "mounts": {
+        "/usr/share/fonts/extra/": "shell/assets/fonts/extra/"
+    },
+    "exclude": [],
+    "applicationDirs": ["apps"],
+    "systemApps": []
+}

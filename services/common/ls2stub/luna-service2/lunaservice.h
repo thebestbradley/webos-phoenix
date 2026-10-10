@@ -67,6 +67,7 @@ bool LSMessageReply(LSHandle *sh, LSMessage *message, const char *replyPayload, 
 
 bool LSSubscriptionAdd(LSHandle *sh, const char *key, LSMessage *message, LSError *lserror);
 bool LSSubscriptionSetCancelFunction(LSHandle *sh, LSCancelFunction cancelFunction, void *ctx, LSError *lserror);
+bool LSSignalSend(LSHandle *sh, const char *uri, const char *payload, LSError *lserror);
 
 // ---- Test side (not in luna-service2) -------------------------------------------
 
@@ -81,5 +82,7 @@ const std::vector<std::string> &replies(LSMessage *msg);
 // The caller cancels its subscription (the page went).
 void cancel(LSHandle *sh, LSMessage *msg);
 void release(LSMessage *msg);
+// The signals a handle sent, "uri payload" each, oldest first.
+std::vector<std::string> &signals(LSHandle *sh);
 
 } // namespace ls2stub

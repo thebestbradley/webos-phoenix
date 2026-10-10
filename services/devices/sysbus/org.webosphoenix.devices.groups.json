@@ -3,7 +3,8 @@
         "com.palm.display",
         "com.palm.keys",
         "com.palm.vibrate",
-        "com.palm.ambientLightSensor"
+        "com.palm.ambientLightSensor",
+        "com.palm.power"
     ],
     "devices.display.status": [
         "dev"
@@ -22,5 +23,11 @@
     ],
     "devices.lightsensor": [
         "dev"
+    ],
+    "devices.power.query": [
+        "dev"
+    ],
+    "devices.power.management": [
+        "oem"
     ]
 }

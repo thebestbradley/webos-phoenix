@@ -18,6 +18,11 @@
 //   - each call made as the app that sent it: the runtime takes the caller
 //     from PalmSystem.appIdentifier (the system UI alone may paste a
 //     sensitive clip without the passcode), which call() sets for the call.
+//     On a device the system UI is two bus names: the shell
+//     (luna-surfacemanager, com.webos.surfacemanager) and its keyboard, the
+//     Phoenix keyboard in maliit-server (GAPS V5: its clip strip pastes a
+//     password into a password field; Phoenix/Keyboard/KeyboardBus.qml), so
+//     they call as "com.palm.systemui", as the system UI does in phoenix-sim.
 // The pages' half (recording copies) is the runtime's on a device
 // (installDevice), which sends them here with /add.
 //
@@ -84,6 +89,9 @@ function element() {
     return e;
 }
 
+// The bus names that are the system UI (above).
+var SYSTEM_UI_SENDERS = ["com.webos.surfacemanager", "com.webos.service.ime.phoenixKeyboard"];
+
 function createHost(opts) {
     var storage = fileStorage(opts.storeFile);
     var doc = target();
@@ -145,6 +153,7 @@ function createHost(opts) {
         });
     };
 
+    var systemUi = opts.systemUiSenders || SYSTEM_UI_SENDERS;
     function call(method, params, sender, respond, isSubscription) {
         var cancelled = false;
         var ctx = { cancelled: function () { return cancelled; }, onCancel: null };
@@ -152,7 +161,8 @@ function createHost(opts) {
         var was = ps.appIdentifier;
         // The caller, as the runtime sees it (the app id, without WebAppMgr's
         // " <process>" suffix).
-        ps.appIdentifier = String(sender || "").split(" ")[0];
+        var id = String(sender || "").split(" ")[0];
+        ps.appIdentifier = systemUi.indexOf(id) >= 0 ? "com.palm.systemui" : id;
         try {
             runtime.dispatch("luna://org.webosphoenix.clipboard/" + String(method).replace(/^\/+/, ""),
                              JSON.parse(JSON.stringify(params || {})),

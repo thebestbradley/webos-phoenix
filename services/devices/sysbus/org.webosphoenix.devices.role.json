@@ -6,12 +6,29 @@
         "com.palm.display",
         "com.palm.keys",
         "com.palm.vibrate",
-        "com.palm.ambientLightSensor"
+        "com.palm.ambientLightSensor",
+        "com.palm.power"
     ],
     "permissions": [
-        { "service": "com.palm.display", "outbound": [] },
-        { "service": "com.palm.keys", "outbound": [] },
-        { "service": "com.palm.vibrate", "outbound": [] },
-        { "service": "com.palm.ambientLightSensor", "outbound": [] }
+        {
+            "service": "com.palm.display",
+            "outbound": []
+        },
+        {
+            "service": "com.palm.keys",
+            "outbound": []
+        },
+        {
+            "service": "com.palm.vibrate",
+            "outbound": []
+        },
+        {
+            "service": "com.palm.ambientLightSensor",
+            "outbound": []
+        },
+        {
+            "service": "com.palm.power",
+            "outbound": []
+        }
     ]
 }

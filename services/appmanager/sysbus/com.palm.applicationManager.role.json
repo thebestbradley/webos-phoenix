@@ -1,0 +1,16 @@
+{
+    "appId": "com.palm.applicationManager",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "com.palm.applicationManager"
+    ],
+    "permissions": [
+        {
+            "service": "com.palm.applicationManager",
+            "outbound": [
+                "com.webos.applicationManager"
+            ]
+        }
+    ]
+}

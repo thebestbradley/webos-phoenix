@@ -838,6 +838,15 @@ device. Each needs checking on the first image (OPEN-QUESTIONS Q2).
 | Sounds (A1) | A raw PCM twin (16-bit, 44.1 kHz, stereo) beside every MP3 and WAV the image has, made at build time (`tools/sounds-to-pcm.py`, mpg123-native), because audiod-pro plays a file's bytes as they are; `LsmWindowSource.playSound` plays the twins, loops on audiod's "stopped", stops at the duration | `tools/test-sounds-pcm.py`. To check: the sinks' volumes; sounds added later (Q22) |
 | Clipboard (E2) | `services/clipboard`: the runtime's clipboard service in a Node page of its own (store 0600, the passcode from com.palm.systemmanager); the pages' copies go there | `services/clipboard/host.test.ts`, `tools/test-runtime-device.cjs`. To check: the service's name beside the app's (Q21) |
 | Orientation (R1) | `phoenix-devices` reads the IIO accelerometer (above) | `devices-test` |
+| The pages' line to the shell | `services/shellhost` (`org.webosphoenix.shellhost`, with `.ongoing` and `.system`): a page's `postToHost` posts there with its app id from the bus; the shell alone listens and answers one app (`send`, the page's `events`). Banners, sounds, scene transitions, the edit popup, screen captures, dictation, Just Type, the app menu and card activation go this way (DEVICE-AUDIT.md 1) | `shellhost.test.ts`, `tools/test-runtime-device.cjs`, `tst_lsm` |
+| The runtime on WebAppMgr | WebAppMgr's injection has `addBannerMessage`, `setWindowOrientation`, `enableFullScreenMode`, `paste`, `simulateMouseClick` and others, which its `HandleBrowserControlMessage` drops: the runtime replaces them. The page features (fonts, border images, HiDPI art, editing, links, share sheet) run on a device; com.palm.power's timeouts become activity manager activities; the media store writes real files; `com.palm.activitymanager` and `com.palm.downloadmanager` go to OSE's | `tools/test-runtime-device.cjs` (a fake WebAppMgr) |
+| Legacy application manager | `services/appmanager`: `com.palm.applicationManager` over SAM (open by type and URL, handlers, listApps, launch points, dock mode), which OSE's SAM lacks; headless apps start with `preload: "partial"` | `appmanager.test.ts` (its tables checked against the runtime's) |
+| Device shell | `LsmWindowSource`: the pages' messages, OSE toasts as banners (the stock view's `acceptToasts: false`), the edit popup over a page (`SurfaceHost`), screen captures filed by the file manager's service, Just Type's page as a surface, com.palm.systemui started hidden at boot | `tst_lsm` |
+| com.palm.power | `phoenix-devices`: battery and charger from `/sys/class/power_supply` (`batteryStatus`, `USBDockStatus` signals, the queries), activities, `machineOff`/`machineReboot` (the shell is told, then `systemctl` 4.5 s later); the shell's battery reads it | `devices-test` testPower, `tst_lsm` batteryFromPowerd, shutdownFromPowerd |
+| DropShare | `services/dropshare`: the simulator's `simdropshare.cpp` as a Node HTTP server, files into `/media/internal/Downloads` | `dropshare.test.ts` (real sockets) |
+| Accessories (E4) | `services/accessories`: game controllers and USB drives from PDM, tethering through the connman adapter, battery use per app | `accessories.test.ts` |
+| Media keys, now playing | `org.webosphoenix.system`; a media key goes through the shell to `phoenix-devices`, which posts the key | `shellhost.test.ts`, `tst_lsm` mediaKeyIsPressedByPhoenixDevices |
+| Open webOS app services | accounts, contacts, linker, calendar reminders under OSE's mojoservicelauncher, with OSE bus files (`compat/app-services`), their db8 kinds and activities | `tools/test-install-rootfs.py` |
 
 `LsmWindowSource` and `LsmSystemStatus` themselves also run in
 `shell/tests-device` (`tst_lsm`), over fake luna-surfacemanager modules
@@ -912,6 +921,121 @@ The other route, luna-surfacemanager answering the text protocol itself
 `keySym`), would put the keyboard in the shell's process as in the
 simulator, but means rebuilding the keyboard switching and the hardware
 keyboard handling Maliit already has (V7 settled it).
+
+#### What is written (10 October 2026; written, not run on a device)
+
+**One keyboard, two hosts.** `VirtualKeyboard.qml` and its JS are the same
+files in the simulator and on a device; what differs is its host,
+`KeyboardHost.qml` (`sendKey`, `commitText`, `setPreedit`, `hideKeyboard`,
+`feedback`, `panelHeight`, `surroundingText`; the host sets `shown`,
+`editorState` and calls `inputClientChanged()`). In the simulator
+`Shell.qml` is the host (`KeyInjector`, unchanged behaviour); on a device
+`Phoenix/Keyboard/MaliitKeyboard.qml` is, over the plugin. What a key types
+is one header for both, `shell/native/keytext.h` (a character is committed,
+Backspace, Return, Tab and the arrows of cursor control are key events, as
+OSE's keyboard sends them: ime-manager `inputmethod.cpp:1104-1105,
+1157-1169`).
+
+**The plugin**, `services/keyboard` → `/usr/lib/maliit/plugins/libphoenix-keyboard.so`:
+
+| Maliit (maliit-framework-webos) | The plugin (`PhoenixInputMethod`) |
+| --- | --- |
+| `InputMethodPlugin` (`inputmethodplugin.h:43-64`) | `PhoenixKeyboardPlugin`: `PhoenixKeyboard`, OnScreen and Hardware (hardware keys handed back unchanged, the base class's `processKeyEvent`) |
+| `registerWindow` (`windowgroup.cpp:55-84`: the input panel surface, center bottom) | a `QQuickView` (transparent, frameless) loading `/usr/share/phoenix/qml/Phoenix/Keyboard/MaliitKeyboard.qml`, its width the screen's, its height the keyboard's (`setPanelHeight`, as `keyboard.cpp:247-251`); `setInputMethodArea` all of it; luna-surfacemanager's `KeyboardView` takes the panel's height from the surface (`KeyboardView.qml:58-65`), and the shell makes room for it (`platformKeyboardHeight`) |
+| `show`, `hide`, `update` (called after every field change, `mimpluginmanager.cpp:1739-1745`), `handleFocusChange`, `handleClientChange` | the keyboard shown or hidden; `contentType`, `enterKeyType`, `hiddenText`, `autoCapitalizationEnabled`, `surroundingText` read again (`clientChanged`, `cursorMoved` to the QML) |
+| `sendCommitString`, `sendKeyEvent`, `sendPreeditString` | the keyboard's characters and commits, its keys, a preedit |
+| `notifyImInitiatedHiding` | the hide key: the panel hides (as `keyboard.cpp:134-141`), the server is told |
+| `switchPlugin("libplugin-global.so")` | the globe key's "webOS OSE" (V7): OSE's own keyboard |
+
+The field's type (`DeviceKeyboard.editorState`): Maliit's content type and
+hidden text (`minputcontextwestonimprotocolconnection.cpp:705-758,
+1296-1320`) become the keyboard's PalmIME type: a hidden-text field is a
+password, numbers, phone numbers, e-mail and URLs theirs, an enter key
+"Search" a search field; no prediction outside text and search fields (the
+keyboard's own rule); the enter key's label from the enter key type;
+auto-capitals (V1) where the app's field sets the text model's
+auto-capitalization hint.
+
+**What the keyboard needs from the system, inside maliit-server**
+(`MaliitKeyboard.qml`, `KeyboardBus.qml`; WebOSServices' `Service` as OSE's
+keyboard calls the bus, appId `com.webos.service.ime.phoenixKeyboard`):
+
+| Need | How | Permission |
+| --- | --- | --- |
+| Settings: layouts, Text Assist, number row, style, sounds | `com.webos.service.systemservice/getPreferences` (subscribed): `x_palm_virtualkeyboard_prefs`, `x_palm_virtualkeyboard_settings`, `x_palm_textinput`, `keyboardNumberRow`, `keyboardStyle`, `systemSounds`, read by the runtime's rules (`DeviceKeyboard.js`) | `systemsettings.query` |
+| The keyboard in use, "Add" to the dictionary | `setPreferences` | `systemsettings.management` |
+| Key sounds | `com.webos.service.audio/playSound`, the file's PCM twin on `pfeedback` (as `LsmWindowSource.playSound`) | `audio.management` |
+| Dictation (V2) | Phoenix.Native's `Dictation`: the microphone and `luna-send` to `org.webosphoenix.transcriber` (whisper.cpp). The microphone needs Qt Multimedia, and OSE's `qtmultimedia` recipe is skipped (it fails to build against OSE's Qt), so on a device the keyboard has no microphone key yet (OPEN-QUESTIONS Q35) | luna-send's own |
+| Prediction, swipe, emoji | `TextAssist.js`, `EmojiWords.js` in the QML: nothing from outside | none |
+| The words it learned, recent emoji | the plugin's files, `/var/lib/phoenix/keyboard/{words,emoji}.json` (0600); the learned words to `com.palm.systemmanager/phoenix/learnedWords` (keyboard only), in `getSystemStatus` for Settings > Personal Dictionary | `systemmanager.keyboard` (new group) |
+| The clip strip (E2) | `org.webosphoenix.clipboard` through `ClipboardClient`; the clipboard service takes the keyboard's bus name (and the shell's) as the system UI, which may paste a sensitive clip | `phoenix.clipboard` |
+| Haptics | none here: the shell buzzes every tap (UserActivity sees the panel's touches as the compositor) | none |
+
+The groups are granted to `com.webos.service.ime*` in
+`/usr/share/luna-service2/client-permissions.d/com.webos.service.ime.phoenix.perm.json`
+(phoenix-keyboard). maliit-server's role is imemanager's
+(`com.webos.service.ime.role.json`), and luna-service2 lets a client call
+only the services its role's `outbound` lists (ls-hubd `security.cpp:684-700`),
+a second role for the same executable being skipped
+(`service_permissions.cpp:110-141`): meta-phoenix's `imemanager.bbappend`
+adds the four services to that list.
+
+**meta-phoenix:** `phoenix-keyboard` (built against maliit-framework-webos's
+headers and `libmaliit-plugins`; RDEPENDS phoenix-shell, imemanager,
+qml-webos-bridge), in `webos-phoenix-image`;
+`maliit-framework-webos.bbappend`: `MALIIT_DEFAULT_PLUGIN=libphoenix-keyboard.so`
+and, in `maliit-server.sh`'s first-boot `/var/lib/maliit/server.conf`,
+`onscreen\active=libphoenix-keyboard.so:` and Phoenix's keyboard first in
+`onscreen\enabled` (maliit-server switches only to enabled plugins,
+`mimpluginmanager.cpp:648-653`); OSE's keyboard stays installed and enabled.
+
+**Built and tested here:** the plugin builds against a stand-in of the part
+of Maliit's API it uses (`services/keyboard/maliit-stub`, written from
+maliit-framework-webos's headers, not copied: they are LGPL); with
+`-DPHOENIX_MALIIT_SOURCE_DIR=<maliit-framework-webos checkout>` it is also
+compiled against the real headers (`phoenix-keyboard-realapi`; CI does), every
+reimplemented method marked `override`. `build/keyboard/keyboard-test` runs
+the plugin over a fake Maliit host with the shell's QML (the window
+registered, the panel's height and area, letters committed, Backspace and
+Return as key events, a candidate's commit, a preedit, the field types,
+the text around the cursor and a sentence's capital, show and hide, the
+switch to OSE's keyboard, its files); `shell/tests-device/tst_maliitkeyboard.qml`
+runs `MaliitKeyboard.qml` over a fake input method and the fake bus (the
+settings, sounds, writes, learned words, the clip strip).
+
+#### What the first image must check
+
+1. maliit-server loads `libphoenix-keyboard.so` beside OSE's plugins and
+   makes it active (journal: "is loaded successfully"); a fresh
+   `/var/lib/maliit/server.conf` has it active and enabled.
+2. The plugin's `QQuickView` imports Phoenix.Shell from
+   `/usr/share/phoenix/qml` and Phoenix.Native from Qt's QML directory in
+   maliit-server's process (no QML errors in the journal), and its window
+   becomes the input panel (`KeyboardView` shows it; the shell's
+   `platformKeyboardHeight` follows the keyboard's height, number row and
+   candidate bar included).
+3. Typing in a web app (WAM/Chromium) and a Qt app: letters by
+   `commit_string`, Backspace, Return and the arrows (cursor control) by
+   `keysym`; corrections (backspaces then a commit) arrive in order;
+   `surrounding_text` and the cursor reach the keyboard (prediction from the
+   field's words, a capital after ". " where the page asks for one).
+4. The field types: Chromium's text-input content purpose and hints for
+   password, number, tel, email and url inputs, and `enterkeyhint`.
+5. The bus: the role edit took (`ls-monitor`, no "outbound permissions"
+   errors), the client permissions merge, `getPreferences` answers, key
+   sounds play, the learned words reach Settings, the clip strip lists clips
+   and pastes a password into a password field.
+6. Dictation, once Qt Multimedia builds (Q35): the microphone opens from
+   maliit-server's process (PulseAudio access for its user) and the
+   transcriber reads its WAV.
+7. The globe key's "webOS OSE" switches to OSE's keyboard, and OSE's
+   keyboard's language switching comes back to Phoenix's.
+8. Rotation and size: the panel at the bottom of the turned UI
+   (`handleAppOrientationChanged`), phone or tablet keyboard by the screen,
+   the phone's key popups of the top row (the window is only the keyboard's
+   height, so what rises above it is cut off).
+9. The hide key: the panel goes but the field keeps the focus (Maliit
+   cannot blur the app's field; OPEN-QUESTIONS Q34).
 
 ## Graphics
 

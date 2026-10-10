@@ -38,7 +38,8 @@ function world(opts: Any = {}) {
         now: () => now,
         wipe: () => wipes.push(now),
         startup: { write: (o: Any) => startup.push(o) },
-        isShell: (s: string) => s === "com.webos.surfacemanager"
+        isShell: (s: string) => s === "com.webos.surfacemanager",
+        isKeyboard: (s: string) => s.startsWith("com.webos.service.ime")
     });
     return { m, call: (name: string, p: Any = {}, sender = "com.example.app") => m.methods[name](p, sender) as Promise<Any>,
              saved: () => saved, wipes, startup, docs, advance: (ms: number) => { now += ms; } };
@@ -139,12 +140,32 @@ describe("the shell's state, for the apps", () => {
                      "com.webos.surfacemanager");
         await new Promise((r) => setTimeout(r, 0));
         expect(locks).toEqual([{ returnValue: true, locked: false }]);
-        expect(systems.at(-1)).toEqual({ returnValue: true, ime: { visible: true }, orientation: { ui: "left", device: "left" } });
+        expect(systems.at(-1)).toEqual({ returnValue: true, ime: { visible: true }, orientation: { ui: "left", device: "left" }, learnedWords: [] });
         expect((await w.call("getDockModeStatus")).enabled).toBe(false);
         // The same again: no news.
         await w.call("phoenix/report", { deviceLocked: false }, "com.webos.surfacemanager");
         await new Promise((r) => setTimeout(r, 0));
         expect(locks.length).toBe(1);
+    });
+});
+
+describe("the keyboard's learned words (GAPS V5)", () => {
+    it("only the keyboard reports them; Settings hears them in getSystemStatus", async () => {
+        const w = world();
+        expect((await w.call("phoenix/learnedWords", { words: ["phoenix"] })).errorText).toBe("Only the keyboard reports its words");
+        expect((await w.call("phoenix/learnedWords", { words: ["phoenix"] }, "com.webos.surfacemanager")).returnValue).toBe(false);
+        const systems: Any[] = [];
+        w.m.watch("getSystemStatus", (r: Any) => systems.push(r));
+        const kb = "com.webos.service.ime.phoenixKeyboard";
+        expect((await w.call("phoenix/learnedWords", { words: "phoenix" }, kb)).errorText).toBe("words must be a list");
+        expect((await w.call("phoenix/learnedWords", { words: ["phoenix", 7, "", "webos"] }, kb)).returnValue).toBe(true);
+        await new Promise((r) => setTimeout(r, 0));
+        expect(systems.at(-1).learnedWords).toEqual(["phoenix", "webos"]);
+        expect((await w.call("getSystemStatus")).learnedWords).toEqual(["phoenix", "webos"]);
+        // The same again: no news.
+        await w.call("phoenix/learnedWords", { words: ["phoenix", "webos"] }, kb);
+        await new Promise((r) => setTimeout(r, 0));
+        expect(systems.length).toBe(1);
     });
 });
 

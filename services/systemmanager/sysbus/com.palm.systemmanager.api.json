@@ -12,5 +12,8 @@
     ],
     "systemmanager.shell": [
         "com.palm.systemmanager/phoenix/report"
+    ],
+    "systemmanager.keyboard": [
+        "com.palm.systemmanager/phoenix/learnedWords"
     ]
 }

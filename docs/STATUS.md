@@ -71,8 +71,18 @@ OSE's services; the orientation sensor (phoenix-devices, IIO); the device
 lock and the shell's state for the apps (`services/systemmanager`); the
 clipboard history on the bus (`services/clipboard`); the system sounds as
 raw PCM for audiod, with looping ringtones; the start-up animation at boot.
+Everything that only worked because the simulator is one process
+([DEVICE-AUDIT.md](DEVICE-AUDIT.md), 105 items: 23 done by OSE, 54 written
+for the device, 21 to do, 7 waiting on hardware or a decision) now has a
+device path where one could be built without hardware: the pages' line to
+the shell (`services/shellhost`: banners, sounds, the edit popup, scene
+transitions, screen captures, Just Type, dictation, media keys), the runtime
+replacing what WebAppMgr drops, the legacy application manager over SAM
+(`services/appmanager`), com.palm.power and the battery (phoenix-devices),
+DropShare's server, the accessories' services, OSE's toasts as banners and
+Open webOS's app services under mojoservicelauncher.
 What the first image must check is listed there; the owner's questions are
-[OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q19-Q23.
+[OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q19-Q23, Q37-Q39, Q61 and Q75.
 
 ## Direction
 
@@ -180,6 +190,7 @@ The whole plan, milestone by milestone, with the decisions taken so far:
   [spec/GAPS.md](spec/GAPS.md#open-gaps-at-a-glance). In the simulator only
   small ones are left (word-by-word dictation); everything
   else waits on a device: written and tested here, to run on hardware (K1,
-  G1, G2, R1, R2, S6, M2, S2, A1, E2, C8, C12), and the Phoenix keyboard as
-  the device's input method (V5): the first image, and a device to run it
-  on (OPEN-QUESTIONS Q2).
+  G1, G2, R1, R2, S6, M2, S2, A1, E2, C8, C12, and since 10 October 2026 the
+  Phoenix keyboard as the device's input method, V5: a Maliit plugin around
+  the same keyboard QML, tested over a fake Maliit host): the first image,
+  and a device to run it on (OPEN-QUESTIONS Q2).

@@ -44,6 +44,19 @@ Item {
         id: freshKeyboard
         VirtualKeyboard { availableWidth: 320; availableHeight: 480 }
     }
+    // A keyboard host that writes down what it is asked (test_keyboardHost).
+    Component {
+        id: recordingHost
+        KeyboardHost {
+            property var calls: []
+            function sendKey(key, modifiers) { calls.push(["key", key, modifiers]); }
+            function commitText(text) { calls.push(["commit", text]); }
+            function feedback(name) { calls.push(["sound", name]); }
+            function hideKeyboard() { calls.push(["hide"]); }
+            function panelHeight(height) { calls.push(["height", height]); }
+            function surroundingText() { return { text: "The cat", cursor: 7 }; }
+        }
+    }
 
     TestCase {
         name: "PhoneKeyboard"
@@ -1031,6 +1044,62 @@ Item {
             wait(350);
             field.cursorPosition = field.text.length;
             tryCompare(kb, "_word", "wor", 1000);
+        }
+
+        // The phone's AZERTY keyboard draws: its third row has eleven keys
+        // in the original (sAzerty, PhoneKeymap.cpp:295), the twelfth cell
+        // none, as every row has twelve (it failed to draw before).
+        function test_phoneAzerty() {
+            var own = createTemporaryObject(freshKeyboard, root, { editorState: { type: 0 },
+                keyboards: [{ layout: "azerty", language: "fr" }], keyboard: { layout: "azerty", language: "fr" } });
+            own.shown = true;
+            tryVerify(function() { return own.keyRect("w") !== null; }, 1000);
+            var a = own.keyRect("a"), z = own.keyRect("z"), w = own.keyRect("w");
+            verify(a.x < z.x);
+            verify(w.y > a.y);
+            compare(own.layoutName, "azerty");
+            // Text Assist's language is the process's: English again for
+            // the shell's keyboard.
+            own.keyboards = [{ layout: "qwerty", language: "en" }];
+            own.keyboard = { layout: "qwerty", language: "en" };
+            compare(own.language, "en");
+        }
+
+        // The keyboard's host (KeyboardHost, GAPS V5): in the simulator the
+        // shell's, which types into the field in this process; the keyboard
+        // calls it for every key, commit, sound and height change, and asks
+        // it the text around the cursor.
+        function test_keyboardHost() {
+            verify(kb.host !== null);
+            field.text = "Hello";
+            field.cursorPosition = 5;
+            showKeyboard();
+            compare(JSON.stringify(kb.host.surroundingText()), JSON.stringify({ text: "Hello", cursor: 5 }));
+            // Composing text (a preedit): shown, not yet in the field.
+            kb.host.setPreedit("wor");
+            compare(field.preeditText, "wor");
+            compare(field.text, "Hello");
+            kb.host.setPreedit("");
+            compare(field.preeditText, "");
+            kb.host.commitText(" world");
+            compare(field.text, "Hello world");
+            kb.host.sendKey(Qt.Key_Backspace, Qt.NoModifier);
+            compare(field.text, "Hello worl");
+            // A keyboard of its own with a recording host: what it is asked.
+            var host = createTemporaryObject(recordingHost, root);
+            var own = createTemporaryObject(freshKeyboard, root, { host: host, editorState: { type: 0 } });
+            own.shown = true;
+            tryVerify(function() { return own.keyRect("q") !== null; }, 1000);
+            verify(host.calls.some(function (c) { return c[0] === "height" && c[1] === own.keyboardHeight; }),
+                   JSON.stringify(host.calls));
+            var r = own.keyRect("q");
+            mouseClick(own, r.x + r.width / 2, r.y + r.height / 2);
+            verify(host.calls.some(function (c) { return c[0] === "key" && c[1] === Qt.Key_Q; }), JSON.stringify(host.calls));
+            verify(host.calls.some(function (c) { return c[0] === "sound" && c[1] === "key"; }), JSON.stringify(host.calls));
+            // The field's words, from the host: "cat" is the word being typed.
+            verify(own.syncWithField());
+            compare(own._word, "cat");
+            compare(own._prevWord, "The");
         }
 
         // Emoji suggestions for words (GAPS V3, V6): CLDR's keywords; a tap

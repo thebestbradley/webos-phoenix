@@ -74,6 +74,13 @@ def find_apps(cfg):
             app_dir = os.path.join(app_dir, "dist")
         info = os.path.join(app_dir, "appinfo.json")
         if not os.path.isfile(info):
+            # An app that is built (React, Enact, Flutter: a package.json or
+            # pubspec.yaml beside public/appinfo.json) and was not: the image
+            # would quietly lack it.
+            src_dir = os.path.dirname(app_dir)
+            if os.path.isfile(os.path.join(src_dir, "public", "appinfo.json")):
+                not_built("%s: the app is not built (no dist/appinfo.json; cd apps && npm run build)"
+                          % os.path.relpath(src_dir, REPO))
             continue
         with open(info, encoding="utf-8-sig") as f:
             app_id = json.load(f).get("id", name)
@@ -148,7 +155,9 @@ def plan_dependencies(svc_dir, dest, plan, shared, seen=None):
         src, info = shared[name]
         main_dir = os.path.dirname(os.path.normpath(info.get("main", "index.js"))) or "."
         if not os.path.isdir(os.path.join(src, main_dir)):
-            sys.exit("%s: %s is not built (cd apps && npm run build -w %s)" % (svc_dir, os.path.join(src, main_dir), name))
+            not_built("%s: %s is not built (cd apps && npm run build -w %s)"
+                      % (os.path.relpath(svc_dir, REPO), os.path.relpath(os.path.join(src, main_dir), REPO), name))
+            continue
         target = "%s/node_modules/%s" % (dest, name)
         plan.append((os.path.join(src, "package.json"), target + "/package.json"))
         for root, dirs, files in os.walk(os.path.join(src, main_dir)):
@@ -176,6 +185,48 @@ def plan_service(svc_id, svc_dir, plan):
         copy_tree(src, "/usr/palm/services/%s/%s" % (svc_id, fn), plan)
     sysbus = os.path.join(svc_dir, "sysbus")
     if os.path.isdir(sysbus):
+        for fn in sorted(os.listdir(sysbus)):
+            for suffix, sub in SYSBUS_DIRS:
+                if fn.endswith(suffix):
+                    plan.append((os.path.join(sysbus, fn), "/usr/share/luna-service2/%s/%s" % (sub, fn)))
+                    break
+
+
+# Open webOS's app services (the core apps' accounts, contacts, linker and
+# calendar reminders), Mojo-era Node services OSE's mojoservicelauncher
+# runs as they are, with OSE's bus files from compat/app-services (theirs
+# are luna-service 1's): compat/app-services/README.md.
+APP_SERVICES_DIR = os.path.join("third_party", "app-services")
+APP_SERVICES_SYSBUS = os.path.join("compat", "app-services")
+APP_SERVICE_SKIP = {"files", "desktop", "desktop-support", "test.sh", "run_tests.sh", "all-tests.json", "testSpec.json",
+                    "jslint-ignore", ".project", "README.md"}
+
+
+def plan_app_services(plan):
+    base = os.path.join(REPO, APP_SERVICES_DIR)
+    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        src = os.path.join(base, name)
+        sysbus = os.path.join(REPO, APP_SERVICES_SYSBUS, name, "sysbus")
+        if not os.path.isfile(os.path.join(src, "services.json")) or not os.path.isdir(sysbus):
+            continue
+        dest = "/usr/palm/services/" + name
+        for fn in sorted(os.listdir(src)):
+            if fn in APP_SERVICE_SKIP or fn in SKIP_NAMES or fn.endswith(".service"):
+                continue
+            path = os.path.join(src, fn)
+            if fn in ("db", "tempdb"):
+                # db8's kinds and permissions, where db8 reads them.
+                for kind in ("kinds", "permissions"):
+                    if os.path.isdir(os.path.join(path, kind)):
+                        copy_tree(os.path.join(path, kind), "/etc/palm/%s/%s" % (fn, kind), plan)
+                continue
+            if fn == "activities":
+                # activities/<id>/<activity>.json: OSE's configurator registers
+                # services' from /etc/palm/activities/services/ (configurator
+                # src/ActivityConfigurator.cpp:37, SERVICE_DIR).
+                copy_tree(path, "/etc/palm/activities/services", plan)
+                continue
+            copy_tree(path, dest + "/" + fn, plan)
         for fn in sorted(os.listdir(sysbus)):
             for suffix, sub in SYSBUS_DIRS:
                 if fn.endswith(suffix):
@@ -227,12 +278,40 @@ def device_appinfo(data):
     return (json.dumps(info, indent=4, ensure_ascii=False) + "\n").encode("utf-8")
 
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("destdir")
-    ap.add_argument("--list", action="store_true", help="print what would be installed and exit")
-    args = ap.parse_args()
+STRICT = True
+UNBUILT = []   # what plan(strict=False) could not install: apps and packages not built
 
+
+def not_built(message):
+    if STRICT:
+        sys.exit(message)
+    UNBUILT.append(message)
+
+
+def plan(repo=None, strict=True):
+    """({device path: source file} of everything the image gets, [what is
+    missing because it was not built]). strict: stop at the first thing not
+    built, as the recipe must (tools/devicecheck reads the plan without)."""
+    global REPO, STRICT
+    saved = REPO, STRICT
+    if repo:
+        REPO = os.path.abspath(repo)
+    STRICT = strict
+    del UNBUILT[:]
+    try:
+        final = build_plan()
+    finally:
+        REPO, STRICT = saved
+    return final, list(UNBUILT)
+
+
+# Device paths phoenix-shell installs itself (shell/CMakeLists.txt) that the
+# simulator serves through rootfs.json's mounts: on the image only one
+# package may own a path, and phoenix-apps' FILES does not take these.
+SHELL_OWNS = {"/usr/share/fonts/open-sans/"}
+
+
+def build_plan():
     cfg = load_config()
     plan = []   # (source file, device path)
     services = find_services(cfg)
@@ -254,6 +333,8 @@ def main():
         # a device has a copy in each service that needs one (plan_service).
         if prefix.startswith("/usr/lib/phoenix/node_modules/"):
             continue
+        if prefix in SHELL_OWNS:
+            continue
         copy_tree(os.path.join(REPO, target), prefix.rstrip("/"), plan)
     for app_id, app_dir in find_apps(cfg):
         # An app's service/ is installed on its own, below (apps/dav keeps
@@ -264,6 +345,15 @@ def main():
             d = os.path.join(app_dir, "configuration", "db", kind)
             if os.path.isdir(d):
                 copy_tree(d, "/etc/palm/db/" + kind, plan)
+        # Activities the app schedules from the start (the Clock's alarm
+        # updates, the Calendar's reminders): OSE's configurator registers
+        # them with the activity manager from /etc/palm/activities/applications/
+        # <id>/ (configurator src/ActivityConfigurator.cpp:36, APP_DIR), where
+        # openwebos/build-desktop put them; in the app's folder nobody reads them.
+        for sub in (os.path.join("configuration", "activities"), "activities"):
+            d = os.path.join(app_dir, sub)
+            if os.path.isdir(d):
+                copy_tree(d, "/etc/palm/activities/applications", plan)
     # The connector packages Phoenix comes with: in the apps the user may
     # remove, the whole package's app (its service/ too, with what it needs
     # in service/node_modules, as `phoenix-connector pack` packs it), so the
@@ -284,6 +374,7 @@ def main():
                 copy_tree(d, "/etc/palm/db/" + kind, plan)
     for svc_id, svc_dir in services:
         plan_service(svc_id, svc_dir, plan)
+    plan_app_services(plan)
     for overlay in cfg.get("overlays", []):
         base = os.path.join(REPO, overlay)
         for root, dirs, files in os.walk(base):
@@ -300,6 +391,87 @@ def main():
     # Files of the original apps we do not redistribute (docs/LEGAL.md).
     for dev in cfg.get("exclude", []):
         final.pop(dev, None)
+    # Each app's luna-service2 role and client permissions, which an OSE
+    # image's own apps get from webos_app_generate_security_files.bbclass
+    # (meta-webos): without them luna-hub refuses the app's every call.
+    GENERATED.clear()
+    compat_perms = {}
+    cp = os.path.join(REPO, "compat", "app-permissions.json")
+    if os.path.isfile(cp):
+        with open(cp, encoding="utf-8") as f:
+            compat_perms = {k: v for k, v in json.load(f).items() if not k.startswith("//")}
+    for dev in sorted(final):
+        m = APPINFO.match(dev)
+        if not m:
+            continue
+        try:
+            with open(final[dev], encoding="utf-8-sig") as f:
+                info = json.loads(f.read())
+        except (ValueError, OSError):
+            continue
+        # The original apps predate ACG: compat/app-permissions.json gives them their groups.
+        if isinstance(info, dict) and "requiredPermissions" not in info and info.get("id") in compat_perms:
+            info["requiredPermissions"] = compat_perms[info["id"]]
+        for path, data in security_files(info).items():
+            if path not in final and path.replace(".app.json", ".role.json") not in final:
+                GENERATED[path] = data
+                final[path] = "generated: %s's ACG files (webos_app_generate_security_files)" % info.get("id")
+    return final
+
+
+GENERATED = {}   # device path -> bytes, for plan entries made here, not copied
+
+
+def security_files(info):
+    """The role and client-permission files meta-webos writes for an app at
+    build time (webos_app_generate_security_files.bbclass,
+    WEBOS_SYSTEM_BUS_ACG_ENABLED "FALSE" as OSE builds): the appinfo's
+    requiredPermissions, plus "public" (and "private" for com.palm. and
+    com.webos. web apps), and a role that lets the app's processes
+    ("<id>-*") onto the bus."""
+    app_id, kind = info.get("id"), info.get("type")
+    if not app_id or kind not in ("web", "qml", "native"):
+        return {}
+    key = app_id if kind == "native" else app_id + "-*"
+    groups = list(info.get("requiredPermissions") or [])
+    trust = info.get("trustLevel", "default")
+    pub = trust in ("default", "trusted")
+    prv = trust == "trusted"
+    if kind == "web" and ("com.palm." in app_id or "com.webos." in app_id):
+        prv = True
+    elif kind == "qml":
+        prv = pub = True
+    elif kind == "native":
+        pub = True
+    if prv:
+        pub = True
+        if "private" not in groups:
+            groups.append("private")
+    if pub and "public" not in groups:
+        groups.append("public")
+    if kind == "native":
+        role = {"exeName": "/usr/palm/applications/%s/%s" % (app_id, info.get("main", "")), "type": "regular",
+                "allowedNames": [app_id + "*"], "permissions": [{"service": app_id, "outbound": ["*"]}],
+                "trustLevel": "oem"}
+    else:
+        role = {"appId": app_id, "type": "regular", "allowedNames": [app_id + "-*"],
+                "permissions": [{"service": app_id + "-*", "outbound": ["*"]}], "trustLevel": "oem"}
+
+    def dump(obj):
+        return (json.dumps(obj, indent=4) + "\n").encode("utf-8")
+    return {
+        "/usr/share/luna-service2/roles.d/%s.app.json" % app_id: dump(role),
+        "/usr/share/luna-service2/client-permissions.d/%s.app.json" % app_id: dump({key: groups}),
+    }
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("destdir")
+    ap.add_argument("--list", action="store_true", help="print what would be installed and exit")
+    args = ap.parse_args()
+
+    final, _ = plan()
 
     if args.list:
         for dev in sorted(final):
@@ -309,6 +481,10 @@ def main():
     for dev, src in sorted(final.items()):
         dst = os.path.join(args.destdir, dev.lstrip("/"))
         os.makedirs(os.path.dirname(dst), exist_ok=True)
+        if dev in GENERATED:
+            with open(dst, "wb") as f:
+                f.write(GENERATED[dev])
+            continue
         # App pages, and Enyo 1.0's framework pages an app opens as a
         # window (dashboard-window), as in phoenix-sim and serve-rootfs.py.
         if dev.startswith(("/usr/palm/applications/", "/media/cryptofs/apps/usr/palm/applications/", "/usr/palm/frameworks/enyo/")) \

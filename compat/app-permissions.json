@@ -1,0 +1,29 @@
+{
+    "//": [
+        "The ACG groups the original Open webOS apps get on a Phoenix image. They predate webOS OSE's access",
+        "control groups and declare no requiredPermissions; without groups luna-hub refuses their calls.",
+        "tools/install-rootfs.py writes these into each app's client permissions",
+        "(/usr/share/luna-service2/client-permissions.d/<id>.app.json, as meta-webos's",
+        "webos_app_generate_security_files does from requiredPermissions); tools/check-luna.py checks the calls",
+        "against them. The lists start from `tools/check-luna.py --suggest` (the groups OSE's api files give the",
+        "methods each app calls directly), plus database.operation and activity.operation for the apps that keep",
+        "their data in db8 and schedule activities through the frameworks (DbService, foundations' Mojo.Service),",
+        "which the checker charges to the frameworks, not the app."
+    ],
+    "com.palm.app.accounts": ["database.operation", "activity.operation", "application.launcher"],
+    "com.palm.app.browser": ["application.launcher", "database.operation"],
+    "com.palm.app.calculator": [],
+    "com.palm.app.calendar": ["application.launcher", "database.operation", "activity.operation"],
+    "com.palm.app.clock": ["application.launcher", "devices.display.control", "devices.keys", "database.operation",
+                           "activity.operation"],
+    "com.palm.app.contacts": ["application.launcher", "database.operation", "activity.operation"],
+    "com.palm.app.email": ["application.launcher", "database.operation", "activity.operation",
+                           "devices.display.control", "filecache.management", "filecache.operation",
+                           "networkconnection.query", "systemmanager.query", "systemsettings.query",
+                           "tempdatabase.operation"],
+    "com.palm.app.notes": ["database.operation", "application.launcher"],
+    "com.palm.launcher": ["application.launcher", "application.operation", "database.operation"],
+    "com.palm.systemui": ["application.operation", "database.management", "devices.display.control",
+                          "systemsettings.management", "systemsettings.query", "systemupdate.management",
+                          "time.query"]
+}
