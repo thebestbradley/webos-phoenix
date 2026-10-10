@@ -97,6 +97,16 @@ FocusScope {
         }
     }
 
+    // A key of the PIN pad pressed (PINPad.qml's keyAction).
+    function _pinKey(text) {
+        if (text === "\b") {
+            passwordField.deleteOne();
+        } else {
+            passwordField.keyInput(text, true);
+            _showQueued();
+        }
+    }
+
     function _submit() {
         if (passwordField.enteredText.length > 0)
             passwordSubmitted(passwordField.enteredText, isPINEntry);
@@ -215,6 +225,7 @@ FocusScope {
             columns: 3
 
             Repeater {
+                id: keyRepeater
                 model: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "\b"]
                 delegate: PinButton {
                     required property string modelData
@@ -226,14 +237,7 @@ FocusScope {
                     // The blank left of 0 keeps its cell (a hidden Grid child would not).
                     enabled: modelData !== ""
                     imgSource: modelData === "\b" ? Theme.asset("pin/icon-delete.png") : ""
-                    onAction: (text) => {
-                        if (text === "\b") {
-                            passwordField.deleteOne();
-                        } else {
-                            passwordField.keyInput(text, true);
-                            panel._showQueued();
-                        }
-                    }
+                    onAction: (text) => panel._pinKey(text)
                 }
             }
         }
@@ -268,6 +272,7 @@ FocusScope {
         spacing: panel.margin + 1
 
         ActionButton {
+            id: cancelButton
             objectName: "unlockCancel"
             caption: qsTr("Cancel")
             width: panel.sideBySide ? buttonGrid.width : buttonGrid.width / 2 - panel.margin / 2
@@ -275,6 +280,7 @@ FocusScope {
             onAction: panel.entryCanceled()
         }
         ActionButton {
+            id: doneButton
             objectName: "unlockDone"
             caption: qsTr("Done")
             affirmative: true
@@ -286,17 +292,117 @@ FocusScope {
     }
 
     // ---- Keyboard entry (UnlockPanel.qml Keys handlers) ------------------------
+    // The original's (uiComponents/UnlockPanel/UnlockPanel.qml:191-230): a
+    // digit types into a PIN (anything printable into a password),
+    // Backspace and Delete take one off, Enter and Return submit. Phoenix:
+    // Esc cancels.
+    //
+    // Focus navigation (GAPS V8 (3); Phoenix, the original had none): Tab /
+    // Shift+Tab and the arrows put a ring on the keypad's keys and the
+    // buttons, as on the shell's dialogs (ActionButton.keyFocused): the
+    // arrows go to the nearest one that way, Tab in reading order. Enter
+    // (and Space on the PIN pad, where it types nothing) presses the ringed
+    // one; typing, Backspace or the panel closing takes the ring away, so
+    // Enter submits again.
 
     focus: true
+    property Item keyItem: null
+    function _setKeyItem(it) {
+        if (keyItem)
+            keyItem.keyFocused = false;
+        keyItem = it;
+        if (it)
+            it.keyFocused = true;
+    }
+    onEnabledChanged: if (!enabled) _setKeyItem(null)
+    onIsPINEntryChanged: _setKeyItem(null)
+    function _keyItems() {
+        var out = [];
+        // (A Grid places its children when next polished: right after the
+        // panel is shown that has not happened yet.)
+        keys.forceLayout();
+        buttonGrid.forceLayout();
+        if (isPINEntry) {
+            for (var i = 0; i < keyRepeater.count; ++i) {
+                var k = keyRepeater.itemAt(i);
+                if (k && k.enabled)
+                    out.push(k);
+            }
+        }
+        if (emergencyButton.visible)
+            out.push(emergencyButton);
+        out.push(cancelButton);
+        if (doneButton.active)
+            out.push(doneButton);
+        return out;
+    }
+    function _centre(it) { return it.mapToItem(panel, it.width / 2, it.height / 2); }
+    // The nearest item from `from` in a direction (dx, dy each -1, 0 or 1):
+    // wholly ahead of its centre that way, the least off to the side (not
+    // at all when it spans the centre, as Emergency Call spans the keys).
+    function _nearest(items, from, dx, dy) {
+        var c = _centre(from), best = null, bestScore = Infinity;
+        for (var i = 0; i < items.length; ++i) {
+            if (items[i] === from)
+                continue;
+            var r = items[i].mapToItem(panel, 0, 0), w = items[i].width, h = items[i].height;
+            var along = dx > 0 ? r.x - c.x : dx < 0 ? c.x - (r.x + w) : dy > 0 ? r.y - c.y : c.y - (r.y + h);
+            var across = dx !== 0 ? Math.max(0, r.y - c.y, c.y - r.y - h)
+                                  : Math.max(0, r.x - c.x, c.x - r.x - w);
+            if (along < 1)
+                continue;
+            var score = along + 2 * across;
+            if (score < bestScore) {
+                bestScore = score;
+                best = items[i];
+            }
+        }
+        return best;
+    }
+    // True when the key moved the ring or pressed what it is on.
+    function _navKey(event) {
+        var k = event.key;
+        var items = _keyItems();
+        var i = items.indexOf(keyItem);
+        if (k === Qt.Key_Tab || k === Qt.Key_Backtab) {
+            var back = k === Qt.Key_Backtab || (event.modifiers & Qt.ShiftModifier);
+            items.sort(function (a, b) { var p = _centre(a), q = _centre(b); return Math.round(p.y - q.y) || p.x - q.x; });
+            i = items.indexOf(keyItem);
+            _setKeyItem(items[i < 0 ? (back ? items.length - 1 : 0) : (i + (back ? -1 : 1) + items.length) % items.length]);
+            return true;
+        }
+        var dx = k === Qt.Key_Left ? -1 : k === Qt.Key_Right ? 1 : 0;
+        var dy = k === Qt.Key_Up ? -1 : k === Qt.Key_Down ? 1 : 0;
+        if (dx !== 0 || dy !== 0) {
+            _setKeyItem(i < 0 ? items[0] : (_nearest(items, keyItem, dx, dy) || keyItem));
+            return true;
+        }
+        if (i >= 0 && (k === Qt.Key_Return || k === Qt.Key_Enter || (k === Qt.Key_Space && isPINEntry))) {
+            var it = keyItem;
+            if (it === emergencyButton || it === cancelButton || it === doneButton) {
+                _setKeyItem(null);
+                it.action();
+            } else {
+                _pinKey(it.caption);
+            }
+            return true;
+        }
+        return false;
+    }
     Keys.onPressed: (event) => {
         event.accepted = true;
+        if (_navKey(event))
+            return;
         if (event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete) {
+            _setKeyItem(null);
             passwordField.deleteOne();
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
             panel._submit();
         } else if (event.key === Qt.Key_Escape) {
+            _setKeyItem(null);
             panel.entryCanceled();
         } else if (event.text.length > 0 && event.text.charCodeAt(0) >= 32) {
+            _setKeyItem(null);
             passwordField.keyInput(event.text, event.key >= Qt.Key_0 && event.key <= Qt.Key_9);
             panel._showQueued();
         }
@@ -307,6 +413,8 @@ FocusScope {
         property bool isPressed: false
         property string caption: ""
         property string imgSource: ""
+        // A keyboard's focus (above): ringed as ActionButton is.
+        property bool keyFocused: false
         signal action(string text)
 
         ArtBorderImage {
@@ -330,6 +438,16 @@ FocusScope {
             width: Theme.px(50)
             height: Theme.px(50)
             source: pinButton.imgSource
+        }
+        Rectangle {
+            objectName: "pinKeyFocus"
+            visible: pinButton.keyFocused
+            anchors.fill: parent
+            anchors.margins: Theme.px(3)
+            radius: Theme.px(10)
+            color: "transparent"
+            border.color: "#2c8ce0"
+            border.width: Theme.px(3)
         }
         MouseArea {
             objectName: "pinKey" + (pinButton.caption === "\b" ? "Delete" : pinButton.caption)

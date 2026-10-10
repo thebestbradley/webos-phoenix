@@ -207,6 +207,80 @@ Item {
             compare(field.text, "HiOKa");
         }
 
+        // Auto-capitalisation from the field (GAPS V1): off unless the field
+        // asks (the plugin's m_autoCap, false until WebKit set it,
+        // PhoneKeyboard.cpp:276-280); a shell field asks with
+        // Qt.ImhPreferUppercase. Shift shows on and the caps are capitals at
+        // a sentence's start (PhoneKeyboard.cpp:1395, 1469).
+        function test_autoCapOffByDefault() {
+            showKeyboard();
+            compare(kb.fieldAutoCap, "none");
+            verify(!kb.keymap.autoCap);
+            compare(kb._keyIcon(Qt.Key_Shift), "icon-shift.png");
+            type(["h", "i"]);
+            compare(field.text, "hi");
+        }
+
+        function test_autoCapSentences() {
+            field.inputMethodHints = Qt.ImhPreferUppercase;
+            showKeyboard();
+            compare(kb.fieldAutoCap, "sentences");
+            tryVerify(function() { return kb.keymap.autoCap; }, 1000);
+            compare(kb._keyIcon(Qt.Key_Shift), "icon-shift-on.png");
+            verify(kb.keyRect("H") !== null, "caps shown");
+            type(["H", "i"]);
+            compare(field.text, "Hi");
+            // Inside the sentence: plain letters.
+            verify(!kb.keymap.autoCap);
+            compare(kb._keyIcon(Qt.Key_Shift), "icon-shift.png");
+            type(["Space", "t", "o"]);
+            compare(field.text, "Hi to");
+            // After a full stop and a space, a capital again.
+            type(["."]);
+            verify(!kb.keymap.autoCap, "not before the space");
+            type(["Space"]);
+            verify(kb.keymap.autoCap);
+            type(["O", "k"]);
+            compare(field.text, "Hi to. Ok");
+            // Backspace to the sentence's start: a capital again.
+            tapKey("Backspace");
+            tapKey("Backspace");
+            verify(kb.keymap.autoCap);
+            // Shift tapped turns it off (and on Once, as the plugin did).
+            tapKey("Shift");
+            verify(!kb.keymap.autoCap);
+            compare(kb.keymap.shiftMode, 1);
+        }
+
+        // A web page's field gives its mode (the runtime's editorState: Enyo's
+        // x-palm-title-cap is "words", x-palm-disable-auto-cap "none").
+        function test_autoCapFromAWebField() {
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize();
+            tryVerify(function() { return shell.maximized; }, 2000);
+            windows.inputFocusChanged(uid, true, { type: 0, autoCap: "words" });
+            tryCompare(shell, "keyboardOpen", true, 1000);
+            tryCompare(shell.notifications, "negativeSpace", kb.keyboardHeight, 2000);
+            tryVerify(function() { return kb.keyRect("q") !== null; }, 1000);
+            compare(kb.fieldAutoCap, "words");
+            verify(kb.keymap.autoCap);
+            typed.clear();
+            type(["J", "o", "Space", "B"]);
+            compare(typed.count, 4);
+            compare(typed.signalArguments[0][1], Qt.ShiftModifier);
+            compare(typed.signalArguments[1][1], Qt.NoModifier);
+            compare(typed.signalArguments[3][1], Qt.ShiftModifier);
+            // A password, or a field that turned it off: never.
+            windows.inputFocusChanged(uid, true, { type: 0, autoCap: "none" });
+            tryCompare(kb, "fieldAutoCap", "none", 1000);
+            verify(!kb.keymap.autoCap);
+            windows.inputFocusChanged(uid, true, { type: 0, autoCap: "characters" });
+            tryCompare(kb, "fieldAutoCap", "characters", 1000);
+            verify(kb.keymap.autoCap);
+            windows.inputFocusChanged(uid, false, null);
+            tryCompare(shell, "keyboardOpen", false, 1000);
+        }
+
         // Settings > Text Assist > Number row (docs/M6-PLAN.md F4): a row
         // of digits above the letters, three quarters of a letter row; the
         // keyboard grows by it and the letter keys keep their size. Off by

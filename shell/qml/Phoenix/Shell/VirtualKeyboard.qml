@@ -84,6 +84,25 @@ Item {
     // enterKeyLabel) and whether to start the next word capitalized.
     property var editorState: ({})
     property bool autoCap: false
+    // Auto-capitalisation from the field (GAPS V1). On webOS WebKit worked
+    // out where the cursor was and told the keyboard (autoCap above, the
+    // plugin's m_autoCap, false until told: PhoneKeyboard.cpp:276-280,
+    // PhoneKeymap.cpp:361); here the field gives its mode (Phoenix's
+    // editorState.autoCap, from the runtime or the shell: "sentences",
+    // "words", "characters" or "none", none when not given) and the
+    // keyboard follows the cursor itself (_word, _sentenceStart).
+    readonly property string fieldAutoCap: editorState && typeof editorState.autoCap === "string" ? editorState.autoCap : "none"
+    readonly property bool _autoCapHere: fieldAutoCap === "characters"
+        || (fieldAutoCap === "words" && _word === "")
+        || (fieldAutoCap === "sentences" && _word === "" && _sentenceStart && !_rightAfterMark)
+    // The cursor right after . ! or ? ("e.g.", "3.5", a web address): a
+    // capital waits for the space.
+    property bool _rightAfterMark: false
+    on_AutoCapHereChanged: _applyAutoCap()
+    function _applyAutoCap() {
+        if (_km.setAutoCap(autoCap || _autoCapHere))
+            _layoutChanged();
+    }
     // IMEDataInterface::m_visible: the keyboard is (being) shown.
     property bool shown: false
     // IMEController::isIMEOpened: it takes touches (IMEView::acceptPoint).
@@ -335,6 +354,7 @@ Item {
         _prevWord = p ? p[1] : "";
         // A sentence starts at the field's start, after . ! ? or a new line.
         _sentenceStart = /^\s*$/.test(rest) || /[.!?\n]['")\]]*\s*$/.test(rest);
+        _rightAfterMark = /[.!?]$/.test(before);
         // Text before it that is not a word: no space is owed before a
         // swipe after a space, one is after anything else ("hello|").
         _swipeNeedsSpace = before !== "" && !/\s$/.test(before) && word === "";
@@ -449,6 +469,7 @@ Item {
     }
     // Every key the keyboard sends: the word being typed follows it.
     function _trackKey(key, modifiers) {
+        _rightAfterMark = key > 0 && key < 0x110000 && /^[.!?]$/.test(String.fromCharCode(key));
         if (key === KM.Key.Backspace) {
             if (_word)
                 _word = _word.slice(0, -1);
@@ -465,7 +486,9 @@ Item {
             _refreshCandidates();
         } else if (key === KM.Key.Space || key === KM.Key.Return || /^[.,!?;:]$/.test(ch)) {
             var keep = _lastCorrection;
-            _endWord(key === KM.Key.Return || /^[.!?]$/.test(ch));
+            // A space after ". " keeps the sentence's start (as
+            // syncWithField reads "Hello. |").
+            _endWord(key === KM.Key.Return || /^[.!?]$/.test(ch) || (key === KM.Key.Space && _word === "" && _sentenceStart));
             if (keep && key === KM.Key.Space)
                 _lastCorrection = keep;        // backspace now puts the typed word back
         } else if (ch) {
@@ -1145,6 +1168,7 @@ Item {
         _touches = ({});
         _extendedKeys = null;
         _availableSpaceChanged();
+        _applyAutoCap();
     }
 
     // Keyboard pixels.
@@ -1271,6 +1295,7 @@ Item {
         _swipeNeedsSpace = false;
         _sentenceStart = true;
         _assistReset();
+        _applyAutoCap();
         if (shown) {
             _setKeyboardHeight(_requestedHeight > 0 ? _requestedHeight : _presetHeight());
             fieldSyncTimer.restart();     // the text around the cursor (V3)
@@ -1298,8 +1323,9 @@ Item {
         if (changed)
             _layoutChanged();
         _resetShortcuts(editorState);
+        _applyAutoCap();
     }
-    onAutoCapChanged: if (_km.setAutoCap(autoCap)) _layoutChanged()
+    onAutoCapChanged: _applyAutoCap()
 
     function _layoutChanged() {    // keyboardLayoutChanged
         _triggerRepaint();
@@ -1932,8 +1958,8 @@ Item {
                     else
                         _sendKeyDownUp(k, _km.shiftDown ? Qt.ShiftModifier : Qt.NoModifier);
                 } else if (k > 0 && k < 128) {
-                    _sendKeyDownUp(k, _km.isCapActive() ? Qt.ShiftModifier : Qt.NoModifier);   // a basic keystroke
-                } else if (_km.isCapActive()) {
+                    _sendKeyDownUp(k, _capFor(k) ? Qt.ShiftModifier : Qt.NoModifier);   // a basic keystroke
+                } else if (_capFor(k)) {
                     _sendKeyDownUp(KM.upper(String.fromCharCode(k)).charCodeAt(0), Qt.ShiftModifier);
                 } else {
                     _sendKeyDownUp(KM.lower(String.fromCharCode(k)).charCodeAt(0), Qt.NoModifier);
@@ -1951,6 +1977,17 @@ Item {
             changed = true;
         if (changed)
             _layoutChanged();
+    }
+
+    // A key typed as a capital: Shift, or auto-capitalisation for a letter.
+    // (The plugin sent the letter plain, isCapActive, PhoneKeyboard.cpp:884,
+    // and WebKit, which had asked for the capital, made it one; Phoenix's
+    // fields have no such WebKit, so the keyboard types it.)
+    function _capFor(key) {
+        if (_km.isCapActive())
+            return true;
+        var c = String.fromCharCode(key);
+        return _km.autoCap && KM.upper(c) !== KM.lower(c);
     }
 
     function _sendKeyDownUp(key, modifiers) {

@@ -9,6 +9,9 @@
 //  * an editable element taking the focus reaches the shell as an
 //    "inputFocus" host message with its PalmIME field type (e-mail 4,
 //    URL 7, password 1, ...), and losing it too; buttons and the like do not;
+//  * with the field's auto-capitalisation (GAPS V1): sentences, words or
+//    none, from Enyo's x-palm-title-cap / x-palm-disable-auto-cap and
+//    the HTML autocapitalize attribute;
 //  * Enyo's manual mode (enyo.keyboard.forceShow / forceHide over
 //    PalmSystem.setManualKeyboardEnabled / keyboardShow / keyboardHide)
 //    shows and hides it on request and stops following the focus;
@@ -121,6 +124,34 @@ async function main() {
         await page.focus("#kbCheck");
         await settle();
         check(inputs.length === n1, "nothing new for a check box");
+
+        // ---- Auto-capitalisation, the field's mode (GAPS V1) ---------------------------------
+        // Enyo 1.0's Input says it with attributes (Input.js:273-281):
+        // "sentence" (its default) none, "title" x-palm-title-cap,
+        // "lowercase" x-palm-disable-auto-cap; PasswordInput is lowercase.
+        await page.evaluate(() => {
+            const made = [["kbSentence", "enyo.Input", "sentence"], ["kbTitle", "enyo.Input", "title"],
+                          ["kbLower", "enyo.Input", "lowercase"], ["kbPass", "enyo.PasswordInput", ""]];
+            for (const [id, kind, cap] of made) {
+                const c = enyo.create({ kind, name: id, autoCapitalize: cap || undefined });
+                const host = document.createElement("div");
+                document.body.appendChild(host);
+                c.renderInto(host);
+            }
+            const add = (html) => { const d = document.createElement("div"); d.innerHTML = html; document.body.appendChild(d.firstChild); };
+            add('<input id="kbOff" autocapitalize="off">');
+            add('<input id="kbWords" autocapitalize="words">');
+        });
+        const capOf = async (sel) => { await page.focus(sel); await settle(); return last().state.autoCap; };
+        check(await capOf("#kbText") === "sentences", "a plain text field: sentences");
+        check(await capOf("#kbArea") === "sentences", "a text area: sentences");
+        check(await capOf("#kbSentence input") === "sentences", "Enyo's autoCapitalize \"sentence\": sentences");
+        check(await capOf("#kbTitle input") === "words", "Enyo's \"title\" (x-palm-title-cap): words");
+        check(await capOf("#kbLower input") === "none", "Enyo's \"lowercase\" (x-palm-disable-auto-cap): none");
+        check(await capOf("#kbPass input") === "none", "Enyo's PasswordInput: none");
+        check(await capOf("#kbEmail") === "none" && await capOf("#kbUrl") === "none" && await capOf("#kbPassword") === "none",
+              "e-mail, URL and password fields: none");
+        check(await capOf("#kbOff") === "none" && await capOf("#kbWords") === "words", "the HTML autocapitalize attribute");
 
         // ---- Keys typed into the page ------------------------------------------------------
         await page.focus("#kbText");

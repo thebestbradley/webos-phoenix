@@ -20,10 +20,10 @@
 //       The buttons act while the player holds the audio focus.
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent } from "react";
-import { audioFocus, fileManager, isWebAddress, listFolderPaths, playableUrl, setFullScreen, setWindowOrientation, watchMediaKeys, type Subscription } from "./platform";
+import { audioFocus, captionsOn, fileManager, isWebAddress, listFolderPaths, playableUrl, setFullScreen, setWindowOrientation, watchMediaKeys, type Subscription } from "./platform";
 import { IconToolButton, PopupMenu, Slider, Toolbar, ToolSpacer, cssImage, formatSeconds, icons, type Option } from "@phoenix/ui";
 import { forgetPosition, loadPositions, resumeAt, savePosition, type Prefs } from "./library";
-import { cueText, parseSubtitles, subtitleTracks, type Cue, type SubtitleTrack } from "./subtitles";
+import { cueText, parseSubtitles, pickTrack, subtitleTracks, type Cue, type SubtitleTrack } from "./subtitles";
 
 export interface PlayerProps {
     /** A file path or web address. */
@@ -72,14 +72,11 @@ export function Player({ target, title, prefs, onPrefs, onClose }: PlayerProps) 
     useEffect(() => {
         if (isWebAddress(target)) return;
         let live = true;
-        listFolderPaths(target).then((paths) => {
+        Promise.all([listFolderPaths(target), captionsOn()]).then(([paths, captions]) => {
             if (!live) return;
             const found = subtitleTracks(target, paths);
             setTracks(found);
-            const want = prefs.subtitles;
-            const pick = want === "" ? null
-                : found.find((t) => (t.language ?? "*") === want) ?? found.find((t) => !t.language) ?? (want === "*" ? found[0] : null) ?? null;
-            setTrack(pick ?? null);
+            setTrack(pickTrack(found, prefs.subtitles, captions));
         }, () => {});
         return () => { live = false; };
         // Only when the video changes, not when the preference does.

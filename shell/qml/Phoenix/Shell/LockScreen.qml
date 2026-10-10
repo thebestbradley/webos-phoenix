@@ -730,6 +730,9 @@ Item {
         opacity: shown ? 1 : 0
         visible: shown || opacity > 0
         enabled: shown
+        // Shown, it takes the keys, however it was opened (the original
+        // took the focus as it faded in, UnlockPanel.qml onOpacityChanged).
+        onShownChanged: if (shown) forceActiveFocus()
         Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
         emergencyAvailable: lock.emergencyAvailable
         // LockWindow::slotCancelPasswordEntry: locked again, the new

@@ -17,7 +17,8 @@
 //               the "runs on the device" placeholder (never a made-up
 //               transcript); transcripts are searchable in the app and
 //               through Just Type's content search (appinfo.json dbsearch)
-//   rename, share (the system share sheet; Email with the file attached), delete (the file, its
+//   rename, share (the system share sheet; Email with the file attached; Music
+//               plays it, "Open in Music"), delete (the file, its
 //               index entry and the memo), "transcribe automatically",
 //               and the Just Type launch params {memoId} and {newMemo}
 //
@@ -244,6 +245,33 @@ async function main() {
         const email = host.find((m) => m.type === "launch" && m.payload.id === "com.palm.app.email");
         check(email && email.payload.params.attachments[0].fullPath === rec.path && email.payload.params.attachments[0].mimeType === "audio/wav",
               "share: Email opens with the recording attached");
+
+        // "Open in Music": Music takes audio from the sheet (its appinfo.json
+        // shareTargets) and plays the recording.
+        await page.click(`${g} [data-testid='share']`);
+        const sheet2 = await (await page.waitForSelector("iframe[data-phoenix-sheet=share]")).contentFrame();
+        await sheet2.waitForSelector("[data-testid='share-app-org.webosphoenix.music']");
+        host.length = 0;
+        await sheet2.click("[data-testid='share-app-org.webosphoenix.music']");
+        await page.waitForSelector("iframe[data-phoenix-sheet]", { state: "detached" });
+        await page.waitForTimeout(200);
+        const music = host.find((m) => m.type === "launch" && m.payload.id === "org.webosphoenix.music");
+        const shared = music && music.payload.params.share;
+        check(shared && shared.title === "Garage sale" && shared.files[0].path === rec.path && shared.files[0].mimeType === "audio/wav",
+              "share: Music opens with the recording");
+        if (fs.existsSync(path.join(REPO, "apps/music/dist/index.html")) && shared) {
+            const mp = await context.newPage();
+            mp.on("pageerror", (e) => errors.push("music: " + e.message));
+            await mp.goto(`${origin}/usr/palm/applications/org.webosphoenix.music/index.html?launchParams=` + encodeURIComponent(JSON.stringify({ share: shared })));
+            await mp.waitForSelector("[data-testid='now-playing']", { timeout: 8000 })
+                .then(() => mp.waitForFunction(() => document.querySelector("[data-testid='np-elapsed']").textContent !== "0:00", null, { timeout: 8000 }))
+                .then(() => check(true, "share: Music plays the recording"), () => check(false, "share: Music plays the recording"));
+            check((await mp.textContent("[data-testid='np-title']").catch(() => "")) === "Garage sale", "share: under the memo's name");
+            await mp.screenshot({ path: path.join(outDir, "share-music.png") });
+            await mp.close();
+        } else {
+            check(false, "share: apps/music/dist is missing (build the apps)");
+        }
 
         // ---- Delete -------------------------------------------------------------------------------
         await page.click(`${g} [data-testid='delete']`);

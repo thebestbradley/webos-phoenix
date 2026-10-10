@@ -11,8 +11,8 @@
 //   highContrast  Phoenix apps draw darker text and stronger outlines (the
 //                 runtime puts phoenix-high-contrast on every page's <html>;
 //                 @phoenix/ui styles.css)
-//   monoAudio, captions  stored for the audio service and the media apps;
-//                 nothing reads them yet (see the notes on the page)
+//   captions      Videos shows a video's subtitles even when turned off there
+//   monoAudio     stored for the audio service; nothing reads it yet (the note)
 //   stickyKeys, slowKeys, bounceKeys, keyRepeatDelay, keyRepeatInterval
 //                 a hardware keyboard's accessibility, as iOS's (GAPS V8 (4)):
 //                 the shell's KeyboardAccess applies them to every key
@@ -56,7 +56,7 @@ export function AccessibilityPage() {
                 {toggle("monoAudio", "Mono audio", "The same sound in both ears")}
                 {toggle("captions", "Captions", "Show captions on videos that have them")}
             </Group>
-            <Note>Mono audio and captions are saved for the audio service and the video player, which do not use them yet.</Note>
+            <Note>Captions shows the subtitles of a video that has them in Videos, even when they were turned off there. Mono audio is saved for the audio service, which does not use it yet.</Note>
             <Group label="Keyboard">
                 {toggle("stickyKeys", "Sticky keys", "Press Shift, Ctrl or Alt, then the key; twice to keep it down")}
                 <ListSelector<string> title="Slow keys" value={String(prefs?.slowKeys ?? 0)} testId="a11y-slowKeys"
