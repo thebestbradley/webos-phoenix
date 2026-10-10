@@ -234,14 +234,14 @@ def plan_app_services(plan):
                     break
 
 
-def copy_tree(src, dst, plan, skip_top=()):
+def copy_tree(src, dst, plan, skip_top=(), skip_tests=False):
     if os.path.isfile(src):
         plan.append((src, dst))
         return
     for root, dirs, files in os.walk(src):
         dirs[:] = sorted(d for d in dirs if d not in SKIP_NAMES and not (root == src and d in skip_top))
         for fn in sorted(files):
-            if fn in SKIP_NAMES:
+            if fn in SKIP_NAMES or (skip_tests and ".test." in fn):
                 continue
             s = os.path.join(root, fn)
             plan.append((s, os.path.join(dst, os.path.relpath(s, src))))
@@ -365,7 +365,8 @@ def build_plan():
         if not os.path.isfile(os.path.join(app_dir, "appinfo.json")):
             app_dir = os.path.join(app_dir, "dist")
         dest = "/media/cryptofs/apps/usr/palm/applications/" + app_id
-        copy_tree(app_dir, dest, plan)
+        # Its service's tests stay out, as plan_service leaves them out.
+        copy_tree(app_dir, dest, plan, skip_tests=True)
         if os.path.isfile(os.path.join(app_dir, "service", "package.json")):
             plan_dependencies(os.path.join(app_dir, "service"), dest + "/service", plan, shared_packages())
         for kind in ("kinds", "permissions"):
