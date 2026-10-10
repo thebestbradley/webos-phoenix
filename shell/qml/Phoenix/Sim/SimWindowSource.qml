@@ -723,9 +723,9 @@ Item {
             // launch, or an app launching itself (its dashboard or banner
             // tapped), only tells its page.
             // {newCard: true} (Phoenix, the application manager's launch):
-            // another card of it whatever the setting, in a stack of its
-            // own, e.g. the Assistant opening a conversation in a new card
-            // (apps/assistant: its "Open in New Card").
+            // another card of it whatever the setting, e.g. "Open in New
+            // Card" (the Assistant, Messaging); asked by the card in front it
+            // joins that card's stack, as every card an app opens does.
             var newCard = payload.newCard === true && !background;
             // {behind: true} (Phoenix, the application manager's launch): the
             // card opens, or hears its params, without coming to the front
@@ -748,9 +748,10 @@ Item {
                 return;
             }
             // Launched by the app in front: the new card joins its stack,
-            // e.g. the browser opened from a link in Email
+            // e.g. the browser opened from a link in Email, or another card
+            // of the same app (Open in New Card; the owner, 10 October 2026)
             // (CardWindowManager::prepareAddWindow, :561-567).
-            var joins = uid !== "" && uid === focusedUid && !background && !newCard;
+            var joins = uid !== "" && uid === focusedUid && !background;
             var launched = launch(target, uid, target === payload.id ? params : null, joins, how);
             if (launched !== "" && !background && !behind)
                 cardFocusRequested(launched);

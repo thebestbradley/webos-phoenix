@@ -1856,9 +1856,10 @@
     runtime.launchedReply = launchedReply;
 
     register(["com.palm.applicationManager", "com.webos.applicationManager"], {
-        // {newCard: true} (Phoenix): another card of the app in a stack of
-        // its own, even while one runs (the shell's appRelaunch "new" for
-        // this launch; one-card apps such as the phone keep theirs).
+        // {newCard: true} (Phoenix): another card of the app, even while one
+        // runs (the shell's appRelaunch "new" for this launch; one-card apps
+        // such as the phone keep theirs); asked by the card in front, it
+        // joins that card's stack, as any card an app opens.
         // {behind: true} (Phoenix): the app opens (or hears its new params)
         // without its card coming to the front: the Assistant's "I've opened
         // them in Photos too", while the conversation stays in front.
