@@ -14,6 +14,9 @@
 # (mimpluginmanager.cpp:648-653). maliit-server.sh writes that file on the
 # first boot (meta-webos maliit-server.sh, the "onscreen\enabled" list).
 
+# (Named for the recipe as OSE has it, unversioned: maliit-framework-webos.bb;
+# a "_%" append would not apply to it.)
+
 # The default: Phoenix's, not OSE's (maliit-framework-webos.bb passes
 # MALIIT_DEFAULT_PLUGIN=libplugin-global.so to qmake).
 EXTRA_QMAKEVARS_PRE:remove = "MALIIT_DEFAULT_PLUGIN=libplugin-global.so"

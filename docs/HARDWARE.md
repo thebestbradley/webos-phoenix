@@ -968,13 +968,13 @@ The groups are granted to `com.webos.service.ime*` in
 (`com.webos.service.ime.role.json`), and luna-service2 lets a client call
 only the services its role's `outbound` lists (ls-hubd `security.cpp:684-700`),
 a second role for the same executable being skipped
-(`service_permissions.cpp:110-141`): meta-phoenix's `imemanager_%.bbappend`
+(`service_permissions.cpp:110-141`): meta-phoenix's `imemanager.bbappend`
 adds the four services to that list.
 
 **meta-phoenix:** `phoenix-keyboard` (built against maliit-framework-webos's
 headers and `libmaliit-plugins`; RDEPENDS phoenix-shell, imemanager,
 qml-webos-bridge, Qt Multimedia's plugins), in `webos-phoenix-image`;
-`maliit-framework-webos_%.bbappend`: `MALIIT_DEFAULT_PLUGIN=libphoenix-keyboard.so`
+`maliit-framework-webos.bbappend`: `MALIIT_DEFAULT_PLUGIN=libphoenix-keyboard.so`
 and, in `maliit-server.sh`'s first-boot `/var/lib/maliit/server.conf`,
 `onscreen\active=libphoenix-keyboard.so:` and Phoenix's keyboard first in
 `onscreen\enabled` (maliit-server switches only to enabled plugins,
