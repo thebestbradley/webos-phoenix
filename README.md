@@ -505,6 +505,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `node tools/test-security.cjs` | Security policy, erase, USB drive mode, debugging |
 | `node tools/test-browser.cjs` | The browser: pages, downloads, printing (Save as PDF), find on page, private browsing, the content blocker, user agent and search engine preferences |
 | `node tools/test-links.cjs` | Links between apps: web, `mailto:`, `tel:`, `sms:` and web app links tapped in app pages open the right app with the link |
+| `node tools/test-launch-contracts.cjs` | Buttons that open another app (docs/LAUNCH-CONTRACTS.md): Contacts' message, call, e-mail and address, Just Type's contact actions, Calendar's location, numbers in a message, an audio file in Music; `node tools/check-launch-contracts.cjs` checks every launch's params statically |
 | `node tools/test-back.cjs` | The back gesture: an app takes Back where it can go back (Enyo 1 and 2, Phoenix, Ionic) and leaves it at its top level, where the card minimizes |
 | `node tools/test-runtime-device.cjs` | The runtime on a device, in a stand-in for WebAppMgr's page (plain Node): the window properties the device shell reads (orientation, full screen, status bar colour, the caller to return to, a Back the page did not take), `{returnToCaller}` as `$caller`, copies sent to the clipboard service |
 | `python3 tools/test-sounds-pcm.py` | The system sounds' raw PCM twins for OSE's audiod (`tools/sounds-to-pcm.py`) |

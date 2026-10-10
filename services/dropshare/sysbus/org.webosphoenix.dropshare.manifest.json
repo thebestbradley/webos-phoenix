@@ -1,0 +1,19 @@
+{
+    "id": "org.webosphoenix.dropshare.service",
+    "version": "0.1.0",
+    "roleFiles": [
+        "/usr/share/luna-service2/roles.d/org.webosphoenix.dropshare.role.json"
+    ],
+    "serviceFiles": [
+        "/usr/share/luna-service2/services.d/org.webosphoenix.dropshare.service"
+    ],
+    "apiPermissionFiles": [
+        "/usr/share/luna-service2/api-permissions.d/org.webosphoenix.dropshare.api.json"
+    ],
+    "clientPermissionFiles": [
+        "/usr/share/luna-service2/client-permissions.d/org.webosphoenix.dropshare.perm.json"
+    ],
+    "groupsFiles": [
+        "/usr/share/luna-service2/groups.d/org.webosphoenix.dropshare.groups.json"
+    ]
+}

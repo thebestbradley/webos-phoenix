@@ -1,0 +1,20 @@
+<!doctype html>
+<html><head><title>Demo</title></head>
+<body>
+<img src="pic.png">
+<script>
+// A service no image has.
+call("luna://com.palm.nothing/doIt", {});
+// Renamed on OSE (the runtime's alias), and a method luna-sysservice lacks.
+call("luna://com.palm.systemservice/noSuchMethod", {});
+// Allowed: time.query is held.
+call("luna://com.webos.service.systemservice/time/getSystemTime", {});
+// Needs systemsettings.query, which the app does not hold.
+call("luna://com.webos.service.systemservice/getPreferences", { keys: ["x"] });
+// Mojo style: base URI and method beside it.
+new Mojo.Service.Request("palm://com.webos.service.systemservice/", { method: "getPreferenceValues" });
+// The simulator's own.
+call("luna://org.webosphoenix.simulator/reset", {});
+var catalog = "http://127.0.0.1:8088/v1/";
+</script>
+</body></html>

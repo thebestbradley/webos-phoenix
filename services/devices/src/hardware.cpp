@@ -1018,6 +1018,48 @@ std::string HotplugMonitor::describe() const
 
 // ---- --probe ------------------------------------------------------------------------------------
 
+// ---- The battery and the chargers ---------------------------------------------------
+
+PowerSupplies::PowerSupplies(const std::string &root)
+    : m_dir(root + "/sys/class/power_supply")
+{
+}
+
+PowerSupplies::Status PowerSupplies::read() const
+{
+    Status st;
+    bool batteryCharging = false;
+    for (const std::string &name : entries(m_dir, "")) {
+        const std::string dir = m_dir + "/" + name + "/";
+        const std::string type = readText(dir + "type");
+        if (type == "Battery") {
+            const std::string cap = readText(dir + "capacity");
+            if (cap.empty() || st.present)
+                continue;
+            st.present = true;
+            st.percent = std::max(0, std::min(100, std::atoi(cap.c_str())));
+            const std::string status = readText(dir + "status");
+            batteryCharging = status == "Charging" || status == "Full";
+            const std::string temp = readText(dir + "temp");
+            if (!temp.empty())
+                st.temperatureC = std::atoi(temp.c_str()) / 10.0;
+            st.currentmA = static_cast<int>(std::atol(readText(dir + "current_now").c_str()) / 1000);
+            st.voltagemV = static_cast<int>(std::atol(readText(dir + "voltage_now").c_str()) / 1000);
+            st.capacitymAh = static_cast<int>(std::atol(readText(dir + "charge_full").c_str()) / 1000);
+        } else if (readText(dir + "online") == "1") {
+            // A USB supply is a computer's port unless it says it is a
+            // charger (usb_type's chosen one in brackets: [DCP], [CDP]...).
+            const std::string usbType = readText(dir + "usb_type");
+            const bool host = type == "USB" && (usbType.empty() || usbType.find("[SDP]") != std::string::npos
+                                                || usbType.find("[Unknown]") != std::string::npos);
+            if (st.charger == "none" || st.charger == "pc")
+                st.charger = host ? "pc" : "wall";
+        }
+    }
+    st.charging = st.charger != "none" || batteryCharging;
+    return st;
+}
+
 std::string probeReport(const std::string &root, const std::string &configPath)
 {
     const DeviceConfig config = DeviceConfig::load(configPath);

@@ -18,6 +18,17 @@
 //   php bin/marketplace.php queue             what waits for review
 //   php bin/marketplace.php approve N | reject N [notes]   a release
 //   php bin/marketplace.php key               the public key and its fingerprint
+//   php bin/marketplace.php developer         a development catalog's (MARKETPLACE_DEV)
+//                                             local developer: its token, in
+//                                             data/developer.token (made the first
+//                                             time), which `phoenix-connector
+//                                             publish --local` uses
+//   php bin/marketplace.php upload [--phoenix] FILE.ipk
+//                                             a package, as that developer (on a
+//                                             development catalog: approved and
+//                                             published at once); --phoenix: one
+//                                             of Phoenix's own (the connectors it
+//                                             comes with), as the admin
 
 declare(strict_types=1);
 
@@ -28,6 +39,32 @@ use Phoenix\Marketplace\App;
 $app = new App(marketplace_config());
 $cmd = $argv[1] ?? 'help';
 $curated = dirname(__DIR__) . '/catalog/curated-pwas.json';
+
+/**
+ * A development catalog's local developer (the simulator's, `phoenix-connector publish --local`'s):
+ * the account whose token is in data/developer.token, made when there is none (or it is not
+ * this database's). Its packages are approved at once (MARKETPLACE_DEV).
+ */
+function local_developer(App $app): array
+{
+    if (!$app->config['dev']) {
+        fwrite(STDERR, "Only on a development catalog (MARKETPLACE_DEV=1, as bin/serve.sh runs it)\n");
+        exit(2);
+    }
+    $file = $app->config['data'] . '/developer.token';
+    $token = trim((string) @file_get_contents($file));
+    $a = $token !== '' ? $app->db->one('SELECT * FROM accounts WHERE token_hash = ?', [hash('sha256', $token)]) : null;
+    if (!$a) {
+        $made = $app->api->createAccount('Local developer', 'developer@localhost.localdomain', 'developer');
+        $token = $made['token'];
+        @mkdir($app->config['data'], 0700, true);
+        $old = umask(0077);
+        file_put_contents($file, $token . "\n");
+        umask($old);
+        $a = $app->db->one('SELECT * FROM accounts WHERE id = ?', [$made['id']]);
+    }
+    return $a + ['token' => $token];
+}
 
 switch ($cmd) {
     case 'init':
@@ -71,10 +108,42 @@ switch ($cmd) {
         $p = $app->catalog->publish();
         echo "Release {$r['id']}: {$r['state']}. Published build {$p['build']}\n";
         break;
+    case 'developer':
+        echo local_developer($app)['token'], "\n";
+        break;
+    case 'upload':
+        $phoenix = ($argv[2] ?? '') === '--phoenix';
+        $bytes = @file_get_contents($argv[$phoenix ? 3 : 2] ?? '');
+        if (!is_string($bytes)) {
+            fwrite(STDERR, "usage: php bin/marketplace.php upload [--phoenix] FILE.ipk\n");
+            exit(2);
+        }
+        if ($phoenix) {
+            // Phoenix's own package, as the catalog's first admin (the one init made).
+            $owner = $app->db->one("SELECT * FROM accounts WHERE role = 'admin' ORDER BY id");
+            try {
+                $r = $app->catalog->submitPackage($owner, $bytes);
+                if ($r['release']['state'] === 'approved') {
+                    $r['publish'] = $app->catalog->publish();
+                }
+                $status = 200;
+            } catch (\Phoenix\Marketplace\CheckFailed $e) {
+                [$status, $r] = [400, ['error' => $e->getMessage()]];
+            }
+        } else {
+            [$status, $r] = $app->api->handle('POST', '/api/apps/packages', $bytes, 'Bearer ' . local_developer($app)['token']);
+        }
+        if ($status !== 200) {
+            fwrite(STDERR, "Refused: {$r['error']}\n");
+            exit(1);
+        }
+        echo "{$r['app']['id']} {$r['release']['version']}: {$r['release']['state']}"
+            . (isset($r['publish']) ? ". Published build {$r['publish']['build']}" : '') . "\n";
+        break;
     case 'key':
         echo base64_encode($app->signer->public), "\n", $app->signer->fingerprint(), "\n";
         break;
     default:
-        fwrite(STDERR, "usage: php bin/marketplace.php init|seed|publish|admin|queue|approve|reject|key\n");
+        fwrite(STDERR, "usage: php bin/marketplace.php init|seed|publish|admin|queue|approve|reject|key|developer|upload\n");
         exit(2);
 }

@@ -1,0 +1,6 @@
+{
+    "name": "org.example.svc",
+    "version": "0.1.0",
+    "main": "service.js",
+    "dependencies": { "left-pad": "^1.3.0", "@example/linked": "file:../linked" }
+}

@@ -1,0 +1,7 @@
+{
+    "com.palm.service.contacts.linker": [
+        "database.operation",
+        "phoenix.appmanager.query",
+        "phoenix.appmanager.launch"
+    ]
+}

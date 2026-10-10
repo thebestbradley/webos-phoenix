@@ -10,7 +10,10 @@
 //   GET  /api/apps                        listed apps
 //   GET  /api/apps/{id}                   one app, its releases and rating
 //   POST /api/apps            (developer) {kind: "pwa", id, manifest, title, ...}
-//   POST /api/apps/packages   (developer) the .ipk as the request body
+//   POST /api/apps/packages   (developer) the .ipk as the request body: an app,
+//                             or a Synergy connector (Catalog::connectorTypes);
+//                             on a development catalog approved and published
+//                             at once ({app, release, publish})
 //   GET  /api/apps/{id}/reviews
 //   POST /api/apps/{id}/reviews  (account) {stars, text}
 //   POST /api/reports         {appId, kind, text, contact}
@@ -121,7 +124,11 @@ final class Api
         }
         if ($m === 'POST' && $p === '/api/apps/packages') {
             $owner = $this->account($auth, 'developer');
-            return $this->catalog->submitPackage($owner, $body);
+            $r = $this->catalog->submitPackage($owner, $body);
+            if ($r['release']['state'] === 'approved') {
+                $r['publish'] = $this->catalog->publish();
+            }
+            return $r;
         }
         if (preg_match('#^/api/apps/([^/]+)$#', $p, $x) && $m === 'GET') {
             $a = $this->catalog->app(rawurldecode($x[1]));

@@ -1,0 +1,5 @@
+{
+    "phoenix.appservices.contacts-linker": [
+        "com.palm.service.contacts.linker/*"
+    ]
+}

@@ -14,6 +14,7 @@
     "keywords": ["Assistant", "Ask", "Voice", "Siri", "Chat", "AI"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launchParams": ["text", "threadId", "conversationId", "retry", "followUp", "timerDone"],
         "launcherTab": 0
     },
     "//universalSearch": "Just Type (com.palm.universalsearch): the \"Ask Assistant\" action asks the typed words in the conversation in use.",

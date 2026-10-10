@@ -25,5 +25,17 @@
     ],
     "devices.lightsensor": [
         "com.palm.ambientLightSensor/control/status"
+    ],
+    "devices.power.query": [
+        "com.palm.power/com/palm/power/batteryStatusQuery",
+        "com.palm.power/com/palm/power/chargerStatusQuery",
+        "com.palm.power/com/palm/power/activityStart",
+        "com.palm.power/com/palm/power/activityEnd",
+        "com.palm.power/timeout/set",
+        "com.palm.power/timeout/clear"
+    ],
+    "devices.power.management": [
+        "com.palm.power/shutdown/machineOff",
+        "com.palm.power/shutdown/machineReboot"
     ]
 }

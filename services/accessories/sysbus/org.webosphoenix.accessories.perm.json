@@ -1,0 +1,46 @@
+{
+    "com.webos.surfacemanager": [
+        "phoenix.accessories.query",
+        "phoenix.accessories.shell"
+    ],
+    "org.webosphoenix.gamepads": [
+        "physicaldevice.query",
+        "physicaldevice.management",
+        "wifi.query",
+        "wifi.management",
+        "networkconnection.query",
+        "application.operation",
+        "phoenix.ongoing",
+        "phoenix.shellhost.app"
+    ],
+    "org.webosphoenix.usb": [
+        "physicaldevice.query",
+        "physicaldevice.management",
+        "wifi.query",
+        "wifi.management",
+        "networkconnection.query",
+        "application.operation",
+        "phoenix.ongoing",
+        "phoenix.shellhost.app"
+    ],
+    "org.webosphoenix.tethering": [
+        "physicaldevice.query",
+        "physicaldevice.management",
+        "wifi.query",
+        "wifi.management",
+        "networkconnection.query",
+        "application.operation",
+        "phoenix.ongoing",
+        "phoenix.shellhost.app"
+    ],
+    "org.webosphoenix.battery": [
+        "physicaldevice.query",
+        "physicaldevice.management",
+        "wifi.query",
+        "wifi.management",
+        "networkconnection.query",
+        "application.operation",
+        "phoenix.ongoing",
+        "phoenix.shellhost.app"
+    ]
+}

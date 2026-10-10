@@ -14,6 +14,11 @@
     "keywords": ["Print", "Printer", "Printing", "PDF", "Save as PDF"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings. Print Manager was on the settings page of the webOS launcher (luna-sysmgr conf/default-launcher-page-layout.json, com.palm.app.printmanager); the print dialog launches it by that id, an alias of this one.",
+        "launchParams": ["jobID"],
         "launcherTab": 2
-    }
+    },
+    "//requiredPermissions": "OSE access control groups for the services the app calls (the groups in each service's sysbus api.json): com.palm.applicationManager/open for a saved PDF.",
+    "requiredPermissions": [
+        "phoenix.appmanager.launch"
+    ]
 }

@@ -378,6 +378,18 @@ data use "Phoenix Account".
 - RAUC (LGPL-2.1) is a separate program on the device; the service calls its
   command line and does not link it.
 
+## The keyboard's Maliit plugin
+
+- `services/keyboard` (Apache-2.0, original code) is a plugin for
+  maliit-server and links webOS OSE's `libmaliit-plugins`
+  (maliit-framework-webos, LGPL-2.1) dynamically on the device, as OSE's own
+  keyboard (imemanager, Apache-2.0) does; the library is OSE's, unchanged.
+- `services/keyboard/maliit-stub` declares the part of Maliit's plugin API
+  the plugin uses, for building and testing without maliit-framework-webos.
+  It is written for Phoenix (the names and values an API needs to be
+  called), not copied from the LGPL headers, and never ships: the device's
+  build uses the real headers.
+
 ## Firmware and drivers
 
 The owner's decision of October 2026: as much hardware as possible works
@@ -645,3 +657,47 @@ product names) are in [BRANDING.md](BRANDING.md).
 - Closed-source homebrew (Preware apps such as Internalz Pro): reimplement the
   behaviour from its visible features only, without its code or artwork, and
   record it here (see Files above).
+
+## Source offer
+
+Phoenix's own code is Apache-2.0, but the image it ships in is not only
+Phoenix's: an image is a distribution of every package in it, and the GPL
+and LGPL ones bring a duty to whoever hands the image out. **Whoever
+publishes a Phoenix image (a download, a device sold with it) must offer
+the corresponding source of these components with it**, for at least three
+years or alongside the download (GPL-2.0 section 3, GPL-3.0 section 6,
+LGPL-2.1 section 6, LGPL-3.0 section 4). OE makes it mechanical: build the
+release image with `INHERIT += "archiver"` and `ARCHIVER_MODE[src] =
+"original"` (patched sources and recipes per package), and publish
+`deploy/sources/` and the image's `license.manifest` with it. The LGPL
+libraries (Qt, glibc, systemd's libraries) are linked dynamically, as LGPL
+allows, so a user can replace them; LGPL-3.0's installation information
+(Qt) means a device that verifies its system image must still let its owner
+install a modified Qt: RAUC's keyring belongs to the owner, or developer
+mode allows unsigned updates (docs/PRE-IMAGE-CHECKLIST.md U3, L2).
+
+What every Phoenix image installs under these licences (OSE's base and
+meta-phoenix's packagegroups; the release's `license.manifest` is the
+authoritative list, and `tools/check-licences.py` keeps this one current):
+
+| Component | Licence | Why it is there |
+|---|---|---|
+| Linux kernel | GPL-2.0-only | the kernel and its in-tree modules |
+| kernel modules (rtl8812au, rtl8814au) | GPL-2.0-only | out-of-tree Wi-Fi drivers (meta-phoenix recipes-kernel) |
+| linux-firmware (some files) | firmware licences, a few GPL-2.0 | `packagegroup-phoenix-firmware` (Firmware and drivers, above) |
+| glibc | LGPL-2.1-or-later | the C library |
+| systemd | LGPL-2.1-or-later (some tools GPL-2.0) | init, journald |
+| qtbase, qtdeclarative, qtwayland, qtsvg, qt5compat | LGPL-3.0-only (or GPL) | the compositor and the shell's QML |
+| bash | GPL-3.0-or-later | the Terminal's default shell (`packagegroup-phoenix-terminal`) |
+| coreutils | GPL-3.0-or-later | the Terminal's tools |
+| nano | GPL-3.0-or-later | the Terminal's editor |
+| less | GPL-3.0-or-later or BSD-2-Clause | the Terminal's pager |
+| htop | GPL-2.0-or-later | the Terminal's process viewer |
+| procps | GPL-2.0-or-later, LGPL-2.0-or-later | `ps`, `top`, `free` |
+| opkg | GPL-2.0-or-later | the Hardware app's package installs |
+
+GPL-3.0 programs (bash, coreutils, nano) also carry GPL-3.0's
+installation-information clause on "User Products": a phone or tablet sold
+with them must let its owner install modified versions. A locked device
+must leave them out (`packagegroup-phoenix-terminal` is the only reason
+they are there).

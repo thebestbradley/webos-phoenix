@@ -41,7 +41,8 @@ plus the incremental build.
 | `./phoenix setup` | Install what is missing, without building |
 | `--no-assistant` | Without the assistant's parts (whisper.cpp, llama.cpp, their models, the wake word, the voice) |
 | `--offline` | Download nothing; it fails only when something the build needs is missing |
-| `./phoenix run --marketplace` | With the Marketplace's catalog running on this computer, and the Marketplace open |
+| `./phoenix run --marketplace` | Waits for the Marketplace's catalog on this computer (it starts with every run where PHP is), and opens the Marketplace |
+| `./phoenix run --no-marketplace` | Without the Marketplace's catalog this time |
 | `--tests` | Also the test tools (Playwright, Radicale, WsgiDAV, PHP's MySQL driver, xvfb) |
 
 What it checks, and installs when missing (it prints each one's size first):
@@ -205,15 +206,20 @@ device's data the way a phone does. On Linux they are
 **The Marketplace's catalog.** The Marketplace app reads the Phoenix
 catalog from a service on this computer for now (`server/marketplace`, PHP 8
 with sodium and pdo_sqlite, which `./phoenix` installs), at
-`http://127.0.0.1:8088/`. To start it, pick **Services > Marketplace
-Catalog**. The first time it sets itself up (its database, its signing key,
-the curated web apps), which takes a moment; the menu item says "setting
-up", then "running at 127.0.0.1:8088", and the Marketplace opens. The first
-time, the Marketplace shows the catalog's key: tap **Trust This Catalog**.
-Other ways in: **Start Local Catalog** on the Marketplace's "Can't reach
-Phoenix Marketplace" card, `./phoenix run --marketplace`, or **Services >
-Start Catalog with the Simulator**, which starts it with every run (off by
-default). If it fails, a box says why (most often PHP missing or without
+`http://127.0.0.1:8088/`. The simulator starts it with every run where PHP
+is (**Services > Start Catalog with the Simulator**, on unless you turn it
+off; `--no-marketplace` for one run), and **Services > Marketplace Catalog**
+starts or stops it. The first time it sets itself up (its database, its
+signing key, the curated web apps, the News Feed example connector and the
+Fediverse package), which takes a moment; the menu item says "setting up",
+then "running at 127.0.0.1:8088". The simulator's Marketplace trusts this
+catalog without asking: phoenix-sim reads the catalog's key from its data
+folder (`server/marketplace/data/public/v1/key.json`), so any other catalog
+still shows its key to check. Other ways in: **Start Local Catalog** on the
+Marketplace's "Can't reach Phoenix Marketplace" card, or
+`./phoenix run --marketplace` (waits for it and opens the Marketplace).
+Connector developers publish to it with `phoenix-connector publish --local`
+(`docs/SYNERGY-SDK.md`, "Testing in the simulator"). If it fails, a box says why (most often PHP missing or without
 sodium) with **Show Log** (`server/marketplace/data/simulator.log`; the menu
 has **Show Catalog Log** too). **Open Catalog in Browser** opens its review
 page, `/admin`, whose token is in `server/marketplace/data/admin.token`. It

@@ -4,6 +4,8 @@
         "devices.display.control",
         "devices.keys",
         "devices.vibrate",
-        "devices.lightsensor"
+        "devices.lightsensor",
+        "devices.power.query",
+        "devices.power.management"
     ]
 }

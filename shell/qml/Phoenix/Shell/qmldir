@@ -37,6 +37,8 @@ StatusBar 1.0 StatusBar.qml
 SystemMenu 1.0 SystemMenu.qml
 Wallpaper 1.0 Wallpaper.qml
 VirtualKeyboard 1.0 VirtualKeyboard.qml
+KeyboardHost 1.0 KeyboardHost.qml
+ClipboardClient 1.0 ClipboardClient.qml
 SystemSounds 1.0 SystemSounds.qml
 EmergencyWindow 1.0 EmergencyWindow.qml
 EditPopup 1.0 EditPopup.qml

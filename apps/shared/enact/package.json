@@ -1,0 +1,45 @@
+{
+  "name": "@phoenix/enact",
+  "version": "0.1.0",
+  "description": "The Phoenix service plugin for Enact apps: @phoenix/sdk over Enact's LS2Request, @phoenix/react's hooks, and the Phoenix design layer (tokens, fonts, Agate colours, header)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "keywords": [
+    "enact",
+    "webos",
+    "phoenix",
+    "agate",
+    "limestone"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/index.js",
+    "dist/index.js.map",
+    "dist/index.d.ts",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "peerDependencies": {
+    "@enact/webos": ">=4",
+    "@phoenix/react": "^0.1.0",
+    "@phoenix/sdk": "^0.1.0",
+    "react": ">=18"
+  },
+  "peerDependenciesMeta": {
+    "@enact/webos": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p ."
+  }
+}

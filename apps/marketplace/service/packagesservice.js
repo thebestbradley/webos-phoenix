@@ -19,6 +19,16 @@
 // install scripts, services, files outside its app, native code it cannot
 // run, or (Classics) needs the Mojo framework, which Phoenix cannot ship.
 //
+// Synergy connectors (kind "connector": an app with its service; Connections
+// installs them, docs/SYNERGY-CONNECTORS.md C4) need Developer Mode, as the
+// owner decided, until the connector trust tier (C5); except the first-party
+// ones Phoenix comes with (/etc/palm/marketplace/preinstalled.json: the
+// Fediverse), installed again from a catalog the device ships with, signed
+// with its key: those the device itself vouches for, so no Developer Mode
+// (firstParty). A pre-installed package counts as installed from that
+// catalog the first time the service looks (it was in the image), and can
+// be removed and installed again like any other.
+//
 // Methods:
 //   getSources {}                       -> {sources: [...]}, none with secrets
 //   addSource {url}                     -> {pending: {url, name, key, fingerprint}}:
@@ -100,6 +110,10 @@ function clone(o) { return JSON.parse(JSON.stringify(o)); }
 //   state.load() / state.save(obj)       the service's own settings and caches
 //   temp.write(name, bytes) -> path; temp.remove(path)
 //   defaultSources() -> [{id, name, kind, url, key?, enabled}]
+//   preinstalled() (optional) -> [{id, sourceId, version, title?}]: the
+//            connector packages the device came with
+//            (/etc/palm/marketplace/preinstalled.json), the version each
+//            has now (its appinfo.json)
 //   now(), log(msg) (optional)
 //   pending({appId, catalogId, sourceId, title, icon, state, progress,
 //            errorText}) (optional): an install as it goes, for the
@@ -123,13 +137,42 @@ function createPackagesService(deps) {
         var known = {};
         s.sources.forEach(function (x) { known[x.id] = true; });
         (deps.defaultSources() || []).forEach(function (d) {
-            if (known[d.id] || (s.removedDefaults || []).indexOf(d.id) >= 0) return;
+            if (known[d.id]) return adoptKey(sourceOf(s, d.id), d);
+            if ((s.removedDefaults || []).indexOf(d.id) >= 0) return;
             s.sources.push({ id: d.id, name: d.name, kind: d.kind, url: d.url, key: d.key || null, enabled: !!d.enabled,
-                             builtin: true, lastBuild: null, refreshed: null, error: null, fingerprint: null });
+                             builtin: true, lastBuild: null, refreshed: null, error: null, fingerprint: null,
+                             keyFromDevice: !!d.key });
+        });
+        // The connector packages the device came with: installed from their
+        // catalog, once (removed, they stay removed).
+        s.preinstalledSeen = s.preinstalledSeen || {};
+        preinstalledList().forEach(function (pre) {
+            if (s.preinstalledSeen[pre.id]) return;
+            s.preinstalledSeen[pre.id] = true;
+            if (!s.installed[pre.id])
+                s.installed[pre.id] = { sourceId: pre.sourceId, catalogId: pre.id, kind: "connector", title: pre.title || pre.id, icon: "",
+                                        version: pre.version || "", museumId: null, installedAt: now().toISOString(), preinstalled: true };
         });
         return s;
     }
     function save(s) { deps.state.save(s); }
+    // A key the device's sources file gives a catalog it ships with is
+    // trusted without asking (the simulator gives its own local catalog's,
+    // read from that catalog's data folder): taken when the user has not
+    // trusted another, and followed when it changes.
+    function adoptKey(src, d) {
+        if (!src || !src.builtin || !d.key || src.url !== d.url || src.key === d.key) return;
+        if (src.key && !src.keyFromDevice) return;
+        src.key = d.key;
+        src.keyFromDevice = true;
+        src.fingerprint = null;
+        src.lastBuild = null;
+        if (src.error && src.error.errorCode === "UNTRUSTED") src.error = null;
+    }
+    function preinstalledList() {
+        try { return (deps.preinstalled ? deps.preinstalled() : []) || []; } catch (e) { return []; }
+    }
+    function isPreinstalled(id) { return preinstalledList().some(function (p) { return p.id === id; }); }
     function sourceOf(s, id) { return s.sources.filter(function (x) { return x.id === id; })[0] || null; }
     function publicSource(x) {
         return { id: x.id, name: x.name, kind: x.kind, url: x.url, enabled: x.enabled, builtin: !!x.builtin,
@@ -186,6 +229,12 @@ function createPackagesService(deps) {
                 src.refreshed = now().toISOString();
                 src.error = null;
                 return { id: src.id, ok: true };
+            });
+        }
+        if (src.key && !src.fingerprint) {
+            return catalog.fingerprint(b64.fromBase64(src.key), deps.crypto.sha256).then(function (fp) {
+                src.fingerprint = fp;
+                return refreshOne(s, src);
             });
         }
         if (!src.key) {
@@ -372,14 +421,26 @@ function createPackagesService(deps) {
             .then(function (r) { return !!r && r.status === "enabled"; }, function () { return false; });
     }
 
+    // Whether an entry is a first-party connector the device vouches for:
+    // one it came with (preinstalled), from a Phoenix catalog it ships with
+    // (a builtin source) whose key is the one the device was given or the
+    // user checked: its index is signed with that key, so the package (its
+    // SHA-256 in the index) is the catalog's.
+    function firstPartyEntry(s, entry) {
+        var src = sourceOf(s, entry.sourceId);
+        return entry.kind === "connector" && isPreinstalled(entry.id) && !!src && src.builtin && src.kind === "phoenix" && !!src.key;
+    }
+
     // The package's bytes -> its app, or an error saying why it cannot be installed.
     // dev (Developer Mode): install scripts, services and files outside the
     // app are allowed ({developer: true}: the installer is told so).
-    function check(bytes, entry, dev) {
+    // firstParty: a connector the device came with, from a catalog it ships
+    // with (firstPartyEntry): installed without Developer Mode.
+    function check(bytes, entry, dev, firstParty) {
         return ipk.read(bytes).then(function (pkg) {
             var app = pkg.apps[0];
             if (!app || pkg.apps.length > 1) throw err("BAD_PACKAGE", "The package does not hold one app");
-            if (entry.kind === "ipk" && (app.id !== entry.id || pkg.control.Package !== entry.id))
+            if ((entry.kind === "ipk" || entry.kind === "connector") && (app.id !== entry.id || pkg.control.Package !== entry.id))
                 throw err("BAD_PACKAGE", "The package is " + (pkg.control.Package || app.id) + ", not " + entry.id);
             var outside = pkg.files.filter(function (f) { return f.path.indexOf(app.dir) !== 0; });
             // A Synergy connector carries its service in the app's service/
@@ -390,7 +451,7 @@ function createPackagesService(deps) {
             });
             var needs = pkg.scripts.length ? "The package runs install scripts as the system"
                 : pkg.services.length ? "The app has background services"
-                : connector ? "It is a Synergy connector (an account type with a background service)"
+                : connector && !firstParty ? "It is a Synergy connector (an account type with a background service)"
                 : outside.length ? "The package puts files outside its app (" + outside[0].path + ")" : "";
             if (needs && !dev) throw err("NEEDS_DEVMODE", needs + ": turn on Developer Mode in Settings to install it");
             var type = app.appinfo.type || "web";
@@ -405,7 +466,7 @@ function createPackagesService(deps) {
                 var m = f.path.indexOf(app.dir) === 0 && /([^/]+)_appinfo\.json$/.exec(f.path);
                 return m ? m[1] : "";
             }).filter(Boolean);
-            return { pkg: pkg, app: app, developer: !!needs, plugins: plugins };
+            return { pkg: pkg, app: app, developer: !!needs, firstParty: !!(connector && firstParty && !needs), plugins: plugins };
         });
     }
 
@@ -471,7 +532,7 @@ function createPackagesService(deps) {
         progress({ state: "downloading", progress: 10 });
         return getBytes(rel.url).then(function (bytes) {
             progress({ state: "checking", progress: 60 });
-            if (entry.kind === "ipk") {
+            if (entry.kind === "ipk" || entry.kind === "connector") {
                 if (rel.size && bytes.length !== rel.size) throw err("BAD_PACKAGE", "The download is not the size the catalog signed");
                 return sha256Hex(bytes).then(function (h) {
                     if (h !== rel.sha256) throw err("BAD_PACKAGE", "The download is not the package the catalog signed (SHA-256)");
@@ -486,7 +547,9 @@ function createPackagesService(deps) {
 
     // OSE's installer, to the end: {ok, error}.
     // developer: the package needs Developer Mode (scripts, services, ...).
-    function osInstall(id, path, developer) {
+    // firstParty: a connector the device came with (check), which the
+    // installer takes from this service without Developer Mode.
+    function osInstall(id, path, developer, firstParty) {
         return new Promise(function (resolve) {
             var done = false, cancel = null;
             function finish(r) {
@@ -497,6 +560,7 @@ function createPackagesService(deps) {
             }
             var req = { id: id, ipkUrl: path, subscribe: true };
             if (developer) req.developerMode = true;
+            if (firstParty) req.firstParty = true;
             cancel = deps.luna.subscribe("luna://com.webos.appInstallService/install", req, function (r) {
                 if (r.returnValue === false && !r.details) return finish({ ok: false, error: r.errorText || "The installer refused the package" });
                 var st = r.details && r.details.state;
@@ -552,7 +616,7 @@ function createPackagesService(deps) {
             return Promise.all([packageFor(s, entry, progress), devMode()]);
         }).then(function (got) {
             var bytes = got[0];
-            return check(bytes, entry, got[1]).then(function (c) {
+            return check(bytes, entry, got[1], firstPartyEntry(s, entry)).then(function (c) {
                 appId = c.app.id;
                 ownIcon = packageIcon(c);
                 if (entry.kind !== "classic" && entry.kind !== "preware" && appId !== entry.id) throw err("BAD_PACKAGE", "The package holds another app");
@@ -562,7 +626,7 @@ function createPackagesService(deps) {
                 return Promise.resolve(deps.temp.write(appId + ".ipk", bytes)).then(function (where) {
                     path = where;
                     progress({ state: "installing", progress: 80 });
-                    return osInstall(appId, path, c.developer);
+                    return osInstall(appId, path, c.developer, c.firstParty);
                 }).then(function (r) {
                     if (!r.ok) throw err("INSTALL_FAILED", r.error);
                     var s2 = load();
@@ -632,13 +696,22 @@ function createPackagesService(deps) {
 
     // Apps removed some other way (the launcher) are forgotten here too.
     function reconcile() {
-        return deps.luna.call("luna://com.webos.applicationManager/listLaunchPoints", {}).then(function (r) {
+        // Every app, the hidden ones too (a connector's app is hidden: not a launch point).
+        var all = Promise.resolve(deps.luna.call("luna://com.webos.applicationManager/listApps", {})).then(function (r) {
+            return r && Array.isArray(r.apps) ? r.apps : null;
+        }, function () { return null; });
+        return Promise.all([deps.luna.call("luna://com.webos.applicationManager/listLaunchPoints", {}), all]).then(function (got) {
+            var r = got[0];
             if (!r || !Array.isArray(r.launchPoints)) return;
             var present = {};
             ownIcons = {};
             r.launchPoints.forEach(function (lp) {
                 present[lp.id] = true;
                 if (lp.icon && (!lp.launchPointId || lp.launchPointId === lp.id + "_default")) ownIcons[lp.id] = String(lp.icon);
+            });
+            (got[1] || []).forEach(function (a) {
+                present[a.id] = true;
+                if (a.icon && !ownIcons[a.id]) ownIcons[a.id] = String(a.icon);
             });
             var s = load(), changed = false;
             Object.keys(s.installed).forEach(function (id) {

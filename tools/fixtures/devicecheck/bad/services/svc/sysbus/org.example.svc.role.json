@@ -1,0 +1,7 @@
+{
+    "appId": "org.example.svc",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": ["org.example.svc"],
+    "permissions": [{ "service": "org.example.svc", "outbound": ["com.webos.service.systemservice"] }]
+}

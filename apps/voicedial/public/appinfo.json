@@ -13,6 +13,7 @@
     "keywords": ["Voice Dial", "Voice", "Dial", "Call", "Speak"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps. Voice Dial was luna-sysmgr's built-in system app com.palm.sysapp.voicedial (sysapps/com.palm.sysapp.voicedial, category Applications), an alias of this one; icon.png is its original icon (PROVENANCE.md).",
+        "launchParams": ["source"],
         "launcherTab": 0
     }
 }

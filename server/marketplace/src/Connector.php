@@ -38,8 +38,9 @@
 //   C16 the template's sign-up link (signUp: {url?, servers?: [{name, url}]}):
 //       https addresses only
 //
-// Phase C4 (connector packages in the catalog) uses this; until then the
-// catalog takes no connector (Catalog::publish, Ipk::check refuses services).
+// Phase C4 (connector packages in the catalog) uses this: Catalog::submitPackage
+// takes a package with a service only when checkIpk finds no error (Ipk::check
+// refuses a service in any other package).
 
 declare(strict_types=1);
 

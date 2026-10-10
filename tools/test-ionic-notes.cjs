@@ -207,6 +207,36 @@ async function main() {
         check(await visible(page, "ion-fab-button").isVisible(), "Material Design: New Note is a floating action button");
         await page.screenshot({ path: path.join(outDir, "phone-md.png") });
 
+        // ---- The Phoenix service plugin (@phoenix/sdk, react, capacitor) ------
+        // The status bar's app name: the app menu, Edit and Share first.
+        await page.evaluate(() => window.__phoenixRuntime.openAppMenu());
+        await pause(page, 400);
+        const menuLabels = await page.locator(".phx-appmenu-item").allTextContents();
+        check(JSON.stringify(menuLabels) === JSON.stringify(["Edit", "Share", "New Note", "Settings"]),
+              "SDK: the app menu has Edit, Share, New Note and Settings (" + menuLabels.join(", ") + ")");
+        check(await page.locator(".phx-appmenu-item.disabled", { hasText: "Share" }).count() === 1, "SDK: Share is dimmed with no note open");
+        await page.screenshot({ path: path.join(outDir, "phone-appmenu.png") });
+        await page.keyboard.press("Escape");
+        await pause(page, 400);
+        check(await page.locator(".phx-appmenu").count() === 0, "SDK: the back gesture closes the app menu");
+        // A share from another app (appinfo.json shareTargets) becomes a note.
+        await page.evaluate(() => window.__phoenixRuntime.relaunch({ share: { title: "Shared Recipe", text: "Flour and eggs" } }));
+        await pause(page, 1500);
+        check(await visible(page, "textarea.note-editor").inputValue() === "# Shared Recipe\n\nFlour and eggs", "SDK: a share received becomes a new note");
+        // Just Type's "New Note (Ionic)" action ({newNote: words}).
+        await page.keyboard.press("Escape");
+        await pause(page, 1000);
+        await page.evaluate(() => window.__phoenixRuntime.relaunch({ newNote: "Typed in Just Type" }));
+        await pause(page, 1500);
+        check(await visible(page, "textarea.note-editor").inputValue() === "Typed in Just Type", "SDK: Just Type's action makes a note of the words");
+        // Share in the app menu now shares the open note: the system's sheet opens.
+        await page.evaluate(() => window.__phoenixRuntime.openAppMenu());
+        await pause(page, 400);
+        await page.locator(".phx-appmenu-item", { hasText: "Share" }).click();
+        await pause(page, 1500);
+        check(await page.locator("iframe[src*='org.webosphoenix.sharesheet']").count() === 1, "SDK: Share opens the system's share sheet (Capacitor plugin)");
+        await page.screenshot({ path: path.join(outDir, "phone-share.png") });
+
         check(errors.length === 0, "no page errors" + (errors.length ? ":\n    " + errors.slice(0, 5).join("\n    ") : ""));
         await browser.close();
     } finally {

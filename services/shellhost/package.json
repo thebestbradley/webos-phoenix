@@ -1,0 +1,8 @@
+{
+  "name": "org.webosphoenix.shellhost",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix's line between the pages and the shell on a device (Luna): the pages' phoenixHost messages for luna-surfacemanager's Phoenix shell, and the shell's messages for each app's pages",
+  "license": "Apache-2.0",
+  "main": "service.js"
+}

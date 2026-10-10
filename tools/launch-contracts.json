@@ -1,0 +1,162 @@
+{
+    "//": "Launch contracts tools/check-launch-contracts.cjs checks the system's app-to-app launches against (docs/LAUNCH-CONTRACTS.md). Phoenix's own apps list the launch params they read in their appinfo.json (\"phoenix\": {\"launchParams\"}); the original apps they cannot list them in, so they are here, each with the file that reads them.",
+    "universal": {
+        "//": "Keys the system adds or consumes, not the app: the runtime's returnToCaller ($caller), a scheduled activity's launch ($activity), luna-sysmgr's own flag for a launch without a card preview ($disableCardPreLaunch, WebAppMgr's).",
+        "keys": [
+            "$caller",
+            "$activity",
+            "$disableCardPreLaunch"
+        ]
+    },
+    "runtime": {
+        "//": "Keys the runtime takes for an app before it opens: {id: com.palm.app.printmanager, params: {runHeadless}} starts no card (runtime/phoenix-runtime.js, the Print Manager); com.palm.app.help {target: \"http://help.palm.com/<area>/...\"} becomes Help's {topic} (aliasParams, HELP_TOPICS).",
+        "org.webosphoenix.printmanager": [
+            "runHeadless"
+        ],
+        "org.webosphoenix.help": [
+            "target"
+        ]
+    },
+    "originals": {
+        "com.palm.app.contacts": {
+            "launchParams": [
+                "launchType",
+                "contact",
+                "person",
+                "skipPrompt",
+                "id",
+                "target",
+                "personId",
+                "focusField"
+            ],
+            "source": "third_party/core-apps/com.palm.app.contacts/app/ContactsApp.js:93-125 (handleLaunchParams: launchType editContact | newContact | pseudo-card | addToExisting | showPerson with id, contact or person; target: a vCard file) and compat/rootfs/usr/palm/applications/com.palm.app.contacts/app/phoenix-launch.js (launchType reminder with personId and focusField, personId alone, target opencontact://)"
+        },
+        "com.palm.app.email": {
+            "launchParams": [
+                "target",
+                "uri",
+                "newEmail",
+                "account",
+                "accountId",
+                "attachments",
+                "recipients",
+                "summary",
+                "text",
+                "launchedAtBoot",
+                "emailId"
+            ],
+            "source": "third_party/core-apps/com.palm.app.email/nowindow/source/Launch.js:201-252 (relaunch: target or uri mailto: or file:, newEmail {...}, the legacy account / attachments / recipients / summary / text) and compose/source/Composition.js:373-498; emailId: compat/rootfs/usr/palm/applications/com.palm.app.email/mail/source/phoenix-compat.js"
+        },
+        "com.palm.app.calendar": {
+            "launchParams": [
+                "launchedAtBoot",
+                "dayChange",
+                "alarm",
+                "alarmClose",
+                "alarmDeleted",
+                "alarmUpdated",
+                "newEvent",
+                "quickLaunchText",
+                "showEventDetail",
+                "showDetailFromReminder"
+            ],
+            "source": "third_party/core-apps/com.palm.app.calendar/app/App.js:332-365 and app/AppView.js:279-320"
+        },
+        "com.palm.launcher": {
+            "launchParams": [],
+            "source": "shell/qml/Phoenix/Lsm/LsmWindowSource.qml:789-810 (the device shell launches Just Type's page only to bring it up; what is typed reaches it as the shell's \"justType\" events, runtime/phoenix-runtime.js deviceJustType)"
+        },
+        "com.palm.app.notes": {
+            "launchParams": [
+                "text",
+                "memoId"
+            ],
+            "source": "compat/rootfs/usr/palm/applications/com.palm.app.notes/app/views/GridView.js:131-140 (the original's goToGrid with the launch params, app/views/AppView.js:66-68)"
+        },
+        "com.palm.app.clock": {
+            "launchParams": [
+                "action",
+                "key",
+                "setTime"
+            ],
+            "source": "third_party/core-apps/com.palm.app.clock/launch/clockapp.js:139-215 and main/main.js:189-196"
+        },
+        "com.palm.app.accounts": {
+            "launchParams": [
+                "launchType",
+                "accountId",
+                "templateId"
+            ],
+            "source": "compat/rootfs/usr/palm/applications/com.palm.app.accounts/source/AccountManager.js:110-125 (launchType changelogin with accountId) and source/phoenix-launch.js (templateId)"
+        },
+        "com.palm.app.browser": {
+            "launchParams": [
+                "target",
+                "url"
+            ],
+            "ignored": [
+                "scene"
+            ],
+            "source": "third_party/isis/isis-browser/source/BrowserApp.js:152-153 (p.target || p.url); scene is the Mojo browser's scene name (luna-applauncher sends scene: \"page\"), which the isis browser never needed"
+        },
+        "com.palm.app.calculator": {
+            "launchParams": [],
+            "source": "third_party/core-apps/com.palm.app.calculator (reads no launch params)"
+        },
+        "com.palm.systemui": {
+            "launchParams": [
+                "action",
+                "metadata"
+            ],
+            "source": "third_party/luna-systemui/data/System-Service.js:150-200 (its own relaunches)"
+        }
+    },
+    "exceptions": [
+        {
+            "file": "third_party/core-apps/com.palm.app.calendar/app/shared/LunaAppManager.js",
+            "id": "com.palm.app.calendar",
+            "keys": [
+                "reminders"
+            ],
+            "why": "the original Calendar never read it either: its missed reminders view was a TODO (LunaAppManager.js:270-276, App.js:378)"
+        },
+        {
+            "file": "third_party/luna-systemui/app/SystemServiceAlerts/SystemServiceAlerts.js",
+            "id": "com.palm.app.dateandtime",
+            "keys": [
+                "launchType"
+            ],
+            "why": "Settings' Date & Time page opens; it has no separate \"set the time temporarily\" mode to start"
+        },
+        {
+            "file": "third_party/luna-systemui/app/SystemManagerAlerts/SystemManagerAlerts.js",
+            "id": "com.palm.app.searchpreferences",
+            "keys": [
+                "launch"
+            ],
+            "why": "Settings' Just Type page opens, its search providers (\"Add More\") are on it"
+        },
+        {
+            "file": "third_party/enyo-1.0/framework/lib/networkalerts/source/NetworkAlertsContent.js",
+            "id": "com.palm.app.phone",
+            "keys": [
+                "launchType"
+            ],
+            "why": "{preferences: true} opens Settings' Phone page (APP_ROUTES); a network search is not something the simulated modem has"
+        },
+        {
+            "file": "third_party/isis/isis-browser/source/ShareLinkDialog.js",
+            "id": "com.palm.app.enyo-findapps",
+            "keys": [
+                "target"
+            ],
+            "why": "the App Catalog page of HP's Facebook app, which Phoenix does not have (\"absent\"); the Marketplace opens"
+        }
+    ],
+    "absent": {
+        "//": "Ids the original apps launch that Phoenix has no app for, and why. The checker lists them as ❌ but does not fail on them.",
+        "com.palm.app.swmanager": "The Software Manager (luna-systemui AppManagerAlerts.js opens it from its app install alerts): not in the open-source release, and Phoenix has none; the Marketplace lists the installed apps.",
+        "com.palm.app.dataimport": "The data import app (luna-systemui SystemManagerAlerts.js opens it after a data transfer): not in the open-source release, and Phoenix has none.",
+        "com.palm.app.enyo-facebook": "HP's Facebook app (the browser's Share Link > Facebook): not in the open-source release; Phoenix shares through the share sheet."
+    }
+}

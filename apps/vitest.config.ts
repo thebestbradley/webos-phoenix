@@ -16,6 +16,15 @@ export default defineConfig({
             { find: /^@phoenix\/synckit$/, replacement: here("./shared/synckit/src/index.js") },
             { find: /^@phoenix\/synckit\/(.*)$/, replacement: here("./shared/synckit/") + "$1" },
             { find: /^@phoenix\/connector-kit$/, replacement: here("./shared/connector-kit/src/index.ts") },
+            // The app SDK and its bindings (built to dist/ only for publishing
+            // and the Enact apps), and Enact's LS2Request, which the Enact
+            // binding's tests replace (apps/ has no Enact).
+            { find: /^@phoenix\/sdk\/testing$/, replacement: here("./shared/sdk/src/testing.ts") },
+            { find: /^@phoenix\/sdk$/, replacement: here("./shared/sdk/src/index.ts") },
+            { find: /^@phoenix\/react$/, replacement: here("./shared/react/src/index.ts") },
+            { find: /^@phoenix\/capacitor$/, replacement: here("./shared/capacitor/src/index.ts") },
+            { find: /^@phoenix\/enact$/, replacement: here("./shared/enact/src/index.ts") },
+            { find: /^@enact\/webos\/LS2Request\/LS2Request\.js$/, replacement: here("./shared/enact/src/test/LS2Request.ts") },
         ],
     },
     test: {
@@ -25,6 +34,7 @@ export default defineConfig({
                   "{phone,messaging,camera,photos,music,files,tasks,voicememos,flashlight,scanner,weather,maps,passwords,authenticator,terminal,videos,podcasts,pdfview,docview,help,firstuse,screenshot,notificationlab,agenda,printmanager,voicedial,clipboard,assistant,dropshare,marketplace}/src/**/*.test.{ts,tsx}",
                   "{files,voicememos,dav,fediverse,settings,marketplace,assistant}/service/**/*.test.ts",
                   "../services/updates/**/*.test.ts", "../services/hardware/**/*.test.ts",
-                  "../services/systemmanager/**/*.test.ts", "../services/clipboard/**/*.test.ts"],
+                  "../services/systemmanager/**/*.test.ts", "../services/clipboard/**/*.test.ts",
+                  "../services/{shellhost,appmanager,accessories,dropshare}/**/*.test.ts"],
     },
 });

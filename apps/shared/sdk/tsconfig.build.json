@@ -1,0 +1,15 @@
+{
+  // The declarations only (vite builds the JavaScript). The SDK bundles the
+  // parts of @phoenix/luna it uses (../luna/src), so their declarations go
+  // beside the SDK's, under dist/types/{sdk,luna}/src.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "outDir": "dist/types",
+    "rootDir": ".."
+  },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+}

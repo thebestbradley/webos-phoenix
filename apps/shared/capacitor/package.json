@@ -1,0 +1,42 @@
+{
+  "name": "@phoenix/capacitor",
+  "version": "0.1.0",
+  "description": "The Phoenix service plugin as a Capacitor plugin, for Ionic and Capacitor apps on webOS Phoenix (web implementation over @phoenix/sdk)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "keywords": [
+    "capacitor",
+    "capacitor-plugin",
+    "ionic",
+    "webos",
+    "phoenix"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "sideEffects": false,
+  "capacitor": {
+    "//": "Web only: Phoenix runs web apps (Capacitor's web platform)."
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=6",
+    "@phoenix/sdk": "^0.1.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "@capacitor/core": "^8.5.3"
+  }
+}

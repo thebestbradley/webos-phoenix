@@ -78,6 +78,8 @@ QString SimInstaller::install(const QString &appId, const QVariantList &files)
     if (!QDir().rename(temp, dir))
         return QStringLiteral("Cannot write ") + dir;
     QDir(old).removeRecursively();
+    // A pre-installed package installed again from the catalog: the user's now.
+    m_rootfs->forgetSeeded(appId);
     m_rootfs->rescan();
     return {};
 }
@@ -88,6 +90,7 @@ QString SimInstaller::remove(const QString &appId)
         return QStringLiteral("No such id");
     if (!QDir(QDir(appsDir(m_rootfs)).filePath(appId)).removeRecursively())
         return QStringLiteral("Cannot remove ") + appId;
+    m_rootfs->forgetSeeded(appId);
     m_rootfs->rescan();
     return {};
 }

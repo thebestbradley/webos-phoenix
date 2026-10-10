@@ -13,6 +13,7 @@
     "uiRevision": 2,
     "phoenix": {
         "//": "shareTargets: what it takes from the share sheet (docs/SHARE-AND-FILES.md): audio, which it plays (a voice memo from Voice Memos' Share).",
+        "launchParams": ["play", "share", "target", "mimeType", "fileName"],
         "shareTargets": [
             { "types": ["audio/*"], "label": "Music" }
         ]
@@ -23,6 +24,7 @@
         "application.operation",
         "mediaindexer.operation",
         "media.operation",
-        "audio.operation"
+        "audio.operation",
+        "phoenix.system.media"
     ]
 }

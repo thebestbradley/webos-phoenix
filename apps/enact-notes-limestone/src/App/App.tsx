@@ -10,8 +10,9 @@ import Button from '@enact/limestone/Button';
 import {InputPopup} from '@enact/limestone/Input';
 import ThemeDecorator from '@enact/limestone/ThemeDecorator';
 import {Cell} from '@enact/ui/Layout';
-import {DEFAULT_SETTINGS, useNotesApp} from '@phoenix/notes-core';
-import {useEffect, useState} from 'react';
+import {DEFAULT_SETTINGS, noteFromShare, shareOfNote, useNotesApp} from '@phoenix/notes-core';
+import {PhoenixDecorator, useAppMenu, useBack, useJustTypeAction, useShareReceiver, useStageReady} from '@phoenix/enact';
+import {useEffect, useRef, useState} from 'react';
 
 import {Row} from '../enact';
 import {luna} from '../luna';
@@ -71,24 +72,41 @@ const Notes = ({onSkin}: {onSkin: (skin: string) => void}) => {
 	}, [folderId, narrow]);
 	const noteShown = narrow ? !folders && !!app.selected : wide || !folders;
 	const listShown = !narrow || (!folders && !app.selected);
-	useEffect(() => {
-		if (!narrow || (!folders && !app.selected)) return;
-		// The back gesture (Escape): the folders or the note close, taken so
-		// the card stays.
-		const onKey = (e: KeyboardEvent) => {
-			if (e.key !== 'Escape' || e.defaultPrevented) return;
-			e.preventDefault();
-			if (folders) setFolders(false);
-			else app.select(null);
-		};
-		window.addEventListener('keydown', onKey);
-		return () => window.removeEventListener('keydown', onKey);
-	}, [narrow, folders, app]);
+	// The back gesture (@phoenix/enact's useBack): the folders or the note
+	// close, taken so the card stays.
+	useBack(() => {
+		if (folders) setFolders(false);
+		else app.select(null);
+		return true;
+	}, narrow && (folders || !!app.selected));
 	const [dialog, setDialog] = useState<Dialog | null>(null);
 	const [problem, setProblem] = useState<string | null>(null);
 	const close = () => { setDialog(null); setProblem(null); };
 
 	onSkin(app.settings.skin || 'neutral');
+
+	// The Phoenix service plugin: the app menu (Edit and Share first, then
+	// New Note and Settings), shares received (appinfo.json shareTargets)
+	// and Just Type's New Note action as new notes, once the notes are loaded.
+	const loaded = useRef(app.loaded);
+	loaded.current = app.loaded;
+	const pending = useRef<string[]>([]);
+	const newNoteWith = (body: string) => {
+		if (!body) return;
+		if (loaded.current) void app.newNote(body);
+		else pending.current.push(body);
+	};
+	useEffect(() => {
+		if (!app.loaded) return;
+		for (const body of pending.current.splice(0)) void app.newNote(body);
+	}, [app.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+	useShareReceiver((s) => newNoteWith(noteFromShare(s)));
+	useJustTypeAction('newNote', newNoteWith);
+	useAppMenu({
+		items: [{label: 'New Note', onSelect: () => void app.newNote()}, {label: 'Settings', onSelect: () => setDialog({kind: 'settings'})}],
+		share: () => (app.selected ? shareOfNote(app.draft) : null)
+	});
+	useStageReady(app.loaded);
 
 	const folderInput = dialog && (dialog.kind === 'newFolder' || dialog.kind === 'rename') ? dialog : null;
 
@@ -182,4 +200,6 @@ const App = () => {
 	return <Themed skin={skin} onSkin={(s: string) => { if (s !== skin) setSkin(s); }} />;
 };
 
-export default App;
+// The Phoenix service plugin's transport (Enact's LS2Request) and design
+// tokens; Limestone keeps its own fonts (Museo Sans, sized for a TV).
+export default PhoenixDecorator(App, {fonts: false});

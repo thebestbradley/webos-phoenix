@@ -22,6 +22,10 @@ var http = require("./lib/node-http");
 var STATE = "/var/lib/phoenix/marketplace/state.json";
 var TEMP = "/tmp/phoenix-marketplace";
 var SOURCES = "/etc/palm/marketplace/sources.json";
+// The connector packages the image came with (tools/install-rootfs.py puts
+// them in /media/cryptofs/apps, the apps the user may remove).
+var PREINSTALLED = "/etc/palm/marketplace/preinstalled.json";
+var INSTALLED_APPS = "/media/cryptofs/apps/usr/palm/applications/";
 
 var service = new Service(packages.SERVICE);
 
@@ -70,6 +74,12 @@ var methods = packages.createPackagesService({
         remove: function (file) { try { fs.unlinkSync(file); } catch (e) { /* gone */ } }
     },
     defaultSources: function () { return (readJson(SOURCES) || {}).sources || []; },
+    preinstalled: function () {
+        return ((readJson(PREINSTALLED) || {}).packages || []).map(function (p) {
+            var info = readJson(INSTALLED_APPS + p.id + "/appinfo.json") || {};
+            return { id: p.id, sourceId: p.sourceId || "phoenix", version: String(info.version || ""), title: info.title || p.id };
+        });
+    },
     log: function (msg) { console.log("[marketplace] " + msg); }
 });
 

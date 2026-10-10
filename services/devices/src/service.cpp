@@ -34,6 +34,8 @@ DeviceService::~DeviceService()
         g_source_remove(m_accelTimer);
     if (m_lightTimer)
         g_source_remove(m_lightTimer);
+    if (m_shutdownTimer)
+        g_source_remove(m_shutdownTimer);
     for (auto &s : m_subs) {
         if (s->timer)
             g_source_remove(s->timer);
@@ -72,6 +74,23 @@ bool DeviceService::attach(LSError *error)
         {},
     };
     static LSMethod als[] = { { "status", &DeviceService::onAlsStatus, LUNA_METHOD_FLAGS_NONE }, {} };
+    static LSMethod powerd[] = {
+        { "batteryStatusQuery", &DeviceService::onBatteryStatusQuery, LUNA_METHOD_FLAGS_NONE },
+        { "chargerStatusQuery", &DeviceService::onChargerStatusQuery, LUNA_METHOD_FLAGS_NONE },
+        { "activityStart", &DeviceService::onPowerActivity, LUNA_METHOD_FLAGS_NONE },
+        { "activityEnd", &DeviceService::onPowerActivity, LUNA_METHOD_FLAGS_NONE },
+        {},
+    };
+    static LSMethod shutdownMethods[] = {
+        { "machineOff", &DeviceService::onMachineOff, LUNA_METHOD_FLAGS_NONE },
+        { "machineReboot", &DeviceService::onMachineReboot, LUNA_METHOD_FLAGS_NONE },
+        {},
+    };
+    static LSMethod timeout[] = {
+        { "set", &DeviceService::onPowerTimeout, LUNA_METHOD_FLAGS_NONE },
+        { "clear", &DeviceService::onPowerTimeout, LUNA_METHOD_FLAGS_NONE },
+        {},
+    };
 
     struct Category { LSHandle *h; const char *name; LSMethod *methods; };
     const Category categories[] = {
@@ -82,6 +101,15 @@ bool DeviceService::attach(LSError *error)
     for (const auto &c : categories) {
         if (!LSRegisterCategory(c.h, c.name, c.methods, nullptr, nullptr, error) || !LSCategorySetData(c.h, c.name, this, error))
             return false;
+    }
+    if (m_h.power) {
+        const Category power[] = { { m_h.power, "/com/palm/power", powerd }, { m_h.power, "/shutdown", shutdownMethods },
+                                   { m_h.power, "/timeout", timeout } };
+        for (const auto &c : power)
+            if (!LSRegisterCategory(c.h, c.name, c.methods, nullptr, nullptr, error) || !LSCategorySetData(c.h, c.name, this, error))
+                return false;
+        if (m_hw.power)
+            m_supply = m_hw.power->read();
     }
     for (LSHandle *h : { m_h.display, m_h.keys, m_h.vibrate, m_h.als })
         if (!LSSubscriptionSetCancelFunction(h, &DeviceService::onCancel, this, error))
@@ -161,6 +189,142 @@ void DeviceService::sumHolds()
     toShell("{\"returnValue\":true,\"holds\":" + holdsJson(m_holds) + "}");
     if (alsChanged)
         lightReading(m_light.current());
+}
+
+// ---- com.palm.power (powerd) ------------------------------------------------------------
+// luna-systemui's PowerdService (data/PowerdService.js) asks
+// chargerStatusQuery and listens to the batteryStatus and USBDockStatus
+// signals (com.palm.bus/signal/addmatch, category /com/palm/power), with
+// powerd's payloads, as the simulator's runtime gives them
+// (runtime/phoenix-runtime.js "System signals and power").
+
+std::string DeviceService::batteryJson() const
+{
+    const PowerSupplies::Status &s = m_supply;
+    std::string out = "{\"percent\":" + std::to_string(s.percent) + ",\"percent_ui\":" + std::to_string(s.percent);
+    if (s.temperatureC > -1000)
+        out += ",\"temperature_C\":" + std::to_string(static_cast<int>(s.temperatureC + (s.temperatureC < 0 ? -0.5 : 0.5)));
+    out += ",\"current_mA\":" + std::to_string(s.currentmA) + ",\"voltage_mV\":" + std::to_string(s.voltagemV)
+         + ",\"capacity_mAh\":" + std::to_string(s.capacitymAh) + ",\"present\":" + boolStr(s.present) + "}";
+    return out;
+}
+
+std::string DeviceService::chargerJson() const
+{
+    const PowerSupplies::Status &s = m_supply;
+    const bool on = s.charger != "none";
+    return std::string("{\"Charging\":") + boolStr(s.charging) + ",\"Connected\":" + boolStr(on) + ",\"USBConnected\":"
+        + boolStr(on) + ",\"USBName\":" + jsonQuote(on ? s.charger : "") + ",\"DockConnected\":false,\"DockPower\":false,"
+        + "\"DockSerialNo\":\"\",\"type\":" + jsonQuote(s.charger) + "}";
+}
+
+static std::string withReturn(const std::string &json)
+{
+    return "{\"returnValue\":true," + json.substr(1);
+}
+
+void DeviceService::signal(const char *uri, const std::string &json)
+{
+    if (!m_h.power)
+        return;
+    LSError err;
+    LSErrorInit(&err);
+    if (!LSSignalSend(m_h.power, uri, json.c_str(), &err)) {
+        LSErrorPrint(&err, stderr);
+        LSErrorFree(&err);
+    }
+}
+
+bool DeviceService::readPower()
+{
+    if (!m_hw.power)
+        return false;
+    const PowerSupplies::Status now = m_hw.power->read();
+    if (now == m_supply)
+        return false;
+    const bool charger = now.charger != m_supply.charger || now.charging != m_supply.charging;
+    m_supply = now;
+    if (charger)
+        signal("luna://com.palm.power/com/palm/power/USBDockStatus", chargerJson());
+    signal("luna://com.palm.power/com/palm/power/batteryStatus", batteryJson());
+    return true;
+}
+
+bool DeviceService::onBatteryStatusQuery(LSHandle *sh, LSMessage *msg, void *ctx)
+{
+    auto *self = static_cast<DeviceService *>(ctx);
+    self->readPower();
+    self->reply(sh, msg, withReturn(self->batteryJson()));
+    // powerd answered with the signal too, which its listeners wait for.
+    self->signal("luna://com.palm.power/com/palm/power/batteryStatus", self->batteryJson());
+    return true;
+}
+
+bool DeviceService::onChargerStatusQuery(LSHandle *sh, LSMessage *msg, void *ctx)
+{
+    auto *self = static_cast<DeviceService *>(ctx);
+    self->readPower();
+    self->reply(sh, msg, withReturn(self->chargerJson()));
+    self->signal("luna://com.palm.power/com/palm/power/USBDockStatus", self->chargerJson());
+    return true;
+}
+
+bool DeviceService::onPowerActivity(LSHandle *sh, LSMessage *msg, void *ctx)
+{
+    // activityStart / activityEnd: keeping the device awake is the shell's
+    // and OSE's power manager's here; well formed is answered true, as on webOS.
+    static_cast<DeviceService *>(ctx)->reply(sh, msg, "{\"returnValue\":true}");
+    return true;
+}
+
+bool DeviceService::onPowerTimeout(LSHandle *sh, LSMessage *msg, void *ctx)
+{
+    // The pre-activity alarm API: com.palm.activitymanager's schedules do it
+    // (the simulator's runtime translates; docs/DEVICE-AUDIT.md).
+    static_cast<DeviceService *>(ctx)->reply(sh, msg, "{\"returnValue\":false,\"errorCode\":-1,"
+        "\"errorText\":\"com.palm.power timeouts are not available: use com.palm.activitymanager\"}");
+    return true;
+}
+
+// Off or restart: the shell first (its shutdown sound and the screen
+// going dark, as phoenix-sim does on the "shutdown" message), then the
+// machine. Only one at a time.
+void DeviceService::shutdown(LSHandle *sh, LSMessage *msg, const char *action)
+{
+    const Json p = Json::parse(LSMessageGetPayload(msg));
+    if (!m_hw.machine) {
+        reply(sh, msg, "{\"returnValue\":false,\"errorCode\":-1,\"errorText\":\"Cannot turn this device off\"}");
+        return;
+    }
+    reply(sh, msg, "{\"returnValue\":true}");
+    if (m_shutdownTimer)
+        return;
+    m_pendingMachine = action;
+    toShell(std::string("{\"returnValue\":true,\"") + (m_pendingMachine == "reboot" ? "reboot" : "shutdown")
+            + "\":{\"reason\":" + jsonQuote(p["reason"].str()) + "}}");
+    say(std::string("com.palm.power: ") + action + " (" + p["reason"].str() + ")");
+    m_shutdownTimer = g_timeout_add(static_cast<guint>(m_shutdownDelayMs), &DeviceService::shutdownNow, this);
+}
+
+gboolean DeviceService::shutdownNow(gpointer data)
+{
+    auto *self = static_cast<DeviceService *>(data);
+    self->m_shutdownTimer = 0;
+    if (self->m_hw.machine && !self->m_hw.machine(self->m_pendingMachine))
+        self->say("com.palm.power: " + self->m_pendingMachine + " failed");
+    return G_SOURCE_REMOVE;
+}
+
+bool DeviceService::onMachineOff(LSHandle *sh, LSMessage *msg, void *ctx)
+{
+    static_cast<DeviceService *>(ctx)->shutdown(sh, msg, "off");
+    return true;
+}
+
+bool DeviceService::onMachineReboot(LSHandle *sh, LSMessage *msg, void *ctx)
+{
+    static_cast<DeviceService *>(ctx)->shutdown(sh, msg, "reboot");
+    return true;
 }
 
 bool DeviceService::onCancel(LSHandle *, LSMessage *msg, void *ctx)
@@ -340,6 +504,17 @@ bool DeviceService::onShellReport(LSHandle *sh, LSMessage *msg, void *ctx)
     if (next.state != before.state)
         self->alsFollowDisplay();
         self->accelFollowDisplay();
+    // A media key the system pressed for the user (the Assistant's "pause",
+    // "next song": org.webosphoenix.system/mediaKey through the shell), as
+    // the hardware key's /media events, down then up (the simulator's
+    // DeviceServices.mediaKey).
+    static const char *mediaKeys[] = { "play", "pause", "togglePausePlay", "stop", "next", "prev" };
+    const std::string mediaKey = p["mediaKey"].str();
+    for (const char *k : mediaKeys)
+        if (mediaKey == k) {
+            self->post(KeyStatus, keyJson(mediaKey, "down"), "/media");
+            self->post(KeyStatus, keyJson(mediaKey, "up"), "/media");
+        }
     // The Power key while an app blocks it (DisplayManager :2463-2476).
     if (p["powerKey"].str() == "released") {
         for (auto &s : self->m_subs)

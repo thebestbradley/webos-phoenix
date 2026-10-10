@@ -1,0 +1,5 @@
+[Unit]
+Description=fixture
+
+[Service]
+ExecStart=/usr/sbin/svc

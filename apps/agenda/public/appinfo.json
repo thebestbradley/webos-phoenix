@@ -16,6 +16,7 @@
     "exhibitionModeOptions": { "title": "Agenda" },
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md). Like com.palm.app.agendaview, an exhibition only: not in the launcher.",
+        "launchParams": [],
         "hidden": true
     },
     "//requiredPermissions": "OSE access control groups for the services the app calls (the groups in each service's sysbus api.json).",

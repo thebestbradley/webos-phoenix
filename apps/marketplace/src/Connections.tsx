@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apps, call, marketplace, type AccountType } from "@phoenix/luna";
 import { Button, Group, Note, Row, Spinner } from "@phoenix/ui";
 import { Icon } from "./Icon";
+import { ConnectorPackage, useConnectorInstalled } from "./ConnectorPackage";
 import {
     applyFilter, capabilityChips, groupAccountTypes, openAccountsLaunch, privacyLines, pushText, serverText, setUpLaunch, signInText, statusBadge,
     addedTemplates, type ConnectorFilter,
@@ -55,12 +56,14 @@ function Badge({ t }: { t: AccountType }) {
 }
 
 export function AccountTypeRow({ t, added, onOpen }: { t: AccountType; added: boolean; onOpen: () => void }) {
+    // A connector package on the device (ConnectorPackage.tsx).
+    const installed = useConnectorInstalled(t);
     return (
         <Row testId={`account-${t.templateId}`} onClick={onOpen} chevron icon={<Icon src={t.icon} title={t.title} />}
              title={t.title}
              // The badge first in the subtitle: in the title a long name's ellipsis hid it on a phone.
              subtitle={<><Badge t={t} />{statusBadge(t) ? " " : ""}{t.provider && t.provider !== t.title ? t.provider : capabilityChips(t).join(" · ")}</>}
-             value={added ? "Added" : ""} />
+             value={added ? "Added" : installed ? "Installed" : ""} />
     );
 }
 
@@ -132,23 +135,25 @@ export function AccountTypePage({ t, added }: { t: AccountType; added: boolean }
                     {chips.map((c) => <span key={c}>{c}</span>)}
                 </div>
             )}
-            <div className="mk-actions">
-                {added ? (
-                    <Button variant="affirmative" data-testid="open-accounts"
-                            onClick={() => { const l = openAccountsLaunch(); void apps.launch(l.id, l.params); }}>Open in Accounts</Button>
-                ) : (
-                    <Button variant="affirmative" data-testid="set-up" disabled={!t.package.builtin}
-                            onClick={() => { const l = setUpLaunch(t); void apps.launch(l.id, l.params); }}>Set up</Button>
-                )}
-                {/* No account yet: the service's own page to get one, in the browser (docs/SYNERGY-SDK.md "Sign-up link"). */}
-                {!added && t.signUp && (
-                    <p className="mk-signup" data-testid="sign-up-line">
-                        Don't have an account?{" "}
-                        <a href={t.signUp} data-testid="sign-up" onClick={(e) => { e.preventDefault(); void apps.open(t.signUp); }}>Sign up</a>
-                    </p>
-                )}
-            </div>
-            {!t.package.builtin && <Note>It comes in a connector package, which the Marketplace cannot install yet.</Note>}
+            {/* A connector package's: install, set up, remove (ConnectorPackage.tsx). */}
+            {!t.package.builtin ? <ConnectorPackage t={t} added={added} /> : (
+                <div className="mk-actions">
+                    {added ? (
+                        <Button variant="affirmative" data-testid="open-accounts"
+                                onClick={() => { const l = openAccountsLaunch(); void apps.launch(l.id, l.params); }}>Open in Accounts</Button>
+                    ) : (
+                        <Button variant="affirmative" data-testid="set-up"
+                                onClick={() => { const l = setUpLaunch(t); void apps.launch(l.id, l.params); }}>Set up</Button>
+                    )}
+                </div>
+            )}
+            {/* No account yet: the service's own page to get one, in the browser (docs/SYNERGY-SDK.md "Sign-up link"). */}
+            {!added && t.signUp && (
+                <p className="mk-signup" data-testid="sign-up-line">
+                    Don't have an account?{" "}
+                    <a href={t.signUp} data-testid="sign-up" onClick={(e) => { e.preventDefault(); void apps.open(t.signUp); }}>Sign up</a>
+                </p>
+            )}
             {t.summary && <p className="mk-desc">{t.summary}</p>}
             <div className="mk-card mk-privacy" data-testid="privacy">
                 <div className="mk-card-title">Where your data goes</div>

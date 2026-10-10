@@ -2,7 +2,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// phoenix-connector new | validate | pack | test (src/tools/cli.ts;
+// phoenix-connector new | validate | pack | publish | test (src/tools/cli.ts;
 // docs/SYNERGY-SDK.md). Build the kit first: npm run build -w @phoenix/connector-kit.
 
 "use strict";

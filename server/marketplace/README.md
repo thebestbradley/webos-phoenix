@@ -21,13 +21,32 @@ setting it up the first time; the menu item shows it starting, running or
 failed with the reason, and the Marketplace opens once it answers. It stops
 on quitting (one already running, another simulator's, is used as it is);
 its log is `data/simulator.log` (Services > Show Catalog Log). **Services >
-Start Catalog with the Simulator** starts it with every run. It needs PHP 8
+Start Catalog with the Simulator** starts it with every run where PHP is,
+and is on unless turned off (`--no-marketplace` for one run). It needs PHP 8
 with sodium and pdo_sqlite, which `./phoenix` installs (Homebrew's `php`;
 apt's `php-cli` and `php-sqlite3`, whose `php-common` has sodium).
 
-The first time the Marketplace reads it, it shows the key's fingerprint
-(`php server/marketplace/bin/marketplace.php key` prints it) and asks to
-trust it.
+The simulator's Marketplace trusts this catalog without the fingerprint
+step: phoenix-sim reads the public key from the catalog's data folder
+(`data/public/v1/key.json`, which every publish writes) and gives it as the
+key of the sources file's `phoenix` catalog, as a device's sources file
+gives a catalog's key. Whatever answers at 127.0.0.1:8088 must sign its
+index with that key. A catalog elsewhere (another data folder, another
+address) shows its fingerprint (`php server/marketplace/bin/marketplace.php
+key` prints it) and asks to trust it.
+
+**A development catalog.** `serve.sh` runs it with `MARKETPLACE_DEV=1`
+(unless set): a developer's upload is approved and published at once, with
+no review. It keeps a local developer (`data/developer.token`, made by
+`bin/marketplace.php developer`) for `phoenix-connector publish --local`
+and `bin/marketplace.php upload FILE.ipk`, and once per catalog
+(`data/seed/done`) it publishes the connector kit's News Feed example, as
+that developer, and the connector packages Phoenix comes with
+(`apps/marketplace/service/etc/palm/marketplace/preinstalled.json`: the
+Fediverse) as Phoenix's own (`upload --phoenix`, the admin, in Phoenix's
+namespaces), so the simulator can install one again after removing it.
+Packing them needs the connector kit built (the build does it). Never set
+`MARKETPLACE_DEV` on a server.
 
 - Catalog: `/v1/key.json`, `/v1/index.json`, `/v1/index.json.sig`, `/v1/packages/`
 - API: `/api/` (see `src/Api.php`)
@@ -180,9 +199,13 @@ builtin}, help?, signUp?, featured}]`. `signUp` is where a person without an
 account gets one, an `https://` address (the Fediverse's
 joinmastodon.org/servers, XMPP's providers.xmpp.net; none where the server is
 the user's own or no account is needed); the device's account type page
-offers "Don't have an account? Sign up" beside Set up. For now these are the built-in templates only
-(CardDAV & CalDAV, Subscribed Calendar, Email Account, the simulator's
-Jabber), each `package.builtin: true`; connector packages come later (C4).
+offers "Don't have an account? Sign up" beside Set up. Here are the built-in ones (CardDAV & CalDAV, Subscribed Calendar, Email
+Account, the simulator's Jabber), `package.builtin: true`, and the
+connector packages Phoenix comes with (the Fediverse), `package: {builtin:
+false, preinstalled: true}`: removable, installed again from the catalog
+without Developer Mode (`preinstalled` only with `builtin: false`; a bad
+value stops the publish). Every other connector lists its own types from its
+package (below).
 
 The list is `catalog/accounts.json`, edited by hand. It is not kept in the
 database: every `publish` reads it, checks each entry (required fields, the
@@ -192,6 +215,30 @@ names them) and stops on a bad one, so the published index stays as it was;
 icon in this checkout (open-source release or Phoenix art, with its
 provenance where it lives); `publish` copies it to
 `/v1/icons/accounts/<templateId>.png`, and the index gives its full address.
+
+## Connector packages (Synergy, phase C4)
+
+A connector (`docs/SYNERGY-SDK.md`: an app with its service in `service/`,
+its account templates and its kinds) goes up as any package:
+`POST /api/apps/packages` with the `.ipk`, or `phoenix-connector publish`.
+The catalog takes one that passes the connector rules (`src/Connector.php`,
+the same as `phoenix-connector validate`; `Ipk::check` refuses a service in
+any other package), lists it in the index as kind `"connector"` (with a
+`release`, as an `ipk`; devices before C4 leave the kind out), and lists its
+account types in `accounts` with `package.builtin: false`. Their entries come
+from the package: its template (the name, the capabilities, the icon, copied
+to `icons/accounts/<templateId>.png`) and its `catalog.json` (the summary,
+where the data goes, the sign-in, ...: `Catalog::connectorTypes`), checked
+as `catalog/accounts.json`'s entries are. A catalog type with the same
+template id wins (the Fediverse's entry in `accounts.json`). On a server a
+person reviews each release; on a development catalog it is approved at
+once. `org.webosphoenix.*` packages are Phoenix's own: only an admin uploads
+them, in the `org.webosphoenix` and `com.webosphoenix` namespaces.
+
+Devices install a connector only in Developer Mode (the owner's decision,
+until the connector trust tier, C5), except one Phoenix comes with
+(`/etc/palm/marketplace/preinstalled.json`) from a catalog the device ships
+with (`apps/marketplace/service/packagesservice.js`, `firstPartyEntry`).
 
 ## Tests
 

@@ -8,7 +8,9 @@
 // appinfo.json valid and saying the same id and version as the control
 // file, no maintainer scripts, no services, no files elsewhere, no
 // symlinks, under the size limit. The device runs the same checks again
-// (apps/marketplace/service/packagesservice.js).
+// (apps/marketplace/service/packagesservice.js). A Synergy connector (a
+// service in the app's service/ folder) passes only with $connectors, and
+// then Connector::checkIpk has the last word (Catalog::submitPackage).
 
 declare(strict_types=1);
 
@@ -19,8 +21,13 @@ final class Ipk
     public const MAX_SIZE = 64 * 1024 * 1024;
     private const SCRIPTS = ['preinst', 'postinst', 'prerm', 'postrm', 'pmPostInstall.script', 'pmPreRemove.script'];
 
-    /** @return array{control: array, appinfo: array, appId: string, version: string, files: string[]} */
-    public static function check(string $bytes): array
+    /**
+     * $connectors: a package with a service in its app's service/ folder is a connector
+     * ('connector' => true), for Connector::checkIpk; without it, it is refused.
+     *
+     * @return array{control: array, appinfo: array, appId: string, version: string, files: string[], connector: bool}
+     */
+    public static function check(string $bytes, bool $connectors = false): array
     {
         if (strlen($bytes) > self::MAX_SIZE) {
             throw new CheckFailed('The package is larger than 64 MB');
@@ -54,6 +61,7 @@ final class Ipk
         }
         $appId = $apps[0];
         $dir = "usr/palm/applications/$appId/";
+        $connector = false;
         foreach ($data as $path => $f) {
             if ($f['type'] === 'file' && !str_starts_with($path, $dir)) {
                 throw new CheckFailed("The package puts a file outside its app ($path)");
@@ -62,7 +70,10 @@ final class Ipk
             // service/ folder (docs/SYNERGY-CONNECTORS.md 3.1): not a web app.
             // Connectors are checked by Connector::checkIpk (phase C4).
             if ($f['type'] === 'file' && ($path === $dir . 'service/package.json' || str_starts_with($path, $dir . 'service/sysbus/'))) {
-                throw new CheckFailed('The package has a background service (service/): a Synergy connector, which the catalog does not take yet');
+                if (!$connectors) {
+                    throw new CheckFailed('The package has a background service (service/): a Synergy connector, which this catalog does not take');
+                }
+                $connector = true;
             }
         }
         $info = json_decode(preg_replace('/^\xEF\xBB\xBF/', '', $data[$dir . 'appinfo.json']['data']), true);
@@ -86,7 +97,7 @@ final class Ipk
             throw new CheckFailed('Only packages for any architecture ("Architecture: all") are accepted');
         }
         return ['control' => $fields, 'appinfo' => $info, 'appId' => $appId, 'version' => $version,
-                'files' => array_keys(array_filter($data, fn ($f) => $f['type'] === 'file'))];
+                'files' => array_keys(array_filter($data, fn ($f) => $f['type'] === 'file')), 'connector' => $connector];
     }
 
     // readAr, readTar and parseControl are also server/drivers' .ipk reader.

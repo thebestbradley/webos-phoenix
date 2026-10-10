@@ -3,9 +3,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:phoenix_services/phoenix_services.dart' show Phoenix;
 
 import '../notes_model.dart';
 import 'home.dart';
+import 'phoenix.dart';
 
 /// The model for the widgets below (they rebuild when it changes).
 class NotesScope extends InheritedNotifier<NotesModel> {
@@ -20,9 +22,12 @@ class BackIntent extends Intent {
 }
 
 class NotesApp extends StatefulWidget {
-  const NotesApp({super.key, required this.model});
+  const NotesApp({super.key, required this.model, this.phoenix});
 
   final NotesModel model;
+
+  /// The Phoenix service plugin (the app menu, shares, Just Type); none in widget tests.
+  final Phoenix? phoenix;
 
   @override
   State<NotesApp> createState() => _NotesAppState();
@@ -48,6 +53,12 @@ class _NotesAppState extends State<NotesApp> {
 
   @override
   Widget build(BuildContext context) {
+    final app = _app(context);
+    final phoenix = widget.phoenix;
+    return phoenix == null ? app : PhoenixIntegration(phoenix: phoenix, model: widget.model, navigator: _navigator, child: app);
+  }
+
+  Widget _app(BuildContext context) {
     return NotesScope(
       model: widget.model,
       child: ListenableBuilder(

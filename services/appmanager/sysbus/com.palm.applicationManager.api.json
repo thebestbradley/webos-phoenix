@@ -1,0 +1,43 @@
+{
+    "phoenix.appmanager.query": [
+        "com.palm.applicationManager/listApps",
+        "com.palm.applicationManager/getAppInfo",
+        "com.palm.applicationManager/getAppBasePath",
+        "com.palm.applicationManager/listLaunchPoints",
+        "com.palm.applicationManager/searchApps",
+        "com.palm.applicationManager/launchPointChanges",
+        "com.palm.applicationManager/running",
+        "com.palm.applicationManager/getSizeOfApps",
+        "com.palm.applicationManager/listPendingLaunchPoints",
+        "com.palm.applicationManager/listDockPoints",
+        "com.palm.applicationManager/getHandlerForMimeType",
+        "com.palm.applicationManager/getResourceInfo",
+        "com.palm.applicationManager/listAllHandlersForMime",
+        "com.palm.applicationManager/mimeTypeForExtension",
+        "com.palm.applicationManager/getHandlerForExtension",
+        "com.palm.applicationManager/getHandlerForUrl",
+        "com.palm.applicationManager/listResourceHandlers",
+        "com.palm.applicationManager/listExtensionMap",
+        "com.palm.applicationManager/listAllHandlersForUrl",
+        "com.palm.applicationManager/listAllHandlersForUrlPattern",
+        "com.palm.applicationManager/listRedirectHandlers",
+        "com.palm.applicationManager/listDockModeLaunchPoints"
+    ],
+    "phoenix.appmanager.launch": [
+        "com.palm.applicationManager/launch",
+        "com.palm.applicationManager/open",
+        "com.palm.applicationManager/addLaunchPoint",
+        "com.palm.applicationManager/removeLaunchPoint",
+        "com.palm.applicationManager/addResourceHandler",
+        "com.palm.applicationManager/addRedirectHandler",
+        "com.palm.applicationManager/removeHandlersForAppId",
+        "com.palm.applicationManager/swapResourceHandler",
+        "com.palm.applicationManager/swapRedirectHandler",
+        "com.palm.applicationManager/addDockModeLaunchPoint",
+        "com.palm.applicationManager/removeDockModeLaunchPoint",
+        "com.palm.applicationManager/setDockModeLaunchPoints"
+    ],
+    "phoenix.appmanager.manage": [
+        "com.palm.applicationManager/close"
+    ]
+}

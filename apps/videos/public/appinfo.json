@@ -14,6 +14,7 @@
     "keywords": ["Video", "Movies", "Player", "Films", "Subtitles"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launchParams": ["target", "mimeType", "fileName", "imageList"],
         "launcherTab": 0
     },
     "//mimeTypes": "The types Videos opens, declared as legacy webOS apps did (luna-sysmgr ApplicationDescription; core-apps Email's message/rfc822): Files' \"Open with\", Email attachments and the browser's downloads come here with {target}. stream: a web address plays without being downloaded first.",

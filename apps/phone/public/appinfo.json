@@ -12,6 +12,7 @@
     "uiRevision": 2,
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): quickLaunch puts the app in that quick launch slot (1-4).",
+        "launchParams": ["number", "dial", "target", "emergency", "address", "transport", "video", "personId", "label", "service", "action", "preferences"],
         "quickLaunch": 1
     }
 }

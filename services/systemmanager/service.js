@@ -27,6 +27,10 @@ var STARTUP = path.join(DIR, "startup.json");
 // The shell's bus name (luna-surfacemanager), the only one that may report
 // its state (the ACG grants /phoenix/report to it alone too: sysbus/).
 var SHELL_NAMES = ["com.webos.surfacemanager"];
+// The Phoenix keyboard's: maliit-server's bus name, com.webos.service.ime
+// (with a display's number), as its plugin's QML calls
+// (Phoenix/Keyboard/KeyboardBus.qml: com.webos.service.ime.phoenixKeyboard).
+var KEYBOARD_PREFIX = "com.webos.service.ime";
 
 var service = new Service(sm.SERVICE);
 
@@ -63,7 +67,8 @@ var manager = sm.createSystemManager({
         });
     },
     startup: { write: function (obj) { writeAtomic(STARTUP, JSON.stringify(obj), 420); } },
-    isShell: function (sender) { return SHELL_NAMES.indexOf(String(sender || "")) >= 0; }
+    isShell: function (sender) { return SHELL_NAMES.indexOf(String(sender || "")) >= 0; },
+    isKeyboard: function (sender) { return String(sender || "").indexOf(KEYBOARD_PREFIX) === 0; }
 });
 
 sm.METHODS.forEach(function (name) {

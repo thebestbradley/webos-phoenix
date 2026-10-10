@@ -1,0 +1,11 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Settings > Game Controllers, USB, Hotspot & Tethering and Battery
+# (services/accessories): four names, one process. Started by the hub when
+# any of them is first called; it keeps itself running.
+
+[D-BUS Service]
+Name=org.webosphoenix.gamepads;org.webosphoenix.usb;org.webosphoenix.tethering;org.webosphoenix.battery
+Exec=/usr/bin/run-js-service -n /usr/palm/services/org.webosphoenix.accessories
+Type=dynamic

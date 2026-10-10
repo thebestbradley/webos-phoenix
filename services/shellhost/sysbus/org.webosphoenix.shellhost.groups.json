@@ -1,0 +1,22 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.shellhost",
+        "org.webosphoenix.ongoing",
+        "org.webosphoenix.system"
+    ],
+    "phoenix.shellhost.app": [
+        "dev"
+    ],
+    "phoenix.shellhost.shell": [
+        "oem"
+    ],
+    "phoenix.ongoing": [
+        "dev"
+    ],
+    "phoenix.system.media": [
+        "dev"
+    ],
+    "phoenix.system.restart": [
+        "oem"
+    ]
+}

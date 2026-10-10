@@ -1,3 +1,4 @@
 {
-    "org.webosphoenix.service.packages": ["applicationinstall.management", "activity.operation"]
+    "org.webosphoenix.service.packages": ["applicationinstall.management", "activity.operation", "application.operation", "notification.operation",
+                                          "phoenix.ongoing"]
 }

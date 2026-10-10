@@ -11,7 +11,9 @@
 // its key, browsing, a web app and a developer's package installed (and
 // served, and listed), an update, removing, the Classics with a Mojo app
 // refused, search, the update notification's launch, and in the simulator
-// (its host.json) the offline card's Start Local Catalog.
+// (its host.json) the offline card's Start Local Catalog, its own catalog trusted without the
+// fingerprint step, and connector packages: Connections installs a third-party one in Developer
+// Mode only, adds its account, and removes and installs again the pre-installed Fediverse.
 //
 //   node tools/test-marketplace.cjs [--tablet] [--out DIR]
 //
@@ -402,6 +404,8 @@ async function main() {
             });
             const shellSays = (c) => sp.evaluate((st) => window.__phoenixRuntime.applyHostStatus({ marketplaceCatalog: st }, { writer: false }),
                 Object.assign({ url: `http://127.0.0.1:${simPort}/`, error: "", settingUp: false }, c));
+            // The Marketplace opened again (a reload waits on the page's load, which its connections can keep open).
+            const reopen = () => sp.goto(appUrl("org.webosphoenix.marketplace"), { waitUntil: "domcontentloaded" });
             const simShot = async (name) => { await sp.waitForTimeout(350); await sp.screenshot({ path: path.join(outDir, name + ".png") }); };
             await sp.goto(appUrl("org.webosphoenix.marketplace"));
             await sp.waitForSelector("[data-testid=catalog-start]", { timeout: 15000 });
@@ -430,11 +434,31 @@ async function main() {
             await simShot("12-sim-setting-up");
             const local = await servers.startCatalog({ port: simPort });
             try {
+                // A catalog whose key phoenix-sim did not read (another data folder): checked by its fingerprint.
                 await shellSays({ state: "running" });
                 await sp.waitForSelector("[data-testid=trust-card]", { timeout: 15000 });
                 check((await sp.textContent("[data-testid=trust-fingerprint]")).trim() === local.fingerprint && await sp.locator("[data-testid=catalog-offline]").count() === 0,
-                      "once it runs the Marketplace reads it: its key to trust, the offline card gone");
+                      "once it runs the Marketplace reads it; a catalog whose key the simulator did not read: its key to trust");
                 await simShot("13-sim-running");
+                // phoenix-sim's own catalog: the key it read from the catalog's data folder comes with the state
+                // (SimMarketplace::key), and the Marketplace trusts it without the fingerprint step.
+                await reopen();
+                await sp.waitForSelector("[data-testid=tab-connections]");
+                await shellSays({ state: "running", key: local.key });
+                const srcs = await sp.evaluate(() => new Promise((res) => {
+                    const b = new PalmServiceBridge();
+                    b.onservicecallback = (x) => res(JSON.parse(x));
+                    b.call("luna://org.webosphoenix.service.packages/refresh", "{}");
+                }));
+                const ph = srcs.sources.find((x) => x.id === "phoenix");
+                await reopen();
+                await sp.waitForSelector("[data-testid=tab-connections]");
+                await shellSays({ state: "running", key: local.key });
+                await sp.waitForTimeout(1500);
+                check(ph.trusted && ph.fingerprint === local.fingerprint && !ph.error && await sp.locator("[data-testid=trust-card]").count() === 0,
+                      "the simulator's own local catalog is trusted without the fingerprint step");
+                await simShot("14-sim-trusted");
+                await simConnectors(sp, local, simShot, shellSays, reopen);
             } finally {
                 await local.stop();
                 await sim.close();
@@ -450,6 +474,112 @@ async function main() {
     }
     console.log(failures ? `\n${failures} check(s) failed` : `\nAll checks passed. Screenshots in ${outDir}`);
     process.exit(failures ? 1 : 0);
+}
+
+// ---- Connector packages in the simulator (docs/SYNERGY-CONNECTORS.md C4) ----------------------------
+// The News Feed example published to the catalog (as `phoenix-connector publish` does: packed by the
+// kit, uploaded through the developer API, approved), and the Fediverse as Phoenix's own (an admin's).
+// Connections lists them; the News Feed installs only in Developer Mode, then Accounts finds its
+// template and the account is added. The Fediverse comes pre-installed (serve-rootfs.py puts it in
+// the installed apps): removing it takes its account after a confirmation that says so, and it
+// installs again from the catalog without Developer Mode.
+async function simConnectors(sp, local, simShot, shellSays, reopen) {
+    const { pack } = require(path.join(REPO, "apps/shared/connector-kit/lib/tools/package.js"));
+    const out = fs.mkdtempSync(path.join(require("os").tmpdir(), "phoenix-connectors-"));
+    const luna = (uri, params) => sp.evaluate(([u, p]) => new Promise((res) => {
+        const b = new PalmServiceBridge();
+        b.onservicecallback = (x) => res(JSON.parse(x));
+        b.call(u, JSON.stringify(p || {}));
+    }), [uri, params]);
+    try {
+        const feeds = pack(path.join(REPO, "apps/shared/connector-kit/examples/feeds"), out, { vendor: false });
+        const fedi = pack(path.join(REPO, "apps/fediverse"), out, { vendor: false, namespaces: ["org.webosphoenix", "com.webosphoenix"] });
+        const dev = await local.api("POST", "/api/accounts", { name: "Fay", email: "fay@example.com", role: "developer" });
+        const up = await local.api("POST", "/api/apps/packages", new Uint8Array(fs.readFileSync(feeds.file)), dev.token);
+        check(up.status === 200 && up.app.kind === "connector", "the News Feed connector is taken by the catalog (" + (up.error || up.app.kind) + ")");
+        await local.api("POST", `/api/admin/releases/${up.release.id}/approve`, {}, local.admin);
+        const own = await local.api("POST", "/api/apps/packages", new Uint8Array(fs.readFileSync(fedi.file)), local.admin);
+        check(own.status === 200 && own.app.kind === "connector", "the Fediverse, Phoenix's own, is taken (" + (own.error || own.app.kind) + ")");
+        await local.api("POST", `/api/admin/releases/${own.release.id}/approve`, {}, local.admin);
+        await luna("luna://org.webosphoenix.service.packages/refresh", {});
+
+        // Connections: the third-party connector, and the Fediverse installed.
+        await reopen();
+        await shellSays({ state: "running", key: local.key });
+        await sp.click("[data-testid=tab-connections]");
+        await sp.waitForSelector("[data-testid='account-org.example.feeds']", { timeout: 15000 });
+        const fediRow = sp.locator("[data-testid='group-social'] [data-testid='account-com.webosphoenix.fediverse']");
+        await sp.waitForFunction(() => /Installed/.test(document.querySelector("[data-testid='group-social'] [data-testid='account-com.webosphoenix.fediverse']").textContent));
+        check(/Installed/.test(await fediRow.textContent()) && !/Installed/.test(await sp.textContent("[data-testid='account-org.example.feeds']")),
+              "Connections: the Fediverse Installed (pre-installed), the News Feed not");
+        await sp.locator("[data-testid='group-social']").scrollIntoViewIfNeeded();
+        await simShot("15-connections-connectors");
+
+        // The News Feed: Developer Mode first.
+        await sp.click("[data-testid='group-social'] [data-testid='account-org.example.feeds']");
+        await sp.waitForSelector("[data-testid=connector-install]");
+        check(/third-party connector/.test(await sp.textContent("[data-testid=connector-third-party]")), "its page says it is a third-party connector");
+        await simShot("16-feeds-page");
+        await sp.click("[data-testid=connector-install]");
+        await sp.waitForSelector("[data-testid=devmode-needed]");
+        check(/Konami code/.test(await sp.textContent("[data-testid=devmode-hint]")), "while Developer Mode is hidden, how to find it");
+        // Revealed (Just Type's Konami code): the way to it.
+        await luna("luna://com.palm.applicationManager/launch", { id: "com.palm.app.devmodeswitcher", params: {} });
+        await sp.waitForSelector("[data-testid=open-devmode]", { timeout: 10000 });
+        check(/install only in Developer Mode/.test(await sp.textContent("[data-testid=devmode-needed]")) && await sp.locator("[data-testid=open-devmode]").count() === 1,
+              "without Developer Mode, Install explains and links to Settings > Developer Mode");
+        check(!(await luna("luna://org.webosphoenix.service.packages/listInstalled", {})).apps.some((a) => a.id === "org.example.feeds"), "... and nothing is installed");
+        await simShot("17-feeds-needs-devmode");
+        await luna("luna://com.webos.service.devmode/setDevMode", { status: "enabled" });
+        await sp.click("[data-testid=connector-install]");
+        await sp.waitForSelector("[data-testid=set-up]", { timeout: 30000 });
+        const tpl = await luna("luna://com.palm.service.accounts/listAccountTemplates", {});
+        check(tpl.results.some((t) => t.templateId === "org.example.feeds"), "installed in Developer Mode: the Accounts app's add flow finds its template");
+        await simShot("18-feeds-installed");
+        const acct = await luna("luna://com.palm.service.accounts/createAccount", { templateId: "org.example.feeds", username: "News",
+            config: { url: "https://news.example.org/feed.xml" }, capabilityProviders: [{ id: "org.example.feeds.entries" }] });
+        check(acct.returnValue === true, "the News Feed account is added");
+        await luna("luna://com.webos.service.devmode/setDevMode", { status: "disabled" });
+
+        // The Fediverse: an account, then Remove takes it after saying so.
+        await sp.click("[data-testid=back]");
+        await sp.click("[data-testid='group-social'] [data-testid='account-com.webosphoenix.fediverse']");
+        await sp.waitForSelector("[data-testid=connector-remove]");
+        check(/comes with Phoenix/.test(await sp.textContent("[data-testid=connector-installed]")), "the Fediverse: installed, it comes with Phoenix, removable");
+        const fa = await luna("luna://com.palm.service.accounts/createAccount", { templateId: "com.webosphoenix.fediverse", username: "@jordan@social.example",
+            alias: "@jordan@social.example", capabilityProviders: [{ id: "com.webosphoenix.fediverse.contacts" }] });
+        check(fa.returnValue === true, "a Fediverse account");
+        await reopen();
+        await shellSays({ state: "running", key: local.key });
+        await sp.click("[data-testid=tab-connections]");
+        await sp.click("[data-testid='group-social'] [data-testid='account-com.webosphoenix.fediverse']");
+        await sp.waitForSelector("[data-testid=open-accounts]");
+        await sp.click("[data-testid=connector-remove]");
+        await sp.waitForSelector("[data-testid=connector-remove-dialog]");
+        check(/Its account on this device \(@jordan@social\.example\) is removed with it/.test(await sp.textContent("[data-testid=connector-remove-dialog]")),
+              "Remove asks first, saying its account goes with it");
+        await simShot("19-fediverse-remove");
+        await sp.click("[data-testid=connector-remove-confirm]");
+        await sp.waitForSelector("[data-testid=connector-install]", { timeout: 20000 });
+        const left = (await luna("luna://com.palm.service.accounts/listAccounts", {})).results.map((a) => a.templateId);
+        const tpl2 = (await luna("luna://com.palm.service.accounts/listAccountTemplates", {})).results.map((t) => t.templateId);
+        check(!left.includes("com.webosphoenix.fediverse") && left.includes("org.example.feeds") && !tpl2.includes("com.webosphoenix.fediverse"),
+              "removed: its account and its template are gone, the other accounts stay");
+        await simShot("20-fediverse-removed");
+
+        // Installed again from the catalog, without Developer Mode (Phoenix's own, from the catalog the device ships with).
+        await sp.click("[data-testid=connector-install]");
+        await sp.waitForSelector("[data-testid=set-up]", { timeout: 30000 });
+        const tpl3 = (await luna("luna://com.palm.service.accounts/listAccountTemplates", {})).results.map((t) => t.templateId);
+        check(tpl3.includes("com.webosphoenix.fediverse") && await sp.locator("[data-testid=devmode-needed]").count() === 0,
+              "the Fediverse installs again without Developer Mode, and Accounts has its template again");
+        const again = await luna("luna://com.palm.service.accounts/createAccount", { templateId: "com.webosphoenix.fediverse", username: "@jordan@social.example",
+            capabilityProviders: [{ id: "com.webosphoenix.fediverse.contacts" }] });
+        check(again.returnValue === true, "... and the account can be added again");
+        await simShot("21-fediverse-reinstalled");
+    } finally {
+        fs.rmSync(out, { recursive: true, force: true });
+    }
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

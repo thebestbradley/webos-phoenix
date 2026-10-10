@@ -90,6 +90,17 @@ jobs:
                    settings/service/*.js settings/service/lib/*.js marketplace/service/*.js marketplace/service/lib/*.js \
                    ../services/updates/*.js ../services/updates/lib/*.js; do node --check "$f"; done
 
+      # What a device image would trip on that the simulator hides
+      # (docs/PRE-IMAGE-CHECKLIST.md): Luna calls against their providers
+      # and ACG groups, simulator-only references, the image's contents
+      # against its recipes, the recipes themselves, licences. After the
+      # apps' build, so install-rootfs.py's plan has every app. A finding
+      # not in tools/check-device-allowlist.json fails.
+      - name: Device readiness checkers
+        run: |
+          python3 tools/test-devicecheck.py
+          tools/check-device.sh
+
       # The Enact demos are npm projects of their own (apps/enact-notes-*/
       # README.md); `npm ci` copies in @phoenix/notes-core as built above.
       - name: Enact demo apps - typecheck, build
@@ -108,6 +119,14 @@ jobs:
           channel: stable
           cache: true
 
+      # The Phoenix service plugin for Dart, which the Flutter demo uses.
+      - name: Dart package phoenix_services - analyze, unit tests
+        working-directory: apps/shared/phoenix_services
+        run: |
+          dart pub get
+          dart analyze --fatal-infos
+          dart test
+
       - name: Flutter demo app - analyze, unit tests, build
         working-directory: apps/flutter-notes
         run: |
@@ -115,6 +134,18 @@ jobs:
           dart analyze --fatal-infos
           flutter test
           tool/build.sh
+
+      # The built apps (React, Enact, Flutter; the shared packages' lib/)
+      # for a device image: meta-phoenix's phoenix-apps installs them from
+      # this archive (PHOENIX_APPS_DIST), as BitBake allows no npm in
+      # do_compile (tools/pack-apps-dist.sh, docs/PRE-IMAGE-CHECKLIST.md B3).
+      - name: Pack the built apps for the image
+        run: tools/pack-apps-dist.sh apps-dist.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apps-dist
+          path: apps-dist.tar.gz
+          retention-days: 30
 
       - name: Build simulator
         run: |
@@ -158,6 +189,21 @@ jobs:
         timeout-minutes: 10
         run: QT_QPA_PLATFORM=offscreen "$QT_ROOT_DIR/bin/qmltestrunner" -import shell/qml -import build/qml -import shell/tests-device/fakes -input shell/tests-device
 
+      - name: The keyboard as the device's input method (Maliit plugin over a fake host; services/keyboard)
+        timeout-minutes: 10
+        run: QT_QPA_PLATFORM=offscreen build/keyboard/keyboard-test
+
+      # The plugin is built against a stand-in of Maliit's plugin API here
+      # (services/keyboard/maliit-stub); this compiles it against the real
+      # headers too, so the stand-in cannot drift from them.
+      - name: The keyboard plugin against maliit-framework-webos's own headers
+        timeout-minutes: 10
+        run: |
+          git clone -q --depth 1 https://github.com/webosose/maliit-framework-webos.git "$RUNNER_TEMP/maliit"
+          cmake -S services/keyboard -B build-keyboard-realapi -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+                -DPHOENIX_KEYBOARD_TESTS=OFF -DPHOENIX_MALIIT_SOURCE_DIR="$RUNNER_TEMP/maliit"
+          cmake --build build-keyboard-realapi --target phoenix-keyboard-realapi -j
+
       - name: The runtime on a device (window properties, Back, the launch's caller, copies)
         timeout-minutes: 10
         run: node tools/test-runtime-device.cjs
@@ -197,6 +243,9 @@ jobs:
       - name: The Assistant's voice (phoenix-tts, with Kitten TTS's model and ONNX Runtime)
         timeout-minutes: 10
         run: python3 tools/get-kitten.py && build/tts-test
+
+      - name: App-to-app launches send what their apps read (docs/LAUNCH-CONTRACTS.md)
+        run: node tools/check-launch-contracts.cjs
 
       - name: Trademark overlays up to date
         run: python3 tools/debrand-overlays.py --check
@@ -259,6 +308,8 @@ jobs:
           t node tools/test-browser.cjs --out app-tests/browser-phone
           t node tools/test-browser.cjs --tablet --out app-tests/browser-tablet
           t node tools/test-links.cjs --out app-tests/links-phone
+          t node tools/test-launch-contracts.cjs --out app-tests/launch-contracts-phone
+          t node tools/test-launch-contracts.cjs --tablet --out app-tests/launch-contracts-tablet
           t node tools/test-back.cjs
           t node tools/test-files.cjs --out app-tests/files-phone
           t node tools/test-files.cjs --tablet --out app-tests/files-tablet
@@ -324,6 +375,7 @@ jobs:
           t node tools/test-enact-notes.cjs --out app-tests/enact-notes
           t node tools/test-ionic-notes.cjs --out app-tests/ionic-notes
           t node tools/test-flutter-notes.cjs --out app-tests/flutter-notes
+          t node tools/test-app-sdk.cjs --out app-tests/app-sdk
 
       # The menus over the screen, with the keyboard focus on the screen.
       - name: The simulator's menu bar

@@ -72,20 +72,32 @@ final class Catalog
         return $this->app($id);
     }
 
-    /** A developer's .ipk: checked now, reviewed by an admin. A first upload makes the app (pending). */
+    /**
+     * A developer's .ipk: checked now, reviewed by an admin. A first upload makes the app (pending).
+     * A Synergy connector (a service in its app) is kind "connector": it must pass the connector
+     * rules (Connector::checkIpk) and say what Connections shows (catalog.json, connectorTypes).
+     * On a development catalog (MARKETPLACE_DEV: serve.sh, the simulator's) the release is
+     * approved at once ('approved' in the result: publish then).
+     */
     public function submitPackage(array $owner, string $bytes, array $p = []): array
     {
-        $pkg = Ipk::check($bytes);
+        $pkg = Ipk::check($bytes, true);
         $id = $pkg['appId'];
-        if (str_starts_with($id, 'org.webosphoenix.')) {
+        // Phoenix's own packages (the connectors it comes with, firstPartyPackages) are an admin's.
+        $phoenix = ($owner['role'] ?? '') === 'admin';
+        if (str_starts_with($id, 'org.webosphoenix.') && !$phoenix) {
             throw new CheckFailed('org.webosphoenix.* ids are Phoenix\'s own');
+        }
+        $kind = $pkg['connector'] ? 'connector' : 'ipk';
+        if ($pkg['connector']) {
+            $this->checkConnectorPackage($bytes, $phoenix ? ['org.webosphoenix', 'com.webosphoenix'] : []);
         }
         $app = $this->db->one('SELECT * FROM apps WHERE id = ?', [$id]);
         if ($app && (int) $app['owner_id'] !== (int) $owner['id']) {
             throw new CheckFailed("The app $id belongs to another developer");
         }
-        if ($app && $app['kind'] !== 'ipk') {
-            throw new CheckFailed("$id is listed as a web app");
+        if ($app && $app['kind'] !== $kind) {
+            throw new CheckFailed($app['kind'] === 'pwa' ? "$id is listed as a web app" : "$id is listed as " . ($app['kind'] === 'connector' ? 'a connector' : 'an app'));
         }
         $dup = $this->db->one("SELECT id FROM releases WHERE app_id = ? AND version = ? AND state != 'rejected'", [$id, $pkg['version']]);
         if ($dup) {
@@ -94,14 +106,18 @@ final class Catalog
         if (!$app) {
             $p += ['title' => $pkg['appinfo']['title'] ?? $id, 'developer' => $pkg['appinfo']['vendor'] ?? $owner['name'],
                    'summary' => $pkg['control']['Description'] ?? ''];
-            $this->insertApp($id, 'ipk', $owner['id'], $p, 'pending', []);
+            $this->insertApp($id, $kind, $owner['id'], $p, 'pending', []);
         }
         $file = sprintf('%s_%s_all.ipk', $id, preg_replace('/[^A-Za-z0-9.+~-]/', '_', $pkg['version']));
         @mkdir($this->uploadDir(), 0700, true);
         file_put_contents($this->uploadDir() . '/' . $file, $bytes);
         $this->db->run('INSERT INTO releases (app_id, version, file, size, sha256, state, notes, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
             [$id, $pkg['version'], $file, strlen($bytes), hash('sha256', $bytes), 'pending', '', Db::now()]);
-        return ['app' => $this->app($id), 'release' => $this->db->one('SELECT * FROM releases WHERE id = ?', [$this->db->lastId()])];
+        $release = $this->db->one('SELECT * FROM releases WHERE id = ?', [$this->db->lastId()]);
+        if (!empty($this->config['dev'])) {
+            $release = $this->decideRelease((int) $release['id'], true, $owner, 'Approved on upload: a development catalog (MARKETPLACE_DEV)');
+        }
+        return ['app' => $this->app($id), 'release' => $release];
     }
 
     private function insertApp(string $id, string $kind, ?int $ownerId, array $p, string $status, array $extra): void
@@ -496,8 +512,11 @@ final class Catalog
         return $out;
     }
 
-    /** One account type, checked: [entry as published, iconFrom | null]. */
-    private function accountType(array $e): array
+    /**
+     * One account type, checked: [entry as published, iconFrom | null]. $fromPackage: a connector
+     * package's (connectorTypes): builtin false, its icon written from the package, not iconFrom.
+     */
+    private function accountType(array $e, bool $fromPackage = false): array
     {
         $fields = ['templateId', 'title', 'provider', 'icon', 'iconFrom', 'summary', 'capabilities', 'protocols', 'auth', 'server',
                    'privacy', 'push', 'status', 'package', 'help', 'signUp', 'featured'];
@@ -547,12 +566,23 @@ final class Catalog
             || !is_bool($privacy['e2ee'] ?? null)) {
             throw new CheckFailed('privacy: {dataGoesTo: a text, e2ee: true or false, phoenixServers}');
         }
-        if (!is_array($package) || array_diff(array_keys($package), ['id', 'builtin'])
+        if (!is_array($package) || array_diff(array_keys($package), ['id', 'builtin', 'preinstalled'])
             || !is_string($package['id'] ?? null) || !self::validId($package['id'])) {
-            throw new CheckFailed('package: {id: the providing app or service, builtin}');
+            throw new CheckFailed('package: {id: the providing app or service, builtin, preinstalled?}');
         }
-        if (($package['builtin'] ?? null) !== true) {
-            throw new CheckFailed('package: only built-in account types for now (builtin: true); connector packages come later');
+        // Here (catalog/accounts.json): built in (part of the system, never removed: the generic
+        // logins), or a first-party connector package Phoenix comes with (builtin false,
+        // preinstalled true: removable, installed again from the catalog; the package is uploaded
+        // as Phoenix's own, firstPartyPackages). A developer's connector lists its own (catalog.json).
+        $preinstalled = $package['preinstalled'] ?? false;
+        if (!is_bool($preinstalled) || ($preinstalled && ($package['builtin'] ?? null) !== false)) {
+            throw new CheckFailed('package: preinstalled is true or false, and only for a package (builtin: false)');
+        }
+        if ($fromPackage ? (($package['builtin'] ?? null) !== false || $preinstalled)
+                         : (($package['builtin'] ?? null) !== true && !$preinstalled)) {
+            throw new CheckFailed($fromPackage ? 'package: a connector package\'s (builtin: false)'
+                : 'package: built in (builtin: true), or a connector package Phoenix comes with (builtin: false, preinstalled: true); '
+                  . 'any other connector package lists its own (catalog.json)');
         }
         // The icon: a file under the published icons/accounts/, copied from iconFrom (a file in
         // this checkout), or an https:// address.
@@ -564,6 +594,8 @@ final class Catalog
             }
         } elseif (!is_string($icon) || !preg_match('#^icons/accounts/[A-Za-z0-9][A-Za-z0-9._-]*\.png$#', $icon)) {
             throw new CheckFailed('icon: icons/accounts/<name>.png (published here) or an https:// address');
+        } elseif ($fromPackage) {
+            // Written from the package's own template icon (connectorTypes).
         } elseif (!is_string($from) || str_contains($from, '..') || str_starts_with($from, '/')
                   || !is_file($this->repo() . '/' . $from)
                   || self::imageType((string) file_get_contents($this->repo() . '/' . $from)) !== 'png') {
@@ -588,7 +620,7 @@ final class Catalog
             'privacy' => ['dataGoesTo' => $privacy['dataGoesTo'], 'e2ee' => $privacy['e2ee'],
                           'phoenixServers' => $oneOf('privacy.phoenixServers', $privacy['phoenixServers'] ?? null)],
             'push' => $oneOf('push', $e['push'] ?? null), 'status' => $oneOf('status', $e['status'] ?? null),
-            'package' => ['id' => $package['id'], 'builtin' => true],
+            'package' => ['id' => $package['id'], 'builtin' => $package['builtin']] + ($preinstalled ? ['preinstalled' => true] : []),
         ];
         if (isset($e['help'])) {
             $entry['help'] = $e['help'];
@@ -597,7 +629,161 @@ final class Catalog
             $entry['signUp'] = $e['signUp'];
         }
         $entry['featured'] = !empty($e['featured']);
-        return [$entry, str_starts_with($icon, 'icons/') ? [$from, $icon] : null];
+        return [$entry, str_starts_with($icon, 'icons/') && !$fromPackage ? [$from, $icon] : null];
+    }
+
+    // ---- Connector packages (docs/SYNERGY-CONNECTORS.md 2.2, phase C4) -------------------------
+    //
+    // A Synergy connector is an .ipk whose app carries a service (service/), its account
+    // templates (public/accounts/<id>/<id>.json) and its kinds. The catalog takes one that passes
+    // the connector rules (Connector::checkIpk, the same as `phoenix-connector validate`), lists it
+    // in the index as kind "connector" (devices before C4 do not know the kind and leave it out),
+    // and lists its account types in the index's "accounts" for Connections, with builtin false.
+    // Devices install one only in Developer Mode until the connector trust tier (C5; the owner's
+    // decision, SYNERGY-CONNECTORS.md 5). What Connections says of each type that the template
+    // does not (its summary, where the data goes, how it signs in) is the developer's, in
+    // catalog.json at the app's root:
+    //
+    //   {"accountTypes": [{"templateId", "summary", "auth": {type, registration}, "server",
+    //     "privacy": {dataGoesTo, e2ee, phoenixServers}, "protocols"?, "push"?, "status"?,
+    //     "help"?, "title"?, "provider"?, "capabilities"?, ...}]}
+    //
+    // with the same fields and rules as catalog/accounts.json's (accountType); title, provider
+    // and capabilities default to the template's loc_name, the app's vendor and its capability
+    // providers (readOnlyData: read-only), status to experimental, push to poll. The icon is the
+    // template's own (loc_48x48, its @2x when there is one).
+
+    /** A connector .ipk's checks: the connector rules, then its account types. Throws CheckFailed. */
+    private function checkConnectorPackage(string $bytes, array $namespaces = []): array
+    {
+        $r = Connector::checkIpk($bytes, $namespaces);
+        if ($r['errors']) {
+            throw new CheckFailed("The connector does not pass the Marketplace's checks (phoenix-connector validate runs the same):\n  "
+                                  . implode("\n  ", $r['errors']));
+        }
+        return $this->connectorTypes($bytes);
+    }
+
+    /** A connector package's account types: [[entry as published, icon PNG bytes], ...]. Throws CheckFailed. */
+    public function connectorTypes(string $bytes): array
+    {
+        $ar = Ipk::readAr($bytes);
+        $data = Ipk::readTar((string) @gzdecode($ar['data.tar.gz'] ?? ''));
+        $appId = null;
+        foreach (array_keys($data) as $path) {
+            if (preg_match('#^usr/palm/applications/([^/]+)/appinfo\.json$#', (string) $path, $m)) {
+                $appId = $m[1];
+            }
+        }
+        if ($appId === null) {
+            throw new CheckFailed('The package holds no app');
+        }
+        $dir = "usr/palm/applications/$appId/";
+        $file = fn (string $rel): ?string => ($data[$dir . $rel]['type'] ?? '') === 'file' ? $data[$dir . $rel]['data'] : null;
+        $json = fn (string $rel) => json_decode(preg_replace('/^\xEF\xBB\xBF/', '', (string) $file($rel)), true);
+        $info = $json('appinfo.json');
+        $meta = $json('catalog.json');
+        if (!is_array($meta) || !is_array($meta['accountTypes'] ?? null) || !array_is_list($meta['accountTypes'])) {
+            throw new CheckFailed('catalog.json: a connector says what Connections shows of its account types, '
+                                  . '{"accountTypes": [{"templateId", "summary", "auth", "server", "privacy", ...}]} (docs/SYNERGY-SDK.md)');
+        }
+        $byId = [];
+        foreach ($meta['accountTypes'] as $m) {
+            if (!is_array($m) || !is_string($m['templateId'] ?? null)) {
+                throw new CheckFailed('catalog.json: each account type names its templateId');
+            }
+            $byId[$m['templateId']] = $m;
+        }
+        $out = [];
+        foreach (array_keys($data) as $path) {
+            if (!preg_match('#^' . preg_quote($dir, '#') . 'public/accounts/([^/]+)/([^/]+)\.json$#', (string) $path, $pm) || $pm[1] !== $pm[2]) {
+                continue;
+            }
+            $tpl = $json("public/accounts/{$pm[1]}/{$pm[1]}.json");
+            foreach (is_array($tpl) && array_is_list($tpl) ? $tpl : [$tpl] as $t) {
+                $tid = is_array($t) ? (string) ($t['templateId'] ?? '') : '';
+                if (!isset($byId[$tid])) {
+                    throw new CheckFailed("catalog.json: nothing for the template $tid (its summary, where its data goes, how it signs in)");
+                }
+                $m = $byId[$tid];
+                unset($byId[$tid]);
+                $caps = [];
+                foreach ((array) ($t['capabilityProviders'] ?? []) as $cp) {
+                    if (is_array($cp) && is_string($cp['capability'] ?? null) && !isset($caps[$cp['capability']])) {
+                        $caps[$cp['capability']] = ['capability' => $cp['capability']] + (!empty($cp['readOnlyData']) ? ['direction' => 'read-only'] : []);
+                    }
+                }
+                // The template's icon, at twice its size when the package has it.
+                $png = null;
+                foreach (['loc_48x48', 'loc_32x32'] as $k) {
+                    $rel = $t['icon'][$k] ?? null;
+                    if (!is_string($rel) || $png !== null) {
+                        continue;
+                    }
+                    foreach ([preg_replace('/\.png$/', '@2x.png', $rel), $rel] as $try) {
+                        $b = $file("public/accounts/$tid/$try");
+                        if ($png === null && $b !== null && self::imageType($b) === 'png') {
+                            $png = $b;
+                        }
+                    }
+                }
+                if ($png === null) {
+                    throw new CheckFailed("the template $tid has no PNG icon (icon.loc_48x48) for Connections");
+                }
+                $e = ['templateId' => $tid, 'title' => $m['title'] ?? $t['loc_name'] ?? $tid, 'provider' => $m['provider'] ?? $info['vendor'] ?? $appId,
+                      'icon' => "icons/accounts/$tid.png", 'summary' => $m['summary'] ?? null,
+                      'capabilities' => $m['capabilities'] ?? array_values($caps), 'protocols' => $m['protocols'] ?? [],
+                      'auth' => $m['auth'] ?? null, 'server' => $m['server'] ?? null, 'privacy' => $m['privacy'] ?? null,
+                      'push' => $m['push'] ?? 'poll', 'status' => $m['status'] ?? 'experimental',
+                      'package' => ['id' => $appId, 'builtin' => false]];
+                // Any other field an account type has (help, ...) is checked as catalog/accounts.json's
+                // are; only Phoenix features a type.
+                $e = array_merge($e, array_diff_key($m, $e + ['featured' => 1]));
+                try {
+                    [$entry] = $this->accountType($e, true);
+                } catch (CheckFailed $x) {
+                    throw new CheckFailed("catalog.json, $tid: " . $x->getMessage());
+                }
+                $out[] = [$entry, $png];
+            }
+        }
+        if ($byId) {
+            throw new CheckFailed('catalog.json: no template ' . implode(', ', array_keys($byId)) . ' in the package');
+        }
+        if (!$out) {
+            throw new CheckFailed('The connector has no account template');
+        }
+        return $out;
+    }
+
+    /**
+     * The listed connectors' account types, from their newest approved release, each template
+     * once and none of $taken's (the built-in ones). One that no longer passes is left out (logged).
+     */
+    private function listedConnectorTypes(array $taken): array
+    {
+        $out = [];
+        $seen = array_fill_keys($taken, true);
+        foreach ($this->db->all("SELECT id FROM apps WHERE kind = 'connector' AND status = 'listed' ORDER BY title") as $row) {
+            $r = $this->db->one("SELECT * FROM releases WHERE app_id = ? AND state = 'approved' ORDER BY id DESC", [$row['id']]);
+            $bytes = $r ? @file_get_contents($this->publicDir() . '/packages/' . $r['file']) : false;
+            if (!is_string($bytes)) {
+                continue;
+            }
+            try {
+                $types = $this->connectorTypes($bytes);
+            } catch (CheckFailed $e) {
+                error_log("marketplace: the connector {$row['id']} is left out of Connections: " . $e->getMessage());
+                continue;
+            }
+            foreach ($types as $t) {
+                if (!isset($seen[$t[0]['templateId']])) {
+                    $seen[$t[0]['templateId']] = true;
+                    $out[] = $t;
+                }
+            }
+        }
+        return $out;
     }
 
     // ---- Publishing ---------------------------------------------------------------------------
@@ -607,6 +793,8 @@ final class Catalog
         // The account types first: a bad catalog/accounts.json stops the publish, and the
         // index devices have stays as it was.
         $accountTypes = $this->accountTypes();
+        // The connector packages' own (after the built-in ones, which they cannot replace).
+        $connectorTypes = $this->listedConnectorTypes(array_column(array_column($accountTypes, 0), 'templateId'));
         $apps = [];
         $categories = [];
         foreach ($this->db->all("SELECT id FROM apps WHERE status = 'listed' ORDER BY featured DESC, title") as $row) {
@@ -646,7 +834,7 @@ final class Catalog
             'expires' => gmdate('Y-m-d\TH:i:s\Z', $now + self::EXPIRES_DAYS * 86400),
             'source' => ['id' => 'phoenix', 'name' => $this->config['name']],
             'categories' => array_keys($categories), 'apps' => $apps,
-            'accounts' => array_column($accountTypes, 0),
+            'accounts' => array_merge(array_column($accountTypes, 0), array_column($connectorTypes, 0)),
         ];
         $json = json_encode($index, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n";
         $dir = $this->publicDir();
@@ -658,6 +846,10 @@ final class Catalog
                 copy($this->repo() . '/' . $copy[0], "$dir/{$copy[1]}");
             }
         }
+        foreach ($connectorTypes as [$entry, $png]) {
+            @mkdir("$dir/icons/accounts", 0755, true);
+            file_put_contents("$dir/icons/accounts/{$entry['templateId']}.png", $png);
+        }
         // The signature first, then the index: a reader never sees an index without its signature.
         file_put_contents("$dir/index.json.sig.new", base64_encode($this->signer->sign($json)) . "\n");
         file_put_contents("$dir/index.json.new", $json);
@@ -666,6 +858,6 @@ final class Catalog
         file_put_contents("$dir/key.json", json_encode(['key' => base64_encode($this->signer->public), 'name' => $this->config['name'],
                                                          'fingerprint' => $this->signer->fingerprint()], JSON_UNESCAPED_SLASHES) . "\n");
         $this->db->run('INSERT INTO index_builds (build, generated, sha256) VALUES (?, ?, ?)', [$build, $index['generated'], hash('sha256', $json)]);
-        return ['build' => $build, 'apps' => count($apps), 'accounts' => count($accountTypes)];
+        return ['build' => $build, 'apps' => count($apps), 'accounts' => count($accountTypes) + count($connectorTypes)];
     }
 }

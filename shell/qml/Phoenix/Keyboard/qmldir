@@ -1,0 +1,3 @@
+module Phoenix.Keyboard
+MaliitKeyboard 1.0 MaliitKeyboard.qml
+KeyboardBus 1.0 KeyboardBus.qml

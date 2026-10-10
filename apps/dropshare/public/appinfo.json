@@ -16,6 +16,7 @@
     "tapToShareSupported": true,
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps. shareTargets: the share sheet offers DropShare for files.",
+        "launchParams": ["share", "sendDataToShare"],
         "launcherTab": 0,
         "shareTargets": [
             { "types": ["image/*", "video/*", "audio/*", "application/*"], "label": "DropShare" }

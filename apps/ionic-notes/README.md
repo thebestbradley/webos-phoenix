@@ -25,7 +25,13 @@ framework for Phoenix 2.0 apps, beside the Enact demos
 
 The model is `@phoenix/notes-core`, the same code as the Enact demos (the
 db8 store, Markdown, editing commands, the app state as a React hook, the
-editor and preview). Luna calls go through `@phoenix/luna`.
+editor and preview). The system comes through the Phoenix service plugin
+([docs/APP-SDK.md](../../docs/APP-SDK.md)): Luna calls through
+`@phoenix/sdk`, Share, received shares and stage ready through the
+Capacitor plugin `@phoenix/capacitor`, the app menu (Edit, Share, New
+Note, Settings) and Just Type's New Note action through
+`@phoenix/react`, Back through `app.onBack` (`src/phoenix.tsx`,
+`src/main.tsx`).
 
 ## Ionic components used
 

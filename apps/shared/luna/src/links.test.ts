@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, expect, it } from "vitest";
-import { messageTarget, telTarget } from "./links";
+import { linkedText, messageTarget, telTarget } from "./links";
 
 describe("links", () => {
     it("reads the number of a tel: link", () => {
@@ -22,5 +22,20 @@ describe("links", () => {
         expect(messageTarget("im:ada@example.com")).toEqual({ to: "ada@example.com" });
         expect(messageTarget("tel:5550100")).toBeUndefined();
         expect(messageTarget(42)).toBeUndefined();
+    });
+
+    it("links the numbers and addresses of plain text with the system text indexer, the text escaped", () => {
+        const g = globalThis as { PalmSystem?: { runTextIndexer?: (t: string) => string } };
+        const before = g.PalmSystem;
+        try {
+            g.PalmSystem = undefined;
+            expect(linkedText("<b>5550100</b> & co")).toBe("&lt;b&gt;5550100&lt;/b&gt; &amp; co");
+            let seen = "";
+            g.PalmSystem = { runTextIndexer: (t) => { seen = t; return t.replace("5550100", '<a href="tel:5550100">5550100</a>'); } };
+            expect(linkedText("Call <me> 5550100")).toBe('Call &lt;me&gt; <a href="tel:5550100">5550100</a>');
+            expect(seen).toBe("Call &lt;me&gt; 5550100");
+        } finally {
+            g.PalmSystem = before;
+        }
     });
 });

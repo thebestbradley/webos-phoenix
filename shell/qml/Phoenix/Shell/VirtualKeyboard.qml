@@ -208,6 +208,14 @@ Item {
     signal hideRequested()
     // keyDownAudioFeedback: "key", "space", "backspace" or "return".
     signal feedback(string name)
+    // What the keyboard types into (KeyboardHost.qml, GAPS V5): the
+    // simulator's shell, or on a device the Maliit input method
+    // (Phoenix/Keyboard/MaliitKeyboard.qml). Each of the signals above goes
+    // to it as well; without one (a test's keyboard) they are all there is.
+    property KeyboardHost host: null
+    onHideRequested: if (host) host.hideKeyboard()
+    onFeedback: (name) => { if (host) host.feedback(name); }
+    onKeyboardHeightChanged: if (host) host.panelHeight(keyboardHeight)
 
     // ---- Text Assist (Phoenix, GAPS V2, V3) ---------------------------------------------
     // Settings > Text & Keyboard: suggestions, auto-correction, swipe typing.
@@ -322,8 +330,9 @@ Item {
     // ---- The text around the cursor (GAPS V3) ------------------------------------------
     // A function returning the field's text around the cursor, {text,
     // cursor} (Qt's ImSurroundingText and ImCursorPosition: what an input
-    // method asks a field), or null when it cannot tell. The shell gives
-    // one; without it the keyboard follows only what it typed itself.
+    // method asks a field), or null when it cannot tell. Without one the
+    // host's (KeyboardHost.surroundingText) is asked; without either the
+    // keyboard follows only what it typed itself.
     property var surroundingText: null
     // When the keyboard last typed (ms): a cursor move soon after is its own.
     property real _lastOwnInput: 0
@@ -333,9 +342,11 @@ Item {
     // from its words. Inside a word (letters after the cursor) nothing is
     // being typed: a correction would cut the word in two.
     function syncWithField() {
-        if (typeof surroundingText !== "function" || !shown || _swipeId !== "" || trackpad)
+        var ask = typeof surroundingText === "function" ? surroundingText
+                : host ? function () { return host.surroundingText(); } : null;
+        if (!ask || !shown || _swipeId !== "" || trackpad)
             return false;
-        var s = surroundingText();
+        var s = ask();
         if (!s || typeof s.text !== "string" || typeof s.cursor !== "number")
             return false;
         var cursor = Math.max(0, Math.min(s.cursor, s.text.length));
@@ -440,12 +451,18 @@ Item {
         kb.textCommitted(text);
         _assistOwnText = false;
     }
-    onTextCommitted: {
+    onTextCommitted: (text) => {
         _lastOwnInput = Date.now();
+        if (host)
+            host.commitText(text);
         if (!_assistOwnText)
             _assistReset();
     }
-    onKeyTyped: _lastOwnInput = Date.now()
+    onKeyTyped: (key, modifiers) => {
+        _lastOwnInput = Date.now();
+        if (host)
+            host.sendKey(key, modifiers);
+    }
     // Another field has the keyboard (IMEController::restartInput): its text
     // is read afresh.
     function inputClientChanged() {

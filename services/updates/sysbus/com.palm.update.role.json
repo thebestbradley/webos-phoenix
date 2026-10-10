@@ -6,7 +6,8 @@
     "permissions": [
         {
             "service": "com.palm.update",
-            "outbound": ["com.palm.activitymanager", "com.palm.connectionmanager", "com.palm.power", "com.webos.notification"]
+            "outbound": ["com.palm.activitymanager", "com.palm.connectionmanager", "com.palm.power", "com.webos.notification",
+                         "org.webosphoenix.ongoing"]
         }
     ]
 }

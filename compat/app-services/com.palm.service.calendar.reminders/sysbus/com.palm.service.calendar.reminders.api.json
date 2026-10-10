@@ -1,0 +1,5 @@
+{
+    "phoenix.appservices.calendar-reminders": [
+        "com.palm.service.calendar.reminders/*"
+    ]
+}

@@ -25,9 +25,13 @@ of them use the same notes in db8.
 
 ## How it fits Phoenix
 
-- **Luna**: `lib/src/platform_web.dart` calls the web runtime's
-  `PalmServiceBridge` from Dart (`dart:js_interop`), the same bus the web
-  apps use.
+- **The system**: through the Phoenix service plugin for Dart
+  (`../shared/phoenix_services`, [docs/APP-SDK.md](../../docs/APP-SDK.md)):
+  Luna over the web runtime's `PalmServiceBridge` (`dart:js_interop`),
+  the same bus the web apps use; stage ready; the app menu (Edit, Share,
+  New Note, Settings, drawn by Flutter: `lib/src/ui/phoenix.dart`);
+  received shares (`web/appinfo.json` shareTargets) and Just Type's New
+  Note action as new notes.
 - **The model** (`lib/src`) is a Dart port of `@phoenix/notes-core`: the
   same db8 kinds and calls, Markdown handling, editing commands (with the
   same tests, `test/`) and date sections. `test/parity_test.dart` reads

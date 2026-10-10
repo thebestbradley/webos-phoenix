@@ -66,6 +66,21 @@ Rootfs::Rootfs(const QString &repoDir)
     for (const auto &dirValue : cfg.value(QStringLiteral("systemApps")).toArray())
         m_systemApps.append(QDir(repoDir).filePath(dirValue.toString()));
 
+    // The connector packages Phoenix comes with: installed apps, not built-in ones.
+    const QString preinstalledFile = cfg.value(QStringLiteral("preinstalled")).toString();
+    if (!preinstalledFile.isEmpty()) {
+        QFile pf(QDir(repoDir).filePath(preinstalledFile));
+        if (pf.open(QIODevice::ReadOnly)) {
+            for (const auto &v : QJsonDocument::fromJson(pf.readAll()).object().value(QStringLiteral("packages")).toArray()) {
+                const QJsonObject pkg = v.toObject();
+                const QString id = pkg.value(QStringLiteral("id")).toString();
+                const QString from = pkg.value(QStringLiteral("from")).toString();
+                if (!id.isEmpty() && !from.isEmpty())
+                    m_preinstalled.insert(id, QDir::cleanPath(QDir(repoDir).filePath(from)));
+            }
+        }
+    }
+
     QStringList sources = m_applicationDirs + m_systemApps;
     for (const auto &mount : std::as_const(m_mounts))
         sources.append(mount.second);
@@ -90,7 +105,69 @@ Rootfs::Rootfs(const QString &repoDir)
 void Rootfs::setInstalledDir(const QString &dir)
 {
     m_installedDir = dir;
+    seedPreinstalled();
     rescan();
+}
+
+QString Rootfs::preinstalledMarker(const QString &appId, const QString &suffix) const
+{
+    return QDir(m_installedDir).filePath(QStringLiteral("var/lib/phoenix/preinstalled/") + appId + suffix);
+}
+
+void Rootfs::forgetSeeded(const QString &appId) const
+{
+    if (!m_installedDir.isEmpty() && m_preinstalled.contains(appId))
+        QFile::remove(preinstalledMarker(appId, QStringLiteral(".seeded")));
+}
+
+// Copies the folder's files (not a build's or the tests') into dest.
+static bool copyApp(const QString &from, const QString &dest)
+{
+    static const QStringList skip = { QStringLiteral("node_modules"), QStringLiteral(".git"), QStringLiteral("test"), QStringLiteral("tests") };
+    QDirIterator it(from, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        const QString file = it.next();
+        const QString rel = QDir(from).relativeFilePath(file);
+        if (std::any_of(skip.begin(), skip.end(), [&](const QString &s) { return rel.split(QLatin1Char('/')).contains(s); }))
+            continue;
+        const QString to = QDir(dest).filePath(rel);
+        QDir().mkpath(QFileInfo(to).path());
+        if (!QFile::copy(file, to))
+            return false;
+    }
+    return true;
+}
+
+void Rootfs::seedPreinstalled()
+{
+    if (m_installedDir.isEmpty())
+        return;
+    for (auto it = m_preinstalled.constBegin(); it != m_preinstalled.constEnd(); ++it) {
+        const QString dest = QDir(m_installedDir).filePath(QStringLiteral("usr/palm/applications/") + it.key());
+        const QString offered = preinstalledMarker(it.key(), QStringLiteral(".offered"));
+        const QString seeded = preinstalledMarker(it.key(), QStringLiteral(".seeded"));
+        // Removed by the user, or installed from the catalog since: as it is.
+        if (QFileInfo::exists(offered) && !(QFileInfo::exists(seeded) && QFileInfo::exists(dest)))
+            continue;
+        QString from = it.value();
+        if (!QFileInfo::exists(from + QStringLiteral("/appinfo.json")))
+            from += QStringLiteral("/dist");
+        const QString temp = dest + QStringLiteral(".new");
+        QDir(temp).removeRecursively();
+        if (!QFileInfo::exists(from + QStringLiteral("/appinfo.json")) || !copyApp(from, temp)) {
+            qWarning("phoenix-sim: cannot put the pre-installed %s in %s", qPrintable(it.key()), qPrintable(dest));
+            QDir(temp).removeRecursively();
+            continue;
+        }
+        QDir(dest).removeRecursively();
+        QDir().rename(temp, dest);
+        QDir().mkpath(QFileInfo(offered).path());
+        for (const QString &marker : { offered, seeded }) {
+            QFile f(marker);
+            if (f.open(QIODevice::WriteOnly))
+                f.write("pre-installed\n");
+        }
+    }
 }
 
 static const char kDataPrefix[] = "/var/luna/";
@@ -408,11 +485,17 @@ void Rootfs::rescan()
             m_launchPoints.append(pointRecord);
         }
     };
+    // A pre-installed package's folder is not a built-in app: its copy in
+    // the installed apps is the app (seedPreinstalled).
+    QStringList preinstalledDirs;
+    for (const QString &d : std::as_const(m_preinstalled))
+        preinstalledDirs.append(d);
     for (const QString &dir : m_applicationDirs) {
         QDir base(dir);
         const auto entries = base.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
         for (const QString &name : entries)
-            addApp(base.filePath(name), name, false, false);
+            if (!preinstalledDirs.contains(QDir::cleanPath(base.filePath(name))))
+                addApp(base.filePath(name), name, false, false);
     }
     for (const QString &dir : m_systemApps)
         addApp(dir, QFileInfo(dir).fileName(), true, false);

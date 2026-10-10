@@ -1,0 +1,7 @@
+{
+    "org.webosphoenix.dropshare": [
+        "systemsettings.query",
+        "phoenix.ongoing",
+        "phoenix.shellhost.app"
+    ]
+}

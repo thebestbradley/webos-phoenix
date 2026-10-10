@@ -1,0 +1,68 @@
+{
+    "//": "What each checker must find in this tree, and nothing else (tools/test-devicecheck.py).",
+    "luna": [
+        "luna:missing-permission:org.example.demo->com.webos.service.systemservice/getPreferenceValues",
+        "luna:missing-permission:org.example.demo->com.webos.service.systemservice/getPreferences",
+        "luna:missing-permission:org.example.svc->com.webos.notification/createToast",
+        "luna:no-permissions:org.example.nogroups",
+        "luna:outbound:org.example.svc->com.webos.notification",
+        "luna:unknown-group:org.example.demo:made.up.group",
+        "luna:unknown-method:com.webos.service.systemservice/noSuchMethod",
+        "luna:unknown-service:com.palm.nothing",
+        "luna:unknown-service:org.example.nowhere",
+        "luna:unknown-service:org.webosphoenix.simulator"
+    ],
+    "simrefs": [
+        "simrefs:loopback:apps/demo:127.0.0.1",
+        "simrefs:phoenix-scheme:shell/qml/Phoenix/Shell/Thing.qml",
+        "simrefs:sim-property:simSettings",
+        "simrefs:sim-service:org.webosphoenix.simulator"
+    ],
+    "image": [
+        "image:conflict:/usr/share/fonts/extra/Extra.ttf",
+        "image:dev-dependency:org.example.svc:@example/linked",
+        "image:missing-path:/etc/phoenix/example.json",
+        "image:qml-import:Qt5Compat.GraphicalEffects",
+        "image:qml-import:QtWebEngine",
+        "image:require:org.example.svc:./lib/missing",
+        "image:require:org.example.svc:left-pad",
+        "image:unpackaged:/usr/share/fonts",
+        "image:unpackaged:/usr/share/luna-service2"
+    ],
+    "recipes": [
+        "recipes:license:phoenix-apps_git.bb:LICENSE",
+        "recipes:license:thing_1.0.bb",
+        "recipes:missing-file:phoenix-shell_git.bb:product.env",
+        "recipes:network:phoenix-apps_git.bb:do_compile",
+        "recipes:rdepends:phoenix-apps_git.bb:mojoservicelauncher",
+        "recipes:service-file:org.example.svc.service",
+        "recipes:systemd:svc.service:after",
+        "recipes:systemd:svc.service:install",
+        "recipes:systemd:svc.service:recipe",
+        "recipes:systemd:svc.service:requires",
+        "recipes:unpinned:phoenix-apps_git.bb",
+        "recipes:unpinned:thing_1.0.bb:https://example.org/thing-${PV}.tar.gz"
+    ],
+    "licences": [
+        "licences:no-provenance:apps/demo",
+        "licences:no-provenance:shell/assets/fonts/extra",
+        "licences:recipe-licence:gplthing_1.0.bb:GPL-3.0-only",
+        "licences:source-offer:bash",
+        "licences:source-offer:coreutils",
+        "licences:source-offer:glibc",
+        "licences:source-offer:htop",
+        "licences:source-offer:kernel modules (rtl8812au, rtl8814au)",
+        "licences:source-offer:less",
+        "licences:source-offer:linux kernel",
+        "licences:source-offer:linux-firmware (some files)",
+        "licences:source-offer:nano",
+        "licences:source-offer:opkg",
+        "licences:source-offer:procps",
+        "licences:source-offer:qt5compat",
+        "licences:source-offer:qtbase",
+        "licences:source-offer:qtdeclarative",
+        "licences:source-offer:qtsvg",
+        "licences:source-offer:qtwayland",
+        "licences:source-offer:systemd"
+    ]
+}

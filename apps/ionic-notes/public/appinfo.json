@@ -11,10 +11,31 @@
     "extraLargeIcon": "icon-512x512.png",
     "iconColor": "#3880ff",
     "uiRevision": 2,
-    "keywords": ["Notes", "Markdown", "Ionic"],
+    "keywords": [
+        "Notes",
+        "Markdown",
+        "Ionic"
+    ],
     "phoenix": {
         "//": "A 2.0 framework demo (apps/ionic-notes/README.md), in the launcher's Downloads tab with the other demos; developer: only while Developer Mode is on (docs/APP-RUNTIME.md).",
+        "launchParams": ["newNote", "share"],
         "launcherTab": 1,
-        "developer": true
+        "developer": true,
+        "shareTargets": [
+            {
+                "types": [
+                    "text/plain",
+                    "text/uri-list"
+                ],
+                "label": "Notes (Ionic)"
+            }
+        ]
+    },
+    "universalSearch": {
+        "action": {
+            "displayName": "New Note (Ionic)",
+            "url": "org.webosphoenix.ionicnotes",
+            "launchParam": "newNote"
+        }
     }
 }

@@ -1,0 +1,29 @@
+{
+  "name": "@phoenix/sdk",
+  "version": "0.1.0",
+  "description": "The Phoenix service plugin: typed, promise-based access to webOS Phoenix's services (app lifecycle, app menu, share sheet, pickers, notifications, Just Type, the Assistant, contacts, calendar, files, media, location, ...) for any web framework, with capability checks so apps also run on webOS OSE and in a browser",
+  "license": "Apache-2.0",
+  "type": "module",
+  "keywords": ["webos", "phoenix", "luna", "palm", "enact", "ionic", "pwa"],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/types/sdk/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/sdk/src/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/types/sdk/src/testing.d.ts",
+      "default": "./dist/testing.js"
+    },
+    "./phoenix-sdk.js": "./dist/phoenix-sdk.js",
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "README.md"],
+  "sideEffects": ["./dist/phoenix-sdk.js", "./dist/index.js"],
+  "scripts": {
+    "build": "vite build && vite build --mode iife && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p ."
+  }
+}

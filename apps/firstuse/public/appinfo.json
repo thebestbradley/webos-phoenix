@@ -14,6 +14,7 @@
     "keywords": ["Setup", "Welcome", "Tutorial"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md). Hidden, as com.palm.app.firstuse was: the shell runs it at first boot, and Settings > Device Info runs it again.",
+        "launchParams": ["rerun"],
         "launcherTab": 2,
         "hidden": true
     }

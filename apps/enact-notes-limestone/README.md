@@ -32,8 +32,10 @@ ThemeDecorator, Panel, Header, Item, Heading, BodyText, Icon, Button,
 TooltipDecorator, ContextualMenuDecorator, InputField, InputPopup, Chips,
 Scroller, VirtualList, Popup, Alert, RadioItem, CheckboxItem, SwitchItem,
 Dropdown, Slider, Spinner, PopupTabLayout; from `@enact/ui`, Layout and
-resolution; from `@enact/webos`, LS2Request (the db8 calls); Spotlight for
-focus. Enact has no multi-line text field, so the editor is a textarea
+resolution; from `@enact/webos`, LS2Request, under the Phoenix service
+plugin (`@phoenix/enact`: the db8 calls, Back, the app menu, received
+shares and Just Type's New Note action; [docs/APP-SDK.md](../../docs/APP-SDK.md));
+Spotlight for focus. Enact has no multi-line text field, so the editor is a textarea
 styled from Limestone's colour tokens.
 
 ## Building

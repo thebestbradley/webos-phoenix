@@ -11,13 +11,17 @@ and how a connector runs in the simulator and on a device.
 The reasoning behind all this, the catalog and the rules for listing a
 connector are in [SYNERGY-CONNECTORS.md](SYNERGY-CONNECTORS.md) (sections 3
 and 4); how webOS's Synergy worked is in [SYNERGY.md](SYNERGY.md).
+An app (rather than an account type) that reads Synergy's data (contacts,
+calendar, accounts) or composes a message or an email uses the Phoenix
+service plugin instead: [APP-SDK.md](APP-SDK.md).
 
 **Status (October 2026).** The kit, the command and the suite are built
-(phase C1). Third-party connectors install **in Developer Mode only** until
-the connector trust tier (SYNERGY-CONNECTORS.md 4.1, phase C5), and the
-Marketplace does not list connector packages yet (phase C4); its checks are
-already the ones `phoenix-connector validate` runs. Two connectors are built
-on the kit: the **Fediverse** account (`apps/fediverse`, built in) and the
+(phase C1). The Marketplace's catalog takes connector packages, and its
+Connections view installs them (phase C4; `phoenix-connector publish`,
+section 9): third-party connectors **in Developer Mode only** until the
+connector trust tier (SYNERGY-CONNECTORS.md 4.1, phase C5). Two connectors
+are built on the kit: the **Fediverse** account (`apps/fediverse`, a
+connector package Phoenix comes with: pre-installed, removable) and the
 hello-world **News Feed** example
 (`apps/shared/connector-kit/examples/feeds`). Since 10 October 2026 a
 connector can be a place to share to (section 7): the share sheet lists
@@ -514,11 +518,95 @@ file under `usr/palm/applications/<app id>/`, the kit and the sync layer in
 `service/node_modules/@phoenix/` (a device's `run-js-service` finds them
 there), tests and sources of a build left out.
 
+### Publishing
+
+```sh
+phoenix-connector publish org.example.foo --local                       # the catalog on this computer
+phoenix-connector publish org.example.foo --catalog https://... --token T  # any other catalog
+```
+
+`publish` packs a folder (or takes an `.ipk`), validates it, and uploads it
+through the catalog's developer API (`POST /api/apps/packages`,
+`server/marketplace`). The catalog runs the same rules again and lists the
+package as kind `connector`; its account types go into the index's
+`accounts`, which the Marketplace's **Connections** view lists. What
+Connections says of each one that the template does not is yours, in
+**`catalog.json`** at the app's root (`phoenix-connector new` writes one to
+fill in):
+
+```json
+{"accountTypes": [{
+    "templateId": "org.example.foo",
+    "summary": "What it brings to this device, in a sentence.",
+    "auth": {"type": "password", "registration": "none"},
+    "server": "user",
+    "privacy": {"dataGoesTo": "the server you enter", "e2ee": false, "phoenixServers": "none"},
+    "protocols": ["foo-rest"], "push": "poll", "status": "beta",
+    "help": "https://...", "signUp": "https://..."
+}]}
+```
+
+The fields are those of the catalog's own account types
+(`server/marketplace/catalog/accounts.json`, its README "Account types");
+the title, the provider and the capabilities default to the template's
+`loc_name`, your app's `vendor` and its capability providers (`readOnlyData`:
+read-only), the status to `experimental`, `push` to `poll`; the icon is the
+template's (`loc_48x48`, its `@2x`). Only Phoenix features a type.
+
+`--local` is the catalog on this computer (`server/marketplace/bin/serve.sh`,
+which the simulator starts: `http://127.0.0.1:8088/`, or `PHOENIX_CATALOG`).
+It is a **development catalog** (`MARKETPLACE_DEV=1`): an upload is approved
+and published at once, as its local developer, whose token is
+`server/marketplace/data/developer.token` (a local catalog without one gets a
+developer account registered, its token kept in
+`~/.config/phoenix-connector/tokens.json`). On any other catalog a person
+reviews it first; `--token` (or `PHOENIX_CATALOG_TOKEN`) is your developer
+account's. The same version twice is refused: raise `version` in
+`appinfo.json`.
+
 ## 10. Running it
 
-**In the simulator.** A built-in connector is listed in the runtime's
-"Synergy connectors on the kit" block. Any other: pack it and install the
-`.ipk` with Developer Mode on (Settings > Developer Mode), through
+### Testing in the simulator
+
+The whole store runs on this computer: the simulator starts the
+Marketplace's catalog with every run where PHP is (`./phoenix run`;
+**Services > Start Catalog with the Simulator** turns that off,
+`--no-marketplace` for one run), and its Marketplace trusts that catalog at
+once (the key comes from the catalog's own data folder, not the network).
+
+1. **Start**: `./phoenix run tablet`. The first start sets the catalog up
+   and publishes the News Feed example, so **Marketplace > Connections**
+   lists a third-party connector (under Social & Feeds) beside the
+   Fediverse (Installed: it comes with Phoenix).
+2. **Publish yours**: `phoenix-connector publish path/to/yours --local`. It
+   is in Connections at once (the Marketplace reads the catalog again each
+   time it opens).
+3. **Install**: open its page in Connections and tap **Install**. Without
+   Developer Mode the page says why and links to Settings > Developer Mode
+   (reveal it first with the Konami code in Just Type, as on webOS: up up
+   down down left right left right b a start); with it on, Install installs
+   the package through the Marketplace (the catalog's signed SHA-256
+   checked), its service starts in the page, its kinds are put, and its
+   template is in Accounts.
+4. **Add the account**: **Set up** opens Accounts at your template: your
+   sign-in page (`customUI`) or the template's user name and password, then
+   your validator, then Create Account.
+5. **Sync**: Contacts' and Calendar's **Sync now**, or the account's own
+   sync; periodic syncs do not run in the simulator (no background
+   process). Your data is in db8 (`luna://com.palm.db/find` from a page's
+   console: `PalmServiceBridge`).
+6. **Remove**: **Remove** on its page asks first, naming the accounts that
+   go with it, then deletes them (each capability's `onDelete`) and removes
+   the package. Publish a new version (raise `version`) and install it again.
+
+`server/marketplace/data/` holds the catalog (delete it to start over: the
+next start sets it up again); `tools/test-marketplace.cjs` runs this whole
+path in Chromium, `node tools/test-fediverse.cjs` a connector's sync.
+
+**Without the Marketplace.** A built-in connector, and a connector package
+Phoenix comes with (`/etc/palm/marketplace/preinstalled.json`), is listed in
+the runtime's "Synergy connectors on the kit" block. Any other: pack it and
+install the `.ipk` with Developer Mode on (Settings > Developer Mode), through
 `com.webos.appInstallService/install` with `developerMode: true` (as the
 Marketplace installs in Developer Mode); without it the install is refused,
 as on a device. Its service then runs in the page, its
@@ -560,8 +648,10 @@ its own compose page in place of the kit's.
 
 ## 12. Not yet
 
-- Connector packages in the Marketplace (C4), the trust tier and the db8
-  permission rule for generic kinds (C5).
+- The trust tier and the db8 permission rule for generic kinds (C5); until
+  then third-party connectors install in Developer Mode only. Review of a
+  connector's first release on a public catalog, and the privacy and terms
+  fields for reviewers (C4's admin side).
 - Push (UnifiedPush) registration (C6); connectors poll meanwhile.
 - The OAuth sheet and the key store on a device (C3; placeholders).
 - Generic kinds for FEEDS, SOCIAL, PHOTO, MEDIA, PODCASTS and BOOKMARKS
