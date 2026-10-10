@@ -507,6 +507,13 @@ lines come from the original code doing what it always did:
 
 ## Links between apps
 
+An app opening another with params (Contacts' message and call buttons,
+Just Type's actions, the Assistant's) is a launch contract: the original
+ids the runtime maps to Phoenix's apps (`APP_ALIASES`, `APP_ROUTES`), the
+params each app reads (its `launchParams.ts`, its appinfo.json
+`"phoenix": {"launchParams"}`) and every launch in the system, checked in CI,
+are in [LAUNCH-CONTRACTS.md](LAUNCH-CONTRACTS.md).
+
 A link in an app that belongs to another app opens that app, as on webOS:
 the application manager's `open {target}` finds the app for it and
 launches it with the link, `{target: "<the link>"}`

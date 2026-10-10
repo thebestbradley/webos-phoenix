@@ -12,6 +12,7 @@
     "uiRevision": 2,
     "phoenix": {
         "//": "Phoenix launcher metadata: launcherTab 0 = Apps, 1 = Downloads, 2 = Settings. hidden keeps the app itself out of the launcher; each launch point is its own icon and card, and starts the app with its params. developer \"unlock\": shown once Developer Mode was revealed (Just Type's Konami code), true: only while it is on (docs/APP-RUNTIME.md).",
+        "launchParams": ["page", "connect", "threadId", "installNow", "driverId", "join"],
         "launcherTab": 2,
         "hidden": true,
         "launchPoints": [

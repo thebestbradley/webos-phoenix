@@ -14,6 +14,7 @@
     "keywords": ["PDF", "Reader", "Acrobat", "Documents"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launchParams": ["target", "mimeType", "fileName", "imageList"],
         "launcherTab": 0
     },
     "//mimeTypes": "PDF View opens PDFs from Files, Email attachments and the browser's downloads (declared as legacy webOS apps did; see apps/videos/public/appinfo.json).",

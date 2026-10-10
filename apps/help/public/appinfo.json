@@ -14,6 +14,7 @@
     "keywords": ["Help", "Tips", "Tutorial", "How to", "Gestures", "Manual"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launchParams": ["topic", "search"],
         "launcherTab": 0
     },
     "universalSearch": {

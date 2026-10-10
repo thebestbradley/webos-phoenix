@@ -12,6 +12,7 @@
     "uiRevision": 2,
     "phoenix": {
         "//": "The system's share sheet and save picker, shown over the app that asks (org.webosphoenix.share/open, org.webosphoenix.filepicker/save); never launched by itself. docs/SHARE-AND-FILES.md.",
+        "launchParams": ["kind", "id"],
         "launcherTab": 0,
         "hidden": true
     }

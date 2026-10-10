@@ -14,6 +14,7 @@
     "keywords": ["Notifications", "Live Activities", "Background", "Dashboard", "Banner", "Developer"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings; developer: shown only while Developer Mode is on.",
+        "launchParams": ["task", "scheduled", "from"],
         "launcherTab": 0,
         "developer": true
     }

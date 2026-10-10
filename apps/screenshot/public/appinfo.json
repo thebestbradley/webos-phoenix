@@ -13,6 +13,7 @@
     "uiRevision": 2,
     "phoenix": {
         "//": "Opened by a screen capture's notification ({path}); not in the launcher (Photos has the Screen captures album). docs/SCREENSHOTS.md.",
+        "launchParams": ["path", "capture"],
         "launcherTab": 0,
         "hidden": true
     }

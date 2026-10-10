@@ -46,6 +46,20 @@ export function messageTarget(target: unknown): { to?: string; messageText?: str
     return undefined;
 }
 
+/**
+ * Plain text as HTML with its web addresses, e-mail addresses and phone
+ * numbers made links (http, mailto:, tel:), by the system text indexer
+ * (PalmSystem.runTextIndexer, as webOS apps linked text they showed:
+ * enyo-1.0 dom/util.js:310-334); a tapped link opens in its app. Without
+ * the indexer (a browser), the text escaped.
+ */
+export function linkedText(text: string): string {
+    const html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    const ps = (globalThis as { PalmSystem?: { runTextIndexer?: (t: string, o?: object) => string } }).PalmSystem;
+    if (typeof ps?.runTextIndexer !== "function") return html;
+    try { return ps.runTextIndexer(html); } catch { return html; }
+}
+
 function safeDecode(s: string): string {
     try { return decodeURIComponent(s); } catch { return s; }
 }

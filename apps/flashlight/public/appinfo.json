@@ -14,6 +14,7 @@
     "keywords": ["Torch", "Flash", "Light", "LED"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launchParams": ["on"],
         "launcherTab": 0
     },
     "//requiredPermissions": "OSE access control groups for the services the app calls: torch.operation is LuneOS torchd's (org.webosports.service.torch api.json).",

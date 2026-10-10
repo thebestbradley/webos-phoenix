@@ -14,6 +14,7 @@
     "keywords": ["Two-Factor", "2FA", "TOTP", "One-Time Password", "Verification Code", "Security"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launchParams": ["otpauth"],
         "launcherTab": 0
     },
     "//launchParams": "{otpauth: \"otpauth://totp/...\"} offers to add that code (after unlocking, with a confirmation); the QR scanner launches the app this way.",

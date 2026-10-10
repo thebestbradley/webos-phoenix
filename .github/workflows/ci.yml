@@ -244,6 +244,9 @@ jobs:
         timeout-minutes: 10
         run: python3 tools/get-kitten.py && build/tts-test
 
+      - name: App-to-app launches send what their apps read (docs/LAUNCH-CONTRACTS.md)
+        run: node tools/check-launch-contracts.cjs
+
       - name: Trademark overlays up to date
         run: python3 tools/debrand-overlays.py --check
 
@@ -305,6 +308,8 @@ jobs:
           t node tools/test-browser.cjs --out app-tests/browser-phone
           t node tools/test-browser.cjs --tablet --out app-tests/browser-tablet
           t node tools/test-links.cjs --out app-tests/links-phone
+          t node tools/test-launch-contracts.cjs --out app-tests/launch-contracts-phone
+          t node tools/test-launch-contracts.cjs --tablet --out app-tests/launch-contracts-tablet
           t node tools/test-back.cjs
           t node tools/test-files.cjs --out app-tests/files-phone
           t node tools/test-files.cjs --tablet --out app-tests/files-tablet

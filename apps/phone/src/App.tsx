@@ -9,12 +9,15 @@
 // Tablet (1024 wide): the dial pad stays on the left and the log or the
 // favourites fill the right, as the TouchPad's "Phone & Video Calls" did.
 //
-// Launch params: {number: "..."} fills in the dial pad (tel: links);
-// {emergency: true} is the restricted mode the lock screen opens
-// (views/Emergency).
+// Launch params (src/launchParams.ts, the one place they are read; docs/
+// LAUNCH-CONTRACTS.md): {number} fills in the dial pad, {number, dial: true}
+// calls it, {target: "tel:..."} (a link) fills it in; the original apps'
+// {address, transport} (a number tapped in Contacts, Just Type's Call)
+// calls it, {action: "voicemail"} calls voicemail; {emergency: true} is the
+// restricted mode the lock screen opens (views/Emergency).
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { apps, primaryCall, ringingCall, setWindowOrientation, telephony, telTarget, type Call } from "@phoenix/luna";
+import { apps, primaryCall, ringingCall, setWindowOrientation, telephony, type Call } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, RadioToolGroup, ToolBar, dialable, useBack } from "@phoenix/ui";
 import { callLog, otherParty, type PhoneCall } from "./lib/calllog";
@@ -25,6 +28,7 @@ import { Favorites } from "./views/Favorites";
 import { InCall } from "./views/InCall";
 import { IncomingAlert, isIncomingAlert, useIncomingAlert } from "./views/IncomingAlert";
 import { EmergencyPhone, useEmergencyMode } from "./views/Emergency";
+import { parseLaunch, type PhoneLaunchParams } from "./launchParams";
 
 type Tab = "dial" | "log" | "favorites";
 
@@ -64,17 +68,13 @@ function Phone() {
     // command menu (the bottom two rows and the dial button were cut off).
     // On a tablet it turns with the device (its wide layout).
     useEffect(() => { setWindowOrientation(wide ? "free" : "up"); }, [wide]);
-    // {number}: on the dial pad; {number, dial: true}: called at once
-    // (Voice Dial, after you said yes); {target: "tel:..."}: a tel: link
-    // (the application manager's, @phoenix/luna links.ts), on the dial pad.
-    const launch = useLaunchParams<{ number?: string; dial?: boolean; target?: string }>();
-    const params = useMemo(() => {
-        const n = launch.number ?? telTarget(launch.target);
-        return n ? { ...launch, number: n } : launch;
-    }, [launch]);
+    // What the launch asks for (launchParams.ts): a number on the dial pad,
+    // a call, voicemail.
+    const launch = useLaunchParams<PhoneLaunchParams>();
+    const intent = useMemo(() => parseLaunch(launch), [launch]);
     const dialedFor = useRef<object | null>(null);
     const [tab, setTab] = useState<Tab>("dial");
-    const [number, setNumber] = useState(params.number ? dialable(params.number) : "");
+    const [number, setNumber] = useState(intent.kind === "show" ? dialable(intent.number) : "");
     const [error, setError] = useState<string | null>(null);
     const lastDialed = useLastDialed();
     useCallBookkeeping(status.calls, people);
@@ -82,16 +82,20 @@ function Phone() {
     useActiveCallBanner(status.calls, people);
 
     useEffect(() => {
-        if (params.number && params.dial) {
-            if (dialedFor.current === params) return;
-            dialedFor.current = params;
-            dial(params.number);
-        } else if (params.number) {
-            setNumber(dialable(params.number));
+        if (intent.kind === "call" || intent.kind === "voicemail") {
+            // Once per launch; voicemail once its number is known.
+            if (dialedFor.current === intent) return;
+            if (intent.kind === "voicemail" && !voicemail?.number) return;
+            dialedFor.current = intent;
+            dial(intent.kind === "call" ? intent.number : voicemail!.number!);
+        } else if (intent.kind === "show") {
+            setNumber(dialable(intent.number));
             setTab("dial");
+        } else if (intent.kind === "preferences") {
+            void apps.launch("org.webosphoenix.settings", { page: "phone" }).catch(() => undefined);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [params]);
+    }, [intent, voicemail?.number]);
 
     const ringing = ringingCall(status.calls);
     const justEnded = useJustEnded(status.calls);

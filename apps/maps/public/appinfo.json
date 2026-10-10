@@ -14,6 +14,7 @@
     "keywords": ["Map", "Directions", "Navigation", "Navigate", "GPS", "Route", "Location", "OpenStreetMap"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launchParams": ["target", "address", "query", "route", "location", "placeId", "nearby", "place", "destination", "travelMode", "navigate"],
         "launcherTab": 0
     },
     "//universalSearch": "Just Type (com.palm.universalsearch): the \"Search Maps\" action searches for the typed text; the content search finds saved places (searchText, see the kind) and opens them.",

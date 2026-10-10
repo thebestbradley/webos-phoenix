@@ -14,6 +14,7 @@
     "keywords": ["Forecast", "Temperature", "Rain", "Conditions"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launchParams": [],
         "launcherTab": 0
     },
     "//requiredPermissions": "OSE access control groups for the services the app calls (location for Current Location, settings and system service for units and the clock). Forecasts come from Open-Meteo over HTTPS (docs/APP-RUNTIME.md, Weather).",

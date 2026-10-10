@@ -10,18 +10,22 @@
 // accounts' buddies with their presence) are conversations alike; the
 // Conversations badge counts what is unread in all of them.
 //
-// Launch params: {threadId} opens a conversation (a message's notification;
-// Open in New Card, which launches another card of Messaging with it, from
-// a conversation's menu in the list or from the app menu while one is
-// open; a cold launch and a relaunch alike); {to, name?} starts a
-// message to that number; {messageText} (webOS 2.x's name for it) starts a
-// message with that text, e.g. a location shared from Maps; {share: {text,
-// url, files}} (the share sheet) starts one with the text and the first
-// picture attached; {attachment} (a path: Photos' Share) attaches that
-// picture.
+// Launch params (src/launchParams.ts, the one place they are read; docs/
+// LAUNCH-CONTRACTS.md): {threadId} opens a conversation (a message's
+// notification; Open in New Card, which launches another card of Messaging
+// with it, from a conversation's menu in the list or from the app menu
+// while one is open; a cold launch and a relaunch alike); {to, name?}
+// starts a message to that number; {messageText} starts a message with that
+// text, e.g. a location shared from Maps; {share: {text, url, files}} (the
+// share sheet) starts one with the text and the first picture attached;
+// {attachment} (a path: Photos' Share) attaches that picture. The original
+// apps' {compose: {personId, phoneNumbers | ims, messageText, attachment}}
+// (Contacts' message button, Just Type, the browser's Share Link) opens the
+// conversation with that number or buddy if there is one, else a new
+// message to them, with the person's name.
 
 import { useEffect, useMemo, useState } from "react";
-import { messageTarget, messaging, type MessagePart } from "@phoenix/luna";
+import { db, messaging, personDisplayName, type MessagePart, type Person } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import { AppMenu, BackProvider, RadioToolGroup, ToolBar, ToolButton, useBack } from "@phoenix/ui";
 import { useBuddies, useImAccounts, usePeople, useThreads, useWide } from "./lib/hooks";
@@ -31,23 +35,14 @@ import { Conversation } from "./views/Conversation";
 import { Compose } from "./views/Compose";
 import { Buddies } from "./views/Buddies";
 import { Bubbles, Compose as ComposeIcon } from "./icons";
+import { parseLaunch, resolveLaunch, type MessagingLaunchParams } from "./launchParams";
 
-type View = { kind: "list" } | { kind: "thread"; id: string }
+type View = { kind: "list" } | { kind: "thread"; id: string; text?: string; parts?: MessagePart[] }
     | { kind: "compose"; to?: Recipient | null; text?: string; parts?: MessagePart[] };
 
-const isPicture = (path: string, mime?: string) => /^image\//.test(mime ?? "") || /\.(jpe?g|png|gif|webp|bmp)$/i.test(path);
-const pictureType = (path: string, mime?: string) =>
-    mime || (/\.png$/i.test(path) ? "image/png" : /\.gif$/i.test(path) ? "image/gif" : /\.webp$/i.test(path) ? "image/webp" : "image/jpeg");
-
 function Messaging() {
-    // {target: "sms:..." | "im:..."}: a link (the application manager's,
-    // @phoenix/luna links.ts), a new message to its recipient with its text.
-    const launch = useLaunchParams<{ threadId?: string; to?: string; name?: string; messageText?: string; attachment?: string; target?: string;
-                                     share?: { title?: string; text?: string; url?: string; files?: { path: string; mimeType?: string }[] } }>();
-    const params = useMemo(() => {
-        const m = messageTarget(launch.target);
-        return m ? { ...launch, ...m } : launch;
-    }, [launch]);
+    const launch = useLaunchParams<MessagingLaunchParams>();
+    const intent = useMemo(() => parseLaunch(launch), [launch]);
     const people = usePeople();
     const threads = useThreads();
     const buddies = useBuddies();
@@ -56,20 +51,25 @@ function Messaging() {
     const [tab, setTab] = useState<"conversations" | "buddies">("conversations");
     const [view, setView] = useState<View>({ kind: "list" });
 
+    // Once the conversations are known (to find the one with that address),
+    // and the person's name for a new message to them.
+    const threadsKnown = threads !== null;
     useEffect(() => {
-        if (params.threadId) setView({ kind: "thread", id: params.threadId });
-        // From the share sheet: a new message with the text and the link,
-        // and the first picture attached.
-        else if (params.share) {
-            const pic = (params.share.files ?? []).find((f) => isPicture(f.path, f.mimeType));
-            setView({ kind: "compose", to: null, text: [params.share.text, params.share.url].filter(Boolean).join(" "),
-                      parts: pic ? [{ path: pic.path, mimeType: pictureType(pic.path, pic.mimeType), name: pic.path.replace(/^.*\//, "") }] : [] });
-        } else if (params.attachment && isPicture(params.attachment))
-            setView({ kind: "compose", to: null,
-                      parts: [{ path: params.attachment, mimeType: pictureType(params.attachment), name: params.attachment.replace(/^.*\//, "") }] });
-        else if (params.to || params.messageText)
-            setView({ kind: "compose", to: params.to ? { addr: params.to, name: params.name } : null, text: params.messageText });
-    }, [params]);
+        if (intent.kind === "none" || !threadsKnown) return;
+        let alive = true;
+        const show = (personName?: string) => {
+            const v = resolveLaunch(intent, { threads: threads ?? [], buddies, accounts, personName });
+            if (!alive || !v) return;
+            setTab("conversations");
+            setView(v);
+        };
+        const personId = intent.kind === "compose" && !intent.to?.name ? intent.to?.personId : undefined;
+        if (personId) db.get<Person>([personId]).then(([p]) => show(personDisplayName(p) || undefined), () => show());
+        else show();
+        return () => { alive = false; };
+        // Once per launch (and relaunch): not again as the lists change.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [intent, threadsKnown]);
 
     useBack(() => { setView({ kind: "list" }); return true; }, view.kind !== "list");
 
@@ -84,9 +84,10 @@ function Messaging() {
 
     const unread = (threads ?? []).reduce((n, t) => n + (t.unreadCount ?? 0), 0);
     const detail = view.kind === "thread"
-        ? <Conversation key={view.id} threadId={view.id} people={people} buddies={buddies} />
+        ? <Conversation key={view.id + (view.text ?? "") + (view.parts?.length ?? 0)} threadId={view.id} people={people} buddies={buddies}
+                        initialText={view.text} initialParts={view.parts} />
         : view.kind === "compose"
-            ? <Compose key={"compose" + (view.to?.addr ?? "")} people={people} buddies={buddies} accounts={accounts}
+            ? <Compose key={"compose" + (view.to?.addr ?? "") + (view.text ?? "")} people={people} buddies={buddies} accounts={accounts}
                        initialTo={view.to} initialText={view.text} initialParts={view.parts}
                        onSent={(id) => setView({ kind: "thread", id })} />
             : null;
