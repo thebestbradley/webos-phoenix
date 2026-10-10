@@ -100,6 +100,9 @@ var DEFAULTS = {
     units: "auto",              // weather: "metric", "imperial", or from the language
     localModel: "",             // the chosen on-device model (lib/models.js id); "" the built-in one, "off" none
     speechVoice: "",            // the voice answers are spoken with (Kitten's, expr-voice-3-f ...), "" its default
+    speechRate: 1,              // how fast it speaks (RATE_CHOICES: 0.8 slower ... 1.3 faster)
+    personality: "friendly",    // how it talks (PERSONALITIES; its words in a voice session, lib/lang say.checkIn)
+    voiceWait: 45,              // a spoken conversation stays open this many seconds after an answer (WAIT_CHOICES)
     defaultProvider: "",        // the cloud provider "Ask ..." offers
     allowCloudControl: false,   // cloud models may run commands
     voiceReplies: true,         // answers to spoken requests spoken (ask {voice})
@@ -135,6 +138,19 @@ var HHMM = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 // Settings > Assistant > First and Second follow-up (minutes): the reminder
 // brackets offered (the owner's choice, 9 October 2026).
 var FIRST_CHOICES = [15, 60, 180];
+// Settings > Assistant > Speaking speed, Personality, Keep listening
+// (the owner, 10 October 2026: "it shouldn't close so fast, it should wait
+// 30-60 seconds", and the wait a setting).
+var RATE_CHOICES = [0.8, 0.9, 1, 1.15, 1.3];
+var WAIT_CHOICES = [15, 30, 45, 60, 90, 120];
+// What each personality adds to what a model is told.
+var PERSONALITIES = {
+    friendly: "Be friendly and warm.",
+    cheerful: "Be upbeat and cheerful, with a little enthusiasm.",
+    calm: "Be calm, gentle and unhurried, and keep answers especially short.",
+    professional: "Be precise and businesslike; no jokes or small talk unless asked.",
+    playful: "Be playful and witty, with light humour, while still answering correctly."
+};
 var AGAIN_CHOICES = [0, 60, 240, 1440];
 // Follow-up answers read even when the words could be a command too ("in
 // an hour", "every day"); the others (a place, a label, a list, names)
@@ -167,6 +183,9 @@ function createAssistantService(deps) {
         out.followUpTopicsOff = Array.isArray(out.followUpTopicsOff) ? out.followUpTopicsOff.filter(function (k) { return TOPICS.indexOf(k) >= 0; }) : [];
         out.disabledCommands = Array.isArray(out.disabledCommands) ? out.disabledCommands.filter(function (x) { return typeof x === "string"; }) : [];
         if (["metric", "imperial", "auto"].indexOf(out.units) < 0) out.units = "auto";
+        if (RATE_CHOICES.indexOf(out.speechRate) < 0) out.speechRate = DEFAULTS.speechRate;
+        if (!PERSONALITIES[out.personality]) out.personality = DEFAULTS.personality;
+        if (WAIT_CHOICES.indexOf(out.voiceWait) < 0) out.voiceWait = DEFAULTS.voiceWait;
         return out;
     }
     function lang() { return grammar.language(settings().language); }
@@ -485,10 +504,13 @@ function createAssistantService(deps) {
     // what the user asks the phone to do. (The owner's report, 9 October
     // 2026: "You can't do that on the phone" was a model copying the
     // grammar's old refusal and this prompt's "one to three sentences".)
-    var PERSONA = "You are Assistant, the friendly, helpful assistant on a webOS Phoenix phone. " +
-        "Answer questions directly and accurately: facts, explanations, how-tos, recipes, advice, small talk and jokes. " +
-        "Be concise, since answers may be read aloud, but give every step when steps are needed (a short numbered list is fine). " +
-        "Write plain text without markdown headings or bold. If you are not sure of something, say so briefly.";
+    // The personality chosen in Settings sets its tone (PERSONALITIES).
+    function persona() {
+        return "You are Assistant, the helpful assistant on a webOS Phoenix phone. " + PERSONALITIES[settings().personality] + " " +
+            "Answer questions directly and accurately: facts, explanations, how-tos, recipes, advice, small talk and jokes. " +
+            "Be concise, since answers may be read aloud, but give every step when steps are needed (a short numbered list is fine). " +
+            "Write plain text without markdown headings or bold. If you are not sure of something, say so briefly.";
+    }
     // What changes from request to request (the time, whether it has
     // tools): after the persona for a cloud model, in its own message after
     // the shared prefix for the on-device one (localPrefix).
@@ -500,7 +522,7 @@ function createAssistantService(deps) {
              "Never call a tool for a question you can answer in words."
                        : " In this conversation you cannot operate the phone; if asked to, say which app or setting does it.");
     }
-    function systemPrompt(withTools) { return PERSONA + " " + promptTail(withTools); }
+    function systemPrompt(withTools) { return persona() + " " + promptTail(withTools); }
     // The conversation as a model sees it: not the "nothing here can"
     // fallbacks (kind "fallback") nor follow-up questions left unanswered.
     function history(thread) {
@@ -765,13 +787,13 @@ function createAssistantService(deps) {
     function localPrefix(cat) {
         var usable = cat.all.filter(function (c) { return allowed(c) && !c.internal; });
         var names = usable.map(function (c) { return commands.toolName(c.id); });
-        var key = settings().language + "|" + names.join(",");
+        var key = settings().language + "|" + settings().personality + "|" + names.join(",");
         if (prefixCache && prefixCache.key === key) return prefixCache;
         var list = usable.map(function (c, i) { return names[i] + ": " + String(c.description || c.title).split(/\.\s/)[0].replace(/\.$/, ""); }).join("\n");
         var shots = PICK_EXAMPLES.filter(function (x) { return x[1] === "none" || names.indexOf(x[1]) >= 0; })
             .map(function (x) { return JSON.stringify(x[0]) + ": " + x[1]; }).join("\n");
         prefixCache = { key: key, usable: usable, names: names,
-                        text: PERSONA + "\n\nThe phone's commands:\n" + list +
+                        text: persona() + "\n\nThe phone's commands:\n" + list +
                               "\n\nWhich command does what was asked, for example (none: a question or chat, answered in words):\n" + shots };
         return prefixCache;
     }
@@ -966,7 +988,7 @@ function createAssistantService(deps) {
             // A follow-up question is said after what was done.
             var before = list[list.length - 2], words = last.text;
             if (last.followUp && before && before.role === "assistant" && before.text) words = before.text + " " + last.text;
-            try { Promise.resolve(deps.tts.speak(words, settings().language, settings().speechVoice)).catch(function () {}); } catch (e) { /* no speech */ }
+            try { Promise.resolve(deps.tts.speak(words, settings().language, settings().speechVoice, settings().speechRate)).catch(function () {}); } catch (e) { /* no speech */ }
         }
     }
     function privileged() {
@@ -1008,6 +1030,11 @@ function createAssistantService(deps) {
                         return r;
                     });
             }
+            // "I'm done", "that's all" in a spoken conversation (after the
+            // check-in, a plain "no" too): a goodbye, and the view closes
+            // once it is said (status "goodbye", AssistantOverlay.qml).
+            if (p.voice && lang().say.done && lang().say.done(text, !!p.checkIn))
+                return Promise.resolve(done(thread, [user, say(thread, lang().say.goodbye(settings().personality), { status: "goodbye" })], p));
             if (p.locked) lockedAsk[thread.id] = true;
             var unlocked = function () { delete lockedAsk[thread.id]; };
             return route(thread, text, p.locked ? null : openFollowUp(thread)).then(function (out) { unlocked(); return done(thread, [user].concat(out), p); },
@@ -1187,6 +1214,9 @@ function createAssistantService(deps) {
                 if (!(k in DEFAULTS)) return;
                 var v = p[k];
                 if (/^(enabled|speak|allowCloudControl|voiceReplies|wakeWord|wakeWhenLocked|followUps)$/.test(k) && typeof v !== "boolean") bad = k + ": true or false";
+                else if (k === "speechRate" && RATE_CHOICES.indexOf(v) < 0) bad = "speechRate: one of " + RATE_CHOICES.join(", ");
+                else if (k === "personality" && !PERSONALITIES[v]) bad = "personality: one of " + Object.keys(PERSONALITIES).join(", ");
+                else if (k === "voiceWait" && WAIT_CHOICES.indexOf(v) < 0) bad = "voiceWait: seconds, one of " + WAIT_CHOICES.join(", ");
                 else if ((k === "quietStart" || k === "quietEnd") && !HHMM.test(String(v))) bad = k + ": a time, \"22:00\"";
                 else if (k === "followUpFirst" && FIRST_CHOICES.indexOf(v) < 0) bad = "followUpFirst: minutes, one of " + FIRST_CHOICES.join(", ");
                 else if (k === "followUpAgain" && AGAIN_CHOICES.indexOf(v) < 0) bad = "followUpAgain: minutes, one of " + AGAIN_CHOICES.join(", ");
@@ -1422,8 +1452,25 @@ function createAssistantService(deps) {
             if (!deps.tts) return Promise.resolve(fail(ERRORS.FAILED, "No speech here"));
             // voice: this one (Settings' Play Sample), else the chosen one.
             var voice = typeof p.voice === "string" && /^[A-Za-z0-9._-]{1,40}$/.test(p.voice) ? p.voice : settings().speechVoice;
-            return Promise.resolve(deps.tts.speak(String(p.text || ""), settings().language, voice)).then(function () { return ok({}); },
+            // rate: this speed (Settings' sample of a speed), else the chosen one.
+            var rate = RATE_CHOICES.indexOf(p.rate) >= 0 ? p.rate : settings().speechRate;
+            return Promise.resolve(deps.tts.speak(String(p.text || ""), settings().language, voice, rate)).then(function () { return ok({}); },
                 function (e) { return fail(ERRORS.FAILED, e.message); });
+        },
+        // A voice session's words (AssistantOverlay.qml): kind "checkIn"
+        // after the wait ("Anything else?"), "goodbye" when nothing more was
+        // said; in the chosen personality. Put in the conversation (the
+        // current one) and spoken unless speak is false.
+        sessionPhrase: function (p) {
+            if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
+            var kind = p.kind, l = lang().say;
+            if ((kind !== "checkIn" && kind !== "goodbye") || !l.checkIn) return Promise.resolve(fail(ERRORS.BAD_PARAMS, "kind: checkIn or goodbye"));
+            var text = kind === "checkIn" ? l.checkIn(settings().personality) : l.goodbye(settings().personality);
+            var thread = p.threadId ? getThread(p.threadId) : currentThread();
+            var list = thread ? [say(thread, text, kind === "goodbye" ? { status: "goodbye" } : { kind: "checkIn" })] : [];
+            if (p.speak !== false) speakLast([{ role: "assistant", text: text }], { voice: true });
+            if (thread) changed("threads");
+            return Promise.resolve(ok({ text: text, kind: kind, messages: list }));
         },
         stopSpeaking: function () {
             if (deps.tts) try { deps.tts.stop(); } catch (e) { /* nothing speaking */ }
@@ -1479,7 +1526,7 @@ var VOICE_PARTS = [
 
 var METHODS = ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
                "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
-               "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary", "voice",
+               "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "sessionPhrase", "vocabulary", "voice",
                "connect", "retry",
                "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps", "markRead"];
 

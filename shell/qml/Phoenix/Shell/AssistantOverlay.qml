@@ -47,8 +47,13 @@
 // Voice (docs/AI-AND-MCP.md, Voice): a request spoken into the microphone
 // is answered aloud (the service's Voice replies), and a read-back ("Send
 // it?") listens for the answer at once, without the wake word. Opened by
-// the wake word ("Hey Phoenix", handsFree), it listens as it opens and
-// closes by itself once the conversation is idle. Over the lock screen
+// the wake word ("Hey Phoenix", handsFree), it listens as it opens. A
+// spoken conversation (the wake word or the microphone) stays open after
+// each answer, listening on, for the wait chosen in Settings (voiceWaitMs,
+// 45 s by default; the owner, 10 October 2026); then it asks whether there
+// is anything else, listens 10 s more, and says goodbye in its personality
+// and closes; "I'm done" (or "no" to the check-in) says goodbye at once.
+// Woken with nothing said, it closes after a moment. Over the lock screen
 // (locked) the service does only what shows nothing private; for the rest
 // it says to unlock, and unlockNeeded hands the words to the shell, which
 // asks again once the phone is unlocked.
@@ -92,6 +97,45 @@ Item {
     property bool handsFree: false
     // How long a hands-free conversation stays open once it is idle.
     property int idleCloseMs: 4000
+    // A spoken conversation (the wake word or the microphone) stays open
+    // this long after an answer, listening on (Settings > Assistant > Wait
+    // after answering; the shell binds it); then it checks in ("Anything
+    // else?") and listens checkInWaitMs more; then it says goodbye and
+    // closes. "I'm done" ends it at once (the service's status "goodbye").
+    property int voiceWaitMs: 45000
+    property int checkInWaitMs: 10000
+    // "" (no wait yet), "wait", "checkIn", "goodbye"; until when the wait lasts.
+    property string _phase: ""
+    property real _phaseUntil: 0
+    // Something was asked in this opening (a wake with nothing said closes
+    // after idleCloseMs, as before).
+    property bool _asked: false
+    // The loudest the microphone has been in this listening turn: speech is
+    // 0.4 and up (Dictation's kSpeechLevel, -34 dBFS, as loudness).
+    property real _turnLoudness: 0
+    // The wait (or the check-in's 10 s) is over while a turn listens to
+    // nothing said: it ends there, rather than the turn's own 7 s.
+    Timer {
+        id: phaseTimer
+        onTriggered: {
+            if (ov._phase !== "wait" && ov._phase !== "checkIn")
+                return;
+            // Over, whatever the clock says (a timer may fire a few ms
+            // early: Date.now() would still be short of _phaseUntil, and
+            // another whole turn would start).
+            ov._phaseUntil = Date.now();
+            if (!ov.listening || !ov.dictation || ov.dictation.busy || ov._turnLoudness >= 0.4)
+                return;
+            ov.stopListening(true);
+            ov._followGrace = 0;
+            followTimer.restart();
+        }
+    }
+    function _until(ms) {
+        _phaseUntil = Date.now() + ms;
+        phaseTimer.interval = Math.max(1, ms);
+        phaseTimer.restart();
+    }
 
     signal closeRequested()
     // Asked over the lock screen for what needs it unlocked: the words, to
@@ -264,6 +308,9 @@ Item {
             busy = false;
             voice = false;
             handsFree = false;
+            _phase = "";
+            _asked = false;
+            phaseTimer.stop();
             stopListening(true);
             input.focus = false;
             input.text = "";
@@ -343,8 +390,12 @@ Item {
         messages = messages.concat([{ id: "pending-user-" + (++_pending), role: "user", text: text }]);
         // The first request makes this opening's thread.
         var p = { text: text };
+        _asked = true;
         if (voice)
             p.voice = true;
+        // Just asked "Anything else?": a plain "no" ends it.
+        if (voice && _phase === "checkIn")
+            p.checkIn = true;
         if (locked)
             p.locked = true;
         if (threadId !== "")
@@ -609,7 +660,29 @@ Item {
         _followGrace = 3;
         _idleMs = 0;
         _followDone = false;
+        _phase = "";
+        phaseTimer.stop();
         followTimer.restart();
+    }
+    // The check-in or the goodbye: the service puts it in the conversation
+    // and says it (in the chosen personality); what comes next waits until
+    // it has been said.
+    function _sessionPhrase(kind) {
+        _phase = kind;
+        busy = true;
+        var p = { kind: kind };
+        if (threadId !== "")
+            p.threadId = threadId;
+        _call("sessionPhrase", p, function (r) {
+            ov.busy = false;
+            if (r && r.returnValue !== false)
+                ov.refresh();
+            ov._followGrace = 3;
+            ov._followDone = true;
+            // The check-in's wait starts once it has been said (followTimer).
+            ov._phaseUntil = 0;
+            followTimer.restart();
+        });
     }
     property int _followGrace: 0
     property int _idleMs: 0
@@ -640,6 +713,12 @@ Item {
             if (!ov._followDone) {
                 ov._followDone = true;
                 var last = ov._lastAssistant();
+                // "I'm done": the goodbye has been said.
+                if (last && last.status === "goodbye") {
+                    stop();
+                    ov.closeRequested();
+                    return;
+                }
                 if (ov.voice && ov.asking) {
                     stop();
                     ov.listen();
@@ -652,15 +731,38 @@ Item {
                     return;
                 }
             }
-            if (!ov.handsFree) {
+            // Typed: it stays open.
+            if (!ov.voice && !ov.handsFree) {
                 stop();
                 return;
             }
-            ov._idleMs += interval;
-            if (ov._idleMs >= ov.idleCloseMs) {
-                stop();
-                ov.closeRequested();
+            // Woken with nothing asked: it closes after a moment.
+            if (!ov._asked) {
+                ov._idleMs += interval;
+                if (ov._idleMs >= ov.idleCloseMs) {
+                    stop();
+                    ov.closeRequested();
+                }
+                return;
             }
+            // A spoken conversation: listening on until the wait is over,
+            // then the check-in, then (nothing more said) the goodbye.
+            stop();
+            if (ov._phase === "goodbye") {
+                ov.closeRequested();
+                return;
+            }
+            if (ov._phase === "") {
+                ov._phase = "wait";
+                ov._phaseUntil = 0;
+            }
+            // The wait starts now, the answer (or the check-in) said.
+            if (ov._phaseUntil === 0)
+                ov._until(ov._phase === "checkIn" ? ov.checkInWaitMs : ov.voiceWaitMs);
+            if (Date.now() < ov._phaseUntil)
+                ov.listen();
+            else
+                ov._sessionPhrase(ov._phase === "wait" ? "checkIn" : "goodbye");
         }
     }
     // "Hey Phoenix, ..." came through whole: the request is what follows.
@@ -693,6 +795,7 @@ Item {
             return;
         }
         input.focus = false;
+        _turnLoudness = 0;
         dictation.owner = _owner;
         dictation.prompt = _vocabulary;
         dictation.autoStop = true;
@@ -704,6 +807,9 @@ Item {
         if (!dictation || !listening)
             return;
         listening = false;
+        // "Listening..." goes with it (a turn cut short says nothing).
+        if (status === qsTr("Listening…"))
+            status = "";
         if (cancel)
             dictation.cancel();
         Qt.callLater(_releaseMicrophone);
@@ -721,6 +827,10 @@ Item {
             if (ov.listening && ov.dictation.busy)
                 ov.status = qsTr("Transcribing…");
         }
+        function onLoudnessChanged() {
+            if (ov.listening)
+                ov._turnLoudness = Math.max(ov._turnLoudness, ov.dictation.loudness);
+        }
         function onTranscribed(text, error) {
             if (!ov.listening)
                 return;
@@ -732,8 +842,13 @@ Item {
             var words = ov.withoutWakeWord(text);
             if (!error && words)
                 ov.ask(words);
-            else if (ov.handsFree)
-                ov._afterReply();           // nothing (more) said: it closes after a moment
+            else if (ov._phase !== "") {
+                // Nothing said in the wait: on with it (listening again, or
+                // the check-in or goodbye once it is over).
+                ov._followGrace = 0;
+                followTimer.restart();
+            } else if (ov.handsFree || (ov.voice && ov._asked))
+                ov._afterReply();           // nothing (more) said
         }
     }
 
@@ -1343,12 +1458,15 @@ Item {
                 // so the keyboard stays and Enter's release does not reach
                 // the card behind (ask() waits for the answer anyway).
                 readOnly: ov.busy
-                // A tap on the field: the user is here, it does not close by itself.
-                // Listening for a read-back's answer stops: it will be typed.
+                // A tap on the field: the user is here, it does not close by
+                // itself (the spoken conversation's wait ends). Listening for
+                // a read-back's answer stops: it will be typed.
                 onActiveFocusChanged: {
                     if (!activeFocus)
                         return;
                     ov.handsFree = false;
+                    ov._phase = "";
+                    phaseTimer.stop();
                     followTimer.stop();
                     ov.stopListening(true);
                 }

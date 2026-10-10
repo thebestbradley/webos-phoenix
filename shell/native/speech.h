@@ -21,6 +21,11 @@
 //
 // voice: Kitten's voice (expr-voice-3-f, ...; Settings > Assistant >
 // Voice), "" for its default; voices: the ones it has.
+//
+// rate: how fast, 1 normal (0.5 to 2; Settings > Assistant > Speaking
+// speed): Kitten's --speed, espeak-ng's -s and say's -r in words a minute
+// (175 at 1), Flite's duration_stretch (1 / rate); a command of its own
+// gets it as "%r" (the rate) and "%w" (words a minute).
 
 #pragma once
 
@@ -54,9 +59,10 @@ public:
     void setVoice(const QString &v);
     QStringList voices() const;
 
-    // voice: this one instead of the voice property ("" for it).
+    // voice: this one instead of the voice property ("" for it); rate: how
+    // fast (1 normal).
     Q_INVOKABLE bool speak(const QString &text, const QString &lang = QStringLiteral("en"),
-                           const QString &voice = QString());
+                           const QString &voice = QString(), double rate = 1.0);
     Q_INVOKABLE void stop();
 
     // phoenix-tts beside the program or on the PATH ("" when not there), and
@@ -73,7 +79,8 @@ private:
     QStringList resolved(const QString &lang = QStringLiteral("en")) const;
     QStringList fallback() const;
     bool kittenReady() const;
-    bool run(const QStringList &command, const QString &text, const QString &lang, const QString &voice);
+    bool run(const QStringList &command, const QString &text, const QString &lang, const QString &voice, double rate);
+    QStringList rateArguments(const QString &program, double rate) const;
 
     QStringList m_command;
     QString m_voice;

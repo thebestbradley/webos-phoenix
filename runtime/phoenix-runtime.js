@@ -14255,13 +14255,16 @@
             try { return ss && ss.getVoices ? ss.getVoices() : []; } catch (e) { return []; }
         }
         var tts = {
-            speak: function (text, lang, voice) {
+            // rate: how fast (1 normal; Settings > Assistant > Speaking speed).
+            speak: function (text, lang, voice, rate) {
                 if (!text) return Promise.resolve();
-                if (hostHas()) return hostAsk("speak", { text: String(text).slice(0, 2000), lang: lang || "en", voice: voice || "" });
+                rate = typeof rate === "number" && rate >= 0.5 && rate <= 2 ? rate : 1;
+                if (hostHas()) return hostAsk("speak", { text: String(text).slice(0, 2000), lang: lang || "en", voice: voice || "", rate: rate });
                 var ss = global.speechSynthesis;
                 if (ss && pageVoices().length && global.SpeechSynthesisUtterance) {
                     var u = new global.SpeechSynthesisUtterance(String(text));
                     u.lang = lang || "en";
+                    u.rate = rate;
                     ss.cancel();
                     ss.speak(u);
                     return Promise.resolve();
@@ -14357,7 +14360,7 @@
         var serviceMethods = {};
         ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
          "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
-         "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "vocabulary",
+         "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "sessionPhrase", "vocabulary",
          "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps", "markRead",
          "connect", "retry", "voice"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
@@ -14384,7 +14387,7 @@
             "/speak": function (p, reply) {
                 if (typeof p.text !== "string" || !p.text.trim()) return reply(fail(-1, "need \"text\""));
                 var voice = typeof p.voice === "string" && /^[A-Za-z0-9._-]{1,40}$/.test(p.voice) ? p.voice : "";
-                tts.speak(p.text, p.lang, voice).then(function () { reply(ok({})); }, function (e) { reply(fail(1, e.message)); });
+                tts.speak(p.text, p.lang, voice, p.rate).then(function () { reply(ok({})); }, function (e) { reply(fail(1, e.message)); });
             },
             "/stop": function (p, reply) { tts.stop().then(function () { reply(ok({})); }); },
             "/getStatus": function (p, reply) {

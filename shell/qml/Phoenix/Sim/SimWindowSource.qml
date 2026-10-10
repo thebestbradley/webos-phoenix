@@ -2533,7 +2533,7 @@ Item {
             break;
         case "speak":
             if (!sp || !sp.available) { answer({ error: qsTr("No text-to-speech here.") }); break; }
-            sp.speak(String(p.text || ""), String(p.lang || "en"), String(p.voice || ""));
+            sp.speak(String(p.text || ""), String(p.lang || "en"), String(p.voice || ""), Number(p.rate) || 1);
             answer({});
             break;
         case "stopSpeaking":

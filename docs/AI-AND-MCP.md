@@ -1468,11 +1468,37 @@ against a list shipped with Phoenix.
     made of the contacts' names, as Voice Dial does) -> the command ->
     the answer spoken (Voice replies, on by default) -> a read-back ("Call
     Marcus Reyes?") listens for Yes / No / Send / Cancel without the wake
-    word; otherwise the view closes after 4 s idle. "Hey Phoenix, <request>"
-    in one breath works (the recording starts just before the phrase; the
-    phrase is dropped from the transcript). The microphone button stays
-    push-to-talk. Listening pauses while the view is open, while anything
-    is spoken, during a call and while one rings.
+    word. "Hey Phoenix, <request>" in one breath works (the recording
+    starts just before the phrase; the phrase is dropped from the
+    transcript). Listening for the wake word pauses while the view is
+    open, while anything is spoken, during a call and while one rings.
+  - **A spoken conversation stays open** (the owner, 10 October 2026:
+    "it shouldn't close so fast"). Started by the wake word or the
+    microphone button, after each answer has been said the view listens
+    on (no wake word needed) for Settings > Assistant > Keep listening (15
+    s to 2 min, 45 s by default); then it checks in once ("Is there
+    anything else I can help with?"), listens 10 s more, and says a
+    goodbye and closes. "I'm done", "that's all", "bye" end it at once
+    with the goodbye, and so does "no" right after the check-in (the
+    service's `ask {voice}` answers them with `status: "goodbye"`;
+    `lib/lang/en.js` `say.done`). The check-in and goodbye are the
+    service's `sessionPhrase {kind}`, in the chosen personality, put in
+    the conversation and spoken. A listening turn that hears nothing is
+    cut short when the wait ends (nothing as loud as speech since it
+    began; else the turn's own 7 s). Typing ends the spoken conversation
+    (the view stays open). Woken with nothing said, it closes after 4 s
+    as before. `AssistantOverlay.qml` (`voiceWaitMs`, `checkInWaitMs`,
+    `_phase`); `tst_wakeword.qml`.
+  - **Speed and personality** (Settings > Assistant). Speaking speed
+    (Slower 0.8, Slow 0.9, Normal, Fast 1.15, Faster 1.3: `speechRate`)
+    goes to every engine as it takes one: Kitten's `--speed`, espeak-ng's
+    `-s` and say's `-r` in words a minute (175 at 1), Flite's
+    `duration_stretch`, a command of its own `%r` / `%w`
+    (`shell/native/speech.cpp`, `lib/node-device.js`). Personality
+    (Friendly, the default; Cheerful, Calm, Professional, Playful:
+    `personality`) sets the models' tone (a sentence in the system prompt,
+    which the on-device prompt cache keys on) and the check-in's and
+    goodbye's words.
   - **Locked.** "When the screen is off or locked" (off by default): over
     the lock screen (nothing of the apps blurred behind it) the service
     runs only what shows nothing private and sends nothing (timers, alarms,

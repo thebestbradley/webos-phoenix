@@ -43,6 +43,7 @@ Item {
     QtObject {
         id: fake
         property var asks: []
+        property var phrases: []
         property var messages: []
         property string tid: ""
         property int n: 0
@@ -69,7 +70,9 @@ Item {
                 }
                 var added = [msg({ role: "user", text: params.text })];
                 var p = pending();
-                if (/^yes/i.test(params.text) && p) {
+                if (params.voice && (/^i'm done/i.test(params.text) || (params.checkIn && /^no/i.test(params.text)))) {
+                    added.push(msg({ role: "assistant", text: "Okay, bye for now!", status: "goodbye" }));
+                } else if (/^yes/i.test(params.text) && p) {
                     p.status = "done";
                     added.push(msg({ role: "assistant", text: "Sent to Sam.", command: "text", status: "done" }));
                 } else if (/^text/i.test(params.text) && params.locked) {
@@ -83,6 +86,13 @@ Item {
                 messages = messages.concat(added);
                 reply.thread = { id: tid };
                 reply.messages = added;
+            } else if (method === "sessionPhrase") {
+                phrases.push(params.kind);
+                var said = msg(params.kind === "goodbye" ? { role: "assistant", text: "Bye for now!", status: "goodbye" }
+                                                         : { role: "assistant", text: "Anything else?", kind: "checkIn" });
+                messages = messages.concat([said]);
+                reply.text = said.text;
+                reply.messages = [said];
             }
             Qt.callLater(function () { cb(reply); });
         }
@@ -102,6 +112,10 @@ Item {
             overlay.source = fake;
             overlay.speech = fakeSpeech;
             overlay.idleCloseMs = 1000;
+            // The wait after an answer, short for the tests (Settings: 15 s
+            // to 2 min), and the check-in's.
+            overlay.voiceWaitMs = 1500;
+            overlay.checkInWaitMs = 1000;
             // The spotter: hears it once, after 1.2 s of audio.
             shell.wakeWordCommand = ["sh", "-c", "echo '{\"ready\":true}'; head -c 38400 >/dev/null; "
                                      + "echo '{\"wake\":\"hey phoenix\",\"start\":0.5,\"end\":1.2,\"heard\":\"hey phoenix\"}'; cat >/dev/null"];
@@ -116,6 +130,7 @@ Item {
             shell.unlock();
             shell.closeAssistant();
             fake.asks = [];
+            fake.phrases = [];
             fake.messages = [];
             fake.tid = "";
             fakeSpeech.speaking = false;
@@ -161,7 +176,7 @@ Item {
 
         function test_wakeAskReadBackYesAndClose() {
             var heard = shell.wakeWordHeard;
-            listenFor(["hey-phoenix-timer.wav", "yes.wav"]);
+            listenFor(["hey-phoenix-timer.wav", "yes.wav", "quiet.wav"]);
             tryCompare(shell.dictation, "standingBy", true, 2000);
             // Heard: a chime, the view listening, the microphone orange.
             tryCompare(shell, "wakeWordHeard", heard + 1, 5000);
@@ -186,10 +201,65 @@ Item {
             compare(fake.asks[1].voice, true);
             compare(fake.messages[fake.messages.length - 1].text, "Sent to Sam.");
             compare(shell.wakeWordHeard, heard + 1);
-            // Idle: it closes by itself, and stands by again.
+            // It stays open, listening on, for the wait (not 4 s and gone)...
+            tryCompare(overlay, "listening", true, 3000);
+            compare(fake.phrases.length, 0);
+            // ... then checks in, listens again, and says goodbye.
+            tryVerify(function () { return fake.phrases.length === 1; }, 6000, "the check-in");
+            compare(fake.phrases[0], "checkIn");
+            compare(overlay.open, true);
+            tryCompare(overlay, "listening", true, 3000);
+            tryVerify(function () { return fake.phrases.length === 2; }, 6000, "the goodbye");
+            compare(fake.phrases[1], "goodbye");
+            // Not until the goodbye has been said.
+            fakeSpeech.speaking = true;
+            wait(600);
+            compare(overlay.open, true);
+            fakeSpeech.speaking = false;
+            // Then it closes by itself, and stands by again.
             tryCompare(overlay, "open", false, 5000);
             tryCompare(shell.dictation, "standingBy", true, 3000);
             compare(microphone(), "standby");
+        }
+
+        // "I'm done" in a spoken conversation: the goodbye, then it closes.
+        function test_imDoneSaysGoodbyeAndCloses() {
+            shell.dictationInputFiles = [root.recordings + "quiet.wav"];
+            shell.assistantSettings = { enabled: true };
+            shell.openAssistant(false);
+            tryCompare(overlay, "open", true, 2000);
+            overlay.voice = true;
+            overlay.ask("set a timer");
+            tryVerify(function () { return fake.asks.length === 1; }, 3000);
+            tryCompare(overlay, "listening", true, 3000);
+            overlay.stopListening(true);
+            overlay.ask("I'm done");
+            tryVerify(function () { return fake.asks.length === 2; }, 3000);
+            compare(fake.asks[1].voice, true);
+            tryCompare(overlay, "open", false, 3000);
+            compare(fake.phrases.length, 0);
+        }
+
+        // Started with the microphone (not the wake word): the same wait,
+        // check-in and goodbye; "no" to the check-in ends it.
+        function test_microphoneConversationWaitsThenNoEndsIt() {
+            shell.dictationInputFiles = [root.recordings + "yes.wav", root.recordings + "quiet.wav"];
+            shell.assistantSettings = { enabled: true };
+            shell.openAssistant(false);
+            tryCompare(overlay, "open", true, 2000);
+            compare(overlay.handsFree, false);
+            overlay.listen();
+            tryVerify(function () { return fake.asks.length === 1; }, 8000, "the request");
+            compare(fake.asks[0].text, "yes");
+            tryVerify(function () { return fake.phrases.length === 1; }, 8000, "the check-in");
+            compare(overlay.open, true);
+            tryCompare(overlay, "listening", true, 3000);
+            overlay.stopListening(true);
+            overlay.ask("no thanks");
+            tryVerify(function () { return fake.asks.length === 2; }, 3000);
+            compare(fake.asks[1].checkIn, true);
+            tryCompare(overlay, "open", false, 3000);
+            compare(fake.phrases.length, 1);
         }
 
         function test_typingKeepsItOpen() {

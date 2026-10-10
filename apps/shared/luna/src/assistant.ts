@@ -103,6 +103,12 @@ export interface AssistantSettings {
     localModel: string;
     /** The voice answers are spoken with (one of tts.status().voices), "" the default. */
     speechVoice: string;
+    /** How fast it speaks: one of SPEECH_RATES (1 normal). */
+    speechRate: number;
+    /** How it talks: its tone, and its words in a voice session. */
+    personality: Personality;
+    /** Seconds a spoken conversation stays open after an answer: one of VOICE_WAITS (45 by default). */
+    voiceWait: number;
     defaultProvider: string;
     /** Cloud models may run commands (off by default). */
     allowCloudControl: boolean;
@@ -125,6 +131,24 @@ export interface AssistantSettings {
     /** Follow-up topics turned off (Settings, or "Stop asking" when it asked whether they help). */
     followUpTopicsOff: FollowUpKind[];
 }
+
+/** Settings > Assistant: the personalities, speeds and waits the service takes. */
+export type Personality = "friendly" | "cheerful" | "calm" | "professional" | "playful";
+export const PERSONALITIES: { value: Personality; label: string }[] = [
+    { value: "friendly", label: "Friendly" },
+    { value: "cheerful", label: "Cheerful" },
+    { value: "calm", label: "Calm" },
+    { value: "professional", label: "Professional" },
+    { value: "playful", label: "Playful" },
+];
+export const SPEECH_RATES: { value: number; label: string }[] = [
+    { value: 0.8, label: "Slower" },
+    { value: 0.9, label: "Slow" },
+    { value: 1, label: "Normal" },
+    { value: 1.15, label: "Fast" },
+    { value: 1.3, label: "Faster" },
+];
+export const VOICE_WAITS = [15, 30, 45, 60, 90, 120];
 
 export interface AssistantCommand {
     id: string;
@@ -328,8 +352,8 @@ export const assistant = {
 
 export const tts = {
     /** Say it with the device's voice (org.webosphoenix.tts). */
-    async speak(text: string, lang?: string, voice?: string): Promise<void> {
-        await call("luna://org.webosphoenix.tts/speak", { text, ...(lang ? { lang } : {}), ...(voice ? { voice } : {}) });
+    async speak(text: string, lang?: string, voice?: string, rate?: number): Promise<void> {
+        await call("luna://org.webosphoenix.tts/speak", { text, ...(lang ? { lang } : {}), ...(voice ? { voice } : {}), ...(rate ? { rate } : {}) });
     },
     async stop(): Promise<void> { await call("luna://org.webosphoenix.tts/stop", {}); },
     /** voices: the engine's (Kitten TTS's expr-voice-3-f, ...), [] when it has no choice. */

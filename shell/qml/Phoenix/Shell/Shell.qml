@@ -3146,6 +3146,8 @@ FocusScope {
                     dictation: shell.dictation
                     speech: shell.speech
                     locked: shell.locked
+                    // Settings > Assistant > Keep listening.
+                    voiceWaitMs: (shell.assistantSettings && shell.assistantSettings.voiceWait > 0 ? shell.assistantSettings.voiceWait : 45) * 1000
                     // Over the lock screen it blurs nothing: the apps
                     // behind the lock stay hidden (the lock screen shows
                     // through the dim instead).

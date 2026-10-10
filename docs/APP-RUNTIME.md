@@ -1964,13 +1964,14 @@ are the clients.
 | `confirm {threadId, messageId, accept}` | a read-back (`status: "pending"`): run it, or not |
 | `threads` / `thread {id?}` | `{threads, current}` / `{thread, messages}` (the one in use without an id) |
 | `newThread`, `setCurrent {id}`, `deleteThread {id}`, `clearHistory` | conversations |
-| `getSettings` / `setSettings {...}` | `{enabled, speak, language, units, localModel, defaultProvider, allowCloudControl, disabledCommands}`; only Settings may set `allowCloudControl` |
+| `getSettings` / `setSettings {...}` | `{enabled, speak, language, units, localModel, speechVoice, speechRate, personality, voiceWait, defaultProvider, allowCloudControl, voiceReplies, wakeWord, wakeWhenLocked, disabledCommands, followUps, quietStart, quietEnd, followUpFirst, followUpAgain, followUpTopicsOff}`; `speechRate` one of 0.8, 0.9, 1, 1.15, 1.3; `personality` friendly, cheerful, calm, professional or playful; `voiceWait` (seconds a spoken conversation stays open after an answer) 15, 30, 45, 60, 90 or 120; only Settings may set `allowCloudControl` |
 | `commands` | `{commands: [{id, title, risk, builtIn, appId, enabled, confirms}]}` |
 | `providers` | `{providers: [{id, type, name, model, baseUrl, hasKey, keyHint, label}], defaultProvider, types}` |
 | `setProvider {id?, type, name?, model?, baseUrl?, key?}`, `removeProvider {id}`, `testProvider {id \| type, model, baseUrl, key}`, `listModels {...}` | Settings only. A key is sealed at once; `testProvider` answers `{ok, text}` or `{ok: false, error}` |
 | `models` | the on-device catalogue with `fits`, `recommended`, `installed`, `downloading`, and `status: {available, running, ramBytes, error, howToInstall}` |
 | `downloadModel {id}`, `cancelDownload {id}`, `removeModel {id}`, `selectModel {id}` | on-device models |
-| `speak {text}`, `stopSpeaking` | the device's voice |
+| `speak {text, voice?, rate?}`, `stopSpeaking` | the device's voice (the chosen voice and speed unless given: Settings' Play Sample) |
+| `sessionPhrase {kind: "checkIn" \| "goodbye", threadId?}` | a spoken conversation's check-in or goodbye (the shell's view), in the chosen personality: `{text, messages}`, put in the conversation (the goodbye with `status: "goodbye"`) and spoken. System UI, Assistant and Settings only. `ask {voice, checkIn?}` answers "I'm done" (and "no" with `checkIn`) with a goodbye the same way |
 | `followUps` | follow-up questions waiting (`lib/followups.js`): `{followUps: [{id, kind, meta, question, item: {type, id, title, at}, state: "open" \| "queued" \| "delivered", attempts, nextAt, threadId, choices}], topicsOff}` |
 | `answerFollowUp {id, action: "fu:<n>" \| "fu:skip"}` | a follow-up's notification button: the answer applied, said in its conversation, `{text, answered}` (the banner's words). System UI, Assistant and Settings only |
 | `followUpOpen {id}` | a follow-up's notification tapped: `{thread, messages}`, the question in its conversation (not again if it is waiting there), unread cleared |
@@ -2009,7 +2010,7 @@ the app's own service called with `{action}` as the system UI, the reply's
 its own stored key, so the shell's view and the app never write over each
 other (PR 7).
 
-`luna://org.webosphoenix.tts/`: `speak {text, lang?}`, `stop`, `getStatus`
+`luna://org.webosphoenix.tts/`: `speak {text, lang?, voice?, rate?}` (rate: 1 normal, 0.5 to 2), `stop`, `getStatus`
 -> `{available, engine}`.
 
 **What the commands do** (`lib/commands.js`; the full list with phrasings
