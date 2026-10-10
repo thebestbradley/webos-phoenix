@@ -82,6 +82,18 @@ QtObject {
     // Unconditional call forwarding is on (Settings > Phone; the runtime's
     // com.palm.telephony forwardQuery), for the status bar's icon.
     property bool callForwarding: false
+    // A modem's indicators (StatusBarInfo.cpp:195-262; LsmSystemStatus reads
+    // them from the device's telephony and WAN services): the mobile data
+    // connection's type ("" none, "1x", "edge", "evdo", "gprs", "umts",
+    // "hsdpa", "hspa-4g") and whether it is dormant; roaming; TTY and
+    // hearing aid compatibility on; EV-DO shown as 3G (the carrier's
+    // preference). The simulator has no modem: off unless a test sets them.
+    property string wanType: ""
+    property bool wanDormant: false
+    property bool roaming: false
+    property bool tty: false
+    property bool hac: false
+    property bool show3GForEvdo: false
     // System sounds (SystemSounds.qml), as the runtime reports them
     // (Settings > Sounds & Ringtones): the master and stream volumes
     // (0..100), "System Sounds", "Keyboard clicks" and the tones' paths.

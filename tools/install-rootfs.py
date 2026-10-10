@@ -25,6 +25,7 @@ development-only files (specs, tests, build tooling) are left out.
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 
@@ -142,6 +143,28 @@ def inject_runtime(data):
     return RUNTIME_TAG + data
 
 
+APPINFO = re.compile(r"^/usr/palm/applications/[^/]+/appinfo\.json$")
+
+
+def device_appinfo(data):
+    """An app's appinfo.json for WebAppMgr: disableBackHistoryAPI true unless
+    the app says otherwise. webOS 1-3 apps, and Phoenix's, take Back in the
+    page (Mojo and Enyo 1.0 as Escape / U+1200001, @phoenix/ui's useBack as
+    Escape; phoenix-runtime.js gives them those for the webOS Back key on a
+    device). With the history API on, WebAppMgr would give the page the key
+    only while its history can go back (_WEBOS_ACCESS_POLICY_KEYS_BACK,
+    wam src/platform/web_app_wayland.cc:725-733), so a page's own Back (a
+    dialog, a view) would never run. Text that is not JSON is left as it is."""
+    try:
+        info = json.loads(data.decode("utf-8-sig"))
+    except (ValueError, UnicodeDecodeError):
+        return data
+    if not isinstance(info, dict) or "disableBackHistoryAPI" in info:
+        return data
+    info["disableBackHistoryAPI"] = True
+    return (json.dumps(info, indent=4, ensure_ascii=False) + "\n").encode("utf-8")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("destdir")
@@ -207,6 +230,12 @@ def main():
         if dev.startswith(("/usr/palm/applications/", "/usr/palm/frameworks/enyo/")) and dev.endswith(".html"):
             with open(src, "rb") as f:
                 data = inject_runtime(f.read())
+            with open(dst, "wb") as f:
+                f.write(data)
+            shutil.copymode(src, dst)
+        elif APPINFO.match(dev):
+            with open(src, "rb") as f:
+                data = device_appinfo(f.read())
             with open(dst, "wb") as f:
                 f.write(data)
             shutil.copymode(src, dst)

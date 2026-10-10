@@ -14,6 +14,7 @@ import WebOSCompositorBase 1.0
 import WebOSServices 1.0
 import WebOS.Global 1.0
 import Phoenix.Native
+import "LsmCards.js" as LsmCards
 
 Item {
     id: source
@@ -25,8 +26,18 @@ Item {
 
     // The shell connects to this to maximize a newly mapped card.
     signal cardFocusRequested(string uid)
-    // As SimWindowSource's (an opened app's Back to its caller); not sent here yet.
+    // Back in an app another one opened ({returnToCaller}): the caller's
+    // card uid comes back to the front and fromUid goes behind it, as
+    // SimWindowSource's (back(), and the page's phoenixBack below).
     signal cardReturnRequested(string uid, string fromUid)
+    // The page in the card did not take the back gesture (its phoenixBack
+    // window property): the shell minimizes the card (Shell._lateBackUnhandled).
+    signal backUnhandled(string uid)
+
+    // The card in front, maximized and focused ("" in card view): the shell
+    // sets it (Shell.qml's Binding), and an app it launches joins its stack
+    // (LsmCards.placement).
+    property string focusedUid: ""
 
     property var _hosts: ({})       // uid -> SurfaceHost
     property var _surfaces: []      // [{ uid, item }]
@@ -36,14 +47,6 @@ Item {
 
     function newGroupId() {
         return "g" + (_nextGroup++);
-    }
-
-    // Index just past the stack that holds card index i.
-    function _groupEnd(i) {
-        var gid = cards.get(i).groupId;
-        while (i < cards.count && cards.get(i).groupId === gid)
-            ++i;
-        return i;
     }
 
     // ---- Apps ------------------------------------------------------------------
@@ -106,6 +109,22 @@ Item {
         return -1;
     }
 
+    function _cardList() {
+        var out = [];
+        for (var i = 0; i < cards.count; ++i)
+            out.push({ uid: cards.get(i).uid, appId: cards.get(i).appId, groupId: cards.get(i).groupId });
+        return out;
+    }
+
+    function _props(item) {
+        var p = item ? item.windowProperties : null;
+        return p && typeof p === "object" ? p : {};
+    }
+
+    // A new card: where it goes is LsmCards.placement's (a further window
+    // of an app joins its stack; an app launched by the card in front, by
+    // WebAppMgr's launchingAppId, joins that one's, CardWindowManager.cpp:
+    // 556-578; else a new stack right of the one the shell launched from).
     function addSurface(item) {
         if (!isCard(item) || uidOf(item) !== "")
             return;
@@ -113,22 +132,46 @@ Item {
         _surfaces.push({ uid: uid, item: item });
         _hosts[uid] = hostComponent.createObject(source, { surface: item });
         item.state = Qt.WindowFullScreen;
-        // A further window of an app that already has a card joins that
-        // card's stack; anything else starts a new stack to the right of the
-        // active one (CardWindowManager.cpp:556-599).
-        var sibling = cardIndex(runningUid(item.appId));
-        var at, groupId;
-        if (sibling >= 0) {
-            at = _groupEnd(sibling);
-            groupId = cards.get(sibling).groupId;
-        } else {
-            var after = cardIndex(_pendingAfterUid);
-            at = after >= 0 ? _groupEnd(after) : cards.count;
-            groupId = newGroupId();
-        }
-        cards.insert(at, { uid: uid, appId: item.appId, title: item.title || item.appId, groupId: groupId });
+        var f = LsmCards.cardFields(_props(item));
+        var place = LsmCards.placement(_cardList(), item.appId, f.launchingAppId, focusedUid, _pendingAfterUid);
+        var groupId = place.groupOf !== "" ? cards.get(cardIndex(place.groupOf)).groupId : newGroupId();
+        cards.insert(place.at, { uid: uid, appId: item.appId, title: item.title || item.appId, groupId: groupId,
+                                 fullScreen: f.fullScreen, statusBarColor: f.statusBarColor, orientation: f.orientation,
+                                 blockScreenTimeout: f.blockScreenTimeout, allowResize: true,
+                                 launchingAppId: f.launchingAppId, returnTo: f.returnTo });
         _pendingAfterUid = "";
+        _backSeen[uid] = f.back;
+        // The page's later requests (orientation, full screen, status bar
+        // colour, a Back it did not take) come as window properties
+        // (WebOSSurfaceItem::windowPropertiesChanged, webossurfaceitem.cpp:930).
+        item.windowPropertiesChanged.connect(function() { source._propertiesChanged(item); });
         cardFocusRequested(uid);
+    }
+
+    property var _backSeen: ({})    // uid -> the last phoenixBack heard
+
+    function _propertiesChanged(item) {
+        var uid = uidOf(item);
+        var i = cardIndex(uid);
+        if (i < 0)
+            return;
+        var f = LsmCards.cardFields(_props(item));
+        var keys = ["fullScreen", "statusBarColor", "orientation", "blockScreenTimeout", "launchingAppId", "returnTo"];
+        for (var k = 0; k < keys.length; ++k)
+            if (cards.get(i)[keys[k]] !== f[keys[k]])
+                cards.setProperty(i, keys[k], f[keys[k]]);
+        if (f.back !== "" && f.back !== _backSeen[uid]) {
+            _backSeen[uid] = f.back;
+            _unhandledBack(uid, f, item.appId);
+        }
+    }
+
+    function _unhandledBack(uid, fields, appId) {
+        var caller = LsmCards.isCaller(fields.returnTo) ? runningUid(fields.returnTo) : "";
+        if (LsmCards.unhandledBack(fields, appId, caller) === "return")
+            cardReturnRequested(caller, uid);
+        else
+            backUnhandled(uid);
     }
 
     function removeSurface(item) {
@@ -139,6 +182,7 @@ Item {
         var i = cardIndex(uid);
         if (i >= 0)
             cards.remove(i);
+        delete _backSeen[uid];
         var host = _hosts[uid];
         delete _hosts[uid];
         if (host) {
@@ -246,17 +290,58 @@ Item {
         }
     }
 
-    // The back gesture is the webOS Back key, delivered to the card's
-    // surface, which forwards it to the app by its native scan code
-    // (WebOSSurfaceItem::processKeyEvent). webOS reads evdev 412 as Back;
-    // on the wire that is XKB keycode 412 + 8. Web apps get it as keyCode
-    // 461, Enyo 1.0 and Mojo apps as their back event.
+    // The back gesture. A page that can take it gets the webOS Back key,
+    // delivered to the card's surface, which forwards it to the app by its
+    // native scan code (WebOSSurfaceItem::processKeyEvent). webOS reads
+    // evdev 412 as Back; on the wire that is XKB keycode 412 + 8. Web apps
+    // get it as keyCode 461; one that does not take it says so through its
+    // phoenixBack window property (phoenix-runtime.js), and the card then
+    // returns to its caller or minimizes (cardReturnRequested /
+    // backUnhandled). A page that cannot take it (WebAppMgr's
+    // _WEBOS_ACCESS_POLICY_KEYS_BACK "false": its history is at its start
+    // and its app does not handle Back, "LSM should handle it",
+    // web_app_wayland.cc:725-733) is not sent the key: the card returns to
+    // its caller ({returnToCaller}) or minimizes at once, as LunaSysMgr
+    // did with a Back WebAppMgr handed back (SystemUiController::
+    // slotKeyEventRejected, SystemUiController.cpp:941-954). Returns false
+    // when the shell should minimize the card now.
+    // STATUS: written against WebAppMgr's source; not yet run on a device.
     readonly property int backScanCode: 412 + 8
     function back(uid) {
-        for (var i = 0; i < _surfaces.length; ++i)
-            if (_surfaces[i].uid === uid)
-                return KeyInjector.sendKey(_surfaces[i].item, WebOS.Key_webOS_Back, backScanCode);
+        for (var i = 0; i < _surfaces.length; ++i) {
+            if (_surfaces[i].uid !== uid)
+                continue;
+            var item = _surfaces[i].item;
+            var f = LsmCards.cardFields(_props(item));
+            var caller = LsmCards.isCaller(f.returnTo) ? runningUid(f.returnTo) : "";
+            var action = LsmCards.backAction(f, item.appId, caller);
+            if (action === "return") {
+                cardReturnRequested(caller, uid);
+                return true;
+            }
+            if (action === "minimize")
+                return false;
+            KeyInjector.sendKey(item, WebOS.Key_webOS_Back, backScanCode);
+            return true;
+        }
         return false;
+    }
+
+    // State only the shell knows, for the apps (SimWindowSource's
+    // pushSystemStatus; PhoenixViewsRoot sends it): the lock screen, dock
+    // mode, how the UI and the device are turned, the keyboard. On a device
+    // it goes to com.palm.systemmanager (services/lock: /phoenix/report),
+    // which answers the apps' getLockStatus, getDockModeStatus and
+    // getSystemStatus. The simulator's other keys are not for it.
+    // STATUS: written against services/lock's tests; not yet run on a device.
+    function pushSystemStatus(changes) {
+        var report = {};
+        ["deviceLocked", "dockMode", "orientation", "ime"].forEach(function(k) {
+            if (changes && changes[k] !== undefined)
+                report[k] = changes[k];
+        });
+        if (Object.keys(report).length > 0)
+            lunaCall("luna://com.palm.systemmanager/phoenix/report", report, function() {});
     }
 
     function notify(appId, title, body, params) {

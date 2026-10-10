@@ -55,7 +55,63 @@ FocusScope {
         // its usual name. Missing pieces: the spotter fails to start and
         // Settings > Assistant says what is not in the image.
         wakeWordCommand: ["/usr/bin/phoenix-wakeword", "--model", "/usr/share/phoenix/wakeword/vosk-model-small-en-us-0.15"]
-        Component.onCompleted: phoenix.unlock()
+        // The boot animation from the first frame (Shell.bootAnimation), in
+        // the style Settings > Advanced chose (LsmSystemStatus reads the
+        // start-up preferences before this frame), until the boot is over
+        // (below). The lock screen is up from the start, as LockWindow was
+        // at boot; com.palm.systemmanager (services/systemmanager) checks
+        // its passcode.
+        bootAnimation: true
+    }
+
+    // ---- The boot is over ----------------------------------------------------------
+    // LunaSysMgr's bootupFinished came when the system UI had loaded; on OSE
+    // bootd says so: com.webos.bootManager getBootStatus {subscribe} answers
+    // {bootStatus, signals: {"boot-done": true, ...}} (bootd
+    // src/bootd/service/BootManager.cpp:103-127, AbsBootSequencer.cpp:
+    // 166-176; SignalManager.cpp:28 "boot-done"). The animation then ends,
+    // once it has played at least the logo's first glow, 4 s
+    // (BootupAnimation.cpp:44, kFirstGlowAnimDuration; as phoenix-sim's
+    // bootMinimum). Without bootd's answer within 90 s the animation ends
+    // anyway, and says why, rather than holding the device behind it.
+    // STATUS: written against bootd's source; not yet run on a device.
+    property bool _bootDone: false
+    property bool _bootShown: false
+    readonly property bool _bootOver: _bootDone && _bootShown
+    on_BootOverChanged: if (_bootOver) phoenix.systemScreens.finishBoot()
+    Timer { interval: 4000; running: true; onTriggered: root._bootShown = true }
+    Timer {
+        interval: 90000
+        running: !root._bootDone
+        onTriggered: {
+            console.warn("phoenix: com.webos.bootManager did not say boot-done in 90 s; ending the boot animation");
+            root._bootDone = true;
+        }
+    }
+    function _bootStatus(r) {
+        if (r && r.signals && r.signals["boot-done"] === true)
+            _bootDone = true;
+    }
+
+    // State only the shell knows, for the apps (com.palm.systemmanager's
+    // getLockStatus, getDockModeStatus, getSystemStatus; as sim.qml sends
+    // it to the simulator's runtime).
+    function _pushOrientation() {
+        windows.pushSystemStatus({ orientation: { ui: phoenix.uiOrientation, device: phoenix.deviceOrientation } });
+    }
+    Connections {
+        target: phoenix
+        function onLockedChanged() { windows.pushSystemStatus({ deviceLocked: phoenix.locked }); }
+        function onDockModeChanged() { windows.pushSystemStatus({ dockMode: phoenix.dockMode }); }
+        function onKeyboardOpenChanged() { windows.pushSystemStatus({ ime: { visible: phoenix.keyboardOpen } }); }
+        function onUiOrientationChanged() { root._pushOrientation(); }
+        function onDeviceOrientationChanged() { root._pushOrientation(); }
+    }
+    Component.onCompleted: {
+        windows.lunaSubscribe("luna://com.webos.bootManager/getBootStatus", { subscribe: true }, root._bootStatus);
+        windows.pushSystemStatus({ deviceLocked: phoenix.locked, dockMode: phoenix.dockMode,
+                                   ime: { visible: phoenix.keyboardOpen } });
+        root._pushOrientation();
     }
 
     // Kept for controller compatibility; Phoenix owns card surfaces.

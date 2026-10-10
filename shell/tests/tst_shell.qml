@@ -1353,6 +1353,66 @@ Item {
             tryVerify(function() { return !fwd.visible; }, 2500);
         }
 
+        // A modem's indicators and the radios' in-between states
+        // (StatusBarInfo.cpp:195-262: right to left from the battery RSSI,
+        // WAN, Bluetooth, Wi-Fi, TTY, HAC, call forward, roaming).
+        function test_modemAndRadioIndicators() {
+            var sys = shell.system;
+            var wan = findChild(shell, "wanIcon"), tty = findChild(shell, "ttyIcon"), hac = findChild(shell, "hacIcon");
+            var roam = findChild(shell, "roamingIcon"), wifi = findChild(shell, "wifiIcon"), bt = findChild(shell, "bluetoothIcon");
+            verify(!wan.visible && !tty.visible && !hac.visible && !roam.visible);
+            sys.wanType = "hsdpa";
+            sys.tty = true;
+            sys.hac = true;
+            sys.roaming = true;
+            tryCompare(wan, "progress", 1, 2500);
+            tryCompare(roam, "progress", 1, 2500);
+            tryCompare(tty, "progress", 1, 2500);
+            tryCompare(hac, "progress", 1, 2500);
+            verify(/statusBar\/network-3g-connected\.png$/.test(wan.source));
+            verify(/statusBar\/network-roaming\.png$/.test(roam.source));
+            // The original's order, left to right here.
+            verify(roam.x < hac.x && hac.x < tty.x && tty.x < wifi.x && wifi.x < bt.x || !bt.visible);
+            verify(wan.x > wifi.x);
+            // Dormant EV-DO; EV-DO as 3G when the carrier says so; dormant
+            // HSDPA has no icon (getWanIndex).
+            sys.wanType = "evdo";
+            sys.wanDormant = true;
+            verify(/network-evdo-dormant\.png$/.test(wan.source));
+            sys.show3GForEvdo = true;
+            verify(/network-3g-dormant\.png$/.test(wan.source));
+            sys.wanType = "hsdpa";
+            tryVerify(function() { return !wan.visible; }, 2500);
+            // Airplane mode takes the WAN and roaming icons with the radio.
+            sys.wanType = "1x";
+            sys.wanDormant = false;
+            tryCompare(wan, "progress", 1, 2500);
+            sys.airplaneMode = true;
+            tryVerify(function() { return !wan.visible && !roam.visible; }, 2500);
+            sys.airplaneMode = false;
+            sys.wanType = "";
+            sys.tty = false;
+            sys.hac = false;
+            sys.roaming = false;
+            sys.show3GForEvdo = false;
+            tryVerify(function() { return !wan.visible && !tty.visible && !hac.visible && !roam.visible; }, 2500);
+            // Wi-Fi joining a network: wifi-connecting.png; Bluetooth
+            // connecting, then connected.
+            var nets = sys.wifiNetworks, devs = sys.bluetoothDevices, bars = sys.wifiBars, on = sys.bluetoothOn;
+            sys.wifiBars = 0;
+            sys.wifiNetworks = [{ ssid: "Phoenix", bars: 3, security: "psk", known: true, state: "connecting" }];
+            verify(/statusBar\/wifi-connecting\.png$/.test(wifi.source));
+            sys.bluetoothOn = true;
+            sys.bluetoothDevices = [{ name: "Car Kit", address: "00:1d", state: "connecting" }];
+            verify(/statusBar\/bluetooth-connecting\.png$/.test(bt.source));
+            sys.bluetoothDevices = [{ name: "Car Kit", address: "00:1d", state: "connected" }];
+            verify(/statusBar\/bluetooth-connected\.png$/.test(bt.source));
+            sys.bluetoothDevices = devs;
+            sys.bluetoothOn = on;
+            sys.wifiNetworks = nets;
+            sys.wifiBars = bars;
+        }
+
         // Back: the dashboard, then the menu, then the launcher
         // (SystemUiController.cpp:424-443).
         function test_backOrder() {
