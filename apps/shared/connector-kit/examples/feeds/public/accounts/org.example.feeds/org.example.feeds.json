@@ -1,0 +1,43 @@
+{
+    "templateId": "org.example.feeds",
+    "loc_name": "News Feed (example)",
+    "icon": {
+        "loc_32x32": "images/feeds-32x32.png",
+        "loc_48x48": "images/feeds-48x48.png"
+    },
+    "validator": {
+        "customUI": {
+            "appId": "org.example.feeds",
+            "name": "accounts/signin.html"
+        },
+        "address": "palm://org.example.service.feeds/checkCredentials"
+    },
+    "readPermissions": [
+        "org.example.service.feeds",
+        "org.example.feeds"
+    ],
+    "writePermissions": [
+        "org.example.feeds"
+    ],
+    "capabilityProviders": [
+        {
+            "capability": "FEEDS",
+            "id": "org.example.feeds.entries",
+            "loc_name": "Entries",
+            "icon": {
+                "loc_32x32": "images/feeds-32x32.png",
+                "loc_48x48": "images/feeds-48x48.png"
+            },
+            "dbkinds": {
+                "entry": "org.example.feeds.entry:1"
+            },
+            "readOnlyData": true,
+            "implementation": "palm://org.example.service.feeds/",
+            "onCreate": "palm://org.example.service.feeds/onCreate",
+            "onEnabled": "palm://org.example.service.feeds/onEnabled",
+            "onDelete": "palm://org.example.service.feeds/onDelete",
+            "onCredentialsChanged": "palm://org.example.service.feeds/onCredentialsChanged",
+            "sync": "palm://org.example.service.feeds/sync"
+        }
+    ]
+}

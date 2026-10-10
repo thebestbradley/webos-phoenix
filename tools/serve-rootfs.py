@@ -586,8 +586,8 @@ def read_body(res, progress_id):
 
 
 def proxy(req):
-    """One HTTP request for the page: {method, url, headers, body, binary?,
-    follow?, progress?} -> {status, headers (lower-case names), body (or
+    """One HTTP request for the page: {method, url, headers, body (or bodyBase64:
+    bytes), binary?, follow?, progress?} -> {status, headers (lower-case names), body (or
     bodyBase64 with binary), url} or {error, code}. follow: take up to 5
     redirects (GET). progress: an id under which the body's progress can be
     read while it comes (GET /__phoenix/proxy/progress?id=)."""
@@ -601,6 +601,8 @@ def proxy_request(req):
     url_s = req.get("url", "")
     method = req.get("method", "GET")
     body = req.get("body")
+    # bodyBase64: a body of bytes (a picture uploaded), sent as they are.
+    raw_body = base64.b64decode(req["bodyBase64"]) if isinstance(req.get("bodyBase64"), str) else None
     try:
         for _ in range(6):
             url = urllib.parse.urlsplit(url_s)
@@ -613,7 +615,7 @@ def proxy_request(req):
             # {timeoutMs}: the on-device model's deadline (assistant.js bounded).
             asked = req.get("timeoutMs")
             conn = cls(url.hostname, url.port, timeout=min(60, asked / 1000) if isinstance(asked, (int, float)) and asked > 0 else 60)
-            conn.request(method, target, body=body.encode("utf-8") if body is not None else None,
+            conn.request(method, target, body=raw_body if raw_body is not None else body.encode("utf-8") if body is not None else None,
                          headers=req.get("headers") or {})
             res = conn.getresponse()
             raw = read_body(res, req.get("progress"))
@@ -622,7 +624,7 @@ def proxy_request(req):
             if req.get("follow") and res.status in (301, 302, 303, 307, 308) and headers.get("location"):
                 url_s = urllib.parse.urljoin(url_s, headers["location"])
                 if res.status == 303:
-                    method, body = "GET", None
+                    method, body, raw_body = "GET", None, None
                 continue
             out = {"status": res.status, "headers": headers, "url": url_s}
             if req.get("binary"):

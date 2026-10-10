@@ -547,7 +547,7 @@ and Google's verification (2.12).
 | `apps/dav/configuration/db/` | db8 kinds and permissions (installed to `/etc/palm/db`) |
 | `apps/dav/service/davservice.js` | The transport's methods: `checkCredentials`, `onCreate`, `onEnabled`, `onCredentialsChanged`, `onDelete`, `sync`, `accountSettings` |
 | `apps/dav/service/service.js` | The Luna service on a device (`webos-service`) |
-| `apps/dav/service/lib/` | The sync engine: `davclient.js` (discovery, sync-collection, ctag/etag, multiget, conditional writes), `vcard.js`, `ical.js` (mapping), `sync.js` (two-way sync), `linker.js` (persons), `xml.js`, `contentline.js`, `datetime.js`, `node-http.js`. Plain CommonJS without dependencies, so the same files run in Node and in the simulator's page |
+| `apps/dav/service/lib/` | The sync engine: `davclient.js` (discovery, sync-collection, ctag/etag, multiget, conditional writes), `sync.js` (two-way sync), `webcal.js`, `xml.js`; the mapping (`vcard.js`, `ical.js`), `linker.js` (persons), `contentline.js`, `datetime.js` and `node-http.js` moved to `apps/shared/synckit/src/` (`@phoenix/synckit`, SYNERGY-CONNECTORS.md C1). Plain CommonJS, so the same files run in Node and in the simulator's page |
 | `apps/dav/service/sysbus/` | luna-service2 role, permissions, groups, service file |
 | `runtime/phoenix-runtime.js`, last block | The simulator's side (3.6) |
 | `tools/serve-rootfs.py` | `POST /__phoenix/proxy` for the simulator's HTTP |

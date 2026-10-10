@@ -9,6 +9,7 @@
 #include <QBuffer>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
@@ -611,8 +612,13 @@ void RootfsSchemeHandler::proxy(QWebEngineUrlRequestJob *job)
     for (auto it = headers.begin(); it != headers.end(); ++it)
         nr.setRawHeader(it.key().toUtf8(), it.value().toString().toUtf8());
     const QByteArray method = req.value(QStringLiteral("method")).toString(QStringLiteral("GET")).toUtf8();
+    // body: text, sent as UTF-8; bodyBase64: bytes, sent as they are (a
+    // picture a Synergy connector uploads: runtime "Synergy connectors").
     const QJsonValue body = req.value(QStringLiteral("body"));
-    QNetworkReply *reply = body.isString()
+    const QJsonValue bodyBase64 = req.value(QStringLiteral("bodyBase64"));
+    QNetworkReply *reply = bodyBase64.isString()
+        ? m_network->sendCustomRequest(nr, method, QByteArray::fromBase64(bodyBase64.toString().toLatin1()))
+        : body.isString()
         ? m_network->sendCustomRequest(nr, method, body.toString().toUtf8())
         : m_network->sendCustomRequest(nr, method);
     const bool binary = req.value(QStringLiteral("binary")).toBool();
@@ -756,12 +762,18 @@ void RootfsSchemeHandler::serveFile(QWebEngineUrlRequestJob *job, const QString 
     // app had PalmSystem (WebAppMgr).
     if ((devicePath.startsWith(QLatin1String(kAppsPrefix)) || devicePath.startsWith(QLatin1String(kEnyoPrefix)))
         && file.endsWith(QLatin1String(".html"))) {
+        // This run of phoenix-sim, for the runtime's state that lasts only
+        // as long as the device is on (the battery: a boot starts with a
+        // battery of its own, not the last run's simulated 4 %).
+        static const QByteArray runTag = "<script>window.__phoenixRunId=\""
+            + QByteArray::number(QDateTime::currentMSecsSinceEpoch()) + "\";</script>";
+        const QByteArray tags = runTag + kRuntimeTag;
         const int head = data.toLower().indexOf("<head");
         const int close = head >= 0 ? data.indexOf('>', head) : -1;
         if (close >= 0)
-            data.insert(close + 1, kRuntimeTag);
+            data.insert(close + 1, tags);
         else
-            data.prepend(kRuntimeTag);
+            data.prepend(tags);
         mime = "text/html";
     }
 

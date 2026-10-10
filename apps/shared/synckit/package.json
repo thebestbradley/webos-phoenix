@@ -1,0 +1,9 @@
+{
+  "name": "@phoenix/synckit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The shared sync layer of webOS Phoenix's Synergy transports (docs/SYNERGY-MODERN.md 4.2): Luna and db8 helpers, sync state records, scheduling, an HTTP client with host allow-list and Retry-After backoff, item records with three-way merge, the contacts linker's rules and the vCard / iCalendar mappers. Plain CommonJS without dependencies: runs on a device (run-js-service), in the simulator and in tests",
+  "license": "Apache-2.0",
+  "main": "src/index.js",
+  "types": "src/index.d.ts"
+}

@@ -1,0 +1,19 @@
+{
+    "id": "org.webosphoenix.service.fediverse",
+    "version": "0.1.0",
+    "roleFiles": [
+        "/usr/share/luna-service2/roles.d/org.webosphoenix.service.fediverse.role.json"
+    ],
+    "serviceFiles": [
+        "/usr/share/luna-service2/services.d/org.webosphoenix.service.fediverse.service"
+    ],
+    "apiPermissionFiles": [
+        "/usr/share/luna-service2/api-permissions.d/org.webosphoenix.service.fediverse.api.json"
+    ],
+    "clientPermissionFiles": [
+        "/usr/share/luna-service2/client-permissions.d/org.webosphoenix.service.fediverse.perm.json"
+    ],
+    "groupsFiles": [
+        "/usr/share/luna-service2/groups.d/org.webosphoenix.service.fediverse.groups.json"
+    ]
+}

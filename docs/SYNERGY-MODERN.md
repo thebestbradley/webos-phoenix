@@ -494,6 +494,17 @@ What the account feeds, per Synergy capability:
 | `PHOTO` | Pixelfed albums and the user's own media into Photos (3.2) | The user's own posts' images |
 | Sharing | "Share to" from Photos, Camera and the browser posts to the account | Same |
 
+**Built (October 2026, SYNERGY-CONNECTORS.md phase C2):** the Fediverse
+account (`apps/fediverse`, template `com.webosphoenix.fediverse`) for any
+server with the Mastodon client API: sign-in by handle (WebFinger, NodeInfo,
+the app registering itself, OAuth with PKCE in the system's browser sheet);
+the people you follow on contact cards; direct mentions in Messaging,
+labelled "not private"; mentions, follows, boosts and favourites as
+notifications (polled; Web Push later, 4.8); the account as a share target.
+The Mastodon column of the table above is what it does, but for Pixelfed
+albums in Photos (not done: no PHOTO kinds yet) and Web Push. Details in
+SYNERGY-CONNECTORS.md section 6, "As built in C2".
+
 A full timeline reader is an app, not Synergy: the catalog (APP-STORE.md)
 can list web clients such as the server's own PWA, and Phoenix need not
 write one.
@@ -606,6 +617,16 @@ before the second transport is written:
 | Scheduler glue: one periodic activity per account, network requirement, "sync now" | `davservice.js` | all |
 | Photo cache | DAV contact photos | contacts, photos, social avatars |
 
+**Built (phase 1c, October 2026):** `apps/shared/synckit`
+(`@phoenix/synckit`), with `apps/dav` running on it: item records and the
+three-way merge (`createItemStore`, `merge3`), sync state records,
+backoff with `Retry-After` (`createHttp`, which also keeps a connector to
+its hosts), the scheduler glue, the linker and the vCard / iCalendar
+mappers. The DAV engine's pull, push, pull loop stays in `apps/dav` (it is
+WebDAV's); the connector kit (`@phoenix/connector-kit`,
+[SYNERGY-SDK.md](SYNERGY-SDK.md)) has the generic one. The photo cache is
+the kit's `cachePhoto`. DAV keeps "server wins"; the kit's engine merges.
+
 **Conflicts.** Keep "server wins" (SYNERGY.md 3.3) for contacts and
 calendars, and add the improvement it suggests: the base copy in the item
 record allows a three-way merge per field, so a device edit to a phone
@@ -633,7 +654,7 @@ Google and Microsoft. The rest of the list:
 | Google | Loopback + PKCE [S7]; no device flow for these scopes [S6] | Project's Cloud project, or the user's own (1.2) | No (yes for push) |
 | Microsoft | Loopback + PKCE [M7]; device code as fallback | Project's Entra app | No (yes for push) |
 | Nextcloud | Login Flow v2: poll endpoint, browser login, app password returned [N1] | None | No |
-| Mastodon | Register an app on the instance from the device, then code flow with loopback; the per-device client secret goes into the key store [MA1] | None (per instance, per device) | No |
+| Mastodon | Register an app on the instance from the device, then code flow with loopback; the per-device client secret goes into the key store [MA1]. **Built** (C2): `org.webosphoenix.service.oauth` `client` keeps the registration per server, `authorize` runs the code flow with PKCE in the system's browser sheet; the redirect is the simulator's own page there, the RFC 8252 loopback address on a device (not yet: no sheet on devices) | None (per instance, per device) | No |
 | Bluesky | atproto OAuth public client with PKCE and DPoP; the client ID is a metadata document at an HTTPS URL [B1] | A static JSON file on the project's website | A static file only |
 | Dropbox | PKCE public client *(not rechecked)* | Project's Dropbox app | No |
 | Yahoo mail | Only after Yahoo approves the project [Y1] | Application | Probably a confidential client *(unverified)* |
@@ -658,6 +679,11 @@ SYNERGY.md 2.9 chooses the key store. Additional needs from this page:
 - **Backup**: credentials and E2EE stores are excluded from any Phoenix
   backup unless the backup itself is encrypted with a user secret; Matrix
   keys are recoverable through server-side key backup instead.
+- **Built so far** (C2): the OAuth service keeps tokens under keys owned by
+  the service that asked (`token` and `forget` refuse anyone else, pages
+  included); the account's credentials hold the key, not the token. The
+  store itself is the runtime's credential storage in the simulator and a
+  file only the service reads on a device (a placeholder for the key store).
 - **Per-account isolation**: transports read only their own accounts'
   credentials (`readCredentials` checks the caller against the template's
   `implementation`), as the legacy service did through `services.json`.
@@ -772,7 +798,7 @@ their scope here only adds to what is written there.
 | --- | --- | --- | --- | --- |
 | **0. Framework on the device** (SYNERGY.md 2.11 phase 0) | Accounts service and contacts linker on OSE, key store, activity manager check | L | M1 (OSE image runs) | `mojoservice` port larger than expected; OSE activity manager differences |
 | **1b. Provider presets for DAV** | iCloud, Fastmail, Nextcloud (Login Flow v2), Yahoo templates with both hosts; autoconfig | S | phase 1 (done) | Yahoo DAV behaviour unknown |
-| **1c. Shared sync layer** (4.2) | Extract `synckit` from `apps/dav`; three-way field merge | M | – | Regressions in DAV: keep its tests |
+| **1c. Shared sync layer** (4.2) **done** | Extract `synckit` from `apps/dav`; three-way field merge | M | – | Regressions in DAV: keep its tests |
 | **2a. OAuth helper + Microsoft** | Helper (loopback, PKCE, device code), Entra registration, Graph contacts, calendar, To Do; XOAUTH2 for Outlook mail | L | 1c, key store | Tenant admin consent; Graph throttling |
 | **2b. Google contacts and calendar** | People + Calendar API, Cloud project, consent screen, verification | M (+ weeks of Google review) | 2a helper | Verification delays; 100-user cap until verified |
 | **2c. Gmail** | IMAP + app password now (S); OAuth with bring-your-own client ID (S); project-wide OAuth only if CASA is funded (open question 2) | S / S / M + money | mail transport (3a) | Google may withdraw app passwords |
@@ -787,7 +813,7 @@ their scope here only adds to what is written there.
 | **6b. Telegram (optional)** | TDLib build for OSE, transport, `api_id` | L | 4a | Large C++ build; Telegram's client terms [T1] |
 | **7a. Photos** | `PHOTO` in Photos: Immich, Nextcloud/WebDAV, OneDrive; Google Photos picker | M | 0 | Storage and bandwidth on phones |
 | **7b. Files and cloud drives** | `DOCUMENTS` roots in Files, open and save back in the document viewers: WebDAV, OneDrive, Dropbox, Drive `drive.file`, Box, S3 (native); the long tail through optional rclone (3.3) | M | 0, 1c | One registration per provider; Google's secret-on-device flow |
-| **7c. Social** | One Fediverse account (NodeInfo detection, Mastodon API first) and Bluesky: contacts enrichment, notifications, DMs, Pixelfed photos, share targets (3.1) | M | 5 for push | Server differences behind the Mastodon API; Bluesky OAuth still evolving |
+| **7c. Social** (Fediverse built, polled; Bluesky and Pixelfed photos not) | One Fediverse account (NodeInfo detection, Mastodon API first) and Bluesky: contacts enrichment, notifications, DMs, Pixelfed photos, share targets (3.1) | M | 5 for push | Server differences behind the Mastodon API; Bluesky OAuth still evolving |
 | **7d. Directory** | `REMOTECONTACTS` for Graph, Just Type remote contacts | S | 2a | – |
 
 Suggested order after phase 0: 1b, 1c, 2a, 3a, 2b, 4a, 4b, 5, then the

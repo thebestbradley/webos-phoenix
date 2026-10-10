@@ -1,0 +1,11 @@
+{
+    "name": "org.webosphoenix.service.fediverse",
+    "version": "0.1.0",
+    "private": true,
+    "description": "webOS Phoenix Fediverse account (Synergy connector on @phoenix/connector-kit): sign-in by handle with OAuth, followed accounts on contacts, direct mentions in Messaging, notifications, sharing",
+    "license": "Apache-2.0",
+    "main": "service.js",
+    "dependencies": {
+        "@phoenix/connector-kit": "*"
+    }
+}

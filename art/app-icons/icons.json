@@ -227,6 +227,14 @@
             "apps/dav/icon"
         ]
     },
+    "fediverse": {
+        "platter": "diamond",
+        "base": 175,
+        "foot": 50,
+        "out": [
+            "apps/fediverse/icon"
+        ]
+    },
     "wifi": {
         "platter": "diamond",
         "base": 172,

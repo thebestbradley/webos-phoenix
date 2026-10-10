@@ -3,7 +3,7 @@
 //
 // request({method, url, headers, body}) -> {status, headers, body} on Node's
 // http and https modules, for lib/webdav.js on a device. Bodies are text
-// (a backup file is JSON). Like apps/dav/service/lib/node-http.js.
+// (a backup file is JSON). Like apps/shared/synckit/src/node-http.js.
 
 "use strict";
 

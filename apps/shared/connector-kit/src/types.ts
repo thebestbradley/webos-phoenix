@@ -1,0 +1,192 @@
+// Copyright (c) 2026 webOS Phoenix contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// The types of a connector (docs/SYNERGY-SDK.md): what a developer writes
+// (ConnectorDefinition, made with defineConnector) and what the kit gives
+// each of its functions (the contexts).
+
+import type { DbApi, DbObject, Http, Luna, RequestFn } from "@phoenix/synckit";
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export type Json = any;
+
+/** A Luna reply. */
+export interface Reply { returnValue: boolean; errorCode?: string; errorText?: string; [k: string]: Json }
+
+/** One object on the server, as a connector's pull gives it. */
+export interface RemoteObject {
+    /** The server's stable id of the object (a URL, an id). */
+    remoteId: string;
+    /** Its change key (etag, version, updated_at): unchanged means nothing to do. */
+    etag?: string;
+    /** The mapped fields, in the db8 kind's own names. */
+    fields: Record<string, Json>;
+}
+
+export interface PullResult {
+    /** Objects new or changed since `token` (all of them on a full pull). */
+    changes: RemoteObject[];
+    /** remoteIds deleted on the server since `token`. */
+    deleted?: string[];
+    /** The token for the next incremental pull (sync-token, since_id, delta link). */
+    nextToken?: string | null;
+    /** A full listing: anything not in changes is gone from the server. */
+    full?: boolean;
+}
+
+/** A device change sent to the server by a two-way capability's push. */
+export interface LocalChange {
+    op: "create" | "update" | "delete";
+    remoteId?: string;
+    etag?: string;
+    /** The fields as they are on the device (create, update). */
+    fields?: Record<string, Json>;
+    /** The fields as both sides last agreed on them (update, delete). */
+    base?: Record<string, Json>;
+}
+
+export interface PushResult { remoteId: string; etag?: string }
+
+export interface CapabilityDefinition {
+    /** The template's capability name: "CONTACTS", "CALENDAR", "MESSAGING", "FEEDS", ... */
+    capability: string;
+    /** The db8 kind the synced objects are written to (the template's dbkinds). */
+    kind?: string;
+    /** The fields the mapping owns (item records keep a base copy of them). */
+    fields?: string[];
+    /**
+     * What changed on the server since token (null: the first sync). With
+     * kind, the kit writes the objects, keeps item records and deletes
+     * what is gone.
+     */
+    pull?(ctx: AccountContext, token: string | null): Promise<PullResult>;
+    /** Two-way capabilities: send one device change; the new remote id and etag. */
+    push?(ctx: AccountContext, change: LocalChange): Promise<PushResult | void>;
+    /** db8 object fields from the remote fields (default: the fields as they are). */
+    toDb?(fields: Record<string, Json>, ctx: AccountContext): Record<string, Json> | Promise<Record<string, Json>>;
+    /** Remote fields from a db8 object (two-way; default: the `fields` of the object). */
+    fromDb?(object: DbObject): Record<string, Json>;
+    /** Who wins a field changed on both sides (default "remote": the server, as SYNERGY.md 3.3). */
+    conflict?: "remote" | "local";
+    /** CONTACTS: keep com.palm.person:1 records (the linker's rules; default true). */
+    linkPersons?: boolean;
+    /**
+     * A capability that is not a set of objects (notifications, messages):
+     * runs on each sync instead of pull / push.
+     */
+    sync?(ctx: AccountContext): Promise<Json | void>;
+    /** Turned off or the account deleted: remove what it wrote (default: its kind's objects of the account). */
+    remove?(ctx: AccountContext): Promise<void>;
+    /**
+     * A db8 watch that calls one of the connector's methods with {accountId}
+     * when objects match the query (an outbox of pending messages, as
+     * mojomail's watches: docs/SYNERGY-CONNECTORS.md 3.2 rule 6): an
+     * activity with a db8 trigger while the capability is on.
+     */
+    watch?: { query: Json; method: string };
+}
+
+export interface ConnectorDefinition {
+    /** The Luna service name ("org.example.service.foo"). */
+    service: string;
+    /** The templates this service implements (their capabilityProviders name it). */
+    templateIds: string[];
+    /** The connector's own bookkeeping kinds: state (one per account) and item records. */
+    kinds: { state: string; item?: string };
+    /** Hosts the connector may reach besides the user's server ("*.example.com"). */
+    hosts?: string[];
+    userAgent?: string;
+    /** Capabilities by capability provider id (the template's capabilityProviders[].id). */
+    capabilities: Record<string, CapabilityDefinition>;
+    /** The periodic sync (the activity manager's interval, 15m or more; default 1h). */
+    schedule?: { every?: string; network?: boolean };
+    /** C6: register for push (UnifiedPush). Recorded only, for now. */
+    push?: { unifiedPush?: boolean };
+    /** The template's validator: {username, password, config} -> {credentials, config?, username?}. */
+    validate(ctx: ValidateContext, params: ValidateParams): Promise<ValidateResult>;
+    /** After createAccount (the validator's config is in ctx.config already). */
+    onCreate?(ctx: AccountContext): Promise<void>;
+    /** Before the account's data goes (revoke a token, ...). */
+    onDelete?(ctx: AccountContext): Promise<void>;
+    /** More service methods ({accountId?} gets an account context). */
+    methods?: Record<string, (ctx: MethodContext, params: Json) => Promise<Json>>;
+}
+
+export interface ValidateParams {
+    username?: string;
+    password?: string;
+    templateId?: string;
+    accountId?: string;
+    config?: Record<string, Json>;
+    [k: string]: Json;
+}
+export interface ValidateResult {
+    credentials: Record<string, Json>;
+    config?: Record<string, Json>;
+    username?: string;
+}
+
+/** What every function of a connector gets. */
+export interface BaseContext {
+    luna: Luna;
+    db: DbApi;
+    tempdb: DbApi;
+    http: Http;
+    log(message: string): void;
+    now(): number;
+    service: string;
+    /** OAuth tokens kept by org.webosphoenix.service.oauth (docs/SYNERGY-SDK.md). */
+    oauth: OAuthClient;
+    /** A remote picture kept on the device: a path (device) or a data: URL (simulator). */
+    cachePhoto(key: string, url: string): Promise<string>;
+    /** A file the user picked (sharing): its bytes and type. */
+    readFile(path: string): Promise<{ bytes: Uint8Array; mimeType: string }>;
+}
+
+export interface ValidateContext extends BaseContext {
+    templateId: string;
+}
+
+export interface AccountContext extends BaseContext {
+    accountId: string;
+    /** The account (getAccountInfo): username, templateId, capabilityProviders. */
+    account: Json;
+    /** The account's "common" credentials. */
+    credentials: Record<string, Json>;
+    /** The validator's config, kept by the kit since onCreate. */
+    config: Record<string, Json>;
+    /** The connector's own per-account state; saved after the call when changed. */
+    state: Record<string, Json>;
+    /** A webOS notification (com.webos.notification createToast). */
+    notify(n: { title: string; body?: string; appId?: string; params?: Json }): Promise<void>;
+    /** A message into Messaging (org.webosports.service.messaging putMessage). */
+    putMessage(message: Json): Promise<Json>;
+}
+
+export type MethodContext = BaseContext & Partial<AccountContext>;
+
+export interface OAuthClient {
+    /** The access token of a key held by the OAuth service (credentials.common.oauthKey). */
+    token(keyId: string): Promise<string>;
+    /** Forget the key (account deleted). */
+    forget(keyId: string): Promise<void>;
+}
+
+/** What the host gives the kit: a device (device.ts), the simulator, the tests. */
+export interface Environment {
+    luna: { call(uri: string, params?: object): Promise<Json> | Json };
+    request: RequestFn;
+    log?(message: string): void;
+    now?(): number;
+    sleep?(ms: number): Promise<void>;
+    /** false: no periodic activity (tests). */
+    periodicSync?: boolean;
+    /** false: no com.palm.person:1 upkeep (once the real linker runs on the device). */
+    linkPersons?: boolean;
+    cachePhoto?(key: string, url: string): Promise<string>;
+    readFile?(path: string): Promise<{ bytes: Uint8Array; mimeType: string }>;
+    /** Longest Retry-After waited out within a sync (ms, default 30000). */
+    maxWaitMs?: number;
+}
+
+export type ServiceMethods = Record<string, (params: Json) => Promise<Reply>>;

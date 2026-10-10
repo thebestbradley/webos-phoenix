@@ -9,6 +9,8 @@
     "shared/phoenix-ui",
     "shared/secrets",
     "shared/notes-core",
+    "shared/synckit",
+    "shared/connector-kit",
     "settings",
     "phone",
     "messaging",

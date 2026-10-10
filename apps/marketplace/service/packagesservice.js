@@ -382,8 +382,15 @@ function createPackagesService(deps) {
             if (entry.kind === "ipk" && (app.id !== entry.id || pkg.control.Package !== entry.id))
                 throw err("BAD_PACKAGE", "The package is " + (pkg.control.Package || app.id) + ", not " + entry.id);
             var outside = pkg.files.filter(function (f) { return f.path.indexOf(app.dir) !== 0; });
+            // A Synergy connector carries its service in the app's service/
+            // folder (docs/SYNERGY-CONNECTORS.md 3.1): third-party connectors
+            // install in Developer Mode only until the connector tier (4.1).
+            var connector = pkg.files.some(function (f) {
+                return f.path === app.dir + "service/package.json" || f.path.indexOf(app.dir + "service/sysbus/") === 0;
+            });
             var needs = pkg.scripts.length ? "The package runs install scripts as the system"
                 : pkg.services.length ? "The app has background services"
+                : connector ? "It is a Synergy connector (an account type with a background service)"
                 : outside.length ? "The package puts files outside its app (" + outside[0].path + ")" : "";
             if (needs && !dev) throw err("NEEDS_DEVMODE", needs + ": turn on Developer Mode in Settings to install it");
             var type = app.appinfo.type || "web";

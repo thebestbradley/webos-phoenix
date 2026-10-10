@@ -1,0 +1,19 @@
+{
+  "name": "@phoenix/connector-kit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Write webOS Phoenix Synergy connectors as a definition (docs/SYNERGY-SDK.md): the Luna service the accounts service calls, the sync engine on @phoenix/synckit, the conformance suite, and the phoenix-connector CLI (new, validate, pack, test). TypeScript compiled to CommonJS in lib/, which a device, the simulator and Node all run",
+  "license": "Apache-2.0",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "bin": {
+    "phoenix-connector": "bin/phoenix-connector.cjs"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "@phoenix/synckit": "*"
+  }
+}

@@ -100,8 +100,52 @@ def find_services(cfg):
     return services
 
 
+# Phoenix's shared packages a service may depend on (its package.json
+# "dependencies"): apps/shared/<dir>, by package name. What of each is
+# installed: its package.json and the folder its "main" is in (src/ for
+# the plain CommonJS sync layer, lib/ for the connector kit, which
+# `npm run build` compiles from TypeScript), without tests.
+def shared_packages():
+    out = {}
+    base = os.path.join(REPO, "apps", "shared")
+    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        pkg = os.path.join(base, name, "package.json")
+        if os.path.isfile(pkg):
+            with open(pkg, encoding="utf-8") as f:
+                info = json.load(f)
+            out[info["name"]] = (os.path.join(base, name), info)
+    return out
+
+
+def plan_dependencies(svc_dir, dest, plan, shared, seen=None):
+    """A service's @phoenix/* dependencies into its node_modules, as npm would
+    put them there, so require("@phoenix/synckit") works under run-js-service."""
+    seen = set() if seen is None else seen
+    with open(os.path.join(svc_dir, "package.json"), encoding="utf-8") as f:
+        deps = json.load(f).get("dependencies") or {}
+    for name in sorted(deps):
+        if name in seen or name not in shared:
+            continue
+        seen.add(name)
+        src, info = shared[name]
+        main_dir = os.path.dirname(os.path.normpath(info.get("main", "index.js"))) or "."
+        if not os.path.isdir(os.path.join(src, main_dir)):
+            sys.exit("%s: %s is not built (cd apps && npm run build -w %s)" % (svc_dir, os.path.join(src, main_dir), name))
+        target = "%s/node_modules/%s" % (dest, name)
+        plan.append((os.path.join(src, "package.json"), target + "/package.json"))
+        for root, dirs, files in os.walk(os.path.join(src, main_dir)):
+            dirs[:] = sorted(d for d in dirs if d not in SKIP_NAMES)
+            for fn in sorted(files):
+                if ".test." in fn or fn.endswith((".ts", ".map")):
+                    continue
+                full = os.path.join(root, fn)
+                plan.append((full, target + "/" + os.path.relpath(full, src)))
+        plan_dependencies(src, dest, plan, shared, seen)
+
+
 def plan_service(svc_id, svc_dir, plan):
     """/usr/palm/services/<id>/ (run-js-service) and its ls2 files under /usr/share/luna-service2."""
+    plan_dependencies(svc_dir, "/usr/palm/services/%s" % svc_id, plan, shared_packages())
     for fn in sorted(os.listdir(svc_dir)):
         src = os.path.join(svc_dir, fn)
         if fn == "sysbus" or fn in SKIP_NAMES or ".test." in fn:
@@ -187,6 +231,10 @@ def main():
         # The simulator's stand-ins for what servers hold (the sample driver
         # catalog, server/drivers/sample) are not part of a device.
         if target.startswith("server/"):
+            continue
+        # The shared packages the simulator's service loader finds by name:
+        # a device has a copy in each service that needs one (plan_service).
+        if prefix.startswith("/usr/lib/phoenix/node_modules/"):
             continue
         copy_tree(os.path.join(REPO, target), prefix.rstrip("/"), plan)
     for app_id, app_dir in find_apps(cfg):

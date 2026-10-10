@@ -58,6 +58,12 @@ final class Ipk
             if ($f['type'] === 'file' && !str_starts_with($path, $dir)) {
                 throw new CheckFailed("The package puts a file outside its app ($path)");
             }
+            // A Synergy connector carries its Node.js service in the app's
+            // service/ folder (docs/SYNERGY-CONNECTORS.md 3.1): not a web app.
+            // Connectors are checked by Connector::checkIpk (phase C4).
+            if ($f['type'] === 'file' && ($path === $dir . 'service/package.json' || str_starts_with($path, $dir . 'service/sysbus/'))) {
+                throw new CheckFailed('The package has a background service (service/): a Synergy connector, which the catalog does not take yet');
+            }
         }
         $info = json_decode(preg_replace('/^\xEF\xBB\xBF/', '', $data[$dir . 'appinfo.json']['data']), true);
         if (!is_array($info)) {

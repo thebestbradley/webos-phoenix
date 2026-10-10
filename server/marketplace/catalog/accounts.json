@@ -22,6 +22,27 @@
             "featured": true
         },
         {
+            "templateId": "com.webosphoenix.fediverse",
+            "title": "Fediverse",
+            "provider": "Mastodon, GoToSocial, Akkoma, Pixelfed and other servers",
+            "icon": "icons/accounts/com.webosphoenix.fediverse.png",
+            "iconFrom": "apps/fediverse/public/accounts/com.webosphoenix.fediverse/images/fediverse-48x48@2x.png",
+            "summary": "The people you follow on your contact cards, direct mentions in Messaging, mentions, follows and boosts as notifications, and Share to post a link or a photo.",
+            "capabilities": [
+                { "capability": "CONTACTS", "direction": "read-only" },
+                { "capability": "MESSAGING", "direction": "two-way" },
+                { "capability": "SOCIAL", "direction": "two-way" }
+            ],
+            "protocols": ["mastodon-api", "activitypub", "webfinger", "nodeinfo"],
+            "auth": { "type": "oauth", "registration": "none" },
+            "server": "discovered",
+            "privacy": { "dataGoesTo": "the server of your handle (and, for direct mentions, the servers of the people you write to)", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "beta",
+            "package": { "id": "org.webosphoenix.fediverse", "builtin": true },
+            "featured": true
+        },
+        {
             "templateId": "com.webosphoenix.webcal",
             "title": "Subscribed Calendar",
             "provider": "Any calendar address (webcal or .ics)",

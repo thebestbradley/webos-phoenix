@@ -70,4 +70,15 @@
 			delete this.phoenixTemplateId;
 		return r;
 	};
+
+	// The names of the capabilities Phoenix adds (docs/SYNERGY-MODERN.md 4.1:
+	// SOCIAL; docs/SYNERGY-CONNECTORS.md section 1: FEEDS and the others), for
+	// an account's switches, as the library names its own
+	// (util.js localizedCapabilities); without them the switch shows the raw name.
+	var names = AccountsUtil.localizedCapabilities;
+	var phoenixNames = {SOCIAL: "Notifications", FEEDS: "Feeds", MEDIA: "Media Library", PODCASTS: "Podcasts", BOOKMARKS: "Bookmarks"};
+	for (var cap in phoenixNames) {
+		if (names && !names[cap])
+			names[cap] = phoenixNames[cap];
+	}
 })();

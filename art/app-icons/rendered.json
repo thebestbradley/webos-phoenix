@@ -175,6 +175,22 @@
   "svg": "dddf2efd286214825a439e0f26ca86b9de3526c761211b5ee23d7d87c266e41e",
   "png": "30d23cfb992327960f7025c25dacadf134f94b410319faf4779129c261cb1ebf"
  },
+ "apps/fediverse/icon-128x128.png": {
+  "svg": "b2442b94f54304dd3c3e629b92088325fc0b8210e5ac599a6bbd457970357e88",
+  "png": "61275559a795b7814957ce9dfe4128dfc7c9d6d1f150a0e03b3550b0f46e2406"
+ },
+ "apps/fediverse/icon-256x256.png": {
+  "svg": "40766e4e979d5cf7bcb2a0f6accf45b87563a0d3e6029f97307ac4d9a66adb75",
+  "png": "63b204c9eee86ed56b06d7f8c7477fa3afb30c6eb3ec4fb99bbbc6fb312de992"
+ },
+ "apps/fediverse/icon-512x512.png": {
+  "svg": "10aff8cbdebec84ac0574e542016f31fb2b758f53b26eaa014b79fa5b24b4b9b",
+  "png": "a0c4e7a037a5dc727730c675f832317e3354d057bd28a78896e134de1f994f88"
+ },
+ "apps/fediverse/icon.png": {
+  "svg": "71eab19297d828a003b5180a62af21ad146d038d1966cf7f3c187f3d9d9df168",
+  "png": "ab596e36422b7bc1daeb88eff55b31ff533e4ca5b043e0614cd2c9ff7354272a"
+ },
  "apps/files/public/icon-128x128.png": {
   "svg": "9db97dd76d3cc83934e7174716f01b41615e2f349305c8f385a4ec486113ff64",
   "png": "aa26bacfc190e4f6745421e1687174229cd720aea3093908884a984df9929ba1"

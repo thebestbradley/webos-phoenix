@@ -38,6 +38,7 @@
 
 "use strict";
 
+var synckit = require("@phoenix/synckit");
 var syncLib = require("./lib/sync");
 var davclient = require("./lib/davclient");
 var webcalLib = require("./lib/webcal");
@@ -52,85 +53,24 @@ var WEBCAL = "com.webosphoenix.webcal";
 // A subscribed calendar is read again this often (WebCal Sync's 30 minutes).
 var WEBCAL_INTERVAL = "30m";
 
-// A thrown error -> an error code the Accounts app can show.
-function errorCodeOf(e) {
-    var code = e && (e.errorCode || e.code);
-    if (e && e.status === 401) return "401_UNAUTHORIZED";
-    switch (code) {
-    case "401_UNAUTHORIZED": return code;
-    case "ENOTFOUND": case "EAI_AGAIN": return "HOST_NOT_FOUND";
-    case "ECONNREFUSED": case "ECONNRESET": case "EHOSTUNREACH": case "ENETUNREACH": return "CONNECTION_FAILED";
-    case "ETIMEDOUT": return "CONNECTION_TIMEOUT";
-    case "CERT_HAS_EXPIRED": return "SSL_CERT_EXPIRED";
-    case "DEPTH_ZERO_SELF_SIGNED_CERT": case "SELF_SIGNED_CERT_IN_CHAIN": case "UNABLE_TO_VERIFY_LEAF_SIGNATURE": return "SSL_CERT_UNTRUSTED";
-    case "ERR_TLS_CERT_ALTNAME_INVALID": return "SSL_CERT_HOSTNAME_MISMATCH";
-    case "NO_DAV_SERVICE": return "UNSUPPORTED_CAPABILITY";
-    case "BAD_SERVER": return "400_BAD_REQUEST";
-    }
-    if (e && e.status >= 500) return "500_SERVER_ERROR";
-    if (e && /timed out/i.test(e.message || "")) return "CONNECTION_TIMEOUT";
-    return "UNKNOWN_ERROR";
-}
-
-function fail(e) {
-    return { returnValue: false, errorCode: errorCodeOf(e), errorText: String(e && e.message || e) };
-}
+// A thrown error -> an error code the Accounts app can show (@phoenix/synckit errors.js).
+var errorCodeOf = synckit.errorCodeOf;
+var fail = synckit.fail;
 
 // options: { luna: {call(uri, params) -> Promise<reply>}, request, log?, localTz?,
 //            savePhoto?, linkPersons?, periodicSync? ("1h"; false for none) }
 function createDavService(options) {
-    var luna = options.luna;
     var log = options.log || function () {};
-    var running = {};
-
-    function lunaCall(uri, params) {
-        return Promise.resolve(luna.call(uri, params || {})).then(function (r) {
-            if (!r || r.returnValue === false) {
-                var e = new Error((r && (r.errorText || r.errorMessage)) || ("call failed: " + uri));
-                e.errorCode = r && r.errorCode;
-                throw e;
-            }
-            return r;
-        });
-    }
-
-    // db8 as the sync engine wants it (lib/sync.js).
-    function dbApi(service) {
-        var base = "luna://" + service + "/";
-        return {
-            find: function (query) {
-                var all = [];
-                function page(p) {
-                    var q = Object.assign({}, query);
-                    if (p) q.page = p;
-                    return lunaCall(base + "find", { query: q }).then(function (r) {
-                        all = all.concat(r.results || []);
-                        if (r.next && !query.limit) return page(r.next);
-                        return all;
-                    });
-                }
-                return page(null);
-            },
-            get: function (ids) { return lunaCall(base + "get", { ids: ids }).then(function (r) { return r.results || []; }); },
-            put: function (objects) { return lunaCall(base + "put", { objects: objects }).then(function (r) { return r.results; }); },
-            merge: function (objects) { return lunaCall(base + "merge", { objects: objects }).then(function (r) { return r.results; }); },
-            del: function (ids) { return lunaCall(base + "del", { ids: ids }).then(function (r) { return r.results; }); },
-            delQuery: function (query) { return lunaCall(base + "del", { query: query }); }
-        };
-    }
-
-    var db = dbApi("com.palm.db");
-    var tempdb = dbApi("com.palm.tempdb");
-
-    function credentials(accountId) {
-        return lunaCall("luna://com.palm.service.accounts/readCredentials", { accountId: accountId, name: "common" })
-            .then(function (r) { return r.credentials || {}; });
-    }
-
-    function accountInfo(accountId) {
-        return lunaCall("luna://com.palm.service.accounts/getAccountInfo", { accountId: accountId })
-            .then(function (r) { return r.result; });
-    }
+    // Luna, db8 and the accounts service, the scheduler and the "one sync
+    // at a time per account" rule come from the shared sync layer.
+    var luna = options.luna;
+    var bus = synckit.createLuna(luna);
+    var db = bus.db;
+    var tempdb = bus.tempdb;
+    var credentials = bus.credentials;
+    var accountInfo = bus.accountInfo;
+    var scheduler = synckit.createScheduler({ call: bus.call, service: SERVICE, log: log });
+    var serialize = synckit.createSerializer();
 
     function engine(accountId, creds, username) {
         return syncLib.createEngine({
@@ -144,8 +84,6 @@ function createDavService(options) {
         return (account.capabilityProviders || []).map(function (c) { return PROVIDER_CAPABILITY[c.id]; }).filter(Boolean);
     }
 
-    function activityName(accountId) { return SERVICE + ".sync." + accountId; }
-
     function isWebcal(accountId) {
         return accountInfo(accountId).then(function (a) { return a && a.templateId === WEBCAL; }, function () { return false; });
     }
@@ -153,25 +91,14 @@ function createDavService(options) {
     function schedulePeriodic(accountId) {
         if (options.periodicSync === false) return Promise.resolve();
         return isWebcal(accountId).then(function (webcal) {
-            return lunaCall("luna://com.palm.activitymanager/create", {
-            activity: {
-                name: activityName(accountId),
-                description: (webcal ? "Subscribed calendar refresh for account " : "CardDAV / CalDAV sync for account ") + accountId,
-                type: { background: true, persist: true, explicit: true },
-                schedule: { interval: webcal ? WEBCAL_INTERVAL : options.periodicSync || "1h" },
-                requirements: { internet: true },
-                callback: { method: "luna://" + SERVICE + "/sync", params: { accountId: accountId } }
-            },
-            start: true,
-            replace: true
+            return scheduler.schedule(accountId, {
+                every: webcal ? WEBCAL_INTERVAL : options.periodicSync || "1h",
+                description: (webcal ? "Subscribed calendar refresh for account " : "CardDAV / CalDAV sync for account ") + accountId
             });
-        }).catch(function (e) { log("periodic sync not scheduled: " + e.message); });
+        });
     }
 
-    function cancelPeriodic(accountId) {
-        return lunaCall("luna://com.palm.activitymanager/cancel", { activityName: activityName(accountId) })
-            .catch(function () { /* none scheduled */ });
-    }
+    function cancelPeriodic(accountId) { return scheduler.cancel(accountId); }
 
     // A sync started by the service itself goes through the bus like any
     // other, so whoever serializes syncs (the simulator's cross-page lock)
@@ -282,28 +209,25 @@ function createDavService(options) {
         sync: function (p) {
             var accountId = p.accountId;
             if (!accountId) return Promise.resolve({ returnValue: false, errorCode: "400_BAD_REQUEST", errorText: "accountId is required" });
-            if (running[accountId]) return running[accountId];
-            var job = Promise.all([credentials(accountId), accountInfo(accountId)]).then(function (r) {
-                var creds = r[0], account = r[1];
-                var caps = enabledCapabilities(account);
-                if (p.capability) caps = caps.filter(function (c) { return c === p.capability; });
-                if (!caps.length) return { returnValue: true, skipped: "no enabled capability" };
-                if (account.templateId === WEBCAL) {
-                    return webcalLib.createWebcal({ db: db, request: options.request, accountId: accountId, localTz: options.localTz, log: log })
-                        .sync(creds.url, account.username).then(function (stats) { return { returnValue: true, stats: stats }; });
-                }
-                return engine(accountId, creds, account.username).sync({ capabilities: caps }).then(function (stats) {
-                    return { returnValue: true, stats: stats };
+            return serialize(accountId, function () {
+                return Promise.all([credentials(accountId), accountInfo(accountId)]).then(function (r) {
+                    var creds = r[0], account = r[1];
+                    var caps = enabledCapabilities(account);
+                    if (p.capability) caps = caps.filter(function (c) { return c === p.capability; });
+                    if (!caps.length) return { returnValue: true, skipped: "no enabled capability" };
+                    if (account.templateId === WEBCAL) {
+                        return webcalLib.createWebcal({ db: db, request: options.request, accountId: accountId, localTz: options.localTz, log: log })
+                            .sync(creds.url, account.username).then(function (stats) { return { returnValue: true, stats: stats }; });
+                    }
+                    return engine(accountId, creds, account.username).sync({ capabilities: caps }).then(function (stats) {
+                        return { returnValue: true, stats: stats };
+                    });
+                }).then(null, fail).then(function (reply) {
+                    // A periodic activity is told the run is over (legacy activity manager "complete").
+                    scheduler.complete(p.$activity);
+                    return reply;
                 });
-            }).then(null, fail).then(function (reply) {
-                delete running[accountId];
-                // A periodic activity is told the run is over (legacy activity manager "complete").
-                var act = p.$activity && p.$activity.activityId;
-                if (act) lunaCall("luna://com.palm.activitymanager/complete", { activityId: act, restart: true }).catch(function () {});
-                return reply;
             });
-            running[accountId] = job;
-            return job;
         }
     };
     return methods;

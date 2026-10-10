@@ -17,6 +17,12 @@
 //          videos, music, documents, any file by folder; one file or
 //          several; a crop frame for a picture
 //          (org.webosphoenix.filepicker/pick, SF2).
+//   signin The system's browser sheet for an OAuth sign-in
+//          (org.webosphoenix.service.oauth authorize; docs/SYNERGY-CONNECTORS.md
+//          4.1): the provider's own page in a web view, its address above
+//          it, Cancel; it closes when the page goes to the redirect address.
+//          The app that asked cannot read the page: it only hears that
+//          address back (the code), from the OAuth service.
 //
 // It talks to the page under it with postMessage: "ready", then the
 // request; "done" with the choice. The back gesture comes as "back".
@@ -39,8 +45,10 @@ interface Target { appId: string; title: string; icon: string; label: string }
 interface ShareRequest { share: Share; targets: Target[] }
 interface SaveRequest { name: string; title: string; folder: string }
 interface PickRequest { title: string; kinds: PickKind[]; multiple: boolean; crop: { width: number; height: number } | null; extensions: string[] }
-type Request = ShareRequest | SaveRequest | PickRequest;
+interface SignInRequest { url: string; redirectPrefix: string }
+type Request = ShareRequest | SaveRequest | PickRequest | SignInRequest;
 type Result =
+    | { action: "redirect"; url: string }
     | { action: "app"; appId: string }
     | { action: "photos" | "files" | "copy" | "cancel" }
     | { action: "save"; folder: string; name: string; overwrite: boolean }
@@ -69,7 +77,7 @@ async function copyText(text: string): Promise<boolean> {
 }
 
 export function App() {
-    const params = useLaunchParams<{ kind?: "share" | "save" | "pick"; id?: string }>();
+    const params = useLaunchParams<{ kind?: "share" | "save" | "pick" | "signin"; id?: string }>();
     const [request, setRequest] = useState<Request | null>(null);
     const [leaving, setLeaving] = useState(false);
     const backHandler = useRef<() => void>(() => {});
@@ -114,6 +122,9 @@ export function App() {
             {request && params.kind === "save" && "folder" in request && (
                 <SavePicker request={request} finish={finish} backHandler={backHandler} />
             )}
+            {request && params.kind === "signin" && "redirectPrefix" in request && (
+                <SignInSheet request={request} finish={finish} backHandler={backHandler} />
+            )}
             {request && params.kind === "pick" && "kinds" in request && (
                 <FilePicker request={{ ...request, kinds: request.kinds.length ? request.kinds : ["image"], multiple: !!request.multiple,
                                        crop: request.crop ?? null, extensions: request.extensions ?? [] }}
@@ -127,6 +138,78 @@ interface SheetProps<R> {
     request: R;
     finish: (r: Result) => void;
     backHandler: React.MutableRefObject<() => void>;
+}
+
+// ---- Sign in -------------------------------------------------------------------------
+
+/** The scripting API the runtime gives an <object type="application/x-palm-browser"> (BrowserAdapter). */
+interface WebViewNode extends HTMLObjectElement {
+    eventListener?: Record<string, (...args: never[]) => void>;
+    connectBrowserServer?: () => void;
+    disconnectBrowserServer?: () => void;
+    openURL?: (url: string) => void;
+}
+
+function addressParts(url: string): { host: string; rest: string; secure: boolean } {
+    try {
+        const u = new URL(url);
+        return { host: u.host, rest: u.pathname === "/" ? "" : u.pathname, secure: u.protocol === "https:" };
+    } catch {
+        return { host: url, rest: "", secure: false };
+    }
+}
+
+function SignInSheet({ request, finish, backHandler }: SheetProps<SignInRequest>) {
+    const view = useRef<WebViewNode>(null);
+    const [address, setAddress] = useState(request.url);
+    const [loading, setLoading] = useState(true);
+    // The view goes first: in phoenix-sim it is a native view over the
+    // sheet, which would otherwise stay while the sheet slides away.
+    const close = useCallback((r: Result) => {
+        view.current?.disconnectBrowserServer?.();
+        finish(r);
+    }, [finish]);
+    backHandler.current = () => close({ action: "cancel" });
+    useEffect(() => {
+        const node = view.current;
+        if (!node) return;
+        let done = false;
+        node.eventListener = {
+            urlTitleChanged: (url: string) => {
+                if (done || !url) return;
+                // The redirect: the sign-in is over. The page is not shown.
+                if (url.indexOf(request.redirectPrefix) === 0) {
+                    done = true;
+                    close({ action: "redirect", url });
+                    return;
+                }
+                setAddress(url);
+            },
+            loadStarted: () => setLoading(true),
+            loadStopped: () => setLoading(false),
+            documentLoadFinished: () => setLoading(false),
+        };
+        node.connectBrowserServer?.();
+        node.openURL?.(request.url);
+        return () => {
+            done = true;
+            node.disconnectBrowserServer?.();
+        };
+    }, [request.url, request.redirectPrefix, close]);
+    const a = addressParts(address);
+    return (
+        <div className="ss-sheet ss-signin" role="dialog" aria-label="Sign In" data-testid="signin-sheet">
+            <div className="ss-signin-bar">
+                <span className={"ss-signin-lock" + (a.secure ? " secure" : "")} title={a.secure ? "Encrypted connection" : "Not encrypted"}
+                      aria-label={a.secure ? "Encrypted connection" : "Not encrypted"} data-testid="signin-lock" />
+                <div className="ss-signin-address" data-testid="signin-address"><b>{a.host}</b><span>{a.rest}</span></div>
+                {loading && <Spinner />}
+                <button type="button" className="ss-signin-cancel" onClick={() => close({ action: "cancel" })} data-testid="signin-cancel">Cancel</button>
+            </div>
+            <div className="ss-signin-note">Sign in on your server's own page. Phoenix never sees your password.</div>
+            <object type="application/x-palm-browser" ref={view} className="ss-signin-view" data-testid="signin-view" />
+        </div>
+    );
 }
 
 // ---- Share ---------------------------------------------------------------------------

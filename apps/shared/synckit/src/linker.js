@@ -9,7 +9,7 @@
 // On webOS the linker watches com.palm.contact:1 (its activity
 // activities/com.palm.service.contacts.linker/com.palm.service.contacts.linker.json)
 // and runs Autolinker.performAutolink (autolinker.js) on each change. Neither
-// webOS OSE nor the simulator runs it yet, so the DAV transport calls this
+// webOS OSE nor the simulator runs it yet, so the transports call this
 // after each sync. It applies the linker's strongest rules only: a contact
 // joins an existing person with the same email address (similarEmail), the
 // same mobile number (similarPhoneNumber, mobile) or the same given and
@@ -97,12 +97,29 @@ function buildPerson(existing, contacts) {
                      squarePhotoId: "", squarePhotoPath: "" };
     }
     var family = p.name.familyName || "", given = p.name.givenName || "";
-    p.sortKey = family || given ? (family + "\t" + given).toLowerCase() : (p.organization.name || p.nickname || "").toLowerCase();
+    p.sortKey = sortKeyOf(family, given, p.organization.name || p.nickname || "");
     var terms = [];
     if (family || given) terms.push((given.charAt(0) + family).toLowerCase(), (family + given).toLowerCase());
     if (p.organization.name) terms.push(p.organization.name.toLowerCase().replace(/\s+/g, ""));
     p.searchTerms = terms;
     return p;
+}
+
+// The person's sortKey in the default list order, last name first, as the
+// contacts framework makes it (SortKey._generateSortKeyHelper,
+// loadable-frameworks/contacts/javascript/properties/SortKey.js:313-372):
+// the names present joined by a tab (a given name alone is the key, not
+// "\tgiven", whose divider would be blank), else the display name; a key
+// that does not start with a letter gets SortKey.DEFAULT_CHAR in front, so
+// it sorts last, and no key at all is two of them.
+var SORT_DEFAULT_CHAR = "𧻓";
+function sortKeyOf(family, given, display) {
+    family = String(family || "").trim();
+    given = String(given || "").trim();
+    var key = family || given ? [family, given].filter(Boolean).join("\t") : String(display || "").trim();
+    if (!key) key = SORT_DEFAULT_CHAR + SORT_DEFAULT_CHAR;
+    else if (key.charAt(0) !== SORT_DEFAULT_CHAR && !/^\p{L}/u.test(key)) key = SORT_DEFAULT_CHAR + key;
+    return key.toLocaleLowerCase().trim();
 }
 
 // A person to link a new contact to, or null (the linker's strongest rules).
