@@ -16,6 +16,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -131,6 +132,36 @@ static void testLightRegions()
     CHECK(effectLength("notification", &ms) && ms == 300 && !effectLength("purr", &ms), "vibrate: the Castle's named effects");
 }
 
+static void testOrientation()
+{
+    const double G = 9.80665;
+    OrientationFilter o;
+    CHECK(o.orientation().empty(), "orientation: nothing before a reading");
+    CHECK(o.update(0, G, 0) && o.orientation() == "up", "orientation: held upright is up");
+    CHECK(o.update(G, 0, 0) && o.orientation() == "left", "orientation: right edge up (turned counter-clockwise) is left");
+    CHECK(o.update(-G, 0, 0) && o.orientation() == "right", "orientation: left edge up is right");
+    CHECK(o.update(0, -G, 0) && o.orientation() == "down", "orientation: upside down is down");
+    CHECK(o.update(0, 0, G) && o.orientation() == "faceup", "orientation: flat on its back is faceup");
+    CHECK(o.update(0, 0, -G) && o.orientation() == "facedown", "orientation: on its face is facedown");
+    // Hysteresis: up stays up past the diagonal until 60 degrees.
+    o.update(0, G, 0);
+    const double r = M_PI / 180.0;
+    CHECK(!o.update(G * std::sin(50 * r), G * std::cos(50 * r), 0) && o.orientation() == "up",
+          "orientation: tilted 50 degrees, still up");
+    CHECK(o.update(G * std::sin(65 * r), G * std::cos(65 * r), 0) && o.orientation() == "left",
+          "orientation: 65 degrees, left");
+    CHECK(!o.update(G * std::sin(40 * r), G * std::cos(40 * r), 0) && o.orientation() == "left",
+          "orientation: back to 40 degrees, still left");
+    CHECK(o.update(G * std::sin(25 * r), G * std::cos(25 * r), 0) && o.orientation() == "up", "orientation: 25 degrees, up again");
+    // Tilted back 20 degrees from upright is still up (not face up).
+    CHECK(!o.update(0, G * std::cos(20 * r), G * std::sin(20 * r)) && o.orientation() == "up",
+          "orientation: leaning back, still up");
+    CHECK(!o.update(0, 3 * G, 0) && !o.update(0, 0.2 * G, 0), "orientation: shaken or falling readings are ignored");
+    CHECK(orientationJson("left", true) == "{\"returnValue\":true,\"subscribed\":true,\"orientation\":\"left\"}"
+              && orientationJson("", false) == "{\"returnValue\":true}",
+          "orientation: its reply");
+}
+
 // ---- Hardware against a fake sysfs ---------------------------------------------------------
 
 static void mkdirs(const std::string &path) { g_mkdir_with_parents(path.c_str(), 0755); }
@@ -196,6 +227,28 @@ static void testHardware()
     CHECK(l.available() && l.read() == 300, "light sensor: IIO raw times scale, in lux");
     put(iio + "/in_illuminance_input", "42\n");
     CHECK(LightSensor(root).read() == 42, "light sensor: in_illuminance_input when there is one");
+
+    // An accelerometer beside it (iio:device1), raw counts times the shared
+    // scale, through its mount matrix (a panel mounted turned a quarter).
+    const std::string acc = root + "/sys/bus/iio/devices/iio:device1";
+    mkdirs(acc);
+    put(acc + "/in_accel_x_raw", "0\n");
+    put(acc + "/in_accel_y_raw", "1000\n");
+    put(acc + "/in_accel_z_raw", "0\n");
+    put(acc + "/in_accel_scale", "0.009806650\n");
+    double ax = 0, ay = 0, az = 0;
+    Accelerometer a(root);
+    CHECK(a.available() && a.dir() == acc + "/" && a.read(&ax, &ay, &az) && std::fabs(ay - 9.80665) < 1e-6 && ax == 0,
+          "accelerometer: IIO raw times in_accel_scale, the light sensor's device skipped");
+    put(acc + "/in_accel_mount_matrix", "0, 1, 0; -1, 0, 0; 0, 0, 1\n");
+    CHECK(Accelerometer(root).read(&ax, &ay, &az) && std::fabs(ax - 9.80665) < 1e-6 && std::fabs(ay) < 1e-9,
+          "accelerometer: the driver's mount matrix turns it into the device's axes");
+    put(acc + "/in_accel_y_scale", "0.0049033\n");
+    CHECK(Accelerometer(root).read(&ax, &ay, &az) && std::fabs(ax - 4.9033) < 1e-6, "accelerometer: an axis's own scale");
+    put(acc + "/in_accel_z_raw", "");
+    CHECK(!Accelerometer(root).read(&ax, &ay, &az), "accelerometer: an axis it cannot read: no reading");
+    put(acc + "/in_accel_z_raw", "0\n");
+    CHECK(!Accelerometer(root, "iio:device0").available(), "accelerometer: device.json's device, when it is not one: none");
 
     put(root + "/device.json", "{\"backlight\":\"panel0\",\"ringerSwitch\":{\"type\":\"EV_SW\",\"code\":14,\"silentValue\":1}}");
     const DeviceConfig c = DeviceConfig::load(root + "/device.json");
@@ -695,13 +748,61 @@ static void testHotplug()
     }
 }
 
+// com.palm.display/phoenix/orientation: the shell's, the sensor read while
+// the display is on.
+static void testOrientationService()
+{
+    LSError err;
+    LSErrorInit(&err);
+    DeviceService::Handles h;
+    LSRegister("com.palm.display", &h.display, &err);
+    LSRegister("com.palm.keys", &h.keys, &err);
+    LSRegister("com.palm.vibrate", &h.vibrate, &err);
+    LSRegister("com.palm.ambientLightSensor", &h.als, &err);
+    const std::string root = fakeRoot();
+    const std::string acc = root + "/sys/bus/iio/devices/iio:device0";
+    mkdirs(acc);
+    put(acc + "/in_accel_x_raw", "0");
+    put(acc + "/in_accel_y_raw", "981");
+    put(acc + "/in_accel_z_raw", "0");
+    put(acc + "/in_accel_scale", "0.01");
+    Accelerometer accel(root);
+    DeviceService::Hardware hw;
+    hw.accelerometer = &accel;
+    DeviceService svc(h, hw, DeviceConfig());
+    CHECK(svc.attach(&err), "orientation: the service registers");
+    LSMessage *app = ls2stub::call(h.display, "/phoenix/orientation", "{\"subscribe\":true}", "com.example.app");
+    CHECK(!lastReply(app)["returnValue"].boolean(), "orientation: only the shell");
+    ls2stub::release(app);
+    LSMessage *shell = ls2stub::call(h.display, "/phoenix/orientation", "{\"subscribe\":true}", "", SHELL);
+    CHECK(lastReply(shell)["subscribed"].boolean() && !lastReply(shell).has("orientation"),
+          "orientation: the shell subscribes; nothing read yet");
+    CHECK(svc.accelerometerOn(), "orientation: the sensor reads with the display on");
+    CHECK(pump([&] { return svc.orientation() == "up"; }) && lastReply(shell)["orientation"].str() == "up",
+          "orientation: held upright, the shell hears up");
+    const size_t heard = ls2stub::replies(shell).size();
+    svc.accelReading(9.8, 0, 0);
+    CHECK(lastReply(shell)["orientation"].str() == "left", "orientation: turned, the shell hears left");
+    svc.accelReading(9.8, 0.1, 0);
+    CHECK(ls2stub::replies(shell).size() == heard + 1, "orientation: only changes are posted");
+    LSMessage *r = ls2stub::call(h.display, "/phoenix/report", "{\"state\":\"dim\"}", "", SHELL);
+    ls2stub::release(r);
+    CHECK(!svc.accelerometerOn(), "orientation: dimmed, the sensor stops (TurnOffAccelerometerWhenDimmed)");
+    r = ls2stub::call(h.display, "/phoenix/report", "{\"state\":\"on\"}", "", SHELL);
+    ls2stub::release(r);
+    CHECK(svc.accelerometerOn(), "orientation: on again, it reads again");
+    ls2stub::release(shell);
+}
+
 int main()
 {
     testDisplayEvents();
     testHeadsetButton();
     testLightRegions();
+    testOrientation();
     testHardware();
     testService();
+    testOrientationService();
     testBitmapsAndUevents();
     testProbe();
     testHotplug();
