@@ -198,6 +198,9 @@ Item {
         nonActiveScale: nonActiveScale,
         groupingFactor: Theme.cardGroupingXDistanceFactor,
         rotFactor: Theme.cardGroupRotFactor,
+        // The widest card the devices had, in legacy px: a Pre 3 on its
+        // side (800 at 1.5), a TouchPad on its side.
+        maxCardWidth: Theme.tablet ? 1024 : 533,
         gap: Theme.gapBetweenCards,
         position: position,
         fan: fanPositions,
