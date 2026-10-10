@@ -16,3 +16,4 @@ what was chosen in the meantime; answering one may mean a change.
 | Q7 | Messaging's reply bar: the report from M6-PLAN.md F0 | Unchanged | M6-PLAN.md F0 |
 | Q8 | Live Activities: 1.x or 2.0? | As built (in the simulator) | ROADMAP.md M4 |
 | Q9 | The gesture bar's end buttons and `setButton` | As built | GESTURE-BAR.md, open questions |
+| Q10 | Notifications beyond the original (webOS grouped by app or account with dashboard layers, had no quick reply and no force touch): add Quick Reply (Messaging, Email), Email's Mark as Read / Archive / Delete and a missed call's Call Back / Message as notification buttons, and per-conversation lines in a big group? | Not built; suggested for 1.0: Quick Reply and the action buttons (the notification buttons exist: `actions`, Notifications.qml `runAction`) | APP-RUNTIME.md (notification actions) |
