@@ -474,6 +474,29 @@ function page(appId, appinfo, launchParams, opts) {
     check(got.length === 2 && got[0].state === "listening" && got[1].text === "call Ada", "dictation: the shell's states and text come back");
 }
 
+// ---- The media store: real files through the file manager's service ----------------------
+
+{
+    const p = page("org.webosphoenix.camera", { id: "org.webosphoenix.camera" });
+    p.run();
+    const b = new p.g.PalmServiceBridge();
+    let answer = null;
+    b.onservicecallback = (j) => { answer = JSON.parse(j); };
+    b.call("luna://org.webosphoenix.service.mediafiles/write", JSON.stringify({ path: "/media/internal/DCIM/100PHNX/a.jpg", data: "AAAA" }));
+    p.run();
+    check(p.callsTo("luna://org.webosphoenix.filemanager/mkdir")[0].json.path === "/media/internal/DCIM/100PHNX",
+          "media store: the folder is made");
+    p.reply("luna://org.webosphoenix.filemanager/mkdir", { returnValue: false, errorCode: 2 });
+    const w = p.callsTo("luna://org.webosphoenix.filemanager/write")[0];
+    check(w && w.json.encoding === "base64" && w.json.data === "AAAA", "media store: the photo is written by the file manager's service");
+    p.reply("luna://org.webosphoenix.filemanager/write", { returnValue: true, path: w.json.path, size: 3 });
+    check(answer && answer.returnValue && answer.file_size === 3 && p.callsTo("luna://com.webos.service.mediaindexer/requestMediaScan").length === 1,
+          "media store: answered, and the media indexer told");
+    b.call("luna://org.webosphoenix.service.mediafiles/write", JSON.stringify({ path: "/etc/passwd", data: "AAAA" }));
+    p.run();
+    check(answer.returnValue === false, "media store: nothing outside /media/internal");
+}
+
 // ---- Just Type's page (com.palm.launcher) -------------------------------------------------
 
 {

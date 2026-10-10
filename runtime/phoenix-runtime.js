@@ -834,6 +834,33 @@
             "*": function (p, reply, ctx, method) { runtime.busCall("luna://com.palm.power" + method, p, reply, ctx); }
         });
 
+        // Phoenix's media store (Camera's photos, Screenshot's edits,
+        // Podcasts' episodes): the simulator keeps it in the page; on a
+        // device the files are real, written by the file manager's
+        // service, and OSE's media indexer is told of them.
+        var MEDIA_ROOT = "/media/internal";
+        function mediaPath(p) { return typeof p === "string" && p.indexOf(MEDIA_ROOT + "/") === 0 && p.indexOf("/../") < 0; }
+        register(["org.webosphoenix.service.mediafiles"], {
+            "/write": function (p, reply, ctx) {
+                if (!mediaPath(p.path)) return reply(fail(-1, "path must be under " + MEDIA_ROOT));
+                if (typeof p.data !== "string") return reply(fail(-1, "data (base64) is required"));
+                var dir = p.path.replace(/\/[^\/]*$/, "");
+                runtime.busCall("luna://org.webosphoenix.filemanager/mkdir", { path: dir }, function () {
+                    runtime.busCall("luna://org.webosphoenix.filemanager/write", { path: p.path, data: p.data, encoding: "base64" }, function (r) {
+                        if (!r || r.returnValue === false) return reply(fail(-1, "write failed: " + (r && r.errorText || "no reply")));
+                        runtime.busCall("luna://com.webos.service.mediaindexer/requestMediaScan", { path: dir }, function () {});
+                        reply(ok({ path: p.path, file_size: r.size }));
+                    }, ctx);
+                }, ctx);
+            },
+            "/remove": function (p, reply, ctx) {
+                if (!mediaPath(p.path)) return reply(fail(-1, "path must be under " + MEDIA_ROOT));
+                runtime.busCall("luna://org.webosphoenix.filemanager/remove", { path: p.path }, function (r) {
+                    reply(r && r.returnValue !== false ? ok() : fail(-1, "remove failed: " + (r && r.errorText || "no reply")));
+                }, ctx);
+            }
+        });
+
         // ---- The page's own features ------------------------------------------------
         // Each on its own: one that fails on a page leaves the others.
         [legacyAnimationFrames, aliasPreludeFonts, cardActivation, fixLegacyBorderImages, backdropBlur,
