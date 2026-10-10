@@ -12,6 +12,8 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 import { checkConnector, type CheckResult, type Files } from "./checks";
 import { readIpk, writeIpk, type IpkFile } from "./ipk";
+import { loadDefinition } from "./load";
+import { shareTarget } from "../share";
 
 export const MAX_SIZE = 64 * 1024 * 1024;
 const fs = () => require("fs");
@@ -90,11 +92,56 @@ export function vendoredFiles(): { rel: string; data: Uint8Array }[] {
     return out;
 }
 
-export interface PackResult { file: string; size: number; check: CheckResult }
+// ---- The share target in appinfo.json, from the definition ---------------------------------
+
+/**
+ * appinfo.json as the definition's share says it (docs/SYNERGY-SDK.md,
+ * "Sharing to your service"): "phoenix".shareTargets is the one entry
+ * share.ts shareTarget() makes, or none without a share. null when the
+ * folder has no definition made with the kit (service/connector.js; apps/dav
+ * writes the contract by hand). Throws when the definition does not load.
+ */
+export function appinfoFromDefinition(dir: string): { text: string; changed: boolean; sharing: boolean } | null {
+    const p = path(), f = fs();
+    if (!f.existsSync(p.join(dir, "service", "connector.js"))) return null;
+    const def = loadDefinition(dir);
+    if (!def || typeof def !== "object" || typeof def.service !== "string" || !Array.isArray(def.templateIds)) return null;
+    const before = f.readFileSync(p.join(dir, "appinfo.json"), "utf8").replace(/^﻿/, "");
+    const info = JSON.parse(before);
+    const target = shareTarget(def, String(info.title || info.id));
+    const phoenix = info.phoenix && typeof info.phoenix === "object" ? info.phoenix : (info.phoenix = {});
+    if (target) phoenix.shareTargets = [target];
+    else delete phoenix.shareTargets;
+    return { text: JSON.stringify(info, null, 4) + "\n", changed: JSON.stringify(JSON.parse(before)) !== JSON.stringify(info), sharing: !!target };
+}
+
+/** Writes appinfo.json's share target from the definition; true when it changed. */
+export function writeShareTargets(dir: string): boolean {
+    const r = appinfoFromDefinition(dir);
+    if (!r || !r.changed) return false;
+    fs().writeFileSync(path().join(dir, "appinfo.json"), r.text);
+    return true;
+}
+
+/** C14 for a folder: the appinfo.json share target is what the definition says (validate). */
+export function definitionProblems(dir: string): { errors: string[]; warnings: string[] } {
+    try {
+        const r = appinfoFromDefinition(dir);
+        if (r && r.changed) return { errors: ["C14 appinfo.json: shareTargets is not what the definition's share says (phoenix-connector pack writes it)"], warnings: [] };
+    } catch (e) {
+        return { errors: [], warnings: ["C14 the definition (service/connector.js) did not load, so its share was not compared: " + (e as Error).message] };
+    }
+    return { errors: [], warnings: [] };
+}
+
+export interface PackResult { file: string; size: number; check: CheckResult; appinfoWritten: boolean }
 
 // vendor: false leaves the kit out (tests; a package must carry it to run on a device).
-export function pack(dir: string, outDir: string, options?: { namespaces?: string[]; force?: boolean; vendor?: boolean }): PackResult {
+// writeAppinfo: false packs appinfo.json as it is (its share target is still checked, C14).
+export function pack(dir: string, outDir: string, options?: { namespaces?: string[]; force?: boolean; vendor?: boolean; writeAppinfo?: boolean }): PackResult {
     const p = path(), f = fs();
+    // The share target from the definition, into the folder's appinfo.json first.
+    const appinfoWritten = options && options.writeAppinfo === false ? false : writeShareTargets(dir);
     const files = readFolder(dir);
     const check = checkConnector(files, options);
     if (check.errors.length && !(options && options.force))
@@ -112,5 +159,5 @@ export function pack(dir: string, outDir: string, options?: { namespaces?: strin
     f.mkdirSync(outDir, { recursive: true });
     const file = p.join(outDir, info.id + "_" + info.version + "_all.ipk");
     f.writeFileSync(file, Buffer.from(bytes));
-    return { file, size: bytes.length, check };
+    return { file, size: bytes.length, check, appinfoWritten };
 }

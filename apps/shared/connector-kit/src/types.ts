@@ -110,7 +110,83 @@ export interface ConnectorDefinition {
     onDelete?(ctx: AccountContext): Promise<void>;
     /** More service methods ({accountId?} gets an account context). */
     methods?: Record<string, (ctx: MethodContext, params: Json) => Promise<Json>>;
+    /**
+     * Sharing to the service (docs/SYNERGY-SDK.md "Sharing to your service"):
+     * what it can post and how. The share sheet lists the connector once per
+     * signed-in account; the kit makes the `share` method from it.
+     */
+    share?: ShareDefinition;
 }
+
+/** What a connector can be given to post. */
+export type ShareKind = "text" | "link" | "image" | "video" | "file";
+
+export interface MediaLimits {
+    /** At most this many of the kind in one post. */
+    max?: number;
+    /** The largest file the service takes, in bytes. */
+    maxBytes?: number;
+    /** The MIME types taken (default: image/*, video/*, or any file). */
+    mimeTypes?: string[];
+    /** Each file may have a description (alt text), up to maxLength characters. */
+    altText?: boolean | { maxLength?: number };
+    /** Text: the longest text, in characters. */
+    maxLength?: number;
+}
+
+export interface ShareAccepts {
+    text?: true | { maxLength?: number };
+    link?: true | Record<string, never>;
+    image?: true | MediaLimits;
+    video?: true | MediaLimits;
+    file?: true | MediaLimits;
+}
+
+export interface ShareAudienceOption { value: string; label: string; hint?: string }
+
+export interface ShareDefinition {
+    /** The sheet's label (default: the app's title). */
+    label?: string;
+    /** How an account is named in the sheet: "{username}" (the default), "@{username}". */
+    accountLabel?: string;
+    /** The template whose accounts are listed (default: the first of templateIds). */
+    templateId?: string;
+    /** What it takes, and the limits of each kind. */
+    accepts: ShareAccepts;
+    /** Who may see a post, if the service has a choice (Mastodon's visibilities). */
+    audience?: { label?: string; options: ShareAudienceOption[]; default?: string };
+    /**
+     * Post it, as the account the user chose (ctx is that account's). The
+     * content is already checked against accepts; ctx.readFile reads only
+     * the files of this share. -> {url?, id?}; throw an error with an
+     * errorCode (401_UNAUTHORIZED, ...) when it is not posted.
+     */
+    send(ctx: AccountContext, content: ShareContent): Promise<ShareResult | void>;
+}
+
+export interface SharedFile {
+    path: string;
+    mimeType: string;
+    kind: ShareKind;
+    /** The description (alt text) the user wrote; "" without one, or when the kind takes none. */
+    description: string;
+    /** Its bytes (refused with SHARE_TOO_LARGE above the kind's maxBytes). */
+    read(): Promise<{ bytes: Uint8Array; mimeType: string }>;
+}
+
+export interface ShareContent {
+    title: string;
+    text: string;
+    /** The link, when the declaration takes links (otherwise it is in text). */
+    url: string;
+    files: SharedFile[];
+    /** One of audience.options[].value, when the declaration has an audience. */
+    audience?: string;
+    /** The same for a retry of the same share: post it once (an Idempotency-Key). */
+    idempotencyKey: string;
+}
+
+export interface ShareResult { url?: string; id?: string }
 
 export interface ValidateParams {
     username?: string;

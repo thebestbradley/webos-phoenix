@@ -11,16 +11,69 @@
     "extraLargeIcon": "icon-512x512.png",
     "uiRevision": 2,
     "phoenix": {
-        "//": "Not in the launcher: the app carries the Fediverse account (accounts/wizard.html, the template in public/accounts, the service) and the share sheet's page for posting (index.html). shareTargets: links, text and pictures (docs/SHARE-AND-FILES.md).",
+        "//": "Not in the launcher: the app carries the Fediverse account (accounts/wizard.html, the template in public/accounts, the service) and the share sheet's page for posting (index.html). shareTargets is written by phoenix-connector pack from the definition's share (service/connector.js; docs/SYNERGY-SDK.md): the sheet lists one entry per signed-in account.",
         "hidden": true,
         "shareTargets": [
             {
                 "types": [
                     "text/plain",
                     "text/uri-list",
-                    "image/*"
+                    "image/jpeg",
+                    "image/png",
+                    "image/gif",
+                    "image/webp"
                 ],
-                "label": "Fediverse"
+                "label": "Fediverse",
+                "connector": {
+                    "templateId": "com.webosphoenix.fediverse",
+                    "service": "org.webosphoenix.service.fediverse",
+                    "accepts": {
+                        "text": {
+                            "maxLength": 5000
+                        },
+                        "link": true,
+                        "image": {
+                            "max": 4,
+                            "maxBytes": 16777216,
+                            "mimeTypes": [
+                                "image/jpeg",
+                                "image/png",
+                                "image/gif",
+                                "image/webp"
+                            ],
+                            "altText": {
+                                "maxLength": 1500
+                            }
+                        }
+                    },
+                    "audience": {
+                        "label": "Who can see it",
+                        "options": [
+                            {
+                                "value": "public",
+                                "label": "Public",
+                                "hint": "Everyone, and it shows in public timelines."
+                            },
+                            {
+                                "value": "unlisted",
+                                "label": "Unlisted",
+                                "hint": "Everyone, but it stays out of public timelines."
+                            },
+                            {
+                                "value": "private",
+                                "label": "Followers",
+                                "hint": "Only your followers."
+                            },
+                            {
+                                "value": "direct",
+                                "label": "Mentioned",
+                                "hint": "Only the people you mention. Not end-to-end encrypted: their servers' admins can read it."
+                            }
+                        ],
+                        "default": "public"
+                    },
+                    "accountLabel": "@{username}"
+                }
             }
         ]
     },

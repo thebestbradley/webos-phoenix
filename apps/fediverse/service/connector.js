@@ -31,8 +31,11 @@
 //
 // Notifications are polled on the kit's schedule (every 15 minutes, when
 // online); Web Push to UnifiedPush is phase C6 (SYNERGY-MODERN.md 4.8).
-// Sharing to the account (the share sheet: a link, text, a photo with alt
-// text, the visibility) is the app's page, index.html, calling post.
+// Sharing to the account is the kit's share declaration (share, below):
+// the share sheet lists each signed-in Fediverse account ("Fediverse ·
+// @you@example.social"), and opens the app's own compose page, index.html
+// (a link, text, up to four pictures with alt text, the visibility), which
+// posts through the kit's share method.
 
 "use strict";
 
@@ -307,7 +310,8 @@ function removeMessages(ctx) {
 // the attachment, or 202 while the server still processes it, then GET
 // /api/v1/media/:id until it has its url.
 function uploadMedia(ctx, s, file) {
-    return ctx.readFile(file.path).then(function (f) {
+    // A shared file's own read() keeps the declaration's maxBytes; Messaging's replies carry none.
+    return (file.read ? file.read() : ctx.readFile(file.path)).then(function (f) {
         return s.api.upload("/api/v2/media", { description: file.description || "" },
                             { name: String(file.path).replace(/^.*\//, ""), mimeType: file.mimeType || f.mimeType, bytes: f.bytes });
     }).then(function (r) {
@@ -329,14 +333,49 @@ function uploadMedia(ctx, s, file) {
 
 var VISIBILITIES = ["public", "unlisted", "private", "direct"];
 
+// What the share sheet may give the account (docs/SYNERGY-SDK.md "Sharing to
+// your service"): text up to the 5000 characters the service takes (the
+// page counts down from 500, Mastodon's default), a link, and up to four
+// pictures of 16 MB (Mastodon's limits: https://docs.joinmastodon.org/user/posting/#media),
+// each with its description; who may see it is Mastodon's visibility
+// (https://docs.joinmastodon.org/entities/Status/#visibility).
+var SHARE = {
+    label: "Fediverse",
+    accountLabel: "@{username}",
+    accepts: {
+        text: { maxLength: 5000 },
+        link: true,
+        image: { max: 4, maxBytes: 16 * 1024 * 1024, mimeTypes: ["image/jpeg", "image/png", "image/gif", "image/webp"], altText: { maxLength: 1500 } }
+    },
+    audience: {
+        label: "Who can see it",
+        options: [
+            { value: "public", label: "Public", hint: "Everyone, and it shows in public timelines." },
+            { value: "unlisted", label: "Unlisted", hint: "Everyone, but it stays out of public timelines." },
+            { value: "private", label: "Followers", hint: "Only your followers." },
+            { value: "direct", label: "Mentioned", hint: "Only the people you mention. Not end-to-end encrypted: their servers' admins can read it." }
+        ],
+        "default": "public"
+    },
+    // The kit checked the content against accepts; ctx is the chosen account's.
+    send: function (ctx, content) {
+        var text = content.text;
+        if (content.url && text.indexOf(content.url) < 0) text = text ? text + "\n\n" + content.url : content.url;
+        return post(ctx, {
+            text: text, visibility: content.audience, idempotencyKey: content.idempotencyKey,
+            media: content.files.map(function (f) { return { path: f.path, mimeType: f.mimeType, description: f.description, read: f.read }; })
+        });
+    }
+};
+
 // POST /api/v1/statuses (https://docs.joinmastodon.org/methods/statuses/#create),
 // with an Idempotency-Key, so a retry does not post twice.
 function post(ctx, p) {
     var text = String(p.text || "").trim();
-    var media = (p.media || []).filter(function (m) { return m && m.path; }).slice(0, 4);
+    var media = (p.media || []).filter(function (m) { return m && m.path; }).slice(0, SHARE.accepts.image.max);
     var visibility = VISIBILITIES.indexOf(p.visibility) >= 0 ? p.visibility : "public";
     if (!text && !media.length) return Promise.reject(fail("Nothing to post", "400_BAD_REQUEST"));
-    if (text.length > 5000) return Promise.reject(fail("The post is too long", "400_BAD_REQUEST"));
+    if (text.length > SHARE.accepts.text.maxLength) return Promise.reject(fail("The post is too long", "400_BAD_REQUEST"));
     return session(ctx).then(function (s) {
         var chain = Promise.resolve([]);
         media.forEach(function (m) {
@@ -475,14 +514,12 @@ module.exports = kit.defineConnector({
         return ctx.oauth.forget(ctx.credentials && ctx.credentials.oauthKey);
     },
 
+    // The share sheet's target: the kit's share method posts with send.
+    share: SHARE,
+
     methods: {
         // {handle, accountId?} -> what the validator gives, after the sign-in.
         signIn: function (ctx, p) { return signIn(ctx, p); },
-        // {accountId, text, visibility?, media?: [{path, mimeType?, description}], spoilerText?, idempotencyKey?} -> {id, url}
-        post: function (ctx, p) {
-            if (!p.accountId) return Promise.reject(fail("accountId is required", "400_BAD_REQUEST"));
-            return post(ctx, p);
-        },
         // {accountId?, messageId?}: Messaging's pending replies (the db8 watch, the simulator's IM transport).
         outbox: function (ctx, p) {
             if (p.accountId) return sendOutbox(ctx, p);

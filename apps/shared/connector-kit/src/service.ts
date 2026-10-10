@@ -18,6 +18,12 @@
 //   onDelete {accountId}              every object of the account, its
 //                                     state and sync states removed
 //   sync {accountId, capability?, $activity?}   one at a time per account
+//   share {accountId, content: {title?, text?, url?, files?: [{path,
+//       mimeType?, description?}]}, audience?, idempotencyKey?}
+//       (with definition.share) the content checked against the
+//       declaration (share.ts checkShare), then definition.share.send as
+//       that account -> {posted: {url?, id?}, url?}; or an errorCode, with
+//       retryable (and retryAt) when trying again later may work
 //   + definition.methods
 //
 // The environment is what the host gives: luna (a device's webos-service,
@@ -29,6 +35,7 @@
 import * as synckit from "@phoenix/synckit";
 import type { DbObject, ItemStore } from "@phoenix/synckit";
 import { emptyStats, removeObjects, syncObjects, type CapabilityStats } from "./engine";
+import { checkShare, maxBytesOf } from "./share";
 import type {
     AccountContext, BaseContext, ConnectorDefinition, Environment, Json, MethodContext, Reply, ServiceMethods, ValidateContext
 } from "./types";
@@ -40,7 +47,7 @@ function ok(extra?: Json): Reply { return Object.assign({ returnValue: true }, e
 
 /** Every method name the service registers. */
 export function methodNames(def: ConnectorDefinition): string[] {
-    return CALLBACKS.concat(Object.keys(def.methods || {}));
+    return CALLBACKS.concat(def.share ? ["share"] : [], Object.keys(def.methods || {}));
 }
 
 export function createConnectorService(def: ConnectorDefinition, env: Environment): ServiceMethods {
@@ -356,6 +363,57 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
             });
         }
     };
+
+    // Sharing (definition.share): docs/SYNERGY-SDK.md "Sharing to your service".
+    if (def.share) {
+        const share = def.share;
+        const templateIds = share.templateId ? [share.templateId] : def.templateIds;
+        methods.share = async (p: Json) => {
+            try {
+                if (!p || !p.accountId) return { returnValue: false, errorCode: "400_BAD_REQUEST", errorText: "accountId is required" };
+                const checked = checkShare(share, p);
+                const { ctx, rec } = await accountContext(p.accountId);
+                if (!ctx.account || templateIds.indexOf(ctx.account.templateId) < 0 || ctx.account.beingDeleted)
+                    return { returnValue: false, errorCode: "ACCOUNT_NOT_FOUND", errorText: "No account " + p.accountId + " of " + templateIds.join(", ") };
+                const before = snapshot(rec);
+                if (rec.retryAt && rec.retryAt > now())
+                    return { returnValue: false, errorCode: "503_SERVICE_UNAVAILABLE", errorText: "The server asked to wait", retryable: true, retryAt: rec.retryAt };
+                // What the connector may read: the files of this share, nothing else.
+                const allowed = checked.files.map((f) => f.path);
+                const read = ctx.readFile;
+                ctx.readFile = (path: string) => allowed.indexOf(path) >= 0 ? read(path)
+                    : Promise.reject(Object.assign(new Error("Not a file of this share: " + path), { errorCode: "PERMISSION_DENIED" }));
+                const content = Object.assign({}, checked, {
+                    files: checked.files.map((f) => Object.assign({}, f, {
+                        read: async () => {
+                            const r = await read(f.path);
+                            const max = maxBytesOf(share.accepts, f.kind);
+                            if (max && r.bytes.length > max)
+                                throw Object.assign(new Error(f.path.replace(/^.*\//, "") + " is larger than " + Math.round(max / 1048576 * 10) / 10 + " MB"),
+                                                    { errorCode: "SHARE_TOO_LARGE" });
+                            return r;
+                        }
+                    }))
+                });
+                let result: Json;
+                try {
+                    result = (await share.send(ctx, content)) || {};
+                } finally {
+                    if (snapshot(rec) !== before) await saveState(rec, before);
+                }
+                const posted: Json = {};
+                if (result.url) posted.url = String(result.url);
+                if (result.id !== undefined) posted.id = String(result.id);
+                return ok(Object.assign({ posted }, posted.url ? { url: posted.url } : {}));
+            } catch (e) {
+                const r = synckit.fail(e) as Reply;
+                const code = r.errorCode || "";
+                // Trying again later may post it (the same idempotencyKey: once).
+                r.retryable = ["503_SERVICE_UNAVAILABLE", "500_SERVER_ERROR", "CONNECTION_FAILED", "CONNECTION_TIMEOUT", "HOST_NOT_FOUND"].indexOf(code) >= 0 || !!r.retryAt;
+                return r;
+            }
+        };
+    }
 
     Object.keys(def.methods || {}).forEach((name) => {
         const fn = (def.methods as NonNullable<ConnectorDefinition["methods"]>)[name];

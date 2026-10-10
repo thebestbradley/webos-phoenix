@@ -18,11 +18,15 @@
 //      link and latest post; Contacts shows her;
 //   4. a direct mention arrives in Messaging (a thread labelled not
 //      private, a notification); a public mention is a notification;
-//   5. the browser's page is shared to the account through the share
-//      sheet; the post (unlisted) is on the server; then a photo with its
+//   5. the share sheet offers no Fediverse entry before the sign-in, and
+//      after it one for the account ("Fediverse · @phoenix@..."); the
+//      browser's page is shared to that account; the compose page posts it
+//      (unlisted) through the kit's share method; then a photo with its
 //      description;
 //   6. Developer Mode: the hello-world FEEDS connector, packed by
-//      phoenix-connector, installs only in Developer Mode and syncs a feed.
+//      phoenix-connector, installs only in Developer Mode and syncs a feed;
+//   7. the Fediverse account deleted (signed out): the share sheet no
+//      longer offers it.
 //
 //   node tools/test-fediverse.cjs [--tablet] [--out DIR]
 //
@@ -148,6 +152,12 @@ async function main() {
         const setUp = host.find((m) => m.type === "launch" && m.payload.id === "com.palm.app.accounts");
         check(!!setUp && setUp.payload.params.templateId === TEMPLATE, "Set up opens Accounts at the Fediverse template");
 
+        // Not signed in: the share sheet has no Fediverse entry (a connector's
+        // target is one per signed-in account).
+        const fediTargets = async (p) => ((await luna(p, "luna://org.webosphoenix.share/targets", { types: ["text/plain", "text/uri-list"] })).targets || [])
+            .filter((t) => t.appId === "org.webosphoenix.fediverse");
+        check((await fediTargets(page)).length === 0, "signed out: the share sheet does not offer the Fediverse");
+
         // ---- 2. Sign in ------------------------------------------------------------------------------
         const accounts = await context.newPage();
         await accounts.goto(appUrl("com.palm.app.accounts", { templateId: TEMPLATE }));
@@ -256,10 +266,15 @@ async function main() {
         await shareSheet.waitForSelector("[data-testid='share-app-org.webosphoenix.fediverse']", { timeout: 10000 });
         await browserPage.waitForTimeout(400);
         await shot(browserPage, "9-share-sheet");
+        const sheetEntries = await shareSheet.locator("[data-testid='share-app-org.webosphoenix.fediverse']").count();
+        const entryLabel = await shareSheet.getAttribute("[data-testid='share-app-org.webosphoenix.fediverse']", "aria-label");
+        check(sheetEntries === 1 && entryLabel === "Fediverse \u00b7 @phoenix@" + mastodon.domain,
+              "signed in: the share sheet offers the account (" + entryLabel + ")");
         await shareSheet.click("[data-testid='share-app-org.webosphoenix.fediverse']");
         await shared;
         const launched = host.find((m) => m.type === "launch" && m.payload.id === "org.webosphoenix.fediverse");
-        check(!!launched && launched.payload.params.share.url === "https://example.org/phoenix", "the share sheet offers the account and opens it with the link");
+        check(!!launched && launched.payload.params.share.url === "https://example.org/phoenix" && launched.payload.params.accountId === account._id,
+              "choosing it opens the Fediverse's page for that account, with the link");
         const compose = await context.newPage();
         await compose.goto(appUrl("org.webosphoenix.fediverse", launched && launched.payload.params));
         await compose.waitForSelector("#compose:not([hidden])", { timeout: 10000 });
@@ -313,6 +328,10 @@ async function main() {
               "an account of it syncs the feed's entries into db8 (" + (entries ? entries.length : 0) + ")");
         await luna(page, "luna://com.palm.service.accounts/deleteAccount", { accountId: feedAccount.result && feedAccount.result._id });
         check(!!(await until(async () => (await db(page, "org.example.feeds.entry:1")).length === 0, 10000)), "deleting the account removes its entries");
+
+        // ---- 7. Signed out ----------------------------------------------------------------------------------
+        await luna(page, "luna://com.palm.service.accounts/deleteAccount", { accountId: account._id });
+        check(!!(await until(async () => (await fediTargets(page)).length === 0, 10000)), "the account deleted: the share sheet no longer offers it");
 
         check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.join("; ") : ""));
     } finally {

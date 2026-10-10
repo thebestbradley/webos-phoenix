@@ -5,6 +5,7 @@
 // it, so that a mistake shows when the service loads, not on the first
 // sync (docs/SYNERGY-SDK.md, "The definition").
 
+import { shareProblems } from "./share";
 import type { ConnectorDefinition } from "./types";
 
 const ID = /^[A-Za-z0-9]+([._-][A-Za-z0-9]+)+$/;
@@ -42,6 +43,7 @@ export function defineConnector<T extends ConnectorDefinition>(def: T): T {
         if (["checkCredentials", "onCreate", "onEnabled", "onCredentialsChanged", "onDelete", "sync"].indexOf(name) >= 0)
             problems.push("methods." + name + ": the kit makes this one from the definition");
     });
+    problems.push(...shareProblems(def));
     if (problems.length) throw new Error("defineConnector " + (def.service || "") + ":\n  " + problems.join("\n  "));
     return def;
 }

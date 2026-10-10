@@ -29,6 +29,12 @@
 //   C12 no native code
 //   C13 (checkIpk) the .ipk: files only under its app, no links, no
 //       scripts, 64 MB at most, control file and appinfo.json agreeing
+//   C14 share targets (appinfo.json "phoenix".shareTargets): each one a
+//       connector's, written from its definition's share (no hand-written
+//       ones), its template and service the package's, accepts and
+//       audience well formed, types what accepts takes
+//   C15 sharing reaches the service: <service>/share in an api.json group
+//       the app's requiredPermissions name; the app's main page in the package
 //
 // Phase C4 (connector packages in the catalog) uses this; until then the
 // catalog takes no connector (Catalog::publish, Ipk::check refuses services).
@@ -236,9 +242,183 @@ final class Connector
         if (!$own) {
             $errors[] = 'C2 no account template (public/accounts/<templateId>/<templateId>.json)';
         }
+
+        // C14, C15
+        $targets = is_array($info['phoenix'] ?? null) ? ($info['phoenix']['shareTargets'] ?? null) : null;
+        if ($targets !== null) {
+            if (!is_array($targets) || !array_is_list($targets)) {
+                $errors[] = 'C14 appinfo.json: shareTargets must be a list';
+            } else {
+                self::checkShareTargets($targets, $info, $files, $service, $out['templates'], $json, $errors);
+            }
+        }
         $out['errors'] = $errors;
         $out['warnings'] = $warnings;
         return $out;
+    }
+
+    /** What a connector may say it takes, and the MIME types each kind is by default (share.ts). */
+    public const SHARE_KINDS = ['text' => ['text/plain'], 'link' => ['text/uri-list'], 'image' => ['image/*'], 'video' => ['video/*'], 'file' => ['*/*']];
+    private const MIME = '#^[a-z0-9][a-z0-9.+-]*/(\*|[a-z0-9][a-z0-9.+-]*)$#i';
+
+    /** The MIME types a declaration takes (share.ts shareTypes). */
+    public static function shareTypes(array $accepts): array
+    {
+        $out = [];
+        foreach (self::SHARE_KINDS as $k => $default) {
+            $l = $accepts[$k] ?? null;
+            if ($l === null || $l === false) {
+                continue;
+            }
+            $types = in_array($k, ['image', 'video', 'file'], true) && is_array($l) && is_array($l['mimeTypes'] ?? null) && $l['mimeTypes'] !== []
+                ? $l['mimeTypes'] : $default;
+            foreach ($types as $t) {
+                if (!in_array($t, $out, true)) {
+                    $out[] = $t;
+                }
+            }
+        }
+        return $out;
+    }
+
+    private static function positiveInt($v): bool
+    {
+        return is_int($v) && $v > 0;
+    }
+
+    /** The form of accepts (share.ts acceptsProblems). */
+    public static function acceptsProblems($accepts): array
+    {
+        $kinds = array_keys(self::SHARE_KINDS);
+        if (!is_array($accepts) || $accepts === [] || array_is_list($accepts)) {
+            return ['accepts: what it takes, one or more of ' . implode(', ', $kinds)];
+        }
+        $out = [];
+        foreach ($accepts as $k => $v) {
+            if (!in_array($k, $kinds, true)) {
+                $out[] = "accepts.$k: not one of " . implode(', ', $kinds);
+                continue;
+            }
+            if ($v === true) {
+                continue;
+            }
+            // {} decodes as [] here.
+            if (!is_array($v) || ($v !== [] && array_is_list($v))) {
+                $out[] = "accepts.$k: true or an object of limits";
+                continue;
+            }
+            foreach (['max', 'maxBytes', 'maxLength'] as $n) {
+                if (array_key_exists($n, $v) && !self::positiveInt($v[$n])) {
+                    $out[] = "accepts.$k.$n: a whole number above 0";
+                }
+            }
+            if (array_key_exists('mimeTypes', $v)) {
+                $m = $v['mimeTypes'];
+                if (!in_array($k, ['image', 'video', 'file'], true)) {
+                    $out[] = "accepts.$k.mimeTypes: only for image, video and file";
+                } elseif (!is_array($m) || $m === [] || !array_is_list($m)
+                          || array_filter($m, fn ($t) => !is_string($t) || !preg_match(self::MIME, $t))) {
+                    $out[] = "accepts.$k.mimeTypes: MIME types (image/png, image/*)";
+                }
+            }
+            if (array_key_exists('altText', $v) && !is_bool($v['altText'])) {
+                $a = $v['altText'];
+                if (!is_array($a) || ($a !== [] && array_is_list($a)) || (array_key_exists('maxLength', $a) && !self::positiveInt($a['maxLength']))) {
+                    $out[] = "accepts.$k.altText: true, or {maxLength}";
+                }
+            }
+        }
+        return $out;
+    }
+
+    /** The form of a share target's audience (share.ts audienceProblems). */
+    public static function audienceProblems(array $c): array
+    {
+        if (!array_key_exists('audience', $c)) {
+            return [];
+        }
+        $a = $c['audience'];
+        if (!is_array($a) || !is_array($a['options'] ?? null) || $a['options'] === [] || !array_is_list($a['options'])) {
+            return ['audience: {options: [{value, label, hint?}], default?}'];
+        }
+        $out = [];
+        $values = [];
+        foreach ($a['options'] as $i => $o) {
+            if (!is_array($o) || !is_string($o['value'] ?? null) || $o['value'] === '' || !is_string($o['label'] ?? null) || $o['label'] === '') {
+                $out[] = "audience.options[$i]: {value, label} strings";
+            }
+            $values[] = is_array($o) ? ($o['value'] ?? null) : null;
+        }
+        if (array_key_exists('default', $a) && !in_array($a['default'], $values, true)) {
+            $out[] = "audience.default: one of the options' values";
+        }
+        if (array_key_exists('label', $a) && !is_string($a['label'])) {
+            $out[] = 'audience.label: a string';
+        }
+        return $out;
+    }
+
+    private static function checkShareTargets(array $list, array $info, array $files, string $service, array $templates, callable $json,
+                                              array &$errors): void
+    {
+        $sharing = false;
+        foreach ($list as $i => $t) {
+            $where = "C14 appinfo.json shareTargets[$i]";
+            $c = is_array($t) ? ($t['connector'] ?? null) : null;
+            if (!is_array($c) || ($c !== [] && array_is_list($c))) {
+                $errors[] = "$where: a connector's share target is written from its definition's share (phoenix-connector pack), not by hand";
+                continue;
+            }
+            $sharing = true;
+            if (!is_string($t['label'] ?? null) || $t['label'] === '') {
+                $errors[] = "$where: label must be a string";
+            }
+            if (!in_array($c['templateId'] ?? null, $templates, true)) {
+                $errors[] = "$where: connector.templateId " . (is_string($c['templateId'] ?? null) ? $c['templateId'] : '')
+                    . " is not one of the package's templates";
+            }
+            if (($c['service'] ?? null) !== $service) {
+                $errors[] = "$where: connector.service must be " . ($service !== '' ? $service : "the package's service");
+            }
+            if (array_key_exists('accountLabel', $c) && !is_string($c['accountLabel'])) {
+                $errors[] = "$where: connector.accountLabel must be a string";
+            }
+            $bad = array_merge(self::acceptsProblems($c['accepts'] ?? null), self::audienceProblems($c));
+            foreach ($bad as $b) {
+                $errors[] = "$where: connector.$b";
+            }
+            if (!$bad) {
+                $want = self::shareTypes($c['accepts']);
+                sort($want);
+                $got = is_array($t['types'] ?? null) ? $t['types'] : [];
+                sort($got);
+                if ($want !== $got) {
+                    $errors[] = "$where: types must be " . implode(', ', $want) . ' (what accepts takes)';
+                }
+            }
+        }
+        if (!$sharing || $service === '') {
+            return;
+        }
+        [$aok, $api] = $json("service/sysbus/$service.api.json");
+        $groups = [];
+        if ($aok && is_array($api)) {
+            foreach ($api as $g => $methods) {
+                if (is_array($methods) && in_array("$service/share", $methods, true)) {
+                    $groups[] = (string) $g;
+                }
+            }
+        }
+        $required = is_array($info['requiredPermissions'] ?? null) ? $info['requiredPermissions'] : [];
+        if (!$groups) {
+            $errors[] = "C15 the api.json must list $service/share (the compose page calls it)";
+        } elseif (!array_intersect($groups, $required)) {
+            $errors[] = "C15 appinfo.json requiredPermissions must name the group of $service/share (" . implode(', ', $groups) . ')';
+        }
+        $main = (string) ($info['main'] ?? 'index.html');
+        if (!isset($files[$main])) {
+            $errors[] = "C15 the app's main page $main is not in the package: the share sheet opens it to compose";
+        }
     }
 
     private static function checkTemplate($tpl, string $dir, string $folder, array $files, string $appId, string $service, array $kinds,
