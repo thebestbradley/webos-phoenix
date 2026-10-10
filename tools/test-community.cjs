@@ -114,7 +114,8 @@ async function main() {
         }
         for (const [id, option, key, want] of [["adv-launcherGridDensity", "Dense", "gridDensity", "dense"],
                                                ["adv-gestureSensitivity", "High", "gestureSensitivity", "high"],
-                                               ["adv-animationSpeed", "Fast", "animationSpeed", "fast"]]) {
+                                               ["adv-animationSpeed", "Fast", "animationSpeed", "fast"],
+                                               ["adv-startupAnimation", "Classic", "startupAnimation", "classic"]]) {
             await st.click(`[data-testid='${id}']`);
             await st.click(`role=option[name='${option}']`);
             await until(() => tweaks()[key] === want, `Advanced: ${key} ${want} reaches the shell`);

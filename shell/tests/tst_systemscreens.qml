@@ -53,6 +53,9 @@ Item {
             windows.failedAlerts = 0;
             status.charging = false;
             status.volume = 50;
+            // The original boot logo (Settings > Advanced > Start-up
+            // animation: Classic); the story is tst_bootstory.qml's.
+            status.tweaks = { startupAnimation: "classic" };
         }
         function callsTo(method) {
             return windows.calls.filter(function (c) { return c.uri.indexOf(method) >= 0; });

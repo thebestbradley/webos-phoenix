@@ -118,7 +118,7 @@ FocusScope {
     readonly property var tweakDefaults: ({ infiniteCardCycling: false, maximizeEdges: false, waveLauncher: true, tapRipple: true,
                                             animationSpeed: "normal", gestureSensitivity: "normal", haptics: false,
                                             gridDensity: "normal", batteryPercent: false, numberRow: false,
-                                            keyboardStyle: "auto" })
+                                            keyboardStyle: "auto", startupAnimation: "phoenix" })
     function tweak(name) { return tweaks[name] !== undefined ? tweaks[name] : tweakDefaults[name]; }
     Binding { target: Theme; property: "animationSpeed"; value: shell.tweak("animationSpeed") }
     Binding { target: Theme; property: "gestureSensitivity"; value: shell.tweak("gestureSensitivity") }
@@ -3870,6 +3870,7 @@ FocusScope {
         onCall: notes.incomingCall || !!(shell.source && shell.source.activeCallBanner)
         displayOn: backlight.on
         bootAngle: shell.homeButtonAngle
+        bootStyle: shell.tweak("startupAnimation") === "classic" ? "classic" : "phoenix"
         onBootFinished: sounds.bootFinished()
         // storaged could not take the drive: "USB Drive connection failed".
         onBrickModeFailed: if (shell.source && shell.source.showMsmEntryFailedAlert) shell.source.showMsmEntryFailedAlert()

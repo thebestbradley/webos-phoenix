@@ -32,6 +32,11 @@
 //   emailDashboardCycling    Email's new-mail dashboard goes through the new
 //                            emails one at a time, with a delete button
 //                            (Uber Cycling Email Dashboard)
+//   startupAnimation         the start-up animation: Phoenix (the bird's
+//                            story: the orb burns to ash and the bird is
+//                            born from it, BootStory.qml) or Classic (the
+//                            original logo's glow) (Phoenix; the shell
+//                            reads it before the next start)
 //   appRelaunch              opening an app that already has a card (its
 //                            icon, Just Type, a link, the assistant):
 //                            Bring to front (the default, its card as it
@@ -45,7 +50,7 @@ import { Group, ListSelector, Note, Page, PageHeader, Row, ToggleButton } from "
 
 const KEYS: (keyof SystemPreferences)[] = ["launcherGridDensity", "infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges",
     "sysUiEnableWaveLauncher", "animationSpeed", "gestureSensitivity", "showReticleAnimation", "hapticFeedback",
-    "showBatteryPercent", "emailDashboardCycling", "sysUiEnableNextPrevGestures", "appRelaunch"];
+    "showBatteryPercent", "emailDashboardCycling", "sysUiEnableNextPrevGestures", "appRelaunch", "startupAnimation"];
 
 export function AdvancedPage() {
     const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(KEYS, cb, err), []).value;
@@ -101,6 +106,14 @@ export function AdvancedPage() {
                               onChange={(v) => set({ animationSpeed: v })} />
                 {toggle("hapticFeedback", "Vibrate on tap", "A short buzz with every tap, where the device can")}
             </Group>
+            <Group label="Start-up">
+                <ListSelector title="Start-up animation" value={prefs?.startupAnimation ?? "phoenix"} testId="adv-startupAnimation"
+                              options={[{ label: "Phoenix", value: "phoenix" as const }, { label: "Classic", value: "classic" as const }]}
+                              onChange={(v) => set({ startupAnimation: v })} />
+            </Group>
+            <Note testId="adv-startupAnimation-note">{prefs?.startupAnimation === "classic"
+                  ? "The glowing logo, as webOS started."
+                  : "The phoenix burns to ash and is born again. Tap to skip it."} Shown the next time the device starts.</Note>
         </Page>
     );
 }

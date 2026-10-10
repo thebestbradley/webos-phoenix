@@ -21,6 +21,12 @@ in the documents linked from each item.
   shortcuts and accessibility (V8), Edit in every app menu (E1), Developer
   Mode behind the Konami code, and the share sheet with Share in every app
   menu ([SHARE-AND-FILES.md](SHARE-AND-FILES.md)).
+- The start-up animation: the phoenix's death and rebirth (the dead orb
+  burns to ash, a gold bird-orb flies out of it and becomes the Assistant
+  bird, which lands and waves; `BootStory.qml`), or the classic glowing
+  logo (Settings > Advanced > Start-up animation). Not yet on a device: the
+  device shell does not show the boot animation, nor read the setting
+  early ([OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q10-Q14).
 - Cards: stacks keep their order while a card maximizes and minimizes, and
   Back in an app another opened returns to the caller, the app staying open
   behind it (GAPS C12).

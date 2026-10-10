@@ -104,7 +104,7 @@ durations and curves, never wall-clock time).
 | PIN panel slide | commented out (`LockWindow.cpp:644-645`) | none | matches (n/a) |
 | Keyboard show/hide | the negative space, 400 ms OutCubic (`InputWindowManager.cpp:134-160`); its own fade is only for USB mode (`:177-197`) | `Shell.qml` `_slotShowIME` | matches |
 | Rotation | 300 ms InOutCubic, rotate and cross-fade (`WindowServer.cpp:1950-1953`; conf `:127-128`) | `UiRotation.qml` | matches (now through `Theme.motion`) |
-| USB mode (brick) screen, emergency mode, boot, progress | 300 linear; 350 linear; 700 linear; 2000/700 InQuad (`TopLevelWindowManager.cpp:69-70`, `EmergencyWindowManager.cpp:49`, `BootupAnimation.cpp:48`, `ProgressAnimation.cpp:91-105`) | `SystemScreens.qml`, `EmergencyWindow.qml`, `BootAnimation.qml`, `ProgressAnimation.qml` | matches |
+| USB mode (brick) screen, emergency mode, boot, progress | 300 linear; 350 linear; 700 linear; 2000/700 InQuad (`TopLevelWindowManager.cpp:69-70`, `EmergencyWindowManager.cpp:49`, `BootupAnimation.cpp:48`, `ProgressAnimation.cpp:91-105`) | `SystemScreens.qml`, `EmergencyWindow.qml`, `BootAnimation.qml`, `ProgressAnimation.qml` | matches (the boot logo with Start-up animation: Classic; Phoenix's own start-up story by default, `BootStory.qml`) |
 | Dock mode in/out | 900 / 500 ms InOutQuad, 270 ms delay (`WindowServerLuna.cpp:622-641`) | `Shell.qml` | matches |
 | Tap reticle, screenshot flash | 200 ms linear; 900 ms (`ReticleItem.cpp:61-70`, `WSOverlayScreenShotAnimation.cpp:79-86`) | `Shell.qml`, `ScreenCaptureFlash.qml` | matches |
 
