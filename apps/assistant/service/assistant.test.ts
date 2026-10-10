@@ -113,7 +113,11 @@ describe("the command layer", () => {
         expect(last(r)).toMatchObject({ text: "The flashlight is on.", via: "commands", command: "toggle", status: "done" });
         expect(t.called("torch/set")[0].params).toEqual({ on: true });
         expect(mock.requests).toHaveLength(0);
-        expect(t.spoken).toEqual(["The flashlight is on."]);
+        // Typed: shown, not spoken (Answer aloud > When you type, off by
+        // default); said: spoken too (When you speak, on).
+        expect(t.spoken).toEqual([]);
+        await ask(t, "Turn off the flashlight", { voice: true });
+        expect(t.spoken).toEqual(["The flashlight is off."]);
     });
 
     it("sets a timer as an activity that opens the Assistant when it is done", async () => {
@@ -800,7 +804,7 @@ describe("the voice", () => {
         await t.svc.speak({ text: "Sample.", voice: "expr-voice-2-f" });
         expect(t.voices).toEqual(["expr-voice-5-m", "expr-voice-2-f"]);
         t.as("com.palm.systemui");
-        await ask(t, "turn on the flashlight");
+        await ask(t, "turn on the flashlight", { voice: true });
         expect(t.voices.at(-1)).toBe("expr-voice-5-m");
     });
 });

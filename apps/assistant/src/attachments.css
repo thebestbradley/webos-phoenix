@@ -1,7 +1,7 @@
 /* Copyright (c) 2026 webOS Phoenix contributors
    SPDX-License-Identifier: Apache-2.0
    What an answer found (Attachments.tsx): thumbnails and cards under its words. */
-.as-found { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; max-width: 86%; }
+.as-found { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; max-width: min(86%, 520px); }
 .as-row.with-avatar .as-found { margin-left: 36px; }
 .as-thumbs { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .as-thumb { width: 72px; height: 72px; padding: 0; border: 1px solid #b4b4b2; border-radius: 6px; overflow: hidden; background: #d8d8d6; cursor: pointer; }

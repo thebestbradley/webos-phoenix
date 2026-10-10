@@ -567,6 +567,11 @@ async function main() {
         check(tablet ? /\bmulti\b/.test(panes) : /\bsingle\b/.test(panes), tablet ? "a tablet: the panes side by side" : "a phone: one pane at a time");
         if (tablet) check(await app.isVisible("[data-testid='as-list']") && await app.isVisible("[data-testid='as-input']"), "the list beside the conversation");
         else check(await app.isHidden("[data-testid='as-list']"), "the conversation over the list");
+        // Bubbles no wider than a comfortable line: on a tablet 80% of the
+        // conversation stretched a short answer across the screen (the owner).
+        const widest = await app.evaluate(() => Math.max(...[...document.querySelectorAll(".as-bubble")].map((b) => b.getBoundingClientRect().width)));
+        check(widest <= 480.5, "no bubble wider than 480 px: " + Math.round(widest));
+        await shot(app, "bubbles");
         const showList = async () => {
             if (!tablet && await app.isVisible("[data-testid='as-conversations']")) await app.click("[data-testid='as-conversations']");
             // (Slid away, the conversation is out of sight.)
