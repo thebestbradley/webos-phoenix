@@ -23,8 +23,8 @@
 //                                   switches and the light
 //
 // A service a device does not have never answers, and what it would give
-// keeps its default (no modem: no WAN, TTY, HAC or roaming icon). Battery,
-// charger, brightness and the exhibitions are still placeholders (M1).
+// keeps its default (no modem: no WAN, TTY, HAC or roaming icon). Brightness
+// and the exhibitions are still placeholders (M1).
 //
 // STATUS: written against the services' sources and their replies
 // (tst_lsmstatus drives LsmStatus.js with them); not yet run on a device.
@@ -37,7 +37,10 @@ import "LsmStatus.js" as LsmStatus
 QtObject {
     id: status
     property string carrier: "webOS Phoenix"
-    // STATUS: placeholders (M1: powerd's or the charger driver's).
+    // powerd's (com.palm.power: phoenix-devices over the kernel's power
+    // supplies): batteryStatusQuery, then its batteryStatus and USBDockStatus
+    // signals (_power below). Until it answers: full, on mains (a device
+    // without a battery, as QEMU, stays so).
     property int batteryPercent: 100
     property bool charging: true
     // -1 off, 0 on without a network, 1-3 connected (com.webos.service.wifi).
@@ -199,13 +202,51 @@ QtObject {
         }
     }
     // The charger, and the Touchstone's serial number while on one (dock
-    // mode). STATUS: placeholders; M1 reads powerd's chargerStatus /
-    // USBDockStatus (DockConnected with DockPower, DockSerialNo) or the
-    // device's charger driver.
+    // mode): powerd's USBDockStatus ("type"; DockConnected with DockPower,
+    // DockSerialNo), as _power hears it. phoenix-devices knows no
+    // Touchstone (no inductive charger driver yet).
     property string charger: "none"
     property string puckId: ""
     readonly property bool onPuck: charger === "inductive"
-    // Settings > Exhibition. STATUS: the defaults; M1 reads the system
+    property real batteryTemperature: NaN
+
+    function _battery(r) {
+        if (!r || typeof r.percent !== "number" || r.present === false)
+            return;
+        batteryPercent = Math.max(0, Math.min(100, Math.round(r.percent_ui !== undefined ? r.percent_ui : r.percent)));
+        if (typeof r.temperature_C === "number")
+            batteryTemperature = r.temperature_C;
+    }
+    function _charger(r) {
+        if (!r || typeof r.Connected !== "boolean")
+            return;
+        charger = r.DockConnected ? "inductive" : (r.type && r.type !== "none" ? String(r.type) : r.Connected ? "wall" : "none");
+        puckId = r.DockConnected ? String(r.DockSerialNo || "") : "";
+        charging = !!(r.Charging || r.Connected);
+    }
+    property var _power: Service {
+        appId: LS.appId
+        property int batteryToken: 0
+        property int chargerToken: 0
+        onResponse: (method, payload, token) => {
+            var r = null;
+            try { r = JSON.parse(payload); } catch (e) { return; }
+            if (token === chargerToken || (r && typeof r.Connected === "boolean"))
+                status._charger(r);
+            else
+                status._battery(r);
+        }
+        Component.onCompleted: {
+            // The signals (luna-service2's addmatch, as luna-systemui's
+            // PowerdService.js listens), then the state now.
+            batteryToken = call("luna://com.webos.service.bus", "/signal/addmatch",
+                                JSON.stringify({ category: "/com/palm/power", method: "batteryStatus", subscribe: true }));
+            chargerToken = call("luna://com.webos.service.bus", "/signal/addmatch",
+                                JSON.stringify({ category: "/com/palm/power", method: "USBDockStatus", subscribe: true }));
+            call("luna://com.palm.power", "/com/palm/power/batteryStatusQuery", "{}");
+            call("luna://com.palm.power", "/com/palm/power/chargerStatusQuery", "{}");
+        }
+    }    // Settings > Exhibition. STATUS: the defaults; M1 reads the system
     // service's preferences (exhibition, dockModeSoundPref, dockwallpaper)
     // and the application manager's exhibitions (listDockModeLaunchPoints).
     property bool exhibitionEnabled: true

@@ -123,6 +123,14 @@ Item {
             [assistant, photos].forEach(function(s) { windows.removeSurface(s); s.destroy(); });
         }
 
+        function test_systemUiStartsHidden() {
+            FakeBus.clear();
+            windows.startBootApps();
+            var boot = FakeBus.find("com.webos.applicationManager", "/launch").filter(function(c) { return c.params.id === "com.palm.systemui"; });
+            compare(boot.length, 1);
+            compare(boot[0].params.preload, "partial");
+        }
+
         function test_launchAndStatusGoToTheBus() {
             FakeBus.clear();
             windows.launch("org.webosphoenix.memos", "", null);
@@ -279,6 +287,13 @@ Item {
             memos.destroy();
         }
 
+        function test_shutdownFromPowerd() {
+            shutdownSpy.clear();
+            FakeBus.replyAll("com.palm.display", "/phoenix/requests", { returnValue: true, shutdown: { reason: "power menu" } });
+            compare(shutdownSpy.count, 1);
+            compare(shutdownSpy.signalArguments[0][0], "power menu");
+        }
+
         function test_usageTicksGoToTheBatteryService() {
             FakeBus.clear();
             windows.pushSystemStatus({ usageTick: { appId: "com.palm.app.email", ms: 60000, at: 5 } });
@@ -310,6 +325,7 @@ Item {
     SignalSpy { id: removedSpy; target: windows; signalName: "bannerRemoved" }
     SignalSpy { id: soundSpy; target: windows; signalName: "soundRequested" }
     SignalSpy { id: sceneSpy; target: windows; signalName: "sceneTransitionRequested" }
+    SignalSpy { id: shutdownSpy; target: windows; signalName: "shutdownRequested" }
 
     TestCase {
         name: "LsmSystemStatus"
@@ -359,6 +375,23 @@ Item {
             status.connectVpn("Office");
             compare(FakeBus.last("com.webos.service.vpn", "/connect").params.vpnProfileName, "Office");
             compare(status.vpnProfiles[0].state, "connecting");
+        }
+
+        function test_batteryFromPowerd() {
+            var q = FakeBus.last("com.palm.power", "/com/palm/power/batteryStatusQuery");
+            verify(q, "the battery is asked of powerd");
+            verify(FakeBus.find("com.webos.service.bus", "/signal/addmatch").some(function(c) {
+                return c.params.category === "/com/palm/power" && c.params.method === "batteryStatus"; }), "and its signal followed");
+            FakeBus.reply("com.palm.power", "/com/palm/power/batteryStatusQuery", { returnValue: true, percent: 42, percent_ui: 41, temperature_C: 30 });
+            compare(status.batteryPercent, 41);
+            FakeBus.reply("com.palm.power", "/com/palm/power/chargerStatusQuery", { returnValue: true, Charging: false, Connected: false, type: "none" });
+            verify(!status.charging);
+            compare(status.charger, "none");
+            // The signal: a wall charger in.
+            FakeBus.replyAll("com.webos.service.bus", "/signal/addmatch", { Charging: true, Connected: true, USBConnected: true, type: "wall",
+                                                                           DockConnected: false });
+            verify(status.charging);
+            compare(status.charger, "wall");
         }
 
         function test_preferencesAndModem() {

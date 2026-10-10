@@ -329,8 +329,19 @@ function createAppManager(opts) {
     }
 
     // ---- Launching ------------------------------------------------------------------------
+    // An app without a window of its own (appinfo.json "noWindow": the
+    // Calendar's and Email's background halves, luna-systemui) runs
+    // hidden: SAM passes "preload" to WebAppMgr, which then keeps its
+    // window hidden (sam src/base/RunningApp.h:194, src/bus/client/WAM.cpp:
+    // 207-209; wam src/core/web_app_base.cc:309-328 SetPreloadState). WebAppMgr
+    // itself has no noWindow.
     function launch(id, params) {
-        return sam("launch", { id: id, params: params || {} }).then(function (r) {
+        return apps().then(function (list) {
+            var a = app(list, id);
+            var req = { id: id, params: params || {} };
+            if (a && a.noWindow === true) req.preload = "partial";
+            return sam("launch", req);
+        }).then(function (r) {
             if (r.returnValue === false) return r;
             // The legacy reply: {processId}; SAM's names the instance.
             return ok({ processId: String(r.processId || r.instanceId || r.appId || id) });

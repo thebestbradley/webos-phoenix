@@ -30,7 +30,8 @@ const APPS = [
     { id: "org.webosphoenix.videos", title: "Videos", mimeTypes: [{ mime: "video/mp4", extension: "mp4", stream: true }] },
     { id: "org.webosphoenix.pdfview", title: "PDF View", mimeTypes: [{ mime: "application/pdf", extension: "pdf" }] },
     { id: "com.example.mastodon", title: "Mastodon", siteScope: "https://mastodon.example/" },
-    { id: "org.webosphoenix.agenda", title: "Agenda", exhibitionMode: true, exhibitionModeTitle: "Today" }
+    { id: "org.webosphoenix.agenda", title: "Agenda", exhibitionMode: true, exhibitionModeTitle: "Today" },
+    { id: "com.palm.app.calendar.alarms", title: "Calendar", noWindow: true }
 ];
 
 function world(opts: Any = {}) {
@@ -73,6 +74,12 @@ describe("com.palm.applicationManager on OSE", () => {
             { id: "org.webosphoenix.settings", params: { page: "backup" } },
             { id: "org.webosphoenix.help", params: { topic: "phone" } }
         ]);
+    });
+
+    it("runs an app without a window hidden (WebAppMgr's preload)", async () => {
+        const w = world();
+        await w.m.methods.launch({ id: "com.palm.app.calendar.alarms", params: { a: 1 } });
+        expect(w.launches()).toEqual([{ id: "com.palm.app.calendar.alarms", params: { a: 1 }, preload: "partial" }]);
     });
 
     it("opens a target in the app for it: schemes, sites, the browser, files by type", async () => {

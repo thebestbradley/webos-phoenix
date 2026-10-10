@@ -16,6 +16,7 @@ struct LSHandle
     std::map<std::string, void *> data;             // category -> its data
     LSCancelFunction cancel = nullptr;
     void *cancelCtx = nullptr;
+    std::vector<std::string> signals;               // "uri payload"
 };
 
 struct LSMessage
@@ -101,7 +102,15 @@ bool LSSubscriptionSetCancelFunction(LSHandle *sh, LSCancelFunction f, void *ctx
     return true;
 }
 
+bool LSSignalSend(LSHandle *sh, const char *uri, const char *payload, LSError *)
+{
+    sh->signals.push_back(std::string(uri) + " " + payload);
+    return true;
+}
+
 namespace ls2stub {
+
+std::vector<std::string> &signals(LSHandle *sh) { return sh->signals; }
 
 LSMessage *call(LSHandle *sh, const std::string &method, const std::string &payload,
                 const std::string &appId, const std::string &service)

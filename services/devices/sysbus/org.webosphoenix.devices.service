@@ -23,3 +23,8 @@ Type=static
 Name=com.palm.ambientLightSensor
 Exec=/usr/sbin/phoenix-devices
 Type=static
+
+[D-BUS Service]
+Name=com.palm.power
+Exec=/usr/sbin/phoenix-devices
+Type=static

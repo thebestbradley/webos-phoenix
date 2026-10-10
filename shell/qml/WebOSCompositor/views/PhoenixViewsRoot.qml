@@ -140,6 +140,26 @@ FocusScope {
             else
                 phoenix.systemScreens.stopProgressAnimation();
         }
+        // Off or restart (com.palm.power, phoenix-devices): the screen goes
+        // dark as the shutdown sound plays, as phoenix-sim's power-off;
+        // phoenix-devices turns the machine off after it.
+        function onShutdownRequested(reason) { root._goingDown(); }
+        function onRebootRequested(reason) { root._goingDown(); }
+    }
+    property bool _down: false
+    function _goingDown() {
+        if (_down)
+            return;
+        _down = true;
+        if (phoenix.bootSound)
+            phoenix.sounds.shutdown();
+    }
+    Rectangle {
+        anchors.fill: parent
+        z: 10000
+        color: "black"
+        visible: root._down
+        MouseArea { anchors.fill: parent }
     }
 
     Component.onCompleted: {

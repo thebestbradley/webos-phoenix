@@ -472,6 +472,8 @@ Item {
     signal displayStateRequested(string state)
     signal vibrationRequested(var request)
     signal displayPropertiesRequested(var props)
+    signal shutdownRequested(string reason)
+    signal rebootRequested(string reason)
     property var displayHolds: ({ requestBlock: 0, powerKeyBlock: 0, proximity: 0, alsDisabled: 0 })
 
     // What the shell knows, for the services: only the display and the
@@ -512,6 +514,12 @@ Item {
             // An app's vibration, already on the motor: counted by the shell.
             if (r.vibrated)
                 source.vibrationRequested(Object.assign({ on: true, ran: true }, r.vibrated));
+            // com.palm.power's machineOff / machineReboot (phoenix-devices):
+            // the shell's moment before the machine goes.
+            if (r.shutdown)
+                source.shutdownRequested(String(r.shutdown.reason || ""));
+            if (r.reboot)
+                source.rebootRequested(String(r.reboot.reason || ""));
         }
         Component.onCompleted: call("luna://com.palm.display", "/phoenix/requests", JSON.stringify({ subscribe: true }))
     }
@@ -958,7 +966,22 @@ Item {
         function onFailed(requestId, error) { source._assistantSettle(requestId, { error: error }); }
     }
 
+    // The system's own headless apps, started at boot as LunaSysMgr started
+    // com.palm.systemui (WebAppMgrProxy.cpp:88-97; SimWindowSource.bootApps):
+    // hidden, through SAM's "preload" (WebAppMgr has no noWindow;
+    // services/appmanager does the same for other apps without a window).
+    // Its alerts and dashboards are windows it opens (window.open), which
+    // WebAppMgr does not make yet: docs/DEVICE-AUDIT.md, "Windows an app opens".
+    readonly property var bootApps: ["com.palm.systemui"]
+
+    function startBootApps() {
+        for (var b = 0; b < bootApps.length; ++b)
+            lunaCall("luna://com.webos.applicationManager/launch",
+                     { id: bootApps[b], preload: "partial", params: { launchedAtBoot: true } }, function() {});
+    }
+
     Component.onCompleted: {
+        startBootApps();
         _listenToPages();
         lunaSubscribe("luna://com.webos.notification/getToastNotification", { subscribe: true }, function(r) {
             if (r && r.returnValue !== false && typeof r.message === "string")
