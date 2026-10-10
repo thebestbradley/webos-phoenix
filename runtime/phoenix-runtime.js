@@ -642,7 +642,8 @@
         // enyo.windows.setWindowProperties: blockScreenTimeout keeps the
         // screen on while the card is in front (a video, a flashlight);
         // statusBarColor (0xRRGGBB) tints the tablet's status bar while the
-        // card is maximized (IpcClientHost.cpp:294-296). setSubtleLightbar
+        // card is maximized (IpcClientHost.cpp:294-296); webosDragMode
+        // switches a dashboard window's own drags on or off. setSubtleLightbar
         // and fastAccelerometer have nothing to act on.
         setWindowProperties: function (props) {
             if (!props || typeof props !== "object")
@@ -652,6 +653,11 @@
                 out.blockScreenTimeout = !!props.blockScreenTimeout;
             if (typeof props.statusBarColor === "number" && isFinite(props.statusBarColor))
                 out.statusBarColor = props.statusBarColor & 0xFFFFFF;
+            // A dashboard window's webosDragMode: "manual", it takes its own
+            // drags; any other string, the row is dragged again (WebAppMgr's
+            // PalmSystem::setWindowProperties, PalmSystem.cpp:659-661).
+            if (typeof props.webosDragMode === "string")
+                out.webosDragMode = props.webosDragMode === "manual";
             if (Object.keys(out).length > 1)
                 host.postToHost("windowProperties", out);
         },

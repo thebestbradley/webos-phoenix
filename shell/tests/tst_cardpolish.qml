@@ -144,6 +144,80 @@ Item {
             tryCompare(windows.cards, "count", 0, 2000);
         }
 
+        // The positive space changes under a modal card (the keyboard
+        // comes, then goes): its height is the new space's at once (never
+        // past 480), and it moves to the new space's centre over 500 ms
+        // OutCubic, from the start of the slide (CardWindow::
+        // positiveSpaceChanged -> resizeModalCard, startModalAnimation,
+        // CardWindow.cpp:2195-2289; positionModalForLess / MorePositiveSpace,
+        // :1883-1985).
+        function test_modalCardMovesWithThePositiveSpace() {
+            var cv = shell.cardView, notes = shell.notifications;
+            var p = maximized("org.webosphoenix.email");
+            var m = windows.launchModal("org.webosphoenix.calendar", null, p, "MODAL_6", true);
+            tryCompare(cv, "modalUid", m, 1000);
+            var mc = cv.cardItem(m);
+            var restY = cv.topInset + cv.windowHeight / 2;
+            compare(mc.centerY, restY);
+            var space = function () { return cv.height - cv.topInset - notes.negativeSpaceTarget; };
+            // The keyboard comes.
+            notes.keyboardHeight = 160;
+            var upY = cv.topInset + space() / 2;
+            verify(upY < restY);
+            compare(mc.height, Math.min(space(), Theme.px(480)), "its height at once");
+            verify(cv.modalMoving, "it moves");
+            verify(mc.centerY > upY);
+            wait(Theme.modalCardMoveDuration / 2);
+            verify(mc.centerY < restY && mc.centerY > upY, "on its way: " + mc.centerY);
+            tryCompare(mc, "centerY", upY, 2000);
+            verify(!cv.modalMoving);
+            // The parent keeps its place under it.
+            compare(cv.cardItem(p).centerY, cv.maximizedCenterY);
+            // The keyboard goes: back where it was, as tall as before.
+            notes.keyboardHeight = 0;
+            compare(mc.height, Math.min(cv.windowHeight, space(), Theme.px(480)));
+            verify(cv.modalMoving);
+            tryCompare(mc, "centerY", restY, 2000);
+            tryCompare(notes, "negativeSpace", 0, 2000);
+            compare(mc.height, Math.min(cv.windowHeight, Theme.px(480)));
+            cv.dismissModal("service", false);
+            compare(cv.modalUid, "");
+        }
+
+        // Back goes to the modal card's page while it shows, not to its
+        // parent's (the focused window is the modal child:
+        // CardWindowManager::activeWindow, CardWindowManager.cpp:2970-2982);
+        // when its page does not take it, the modal goes, faded, as for the
+        // minimize gesture, and the parent stays maximized
+        // (SystemUiController::slotKeyEventRejected -> minimizeActiveWindow,
+        // SystemUiController.cpp:941-954, CardWindowManager.cpp:1151-1164).
+        function test_backGoesToTheModalCard() {
+            var cv = shell.cardView;
+            var p = maximized("org.webosphoenix.email");
+            var m = windows.launchModal("org.webosphoenix.calendar", null, p, "MODAL_7", true);
+            tryCompare(cv, "modalUid", m, 1000);
+            var pw = windows.windowFor(p), mw = windows.windowFor(m);
+            pw.detail = "Inbox";
+            mw.detail = "Event";
+            modalSpy.clear();
+            shell.gestureBack();
+            compare(mw.detail, "", "the modal's page went back");
+            compare(pw.detail, "Inbox", "not the parent's");
+            compare(cv.modalUid, m);
+            compare(cv.activeUid, m);
+            // Nothing left to go back to in the modal: it goes.
+            shell.gestureBack();
+            tryCompare(cv, "modalUid", "", 1000);
+            compare(modalSpy.signalArguments[0][1].dismissResult, "Modal card was dismissed because system got minimize active card gesture");
+            verify(cv.maximized, "the parent stays maximized");
+            compare(cv.currentUid, p);
+            compare(pw.detail, "Inbox");
+            compare(cv.activeUid, p);
+            // Now Back is the parent's again.
+            shell.gestureBack();
+            compare(pw.detail, "");
+        }
+
         // ---- Scene transitions --------------------------------------------------
 
         function test_sceneTransitionPushZoomsTheNewSceneIn() {

@@ -478,6 +478,10 @@ QtObject {
     readonly property int modalCardWidth: 320
     readonly property int modalCardHeight: 480
     readonly property int modalCardFadeDuration: motion(45)
+    // Its move to its new place when the positive space changes
+    // (CardWindow.cpp:75 sModalCardAnimationTimeout; :2210-2211, curve
+    // cardDeleteCurve 6 = OutCubic).
+    readonly property int modalCardMoveDuration: motion(500)
     // Loading card (CardLoading.cpp, lunaAnimations.conf:55-60, Settings.cpp:216).
     readonly property int cardLoadingTimeBeforePulse: 900
     readonly property int cardLoadingPulseDuration: 1000             // half up, half down

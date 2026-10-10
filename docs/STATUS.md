@@ -178,8 +178,7 @@ The whole plan, milestone by milestone, with the decisions taken so far:
   register under the Phoenix project account: OPEN-QUESTIONS Q17.
 - **Open gaps**: one list by area and priority in
   [spec/GAPS.md](spec/GAPS.md#open-gaps-at-a-glance). In the simulator only
-  small ones are left (a modal card and the keyboard, a dashboard's drag
-  mode set late, firm press to select, word-by-word dictation); everything
+  small ones are left (firm press to select, word-by-word dictation); everything
   else waits on a device: written and tested here, to run on hardware (K1,
   G1, G2, R1, R2, S6, M2, S2, A1, E2, C8, C12), and the Phoenix keyboard as
   the device's input method (V5): the first image, and a device to run it
