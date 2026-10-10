@@ -26,6 +26,16 @@ Item {
         system: SimSystemStatus { id: sys }
     }
 
+    // An app's dashboard window, recording the touches the row passes on.
+    Component {
+        id: fakeDashboardPage
+        Rectangle {
+            color: "#203040"
+            property var events: []
+            function pointer(type, x, y) { events = events.concat([type]); }
+        }
+    }
+
     TestCase {
         name: "Tablet"
         when: windowShown
@@ -480,6 +490,58 @@ Item {
             // above may not have reached yet.
             tryVerify(function() { return visibleGapShades(menu) === 0; }, 1000);
             compare(findChild(menu, "dashboardMenuBorder").height, 2 * 52 + 2 + 15 + Theme.drawerHandleHeight);
+            closeMenu();
+        }
+
+        // Dashboard windows in the menu (N5): a tap is the window's; a
+        // persistent one comes back from past a quarter (:343-347); one that
+        // takes its own drags gets a touch right of its badge (:193-306).
+        function test_dashboardMenuWindows() {
+            var notes = shell.notifications;
+            var pages = {};
+            var keys = ["s911", "s912", "s913"];
+            var attrs = [{}, { persistent: true }, { manualDrag: true }];
+            for (var i = 0; i < 3; ++i) {
+                pages[keys[i]] = fakeDashboardPage.createObject(windows);
+                windows._windows[keys[i]] = pages[keys[i]];
+                windows.notifications.append(Object.assign({
+                    id: keys[i], appId: "org.webosphoenix.messaging", title: "", body: "", color: "#666666", glyph: "!", icon: "",
+                    params: "", windowKey: keys[i], clickableWhenLocked: false, ongoing: false, progress: -1, tag: "", actions: "",
+                    persistent: false, manualDrag: false }, attrs[i]));
+            }
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            var menu = findChild(shell, "dashboardMenu");
+            tryCompare(menu, "opacity", 1, 1000);
+            tryCompare(menu, "containerHeight", menu.rowsHeight, 1000);
+            var row = function (key) {
+                var rs = menuRows();
+                for (var j = 0; j < rs.length; ++j)
+                    if (rs[j].windowKey === key)
+                        return rs[j];
+                return null;
+            };
+            var drag = function (r, x0, dx) {
+                var p = r.mapToItem(root, x0, 26);
+                mousePress(root, p.x, p.y);
+                for (var d = 1; d <= 10; ++d) { wait(20); mouseMove(root, p.x + dx * d / 10, p.y); }
+                mouseRelease(root, p.x + dx, p.y);
+            };
+            mouseClick(row("s911"), 150, 26);
+            compare(pages["s911"].events.join(","), "tap");
+            drag(row("s912"), 60, 150);
+            tryCompare(row("s912"), "swipeX", 0, 1500);
+            compare(windows.notifications.count, 3);
+            drag(row("s913"), 120, 120);
+            compare(pages["s913"].events[0], "down");
+            compare(pages["s913"].events[pages["s913"].events.length - 1], "up");
+            compare(row("s913").swipeX, 0);
+            drag(row("s913"), 20, 150);
+            tryCompare(windows.notifications, "count", 2, 1500);
+            drag(row("s911"), 60, 150);
+            tryCompare(windows.notifications, "count", 1, 1500);
+            compare(windows.notifications.get(0).windowKey, "s912");
+            windows.notifications.clear();
             closeMenu();
         }
 

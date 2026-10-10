@@ -57,6 +57,18 @@ Item {
     }
     Component.onCompleted: claim()
 
+    // Pass a touch on to the app's dashboard window, at x, y in the row (the
+    // window fills it), as DashboardWindowContainer passed pen events to it
+    // (DashboardWindow::inputEvent: handleTap, :1104-1146; a window that
+    // takes its own drags, :193-217, 284-306, 386-412). type: "down",
+    // "move", "up", "tapup" (an up that ends a tap), "cancel", or "tap" (a
+    // down and an up). A window that cannot take them is left alone.
+    function pointer(type, x, y) {
+        var w = windowKey && source ? source.windowFor(windowKey) : null;
+        if (w && typeof w.pointer === "function")
+            w.pointer(type, x, y);
+    }
+
     Item {
         id: host
         anchors.fill: parent

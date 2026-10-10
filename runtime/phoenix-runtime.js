@@ -625,7 +625,10 @@
     // (enyo.windows.openPopup/openDashboard) and LunaSysMgr read the type
     // from the attributes. Browsers do not pass window features on, so the
     // runtime puts the type, height, icon, window name, clickableWhenLocked
-    // (a dashboard that takes taps on the lock screen) and a popup alert's
+    // (a dashboard that takes taps on the lock screen), a dashboard's
+    // persistent (no swipe dismisses it: SysUpdateService.js's update
+    // dashboard) and webosDragMode "manual" (it takes its own drags:
+    // enyo.Dashboard), and a popup alert's
     // sound and sound class (AlertWindow::setSoundParams: {"sound": path,
     // "soundclass": "ringtones"}) in the new window's URL fragment
     // (#phoenixWindow=popupalert&phoenixHeight=150), where the simulator's
@@ -648,6 +651,8 @@
                      + (attrs.icon ? "&phoenixIcon=" + encodeURIComponent(attrs.icon) : "")
                      + (name ? "&phoenixName=" + encodeURIComponent(name) : "")
                      + (attrs.clickableWhenLocked ? "&phoenixClickableWhenLocked=1" : "")
+                     + (attrs.persistent ? "&phoenixPersistent=1" : "")
+                     + (attrs.webosDragMode === "manual" || attrs.webosDragMode === true ? "&phoenixDragMode=manual" : "")
                      + (attrs.sound ? "&phoenixSound=" + encodeURIComponent(attrs.sound) : "")
                      + (attrs.soundclass ? "&phoenixSoundClass=" + encodeURIComponent(attrs.soundclass) : "");
             }

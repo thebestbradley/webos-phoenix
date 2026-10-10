@@ -1295,7 +1295,15 @@ Item {
                 color: info.color, glyph: info.glyph, icon: _iconUrl(_param(url, "phoenixIcon"), appId),
                 params: "", windowKey: key,
                 clickableWhenLocked: _param(url, "phoenixClickableWhenLocked") === "1",
-                ongoing: false, progress: -1, tag: "", actions: ""
+                ongoing: false, progress: -1, tag: "", actions: "",
+                // Its window attributes {persistent: true} (no swipe or flick
+                // dismisses it: DashboardWindow::persistent; luna-systemui's
+                // update dashboard, SysUpdateService.js:184-188) and
+                // {webosDragMode: "manual"} (it takes its own drags:
+                // DashboardWindow::isManualDragWindow; enyo.Dashboard,
+                // Dashboard.js:107).
+                persistent: _param(url, "phoenixPersistent") === "1",
+                manualDrag: _param(url, "phoenixDragMode") === "manual"
             });
         }
     }

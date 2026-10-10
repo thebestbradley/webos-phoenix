@@ -36,6 +36,18 @@ Item {
         }
     }
 
+    // An app's dashboard window as the window source gives it, recording
+    // the touches the row passes on (WebAppWindow.pointer), without a
+    // browser engine.
+    Component {
+        id: fakeDashboardPage
+        Rectangle {
+            color: "#203040"
+            property var events: []
+            function pointer(type, x, y) { events = events.concat([type]); }
+        }
+    }
+
     TestCase {
         name: "Shell"
         when: windowShown
@@ -648,6 +660,93 @@ Item {
             // which takes as long as the machine takes to draw its frames.
             verify(!r.enabled, "the flick dismisses the row");
             tryCompare(windows.notifications, "count", 1, 3000);
+            notes.dashboardOpen = false;
+        }
+
+        // An app's dashboard window as a row: attrs {persistent, manualDrag}.
+        function addDashboardWindow(key, attrs) {
+            var page = fakeDashboardPage.createObject(windows);
+            windows._windows[key] = page;
+            windows.notifications.append(Object.assign({
+                id: key, appId: "org.webosphoenix.messaging", title: "", body: "", color: "#666666", glyph: "!", icon: "",
+                params: "", windowKey: key, clickableWhenLocked: false, ongoing: false, progress: -1, tag: "", actions: "",
+                persistent: false, manualDrag: false }, attrs || {}));
+            return page;
+        }
+        function dragRowFrom(r, x0, dx, dy) {
+            var y = r.height / 2;
+            mousePress(r, x0, y);
+            for (var i = 1; i <= 10; ++i) { wait(20); mouseMove(r, x0 + dx * i / 10, y + (dy || 0) * i / 10); }
+            mouseRelease(r, x0 + dx, y + (dy || 0));
+        }
+
+        // A dashboard window (N5): a tap on it is its page's (handleTap,
+        // DashboardWindowContainer.cpp:1104-1146), a sideways drag the row's,
+        // which goes past a quarter; one opened {persistent: true} always
+        // comes back and is not cleared (DashboardWindow::persistent,
+        // :343-347, 433-438); one that takes its own drags (webosDragMode
+        // "manual") gets a touch that begins right of its 50 px badge, its
+        // moves and its release, while the badge drags the row, and a touch
+        // that goes up or down first is cancelled for it (:193-306).
+        function test_dashboardWindows() {
+            var notes = shell.notifications;
+            var plain = addDashboardWindow("s901");
+            var kept = addDashboardWindow("s902", { persistent: true });
+            var manual = addDashboardWindow("s903", { manualDrag: true });
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            var rows = dashboardRows();
+            compare(rows.length, 3);
+            var rowOf = function (page) {
+                for (var i = 0; i < rows.length; ++i)
+                    if (rows[i].parent.windowKey === Object.keys(windows._windows).filter(function (k) { return windows._windows[k] === page; })[0])
+                        return rows[i];
+                return null;
+            };
+            var rp = rowOf(plain), rk = rowOf(kept), rm = rowOf(manual);
+            verify(rp && rk && rm);
+            compare(notes.clearableCount, 2, "the persistent row is not clearable");
+
+            // A tap: the page's; the row stays.
+            mouseClick(rp, 150, rp.height / 2);
+            compare(plain.events.join(","), "tap");
+            compare(windows.notifications.count, 3);
+
+            // The persistent row follows the finger but comes back.
+            dragRowFrom(rk, 60, 140);
+            tryCompare(rk.parent, "x", 0, 1500);
+            compare(windows.notifications.count, 3);
+            compare(kept.events.length, 0);
+
+            // Right of the badge: the window's own drag, the row stays put.
+            dragRowFrom(rm, 120, 120);
+            compare(manual.events[0], "down");
+            compare(manual.events[manual.events.length - 1], "up");
+            verify(manual.events.indexOf("move") > 0);
+            compare(rm.parent.x, 0, "the row stays");
+            compare(windows.notifications.count, 3);
+            // Up or down first: cancelled for the window.
+            manual.events = [];
+            dragRowFrom(rm, 120, 0, 40);
+            compare(manual.events[0], "down");
+            verify(manual.events.indexOf("cancel") > 0);
+            compare(manual.events.indexOf("up"), -1);
+            // A tap there: a down, then the up that ends a tap.
+            manual.events = [];
+            mouseClick(rm, 150, rm.height / 2);
+            compare(manual.events.join(","), "down,tapup");
+            // On the badge the row is dragged, away past a quarter.
+            manual.events = [];
+            dragRowFrom(rm, 20, 140);
+            compare(manual.events.length, 0);
+            tryCompare(windows.notifications, "count", 2, 1500);
+
+            // Clear All leaves the persistent one.
+            notes.clearAll();
+            tryCompare(windows.notifications, "count", 1, 1500);
+            compare(windows.notifications.get(0).windowKey, "s902");
+            windows.notifications.clear();
             notes.dashboardOpen = false;
         }
 

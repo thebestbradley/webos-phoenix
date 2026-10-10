@@ -382,6 +382,9 @@ QtObject {
     readonly property int phoneAlertTopPadding: px(10)
     readonly property int positiveSpaceDuration: motion(400)                 // conf/lunaAnimations.conf:73-74, curve 6 OutCubic
     readonly property real dashboardDismissRatio: 0.25               // DashboardWindowContainer.cpp:350-363
+    // A dashboard window that takes its own drags (webosDragMode "manual")
+    // leaves the row's drag to its badge, this far from its left.
+    readonly property int dashboardBadgeWidth: px(50)                // DashboardWindowContainer.cpp:49 sDashboardBadgeWidth
     readonly property int dashboardTopPadding: px(10)                // DashboardWindowContainer.cpp:107 (phones)
     // Dismissed: slides a width and a half to the right (:700-708).
     readonly property int dashboardDeleteDuration: motion(200)               // AnimationSettings.cpp:117, curve 0 Linear
