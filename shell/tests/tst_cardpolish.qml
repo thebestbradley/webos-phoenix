@@ -30,6 +30,12 @@ Item {
         signalName: "sceneTransitionRequested"
     }
 
+    SignalSpy {
+        id: modalSpy
+        target: windows
+        signalName: "modalStatusReported"
+    }
+
     TestCase {
         name: "CardPolish"
         when: windowShown
@@ -55,6 +61,87 @@ Item {
             tryCompare(shell.cardView, "maximized", true, 3000);
             compare(shell.cardView.currentUid, uid);
             return uid;
+        }
+
+        // ---- Modal cards (GAPS C11) -------------------------------------------------
+        // launchModalApp: the maximized card's app launches another as a
+        // 320 x 480 card over it, in no stack, its parent shaded under 60 %
+        // of #0f0f0f and not taking touches (CardWindowManager.cpp:425-550;
+        // CardWindow.cpp:1593-1599, 1842-1866). The minimize gesture takes
+        // it away, faded, and leaves the parent maximized (:1151-1164).
+        function test_modalCardOverItsParent() {
+            var cv = shell.cardView;
+            var p = maximized("org.webosphoenix.email");
+            modalSpy.clear();
+            var m = windows.launchModal("org.webosphoenix.calendar", null, p, "MODAL_1", true);
+            verify(m !== "");
+            tryCompare(cv, "modalUid", m, 1000);
+            compare(modalSpy.count, 1);
+            compare(modalSpy.signalArguments[0][0], "MODAL_1");
+            compare(modalSpy.signalArguments[0][1].launchResult, "Modal window was launched successfully");
+            compare(cv.groupIndexOf(m), -1, "in no stack");
+            compare(cv.currentUid, p);
+            var mc = cv.cardItem(m), pc = cv.cardItem(p);
+            verify(mc.visible);
+            compare(mc.width, Math.min(cv.windowWidth, Theme.px(320)));
+            compare(mc.height, Math.min(cv.windowHeight, Theme.px(480)));
+            compare(mc.centerY, cv.maximizedCenterY);
+            compare(mc.centerX, pc.centerX);
+            verify(mc.z > pc.z);
+            verify(mc.interactive);
+            verify(!pc.interactive, "the parent's touches are the modal's");
+            verify(findChild(pc, "modalShade").visible);
+            // The minimize gesture: the modal fades away, the parent stays.
+            modalSpy.clear();
+            cv.minimize();
+            verify(cv.maximized);
+            tryCompare(cv, "modalUid", "", 1000);
+            compare(windows.cardIndex(m), -1);
+            verify(cv.maximized, "the parent stays maximized");
+            verify(pc.interactive);
+            verify(!findChild(pc, "modalShade").visible);
+            compare(modalSpy.count, 1);
+            compare(modalSpy.signalArguments[0][1].dismissResult, "Modal card was dismissed because system got minimize active card gesture");
+        }
+
+        // Refused unless its caller is the maximized card; taken away at once
+        // when the parent closes or the app dismisses it.
+        function test_modalCardRefusedAndDismissed() {
+            var cv = shell.cardView;
+            var p = maximized("org.webosphoenix.email");
+            cv.minimize();
+            tryCompare(cv, "maximizeProgress", 0, 2000);
+            modalSpy.clear();
+            var m = windows.launchModal("org.webosphoenix.calendar", null, p, "MODAL_2", true);
+            tryCompare(modalSpy, "count", 1, 1000);
+            compare(modalSpy.signalArguments[0][1].returnValue, false);
+            compare(modalSpy.signalArguments[0][1].errorCode, 2);
+            compare(windows.cardIndex(m), -1, "closed");
+            compare(cv.modalUid, "");
+            // A caller that is not who it says.
+            cv.maximize(p);
+            tryCompare(cv, "maximized", true, 2000);
+            modalSpy.clear();
+            windows.launchModal("org.webosphoenix.calendar", null, p, "MODAL_3", false);
+            compare(modalSpy.signalArguments[0][1].errorCode, 3);
+            // Dismissed by its app (dismissModalApp).
+            m = windows.launchModal("org.webosphoenix.calendar", null, p, "MODAL_4", true);
+            tryCompare(cv, "modalUid", m, 1000);
+            modalSpy.clear();
+            windows._hostMessage("org.webosphoenix.email", p, "dismissModal", { modalId: "MODAL_4" });
+            tryCompare(cv, "modalUid", "", 1000);
+            compare(modalSpy.signalArguments[0][1].dismissResult, "Modal card was dismissed by the service");
+            verify(cv.maximized);
+            // The parent closes: the modal goes first.
+            m = windows.launchModal("org.webosphoenix.calendar", null, p, "MODAL_5", true);
+            tryCompare(cv, "modalUid", m, 1000);
+            modalSpy.clear();
+            windows.cardCloseRequested(p);
+            compare(cv.modalUid, "");
+            compare(windows.cardIndex(m), -1);
+            compare(modalSpy.signalArguments[0][1].dismissResult,
+                    "Modal card was dismissed as the parent of the modal window was dismissed or closed");
+            tryCompare(windows.cards, "count", 0, 2000);
         }
 
         // ---- Scene transitions --------------------------------------------------

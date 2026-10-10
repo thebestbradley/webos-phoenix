@@ -186,11 +186,14 @@ Item {
             compare(shell.cardView.currentUid, a, "still in front");
             windows._hostMessage(email, a, "launch", { id: calendar, params: { day: 3, $caller: email } });
             tryCompare(shell.cardView, "currentUid", c, 2000);
-            // Its window closes itself: back to the caller, still maximized.
+            // Its window closes itself: card view, and once it has settled
+            // the caller (the card in front that launched it into its
+            // stack) is maximized again (restoreCardToMaximized,
+            // CardWindowManager.cpp:2812-2821).
             windows.cardCloseRequested(c);
             tryCompare(shell.cardView, "currentUid", a, 3000);
             tryVerify(function () { return cardsOf(calendar).length === 0; }, 3000, "the child closed");
-            verify(shell.maximized, "the caller full screen again");
+            tryVerify(function () { return shell.maximized; }, 3000, "the caller full screen again");
         }
 
         // The setting reaches the shell through the runtime's systemStatus

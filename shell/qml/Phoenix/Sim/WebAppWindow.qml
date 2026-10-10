@@ -103,6 +103,28 @@ Item {
             view.runJavaScript(js);
     }
 
+    // A touch the system UI passes on to the page, at x, y in the window's
+    // pixels (a dashboard row: DashboardItem.pointer, as LunaSysMgr sent
+    // pen events to a dashboard window, DashboardWindow::inputEvent). The
+    // page gets mouse events at that point, as WebKit made them of pen
+    // events: "down", "move", "up" go to the element first pressed (the
+    // mouse's capture), "tapup" also clicks it, "cancel" lets go without a
+    // click, "tap" is a down, an up and a click.
+    function pointer(type, x, y) {
+        view.runJavaScript("(function (t, x, y) {"
+            + " var d = document, w = window, st = w.__phoenixPointer || (w.__phoenixPointer = {});"
+            + " if (t === 'down' || t === 'tap' || !st.target) st.target = d.elementFromPoint(x, y) || d.body;"
+            + " var el = st.target;"
+            + " function fire(n) { el.dispatchEvent(new MouseEvent(n, { bubbles: true, cancelable: true, view: w,"
+            + "   clientX: x, clientY: y, screenX: x, screenY: y, button: 0, buttons: n === 'mousedown' || n === 'mousemove' ? 1 : 0 })); }"
+            + " if (t === 'down' || t === 'tap') fire('mousedown');"
+            + " if (t === 'move') fire('mousemove');"
+            + " if (t === 'up' || t === 'tapup' || t === 'tap' || t === 'cancel') fire('mouseup');"
+            + " if (t === 'tapup' || t === 'tap') fire('click');"
+            + " if (t !== 'down' && t !== 'move') st.target = null;"
+            + "})(" + JSON.stringify(String(type)) + ", " + (x / zoom) + ", " + (y / zoom) + ")");
+    }
+
     // Relaunch with new launch params (webOSRelaunch event in the page).
     // refresh (Settings > Apps > Opening a running app: Refresh): the page
     // also reloads its data ("phoenixRefresh"); a site reloads.

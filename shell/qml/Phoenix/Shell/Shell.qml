@@ -1295,6 +1295,8 @@ FocusScope {
         target: shell.source
         ignoreUnknownSignals: true
         function onCardFocusRequested(uid) { Qt.callLater(cards.focusLaunched, uid); }
+        // An app the card in front launched as a modal window (launchModalApp).
+        function onModalCardRequested(uid) { Qt.callLater(cards.addModal, uid); }
         // Back in an app another opened ({returnToCaller}): its caller's card
         // comes back to the front; the app stays open behind it.
         function onCardReturnRequested(uid, fromUid) { Qt.callLater(cards.returnTo, uid, fromUid); }

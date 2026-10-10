@@ -30,6 +30,9 @@ Item {
     property real flickOffset: 0
     // The app is still loading: CardLoading covers it.
     readonly property bool loading: window !== null && window.ready === false
+    // The card has been prepared (a new card is not for its first
+    // cardPrepareAddDuration): its loading screen shows only from then.
+    property bool prepared: true
     // The app's launcher icon, for the loading card.
     property url icon: ""
     // Its bigger icon (appinfo.json "splashicon"), if any.
@@ -40,6 +43,9 @@ Item {
     property url splashBackground: ""
     // Cards that have lost focus are darkened (CardWindow.cpp:211-213).
     property bool dimmed: false
+    // The parent of a modal card: 60 % of #0f0f0f over it (CardWindow::paint,
+    // CardWindow.cpp:1593-1599).
+    property bool modalShade: false
 
     // The orientation the app asked for (PalmSystem.setWindowOrientation):
     // "free", "up", "down", "left", "right", "landscape" or "portrait";
@@ -216,12 +222,21 @@ Item {
             CardLoading {
                 anchors.fill: parent
                 z: 1
-                active: card.loading
+                active: card.loading && card.prepared
                 icon: card.icon
                 largeIcon: card.largeIcon
                 splashIcon: card.splashIcon
                 splashBackground: card.splashBackground
             }
+        }
+
+        Rectangle {
+            objectName: "modalShade"
+            anchors.fill: parent
+            z: 3
+            color: "#0f0f0f"
+            opacity: 0.6
+            visible: card.modalShade
         }
 
         // Darkened when it has lost focus (CardWindow.cpp:211-213), inside

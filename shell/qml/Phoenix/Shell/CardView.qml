@@ -125,7 +125,8 @@ Item {
         var n = source ? source.cards.count : 0;
         for (var i = 0; i < n; ++i) {
             var c = source.cards.get(i);
-            if (closing[c.uid])
+            // A modal card is in no stack (CardWindowManager.cpp:524-549).
+            if (closing[c.uid] || c.uid === waitingUid || c.modal === true)
                 continue;
             if (list.length === 0 || list[list.length - 1].id !== c.groupId)
                 list.push({ id: c.groupId, uids: [], start: i });
@@ -195,6 +196,7 @@ Item {
         fan: fanPositions,
         focus: groupFocus,
         maximize: maximizeProgress,
+        stackMaximize: _stackOwn ? stackProgress : maximizeProgress,
         originY: cardOriginY,
         maximizedCenterY: maximizedCenterY
     })
@@ -217,7 +219,12 @@ Item {
     }
     Timer {
         id: layoutAnimTimer
-        onTriggered: view.layoutAnimationDuration = 0
+        onTriggered: {
+            view.layoutAnimationDuration = 0;
+            view._fanEaseUids = ({});
+            if (view._restoreAfterClose)
+                view._restoreToMaximized();
+        }
     }
 
     // ---- Public API -------------------------------------------------------------------
@@ -263,6 +270,8 @@ Item {
         var g = groupIndexOf(uid);
         if (g < 0)
             return;
+        if (modalUid !== "" && uid !== modalParentUid)
+            dismissModal("switched", false);
         setFocus(uid);
         if (Math.abs(position - g) > 0.001)
             slideTo(g);
@@ -274,7 +283,15 @@ Item {
     }
 
     function minimize() {
+        // With a modal card up the gesture only takes it away, faded, and
+        // its parent stays maximized (minimizeActiveWindow with
+        // m_addingModalWindow, CardWindowManager.cpp:1151-1164).
+        if (modalUid !== "") {
+            dismissModal("minimized", true);
+            return;
+        }
         cancelRise();
+        restoreUid = "";
         if (count === 0)
             return;
         maximizeAnim.stop();
@@ -331,6 +348,8 @@ Item {
             return false;
         }
         animateLayout(Theme.cardSlideDuration);
+        restoreUid = "";
+        dismissModal("switched", false);
         if (maximized) {
             cardMinimized(currentUid);
             maximize(next);
@@ -358,6 +377,8 @@ Item {
         if (g < 0)
             return;
         _returning = null;
+        restoreUid = "";
+        dismissModal("switched", false);
         if (!maximized || currentUid !== fromUid) {
             maximize(uid);
             return;
@@ -406,6 +427,8 @@ Item {
     // Jump straight to card view on a stack, without animating.
     function jumpTo(groupIndex) {
         cancelRise();
+        _cancelWait();
+        restoreUid = "";
         slideAnim.stop();
         maximizeAnim.stop();
         maximizeProgress = 0;
@@ -414,21 +437,54 @@ Item {
 
     // Show a freshly launched (or re-launched) card maximized.
     function focusLaunched(uid) {
-        var g = groupIndexOf(uid);
-        if (g < 0)
-            return;
-        slideAnim.stop();
+        // The card in front, maximized, when the new card is launched
+        // (activeWin, focused: prepareAddWindowSibling).
+        var front = maximized && currentUid !== uid ? currentUid : "";
+        restoreUid = "";
         // A card added without rising (opened behind the card asking for
         // it, {behind: true}) has taken its place in the stack: when it is
         // brought forward later it maximizes from there, not rises again.
-        for (var k in _newCards)
-            if (k !== uid)
+        for (var k in _newCards) {
+            if (k !== uid) {
+                // Opened behind the card that kept the front ({behind},
+                // Phoenix): when that card brings it forward, that is its
+                // launch, put off (see restoreUid).
+                _openedBehind[k] = uid;
                 delete _newCards[k];
+            }
+        }
+        var opener = _openedBehind[uid];
+        delete _openedBehind[uid];
         if (_newCards[uid]) {
+            if (indexOf(uid) < 0)
+                return;
             delete _newCards[uid];
-            _prepareRise(uid, g);
+            // One card prepares at a time: one still waiting goes ahead now.
+            if (waitingUid !== "")
+                _endWait();
+            // A new card takes the front from a modal card
+            // (CardWindowManager.cpp:507-528, ActiveCardsSwitched).
+            dismissModal("switched", false);
+            slideAnim.stop();
+            // Launched by the card in front into its stack: that card comes
+            // back when this one closes while maximized (C8, C12).
+            var i = indexOf(uid), j = indexOf(front);
+            if (front !== "" && j >= 0 && source.cards.get(i).groupId === source.cards.get(j).groupId)
+                restoreUid = front;
+            // CardWindow::delayPrepare (CardWindow.cpp:1395-1400): nothing
+            // happens for cardPrepareAddDuration (150 ms); then the window
+            // is prepared (loadingTimeout, :1452-1494: prepareAddWindow, and
+            // at once addWindow if the app is ready by then).
+            waitingUid = uid;
+            prepareTimer.restart();
             return;
         }
+        var g = groupIndexOf(uid);
+        if (g < 0)
+            return;
+        if (opener !== undefined && opener === front && groupIndexOf(front) === g)
+            restoreUid = front;
+        slideAnim.stop();
         setFocus(uid);
         position = g;
         maximizeAnim.stop();
@@ -438,32 +494,65 @@ Item {
         cardMaximized(uid);
     }
 
-    // ---- A new card rises (CardWindowManager::prepareAddWindowSibling,
+    // ---- A new card is prepared and rises (CardWindow::delayPrepare,
+    // loadingTimeout; CardWindowManager::prepareAddWindowSibling,
     // setActiveCardOffScreen, PreparingState, LoadingState,
     // addWindowTimedOutNormal, maximizeActiveWindow) --------------------------
-    // The card in front zooms out to card view while the stacks slide so the
-    // new card's stack is centred (slideAllGroups, 300 ms); the new card
-    // waits full size just below the screen, in its launcher's stack when
-    // the app in front opened it. When the app is ready it rises to
-    // maximized, 300 ms OutQuart (cardMaximize). If it is not ready after
-    // cardAddMaxDuration (750 ms), it slides into its place in the stack
-    // showing its loading screen instead, and maximizes once the app is
-    // ready. A touch before that stays in card view.
+    // For the first 150 ms (cardPrepareAddDuration) the new card is not
+    // there yet: nothing moves, the card in front stays as it is. Then it is
+    // prepared: the card in front zooms out to card view while the stacks
+    // slide so the new card's stack is centred (slideAllGroups, 300 ms); the
+    // new card waits full size just below the screen, in its launcher's
+    // stack when the app in front opened it, its loading screen on
+    // (startLoadingOverlay). As soon as the app is ready (already, or later)
+    // it rises to maximized (PreparingState::windowAdded ->
+    // maximizeActiveWindow; the zoom out need not have ended). If it is not
+    // ready cardAddMaxDuration (750 ms) after the prepare, it slides into its
+    // place in the stack showing its loading screen instead, and maximizes
+    // once the app is ready. A touch after the prepare stays in card view
+    // (PreparingState/LoadingState::handleTouchBegin).
     property string risingUid: ""
+    // The new card in its prepare step: not in the stacks yet, not shown.
+    property string waitingUid: ""
     // The card waiting in card view for its app (LoadingState).
     property string loadingUid: ""
-    readonly property bool preparing: riseTimeout.running || _risePending
-    property bool _risePending: false
+    readonly property bool preparing: riseTimeout.running
     property bool _inPrepare: false
     property var _newCards: ({})
+    property var _openedBehind: ({})
     Connections {
         target: cards
         function onItemAdded(index, item) { view._newCards[item.uid] = true; }
     }
+    Timer {
+        id: prepareTimer
+        interval: Theme.cardPrepareAddDuration
+        onTriggered: view._endWait()
+    }
+    function _endWait() {
+        prepareTimer.stop();
+        var uid = waitingUid;
+        if (uid === "")
+            return;
+        // Below the screen as it appears, not for a moment in its stack.
+        riseTimeout.stop();
+        loadingUid = "";
+        risingUid = uid;
+        waitingUid = "";
+        var g = groupIndexOf(uid);
+        if (g < 0) {
+            risingUid = "";
+            return;
+        }
+        _prepareRise(uid, g);
+    }
+    function _cancelWait() {
+        prepareTimer.stop();
+        waitingUid = "";
+    }
 
     function _prepareRise(uid, g) {
         riseTimeout.stop();
-        _risePending = false;
         loadingUid = "";
         maximizeAnim.stop();
         _inPrepare = true;
@@ -486,14 +575,6 @@ Item {
         riseTimeout.stop();
         if (risingUid === "" || (maximizeAnim.running && maximizeAnim.to === 1))
             return;
-        // After the zoom out and a short settle (cardPrepareAddDuration):
-        // the cards' layout animation would drag the rise, and a rise that
-        // starts the moment the zoom out ends looks like a bounce.
-        if (layoutAnimTimer.running || riseSettle.running) {
-            _risePending = true;
-            return;
-        }
-        _risePending = false;
         maximizeAnim.to = 1;
         // A new card rises at the launch pace (cardLaunchDuration, 400 ms).
         maximizeAnim.duration = Theme.cardLaunchDuration;
@@ -504,15 +585,12 @@ Item {
     function _slideInLoading() {
         if (risingUid === "")
             return;
-        _risePending = false;
         loadingUid = risingUid;
         animateLayout(Theme.cardSlideDuration);
         risingUid = "";
     }
     function cancelRise() {
         riseTimeout.stop();
-        riseSettle.stop();
-        _risePending = false;
         risingUid = "";
         loadingUid = "";
     }
@@ -520,15 +598,6 @@ Item {
         id: riseTimeout
         interval: Theme.cardAddMaxDuration
         onTriggered: view._slideInLoading()
-    }
-    Connections {
-        target: layoutAnimTimer
-        function onRunningChanged() { if (!layoutAnimTimer.running && view._risePending) riseSettle.restart(); }
-    }
-    Timer {
-        id: riseSettle
-        interval: Theme.cardPrepareAddDuration
-        onTriggered: if (view._risePending) view._rise()
     }
     // The app became ready: rise from below, or maximize from card view.
     Connections {
@@ -565,9 +634,45 @@ Item {
     // the top, 300 ms OutCubic, while the others slide into place
     // (removeCardFromGroup -> slideAllGroups) at the same time. It does not
     // fade. The window closes once it is off.
+    // The card in front, maximized (its app closed it, or the close
+    // shortcut), slides straight up off the top at full size over the same
+    // 300 ms OutCubic (removeWindowNoModality, CardWindowManager.cpp:
+    // 672-696), and the rest go back to card view from where they are
+    // (MaximizeState::windowRemoved -> removeCardFromGroupMaximized:
+    // signalMinimizeActiveWindow, removeCardFromGroup -> slideAllGroups,
+    // :994-1047; the stack's own cards over 200 ms OutCubic, the other
+    // stacks over 300 ms). The card next to it in its stack becomes the
+    // stack's active card (CardGroup::removeFromGroup, CardGroup.cpp:196-212).
+    // If the card was opened by the card that was in front when it was
+    // launched (and joined its stack), that card maximizes again once card
+    // view has settled (restoreCardToMaximized, :2812-2821, from
+    // MinimizeState::animationsFinished, CardWindowManagerStates.cpp:158-165).
     function close(uid, byApp) {
         if (closing[uid])
             return;
+        if (uid !== "" && uid === modalUid) {
+            // The modal card closed itself (or was closed): it goes at once
+            // (removeWindowWithModality, ModalWindowDismissedExternally).
+            cardClosing(uid, !!byApp);
+            dismissModal("closed", false);
+            cardClosed(uid);
+            return;
+        }
+        // Its parent closed: the modal card goes first, at once
+        // (ParentCardDismissed, CardWindowManager.cpp:2840-2852).
+        if (uid !== "" && uid === modalParentUid)
+            dismissModal("parentClosed", false);
+        if (uid === waitingUid) {
+            // Closed before it was shown (still in its prepare step).
+            _cancelWait();
+            if (byApp)
+                _noKeepAlive[uid] = true;
+            cardClosing(uid, !!byApp);
+            source.close(uid, !!_noKeepAlive[uid]);
+            delete _noKeepAlive[uid];
+            cardClosed(uid);
+            return;
+        }
         var g = groupIndexOf(uid);
         if (g < 0)
             return;
@@ -577,29 +682,174 @@ Item {
         cardClosing(uid, !!byApp);
         var place = layout.cards[uid];
         var card = cardItem(uid);
-        var fly = card && place && maximizeProgress === 0;
+        var inFront = uid === currentUid && maximizeProgress > 0;
+        if (inFront && risingUid === uid)
+            inFront = false;
+        var fly = card && place && (maximizeProgress === 0 || inFront);
         var group = groups[g];
         var k = group.uids.indexOf(uid);
         var stackSurvives = group.uids.length > 1;
-        // The neighbouring card in the stack takes focus.
-        if (stackSurvives && focusOf(group) === uid)
-            setFocus(group.uids[k > 0 ? k - 1 : 1]);
-        animateLayout(fly ? Theme.cardDeleteDuration : Theme.cardShuffleReorderDuration);
         var wasLastGroup = g === groupCount - 1;
-        var c = Object.assign({}, closing);
-        c[uid] = place || { cx: width / 2, cy: cardOriginY, scale: activeScale, rot: 0, z: 0, focused: false };
-        closing = c;
-        if (!stackSurvives) {
-            if (wasLastGroup && position > 0)
-                slideTo(groupCount - 1);
-            else if (g < position)
-                position = Math.max(0, position - 1);
+        if (inFront) {
+            _closeInFront(uid, place, g, group, k, stackSurvives, wasLastGroup);
+        } else {
+            // The neighbouring card in the stack takes focus.
+            if (stackSurvives && focusOf(group) === uid)
+                setFocus(group.uids[k > 0 ? k - 1 : 1]);
+            animateLayout(fly ? Theme.cardDeleteDuration : Theme.cardShuffleReorderDuration);
+            var c = Object.assign({}, closing);
+            c[uid] = place || { cx: width / 2, cy: cardOriginY, scale: activeScale, rot: 0, z: 0, focused: false };
+            closing = c;
+            if (!stackSurvives) {
+                if (wasLastGroup && position > 0)
+                    slideTo(groupCount - 1);
+                else if (g < position)
+                    position = Math.max(0, position - 1);
+            }
         }
         if (fly)
             flickAnimation.createObject(card, { target: card, closing: true,
                                                 to: -(place.cy + card.height * place.scale / 2) }).start();
         else
             _finishClose(uid);
+    }
+
+    // ---- Modal cards (CardWindowManager::prepareAddWindow, :499-550;
+    // CardWindow::setModalParent, positionModalWindowWrpParent,
+    // CardWindow.cpp:1842-1866; the parent's 60 % shade, :1593-1599) --------
+    // An app the maximized card launched as a modal window
+    // (com.palm.systemmanager/launchModalApp) shows over it, 320 x 480,
+    // centred on it in the screen's positive space, the parent dimmed under
+    // 60 % of #0f0f0f and its touches going to the modal card. It is in no
+    // stack and never in card view: the minimize gesture takes it away
+    // (faded over 45 ms, kModalWindowAnimationTimeout) and leaves the parent
+    // maximized; switching cards, a new card, the parent closing, or its app
+    // dismissing it take it away at once (notifySysControllerOfModalStatus,
+    // :3130-3175, performPostModalWindowRemovedActions, :914-990).
+    property string modalUid: ""
+    readonly property string modalParentUid: {
+        revision;
+        var i = indexOf(modalUid);
+        return i >= 0 ? (source.cards.get(i).modalParent || "") : "";
+    }
+    property bool modalFading: false
+    readonly property real modalWidth: Math.min(windowWidth, Theme.px(Theme.modalCardWidth))
+    readonly property real modalHeight: Math.min(windowHeight, Theme.px(Theme.modalCardHeight))
+    // The window source asks for a modal card (modalCardRequested): shown
+    // if its parent is the maximized card and no other modal is up
+    // (proceedToAddModalWindow, :425-466), else refused and closed.
+    function addModal(uid) {
+        var i = indexOf(uid);
+        if (i < 0)
+            return;
+        var parent = source.cards.get(i).modalParent || "";
+        var result = modalUid !== "" ? "anotherModalActive"
+                   : !maximized || currentUid === "" ? "noMaximizedCard"
+                   : currentUid !== parent ? "parentDifferent" : "launched";
+        if (result !== "launched") {
+            if (source && typeof source.modalResult === "function")
+                source.modalResult(uid, result);
+            source.close(uid, true);
+            return;
+        }
+        modalFading = false;
+        modalUid = uid;
+        if (source && typeof source.modalResult === "function")
+            source.modalResult(uid, "launched");
+    }
+    // Take the modal card away; why: the dismiss reason the window source
+    // reports ("minimized", "switched", "parentClosed", "service", "closed").
+    function dismissModal(why, animate) {
+        if (modalUid === "" || modalFading)
+            return;
+        if (animate && !Theme.reduceMotion) {
+            modalFading = true;
+            modalFade.why = why;
+            modalFade.restart();
+            return;
+        }
+        _endModal(why);
+    }
+    function _endModal(why) {
+        var uid = modalUid;
+        if (uid === "")
+            return;
+        modalUid = "";
+        modalFading = false;
+        if (source && typeof source.modalResult === "function")
+            source.modalResult(uid, why);
+        if (indexOf(uid) >= 0)
+            source.close(uid, true);
+    }
+    Timer {
+        id: modalFade
+        property string why: ""
+        interval: Theme.modalCardFadeDuration
+        onTriggered: view._endModal(why)
+    }
+    Connections {
+        target: view.source
+        ignoreUnknownSignals: true
+        function onModalDismissRequested(uid) { if (uid === view.modalUid) view.dismissModal("service", true); }
+    }
+
+    // The card that launched the one in front, when that one joined its
+    // stack (prepareAddWindowSibling: m_cardToRestoreToMaximized,
+    // CardWindowManager.cpp:561-568); "" when there is none. Anything else
+    // that takes the user elsewhere forgets it (disableCardRestoreToMaximized:
+    // minimizeActiveWindow, another card being added, switching apps,
+    // focusWindow; :551, 1144, 2225-2398, 2703). Phoenix: a card the card in
+    // front opened behind itself ({behind}) and later brings forward counts
+    // as launched by it then.
+    property string restoreUid: ""
+    property bool _restoreAfterClose: false
+    // The cards of the stack that stays in front while a maximized card
+    // closes: they ease to their places in the fan over 200 ms OutCubic
+    // from wherever they are; the other stacks slide over 300 ms.
+    property var _fanEaseUids: ({})
+
+    function _closeInFront(uid, place, g, group, k, stackSurvives, wasLastGroup) {
+        cancelRise();
+        _returning = null;
+        // The stack in front afterwards: this one, or (it was the stack's
+        // only card) the next one, or the one before if it was the last.
+        var nb = stackSurvives ? g : wasLastGroup ? g - 1 : g + 1;
+        var stay = nb >= 0 && nb < groupCount ? groups[nb].uids : [];
+        var ease = {};
+        for (var i = 0; i < stay.length; ++i)
+            if (stay[i] !== uid)
+                ease[stay[i]] = true;
+        // Everything eases from where it is drawn now: set before anything
+        // moves.
+        _fanEaseUids = ease;
+        animateLayout(Theme.cardSlideDuration);
+        // Where it is, kept as it slides away, over everything.
+        var c = Object.assign({}, closing);
+        c[uid] = Object.assign({}, place, { z: 4000 });
+        closing = c;
+        if (stackSurvives && focusOf(group) === uid)
+            setFocus(group.uids[k > 0 ? k - 1 : 1]);
+        maximizeAnim.stop();
+        stackAnim.stop();
+        slideAnim.stop();
+        _stackOwn = false;
+        position = Math.max(0, stackSurvives || !wasLastGroup ? g : g - 1);
+        maximizeProgress = 0;
+        _restoreAfterClose = restoreUid !== "";
+        cardMinimized(uid);
+        if (groupCount > 0 && source && typeof source.firstCardAlert === "function")
+            source.firstCardAlert();
+    }
+
+    // Card view has settled after a maximized card closed: the card that
+    // launched it, if it is in the stack in front, maximizes again.
+    function _restoreToMaximized() {
+        var r = restoreUid;
+        _restoreAfterClose = false;
+        restoreUid = "";
+        if (r === "" || maximizeProgress !== 0 || maximizeAnim.running || groupIndexOf(r) !== currentGroup)
+            return;
+        maximize(r);
     }
 
     // A card closed from elsewhere (the app, the source) while flying off
@@ -617,6 +867,20 @@ Item {
         }
         if (loadingUid !== "" && !loadingHere)
             loadingUid = "";
+        if (waitingUid !== "" && indexOf(waitingUid) < 0)
+            _cancelWait();
+        if (modalUid !== "" && indexOf(modalUid) < 0) {
+            var gone = modalUid;
+            modalUid = "";
+            modalFading = false;
+            if (source && typeof source.modalResult === "function")
+                source.modalResult(gone, "closed");
+        } else if (modalUid !== "" && indexOf(modalParentUid) < 0) {
+            dismissModal("parentClosed", false);
+        }
+        for (var b in _openedBehind)
+            if (indexOf(b) < 0)
+                delete _openedBehind[b];
         if (Object.keys(closing).length !== Object.keys(c).length)
             closing = c;
         if (risingUid !== "" && !risingHere) {
@@ -771,6 +1035,55 @@ Item {
         easing.type: Theme.cardEasing
     }
 
+    // The current stack's own cards on their way back into card view:
+    // CardWindowManager::minimizeActiveWindow -> slideAllGroups moves the
+    // stacks (the groups' x) over cardSlide, 300 ms OutQuart, but the cards
+    // of the stack in front, the minimizing one among them, to their places
+    // in the fan with CardGroup::animateOpen(200, OutCubic)
+    // (CardWindowManager.cpp:1142-1160, 2481-2499). So the card is in its
+    // place in the fan a third sooner, while the neighbouring stacks are
+    // still sliding in. A maximize that takes over carries the cards on
+    // from where they are, at its own pace.
+    property real stackProgress: 0
+    property bool _stackOwn: false
+    NumberAnimation {
+        id: stackAnim
+        target: view; property: "stackProgress"
+    }
+    Connections {
+        target: maximizeAnim
+        function onStarted() {
+            if (maximizeAnim.to === 0) {
+                if (!view._stackOwn)
+                    view.stackProgress = view.maximizeProgress;
+                view._stackOwn = true;
+                stackAnim.stop();
+                stackAnim.to = 0;
+                stackAnim.duration = Theme.cardFanDuration;
+                stackAnim.easing.type = Easing.OutCubic;
+                stackAnim.start();
+            } else if (view._stackOwn) {
+                stackAnim.stop();
+                stackAnim.to = maximizeAnim.to;
+                stackAnim.duration = maximizeAnim.duration;
+                stackAnim.easing.type = maximizeAnim.easing.type;
+                stackAnim.start();
+            }
+        }
+        // Stopped, not restarted at once (maximize and minimize stop it
+        // and start it again): the stack follows maximizeProgress again.
+        function onRunningChanged() {
+            if (!maximizeAnim.running)
+                Qt.callLater(view._endStackOwn);
+        }
+    }
+    function _endStackOwn() {
+        if (maximizeAnim.running)
+            return;
+        stackAnim.stop();
+        _stackOwn = false;
+    }
+
     // ---- Cards --------------------------------------------------------------------------
 
     Repeater {
@@ -786,6 +1099,10 @@ Item {
             // Rising from below the screen: full size, straight up.
             readonly property bool rising: view.risingUid === uid
             readonly property bool lifted: view.reorderUid === uid
+            // A modal card, over its parent; and the parent under it.
+            readonly property bool modalCard: view.modalUid !== "" && view.modalUid === uid
+            readonly property bool modalParent: view.modalUid !== "" && view.modalParentUid === uid
+            readonly property Item parentCard: modalCard ? view.cardItem(view.modalParentUid) : null
 
             uid: model.uid
             title: model.title
@@ -797,25 +1114,40 @@ Item {
             largeIcon: info && info.largeIcon ? info.largeIcon : ""
             splashIcon: info && info.splashIcon ? info.splashIcon : ""
             splashBackground: info && info.splashBackground ? info.splashBackground : ""
-            width: view.windowWidth
-            height: view.windowHeight
+            width: modalCard ? view.modalWidth : view.windowWidth
+            height: modalCard ? view.modalHeight : view.windowHeight
             window: view.source.windowFor(uid)
-            centerX: (rising ? view.width / 2 : lifted ? view.reorderX : place ? place.cx : view.width / 2)
-                     + (place && place.focused ? view.edgeNudge : 0)
-            centerY: rising ? view.mix(view.height + height / 2, view.maximizedCenterY, view.maximizeProgress)
+            centerX: modalCard ? (parentCard ? parentCard.centerX : view.width / 2)
+                     : (rising ? view.width / 2 : lifted ? view.reorderX : place ? place.cx : view.width / 2)
+                       + (place && place.focused ? view.edgeNudge : 0)
+            centerY: modalCard ? view.maximizedCenterY
+                   : rising ? view.mix(view.height + height / 2, view.maximizedCenterY, view.maximizeProgress)
                    : lifted ? view.reorderY : place ? place.cy : view.cardOriginY
-            cardScale: rising ? 1 : lifted ? view.activeScale : place ? place.scale : view.activeScale
-            rotation: rising || lifted || !place ? 0 : place.rot
-            rounded: view.maximizeProgress < 1
+            cardScale: modalCard || rising ? 1 : lifted ? view.activeScale : place ? place.scale : view.activeScale
+            rotation: modalCard || rising || lifted || !place ? 0 : place.rot
+            rounded: modalCard || view.maximizeProgress < 1
+            modalShade: modalParent
             appOrientation: model.orientation !== undefined && model.orientation !== "" ? model.orientation : "free"
             uiOrientation: view.uiOrientation
             uiPortrait: view.uiPortrait
-            interactive: view.maximized && place !== null && place.focused
-            dimmed: place === null || !place.focused
+            interactive: modalCard ? view.maximized : view.maximized && place !== null && place.focused && !modalParent
+            dimmed: !modalCard && (place === null || !place.focused)
             reordering: lifted
-            layoutAnimationDuration: lifted || view.closing[uid] ? 0 : view.layoutAnimationDuration
-            z: lifted || rising ? 3000 : place ? place.z : 0
-            visible: centerX + width * cardScale / 2 > -view.width
+            layoutAnimationDuration: lifted || view.closing[uid] || (rising && maximizeAnim.running) ? 0
+                                     : view._fanEaseUids[uid] && view.layoutAnimationDuration > 0 ? Theme.cardFanDuration
+                                     : view.layoutAnimationDuration
+            z: modalCard ? 3500 : lifted || rising ? 3000 : place ? place.z : 0
+            opacity: modalCard && view.modalFading ? 0 : reordering ? 0.8 : 1
+            Behavior on opacity {
+                enabled: cardDelegate.modalCard && view.modalFading
+                NumberAnimation { duration: Theme.modalCardFadeDuration }
+            }
+            // In its prepare step the card is not there yet; its loading
+            // screen starts when it is prepared (startLoadingOverlay,
+            // CardWindow.cpp:1486-1490).
+            prepared: view.waitingUid !== uid
+            visible: (modalCard ? view.maximized || view.modalFading
+                      : !(model.modal === true)) && prepared && centerX + width * cardScale / 2 > -view.width
                      && centerX - width * cardScale / 2 < view.width * 2
         }
     }
@@ -1179,6 +1511,15 @@ Item {
                 // m_trackWithinGroup; CardGroup::atEdge).
                 if (f.withinGroup) {
                     var fanBefore = currentFan();
+                    // Each move sends the stack's cards to their new places
+                    // over 200 ms OutCubic from wherever they are
+                    // (adjustHorizontally, then slideAllGroups ->
+                    // animateOpen(200, OutCubic): CardWindowManager.cpp:
+                    // 1482-1490, 2495): the fan eases after the finger.
+                    var fanTarget = CardLayout.clampFanPosition(fanBefore - stepX / fanUnit(),
+                                                                view.groups[view.currentGroup].uids.length);
+                    if (stepX !== 0 && fanTarget !== fanBefore)
+                        view.animateLayout(Theme.cardFanDuration);
                     if (stepX !== 0)
                         setCurrentFan(fanBefore - stepX / fanUnit());
                     var moved = currentFan() - fanBefore;
@@ -1187,6 +1528,10 @@ Item {
                         f.withinGroup = false;
                         f.panFrom = view.position;
                         f.panX = (wanted - moved) * fanUnit();
+                        // From here the stacks follow the finger directly
+                        // (slideAllGroupsOnTouchUpdate, :1372-1396).
+                        layoutAnimTimer.stop();
+                        view.layoutAnimationDuration = 0;
                     }
                 } else {
                     f.panX += -stepX;
