@@ -693,3 +693,27 @@ registered by the Phoenix project account (OPEN-QUESTIONS Q17) and listed
 in the Slack Marketplace (Slack's review); a workspace's admins can also
 refuse outside apps. Until it is listed it is built and tested with those
 limits.
+
+**More platforms** (the owner, 10 October 2026: "add them with the others
+as potentials or not likely"; catalog packages, none pre-installed):
+
+Potentials:
+
+| Platform | What it brings | How | Notes |
+| --- | --- | --- | --- |
+| KDE Connect | An Android phone's texts in Messaging (read and reply from a Phoenix tablet), its notifications mirrored, files and the clipboard shared | Its open protocol over the local network (TLS, paired with a code) | Written from the published protocol: KDE Connect's own code is GPL. A fit for tablets, as the TouchPad's "text from your tablet" was |
+| Mattermost, Zulip, Rocket.Chat | Team chat: direct messages and channels in Messaging, the team's people in Contacts, mentions as notifications | Their REST and websocket APIs with the user's sign-in or a personal token | Self-hosted Slack alternatives with full user APIs: no marketplace review, no history limits |
+| Nostr | Posts in the feed, people as contacts, direct messages in Messaging | Relays over websockets, the user's key (NIP-01, NIP-17 messages) | No registration; keys only. Next to the Fediverse and Bluesky |
+| GitHub, GitLab, Forgejo / Codeberg | Notifications (mentions, reviews, CI, issues), assigned issues as tasks | Their REST APIs with a personal token or OAuth | For the work theme; free APIs |
+| Home Assistant | Smart-home alerts as notifications; "turn off the lights" through Just Type and the Assistant | Its REST and websocket APIs with a long-lived token, on the user's own server | No registration; local |
+| Last.fm, ListenBrainz, Spotify | Scrobbling what Music plays; Spotify's now playing and playlists | Last.fm and ListenBrainz APIs; Spotify Web API (OAuth) | Spotify needs an app registered (OPEN-QUESTIONS Q17) and its playback rules are strict |
+| Reddit | Inbox messages and replies in Messaging, notifications | Reddit's OAuth API, free tier for personal non-commercial use | Its terms limit commercial use |
+
+Not likely, and why:
+
+| Platform | Why not | Instead |
+| --- | --- | --- |
+| Facebook | The original had it built in, but today's Graph API gives no friends' details, posts or Messenger messages to other apps | Its web app in the catalog |
+| Instagram | Its API is only for business and creator accounts; no direct messages for personal ones | Its web app |
+| Threads | Its API posts and reads the user's own posts only | The Fediverse account reaches Threads profiles that share to the fediverse |
+| YouTube as an account | Little an account adds | Channel subscriptions as RSS feeds through the feeds connector |
