@@ -383,8 +383,12 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
 - [ ] OTA updates with A/B slots ([HARDWARE.md](HARDWARE.md#ota-with-ab-updates)).
       Done in the simulator: `com.palm.update` (Palm's API, so luna-systemui's
       update alerts work) on RAUC, Settings > Updates, the feed publisher
-      `server/updates` ([APP-RUNTIME.md](APP-RUNTIME.md#system-updates)); to do:
-      the A/B image, RAUC's bootloader setup and signing keys per device
+      `server/updates`, and the feed built into Phoenix's own catalog server
+      (`server/marketplace`: `/updates/`, published with its admin API; the
+      device's default feed) ([APP-RUNTIME.md](APP-RUNTIME.md#system-updates)); to do:
+      the A/B image, RAUC's bootloader setup and signing keys per device,
+      and hosting the catalog server (its public address in
+      `/etc/palm/updates.json` and the Marketplace's sources)
 
 ## 2.0: modern webOS
 

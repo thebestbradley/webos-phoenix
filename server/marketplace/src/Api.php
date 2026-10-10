@@ -20,6 +20,13 @@
 //   POST /api/admin/releases/{n}/{approve|reject}  (admin) {notes}
 //   POST /api/admin/optouts/{n}/accept             (admin)
 //   POST /api/admin/publish                        (admin)
+//   GET  /api/updates                              the system update feed: every
+//                                                  device type's channels
+//   POST /api/admin/updates?compatible=C&version=V&build=N[&channel=stable|beta]
+//        [&name=NAME][&date=YYYY-MM-DD]            (admin) the .raucb as the
+//        request body; notes as repeated note=... the channel's release from
+//        now on, served at /updates/<compatible>/<channel>.json
+//   POST /api/admin/updates/withdraw {compatible, channel}  (admin)
 //
 // Accounts send "Authorization: Bearer <token>"; only a hash of the token
 // is stored. Decisions publish the catalog again.
@@ -30,16 +37,16 @@ namespace Phoenix\Marketplace;
 
 final class Api
 {
-    public function __construct(private Db $db, private Catalog $catalog)
+    public function __construct(private Db $db, private Catalog $catalog, private ?\Phoenix\Updates\UpdateFeed $updates = null)
     {
     }
 
     /** @return array{0: int, 1: array} */
-    public function handle(string $method, string $path, string $body, ?string $auth): array
+    public function handle(string $method, string $path, string $body, ?string $auth, array $query = []): array
     {
         try {
-            return [200, $this->route($method, rtrim($path, '/'), $body, $auth)];
-        } catch (CheckFailed $e) {
+            return [200, $this->route($method, rtrim($path, '/'), $body, $auth, $query)];
+        } catch (CheckFailed | \InvalidArgumentException $e) {
             return [400, ['error' => $e->getMessage()]];
         } catch (HttpError $e) {
             return [$e->getCode(), ['error' => $e->getMessage()]];
@@ -84,10 +91,13 @@ final class Api
         return ['id' => $this->db->lastId(), 'token' => $token, 'role' => $role];
     }
 
-    private function route(string $m, string $p, string $body, ?string $auth): array
+    private function route(string $m, string $p, string $body, ?string $auth, array $query): array
     {
         if ($m === 'GET' && $p === '/api/health') {
             return ['ok' => true];
+        }
+        if ($m === 'GET' && $p === '/api/updates' && $this->updates) {
+            return ['feeds' => $this->updates->all()];
         }
         if ($m === 'POST' && $p === '/api/accounts') {
             $j = $this->json($body);
@@ -163,6 +173,22 @@ final class Api
             }
             if ($m === 'POST' && $p === '/api/admin/publish') {
                 return ['publish' => $this->catalog->publish()];
+            }
+            // A system update: the bundle as the body (RAUC signed it; the
+            // device checks that against its keyring), the release in the query.
+            if ($m === 'POST' && $p === '/api/admin/updates' && $this->updates) {
+                $compatible = (string) ($query['compatible'] ?? '');
+                $rel = \Phoenix\Updates\UpdateFeed::release($query + ['notes' => []]);
+                $simulator = $compatible === 'phoenix-sim';
+                $bytes = $simulator && $body === '' ? \Phoenix\Updates\UpdateFeed::simulatorBundle($rel) : $body;
+                $name = ($simulator ? 'phoenix-sim-' : 'phoenix-') . $rel['version'] . '-' . $rel['build'] . '.raucb';
+                $this->updates->publish($compatible, $rel, $bytes, $name);
+                return ['feed' => $this->updates->read($compatible, $rel['channel'])];
+            }
+            if ($m === 'POST' && $p === '/api/admin/updates/withdraw' && $this->updates) {
+                $j = $this->json($body);
+                $this->updates->withdraw((string) ($j['compatible'] ?? ''), (string) ($j['channel'] ?? 'stable'));
+                return ['feed' => $this->updates->read((string) $j['compatible'], (string) ($j['channel'] ?? 'stable'))];
             }
         }
         throw new HttpError('Not found', 404);

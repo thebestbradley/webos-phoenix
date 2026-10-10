@@ -338,6 +338,50 @@ check($local->get('http://10.0.0.1/i.png', 1 << 20) === null && $local->get('htt
       'SafeFetch local mode: still nothing internal besides 127.0.0.1');
 proc_terminate($site);
 
+// ---- The system update feed (served at /updates/, published by the admin API) ----------------
+$bundle = str_repeat("\x00\x01raucb", 64);
+$q = ['compatible' => 'phoenix-pinephone', 'version' => '1.1.0', 'build' => '110', 'notes' => ['Faster cards', 'Share everywhere']];
+[$s] = $api->handle('POST', '/api/admin/updates', $bundle, "Bearer {$dev['token']}", $q);
+check($s === 403, 'updates: only an admin publishes one');
+[$s, $r] = $api->handle('POST', '/api/admin/updates', $bundle, "Bearer $admin", $q);
+check($s === 200 && $r['feed']['format'] === 1 && $r['feed']['compatible'] === 'phoenix-pinephone' && $r['feed']['channel'] === 'stable'
+      && $r['feed']['release']['version'] === '1.1.0' && $r['feed']['release']['build'] === 110
+      && $r['feed']['release']['notes'] === ['Faster cards', 'Share everywhere'], 'updates: a release on the stable channel');
+$feedFile = getenv('MARKETPLACE_DATA') . '/updates/phoenix-pinephone/stable.json';
+$onDisk = json_decode((string) @file_get_contents($feedFile), true);
+check(is_array($onDisk) && $onDisk['release']['sha256'] === hash('sha256', $bundle) && $onDisk['release']['size'] === strlen($bundle)
+      && hash_file('sha256', dirname($feedFile) . '/' . $onDisk['release']['url']) === hash('sha256', $bundle),
+      'updates: the feed file and the bundle beside it, as com.palm.update reads them');
+[$s, $r] = $api->handle('POST', '/api/admin/updates', $bundle, "Bearer $admin", ['build' => '109'] + $q);
+check($s === 400 && str_contains($r['error'], 'higher build number'), 'updates: builds only go up');
+[$s, $r] = $api->handle('POST', '/api/admin/updates', $bundle, "Bearer $admin", ['compatible' => '../etc'] + $q);
+check($s === 400, 'updates: device types are names, not paths');
+[$s, $r] = $api->handle('POST', '/api/admin/updates', '', "Bearer $admin", ['compatible' => 'phoenix-sim', 'version' => '0.2.0', 'build' => '2', 'channel' => 'beta']);
+check($s === 200 && $r['feed']['release']['url'] === 'phoenix-sim-0.2.0-2.raucb', "updates: the simulator's stand-in bundle when none is sent");
+[$s, $r] = $call('GET', '/api/updates');
+check($s === 200 && array_map(fn ($f) => $f['compatible'] . '/' . $f['channel'], $r['feeds']) === ['phoenix-pinephone/stable', 'phoenix-sim/beta'],
+      'updates: GET /api/updates lists every channel');
+[$s, $r] = $call('POST', '/api/admin/updates/withdraw', ['compatible' => 'phoenix-pinephone', 'channel' => 'stable'], $admin);
+check($s === 200 && $r['feed']['release'] === null && $r['feed']['withdrawn']['build'] === 110, 'updates: withdrawn');
+
+// The router serves it (PHP's built-in server, as bin/serve.sh runs it).
+$port = 18000 + random_int(0, 999);
+$server = proc_open(['php', '-S', "127.0.0.1:$port", __DIR__ . '/../public/router.php'], [1 => ['file', '/dev/null', 'w'], 2 => ['file', '/dev/null', 'w']], $pipes,
+                    null, ['MARKETPLACE_DATA' => getenv('MARKETPLACE_DATA'), 'PATH' => getenv('PATH')]);
+$get = function (string $path) use ($port): ?string {
+    for ($i = 0; $i < 50; $i++) {
+        $r = @file_get_contents("http://127.0.0.1:$port$path");
+        if ($r !== false || (isset($http_response_header[0]) && str_contains($http_response_header[0], '404'))) return $r === false ? null : $r;
+        usleep(100000);
+    }
+    return null;
+};
+$served = json_decode((string) $get('/updates/phoenix-sim/beta.json'), true);
+check(is_array($served) && $served['release']['build'] === 2, 'updates: the router serves /updates/<compatible>/<channel>.json');
+check($get('/updates/phoenix-sim/phoenix-sim-0.2.0-2.raucb') === "[update]\ncompatible=phoenix-sim\nversion=0.2.0\nbuild=2\n", 'updates: and its bundle');
+check($get('/updates/../marketplace.sqlite') === null && $get('/updates/') === null, 'updates: nothing outside the feed');
+proc_terminate($server);
+
 exec('rm -rf ' . escapeshellarg($tmp));
 echo $failures ? "\n$failures failed\n" : "\nall passed\n";
 exit($failures ? 1 : 0);

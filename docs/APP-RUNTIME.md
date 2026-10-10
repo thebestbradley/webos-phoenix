@@ -2618,8 +2618,21 @@ system back.
 In the simulator the service runs unchanged over a simulated RAUC: two slots in
 the shared store; osInfo's `webos_release` and `webos_build_id` are the running
 slot's. A simulator bundle is only a RAUC manifest
-(`php server/updates/bin/updates.php simulator --version 0.2.0 --build 2`,
-served by `server/updates/bin/serve.sh` at `http://127.0.0.1:8089/`).
+(`UPDATES_FEED=server/marketplace/data/updates php server/updates/bin/updates.php
+simulator --version 0.2.0 --build 2`, or the catalog server's admin API).
+
+**The feed is built into Phoenix's own catalog server** (the owner, 10
+October 2026: our own API and catalog, not a third party's host): the
+server that publishes the Marketplace's signed catalog (`server/marketplace`)
+also serves the update feed at `/updates/<compatible>/<channel>.json` with
+its bundles, and publishes releases with its admin API (`POST
+/api/admin/updates?compatible=&version=&build=&channel=&note=...` with the
+bundle as the body; `POST /api/admin/updates/withdraw`; `GET /api/updates`
+lists every channel). Both it and `server/updates/bin/updates.php` write the
+feed with `server/updates/src/UpdateFeed.php`. A device's default
+(`/etc/palm/updates.json`) is that server: `http://127.0.0.1:8088/updates/`
+on this computer (the simulator's Services > Marketplace Catalog starts it),
+the catalog server's public address once it is hosted.
 `com.palm.power/shutdown/machineReboot` restarts phoenix-sim (`simProcess`),
 or reloads the page under `tools/serve-rootfs.py`; for a system update
 (`reason: "System update"`) phoenix-sim starts again with `--updating`, and

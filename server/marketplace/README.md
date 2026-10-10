@@ -37,6 +37,24 @@ Everything it keeps is in `data/` (git-ignored). **Keep a copy of
 `data/signing.key`**: with a new key every device has to trust the catalog
 again.
 
+## System updates
+
+The same server serves the system update feed devices read
+(`com.palm.update`, `services/updates`): `/updates/<compatible>/<channel>.json`
+next to its RAUC bundles, in `data/updates` (`MARKETPLACE_UPDATES`
+elsewhere), written by `server/updates/src/UpdateFeed.php`. An admin
+publishes a release with the bundle as the request body:
+
+    curl -X POST -H "Authorization: Bearer $TOKEN" --data-binary @phoenix.raucb \
+        "https://…/api/admin/updates?compatible=phoenix-pinephone&version=1.1.0&build=110&channel=stable&note=…"
+
+(`note=` repeats, one line each; for `compatible=phoenix-sim` with no body,
+the simulator's stand-in bundle.) `POST /api/admin/updates/withdraw
+{compatible, channel}` takes a release back; `GET /api/updates` lists every
+channel. A device's default feed (`services/updates/etc/palm/updates.json`)
+is this server's `/updates/`. The feed is not signed; the bundles are
+(RAUC, on the device), and builds only go up.
+
 ## On a server
 
 Point Apache or nginx (with PHP-FPM) at `public/router.php` for every

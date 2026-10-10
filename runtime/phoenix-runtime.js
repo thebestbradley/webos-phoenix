@@ -12300,7 +12300,10 @@
     // what osInfo/query says (webos_release, webos_build_id). A bundle here is
     // the simulator's stand-in for a RAUC bundle: only its manifest, as text
     // ("[update]" compatible=phoenix-sim, version=, build=;
-    // server/updates/bin/publish.php --simulator makes one). Installing writes
+    // server/updates/bin/updates.php simulator makes one, or the catalog
+    // server's admin API: POST /api/admin/updates?compatible=phoenix-sim).
+    // The feed is the catalog server's (/etc/palm/updates.json:
+    // http://127.0.0.1:8088/updates/, server/marketplace). Installing writes
     // the version to the other slot; com.palm.power/shutdown/machineReboot
     // then starts the primary slot (phoenix-sim restarts itself; a browser
     // page reloads).

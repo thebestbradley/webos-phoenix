@@ -2,7 +2,8 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The service's parts, wired from the configuration.
+// The service's parts, wired from the configuration: the catalog (apps) and
+// the system update feed (server/updates), one server for both.
 
 declare(strict_types=1);
 
@@ -14,6 +15,7 @@ final class App
     public Signer $signer;
     public Catalog $catalog;
     public Api $api;
+    public \Phoenix\Updates\UpdateFeed $updates;
 
     public function __construct(public array $config)
     {
@@ -21,6 +23,7 @@ final class App
         $this->db->migrate();
         $this->signer = new Signer($config['data']);
         $this->catalog = new Catalog($this->db, $this->signer, $config);
-        $this->api = new Api($this->db, $this->catalog);
+        $this->updates = new \Phoenix\Updates\UpdateFeed($config['updates']);
+        $this->api = new Api($this->db, $this->catalog, $this->updates);
     }
 }
