@@ -12,7 +12,7 @@
 //   "orb"     black, the classic orb (the boot logo's dark disc and silver
 //             rim) with a dead face, X eyes, in place of the emblem; its
 //             white glow swells as the logo's did.
-//   "gold"    the glow turns from white to the bird's gold, and grows.
+//   "gold"    the glow turns from white to the bird's gold as it comes up.
 //   "burn"    it catches fire: the crest's flames, each at its own pace,
 //             burst out around it and grow; the face screams (the mouth
 //             wide, the X eyes stay), it shakes, chars, and sinks, burning
@@ -234,6 +234,35 @@ Item {
         }
     }
 
+    // The boot logo's own glow (boot-logo-bright.png over boot-logo.png,
+    // measured along a radius of the 200 px art, the rim at 35 px): a soft
+    // ring hugging the rim, 57 % at it, gone by 1.75 times its radius. Not a
+    // halo of its own: the owner, 10 October 2026, "the same as the original
+    // just adding the color".
+    component LogoGlow: Shape {
+        id: lg
+        property real rim: 10
+        property color tint: "white"
+        readonly property real radius: rim * 1.75
+        preferredRendererType: Shape.GeometryRenderer
+        ShapePath {
+            strokeColor: "transparent"
+            fillGradient: RadialGradient {
+                centerX: 0; centerY: 0; centerRadius: lg.radius
+                focalX: 0; focalY: 0
+                GradientStop { position: 0; color: story._alpha(lg.tint, 0.57) }
+                GradientStop { position: 1 / 1.75; color: story._alpha(lg.tint, 0.57) }
+                GradientStop { position: 1.09 / 1.75; color: story._alpha(lg.tint, 0.41) }
+                GradientStop { position: 1.2 / 1.75; color: story._alpha(lg.tint, 0.27) }
+                GradientStop { position: 1.31 / 1.75; color: story._alpha(lg.tint, 0.15) }
+                GradientStop { position: 1.43 / 1.75; color: story._alpha(lg.tint, 0.075) }
+                GradientStop { position: 1.6 / 1.75; color: story._alpha(lg.tint, 0.016) }
+                GradientStop { position: 1; color: story._alpha(lg.tint, 0) }
+            }
+            PathSvg { path: story._circle(lg.radius) }
+        }
+    }
+
     // Particles from a point that moves (sx, sy), each `life` ms: from
     // there, drifting by up to `spread` and moving by `rise` (up below 0),
     // fading and scaling to `grow`; a new one every life / count ms. Dots,
@@ -337,12 +366,11 @@ Item {
         }
 
         // The orb's glow: white, then gold, then the fire's.
-        Glow {
+        LogoGlow {
             objectName: "bootStoryGlow"
             x: story.cx
             y: story.orbY
-            radius: story.r * 2.4 * story.glowSize
-            inner: 1 / (2.4 * story.glowSize)
+            rim: story.r * story.glowSize
             tint: story.glowColor
             scale: story.orbScale
             opacity: story.glow * story.orbOpacity
@@ -690,21 +718,26 @@ Item {
 
     SequentialAnimation {
         id: tale
-        // Black, the orb, dead; its white glow swells (the logo's first glow).
+        // Black, the orb, dead; its glow comes as the logo's first glow did
+        // (renderInStateLogo, BootupAnimation.cpp:271-322: the bright copy's
+        // alpha from -128, so dark for 16 frames of 80 ms, then up by 8 a
+        // frame: full at 3.84 s, linear). The gold comes in on its second
+        // half, all gold as it is full, before the fire.
         ScriptAction { script: story._setBeat("orb") }
-        PauseAnimation { duration: Theme.motion(300) }
-        NumberAnimation { target: story; property: "glow"; to: 1; duration: Theme.motion(1200); easing.type: Easing.InOutSine }
-        NumberAnimation { target: story; property: "glow"; to: 0.7; duration: Theme.motion(300); easing.type: Easing.InOutSine }
-
-        // White to gold.
-        ScriptAction { script: story._setBeat("gold") }
+        PauseAnimation { duration: Theme.motion(1280) }
         ParallelAnimation {
-            ColorAnimation { target: story; property: "glowColor"; to: story.colors.gold; duration: Theme.motion(800); easing.type: Easing.InOutSine }
-            ColorAnimation { target: story; property: "rimColor"; to: story.colors.gold; duration: Theme.motion(800) }
-            ColorAnimation { target: story; property: "faceColor"; to: story.colors.flameCore; duration: Theme.motion(800) }
-            ColorAnimation { target: story; property: "discColor"; to: "#251A06"; duration: Theme.motion(1000) }
-            NumberAnimation { target: story; property: "glow"; to: 1; duration: Theme.motion(1100); easing.type: Easing.OutSine }
-            NumberAnimation { target: story; property: "glowSize"; to: 1.3; duration: Theme.motion(1100); easing.type: Easing.InOutSine }
+            NumberAnimation { target: story; property: "glow"; to: 1; duration: Theme.motion(2560) }
+            SequentialAnimation {
+                PauseAnimation { duration: Theme.motion(1280) }
+                // White to gold.
+                ScriptAction { script: story._setBeat("gold") }
+                ParallelAnimation {
+                    ColorAnimation { target: story; property: "glowColor"; to: story.colors.gold; duration: Theme.motion(1280); easing.type: Easing.InOutSine }
+                    ColorAnimation { target: story; property: "rimColor"; to: story.colors.gold; duration: Theme.motion(1280); easing.type: Easing.InOutSine }
+                    ColorAnimation { target: story; property: "faceColor"; to: story.colors.flameCore; duration: Theme.motion(1280); easing.type: Easing.InOutSine }
+                    ColorAnimation { target: story; property: "discColor"; to: "#251A06"; duration: Theme.motion(1280) }
+                }
+            }
         }
 
         // It catches fire and screams, burns, sinks and burns down.

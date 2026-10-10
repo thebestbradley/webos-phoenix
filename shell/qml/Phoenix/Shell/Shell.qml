@@ -530,9 +530,8 @@ FocusScope {
         id: backlight
         timeout: shell.system && shell.system.screenTimeout > 0 ? shell.system.screenTimeout : 60
         locked: shell.locked
-        // An app in front keeping the screen on (blockScreenTimeout); the
-        // system screens (USB drive mode, a progress animation, booting).
-        blocked: (cards.maximized && cards.currentBlocksScreenTimeout) || systemScreens.holdsDisplay
+        // An app in front keeping the screen on (blockScreenTimeout).
+        blocked: cards.maximized && cards.currentBlocksScreenTimeout
         onTurnedOff: shell.lock()
         // On the Touchstone it waits for dock mode instead of dimming.
         onPuck: shell._exhibitionsOnPuck
@@ -544,7 +543,12 @@ FocusScope {
         // backlight's level (DeviceServices.qml).
         // The assistant's view stays lit while it is up, also over the
         // lock screen (opened there by "Hey Phoenix").
-        held: devices.holdsDisplay || assistantView.open
+        // The system screens (USB drive mode, a progress animation, the
+        // boot animation) hold it on as an app's request does, the lock
+        // screen too (DisplayManager::pushDNAST, "brickmode-local",
+        // "progress-sequence"): as blocked, the lock screen's 5 s timeout
+        // turned the screen off in the middle of the start-up story.
+        held: devices.holdsDisplay || assistantView.open || systemScreens.holdsDisplay
         maximumBrightness: shell.system && shell.system.brightness > 0 ? Math.round(shell.system.brightness * 100) : 100
         automaticBrightness: !shell.system || shell.system.automaticBrightness !== false
         lightRegion: devices.lightRegion
