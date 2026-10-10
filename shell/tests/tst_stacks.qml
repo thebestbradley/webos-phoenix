@@ -25,9 +25,17 @@ Item {
 
     // The lowest maximizeProgress since it was reset (test_returnToTheCaller).
     property real lowestProgress: 1
+    // While set, every frame of a maximize or minimize is checked with it
+    // (test_backCardKeepsItsPlaceInTheStack): polling can miss the frames
+    // in the middle of a 300 ms animation on a slow machine.
+    property var onProgress: null
     Connections {
         target: shell.cardView
-        function onMaximizeProgressChanged() { root.lowestProgress = Math.min(root.lowestProgress, shell.cardView.maximizeProgress); }
+        function onMaximizeProgressChanged() {
+            root.lowestProgress = Math.min(root.lowestProgress, shell.cardView.maximizeProgress);
+            if (root.onProgress)
+                root.onProgress(shell.cardView.maximizeProgress);
+        }
     }
 
     TestCase {
@@ -37,6 +45,7 @@ Item {
         property var cv: shell.cardView
 
         function init() {
+            root.onProgress = null;
             while (windows.cards.count > 0)
                 windows.close(windows.cards.get(0).uid);
             cv.reorderUid = "";
@@ -303,22 +312,33 @@ Item {
             var z = function (uid) { return cv.layout.cards[uid].z; };
             var below = z(s.c1) < z(s.c2) && z(s.msg) < z(s.c1);
             verify(below, "front to back: c2, c1, msg");
+            // Every frame between card view and maximized: under the card
+            // in front.
+            var frames = 0, over = 0;
+            root.onProgress = function (p) {
+                if (p > 0 && p < 1) {
+                    frames++;
+                    if (!(z(s.c1) < z(s.c2)))
+                        over++;
+                }
+            };
             cv.maximize(s.c1);
-            var midway = false;
-            tryVerify(function () {
-                if (cv.maximizeProgress > 0.2 && cv.maximizeProgress < 0.8 && z(s.c1) < z(s.c2))
-                    midway = true;
-                return shell.maximized;
-            }, 2000);
-            verify(midway, "maximizing: still under the card in front");
+            tryVerify(function () { return shell.maximized; }, 2000);
+            root.onProgress = null;
+            verify(frames > 0, "maximizing: frames between card view and maximized");
+            compare(over, 0, "maximizing: still under the card in front");
             verify(z(s.c1) < z(s.c2) && z(s.msg) < z(s.c1), "maximized: the same order");
             // The card in front sits level, at the maximized card's height,
             // off to the right (CardGroup.cpp:344-370).
             compare(cv.layout.cards[s.c2].rot, 0);
             fuzzyCompare(cv.layout.cards[s.c2].cy, cv.maximizedCenterY, 0.5);
             var before = z(s.c1);
+            var moved = 0;
+            root.onProgress = function () { if (z(s.c1) !== before) moved++; };
             cv.minimize();
             tryVerify(function () { return cv.maximizeProgress === 0; }, 2000);
+            root.onProgress = null;
+            compare(moved, 0, "minimizing: no change in z on any frame");
             compare(z(s.c1), before, "minimized: no change in z");
             compare(uidsOf(1), [s.msg, s.c1, s.c2].join(","));
         }

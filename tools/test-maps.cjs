@@ -189,7 +189,11 @@ async function main() {
             document.dispatchEvent(new CustomEvent("webOSRelaunch", { detail: p }));
         }, params);
         const setLocation = (lat, lon, extra) => page.evaluate(([a, b, x]) => window.__phoenixRuntime.location.set(a, b, x), [lat, lon, extra || {}]);
-        const spoken = () => page.evaluate(() => window.__phoenixRuntime.tts.spoken.map((s) => s.text));
+        // Whether something matching re is said within 3 s: the runtime runs
+        // every service call on a timer (asynchronous, as on a device), so a
+        // speak request is recorded a moment after the screen shows its text.
+        const saidSoon = (re) => page.waitForFunction((src) => window.__phoenixRuntime.tts.spoken.some((s) => new RegExp(src, "i").test(s.text)),
+            re.source, { timeout: 3000 }).then(() => true, () => false);
         const search = async (q) => {
             await page.fill(tid("search"), q);
             await page.press(tid("search"), "Enter");
@@ -309,8 +313,7 @@ async function main() {
         await page.click(tid("start-nav"));
         await page.waitForSelector(tid("nav-banner"));
         check(/Turn left onto West Santa Clara Street/.test(await page.textContent(tid("nav-instruction"))), "navigation shows the next turn");
-        const said0 = await spoken();
-        check(said0.some((t) => /Drive northwest on South Market Street/.test(t)), "and says the first direction (com.webos.service.tts)");
+        check(await saidSoon(/Drive northwest on South Market Street/), "and says the first direction (com.webos.service.tts)");
         // Drive along: shape points 8 and 14 (before the first turn), then past it.
         await setLocation(geometry[8][1], geometry[8][0], { speed: 10, direction: 330 });
         await page.waitForTimeout(400);
@@ -319,7 +322,7 @@ async function main() {
         await page.waitForTimeout(400);
         const d2 = await page.textContent(tid("nav-distance"));
         check(d1 !== d2, `the distance to the turn counts down (${d1} -> ${d2})`);
-        check((await spoken()).some((t) => /turn left onto West Santa Clara Street/i.test(t)), "announces the turn ahead");
+        check(await saidSoon(/turn left onto West Santa Clara Street/), "announces the turn ahead");
         await page.waitForTimeout(500);
         await shot("navigation");
         await setLocation(geometry[19][1], geometry[19][0], { speed: 8, direction: 240 });
@@ -328,7 +331,7 @@ async function main() {
         const end = geometry[geometry.length - 1];
         await setLocation(end[1], end[0], { speed: 0 });
         await page.waitForFunction(() => document.querySelector("[data-testid='nav-distance']").textContent === "Arrived");
-        check((await spoken()).some((t) => /arrived/i.test(t)), "arriving is announced");
+        check(await saidSoon(/arrived/), "arriving is announced");
         await page.click(tid("nav-end"));
         await page.waitForSelector(tid("nav-banner"), { state: "detached" });
         check(true, "End leaves navigation");

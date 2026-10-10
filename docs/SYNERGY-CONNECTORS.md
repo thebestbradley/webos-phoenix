@@ -118,7 +118,7 @@ the earlier pages.
 
 | Account | Protocol / API | Auth | Reg | Terms / notes | P |
 | --- | --- | --- | --- | --- | --- |
-| Fediverse (Mastodon, Pixelfed, GoToSocial, ...) | Mastodon client API, NodeInfo | OAuth per server | none | SM 3.1: contact enrichment, notifications, DMs, sharing | P1 |
+| **Fediverse** (Mastodon, Pixelfed, GoToSocial, Akkoma, Friendica, ...): **the flagship connector** (the owner, 10 October 2026) | Mastodon client API, NodeInfo | OAuth per server, the app registering itself with each server | none | SM 3.1: contact enrichment, notifications, DMs, sharing; phase C2 | **P0** |
 | Bluesky | AT Protocol | OAuth (atproto) | static client-metadata file | SM 3.1 | P2 |
 | **new** RSS reader sync: FreshRSS, Miniflux, Nextcloud News, Inoreader, Feedly | Google Reader API (FreshRSS, Inoreader), Miniflux REST, Fever, Nextcloud News API | Key / PW (Inoreader and Feedly: OAuth + registration) | none for self-hosted | A new `FEEDS` capability: subscriptions and read state, for a reader app or a "Feeds" exhibition/Just Type. Plain RSS needs no account at all | P2 |
 | **new** "Follow" on the open web | RSS/Atom, WebSub, h-feed | none | none | Subscriptions saved locally; a FEEDS account only syncs them | P3 |
@@ -415,7 +415,9 @@ Decided (10 October 2026): the Marketplace view is called
 **Connections**; third-party connectors are installable from the
 Marketplace **for Developer Mode only** until the connector tier (4.1);
 the Accounts app keeps the original **"Find More..." only** (no inline
-rows). The owner wants the plan fleshed out before C0 is built.
+rows). The owner wants the plan fleshed out before C0 is built, and the
+**Fediverse** as the flagship Synergy account (phase C2, right after the
+kit).
 
 Still open:
 
@@ -434,14 +436,15 @@ Still open:
 | --- | --- | --- | --- |
 | **C0** (simulator, now) | Alias "Find More..." to the Marketplace with its params; dynamic template discovery + reload; `accounts` array in the index with built-in types only; the Accounts view (browse, Set up); calendar directory | M | nothing |
 | **C1** | Extract `synckit` from `apps/dav` (SM phase 1c); `@phoenix/connector-kit`, CLI `new/validate/pack`, conformance suite; `docs/SYNERGY-SDK.md` with a FEEDS example | M | C0 |
-| **C2** | First-party connectors on the kit: DAV presets (iCloud, Fastmail, Nextcloud LF v2), CalDAV tasks for Tasks, Immich, gpodder, FreshRSS/Miniflux | M | C1 |
-| **C3** | OAuth service + browser sheet + key store (sim, then device), then Microsoft and the Fediverse (SM 2a, 7c) | L | C1; SYNERGY phase 0 for the device |
+| **C2** | **The Fediverse first** (the flagship): one account type for any ActivityPub server with the Mastodon client API (SM 3.1), on the kit. The handle finds the server (WebFinger, NodeInfo); the app registers itself with that server (`POST /api/v1/apps`) and signs in with OAuth in a browser sheet, its token in the key store: the parts of C3's OAuth service it needs, built here first. Then followed accounts on contact cards (avatar, profile, latest post), notifications as webOS notifications (Web Push to UnifiedPush later, C6; polled until then), direct mentions in Messaging's threads (labelled "not private"), Pixelfed albums in Photos, and the account as a share target in the share sheet (post a photo, a link, a memo) | M–L | C1 |
+| **C3** | The rest of the OAuth service (providers that need a registered client), then first-party connectors on the kit: Microsoft (SM 2a, 7c), DAV presets (iCloud, Fastmail, Nextcloud LF v2), CalDAV tasks for Tasks, Immich, gpodder, FreshRSS/Miniflux, Bluesky | L | C2; SYNERGY phase 0 for the device |
 | **C4** | `connector` kind in the backend: profile checks, review, privacy/terms fields; Developer Mode installs from the Marketplace | M | C1 |
 | **C5** | Connector trust tier + db8 permission rule; open submissions to everyone | L | APP-STORE A5, device |
 | **C6** | Push (UnifiedPush) and relay in the kit; per-account app visibility; account health | M | SM phase 5 |
 
 C0 and C1 need no registration with anyone and no new server, as DAV
-needed none in phase 1. They also make every later connector, ours or a
+needed none in phase 1; nor does C2: each Fediverse server registers the
+app itself. They also make every later connector, ours or a
 developer's, show up in one place.
 
 When parts of this are built, update `docs/spec/feature-inventory.md` and
