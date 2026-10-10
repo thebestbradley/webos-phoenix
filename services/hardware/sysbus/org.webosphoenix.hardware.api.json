@@ -1,7 +1,9 @@
 {
     "hardware.query": [
         "org.webosphoenix.hardware/list",
-        "org.webosphoenix.hardware/getReport"
+        "org.webosphoenix.hardware/getReport",
+        "org.webosphoenix.hardware/firmwareLicenses",
+        "org.webosphoenix.hardware/firmwareLicense"
     ],
     "hardware.management": [
         "org.webosphoenix.hardware/refresh",
@@ -9,6 +11,9 @@
         "org.webosphoenix.hardware/remove",
         "org.webosphoenix.hardware/sendReport",
         "org.webosphoenix.hardware/setPreferences",
-        "org.webosphoenix.hardware/scheduled"
+        "org.webosphoenix.hardware/scheduled",
+        "org.webosphoenix.hardware/addSource",
+        "org.webosphoenix.hardware/trustSource",
+        "org.webosphoenix.hardware/removeSource"
     ]
 }
