@@ -2700,10 +2700,9 @@
             }
             var popup = Array.prototype.some.call(global.document.querySelectorAll(".enyo-popup, iframe[data-phoenix-sheet]"), function (e) {
                 return shown(e) && e.getBoundingClientRect().height > 0;
-            }) || !!global.document.querySelector("iframe[data-phoenix-sheet]");
-            // (A system sheet over the page, block "Share sheet", is a popup
-            // too: nothing in the page draws over a native view. A view in
-            // the sheet itself is in the sheet's document, which has none.)
+            });
+            // (A view in a sheet itself, the sign-in sheet's, is in the
+            // sheet's document, which has no sheet over it.)
             // A drawer flown in from a side (enyo.Toaster, class enyo-toaster:
             // the browser's bookmarks, history and downloads) covers part of
             // the page: the view keeps to the part it leaves, since nothing in
