@@ -522,3 +522,33 @@ public tree as a build-time setting; Telegram's terms: the app is not
 called "Telegram" nor made to look like the official one. WhatsApp (no
 client API) and Signal (only through unofficial AGPL tools, against the
 licence rule) stay out.
+
+Telegram's app id is registered by a Phoenix project account (the owner,
+OPEN-QUESTIONS Q16), as are the other developer apps below (Q17).
+
+**LinkedIn** (C3; the work theme): its connections API is closed to all but
+paid partner programmes, so: Sign In with LinkedIn (OpenID Connect: the
+user's own name, photo, headline, email); Share on LinkedIn (the
+`w_member_social` scope, open to any app) as a share-sheet target; and the
+people on contact cards from an import of the user's own data export
+(LinkedIn, Settings, Data privacy, Get a copy of your data:
+`Connections.csv`, with name, company, position, profile URL and sometimes
+email), matched to existing contacts and adding company, title and a
+LinkedIn profile link; repeatable, not live. No feed, messages or live
+connection updates.
+
+**Meetings and video calls** (Skype closed in May 2025; webOS 2-3 phones had
+Skype in Phone and Messaging): (1) before C3, needing no account: meeting
+links (Zoom, Teams, Google Meet, Webex, Jitsi) found in events, invitations
+and notifications get a Join button and a reminder as the meeting starts;
+(2) before C3: a Video Call action on contacts and in Phone, through Jitsi
+Meet (open source, WebRTC, no account; which server is an owner's choice),
+the room link sent through Messaging; (3) C3: a Zoom account (Zoom's API,
+OAuth: meetings listed in Calendar with Join, created by the Assistant;
+meetings run in the browser, Zoom's own app has no ARM Linux build) and
+Microsoft Teams through the Microsoft sign-in (meetings in Calendar, chats
+in Messaging where Graph allows).
+
+**Box** (C3, with Dropbox, OneDrive and Google Drive): its content API with
+OAuth (Box dropped WebDAV), as a place in Files.
+
