@@ -107,6 +107,22 @@ FocusScope {
         function onUiOrientationChanged() { root._pushOrientation(); }
         function onDeviceOrientationChanged() { root._pushOrientation(); }
     }
+    // What the pages ask the shell for (org.webosphoenix.shellhost; as
+    // sim.qml answers the simulator's window source).
+    Connections {
+        target: windows
+        // The Assistant's "take a screenshot".
+        function onScreenshotRequested() { phoenix.takeScreenshot(); }
+        // com.palm.systemmanager enableFpsCounter / enableTouchPlot, runProgressAnimation.
+        function onDebugOverlayRequested(request) { phoenix.systemScreens.debugOverlay(request); }
+        function onProgressAnimationRequested(type, state) {
+            if (state === "start")
+                phoenix.systemScreens.startProgressAnimation(type);
+            else
+                phoenix.systemScreens.stopProgressAnimation();
+        }
+    }
+
     Component.onCompleted: {
         windows.lunaSubscribe("luna://com.webos.bootManager/getBootStatus", { subscribe: true }, root._bootStatus);
         windows.pushSystemStatus({ deviceLocked: phoenix.locked, dockMode: phoenix.dockMode,
@@ -150,10 +166,14 @@ FocusScope {
         model: PopupWindowModel {}
     }
 
+    // OSE's alerts and PIN prompts (com.webos.notification createAlert)
+    // stay the stock view's; its toasts are the shell's banners
+    // (LsmWindowSource.toast), so the stock view takes none.
     NotificationView {
         id: notificationViewId
         objectName: "notificationView" + suffix
         anchors.fill: parent
+        acceptToasts: false
     }
 
     KeyboardView {

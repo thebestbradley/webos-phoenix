@@ -165,7 +165,143 @@ Item {
             FakeBus.reply("com.webos.service.audio", "/playSound", { returnValue: true, playbackId: "p3" });
             tryVerify(function() { var s = FakeBus.last("com.webos.service.audio", "/controlPlayback"); return s && s.params.playbackId === "p3"; }, 1000);
         }
+
+        // ---- The pages' messages (org.webosphoenix.shellhost) ------------------------
+
+        // A page's message as the relay hands it to the shell.
+        function post(appId, type, payload) {
+            return FakeBus.reply("org.webosphoenix.shellhost", "/listen",
+                                 { returnValue: true, subscribed: true, message: { appId: appId, type: type, payload: payload || {} } });
+        }
+        function sent(type) {
+            return FakeBus.find("org.webosphoenix.shellhost", "/send").filter(function(c) { return !type || c.params.type === type; });
+        }
+
+        function test_pagesMessagesReachTheShell() {
+            var l = FakeBus.last("org.webosphoenix.shellhost", "/listen");
+            verify(l && l.params.subscribe === true, "the shell listens to the pages from its start");
+            windows.apps.append({ appId: "com.palm.app.email", title: "Email", icon: "file:///usr/palm/applications/com.palm.app.email/icon.png",
+                                  largeIcon: "", color: "#336699", glyph: "E", tab: 0, quickLaunch: 0 });
+            // Banners: the page's, with its app id from the bus, never the payload's.
+            bannerSpy.clear();
+            verify(post("com.palm.app.email", "banner", { id: "b1", appId: "com.evil", message: "2 new messages", params: "{\"f\":1}",
+                                                          icon: "/usr/palm/applications/com.palm.app.email/images/n.png",
+                                                          soundClass: "notifications", soundFile: "", duration: 0 }));
+            compare(bannerSpy.count, 1);
+            compare(bannerSpy.signalArguments[0][0], "com.palm.app.email");
+            compare(bannerSpy.signalArguments[0][1], "2 new messages");
+            compare(String(bannerSpy.signalArguments[0][2]), "file:///usr/palm/applications/com.palm.app.email/images/n.png");
+            compare(bannerSpy.signalArguments[0][3], "{\"f\":1}");
+            compare(bannerSpy.signalArguments[0][7], "b1");
+            post("com.palm.app.email", "removeBanner", { id: "b1" });
+            compare(removedSpy.count, 1);
+            compare(removedSpy.signalArguments[0][1], "b1");
+            post("com.palm.app.email", "sound", { soundClass: "alerts", soundFile: "/usr/palm/sounds/alert.wav", duration: 5 });
+            compare(soundSpy.signalArguments[0][2], "/usr/palm/sounds/alert.wav");
+
+            // Notifications: tagged ones replace each other; ongoing ones stay on top.
+            var before = windows.notifications.count;
+            post("com.palm.app.email", "notification", { title: "Ada", body: "Lunch?", tag: "t1", params: { id: 7 } });
+            post("com.palm.app.email", "notification", { title: "Ada", body: "Lunch today?", tag: "t1" });
+            compare(windows.notifications.count, before + 1);
+            compare(windows.notifications.get(windows.notifications.count - 1).body, "Lunch today?");
+            compare(windows.notifications.get(windows.notifications.count - 1).color, "#336699");
+            post("com.palm.app.email", "ongoing", { id: "sync", title: "Syncing", progress: 40 });
+            compare(windows.notifications.get(0).id, "ongoing:com.palm.app.email:sync");
+            compare(windows.notifications.get(0).progress, 40);
+            post("com.palm.app.email", "ongoing", { id: "sync", clear: true });
+            post("com.palm.app.email", "notification", { tag: "t1", remove: true });
+            compare(windows.notifications.count, before);
+
+            // The active-call banner is its app's alone.
+            post("org.webosphoenix.phone", "activeCallBanner", { op: "add", message: "Ada", startTime: 5 });
+            compare(windows.activeCallBanner.message, "Ada");
+            post("com.palm.app.email", "activeCallBanner", { op: "remove" });
+            verify(windows.activeCallBanner !== null);
+            post("org.webosphoenix.phone", "activeCallBanner", { op: "remove" });
+            compare(windows.activeCallBanner, null);
+
+            // OSE's own toasts (notificationmgr) are banners too.
+            bannerSpy.clear();
+            FakeBus.reply("com.webos.notification", "/getToastNotification", { returnValue: true, sourceId: "com.webos.app.settings",
+                          message: "Updated", title: "", iconUrl: "file:///usr/share/icon.png",
+                          action: { launchParams: { id: "com.webos.app.settings", params: { page: "about" } } } });
+            compare(bannerSpy.count, 1);
+            compare(bannerSpy.signalArguments[0][0], "com.webos.app.settings");
+            compare(bannerSpy.signalArguments[0][3], "{\"page\":\"about\"}");
+        }
+
+        function test_editPopupAndEventsGoToThePage() {
+            FakeBus.clear();
+            var memos = wam("com.palm.app.memos");
+            memos.width = 320;
+            memos.height = 480;
+            var uid = windows._adopt(memos);
+            var host = windows.windowFor(uid);
+            // In a card, as the shell shows it.
+            host.parent = root;
+            host.width = 160;
+            host.height = 240;
+            // The page's selection, in its CSS pixels (a 320-wide viewport).
+            post("com.palm.app.memos", "editMenu", { x: 100, y: 200, width: 40, height: 20, viewportWidth: 320,
+                                                     canSelectAll: true, canCut: true, canCopy: true, canPaste: true });
+            var popup = host.editPopupItem;
+            verify(popup.visible);
+            compare(popup.target.x, 50);
+            compare(popup.target.y, 100);
+            compare(popup.actions.length, 4);
+            popup.triggered("copy");
+            var s = sent("editAction");
+            compare(s.length, 1);
+            compare(s[0].params.appId, "com.palm.app.memos");
+            compare(s[0].params.payload.action, "copy");
+            // The card in front: its page hears it.
+            windows.focusedUid = uid;
+            compare(sent("cardActivation")[0].params.payload.active, true);
+            windows.focusedUid = "";
+            compare(sent("cardActivation")[1].params.payload.active, false);
+            // The app menu, and a scene's snapshot.
+            verify(windows.appMenu(uid));
+            compare(sent("openAppMenu")[0].params.appId, "com.palm.app.memos");
+            sceneSpy.clear();
+            post("com.palm.app.memos", "sceneTransition", { op: "prepare", isPop: false });
+            compare(sceneSpy.count, 1);
+            compare(sceneSpy.signalArguments[0][0], uid);
+            windows.sceneTransitionPrepared(uid);
+            compare(sent("sceneTransitionPrepared").length, 1);
+            // The Assistant's on-device model: no engine here, said so.
+            post("org.webosphoenix.assistant", "assistant", { op: "speechStatus", requestId: "r1" });
+            var a = sent("assistantHostEvent")[0];
+            compare(a.params.appId, "org.webosphoenix.assistant");
+            compare(a.params.payload.requestId, "r1");
+            compare(a.params.payload.available, false);
+            windows.removeSurface(memos);
+            memos.destroy();
+        }
+
+        function test_screenCapturesAreFiled() {
+            FakeBus.clear();
+            var before = windows.notifications.count;
+            windows.saveScreenshot("iVBORw0KGgo=", "Memos", "capture-1");
+            var mk = FakeBus.last("org.webosphoenix.filemanager", "/mkdir");
+            compare(mk.params.path, "/media/internal/screencaptures");
+            FakeBus.reply("org.webosphoenix.filemanager", "/mkdir", { returnValue: false, errorCode: 2 });
+            var w = FakeBus.last("org.webosphoenix.filemanager", "/write");
+            verify(/^\/media\/internal\/screencaptures\/Memos \d{4}-\d\d-\d\d at \d\d\.\d\d\.\d\d\.png$/.test(w.params.path), w.params.path);
+            compare(w.params.encoding, "base64");
+            compare(w.params.data, "iVBORw0KGgo=");
+            FakeBus.reply("org.webosphoenix.filemanager", "/write", { returnValue: true, path: w.params.path, size: 8 });
+            compare(windows.notifications.count, before + 1);
+            var n = windows.notifications.get(windows.notifications.count - 1);
+            compare(n.appId, "org.webosphoenix.screenshot");
+            compare(JSON.parse(n.params).capture, "capture-1");
+            windows.notifications.remove(windows.notifications.count - 1);
+        }
     }
+    SignalSpy { id: bannerSpy; target: windows; signalName: "bannerRequested" }
+    SignalSpy { id: removedSpy; target: windows; signalName: "bannerRemoved" }
+    SignalSpy { id: soundSpy; target: windows; signalName: "soundRequested" }
+    SignalSpy { id: sceneSpy; target: windows; signalName: "sceneTransitionRequested" }
 
     TestCase {
         name: "LsmSystemStatus"

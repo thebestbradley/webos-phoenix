@@ -382,6 +382,20 @@ function page(appId, appinfo, launchParams, opts) {
           "which goes into the field as typed text");
     p.g.PalmSystem.paste();
     check(p.callsTo("luna://org.webosphoenix.clipboard/history").length === 2, "PalmSystem.paste does the same");
+
+    // A long press (Chromium's context menu) in a field: the shell's edit popup.
+    p.g.innerWidth = 320;
+    const field = new Target(p.body);
+    field.tagName = "TEXTAREA";
+    field.value = "";
+    field.getBoundingClientRect = () => ({ left: 10, top: 40, width: 300, height: 30 });
+    p.g.getSelection = () => ({ rangeCount: 0, toString: () => "" });
+    let prevented = false;
+    p.doc.dispatchEvent(Object.assign(new FakeEvent("contextmenu", {}), { target: field, clientX: 50, preventDefault() { prevented = true; } }));
+    const m = p.posts("editMenu")[0];
+    check(prevented && m && m.payload.x === 50 && m.payload.y === 40 && m.payload.height === 30 && m.payload.viewportWidth === 320
+          && m.payload.canPaste === false && m.payload.appId === "com.palm.app.memos",
+          "a long press in a field asks the shell for the edit popup (contextmenu -> editMenu, with the viewport's width)");
 }
 
 // ---- The page's own features ----------------------------------------------------------------

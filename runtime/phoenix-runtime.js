@@ -758,6 +758,27 @@
         runtime.openAppMenu = pageOpenAppMenu;
         runtime.linkLeavesApp = linkLeavesApp;
 
+        // The edit popup for a finger: Chromium's long press selects the
+        // word and asks for a context menu (as does a right click), which
+        // WebAppMgr has none of; the shell draws the edit popup over the
+        // selection or the field instead (phoenix-sim does it from
+        // QtWebEngine's touch selection menu, WebAppWindow.qml).
+        if (global.document) global.document.addEventListener("contextmenu", function (e) {
+            var el = editable(e.target) ? e.target : null;
+            var sel = global.getSelection && global.getSelection();
+            var rect = null;
+            if (sel && sel.rangeCount && String(sel)) {
+                var r = sel.getRangeAt(0).getBoundingClientRect();
+                rect = { x: r.left, y: r.top, width: r.width, height: r.height };
+            } else if (el && el.getBoundingClientRect) {
+                var b = el.getBoundingClientRect();
+                rect = { x: e.clientX || b.left, y: b.top, width: 0, height: b.height };
+            }
+            if (!rect) return;
+            e.preventDefault();
+            showEditPopup(rect);
+        }, true);
+
         // Paste: WebAppMgr does nothing with PalmSystem.paste (above).
         // Chromium's own paste where WebAppMgr lets a page read the
         // clipboard; otherwise the newest copy in the clipboard history
@@ -4785,7 +4806,11 @@
     // PalmIME::FieldType (luna-webkit-api palmimedefines.h:33-44), from the
     // element's type as WebKit named it.
     var fieldTypes = { password: 1, search: 2, range: 3, email: 4, number: 5, tel: 6, url: 7, color: 8 };
-    var textInputs = ["", "text", "password", "search", "email", "number", "tel", "url"];
+    // (A function: editable() runs on a device too, where this section's
+    // statements do not: installDevice returns before them.)
+    function isTextInputType(type) {
+        return ["", "text", "password", "search", "email", "number", "tel", "url"].indexOf(type) >= 0;
+    }
 
     function editable(el) {
         if (!el || el.disabled || el.readOnly)
@@ -4794,7 +4819,7 @@
         if (tag === "textarea")
             return true;
         if (tag === "input")
-            return textInputs.indexOf((el.getAttribute("type") || "").toLowerCase()) >= 0;
+            return isTextInputType((el.getAttribute("type") || "").toLowerCase());
         return !!el.isContentEditable;
     }
 
@@ -5203,6 +5228,9 @@
         host.postToHost("editMenu", {
             appId: PalmSystem.appIdentifier,
             x: rect.x, y: rect.y, width: rect.width, height: rect.height,
+            // The page's width in its own pixels: the shell scales the
+            // rectangle to the card it shows (on a device, SurfaceHost).
+            viewportWidth: global.innerWidth || 0,
             canSelectAll: s.canSelectAll, canCut: s.canCut, canCopy: s.canCopy, canPaste: s.canPaste
         });
     }

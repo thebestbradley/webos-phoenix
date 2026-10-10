@@ -15,6 +15,7 @@ import WebOSServices 1.0
 import WebOS.Global 1.0
 import Phoenix.Native
 import "LsmCards.js" as LsmCards
+import "../Shell/NotificationPolicy.js" as Policy
 
 Item {
     id: source
@@ -137,7 +138,11 @@ Item {
             return uidOf(item);
         var uid = "s" + (_nextUid++);
         _surfaces.push({ uid: uid, item: item });
-        _hosts[uid] = hostComponent.createObject(source, { surface: item });
+        var host = hostComponent.createObject(source, { surface: item });
+        _hosts[uid] = host;
+        // The card's edit popup: the command goes back to its page.
+        var appOfCard = item.appId;
+        host.editTriggered.connect(function(action) { source.sendToApp(appOfCard, "editAction", { action: action }); });
         item.state = Qt.WindowFullScreen;
         var f = LsmCards.cardFields(_props(item));
         var place = LsmCards.placement(_cardList(), item.appId, f.launchingAppId, focusedUid, _pendingAfterUid);
@@ -352,13 +357,6 @@ Item {
             lunaCall("luna://com.palm.systemmanager/phoenix/report", report, function() {});
     }
 
-    function notify(appId, title, body, params) {
-        notifications.append({ id: "n" + Date.now(), appId: appId, title: title, body: body || "",
-                               color: "#666666", glyph: "!", icon: "", params: params ? JSON.stringify(params) : "",
-                               windowKey: "", clickableWhenLocked: false, ongoing: false, progress: -1,
-                               tag: "", actions: "" });
-    }
-
     function dismissNotification(index) {
         if (index >= 0 && index < notifications.count)
             notifications.remove(index);
@@ -522,5 +520,445 @@ Item {
 
     function appDir(appId) {
         return "/usr/palm/applications/" + appId;
+    }
+
+    // ---- The pages' messages (org.webosphoenix.shellhost) -------------------------------
+    // docs/DEVICE-AUDIT.md, "The shell's messages". In phoenix-sim a page's
+    // phoenixHost.postToHost reaches SimWindowSource._hostMessage as a
+    // console message, and the shell runs script in the page to answer. On
+    // a device the pages are WebAppMgr's, in processes of their own: what a
+    // page posts comes from org.webosphoenix.shellhost (services/shellhost)
+    // with the app id luna-service2 gave its call, and what the shell has
+    // for a page goes back there (sendToApp: the page's runtime hears it as
+    // an event, runtime.shellEvent). The same messages, handled as the
+    // simulator handles them: banners, sounds, notifications, ongoing
+    // activities, the active-call banner, the edit popup, scene
+    // transitions, the Assistant's on-device model and speech, an app's
+    // dictation, a screenshot, a media key.
+    // STATUS: written against services/shellhost and the runtime's device
+    // half (tools/test-runtime-device.cjs); not yet run on a device.
+
+    signal bannerRequested(string appId, string text, url icon, string params, string soundClass, string soundFile, int soundDuration, string bannerId)
+    signal bannerRemoved(string appId, string bannerId)
+    signal bannersCleared(string appId)
+    signal soundRequested(string appId, string soundClass, string soundFile, int duration)
+    signal sceneTransitionRequested(string uid, string op, string transition, bool isPop)
+    signal screenshotRequested
+    signal mediaKeyRequested(string key)
+    signal progressAnimationRequested(string type, string state)
+    signal debugOverlayRequested(var request)
+    property var activeCallBanner: null
+    property string lastSceneTransitionPrepared: ""
+    // The shell's engines (Shell.qml binds them when these exist).
+    property var dictation: null
+    property var localModels: null
+    property var speech: null
+
+    readonly property string shellHost: "luna://org.webosphoenix.shellhost"
+
+    // A message for every page of appId (its runtime's shellEvent).
+    function sendToApp(appId, type, payload) {
+        if (!appId)
+            return;
+        lunaCall(shellHost + "/send", { appId: appId, type: type, payload: payload || {} }, function() {});
+    }
+
+    function _listenToPages() {
+        lunaSubscribe(shellHost + "/listen", { subscribe: true }, function(r) {
+            var m = r && r.message;
+            if (m && typeof m.appId === "string" && typeof m.type === "string")
+                source.pageMessage(m.appId, m.type, m.payload && typeof m.payload === "object" ? m.payload : {});
+        });
+    }
+
+    // What the shell knows of an app (its launch point).
+    function appInfo(appId) {
+        for (var i = 0; i < apps.count; ++i) {
+            var a = apps.get(i);
+            if (a.appId === appId)
+                return { appId: a.appId, title: a.title, icon: a.icon, color: a.color, glyph: a.glyph };
+        }
+        return null;
+    }
+
+    // A device path (or URL) the page named as an icon, else the app's.
+    function _iconUrl(path, appId) {
+        var p = path ? String(path) : "";
+        if (p.charAt(0) === "/")
+            return "file://" + p;
+        if (/^(file|https?|data):/i.test(p))
+            return p;
+        var info = appInfo(appId);
+        return info && info.icon ? info.icon : "";
+    }
+
+    function _soundArgs(payload) {
+        return [payload.soundClass ? String(payload.soundClass) : "", payload.soundFile ? String(payload.soundFile) : "",
+                payload.duration | 0];
+    }
+
+    // A page's message: appId is luna-service2's word for the sender, never
+    // the payload's.
+    function pageMessage(appId, type, payload) {
+        var uid = runningUid(appId);
+        if (type === "banner") {
+            var bp = payload.params;
+            var bs = _soundArgs(payload);
+            bannerRequested(appId, payload.message || "", _iconUrl(payload.icon, appId),
+                            bp === undefined || bp === null ? "" : typeof bp === "string" ? bp : JSON.stringify(bp),
+                            bs[0], bs[1], bs[2], payload.id ? String(payload.id) : "");
+        } else if (type === "removeBanner") {
+            bannerRemoved(appId, payload.id ? String(payload.id) : "");
+        } else if (type === "clearBanners") {
+            bannersCleared(appId);
+        } else if (type === "sound") {
+            var ss = _soundArgs(payload);
+            soundRequested(appId, ss[0], ss[1], ss[2]);
+        } else if (type === "notification") {
+            // A notification for this app or one it names (a text the
+            // telephony service received for Messaging); {tag} replaces,
+            // {tag, remove} takes back (tagPrefix: all starting with it).
+            var target = payload.appId && appInfo(payload.appId) ? payload.appId : appId;
+            if (payload.tag)
+                removeTagged(target, String(payload.tag));
+            if (payload.remove) {
+                if (payload.tagPrefix)
+                    removeTagged(target, String(payload.tagPrefix), true);
+                return;
+            }
+            notify(target, payload.title || "", payload.body || "", payload.params,
+                   { tag: payload.tag ? String(payload.tag) : "", actions: payload.actions || null });
+            if (payload.soundClass || payload.soundFile) {
+                var ns = _soundArgs(payload);
+                soundRequested(target, ns[0], ns[1], ns[2]);
+            }
+        } else if (type === "ongoing") {
+            setOngoing(appId, payload);
+        } else if (type === "activeCallBanner") {
+            var call = { appId: appId, icon: _iconUrl(payload.icon, appId), message: payload.message || "",
+                         startTime: payload.startTime || 0 };
+            if (payload.op === "add" && activeCallBanner === null)
+                activeCallBanner = call;
+            else if (payload.op === "update" && activeCallBanner !== null && activeCallBanner.appId === appId)
+                activeCallBanner = call;
+            else if (payload.op === "remove" && activeCallBanner !== null && activeCallBanner.appId === appId)
+                activeCallBanner = null;
+        } else if (type === "activate") {
+            if (uid !== "")
+                cardFocusRequested(uid);
+        } else if (type === "launch" && payload.id) {
+            // The runtime's own launches (a share target): SAM, as the shell's.
+            var running = launch(String(payload.id), uid === focusedUid ? uid : "", payload.params || {});
+            if (running !== "" && payload.behind !== true)
+                cardFocusRequested(running);
+        } else if (type === "open") {
+            bannerRequested(appId, qsTr("No app can open this link"), _iconUrl("", appId), "", "", "", 0, "");
+        } else if (type === "editMenu") {
+            var host = uid !== "" ? _hosts[uid] : null;
+            if (host)
+                host.openEditPopup(payload);
+        } else if (type === "sceneTransition") {
+            if (uid !== "")
+                sceneTransitionRequested(uid, String(payload.op || ""), String(payload.transition || ""), !!payload.isPop);
+            else if (payload.op === "prepare")
+                sendToApp(appId, "sceneTransitionPrepared", {});
+        } else if (type === "dictation") {
+            if (uid !== "")
+                _dictationRequest(appId, uid, payload);
+        } else if (type === "assistant") {
+            _assistantRequest(appId, payload);
+        } else if (type === "takeScreenshot") {
+            screenshotRequested();
+        } else if (type === "mediaKey") {
+            mediaKeyRequested(String(payload.key || ""));
+        } else if (type === "progressAnimation") {
+            progressAnimationRequested(String(payload.type || ""), String(payload.state || ""));
+        } else if (type === "debugOverlay") {
+            debugOverlayRequested(payload);
+        }
+        // Others are the simulator's (its installer, its storaged, its
+        // preferences mirror) or reach the shell another way on a device
+        // (window properties, the services' own subscriptions).
+    }
+
+    // The card has its snapshot: the page may change the scene.
+    function sceneTransitionPrepared(uid) {
+        lastSceneTransitionPrepared = uid;
+        var i = cardIndex(uid);
+        if (i >= 0)
+            sendToApp(cards.get(i).appId, "sceneTransitionPrepared", {});
+    }
+
+    // The app menu (the status bar's app name): the page's own.
+    function appMenu(uid) {
+        var i = cardIndex(uid);
+        if (i < 0)
+            return false;
+        sendToApp(cards.get(i).appId, "openAppMenu", {});
+        return true;
+    }
+
+    // The card in front changed: the pages hear it (Mojo.stageActivated,
+    // "phoenixcardactivation"), as the simulator's SimWindowSource tells them.
+    property string _activeUid: ""
+    onFocusedUidChanged: {
+        var previous = _activeUid;
+        _activeUid = focusedUid;
+        if (previous === focusedUid)
+            return;
+        var tell = function(uid, active) {
+            var i = cardIndex(uid);
+            if (i >= 0)
+                source.sendToApp(cards.get(i).appId, "cardActivation", { active: active });
+        };
+        if (previous !== "")
+            tell(previous, false);
+        if (focusedUid !== "")
+            tell(focusedUid, true);
+    }
+
+    // ---- Screen captures (docs/SCREENSHOTS.md SC1) --------------------------------------
+    // The shell's PNG (Shell.takeScreenshot) into /media/internal/screencaptures,
+    // named as the simulator's runtime names it ("<app> 2026-10-10 at
+    // 09.41.05.png"), written by the file manager's service
+    // (org.webosphoenix.filemanager write, base64), then the "Screen
+    // captured" notification that opens it in the Screenshot app, as the
+    // runtime's saveScreenshot posts it in phoenix-sim.
+    readonly property string captureDir: "/media/internal/screencaptures"
+    function captureFileName(app, d) {
+        function two(n) { return (n < 10 ? "0" : "") + n; }
+        var safe = String(app || "Screen").replace(/[\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim() || "Screen";
+        return safe + " " + d.getFullYear() + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate())
+            + " at " + two(d.getHours()) + "." + two(d.getMinutes()) + "." + two(d.getSeconds()) + ".png";
+    }
+    function saveScreenshot(png, appTitle, captureId) {
+        var path = captureDir + "/" + captureFileName(appTitle, new Date());
+        var fm = "luna://org.webosphoenix.filemanager";
+        lunaCall(fm + "/mkdir", { path: captureDir }, function() {
+            source.lunaCall(fm + "/write", { path: path, data: String(png).replace(/^data:image\/png;base64,/, ""), encoding: "base64" }, function(r) {
+                if (!r || r.returnValue === false) {
+                    console.warn("phoenix: the screen capture could not be saved: " + JSON.stringify(r));
+                    return;
+                }
+                var params = { path: path };
+                if (captureId)
+                    params.capture = String(captureId);
+                source.notify("org.webosphoenix.screenshot", qsTr("Screen captured"),
+                              path.slice(source.captureDir.length + 1).replace(/\.png$/, ""), params, { tag: "capture:" + path });
+            });
+        });
+        return true;
+    }
+
+    // ---- Notifications ------------------------------------------------------------------
+    // params: the app's launch params when it is tapped; extra: {tag, actions}.
+    function notify(appId, title, body, params, extra) {
+        var info = appInfo(appId) || { color: "#666666", glyph: "!", icon: "" };
+        var acts = extra && extra.actions && Array.isArray(extra.actions.items) && extra.actions.items.length ? extra.actions : null;
+        notifications.append({ id: "n" + Date.now() + "_" + notifications.count, appId: appId, title: title, body: body || "",
+                               color: info.color || "#666666", glyph: info.glyph || "!", icon: info.icon || "",
+                               params: params && typeof params === "object" ? JSON.stringify(params) : (typeof params === "string" ? params : ""),
+                               windowKey: "", clickableWhenLocked: false, ongoing: false, progress: -1,
+                               tag: extra && extra.tag ? extra.tag : "", actions: acts ? JSON.stringify(acts) : "" });
+    }
+
+    function removeTagged(appId, tag, prefix) {
+        for (var i = notifications.count - 1; i >= 0; --i) {
+            var n = notifications.get(i);
+            if (n.appId === appId && (prefix ? n.tag !== "" && n.tag.indexOf(tag) === 0 : n.tag === tag))
+                notifications.remove(i);
+        }
+    }
+
+    // An ongoing activity: {id, title, body, icon?, progress, params?} or
+    // {id, clear: true}; pinned above the notifications (SimWindowSource's).
+    function setOngoing(appId, p) {
+        var key = "ongoing:" + appId + ":" + p.id;
+        var at = -1;
+        for (var i = 0; i < notifications.count; ++i)
+            if (notifications.get(i).id === key) { at = i; break; }
+        if (p.clear) {
+            if (at >= 0)
+                notifications.remove(at);
+            return;
+        }
+        var target = p.appId && appInfo(p.appId) ? p.appId : appId;
+        var info = appInfo(target) || { color: "#666666", glyph: "!", icon: "" };
+        var progress = typeof p.progress === "number" ? Math.max(-1, Math.min(100, p.progress)) : -1;
+        var params = p.params && typeof p.params === "object" ? JSON.stringify(p.params) : "";
+        if (at >= 0) {
+            notifications.setProperty(at, "title", p.title || "");
+            notifications.setProperty(at, "body", p.body || "");
+            notifications.setProperty(at, "progress", progress);
+            notifications.setProperty(at, "params", params);
+            return;
+        }
+        var flags = [];
+        for (var j = 0; j < notifications.count; ++j)
+            flags.push(notifications.get(j).ongoing);
+        notifications.insert(Policy.ongoingInsertIndex(flags), {
+            id: key, appId: target, title: p.title || "", body: p.body || "",
+            color: info.color || "#666666", glyph: info.glyph || "!", icon: p.icon ? _iconUrl(p.icon, target) : (info.icon || ""),
+            params: params, windowKey: "", clickableWhenLocked: false, ongoing: true, progress: progress, tag: "", actions: ""
+        });
+    }
+
+    // OSE's own notifications (com.webos.notification createToast, from
+    // OSE's services and apps): the shell is the system UI notificationmgr
+    // serves (PRIVILEGED_SYSTEM_UI_SOURCE "com.webos.surfacemanager",
+    // NotificationService.cpp:51, 227-245), so its toasts become banners,
+    // and those that are not only toasts stay as notifications; a tap runs
+    // the toast's action (SAM's launch, NotificationService.cpp:686-729). The
+    // stock NotificationView takes no toasts (PhoenixViewsRoot); its alerts
+    // stay its own.
+    function toast(t) {
+        if (!t || typeof t.message !== "string" || t.message === "")
+            return;
+        var appId = String(t.sourceId || "");
+        var lp = t.action && t.action.launchParams ? t.action.launchParams : null;
+        var target = lp && lp.id ? String(lp.id) : appId;
+        var params = lp && lp.params ? JSON.stringify(lp.params) : "";
+        var text = t.title ? String(t.title) + ": " + t.message : t.message;
+        bannerRequested(target, text, t.iconUrl ? String(t.iconUrl) : _iconUrl("", target), params, "notifications", "", 0,
+                        "toast-" + String(t.timestamp || Date.now()));
+        if (t.onlyToast === false)
+            notify(target, t.title ? String(t.title) : t.message, t.title ? t.message : "", lp && lp.params ? lp.params : null);
+    }
+
+    // ---- An app's dictation (org.webosphoenix.dictation) ---------------------------------
+    // The shell's recorder for a card's page, as SimWindowSource's: one at a
+    // time; the page hears listening, transcribing, done or error.
+    function _dictationEvent(appId, ev) { sendToApp(appId, "dictationEvent", ev); }
+    function _dictationRequest(appId, uid, p) {
+        var d = dictation;
+        if (!d) {
+            _dictationEvent(appId, { state: "error", errorText: qsTr("Dictation is not available on this device.") });
+            return;
+        }
+        var mine = d.owner === uid;
+        if (p.op === "start") {
+            if ((d.listening || d.busy) && !mine) {
+                _dictationEvent(appId, { state: "error", errorText: qsTr("The microphone is in use.") });
+                return;
+            }
+            if (d.listening || d.busy)
+                d.cancel();
+            d.owner = uid;
+            d.prompt = typeof p.prompt === "string" ? p.prompt.slice(0, 1000) : "";
+            d.autoStop = !!p.autoStop;
+            d.start();
+            if (d.listening)
+                _dictationEvent(appId, { state: "listening" });
+        } else if (p.op === "stop" && mine) {
+            d.stop();
+        } else if (p.op === "cancel" && mine) {
+            d.cancel();
+            _dictationDone();
+        }
+    }
+    function _dictationDone() {
+        if (!dictation)
+            return;
+        dictation.owner = "";
+        dictation.prompt = "";
+        dictation.autoStop = false;
+    }
+    function _ownerApp(uid) {
+        var i = cardIndex(uid);
+        return i >= 0 ? cards.get(i).appId : "";
+    }
+    Connections {
+        target: source.dictation
+        ignoreUnknownSignals: true
+        // Only an app's recording: the keyboard's (owner "") and the
+        // Assistant view's are theirs.
+        function onStateChanged() {
+            var d = source.dictation;
+            var app = d.owner !== "" ? source._ownerApp(d.owner) : "";
+            if (app !== "" && d.busy)
+                source._dictationEvent(app, { state: "transcribing" });
+        }
+        function onTranscribed(text, error) {
+            var d = source.dictation;
+            var app = d.owner !== "" ? source._ownerApp(d.owner) : "";
+            if (app === "")
+                return;
+            source._dictationDone();
+            source._dictationEvent(app, error ? { state: "error", errorText: error } : { state: "done", text: text });
+        }
+    }
+
+    // ---- The Assistant's on-device model and speech ("assistant" messages) ---------------
+    property var _assistantWaiting: ({})
+    function _assistantEvent(appId, ev) { sendToApp(appId, "assistantHostEvent", ev); }
+    function _assistantRequest(appId, p) {
+        var answer = function(o) { o.requestId = p.requestId; source._assistantEvent(appId, o); };
+        var lm = localModels, sp = speech;
+        switch (p.op) {
+        case "status":
+            answer(lm ? lm.status() : { available: false, installed: [], ramBytes: 0, error: "" });
+            break;
+        case "download":
+            if (!lm) { answer({ error: qsTr("Models cannot be downloaded here.") }); break; }
+            if (p.sources && p.sources.length)
+                lm.downloadFrom(String(p.id), p.sources);
+            else
+                lm.download(String(p.id), String(p.url), String(p.sha256 || ""), Number(p.size) || 0);
+            answer(lm.error && lm.status().downloading === null ? { error: lm.error } : {});
+            break;
+        case "cancel":
+            if (lm) lm.cancel(String(p.id));
+            answer({});
+            break;
+        case "remove":
+            if (lm) lm.remove(String(p.id));
+            answer({});
+            break;
+        case "ensure":
+            if (!lm) { answer({ error: qsTr("No on-device model here.") }); break; }
+            var w = _assistantWaiting;
+            w[p.requestId] = appId;
+            _assistantWaiting = w;
+            lm.ensure(String(p.id), String(p.requestId));
+            break;
+        case "speak":
+            if (!sp || !sp.available) { answer({ error: qsTr("No text-to-speech here.") }); break; }
+            sp.speak(String(p.text || ""), String(p.lang || "en"), String(p.voice || ""), Number(p.rate) || 1);
+            answer({});
+            break;
+        case "stopSpeaking":
+            if (sp) sp.stop();
+            answer({});
+            break;
+        case "speechStatus":
+            answer({ available: !!(sp && sp.available), engine: sp ? sp.engine : "", voices: sp ? sp.voices : [] });
+            break;
+        default:
+            answer({ error: "unknown op " + p.op });
+        }
+    }
+    function _assistantSettle(requestId, ev) {
+        var appId = _assistantWaiting[requestId];
+        if (!appId)
+            return;
+        var w = _assistantWaiting;
+        delete w[requestId];
+        _assistantWaiting = w;
+        ev.requestId = requestId;
+        _assistantEvent(appId, ev);
+    }
+    Connections {
+        target: source.localModels
+        ignoreUnknownSignals: true
+        function onReady(requestId, baseUrl) { source._assistantSettle(requestId, { baseUrl: baseUrl }); }
+        function onFailed(requestId, error) { source._assistantSettle(requestId, { error: error }); }
+    }
+
+    Component.onCompleted: {
+        _listenToPages();
+        lunaSubscribe("luna://com.webos.notification/getToastNotification", { subscribe: true }, function(r) {
+            if (r && r.returnValue !== false && typeof r.message === "string")
+                source.toast(r);
+        });
     }
 }
