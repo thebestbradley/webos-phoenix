@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { VideoItem } from "@phoenix/luna";
 import { durationLabel, forgetPosition, loadPositions, loadPrefs, progressOf, resumeAt, savePosition, savePrefs, sortVideos, titleOf } from "./library";
-import { cueText, parseSubtitles, parseTime, subtitleTracks } from "./subtitles";
+import { cueText, parseSubtitles, parseTime, pickTrack, subtitleTracks } from "./subtitles";
 import { isBlank } from "./Poster";
 
 const SAMPLES = resolve(__dirname, "../../media-samples/media/videos");
@@ -48,6 +48,20 @@ describe("subtitles", () => {
         const dir = "/media/internal/Movies/";
         const tracks = subtitleTracks(dir + "Trip.mp4", [dir + "Trip.mp4", dir + "trip.srt", dir + "Trip.es.vtt", dir + "Trip.de.srt", dir + "Trip.forced.srt", dir + "Other.srt", dir + "Trip.txt"]);
         expect(tracks.map((t) => [t.label, t.language])).toEqual([["Subtitles", undefined], ["forced", undefined], ["German", "de"], ["Spanish", "es"]]);
+    });
+
+    it("picks the track to show, and Captions keeps one on", () => {
+        const dir = "/media/internal/Movies/";
+        const es = subtitleTracks(dir + "Trip.mp4", [dir + "Trip.es.vtt", dir + "Trip.de.srt"]);
+        expect(pickTrack(es, "de")?.language).toBe("de");
+        expect(pickTrack(es, "*")?.language).toBe("de");
+        expect(pickTrack(es, "")).toBeNull();
+        expect(pickTrack(es, "fr")).toBeNull();
+        // Settings > Accessibility > Captions.
+        expect(pickTrack(es, "", true)?.language).toBe("de");
+        expect(pickTrack(es, "fr", true)?.language).toBe("de");
+        expect(pickTrack(es, "es", true)?.language).toBe("es");
+        expect(pickTrack([], "", true)).toBeNull();
     });
 });
 
