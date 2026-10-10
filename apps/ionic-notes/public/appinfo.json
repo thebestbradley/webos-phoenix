@@ -18,6 +18,7 @@
     ],
     "phoenix": {
         "//": "A 2.0 framework demo (apps/ionic-notes/README.md), in the launcher's Downloads tab with the other demos; developer: only while Developer Mode is on (docs/APP-RUNTIME.md).",
+        "launchParams": ["newNote", "share"],
         "launcherTab": 1,
         "developer": true,
         "shareTargets": [

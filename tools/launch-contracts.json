@@ -62,6 +62,10 @@
             ],
             "source": "third_party/core-apps/com.palm.app.calendar/app/App.js:332-365 and app/AppView.js:279-320"
         },
+        "com.palm.launcher": {
+            "launchParams": [],
+            "source": "shell/qml/Phoenix/Lsm/LsmWindowSource.qml:789-810 (the device shell launches Just Type's page only to bring it up; what is typed reaches it as the shell's \"justType\" events, runtime/phoenix-runtime.js deviceJustType)"
+        },
         "com.palm.app.notes": {
             "launchParams": [
                 "text",

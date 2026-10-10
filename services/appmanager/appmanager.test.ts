@@ -76,6 +76,18 @@ describe("com.palm.applicationManager on OSE", () => {
         ]);
     });
 
+    it("opens the replaced apps by their original ids, and the phone's preferences in Settings", async () => {
+        const w = world();
+        await w.m.methods.launch({ id: "com.palm.app.messaging", params: { compose: { personId: "p1" } } });
+        await w.m.methods.launch({ id: "com.palm.app.phone", params: { preferences: true } });
+        await w.m.methods.launch({ id: "com.palm.app.phone", params: { address: "4085550144" } });
+        expect(w.launches()).toEqual([
+            { id: "org.webosphoenix.messaging", params: { compose: { personId: "p1" } } },
+            { id: "org.webosphoenix.settings", params: { page: "phone" } },
+            { id: "org.webosphoenix.phone", params: { address: "4085550144" } }
+        ]);
+    });
+
     it("runs an app without a window hidden (WebAppMgr's preload)", async () => {
         const w = world();
         await w.m.methods.launch({ id: "com.palm.app.calendar.alarms", params: { a: 1 } });

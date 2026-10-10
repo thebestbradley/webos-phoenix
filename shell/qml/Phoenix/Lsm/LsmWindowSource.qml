@@ -805,7 +805,7 @@ Item {
     function justTypeStart(text, done) {
         justTypeWindow();
         _justTypeShown = true;
-        lunaCall("luna://com.webos.applicationManager/launch", { id: justTypeAppId, params: { justType: true } }, function() {});
+        lunaCall("luna://com.webos.applicationManager/launch", { id: justTypeAppId, params: {} }, function() {});
         sendToApp(justTypeAppId, "justType", { op: "start", text: String(text || "") });
         if (done)
             done();

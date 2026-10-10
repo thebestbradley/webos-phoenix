@@ -72,8 +72,28 @@ var APP_ALIASES = {
     "com.palm.app.agendaview": "org.webosphoenix.agenda",
     "com.palm.app.exhibitionpreferences": { id: "org.webosphoenix.settings", params: { page: "exhibition" } },
     "com.palm.app.devmodeswitcher": { id: "org.webosphoenix.settings", params: { page: "devmode" } },
-    "com.palm.app.enyo-findapps": "org.webosphoenix.marketplace"
+    "com.palm.app.enyo-findapps": "org.webosphoenix.marketplace",
+    // The apps Phoenix's own replace, under the ids the original apps launch
+    // them by (docs/LAUNCH-CONTRACTS.md); each reads the original's params.
+    "com.palm.app.phone": "org.webosphoenix.phone",
+    "com.palm.app.messaging": "org.webosphoenix.messaging",
+    "com.palm.app.camera": "org.webosphoenix.camera",
+    "com.palm.app.musicplayer": "org.webosphoenix.music",
+    "com.palm.app.streamingmusicplayer": "org.webosphoenix.music",
+    "com.palm.app.videoplayer": "org.webosphoenix.videos",
+    "com.palm.app.firstuse": "org.webosphoenix.firstuse",
+    "com.palm.app.dateandtime": { id: "org.webosphoenix.settings", params: { page: "datetime" } }
 };
+// The runtime's APP_ROUTES: the phone app's {preferences: true} (luna-systemui
+// TelephonyAlerts.js:59-67) opens Settings' Phone page.
+var APP_ROUTES = {
+    "com.palm.app.phone": function (params) {
+        return params && params.preferences === true ? { id: "org.webosphoenix.settings", params: { page: "phone" } } : null;
+    }
+};
+function routed(id, params) {
+    return APP_ROUTES[id] ? APP_ROUTES[id](params || {}) : null;
+}
 var HELP_TOPICS = { universalsearch: "justtype", accountsmgr: "accounts", phone: "phone", messaging: "messaging",
                     camera: "camera", photos: "photos", music: "music", launcher: "launcher", notifications: "notifications" };
 
@@ -116,11 +136,15 @@ function fail(code, text) { return { returnValue: false, errorCode: code, errorT
 // luna-sysmgr's MimeSystem answers: {subscribed: false, returnValue: false, errorCode: "<text>"}.
 function legacyFail(text) { return { subscribed: false, returnValue: false, errorCode: text }; }
 
-function aliasId(id) {
+function aliasId(id, params) {
+    var r = routed(id, params);
+    if (r) return r.id;
     var a = APP_ALIASES[id];
     return a ? (typeof a === "string" ? a : a.id) : id;
 }
 function aliasParams(id, params) {
+    var r = routed(id, params);
+    if (r) return r.params;
     var a = APP_ALIASES[id], out = {};
     if (a && typeof a === "object") for (var k in a.params) out[k] = a.params[k];
     for (var j in params || {}) out[j] = params[j];
@@ -352,10 +376,10 @@ function createAppManager(opts) {
     var methods = {
         launch: function (p) {
             if (typeof p.id !== "string" || !p.id) return Promise.resolve(fail(-1, "Must provide an app id"));
-            return launch(aliasId(p.id), aliasParams(p.id, p.params));
+            return launch(aliasId(p.id, p.params), aliasParams(p.id, p.params));
         },
         open: function (p) {
-            if (typeof p.id === "string" && p.id) return launch(aliasId(p.id), aliasParams(p.id, p.params));
+            if (typeof p.id === "string" && p.id) return launch(aliasId(p.id, p.params), aliasParams(p.id, p.params));
             if (typeof p.target !== "string" || !p.target) return Promise.resolve(fail(-1, "Must provide an id or a target"));
             return apps().then(function (list) {
                 var handler = handlerForTarget(list, p.target);

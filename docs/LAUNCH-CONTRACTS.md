@@ -304,12 +304,14 @@ where the runtime sends the original id ("same": no alias).
 | `apps/firstuse/src/App.tsx:546` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
 | `apps/help/public/appinfo.json:24` | Just Type dbsearch | `org.webosphoenix.help` | same | `topic` | ✅ |
 | `apps/help/src/App.tsx:168` | launch | `com.palm.app.browser` | same | `target` | ✅ |
+| `apps/ionic-notes/public/appinfo.json:38` | Just Type action | `org.webosphoenix.ionicnotes` | same | `newNote` | ✅ |
 | `apps/maps/public/appinfo.json:25` | Just Type action | `org.webosphoenix.maps` | same | `query` | ✅ |
 | `apps/maps/public/appinfo.json:25` | Just Type dbsearch | `org.webosphoenix.maps` | same | `placeId` | ✅ |
-| `apps/marketplace/service/packagesservice.js:697` | open descriptor | `org.webosphoenix.marketplace` | same | `section` | ✅ |
+| `apps/marketplace/service/packagesservice.js:770` | open descriptor | `org.webosphoenix.marketplace` | same | `section` | ✅ |
 | `apps/marketplace/src/accountTypes.ts:169` | launch | `com.palm.app.accounts` | same | `templateId` | ✅ |
 | `apps/marketplace/src/accountTypes.ts:174` | launch | `com.palm.app.accounts` | same | none | ✅ |
 | `apps/marketplace/src/App.tsx:347` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `apps/marketplace/src/ConnectorPackage.tsx:195` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
 | `apps/messaging/src/views/Buddies.tsx:75` | launch | `com.palm.app.accounts` | same | none | ✅ |
 | `apps/messaging/src/views/ThreadList.tsx:31` | launch | `org.webosphoenix.messaging` | same | `threadId` | ✅ |
 | `apps/notificationlab/src/lib/lab.ts:212` | launch | `org.webosphoenix.notificationlab` | same | `task`, `scheduled` | ✅ |
@@ -338,28 +340,30 @@ where the runtime sends the original id ("same": no alias).
 | `apps/voicememos/public/appinfo.json:24` | Just Type dbsearch | `org.webosphoenix.voicememos` | same | `memoId` | ✅ |
 | `compat/rootfs/usr/palm/applications/com.palm.systemui/app/PowerdAlerts/PowerdAlerts.js:118` | launch | `com.palm.app.help` | `org.webosphoenix.help` | `target` | ✅ |
 | `compat/rootfs/usr/palm/frameworks/enyo/0.10/framework/lib/accounts/source/entry-first-launch.js:269` | open | `com.palm.app.enyo-findapps` | `org.webosphoenix.marketplace` | `common` | ✅ |
-| `runtime/phoenix-runtime.js:2019` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
-| `runtime/phoenix-runtime.js:7742` | open descriptor | `org.webosphoenix.messaging` | same | `threadId` | ✅ |
-| `runtime/phoenix-runtime.js:7760` | open descriptor | `org.webosphoenix.messaging` | same | `threadId` | ✅ |
-| `runtime/phoenix-runtime.js:7999` | open descriptor | `org.webosphoenix.messaging` | same | `threadId` | ✅ |
-| `runtime/phoenix-runtime.js:8774` | open descriptor | `org.webosphoenix.screenshot` | same | `path`, `capture` | ✅ |
-| `runtime/phoenix-runtime.js:11280` | launch | `org.webosphoenix.voicedial` | same | `source` | ✅ |
-| `runtime/phoenix-runtime.js:12818` | launch | `org.webosphoenix.marketplace` | same | `sourceId`, `id` | ✅ |
-| `runtime/phoenix-runtime.js:13272` | open descriptor | `org.webosphoenix.printmanager` | same | `jobID` | ✅ |
-| `runtime/phoenix-runtime.js:14370` | open descriptor | `org.webosphoenix.files` | same | `path` | ✅ |
-| `runtime/phoenix-runtime.js:14663` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `runtime/phoenix-runtime.js:2373` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `runtime/phoenix-runtime.js:8154` | open descriptor | `org.webosphoenix.messaging` | same | `threadId` | ✅ |
+| `runtime/phoenix-runtime.js:8172` | open descriptor | `org.webosphoenix.messaging` | same | `threadId` | ✅ |
+| `runtime/phoenix-runtime.js:8411` | open descriptor | `org.webosphoenix.messaging` | same | `threadId` | ✅ |
+| `runtime/phoenix-runtime.js:9186` | open descriptor | `org.webosphoenix.screenshot` | same | `path`, `capture` | ✅ |
+| `runtime/phoenix-runtime.js:11705` | launch | `org.webosphoenix.voicedial` | same | `source` | ✅ |
+| `runtime/phoenix-runtime.js:13295` | launch | `org.webosphoenix.marketplace` | same | `sourceId`, `id` | ✅ |
+| `runtime/phoenix-runtime.js:13749` | open descriptor | `org.webosphoenix.printmanager` | same | `jobID` | ✅ |
+| `runtime/phoenix-runtime.js:14887` | open descriptor | `org.webosphoenix.files` | same | `path` | ✅ |
+| `runtime/phoenix-runtime.js:15180` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `shell/qml/Phoenix/Lsm/LsmWindowSource.qml:796` | launch | `com.palm.launcher` | same | none | ✅ |
+| `shell/qml/Phoenix/Lsm/LsmWindowSource.qml:808` | launch | `com.palm.launcher` | same | none | ✅ |
 | `shell/qml/Phoenix/Shell/Shell.qml:239` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
 | `shell/qml/Phoenix/Shell/Shell.qml:2057` | launch | `org.webosphoenix.screenshot` | same | `path` | ✅ |
-| `shell/qml/Phoenix/Shell/Shell.qml:3277` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
-| `shell/qml/Phoenix/Shell/Shell.qml:3354` | launch | `org.webosphoenix.assistant` | same | `threadId` | ✅ |
-| `shell/qml/Phoenix/Shell/Shell.qml:3757` | launch | `org.webosphoenix.clipboard` | same | none | ✅ |
+| `shell/qml/Phoenix/Shell/Shell.qml:3270` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `shell/qml/Phoenix/Shell/Shell.qml:3347` | launch | `org.webosphoenix.assistant` | same | `threadId` | ✅ |
+| `shell/qml/Phoenix/Shell/Shell.qml:3766` | launch | `org.webosphoenix.clipboard` | same | none | ✅ |
 | `shell/qml/Phoenix/Sim/SimWindowSource.qml:668` | launch | `com.palm.app.browser` | same | `target` | ✅ |
 | `shell/qml/Phoenix/Sim/SimWindowSource.qml:2169` | open | `com.palm.app.browser` | same | `target` | ✅ |
 | `shell/qml/Phoenix/Sim/SimWindowSource.qml:2296` | launch | `org.webosphoenix.phone` | same | (variable) | ✅ |
 | `shell/qml/Phoenix/Sim/SimWindowSource.qml:2336` | launch | `org.webosphoenix.messaging` | same | (variable) | ✅ |
 | `shell/qml/sim.qml:454` | launch | `org.webosphoenix.assistant` | same | `followUp` | ✅ |
-| `shell/qml/sim.qml:1295` | launch | `org.webosphoenix.marketplace` | same | none | ✅ |
-| `shell/qml/sim.qml:2089` | launch | `org.webosphoenix.screenshot` | same | none | ✅ |
+| `shell/qml/sim.qml:1296` | launch | `org.webosphoenix.marketplace` | same | none | ✅ |
+| `shell/qml/sim.qml:2090` | launch | `org.webosphoenix.screenshot` | same | none | ✅ |
 | `third_party/app-services/com.palm.service.calendar.reminders/on-autoclose-handler.js:165` | launch | `com.palm.app.calendar` | same | `alarmClose` | ✅ |
 | `third_party/app-services/com.palm.service.calendar.reminders/on-db-changed-handler.js:362` | launch | `com.palm.app.calendar` | same | `alarmDeleted` | ✅ |
 | `third_party/app-services/com.palm.service.calendar.reminders/on-db-changed-handler.js:526` | launch | `com.palm.app.calendar` | same | `alarmUpdated` | ✅ |
@@ -442,5 +446,5 @@ where the runtime sends the original id ("same": no alias).
 | `third_party/luna-systemui/app/TelephonyAlerts/TelephonyAlerts.js:61` | launch | `com.palm.app.phone` | `org.webosphoenix.phone` | `preferences` | ✅ |
 | `third_party/luna-systemui/app/TelephonyAlerts/TelephonyAlerts.js:292` | launch | `com.palm.app.help` | `org.webosphoenix.help` | `target` | ✅ |
 
-246 launches: 236 ✅, 3 ⚠, 7 ❌ (5 of the ❌ go to apps Phoenix does not have; every ⚠ and ❌ has its why in tools/launch-contracts.json).
+250 launches: 240 ✅, 3 ⚠, 7 ❌ (5 of the ❌ go to apps Phoenix does not have; every ⚠ and ❌ has its why in tools/launch-contracts.json).
 <!-- /launch-table -->
