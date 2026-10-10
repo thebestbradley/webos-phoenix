@@ -22,6 +22,9 @@
 //                         copies (it resolves the names; default: none)
 //   MARKETPLACE_UPDATES   the system update feed it serves at /updates/
 //                         (default: <data>/updates; server/updates/src/UpdateFeed.php)
+//   MARKETPLACE_DEV       1: a development catalog (bin/serve.sh's, on this
+//                         computer): a developer's upload is approved and
+//                         published at once, with no review; never set on a server
 
 declare(strict_types=1);
 
@@ -50,6 +53,7 @@ function marketplace_config(): array
         'fetch_local' => getenv('MARKETPLACE_FETCH_LOCAL') === '1',
         'fetch_proxy' => getenv('MARKETPLACE_FETCH_PROXY') ?: null,
         'updates' => rtrim(getenv('MARKETPLACE_UPDATES') ?: rtrim($data, '/') . '/updates', '/'),
+        'dev' => getenv('MARKETPLACE_DEV') === '1',
         // The account types (Connections) and the checkout their icons come from.
         'accounts' => dirname(__DIR__) . '/catalog/accounts.json',
         'repo' => dirname(__DIR__, 3),

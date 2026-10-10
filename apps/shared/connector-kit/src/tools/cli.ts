@@ -9,6 +9,9 @@
 //       the Marketplace's checks (checks.ts; the server runs the same)
 //   phoenix-connector pack <folder> [--out DIR] [--namespace NS]... [--force]
 //       the .ipk the Marketplace takes
+//   phoenix-connector publish <folder | .ipk> (--local | --catalog URL) [--token T] [--namespace NS]...
+//       packed, validated and uploaded to a catalog (publish.ts); --local is
+//       the one on this computer, which the simulator starts
 //   phoenix-connector test <folder>
 //       the conformance suite, with the connector's fixture
 //       (service/test/fixture.js: module.exports = {template, validateParams, server(), ...})
@@ -18,12 +21,14 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
 import { checkConnector } from "./checks";
 import { checkIpk, pack, readFolder } from "./package";
+import { LOCAL_CATALOG, publish } from "./publish";
 import { scaffold, squarePng } from "./scaffold";
 
 const USAGE = [
     "usage: phoenix-connector new <app id> [--capability CONTACTS] [--dir DIR]",
     "       phoenix-connector validate <folder | file.ipk> [--namespace NS]...",
     "       phoenix-connector pack <folder> [--out DIR] [--namespace NS]... [--force]",
+    "       phoenix-connector publish <folder | file.ipk> (--local | --catalog URL) [--token TOKEN] [--namespace NS]...",
     "       phoenix-connector test <folder>"
 ].join("\n");
 
@@ -33,7 +38,7 @@ export function parseArgs(argv: string[]): Args {
     const out: Args = { _: [], namespace: [] };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
-        if (a === "--force" || a === "--json") out[a.slice(2)] = true;
+        if (a === "--force" || a === "--json" || a === "--local") out[a.slice(2)] = true;
         else if (a === "--namespace") out.namespace.push(argv[++i]);
         else if (/^--[a-z]+$/.test(a)) out[a.slice(2)] = argv[++i];
         else out._.push(a);
@@ -103,6 +108,26 @@ export async function main(argv: string[], io?: { log?(s: string): void; err?(s:
             return 0;
         } catch (e) {
             err("phoenix-connector pack: " + (e as Error).message);
+            return 1;
+        }
+    }
+
+    if (cmd === "publish") {
+        const target = args._[1];
+        const catalog = args.catalog || (args.local ? process.env.PHOENIX_CATALOG || LOCAL_CATALOG : "");
+        if (!target || !catalog) { err(USAGE); return 2; }
+        try {
+            const r = await publish(target, { catalog, token: args.token, namespaces: ns, log });
+            log("Published " + r.appId + " " + r.version + " to " + r.catalog + ": " + (r.state === "approved"
+                ? "approved at once (a development catalog)" + (r.build !== null ? ", catalog build " + r.build : "")
+                : "waiting for review"));
+            if (r.state === "approved") {
+                log("Connections lists " + r.templates.join(", ") + ". In the simulator: Marketplace > Connections; " +
+                    "it installs with Developer Mode on (Settings > Developer Mode).");
+            }
+            return 0;
+        } catch (e) {
+            err("phoenix-connector publish: " + (e as Error).message);
             return 1;
         }
     }

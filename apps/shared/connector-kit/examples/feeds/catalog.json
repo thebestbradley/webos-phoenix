@@ -1,0 +1,18 @@
+{
+    "//": "What the Marketplace's Connections view shows of this connector's account type (docs/SYNERGY-SDK.md, 'Publishing'): the catalog reads it from the package (server/marketplace, Catalog::connectorTypes). The title, the capabilities and the icon default to the template's.",
+    "accountTypes": [
+        {
+            "templateId": "org.example.feeds",
+            "title": "News Feed (example)",
+            "provider": "Any RSS or Atom feed",
+            "summary": "The connector kit's hello world: the entries of a news feed you name, checked every few minutes. An example to copy when you write a connector.",
+            "protocols": ["rss", "atom"],
+            "auth": { "type": "none", "registration": "none" },
+            "server": "user",
+            "privacy": { "dataGoesTo": "nowhere: it only reads the feed you name", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental",
+            "help": "https://github.com/thebestbradley/webos-phoenix/blob/main/docs/SYNERGY-SDK.md"
+        }
+    ]
+}

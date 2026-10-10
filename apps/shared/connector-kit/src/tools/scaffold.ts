@@ -47,6 +47,12 @@ export function scaffold(appId: string, capability: string): Scaffold {
             sync: "palm://" + service + "/sync"
         }, { dbkinds: { [capability.toLowerCase()]: dataKind } })]
     });
+    // What the Marketplace's Connections view says of it (publish.ts; server/marketplace Catalog::connectorTypes).
+    files["catalog.json"] = js({ accountTypes: [{
+        templateId, summary: "What " + name + " brings to this device, in a sentence.",
+        protocols: [], auth: { type: "password", registration: "none" }, server: "user",
+        privacy: { dataGoesTo: "the server you enter", e2ee: false, phoenixServers: "none" }, push: "poll", status: "experimental"
+    }] });
     files["configuration/db/kinds/" + dataKind.replace(/:\d+$/, "")] = kind(dataKind, generic);
     files["configuration/db/kinds/" + stateKind.replace(/:\d+$/, "")] = kind(stateKind);
     files["configuration/db/kinds/" + itemKind.replace(/:\d+$/, "")] = kind(itemKind);
