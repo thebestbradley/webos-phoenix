@@ -36,7 +36,17 @@
 // shell sends one app (the text typed into Just Type, a paste) is not for
 // the others. Here each app hears only its own.
 //
-// createShellHost({isShell(caller), now()}) -> {post, listen, events, send}
+// The same process serves org.webosphoenix.ongoing (the runtime's
+// "Ongoing activities", which Node services call too: the hardware and
+// update services' progress, the Marketplace's installs):
+//
+//   set {id, appId?, title, body?, icon?, progress, params?}, clear {id}
+//                               an "ongoing" message for the shell, from
+//                               the caller, as the runtime's page service
+//                               posts it in phoenix-sim
+//
+// createShellHost({isShell(caller), now()}) -> {post, listen, events, send,
+// ongoing: {set, clear}}
 // each (params, caller, respond(reply)) -> cancel() | undefined; the
 // service file binds them to webos-service (service.js).
 // STATUS: written against webos-service's API and shellhost.test.ts; not
@@ -159,10 +169,32 @@ function createShellHost(opts) {
 
     function listening(appId) { return (apps[appId] || []).length; }
 
-    return { post: post, listen: listen, events: events, send: send, listening: listening };
+    var ongoing = {
+        set: function (p, caller, respond) {
+            if (!p.id || !p.title) return respond(fail(-1, "id and title are required"));
+            post({ type: "ongoing", payload: {
+                id: String(p.id), appId: p.appId ? String(p.appId) : appIdOf(caller), title: String(p.title),
+                body: p.body ? String(p.body) : "", icon: p.icon ? String(p.icon) : "",
+                params: p.params && typeof p.params === "object" ? p.params : null,
+                progress: typeof p.progress === "number" ? p.progress : -1 } }, caller, function (r) {
+                respond(r.returnValue ? ok() : r);
+            });
+        },
+        clear: function (p, caller, respond) {
+            if (!p.id) return respond(fail(-1, "id is required"));
+            post({ type: "ongoing", payload: { id: String(p.id), clear: true } }, caller, function (r) {
+                respond(r.returnValue ? ok() : r);
+            });
+        }
+    };
+
+    return { post: post, listen: listen, events: events, send: send, listening: listening, ongoing: ongoing };
 }
 
 var METHODS = ["post", "listen", "events", "send"];
+var ONGOING = "org.webosphoenix.ongoing";
+var ONGOING_METHODS = ["set", "clear"];
 
 module.exports = { createShellHost: createShellHost, appIdOf: appIdOf, METHODS: METHODS, SERVICE: SERVICE,
+                   ONGOING: ONGOING, ONGOING_METHODS: ONGOING_METHODS,
                    SHELL_NAMES: SHELL_NAMES, KEEP: KEEP, KEEP_MS: KEEP_MS };

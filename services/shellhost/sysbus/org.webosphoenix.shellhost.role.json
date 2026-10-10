@@ -3,11 +3,16 @@
     "type": "regular",
     "trustLevel": "oem",
     "allowedNames": [
-        "org.webosphoenix.shellhost"
+        "org.webosphoenix.shellhost",
+        "org.webosphoenix.ongoing"
     ],
     "permissions": [
         {
             "service": "org.webosphoenix.shellhost",
+            "outbound": []
+        },
+        {
+            "service": "org.webosphoenix.ongoing",
             "outbound": []
         }
     ]

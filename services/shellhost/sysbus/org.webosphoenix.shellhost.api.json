@@ -6,5 +6,9 @@
     "phoenix.shellhost.shell": [
         "org.webosphoenix.shellhost/listen",
         "org.webosphoenix.shellhost/send"
+    ],
+    "phoenix.ongoing": [
+        "org.webosphoenix.ongoing/set",
+        "org.webosphoenix.ongoing/clear"
     ]
 }

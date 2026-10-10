@@ -1,11 +1,15 @@
 {
     "allowedNames": [
-        "org.webosphoenix.shellhost"
+        "org.webosphoenix.shellhost",
+        "org.webosphoenix.ongoing"
     ],
     "phoenix.shellhost.app": [
         "dev"
     ],
     "phoenix.shellhost.shell": [
         "oem"
+    ],
+    "phoenix.ongoing": [
+        "dev"
     ]
 }

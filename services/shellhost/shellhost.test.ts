@@ -89,6 +89,22 @@ describe("org.webosphoenix.shellhost", () => {
         expect(w.call("events", {}, "a.b").replies[0].returnValue).toBe(false);
     });
 
+    it("serves org.webosphoenix.ongoing: the caller's ongoing activities for the shell", () => {
+        const w = world();
+        const shell = w.call("listen", { subscribe: true }, "com.webos.surfacemanager");
+        const replies: Any[] = [];
+        w.host.ongoing.set({ id: "fw", title: "Installing firmware", progress: 30 }, "org.webosphoenix.hardware", (r: Any) => replies.push(r));
+        expect(replies[0]).toEqual({ returnValue: true });
+        expect(shell.replies[1].message).toMatchObject({ appId: "org.webosphoenix.hardware", type: "ongoing",
+            payload: { id: "fw", appId: "org.webosphoenix.hardware", title: "Installing firmware", progress: 30 } });
+        w.host.ongoing.set({ id: "dl", appId: "org.webosphoenix.settings", title: "Update" }, "com.palm.update", () => {});
+        expect(shell.replies[2].message.payload).toMatchObject({ appId: "org.webosphoenix.settings", progress: -1 });
+        w.host.ongoing.clear({ id: "fw" }, "org.webosphoenix.hardware", (r: Any) => replies.push(r));
+        expect(shell.replies[3].message.payload).toEqual({ id: "fw", clear: true });
+        w.host.ongoing.set({ id: "x" }, "a.b", (r: Any) => replies.push(r));
+        expect(replies.pop().returnValue).toBe(false);
+    });
+
     it("has luna-service2 files for every method, apps and shell apart", () => {
         const api = JSON.parse(fs.readFileSync(path.join(HERE, "sysbus/org.webosphoenix.shellhost.api.json"), "utf8"));
         const all = [...api["phoenix.shellhost.app"], ...api["phoenix.shellhost.shell"]].map((m: string) => m.split("/")[1]).sort();
