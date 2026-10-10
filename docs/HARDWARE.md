@@ -956,7 +956,7 @@ keyboard calls the bus, appId `com.webos.service.ime.phoenixKeyboard`):
 | Settings: layouts, Text Assist, number row, style, sounds | `com.webos.service.systemservice/getPreferences` (subscribed): `x_palm_virtualkeyboard_prefs`, `x_palm_virtualkeyboard_settings`, `x_palm_textinput`, `keyboardNumberRow`, `keyboardStyle`, `systemSounds`, read by the runtime's rules (`DeviceKeyboard.js`) | `systemsettings.query` |
 | The keyboard in use, "Add" to the dictionary | `setPreferences` | `systemsettings.management` |
 | Key sounds | `com.webos.service.audio/playSound`, the file's PCM twin on `pfeedback` (as `LsmWindowSource.playSound`) | `audio.management` |
-| Dictation (V2) | Phoenix.Native's `Dictation`: the microphone and `luna-send` to `org.webosphoenix.transcriber` (whisper.cpp). The microphone needs Qt Multimedia, and OSE's `qtmultimedia` recipe is skipped (it fails to build against OSE's Qt), so on a device the keyboard has no microphone key yet (OPEN-QUESTIONS Q33) | luna-send's own |
+| Dictation (V2) | Phoenix.Native's `Dictation`: the microphone and `luna-send` to `org.webosphoenix.transcriber` (whisper.cpp). The microphone needs Qt Multimedia, and OSE's `qtmultimedia` recipe is skipped (it fails to build against OSE's Qt), so on a device the keyboard has no microphone key yet (OPEN-QUESTIONS Q35) | luna-send's own |
 | Prediction, swipe, emoji | `TextAssist.js`, `EmojiWords.js` in the QML: nothing from outside | none |
 | The words it learned, recent emoji | the plugin's files, `/var/lib/phoenix/keyboard/{words,emoji}.json` (0600); the learned words to `com.palm.systemmanager/phoenix/learnedWords` (keyboard only), in `getSystemStatus` for Settings > Personal Dictionary | `systemmanager.keyboard` (new group) |
 | The clip strip (E2) | `org.webosphoenix.clipboard` through `ClipboardClient`; the clipboard service takes the keyboard's bus name (and the shell's) as the system UI, which may paste a sensitive clip | `phoenix.clipboard` |
@@ -1016,7 +1016,7 @@ settings, sounds, writes, learned words, the clip strip).
    errors), the client permissions merge, `getPreferences` answers, key
    sounds play, the learned words reach Settings, the clip strip lists clips
    and pastes a password into a password field.
-6. Dictation, once Qt Multimedia builds (Q33): the microphone opens from
+6. Dictation, once Qt Multimedia builds (Q35): the microphone opens from
    maliit-server's process (PulseAudio access for its user) and the
    transcriber reads its WAV.
 7. The globe key's "webOS OSE" switches to OSE's keyboard, and OSE's
@@ -1026,7 +1026,7 @@ settings, sounds, writes, learned words, the clip strip).
    the phone's key popups of the top row (the window is only the keyboard's
    height, so what rises above it is cut off).
 9. The hide key: the panel goes but the field keeps the focus (Maliit
-   cannot blur the app's field; OPEN-QUESTIONS Q32).
+   cannot blur the app's field; OPEN-QUESTIONS Q34).
 
 ## Graphics
 

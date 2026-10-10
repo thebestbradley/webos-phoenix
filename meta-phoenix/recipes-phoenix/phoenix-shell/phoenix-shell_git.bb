@@ -29,7 +29,7 @@ inherit qt6-cmake
 # delivering the Back key to apps), installed with Qt's QML modules.
 # Built without Qt Multimedia, Phoenix.Native's Dictation has no microphone
 # (shell/native/CMakeLists.txt): OSE's qtmultimedia is skipped, it fails to
-# build against its Qt (OPEN-QUESTIONS Q33).
+# build against its Qt (OPEN-QUESTIONS Q35).
 # The keyboard's Maliit plugin (services/keyboard) is phoenix-keyboard's.
 DEPENDS = "qtbase qtdeclarative qtdeclarative-native"
 EXTRA_OECMAKE = "-DPHOENIX_BUILD_SIM=OFF -DPHOENIX_BUILD_KEYBOARD=OFF -DPHOENIX_DATA_DIR=${datadir}/phoenix \
