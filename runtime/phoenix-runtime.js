@@ -2475,7 +2475,8 @@
             setTimeout(function () { self.listener("serverConnected"); }, 0);
         },
         // Keep the native view on the object's rectangle, and out of the way
-        // while the object is hidden or an Enyo popup (menu, dialog) is open.
+        // while the object is hidden or an Enyo popup (menu, dialog) or the
+        // system's share sheet (drawn in this page) is open.
         track: function () {
             var self = this;
             if (this.destroyed) return;
@@ -2488,7 +2489,7 @@
                 var cs = global.getComputedStyle(e);
                 return cs.visibility !== "hidden" && cs.display !== "none";
             }
-            var popup = Array.prototype.some.call(global.document.querySelectorAll(".enyo-popup"), function (e) {
+            var popup = Array.prototype.some.call(global.document.querySelectorAll(".enyo-popup, iframe[data-phoenix-sheet]"), function (e) {
                 return shown(e) && e.getBoundingClientRect().height > 0;
             });
             // A drawer flown in from a side (enyo.Toaster, class enyo-toaster:
@@ -2512,6 +2513,9 @@
             if (rect !== this.rect || hidden !== this.hidden) {
                 this.rect = rect;
                 this.hidden = hidden;
+                // Back on screen: the picture it left goes (webViewEvent's
+                // phoenixSnapshot).
+                if (!hidden && n.style.backgroundImage) n.style.backgroundImage = "";
                 this.post("geometry", { x: r.left, y: r.top, width: r.width, height: r.height, visible: !hidden });
             }
             if (!n.isConnected && this.connected) return this.destroy();
@@ -2775,6 +2779,18 @@
         if (!a) return;
         if (name === "phoenixFindResult") return a.findResult && a.findResult((args || [])[0] || 0, (args || [])[1] || 0);
         if (name === "urlTitleChanged") { a.url = args[0]; a.title = args[1]; }
+        // A picture of the page as the native view stepped aside for a
+        // popup or the share sheet (WebAppWindow.qml): shown in its place
+        // under them until it is back.
+        if (name === "phoenixSnapshot") {
+            if (a.hidden && a.node && args && args[0]) {
+                var ns = a.node.style;
+                ns.backgroundImage = "url(\"" + args[0] + "\")";
+                ns.backgroundSize = "100% 100%";
+                ns.backgroundRepeat = "no-repeat";
+            }
+            return;
+        }
         a.listener.apply(a, [name].concat(args || []));
     };
 

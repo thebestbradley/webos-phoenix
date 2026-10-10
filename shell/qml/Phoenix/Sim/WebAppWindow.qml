@@ -12,6 +12,7 @@
 import QtQuick
 import QtWebEngine
 import Phoenix.Shell
+import Phoenix.Native
 import "Links.js" as Links
 
 Item {
@@ -345,11 +346,28 @@ Item {
             return;
         switch (p.op) {
         case "geometry":
+            // Stepping aside for something drawn in the page over it (an
+            // Enyo popup, the share sheet: nothing in the page can draw over
+            // a native view): a picture of it goes to the page first, in its
+            // place under them, so the page stays seen (dimmed) rather than
+            // the white of an empty rectangle, as BrowserServer's page,
+            // drawn in the app, did.
+            if (v.visible && !p.visible && v.width > 0 && v.height > 0 && p.width > 0 && p.height > 0) {
+                const id = p.id;
+                v.grabToImage(function (result) {
+                    win._webViewEvent(id, "phoenixSnapshot", ["data:image/png;base64," + ImageTools.pngBase64(result.image)]);
+                    if (win._webViews[id] === v && v.phoenixHide)
+                        v.visible = false;
+                });
+                v.phoenixHide = true;
+            } else {
+                v.phoenixHide = false;
+                v.visible = p.visible;
+            }
             v.x = p.x * win.zoom;
             v.y = p.y * win.zoom;
             v.width = p.width * win.zoom;
             v.height = p.height * win.zoom;
-            v.visible = p.visible;
             break;
         case "open": v.url = p.url; break;
         case "redirects": v.redirects = p.list || []; break;
@@ -389,6 +407,8 @@ Item {
             id: page
             property string viewId
             property bool privateMode: false
+            // Hiding once its picture is taken (geometry above).
+            property bool phoenixHide: false
             // The page's redirects (BrowserAdapter addUrlRedirect, from the
             // runtime): links matching one go back to the page as
             // urlRedirected(url, cookie) instead of loading.
