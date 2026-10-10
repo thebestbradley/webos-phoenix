@@ -36,6 +36,7 @@ vi.mock("@phoenix/luna", async (orig) => {
         call: (uri: string, params: unknown) => {
             luna.calls.push({ uri, params });
             if (/listAccounts$/.test(uri)) return Promise.resolve({ returnValue: true, results: luna.accounts });
+            if (/getDevMode$/.test(uri)) return Promise.resolve({ returnValue: true, status: luna.devModeOn ? "enabled" : "disabled" });
             if (/deleteAccount$/.test(uri)) {
                 luna.accounts = luna.accounts.filter((a) => a._id !== (params as { accountId: string }).accountId);
                 return Promise.resolve({ returnValue: true });

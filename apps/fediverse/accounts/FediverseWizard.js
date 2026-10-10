@@ -26,7 +26,9 @@ enyo.kind({
     TEMPLATE: "com.webosphoenix.fediverse",
     components: [
         {kind: "Toolbar", className: "enyo-toolbar-light accounts-header", pack: "center", components: [
-            {kind: "Image", name: "titleIcon", src: "/usr/palm/public/accounts/com.webosphoenix.fediverse/images/fediverse-48x48.png"},
+            // The app's own template icon (this page is its accounts/wizard.html): the
+            // Fediverse is a removable package, not in the system's templates folder.
+            {kind: "Image", name: "titleIcon", src: "../public/accounts/com.webosphoenix.fediverse/images/fediverse-48x48.png"},
             {kind: "Control", name: "title", content: "Fediverse"}
         ]},
         {className: "accounts-header-shadow"},

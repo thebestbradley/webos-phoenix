@@ -11798,7 +11798,7 @@
         var luna = nodeServiceLuna();
         var request = proxiedRequest;
 
-        var methods = null;
+        var methods = null, shippedSources = null;
         function service() {
             if (!methods) {
                 var davservice = loadModule("davservice.js");
@@ -12196,7 +12196,7 @@
 
         var loadModule = nodeServiceLoader(SERVICE_DIR, "Backup service");
         function archiveLib() { return loadModule("lib/archive.js"); }
-        var methods = null;
+        var methods = null, shippedSources = null;
         function service() {
             if (!methods) {
                 methods = loadModule("backupservice.js").createBackupService({
@@ -12773,7 +12773,7 @@
         function digest(alg) {
             return function (bytes) { return subtle.digest(alg, bytes).then(function (h) { return new Uint8Array(h); }); };
         }
-        var methods = null;
+        var methods = null, shippedSources = null;
         function service() {
             if (!methods) {
                 // Its installs reach the installer as this service's (ctx.caller),
@@ -12809,9 +12809,12 @@
                     // asking, as a device trusts a key its sources file gives.
                     // Any other catalog's key is checked by the user.
                     defaultSources: function () {
-                        var list;
-                        try { list = JSON.parse(PalmSystem.getResource("/etc/palm/marketplace/sources.json") || "{}").sources || []; }
-                        catch (e) { return []; }
+                        // Read once: the service asks at each call, and the file is the system's.
+                        if (!shippedSources) {
+                            try { shippedSources = JSON.parse(PalmSystem.getResource("/etc/palm/marketplace/sources.json") || "{}").sources || []; }
+                            catch (e) { shippedSources = []; }
+                        }
+                        var list = shippedSources;
                         var sim = runtime.simulatorCatalog ? runtime.simulatorCatalog() : null;
                         return list.map(function (src) {
                             return sim && src.kind === "phoenix" && !src.key && String(src.url).replace(/\/*$/, "/") === sim.url
@@ -15785,7 +15788,7 @@
             });
         }
 
-        var methods = null;
+        var methods = null, shippedSources = null;
         function service() {
             if (!methods) {
                 var lib = loadModule("assistant.js");

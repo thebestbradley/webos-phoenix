@@ -43,6 +43,34 @@ export function needsDevMode(t: AccountType, devModeOn: boolean): boolean {
     return !t.package.builtin && !t.package.preinstalled && !devModeOn;
 }
 
+// The ids of the apps installed from the catalogs, shared by the rows of a
+// list (one lookup), looked at again when the Marketplace comes back to the
+// front or a page here installs or removes one (installedChanged).
+let installedIds: Promise<Set<string>> | null = null;
+const installedListeners = new Set<() => void>();
+function installedChanged() {
+    installedIds = null;
+    installedListeners.forEach((f) => f());
+}
+if (typeof document !== "undefined") document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") installedChanged(); });
+
+/** Whether a connector package's app is installed (false for a built-in type); undefined while looked up. */
+export function useConnectorInstalled(t: AccountType): boolean | undefined {
+    const [ids, setIds] = useState<Set<string> | undefined>(undefined);
+    useEffect(() => {
+        if (t.package.builtin) return;
+        let live = true;
+        const load = () => {
+            installedIds ??= marketplace.installed().then((l) => new Set(l.map((a) => a.id)), () => new Set<string>());
+            void installedIds.then((s) => { if (live) setIds(s); });
+        };
+        load();
+        installedListeners.add(load);
+        return () => { live = false; installedListeners.delete(load); };
+    }, [t.package.builtin]);
+    return t.package.builtin ? false : ids && ids.has(t.package.id);
+}
+
 export function ConnectorPackage({ t, added }: { t: AccountType; added: boolean }) {
     const appId = t.package.id;
     // installed: its version, or null; undefined while it is looked up.
@@ -52,7 +80,8 @@ export function ConnectorPackage({ t, added }: { t: AccountType; added: boolean 
     const [progress, setProgress] = useState<InstallProgress | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [askDevMode, setAskDevMode] = useState(false);
-    const [accounts, setAccounts] = useState<Account[]>([]);
+    // null until read: then they, not the list's added (which can be older), say whether it is added.
+    const [accounts, setAccounts] = useState<Account[] | null>(null);
     const [templates, setTemplates] = useState<string[]>([t.templateId]);
     const [confirmRemove, setConfirmRemove] = useState(false);
     const [removing, setRemoving] = useState(false);
@@ -80,15 +109,19 @@ export function ConnectorPackage({ t, added }: { t: AccountType; added: boolean 
     }, [appId, t.sourceId, t.templateId]);
     useEffect(() => { void load(); return () => sub.current?.cancel(); }, [load]);
 
-    function install() {
+    async function install() {
         setError(null);
-        if (needsDevMode(t, devModeOn)) { setAskDevMode(true); return; }
+        // Asked now: it may have been turned on in Settings since this page looked.
+        let on = devModeOn;
+        try { on = ((await call("luna://com.webos.service.devmode/getDevMode", {})) as { status?: string }).status === "enabled"; } catch { /* as watched */ }
+        if (needsDevMode(t, on)) { setAskDevMode(true); return; }
         setAskDevMode(false);
         setProgress({ id: appId, state: "queued", progress: 0 });
         sub.current = marketplace.install(t.sourceId, appId, (p) => {
             setProgress(p);
             if (p.state === "installed" || p.state === "failed") {
                 sub.current?.cancel();
+                if (p.state === "installed") installedChanged();
                 if (p.state === "failed") {
                     if (p.errorCode === "NEEDS_DEVMODE") setAskDevMode(true);
                     else setError(p.errorText ?? "It could not be installed");
@@ -98,7 +131,7 @@ export function ConnectorPackage({ t, added }: { t: AccountType; added: boolean 
         });
     }
 
-    const mine = accounts.filter((a) => a.templateId && templates.includes(a.templateId));
+    const mine = (accounts ?? []).filter((a) => a.templateId && templates.includes(a.templateId));
     async function remove() {
         setConfirmRemove(false);
         setRemoving(true);
@@ -108,13 +141,13 @@ export function ConnectorPackage({ t, added }: { t: AccountType; added: boolean 
             for (const a of mine) await call("luna://com.palm.service.accounts/deleteAccount", { accountId: a._id });
             await marketplace.remove(appId);
         } catch (e) { setError(errorText(e)); }
-        finally { setRemoving(false); setProgress(null); void load(); }
+        finally { setRemoving(false); setProgress(null); installedChanged(); void load(); }
     }
 
     const busy = !!progress && progress.state !== "installed" && progress.state !== "failed";
     const label = progress?.state === "downloading" ? "Downloading…" : progress?.state === "checking" ? "Checking…"
         : progress?.state === "installing" ? "Installing…" : "Waiting…";
-    const isAdded = added || mine.length > 0;
+    const isAdded = accounts === null ? added : mine.length > 0;
     return (
         <>
             <div className="mk-actions" data-testid="connector-actions">
@@ -132,11 +165,11 @@ export function ConnectorPackage({ t, added }: { t: AccountType; added: boolean 
                             <Button variant="affirmative" data-testid="set-up"
                                     onClick={() => { const l = setUpLaunch(t); void apps.launch(l.id, l.params); }}>Set up</Button>
                         )}
-                        {update && inCatalog && <Button data-testid="connector-update" onClick={install}>Update to {update}</Button>}
+                        {update && inCatalog && <Button data-testid="connector-update" onClick={() => void install()}>Update to {update}</Button>}
                         <Button variant="negative" busy={removing} data-testid="connector-remove" onClick={() => setConfirmRemove(true)}>Remove</Button>
                     </>
                 ) : (
-                    <Button variant="affirmative" data-testid="connector-install" disabled={!inCatalog} onClick={install}>Install</Button>
+                    <Button variant="affirmative" data-testid="connector-install" disabled={!inCatalog} onClick={() => void install()}>Install</Button>
                 )}
             </div>
             {installed !== undefined && installed !== null && !busy && (
@@ -172,7 +205,7 @@ export function ConnectorPackage({ t, added }: { t: AccountType; added: boolean 
                     message={[removeAccountsText(mine), t.package.preinstalled ? "You can install it again from Connections." : ""]
                         .filter(Boolean).join(" ") || "It is removed from this device."}>
                 <Button variant="negative" data-testid="connector-remove-confirm" onClick={() => void remove()}>
-                    {mine.length ? "Remove It and Its Accounts" : "Remove"}
+                    {mine.length > 1 ? "Remove It and Its Accounts" : mine.length ? "Remove It and Its Account" : "Remove"}
                 </Button>
                 <Button variant="dark" onClick={() => setConfirmRemove(false)}>Cancel</Button>
             </Dialog>

@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apps, call, marketplace, type AccountType } from "@phoenix/luna";
 import { Button, Group, Note, Row, Spinner } from "@phoenix/ui";
 import { Icon } from "./Icon";
-import { ConnectorPackage } from "./ConnectorPackage";
+import { ConnectorPackage, useConnectorInstalled } from "./ConnectorPackage";
 import {
     applyFilter, capabilityChips, groupAccountTypes, openAccountsLaunch, privacyLines, pushText, serverText, setUpLaunch, signInText, statusBadge,
     addedTemplates, type ConnectorFilter,
@@ -56,12 +56,14 @@ function Badge({ t }: { t: AccountType }) {
 }
 
 export function AccountTypeRow({ t, added, onOpen }: { t: AccountType; added: boolean; onOpen: () => void }) {
+    // A connector package on the device (ConnectorPackage.tsx).
+    const installed = useConnectorInstalled(t);
     return (
         <Row testId={`account-${t.templateId}`} onClick={onOpen} chevron icon={<Icon src={t.icon} title={t.title} />}
              title={t.title}
              // The badge first in the subtitle: in the title a long name's ellipsis hid it on a phone.
              subtitle={<><Badge t={t} />{statusBadge(t) ? " " : ""}{t.provider && t.provider !== t.title ? t.provider : capabilityChips(t).join(" · ")}</>}
-             value={added ? "Added" : ""} />
+             value={added ? "Added" : installed ? "Installed" : ""} />
     );
 }
 
