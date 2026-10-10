@@ -108,9 +108,14 @@ check(array_keys($types) === ['com.webosphoenix.dav', 'com.webosphoenix.fedivers
       && $pub['accounts'] === 5 && !isset($types['com.palm.palmprofile']),
       'the index lists the account types Phoenix connects to (not the HP webOS profile)');
 $shape = ['templateId', 'title', 'provider', 'icon', 'summary', 'capabilities', 'protocols', 'auth', 'server', 'privacy', 'push', 'status', 'package', 'featured'];
-check(!array_filter($types, fn ($t) => array_keys($t) !== $shape || $t['package']['builtin'] !== true || array_keys($t['auth']) !== ['type', 'registration']
-                                       || array_keys($t['privacy']) !== ['dataGoesTo', 'e2ee', 'phoenixServers']),
-      '... each with the fields devices read, in order, built in, and nothing else (no iconFrom)');
+// Built in, but for the connector packages Phoenix comes with (pre-installed, removable: the Fediverse).
+check(!array_filter($types, fn ($t) => array_keys($t) !== $shape || array_keys($t['auth']) !== ['type', 'registration']
+                                       || array_keys($t['privacy']) !== ['dataGoesTo', 'e2ee', 'phoenixServers']
+                                       || $t['package'] !== ($t['package']['builtin'] ? ['id' => $t['package']['id'], 'builtin' => true]
+                                                             : ['id' => $t['package']['id'], 'builtin' => false, 'preinstalled' => true])),
+      '... each with the fields devices read, in order, built in or pre-installed, and nothing else (no iconFrom)');
+check(array_keys(array_filter($types, fn ($t) => $t['package']['builtin'])) === ['com.webosphoenix.dav', 'com.webosphoenix.webcal', 'com.palm.othermail', 'com.webosphoenix.xmpp'],
+      '... only the generic logins are built in (Contacts & Calendars, Email; the simulator\'s Jabber)');
 $dav = $types['com.webosphoenix.dav'];
 check($dav['title'] === 'CardDAV & CalDAV' && $dav['capabilities'] === [['capability' => 'CONTACTS', 'direction' => 'two-way'], ['capability' => 'CALENDAR', 'direction' => 'two-way']]
       && $dav['auth'] === ['type' => 'app-password', 'registration' => 'none'] && $dav['server'] === 'user'
@@ -120,8 +125,8 @@ check($dav['title'] === 'CardDAV & CalDAV' && $dav['capabilities'] === [['capabi
 $fedi = $types['com.webosphoenix.fediverse'];
 check($fedi['title'] === 'Fediverse' && $fedi['auth'] === ['type' => 'oauth', 'registration' => 'none'] && $fedi['server'] === 'discovered'
       && array_column($fedi['capabilities'], 'capability') === ['CONTACTS', 'MESSAGING', 'SOCIAL'] && $fedi['featured'] === true
-      && $fedi['package'] === ['id' => 'org.webosphoenix.fediverse', 'builtin' => true] && $fedi['privacy']['phoenixServers'] === 'none',
-      'Fediverse (phase C2): OAuth with the server found from the handle, built in, featured');
+      && $fedi['package'] === ['id' => 'org.webosphoenix.fediverse', 'builtin' => false, 'preinstalled' => true] && $fedi['privacy']['phoenixServers'] === 'none',
+      'Fediverse (phase C2): OAuth with the server found from the handle, a connector package Phoenix comes with (pre-installed), featured');
 check($types['com.webosphoenix.webcal']['capabilities'] === [['capability' => 'CALENDAR', 'direction' => 'read-only']]
       && $types['com.palm.othermail']['capabilities'][0]['capability'] === 'MAIL'
       && $types['com.webosphoenix.xmpp']['capabilities'][0]['capability'] === 'MESSAGING' && $types['com.webosphoenix.xmpp']['status'] === 'experimental',
@@ -158,6 +163,8 @@ $badEntries = [
     'unknown direction' => fn ($e) => ['capabilities' => [['capability' => 'CONTACTS', 'direction' => 'sideways']]] + $e,
     'no capabilities' => fn ($e) => ['capabilities' => []] + $e,
     'a connector package' => fn ($e) => ['package' => ['id' => 'com.example.connector', 'builtin' => false]] + $e,
+    'pre-installed and built in' => fn ($e) => ['package' => ['id' => 'com.example.connector', 'builtin' => true, 'preinstalled' => true]] + $e,
+    'pre-installed not a boolean' => fn ($e) => ['package' => ['id' => 'com.example.connector', 'builtin' => false, 'preinstalled' => 'yes']] + $e,
     'an unknown field' => fn ($e) => $e + ['secret' => 1],
     'an icon outside icons/accounts' => fn ($e) => ['icon' => '../index.json'] + $e,
     'an icon from outside the checkout' => fn ($e) => ['iconFrom' => '../../etc/passwd'] + $e,
@@ -546,6 +553,34 @@ $feedType = array_column($devIdx['accounts'], null, 'templateId')['org.example.f
 check($s === 200 && $feedType && $feedType['title'] === 'News Feed (example)' && $feedType['capabilities'] === [['capability' => 'FEEDS', 'direction' => 'read-only']]
       && $feedType['status'] === 'experimental' && $feedType['package']['builtin'] === false,
       'the News Feed example passes, its FEEDS capability read-only (readOnlyData)' . ($s === 200 ? '' : " ($r[error])"));
+
+// Phoenix's own connector packages (the ones it comes with, pre-installed): an admin uploads
+// them (bin/marketplace.php upload --phoenix; serve.sh does it), in Phoenix's namespaces.
+$appFiles = function (string $dir, string $id): array {
+    $out = [];
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
+    foreach ($it as $f) {
+        $rel = substr($f->getPathname(), strlen($dir) + 1);
+        if (!preg_match('#(^|/)(test|node_modules)/#', $rel)) {
+            $out["usr/palm/applications/$id/$rel"] = (string) file_get_contents($f->getPathname());
+        }
+    }
+    return $out;
+};
+$fediFiles = $appFiles(dirname(__DIR__, 3) . '/apps/fediverse', 'org.webosphoenix.fediverse');
+$fediInfo = json_decode($fediFiles['usr/palm/applications/org.webosphoenix.fediverse/appinfo.json'], true);
+$fediIpk = ipk($tmp, 'org.webosphoenix.fediverse', $fediInfo['version'], $fediFiles, [], $fediInfo);
+[$s, $r] = $devApp->api->handle('POST', '/api/apps/packages', $fediIpk, 'Bearer ' . $localDev['token']);
+check($s === 400 && str_contains($r['error'], "Phoenix's own"), 'a developer cannot upload Phoenix\'s own connector');
+$devAdmin = $devApp->api->createAccount('Admin', 'admin@localhost.localdomain', 'admin');
+[$s, $r] = $devApp->api->handle('POST', '/api/apps/packages', $fediIpk, 'Bearer ' . $devAdmin['token']);
+$devIdx = json_decode((string) file_get_contents("$tmp/dev/public/v1/index.json"), true);
+$fediApp = array_values(array_filter($devIdx['apps'], fn ($a) => $a['id'] === 'org.webosphoenix.fediverse'))[0] ?? null;
+$fediTypes = array_values(array_filter($devIdx['accounts'], fn ($t) => $t['templateId'] === 'com.webosphoenix.fediverse'));
+check($s === 200 && $fediApp && $fediApp['kind'] === 'connector' && count($fediTypes) === 1
+      && $fediTypes[0]['package'] === ['id' => 'org.webosphoenix.fediverse', 'builtin' => false, 'preinstalled' => true] && $fediTypes[0]['featured'] === true,
+      'the Fediverse, Phoenix\'s own (an admin\'s upload, its namespaces): in the index to install again, its account type once, '
+      . 'catalog/accounts.json\'s (pre-installed, featured)' . ($s === 200 ? '' : " ($r[error])"));
 
 // ---- The system update feed (served at /updates/, published by the admin API) ----------------
 $bundle = str_repeat("\x00\x01raucb", 64);

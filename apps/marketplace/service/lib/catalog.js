@@ -11,10 +11,12 @@
 //                     "apps": [entry, ...], "accounts": [account type, ...]}
 //   index.json.sig   base64 Ed25519 signature of index.json's bytes
 //
-// An entry: {id, kind: "pwa" | "ipk", title, developer: {name, url?},
+// An entry: {id, kind: "pwa" | "ipk" | "connector", title, developer: {name, url?},
 // summary, description, categories, icon (URL), screenshots, license,
 // homepage, donation, featured, rating: {stars, count}, version,
-// pwa: {manifest (URL), origin} | release: {url, size, sha256}}. An
+// pwa: {manifest (URL), origin} | release: {url, size, sha256}}. A
+// "connector" (a Synergy connector package, docs/SYNERGY-CONNECTORS.md C4)
+// has a release as an "ipk" has; Connections installs it. An
 // account type (Synergy, docs/SYNERGY-CONNECTORS.md 2.1): lib/accounts.js;
 // its icon may be relative to the index.
 //
@@ -51,7 +53,7 @@ function url(v) { return typeof v === "string" && /^https?:\/\//i.test(v) ? v : 
 // One entry as the client uses it; null when it is not usable.
 function normalize(e, sourceId) {
     if (!e || typeof e.id !== "string" || !/^[A-Za-z0-9]+([._-][A-Za-z0-9]+)+$/.test(e.id)) return null;
-    var kind = e.kind === "pwa" ? "pwa" : e.kind === "ipk" ? "ipk" : null;
+    var kind = e.kind === "pwa" || e.kind === "ipk" || e.kind === "connector" ? e.kind : null;
     if (!kind) return null;
     var out = {
         id: e.id, sourceId: sourceId, kind: kind, title: str(e.title, 80) || e.id,

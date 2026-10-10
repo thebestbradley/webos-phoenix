@@ -24,11 +24,13 @@ const { createPackagesService } = require("./packagesservice.js") as Any;
 const http = require("./lib/node-http.js") as Any;
 const ipkLib = require("./lib/ipk.js") as Any;
 const servers = require("./test/servers.cjs") as Any;
+// The connector kit's packer (FEEDS, the example connector, as `phoenix-connector pack` makes it).
+import { pack } from "../../shared/connector-kit/src/tools/package";
 
 const gzip = { gzip: async (b: Uint8Array) => new Uint8Array(zlib.gzipSync(b)), gunzip: async (b: Uint8Array) => new Uint8Array(zlib.gunzipSync(b)) };
 const ipk = ipkLib.createIpk({ gzip });
 
-function makeService(sources: Any[]) {
+function makeService(sources: Any[], preinstalled?: Any[]) {
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-mkt-"));
     const world = { state: null as Any, installed: {} as Record<string, Any>, installs: [] as Any[], toasts: [] as Any[], fail: null as string | null,
                     devMode: false, noIcons: false, pending: [] as Any[] };
@@ -47,7 +49,7 @@ function makeService(sources: Any[]) {
                 if (uri.endsWith("/install")) {
                     const bytes = new Uint8Array(fs.readFileSync(params.ipkUrl));
                     const pkg = await ipk.read(bytes);
-                    world.installs.push({ id: params.id, pkg, developerMode: !!params.developerMode });
+                    world.installs.push({ id: params.id, pkg, developerMode: !!params.developerMode, firstParty: !!params.firstParty });
                     if (world.fail) return onReply({ returnValue: true, id: params.id, statusValue: 24, details: { state: "install failed", reason: world.fail } });
                     world.installed[params.id] = pkg;
                     onReply({ returnValue: true, id: params.id, statusValue: 13, details: { state: "installing" } });
@@ -70,6 +72,7 @@ function makeService(sources: Any[]) {
         state: { load: () => (world.state ? JSON.parse(JSON.stringify(world.state)) : null), save: (o: Any) => { world.state = JSON.parse(JSON.stringify(o)); } },
         temp: { write: (name: string, bytes: Uint8Array) => { const f = path.join(temp, name); fs.writeFileSync(f, bytes); return f; }, remove: (f: string) => fs.rmSync(f, { force: true }) },
         defaultSources: () => sources,
+        preinstalled: preinstalled ? () => preinstalled : undefined,
         // The launcher's pending icons, as the runtime passes them on.
         pending: (st: Any) => world.pending.push(st)
     });
@@ -314,5 +317,67 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         world.devMode = true;
         expect(await service.install({ sourceId: "precentral", id: "org.example.feeds" })).toMatchObject({ returnValue: true, appId: "org.example.feeds" });
         expect(world.installs.at(-1)).toMatchObject({ id: "org.example.feeds", developerMode: true });
+    });
+
+    // ---- Connector packages in the catalog (docs/SYNERGY-CONNECTORS.md C4) ----
+
+    it("trusts a catalog whose key the device's sources give (the simulator's own local catalog) without asking", async () => {
+        // Read once without a key (the simulator before its catalog ran), then given one: taken, and its fingerprint shown.
+        const sources = defaults();
+        const { service, world } = makeService(sources);
+        expect((await service.refresh({ id: "phoenix" })).results[0]).toMatchObject({ errorCode: "UNTRUSTED" });
+        sources[0] = { ...sources[0], key: catalog.key };
+        expect((await service.refresh({ id: "phoenix" })).results[0]).toMatchObject({ ok: true });
+        expect((await service.getSources()).sources[0]).toMatchObject({ trusted: true, fingerprint: catalog.fingerprint, error: null });
+        // A key the user checked is not replaced by another the sources give.
+        world.state.sources[0].keyFromDevice = false;
+        sources[0] = { ...sources[0], key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=" };
+        expect((await service.refresh({ id: "phoenix" })).results[0]).toMatchObject({ ok: true });
+    });
+
+    it("installs a connector from the catalog in Developer Mode only, checked against the signed SHA-256", async () => {
+        const out = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-feeds-"));
+        const packed = pack(path.resolve(__dirname, "../../shared/connector-kit/examples/feeds"), out, { vendor: false });
+        const dev = await catalog.api("POST", "/api/accounts", { name: "Fay", email: "fay@example.com", role: "developer" });
+        const up = await catalog.api("POST", "/api/apps/packages", new Uint8Array(fs.readFileSync(packed.file)), dev.token);
+        expect(up).toMatchObject({ status: 200, app: { kind: "connector" }, release: { state: "pending" } });
+        await catalog.api("POST", `/api/admin/releases/${up.release.id}/approve`, {}, catalog.admin);
+        const { service, world } = makeService([{ ...defaults()[0], key: catalog.key }]);
+        await service.refresh({});
+        const types = (await service.listAccountTypes({ capability: "FEEDS" })).accountTypes;
+        expect(types).toEqual([expect.objectContaining({ templateId: "org.example.feeds", sourceId: "phoenix",
+                                                          package: { id: "org.example.feeds", builtin: false, preinstalled: false } })]);
+        // Not an app of the Apps section: Connections installs it.
+        expect((await service.browse({ section: "apps" })).apps.map((a: Any) => a.id)).not.toContain("org.example.feeds");
+        expect((await service.getApp({ sourceId: "phoenix", id: "org.example.feeds" })).app).toMatchObject({ kind: "connector", installed: null });
+        const refused = await service.install({ sourceId: "phoenix", id: "org.example.feeds" });
+        expect(refused).toMatchObject({ errorCode: "NEEDS_DEVMODE" });
+        expect(world.installs).toHaveLength(0);
+        world.devMode = true;
+        expect(await service.install({ sourceId: "phoenix", id: "org.example.feeds" })).toMatchObject({ returnValue: true, appId: "org.example.feeds" });
+        expect(world.installs.at(-1)).toMatchObject({ id: "org.example.feeds", developerMode: true, firstParty: false });
+        expect((await service.listInstalled()).apps).toEqual([expect.objectContaining({ id: "org.example.feeds", kind: "connector", version: "0.1.0" })]);
+        fs.rmSync(out, { recursive: true, force: true });
+    });
+
+    it("a connector the device came with: installed from its catalog, removable, installed again without Developer Mode", async () => {
+        // The device came with FEEDS (as Phoenix comes with the Fediverse): in the image, among the installed apps.
+        const pre = [{ id: "org.example.feeds", sourceId: "phoenix", version: "0.1.0", title: "News Feed (example)" }];
+        const { service, world } = makeService([{ ...defaults()[0], key: catalog.key, builtin: true }], pre);
+        world.installed["org.example.feeds"] = {};
+        await service.refresh({});
+        expect((await service.listInstalled()).apps).toEqual([expect.objectContaining({ id: "org.example.feeds", sourceId: "phoenix", kind: "connector" })]);
+        expect(await service.remove({ id: "org.example.feeds" })).toMatchObject({ returnValue: true });
+        // Removed, it stays removed.
+        expect((await service.listInstalled()).apps).toEqual([]);
+        const r = await service.install({ sourceId: "phoenix", id: "org.example.feeds" });
+        expect(r).toMatchObject({ returnValue: true, appId: "org.example.feeds" });
+        expect(world.installs.at(-1)).toMatchObject({ id: "org.example.feeds", developerMode: false, firstParty: true });
+        // The same package from a catalog the user added is a third party's: Developer Mode.
+        const other = makeService([{ ...defaults()[0], key: catalog.key }], pre);
+        await other.service.removeSource({ id: "phoenix" });
+        await other.service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
+        const added = (await other.service.getSources()).sources.find((x: Any) => x.url === catalog.catalogUrl);
+        expect(await other.service.install({ sourceId: added.id, id: "org.example.feeds" })).toMatchObject({ errorCode: "NEEDS_DEVMODE" });
     });
 });

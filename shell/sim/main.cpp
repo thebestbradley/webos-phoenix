@@ -173,6 +173,7 @@ int main(int argc, char *argv[])
     QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
     QCommandLineOption noHostShellOpt(QStringLiteral("no-host-shell"), QStringLiteral("Do not give the Terminal app a real shell on this computer (it gets the runtime's simulated shell)."));
     QCommandLineOption llamaServerOpt(QStringLiteral("llama-server"), QStringLiteral("llama.cpp's llama-server program for the Assistant's on-device model (default: llama-server on the PATH)."), QStringLiteral("path"));
+    QCommandLineOption noMarketplaceOpt(QStringLiteral("no-marketplace"), QStringLiteral("Do not start the Marketplace's catalog service with the simulator this time (it starts with every run where PHP is, unless Services > Start Catalog with the Simulator is off)."));
     QCommandLineOption marketplaceOpt(QStringLiteral("marketplace"), QStringLiteral("Start the Marketplace's catalog service on this computer (server/marketplace/bin/serve.sh: PHP 8; set up the first time) where the simulator's Marketplace reads it, http://127.0.0.1:8088/, and open the Marketplace. It stops with the simulator; one already running is used. The Services menu starts and stops it too."));
     QCommandLineOption speechCommandOpt(QStringLiteral("speech-command"), QStringLiteral("The program (and arguments, %l for the language, %v for the voice) that speaks the Assistant's answers, given the text on its input (default: Kitten TTS, phoenix-tts; else espeak-ng, say or Flite)."), QStringLiteral("command"));
     QCommandLineOption wakeModelOpt(QStringLiteral("wake-model"), QStringLiteral("The wake word's Vosk model folder (default: wakeword/vosk-model-small-en-us-0.15 beside phoenix-sim, which tools/get-wakeword.py fetches)."), QStringLiteral("dir"));
@@ -195,7 +196,7 @@ int main(int argc, char *argv[])
     eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     parser.addOptions({ hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, adaptiveOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
                         noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, checkChromeOpt, updatingOpt, eraseOpt, microphoneFileOpt,
-                        llamaServerOpt, speechCommandOpt, marketplaceOpt, wakeModelOpt, voskLibraryOpt, wakeFileOpt });
+                        llamaServerOpt, speechCommandOpt, marketplaceOpt, noMarketplaceOpt, wakeModelOpt, voskLibraryOpt, wakeFileOpt });
     parser.process(app);
 
     // A Full Erase or a security policy's wipe restarted the simulator:
@@ -315,14 +316,21 @@ int main(int argc, char *argv[])
     // The Marketplace's catalog service (Services > Marketplace Catalog,
     // the Marketplace's Start Local Catalog). --marketplace: started,
     // answering before the Marketplace first reads it; with Services >
-    // Start Catalog with the Simulator ("marketplace/autostart"), started
-    // without waiting.
+    // Start Catalog with the Simulator ("marketplace/autostart", on unless
+    // set to "0"), started without waiting, where PHP is (without it the
+    // simulator runs without the catalog, and the menu says why when asked);
+    // --no-marketplace: not this time.
     QStringList launch = parser.values(launchOpt);
 #ifdef PHOENIX_HAVE_WEBENGINE
     auto marketplace = std::make_unique<SimMarketplace>(repoDir);
-    if (!parser.isSet(marketplaceOpt) && SimSettings().value(QStringLiteral("marketplace/autostart")) == QLatin1String("1")) {
-        qInfo("phoenix-sim: starting the Marketplace's catalog (Services > Start Catalog with the Simulator)");
-        marketplace->startAsync();
+    if (!parser.isSet(marketplaceOpt) && !parser.isSet(noMarketplaceOpt)
+        && SimSettings().value(QStringLiteral("marketplace/autostart")) != QLatin1String("0")) {
+        if (SimMarketplace::phpAvailable()) {
+            qInfo("phoenix-sim: starting the Marketplace's catalog (Services > Start Catalog with the Simulator; --no-marketplace not to)");
+            marketplace->startAsync();
+        } else {
+            qInfo("phoenix-sim: no PHP here, so the Marketplace's catalog does not start (./phoenix installs PHP)");
+        }
     }
     if (parser.isSet(marketplaceOpt)) {
         if (marketplace->start())

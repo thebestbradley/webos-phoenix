@@ -23,9 +23,12 @@
 //                                             data/developer.token (made the first
 //                                             time), which `phoenix-connector
 //                                             publish --local` uses
-//   php bin/marketplace.php upload FILE.ipk   a package, as that developer (on a
+//   php bin/marketplace.php upload [--phoenix] FILE.ipk
+//                                             a package, as that developer (on a
 //                                             development catalog: approved and
-//                                             published at once)
+//                                             published at once); --phoenix: one
+//                                             of Phoenix's own (the connectors it
+//                                             comes with), as the admin
 
 declare(strict_types=1);
 
@@ -109,13 +112,27 @@ switch ($cmd) {
         echo local_developer($app)['token'], "\n";
         break;
     case 'upload':
-        $bytes = @file_get_contents($argv[2] ?? '');
+        $phoenix = ($argv[2] ?? '') === '--phoenix';
+        $bytes = @file_get_contents($argv[$phoenix ? 3 : 2] ?? '');
         if (!is_string($bytes)) {
-            fwrite(STDERR, "usage: php bin/marketplace.php upload FILE.ipk\n");
+            fwrite(STDERR, "usage: php bin/marketplace.php upload [--phoenix] FILE.ipk\n");
             exit(2);
         }
-        $dev = local_developer($app);
-        [$status, $r] = $app->api->handle('POST', '/api/apps/packages', $bytes, 'Bearer ' . $dev['token']);
+        if ($phoenix) {
+            // Phoenix's own package, as the catalog's first admin (the one init made).
+            $owner = $app->db->one("SELECT * FROM accounts WHERE role = 'admin' ORDER BY id");
+            try {
+                $r = $app->catalog->submitPackage($owner, $bytes);
+                if ($r['release']['state'] === 'approved') {
+                    $r['publish'] = $app->catalog->publish();
+                }
+                $status = 200;
+            } catch (\Phoenix\Marketplace\CheckFailed $e) {
+                [$status, $r] = [400, ['error' => $e->getMessage()]];
+            }
+        } else {
+            [$status, $r] = $app->api->handle('POST', '/api/apps/packages', $bytes, 'Bearer ' . local_developer($app)['token']);
+        }
         if ($status !== 200) {
             fwrite(STDERR, "Refused: {$r['error']}\n");
             exit(1);

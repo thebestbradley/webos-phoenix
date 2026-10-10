@@ -8,7 +8,14 @@
 //   {templateId, title, provider, icon, summary,
 //    capabilities: [{capability, direction?}], protocols: [...],
 //    auth: {type, registration}, server, privacy: {dataGoesTo, e2ee,
-//    phoenixServers}, push, status, package: {id, builtin}, help?, featured?}
+//    phoenixServers}, push, status, package: {id, builtin, preinstalled?},
+//    help?, featured?}
+//
+// package.builtin: part of the system, never removed (the generic logins);
+// else a connector package in the catalog (kind "connector"), which
+// Connections installs and removes; package.preinstalled: one of those that
+// comes installed with Phoenix (the Fediverse), removable and installed
+// again from the catalog without Developer Mode.
 //
 // Read loosely: an entry without a usable templateId is left out, a field
 // that is not what it should be is dropped or given its plain default, so a
@@ -74,7 +81,7 @@ function normalize(e, base, sourceId) {
                              phoenixServers: oneOf(privacy.phoenixServers, PHOENIX_SERVERS, "") } : null,
         push: oneOf(e.push, PUSH, "poll"),
         status: oneOf(e.status, STATUS, "stable"),
-        package: { id: str(pkg.id, 120), builtin: pkg.builtin === true },
+        package: { id: str(pkg.id, 120), builtin: pkg.builtin === true, preinstalled: pkg.builtin !== true && pkg.preinstalled === true },
         help: httpUrl(e.help),
         featured: e.featured === true
     };

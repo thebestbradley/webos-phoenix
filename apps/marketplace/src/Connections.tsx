@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apps, call, marketplace, type AccountType } from "@phoenix/luna";
 import { Button, Group, Note, Row, Spinner } from "@phoenix/ui";
 import { Icon } from "./Icon";
+import { ConnectorPackage } from "./ConnectorPackage";
 import {
     applyFilter, capabilityChips, groupAccountTypes, openAccountsLaunch, privacyLines, pushText, serverText, setUpLaunch, signInText, statusBadge,
     addedTemplates, type ConnectorFilter,
@@ -132,16 +133,18 @@ export function AccountTypePage({ t, added }: { t: AccountType; added: boolean }
                     {chips.map((c) => <span key={c}>{c}</span>)}
                 </div>
             )}
-            <div className="mk-actions">
-                {added ? (
-                    <Button variant="affirmative" data-testid="open-accounts"
-                            onClick={() => { const l = openAccountsLaunch(); void apps.launch(l.id, l.params); }}>Open in Accounts</Button>
-                ) : (
-                    <Button variant="affirmative" data-testid="set-up" disabled={!t.package.builtin}
-                            onClick={() => { const l = setUpLaunch(t); void apps.launch(l.id, l.params); }}>Set up</Button>
-                )}
-            </div>
-            {!t.package.builtin && <Note>It comes in a connector package, which the Marketplace cannot install yet.</Note>}
+            {/* A connector package's: install, set up, remove (ConnectorPackage.tsx). */}
+            {!t.package.builtin ? <ConnectorPackage t={t} added={added} /> : (
+                <div className="mk-actions">
+                    {added ? (
+                        <Button variant="affirmative" data-testid="open-accounts"
+                                onClick={() => { const l = openAccountsLaunch(); void apps.launch(l.id, l.params); }}>Open in Accounts</Button>
+                    ) : (
+                        <Button variant="affirmative" data-testid="set-up"
+                                onClick={() => { const l = setUpLaunch(t); void apps.launch(l.id, l.params); }}>Set up</Button>
+                    )}
+                </div>
+            )}
             {t.summary && <p className="mk-desc">{t.summary}</p>}
             <div className="mk-card mk-privacy" data-testid="privacy">
                 <div className="mk-card-title">Where your data goes</div>

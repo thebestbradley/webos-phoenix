@@ -44,6 +44,15 @@ class SimMarketplace : public QObject
     // Starting for the first time: serve.sh sets the catalog up first
     // (no signing key yet), which takes longer.
     Q_PROPERTY(bool settingUp READ settingUp NOTIFY stateChanged)
+    // While it runs: the catalog's public key (base64), read from the
+    // catalog's own data folder on this computer (server/marketplace/data,
+    // or MARKETPLACE_DATA: public/v1/key.json, which its publish writes),
+    // not from the network. The simulator's Marketplace trusts it without
+    // the fingerprint step (the runtime's defaultSources): whatever answers
+    // at 127.0.0.1:8088 must sign its index with this checkout's key. ""
+    // when there is none (stopped, failed, or a catalog with another data
+    // folder: then the user checks its fingerprint as for any catalog).
+    Q_PROPERTY(QString key READ key NOTIFY stateChanged)
 public:
     enum State { Stopped, Starting, Running, Failed };
     Q_ENUM(State)
@@ -70,6 +79,10 @@ public:
     QString logFile() const;
     bool ownsServer() const { return m_state == Running && m_process.state() != QProcess::NotRunning; }
     bool settingUp() const { return m_settingUp; }
+    QString key() const;
+    // Whether this computer has the PHP the catalog needs on PATH (for
+    // starting it with every run only where it can start).
+    static bool phpAvailable();
 
 signals:
     void stateChanged();

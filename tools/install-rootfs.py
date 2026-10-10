@@ -6,6 +6,12 @@
 Produces the same layout the simulator serves, for a device image:
 
     /usr/palm/applications/<id>/     apps (original Open webOS apps, Phoenix apps)
+    /media/cryptofs/apps/usr/palm/applications/<id>/
+                                     the connector packages Phoenix comes with
+                                     (rootfs.json "preinstalled"): installed
+                                     apps the user may remove, as a package
+                                     from the Marketplace is (its service/ with
+                                     the @phoenix packages it needs)
     /usr/palm/frameworks/...         Enyo 1.0, MojoLoader, foundation frameworks
     /usr/share/phoenix/runtime/      phoenix-runtime.js
     /etc/palm/db/kinds, permissions  db8 kinds the apps declare
@@ -43,15 +49,27 @@ def load_config():
         return json.load(f)
 
 
+def load_preinstalled(cfg):
+    """rootfs.json "preinstalled": the connector packages Phoenix comes with, {id: folder}."""
+    rel = cfg.get("preinstalled")
+    if not rel:
+        return {}
+    with open(os.path.join(REPO, rel)) as f:
+        return {p["id"]: os.path.join(REPO, p["from"]) for p in json.load(f).get("packages", []) if p.get("id") and p.get("from")}
+
+
 def find_apps(cfg):
     apps = []
     seen = set()
+    pre_dirs = set(os.path.normpath(d) for d in load_preinstalled(cfg).values())
     # systemApps (Just Type, the system UI) are single app directories.
     candidates = [(os.path.join(REPO, rel, name), name)
                   for rel in cfg["applicationDirs"] if os.path.isdir(os.path.join(REPO, rel))
                   for name in sorted(os.listdir(os.path.join(REPO, rel)))]
     candidates += [(os.path.join(REPO, rel), os.path.basename(rel)) for rel in cfg.get("systemApps", [])]
     for app_dir, name in candidates:
+        if os.path.normpath(app_dir) in pre_dirs:
+            continue   # installed as a package (main)
         if not os.path.isfile(os.path.join(app_dir, "appinfo.json")):
             app_dir = os.path.join(app_dir, "dist")
         info = os.path.join(app_dir, "appinfo.json")
@@ -187,7 +205,7 @@ def inject_runtime(data):
     return RUNTIME_TAG + data
 
 
-APPINFO = re.compile(r"^/usr/palm/applications/[^/]+/appinfo\.json$")
+APPINFO = re.compile(r"^(/media/cryptofs/apps)?/usr/palm/applications/[^/]+/appinfo\.json$")
 
 
 def device_appinfo(data):
@@ -246,6 +264,24 @@ def main():
             d = os.path.join(app_dir, "configuration", "db", kind)
             if os.path.isdir(d):
                 copy_tree(d, "/etc/palm/db/" + kind, plan)
+    # The connector packages Phoenix comes with: in the apps the user may
+    # remove, the whole package's app (its service/ too, with what it needs
+    # in service/node_modules, as `phoenix-connector pack` packs it), so the
+    # Marketplace removes it and installs it again like any other. Its kinds
+    # go to /etc/palm/db as a built-in app's; its service is also registered
+    # with the system below (find_services), until a device runs the
+    # services of installed connectors itself (docs/SYNERGY-CONNECTORS.md C5).
+    for app_id, app_dir in sorted(load_preinstalled(cfg).items()):
+        if not os.path.isfile(os.path.join(app_dir, "appinfo.json")):
+            app_dir = os.path.join(app_dir, "dist")
+        dest = "/media/cryptofs/apps/usr/palm/applications/" + app_id
+        copy_tree(app_dir, dest, plan)
+        if os.path.isfile(os.path.join(app_dir, "service", "package.json")):
+            plan_dependencies(os.path.join(app_dir, "service"), dest + "/service", plan, shared_packages())
+        for kind in ("kinds", "permissions"):
+            d = os.path.join(app_dir, "configuration", "db", kind)
+            if os.path.isdir(d):
+                copy_tree(d, "/etc/palm/db/" + kind, plan)
     for svc_id, svc_dir in services:
         plan_service(svc_id, svc_dir, plan)
     for overlay in cfg.get("overlays", []):
@@ -275,7 +311,8 @@ def main():
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         # App pages, and Enyo 1.0's framework pages an app opens as a
         # window (dashboard-window), as in phoenix-sim and serve-rootfs.py.
-        if dev.startswith(("/usr/palm/applications/", "/usr/palm/frameworks/enyo/")) and dev.endswith(".html"):
+        if dev.startswith(("/usr/palm/applications/", "/media/cryptofs/apps/usr/palm/applications/", "/usr/palm/frameworks/enyo/")) \
+                and dev.endswith(".html"):
             with open(src, "rb") as f:
                 data = inject_runtime(f.read())
             with open(dst, "wb") as f:

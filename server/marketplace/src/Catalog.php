@@ -83,12 +83,14 @@ final class Catalog
     {
         $pkg = Ipk::check($bytes, true);
         $id = $pkg['appId'];
-        if (str_starts_with($id, 'org.webosphoenix.')) {
+        // Phoenix's own packages (the connectors it comes with, firstPartyPackages) are an admin's.
+        $phoenix = ($owner['role'] ?? '') === 'admin';
+        if (str_starts_with($id, 'org.webosphoenix.') && !$phoenix) {
             throw new CheckFailed('org.webosphoenix.* ids are Phoenix\'s own');
         }
         $kind = $pkg['connector'] ? 'connector' : 'ipk';
         if ($pkg['connector']) {
-            $this->checkConnectorPackage($bytes);
+            $this->checkConnectorPackage($bytes, $phoenix ? ['org.webosphoenix', 'com.webosphoenix'] : []);
         }
         $app = $this->db->one('SELECT * FROM apps WHERE id = ?', [$id]);
         if ($app && (int) $app['owner_id'] !== (int) $owner['id']) {
@@ -564,13 +566,23 @@ final class Catalog
             || !is_bool($privacy['e2ee'] ?? null)) {
             throw new CheckFailed('privacy: {dataGoesTo: a text, e2ee: true or false, phoenixServers}');
         }
-        if (!is_array($package) || array_diff(array_keys($package), ['id', 'builtin'])
+        if (!is_array($package) || array_diff(array_keys($package), ['id', 'builtin', 'preinstalled'])
             || !is_string($package['id'] ?? null) || !self::validId($package['id'])) {
-            throw new CheckFailed('package: {id: the providing app or service, builtin}');
+            throw new CheckFailed('package: {id: the providing app or service, builtin, preinstalled?}');
         }
-        if (($package['builtin'] ?? null) !== !$fromPackage) {
+        // Here (catalog/accounts.json): built in (part of the system, never removed: the generic
+        // logins), or a first-party connector package Phoenix comes with (builtin false,
+        // preinstalled true: removable, installed again from the catalog; the package is uploaded
+        // as Phoenix's own, firstPartyPackages). A developer's connector lists its own (catalog.json).
+        $preinstalled = $package['preinstalled'] ?? false;
+        if (!is_bool($preinstalled) || ($preinstalled && ($package['builtin'] ?? null) !== false)) {
+            throw new CheckFailed('package: preinstalled is true or false, and only for a package (builtin: false)');
+        }
+        if ($fromPackage ? (($package['builtin'] ?? null) !== false || $preinstalled)
+                         : (($package['builtin'] ?? null) !== true && !$preinstalled)) {
             throw new CheckFailed($fromPackage ? 'package: a connector package\'s (builtin: false)'
-                : 'package: only built-in account types here (builtin: true); a connector package lists its own (catalog.json)');
+                : 'package: built in (builtin: true), or a connector package Phoenix comes with (builtin: false, preinstalled: true); '
+                  . 'any other connector package lists its own (catalog.json)');
         }
         // The icon: a file under the published icons/accounts/, copied from iconFrom (a file in
         // this checkout), or an https:// address.
@@ -604,7 +616,7 @@ final class Catalog
             'privacy' => ['dataGoesTo' => $privacy['dataGoesTo'], 'e2ee' => $privacy['e2ee'],
                           'phoenixServers' => $oneOf('privacy.phoenixServers', $privacy['phoenixServers'] ?? null)],
             'push' => $oneOf('push', $e['push'] ?? null), 'status' => $oneOf('status', $e['status'] ?? null),
-            'package' => ['id' => $package['id'], 'builtin' => !$fromPackage],
+            'package' => ['id' => $package['id'], 'builtin' => $package['builtin']] + ($preinstalled ? ['preinstalled' => true] : []),
         ];
         if (isset($e['help'])) {
             $entry['help'] = $e['help'];
@@ -635,9 +647,9 @@ final class Catalog
     // template's own (loc_48x48, its @2x when there is one).
 
     /** A connector .ipk's checks: the connector rules, then its account types. Throws CheckFailed. */
-    private function checkConnectorPackage(string $bytes): array
+    private function checkConnectorPackage(string $bytes, array $namespaces = []): array
     {
-        $r = Connector::checkIpk($bytes);
+        $r = Connector::checkIpk($bytes, $namespaces);
         if ($r['errors']) {
             throw new CheckFailed("The connector does not pass the Marketplace's checks (phoenix-connector validate runs the same):\n  "
                                   . implode("\n  ", $r['errors']));

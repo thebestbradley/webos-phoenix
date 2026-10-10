@@ -74,6 +74,15 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RUNTIME_TAG = b'<script src="/usr/share/phoenix/runtime/phoenix-runtime.js"></script>'
 
 
+def load_preinstalled(cfg):
+    """rootfs.json "preinstalled": the connector packages Phoenix comes with, {id: folder}."""
+    rel = cfg.get("preinstalled")
+    if not rel:
+        return {}
+    with open(os.path.join(REPO, rel)) as f:
+        return {p["id"]: os.path.join(REPO, p["from"]) for p in json.load(f).get("packages", []) if p.get("id") and p.get("from")}
+
+
 def load_rootfs():
     with open(os.path.join(REPO, "runtime", "rootfs.json")) as f:
         cfg = json.load(f)
@@ -86,6 +95,9 @@ def load_rootfs():
                   for rel in cfg["applicationDirs"] if os.path.isdir(os.path.join(REPO, rel))
                   for name in sorted(os.listdir(os.path.join(REPO, rel)))]
     candidates += [(os.path.join(REPO, rel), os.path.basename(rel), True) for rel in cfg.get("systemApps", [])]
+    # A pre-installed package's folder is not a built-in app (seed_preinstalled).
+    pre_dirs = set(os.path.normpath(d) for d in load_preinstalled(cfg).values())
+    candidates = [c for c in candidates if os.path.normpath(c[0]) not in pre_dirs]
     for app_dir, name, system in candidates:
         if not os.path.isfile(os.path.join(app_dir, "appinfo.json")):
             app_dir = os.path.join(app_dir, "dist")
@@ -135,6 +147,42 @@ def rescan_installed():
         INSTALLED.add(name)
 
 
+def preinstalled_marker(app_id, suffix):
+    return os.path.join(INSTALLED_DIR, "var", "lib", "phoenix", "preinstalled", app_id + suffix)
+
+
+def seed_preinstalled():
+    """What phoenix-sim's Rootfs::seedPreinstalled does: each pre-installed package
+    among the installed apps the first time, refreshed from the checkout while it
+    is still that copy; once removed or installed again, as the user made it."""
+    with open(os.path.join(REPO, "runtime", "rootfs.json")) as f:
+        pre = load_preinstalled(json.load(f))
+    skip = {"node_modules", ".git", "test", "tests"}
+    for app_id, src in pre.items():
+        dest = os.path.join(installed_apps_dir(), app_id)
+        offered, seeded = preinstalled_marker(app_id, ".offered"), preinstalled_marker(app_id, ".seeded")
+        if os.path.exists(offered) and not (os.path.exists(seeded) and os.path.isdir(dest)):
+            continue
+        if not os.path.isfile(os.path.join(src, "appinfo.json")):
+            src = os.path.join(src, "dist")
+        temp = dest + ".new"
+        shutil.rmtree(temp, ignore_errors=True)
+        shutil.copytree(src, temp, ignore=lambda d, names: [n for n in names if n in skip])
+        shutil.rmtree(dest, ignore_errors=True)
+        os.rename(temp, dest)
+        os.makedirs(os.path.dirname(offered), exist_ok=True)
+        for m in (offered, seeded):
+            with open(m, "w") as f:
+                f.write("pre-installed\n")
+
+
+def forget_seeded(app_id):
+    try:
+        os.remove(preinstalled_marker(app_id, ".seeded"))
+    except OSError:
+        pass
+
+
 def install_app(app_id, files):
     """What SimInstaller::install does: "" when done, else what is wrong."""
     if not APP_ID_RE.match(app_id or "") or len(app_id) > 128:
@@ -172,6 +220,7 @@ def install_app(app_id, files):
         os.rename(dest, old)
     os.rename(temp, dest)
     shutil.rmtree(old, ignore_errors=True)
+    forget_seeded(app_id)
     rescan_installed()
     return ""
 
@@ -180,6 +229,7 @@ def remove_app(app_id):
     if app_id not in INSTALLED:
         return "No such id"
     shutil.rmtree(os.path.join(installed_apps_dir(), app_id), ignore_errors=True)
+    forget_seeded(app_id)
     rescan_installed()
     return ""
 
@@ -928,6 +978,7 @@ def main():
     args = ap.parse_args()
     global INSTALLED_DIR
     INSTALLED_DIR = args.installed_dir or tempfile.mkdtemp(prefix="phoenix-installed-")
+    seed_preinstalled()
     rescan_installed()
     srv = http.server.ThreadingHTTPServer((args.host, args.port), Handler)
     srv.daemon_threads = True

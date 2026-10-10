@@ -1145,12 +1145,13 @@ Item {
           run: function () { Qt.openUrlExternally("file://" + root.catalog.logFile); } },
         { separator: true, menu: "services" },
         { id: "marketplaceCatalogAuto", menu: "services", text: qsTr("Start Catalog with the Simulator"),
-          tip: qsTr("Start the Marketplace's catalog every time the simulator starts"),
-          checked: function () { return typeof simSettings !== "undefined" && simSettings.value("marketplace/autostart") === "1"; },
+          tip: qsTr("Start the Marketplace's catalog every time the simulator starts, where PHP is (on unless turned off here)"),
+          // On unless turned off ("0"): the simulator's Marketplace has its catalog.
+          checked: function () { return typeof simSettings !== "undefined" && simSettings.value("marketplace/autostart") !== "0"; },
           enabled: function () { return root.catalog !== null; },
           run: function () {
               if (typeof simSettings !== "undefined")
-                  simSettings.setValue("marketplace/autostart", simSettings.value("marketplace/autostart") === "1" ? "0" : "1");
+                  simSettings.setValue("marketplace/autostart", simSettings.value("marketplace/autostart") !== "0" ? "0" : "1");
           } },
 
         // Keys of the shell's own, for Help > Keyboard Shortcuts.
@@ -1286,7 +1287,7 @@ Item {
     }
     function pushCatalogState() {
         windows.pushSystemStatus({ marketplaceCatalog: catalog
-            ? { state: catalog.state, url: catalog.url, error: catalog.error, settingUp: catalog.settingUp }
+            ? { state: catalog.state, url: catalog.url, error: catalog.error, settingUp: catalog.settingUp, key: catalog.key || "" }
             : { state: "unavailable" } });
     }
     Connections {

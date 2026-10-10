@@ -13,10 +13,15 @@
 #                                 phone or tablet by its size), phone, tablet.
 #                                 ARGS go to phoenix-sim (./phoenix run phone
 #                                 --scene cards; phoenix-sim --help lists them)
-#   ./phoenix run --marketplace   the same, with the Marketplace's catalog
-#                                 service on this computer (PHP 8), and the
-#                                 Marketplace open; or start it in the
-#                                 simulator: Services > Marketplace Catalog
+#                                 The Marketplace's catalog service (PHP 8)
+#                                 starts with it, on this computer, where
+#                                 PHP is: the simulator's Marketplace and
+#                                 its Connections, which trust it at once
+#                                 (Services > Start Catalog with the
+#                                 Simulator turns that off)
+#   ./phoenix run --marketplace   the same, waiting for the catalog, with the
+#                                 Marketplace open
+#   ./phoenix run --no-marketplace  without the catalog this time
 #   ./phoenix setup               install what is missing, without building
 #   ./phoenix check               only say what is there and what would be
 #                                 installed (the same as --dry-run)
@@ -564,7 +569,11 @@ summary
 
 [ "$COMMAND" = run ] || exit 0
 SIM="$BUILD_DIR/phoenix-sim"
-step "Starting the simulator ($MODE)"
+case " $* " in
+    *" --no-marketplace "*) step "Starting the simulator ($MODE)" ;;
+    *) if have php; then step "Starting the simulator ($MODE), with the Marketplace's catalog"
+       else step "Starting the simulator ($MODE)"; fi ;;
+esac
 set -- "--$MODE" "$@"
 if [ "$OS" = Linux ]; then
     # Chromium refuses to run as root with its sandbox (cloud containers).

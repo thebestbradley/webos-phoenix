@@ -1,0 +1,16 @@
+{
+    "//": [
+        "The connector packages Phoenix comes with (docs/SYNERGY-CONNECTORS.md 7, 'What comes with Phoenix'): installed in the image as apps the user may remove (/media/cryptofs/apps; tools/install-rootfs.py, phoenix-sim's and tools/serve-rootfs.py's installed apps, runtime/rootfs.json 'preinstalled'), counted by the Marketplace as installed from the catalog sourceId, and installed again from it without Developer Mode (packagesservice.js firstPartyEntry).",
+        "from: where the package's app is in this checkout (for the tools that build the image and the simulator); service and templates: its connector service and account templates, for the simulator's runtime.",
+        "Google, Microsoft, Telegram and LoRa mesh join this list when they are built."
+    ],
+    "packages": [
+        {
+            "id": "org.webosphoenix.fediverse",
+            "sourceId": "phoenix",
+            "from": "apps/fediverse",
+            "service": "org.webosphoenix.service.fediverse",
+            "templates": ["com.webosphoenix.fediverse"]
+        }
+    ]
+}

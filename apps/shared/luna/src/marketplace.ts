@@ -11,7 +11,7 @@ import { call, subscribe, LunaError, type Subscription } from "./bridge";
 const SERVICE = "luna://org.webosphoenix.service.packages/";
 
 export type CatalogKind = "phoenix" | "appmuseum" | "preware";
-export type AppKind = "pwa" | "ipk" | "classic" | "preware";
+export type AppKind = "pwa" | "ipk" | "connector" | "classic" | "preware";
 
 export interface CatalogSource {
     id: string;
@@ -116,7 +116,13 @@ export interface AccountType {
     privacy: { dataGoesTo: string; e2ee: boolean; phoenixServers: "none" | "push-relay" | "token-relay" | "" } | null;
     push: "poll" | "unifiedpush" | "relay";
     status: "stable" | "beta" | "experimental";
-    package: { id: string; builtin: boolean };
+    /**
+     * builtin: part of the system (the generic logins), never removed; else a
+     * connector package (kind "connector") Connections installs and removes;
+     * preinstalled: one Phoenix comes with (removable, installed again
+     * without Developer Mode).
+     */
+    package: { id: string; builtin: boolean; preinstalled?: boolean };
     help: string;
     featured: boolean;
 }

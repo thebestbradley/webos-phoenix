@@ -39,7 +39,7 @@
             "privacy": { "dataGoesTo": "the server of your handle (and, for direct mentions, the servers of the people you write to)", "e2ee": false, "phoenixServers": "none" },
             "push": "poll",
             "status": "beta",
-            "package": { "id": "org.webosphoenix.fediverse", "builtin": true },
+            "package": { "id": "org.webosphoenix.fediverse", "builtin": false, "preinstalled": true },
             "featured": true
         },
         {
