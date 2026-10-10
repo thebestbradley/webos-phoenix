@@ -334,6 +334,21 @@ dark and light themes go to 2.0.
       area ([GESTURE-BAR.md](GESTURE-BAR.md) GB1-GB3). The animations are
       done in the simulator (GAPS G8); to do: the light bar's Settings switch,
       the end buttons and `setButton` (open questions in GESTURE-BAR.md)
+- [ ] A Home app on Home Assistant (the owner, 10 October 2026: "to swing
+      back to"): rather than writing Phoenix's own smart-home app, use Home
+      Assistant's open source web frontend (Apache-2.0, served by the user's
+      own Home Assistant server) as the Home app's page: a card that opens
+      the user's dashboards, with Phoenix's parts around it: the server found
+      on the network (mDNS) and signed in once (OAuth with the server, as
+      Home Assistant's companion apps do), its notifications through the
+      Home Assistant connector (SYNERGY-CONNECTORS.md, potentials), quick
+      toggles in the system menu and the dashboard, "turn off the lights"
+      through Just Type and the Assistant, and the device's battery,
+      location and sensors reported to it as the companion apps do. It needs
+      no Linux/Wayland app layer: the frontend is a web page, which the app
+      runtime already shows (the Wayland layer would be needed only for a
+      native Linux app). Home Assistant has no official Linux app to port;
+      its companion apps are Android and iOS only
 - [x] Community features for 1.x, as picked by the owner on 7 October 2026
       ([M6-PLAN.md](M6-PLAN.md) F4; in the simulator, see M6)
 
