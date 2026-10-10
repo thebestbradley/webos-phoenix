@@ -15,9 +15,9 @@ Nearly all the art is already in `shell/assets/openwebos/`.
 | | Meaning | Rows |
 | --- | --- | --- |
 | ✅ | Done: works as the original did (in the simulator; no device part, or the device part is done too) | 55 |
-| 🟡 | Done in the simulator; the device side is left (nothing has run on hardware yet) | 21 |
-| 🟠 | Partly done: something is left in the simulator too | 6 |
-| ⬜ | Not started | 1 |
+| 🟡 | Done in the simulator; the device side is left (nothing has run on hardware yet) | 25 |
+| 🟠 | Partly done: something is left in the simulator too | 3 |
+| ⬜ | Not started | 0 |
 
 The list of what is left, by area, is the next section; the rows have the detail.
 
