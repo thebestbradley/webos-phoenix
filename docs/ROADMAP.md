@@ -189,13 +189,21 @@ simulator, the P2 rows are listed there.
 - [x] Card stacks keep their order while a card maximizes and minimizes, and
       Back in an app another opened returns to the caller, the app staying
       open behind it (C12); Back that an app does not take minimizes its
-      card (G2). To do: the fan's 200 ms easing, re-maximizing the launching
-      card when a child closes, the device side
+      card (G2); the fan's own 200 ms clock, re-maximizing the launching
+      card when a child closes, a maximized card's fly-off (C12, C4; 10
+      October 2026). To do: the device side
 - [ ] Just Type: search suggestions and remote (GAL) contacts in the results
       (its preferences screen is done: Settings > Just Type)
-- [ ] The remaining rows in GAPS.md ("Open gaps at a glance"): in the
-      simulator, chiefly the launcher's solid dock background and top scroll
-      fade (L1, L2), modal cards and persistent dashboards (C11, N5)
+- [x] The launcher's cards hidden once it is up and its top scroll fade
+      (L1, L2), the tablet status bar's arrow (S8), modal cards (C11),
+      dashboards swiped, kept or dragged by their window (N5), the new card's
+      prepare step and loading screen (C1, C2), the dock-mode system menu and
+      the ringer key (M2), the kept rotation lock and the Home button's
+      angle (R1), the angry card's and the launcher's sounds, Email's and the
+      Clock's tones (C3, A1) (in the simulator, 10 October 2026)
+- [ ] The rows still open in GAPS.md ("Open gaps at a glance"): in the
+      simulator only small ones (a modal card and the keyboard, a dashboard's
+      drag mode set late, firm press to select); the rest is the device side
 - [x] Wave launcher: not in the open sources (GAPS Q3); drawn after
       descriptions as an option (M6 F4)
 
@@ -243,6 +251,18 @@ Still to do:
       ([APP-RUNTIME.md](APP-RUNTIME.md#the-browser-and-enyowebview))
 - [ ] Browser: "Install Web App" under Preferences, with a coloured dot by the
       app menu when the page has a web app manifest ([APP-STORE.md](APP-STORE.md) section 1)
+- [x] Synergy C0 (10 October 2026): "Find More..." opens the Marketplace's
+      Connections (accounts by what they bring, a page per type with where
+      the data goes, Set up), account types found in installed apps, the
+      catalog's account feed ([SYNERGY-CONNECTORS.md](SYNERGY-CONNECTORS.md))
+- [ ] Synergy C1 and C2, in progress: the connector kit, the developer
+      guide and conformance suite; the Fediverse account (the flagship).
+      Then C3 (the OAuth service; Microsoft, Google, Dropbox, Box, LinkedIn,
+      Zoom, Telegram, Bluesky; iCloud, Fastmail and Nextcloud presets),
+      before it the accounts needing no registration (meeting Join
+      buttons, Jitsi video calls, WebDAV, SFTP and S3 drives in Files),
+      C4-C6 (connectors in the catalog, a trust tier, push)
+      ([SYNERGY-CONNECTORS.md](SYNERGY-CONNECTORS.md) 6-7)
 - [ ] Modern Synergy, in the order of [SYNERGY-MODERN.md](SYNERGY-MODERN.md#5-roadmap):
       provider presets, the shared sync layer, OAuth with Microsoft and
       Google, mail, messaging Synergy (SMS, Matrix, XMPP, bridges), RCS,
@@ -303,7 +323,7 @@ dark and light themes go to 2.0.
 
 Agreed with the owner on 7 October 2026; [M6-PLAN.md](M6-PLAN.md) has the detail.
 
-- [ ] F0: fixes (settings lost on save and the card corners: done; the Messaging reply bar)
+- [ ] F0: fixes (settings lost on save and the card corners: done; the Messaging reply bar waits on the owner, OPEN-QUESTIONS Q7)
 - [x] F1: press and hold on launcher icons (peek and menu; in the simulator)
 - [x] F2: clipboard manager (keyboard strip, Clipboard app, Settings > Clipboard; in the simulator)
 - [x] F3: the Assistant 1.0 (commands, optional on-device model, cloud models with permission, Assistant app; in the simulator)
@@ -354,30 +374,42 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
       emoji (V6, done in the simulator), cursor control by holding the space bar or the gesture
       bar (V4, done in the simulator), the keyboards as the device's input method (V5), and
       keyboards chosen in Settings as on iOS: webOS Classic, webOS OSE's and
-      a new Phoenix keyboard (V7; layouts and languages done, several
-      keyboards side by side to do)
+      a new Phoenix keyboard (V7; done in the simulator, 10 October 2026:
+      several side by side, the globe key, the Phoenix keyboard; OSE's needs
+      the device). Also the text around the cursor, emoji for words, spoken
+      punctuation, the text while speaking, auto-capitalisation (V1-V3, V6)
 - [ ] Hardware keyboards, especially on tablets: the TouchPad keyboard's
       keys, shortcuts, full keyboard navigation of the shell, keyboard
       accessibility (sticky, slow and bounce keys, Full Keyboard Access) and
       Settings > Hardware Keyboard (V8). Done in the simulator: the keys,
       both shortcut schemes, sticky, slow and bounce keys, the hardware
-      keyboard keeping the virtual one down, focus navigation of most of the shell;
-      to do: the web apps' menus and popup alerts, Settings > Hardware
-      Keyboard
+      keyboard keeping the virtual one down, focus navigation of the shell,
+      the web apps' menus, popup alerts and the PIN pad, Settings > Text
+      Assist > Hardware Keyboard (layout, repeat, modifier remapping, the
+      shortcuts), the keyboard key, and the show-keyboard button, which keeps
+      clear of notifications, moves to either edge and can be hidden; to do:
+      on a device
 - [x] Editing: the Edit submenu (Select All, Cut, Copy, Paste) in every
       app menu, and the same on a long press in a text field (E1)
-- [ ] One share sheet and one file picker for every app: the original's
+- [x] One share sheet and one file picker for every app: the original's
       file picker back for legacy apps, a save picker (Save to Files in a
       chosen folder), and a share sheet apps join through `appinfo.json`
       ([SHARE-AND-FILES.md](SHARE-AND-FILES.md), GAPS E5). Done in the
       simulator: the share sheet, the save picker, the picture picker, Share
       in Screenshot, Files, Photos and the browser, and Share after Edit in
-      every app menu; to do: the original file picker for legacy apps (SF1),
-      other kinds than pictures (SF2), Share in Docs, Voice Memos and Maps
+      every app menu; the original file picker for legacy apps (SF1), the
+      picker's kinds, several files and a crop size (SF2), Share in Docs,
+      Voice Memos and Maps, Music taking audio from the sheet (10 October
+      2026). The 2.0 sheet (SF6) is 2.0
 - [x] The Assistant, like Siri: on-device speech recognition and
       commands, an optional on-device model, cloud models with permission,
       an Assistant app with threads, spoken answers, "Hey Phoenix" (in the simulator)
       ([M6-PLAN.md](M6-PLAN.md) F3, [AI-AND-MCP.md](AI-AND-MCP.md#10-and-20))
+- [x] The start-up animation: the phoenix burns to ash and is born again as
+      the Assistant bird, or the classic glowing logo (Settings > Advanced;
+      in the simulator, 10 October 2026; on a device with M1)
+- [x] Open in New Card in Messaging and Email (Email's own, hidden in the
+      release), as the Assistant app has it (in the simulator, 10 October 2026)
 - [x] Clipboard manager ([M6-PLAN.md](M6-PLAN.md) F2; in the simulator)
 - [x] Press and hold on launcher icons ([M6-PLAN.md](M6-PLAN.md) F1; in the simulator)
 - [ ] OTA updates with A/B slots ([HARDWARE.md](HARDWARE.md#ota-with-ab-updates)).

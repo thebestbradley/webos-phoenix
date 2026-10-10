@@ -68,7 +68,7 @@ and handwriting input (not in the release). App gaps are in
 
 **Waiting on the owner:** the Messaging reply bar report (M6-PLAN.md F0);
 which line Live Activities belong to (ROADMAP.md M4); the gesture bar's end
-buttons and `setButton` (GESTURE-BAR.md, open questions).
+buttons and `setButton` (GESTURE-BAR.md, open questions). Every decision waiting on the owner, with what was built meanwhile: [OPEN-QUESTIONS.md](../OPEN-QUESTIONS.md).
 
 ## 1. Cards
 
