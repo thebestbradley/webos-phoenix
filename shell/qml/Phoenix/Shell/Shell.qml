@@ -2199,6 +2199,43 @@ FocusScope {
         value: speechEngine
         when: !!shell.source && ("speech" in shell.source)
     }
+    // When the app in front is resized for a change of the negative space
+    // (the keyboard, the dashboard, a banner, an alert), as CardWindowManager
+    // did while maximized (MaximizeState::positiveSpaceAboutToChange and
+    // positiveSpaceChangeFinished, CardWindowManagerStates.cpp:256-318): when
+    // the positive space grows (the keyboard going), at the start of the
+    // 400 ms slide (resizeEventSync); when it shrinks (the keyboard coming),
+    // at its end, the keyboard sliding up over the app meanwhile. Size
+    // changes without a slide (rotation, the tablet keyboard's sizes) at once.
+    property real _spaceFrom: 0
+    // (Within half a pixel: the slide eases into its end.)
+    readonly property bool _spaceSettled: Math.abs(notes.negativeSpace - notes.negativeSpaceTarget) < 0.5
+    readonly property real cardBottomInset: _spaceSettled
+        ? notes.negativeSpaceTarget : Math.min(notes.negativeSpaceTarget, _spaceFrom)
+    Connections {
+        target: notes
+        function onNegativeSpaceTargetChanged() { shell._spaceFrom = notes.negativeSpace; }
+        // positiveSpaceChangeFinished: an app that keeps its size is told the
+        // positive space instead (adjustForPositiveSpaceSize ->
+        // Mojo.positiveSpaceChanged, enyo-1.0 palm/system/keyboard.js:224).
+        function onNegativeSpaceChanged() {
+            if (notes.negativeSpace !== notes.negativeSpaceTarget || !cards.maximized)
+                return;
+            var uid = cards.currentUid;
+            if (uid !== "" && shell._cardKeepsSize(uid) && source && typeof source.positiveSpaceChanged === "function")
+                source.positiveSpaceChanged(uid, Math.round(cards.windowWidth),
+                                            Math.round(ui.height - cards.topInset - notes.negativeSpace));
+        }
+    }
+    // The app asked not to be resized (PalmSystem.allowResizeOnPositiveSpaceChange(false)).
+    function _cardKeepsSize(uid) {
+        var m = source ? source.cards : null;
+        for (var i = 0; m && i < m.count; ++i)
+            if (m.get(i).uid === uid)
+                return m.get(i).allowResize === false;
+        return false;
+    }
+
     // IMEController::isIMEOpened (or the platform's keyboard is up). With
     // it the tablet's bezel flick must travel further.
     readonly property bool keyboardOpen: _imeOpened || platformKeyboardHeight > 0
@@ -2261,6 +2298,8 @@ FocusScope {
         imeClient = c;
         if (!same)
             _keyboardAskedFor = false;
+        if (!same && c)
+            ime.inputClientChanged();
         if (c && hardwareKeyboard && !_keyboardAskedFor) {
             ime.editorState = c.state;
             _hideIMEInternal();
@@ -2546,8 +2585,10 @@ FocusScope {
                         source: shell.source
                         onCardClosing: (uid, byApp) => { if (!byApp) shell.sounds.feedback("appclose"); }
                         topInset: shell.fullScreen ? 0 : Theme.statusBarHeight
-                        // The app's positive space ends where the notifications' negative space begins.
-                        bottomInset: notes.negativeSpace
+                        // The app's positive space ends where the notifications' negative space begins,
+                        // resized when the original resized it (cardBottomInset).
+                        bottomInset: shell.cardBottomInset
+                        keyboardOverlap: notes.keyboardHeight > 0 ? Math.max(0, shell.cardBottomInset - notes.spaceWithoutKeyboard) : 0
                         uiOrientation: uiRotation.uiOrientation
                         uiPortrait: uiRotation.uiPortrait
                         // First Use's card stays until the app closes it.
@@ -3457,6 +3498,7 @@ FocusScope {
                         KeyInjector.commitText(t, text);
                 }
                 onHideRequested: shell.hideKeyboard()
+                surroundingText: shell._imeSurroundingText
                 // VirtualKeyboardPreferences TapSounds: "Keyboard clicks".
                 tapSounds: !shell.system || shell.system.tapSounds !== false
                 // Settings > Text Assist.
@@ -3467,6 +3509,7 @@ FocusScope {
                 userShortcuts: _assistPrefs.shortcuts || ({})
                 shortcutsOn: _assistPrefs.shortcutsOn !== false
                 spaces2period: _assistPrefs.spaces2period !== false
+                emojiSuggestions: _assistPrefs.emojiSuggestions !== false
                 forgetWordsAt: _assistPrefs.forgetWords || 0
                 // Settings > Text Assist > Personal Dictionary; "Add" in the
                 // candidate bar goes back to the system (x_palm_textinput.userWords).
@@ -3573,6 +3616,29 @@ FocusScope {
         if (w && w.runScript)
             w.runScript("window.__phoenixRuntime && __phoenixRuntime.clipboard && __phoenixRuntime.clipboard.insertImage("
                         + JSON.stringify(String(clip.image || "")) + ")");
+    }
+
+    // The text around the cursor in the keyboard's field, {text, cursor}
+    // (GAPS V3), as an input method asks a field (ImSurroundingText,
+    // ImCursorPosition): a text field of the shell's tells its text and
+    // cursor; a web page's field answers Qt's input method query while its
+    // view has the focus (Chromium reports the text around the selection).
+    function _imeSurroundingText() {
+        var c = imeClient;
+        if (!c)
+            return null;
+        if (c.kind === "item")
+            return c.item.text !== undefined && c.item.cursorPosition !== undefined
+                ? { text: String(c.item.text), cursor: c.item.cursorPosition } : null;
+        var t = _imeTarget();
+        for (var i = _focusItem; i && t; i = i.parent) {
+            if (i === t) {
+                var text = Qt.inputMethod.queryFocusObject(Qt.ImSurroundingText, undefined);
+                var pos = Qt.inputMethod.queryFocusObject(Qt.ImCursorPosition, undefined);
+                return typeof text === "string" && typeof pos === "number" ? { text: text, cursor: pos } : null;
+            }
+        }
+        return null;
     }
 
     // What the keyboard's keys go to: the focused text field, or the web

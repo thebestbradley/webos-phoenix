@@ -59,14 +59,16 @@
 // x_palm_textinput.userWords): its words are never corrected and are
 // suggested. Backspace putting back a word a correction replaced offers
 // "Add" in the bar, as Android's and iOS's keyboards do.
-// Not ported: keyboard combos (language key),
-// and the emoticon pictures (/usr/palm/emoticons, not in the Apache-2.0
-// images): emoticon keys show their text.
+// The emoticon pictures (/usr/palm/emoticons) were not in the Apache-2.0
+// images: the emoticon keys show the colour emoji font's faces instead
+// (KeyboardKeymap.emoticonPicture) and type the original's text.
 
 import QtQuick
 import "KeyboardKeymap.js" as KM
 import "EmojiData.js" as ED
+import "EmojiWords.js" as EW
 import "TextAssist.js" as TA
+import "DictationText.js" as DT
 
 Item {
     id: kb
@@ -260,6 +262,64 @@ Item {
         _keepAdd = false;
         _refreshCandidates();
     }
+    // ---- The text around the cursor (GAPS V3) ------------------------------------------
+    // A function returning the field's text around the cursor, {text,
+    // cursor} (Qt's ImSurroundingText and ImCursorPosition: what an input
+    // method asks a field), or null when it cannot tell. The shell gives
+    // one; without it the keyboard follows only what it typed itself.
+    property var surroundingText: null
+    // When the keyboard last typed (ms): a cursor move soon after is its own.
+    property real _lastOwnInput: 0
+    // Picks up where the cursor is: the word it ends (being typed), the one
+    // before, and whether a sentence starts there; so a field with text in
+    // it, or a cursor moved by a tap or the arrows, predicts and corrects
+    // from its words. Inside a word (letters after the cursor) nothing is
+    // being typed: a correction would cut the word in two.
+    function syncWithField() {
+        if (typeof surroundingText !== "function" || !shown || _swipeId !== "" || trackpad)
+            return false;
+        var s = surroundingText();
+        if (!s || typeof s.text !== "string" || typeof s.cursor !== "number")
+            return false;
+        var cursor = Math.max(0, Math.min(s.cursor, s.text.length));
+        var before = s.text.slice(0, cursor), after = s.text.slice(cursor);
+        var letter = /[A-Za-z\u00c0-\u024f]/;
+        var m = /[A-Za-z\u00c0-\u024f][A-Za-z\u00c0-\u024f']*$/.exec(before);
+        var word = m && !letter.test(after.charAt(0)) ? m[0] : "";
+        var rest = m ? before.slice(0, m.index) : before;
+        var p = /([A-Za-z\u00c0-\u024f][A-Za-z\u00c0-\u024f']*)([^A-Za-z\u00c0-\u024f]*)$/.exec(rest);
+        _autoSpace = null;
+        _swipeWords = false;
+        _lastCorrection = null;
+        _keepWord = "";
+        _keepAdd = false;
+        _word = word;
+        _prevWord = p ? p[1] : "";
+        // A sentence starts at the field's start, after . ! ? or a new line.
+        _sentenceStart = /^\s*$/.test(rest) || /[.!?\n]['")\]]*\s*$/.test(rest);
+        // Text before it that is not a word: no space is owed before a
+        // swipe after a space, one is after anything else ("hello|").
+        _swipeNeedsSpace = before !== "" && !/\s$/.test(before) && word === "";
+        _refreshCandidates();
+        return true;
+    }
+    // The cursor moved by itself (a tap in the field, the app): read again,
+    // once the field has caught up (a web page reports its text after the
+    // move: Chromium's selection update comes back asynchronously).
+    Timer {
+        id: fieldSyncTimer
+        interval: 120
+        onTriggered: kb.syncWithField()
+    }
+    function _fieldMoved() {
+        if (shown && Date.now() - _lastOwnInput > 300)
+            fieldSyncTimer.restart();
+    }
+    Connections {
+        target: Qt.inputMethod
+        function onCursorRectangleChanged() { kb._fieldMoved(); }
+    }
+
     function _refreshCandidates() {
         if (!assistBarShown || !textSuggestions) {
             candidates = [];
@@ -283,7 +343,27 @@ Item {
         if (_word && _word === _keepWord && _keepAdd && !TA.isWord(_word))
             list = list.filter(function (c) { return c.text.toLowerCase() !== _word.toLowerCase() || c.kind !== "typed"; })
                        .slice(0, max - 1).concat([{ text: _word, kind: "add" }]);
+        // An emoji for the word (CLDR's keywords: "pizza", "love"), at the
+        // end of the bar, as iOS's predictive bar offers one; a tap puts it
+        // in place of the word. The phone's three cells keep two words.
+        else if (_word && emojiSuggestions) {
+            var em = EW.forWord(_word).filter(_emojiOffered);
+            if (em.length)
+                list = list.slice(0, max - 1).concat([{ text: emojiFor({ e: em[0], t: true }), kind: "emoji", word: _word }]);
+        }
         candidates = list;
+    }
+    // Emoji suggestions for words (Settings > Text Assist > Emoji suggestions).
+    property bool emojiSuggestions: true
+    // An emoji the emoji page offers (one this Qt draws as one glyph).
+    function _emojiOffered(e) {
+        if (!_emojiShown)
+            return e.indexOf("\u200D") < 0;       // not measured yet: no sequences
+        for (var c = 0; c < _emojiShown.length; ++c)
+            for (var i = 0; i < _emojiShown[c].emoji.length; ++i)
+                if (_emojiShown[c].emoji[i].e === e)
+                    return true;
+        return false;
     }
     function _saveTextAssist() {
         _textAssistDataCurrent = TA.userData();
@@ -302,7 +382,20 @@ Item {
         kb.textCommitted(text);
         _assistOwnText = false;
     }
-    onTextCommitted: if (!_assistOwnText) _assistReset()
+    onTextCommitted: {
+        _lastOwnInput = Date.now();
+        if (!_assistOwnText)
+            _assistReset();
+    }
+    onKeyTyped: _lastOwnInput = Date.now()
+    // Another field has the keyboard (IMEController::restartInput): its text
+    // is read afresh.
+    function inputClientChanged() {
+        _swipeNeedsSpace = false;
+        _sentenceStart = true;
+        _assistReset();
+        fieldSyncTimer.restart();
+    }
     // A word ends (space, punctuation, return): learned, and the next one begins.
     function _endWord(sentence) {
         if (_word) {
@@ -343,6 +436,7 @@ Item {
             _refreshCandidates();
         } else {
             _assistReset();               // arrows, tab: somewhere else in the text
+            fieldSyncTimer.restart();     // ... read once it has moved
         }
     }
     // Before a space or punctuation: the correction, if any, goes in.
@@ -423,6 +517,20 @@ Item {
         if (_km.setAutoCap(false))
             _layoutChanged();
     }
+    // An emoji suggested for the word: it takes the word's place, a space
+    // after it (the user's next word starts clean), and it joins the recents.
+    function _pickEmoji(c) {
+        _assistBackspaces(_word.length);
+        _word = "";
+        _lastCorrection = null;
+        _swipeWords = false;
+        _autoSpace = null;
+        _assistOwnText = true;
+        chooseEmoji(c.text);
+        _assistOwnText = false;
+        _assistCommit(" ");
+        _endWord(false);
+    }
     // After a swipe, a candidate replaces the swiped word (its space stays).
     property bool _swipeWords: false
     property bool _swipeNeedsSpace: false
@@ -444,6 +552,10 @@ Item {
         if (c && c.kind === "add") {
             _makeSound(KM.Key.A);
             addToDictionary(c.text);
+            return;
+        }
+        if (c && c.kind === "emoji") {
+            _pickEmoji(c);
             return;
         }
         if (_swipeWords)
@@ -529,10 +641,11 @@ Item {
                 dictationMessageTimer.restart();
                 return;
             }
-            text = String(text || "").trim();
+            // Punctuation said aloud ("comma", "new line") typed as the mark.
+            text = DT.spokenPunctuation(String(text || "").trim(), kb.language);
             if (!text)
                 return;
-            var space = kb._word !== "" || kb._swipeNeedsSpace;
+            var space = (kb._word !== "" || kb._swipeNeedsSpace) && !/^[,.;:!?\n]/.test(text);
             if (kb._sentenceStart || kb._km.isCapActive())
                 text = text.charAt(0).toUpperCase() + text.slice(1);
             kb._assistCommit((space ? " " : "") + text);
@@ -540,8 +653,8 @@ Item {
             kb._swipeWords = false;
             kb._word = "";
             kb._prevWord = "";
-            kb._sentenceStart = /[.!?]$/.test(text);
-            kb._swipeNeedsSpace = true;
+            kb._sentenceStart = /[.!?\n]$/.test(text);
+            kb._swipeNeedsSpace = !/\n$/.test(text);
             kb._refreshCandidates();
             if (kb._km.setAutoCap(false))
                 kb._layoutChanged();
@@ -1119,6 +1232,7 @@ Item {
         _assistReset();
         if (shown) {
             _setKeyboardHeight(_requestedHeight > 0 ? _requestedHeight : _presetHeight());
+            fieldSyncTimer.restart();     // the text around the cursor (V3)
         } else {
             // visibleChanged(false): back to plain letters.
             closeEmoji();
@@ -1291,6 +1405,19 @@ Item {
             }
         } else {
             var emoticonGraphic = KM.isEmoticonKey(key) && (!tablet || (_km.editorState.flags & KM.FieldFlags.Emoticons));
+            // The emoticon keys' pictures (TabletKeyboard.cpp:1571-1597,
+            // PhoneKeyboard.cpp:1267, 1503): /usr/palm/emoticons was not in
+            // the Apache-2.0 images, so the colour emoji font's face for each
+            // (Noto Color Emoji, SIL OFL 1.1: docs/LEGAL.md), with the
+            // original's 8 px margin. The key still types the text (":-)").
+            var picture = emoticonGraphic ? KM.emoticonPicture(key) : "";
+            if (picture !== "") {
+                var pm = 8;
+                var pbox = { x: loc.x + pm, y: loc.y + pm, w: loc.w - 2 * pm, h: loc.h - 2 * pm };
+                var psize = Math.max(1, Math.floor(Math.min(pbox.w, pbox.h) * 0.8));
+                return [{ text: picture, emoji: true, x: pbox.x, y: pbox.y, w: pbox.w, h: pbox.h, size: psize,
+                          bold: false, color: activeColor, back: activeColor, align: "center", emoticon: true }];
+            }
             text = _km.displayString(key, false);
             if (emoticonGraphic || text === "") {
                 var icon = _keyIcon(key);
@@ -1617,6 +1744,7 @@ Item {
         _trackpadId = "";
         _trackpadAnchor = null;
         _triggerRepaint();
+        fieldSyncTimer.restart();         // where the cursor ended up
     }
 
     // Arrow keys for each step from the anchor; Shift while another finger

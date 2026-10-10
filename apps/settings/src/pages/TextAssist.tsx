@@ -5,7 +5,7 @@
 // typing (GAPS V2, V3), as webOS's Text Assist app (com.palm.app.textassist)
 // was the place for auto-correction. The settings are keys of the keyboard's
 // preference, x_palm_virtualkeyboard_prefs (WordSuggestions, AutoCorrect,
-// SwipeTyping, spaces2period; ForgetWords: when the learned words were
+// SwipeTyping, EmojiSuggestions, spaces2period; ForgetWords: when the learned words were
 // forgotten), which the shell's keyboard follows. Keyboards: which layouts
 // and languages the keyboard offers (its "keyboards" combos, as
 // VirtualKeyboardPreferences kept them); with two or more its language key
@@ -71,7 +71,7 @@ export function TextAssistPage() {
             set({ keyboards: next });
     };
 
-    const toggle = (title: string, key: "WordSuggestions" | "AutoCorrect" | "SwipeTyping" | "spaces2period", testId: string, subtitle?: string) => (
+    const toggle = (title: string, key: "WordSuggestions" | "AutoCorrect" | "SwipeTyping" | "EmojiSuggestions" | "spaces2period", testId: string, subtitle?: string) => (
         <Row title={title} subtitle={subtitle}>
             <ToggleButton value={kb[key] !== false} label={title} testId={testId} onChange={(v) => set({ [key]: v })} />
         </Row>
@@ -87,6 +87,7 @@ export function TextAssistPage() {
                 {toggle("Word suggestions", "WordSuggestions", "ta-suggestions", "Above the keys")}
                 {toggle("Auto-correct", "AutoCorrect", "ta-autocorrect", "When you type a space")}
                 {toggle("Swipe typing", "SwipeTyping", "ta-swipe", "Slide across the letters")}
+                {toggle("Emoji suggestions", "EmojiSuggestions", "ta-emoji", "An emoji for words such as \"pizza\"")}
                 {toggle("Quick period", "spaces2period", "ta-period", "Two spaces type \". \"")}
                 <Row title="Personal Dictionary" subtitle={added === 1 ? "1 word added" : added ? `${added} words added` : "Your own words, and the ones it learned"}
                      chevron testId="ta-dictionary" onClick={() => setDictionary(true)} />

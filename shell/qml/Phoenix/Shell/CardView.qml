@@ -92,6 +92,13 @@ Item {
     property real bottomInset: Theme.gestureAreaHeight
     readonly property real windowWidth: width
     readonly property real windowHeight: height - topInset - bottomInset
+    // The part of the bottom inset that is the virtual keyboard's: a window
+    // that does not resize for it (PalmSystem.allowResizeOnPositiveSpaceChange
+    // (false), the card model's allowResize) keeps that much more height,
+    // the keyboard over its bottom (CardWindowManagerState::resizeWindow,
+    // CardWindowManagerStates.cpp:85-98: adjustForPositiveSpaceSize in place
+    // of a resize).
+    property real keyboardOverlap: 0
 
     signal cardClosed(string uid)
     // A card starts closing: the user threw it away, or (byApp) its window
@@ -798,12 +805,15 @@ Item {
             splashIcon: info && info.splashIcon ? info.splashIcon : ""
             splashBackground: info && info.splashBackground ? info.splashBackground : ""
             width: view.windowWidth
-            height: view.windowHeight
+            // A window that does not resize for the keyboard: as tall as
+            // before it came (only the focused card has it in front).
+            readonly property real keepHeight: model.allowResize === false && place !== null && place.focused ? view.keyboardOverlap : 0
+            height: view.windowHeight + keepHeight
             window: view.source.windowFor(uid)
             centerX: (rising ? view.width / 2 : lifted ? view.reorderX : place ? place.cx : view.width / 2)
                      + (place && place.focused ? view.edgeNudge : 0)
-            centerY: rising ? view.mix(view.height + height / 2, view.maximizedCenterY, view.maximizeProgress)
-                   : lifted ? view.reorderY : place ? place.cy : view.cardOriginY
+            centerY: (rising ? view.mix(view.height + height / 2, view.maximizedCenterY, view.maximizeProgress)
+                   : lifted ? view.reorderY : place ? place.cy : view.cardOriginY) + keepHeight * cardScale / 2
             cardScale: rising ? 1 : lifted ? view.activeScale : place ? place.scale : view.activeScale
             rotation: rising || lifted || !place ? 0 : place.rot
             rounded: view.maximizeProgress < 1

@@ -7,7 +7,8 @@
 // a correction is offered; the correction the space bar puts in, in white
 // and bold; other words. A tap types one. After backspace put back a word
 // a correction replaced: "Add “word”" at the end, which adds it to the
-// personal dictionary (kind "add"; dimmer, to stay out of the way). At the right, the microphone
+// personal dictionary (kind "add"; dimmer, to stay out of the way). An emoji for
+// the word ("pizza"), at the end (kind "emoji"). At the right, the microphone
 // (dictation), when the device has one: tap to talk, tap again to stop;
 // what was said is typed where the cursor is.
 // Phoenix (M6 F2): at the left, the clipboard key (a clipboard, drawn), in
@@ -17,6 +18,7 @@
 // only that key.
 
 import QtQuick
+import "DictationText.js" as DT
 
 Item {
     id: bar
@@ -147,7 +149,8 @@ Item {
                         : cell.quoted ? "“" + cell.modelData.text + "”" : cell.modelData.text
                     color: cell.modelData.kind === "correction" ? bar.strongColor : bar.textColor
                     font.family: Theme.fontFamily
-                    font.pixelSize: cell.adding ? Math.round(bar.fontSize * 0.9) : bar.fontSize
+                    // An emoji (kind "emoji") a little larger, to be seen.
+                    font.pixelSize: cell.adding ? Math.round(bar.fontSize * 0.9) : cell.modelData.kind === "emoji" ? Math.round(bar.fontSize * 1.3) : bar.fontSize
                     font.bold: cell.modelData.kind === "correction"
                     opacity: cell.adding ? 0.75 : 1
                 }
@@ -176,9 +179,17 @@ Item {
         anchors.leftMargin: 12 + bar.clipWidth
         anchors.right: mic.left
         anchors.verticalCenter: parent.verticalCenter
-        elide: Text.ElideRight
-        text: bar.listening ? "Listening\u2026 tap the microphone when you are done"
+        // What was said so far shows while speaking (Dictation.partialText,
+        // GAPS V2), its latest words when it is long; it is typed when the
+        // whole recording is written down.
+        readonly property string said: bar.dictation !== null && bar.dictation.partialText !== undefined
+                                        && (bar.listening || bar.transcribing)
+                                        ? DT.spokenPunctuation(bar.dictation.partialText, bar.keyboard.language).replace(/\n/g, " ") : ""
+        elide: said !== "" ? Text.ElideLeft : Text.ElideRight
+        text: said !== "" ? (bar.transcribing ? said + "\u2026" : said)
+            : bar.listening ? "Listening\u2026 tap the microphone when you are done"
             : bar.transcribing ? "Writing it down\u2026" : bar.keyboard.dictationMessage
+        font.italic: said !== ""
         color: bar.textColor
         font.family: Theme.fontFamily
         font.pixelSize: bar.fontSize

@@ -98,6 +98,21 @@ function isFunctionKey(k) { return k >= Key.Escape; }
 function isTextShortcutKey(k) { return k >= 0x01200300 && k <= 0x012003FF; }
 function isComboKey(k) { return k >= Key.ComboFirst && k <= Key.ComboLast; }
 function isEmoticonKey(k) { return k >= Key.EmoticonFrown && k <= Key.EmoticonOptions; }
+// Phoenix: the picture an emoticon key shows (the colour emoji font's face
+// for the original's /usr/palm/emoticons images, never released), or "".
+function emoticonPicture(k) {
+    switch (k) {
+    case Key.EmoticonOptions:
+    case Key.EmoticonSmile: return "\uD83D\uDE42";     // slightly smiling face
+    case Key.EmoticonWink: return "\uD83D\uDE09";      // winking face
+    case Key.EmoticonFrown: return "\uD83D\uDE41";     // slightly frowning face
+    case Key.EmoticonCry: return "\uD83D\uDE22";       // crying face
+    case Key.EmoticonYuck: return "\uD83D\uDE1B";      // face with tongue
+    case Key.EmoticonGasp: return "\uD83D\uDE2E";      // face with open mouth
+    case Key.EmoticonHeart: return "\u2764\uFE0F";     // red heart
+    default: return "";
+    }
+}
 function isLetter(k) { return k >= Key.A && k <= Key.Z; }
 function isSizeKey(k) { return k >= Key.ResizeTiny && k <= Key.ResizeLarge; }
 

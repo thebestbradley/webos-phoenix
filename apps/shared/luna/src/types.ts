@@ -308,6 +308,8 @@ export interface VirtualKeyboardPrefs {
     WordSuggestions?: boolean;
     AutoCorrect?: boolean;
     SwipeTyping?: boolean;
+    /** Phoenix: an emoji in the candidate bar for a word ("pizza"). */
+    EmojiSuggestions?: boolean;
     /** When the user asked for the learned words to be forgotten (ms). */
     ForgetWords?: number;
 }

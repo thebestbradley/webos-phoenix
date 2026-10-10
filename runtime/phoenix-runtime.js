@@ -439,7 +439,13 @@
                 host.postToHost("windowProperties", out);
         },
         enableFullScreenMode: function (on) { host.postToHost("fullScreen", { appId: PalmSystem.appIdentifier, on: !!on }); },
-        allowResizeOnPositiveSpaceChange: function () {},
+        // Enyo's enyo.keyboard.setResizesWindow(false): the card keeps its
+        // size when the keyboard comes, the keyboard over its bottom, and the
+        // page hears Mojo.positiveSpaceChanged(width, height) instead
+        // (IpcClientHost.cpp:303-305, CardWindowManagerStates.cpp:85-98).
+        allowResizeOnPositiveSpaceChange: function (allow) {
+            host.postToHost("windowProperties", { appId: PalmSystem.appIdentifier, allowResizeOnPositiveSpaceChange: allow !== false });
+        },
         receivePageUpDownInLandscape: function () {},
         // The virtual keyboard under the app's control (Enyo's enyo.keyboard manual
         // mode): see "Virtual keyboard" below.
@@ -4259,6 +4265,15 @@
 
     // The keyboard was shown (before the window shrinks) or hidden (after it
     // grew back).
+    // The positive space of a window that keeps its size (it called
+    // allowResizeOnPositiveSpaceChange(false)): Enyo moves its popups and
+    // scrolls the focused field into view (palm/system/keyboard.js:224).
+    runtime.positiveSpaceChanged = function (width, height) {
+        var mojo = global.Mojo;
+        if (mojo && typeof mojo.positiveSpaceChanged === "function") {
+            try { mojo.positiveSpaceChanged(width, height); } catch (e) { console.error("[phoenix-runtime] positiveSpaceChanged failed", e); }
+        }
+    };
     runtime.keyboardShown = function (shown) {
         var mojo = global.Mojo;
         if (mojo && typeof mojo.keyboardShown === "function") {
@@ -4844,6 +4859,7 @@
             });
             return { suggestions: kb.WordSuggestions !== false, autoCorrect: kb.AutoCorrect !== false,
                      swipe: kb.SwipeTyping !== false, spaces2period: kb.spaces2period !== false,
+                     emojiSuggestions: kb.EmojiSuggestions !== false,
                      forgetWords: typeof kb.ForgetWords === "number" ? kb.ForgetWords : 0,
                      shortcuts: shortcuts, shortcutsOn: ti.shortcutChecking !== "off",
                      userWords: dictionaryWords(ti), removedWords: removedWords(ti) };

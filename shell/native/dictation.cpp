@@ -51,6 +51,82 @@ Dictation::Dictation(QObject *parent)
     m_limit->setSingleShot(true);
     m_limit->setInterval(kLimitMs);
     connect(m_limit, &QTimer::timeout, this, &Dictation::stop);
+    m_partialTimer = new QTimer(this);
+    m_partialTimer->setInterval(m_partialInterval);
+    connect(m_partialTimer, &QTimer::timeout, this, &Dictation::transcribePartial);
+}
+
+void Dictation::setPartialInterval(int ms)
+{
+    ms = qMax(0, ms);
+    if (ms == m_partialInterval)
+        return;
+    m_partialInterval = ms;
+    if (ms > 0)
+        m_partialTimer->setInterval(ms);
+    else
+        m_partialTimer->stop();
+    if (ms > 0 && m_listening)
+        m_partialTimer->start();
+    emit partialIntervalChanged();
+}
+
+void Dictation::setPartialText(const QString &t)
+{
+    if (t == m_partialText)
+        return;
+    m_partialText = t;
+    emit partialTextChanged();
+}
+
+// While it listens: what was said so far, the recording until now
+// transcribed by the same transcriber in the background (the keyboard
+// shows it as it comes). One at a time: a slow transcriber is not asked
+// again before it answers, nor for a recording that has not grown.
+void Dictation::transcribePartial()
+{
+    if (!m_listening || m_partialProcess || m_pcm.size() < kWhisperRate / 2 * 2 || m_pcm.size() == m_partialSize)
+        return;
+    QTemporaryFile file(QDir::tempPath() + QStringLiteral("/phoenix-dictation-part-XXXXXX.wav"));
+    file.setAutoRemove(false);
+    if (!file.open() || file.write(wav(m_pcm, kWhisperRate)) < 0)
+        return;
+    file.close();
+    m_partialSize = m_pcm.size();
+    const QString path = file.fileName();
+    QStringList args = commandLine(m_command, path, m_language, m_prompt);
+    const QString program = args.takeFirst();
+    QProcess *proc = new QProcess(this);
+    m_partialProcess = proc;
+    const auto done = [this, proc, path](const QString &text) {
+        QFile::remove(path);
+        proc->deleteLater();
+        if (m_partialProcess != proc)
+            return;                     // ended (endPartial) meanwhile
+        m_partialProcess = nullptr;
+        if (m_listening && !text.trimmed().isEmpty())
+            setPartialText(text.trimmed());
+    };
+    connect(proc, &QProcess::finished, this, [proc, done](int exitCode, QProcess::ExitStatus) {
+        done(parseReply(proc->readAllStandardOutput(), exitCode).first);
+    });
+    connect(proc, &QProcess::errorOccurred, this, [done](QProcess::ProcessError e) {
+        if (e == QProcess::FailedToStart)
+            done(QString());
+    });
+    proc->start(program, args);
+}
+
+// The recording ended: no more of them, and the one under way is dropped.
+void Dictation::endPartial()
+{
+    m_partialTimer->stop();
+    m_partialSize = 0;
+    if (m_partialProcess) {
+        QProcess *proc = m_partialProcess;
+        m_partialProcess = nullptr;
+        proc->kill();                   // its finished() removes its file
+    }
 }
 
 Dictation::~Dictation()
@@ -411,6 +487,9 @@ void Dictation::start()
     }
     m_listening = true;
     m_limit->start();
+    setPartialText(QString());
+    if (m_partialInterval > 0)
+        m_partialTimer->start();
     emit stateChanged();
 }
 
@@ -533,6 +612,7 @@ void Dictation::cancel()
         m_process->deleteLater();
         m_process = nullptr;
         m_busy = false;
+        setPartialText(QString());
         emit stateChanged();
     }
 }
@@ -540,6 +620,11 @@ void Dictation::cancel()
 void Dictation::finishRecording(bool transcribe)
 {
     m_limit->stop();
+    endPartial();
+    // What was said so far stays in view while the whole of it is written
+    // down; nothing stays of a recording thrown away.
+    if (!transcribe)
+        setPartialText(QString());
     m_listening = false;
     // Standing by goes on with the microphone open; else it closes.
     if (standbyWanted()) {
@@ -561,6 +646,7 @@ void Dictation::finishRecording(bool transcribe)
     const QByteArray pcm = m_pcm;
     m_pcm.clear();
     if (pcm.size() < kWhisperRate / 4 * 2) {          // under a quarter of a second
+        setPartialText(QString());
         emit stateChanged();
         emit transcribed(QString(), tr("Nothing was heard."));
         return;
@@ -568,6 +654,7 @@ void Dictation::finishRecording(bool transcribe)
     QTemporaryFile file(QDir::tempPath() + QStringLiteral("/phoenix-dictation-XXXXXX.wav"));
     file.setAutoRemove(false);
     if (!file.open() || file.write(wav(pcm, kWhisperRate)) < 0) {
+        setPartialText(QString());
         emit stateChanged();
         emit transcribed(QString(), tr("The recording could not be saved."));
         return;
@@ -601,6 +688,7 @@ void Dictation::runTranscriber(const QString &file, bool removeAfter)
         if (m_process == proc)
             m_process = nullptr;
         m_busy = false;
+        setPartialText(QString());
         emit stateChanged();
         emit transcribed(reply.first, reply.second);
     });
@@ -613,6 +701,7 @@ void Dictation::runTranscriber(const QString &file, bool removeAfter)
         if (m_process == proc)
             m_process = nullptr;
         m_busy = false;
+        setPartialText(QString());
         emit stateChanged();
         emit transcribed(QString(), tr("Speech recognition is not installed (%1 could not be started).").arg(program));
     });
