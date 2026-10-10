@@ -38,9 +38,11 @@ Files, in a folder the user picks).
 > Share: its recording) and Maps (Share Location and the app menu: the
 > place's name, address and map link, the text its own Messaging / Email
 > menu sent) open the sheet. `tools/test-filepicker.cjs`, `test-docs.cjs`,
-> `test-voicememos.cjs`, `test-maps.cjs`. Left: SF6 (2.0); Voice Memos'
-> "Open in Music" went with its own menu (no app takes audio from the
-> sheet yet).
+> `test-voicememos.cjs`, `test-maps.cjs`. Voice Memos' "Open in Music"
+> (10 October 2026): Music takes audio from the sheet (`shareTargets`
+> `audio/*`) and plays it in Now Playing under the share's title, the
+> library's tags when it has the file (`sharedSongs`, apps/music;
+> `test-voicememos.cjs`). Left: SF6 (2.0).
 
 ### The original picker (SF1)
 

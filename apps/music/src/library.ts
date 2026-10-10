@@ -122,3 +122,32 @@ export function songsFor(items: AudioItem[], query: string): AudioItem[] | null 
     }
     return null;
 }
+
+/** A file handed over by the share sheet ({share: {files}}, docs/SHARE-AND-FILES.md). */
+export interface SharedFile {
+    path: string;
+    mimeType?: string;
+}
+
+const AUDIO_EXT = /\.(mp3|m4a|aac|ogg|oga|opus|wav|flac|amr|wma)$/i;
+
+/**
+ * The songs to play for what the share sheet gave Music ({share: {title,
+ * files}}, appinfo.json shareTargets audio/*): its audio files in order,
+ * as the library has them when it does (their tags and art), else from the
+ * file alone. A single file without a title tag takes the share's title
+ * (a voice memo's name, Voice Memos' Share).
+ */
+export function sharedSongs(share: { title?: string; files?: SharedFile[] }, library: AudioItem[]): AudioItem[] {
+    const files = (share.files ?? []).filter((f) => f && typeof f.path === "string"
+        && (/^audio\//.test(f.mimeType ?? "") || (!f.mimeType && AUDIO_EXT.test(f.path))));
+    const one = files.length === 1 && share.title ? share.title : "";
+    return files.map((f) => {
+        const known = library.find((s) => s.file_path === f.path);
+        const song: AudioItem = known ? { ...known } : { uri: "file://" + f.path, file_path: f.path, type: "audio", mime: f.mimeType };
+        // (Without a title tag the indexer's title is the file's name.)
+        const bare = f.path.replace(/^.*\//, "").replace(/\.[^.]*$/, "");
+        if (one && (!song.title || song.title === bare)) song.title = one;
+        return song;
+    });
+}
