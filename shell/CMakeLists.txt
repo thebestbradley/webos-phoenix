@@ -42,6 +42,14 @@ add_subdirectory(../services/wakeword ${CMAKE_CURRENT_BINARY_DIR}/services-wakew
 # shell's Speech and the device's org.webosphoenix.tts; ONNX Runtime and the
 # model are found at run time.
 add_subdirectory(../services/tts ${CMAKE_CURRENT_BINARY_DIR}/services-tts)
+# The keyboard as a device's input method (GAPS V5): the Maliit plugin
+# around the same keyboard QML, built here against the stand-in Maliit API
+# with its tests (build/keyboard/keyboard-test); meta-phoenix's
+# phoenix-keyboard recipe builds it for a device against the real one.
+option(PHOENIX_BUILD_KEYBOARD "Build the Maliit keyboard plugin (services/keyboard)" ON)
+if(PHOENIX_BUILD_KEYBOARD)
+    add_subdirectory(../services/keyboard ${CMAKE_CURRENT_BINARY_DIR}/keyboard)
+endif()
 
 if(PHOENIX_BUILD_SIM)
     # Qt WebEngine runs the web apps (original webOS apps, Settings, ...).

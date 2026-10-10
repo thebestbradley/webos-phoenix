@@ -2519,14 +2519,7 @@ FocusScope {
         notes.keyboardHeight = h;
         notes.spaceImmediate = false;
     }
-    // slotKeyboardHeightChanged: at once.
-    Connections {
-        target: ime
-        function onKeyboardHeightChanged() {
-            if (shell._imeOpened)
-                shell._setKeyboardSpace(ime.keyboardHeight, true);
-        }
-    }
+    // slotKeyboardHeightChanged: the keyboard's host (panelHeight, above).
     // The platform's keyboard (a device): its panel's height, as it slides.
     onPlatformKeyboardHeightChanged: if (!_imeOpened) _setKeyboardSpace(platformKeyboardHeight, true)
 
@@ -3609,24 +3602,41 @@ FocusScope {
                 y: ui.height - notes.negativeSpace
                 visible: shell.virtualKeyboard && shell._imeOwnsSpace && notes.negativeSpace > 0 && !notes.alertShown
                 acceptingInput: shell._imeOpened
-                onKeyTyped: (key, modifiers) => {
-                    var t = shell._imeTarget();
-                    if (t)
-                        KeyInjector.sendImeKey(t, key, modifiers);
-                }
-                onTextCommitted: (text) => {
-                    // The meta key held: c, x, v and a are Edit commands.
-                    var meta = { c: "copy", x: "cut", v: "paste", a: "selectAll" }[String(text).toLowerCase()];
-                    if (gesture.metaHeld && meta) {
-                        shell.metaEdit(meta);
-                        return;
+                // The simulator's host (KeyboardHost; on a device the Maliit
+                // input method is the keyboard's): the field is in this
+                // process, and the keys reach it as key events and input
+                // method commits.
+                host: KeyboardHost {
+                    function sendKey(key, modifiers) {
+                        var t = shell._imeTarget();
+                        if (t)
+                            KeyInjector.sendImeKey(t, key, modifiers);
                     }
-                    var t = shell._imeTarget();
-                    if (t)
-                        KeyInjector.commitText(t, text);
+                    function commitText(text) {
+                        // The meta key held: c, x, v and a are Edit commands.
+                        var meta = { c: "copy", x: "cut", v: "paste", a: "selectAll" }[String(text).toLowerCase()];
+                        if (gesture.metaHeld && meta) {
+                            shell.metaEdit(meta);
+                            return;
+                        }
+                        var t = shell._imeTarget();
+                        if (t)
+                            KeyInjector.commitText(t, text);
+                    }
+                    function setPreedit(text) {
+                        var t = shell._imeTarget();
+                        if (t)
+                            KeyInjector.setPreedit(t, text);
+                    }
+                    function hideKeyboard() { shell.hideKeyboard(); }
+                    function feedback(name) { shell.sounds.feedback(name); }
+                    // slotKeyboardHeightChanged: at once.
+                    function panelHeight(height) {
+                        if (shell._imeOpened)
+                            shell._setKeyboardSpace(height, true);
+                    }
+                    function surroundingText() { return shell._imeSurroundingText(); }
                 }
-                onHideRequested: shell.hideKeyboard()
-                surroundingText: shell._imeSurroundingText
                 // VirtualKeyboardPreferences TapSounds: "Keyboard clicks".
                 tapSounds: !shell.system || shell.system.tapSounds !== false
                 // Settings > Text Assist.
@@ -3657,7 +3667,6 @@ FocusScope {
                                     ? shell.system.installedKeyboards : ["classic"]
                 keyboardId: shell.system && shell.system.keyboardId ? shell.system.keyboardId : "classic"
                 onKeyboardChosen: (id) => { if (shell.system && shell.system.keyboardId !== undefined) shell.system.keyboardId = id; }
-                onFeedback: (name) => shell.sounds.feedback(name)
                 // The clipboard key and the clip strip (M6 F2).
                 clipboard: clipboardClient
                 onImagePasteRequested: (clip) => shell._pasteImage(clip)

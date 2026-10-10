@@ -32,7 +32,12 @@
 // only the shell may):
 //   getLockStatus {subscribe}      -> {locked}
 //   getDockModeStatus {subscribe}  -> {enabled}       (SystemService.cpp:1913-1990)
-//   getSystemStatus {subscribe}    -> {ime: {visible}, orientation: {ui, device}}
+//   getSystemStatus {subscribe}    -> {ime: {visible}, orientation: {ui, device},
+//                                      learnedWords}
+// The words the keyboard learned (GAPS V5: the Phoenix keyboard, a Maliit
+// plugin in maliit-server, reports them to /phoenix/learnedWords; only the
+// keyboard may), for Settings > Text Assist > Personal Dictionary, as the
+// simulator's runtime keeps them (getSystemStatus learnedWords).
 //
 // The shell's start-up preferences: the shell must know Settings > Advanced
 // (its start-up animation) and the rotation lock before its first frame, and
@@ -61,7 +66,7 @@ var STARTUP_KEYS = ["infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges", "s
                     "rotationLock"];
 
 var METHODS = ["getDeviceLockMode", "getSecurityPolicy", "setDevicePasscode", "matchDevicePasscode",
-               "getLockStatus", "getDockModeStatus", "getSystemStatus", "phoenix/report"];
+               "getLockStatus", "getDockModeStatus", "getSystemStatus", "phoenix/report", "phoenix/learnedWords"];
 
 function ok(o) {
     var r = { returnValue: true };
@@ -169,9 +174,11 @@ function passcodeError(code, mode) {
 //   wipe      () -> void   the last of a policy's tries (Security::eraseDevice, :420-432)
 //   startup   {write(prefs)}   the start-up preferences file
 //   isShell   (sender) -> bool
+//   isKeyboard (sender) -> bool   the Phoenix keyboard (maliit-server)
 function createSystemManager(deps) {
     var watchers = { lockMode: [], lock: [], dock: [], system: [] };
-    var shell = { deviceLocked: true, dockMode: false, orientation: { ui: "up", device: "up" }, ime: { visible: false } };
+    var shell = { deviceLocked: true, dockMode: false, orientation: { ui: "up", device: "up" }, ime: { visible: false },
+                  learnedWords: [] };
     var startupPrefs = {};
 
     function load() {
@@ -305,7 +312,8 @@ function createSystemManager(deps) {
         getLockStatus: function () { return Promise.resolve(ok({ locked: shell.deviceLocked })); },
         getDockModeStatus: function () { return Promise.resolve(ok({ enabled: shell.dockMode })); },
         getSystemStatus: function () {
-            return Promise.resolve(ok({ ime: { visible: shell.ime.visible }, orientation: { ui: shell.orientation.ui, device: shell.orientation.device } }));
+            return Promise.resolve(ok({ ime: { visible: shell.ime.visible }, orientation: { ui: shell.orientation.ui, device: shell.orientation.device },
+                                        learnedWords: shell.learnedWords.slice() }));
         },
         // The shell's state: {deviceLocked, dockMode, orientation: {ui,
         // device}, ime: {visible}}, any of them.
@@ -337,6 +345,20 @@ function createSystemManager(deps) {
             if (changed.lock) methods.getLockStatus().then(function (r) { notify("lock", r); });
             if (changed.dock) methods.getDockModeStatus().then(function (r) { notify("dock", r); });
             if (changed.system) methods.getSystemStatus().then(function (r) { notify("system", r); });
+            return Promise.resolve(ok());
+        },
+        // The keyboard's learned words: {words: [string]} (at most 5000,
+        // each a word of at most 48 characters).
+        "phoenix/learnedWords": function (p, sender) {
+            if (!deps.isKeyboard || !deps.isKeyboard(sender))
+                return Promise.resolve(fail(-1, "Only the keyboard reports its words"));
+            if (!Array.isArray(p.words))
+                return Promise.resolve(fail(-1, "words must be a list"));
+            var words = p.words.filter(function (w) { return typeof w === "string" && w.length > 0 && w.length <= 48; }).slice(0, 5000);
+            if (JSON.stringify(words) !== JSON.stringify(shell.learnedWords)) {
+                shell.learnedWords = words;
+                methods.getSystemStatus().then(function (r) { notify("system", r); });
+            }
             return Promise.resolve(ok());
         }
     };

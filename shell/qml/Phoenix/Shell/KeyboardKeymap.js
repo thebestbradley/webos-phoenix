@@ -254,7 +254,9 @@ function phoneAzerty() {   // sAzerty (:275-280)
             .concat([NOKEY()]),
         [K(1.25, Key.Shift, Key.ToggleLanguage, null, "languages"), K(-0.25, Key.Shift, Key.ToggleLanguage, null, "languages")]
             .concat(pairs(1, "WXCVBN", ";:=+-'", [null, null, X.C, null, null, X.N]))
-            .concat([K(1.5, code("'"), code("@")), K(-0.25, Key.Backspace), K(1.25, Key.Backspace)]),
+            // The twelfth cell: none (sAzerty lists eleven, :295, and C++
+            // fills the rest of the row with zeros: no key, no width).
+            .concat([K(1.5, code("'"), code("@")), K(-0.25, Key.Backspace), K(1.25, Key.Backspace), NOKEY()]),
         phoneBottomRow(1.75, 2)
     ];
 }

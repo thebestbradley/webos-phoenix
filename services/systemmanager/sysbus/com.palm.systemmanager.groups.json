@@ -2,5 +2,6 @@
     "allowedNames": ["com.palm.systemmanager"],
     "systemmanager.query": ["dev"],
     "systemmanager.passcode": ["oem"],
-    "systemmanager.shell": ["oem"]
+    "systemmanager.shell": ["oem"],
+    "systemmanager.keyboard": ["oem"]
 }
