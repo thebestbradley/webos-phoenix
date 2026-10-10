@@ -12206,7 +12206,7 @@
         var luna = nodeServiceLuna();
         var request = proxiedRequest;
 
-        var methods = null, shippedSources = null;
+        var methods = null, shippedSources = null, preinstalledInfo = null;
         function service() {
             if (!methods) {
                 var davservice = loadModule("davservice.js");
@@ -12604,7 +12604,7 @@
 
         var loadModule = nodeServiceLoader(SERVICE_DIR, "Backup service");
         function archiveLib() { return loadModule("lib/archive.js"); }
-        var methods = null, shippedSources = null;
+        var methods = null, shippedSources = null, preinstalledInfo = null;
         function service() {
             if (!methods) {
                 methods = loadModule("backupservice.js").createBackupService({
@@ -13181,7 +13181,7 @@
         function digest(alg) {
             return function (bytes) { return subtle.digest(alg, bytes).then(function (h) { return new Uint8Array(h); }); };
         }
-        var methods = null, shippedSources = null;
+        var methods = null, shippedSources = null, preinstalledInfo = null;
         function service() {
             if (!methods) {
                 // Its installs reach the installer as this service's (ctx.caller),
@@ -13230,14 +13230,20 @@
                         });
                     },
                     // The connector packages the simulator came with (seeded
-                    // into its installed apps by phoenix-sim).
+                    // into its installed apps by phoenix-sim). Each one's
+                    // appinfo.json is read once per page: the service asks at
+                    // every call, and only uses the version the first time it
+                    // counts the package as installed.
                     preinstalled: function () {
-                        return runtime.preinstalledPackages().map(function (p) {
-                            var info = {};
-                            try { info = JSON.parse(PalmSystem.getResource("/usr/palm/applications/" + p.id + "/appinfo.json") || "{}"); }
-                            catch (e) { info = {}; }
-                            return { id: p.id, sourceId: p.sourceId || "phoenix", version: String(info.version || ""), title: info.title || p.id };
-                        });
+                        if (!preinstalledInfo) {
+                            preinstalledInfo = runtime.preinstalledPackages().map(function (p) {
+                                var info = {};
+                                try { info = JSON.parse(PalmSystem.getResource("/usr/palm/applications/" + p.id + "/appinfo.json") || "{}"); }
+                                catch (e) { info = {}; }
+                                return { id: p.id, sourceId: p.sourceId || "phoenix", version: String(info.version || ""), title: info.title || p.id };
+                            });
+                        }
+                        return preinstalledInfo;
                     },
                     log: function (m) { console.info("[marketplace] " + m); },
                     // The launcher's pending icon: a tap opens the app's page
@@ -16281,7 +16287,7 @@
             });
         }
 
-        var methods = null, shippedSources = null;
+        var methods = null, shippedSources = null, preinstalledInfo = null;
         function service() {
             if (!methods) {
                 var lib = loadModule("assistant.js");

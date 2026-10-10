@@ -15,7 +15,7 @@
 // says so.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apps, call, devMode, LunaError, marketplace, type AccountType, type InstallProgress } from "@phoenix/luna";
+import { apps, call, LunaError, marketplace, subscribe, type AccountType, type InstallProgress } from "@phoenix/luna";
 import { useDevModeShown, useLuna } from "@phoenix/luna/react";
 import { Button, Dialog, ErrorText, Note } from "@phoenix/ui";
 import { openAccountsLaunch, setUpLaunch } from "./accountTypes";
@@ -86,7 +86,9 @@ export function ConnectorPackage({ t, added }: { t: AccountType; added: boolean 
     const [confirmRemove, setConfirmRemove] = useState(false);
     const [removing, setRemoving] = useState(false);
     const sub = useRef<{ cancel(): void } | null>(null);
-    const devModeOn = useLuna<boolean>((cb, err) => devMode.watch(cb, err), []).value === true;
+    // Developer Mode as it is (com.webos.service.devmode getDevMode), asked again at Install.
+    const devModeOn = useLuna<boolean>((cb, err) => subscribe("luna://com.webos.service.devmode/getDevMode", {},
+        (r) => cb((r as { status?: string }).status === "enabled"), err), []).value === true;
     const devModeShown = useDevModeShown() === true;
 
     const load = useCallback(async () => {

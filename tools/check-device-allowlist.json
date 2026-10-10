@@ -662,6 +662,14 @@
   "owner": "platform (PLATFORM.md 12: the feed and catalog URLs)",
   "row": "Q1"
  },
+ "simrefs:loopback:apps/shared:127.0.0.1": {
+  "owner": "intended: phoenix-connector publish --local (connector-kit src/tools/publish.ts), a developer's command on a computer for the catalog the simulator runs there, never run on a device",
+  "row": "Q1"
+ },
+ "simrefs:loopback:apps/shared:localhost": {
+  "owner": "intended: phoenix-connector publish --local (connector-kit src/tools/publish.ts), a developer's command on a computer for the catalog the simulator runs there, never run on a device",
+  "row": "Q1"
+ },
  "simrefs:loopback:apps/shared:0.0.0.0": {
   "owner": "intended: a server on the device itself (see the row)",
   "row": "N4"

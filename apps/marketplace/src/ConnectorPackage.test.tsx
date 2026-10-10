@@ -33,6 +33,10 @@ vi.mock("@phoenix/luna", async (orig) => {
             watch: (cb: (on: boolean) => void) => { setTimeout(() => cb(luna.devModeOn), 0); return sub(); },
             watchUnlocked: (cb: (on: boolean) => void) => { setTimeout(() => cb(luna.unlocked), 0); return sub(); },
         },
+        subscribe: (uri: string, _p: unknown, cb: (r: unknown) => void) => {
+            if (/getDevMode$/.test(uri)) setTimeout(() => cb({ returnValue: true, status: luna.devModeOn ? "enabled" : "disabled" }), 0);
+            return sub();
+        },
         call: (uri: string, params: unknown) => {
             luna.calls.push({ uri, params });
             if (/listAccounts$/.test(uri)) return Promise.resolve({ returnValue: true, results: luna.accounts });
