@@ -82,6 +82,17 @@ catalog app with three sources" is the starting point.
   native code) from Preware feeds and other catalogs
   themselves, unsandboxed and at their own risk
   ([APP-RUNTIME.md](APP-RUNTIME.md#developer-mode)).
+- **Synergy connectors** (account types with a background service,
+  [SYNERGY-CONNECTORS.md](SYNERGY-CONNECTORS.md)) are the one kind of
+  package with a service the catalog takes (phase C4): checked against the
+  connector rules, listed as kind `connector`, their account types in the
+  Marketplace's Connections. A device installs a third-party one in
+  Developer Mode only until the connector tier (C5); the ones Phoenix comes
+  with (the Fediverse) are pre-installed, removable and installed again from
+  the catalog without it. The path, from `phoenix-connector publish` to the
+  device: `server/marketplace/README.md` "Connector packages",
+  [SYNERGY-SDK.md](SYNERGY-SDK.md) "Publishing" and "Testing in the
+  simulator".
 
 ## Contents
 

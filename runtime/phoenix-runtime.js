@@ -3705,6 +3705,19 @@
     // (accounts.js lines 142-190): the accounts library watches it
     // (get-templates.js line 28), so an open "Add an Account" list shows a
     // connector installed meanwhile.
+    // The connector packages the device came with
+    // (/etc/palm/marketplace/preinstalled.json; tools/install-rootfs.py and
+    // phoenix-sim put them among the installed apps): [{id, sourceId,
+    // service, templates}].
+    var preinstalledCache = null;
+    runtime.preinstalledPackages = function () {
+        if (!preinstalledCache) {
+            try { preinstalledCache = JSON.parse(PalmSystem.getResource("/etc/palm/marketplace/preinstalled.json") || "{}").packages || []; }
+            catch (e) { preinstalledCache = []; }
+        }
+        return preinstalledCache;
+    };
+
     (function accountsService() {
         var PUBLIC_ACCOUNTS = "/usr/palm/public/accounts/";
         var BUILTIN_TEMPLATES = [
@@ -3741,7 +3754,9 @@
                 if (!lp.removable || lp.dynamic || seen[lp.id]) return;
                 seen[lp.id] = true;
                 var base = "/usr/palm/applications/" + lp.id + "/";
-                (packaged[lp.id] || ["public/accounts/" + lp.id + "/" + lp.id + ".json"]).forEach(function (rel) {
+                var pre = runtime.preinstalledPackages().filter(function (p) { return p.id === lp.id; })[0];
+                var named = pre && pre.templates ? pre.templates.map(function (t) { return "public/accounts/" + t + "/" + t + ".json"; }) : null;
+                (packaged[lp.id] || named || ["public/accounts/" + lp.id + "/" + lp.id + ".json"]).forEach(function (rel) {
                     out.push(base + rel);
                 });
             });
@@ -11582,7 +11597,9 @@
             }
             return hostInfo.marketplaceCatalog === true;
         }
-        var catalog = { state: "stopped", url: "http://127.0.0.1:8088/", error: "", settingUp: false };
+        // key: the catalog's public key as phoenix-sim read it from the
+        // catalog's own data folder (SimMarketplace::key), "" when it has none.
+        var catalog = { state: "stopped", url: "http://127.0.0.1:8088/", error: "", settingUp: false, key: "" };
         var watching = [];   // {reply, ctx} of marketplaceCatalog subscribers
         var starting = [];   // {reply, ctx} of startMarketplaceCatalog calls waiting
         function status() {
@@ -11606,10 +11623,16 @@
         runtime.hostStatusHooks.push(function (st) {
             var c = st && st.marketplaceCatalog;
             if (!c || typeof c !== "object" || typeof c.state !== "string") return;
-            catalog = { state: c.state, url: String(c.url || catalog.url), error: String(c.error || ""), settingUp: !!c.settingUp };
+            catalog = { state: c.state, url: String(c.url || catalog.url), error: String(c.error || ""), settingUp: !!c.settingUp,
+                        key: typeof c.key === "string" ? c.key : "" };
             changed();
             settle();
         });
+        // The simulator's own local catalog, which its Marketplace trusts
+        // without the fingerprint step: {url (its /v1/), key}, or null.
+        runtime.simulatorCatalog = function () {
+            return available() && catalog.key ? { url: catalog.url.replace(/\/*$/, "/") + "v1/", key: catalog.key } : null;
+        };
         register(["org.webosphoenix.simulator"], {
             "/marketplaceCatalog": function (p, reply, ctx) {
                 if (!available()) return reply(fail(E.NOT_AVAILABLE, "Only in the simulator."));
@@ -11929,7 +11952,11 @@
     // accounts block below ("CardDAV and CalDAV") serves its templates and
     // calls their callbacks as for DAV.
     //
-    //   built in    the Fediverse account (apps/fediverse)
+    //   pre-installed  the connector packages the simulator came with
+    //               (/etc/palm/marketplace/preinstalled.json: the Fediverse,
+    //               apps/fediverse), while they are installed: phoenix-sim
+    //               puts them in its installed apps, and the user may remove
+    //               them and install them again from the Marketplace
     //   installed   a connector package installed in Developer Mode (block
     //               "Install and remove": its service/package.json names the
     //               service; runtime.connectorInstalled(appId, service))
@@ -11942,7 +11969,6 @@
     // is no background process in the simulator ("Sync now" works).
     // __phoenixRuntime.connectors: hosted(), service(name) -> the methods.
     (function connectors() {
-        var BUILTIN = [{ appId: "org.webosphoenix.fediverse", service: "org.webosphoenix.service.fediverse" }];
         var INSTALLED = "connectorServices";     // store: {appId: service}
         var LOCK_MS = 5 * 60 * 1000;
         var hosted = {};
@@ -12111,7 +12137,9 @@
             return found;
         });
 
-        BUILTIN.forEach(function (b) { host(b.appId, b.service); });
+        runtime.preinstalledPackages().forEach(function (b) {
+            if (b.service && launchPoints().some(function (lp) { return lp.id === b.id; })) host(b.id, b.service);
+        });
         var installed = store.get(INSTALLED, {});
         Object.keys(installed).forEach(function (appId) {
             if (launchPoints().some(function (lp) { return lp.id === appId; })) host(appId, installed[appId]);
@@ -12121,10 +12149,12 @@
         runtime.connectorInstalled = function (appId, service) {
             var all = store.get(INSTALLED, {});
             if (service) { all[appId] = service; store.set(INSTALLED, all); host(appId, service); return; }
-            var gone = all[appId];
             delete all[appId];
             store.set(INSTALLED, all);
-            if (gone && hosted[gone]) { delete hosted[gone]; delete runtime.services[gone]; }
+            // Its service (a pre-installed one was never in the store's list).
+            Object.keys(hosted).forEach(function (svc) {
+                if (hosted[svc].appId === appId) { delete hosted[svc]; delete runtime.services[svc]; }
+            });
         };
         runtime.connectors = {
             hosted: function () { return Object.keys(hosted); },
@@ -12176,7 +12206,7 @@
         var luna = nodeServiceLuna();
         var request = proxiedRequest;
 
-        var methods = null;
+        var methods = null, shippedSources = null, preinstalledInfo = null;
         function service() {
             if (!methods) {
                 var davservice = loadModule("davservice.js");
@@ -12574,7 +12604,7 @@
 
         var loadModule = nodeServiceLoader(SERVICE_DIR, "Backup service");
         function archiveLib() { return loadModule("lib/archive.js"); }
-        var methods = null;
+        var methods = null, shippedSources = null, preinstalledInfo = null;
         function service() {
             if (!methods) {
                 methods = loadModule("backupservice.js").createBackupService({
@@ -12824,7 +12854,10 @@
         // retry: how the launcher's failed icon tries again ({uri, params});
         // by default the same install, unless the package was only in this
         // page's memory (/tmp).
-        function installPackage(id, path, each, developer, retry) {
+        // firstParty: a connector the device came with, installed again by
+        // the Marketplace's service from a catalog the device ships with
+        // (packagesservice.js firstPartyEntry): no Developer Mode needed.
+        function installPackage(id, path, each, developer, retry, firstParty) {
             if (retry === undefined)
                 retry = /^\/tmp\//.test(path) ? null
                       : { uri: "luna://com.webos.appInstallService/install", params: { id: id || "", ipkUrl: path, developerMode: !!developer } };
@@ -12866,7 +12899,8 @@
                 var serviceFile = pkg.files.filter(function (f) { return f.path === app.dir + "service/package.json"; })[0];
                 var connectorService = "";
                 if (serviceFile) {
-                    if (!dev) throw Object.assign(new Error("Synergy connectors (an account type with a background service) need Developer Mode"), { code: "NEEDS_DEVMODE" });
+                    if (!dev && !(firstParty && runtime.preinstalledPackages().some(function (p) { return p.id === id; })))
+                        throw Object.assign(new Error("Synergy connectors (an account type with a background service) need Developer Mode"), { code: "NEEDS_DEVMODE" });
                     try { connectorService = JSON.parse(new TextDecoder().decode(serviceFile.data)).name || ""; } catch (e) { connectorService = ""; }
                 }
                 report(id, 13, { state: "installing", ipkUrl: path }, each, looks);
@@ -12915,7 +12949,9 @@
                 reply(ok({ subscribed: !!p.subscribe }));
                 var each = p.subscribe ? function (m) { if (!ctx.cancelled()) reply(m); } : null;
                 // developerMode (Phoenix): the Marketplace asks for it in Developer Mode.
-                installPackage(p.id, p.ipkUrl, each, !!p.developerMode).then(null, function () { /* reported */ });
+                // firstParty: only the Marketplace's service may say so.
+                var firstParty = !!p.firstParty && !!ctx && ctx.caller === "org.webosphoenix.service.packages";
+                installPackage(p.id, p.ipkUrl, each, !!p.developerMode, undefined, firstParty).then(null, function () { /* reported */ });
             },
             "/remove": function (p, reply, ctx) {
                 if (!p.id) return reply(fail(-2, "id is empty"));
@@ -13145,11 +13181,19 @@
         function digest(alg) {
             return function (bytes) { return subtle.digest(alg, bytes).then(function (h) { return new Uint8Array(h); }); };
         }
-        var methods = null;
+        var methods = null, shippedSources = null, preinstalledInfo = null;
         function service() {
             if (!methods) {
+                // Its installs reach the installer as this service's (ctx.caller),
+                // which then takes a first-party connector (firstParty).
+                var asPage = nodeServiceLuna(), asService = nodeServiceLuna(SERVICE);
                 methods = loadModule("packagesservice.js").createPackagesService({
-                    luna: nodeServiceLuna(),
+                    luna: {
+                        call: asPage.call,
+                        subscribe: function (uri, params, onReply) {
+                            return (/^luna:\/\/com\.webos\.appInstallService\//.test(uri) ? asService : asPage).subscribe(uri, params, onReply);
+                        }
+                    },
                     request: proxiedRequest,
                     requestBytes: proxiedRequestBytes,
                     crypto: { sha256: digest("SHA-256"), sha512: digest("SHA-512") },
@@ -13166,9 +13210,40 @@
                         },
                         remove: function (path) { runtime.tmpFiles.remove(path); }
                     },
+                    // The device's catalogs; the simulator's own local catalog
+                    // (phoenix-sim started it, or found it running, at
+                    // 127.0.0.1:8088) with the key phoenix-sim read from that
+                    // catalog's data folder on this computer: trusted without
+                    // asking, as a device trusts a key its sources file gives.
+                    // Any other catalog's key is checked by the user.
                     defaultSources: function () {
-                        try { return JSON.parse(PalmSystem.getResource("/etc/palm/marketplace/sources.json") || "{}").sources || []; }
-                        catch (e) { return []; }
+                        // Read once: the service asks at each call, and the file is the system's.
+                        if (!shippedSources) {
+                            try { shippedSources = JSON.parse(PalmSystem.getResource("/etc/palm/marketplace/sources.json") || "{}").sources || []; }
+                            catch (e) { shippedSources = []; }
+                        }
+                        var list = shippedSources;
+                        var sim = runtime.simulatorCatalog ? runtime.simulatorCatalog() : null;
+                        return list.map(function (src) {
+                            return sim && src.kind === "phoenix" && !src.key && String(src.url).replace(/\/*$/, "/") === sim.url
+                                ? Object.assign({}, src, { key: sim.key }) : src;
+                        });
+                    },
+                    // The connector packages the simulator came with (seeded
+                    // into its installed apps by phoenix-sim). Each one's
+                    // appinfo.json is read once per page: the service asks at
+                    // every call, and only uses the version the first time it
+                    // counts the package as installed.
+                    preinstalled: function () {
+                        if (!preinstalledInfo) {
+                            preinstalledInfo = runtime.preinstalledPackages().map(function (p) {
+                                var info = {};
+                                try { info = JSON.parse(PalmSystem.getResource("/usr/palm/applications/" + p.id + "/appinfo.json") || "{}"); }
+                                catch (e) { info = {}; }
+                                return { id: p.id, sourceId: p.sourceId || "phoenix", version: String(info.version || ""), title: info.title || p.id };
+                            });
+                        }
+                        return preinstalledInfo;
                     },
                     log: function (m) { console.info("[marketplace] " + m); },
                     // The launcher's pending icon: a tap opens the app's page
@@ -16212,7 +16287,7 @@
             });
         }
 
-        var methods = null;
+        var methods = null, shippedSources = null, preinstalledInfo = null;
         function service() {
             if (!methods) {
                 var lib = loadModule("assistant.js");

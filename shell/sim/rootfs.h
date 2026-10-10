@@ -49,6 +49,21 @@ public:
     // removable. rescan() reads the apps again after a change.
     void setInstalledDir(const QString &dir);
     QString installedDir() const { return m_installedDir; }
+
+    // The connector packages Phoenix comes with (rootfs.json "preinstalled":
+    // apps/marketplace/service/etc/palm/marketplace/preinstalled.json, each
+    // package's "from" folder in the checkout): not built-in apps but
+    // installed ones, which the user may remove and install again from the
+    // Marketplace (docs/SYNERGY-CONNECTORS.md 7). setInstalledDir puts each
+    // in the installed apps the first time (a new device), and refreshes it
+    // from the checkout at each start while it is still that copy (a
+    // developer's edits show); once removed, or replaced by an install from
+    // the catalog, it is left as the user made it. The markers are in
+    // <installed>/var/lib/phoenix/preinstalled/: <id>.offered (put there
+    // once) and <id>.seeded (the copy is the checkout's; SimInstaller
+    // clears it on install and remove: forgetSeeded).
+    QStringList preinstalledIds() const { return m_preinstalled.keys(); }
+    void forgetSeeded(const QString &appId) const;
     bool isInstalled(const QString &appId) const { return m_installed.contains(appId); }
     bool hasApp(const QString &appId) const { return m_appDirs.contains(appId); }
     void rescan();
@@ -105,6 +120,9 @@ private:
     QHash<QString, QString> m_appDirs;         // app id -> directory
     QStringList m_applicationDirs;             // rootfs.json applicationDirs, absolute
     QStringList m_systemApps;                  // rootfs.json systemApps, absolute
+    QHash<QString, QString> m_preinstalled;    // pre-installed package id -> its folder, absolute
+    void seedPreinstalled();
+    QString preinstalledMarker(const QString &appId, const QString &suffix) const;
     QString m_installedDir;
     QString m_dataDir;
     QStringList m_installed;                   // ids of installed apps

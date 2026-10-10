@@ -31,7 +31,7 @@ kit**, and a few gaps found in today's code that block third-party connectors.
 | Accounts app | The original Enyo app, unmodified, over the runtime's simulated `com.palm.service.accounts` | `third_party/core-apps/com.palm.app.accounts`, overlay in `compat/rootfs/usr/palm/applications/com.palm.app.accounts` |
 | Templates | HP profile, IMAP, POP, other mail; CardDAV & CalDAV; Subscribed Calendar (webcal); a simulated Jabber (XMPP) account | `compat/rootfs/usr/palm/public/accounts/`, `apps/dav/public/accounts/`, runtime block "Instant messaging" |
 | Reference connector | `apps/dav`: hidden app + wizard + template + db8 kinds and permissions + Node service with luna-service2 files | `apps/dav/` (layout in section 3.1) |
-| Marketplace | Index kinds `pwa` and `ipk`; web apps only; services refused by the server and need Developer Mode on the device | `server/marketplace/src/Catalog.php` `publish()`, `src/Ipk.php` (header: "no services"), `apps/marketplace/service/packagesservice.js` lines 338-357 |
+| Marketplace | Index kinds `pwa`, `ipk` and (C4) `connector`: a package with a service only as a connector that passes the rules; third-party connectors need Developer Mode on the device, the pre-installed ones (the Fediverse) do not | `server/marketplace/src/Catalog.php` `publish()`, `src/Ipk.php` (header: "no services"), `apps/marketplace/service/packagesservice.js` lines 338-357 |
 | OAuth, key store, push, synckit | synckit built (C1); the OAuth service's sign-in with PKCE built for the Fediverse (C2), its sheet and key store in the simulator only; push planned. Simulator keeps credentials in localStorage | SYNERGY.md 2.3, 2.9; SYNERGY-MODERN.md 4.2, 4.8; `services/oauth` |
 
 **Gaps that matter for third-party connectors** (found while reading the code):
@@ -246,10 +246,11 @@ catalog's copy of the template's 96 px icon), not the draft's sizes;
   *Built in C1* as `server/marketplace/src/Connector.php` (`check`,
   `checkIpk`; rules C1 to C13), the same rules as the kit's
   `phoenix-connector validate` and tested on the same cases
-  (`tests/connector-cases.json`). Until C4, `Ipk::check` refuses a package
-  with a service in its app (`service/package.json` or `service/sysbus/`) as
-  "a Synergy connector, which the catalog does not take yet", and the device's
-  Marketplace service and the simulator install one only in Developer Mode.
+  (`tests/connector-cases.json`). Since C4 the catalog takes a package
+  with a service in its app (`service/package.json` or `service/sysbus/`)
+  only as a connector that passes these rules (`Ipk::check` refuses a service
+  in any other package), and the device's Marketplace service and the
+  simulator install a third-party one only in Developer Mode.
   The layout differs from the draft above in one point: the service is in the
   app's `service/` folder (as `apps/dav` keeps it), not under
   `usr/palm/services/`, so the package is one app and C13's "files only under
@@ -521,9 +522,24 @@ Still open:
 | **C1** (built) | Extract `synckit` from `apps/dav` (SM phase 1c); `@phoenix/connector-kit`, CLI `new/validate/pack`, conformance suite; `docs/SYNERGY-SDK.md` with a FEEDS example | M | C0 |
 | **C2** (built, but Pixelfed albums) | **The Fediverse first** (the flagship): one account type for any ActivityPub server with the Mastodon client API (SM 3.1), on the kit. The handle finds the server (WebFinger, NodeInfo); the app registers itself with that server (`POST /api/v1/apps`) and signs in with OAuth in a browser sheet, its token in the key store: the parts of C3's OAuth service it needs, built here first. Then followed accounts on contact cards (avatar, profile, latest post), notifications as webOS notifications (Web Push to UnifiedPush later, C6; polled until then), direct mentions in Messaging's threads (labelled "not private"), Pixelfed albums in Photos, and the account as a share target in the share sheet (post a photo, a link, a memo) | M–L | C1 |
 | **C3** | The rest of the OAuth service (providers that need a registered client), then first-party connectors on the kit: Microsoft (SM 2a, 7c), DAV presets (iCloud, Fastmail, Nextcloud LF v2), CalDAV tasks for Tasks, Immich, gpodder, FreshRSS/Miniflux, Bluesky | L | C2; SYNERGY phase 0 for the device |
-| **C4** | `connector` kind in the backend: profile checks, review, privacy/terms fields; Developer Mode installs from the Marketplace | M | C1 |
+| **C4** (built, but the review fields) | `connector` kind in the backend: profile checks, review, privacy/terms fields; Developer Mode installs from the Marketplace | M | C1 |
 | **C5** | Connector trust tier + db8 permission rule; open submissions to everyone | L | APP-STORE A5, device |
 | **C6** | Push (UnifiedPush) and relay in the kit; per-account app visibility; account health | M | SM phase 5 |
+
+**As built in C4** (10 October 2026; `server/marketplace` README
+"Connector packages", SYNERGY-SDK.md "Publishing" and "Testing in the
+simulator"): the catalog takes a package with a service only when it
+passes the connector rules (`Connector::checkIpk`), lists it as kind
+`connector` with a signed release, and lists its account types from its
+template and its `catalog.json` (the fields of `accounts.json`'s entries,
+checked the same way). A development catalog (`MARKETPLACE_DEV`, serve.sh's)
+approves on upload; elsewhere a person reviews. `phoenix-connector publish`
+packs, validates and uploads (`--local`: the simulator's catalog). The
+Marketplace's Connections installs a connector through its install path:
+a third-party one in Developer Mode only (else it says why and links to
+Settings > Developer Mode), then Set up opens Accounts at its template.
+Still to do: the reviewers' privacy and terms fields and the "verified
+with provider" flag.
 
 **As built in C2** (the Fediverse account, `apps/fediverse`, template
 `com.webosphoenix.fediverse`, built in and listed in Connections, featured):
@@ -688,6 +704,29 @@ mesh come pre-installed at launch, and can be removed and installed again
 like any other; the rest (Jabber, Matrix, Bluesky, LinkedIn, the drives,
 Zoom, Teams, Google Chat with Google, ...) are installed by those who want
 them.
+
+*As built (10 October 2026):* `catalog/accounts.json` marks a connector
+package Phoenix comes with as `package: {builtin: false, preinstalled:
+true}` (checked: `preinstalled` only with `builtin: false`); the Fediverse is
+the first. The device's list is `/etc/palm/marketplace/preinstalled.json`
+(`apps/marketplace/service/etc/palm/marketplace/`): the image has each one
+among the apps the user may remove (`tools/install-rootfs.py`:
+`/media/cryptofs/apps`, from `runtime/rootfs.json` `preinstalled`), phoenix-sim
+and `tools/serve-rootfs.py` put it among their installed apps the first
+time, and the Marketplace's service counts it as installed from the
+`phoenix` catalog. Connections lists it Installed with Remove; Remove asks
+first, naming the accounts that go with it, deletes them, then removes the
+package, and it stays removed. Installing it again needs no Developer Mode:
+the service treats a `connector` entry as first-party only when its id is
+in the device's pre-installed list **and** it comes from a catalog the
+device ships with (a built-in source) whose key the device was given or the
+user checked, so its SHA-256 is signed by that key; the installer takes the
+`firstParty` flag only from the Marketplace's service (ctx.caller). The same
+package from a catalog the user added is a third party's: Developer Mode.
+The catalog publishes Phoenix's own packages as an admin's, in the
+`org.webosphoenix` and `com.webosphoenix` namespaces. Not yet: on a device
+a removed pre-installed connector's service stays registered (unused) in
+the system until devices run installed connectors' services (C5).
 
 **Slack** (the owner, 10 October 2026; a catalog package, not pre-installed):
 direct messages and channels as Messaging conversations, the workspace's

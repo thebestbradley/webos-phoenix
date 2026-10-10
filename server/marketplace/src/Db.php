@@ -43,7 +43,7 @@ final class Db
                 id $auto, name VARCHAR(80) NOT NULL, email VARCHAR(190) NOT NULL,
                 role VARCHAR(16) NOT NULL, token_hash CHAR(64) NOT NULL UNIQUE, created VARCHAR(32) NOT NULL)$engine",
             "CREATE TABLE IF NOT EXISTS apps (
-                id $key PRIMARY KEY, kind VARCHAR(8) NOT NULL, owner_id INTEGER NULL, title VARCHAR(80) NOT NULL,
+                id $key PRIMARY KEY, kind VARCHAR(16) NOT NULL, owner_id INTEGER NULL, title VARCHAR(80) NOT NULL,
                 developer_name VARCHAR(80) NOT NULL, developer_url VARCHAR(500) NOT NULL DEFAULT '',
                 summary VARCHAR(300) NOT NULL DEFAULT '', description $text, categories VARCHAR(500) NOT NULL DEFAULT '[]',
                 icon VARCHAR(1000) NOT NULL DEFAULT '', screenshots $text, license VARCHAR(80) NOT NULL DEFAULT '',
@@ -69,6 +69,11 @@ final class Db
         ];
         foreach ($tables as $sql) {
             $this->pdo->exec($sql);
+        }
+        // apps.kind was VARCHAR(8) before connector packages ("connector"; SQLite does not
+        // mind the width).
+        if ($this->driver === 'mysql') {
+            $this->pdo->exec('ALTER TABLE apps MODIFY kind VARCHAR(16) NOT NULL');
         }
     }
 

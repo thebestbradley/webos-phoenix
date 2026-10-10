@@ -42,6 +42,7 @@
         "/usr/palm/applications/org.webosphoenix.dropshare/": {"icon.png":[[2,"icon-128x128.png"],[4,"icon-256x256.png"],[8,"icon-512x512.png"]]},
         "/usr/palm/applications/org.webosphoenix.enyo2demo/": {"icon.png":[[2,"icon-128x128.png"],[4,"icon-256x256.png"],[8,"icon-512x512.png"]]},
         "/usr/palm/applications/org.webosphoenix.fediverse/": {"icon.png":[[2,"icon-128x128.png"],[4,"icon-256x256.png"],[8,"icon-512x512.png"]]},
+        "/usr/palm/applications/org.webosphoenix.fediverse/public/accounts/com.webosphoenix.fediverse/images/": {"fediverse-32x32.png":[2,3],"fediverse-48x48.png":[2,3]},
         "/usr/palm/applications/org.webosphoenix.files/": {"icon.png":[[2,"icon-128x128.png"],[4,"icon-256x256.png"],[8,"icon-512x512.png"]]},
         "/usr/palm/applications/org.webosphoenix.firstuse/": {"icon.png":[[2,"icon-128x128.png"],[4,"icon-256x256.png"],[8,"icon-512x512.png"]]},
         "/usr/palm/applications/org.webosphoenix.flashlight/": {"icon.png":[[2,"icon-128x128.png"],[4,"icon-256x256.png"],[8,"icon-512x512.png"]]},
@@ -88,7 +89,6 @@
         "/usr/palm/public/accounts/com.palm.palmprofile/images/": {"mypalm-32x32.png":[2,3],"mypalm-48x48.png":[2,3],"sms-32x32.png":[2,3],"sms-48x48.png":[2,3]},
         "/usr/palm/public/accounts/com.palm.pop/images/": {"popmail32.png":[2,3],"popmail48.png":[2,3]},
         "/usr/palm/public/accounts/com.webosphoenix.dav/images/": {"dav-32x32.png":[2,3],"dav-48x48.png":[2,3]},
-        "/usr/palm/public/accounts/com.webosphoenix.fediverse/images/": {"fediverse-32x32.png":[2,3],"fediverse-48x48.png":[2,3]},
         "/usr/share/phoenix/runtime/accounts/com.webosphoenix.xmpp/images/": {"xmpp-32x32.png":[2,3],"xmpp-48x48.png":[2,3]}
     }
 }

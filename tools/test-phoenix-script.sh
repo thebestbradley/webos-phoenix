@@ -263,6 +263,14 @@ phoenix --dry-run --no-assistant run --marketplace
 check "run --marketplace: the catalog's option goes to the simulator" '[ $status = 0 ]' 'has "would run: .*phoenix-sim --adaptive --marketplace$"'
 phoenix --dry-run --no-assistant run tablet --marketplace --scene cards
 check "run tablet --marketplace ARGS" 'has "would run: .*phoenix-sim --tablet --marketplace --scene cards$"'
+# The catalog starts with the simulator where PHP is (phoenix-sim does it); --no-marketplace: not this time.
+mock php 'exit 0'
+phoenix --dry-run --no-assistant run
+check "run: with PHP, the catalog starts with the simulator" '[ $status = 0 ]' "has \"Starting the simulator (adaptive), with the Marketplace's catalog\""
+phoenix --dry-run --no-assistant run --no-marketplace
+check "run --no-marketplace: goes to the simulator, which starts no catalog" \
+    'has "would run: .*phoenix-sim --adaptive --no-marketplace$"' "lacks \"with the Marketplace's catalog\""
+unmock php
 phoenix run --dry-run --no-assistant phone -- --help
 check "run phone -- ARGS" 'has "phoenix-sim --phone --help$"'
 phoenix phone
@@ -271,7 +279,8 @@ phoenix --bogus
 check "an unknown option: usage error" '[ $status = 2 ]' 'has "unknown command or option: --bogus"'
 phoenix --help
 check "--help" '[ $status = 0 ]' 'has "./phoenix run \[MODE\]"' 'has "--no-assistant"' 'has "--offline"' \
-    'has "./phoenix run --marketplace"' 'has "Services > Marketplace Catalog"' 'has "^Environment: PHOENIX_BUILD_DIR"' 'lacks "set -eu"'
+    'has "./phoenix run --marketplace"' 'has "./phoenix run --no-marketplace"' 'has "Start Catalog with the"' \
+    'has "^Environment: PHOENIX_BUILD_DIR"' 'lacks "set -eu"'
 
 # ---- macOS ---------------------------------------------------------------------------
 computer Darwin

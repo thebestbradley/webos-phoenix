@@ -108,10 +108,15 @@ check(array_keys($types) === ['com.webosphoenix.dav', 'com.webosphoenix.fedivers
       && $pub['accounts'] === 5 && !isset($types['com.palm.palmprofile']),
       'the index lists the account types Phoenix connects to (not the HP webOS profile)');
 $shape = ['templateId', 'title', 'provider', 'icon', 'summary', 'capabilities', 'protocols', 'auth', 'server', 'privacy', 'push', 'status', 'package', 'featured'];
+// Built in, but for the connector packages Phoenix comes with (pre-installed, removable: the Fediverse).
 $withSignUp = array_merge(array_slice($shape, 0, -1), ['signUp', 'featured']);
-check(!array_filter($types, fn ($t) => array_keys($t) !== (isset($t['signUp']) ? $withSignUp : $shape) || $t['package']['builtin'] !== true || array_keys($t['auth']) !== ['type', 'registration']
-                                       || array_keys($t['privacy']) !== ['dataGoesTo', 'e2ee', 'phoenixServers']),
-      '... each with the fields devices read, in order, built in, and nothing else (no iconFrom)');
+check(!array_filter($types, fn ($t) => array_keys($t) !== (isset($t['signUp']) ? $withSignUp : $shape) || array_keys($t['auth']) !== ['type', 'registration']
+                                       || array_keys($t['privacy']) !== ['dataGoesTo', 'e2ee', 'phoenixServers']
+                                       || $t['package'] !== ($t['package']['builtin'] ? ['id' => $t['package']['id'], 'builtin' => true]
+                                                             : ['id' => $t['package']['id'], 'builtin' => false, 'preinstalled' => true])),
+      '... each with the fields devices read, in order, built in or pre-installed, and nothing else (no iconFrom)');
+check(array_keys(array_filter($types, fn ($t) => $t['package']['builtin'])) === ['com.webosphoenix.dav', 'com.webosphoenix.webcal', 'com.palm.othermail', 'com.webosphoenix.xmpp'],
+      '... only the generic logins are built in (Contacts & Calendars, Email; the simulator\'s Jabber)');
 $dav = $types['com.webosphoenix.dav'];
 check($dav['title'] === 'CardDAV & CalDAV' && $dav['capabilities'] === [['capability' => 'CONTACTS', 'direction' => 'two-way'], ['capability' => 'CALENDAR', 'direction' => 'two-way']]
       && $dav['auth'] === ['type' => 'app-password', 'registration' => 'none'] && $dav['server'] === 'user'
@@ -121,8 +126,8 @@ check($dav['title'] === 'CardDAV & CalDAV' && $dav['capabilities'] === [['capabi
 $fedi = $types['com.webosphoenix.fediverse'];
 check($fedi['title'] === 'Fediverse' && $fedi['auth'] === ['type' => 'oauth', 'registration' => 'none'] && $fedi['server'] === 'discovered'
       && array_column($fedi['capabilities'], 'capability') === ['CONTACTS', 'MESSAGING', 'SOCIAL'] && $fedi['featured'] === true
-      && $fedi['package'] === ['id' => 'org.webosphoenix.fediverse', 'builtin' => true] && $fedi['privacy']['phoenixServers'] === 'none',
-      'Fediverse (phase C2): OAuth with the server found from the handle, built in, featured');
+      && $fedi['package'] === ['id' => 'org.webosphoenix.fediverse', 'builtin' => false, 'preinstalled' => true] && $fedi['privacy']['phoenixServers'] === 'none',
+      'Fediverse (phase C2): OAuth with the server found from the handle, a connector package Phoenix comes with (pre-installed), featured');
 check($fedi['signUp'] === 'https://joinmastodon.org/servers' && $types['com.webosphoenix.xmpp']['signUp'] === 'https://providers.xmpp.net/'
       && !isset($types['com.webosphoenix.dav']['signUp']) && !isset($types['com.webosphoenix.webcal']['signUp']) && !isset($types['com.palm.othermail']['signUp']),
       'sign-up links: the Fediverse\'s servers, XMPP\'s providers; none where the server is your own or no account is needed');
@@ -162,6 +167,8 @@ $badEntries = [
     'unknown direction' => fn ($e) => ['capabilities' => [['capability' => 'CONTACTS', 'direction' => 'sideways']]] + $e,
     'no capabilities' => fn ($e) => ['capabilities' => []] + $e,
     'a connector package' => fn ($e) => ['package' => ['id' => 'com.example.connector', 'builtin' => false]] + $e,
+    'pre-installed and built in' => fn ($e) => ['package' => ['id' => 'com.example.connector', 'builtin' => true, 'preinstalled' => true]] + $e,
+    'pre-installed not a boolean' => fn ($e) => ['package' => ['id' => 'com.example.connector', 'builtin' => false, 'preinstalled' => 'yes']] + $e,
     'an unknown field' => fn ($e) => $e + ['secret' => 1],
     'an icon outside icons/accounts' => fn ($e) => ['icon' => '../index.json'] + $e,
     'an icon from outside the checkout' => fn ($e) => ['iconFrom' => '../../etc/passwd'] + $e,
@@ -252,7 +259,9 @@ $bad = [
     ['native', ipk($tmp, 'com.example.c', '1.0', [], [], ['type' => 'pdk']), 'Only web apps'],
     ['our ids', ipk($tmp, 'org.webosphoenix.fake', '1.0'), 'Phoenix'],
     ['not a package', '<html>no</html>', 'Not an .ipk'],
-    ['a connector', ipk($tmp, 'com.example.d', '1.0', ['usr/palm/applications/com.example.d/service/package.json' => '{}']), 'background service'],
+    // A service makes it a connector, which must pass the connector rules (below).
+    ['a connector that fails the rules', ipk($tmp, 'com.example.d', '1.0', ['usr/palm/applications/com.example.d/service/package.json' => '{}']),
+     "the Marketplace's checks"],
 ];
 foreach ($bad as [$what, $bytes, $why]) {
     [$s, $r] = $call('POST', '/api/apps/packages', $bytes, $dev['token']);
@@ -468,6 +477,116 @@ check($local->get("$base/big.png", 1 << 20) === null && str_contains($local->ref
 check($local->get('http://10.0.0.1/i.png', 1 << 20) === null && $local->get('https://[fe80::1]/i.png', 1 << 20) === null,
       'SafeFetch local mode: still nothing internal besides 127.0.0.1');
 proc_terminate($site);
+
+// ---- Connector packages in the catalog (phase C4) ----------------------------------------------
+// A connector that passes the connector rules is taken (kind "connector"), reviewed as any
+// package here, and once approved it is in the index with its account types for Connections
+// (builtin false), from its template and its catalog.json.
+$details = ['templateId' => 'org.example.foo', 'summary' => 'Foo\'s contacts on this device.', 'protocols' => ['foo-rest'],
+            'auth' => ['type' => 'password', 'registration' => 'required'], 'server' => 'fixed',
+            'privacy' => ['dataGoesTo' => 'Foo\'s servers', 'e2ee' => false, 'phoenixServers' => 'none'], 'help' => 'https://foo.example.org/help',
+            'featured' => true];
+$connector = function (string $version, ?array $meta, array $more = []) use ($tmp, $connectorFiles): string {
+    $files = $more + $connectorFiles;
+    if ($meta !== null) {
+        $files['usr/palm/applications/org.example.foo/catalog.json'] = json_encode($meta);
+    }
+    return ipk($tmp, 'org.example.foo', $version, $files, [], ['vendor' => 'Example Ltd']);
+};
+[$s, $r] = $call('POST', '/api/apps/packages', $connector('1.0.0', null), $dev['token']);
+check($s === 400 && str_contains($r['error'], 'catalog.json'), 'a connector without catalog.json is refused, saying what it is for');
+[$s, $r] = $call('POST', '/api/apps/packages', $connector('1.0.0', ['accountTypes' => [['privacy' => ['e2ee' => 'no']] + $details]]), $dev['token']);
+check($s === 400 && str_contains($r['error'], 'catalog.json, org.example.foo: privacy'), "catalog.json is checked as catalog/accounts.json is ($r[error])");
+[$s, $r] = $call('POST', '/api/apps/packages', $connector('1.0.0', ['accountTypes' => [['templateId' => 'org.example.bar'] + $details]]), $dev['token']);
+check($s === 400 && str_contains($r['error'], 'nothing for the template org.example.foo'), 'catalog.json names each template');
+$badService = ['usr/palm/applications/org.example.foo/service/package.json' => json_encode(['name' => 'com.other.service.foo', 'main' => 'service.js'])];
+[$s, $r] = $call('POST', '/api/apps/packages', $connector('1.0.0', ['accountTypes' => [$details]], $badService), $dev['token']);
+check($s === 400 && str_contains($r['error'], "the Marketplace's checks") && str_contains($r['error'], 'C5 '), "a connector that breaks a rule is refused with the rule (C5)");
+[$s, $r] = $call('POST', '/api/apps/packages', $connector('1.0.0', ['accountTypes' => [$details]]), $dev['token']);
+check($s === 200 && $r['app']['kind'] === 'connector' && $r['release']['state'] === 'pending' && !isset($r['publish']),
+      'a connector that passes is taken, kind "connector", and waits for review (a catalog that is not a development one)' . ($s === 200 ? '' : " ($r[error])"));
+$crid = (int) $r['release']['id'];
+[$s, $r] = $call('POST', '/api/apps/packages', ipk($tmp, 'org.example.foo', '1.1.0'), $dev['token']);
+check($s === 400 && str_contains($r['error'], 'listed as a connector'), 'an app cannot take over a connector\'s id');
+[$s, $r] = $call('POST', "/api/admin/releases/$crid/approve", [], $admin);
+$idx = json_decode(file_get_contents("$tmp/data/public/v1/index.json"), true);
+$entry = array_values(array_filter($idx['apps'], fn ($a) => $a['id'] === 'org.example.foo'))[0] ?? null;
+check($s === 200 && $entry && $entry['kind'] === 'connector' && $entry['version'] === '1.0.0'
+      && $entry['release']['sha256'] === hash_file('sha256', "$tmp/data/public/v1/packages/org.example.foo_1.0.0_all.ipk"),
+      'approved: the connector is in the index (kind "connector", its release signed as an app\'s)');
+$types = array_column($idx['accounts'], null, 'templateId');
+$foo = $types['org.example.foo'] ?? null;
+check($foo && $foo['title'] === 'Foo' && $foo['provider'] === 'Example Ltd', 'its account type: the template\'s name, the app\'s vendor');
+check($foo && $foo['package'] === ['id' => 'org.example.foo', 'builtin' => false] && $foo['capabilities'] === [['capability' => 'CONTACTS']]
+      && $foo['auth'] === ['type' => 'password', 'registration' => 'required'] && $foo['server'] === 'fixed' && $foo['status'] === 'experimental'
+      && $foo['push'] === 'poll' && $foo['help'] === 'https://foo.example.org/help' && $foo['featured'] === false
+      && $foo['privacy']['dataGoesTo'] === 'Foo\'s servers' && $foo['summary'] === 'Foo\'s contacts on this device.',
+      '... not built in, the template\'s capabilities, the developer\'s details, experimental by default, never featured by its developer');
+$icon = "$tmp/data/public/v1/icons/accounts/org.example.foo.png";
+check($foo && $foo['icon'] === 'http://127.0.0.1:9999/v1/icons/accounts/org.example.foo.png' && is_file($icon)
+      && \Phoenix\Marketplace\Catalog::imageType((string) file_get_contents($icon)) === 'png', '... and the template\'s icon, published with the catalog');
+check(array_key_last($types) === 'org.example.foo' && isset($types['com.webosphoenix.dav']), '... after the built-in account types');
+// A development catalog (MARKETPLACE_DEV: serve.sh's, the simulator's) approves and publishes an upload at once.
+putenv('MARKETPLACE_DEV=1');
+$devCfg = marketplace_config();
+putenv('MARKETPLACE_DEV');
+check($devCfg['dev'] === true && marketplace_config()['dev'] === false, 'MARKETPLACE_DEV=1 makes a development catalog; nothing else does');
+$devApp = new App(['data' => "$tmp/dev", 'dsn' => "sqlite:$tmp/dev/marketplace.sqlite"] + $devCfg);
+$devApp->catalog->publish();
+$localDev = $devApp->api->createAccount('Local developer', 'developer@localhost.localdomain', 'developer');
+[$s, $r] = $devApp->api->handle('POST', '/api/apps/packages', $connector('1.0.0', ['accountTypes' => [$details]]), 'Bearer ' . $localDev['token']);
+$devIdx = json_decode((string) file_get_contents("$tmp/dev/public/v1/index.json"), true);
+check($s === 200 && $r['release']['state'] === 'approved' && $r['app']['status'] === 'listed' && ($r['publish']['build'] ?? 0) === 2
+      && in_array('org.example.foo', array_column($devIdx['accounts'], 'templateId'), true),
+      'a development catalog: the connector is approved and published on upload, and Connections lists it');
+[$s, $r] = $devApp->api->handle('POST', '/api/apps/packages', $connector('1.0.0', ['accountTypes' => [$details]], $badService), 'Bearer ' . $localDev['token']);
+check($s === 400 && str_contains($r['error'], 'C5 '), '... and still checks it against the connector rules');
+// The kit's own example, as serve.sh seeds it: its catalog.json passes.
+$feedsDir = dirname(__DIR__, 3) . '/apps/shared/connector-kit/examples/feeds';
+$feedsFiles = [];
+$it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($feedsDir, FilesystemIterator::SKIP_DOTS));
+foreach ($it as $f) {
+    $rel = substr($f->getPathname(), strlen($feedsDir) + 1);
+    if (!preg_match('#(^|/)(test|node_modules)/#', $rel)) {
+        $feedsFiles["usr/palm/applications/org.example.feeds/$rel"] = (string) file_get_contents($f->getPathname());
+    }
+}
+$feedsInfo = json_decode($feedsFiles['usr/palm/applications/org.example.feeds/appinfo.json'], true);
+$feeds = ipk($tmp, 'org.example.feeds', $feedsInfo['version'], $feedsFiles, [], $feedsInfo);
+[$s, $r] = $devApp->api->handle('POST', '/api/apps/packages', $feeds, 'Bearer ' . $localDev['token']);
+$devIdx = json_decode((string) file_get_contents("$tmp/dev/public/v1/index.json"), true);
+$feedType = array_column($devIdx['accounts'], null, 'templateId')['org.example.feeds'] ?? null;
+check($s === 200 && $feedType && $feedType['title'] === 'News Feed (example)' && $feedType['capabilities'] === [['capability' => 'FEEDS', 'direction' => 'read-only']]
+      && $feedType['status'] === 'experimental' && $feedType['package']['builtin'] === false,
+      'the News Feed example passes, its FEEDS capability read-only (readOnlyData)' . ($s === 200 ? '' : " ($r[error])"));
+
+// Phoenix's own connector packages (the ones it comes with, pre-installed): an admin uploads
+// them (bin/marketplace.php upload --phoenix; serve.sh does it), in Phoenix's namespaces.
+$appFiles = function (string $dir, string $id): array {
+    $out = [];
+    $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS));
+    foreach ($it as $f) {
+        $rel = substr($f->getPathname(), strlen($dir) + 1);
+        if (!preg_match('#(^|/)(test|node_modules)/#', $rel)) {
+            $out["usr/palm/applications/$id/$rel"] = (string) file_get_contents($f->getPathname());
+        }
+    }
+    return $out;
+};
+$fediFiles = $appFiles(dirname(__DIR__, 3) . '/apps/fediverse', 'org.webosphoenix.fediverse');
+$fediInfo = json_decode($fediFiles['usr/palm/applications/org.webosphoenix.fediverse/appinfo.json'], true);
+$fediIpk = ipk($tmp, 'org.webosphoenix.fediverse', $fediInfo['version'], $fediFiles, [], $fediInfo);
+[$s, $r] = $devApp->api->handle('POST', '/api/apps/packages', $fediIpk, 'Bearer ' . $localDev['token']);
+check($s === 400 && str_contains($r['error'], "Phoenix's own"), 'a developer cannot upload Phoenix\'s own connector');
+$devAdmin = $devApp->api->createAccount('Admin', 'admin@localhost.localdomain', 'admin');
+[$s, $r] = $devApp->api->handle('POST', '/api/apps/packages', $fediIpk, 'Bearer ' . $devAdmin['token']);
+$devIdx = json_decode((string) file_get_contents("$tmp/dev/public/v1/index.json"), true);
+$fediApp = array_values(array_filter($devIdx['apps'], fn ($a) => $a['id'] === 'org.webosphoenix.fediverse'))[0] ?? null;
+$fediTypes = array_values(array_filter($devIdx['accounts'], fn ($t) => $t['templateId'] === 'com.webosphoenix.fediverse'));
+check($s === 200 && $fediApp && $fediApp['kind'] === 'connector' && count($fediTypes) === 1
+      && $fediTypes[0]['package'] === ['id' => 'org.webosphoenix.fediverse', 'builtin' => false, 'preinstalled' => true] && $fediTypes[0]['featured'] === true,
+      'the Fediverse, Phoenix\'s own (an admin\'s upload, its namespaces): in the index to install again, its account type once, '
+      . 'catalog/accounts.json\'s (pre-installed, featured)' . ($s === 200 ? '' : " ($r[error])"));
 
 // ---- The system update feed (served at /updates/, published by the admin API) ----------------
 $bundle = str_repeat("\x00\x01raucb", 64);

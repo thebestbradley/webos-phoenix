@@ -8,6 +8,8 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHostAddress>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QProcessEnvironment>
 #include <QStandardPaths>
 #include <QTcpSocket>
@@ -67,6 +69,22 @@ QString SimMarketplace::logFile() const
 {
     const QString data = qEnvironmentVariable("MARKETPLACE_DATA", QDir(m_dir).filePath(QStringLiteral("data")));
     return QDir(data).filePath(QStringLiteral("simulator.log"));
+}
+
+QString SimMarketplace::key() const
+{
+    if (m_state != Running)
+        return {};
+    QFile f(QDir(QFileInfo(logFile()).absolutePath()).filePath(QStringLiteral("public/v1/key.json")));
+    if (!f.open(QIODevice::ReadOnly))
+        return {};
+    const QString k = QJsonDocument::fromJson(f.readAll()).object().value(QStringLiteral("key")).toString();
+    return QByteArray::fromBase64(k.toLatin1()).size() == 32 ? k : QString();
+}
+
+bool SimMarketplace::phpAvailable()
+{
+    return !QStandardPaths::findExecutable(QStringLiteral("php")).isEmpty();
 }
 
 void SimMarketplace::setState(State state, const QString &error)

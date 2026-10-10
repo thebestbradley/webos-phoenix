@@ -61,6 +61,10 @@ do_install() {
     ${PYTHON} ${S}/tools/sounds-to-pcm.py --check ${D}${prefix}/palm/sounds ${D}${datadir}/phoenix/sounds
 }
 
+# The connector packages Phoenix comes with (the Fediverse; runtime/rootfs.json
+# "preinstalled") are installed apps the user may remove, in
+# /media/cryptofs/apps, with the Marketplace's list of them in
+# /etc/palm/marketplace/preinstalled.json (docs/SYNERGY-CONNECTORS.md 7).
 # Everything install-rootfs.py installs (tools/check-image.py checks this
 # list against it: a path left out stops do_package, installed-vs-shipped):
 # the apps, frameworks, services, account templates and sounds under
@@ -69,6 +73,7 @@ do_install() {
 # role and permissions); their /etc/palm configuration (db8 kinds, backup
 # registrations, the update, Marketplace and Hardware sources).
 FILES:${PN} = " \
+    /media/cryptofs/apps \
     /media/internal/ringtones \
     /media/internal/samples \
     ${prefix}/palm \
