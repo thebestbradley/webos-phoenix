@@ -30,6 +30,9 @@ Item {
     property real flickOffset: 0
     // The app is still loading: CardLoading covers it.
     readonly property bool loading: window !== null && window.ready === false
+    // The card has been prepared (a new card is not for its first
+    // cardPrepareAddDuration): its loading screen shows only from then.
+    property bool prepared: true
     // The app's launcher icon, for the loading card.
     property url icon: ""
     // Its bigger icon (appinfo.json "splashicon"), if any.
@@ -180,7 +183,7 @@ Item {
             CardLoading {
                 anchors.fill: parent
                 z: 1
-                active: card.loading
+                active: card.loading && card.prepared
                 icon: card.icon
                 largeIcon: card.largeIcon
                 splashIcon: card.splashIcon

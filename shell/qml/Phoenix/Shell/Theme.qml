@@ -456,14 +456,18 @@ QtObject {
 
     readonly property int cardLaunchDuration: motion(400)
     readonly property int cardAddMaxDuration: motion(750)                    // conf/lunaAnimations.conf:53
-    // conf/lunaAnimations.conf cardPrepareAddDuration: the original waited
-    // this long before preparing a new card (CardWindow::delayPrepare).
-    // Here: the pause between the card in front zooming out and the new
-    // card rising, so the two moves do not run into each other.
+    // conf/lunaAnimations.conf cardPrepareAddDuration: how long a new card
+    // waits before it is prepared (CardWindow::delayPrepare,
+    // CardWindow.cpp:1395-1400; CardView.focusLaunched).
     readonly property int cardPrepareAddDuration: motion(150)
     readonly property int cardSlideDuration: motion(300)                     // curve 10 = OutQuart
     readonly property int cardMaximizeDuration: motion(300)                  // curve 10 = OutQuart
     readonly property int cardMinimizeDuration: motion(300)                  // minimize is a cardSlide
+    // The stack in front's own cards to their places in the fan, on a
+    // minimize and on each move of a finger through the fan:
+    // CardGroup::animateOpen(200, QEasingCurve::OutCubic) in slideAllGroups
+    // (CardWindowManager.cpp:2495), a fixed value, not in the conf.
+    readonly property int cardFanDuration: motion(200)
     readonly property int cardDeleteDuration: motion(300)                    // curve 6 = OutCubic
     // Loading card (CardLoading.cpp, lunaAnimations.conf:55-60, Settings.cpp:216).
     readonly property int cardLoadingTimeBeforePulse: 900

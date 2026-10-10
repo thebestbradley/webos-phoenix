@@ -101,21 +101,105 @@ Item {
             compare(windows.cards.count, 1);
         }
 
+        // A new card is not there for its first cardPrepareAddDuration
+        // (150 ms, CardWindow::delayPrepare); then it waits full size below
+        // the screen and, its app being ready, rises at once.
         function test_newCardRisesFromBelow() {
+            var cv = shell.cardView;
+            var started = Date.now();
             var uid = shell.launch("org.webosphoenix.email");
-            wait(60);
-            var card = shell.cardView.cardItem(uid);
+            var card = cv.cardItem(uid);
+            tryCompare(cv, "waitingUid", uid, 100, "in its prepare step");
+            verify(!card.visible, "not shown yet");
+            compare(cv.groupCount, 0, "not in the stacks yet");
+            var shownAfter = -1, shownAt = 0, shownScale = 0;
+            var watch = function () {
+                if (card.visible && shownAfter < 0) {
+                    shownAfter = Date.now() - started;
+                    shownAt = card.centerY;
+                    shownScale = card.cardScale;
+                }
+            };
+            card.visibleChanged.connect(watch);
+            tryVerify(function () { return shownAfter >= 0; }, 2000, "shown once prepared");
+            card.visibleChanged.disconnect(watch);
+            // Qt's coarse timers may fire 5 % early.
+            verify(shownAfter >= Theme.cardPrepareAddDuration * 0.95, "after the prepare step (" + shownAfter + " ms)");
             // Full size, below its maximized place, coming up.
-            compare(card.cardScale, 1);
-            verify(card.centerY > shell.cardView.maximizedCenterY + 20);
+            compare(shownScale, 1);
+            verify(shownAt > cv.maximizedCenterY + 20, "below the screen: " + shownAt);
             tryVerify(function() { return shell.maximized; }, 2000);
-            compare(shell.cardView.risingUid, "");
-            fuzzyCompare(card.centerY, shell.cardView.maximizedCenterY, 0.5);
+            compare(cv.risingUid, "");
+            fuzzyCompare(card.centerY, cv.maximizedCenterY, 0.5);
         }
 
-        // Launching from a maximized app: that card zooms out to card view
-        // while the new one waits below, then rises (prepareAddWindowSibling:
-        // slideAllGroups, then maximizeActiveWindow).
+        // Launched from a maximized app: for the prepare step the card in
+        // front stays maximized and the new card's loading screen is not on;
+        // an app ready by then never shows it (loadingTimeout: stop the
+        // loading overlay and addWindow at once, CardWindow.cpp:1471-1477).
+        function test_prepareStepLeavesTheCardInFront() {
+            var cv = shell.cardView;
+            var a = shell.launch("org.webosphoenix.email");
+            tryVerify(function() { return shell.maximized; }, 2000);
+            var moved = 0;
+            var watch = function () { if (cv.waitingUid !== "" && cv.maximizeProgress !== 1) moved++; };
+            cv.maximizeProgressChanged.connect(watch);
+            var b = shell.launch("org.webosphoenix.calendar");
+            var bc = cv.cardItem(b);
+            var everLoading = false;
+            var watchLoading = function () { if (bc.prepared && bc.loading) everLoading = true; };
+            bc.preparedChanged.connect(watchLoading);
+            tryCompare(cv, "waitingUid", b, 100);
+            compare(cv.currentUid, a, "the card in front is still the one in front");
+            verify(cv.maximized);
+            tryCompare(cv, "waitingUid", "", 1000);
+            cv.maximizeProgressChanged.disconnect(watch);
+            bc.preparedChanged.disconnect(watchLoading);
+            compare(moved, 0, "nothing moved while the new card waited");
+            verify(!everLoading, "ready in time: no loading screen");
+            tryVerify(function() { return shell.maximized && cv.currentUid === b; }, 3000);
+        }
+
+        // A slow app: its loading screen comes on when the card is prepared,
+        // not before (startLoadingOverlay, CardWindow.cpp:1486-1490).
+        function test_loadingScreenFromThePrepare() {
+            var cv = shell.cardView;
+            var a = shell.launch("org.webosphoenix.email");
+            tryVerify(function() { return shell.maximized; }, 2000);
+            var b = shell.launch("org.webosphoenix.calendar");
+            windows.windowFor(b).ready = false;
+            var bc = cv.cardItem(b);
+            tryCompare(cv, "waitingUid", b, 100);
+            verify(bc.loading);
+            compare(bc.prepared, false);
+            tryCompare(bc, "prepared", true, 1000);
+            compare(cv.risingUid, b, "waits below the screen, loading");
+            windows.windowFor(b).ready = true;
+            tryVerify(function() { return shell.maximized && cv.currentUid === b; }, 3000);
+        }
+
+        // An app that closes its window before it is shown: gone, nothing
+        // moves.
+        function test_closedInItsPrepareStep() {
+            var cv = shell.cardView;
+            var a = shell.launch("org.webosphoenix.email");
+            tryVerify(function() { return shell.maximized; }, 2000);
+            var b = shell.launch("org.webosphoenix.calendar");
+            tryCompare(cv, "waitingUid", b, 100);
+            windows.cardCloseRequested(b);
+            compare(cv.waitingUid, "");
+            compare(windows.cardIndex(b), -1);
+            wait(Theme.cardPrepareAddDuration + 100);
+            verify(shell.maximized);
+            compare(cv.currentUid, a);
+        }
+
+        // Launching from a maximized app: once the new card is prepared,
+        // that card zooms out to card view while the new one waits below,
+        // and the new one rises as soon as its app is ready, the zoom out
+        // still under way if it already is (prepareAddWindowSibling:
+        // slideAllGroups, then PreparingState::windowAdded ->
+        // maximizeActiveWindow).
         function test_launchFromAppZoomsOutThenRises() {
             var a = shell.launch("org.webosphoenix.email");
             tryVerify(function() { return shell.maximized; }, 2000);
@@ -1721,7 +1805,7 @@ Item {
             var uid = windows.launch("org.webosphoenix.email", "");
             windows.windowFor(uid).ready = false;
             shell.cardView.focusLaunched(uid);
-            verify(shell.cardView.risingUid === uid);
+            tryVerify(function () { return shell.cardView.risingUid === uid; }, 1000);
             shell.gestureUp();
             tryCompare(shell, "launcherOpen", true, 2000);
             compare(shell.cardView.risingUid, "");
