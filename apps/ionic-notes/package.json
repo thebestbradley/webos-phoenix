@@ -15,7 +15,6 @@
     "@ionic/react": "^9.0.5",
     "@ionic/react-router": "^9.0.5",
     "@phoenix/capacitor": "*",
-    "@phoenix/luna": "*",
     "@phoenix/notes-core": "*",
     "@phoenix/react": "*",
     "@phoenix/sdk": "*",
