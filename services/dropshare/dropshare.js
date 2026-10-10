@@ -255,9 +255,18 @@ function createDropShare(opts) {
             var ascii = e.name.replace(/[^\x20-\x7e]/g, "_").replace(/"/g, "_");
             res.writeHead(200, { "Content-Type": e.type, "Content-Length": e.size, "Cache-Control": "no-store", "Connection": "close",
                                  "Content-Disposition": "attachment; filename=\"" + ascii + "\"; filename*=UTF-8''" + encodeURIComponent(e.name) });
-            var stream = fs.createReadStream(e.path);
+            var stream = fs.createReadStream(e.path), written = 0;
+            stream.on("data", function (chunk) { written += chunk.length; });
             stream.pipe(res);
-            res.on("finish", function () {
+            // A download counts once every byte went out: on "finish", or on
+            // "close" when the receiver hung up as soon as it had Content-Length
+            // bytes (Connection: close), which can come before the pipe calls
+            // end(): then every byte was written and none is left buffered,
+            // what "finish" means, without "finish".
+            var counted = false;
+            function sent() {
+                if (counted) return;
+                counted = true;
                 e.downloads++;
                 changed(s);
                 // Every file went: the session is done.
@@ -267,7 +276,9 @@ function createDropShare(opts) {
                     if (session === s) { session = null; last = s; }
                     setState(s, "done");
                 }
-            });
+            }
+            res.on("finish", sent);
+            res.on("close", function () { if (written === e.size && res.writableLength === 0) sent(); });
             stream.on("error", function () { res.destroy(); });
             return;
         }
