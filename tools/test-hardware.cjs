@@ -28,6 +28,14 @@ const net = require("net");
 const os = require("os");
 const path = require("path");
 
+// A response read to its end: one left unread, its socket closed under it,
+// aborts Node's fetch (undici: assert(!this.paused), seen in CI).
+async function drained(pending) {
+    const r = await pending;
+    try { await r.arrayBuffer(); } catch (e) { /* the status is what counts */ }
+    return r;
+}
+
 function loadPlaywright() {
     try { return require("playwright"); } catch (e) { /* global install */ }
     return require(path.join(execSync("npm root -g").toString().trim(), "playwright"));
@@ -55,7 +63,7 @@ function freePort() {
 }
 async function waitFor(url) {
     for (let i = 0; ; i++) {
-        try { await fetch(url); return; } catch (e) { /* not up */ }
+        try { await drained(fetch(url)); return; } catch (e) { /* not up */ }
         if (i > 100) throw new Error("did not start: " + url);
         await new Promise((r) => setTimeout(r, 100));
     }

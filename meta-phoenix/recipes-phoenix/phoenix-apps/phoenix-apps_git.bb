@@ -29,14 +29,27 @@ S = "${WORKDIR}/git"
 
 inherit allarch python3native
 
+# The system sounds' raw PCM twins (below): mpg123 decodes the MP3s.
+DEPENDS = "mpg123-native"
+
 do_configure[noexec] = "1"
 do_compile[noexec] = "1"
 
 do_install() {
     ${PYTHON} ${S}/tools/install-rootfs.py ${D}
+    # OSE's audiod plays raw PCM only (no MP3, no WAV header): every system
+    # sound, ringtone and app sound gets "<file>.pcm", 16-bit 44.1 kHz
+    # stereo, which the shell plays (tools/sounds-to-pcm.py,
+    # LsmWindowSource.playSound).
+    MPG123=${STAGING_BINDIR_NATIVE}/mpg123 ${PYTHON} ${S}/tools/sounds-to-pcm.py \
+        ${D}${prefix}/palm/sounds ${D}${datadir}/phoenix/sounds \
+        ${D}${prefix}/palm/applications ${D}/media/internal/ringtones
+    ${PYTHON} ${S}/tools/sounds-to-pcm.py --check ${D}${prefix}/palm/sounds ${D}${datadir}/phoenix/sounds
 }
 
 FILES:${PN} = " \
+    /media/internal/ringtones \
+    /media/internal/samples \
     ${prefix}/palm/applications \
     ${prefix}/palm/frameworks \
     ${prefix}/palm/services \

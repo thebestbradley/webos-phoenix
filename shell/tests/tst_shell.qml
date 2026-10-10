@@ -238,15 +238,21 @@ Item {
             var b = shell.launch("org.webosphoenix.calendar");
             windows.windowFor(b).ready = false;
             var card = shell.cardView.cardItem(b);
-            wait(Theme.cardAddMaxDuration + Theme.cardSlideDuration + 200);
+            // Long enough for it to have risen, had it not waited for the
+            // app (the prepare step, then the most an add may take).
+            wait(Theme.cardPrepareAddDuration + Theme.cardAddMaxDuration + Theme.cardSlideDuration + 200);
             verify(!shell.maximized);
             compare(shell.cardView.risingUid, "");
             compare(shell.cardView.loadingUid, b);
             compare(shell.cardView.currentUid, b);
             verify(card.loading);
             fuzzyCompare(card.cardScale, shell.cardView.activeScale, 0.001);
-            fuzzyCompare(card.scale, shell.cardView.activeScale, 0.01);
-            fuzzyCompare(card.centerY, shell.cardView.cardOriginY, 1);
+            // Its place in card view, once the layout's animation has run
+            // (the scale is animated: a fixed wait checked it mid-way on a
+            // slow machine, CI's macOS runner).
+            tryVerify(function() { return Math.abs(card.scale - shell.cardView.activeScale) < 0.01; }, 3000, "the card's scale settles");
+            tryVerify(function() { return Math.abs(card.centerY - shell.cardView.cardOriginY) < 1; }, 3000, "the card settles in its place");
+            verify(!shell.maximized);
             windows.windowFor(b).ready = true;
             tryVerify(function() { return shell.maximized && shell.cardView.currentUid === b; }, 2000);
         }
@@ -498,6 +504,27 @@ Item {
             shell.cardView.maximizeProgress = 0;
             mouseClick(shell, 30, Theme.statusBarHeight / 2);
             verify(!app.appMenuOpen);
+        }
+
+        // A popup alert that is a page (luna-systemui's): Tab and the arrows
+        // ring its buttons and Enter presses one, through the runtime's
+        // keyNav, whatever has the focus (GAPS V8 (3)).
+        function test_webPopupAlertKeyboard() {
+            // A stand-in for its WebAppWindow: what the shell runs in it.
+            var page = Qt.createQmlObject("import QtQuick; Item { property var calls: []; function runScript(js) { calls = calls.concat([js]); } }", root);
+            windows._windows["alert-web"] = page;
+            windows.alerts.append({ key: "alert-web", appId: "com.palm.systemui", height: 150 });
+            tryCompare(shell.notifications, "alertShown", true, 2000);
+            keyClick(Qt.Key_Tab);
+            keyClick(Qt.Key_Up);
+            keyClick(Qt.Key_Return);
+            var navs = page.calls.filter(function (j) { return j.indexOf("keyNav") >= 0; }).map(function (j) { return /keyNav\("(\w+)"/.exec(j)[1]; });
+            compare(navs, ["next", "previous", "press"]);
+            windows.alerts.clear();
+            delete windows._windows["alert-web"];
+            page.destroy();
+            shell.notifications.bannerActive = false;
+            tryCompare(shell.notifications, "alertShown", false, 2000);
         }
 
         // A popup alert takes the negative space (phones), above the bar.
@@ -1330,6 +1357,66 @@ Item {
             sys.airplaneMode = false;
             sys.applyAppStatus({ callForwarding: false });
             tryVerify(function() { return !fwd.visible; }, 2500);
+        }
+
+        // A modem's indicators and the radios' in-between states
+        // (StatusBarInfo.cpp:195-262: right to left from the battery RSSI,
+        // WAN, Bluetooth, Wi-Fi, TTY, HAC, call forward, roaming).
+        function test_modemAndRadioIndicators() {
+            var sys = shell.system;
+            var wan = findChild(shell, "wanIcon"), tty = findChild(shell, "ttyIcon"), hac = findChild(shell, "hacIcon");
+            var roam = findChild(shell, "roamingIcon"), wifi = findChild(shell, "wifiIcon"), bt = findChild(shell, "bluetoothIcon");
+            verify(!wan.visible && !tty.visible && !hac.visible && !roam.visible);
+            sys.wanType = "hsdpa";
+            sys.tty = true;
+            sys.hac = true;
+            sys.roaming = true;
+            tryCompare(wan, "progress", 1, 2500);
+            tryCompare(roam, "progress", 1, 2500);
+            tryCompare(tty, "progress", 1, 2500);
+            tryCompare(hac, "progress", 1, 2500);
+            verify(/statusBar\/network-3g-connected\.png$/.test(wan.source));
+            verify(/statusBar\/network-roaming\.png$/.test(roam.source));
+            // The original's order, left to right here.
+            verify(roam.x < hac.x && hac.x < tty.x && tty.x < wifi.x && wifi.x < bt.x || !bt.visible);
+            verify(wan.x > wifi.x);
+            // Dormant EV-DO; EV-DO as 3G when the carrier says so; dormant
+            // HSDPA has no icon (getWanIndex).
+            sys.wanType = "evdo";
+            sys.wanDormant = true;
+            verify(/network-evdo-dormant\.png$/.test(wan.source));
+            sys.show3GForEvdo = true;
+            verify(/network-3g-dormant\.png$/.test(wan.source));
+            sys.wanType = "hsdpa";
+            tryVerify(function() { return !wan.visible; }, 2500);
+            // Airplane mode takes the WAN and roaming icons with the radio.
+            sys.wanType = "1x";
+            sys.wanDormant = false;
+            tryCompare(wan, "progress", 1, 2500);
+            sys.airplaneMode = true;
+            tryVerify(function() { return !wan.visible && !roam.visible; }, 2500);
+            sys.airplaneMode = false;
+            sys.wanType = "";
+            sys.tty = false;
+            sys.hac = false;
+            sys.roaming = false;
+            sys.show3GForEvdo = false;
+            tryVerify(function() { return !wan.visible && !tty.visible && !hac.visible && !roam.visible; }, 2500);
+            // Wi-Fi joining a network: wifi-connecting.png; Bluetooth
+            // connecting, then connected.
+            var nets = sys.wifiNetworks, devs = sys.bluetoothDevices, bars = sys.wifiBars, on = sys.bluetoothOn;
+            sys.wifiBars = 0;
+            sys.wifiNetworks = [{ ssid: "Phoenix", bars: 3, security: "psk", known: true, state: "connecting" }];
+            verify(/statusBar\/wifi-connecting\.png$/.test(wifi.source));
+            sys.bluetoothOn = true;
+            sys.bluetoothDevices = [{ name: "Car Kit", address: "00:1d", state: "connecting" }];
+            verify(/statusBar\/bluetooth-connecting\.png$/.test(bt.source));
+            sys.bluetoothDevices = [{ name: "Car Kit", address: "00:1d", state: "connected" }];
+            verify(/statusBar\/bluetooth-connected\.png$/.test(bt.source));
+            sys.bluetoothDevices = devs;
+            sys.bluetoothOn = on;
+            sys.wifiNetworks = nets;
+            sys.wifiBars = bars;
         }
 
         // Back: the dashboard, then the menu, then the launcher

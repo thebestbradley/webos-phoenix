@@ -49,6 +49,7 @@ struct DeviceConfig
 {
     std::string backlight;          // a name under /sys/class/backlight
     std::string lightSensor;        // an IIO device's directory name ("iio:device0")
+    std::string accelerometer;      // the same, for the orientation sensor
     // The ringer switch: an EV_SW or EV_KEY code, and its value when the
     // ringer is silent. -1: the device has none (the ringer is always on).
     // The one thing here that cannot be found by looking: Linux has no
@@ -127,6 +128,29 @@ private:
     std::string m_raw;      // in_illuminance_raw
     double m_scale = 1;
     double m_offset = 0;
+};
+
+// The accelerometer, through IIO (Documentation/ABI/testing/sysfs-bus-iio):
+// in_accel_{x,y,z}_raw, scaled by in_accel_scale (or each axis's
+// in_accel_{x,y,z}_scale) and offset, turned into the device's axes by the
+// driver's mount matrix (in_accel_mount_matrix or mount_matrix, "a, b, c;
+// d, e, f; g, h, i", Documentation/devicetree/bindings/iio/mount-matrix.txt)
+// when it has one. Not iio-sensor-proxy (GPL-3.0, docs/LEGAL.md), and OSE
+// has no sensor service of its own (meta-webosose v2.28 has none).
+class Accelerometer
+{
+public:
+    Accelerometer(const std::string &root, const std::string &name = std::string());
+    bool available() const { return !m_dir.empty(); }
+    const std::string &dir() const { return m_dir; }
+    // m/s^2 in the device's axes; false when it cannot be read.
+    bool read(double *x, double *y, double *z) const;
+
+private:
+    std::string m_dir;
+    double m_scale[3] = { 1, 1, 1 };
+    double m_offset[3] = { 0, 0, 0 };
+    double m_mount[9] = { 1, 0, 0, 0, 1, 0, 0, 0, 1 };
 };
 
 // A kernel bitmap of codes (EVIOCGBIT, or sysfs's capabilities files).
@@ -240,14 +264,15 @@ public:
     std::unique_ptr<Backlight> backlight;
     std::unique_ptr<Vibrator> vibrator;
     std::unique_ptr<LightSensor> lightSensor;
+    std::unique_ptr<Accelerometer> accelerometer;
     std::unique_ptr<InputDevices> input;
 
     struct Changes
     {
-        bool backlight = false, vibrator = false, lightSensor = false;
+        bool backlight = false, vibrator = false, lightSensor = false, accelerometer = false;
         InputDevices::Change input;
         std::vector<std::string> log;     // a line per change
-        bool any() const { return backlight || vibrator || lightSensor || input.any(); }
+        bool any() const { return backlight || vibrator || lightSensor || accelerometer || input.any(); }
     };
     // Look again; replace what changed (a part that is the same is kept,
     // with its state). What was there and is gone becomes nullptr.

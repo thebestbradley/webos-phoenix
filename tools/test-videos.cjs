@@ -19,6 +19,14 @@ const { spawn, execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
+// A response read to its end: one left unread, its socket closed under it,
+// aborts Node's fetch (undici: assert(!this.paused), seen in CI).
+async function drained(pending) {
+    const r = await pending;
+    try { await r.arrayBuffer(); } catch (e) { /* the status is what counts */ }
+    return r;
+}
+
 function loadPlaywright() {
     try { return require("playwright"); } catch (e) { /* global install */ }
     return require(path.join(execSync("npm root -g").toString().trim(), "playwright"));
@@ -47,7 +55,7 @@ function check(cond, what) {
 async function waitForServer(url, ms) {
     const until = Date.now() + ms;
     while (Date.now() < until) {
-        try { if ((await fetch(url)).ok) return; } catch (e) { /* retry */ }
+        try { if ((await drained(fetch(url))).ok) return; } catch (e) { /* retry */ }
         await new Promise((r) => setTimeout(r, 100));
     }
     throw new Error("server did not start");
@@ -165,6 +173,22 @@ async function main() {
         await page.waitForFunction(() => /Every app is a card/.test(document.querySelector("[data-testid='caption']")?.textContent ?? ""), null, { timeout: 8000 })
             .then(() => check(true, "with the SRT subtitles beside it"), () => check(false, "with the SRT subtitles beside it"));
         await shot("launched");
+
+        // Settings > Accessibility > Captions: subtitles turned off in the
+        // player come on anyway.
+        await showControls();
+        await page.click("[data-testid='subtitles']");
+        await page.click(".pui-menu-item:has-text('Off')");
+        const captionAt = async () => {
+            await page.goto(appUrl(APP, { target: "file://" + CARDS }));
+            await page.waitForSelector("[data-testid='player']");
+            return page.waitForFunction(() => /Every app is a card/.test(document.querySelector("[data-testid='caption']")?.textContent ?? ""), null, { timeout: 4000 })
+                .then(() => true, () => false);
+        };
+        check(!(await captionAt()), "subtitles turned off stay off");
+        await luna("luna://com.palm.systemservice/setPreferences", { accessibility: { captions: true } });
+        check(await captionAt(), "with Captions on in Accessibility, they show anyway");
+        await luna("luna://com.palm.systemservice/setPreferences", { accessibility: { captions: false } });
 
         const handlers = await luna("luna://com.webos.applicationManager/listAllHandlersForMime", { mime: "video/webm" });
         check((handlers.resources || []).map((r) => r.appId).join(",") === "org.webosphoenix.videos,org.webosphoenix.photos",

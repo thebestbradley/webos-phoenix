@@ -32,6 +32,14 @@ const { spawn, execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
+// A response read to its end: one left unread, its socket closed under it,
+// aborts Node's fetch (undici: assert(!this.paused), seen in CI).
+async function drained(pending) {
+    const r = await pending;
+    try { await r.arrayBuffer(); } catch (e) { /* the status is what counts */ }
+    return r;
+}
+
 function loadPlaywright() {
     try { return require("playwright"); } catch (e) { /* global install */ }
     return require(path.join(execSync("npm root -g").toString().trim(), "playwright"));
@@ -59,7 +67,7 @@ function check(cond, what) {
 async function waitForServer(url, ms) {
     const until = Date.now() + ms;
     while (Date.now() < until) {
-        try { if ((await fetch(url)).ok) return; } catch (e) { /* retry */ }
+        try { if ((await drained(fetch(url))).ok) return; } catch (e) { /* retry */ }
         await new Promise((r) => setTimeout(r, 100));
     }
     throw new Error("server did not start");
@@ -262,15 +270,33 @@ async function main() {
         check(savedObjs.length === 1 && savedObjs[0].name === "San José Museum of Art" && /museum/.test(savedObjs[0].searchText),
               "saving puts the place in db8 (org.webosphoenix.maps.place:1)");
 
-        // Share it with Messaging.
+        // Share it: the system's share sheet (SF5), then Messaging.
         host.length = 0;
         await page.click(tid("share"));
-        await page.click(`.pui-popup .pui-menu-item:has(.pui-menu-label:text-is("Messaging"))`);
-        await page.waitForTimeout(200);
+        const sheetEl = await page.waitForSelector("iframe[data-phoenix-sheet=share]");
+        const sheet = await sheetEl.contentFrame();
+        await sheet.waitForSelector("[data-testid=share-sheet]");
+        check((await sheet.textContent("[data-testid=share-title]")) === "San José Museum of Art",
+              "Share opens the system's share sheet with the place");
+        check(await sheet.locator("[data-testid='share-copy']").count() === 1, "the sheet offers Copy");
+        await page.waitForTimeout(400);
+        await shot("share-sheet");
+        await sheet.click("[data-testid='share-app-org.webosphoenix.messaging']");
+        await page.waitForSelector("iframe[data-phoenix-sheet]", { state: "detached" });
         const shareLaunch = host.find((m) => m.type === "launch");
-        check(!!shareLaunch && shareLaunch.payload.id === "org.webosphoenix.messaging"
-              && /openstreetmap\.org\/\?mlat=37\.33336/.test(shareLaunch.payload.params.messageText || ""),
+        const shared = shareLaunch && shareLaunch.payload.params.share;
+        check(!!shared && shareLaunch.payload.id === "org.webosphoenix.messaging"
+              && /^San José Museum of Art\n/.test(shared.text) && /openstreetmap\.org\/\?mlat=37\.33336/.test(shared.text),
               "Share > Messaging starts a message with the place and a map link");
+        // The app menu's Share shares the place shown.
+        await page.evaluate(() => document.dispatchEvent(new CustomEvent("phoenixAppMenu")));
+        await page.click("[data-testid='appmenu-share']");
+        const menuSheet = await (await page.waitForSelector("iframe[data-phoenix-sheet=share]")).contentFrame();
+        await menuSheet.waitForSelector("[data-testid=share-sheet]");
+        check((await menuSheet.textContent("[data-testid=share-title]")) === "San José Museum of Art",
+              "the app menu's Share shares the place shown");
+        await menuSheet.click("[data-testid='share-cancel']");
+        await page.waitForSelector("iframe[data-phoenix-sheet]", { state: "detached" });
 
         // ---- Directions (Valhalla) -----------------------------------------------------------
         await page.click(tid("directions"));

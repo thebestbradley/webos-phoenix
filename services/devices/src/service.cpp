@@ -30,6 +30,8 @@ DeviceService::~DeviceService()
         g_source_remove(m_rescanIdle);
     if (m_headsetTimer)
         g_source_remove(m_headsetTimer);
+    if (m_accelTimer)
+        g_source_remove(m_accelTimer);
     if (m_lightTimer)
         g_source_remove(m_lightTimer);
     for (auto &s : m_subs) {
@@ -57,6 +59,7 @@ bool DeviceService::attach(LSError *error)
     static LSMethod displayShell[] = {
         { "report", &DeviceService::onShellReport, LUNA_METHOD_FLAGS_NONE },
         { "requests", &DeviceService::onShellRequests, LUNA_METHOD_FLAGS_NONE },
+        { "orientation", &DeviceService::onShellOrientation, LUNA_METHOD_FLAGS_NONE },
         {},
     };
     static LSMethod audio[] = { { "status", &DeviceService::onAudioStatus, LUNA_METHOD_FLAGS_NONE }, {} };
@@ -85,6 +88,7 @@ bool DeviceService::attach(LSError *error)
             return false;
     readSwitches();
     alsFollowDisplay();
+    accelFollowDisplay();
     return true;
 }
 
@@ -335,6 +339,7 @@ bool DeviceService::onShellReport(LSHandle *sh, LSMessage *msg, void *ctx)
         self->m_hw.backlight->setPercent(next.state == "off" ? 0 : next.brightness);
     if (next.state != before.state)
         self->alsFollowDisplay();
+        self->accelFollowDisplay();
     // The Power key while an app blocks it (DisplayManager :2463-2476).
     if (p["powerKey"].str() == "released") {
         for (auto &s : self->m_subs)
@@ -357,6 +362,23 @@ bool DeviceService::onShellRequests(LSHandle *sh, LSMessage *msg, void *ctx)
                 + holdsJson(self->m_holds) + "}");
     if (subscribed)
         self->addSub(Sub{ ShellRequests, sh, msg });
+    return true;
+}
+
+// The accelerometer's orientation, for the shell's rotation (UiRotation; what
+// LunaSysMgr got from nyx's orientation sensor, HostArm::NYXDataAvailable,
+// luna-sysmgr-common Src/base/hosts/HostArm.cpp:775-791).
+bool DeviceService::onShellOrientation(LSHandle *sh, LSMessage *msg, void *ctx)
+{
+    auto *self = static_cast<DeviceService *>(ctx);
+    if (!self->fromShell(msg)) {
+        self->reply(sh, msg, "{\"returnValue\":false,\"errorCode\":-1,\"errorText\":\"Only the shell takes the orientation\"}");
+        return true;
+    }
+    const bool subscribed = LSMessageIsSubscription(msg);
+    self->reply(sh, msg, orientationJson(self->m_orientation.orientation(), subscribed));
+    if (subscribed)
+        self->addSub(Sub{ Orientation, sh, msg });
     return true;
 }
 
@@ -676,6 +698,41 @@ gboolean DeviceService::lightTimerFired(gpointer self)
     return G_SOURCE_CONTINUE;
 }
 
+void DeviceService::accelReading(double x, double y, double z)
+{
+    if (m_orientation.update(x, y, z))
+        post(Orientation, orientationJson(m_orientation.orientation(), true));
+}
+
+// The sensor reads while the display is on, as LunaSysMgr's orientation
+// sensor did: on as the display comes on (DisplayOn::enter,
+// DisplayOnLocked::enter, DisplayStates.cpp:814, 1097), off as it goes off
+// or dims (DisplayOff::enter :298; DisplayDim::enter :1369-1372 with
+// TurnOffAccelerometerWhenDimmed, true by default, Settings.cpp:155).
+// Ten readings a second.
+void DeviceService::accelFollowDisplay()
+{
+    const bool on = m_hw.accelerometer && m_hw.accelerometer->available() && m_display.state == "on";
+    if (on == m_accelOn)
+        return;
+    m_accelOn = on;
+    if (on) {
+        m_accelTimer = g_timeout_add(100, &DeviceService::accelTimerFired, this);
+    } else if (m_accelTimer) {
+        g_source_remove(m_accelTimer);
+        m_accelTimer = 0;
+    }
+}
+
+gboolean DeviceService::accelTimerFired(gpointer self)
+{
+    auto *s = static_cast<DeviceService *>(self);
+    double x = 0, y = 0, z = 0;
+    if (s->m_hw.accelerometer && s->m_hw.accelerometer->read(&x, &y, &z))
+        s->accelReading(x, y, z);
+    return G_SOURCE_CONTINUE;
+}
+
 // ---- The hardware as it comes and goes -----------------------------------------------------------
 
 void DeviceService::say(const std::string &line)
@@ -691,6 +748,7 @@ void DeviceService::attachProbe(DeviceProbe *probe, HotplugMonitor *monitor)
     m_hw.backlight = probe->backlight.get();
     m_hw.vibrator = probe->vibrator.get();
     m_hw.lightSensor = probe->lightSensor.get();
+    m_hw.accelerometer = probe->accelerometer.get();
     m_hw.input = probe->input.get();
     for (const auto &line : probe->describe())
         say(line);
@@ -702,6 +760,7 @@ void DeviceService::attachProbe(DeviceProbe *probe, HotplugMonitor *monitor)
     watchInputs();
     readSwitches();
     alsFollowDisplay();
+    accelFollowDisplay();
 }
 
 // One watch per input device in use; the ones gone lose theirs.
@@ -775,6 +834,7 @@ DeviceProbe::Changes DeviceService::rescan()
     m_hw.backlight = m_probe->backlight.get();
     m_hw.vibrator = m_probe->vibrator.get();
     m_hw.lightSensor = m_probe->lightSensor.get();
+    m_hw.accelerometer = m_probe->accelerometer.get();
     m_hw.input = m_probe->input.get();
     // A new backlight gets the level the display has now.
     if (c.backlight && m_hw.backlight)
@@ -787,6 +847,14 @@ DeviceProbe::Changes DeviceService::rescan()
         }
         m_alsOn = false;
         alsFollowDisplay();
+    }
+    if (c.accelerometer) {
+        if (m_accelOn && m_accelTimer) {
+            g_source_remove(m_accelTimer);
+            m_accelTimer = 0;
+        }
+        m_accelOn = false;
+        accelFollowDisplay();
     }
     if (c.input.any()) {
         watchInputs();

@@ -24,6 +24,14 @@ const { spawn, execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
+// A response read to its end: one left unread, its socket closed under it,
+// aborts Node's fetch (undici: assert(!this.paused), seen in CI).
+async function drained(pending) {
+    const r = await pending;
+    try { await r.arrayBuffer(); } catch (e) { /* the status is what counts */ }
+    return r;
+}
+
 function loadPlaywright() {
     try { return require("playwright"); } catch (e) { /* global install */ }
     return require(path.join(execSync("npm root -g").toString().trim(), "playwright"));
@@ -55,7 +63,7 @@ async function expect(promise, what) {
 async function waitForServer(url, ms) {
     const until = Date.now() + ms;
     while (Date.now() < until) {
-        try { if ((await fetch(url)).ok) return; } catch (e) { /* retry */ }
+        try { if ((await drained(fetch(url))).ok) return; } catch (e) { /* retry */ }
         await new Promise((r) => setTimeout(r, 100));
     }
     throw new Error("server did not start");
@@ -206,6 +214,22 @@ async function main() {
         check(await inFrame("return /one hundred and twelve steps/.test(d.body.textContent)"), "the chapter's text is in the reader");
         await page.waitForTimeout(300);
         await shot("doc-book");
+
+        // Share: the system's share sheet with the book's file (SF5).
+        await page.click("[data-testid='share']");
+        const sheet = await (await page.waitForSelector("iframe[data-phoenix-sheet=share]")).contentFrame();
+        await sheet.waitForSelector("[data-testid=share-sheet]");
+        check(await sheet.textContent("[data-testid=share-title]") === "The Lighthouse Cat", "Share opens the system's share sheet with the book");
+        check(await sheet.locator("[data-testid='share-app-com.palm.app.email']").count() === 1 && await sheet.locator("[data-testid=share-files]").count() === 1,
+            "the sheet offers Email and Save to Files");
+        await page.waitForTimeout(400);
+        await shot("doc-share");
+        host.length = 0;
+        await sheet.click("[data-testid='share-app-com.palm.app.email']");
+        await page.waitForSelector("iframe[data-phoenix-sheet]", { state: "detached" });
+        const mail = lastHost("launch");
+        check(mail && mail.payload.id === "com.palm.app.email" && mail.payload.params.attachments[0].fullPath === `${DIR}/the-lighthouse-cat.epub`
+              && mail.payload.params.attachments[0].mimeType === "application/epub+zip", "Share > Email attaches the book");
 
         await page.click("[data-testid='toc']");
         await page.waitForSelector("[data-testid='toc-The Storm']");

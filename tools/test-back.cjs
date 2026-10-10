@@ -40,6 +40,14 @@ function loadPlaywright() {
 const REPO = path.resolve(__dirname, "..");
 const servers = require(path.join(REPO, "apps/marketplace/service/test/servers.cjs"));
 
+// A response read to its end: one left unread, its socket closed under it,
+// aborts Node's fetch (undici: assert(!this.paused), seen in CI).
+async function drained(pending) {
+    const r = await pending;
+    try { await r.arrayBuffer(); } catch (e) { /* the status is what counts */ }
+    return r;
+}
+
 let failures = 0;
 function check(cond, what) {
     console.log(`${cond ? "ok  " : "FAIL"} ${what}`);
@@ -64,7 +72,7 @@ async function main() {
     let browser;
     try {
         for (let i = 0; ; i++) {
-            try { if ((await fetch(origin + "/apps.json")).ok) break; } catch (e) { /* not up */ }
+            try { if ((await drained(fetch(origin + "/apps.json"))).ok) break; } catch (e) { /* not up */ }
             if (i > 100) throw new Error("serve-rootfs did not start");
             await new Promise((r) => setTimeout(r, 100));
         }

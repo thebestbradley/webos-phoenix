@@ -23,6 +23,20 @@
 // alone grows to twice its size as it fades, 700 ms, linear
 // (BootupAnimationTransition, kFadeAnimDuration, :556-581), and the
 // screen under it shows.
+//
+// What Phoenix does differently: at start-up (start(false)) the logo's
+// glow is replaced by a story of its own (BootStory.qml), as the owner
+// asked: the orb, without the emblem, a dead face; its glow turning gold;
+// it catches fire, screams and burns down to ash; a small gold bird-orb
+// shoots out of the ash, flies about the screen and becomes the
+// Assistant bird's entrance; the bird lands and waves. `style` "classic"
+// (Settings > Advanced > Start-up animation: Classic) keeps the original
+// glow above, unchanged; so does the logo after "Updating the system".
+// The story plays to the end of the wave even when the boot is over
+// sooner: finish() then waits for it (finishPending) before the
+// transition; a boot that takes longer leaves the bird standing, idle,
+// until finish(). A tap skips to the wave, or straight to the transition
+// once finish() has been called. `running` stays true throughout.
 
 import QtQuick
 
@@ -32,6 +46,16 @@ Item {
 
     // "logo", "activity", or "" when not running.
     property string mode: ""
+    // The logo at start-up: "phoenix" (the story, BootStory.qml) or
+    // "classic" (the original glow); Settings > Advanced > Start-up
+    // animation. Read as it starts.
+    property string style: "phoenix"
+    // This start's logo is the story.
+    property bool _story: false
+    readonly property bool storyShown: _story && storyLoader.item !== null
+    readonly property var story: storyLoader.item
+    // finish() came before the story's end: the transition waits for it.
+    property bool finishPending: false
     readonly property bool running: mode !== "" || transition.running
     // The lit logo's alpha (renderInStateLogo's sCurrAlpha) and step.
     property int glowAlpha: -128
@@ -60,9 +84,15 @@ Item {
         _glowDelta = 8;
         progress = 0;
         spinnerFrame = 0;
+        finishPending = false;
+        _story = !activity && style !== "classic";
+        // A story already there starts again; a new one starts as it loads.
+        var had = storyLoader.item;
         mode = activity ? "activity" : "logo";
         opacity = 1;
         scale = 1;
+        if (had && storyLoader.item === had)
+            had.start();
     }
     // setActivityProgress (:532-537): val of total, in 20 steps.
     function setProgress(val, total) {
@@ -72,8 +102,17 @@ Item {
         progress = Math.max(0, Math.min(progressTotal, Math.round(val * progressTotal / total)));
     }
     function finish() {
-        if (mode === "")
+        if (mode === "" || finishPending)
             return;
+        // The story plays to the end of its wave first.
+        if (storyShown && !storyLoader.item.done) {
+            finishPending = true;
+            return;
+        }
+        _finishNow();
+    }
+    function _finishNow() {
+        finishPending = false;
         // The transition first: running (and SystemScreens.holdsDisplay)
         // stays true from the logo to the end of the fade, not false for
         // the moment between them.
@@ -86,8 +125,20 @@ Item {
     // black in one pixmap): not the logo's own black square over the fill.
     layer.enabled: transition.running
 
-    // Swallows the input while it shows.
-    MouseArea { anchors.fill: parent; enabled: boot.running }
+    // Swallows the input while it shows; a tap skips the story (to its
+    // wave, or to its end once the boot is over).
+    MouseArea {
+        anchors.fill: parent
+        enabled: boot.running
+        onClicked: {
+            if (!boot.storyShown || boot.mode === "")
+                return;
+            if (boot.finishPending)
+                boot.story.end();
+            else
+                boot.story.skip();
+        }
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -97,7 +148,7 @@ Item {
     Timer {
         interval: boot.frameTime
         repeat: true
-        running: boot.mode !== ""
+        running: boot.mode === "activity" || (boot.mode === "logo" && !boot._story)
         onTriggered: {
             if (boot.mode === "logo") {
                 var a = boot.glowAlpha + boot._glowDelta;
@@ -128,7 +179,7 @@ Item {
         rotation: boot.angle
         width: Theme.artWidth(normal.source)
         height: Theme.artHeight(normal.source)
-        visible: boot.mode !== "activity"
+        visible: boot.mode !== "activity" && !boot._story
         Image {
             id: normal
             objectName: "bootLogo"
@@ -212,6 +263,19 @@ Item {
             font.bold: true
             font.pixelSize: Theme.px(16)
         }
+    }
+
+    // ---- The story (Phoenix) -------------------------------------------------------
+
+    Loader {
+        id: storyLoader
+        anchors.fill: parent
+        active: boot._story && boot.running
+        sourceComponent: BootStory {
+            angle: boot.angle
+            onEnded: if (boot.finishPending) boot._finishNow()
+        }
+        onLoaded: item.start()
     }
 
     // BootupAnimationTransition: the logo, alone on black, twice as big

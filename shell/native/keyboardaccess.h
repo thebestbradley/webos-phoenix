@@ -17,6 +17,21 @@
 //                repeatInterval ms (the keyboard's own repeats are
 //                dropped); repeatDelay 0 turns repeating off
 //
+// Settings > Text Assist > Hardware Keyboard (GAPS V8 (5)), applied first:
+//   layout       the keyboard's layout, from the keys of a US one (what a
+//                device's compositor and most computers deliver): "auto"
+//                (as they come), "qwertz" (German) or "azerty" (French);
+//                letters, digits and punctuation by their place
+//   keyRemap     the modifier keys and Caps Lock, as macOS's Modifier Keys:
+//                {capslock, control, alt, meta} -> "capslock", "control",
+//                "alt", "meta", "escape", "keyboard" (the TouchPad's
+//                keyboard key) or "none"
+// The TouchPad keyboard's keyboard key (KEYS::Key_Keyboard; evdev
+// KEY_KEYBOARD, native scan code 382, which a device's compositor passes
+// on) and any key remapped to it: keyboardKeyPressed(), and the shell shows
+// or hides the virtual keyboard (SystemUiController.cpp:620-623,
+// IMEController::setIMEActive).
+//
 // Only keys from the keyboard (spontaneous events) are changed; the
 // virtual keyboard's (KeyInjector) and the ones this sends go through.
 
@@ -27,6 +42,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QSet>
+#include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
 class QKeyEvent;
@@ -52,6 +68,8 @@ class KeyboardAccess : public QObject
     Q_PROPERTY(int lockedModifiers READ lockedModifiers NOTIFY modifiersChanged)
     // A spontaneous (hardware) key went by: a keyboard is in use.
     Q_PROPERTY(bool hardwareKeySeen READ hardwareKeySeen NOTIFY hardwareKeySeenChanged)
+    Q_PROPERTY(QString layout READ layout WRITE setLayout NOTIFY settingsChanged)
+    Q_PROPERTY(QVariantMap keyRemap READ keyRemap WRITE setKeyRemap NOTIFY settingsChanged)
 
 public:
     explicit KeyboardAccess(QObject *parent = nullptr);
@@ -76,6 +94,14 @@ public:
     int latchedModifiers() const { return int(m_latched); }
     int lockedModifiers() const { return int(m_locked); }
     bool hardwareKeySeen() const { return m_hardwareKeySeen; }
+    QString layout() const { return m_layout; }
+    void setLayout(const QString &l);
+    QVariantMap keyRemap() const { return m_remap; }
+    void setKeyRemap(const QVariantMap &m);
+
+    // A US keyboard's key (Qt key, its text, Shift) in `layout`: the key and
+    // text it types there. False when the layout leaves it as it is.
+    static bool translate(const QString &layout, int key, bool shift, int *outKey, QString *outText);
 
     // Drops latched and locked modifiers (sticky keys off, the lock screen).
     Q_INVOKABLE void clearModifiers();
@@ -86,6 +112,8 @@ signals:
     void hardwareKeySeenChanged();
     // A key pressed on the keyboard (not the virtual keyboard's).
     void hardwareKeyPressed(int key);
+    // The keyboard key (or a key remapped to it).
+    void keyboardKeyPressed();
     // A key the accessibility rules held back or dropped (for tests and a
     // future click sound).
     void keyIgnored(int key);
@@ -102,6 +130,12 @@ private:
     bool deliverPress(QWindow *window, QKeyEvent *key);
     bool deliverRelease(QWindow *window, QKeyEvent *key);
     void stopRepeat();
+    // The accessibility rules (sticky, slow, bounce, repeat): true when the
+    // event was dealt with (sent or dropped here).
+    bool filterKey(QWindow *window, QKeyEvent *key);
+    // keyRemap's target for a key ("" when not remapped).
+    QString remapTarget(int key) const;
+    Qt::KeyboardModifiers strippedModifiers() const;
 
     bool m_sticky = false;
     bool m_slow = false;
@@ -112,6 +146,10 @@ private:
     int m_repeatDelay = 500;
     int m_repeatInterval = 50;
     bool m_hardwareKeySeen = false;
+    QString m_layout = QStringLiteral("auto");
+    QVariantMap m_remap;
+    Qt::KeyboardModifiers m_remapHeld;   // modifiers held by keys remapped to them
+    QSet<int> m_remapDown;               // remapped keys down (their releases are ours)
 
     int m_sending = 0;  // > 0 while this sends an event of its own
 

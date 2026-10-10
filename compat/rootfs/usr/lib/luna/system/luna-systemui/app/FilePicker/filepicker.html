@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1//EN"
+	"http://www.w3.org/TR/xhtml11/DTD/xhtml11.dtd">
+<!-- LICENSE@@@
+
+     Copyright (c) 2010-2013 LG Electronics, Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+     @@@LICENSE -->
+<!-- webOS Phoenix overlay (docs/SHARE-AND-FILES.md SF1): luna-systemui's
+     filepicker.html with one line added, the runtime's script before
+     enyo.js. Enyo 1's FilePicker shows this page in a frame of the app's
+     own page (CrossAppUI, FilePicker.js:48). On webOS the web runtime gave
+     every frame PalmSystem and PalmServiceBridge, so the picker read the
+     media kinds in db8 as the app; the hosts here add the runtime only to
+     the apps' pages (/usr/palm/applications/), and without it the picker
+     had no services (an empty list). The runtime takes the app of the
+     page around the frame as its own. Nothing else is changed. -->
+
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en">
+<head>
+	<script src="/usr/share/phoenix/runtime/phoenix-runtime.js"></script>
+	<title>FilePicker</title>
+	<script src="/usr/palm/frameworks/enyo/0.10/framework/enyo.js" type="text/javascript"></script>
+</head>
+
+<body>
+	<script type="text/javascript">
+		view = new FilePickerApp();
+		view.renderInto(document.body);
+	</script>
+</body>
+</html>

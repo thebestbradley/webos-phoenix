@@ -59,14 +59,16 @@
 // x_palm_textinput.userWords): its words are never corrected and are
 // suggested. Backspace putting back a word a correction replaced offers
 // "Add" in the bar, as Android's and iOS's keyboards do.
-// Not ported: keyboard combos (language key),
-// and the emoticon pictures (/usr/palm/emoticons, not in the Apache-2.0
-// images): emoticon keys show their text.
+// The emoticon pictures (/usr/palm/emoticons) were not in the Apache-2.0
+// images: the emoticon keys show the colour emoji font's faces instead
+// (KeyboardKeymap.emoticonPicture) and type the original's text.
 
 import QtQuick
 import "KeyboardKeymap.js" as KM
 import "EmojiData.js" as ED
+import "EmojiWords.js" as EW
 import "TextAssist.js" as TA
+import "DictationText.js" as DT
 
 Item {
     id: kb
@@ -82,6 +84,25 @@ Item {
     // enterKeyLabel) and whether to start the next word capitalized.
     property var editorState: ({})
     property bool autoCap: false
+    // Auto-capitalisation from the field (GAPS V1). On webOS WebKit worked
+    // out where the cursor was and told the keyboard (autoCap above, the
+    // plugin's m_autoCap, false until told: PhoneKeyboard.cpp:276-280,
+    // PhoneKeymap.cpp:361); here the field gives its mode (Phoenix's
+    // editorState.autoCap, from the runtime or the shell: "sentences",
+    // "words", "characters" or "none", none when not given) and the
+    // keyboard follows the cursor itself (_word, _sentenceStart).
+    readonly property string fieldAutoCap: editorState && typeof editorState.autoCap === "string" ? editorState.autoCap : "none"
+    readonly property bool _autoCapHere: fieldAutoCap === "characters"
+        || (fieldAutoCap === "words" && _word === "")
+        || (fieldAutoCap === "sentences" && _word === "" && _sentenceStart && !_rightAfterMark)
+    // The cursor right after . ! or ? ("e.g.", "3.5", a web address): a
+    // capital waits for the space.
+    property bool _rightAfterMark: false
+    on_AutoCapHereChanged: _applyAutoCap()
+    function _applyAutoCap() {
+        if (_km.setAutoCap(autoCap || _autoCapHere))
+            _layoutChanged();
+    }
     // IMEDataInterface::m_visible: the keyboard is (being) shown.
     property bool shown: false
     // IMEController::isIMEOpened: it takes touches (IMEView::acceptPoint).
@@ -113,6 +134,44 @@ Item {
             return;
         keyboardSelected(keyboards[index]);
     }
+    // ---- Several keyboards (GAPS V7; the owner, 29 September 2026) ----------------------
+    // Whole keyboards side by side, as on iOS (Settings > Text Assist >
+    // Keyboards, in the user's order): "classic" (the Pre's and TouchPad's,
+    // V1) and "phoenix" (Phoenix's own look over the same keys; dictation,
+    // prediction, swipe, emoji and cursor control are shared parts of
+    // both). OSE's own keyboard ("ose") is a Maliit plugin on a device, not
+    // drawn here. With another installed, the language key is the globe: a
+    // tap goes to the next language and after the last to the next
+    // keyboard; held, it lists the languages and the keyboards
+    // (keyboardChosen tells the shell, which keeps it).
+    property var installedKeyboards: ["classic"]
+    property string keyboardId: "classic"
+    signal keyboardChosen(string id)
+    readonly property var drawnKeyboards: ["classic", "phoenix"]
+    readonly property var keyboardNames: ({ classic: "webOS Classic", phoenix: "Phoenix", ose: "webOS OSE" })
+    // The other keyboards this shell draws, the next one first.
+    readonly property var otherKeyboards: {
+        var list = installedKeyboards.filter(function (id) { return kb.drawnKeyboards.indexOf(id) >= 0; });
+        var i = list.indexOf(keyboardId);
+        return i < 0 ? list : list.slice(i + 1).concat(list.slice(0, i));
+    }
+    readonly property bool phoenixLook: keyboardId === "phoenix"
+    // The Phoenix look's colours: flat keys on a near-black ground.
+    readonly property color cPhoenixBack: "#16181c"
+    readonly property color cPhoenixLetter: "#3a3d44"
+    readonly property color cPhoenixFunction: "#262930"
+    readonly property color cPhoenixPressed: "#5b6070"
+    function _nextLanguageOrKeyboard() {
+        if (keyboardIndex + 1 < keyboards.length)
+            selectKeyboard(keyboardIndex + 1);
+        else if (otherKeyboards.length) {
+            if (keyboards.length > 1)
+                selectKeyboard(0);
+            keyboardChosen(otherKeyboards[0]);
+        } else if (keyboards.length > 1)
+            selectKeyboard(0);
+    }
+
     // Tablet: the keyboard size, -2 to 1 (XS, S, M, L).
     property int keyboardSize: 0
     // Settings > Text Assist > Number row (docs/M6-PLAN.md F4; the
@@ -127,7 +186,7 @@ Item {
     // tablet's keys); "touchpad": the TouchPad's everywhere (its art in the
     // phone's keys).
     property string keyboardStyle: "auto"
-    readonly property bool touchpadLook: keyboardStyle === "touchpad" || (keyboardStyle !== "black" && tablet)
+    readonly property bool touchpadLook: !phoenixLook && (keyboardStyle === "touchpad" || (keyboardStyle !== "black" && tablet))
     onTouchpadLookChanged: {
         // The keys' trim follows the art (_setKeyboardHeight).
         if (_km && _keymapHeight > 0)
@@ -260,6 +319,65 @@ Item {
         _keepAdd = false;
         _refreshCandidates();
     }
+    // ---- The text around the cursor (GAPS V3) ------------------------------------------
+    // A function returning the field's text around the cursor, {text,
+    // cursor} (Qt's ImSurroundingText and ImCursorPosition: what an input
+    // method asks a field), or null when it cannot tell. The shell gives
+    // one; without it the keyboard follows only what it typed itself.
+    property var surroundingText: null
+    // When the keyboard last typed (ms): a cursor move soon after is its own.
+    property real _lastOwnInput: 0
+    // Picks up where the cursor is: the word it ends (being typed), the one
+    // before, and whether a sentence starts there; so a field with text in
+    // it, or a cursor moved by a tap or the arrows, predicts and corrects
+    // from its words. Inside a word (letters after the cursor) nothing is
+    // being typed: a correction would cut the word in two.
+    function syncWithField() {
+        if (typeof surroundingText !== "function" || !shown || _swipeId !== "" || trackpad)
+            return false;
+        var s = surroundingText();
+        if (!s || typeof s.text !== "string" || typeof s.cursor !== "number")
+            return false;
+        var cursor = Math.max(0, Math.min(s.cursor, s.text.length));
+        var before = s.text.slice(0, cursor), after = s.text.slice(cursor);
+        var letter = /[A-Za-z\u00c0-\u024f]/;
+        var m = /[A-Za-z\u00c0-\u024f][A-Za-z\u00c0-\u024f']*$/.exec(before);
+        var word = m && !letter.test(after.charAt(0)) ? m[0] : "";
+        var rest = m ? before.slice(0, m.index) : before;
+        var p = /([A-Za-z\u00c0-\u024f][A-Za-z\u00c0-\u024f']*)([^A-Za-z\u00c0-\u024f]*)$/.exec(rest);
+        _autoSpace = null;
+        _swipeWords = false;
+        _lastCorrection = null;
+        _keepWord = "";
+        _keepAdd = false;
+        _word = word;
+        _prevWord = p ? p[1] : "";
+        // A sentence starts at the field's start, after . ! ? or a new line.
+        _sentenceStart = /^\s*$/.test(rest) || /[.!?\n]['")\]]*\s*$/.test(rest);
+        _rightAfterMark = /[.!?]$/.test(before);
+        // Text before it that is not a word: no space is owed before a
+        // swipe after a space, one is after anything else ("hello|").
+        _swipeNeedsSpace = before !== "" && !/\s$/.test(before) && word === "";
+        _refreshCandidates();
+        return true;
+    }
+    // The cursor moved by itself (a tap in the field, the app): read again,
+    // once the field has caught up (a web page reports its text after the
+    // move: Chromium's selection update comes back asynchronously).
+    Timer {
+        id: fieldSyncTimer
+        interval: 120
+        onTriggered: kb.syncWithField()
+    }
+    function _fieldMoved() {
+        if (shown && Date.now() - _lastOwnInput > 300)
+            fieldSyncTimer.restart();
+    }
+    Connections {
+        target: Qt.inputMethod
+        function onCursorRectangleChanged() { kb._fieldMoved(); }
+    }
+
     function _refreshCandidates() {
         if (!assistBarShown || !textSuggestions) {
             candidates = [];
@@ -283,7 +401,27 @@ Item {
         if (_word && _word === _keepWord && _keepAdd && !TA.isWord(_word))
             list = list.filter(function (c) { return c.text.toLowerCase() !== _word.toLowerCase() || c.kind !== "typed"; })
                        .slice(0, max - 1).concat([{ text: _word, kind: "add" }]);
+        // An emoji for the word (CLDR's keywords: "pizza", "love"), at the
+        // end of the bar, as iOS's predictive bar offers one; a tap puts it
+        // in place of the word. The phone's three cells keep two words.
+        else if (_word && emojiSuggestions) {
+            var em = EW.forWord(_word).filter(_emojiOffered);
+            if (em.length)
+                list = list.slice(0, max - 1).concat([{ text: emojiFor({ e: em[0], t: true }), kind: "emoji", word: _word }]);
+        }
         candidates = list;
+    }
+    // Emoji suggestions for words (Settings > Text Assist > Emoji suggestions).
+    property bool emojiSuggestions: true
+    // An emoji the emoji page offers (one this Qt draws as one glyph).
+    function _emojiOffered(e) {
+        if (!_emojiShown)
+            return e.indexOf("\u200D") < 0;       // not measured yet: no sequences
+        for (var c = 0; c < _emojiShown.length; ++c)
+            for (var i = 0; i < _emojiShown[c].emoji.length; ++i)
+                if (_emojiShown[c].emoji[i].e === e)
+                    return true;
+        return false;
     }
     function _saveTextAssist() {
         _textAssistDataCurrent = TA.userData();
@@ -302,7 +440,20 @@ Item {
         kb.textCommitted(text);
         _assistOwnText = false;
     }
-    onTextCommitted: if (!_assistOwnText) _assistReset()
+    onTextCommitted: {
+        _lastOwnInput = Date.now();
+        if (!_assistOwnText)
+            _assistReset();
+    }
+    onKeyTyped: _lastOwnInput = Date.now()
+    // Another field has the keyboard (IMEController::restartInput): its text
+    // is read afresh.
+    function inputClientChanged() {
+        _swipeNeedsSpace = false;
+        _sentenceStart = true;
+        _assistReset();
+        fieldSyncTimer.restart();
+    }
     // A word ends (space, punctuation, return): learned, and the next one begins.
     function _endWord(sentence) {
         if (_word) {
@@ -318,6 +469,7 @@ Item {
     }
     // Every key the keyboard sends: the word being typed follows it.
     function _trackKey(key, modifiers) {
+        _rightAfterMark = key > 0 && key < 0x110000 && /^[.!?]$/.test(String.fromCharCode(key));
         if (key === KM.Key.Backspace) {
             if (_word)
                 _word = _word.slice(0, -1);
@@ -334,7 +486,9 @@ Item {
             _refreshCandidates();
         } else if (key === KM.Key.Space || key === KM.Key.Return || /^[.,!?;:]$/.test(ch)) {
             var keep = _lastCorrection;
-            _endWord(key === KM.Key.Return || /^[.!?]$/.test(ch));
+            // A space after ". " keeps the sentence's start (as
+            // syncWithField reads "Hello. |").
+            _endWord(key === KM.Key.Return || /^[.!?]$/.test(ch) || (key === KM.Key.Space && _word === "" && _sentenceStart));
             if (keep && key === KM.Key.Space)
                 _lastCorrection = keep;        // backspace now puts the typed word back
         } else if (ch) {
@@ -343,6 +497,7 @@ Item {
             _refreshCandidates();
         } else {
             _assistReset();               // arrows, tab: somewhere else in the text
+            fieldSyncTimer.restart();     // ... read once it has moved
         }
     }
     // Before a space or punctuation: the correction, if any, goes in.
@@ -423,6 +578,20 @@ Item {
         if (_km.setAutoCap(false))
             _layoutChanged();
     }
+    // An emoji suggested for the word: it takes the word's place, a space
+    // after it (the user's next word starts clean), and it joins the recents.
+    function _pickEmoji(c) {
+        _assistBackspaces(_word.length);
+        _word = "";
+        _lastCorrection = null;
+        _swipeWords = false;
+        _autoSpace = null;
+        _assistOwnText = true;
+        chooseEmoji(c.text);
+        _assistOwnText = false;
+        _assistCommit(" ");
+        _endWord(false);
+    }
     // After a swipe, a candidate replaces the swiped word (its space stays).
     property bool _swipeWords: false
     property bool _swipeNeedsSpace: false
@@ -444,6 +613,10 @@ Item {
         if (c && c.kind === "add") {
             _makeSound(KM.Key.A);
             addToDictionary(c.text);
+            return;
+        }
+        if (c && c.kind === "emoji") {
+            _pickEmoji(c);
             return;
         }
         if (_swipeWords)
@@ -529,10 +702,11 @@ Item {
                 dictationMessageTimer.restart();
                 return;
             }
-            text = String(text || "").trim();
+            // Punctuation said aloud ("comma", "new line") typed as the mark.
+            text = DT.spokenPunctuation(String(text || "").trim(), kb.language);
             if (!text)
                 return;
-            var space = kb._word !== "" || kb._swipeNeedsSpace;
+            var space = (kb._word !== "" || kb._swipeNeedsSpace) && !/^[,.;:!?\n]/.test(text);
             if (kb._sentenceStart || kb._km.isCapActive())
                 text = text.charAt(0).toUpperCase() + text.slice(1);
             kb._assistCommit((space ? " " : "") + text);
@@ -540,8 +714,8 @@ Item {
             kb._swipeWords = false;
             kb._word = "";
             kb._prevWord = "";
-            kb._sentenceStart = /[.!?]$/.test(text);
-            kb._swipeNeedsSpace = true;
+            kb._sentenceStart = /[.!?\n]$/.test(text);
+            kb._swipeNeedsSpace = !/\n$/.test(text);
             kb._refreshCandidates();
             if (kb._km.setAutoCap(false))
                 kb._layoutChanged();
@@ -974,11 +1148,14 @@ Item {
     // The language key's name for each keyboard (comboLanguageName).
     readonly property var _comboNames: keyboards.map(function (k) {
         return KM.comboLanguageName(k.language, ({ qwerty: "En", qwertz: "De", azerty: "Fr" })[k.layout]);
-    })
+    }).concat(otherKeyboards.map(function (id) { return kb.keyboardNames[id] || id; }))
+    // The globe's cap, with other keyboards installed.
+    readonly property string _comboCap: otherKeyboards.length ? "\uD83C\uDF10" : ""
+    on_ComboCapChanged: _updateCombos()
     on_ComboNamesChanged: _updateCombos()
     onKeyboardIndexChanged: _updateCombos()
     function _updateCombos() {
-        if (_km && _km.setCombos(_comboNames, keyboardIndex))
+        if (_km && _km.setCombos(_comboNames, keyboardIndex, _comboCap))
             _layoutChanged();
     }
     onLanguageChanged: {
@@ -987,10 +1164,11 @@ Item {
     }
     function _reset() {
         _km = new KM.Keymap(tablet, layoutName, numberRow);
-        _km.setCombos(_comboNames, keyboardIndex);
+        _km.setCombos(_comboNames, keyboardIndex, _comboCap);
         _touches = ({});
         _extendedKeys = null;
         _availableSpaceChanged();
+        _applyAutoCap();
     }
 
     // Keyboard pixels.
@@ -1064,7 +1242,7 @@ Item {
     Component.onCompleted: {
         _km = new KM.Keymap(tablet, "qwerty", numberRow);
         _km.setLayoutFamily(layoutName);
-        _km.setCombos(_comboNames, keyboardIndex);
+        _km.setCombos(_comboNames, keyboardIndex, _comboCap);
         TA.setLanguage(language, layoutName);
         _km.setRowHeight(0, _rowHalf(0));
         _availableSpaceChanged();
@@ -1117,8 +1295,10 @@ Item {
         _swipeNeedsSpace = false;
         _sentenceStart = true;
         _assistReset();
+        _applyAutoCap();
         if (shown) {
             _setKeyboardHeight(_requestedHeight > 0 ? _requestedHeight : _presetHeight());
+            fieldSyncTimer.restart();     // the text around the cursor (V3)
         } else {
             // visibleChanged(false): back to plain letters.
             closeEmoji();
@@ -1143,8 +1323,9 @@ Item {
         if (changed)
             _layoutChanged();
         _resetShortcuts(editorState);
+        _applyAutoCap();
     }
-    onAutoCapChanged: if (_km.setAutoCap(autoCap)) _layoutChanged()
+    onAutoCapChanged: _applyAutoCap()
 
     function _layoutChanged() {    // keyboardLayoutChanged
         _triggerRepaint();
@@ -1291,6 +1472,19 @@ Item {
             }
         } else {
             var emoticonGraphic = KM.isEmoticonKey(key) && (!tablet || (_km.editorState.flags & KM.FieldFlags.Emoticons));
+            // The emoticon keys' pictures (TabletKeyboard.cpp:1571-1597,
+            // PhoneKeyboard.cpp:1267, 1503): /usr/palm/emoticons was not in
+            // the Apache-2.0 images, so the colour emoji font's face for each
+            // (Noto Color Emoji, SIL OFL 1.1: docs/LEGAL.md), with the
+            // original's 8 px margin. The key still types the text (":-)").
+            var picture = emoticonGraphic ? KM.emoticonPicture(key) : "";
+            if (picture !== "") {
+                var pm = 8;
+                var pbox = { x: loc.x + pm, y: loc.y + pm, w: loc.w - 2 * pm, h: loc.h - 2 * pm };
+                var psize = Math.max(1, Math.floor(Math.min(pbox.w, pbox.h) * 0.8));
+                return [{ text: picture, emoji: true, x: pbox.x, y: pbox.y, w: pbox.w, h: pbox.h, size: psize,
+                          bold: false, color: activeColor, back: activeColor, align: "center", emoticon: true }];
+            }
             text = _km.displayString(key, false);
             if (emoticonGraphic || text === "") {
                 var icon = _keyIcon(key);
@@ -1617,6 +1811,7 @@ Item {
         _trackpadId = "";
         _trackpadAnchor = null;
         _triggerRepaint();
+        fieldSyncTimer.restart();         // where the cursor ended up
     }
 
     // Arrow keys for each step from the anchor; Shift while another finger
@@ -1654,7 +1849,11 @@ Item {
         } else if (KM.isTextShortcutKey(key)) {
             qtkey = key;
         } else if (KM.isComboKey(key)) {
-            selectKeyboard(key - KM.Key.ComboFirst);   // selectKeyboardCombo
+            // selectKeyboardCombo; past the languages, another keyboard (V7).
+            if (key - KM.Key.ComboFirst < keyboards.length)
+                selectKeyboard(key - KM.Key.ComboFirst);
+            else if (otherKeyboards[key - KM.Key.ComboFirst - keyboards.length])
+                keyboardChosen(otherKeyboards[key - KM.Key.ComboFirst - keyboards.length]);
         } else {
             switch (key) {
             case KM.Key.Backspace:
@@ -1700,9 +1899,9 @@ Item {
                 kb.hideRequested();
                 break;
             case KM.Key.ToggleLanguage:
-                // selectNextKeyboardCombo.
-                if (keyboards.length > 1)
-                    selectKeyboard((keyboardIndex + 1) % keyboards.length);
+                // selectNextKeyboardCombo; after the last language, the
+                // next keyboard (V7).
+                _nextLanguageOrKeyboard();
                 break;
             case KM.Key.Emoji:
                 openEmoji();
@@ -1759,8 +1958,8 @@ Item {
                     else
                         _sendKeyDownUp(k, _km.shiftDown ? Qt.ShiftModifier : Qt.NoModifier);
                 } else if (k > 0 && k < 128) {
-                    _sendKeyDownUp(k, _km.isCapActive() ? Qt.ShiftModifier : Qt.NoModifier);   // a basic keystroke
-                } else if (_km.isCapActive()) {
+                    _sendKeyDownUp(k, _capFor(k) ? Qt.ShiftModifier : Qt.NoModifier);   // a basic keystroke
+                } else if (_capFor(k)) {
                     _sendKeyDownUp(KM.upper(String.fromCharCode(k)).charCodeAt(0), Qt.ShiftModifier);
                 } else {
                     _sendKeyDownUp(KM.lower(String.fromCharCode(k)).charCodeAt(0), Qt.NoModifier);
@@ -1778,6 +1977,17 @@ Item {
             changed = true;
         if (changed)
             _layoutChanged();
+    }
+
+    // A key typed as a capital: Shift, or auto-capitalisation for a letter.
+    // (The plugin sent the letter plain, isCapActive, PhoneKeyboard.cpp:884,
+    // and WebKit, which had asked for the capital, made it one; Phoenix's
+    // fields have no such WebKit, so the keyboard types it.)
+    function _capFor(key) {
+        if (_km.isCapActive())
+            return true;
+        var c = String.fromCharCode(key);
+        return _km.autoCap && KM.upper(c) !== KM.lower(c);
     }
 
     function _sendKeyDownUp(key, modifiers) {
@@ -2042,7 +2252,22 @@ Item {
         property int corner: 22
         property real trim: 0
         property real insetV: 0
+        // The Phoenix look (GAPS V7): a flat rounded key, by its kind
+        // (a letter's art, key-white.png, or another).
+        property bool flat: false
+        property string background: ""
+        Rectangle {
+            visible: tile.flat
+            x: 3
+            y: 5
+            width: tile.width - 6
+            height: tile.height - 10
+            radius: 7
+            color: tile.pressed ? kb.cPhoenixPressed
+                 : tile.background === "key-white.png" ? kb.cPhoenixLetter : kb.cPhoenixFunction
+        }
         Item {
+            visible: !tile.flat
             y: tile.insetV
             width: tile.width
             height: tile.height - 2 * tile.insetV
@@ -2192,6 +2417,12 @@ Item {
             anchors.fill: parent
             source: kb._artFile("keyboard-bg.png")
             fillMode: Image.Stretch
+            // The Phoenix look: its flat ground.
+            Rectangle {
+                anchors.fill: parent
+                visible: kb.phoenixLook
+                color: kb.cPhoenixBack
+            }
         }
 
         Repeater {
@@ -2208,6 +2439,8 @@ Item {
                 height: modelData.h
                 KeyTile {
                     anchors.fill: parent
+                    flat: kb.phoenixLook
+                    background: keyItem.modelData.background
                     source: String(Theme.variant(keyItem.modelData.art + keyItem.modelData.background, kb.pixelScale))
                     half: kb._keyHalfFor(keyItem.modelData.background)
                     corner: kb._corner
@@ -2292,10 +2525,17 @@ Item {
                         height: frame.height
                         source: kb._artFile("keyboard-bg.png")
                         fillMode: Image.Stretch
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: kb.phoenixLook
+                            color: kb.cPhoenixBack
+                        }
                     }
                     KeyTile {
                         anchors.fill: parent
                         objectName: "pressedKey"
+                        flat: kb.phoenixLook
+                        background: pressedItem.modelData.background
                         source: String(Theme.variant(pressedItem.modelData.art + pressedItem.modelData.background, kb.pixelScale))
                         pressed: true
                         half: kb._keyHalfFor(pressedItem.modelData.background)

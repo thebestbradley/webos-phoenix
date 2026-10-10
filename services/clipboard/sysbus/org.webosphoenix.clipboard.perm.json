@@ -1,0 +1,4 @@
+{
+    "org.webosphoenix.clipboard": ["systemmanager.query", "systemmanager.passcode"],
+    "com.webos.surfacemanager": ["phoenix.clipboard"]
+}

@@ -62,6 +62,8 @@ DockModeDigitalClock 1.0 DockModeDigitalClock.qml
 MessageDialog 1.0 MessageDialog.qml
 MsmEntryFailedAlert 1.0 MsmEntryFailedAlert.qml
 BootAnimation 1.0 BootAnimation.qml
+BootStory 1.0 BootStory.qml
+BootFlame 1.0 BootFlame.qml
 ProgressAnimation 1.0 ProgressAnimation.qml
 FullEraseConfirmation 1.0 FullEraseConfirmation.qml
 FpsCounter 1.0 FpsCounter.qml
@@ -69,3 +71,4 @@ TouchPlot 1.0 TouchPlot.qml
 SystemScreens 1.0 SystemScreens.qml
 DeviceServices 1.0 DeviceServices.qml
 ClipStrip 1.0 ClipStrip.qml
+KeyboardButton 1.0 KeyboardButton.qml

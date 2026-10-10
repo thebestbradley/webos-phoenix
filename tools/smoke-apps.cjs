@@ -18,6 +18,14 @@ const { spawn, execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
+// A response read to its end: one left unread, its socket closed under it,
+// aborts Node's fetch (undici: assert(!this.paused), seen in CI).
+async function drained(pending) {
+    const r = await pending;
+    try { await r.arrayBuffer(); } catch (e) { /* the status is what counts */ }
+    return r;
+}
+
 function loadPlaywright() {
     const tries = ["playwright", path.join(execSync("npm root -g").toString().trim(), "playwright")];
     for (const t of tries) {
@@ -207,7 +215,47 @@ const SCENARIOS = {
         await h.tapText("Launcher mock-ups for Thursday", 2000);
         await h.screenshot("message");
         await h.expectText("Larger touch targets in the quick launch bar");
+        // Open Email in New Card (MailApp.js:87, 634-641; compat
+        // phoenix-compat.js 5): from the app menu while the message is in
+        // view, and from a message held in the list: the message viewer, a
+        // card of its own (emailviewer/), showing that message.
+        const viewer = async (how, subject, text) => {
+            const n = context.pages().length;
+            await how();
+            const v = helpers(await nextWindow(context, n), "com.palm.app.email");
+            await h.expect(`the message viewer (${subject})`, async () => /emailviewer\/index\.html/.test(v.page.url()));
+            for (let i = 0; i < 40 && !(await v.text()).includes(text); i++) await v.wait(250);
+            await v.expectText(subject);
+            await v.expectText(text);
+            return v;
+        };
+        let v = await viewer(async () => {
+            await h.page.evaluate(() => window.__phoenixRuntime.openAppMenu()); await h.wait(600);
+            await h.tapText("Open Email in New Card", 300);
+        }, "Launcher mock-ups for Thursday", "Larger touch targets in the quick launch bar");
+        await v.page.screenshot({ path: path.join(outDir, "smoke-email-new-card.png") });
+        await v.page.close();
         if (phone) await h.back();
+        // Held (a long press: Enyo's mousehold) ...
+        const row = h.page.getByText("Lunch today?", { exact: true }).first();
+        const box = await row.boundingBox();
+        await h.page.mouse.move(box.x + 10, box.y + box.height / 2);
+        await h.page.mouse.down(); await h.wait(1200);
+        await h.page.screenshot({ path: path.join(outDir, "smoke-email-held.png") });
+        await h.expectText("Open in New Card");
+        await h.expectText("Delete");
+        await h.page.mouse.up(); await h.wait(500);
+        // ... the message stays in the list (the hold is not a tap).
+        if (phone) await h.expect("the list, not the message, after a hold", async () => (await h.text()).includes("Launcher mock-ups for Thursday"));
+        v = await viewer(() => h.tapText("Open in New Card", 300), "Lunch today?", "Priya");
+        await v.page.close();
+        // ... or right-clicked.
+        v = await viewer(async () => {
+            await h.page.getByText("Scheduled maintenance this weekend", { exact: true }).first().click({ button: "right" });
+            await h.wait(500);
+            await h.tapText("Open in New Card", 300);
+        }, "Scheduled maintenance this weekend", "Northwind");
+        await v.page.close();
         const before = context.pages().length;
         await h.tap("[id$=composeButton]", 500);
         const c = helpers(await nextWindow(context, before), "com.palm.app.email");
@@ -244,7 +292,7 @@ const SCENARIOS = {
 async function waitForServer(url, ms) {
     const until = Date.now() + ms;
     while (Date.now() < until) {
-        try { if ((await fetch(url)).ok) return; } catch (e) { /* retry */ }
+        try { if ((await drained(fetch(url))).ok) return; } catch (e) { /* retry */ }
         await new Promise((r) => setTimeout(r, 100));
     }
     throw new Error("server did not start");

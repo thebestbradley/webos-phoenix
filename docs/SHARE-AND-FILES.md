@@ -19,8 +19,53 @@ Files, in a folder the user picks).
 > picture, Save to Files is offered for one file), Photos (its Share is the
 > sheet, no longer its own Email/Messaging menu), the browser (Share Link,
 > from the share menu or a link's menu) and, in every app, **Share in the
-> app menu, after Edit** (below). To do: SF1, SF2 for other kinds, several
-> files and a crop size, and Docs, Voice Memos and Maps of SF5.
+> app menu, after Edit** (below).
+>
+> **10 October 2026: SF1, SF2 and SF5 built in the simulator.** SF1: the
+> original apps' `enyo.FilePicker` opens luna-systemui's own picker in their
+> card, as on webOS (Clock's alarm sound, Email's attachments, Contacts'
+> photo with its crop view); see "The original picker" below. SF2:
+> `pick {kinds: ["image" | "video" | "audio" | "document" | "file"],
+> multiple?, cropWidth?, cropHeight?, extensions?, title?}` answers `{files:
+> [{fullPath, mimeType, name, size, cropInfo?, croppedPath?}]}` or
+> `{canceled: true}`: several kinds ask for the kind first (the original's
+> Photos, Videos, Music, Documents, and Files, any file by folder); several
+> files are ticked and OK sends them ("2 Files Selected"); a crop size shows
+> the picture in a frame of that shape to move and zoom, and answers
+> `cropInfo` in Enyo's CroppableImage names and `croppedPath`, the crop at
+> that size (`filePicker.pick()` in `@phoenix/luna`). SF5: Docs (the
+> reader's Share and app menu: the document's file), Voice Memos (a memo's
+> Share: its recording) and Maps (Share Location and the app menu: the
+> place's name, address and map link, the text its own Messaging / Email
+> menu sent) open the sheet. `tools/test-filepicker.cjs`, `test-docs.cjs`,
+> `test-voicememos.cjs`, `test-maps.cjs`. Voice Memos' "Open in Music"
+> (10 October 2026): Music takes audio from the sheet (`shareTargets`
+> `audio/*`) and plays it in Now Playing under the share's title, the
+> library's tags when it has the file (`sharedSongs`, apps/music;
+> `test-voicememos.cjs`). Left: SF6 (2.0).
+
+### The original picker (SF1)
+
+Enyo 1's `enyo.FilePicker` (FilePicker.js:48) shows
+`/usr/lib/luna/system/luna-systemui/app/FilePicker/filepicker.html` in a
+CrossAppUI frame of the app's page; the page answers with a
+`enyoCrossAppResult=` message (CrossAppResult.js:13). On webOS every frame
+had `PalmSystem` and `PalmServiceBridge`; here the compat copy of
+`filepicker.html` loads the runtime, which takes the app of the page around
+the frame as its own. Behind it, as webOS 3's media indexer kept them in
+db8: albums (`com.palm.media.image.album:1`: name, path, total {images,
+videos}, sortKey; the camera's "Photo roll" first), pictures and videos
+with their album's `albumId`, `appCacheComplete` and `appGridThumbnail`
+(found "from" the parent kind `com.palm.media.types:1`), songs with
+`isRingtone` (the system's ringtones and /media/internal/ringtones), and
+the documents (`com.palm.media.misc.file:1`, as before); systemservice
+`ringtone/addRingtone` / `deleteRingtone` (its add-ringtone button and
+swipe). Contacts makes its photo from the crop with `com.palm.image/convert`
+(and `ezResize`, `imageInfo`; `com.palm.filecache` for synced contacts),
+which the runtime does on a canvas; pages show the user's pictures by
+their path (an `<img>` or an inline background naming
+/media/internal/... or /var/file-cache/...), and `palmGetResource` reads
+the files the Files store keeps.
 
 **Share in every app menu.** As Edit is in every app menu, Share follows
 it: React apps' `AppMenu` (`@phoenix/ui`) takes `share`, what the app is

@@ -10,7 +10,9 @@
 //                            screen order; consecutive cards with the same
 //                            groupId form a card stack); optional:
 //                            fullScreen (enableFullScreenMode), blockScreenTimeout,
-//                            statusBarColor (setWindowProperties; -1 for none)
+//                            statusBarColor (setWindowProperties; -1 for none),
+//                            allowResize (PalmSystem.allowResizeOnPositiveSpaceChange:
+//                            false keeps its size when the keyboard comes)
 //                            (setWindowProperties: the screen stays on), orientation
 //                            (the app's PalmSystem.setWindowOrientation:
 //                            "free", "up", "down", "left", "right",
@@ -586,7 +588,7 @@ Item {
         // appinfo.json requestedWindowOrientation (ApplicationDescription.cpp:
         // 464-469, handed to WebAppMgr) until the page asks for another.
         cards.insert(at, { uid: uid, appId: appId, title: titleText, groupId: groupId, fullScreen: false, blockScreenTimeout: false, statusBarColor: -1,
-                           orientation: _windowOrientation(info.orientation), modal: false, modalParent: "" });
+                           allowResize: true, orientation: _windowOrientation(info.orientation), modal: false, modalParent: "" });
         _pidOf(appId);
         return uid;
     }
@@ -721,9 +723,9 @@ Item {
             // launch, or an app launching itself (its dashboard or banner
             // tapped), only tells its page.
             // {newCard: true} (Phoenix, the application manager's launch):
-            // another card of it whatever the setting, in a stack of its
-            // own, e.g. the Assistant opening a conversation in a new card
-            // (apps/assistant: its "Open in New Card").
+            // another card of it whatever the setting, e.g. "Open in New
+            // Card" (the Assistant, Messaging); asked by the card in front it
+            // joins that card's stack, as every card an app opens does.
             var newCard = payload.newCard === true && !background;
             // {behind: true} (Phoenix, the application manager's launch): the
             // card opens, or hears its params, without coming to the front
@@ -746,9 +748,10 @@ Item {
                 return;
             }
             // Launched by the app in front: the new card joins its stack,
-            // e.g. the browser opened from a link in Email
+            // e.g. the browser opened from a link in Email, or another card
+            // of the same app (Open in New Card; the owner, 10 October 2026)
             // (CardWindowManager::prepareAddWindow, :561-567).
-            var joins = uid !== "" && uid === focusedUid && !background && !newCard;
+            var joins = uid !== "" && uid === focusedUid && !background;
             var launched = launch(target, uid, target === payload.id ? params : null, joins, how);
             if (launched !== "" && !background && !behind)
                 cardFocusRequested(launched);
@@ -846,6 +849,9 @@ Item {
                 cards.setProperty(wi, "blockScreenTimeout", !!payload.blockScreenTimeout);
             if (wi >= 0 && typeof payload.statusBarColor === "number")
                 cards.setProperty(wi, "statusBarColor", payload.statusBarColor);
+            // PalmSystem.allowResizeOnPositiveSpaceChange (IpcClientHost.cpp:303-305).
+            if (wi >= 0 && payload.allowResizeOnPositiveSpaceChange !== undefined)
+                cards.setProperty(wi, "allowResize", !!payload.allowResizeOnPositiveSpaceChange);
         } else if (type === "inputFocus") {
             // An editable element of the page got or lost the focus, or the
             // app showed or hid the keyboard itself (runtime: "Virtual
@@ -1132,6 +1138,15 @@ Item {
         var w = uid === "justtype" ? _justType : _windows[uid];
         if (w && w.runScript)
             w.runScript("window.__phoenixRuntime && __phoenixRuntime.imeRemoveFocus && __phoenixRuntime.imeRemoveFocus()");
+    }
+
+    // The positive space changed for a window that keeps its size
+    // (CardWindow::adjustForPositiveSpaceSize): Mojo.positiveSpaceChanged.
+    function positiveSpaceChanged(uid, width, height) {
+        var w = _windows[uid];
+        if (w && w.runScript)
+            w.runScript("window.__phoenixRuntime && __phoenixRuntime.positiveSpaceChanged && __phoenixRuntime.positiveSpaceChanged("
+                        + Number(width) + "," + Number(height) + ")");
     }
 
     // The keyboard came up or went (Mojo.keyboardShown in the app).
@@ -1554,7 +1569,7 @@ Item {
         delete p[uid];
         _parked = p;
         cards.insert(cards.count, { uid: uid, appId: card.appId, title: card.title, groupId: newGroupId(), fullScreen: false,
-                                    blockScreenTimeout: false, statusBarColor: -1, orientation: card.orientation || "free" });
+                                    blockScreenTimeout: false, statusBarColor: -1, allowResize: true, orientation: card.orientation || "free" });
         return uid;
     }
     // Whether closing this card keeps its window: its page asked

@@ -18,12 +18,38 @@ in the documents linked from each item.
   launcher icons, the clipboard history, the Assistant, and the community
   features picked for 1.0. Also the keyboard's dictation, word suggestions,
   swipe typing, emoji and cursor control (GAPS V2-V6), hardware keyboard
-  shortcuts and accessibility (V8), Edit in every app menu (E1), Developer
+  shortcuts and accessibility (V8) and its keyboard button, which keeps clear of
+  notifications, moves to either edge and can be hidden, Edit in every app menu (E1), Developer
   Mode behind the Konami code, and the share sheet with Share in every app
   menu ([SHARE-AND-FILES.md](SHARE-AND-FILES.md)).
+- The start-up animation: the phoenix's death and rebirth (the dead orb
+  burns to ash, a gold bird-orb flies out of it and becomes the Assistant
+  bird, which lands and waves; `BootStory.qml`), or the classic glowing
+  logo (Settings > Advanced > Start-up animation). On a device written, not
+  run: the device shell shows it from its first frame in the chosen style
+  and ends it on bootd's `boot-done` ([OPEN-QUESTIONS.md](OPEN-QUESTIONS.md)
+  Q10-Q14, Q19).
 - Cards: stacks keep their order while a card maximizes and minimizes, and
   Back in an app another opened returns to the caller, the app staying open
-  behind it (GAPS C12).
+  behind it (GAPS C12); the fan's own clock, the launching card coming back
+  when a child closes, a maximized card's fly-off, the new card's prepare
+  step, modal cards, dashboards swiped or dragged by their window (C1, C2,
+  C4, C11, N5; 10 October 2026).
+- 10 October 2026, also: the launcher hides the cards and has its top
+  scroll fade (L1, L2); the dock-mode system menu, the ringer key, the kept
+  rotation lock (M2, R1); the angry card's and launcher's sounds and Email's
+  and the Clock's tones (C3, A1); several keyboards with the globe key, the
+  text around the cursor, emoji for words, spoken punctuation,
+  auto-capitalisation, hardware keyboard layouts and remapping, the PIN pad
+  by keyboard (V1-V3, V6-V8); the original file picker for legacy apps, the
+  picker's kinds, Share in Docs, Voice Memos and Maps, Open in Music (SF1,
+  SF2, SF5); Open in New Card in Messaging and Email; the Assistant listening
+  on after "Hey Phoenix" and Answer aloud when you type / when you speak;
+  Synergy C0 (Connections in the Marketplace).
+- In progress (10 October 2026): Synergy C1-C2 (the connector kit and the
+  Fediverse account), and the device side of the gaps (the device window
+  source, its system status, the WAV sounds, the lock service, the
+  Assistant's and the clipboard's services on the bus).
 - Plans: modern Synergy with cloud drives, the Fediverse, the messaging
   networks Phoenix can use and RCS ([SYNERGY-MODERN.md](SYNERGY-MODERN.md)); LuneOS
   ([LUNEOS.md](LUNEOS.md)); how Phoenix differs from webOS Community
@@ -33,7 +59,20 @@ in the documents linked from each item.
   hardware ([HARDWARE.md](HARDWARE.md)); 2.0 docking and TV mode
   ([CONVERGENCE.md](CONVERGENCE.md)).
 
-Nothing has run on a phone yet.
+## Written for the device, not yet run
+
+Nothing has run on a phone yet. The device side is written against OSE's
+own sources and tested here with fakes ([HARDWARE.md](HARDWARE.md#written-for-the-device-not-yet-run)):
+the device window source's launching app, Back (to the page, to the caller,
+or minimizing the card) and the apps' orientation, full-screen and status
+bar colour requests; Wi-Fi, Bluetooth, VPN and a modem's indicators, the
+sound and rotation lock preferences and all of Settings > Advanced from
+OSE's services; the orientation sensor (phoenix-devices, IIO); the device
+lock and the shell's state for the apps (`services/systemmanager`); the
+clipboard history on the bus (`services/clipboard`); the system sounds as
+raw PCM for audiod, with looping ringtones; the start-up animation at boot.
+What the first image must check is listed there; the owner's questions are
+[OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q19-Q23.
 
 ## Direction
 
@@ -100,8 +139,6 @@ The whole plan, milestone by milestone, with the decisions taken so far:
 - **Check on a Retina Mac** that the status bar icons are the right size
   (fixed in `a8590c1`; CI now runs the HiDPI tests at a device pixel ratio
   of 2).
-- **Terminal test flake**: `test-terminal.cjs` "paste: from the app menu"
-  lost keystrokes once in three runs; find the cause.
 - **Device work** for the new apps: torchd and the nyx torch module, the
   PTY service build, Developer Mode, the emergency window and First Use at
   boot on the device window source, a per-app location permission service,
@@ -133,11 +170,17 @@ The whole plan, milestone by milestone, with the decisions taken so far:
 - **Ionic and Flutter demos**: Notes (Ionic) and Notes (Flutter), the same
   app for phones and tablets, in Downloads with the Enact demos and on the
   same notes ([APP-RUNTIME.md](APP-RUNTIME.md#ionic-and-flutter-apps)).
-- **Synergy build**, in the order of [SYNERGY-MODERN.md](SYNERGY-MODERN.md#5-roadmap).
+- **Synergy build**: C1-C2 in progress; then the accounts needing no
+  registration (meeting Join buttons, Jitsi video calls, WebDAV, SFTP and
+  S3 drives in Files) and C3 (the OAuth service, Microsoft, Google, Dropbox,
+  Box, LinkedIn, Zoom, Telegram, Bluesky, the iCloud preset)
+  ([SYNERGY-CONNECTORS.md](SYNERGY-CONNECTORS.md) 6-7). The developer apps to
+  register under the Phoenix project account: OPEN-QUESTIONS Q17.
 - **Open gaps**: one list by area and priority in
-  [spec/GAPS.md](spec/GAPS.md#open-gaps-at-a-glance). In the simulator the
-  biggest left are the launcher's solid dock background and top scroll fade
-  (L1, L2), the fan's easing and the launching card coming back when a child
-  closes (C12), several keyboards side by side (V7), and the original file
-  picker for legacy apps (SF1); everything else waits on a device (K1, G1,
-  G2, V5, R1, A1).
+  [spec/GAPS.md](spec/GAPS.md#open-gaps-at-a-glance). In the simulator only
+  small ones are left (a modal card and the keyboard, a dashboard's drag
+  mode set late, firm press to select, word-by-word dictation); everything
+  else waits on a device: written and tested here, to run on hardware (K1,
+  G1, G2, R1, R2, S6, M2, S2, A1, E2, C8, C12), and the Phoenix keyboard as
+  the device's input method (V5): the first image, and a device to run it
+  on (OPEN-QUESTIONS Q2).

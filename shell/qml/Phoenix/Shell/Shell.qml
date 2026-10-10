@@ -118,8 +118,43 @@ FocusScope {
     readonly property var tweakDefaults: ({ infiniteCardCycling: false, maximizeEdges: false, waveLauncher: true, tapRipple: true,
                                             animationSpeed: "normal", gestureSensitivity: "normal", haptics: false,
                                             gridDensity: "normal", batteryPercent: false, numberRow: false,
-                                            keyboardStyle: "auto" })
+                                            keyboardStyle: "auto", startupAnimation: "phoenix",
+                                            keyboardButton: true, keyboardButtonSide: "right",
+                                            keyboardButtonY: 1, keyboardButtonHintShown: false })
     function tweak(name) { return tweaks[name] !== undefined ? tweaks[name] : tweakDefaults[name]; }
+    // Changes tweaks the shell itself makes (the keyboard button's place):
+    // at once in the system's tweaks, and saved as the system preferences
+    // of the same names, which the runtime hands back as tweaks
+    // (runtime/phoenix-runtime.js tweaks(); on a device LsmSystemStatus).
+    function setTweaks(values) {
+        if (shell.system && shell.system.tweaks !== undefined) {
+            var t = {};
+            for (var k in tweaks)
+                t[k] = tweaks[k];
+            for (k in values)
+                t[k] = values[k];
+            shell.system.tweaks = t;
+        }
+        var bus = source && typeof source.lunaCall === "function" ? source
+                : shell.system && typeof shell.system.lunaCall === "function" ? shell.system : null;
+        if (bus)
+            bus.lunaCall("luna://com.webos.service.systemservice/setPreferences", values, function() {});
+    }
+    // The keyboard button's menu, Hide Keyboard Button: off (Settings >
+    // Text Assist > Keyboard button brings it back), and the first time a
+    // banner says so; tapped, it opens that page.
+    function hideKeyboardButton() {
+        var first = !tweak("keyboardButtonHintShown");
+        setTweaks(first ? { keyboardButton: false, keyboardButtonHintShown: true } : { keyboardButton: false });
+        if (!first)
+            return;
+        var settingsId = "org.webosphoenix.settings", a = null;
+        for (var i = 0; source && source.apps && i < source.apps.count; ++i)
+            if (source.apps.get(i).appId === settingsId)
+                a = source.apps.get(i);
+        notes.showBanner(qsTr("Keyboard button off: Text Assist"), a && a.icon ? a.icon : "",
+                         a ? a.color : "#666666", a ? a.glyph : "", settingsId, JSON.stringify({ page: "textassist" }), "keyboardButton");
+    }
     Binding { target: Theme; property: "animationSpeed"; value: shell.tweak("animationSpeed") }
     Binding { target: Theme; property: "gestureSensitivity"; value: shell.tweak("gestureSensitivity") }
     // Tell the window source which card is in front (apps it launches join
@@ -495,9 +530,8 @@ FocusScope {
         id: backlight
         timeout: shell.system && shell.system.screenTimeout > 0 ? shell.system.screenTimeout : 60
         locked: shell.locked
-        // An app in front keeping the screen on (blockScreenTimeout); the
-        // system screens (USB drive mode, a progress animation, booting).
-        blocked: (cards.maximized && cards.currentBlocksScreenTimeout) || systemScreens.holdsDisplay
+        // An app in front keeping the screen on (blockScreenTimeout).
+        blocked: cards.maximized && cards.currentBlocksScreenTimeout
         onTurnedOff: shell.lock()
         // On the Touchstone it waits for dock mode instead of dimming.
         onPuck: shell._exhibitionsOnPuck
@@ -509,7 +543,12 @@ FocusScope {
         // backlight's level (DeviceServices.qml).
         // The assistant's view stays lit while it is up, also over the
         // lock screen (opened there by "Hey Phoenix").
-        held: devices.holdsDisplay || assistantView.open
+        // The system screens (USB drive mode, a progress animation, the
+        // boot animation) hold it on as an app's request does, the lock
+        // screen too (DisplayManager::pushDNAST, "brickmode-local",
+        // "progress-sequence"): as blocked, the lock screen's 5 s timeout
+        // turned the screen off in the middle of the start-up story.
+        held: devices.holdsDisplay || assistantView.open || systemScreens.holdsDisplay
         maximumBrightness: shell.system && shell.system.brightness > 0 ? Math.round(shell.system.brightness * 100) : 100
         automaticBrightness: !shell.system || shell.system.automaticBrightness !== false
         lightRegion: devices.lightRegion
@@ -1519,9 +1558,21 @@ FocusScope {
             return false;
         }
         var buttons = _keyButtons(host);
+        var k = event.key;
+        // A popup alert that is a page (luna-systemui's, an app's
+        // createPopupAlert): its buttons are its own; the runtime rings and
+        // presses them (keyNav), the same keys as here. Esc stays Back.
+        if (!buttons.length && host !== deleteDialog && typeof host.runScript === "function") {
+            var nav = k === Qt.Key_Tab || k === Qt.Key_Down || k === Qt.Key_Right ? "next"
+                    : k === Qt.Key_Backtab || k === Qt.Key_Up || k === Qt.Key_Left ? "previous"
+                    : k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space ? "press" : "";
+            if (nav === "")
+                return false;
+            host.runScript("window.__phoenixRuntime && __phoenixRuntime.keyNav && __phoenixRuntime.keyNav(\"" + nav + "\", \"buttons\")");
+            return true;
+        }
         if (!buttons.length)
             return false;
-        var k = event.key;
         var i = buttons.indexOf(_keyButton);
         if (k === Qt.Key_Tab || k === Qt.Key_Backtab || k === Qt.Key_Down || k === Qt.Key_Up || k === Qt.Key_Left || k === Qt.Key_Right) {
             var back = k === Qt.Key_Backtab || k === Qt.Key_Up || k === Qt.Key_Left;
@@ -1631,6 +1682,17 @@ FocusScope {
     // Orange+Sym+P, WindowServer.cpp:687-697) capture at once. On a Mac,
     // Qt's Ctrl is Command and Meta is Control: both Command+Option+P and
     // Control+Option+P capture.
+    // A popup alert in front takes the navigation keys, whatever had the
+    // focus (the app's page under it takes every key): Tab and the arrows
+    // ring its buttons, Enter or Space presses one (_dialogKey; GAPS V8 (3)).
+    SystemKeys {
+        id: alertKeys
+        enabled: notes.alertShown && !shell.locked
+        keys: [Qt.Key_Tab, Qt.Key_Backtab, Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right,
+               Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space]
+        onPressed: (key, autoRepeat) => shell._dialogKey({ key: key })
+    }
+
     SystemKeys {
         id: systemKeys
         // Also the simulator's gestures and demo keys (sim/main.cpp): Esc
@@ -1766,6 +1828,25 @@ FocusScope {
         customRepeat: !!prefs.customRepeat
         repeatDelay: prefs.repeatDelay !== undefined ? prefs.repeatDelay : 500
         repeatInterval: prefs.repeatInterval || 50
+        // Settings > Text Assist > Hardware Keyboard (GAPS V8 (5)): its
+        // layout and the modifier keys remapped.
+        readonly property var hw: shell.system && shell.system.hardwareKeyboardPrefs ? shell.system.hardwareKeyboardPrefs : ({})
+        layout: hw.layout || "auto"
+        keyRemap: hw.remap || ({})
+        onKeyboardKeyPressed: shell.keyboardKey()
+    }
+    // The TouchPad keyboard's keyboard key: the virtual keyboard up or down
+    // (SystemUiController.cpp:620-623, IMEController::setIMEActive). With a
+    // field in use it comes up even with the keyboard attached (V8 (1)).
+    // Down, the field keeps the focus (setIMEActive(false) hides the IME,
+    // unlike the hide key, which ends the editing).
+    function keyboardKey() {
+        if (_imeOpened) {
+            _keyboardAskedFor = false;
+            _hideIMEInternal();
+        } else if (imeClient) {
+            showVirtualKeyboard();
+        }
     }
 
     // ---- The volume keys ----------------------------------------------------------
@@ -2217,6 +2298,43 @@ FocusScope {
         value: speechEngine
         when: !!shell.source && ("speech" in shell.source)
     }
+    // When the app in front is resized for a change of the negative space
+    // (the keyboard, the dashboard, a banner, an alert), as CardWindowManager
+    // did while maximized (MaximizeState::positiveSpaceAboutToChange and
+    // positiveSpaceChangeFinished, CardWindowManagerStates.cpp:256-318): when
+    // the positive space grows (the keyboard going), at the start of the
+    // 400 ms slide (resizeEventSync); when it shrinks (the keyboard coming),
+    // at its end, the keyboard sliding up over the app meanwhile. Size
+    // changes without a slide (rotation, the tablet keyboard's sizes) at once.
+    property real _spaceFrom: 0
+    // (Within half a pixel: the slide eases into its end.)
+    readonly property bool _spaceSettled: Math.abs(notes.negativeSpace - notes.negativeSpaceTarget) < 0.5
+    readonly property real cardBottomInset: _spaceSettled
+        ? notes.negativeSpaceTarget : Math.min(notes.negativeSpaceTarget, _spaceFrom)
+    Connections {
+        target: notes
+        function onNegativeSpaceTargetChanged() { shell._spaceFrom = notes.negativeSpace; }
+        // positiveSpaceChangeFinished: an app that keeps its size is told the
+        // positive space instead (adjustForPositiveSpaceSize ->
+        // Mojo.positiveSpaceChanged, enyo-1.0 palm/system/keyboard.js:224).
+        function onNegativeSpaceChanged() {
+            if (notes.negativeSpace !== notes.negativeSpaceTarget || !cards.maximized)
+                return;
+            var uid = cards.currentUid;
+            if (uid !== "" && shell._cardKeepsSize(uid) && source && typeof source.positiveSpaceChanged === "function")
+                source.positiveSpaceChanged(uid, Math.round(cards.windowWidth),
+                                            Math.round(ui.height - cards.topInset - notes.negativeSpace));
+        }
+    }
+    // The app asked not to be resized (PalmSystem.allowResizeOnPositiveSpaceChange(false)).
+    function _cardKeepsSize(uid) {
+        var m = source ? source.cards : null;
+        for (var i = 0; m && i < m.count; ++i)
+            if (m.get(i).uid === uid)
+                return m.get(i).allowResize === false;
+        return false;
+    }
+
     // IMEController::isIMEOpened (or the platform's keyboard is up). With
     // it the tablet's bezel flick must travel further.
     readonly property bool keyboardOpen: _imeOpened || platformKeyboardHeight > 0
@@ -2255,7 +2373,14 @@ FocusScope {
             type = 6;                                           // FieldType_Phone
         else if (h & (Qt.ImhDigitsOnly | Qt.ImhFormattedNumbersOnly))
             type = 5;                                           // FieldType_Number
-        return { type: type, actions: 0, flags: 0, enterKeyLabel: "" };
+        // Auto-capitalisation (GAPS V1): off unless the field asks, as
+        // LunaSysMgr's own fields never had it (LockWindow.cpp:1547); a
+        // field with Qt.ImhPreferUppercase starts sentences with a capital,
+        // Qt.ImhUppercaseOnly is all capitals.
+        var cap = "none";
+        if (type === 0 && !(h & (Qt.ImhNoAutoUppercase | Qt.ImhLowercaseOnly | Qt.ImhSensitiveData)))
+            cap = h & Qt.ImhUppercaseOnly ? "characters" : h & Qt.ImhPreferUppercase ? "sentences" : "none";
+        return { type: type, actions: 0, flags: 0, enterKeyLabel: "", autoCap: cap };
     }
 
     // Which client has the input focus now; IMEController::setClient /
@@ -2279,6 +2404,8 @@ FocusScope {
         imeClient = c;
         if (!same)
             _keyboardAskedFor = false;
+        if (!same && c)
+            ime.inputClientChanged();
         if (c && hardwareKeyboard && !_keyboardAskedFor) {
             ime.editorState = c.state;
             _hideIMEInternal();
@@ -2578,8 +2705,10 @@ FocusScope {
                         // The angry card's stretch, upside down.
                         onFeedbackSound: (name) => shell.sounds.feedback(name)
                         topInset: shell.fullScreen ? 0 : Theme.statusBarHeight
-                        // The app's positive space ends where the notifications' negative space begins.
-                        bottomInset: notes.negativeSpace
+                        // The app's positive space ends where the notifications' negative space begins,
+                        // resized when the original resized it (cardBottomInset).
+                        bottomInset: shell.cardBottomInset
+                        keyboardOverlap: notes.keyboardHeight > 0 ? Math.max(0, shell.cardBottomInset - notes.spaceWithoutKeyboard) : 0
                         uiOrientation: uiRotation.uiOrientation
                         uiPortrait: uiRotation.uiPortrait
                         // First Use's card stays until the app closes it.
@@ -3497,6 +3626,7 @@ FocusScope {
                         KeyInjector.commitText(t, text);
                 }
                 onHideRequested: shell.hideKeyboard()
+                surroundingText: shell._imeSurroundingText
                 // VirtualKeyboardPreferences TapSounds: "Keyboard clicks".
                 tapSounds: !shell.system || shell.system.tapSounds !== false
                 // Settings > Text Assist.
@@ -3507,6 +3637,7 @@ FocusScope {
                 userShortcuts: _assistPrefs.shortcuts || ({})
                 shortcutsOn: _assistPrefs.shortcutsOn !== false
                 spaces2period: _assistPrefs.spaces2period !== false
+                emojiSuggestions: _assistPrefs.emojiSuggestions !== false
                 forgetWordsAt: _assistPrefs.forgetWords || 0
                 // Settings > Text Assist > Personal Dictionary; "Add" in the
                 // candidate bar goes back to the system (x_palm_textinput.userWords).
@@ -3520,6 +3651,12 @@ FocusScope {
                                                                                                   : [{ layout: "qwerty", language: "en" }]
                 keyboard: shell.system && shell.system.keyboard ? shell.system.keyboard : ({ layout: "qwerty", language: "en" })
                 onKeyboardSelected: (k) => { if (shell.system && shell.system.keyboard !== undefined) shell.system.keyboard = k; }
+                // Settings > Text Assist > Keyboards (GAPS V7): the keyboards
+                // installed and the one in use; the globe key picks another.
+                installedKeyboards: shell.system && shell.system.installedKeyboards && shell.system.installedKeyboards.length
+                                    ? shell.system.installedKeyboards : ["classic"]
+                keyboardId: shell.system && shell.system.keyboardId ? shell.system.keyboardId : "classic"
+                onKeyboardChosen: (id) => { if (shell.system && shell.system.keyboardId !== undefined) shell.system.keyboardId = id; }
                 onFeedback: (name) => shell.sounds.feedback(name)
                 // The clipboard key and the clip strip (M6 F2).
                 clipboard: clipboardClient
@@ -3559,6 +3696,23 @@ FocusScope {
                     if (dy >= min && dy > Math.abs(m.x - sx))
                         shell.gestureUp();
                 }
+            }
+
+            // A hardware keyboard attached and a field with the focus: the
+            // button that brings the virtual keyboard up (KeyboardButton),
+            // in the UI as it is turned, clear of the notification area.
+            KeyboardButton {
+                id: keyboardButton
+                anchors.fill: parent
+                shown: shell.virtualKeyboard && shell.hardwareKeyboard && shell.imeClient !== null && !shell._imeOpened
+                       && !shell.locked && shell.tweak("keyboardButton") !== false
+                topInset: shell.fullScreen ? 0 : Theme.statusBarHeight
+                side: shell.tweak("keyboardButtonSide")
+                fraction: shell.tweak("keyboardButtonY")
+                keepOut: notes.occupiedRects.map(function (r) { return Qt.rect(r.x + notes.x, r.y + notes.y, r.width, r.height); })
+                onActivated: shell.showVirtualKeyboard()
+                onPlaceChosen: (side, fraction) => shell.setTweaks({ keyboardButtonSide: side, keyboardButtonY: fraction })
+                onHideRequested: shell.hideKeyboardButton()
             }
         }
 
@@ -3617,6 +3771,29 @@ FocusScope {
         if (w && w.runScript)
             w.runScript("window.__phoenixRuntime && __phoenixRuntime.clipboard && __phoenixRuntime.clipboard.insertImage("
                         + JSON.stringify(String(clip.image || "")) + ")");
+    }
+
+    // The text around the cursor in the keyboard's field, {text, cursor}
+    // (GAPS V3), as an input method asks a field (ImSurroundingText,
+    // ImCursorPosition): a text field of the shell's tells its text and
+    // cursor; a web page's field answers Qt's input method query while its
+    // view has the focus (Chromium reports the text around the selection).
+    function _imeSurroundingText() {
+        var c = imeClient;
+        if (!c)
+            return null;
+        if (c.kind === "item")
+            return c.item.text !== undefined && c.item.cursorPosition !== undefined
+                ? { text: String(c.item.text), cursor: c.item.cursorPosition } : null;
+        var t = _imeTarget();
+        for (var i = _focusItem; i && t; i = i.parent) {
+            if (i === t) {
+                var text = Qt.inputMethod.queryFocusObject(Qt.ImSurroundingText, undefined);
+                var pos = Qt.inputMethod.queryFocusObject(Qt.ImCursorPosition, undefined);
+                return typeof text === "string" && typeof pos === "number" ? { text: text, cursor: pos } : null;
+            }
+        }
+        return null;
     }
 
     // What the keyboard's keys go to: the focused text field, or the web
@@ -3707,42 +3884,6 @@ FocusScope {
         z: 99997
         scheme: shell.keyboardShortcuts
         anchors.centerIn: parent
-    }
-
-    // A hardware keyboard attached and a field with the focus: the button
-    // that brings the virtual keyboard up (the iPad's keyboard bar), at the
-    // bottom right above the gesture bar.
-    Rectangle {
-        id: keyboardButton
-        objectName: "showKeyboardButton"
-        z: 99996
-        visible: shell.virtualKeyboard && shell.hardwareKeyboard && shell.imeClient !== null && !shell._imeOpened && !shell.locked
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.rightMargin: Theme.px(12)
-        anchors.bottomMargin: Theme.gestureAreaHeight + Theme.px(10)
-        width: Theme.px(56)
-        height: Theme.px(40)
-        radius: Theme.px(8)
-        color: keyboardButtonArea.pressed ? "#e0505050" : "#d0202020"
-        border.color: "#60ffffff"
-        Item {
-            anchors.centerIn: parent
-            width: Theme.px(36)
-            height: Theme.px(22)
-            clip: true
-            // icon-hide-keyboard.png without its arrow: just the keyboard.
-            Image {
-                source: Theme.asset("keyboard-tablet/icon-hide-keyboard.png")
-                width: Theme.px(36)
-                height: Theme.px(36) * Theme.artHeight(source) / Math.max(1, Theme.artWidth(source))
-            }
-        }
-        MouseArea {
-            id: keyboardButtonArea
-            anchors.fill: parent
-            onClicked: shell.showVirtualKeyboard()
-        }
     }
 
     // Sticky keys: the modifiers waiting for the next key, and in bold
@@ -3872,6 +4013,7 @@ FocusScope {
         onCall: notes.incomingCall || !!(shell.source && shell.source.activeCallBanner)
         displayOn: backlight.on
         bootAngle: shell.homeButtonAngle
+        bootStyle: shell.tweak("startupAnimation") === "classic" ? "classic" : "phoenix"
         onBootFinished: sounds.bootFinished()
         // storaged could not take the drive: "USB Drive connection failed".
         onBrickModeFailed: if (shell.source && shell.source.showMsmEntryFailedAlert) shell.source.showMsmEntryFailedAlert()

@@ -29,9 +29,9 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | App | Status | Legacy webOS | Priority | Approach |
 | --- | --- | --- | --- | --- |
 | Phone | Phoenix | Phone (dial pad, call log, voicemail, conference) | P0 | Done in the simulator. The lock-screen answer is done. Needs the device telephony service (webos-telephonyd on oFono) and the active-call banner. See [HARDWARE.md](HARDWARE.md#hardware-abstraction-plan) |
-| Messaging | Phoenix | Messaging (SMS, MMS, IM through Synergy) | P0 | Done in the simulator for SMS, MMS (attach from the picture picker, pictures in the balloon, simulated receive) and IM (a Jabber (XMPP) account on a simulated server: buddies, presence, chat). Needs real MMS (oFono has MMS through `mmsd`), a real XMPP transport, cell broadcast alerts |
+| Messaging | Phoenix | Messaging (SMS, MMS, IM through Synergy) | P0 | Done in the simulator for SMS, MMS (attach from the picture picker, pictures in the balloon, simulated receive) and IM (a Jabber (XMPP) account on a simulated server: buddies, presence, chat); Open in New Card on a conversation. Needs real MMS (oFono has MMS through `mmsd`), a real XMPP transport, cell broadcast alerts |
 | Contacts | Open webOS | Contacts with Synergy linking | P0 | Works. Needs CardDAV sync (below), vCard import/export, contact photos |
-| Email | Open webOS | Email (IMAP, POP, Exchange EAS) | P0 | Works with simulated transports. Needs real IMAP/SMTP transports in the email service (`third_party/app-services`); OAuth2 for Gmail and Outlook is the hard part |
+| Email | Open webOS | Email (IMAP, POP, Exchange EAS) | P0 | Works with simulated transports. Open Email in New Card (the original's message viewer card) works, from the app menu or a message held in the list. Needs real IMAP/SMTP transports in the email service (`third_party/app-services`); OAuth2 for Gmail and Outlook is the hard part |
 | Calendar | Open webOS | Calendar with Synergy | P0 | Works. Needs CalDAV sync and reminders that fire (activity manager) |
 | Accounts | Open webOS | Accounts (Palm Profile, Synergy) | P0 | Works but cannot sign in to anything. Needs account templates for CalDAV/CardDAV, IMAP and Nextcloud |
 | **Cloud sync** (contacts, calendar, files) | Missing | Palm Profile plus Synergy connectors (Google, Exchange, Facebook, Yahoo, LinkedIn); servers shut down | P0 | Standards, not vendors: CalDAV/CardDAV (Nextcloud, Fastmail, iCloud, Google), IMAP/SMTP, WebDAV for files. Built fresh in `apps/dav` (Apache-2.0): LuneOS's [C+Dav Synergy connector](https://github.com/webOS-ports/org.webosports.service.contacts.carddav) is GPL-3.0, so it is a reference only, not a starting point (see [LUNEOS.md](LUNEOS.md)). No UI of its own; it plugs into Accounts |
@@ -57,7 +57,7 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | --- | --- | --- | --- | --- |
 | Camera | Phoenix | Camera | P0 | Done in the simulator. Device capture depends on the camera work in [HARDWARE.md](HARDWARE.md) |
 | Photos | Phoenix | Photos & Videos | P0 | Done |
-| Music | Phoenix | Music (plus Amazon MP3 store) | P1 | Done. Needs playlists and a now-playing dashboard |
+| Music | Phoenix | Music (plus Amazon MP3 store) | P1 | Done. Plays audio from the share sheet (Voice Memos' "Open in Music", 10 October 2026). Needs playlists and a now-playing dashboard |
 | Video player | Phoenix (Videos) | Photos & Videos, a video player, YouTube app | P1 | Done in the simulator (`apps/videos`, `tools/test-videos.cjs`): library from the media indexer with stills, full-screen player free to turn, resume position, WebVTT/SRT subtitles beside the file (language menu), fit/fill, audio focus with Music and Podcasts; registered for video/* so Files, Email and the browser hand videos over. Photos still plays videos in place and has "Play in Videos". Codec coverage on a device depends on the image's GStreamer plugins (check H.264/HEVC licensing per image); the demo clips are WebM (VP9/Opus) |
 | Podcasts | Phoenix (Podcasts) | None built in; drPodder was the favourite third-party app | P1 | Done in the simulator (`apps/podcasts`, `tools/test-podcasts.cjs`): subscribe by RSS/Atom address, directory search (Apple's keyless iTunes Search API by default, within [its terms](https://performance-partners.apple.com/search-api): names only, cached; the [Podcast Index](https://podcastindex-org.github.io/docs-api/) when the user enters their own key and secret, since it needs one and Phoenix ships none), downloads to `/media/internal/podcasts` through `com.webos.service.downloadmanager`, speed, sleep timer, resume, background playback, OPML import/export, refresh every 6 hours through the activity manager with a notification. Still missing: a now-playing dashboard in the shell (it has none for Music either; both post `nowPlaying`), gpodder.net / Nextcloud sync, automatic downloads. In phoenix-sim only feeds that send CORS headers can be fetched (the dev server proxies the rest) |
 | **Screen recording** | Missing | Screenshots only (`com.palm.systemmanager/takeScreenShot`) | P2 | Screenshots first (shell, from the compositor). Recording needs compositor frames encoded to a file: probably luna-surfacemanager's output capture fed into GStreamer (*unverified*). A system menu toggle, not an app |
@@ -68,7 +68,7 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | App | Status | Legacy webOS | Priority | Approach |
 | --- | --- | --- | --- | --- |
 | Maps and navigation | Phoenix | Google Maps (1.x), Bing Maps (2.x and later); turn-by-turn only from carrier apps (Sprint Navigation, VZ Navigator) | P1 | Done in the simulator (`apps/maps`, `tools/test-maps.cjs`): [MapLibre GL JS](https://maplibre.org/) vector map (canvas renderer when there is no WebGL 2) on [OpenFreeMap](https://openfreemap.org/) tiles, search with Photon or Nominatim, directions for driving, walking and cycling with Valhalla or OSRM, turn-by-turn with spoken directions (OSE `com.webos.service.tts`), saved places in db8, sharing, `geo:`/`maploc:`/`mapto:` links and Contacts'/Calendar's addresses, offline areas and PMTiles files with offline search and routing. Every server is configurable; see [MAPS.md](MAPS.md). Needs on a device: GPS from GeoClue behind `com.webos.service.location`, a TTS engine (OSE's needs Google Cloud credentials), and a check that WAM gives WebGL 2 |
-| Location settings | Missing | Location Services pane | P1 | Settings pane over `com.webos.service.location` (`getState`/`setState`). Done in the simulator: Settings > Location Services, per-app permissions and the luna-systemui alert; see [APP-RUNTIME.md](APP-RUNTIME.md#location). On a device a per-app permission service is still needed (OSE has none) |
+| Location settings | **Done in the simulator** | Location Services pane | P1 | Settings pane over `com.webos.service.location` (`getState`/`setState`). Done in the simulator: Settings > Location Services, per-app permissions and the luna-systemui alert; see [APP-RUNTIME.md](APP-RUNTIME.md#location). On a device a per-app permission service is still needed (OSE has none) |
 
 ## Documents and files
 
@@ -106,15 +106,15 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
 | --- | --- | --- | --- | --- |
 | **Screen reader** | Missing | None | P1 (design now, build after M3) | The hardest item on this page. It must cover the QML shell and web apps. Qt Quick exposes an accessibility tree (AT-SPI on Linux) and Chromium exposes one for web pages, but no Linux screen reader is designed for touch (Orca is desktop-first), and whether OSE's Chromium build exposes AT-SPI under Wayland is *unverified*. Likely a Phoenix reader with TalkBack-style gestures in the shell, speaking through `com.webos.service.tts`. Meanwhile, keep every Phoenix app's markup accessible (labels, roles, focus order) so the work is not redone |
 | **Magnification** | Missing | None | P1 | Compositor zoom in the shell (a scaled view of the output with a pan gesture); cheap in QML. Also system text size and bold text settings |
-| Other settings | Partly | None | P1 | Settings > Accessibility: reduce motion (the shell's card, launcher and lock screen animations) and high contrast (Phoenix apps) work; mono audio and captions are stored (system preference `accessibility`) but nothing uses them yet |
+| Other settings | Partly | None | P1 | Settings > Accessibility: reduce motion (the shell's card, launcher and lock screen animations) and high contrast (Phoenix apps) work; Captions (10 October 2026) has Videos show a video's subtitles even when they were turned off there (`pickTrack`; `tools/test-videos.cjs`). Mono audio is stored (system preference `accessibility`) but nothing uses it yet: it belongs in the audio service (PulseAudio's remapping on a device), not in each page |
 
 ## Input
 
 | App | Status | Legacy webOS | Priority | Approach |
 | --- | --- | --- | --- | --- |
-| Virtual keyboard | OSE's TV keyboard | Hardware slider keyboards on phones; virtual keyboard on the TouchPad and Pre 3 | P0 | webOS-style phone and tablet layouts on OSE's Maliit-based IME (M2) |
-| Word prediction and correction | **Done in the simulator** (the keyboard's candidate bar; Settings > Text Assist) | Text Assist (auto-correct, custom words) | P1 | Suggestions, auto-correct with undo, swipe typing and dictation on AOSP LatinIME's word list and the words the user types, learned on the device. See [GAPS.md](spec/GAPS.md) V2, V3. Still to do: other languages |
-| **Swipe typing** | Missing | None | P1 (1.0, owner 29 September 2026; with prediction, dictation and emoji: [spec/GAPS.md](spec/GAPS.md) V2-V6) | No mature open-source Maliit swipe engine exists. [FlorisBoard](https://github.com/florisboard/florisboard)'s glide typing (Apache-2.0, Kotlin) is a candidate to port; check that its licence and dictionaries fit |
+| Virtual keyboard | **Done in the simulator** (webOS Classic, the port of the Pre and TouchPad keyboards, and Phoenix); OSE's Maliit keyboard on a device | Hardware slider keyboards on phones; virtual keyboard on the TouchPad and Pre 3 | P0 | The keyboards in `VirtualKeyboard.qml` ([spec/GAPS.md](spec/GAPS.md) V1, V7). On a device they must become Maliit input method plugins beside OSE's (V5, M2) |
+| Word prediction and correction | **Done in the simulator** (the keyboard's candidate bar; Settings > Text Assist) | Text Assist (auto-correct, custom words) | P1 | Suggestions, auto-correct with undo, swipe typing and dictation on AOSP LatinIME's word list and the words the user types, learned on the device. See [GAPS.md](spec/GAPS.md) V2, V3. English, German and French. Still to do: other languages |
+| Swipe typing | **Done in the simulator** (the keyboard's own; [spec/GAPS.md](spec/GAPS.md) V3) | None | P1 (1.0, owner 29 September 2026; with prediction, dictation and emoji: [spec/GAPS.md](spec/GAPS.md) V2-V6) | Phoenix's own matcher by the trace's shape (SHARK2) over Text Assist's word lists (`TextAssist.js`, `VirtualKeyboard.qml`), since no mature open-source Maliit swipe engine existed. On a device with the keyboard (V5) |
 
 ## Health and other
 
@@ -173,7 +173,10 @@ services underneath, see [HARDWARE.md](HARDWARE.md); for how apps run, see
    (Backup, VPN, Maps, Authenticator and Password manager are done in the
    simulator; next for the last two: the key store service and WebDAV file
    sync).
-4. **Platform features**: magnification and accessibility settings, word
-   prediction, cell broadcast alerts, screen recording.
-5. **Long projects**: screen reader (designed early, built after M3), swipe
-   typing, document viewer, health/steps, e-book reader, eSIM, print.
+4. **Platform features**: magnification (its gesture is
+   [OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q18), mono audio (the audio
+   service), cell broadcast alerts, screen recording (word prediction and
+   Captions are done in the simulator).
+5. **Long projects**: screen reader (designed early, built after M3),
+   health/steps, eSIM (swipe typing, the document viewer, the e-book reader
+   and print are done in the simulator).

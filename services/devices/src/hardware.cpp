@@ -89,6 +89,7 @@ DeviceConfig DeviceConfig::load(const std::string &path)
     c.loaded = true;
     c.backlight = j["backlight"].str();
     c.lightSensor = j["lightSensor"].str();
+    c.accelerometer = j["accelerometer"].str();
     // "ringerSwitch": {"type": "EV_SW" | "EV_KEY", "code": n, "silentValue": 1}
     const Json &r = j["ringerSwitch"];
     if (r.isObject() && r["code"].isNumber()) {
@@ -361,6 +362,72 @@ int LightSensor::read() const
         return v.empty() ? -1 : static_cast<int>((std::atof(v.c_str()) + m_offset) * m_scale + 0.5);
     }
     return -1;
+}
+
+// ---- Accelerometer ----------------------------------------------------------------------------
+
+Accelerometer::Accelerometer(const std::string &root, const std::string &name)
+{
+    const std::string base = root + "/sys/bus/iio/devices/";
+    std::vector<std::string> names = name.empty() ? entries(base, "iio:device") : std::vector<std::string>{ name };
+    for (const auto &n : names) {
+        const std::string dir = base + n + "/";
+        if (!exists(dir + "in_accel_x_raw") || !exists(dir + "in_accel_y_raw") || !exists(dir + "in_accel_z_raw"))
+            continue;
+        m_dir = dir;
+        const std::string shared = readText(dir + "in_accel_scale");
+        const std::string sharedOffset = readText(dir + "in_accel_offset");
+        const char *axes[] = { "x", "y", "z" };
+        for (int i = 0; i < 3; ++i) {
+            const std::string own = readText(dir + "in_accel_" + axes[i] + "_scale");
+            const std::string &s = !own.empty() ? own : shared;
+            if (!s.empty())
+                m_scale[i] = std::atof(s.c_str());
+            const std::string ownOffset = readText(dir + "in_accel_" + axes[i] + "_offset");
+            const std::string &o = !ownOffset.empty() ? ownOffset : sharedOffset;
+            if (!o.empty())
+                m_offset[i] = std::atof(o.c_str());
+        }
+        std::string mount = readText(dir + "in_accel_mount_matrix");
+        if (mount.empty())
+            mount = readText(dir + "mount_matrix");
+        if (!mount.empty()) {
+            double m[9];
+            int count = 0;
+            std::string cell;
+            for (char c : mount + ";") {
+                if (c == ',' || c == ';') {
+                    if (count < 9)
+                        m[count] = std::atof(cell.c_str());
+                    ++count;
+                    cell.clear();
+                } else if (c != ' ' && c != '\n') {
+                    cell += c;
+                }
+            }
+            if (count == 9)
+                std::copy(m, m + 9, m_mount);
+        }
+        return;
+    }
+}
+
+bool Accelerometer::read(double *x, double *y, double *z) const
+{
+    if (m_dir.empty())
+        return false;
+    double raw[3];
+    const char *axes[] = { "x", "y", "z" };
+    for (int i = 0; i < 3; ++i) {
+        const std::string v = readText(m_dir + "in_accel_" + axes[i] + "_raw");
+        if (v.empty())
+            return false;
+        raw[i] = (std::atof(v.c_str()) + m_offset[i]) * m_scale[i];
+    }
+    *x = m_mount[0] * raw[0] + m_mount[1] * raw[1] + m_mount[2] * raw[2];
+    *y = m_mount[3] * raw[0] + m_mount[4] * raw[1] + m_mount[5] * raw[2];
+    *z = m_mount[6] * raw[0] + m_mount[7] * raw[1] + m_mount[8] * raw[2];
+    return true;
 }
 
 // ---- Input devices: what each is ------------------------------------------------------------
@@ -721,6 +788,9 @@ DeviceProbe::DeviceProbe(const std::string &root, const DeviceConfig &config)
     LightSensor l(root, config.lightSensor);
     if (l.available())
         lightSensor.reset(new LightSensor(l));
+    Accelerometer a(root, config.accelerometer);
+    if (a.available())
+        accelerometer.reset(new Accelerometer(a));
     input.reset(new InputDevices(root, config));
 }
 
@@ -751,6 +821,13 @@ DeviceProbe::Changes DeviceProbe::rescan()
         lightSensor.reset(l.available() ? new LightSensor(l) : nullptr);
         c.log.push_back("light sensor " + (l.available() ? l.source() : std::string("gone")));
     }
+    Accelerometer a(m_root, m_config.accelerometer);
+    const std::string hadAccel = accelerometer ? accelerometer->dir() : std::string();
+    if (a.dir() != hadAccel) {
+        c.accelerometer = true;
+        accelerometer.reset(a.available() ? new Accelerometer(a) : nullptr);
+        c.log.push_back("accelerometer " + (a.available() ? a.dir() : std::string("gone")));
+    }
     c.input = input->rescan();
     const std::vector<std::string> usedNow = input->opened();
     for (const auto &i : c.input.added)
@@ -767,6 +844,7 @@ std::vector<std::string> DeviceProbe::describe() const
     out.push_back(std::string("vibrator ") + Vibrator::kindName(vibrator ? vibrator->kind() : Vibrator::None)
                   + (vibrator ? " " + vibrator->path() : std::string()));
     out.push_back("light sensor " + (lightSensor ? lightSensor->source() : std::string("none")));
+    out.push_back("accelerometer " + (accelerometer ? accelerometer->dir() : std::string("none")));
     const std::vector<std::string> usedNow = input->opened();
     for (const auto &i : input->seen())
         out.push_back("input " + describeInput(i, m_config, std::find(usedNow.begin(), usedNow.end(), i.path) != usedNow.end()));
@@ -953,6 +1031,8 @@ std::string probeReport(const std::string &root, const std::string &configPath)
         out += "  backlight: " + config.backlight + "\n";
     if (!config.lightSensor.empty())
         out += "  light sensor: " + config.lightSensor + "\n";
+    if (!config.accelerometer.empty())
+        out += "  accelerometer: " + config.accelerometer + "\n";
 
     Backlight b(root, config.backlight);
     out += "backlight: " + (b.available() ? b.dir() + " (max_brightness " + std::to_string(b.maxBrightness()) + ")" : std::string("none")) + "\n";
@@ -960,6 +1040,15 @@ std::string probeReport(const std::string &root, const std::string &configPath)
     out += std::string("vibrator: ") + Vibrator::kindName(v.kind) + (v.path.empty() ? "" : " " + v.path) + "\n";
     LightSensor l(root, config.lightSensor);
     out += "light sensor: " + (l.available() ? l.source() + " (now " + std::to_string(l.read()) + " lux)" : std::string("none")) + "\n";
+    Accelerometer a(root, config.accelerometer);
+    double ax = 0, ay = 0, az = 0;
+    OrientationFilter held;
+    if (a.available() && a.read(&ax, &ay, &az))
+        held.update(ax, ay, az);
+    out += "accelerometer: " + (a.available() ? a.dir() + " (now " + std::to_string(ax) + ", " + std::to_string(ay) + ", "
+                                 + std::to_string(az) + " m/s2: " + (held.orientation().empty() ? std::string("not held still")
+                                                                     : held.orientation()) + ")"
+                                : std::string("none")) + "\n";
 
     const std::vector<InputInfo> inputs = listInputs(root);
     out += "input devices: " + std::to_string(inputs.size()) + "\n";

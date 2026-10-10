@@ -130,6 +130,34 @@ Item {
             verify(b.z > a.z);
         }
 
+        // The fan's tilt and drop are the original's at the devices' sizes
+        // (a Pre's 320 px card), and do not grow past a Pre 3's on its side
+        // in a phone layout as wide as a tablet (phoenix-sim --phone,
+        // resized: the next card was turned 16 degrees, the owner, 10
+        // October 2026).
+        function test_fanTiltAtDeviceSizesAndCappedWide() {
+            function fan(cardWidth, maxCardWidth) {
+                var p = { viewWidth: cardWidth, cardWidth: cardWidth, cardHeight: 480, u: 1,
+                          activeScale: 0.6, nonActiveScale: 0.5, groupingFactor: 1, rotFactor: 30, gap: 0,
+                          maxCardWidth: maxCardWidth, position: 0, fan: { g: 0 }, focus: {}, maximize: 0,
+                          originY: 240, maximizedCenterY: 240 };
+                return CardLayout.compute([{ id: "g", uids: ["a", "b", "c"] }], p).cards;
+            }
+            // A Pre: as the formula, x / (activeScale * rotFactor).
+            var pre = fan(320, 533);
+            var x = pre.b.cx - pre.a.cx;
+            fuzzyCompare(pre.b.rot - pre.a.rot, x / (0.6 * 30), 0.001);
+            verify(Math.abs(pre.b.rot) < 5, "a few degrees: " + pre.b.rot);
+            // 1426 px wide: the cards as far apart, the tilt no more than a
+            // 533 px card's.
+            var wide = fan(1426, 533);
+            var capped = fan(533, 533);
+            verify(wide.b.cx - wide.a.cx > x, "the cards keep their (wider) places");
+            fuzzyCompare(wide.b.rot, capped.b.rot, 0.001);
+            fuzzyCompare(wide.c.rot, capped.c.rot, 0.001);
+            verify(Math.abs(wide.c.rot) < 15, "the third card: " + wide.c.rot);
+        }
+
         // A stack more than an active card's width from the centre is
         // folded: CardGroup::calculateOpenedPositions(xOffset) with
         // max(1, aw - |x|) / aw open, its cards 10 px apart, at the small

@@ -57,11 +57,18 @@ function openedOffset(k, pos, p) {
         x = (x + 4 * rOff) / 5;
     else if (x < lOff)
         x = (x + 4 * lOff) / 5;
+    // The tilt and the drop as on a card no wider than the devices'
+    // (p.maxCardWidth: a Pre 3 on its side, a TouchPad): the original's
+    // formula is in its pixels, and a phone layout in a window as wide as a
+    // tablet (phoenix-sim --phone, resized) turned the next card 16 degrees
+    // and the one after 30 (the owner, 10 October 2026). Unchanged at the
+    // devices' sizes.
+    var t = p.maxCardWidth > 0 ? x * Math.min(1, p.maxCardWidth * p.u / p.cardWidth) : x;
     return {
         x: x,
         // Cards right of centre drop slightly and tilt clockwise.
-        y: x > 0 ? x / 15 : 0,
-        rot: (x / p.u) / (p.activeScale * p.rotFactor)
+        y: t > 0 ? t / 15 : 0,
+        rot: (t / p.u) / (p.activeScale * p.rotFactor)
     };
 }
 
@@ -69,6 +76,7 @@ function openedOffset(k, pos, p) {
 // p: {
 //   viewWidth, cardWidth, cardHeight, u,
 //   activeScale, nonActiveScale, groupingFactor, rotFactor, gap,
+//   maxCardWidth,    the widest card the devices have, legacy px (the tilt's)
 //   position,        fractional index of the stack at the centre
 //   fan,             { groupId: fan position }
 //   focus,           { groupId: uid of the stack's active card }

@@ -1,0 +1,21 @@
+{
+    "phoenix.clipboard": [
+        "org.webosphoenix.clipboard/history",
+        "org.webosphoenix.clipboard/subscribe",
+        "org.webosphoenix.clipboard/add",
+        "org.webosphoenix.clipboard/pin",
+        "org.webosphoenix.clipboard/unpin",
+        "org.webosphoenix.clipboard/setCategory",
+        "org.webosphoenix.clipboard/update",
+        "org.webosphoenix.clipboard/delete",
+        "org.webosphoenix.clipboard/clear",
+        "org.webosphoenix.clipboard/paste",
+        "org.webosphoenix.clipboard/reveal",
+        "org.webosphoenix.clipboard/addCategory",
+        "org.webosphoenix.clipboard/renameCategory",
+        "org.webosphoenix.clipboard/deleteCategory",
+        "org.webosphoenix.clipboard/reorderCategories",
+        "org.webosphoenix.clipboard/getSettings",
+        "org.webosphoenix.clipboard/setSettings"
+    ]
+}

@@ -1,0 +1,10 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Started by the hub when the shell (or an app) first calls it; it keeps
+# itself running (service.js's keep-alive activity).
+
+[D-BUS Service]
+Name=com.palm.systemmanager
+Exec=/usr/bin/run-js-service -n /usr/palm/services/com.palm.systemmanager
+Type=dynamic

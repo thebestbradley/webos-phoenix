@@ -27,6 +27,9 @@ Item {
     // The boot animation turned so it is upright with the Home button below
     // (Shell.homeButtonAngle).
     property int bootAngle: 0
+    // The logo at start-up: "phoenix" (the story) or "classic" (Settings >
+    // Advanced > Start-up animation; Shell.tweak("startupAnimation")).
+    property string bootStyle: "phoenix"
 
     // Something here keeps the screen on (DisplayManager::pushDNAST:
     // "brickmode-local", "progress-sequence").
@@ -49,9 +52,10 @@ Item {
 
     function startBoot(activity) { boot.start(activity); }
     function bootProgress(val, total) { boot.setProgress(val, total); }
-    // WindowServer::bootupFinished: the boot sound as the logo goes.
+    // WindowServer::bootupFinished: the boot sound as the logo goes (as the
+    // boot is over: with the story, while it plays on to its end).
     function finishBoot() {
-        if (boot.mode === "")
+        if (boot.mode === "" || boot.finishPending)
             return;
         boot.finish();
         bootFinished();
@@ -320,5 +324,6 @@ Item {
         id: boot
         anchors.fill: parent
         angle: screens.bootAngle
+        style: screens.bootStyle
     }
 }

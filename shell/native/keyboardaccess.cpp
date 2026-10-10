@@ -8,6 +8,7 @@
 #include <QKeyEvent>
 #include <QTimerEvent>
 #include <QWindow>
+#include <iterator>
 
 namespace {
 
@@ -217,6 +218,125 @@ void KeyboardAccess::stopRepeat()
     m_repeatKey = 0;
 }
 
+void KeyboardAccess::setLayout(const QString &l)
+{
+    const QString v = l == QLatin1String("qwertz") || l == QLatin1String("azerty") ? l : QStringLiteral("auto");
+    if (v == m_layout)
+        return;
+    m_layout = v;
+    emit settingsChanged();
+}
+
+void KeyboardAccess::setKeyRemap(const QVariantMap &m)
+{
+    if (m == m_remap)
+        return;
+    m_remap = m;
+    m_remapHeld = {};
+    m_remapDown.clear();
+    emit settingsChanged();
+}
+
+namespace {
+// keyRemap's names for the keys it remaps, and the Qt keys of its targets.
+QString remapName(int key)
+{
+    switch (key) {
+    case Qt::Key_CapsLock: return QStringLiteral("capslock");
+    case Qt::Key_Control: return QStringLiteral("control");
+    case Qt::Key_Alt: return QStringLiteral("alt");
+    case Qt::Key_Meta:
+    case Qt::Key_Super_L:
+    case Qt::Key_Super_R: return QStringLiteral("meta");
+    default: return QString();
+    }
+}
+int remapKey(const QString &target)
+{
+    if (target == QLatin1String("capslock")) return Qt::Key_CapsLock;
+    if (target == QLatin1String("control")) return Qt::Key_Control;
+    if (target == QLatin1String("alt")) return Qt::Key_Alt;
+    if (target == QLatin1String("meta")) return Qt::Key_Meta;
+    if (target == QLatin1String("escape")) return Qt::Key_Escape;
+    return 0;
+}
+// evdev KEY_KEYBOARD (374) + 8: the TouchPad keyboard's keyboard key.
+constexpr quint32 kKeyboardKeyScanCode = 382;
+
+// What a US keyboard's keys type, by key: the unshifted character of the
+// key a shifted one came from ("!" is the 1 key).
+QChar usBase(QChar c)
+{
+    static const QString shifted = QStringLiteral("!@#$%^&*()_+{}|:\"~<>?");
+    static const QString base = QStringLiteral("1234567890-=[]\\;'`,./");
+    const int i = shifted.indexOf(c);
+    return i >= 0 ? base.at(i) : c.toLower();
+}
+} // namespace
+
+QString KeyboardAccess::remapTarget(int key) const
+{
+    const QString name = remapName(key);
+    if (name.isEmpty())
+        return QString();
+    const QString t = m_remap.value(name).toString();
+    return t.isEmpty() || t == name ? QString() : t;
+}
+
+// The modifiers of keys remapped to something else: their own no longer count.
+Qt::KeyboardModifiers KeyboardAccess::strippedModifiers() const
+{
+    Qt::KeyboardModifiers m;
+    if (!remapTarget(Qt::Key_Control).isEmpty()) m |= Qt::ControlModifier;
+    if (!remapTarget(Qt::Key_Alt).isEmpty()) m |= Qt::AltModifier;
+    if (!remapTarget(Qt::Key_Meta).isEmpty()) m |= Qt::MetaModifier;
+    return m;
+}
+
+bool KeyboardAccess::translate(const QString &layout, int key, bool shift, int *outKey, QString *outText)
+{
+    Q_UNUSED(key);
+    // The key's place: its unshifted US character.
+    const QChar base = outText->size() == 1 ? usBase(outText->at(0)) : QChar();
+    if (base.isNull())
+        return false;
+    // [US base, unshifted, shifted] for the keys the layout moves.
+    struct Entry { char16_t us; char16_t plain; char16_t shifted; };
+    static const Entry qwertz[] = {
+        { u'y', u'z', u'Z' }, { u'z', u'y', u'Y' },
+        { u';', u'\u00f6', u'\u00d6' }, { u'\'', u'\u00e4', u'\u00c4' }, { u'[', u'\u00fc', u'\u00dc' },
+        { u'-', u'\u00df', u'?' }, { u']', u'+', u'*' }, { u'\\', u'#', u'\'' }, { u'/', u'-', u'_' },
+        { u',', u',', u';' }, { u'.', u'.', u':' }, { u'`', u'^', u'\u00b0' }, { u'=', u'\u00b4', u'`' },
+        { u'1', u'1', u'!' }, { u'2', u'2', u'"' }, { u'3', u'3', u'\u00a7' }, { u'4', u'4', u'$' },
+        { u'5', u'5', u'%' }, { u'6', u'6', u'&' }, { u'7', u'7', u'/' }, { u'8', u'8', u'(' },
+        { u'9', u'9', u')' }, { u'0', u'0', u'=' },
+    };
+    static const Entry azerty[] = {
+        { u'q', u'a', u'A' }, { u'a', u'q', u'Q' }, { u'w', u'z', u'Z' }, { u'z', u'w', u'W' },
+        { u';', u'm', u'M' }, { u'm', u',', u'?' }, { u',', u';', u'.' }, { u'.', u':', u'/' },
+        { u'/', u'!', u'\u00a7' }, { u'\'', u'\u00f9', u'%' }, { u'[', u'^', u'\u00a8' }, { u']', u'$', u'\u00a3' },
+        { u'\\', u'*', u'\u00b5' }, { u'-', u')', u'\u00b0' }, { u'=', u'=', u'+' }, { u'`', u'\u00b2', u'\u00b2' },
+        { u'1', u'&', u'1' }, { u'2', u'\u00e9', u'2' }, { u'3', u'"', u'3' }, { u'4', u'\'', u'4' },
+        { u'5', u'(', u'5' }, { u'6', u'-', u'6' }, { u'7', u'\u00e8', u'7' }, { u'8', u'_', u'8' },
+        { u'9', u'\u00e7', u'9' }, { u'0', u'\u00e0', u'0' },
+    };
+    const Entry *table = nullptr;
+    size_t n = 0;
+    if (layout == QLatin1String("qwertz")) { table = qwertz; n = std::size(qwertz); }
+    else if (layout == QLatin1String("azerty")) { table = azerty; n = std::size(azerty); }
+    for (size_t i = 0; table && i < n; ++i) {
+        if (table[i].us != base.unicode())
+            continue;
+        const QChar c(shift ? table[i].shifted : table[i].plain);
+        *outText = QString(c);
+        // Qt's key for a character: a letter's capital (Key_A, Key_Odiaeresis).
+        const QChar upper = c.toUpper();
+        *outKey = c.isLetter() && upper.unicode() < 0x100 ? upper.unicode() : c.unicode();
+        return true;
+    }
+    return false;
+}
+
 bool KeyboardAccess::eventFilter(QObject *watched, QEvent *event)
 {
     const QEvent::Type type = event->type();
@@ -227,14 +347,99 @@ bool KeyboardAccess::eventFilter(QObject *watched, QEvent *event)
     if (!window || m_sending || !event->spontaneous())
         return false;
     auto *key = static_cast<QKeyEvent *>(event);
-    const int code = key->key();
+    int code = key->key();
 
     if (!m_hardwareKeySeen) {
         m_hardwareKeySeen = true;
         emit hardwareKeySeenChanged();
     }
-    if (type == QEvent::KeyPress && !key->isAutoRepeat())
+    // (The keyboard key is not typing: the virtual keyboard it brings up
+    // stays.)
+    const bool keyboardKey = key->nativeScanCode() == kKeyboardKeyScanCode
+                             || remapTarget(code) == QLatin1String("keyboard");
+    if (type == QEvent::KeyPress && !key->isAutoRepeat() && !keyboardKey)
         emit hardwareKeyPressed(code);
+
+    // ---- Settings > Hardware Keyboard: the keyboard key, remapped keys, layout.
+    const bool press = type == QEvent::KeyPress;
+    if (key->nativeScanCode() == kKeyboardKeyScanCode) {
+        if (press && !key->isAutoRepeat())
+            emit keyboardKeyPressed();
+        return true;
+    }
+    const QString target = remapTarget(code);
+    if (!target.isEmpty() || m_remapDown.contains(code)) {
+        // A modifier or Caps Lock remapped: what it is now is sent instead.
+        if (press && !key->isAutoRepeat())
+            m_remapDown.insert(code);
+        else if (!press && !key->isAutoRepeat())
+            m_remapDown.remove(code);
+        const QString to = target.isEmpty() ? QString() : target;
+        const int toKey = remapKey(to);
+        const Qt::KeyboardModifier toMod = modifierFor(toKey);
+        if (toMod != Qt::NoModifier && !key->isAutoRepeat()) {
+            if (press) m_remapHeld |= toMod; else m_remapHeld &= ~toMod;
+        }
+        if (to == QLatin1String("keyboard") && press && !key->isAutoRepeat())
+            emit keyboardKeyPressed();
+        if (toKey) {
+            const Qt::KeyboardModifiers mods = (key->modifiers() & ~strippedModifiers()) | m_remapHeld;
+            QKeyEvent mapped(type, toKey, mods, key->nativeScanCode(), key->nativeVirtualKey(),
+                             key->nativeModifiers(), toKey == Qt::Key_Escape ? QStringLiteral("\x1b") : QString(),
+                             key->isAutoRepeat());
+            if (!filterKey(window, &mapped))
+                send(window, type, toKey, mods, mapped.text(), key->isAutoRepeat(),
+                     key->nativeScanCode(), key->nativeVirtualKey(), key->nativeModifiers());
+        }
+        return true;                       // "none", "keyboard": nothing typed
+    }
+    Qt::KeyboardModifiers mods = key->modifiers();
+    QString text = key->text();
+    bool changed = false;
+    if (!m_remap.isEmpty()) {
+        const Qt::KeyboardModifiers m = (mods & ~strippedModifiers()) | m_remapHeld;
+        if (m != mods) {
+            mods = m;
+            changed = true;
+            // A Ctrl or Meta that was not there types no text.
+            if (mods & (Qt::ControlModifier | Qt::MetaModifier))
+                text.clear();
+        }
+        // Caps Lock remapped away: the keyboard's own caps lock (xkb's)
+        // still changes the letters; their case is Shift's alone.
+        if (!remapTarget(Qt::Key_CapsLock).isEmpty() && text.size() == 1 && text.at(0).isLetter()) {
+            const QString t = (mods & Qt::ShiftModifier) ? text.toUpper() : text.toLower();
+            if (t != text) { text = t; changed = true; }
+        }
+    }
+    if (m_layout != QLatin1String("auto") && !(mods & (Qt::ControlModifier | Qt::MetaModifier | Qt::AltModifier))) {
+        int k = code;
+        QString t = text;
+        if (translate(m_layout, code, mods & Qt::ShiftModifier, &k, &t) && (k != code || t != text)) {
+            // A letter keeps the case Caps Lock gave it.
+            if (t.size() == 1 && t.at(0).isLetter() && text.size() == 1 && text.at(0).isUpper() != t.at(0).isUpper()
+                && !(mods & Qt::ShiftModifier) && text.at(0).isLetter())
+                t = text.at(0).isUpper() ? t.toUpper() : t.toLower();
+            code = k;
+            text = t;
+            changed = true;
+        }
+    }
+    if (changed) {
+        QKeyEvent mapped(type, code, mods, key->nativeScanCode(), key->nativeVirtualKey(), key->nativeModifiers(),
+                         text, key->isAutoRepeat());
+        if (!filterKey(window, &mapped))
+            send(window, type, code, mods, text, key->isAutoRepeat(),
+                 key->nativeScanCode(), key->nativeVirtualKey(), key->nativeModifiers());
+        return true;
+    }
+    return filterKey(window, key);
+}
+
+bool KeyboardAccess::filterKey(QWindow *window, QKeyEvent *key)
+{
+    const QEvent::Type type = key->type();
+    const int code = key->key();
     if (!m_sticky && !m_slow && !m_bounce && !m_customRepeat)
         return false;
 

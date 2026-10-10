@@ -10,7 +10,8 @@
     ],
     "devices.display.shell": [
         "com.palm.display/phoenix/report",
-        "com.palm.display/phoenix/requests"
+        "com.palm.display/phoenix/requests",
+        "com.palm.display/phoenix/orientation"
     ],
     "devices.keys": [
         "com.palm.keys/audio/status",

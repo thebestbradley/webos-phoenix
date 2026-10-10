@@ -105,3 +105,16 @@ export function subtitleTracks(videoPath: string, folderPaths: string[]): Subtit
     const untagged = (t: SubtitleTrack) => (t.label === "Subtitles" ? 0 : 1);
     return tracks.sort((a, b) => untagged(a) - untagged(b) || a.label.localeCompare(b.label));
 }
+
+/**
+ * The track to show when a video opens: the language chosen last time
+ * ("" off, "*" any), else one without a language, else (for "*") the
+ * first. With Settings > Accessibility > Captions on (system preference
+ * `accessibility.captions`), a video that has subtitles always shows some:
+ * turned off in the player, or the language missing, the first is shown.
+ */
+export function pickTrack(found: SubtitleTrack[], want: string, captions = false): SubtitleTrack | null {
+    if (want === "") return captions && found.length ? found[0] : null;
+    return found.find((t) => (t.language ?? "*") === want) ?? found.find((t) => !t.language)
+        ?? (want === "*" || captions ? found[0] : null) ?? null;
+}

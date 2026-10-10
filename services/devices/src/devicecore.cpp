@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <climits>
+#include <cmath>
 
 namespace phoenix {
 namespace devices {
@@ -186,6 +187,56 @@ bool LightRegions::update(int lux, bool disabled)
             ++m_region;
     }
     return m_region != before;
+}
+
+bool OrientationFilter::update(double x, double y, double z)
+{
+    static const double G = 9.80665;
+    const double g = std::sqrt(x * x + y * y + z * z);
+    // Shaken or falling: not how it is held.
+    if (g < 0.5 * G || g > 1.5 * G)
+        return false;
+    const std::string before = m_orientation;
+    if (std::fabs(z) > 0.87 * g) {
+        m_orientation = z > 0 ? "faceup" : "facedown";
+        return m_orientation != before;
+    }
+    // The angle of "up" in the screen's plane: 0 when held upright, 90
+    // with the right edge up (turned counter-clockwise: "left").
+    const double a = std::atan2(x, y) * 180.0 / M_PI;
+    auto centre = [](const std::string &o) {
+        return o == "up" ? 0.0 : o == "left" ? 90.0 : o == "down" ? 180.0 : o == "right" ? -90.0 : 1000.0;
+    };
+    auto distance = [](double p, double q) {
+        double d = std::fmod(std::fabs(p - q), 360.0);
+        return d > 180.0 ? 360.0 - d : d;
+    };
+    // Keep the edge it has until the tilt is 15 degrees past the diagonal.
+    const double held = centre(m_orientation);
+    if (held < 999.0 && distance(a, held) < 45.0 + 15.0)
+        return false;
+    const char *edges[] = { "up", "left", "down", "right" };
+    std::string best;
+    double bestDistance = 1000.0;
+    for (const char *e : edges) {
+        const double d = distance(a, centre(e));
+        if (d < bestDistance) {
+            bestDistance = d;
+            best = e;
+        }
+    }
+    m_orientation = best;
+    return m_orientation != before;
+}
+
+std::string orientationJson(const std::string &orientation, bool subscribed)
+{
+    std::string out = "{\"returnValue\":true";
+    if (subscribed)
+        out += ",\"subscribed\":true";
+    if (!orientation.empty())
+        out += ",\"orientation\":\"" + orientation + "\"";
+    return out + "}";
 }
 
 int backlightRaw(int percent, int maxRaw)

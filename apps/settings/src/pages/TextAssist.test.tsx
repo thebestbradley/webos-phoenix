@@ -12,7 +12,7 @@ import { resolve } from "node:path";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
 import { system } from "@phoenix/luna";
-import { keyboardStyle, TextAssistPage } from "./TextAssist";
+import { installedKeyboards, keyboardStyle, moveKeyboard, TextAssistPage } from "./TextAssist";
 import { SoundsPage, toneOptions, SYSTEM_TONES } from "./Sounds";
 import { shortcutProblem, textInputPrefs, withShortcut, withoutShortcut } from "./shortcuts";
 
@@ -118,6 +118,29 @@ describe("Text Assist > Keyboard style", () => {
     });
 });
 
+describe("Text Assist > Keyboards (GAPS V7)", () => {
+    it("reads the installed keyboards, known ones in order", () => {
+        expect(installedKeyboards(undefined)).toEqual(["classic"]);
+        expect(installedKeyboards(["phoenix", "nope", "classic", "phoenix"])).toEqual(["phoenix", "classic"]);
+        expect(moveKeyboard(["classic", "phoenix"], "phoenix", 0)).toEqual(["phoenix", "classic"]);
+    });
+    it("installs the Phoenix keyboard, and the shell's keyboard is told", async () => {
+        render(<TextAssistPage />);
+        const phoenix = await screen.findByTestId("ta-whole-phoenix");
+        expect(phoenix.getAttribute("aria-checked")).toBe("false");
+        // OSE's: on a device only.
+        expect((screen.getByTestId("ta-whole-ose") as HTMLButtonElement).disabled ||
+               screen.getByTestId("ta-whole-ose").getAttribute("aria-disabled") === "true").toBe(true);
+        fireEvent.click(phoenix);
+        await waitFor(() => expect(runtime().hostStatus().installedKeyboards).toEqual(["classic", "phoenix"]));
+        expect(runtime().hostStatus().keyboardId).toBe("classic");
+        await waitFor(() => expect(screen.getByTestId("ta-whole-phoenix").getAttribute("aria-checked")).toBe("true"));
+        // Removed again; the last one cannot be.
+        fireEvent.click(screen.getByTestId("ta-whole-phoenix"));
+        await waitFor(() => expect(runtime().hostStatus().installedKeyboards).toEqual(["classic"]));
+    });
+});
+
 describe("Sounds > alert and notification tones", () => {
     it("offers the system tones and the ringtones, keeping an unknown current one", () => {
         expect(toneOptions(SYSTEM_TONES, { name: "x", fullPath: "/usr/palm/sounds/alert.wav" }).map((o) => o.label)).toEqual(["Alert", "Notification"]);
@@ -143,5 +166,21 @@ describe("Sounds > alert and notification tones", () => {
         await waitFor(() => expect(runtime().hostStatus().notificationtone).toBe("/usr/palm/sounds/alert.wav"));
         await waitFor(() => expect(screen.getByTestId("notificationtone").textContent).toContain("Alert"));
         expect(screen.getByTestId("alerttone").textContent).toContain("Phone");
+    });
+});
+
+describe("Text Assist > Hardware keyboard > Keyboard button", () => {
+    it("is on by default; off and on again, the shell is told (tweaks.keyboardButton)", async () => {
+        render(<TextAssistPage />);
+        const toggle = await screen.findByTestId("ta-keyboardbutton");
+        expect(screen.getByTestId("ta-keyboardbutton-row").textContent).toContain("With a hardware keyboard, a button that brings up the on-screen keyboard");
+        await waitFor(() => expect(toggle.getAttribute("aria-checked")).toBe("true"));
+        expect((runtime().hostStatus().tweaks as { keyboardButton: boolean }).keyboardButton).toBe(true);
+        fireEvent.click(toggle);
+        await waitFor(() => expect((lastStatus().tweaks as { keyboardButton: boolean }).keyboardButton).toBe(false));
+        await waitFor(() => expect(screen.getByTestId("ta-keyboardbutton").getAttribute("aria-checked")).toBe("false"));
+        // The shell's hold menu turns it off the same way; turned on elsewhere, it shows here.
+        await system.setPreferences({ keyboardButton: true });
+        await waitFor(() => expect(screen.getByTestId("ta-keyboardbutton").getAttribute("aria-checked")).toBe("true"));
     });
 });

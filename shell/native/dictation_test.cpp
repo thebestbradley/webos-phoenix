@@ -209,6 +209,51 @@ int main(int argc, char **argv)
               "a missing spotter: an error, and the microphone not kept open");
     }
 
+    // What was said so far, while it listens (GAPS V2): the recording until
+    // then transcribed every partialInterval ms (here the transcriber says
+    // how long it was), cleared when the whole of it is written down.
+    {
+        const QString data = QStringLiteral(PHOENIX_REPO_DIR "/services/wakeword/tests/data/");
+        Dictation d;
+        d.setInputFiles({ data + QStringLiteral("hey-phoenix-timer.wav") });
+        d.setPartialInterval(400);
+        d.setCommand({ QStringLiteral("sh"), QStringLiteral("-c"),
+                       QStringLiteral("printf '{\"returnValue\":true,\"text\":\"%s\"}' $(wc -c < \"$0\")"),
+                       QStringLiteral("%f") });
+        QStringList partials;
+        QString heard;
+        bool done = false;
+        QObject::connect(&d, &Dictation::partialTextChanged, [&]() { if (!d.partialText().isEmpty()) partials << d.partialText(); });
+        QObject::connect(&d, &Dictation::transcribed, [&](const QString &t, const QString &) { heard = t; done = true; });
+        d.start();
+        QElapsedTimer clock;
+        clock.start();
+        while (clock.elapsed() < 2500)
+            QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+        check(partials.size() >= 2, QStringLiteral("text while speaking: %1 updates").arg(partials.size()).toUtf8().constData());
+        check(partials.size() >= 2 && partials.last().toInt() > partials.first().toInt(), "each of more of the recording");
+        check(d.listening() && !d.partialText().isEmpty(), "shown while it listens");
+        d.stop();
+        check(!d.partialText().isEmpty() && d.busy(), "still shown while the whole is written down");
+        while (!done && clock.elapsed() < 8000)
+            QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+        check(done && d.partialText().isEmpty() && heard.toInt() > partials.last().toInt(), "and gone with the final text");
+        d.start();
+        clock.restart();
+        while (d.partialText().isEmpty() && clock.elapsed() < 3000)
+            QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+        d.cancel();
+        check(d.partialText().isEmpty() && !d.listening(), "a cancelled recording leaves none");
+        d.setPartialInterval(0);
+        partials.clear();
+        d.start();
+        clock.restart();
+        while (clock.elapsed() < 1200)
+            QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+        d.cancel();
+        check(partials.isEmpty(), "none with partialInterval 0");
+    }
+
     std::printf(failures ? "%d failed\n" : "all passed\n", failures);
     return failures ? 1 : 0;
 }

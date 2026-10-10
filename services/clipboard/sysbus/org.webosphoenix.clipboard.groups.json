@@ -1,0 +1,4 @@
+{
+    "allowedNames": ["org.webosphoenix.clipboard"],
+    "phoenix.clipboard": ["dev"]
+}

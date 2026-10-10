@@ -1,6 +1,7 @@
 // Phoenix compat overlay: the Email window's original depends.js plus
-// source/phoenix-compat.js (a missing method the message view calls, and
-// one-pane-at-a-time navigation on phones) and ../css/phoenix-compat.css
+// source/phoenix-compat.js (a missing method the message view calls,
+// one-pane-at-a-time navigation on phones, Open Email in New Card and a
+// message's hold menu in the list) and ../css/phoenix-compat.css
 // (phone layout). Nothing else is changed.
 //
 // @@@LICENSE

@@ -37,12 +37,24 @@ describe("Settings > Advanced", () => {
         expect(last("systemStatus")?.tweaks).toEqual({
             infiniteCardCycling: true, maximizeEdges: false, waveLauncher: true, tapRipple: true, animationSpeed: "normal",
             gestureSensitivity: "normal", haptics: false, gridDensity: "dense", batteryPercent: false, numberRow: false,
-            keyboardStyle: "auto",
+            keyboardStyle: "auto", startupAnimation: "phoenix",
+            keyboardButton: true, keyboardButtonSide: "right", keyboardButtonY: 1,
+            keyboardButtonHintShown: false,
         });
         await call("luna://com.webos.service.systemservice/setPreferences", { showReticleAnimation: false, animationSpeed: "warp" });
         const t = last("systemStatus")?.tweaks as Record<string, unknown>;
         expect(t.tapRipple).toBe(false);
         expect(t.animationSpeed).toBe("normal");
+        await call("luna://com.webos.service.systemservice/setPreferences", { startupAnimation: "classic" });
+        expect((last("systemStatus")?.tweaks as Record<string, unknown>).startupAnimation).toBe("classic");
+        await call("luna://com.webos.service.systemservice/setPreferences", { startupAnimation: "fireworks" });
+        expect((last("systemStatus")?.tweaks as Record<string, unknown>).startupAnimation).toBe("phoenix");
+    });
+    it("the keyboard button's place and Hide reach the shell, anything else read as the defaults", async () => {
+        await call("luna://com.webos.service.systemservice/setPreferences", { keyboardButton: false, keyboardButtonSide: "left", keyboardButtonY: 0.25, keyboardButtonHintShown: true });
+        expect(last("systemStatus")?.tweaks).toMatchObject({ keyboardButton: false, keyboardButtonSide: "left", keyboardButtonY: 0.25, keyboardButtonHintShown: true });
+        await call("luna://com.webos.service.systemservice/setPreferences", { keyboardButton: true, keyboardButtonSide: "top", keyboardButtonY: 7 });
+        expect(last("systemStatus")?.tweaks).toMatchObject({ keyboardButton: true, keyboardButtonSide: "right", keyboardButtonY: 1 });
     });
 });
 

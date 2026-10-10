@@ -82,6 +82,18 @@ QtObject {
     // Unconditional call forwarding is on (Settings > Phone; the runtime's
     // com.palm.telephony forwardQuery), for the status bar's icon.
     property bool callForwarding: false
+    // A modem's indicators (StatusBarInfo.cpp:195-262; LsmSystemStatus reads
+    // them from the device's telephony and WAN services): the mobile data
+    // connection's type ("" none, "1x", "edge", "evdo", "gprs", "umts",
+    // "hsdpa", "hspa-4g") and whether it is dormant; roaming; TTY and
+    // hearing aid compatibility on; EV-DO shown as 3G (the carrier's
+    // preference). The simulator has no modem: off unless a test sets them.
+    property string wanType: ""
+    property bool wanDormant: false
+    property bool roaming: false
+    property bool tty: false
+    property bool hac: false
+    property bool show3GForEvdo: false
     // System sounds (SystemSounds.qml), as the runtime reports them
     // (Settings > Sounds & Ringtones): the master and stream volumes
     // (0..100), "System Sounds", "Keyboard clicks" and the tones' paths.
@@ -119,6 +131,14 @@ QtObject {
     // and the one in use (the keyboard's language key picks another).
     property var keyboards: [{ layout: "qwerty", language: "en" }]
     property var keyboard: ({ layout: "qwerty", language: "en" })
+    // Settings > Text Assist > Keyboards (GAPS V7): the keyboards installed,
+    // in the user's order ("classic", "phoenix", "ose"), and the one in use
+    // (the globe key picks another).
+    property var installedKeyboards: ["classic"]
+    // Settings > Text Assist > Hardware Keyboard: {layout ("auto",
+    // "qwertz", "azerty"), remap {capslock, control, alt, meta}}.
+    property var hardwareKeyboardPrefs: ({ layout: "auto", remap: {} })
+    property string keyboardId: "classic"
     property string ringtone: "/usr/palm/sounds/ringtone.mp3"
     property string alerttone: "/usr/palm/sounds/alert.wav"
     property string notificationtone: "/usr/palm/sounds/notification.wav"
@@ -453,6 +473,12 @@ QtObject {
             keyboards = s.keyboards;
         if (s.keyboard !== undefined && s.keyboard !== null)
             keyboard = s.keyboard;
+        if (s.hardwareKeyboard && typeof s.hardwareKeyboard === "object")
+            hardwareKeyboardPrefs = s.hardwareKeyboard;
+        if (Array.isArray(s.installedKeyboards) && s.installedKeyboards.length)
+            installedKeyboards = s.installedKeyboards;
+        if (typeof s.keyboardId === "string" && s.keyboardId !== "")
+            keyboardId = s.keyboardId;
         if (s.ringtone !== undefined)
             ringtone = s.ringtone;
         if (s.alerttone !== undefined)
@@ -513,6 +539,7 @@ QtObject {
         case "muted": return { muted: muted };
         case "volume": return { volume: volume };
         case "keyboard": return { keyboard: keyboard };
+        case "keyboardId": return { keyboardId: keyboardId };
         }
         return {};
     }

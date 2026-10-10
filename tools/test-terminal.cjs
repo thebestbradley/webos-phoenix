@@ -29,6 +29,14 @@ const { spawn, execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
+// A response read to its end: one left unread, its socket closed under it,
+// aborts Node's fetch (undici: assert(!this.paused), seen in CI).
+async function drained(pending) {
+    const r = await pending;
+    try { await r.arrayBuffer(); } catch (e) { /* the status is what counts */ }
+    return r;
+}
+
 function loadPlaywright() {
     try { return require("playwright"); } catch (e) { /* global install */ }
     return require(path.join(execSync("npm root -g").toString().trim(), "playwright"));
@@ -52,7 +60,7 @@ function check(cond, what) {
 async function waitForServer(url, ms) {
     const until = Date.now() + ms;
     while (Date.now() < until) {
-        try { if ((await fetch(url)).ok) return; } catch (e) { /* retry */ }
+        try { if ((await drained(fetch(url))).ok) return; } catch (e) { /* retry */ }
         await new Promise((r) => setTimeout(r, 100));
     }
     throw new Error("server did not start");
@@ -306,10 +314,10 @@ async function real(chromium) {
         await waitForServer(`${origin}/apps.json`, 10000);
         const hostJson = await (await fetch(`${origin}/usr/share/phoenix/host.json`, { headers: { Host: new URL(origin).host } })).json();
         check(hostJson.pty === "websocket" && /token=/.test(hostJson.url), "real: the dev server offers a WebSocket PTY with a token");
-        const bad = await fetch(`${origin}/__phoenix/pty/shells?token=wrong`);
+        const bad = await drained(fetch(`${origin}/__phoenix/pty/shells?token=wrong`));
         check(bad.status === 403, "real: a wrong token is refused");
-        const foreign = await fetch(hostJson.url.replace(/^ws/, "http").replace("/__phoenix/pty?", "/__phoenix/pty/shells?"),
-                                    { headers: { Origin: "http://evil.example" } });
+        const foreign = await drained(fetch(hostJson.url.replace(/^ws/, "http").replace("/__phoenix/pty?", "/__phoenix/pty/shells?"),
+                                            { headers: { Origin: "http://evil.example" } }));
         check(foreign.status === 403, "real: another site's page is refused");
 
         const browser = await chromium.launch();

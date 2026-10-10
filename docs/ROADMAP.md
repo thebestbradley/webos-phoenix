@@ -8,6 +8,23 @@ and what comes next is in [STATUS.md](STATUS.md); this page is the whole
 plan, milestone by milestone. Every gap still open, by area and priority:
 [spec/GAPS.md](spec/GAPS.md#open-gaps-at-a-glance).
 
+**Where we are** (10 October 2026; ✅ done, ⬜ left, counted from the checklists below; a 🟡 on an open item means it is done in the simulator and waits on a device or a decision):
+
+| Milestone | ✅ Done | ⬜ Left |
+| --- | --- | --- |
+| M0: shell in a simulator (done) | 13 | 0 |
+| Source material still to mine | 3 | 1 |
+| Build infrastructure | 1 | 2 |
+| Development devices | 0 | 3 |
+| M1: running on webOS OSE | 0 | 10 |
+| M2: legacy UI parity | 18 | 2 |
+| M3: phones and tablets | 0 | 7 |
+| M4: core apps and services | 12 | 10 |
+| M5: modernize, within 1.x | 2 | 3 |
+| M6: the last 1.0 features | 13 | 1 |
+| 1.0 release | 7 | 11 |
+| 2.0: modern webOS | 0 | 18 |
+
 ## Two lines: 1.x and 2.0
 
 Owner's direction (29 September 2026):
@@ -189,13 +206,21 @@ simulator, the P2 rows are listed there.
 - [x] Card stacks keep their order while a card maximizes and minimizes, and
       Back in an app another opened returns to the caller, the app staying
       open behind it (C12); Back that an app does not take minimizes its
-      card (G2). To do: the fan's 200 ms easing, re-maximizing the launching
-      card when a child closes, the device side
+      card (G2); the fan's own 200 ms clock, re-maximizing the launching
+      card when a child closes, a maximized card's fly-off (C12, C4; 10
+      October 2026). To do: the device side
 - [ ] Just Type: search suggestions and remote (GAL) contacts in the results
       (its preferences screen is done: Settings > Just Type)
-- [ ] The remaining rows in GAPS.md ("Open gaps at a glance"): in the
-      simulator, chiefly the launcher's solid dock background and top scroll
-      fade (L1, L2), modal cards and persistent dashboards (C11, N5)
+- [x] The launcher's cards hidden once it is up and its top scroll fade
+      (L1, L2), the tablet status bar's arrow (S8), modal cards (C11),
+      dashboards swiped, kept or dragged by their window (N5), the new card's
+      prepare step and loading screen (C1, C2), the dock-mode system menu and
+      the ringer key (M2), the kept rotation lock and the Home button's
+      angle (R1), the angry card's and the launcher's sounds, Email's and the
+      Clock's tones (C3, A1) (in the simulator, 10 October 2026)
+- [ ] The rows still open in GAPS.md ("Open gaps at a glance"): in the
+      simulator only small ones (a modal card and the keyboard, a dashboard's
+      drag mode set late, firm press to select); the rest is the device side
 - [x] Wave launcher: not in the open sources (GAPS Q3); drawn after
       descriptions as an option (M6 F4)
 
@@ -209,9 +234,9 @@ Device tiers, the driver plan and the phased timeline are in
 - [ ] Telephony and SMS (oFono, LuneOS's `webos-telephonyd`), cellular indicators
 - [ ] Sensors: accelerometer, proximity, ambient light
 - [ ] Power management: screen timeout, suspend, wake on notification
-- [ ] Porting guide, device table and hardware report (the opt-in report of
+- [ ] 🟡 Porting guide, device table and hardware report (the opt-in report of
       unsupported hardware is done in the simulator, with the Hardware app)
-- [ ] Hardware support like a distro: open source drivers and redistributable
+- [ ] 🟡 Hardware support like a distro: open source drivers and redistributable
       firmware in the image, the gaps (newer firmware, out-of-tree drivers,
       optional extras) from Settings > Hardware and a signed driver catalog
       ([HARDWARE.md](HARDWARE.md#hardware-support-and-the-hardware-app)).
@@ -243,13 +268,25 @@ Still to do:
       ([APP-RUNTIME.md](APP-RUNTIME.md#the-browser-and-enyowebview))
 - [ ] Browser: "Install Web App" under Preferences, with a coloured dot by the
       app menu when the page has a web app manifest ([APP-STORE.md](APP-STORE.md) section 1)
+- [x] Synergy C0 (10 October 2026): "Find More..." opens the Marketplace's
+      Connections (accounts by what they bring, a page per type with where
+      the data goes, Set up), account types found in installed apps, the
+      catalog's account feed ([SYNERGY-CONNECTORS.md](SYNERGY-CONNECTORS.md))
+- [ ] Synergy C1 and C2, in progress: the connector kit, the developer
+      guide and conformance suite; the Fediverse account (the flagship).
+      Then C3 (the OAuth service; Microsoft, Google, Dropbox, Box, LinkedIn,
+      Zoom, Telegram, Bluesky; iCloud, Fastmail and Nextcloud presets),
+      before it the accounts needing no registration (meeting Join
+      buttons, Jitsi video calls, WebDAV, SFTP and S3 drives in Files),
+      C4-C6 (connectors in the catalog, a trust tier, push)
+      ([SYNERGY-CONNECTORS.md](SYNERGY-CONNECTORS.md) 6-7)
 - [ ] Modern Synergy, in the order of [SYNERGY-MODERN.md](SYNERGY-MODERN.md#5-roadmap):
       provider presets, the shared sync layer, OAuth with Microsoft and
       Google, mail, messaging Synergy (SMS, Matrix, XMPP, bridges), RCS,
       cloud drives, the Fediverse and Bluesky, push
 - [ ] Synergy on a device: the accounts service and contacts linker on OSE,
       the key store, the activity manager for periodic sync
-- [ ] Phone and Messaging on a device: telephony service, MMS, IM transports
+- [ ] 🟡 Phone and Messaging on a device: telephony service, MMS, IM transports
       (the active-call banner is done in the simulator, GAPS N7)
 - [ ] Device side of the new apps (torch, PTY service, key store, location
       permissions, WAV sounds, TTS, media indexer, camera capture): the list
@@ -281,18 +318,18 @@ dark and light themes go to 2.0.
 - [x] Terminal (`apps/terminal`, xterm.js on the PTY service
       `org.webosphoenix.pty`; bash by default, zsh available)
       ([TERMINAL.md](TERMINAL.md) T1-T2; T3 written, not yet built for a device)
-- [ ] Developer Mode with `sudo` and an SSH server ([TERMINAL.md](TERMINAL.md) T4-T5).
+- [ ] 🟡 Developer Mode with `sudo` and an SSH server ([TERMINAL.md](TERMINAL.md) T4-T5).
       Done in the simulator: Settings > Developer Mode behind the device PIN
       or password, and the Marketplace installs packages with install
       scripts and services only in it ([APP-RUNTIME.md](APP-RUNTIME.md#developer-mode));
       hidden until Just Type's Konami code reveals it, as on webOS, and the
       developer apps (Notification Lab, the framework demos, Terminal) show
       only while it is on
-- [ ] Screenshots as the original took them, with a notification that
+- [ ] 🟡 Screenshots as the original took them, with a notification that
       opens a preview to crop, mark up, share or delete
       ([SCREENSHOTS.md](SCREENSHOTS.md) SC1-SC2). Done in the simulator;
       to do: the compositor's capture on a device, secure cards
-- [ ] The light bar's animations, and buttons at the ends of the gesture
+- [ ] 🟡 The light bar's animations, and buttons at the ends of the gesture
       area ([GESTURE-BAR.md](GESTURE-BAR.md) GB1-GB3). The animations are
       done in the simulator (GAPS G8); to do: the light bar's Settings switch,
       the end buttons and `setButton` (open questions in GESTURE-BAR.md)
@@ -303,7 +340,7 @@ dark and light themes go to 2.0.
 
 Agreed with the owner on 7 October 2026; [M6-PLAN.md](M6-PLAN.md) has the detail.
 
-- [ ] F0: fixes (settings lost on save and the card corners: done; the Messaging reply bar)
+- [ ] F0: fixes (settings lost on save and the card corners: done; the Messaging reply bar waits on the owner, OPEN-QUESTIONS Q7)
 - [x] F1: press and hold on launcher icons (peek and menu; in the simulator)
 - [x] F2: clipboard manager (keyboard strip, Clipboard app, Settings > Clipboard; in the simulator)
 - [x] F3: the Assistant 1.0 (commands, optional on-device model, cloud models with permission, Assistant app; in the simulator)
@@ -324,10 +361,10 @@ Agreed with the owner on 7 October 2026; [M6-PLAN.md](M6-PLAN.md) has the detail
 every day. The app sources come towards the end of 1.0 (owner, 29 September
 2026).
 
-- [ ] Web apps and the Phoenix Catalog: curated PWAs shown as apps ([APP-STORE.md](APP-STORE.md) A0-A4).
+- [ ] 🟡 Web apps and the Phoenix Catalog: curated PWAs shown as apps ([APP-STORE.md](APP-STORE.md) A0-A4).
       Done in the simulator: the Marketplace (A0) and the catalog service on
       this computer (A3); to do: the server online, A1 on a device, A4
-- [ ] Classic apps from App Museum II ([APP-STORE.md](APP-STORE.md) A2), with webOS Archive.
+- [ ] 🟡 Classic apps from App Museum II ([APP-STORE.md](APP-STORE.md) A2), with webOS Archive.
       Done in the simulator (an add-on catalog, off by default); the owner is
       asking the webOS Archive
 - [ ] Enyo 2 apps: test LuneOS's `org.webosports.app.*` apps and the App
@@ -336,7 +373,7 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
       and the temporary `apps/enyo2demo` samples them
       ([APP-RUNTIME.md](APP-RUNTIME.md#enyo-2-apps)). Remove the demo when
       real apps are tested
-- [ ] Preware feeds, installed through the catalog (done in the simulator:
+- [ ] 🟡 Preware feeds, installed through the catalog (done in the simulator:
       the PreCentral homebrew feed as an add-on catalog)
 - [ ] Native webOS apps (PDK games and hybrid apps such as Quickoffice)
       through a compatibility layer: a 32-bit ARM user space, qemu where
@@ -349,38 +386,50 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
       ([HARDWARE.md](HARDWARE.md#install-it-like-a-linux-distro))
 - [ ] As many devices as possible at Supported or Community level
       ([HARDWARE.md](HARDWARE.md#device-tiers))
-- [ ] Keyboard: dictation (V2, done in the simulator), predictive text and
+- [ ] 🟡 Keyboard: dictation (V2, done in the simulator), predictive text and
       swipe typing (V3, done in the simulator; Settings > Text Assist),
       emoji (V6, done in the simulator), cursor control by holding the space bar or the gesture
       bar (V4, done in the simulator), the keyboards as the device's input method (V5), and
       keyboards chosen in Settings as on iOS: webOS Classic, webOS OSE's and
-      a new Phoenix keyboard (V7; layouts and languages done, several
-      keyboards side by side to do)
-- [ ] Hardware keyboards, especially on tablets: the TouchPad keyboard's
+      a new Phoenix keyboard (V7; done in the simulator, 10 October 2026:
+      several side by side, the globe key, the Phoenix keyboard; OSE's needs
+      the device). Also the text around the cursor, emoji for words, spoken
+      punctuation, the text while speaking, auto-capitalisation (V1-V3, V6)
+- [ ] 🟡 Hardware keyboards, especially on tablets: the TouchPad keyboard's
       keys, shortcuts, full keyboard navigation of the shell, keyboard
       accessibility (sticky, slow and bounce keys, Full Keyboard Access) and
       Settings > Hardware Keyboard (V8). Done in the simulator: the keys,
       both shortcut schemes, sticky, slow and bounce keys, the hardware
-      keyboard keeping the virtual one down, focus navigation of most of the shell;
-      to do: the web apps' menus and popup alerts, Settings > Hardware
-      Keyboard
+      keyboard keeping the virtual one down, focus navigation of the shell,
+      the web apps' menus, popup alerts and the PIN pad, Settings > Text
+      Assist > Hardware Keyboard (layout, repeat, modifier remapping, the
+      shortcuts), the keyboard key, and the show-keyboard button, which keeps
+      clear of notifications, moves to either edge and can be hidden; to do:
+      on a device
 - [x] Editing: the Edit submenu (Select All, Cut, Copy, Paste) in every
       app menu, and the same on a long press in a text field (E1)
-- [ ] One share sheet and one file picker for every app: the original's
+- [x] One share sheet and one file picker for every app: the original's
       file picker back for legacy apps, a save picker (Save to Files in a
       chosen folder), and a share sheet apps join through `appinfo.json`
       ([SHARE-AND-FILES.md](SHARE-AND-FILES.md), GAPS E5). Done in the
       simulator: the share sheet, the save picker, the picture picker, Share
       in Screenshot, Files, Photos and the browser, and Share after Edit in
-      every app menu; to do: the original file picker for legacy apps (SF1),
-      other kinds than pictures (SF2), Share in Docs, Voice Memos and Maps
+      every app menu; the original file picker for legacy apps (SF1), the
+      picker's kinds, several files and a crop size (SF2), Share in Docs,
+      Voice Memos and Maps, Music taking audio from the sheet (10 October
+      2026). The 2.0 sheet (SF6) is 2.0
 - [x] The Assistant, like Siri: on-device speech recognition and
       commands, an optional on-device model, cloud models with permission,
       an Assistant app with threads, spoken answers, "Hey Phoenix" (in the simulator)
       ([M6-PLAN.md](M6-PLAN.md) F3, [AI-AND-MCP.md](AI-AND-MCP.md#10-and-20))
+- [x] The start-up animation: the phoenix burns to ash and is born again as
+      the Assistant bird, or the classic glowing logo (Settings > Advanced;
+      in the simulator, 10 October 2026; on a device with M1)
+- [x] Open in New Card in Messaging and Email (Email's own, hidden in the
+      release), as the Assistant app has it (in the simulator, 10 October 2026)
 - [x] Clipboard manager ([M6-PLAN.md](M6-PLAN.md) F2; in the simulator)
 - [x] Press and hold on launcher icons ([M6-PLAN.md](M6-PLAN.md) F1; in the simulator)
-- [ ] OTA updates with A/B slots ([HARDWARE.md](HARDWARE.md#ota-with-ab-updates)).
+- [ ] 🟡 OTA updates with A/B slots ([HARDWARE.md](HARDWARE.md#ota-with-ab-updates)).
       Done in the simulator: `com.palm.update` (Palm's API, so luna-systemui's
       update alerts work) on RAUC, Settings > Updates, the feed publisher
       `server/updates`, and the feed built into Phoenix's own catalog server

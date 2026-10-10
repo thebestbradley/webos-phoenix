@@ -309,7 +309,36 @@ Item {
         : overlay || fullScreen ? 0
         : dashboardOpen ? dashboardHeight
         : hasContent ? Theme.bannerHeight : 0
+    // What the notification area covers now, as rects in this item's
+    // coordinates, for what floats over the screen to keep clear of (the
+    // keyboard button, KeyboardButton.keepOut): phones, the space at the
+    // bottom (banner, dashboard, popup alert) as it opens; tablets, the
+    // drop-down and the popup alert at the top right (the banner is in the
+    // status bar).
+    readonly property var occupiedRects: {
+        var out = [];
+        if (locked)
+            return out;
+        if (!overlay) {
+            if (phoneSpaceHeight > 0)
+                out.push(Qt.rect(0, height - phoneSpaceHeight, width, phoneSpaceHeight));
+            return out;
+        }
+        if (dropDown.visible)
+            out.push(Qt.rect(dropDown.x, dropDown.y, dropDown.width, dropDown.height));
+        if (tabletAlert.visible)
+            out.push(Qt.rect(tabletAlert.x, tabletAlert.y, tabletAlert.width, tabletAlert.height));
+        return out;
+    }
     property real negativeSpace: negativeSpaceTarget
+    // What the negative space would be without the keyboard: an app that
+    // does not resize for the keyboard (allowResizeOnPositiveSpaceChange
+    // false) keeps the size it had (CardView.keyboardOverlap).
+    readonly property real spaceWithoutKeyboard: locked ? 0
+        : alertShown && !overlay ? alertHeight + alertTopPadding
+        : overlay || fullScreen ? 0
+        : dashboardOpen ? dashboardHeight
+        : hasContent ? Theme.bannerHeight : 0
     Behavior on negativeSpace {
         enabled: !root.spaceImmediate
         NumberAnimation { duration: Theme.positiveSpaceDuration; easing.type: Easing.OutCubic }

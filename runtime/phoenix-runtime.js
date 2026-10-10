@@ -166,6 +166,14 @@
             if (opener && opener.PalmSystem && opener.PalmSystem.appIdentifier)
                 return opener.PalmSystem.appIdentifier;
         } catch (e) { /* another origin */ }
+        // A system page an app shows in a frame of its own page (Enyo's
+        // CrossAppUI: luna-systemui's file picker) runs as that app, as the
+        // frames of an app's card did on webOS.
+        try {
+            var up = global.parent;
+            if (up && up !== global && up.PalmSystem && up.PalmSystem.appIdentifier)
+                return up.PalmSystem.appIdentifier;
+        } catch (e) { /* another origin */ }
         return "com.webos.phoenix.unknown";
     }
 
@@ -339,17 +347,226 @@
     }
 
     if (runtime.onDevice) {
+        installDevice();
+        return;
+    }
+
+    // ---- On a device: WebAppMgr's PalmSystem, and what the shell needs ------------
+    //
+    // WebAppMgr has the bus and PalmSystem; what Phoenix's shell needs from a
+    // page beyond them goes as window properties on the page's surface
+    // (WebAppMgr's setWindowProperty, wam src/platform/webengine/
+    // palm_system_blink.cc:100-108, a string each), which LsmWindowSource
+    // reads (shell/qml/Phoenix/Lsm/LsmCards.js has the list):
+    //   - PalmSystem.setWindowOrientation, enableFullScreenMode and
+    //     setWindowProperties {blockScreenTimeout, statusBarColor}, which
+    //     WebAppMgr does not have (its windowOrientation is always "free",
+    //     palm_system_webos.h:42-43), and appinfo.json's
+    //     requestedWindowOrientation, which it reads but does not use
+    //     (application_description.cc:160): phoenixOrientation,
+    //     phoenixFullScreen, phoenixBlockScreenTimeout, phoenixStatusBarColor.
+    //   - {returnToCaller} on a launch: the caller rides in the params as
+    //     $caller (as off the device, /launch below); the app it opens says
+    //     whom to go back to (phoenixReturnTo), at its start and on each
+    //     relaunch (WebAppMgr's webOSRelaunch event).
+    //   - Back: the webOS Back key (keyCode 461) reaches the page; Mojo,
+    //     Enyo 1.0 and @phoenix/ui know Back as Escape (with keyIdentifier
+    //     U+1200001), so a 461 the page does not take goes on as that (as
+    //     runtime.back does off the device), and one it still does not take
+    //     is said to the shell (phoenixBack, a new value each time), which
+    //     minimizes the card or returns to the caller, as LunaSysMgr did with
+    //     a Back WebAppMgr handed back (SystemUiController.cpp:941-954).
+    //     tools/install-rootfs.py marks the image's apps
+    //     disableBackHistoryAPI, so WebAppMgr gives them every Back.
+    // tools/test-runtime-device.cjs drives this with a fake WebAppMgr.
+    // STATUS: written against WebAppMgr's source; not yet run on a device.
+    // Which name WebAppMgr's page API gives setWindowProperty is taken from
+    // the first of webOSSystem.window.setProperty, webOSSystem.setWindowProperty,
+    // PalmSystem.window.setProperty and PalmSystem.setWindowProperty there is.
+    function installDevice() {
         var NativeBridge = global.PalmServiceBridge;
+        var me = appIdFromLocation();
+        var notCallers = ["com.palm.systemui", "com.palm.launcher", "com.webos.phoenix.unknown"];
+        // A launch with {returnToCaller: true}: params.$caller, as off the device.
+        function deviceJson(url, json) {
+            if (!/^(palm|luna):\/\/com\.webos\.applicationManager\/launch$/.test(url))
+                return json;
+            var p;
+            try { p = JSON.parse(json); } catch (e) { return json; }
+            if (!p || p.returnToCaller !== true)
+                return json;
+            delete p.returnToCaller;
+            if (me && notCallers.indexOf(me) < 0 && me !== p.id) {
+                var params = {};
+                for (var k in p.params || {}) params[k] = p.params[k];
+                params.$caller = me;
+                p.params = params;
+            }
+            return toJson(p);
+        }
         global.PalmServiceBridge = function () {
             var b = new NativeBridge();
             var self = this;
             b.onservicecallback = function (json) {
                 if (self.onservicecallback) self.onservicecallback(json);
             };
-            this.call = function (url, json) { return b.call(aliasUrl(url), json); };
+            this.call = function (url, json) {
+                var u = aliasUrl(url);
+                return b.call(u, deviceJson(u, json));
+            };
             this.cancel = function () { return b.cancel(); };
         };
-        return;
+
+        function setWindowProperty(name, value) {
+            var v = String(value);
+            var ws = global.webOSSystem, ps = global.PalmSystem;
+            var tries = [
+                [ws && ws.window, "setProperty"], [ws, "setWindowProperty"],
+                [ps && ps.window, "setProperty"], [ps, "setWindowProperty"]
+            ];
+            for (var i = 0; i < tries.length; ++i) {
+                var o = tries[i][0], f = tries[i][1];
+                if (o && typeof o[f] === "function") {
+                    try { o[f](name, v); return true; } catch (e) { return false; }
+                }
+            }
+            return false;
+        }
+        runtime.setWindowProperty = setWindowProperty;
+
+        var orientations = ["free", "up", "down", "left", "right", "landscape", "portrait"];
+        function orientation(o) {
+            o = String(o || "").toLowerCase();
+            return orientations.indexOf(o) >= 0 ? o : "free";
+        }
+        var ps = global.PalmSystem;
+        function shim(name, fn) {
+            if (ps && typeof ps[name] !== "function") {
+                try { ps[name] = fn; } catch (e) { /* not extensible */ }
+            }
+        }
+        shim("setWindowOrientation", function (o) { setWindowProperty("phoenixOrientation", orientation(o)); });
+        shim("enableFullScreenMode", function (on) { setWindowProperty("phoenixFullScreen", on ? "true" : "false"); });
+        shim("setWindowProperties", function (props) {
+            if (!props || typeof props !== "object") return;
+            if ("blockScreenTimeout" in props)
+                setWindowProperty("phoenixBlockScreenTimeout", props.blockScreenTimeout ? "true" : "false");
+            if (typeof props.statusBarColor === "number" && isFinite(props.statusBarColor))
+                setWindowProperty("phoenixStatusBarColor", String(props.statusBarColor & 0xFFFFFF));
+        });
+
+        // appinfo.json: the orientation the window starts in, and whether the
+        // app takes Back itself.
+        var takesBack = false;
+        try {
+            var x = new global.XMLHttpRequest();
+            x.open("GET", "file:///usr/palm/applications/" + me + "/appinfo.json", true);
+            x.onload = function () {
+                var info = null;
+                try { info = JSON.parse(x.responseText); } catch (e) { return; }
+                if (!info) return;
+                takesBack = info.disableBackHistoryAPI === true;
+                if (info.requestedWindowOrientation)
+                    setWindowProperty("phoenixOrientation", orientation(info.requestedWindowOrientation));
+            };
+            x.send();
+        } catch (e) { /* no appinfo: not an app */ }
+
+        function launchParams() {
+            try { return JSON.parse((ps && ps.launchParams) || "{}") || {}; } catch (e) { return {}; }
+        }
+        function tellCaller() {
+            var lp = launchParams();
+            setWindowProperty("phoenixReturnTo", lp && typeof lp.$caller === "string" ? lp.$caller : "");
+        }
+        tellCaller();
+        if (global.document)
+            global.document.addEventListener("webOSRelaunch", function () { global.setTimeout(tellCaller, 0); });
+
+        function legacyBack() {
+            var target = (global.document && (global.document.activeElement || global.document.body)) || global.document;
+            var handled = false;
+            ["keydown", "keyup"].forEach(function (type) {
+                var e = new global.KeyboardEvent(type, { key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true, cancelable: true });
+                try {
+                    Object.defineProperty(e, "keyCode", { get: function () { return 27; } });
+                    Object.defineProperty(e, "keyIdentifier", { get: function () { return "U+1200001"; } });
+                } catch (x) { /* ignore */ }
+                target.dispatchEvent(e);
+                if (e.defaultPrevented) handled = true;
+            });
+            return handled;
+        }
+        var backs = 0;
+        runtime.deviceBack = function (e) {
+            if (!takesBack || e.defaultPrevented || legacyBack())
+                return true;
+            setWindowProperty("phoenixBack", Date.now() + "-" + (++backs));
+            return false;
+        };
+        global.addEventListener("keydown", function (e) {
+            if (e.keyCode !== 461 && e.key !== "GoBack" && e.key !== "BrowserBack")
+                return;
+            // After the page's own handlers (they may stop it).
+            global.setTimeout(function () { runtime.deviceBack(e); }, 0);
+        }, false);
+
+        // The clipboard history: this page's copies go to the history's
+        // service on the bus (services/clipboard runs this runtime's
+        // org.webosphoenix.clipboard there), as off the device they go to
+        // the runtime's own: copy and cut events, navigator.clipboard
+        // writes, and what an app marks as a secret first
+        // (runtime.clipboard.markSensitive: @phoenix/secrets' SecretClipboard).
+        // Copy in a password field (the simulator's passwordCopy) is not
+        // here yet.
+        var marks = [];
+        function takeMark(text) {
+            var now = Date.now();
+            marks = marks.filter(function (m) { return now - m.at < 5000; });
+            for (var i = 0; i < marks.length; ++i)
+                if (marks[i].text === text)
+                    return marks.splice(i, 1)[0];
+            return null;
+        }
+        function recordCopy(text) {
+            if (!text || !String(text).trim()) return;
+            var mark = takeMark(String(text));
+            var item = { text: String(text) };
+            if (mark) {
+                item.sensitive = true;
+                if (mark.kind) item.kind = mark.kind;
+            }
+            var b = new NativeBridge();
+            b.onservicecallback = function () {};
+            b.call("luna://org.webosphoenix.clipboard/add", toJson(item));
+        }
+        runtime.recordCopy = recordCopy;
+        function selectedText() {
+            var el = global.document && global.document.activeElement;
+            var tag = el && el.tagName ? el.tagName.toLowerCase() : "";
+            if ((tag === "input" || tag === "textarea") && typeof el.selectionStart === "number")
+                return String(el.value || "").substring(el.selectionStart, el.selectionEnd);
+            var sel = global.getSelection && global.getSelection();
+            return sel ? String(sel) : "";
+        }
+        global.addEventListener("copy", function () { recordCopy(selectedText()); });
+        global.addEventListener("cut", function () { recordCopy(selectedText()); });
+        var nc = global.navigator && global.navigator.clipboard;
+        if (nc && typeof nc.writeText === "function") {
+            var writeText = nc.writeText.bind(nc);
+            try {
+                nc.writeText = function (text) {
+                    var r = writeText(text);
+                    Promise.resolve(r).then(function () { recordCopy(text); }, function () {});
+                    return r;
+                };
+            } catch (e) { /* read-only: not recorded */ }
+        }
+        runtime.clipboard = {
+            markSensitive: function (text, kind) {
+                if (typeof text === "string" && text) marks.push({ text: text, kind: kind ? String(kind) : "", at: Date.now() });
+            }
+        };
     }
 
     // ================================================================================
@@ -439,7 +656,13 @@
                 host.postToHost("windowProperties", out);
         },
         enableFullScreenMode: function (on) { host.postToHost("fullScreen", { appId: PalmSystem.appIdentifier, on: !!on }); },
-        allowResizeOnPositiveSpaceChange: function () {},
+        // Enyo's enyo.keyboard.setResizesWindow(false): the card keeps its
+        // size when the keyboard comes, the keyboard over its bottom, and the
+        // page hears Mojo.positiveSpaceChanged(width, height) instead
+        // (IpcClientHost.cpp:303-305, CardWindowManagerStates.cpp:85-98).
+        allowResizeOnPositiveSpaceChange: function (allow) {
+            host.postToHost("windowProperties", { appId: PalmSystem.appIdentifier, allowResizeOnPositiveSpaceChange: allow !== false });
+        },
         receivePageUpDownInLandscape: function () {},
         // The virtual keyboard under the app's control (Enyo's enyo.keyboard manual
         // mode): see "Virtual keyboard" below.
@@ -1360,6 +1583,18 @@
         showBatteryPercent: false,
         keyboardNumberRow: false,
         keyboardStyle: "auto",
+        // Phoenix's start-up animation: "phoenix" (the bird's story,
+        // BootStory.qml) or "classic" (the original logo's glow).
+        startupAnimation: "phoenix",
+        // The keyboard button (with a hardware keyboard, the button that
+        // brings the on-screen keyboard up; Settings > Text Assist >
+        // Keyboard button, or its hold menu's Hide): shown; the edge it was
+        // dragged to and its height there (0 top, 1 bottom); whether the
+        // banner saying where to turn it back on was shown.
+        keyboardButton: true,
+        keyboardButtonSide: "right",
+        keyboardButtonY: 1,
+        keyboardButtonHintShown: false,
         // Email's new-mail dashboard goes through the new emails one at a
         // time, with their times and a delete button (the community's
         // Uber Cycling Email Dashboard; compat overlay of the Email app).
@@ -1406,7 +1641,12 @@
             gridDensity: pick(p.launcherGridDensity, ["normal", "dense"], "normal"),
             batteryPercent: !!p.showBatteryPercent,
             numberRow: !!p.keyboardNumberRow,
-            keyboardStyle: pick(p.keyboardStyle, ["auto", "black", "touchpad"], "auto")
+            keyboardStyle: pick(p.keyboardStyle, ["auto", "black", "touchpad"], "auto"),
+            startupAnimation: pick(p.startupAnimation, ["phoenix", "classic"], "phoenix"),
+            keyboardButton: p.keyboardButton !== false,
+            keyboardButtonSide: pick(p.keyboardButtonSide, ["left", "right"], "right"),
+            keyboardButtonY: typeof p.keyboardButtonY === "number" && p.keyboardButtonY >= 0 && p.keyboardButtonY <= 1 ? p.keyboardButtonY : 1,
+            keyboardButtonHintShown: !!p.keyboardButtonHintShown
         };
     }
     // The page views' settings and the system proxy, as the shell takes
@@ -1425,7 +1665,9 @@
     runtime.networkProxy = networkProxy;
     var TWEAK_KEYS = ["infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges", "sysUiEnableWaveLauncher", "showReticleAnimation",
                       "animationSpeed", "gestureSensitivity", "hapticFeedback", "launcherGridDensity", "showBatteryPercent",
-                      "keyboardNumberRow", "keyboardStyle"];
+                      "keyboardNumberRow", "keyboardStyle", "startupAnimation",
+                      "keyboardButton", "keyboardButtonSide", "keyboardButtonY",
+                      "keyboardButtonHintShown"];
 
     // Settings > Accessibility's keyboard options, as the shell takes them.
     function keyboardAccess(a) {
@@ -1823,9 +2065,10 @@
     runtime.launchedReply = launchedReply;
 
     register(["com.palm.applicationManager", "com.webos.applicationManager"], {
-        // {newCard: true} (Phoenix): another card of the app in a stack of
-        // its own, even while one runs (the shell's appRelaunch "new" for
-        // this launch; one-card apps such as the phone keep theirs).
+        // {newCard: true} (Phoenix): another card of the app, even while one
+        // runs (the shell's appRelaunch "new" for this launch; one-card apps
+        // such as the phone keep theirs); asked by the card in front, it
+        // joins that card's stack, as any card an app opens.
         // {behind: true} (Phoenix): the app opens (or hears its new params)
         // without its card coming to the front: the Assistant's "I've opened
         // them in Photos too", while the conversation stays in front.
@@ -2441,7 +2684,8 @@
             setTimeout(function () { self.listener("serverConnected"); }, 0);
         },
         // Keep the native view on the object's rectangle, and out of the way
-        // while the object is hidden or an Enyo popup (menu, dialog) is open.
+        // while the object is hidden or an Enyo popup (menu, dialog) or the
+        // system's share sheet (drawn in this page) is open.
         track: function () {
             var self = this;
             if (this.destroyed) return;
@@ -2454,7 +2698,7 @@
                 var cs = global.getComputedStyle(e);
                 return cs.visibility !== "hidden" && cs.display !== "none";
             }
-            var popup = Array.prototype.some.call(global.document.querySelectorAll(".enyo-popup"), function (e) {
+            var popup = Array.prototype.some.call(global.document.querySelectorAll(".enyo-popup, iframe[data-phoenix-sheet]"), function (e) {
                 return shown(e) && e.getBoundingClientRect().height > 0;
             });
             // A drawer flown in from a side (enyo.Toaster, class enyo-toaster:
@@ -2478,6 +2722,9 @@
             if (rect !== this.rect || hidden !== this.hidden) {
                 this.rect = rect;
                 this.hidden = hidden;
+                // Back on screen: the picture it left goes (webViewEvent's
+                // phoenixSnapshot).
+                if (!hidden && n.style.backgroundImage) n.style.backgroundImage = "";
                 this.post("geometry", { x: r.left, y: r.top, width: r.width, height: r.height, visible: !hidden });
             }
             if (!n.isConnected && this.connected) return this.destroy();
@@ -2741,6 +2988,18 @@
         if (!a) return;
         if (name === "phoenixFindResult") return a.findResult && a.findResult((args || [])[0] || 0, (args || [])[1] || 0);
         if (name === "urlTitleChanged") { a.url = args[0]; a.title = args[1]; }
+        // A picture of the page as the native view stepped aside for a
+        // popup or the share sheet (WebAppWindow.qml): shown in its place
+        // under them until it is back.
+        if (name === "phoenixSnapshot") {
+            if (a.hidden && a.node && args && args[0]) {
+                var ns = a.node.style;
+                ns.backgroundImage = "url(\"" + args[0] + "\")";
+                ns.backgroundSize = "100% 100%";
+                ns.backgroundRepeat = "no-repeat";
+            }
+            return;
+        }
         a.listener.apply(a, [name].concat(args || []));
     };
 
@@ -3530,10 +3789,18 @@
     // queries "from" a parent kind find objects of its sub-kinds, and
     // revSets properties are bumped on every change.
     (function installSystemKinds() {
-        var VERSION = 2;
+        var VERSION = 3;
         if (store.get("db8SystemKinds", 0) >= VERSION)
             return;
         var kinds = {
+            // webOS 3's media indexer (luna-systemui's file picker finds
+            // pictures and videos of an album "from" the parent kind:
+            // AlbumGridView.js:49, VideoAlbumList.js:47).
+            "com.palm.media.types:1": {},
+            "com.palm.media.image.file:1": { extends: ["com.palm.media.types:1"] },
+            "com.palm.media.video.file:1": { extends: ["com.palm.media.types:1"] },
+            "com.palm.media.audio.file:1": { extends: ["com.palm.media.types:1"] },
+            "com.palm.media.image.album:1": {},
             "com.palm.contact.palmprofile:1": { extends: ["com.palm.contact:1"] },
             "com.palm.calendar:1": { revSets: ["calendarRevset"] },
             "com.palm.calendarevent:1": { revSets: ["eventDisplayRevset"] },
@@ -4061,6 +4328,85 @@
         runtime.hidpiArt = { variants: variants };
     })();
 
+    // ---- Pictures the media store holds, named by their path -----------------------
+    //
+    // On webOS a page showed a picture of the USB drive or of the file
+    // cache by its path (<img src="/media/internal/DCIM/...">, an inline
+    // background-image url(...)): luna-systemui's file picker its grid
+    // (AlbumGridView.js:105-113, ImageFullView.js:52), Contacts the photo it
+    // made (Edit.js:616). Here the user's files (the camera's, a cropped
+    // contact photo) are in the media store and the Files block's own
+    // store, which the server does not serve: such a reference gets the
+    // file's URL instead (a blob: URL), when there is one. The demo media
+    // under /media/internal/samples/ are served and stay as they are.
+    (function storedPictures() {
+        var doc = global.document;
+        if (!doc || typeof MutationObserver !== "function" || typeof URL !== "function" || typeof WeakMap !== "function")
+            return;
+        var LOCAL = /^\/(?:media\/internal|var\/file-cache)\/(?!samples\/)/;
+        function localPath(url, node) {
+            try {
+                var u = new URL(url, node.ownerDocument.baseURI);
+                var p = decodeURIComponent(u.pathname);
+                return u.origin === global.location.origin && LOCAL.test(p) ? p : null;
+            } catch (e) { return null; }
+        }
+        // The file's URL, or null when the store has no such file.
+        function urlOf(path) {
+            var fm = runtime.fileManager, mf = runtime.mediaFiles;
+            var first = fm ? fm.url(path) : Promise.resolve(path);
+            return first.then(function (u) {
+                if (u !== path) return u;
+                return mf ? mf.url(path) : path;
+            }).then(function (u) { return u === path ? null : u; }, function () { return null; });
+        }
+        var done = new WeakMap();   // element -> the value given here
+        function fixImg(img) {
+            var src = img.getAttribute("src");
+            if (!src || done.get(img) === src) return;
+            var path = localPath(src, img);
+            if (!path) return;
+            urlOf(path).then(function (u) {
+                if (!u || img.getAttribute("src") !== src) return;
+                done.set(img, u);
+                img.setAttribute("src", u);
+            });
+        }
+        var URL_FN = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
+        function fixStyle(el) {
+            var st = el.style, value = st && st.getPropertyValue("background-image");
+            if (!value || value.indexOf("url(") < 0 || done.get(el) === value) return;
+            var paths = [];
+            value.replace(URL_FN, function (all, q, url) { var p = localPath(url, el); if (p) paths.push([url, p]); return all; });
+            if (!paths.length) return;
+            Promise.all(paths.map(function (x) { return urlOf(x[1]); })).then(function (urls) {
+                if (st.getPropertyValue("background-image") !== value) return;
+                var out = value;
+                paths.forEach(function (x, i) { if (urls[i]) out = out.split(x[0]).join(urls[i]); });
+                if (out === value) return;
+                done.set(el, out);
+                st.setProperty("background-image", out, st.getPropertyPriority("background-image"));
+            });
+        }
+        function scan(node) {
+            if (!node || node.nodeType !== 1) return;
+            if (node.tagName === "IMG") fixImg(node);
+            if (node.hasAttribute("style")) fixStyle(node);
+            var els = node.querySelectorAll("img[src], [style]");
+            for (var i = 0; i < els.length; ++i) {
+                if (els[i].tagName === "IMG") fixImg(els[i]);
+                if (els[i].hasAttribute("style")) fixStyle(els[i]);
+            }
+        }
+        new MutationObserver(function (records) {
+            records.forEach(function (r) {
+                if (r.type === "childList") Array.prototype.forEach.call(r.addedNodes, scan);
+                else if (r.attributeName === "src" && r.target.tagName === "IMG") fixImg(r.target);
+                else if (r.attributeName === "style") fixStyle(r.target);
+            });
+        }).observe(doc, { childList: true, subtree: true, attributes: true, attributeFilter: ["src", "style"] });
+    })();
+
     // Back gesture: the shell calls this; Mojo/Enyo 1.0 apps treat Escape
     // (and keyIdentifier U+1200001 on devices) as "back".
     // An app opened by another one to show something ({returnToCaller}:
@@ -4170,11 +4516,43 @@
         return !!el.isContentEditable;
     }
 
+    // Auto-capitalisation (GAPS V1): WebKit told the keyboard when the next
+    // letter should be a capital (ViewHost_AutoCapChanged ->
+    // HostWindow::onAutoCapChanged -> IMEController::notifyAutoCapChanged,
+    // luna-sysmgr Src/base/HostWindow.cpp:297-302), and the keyboard showed
+    // Shift on (keyboard-efigs PhoneKeyboard.cpp:276-280, 1395). WebKit
+    // capitalised a sentence's start unless the field said otherwise; Enyo
+    // 1.0's Input says so with x-palm-disable-auto-cap (autoCapitalize
+    // "lowercase") or x-palm-title-cap ("title"), and its default "sentence"
+    // with neither (enyo-1.0 base/controls/Input.js:39-41, 273-281);
+    // PasswordInput turns it off (palm/controls/input/PasswordInput.js:16).
+    // Palm's WebKit itself was not released: the HTML `autocapitalize`
+    // attribute is followed too, and fields for passwords, numbers, phone
+    // numbers, e-mail and web addresses are left alone (Email turned it off
+    // on its address fields itself, accounts/source/SimpleConfig.js:53).
+    // The shell's keyboard works out where the cursor is (VirtualKeyboard
+    // fieldAutoCap); this is the field's mode.
+    function autoCapFor(el, type) {
+        if (!el || typeof el.getAttribute !== "function" || (type !== 0 && type !== 2))
+            return "none";
+        if ((el.getAttribute("x-palm-disable-auto-cap") || "") === "true")
+            return "none";
+        var title = el.getAttribute("x-palm-title-cap");
+        if (title !== null && title !== "false")
+            return "words";
+        var a = (el.getAttribute("autocapitalize") || "").toLowerCase();
+        if (a === "off" || a === "none")
+            return "none";
+        if (a === "words" || a === "characters")
+            return a;
+        return "sentences";
+    }
+
     function editorState(el) {
         var type = 0;
         if (el && (el.tagName || "").toLowerCase() === "input")
             type = fieldTypes[(el.getAttribute("type") || "").toLowerCase()] || 0;
-        return { type: type, actions: 0, flags: 0, enterKeyLabel: "" };
+        return { type: type, actions: 0, flags: 0, enterKeyLabel: "", autoCap: autoCapFor(el, type) };
     }
 
     var ime = { manual: false, reported: null };
@@ -4264,6 +4642,15 @@
 
     // The keyboard was shown (before the window shrinks) or hidden (after it
     // grew back).
+    // The positive space of a window that keeps its size (it called
+    // allowResizeOnPositiveSpaceChange(false)): Enyo moves its popups and
+    // scrolls the focused field into view (palm/system/keyboard.js:224).
+    runtime.positiveSpaceChanged = function (width, height) {
+        var mojo = global.Mojo;
+        if (mojo && typeof mojo.positiveSpaceChanged === "function") {
+            try { mojo.positiveSpaceChanged(width, height); } catch (e) { console.error("[phoenix-runtime] positiveSpaceChanged failed", e); }
+        }
+    };
     runtime.keyboardShown = function (shown) {
         var mojo = global.Mojo;
         if (mojo && typeof mojo.keyboardShown === "function") {
@@ -4734,6 +5121,14 @@
                 // one in use (the language key switches).
                 keyboards: keyboardCombos(p),
                 keyboard: keyboardInUse(p),
+                // The keyboards installed (Settings > Text Assist >
+                // Keyboards, GAPS V7), in order, and the one in use (the
+                // globe key switches).
+                installedKeyboards: installedKeyboards(p),
+                // Settings > Text Assist > Hardware Keyboard (GAPS V8 (5)):
+                // the layout and the modifier keys remapped.
+                hardwareKeyboard: hardwareKeyboardPrefs(p.hardwareKeyboard),
+                keyboardId: keyboardIdInUse(p),
                 ringtone: (p.ringtone && p.ringtone.fullPath) || "",
                 // Phone preferences: unconditional call forwarding on (the
                 // status bar's call-forward icon, StatusBarInfo::setCallForward).
@@ -4841,6 +5236,43 @@
             var list = (keyboardPrefs(p).keyboards || []).map(keyboardCombo).filter(Boolean);
             return list.length ? list : [{ layout: "qwerty", language: "en" }];
         }
+        // Phoenix (GAPS V7; the owner, 29 September 2026): whole keyboards
+        // side by side, as iOS has: "classic" (the Pre's and TouchPad's,
+        // V1), "phoenix" (Phoenix's own look over the same keys and Text
+        // Assist), "ose" (OSE's own Maliit keyboard: on a device). In the
+        // user's order (x_palm_virtualkeyboard_prefs installed); the one in
+        // use is x_palm_virtualkeyboard_settings keyboardId.
+        var KEYBOARD_IDS = ["classic", "phoenix", "ose"];
+        // The hardware keyboard: {layout: "auto" | "qwertz" | "azerty",
+        // remap: {capslock, control, alt, meta: a key's new part}}.
+        var HW_LAYOUTS = ["auto", "qwertz", "azerty"];
+        var HW_REMAP_KEYS = ["capslock", "control", "alt", "meta"];
+        var HW_REMAP_TARGETS = ["capslock", "control", "alt", "meta", "escape", "keyboard", "none"];
+        function hardwareKeyboardPrefs(h) {
+            h = h && typeof h === "object" ? h : {};
+            var remap = {};
+            HW_REMAP_KEYS.forEach(function (k) {
+                var t = h.remap && h.remap[k];
+                if (HW_REMAP_TARGETS.indexOf(t) >= 0 && t !== k)
+                    remap[k] = t;
+            });
+            return { layout: HW_LAYOUTS.indexOf(h.layout) >= 0 ? h.layout : "auto", remap: remap };
+        }
+        runtime.hardwareKeyboardPrefs = hardwareKeyboardPrefs;
+        function installedKeyboards(p) {
+            var list = (Array.isArray(keyboardPrefs(p).installed) ? keyboardPrefs(p).installed : [])
+                .filter(function (id, i, all) { return KEYBOARD_IDS.indexOf(id) >= 0 && all.indexOf(id) === i; });
+            return list.length ? list : ["classic"];
+        }
+        function keyboardSettings(p) {
+            var st = p.x_palm_virtualkeyboard_settings;
+            if (typeof st === "string") { try { st = JSON.parse(st); } catch (e) { st = null; } }
+            return st && typeof st === "object" ? st : {};
+        }
+        function keyboardIdInUse(p) {
+            var id = keyboardSettings(p).keyboardId, list = installedKeyboards(p);
+            return list.indexOf(id) >= 0 ? id : list[0];
+        }
         function keyboardInUse(p) {
             var st = p.x_palm_virtualkeyboard_settings;
             if (typeof st === "string") { try { st = JSON.parse(st); } catch (e) { st = null; } }
@@ -4861,6 +5293,7 @@
             });
             return { suggestions: kb.WordSuggestions !== false, autoCorrect: kb.AutoCorrect !== false,
                      swipe: kb.SwipeTyping !== false, spaces2period: kb.spaces2period !== false,
+                     emojiSuggestions: kb.EmojiSuggestions !== false,
                      forgetWords: typeof kb.ForgetWords === "number" ? kb.ForgetWords : 0,
                      shortcuts: shortcuts, shortcutsOn: ti.shortcutChecking !== "off",
                      userWords: dictionaryWords(ti), removedWords: removedWords(ti) };
@@ -5437,7 +5870,7 @@
                 }
             }
             if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "lockScreenPreviews", "notificationRepeat", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "appRelaunch", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
-                 "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility",
+                 "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility", "hardwareKeyboard",
                  "dockwallpaper", "dockModeSoundPref", "exhibition", "browserContentBlocker", "browserUserAgent",
                  "networkProxy", "devModeUnlocked"].concat(TWEAK_KEYS).some(function (k) { return k in p; })) {
                 if ("devModeUnlocked" in p && runtime.developerGateChanged) runtime.developerGateChanged();
@@ -6467,9 +6900,21 @@
             suppressHost = true;
             try {
                 // The keyboard's language key chose another keyboard.
+                // ... or the globe key another whole keyboard (V7). Both
+                // are kept in x_palm_virtualkeyboard_settings.
+                var kbSettings = null;
                 if (st.keyboard && keyboardCombo(st.keyboard))
-                    sys["/setPreferences"]({ x_palm_virtualkeyboard_settings: JSON.stringify(keyboardCombo(st.keyboard)) },
+                    kbSettings = keyboardCombo(st.keyboard);
+                if (typeof st.keyboardId === "string" && installedKeyboards(prefs()).indexOf(st.keyboardId) >= 0
+                        && st.keyboardId !== keyboardIdInUse(prefs()))
+                    kbSettings = kbSettings || keyboardCombo(keyboardSettings(prefs())) || keyboardInUse(prefs());
+                if (kbSettings) {
+                    var nextId = typeof st.keyboardId === "string" && installedKeyboards(prefs()).indexOf(st.keyboardId) >= 0
+                        ? st.keyboardId : keyboardIdInUse(prefs());
+                    sys["/setPreferences"]({ x_palm_virtualkeyboard_settings: JSON.stringify({ layout: kbSettings.layout, language: kbSettings.language,
+                                                                                             keyboardId: nextId }) },
                                            function () {}, { cancelled: function () { return false; } });
+                }
                 // The keyboard's "Add" (after backspace put back a corrected
                 // word): into the personal dictionary.
                 if (typeof st.dictionaryWordAdded === "string" && DICTIONARY_WORD.test(st.dictionaryWordAdded)) {
@@ -6516,6 +6961,79 @@
             global.document.dispatchEvent(e);
             return true;
         };
+
+        // Focus navigation with a hardware keyboard (GAPS V8 (3)) in what
+        // Chromium's Tab does not reach well: an app's own app menu (Phoenix's
+        // @phoenix/ui AppMenu, Enyo 1.0's enyo.AppMenu) and the buttons of a
+        // popup alert's page (luna-systemui's NotificationButtons; the shell
+        // passes the keys on, Shell._dialogKey). The arrows (and Tab) move a
+        // ring over the items, Enter or Space presses the one ringed, as the
+        // shell's own dialogs do (ActionButton.keyFocused).
+        var KEYNAV_MENU = ".pui-appmenu [role=menuitem], .enyo-appmenu .enyo-menuitem";
+        var KEYNAV_BUTTONS = ".enyo-notification-button, .enyo-notification-button-affirmative, "
+            + ".enyo-notification-button-negative, .enyo-notification-button-alternate, .enyo-button, button, [role=button]";
+        function keyNavItems(selector) {
+            var doc = global.document;
+            return Array.prototype.slice.call(doc.querySelectorAll(selector)).filter(function (el, i, all) {
+                if (all.indexOf(el) !== i || el.getAttribute("aria-disabled") === "true" || el.disabled) return false;
+                // Enyo 1.0's dimmed item: its own row is "enyo-item-disabled"
+                // (Item.js disabledChanged -> stateChanged).
+                var row = el.firstElementChild;
+                if (/-disabled\b/.test(el.className) || (row && /-disabled\b/.test(row.className))) return false;
+                // Shown: laid out, and not inside a closed drawer.
+                var r = el.getBoundingClientRect();
+                return r.width > 0 && r.height > 0 && global.getComputedStyle(el).visibility !== "hidden";
+            });
+        }
+        function keyNavStyle() {
+            var doc = global.document;
+            if (doc.getElementById("phoenix-keyfocus-style")) return;
+            var st = doc.createElement("style");
+            st.id = "phoenix-keyfocus-style";
+            st.textContent = ".phoenix-keyfocus { outline: 3px solid rgb(75, 151, 222) !important; outline-offset: -3px; }";
+            (doc.head || doc.documentElement).appendChild(st);
+        }
+        // key: "next", "previous", "press"; scope: "menu", "buttons" or ""
+        // (the menu when one is open, else the buttons). True when handled.
+        runtime.keyNav = function (key, scope) {
+            var items = scope === "buttons" ? [] : keyNavItems(KEYNAV_MENU);
+            if (!items.length && scope !== "menu") items = keyNavItems(KEYNAV_BUTTONS);
+            if (!items.length) return false;
+            var doc = global.document;
+            var cur = doc.querySelector(".phoenix-keyfocus");
+            var i = items.indexOf(cur);
+            if (key === "press") {
+                var el = i >= 0 ? items[i] : null;
+                if (!el) return false;
+                // (The ring stays while the item does: Edit opens its drawer
+                // and Down goes on into it.)
+                // A finger's press: Mojo and Enyo widgets act on these.
+                ["mousedown", "mouseup"].forEach(function (t) {
+                    el.dispatchEvent(new global.MouseEvent(t, { bubbles: true, cancelable: true, view: global }));
+                });
+                el.click();
+                return true;
+            }
+            keyNavStyle();
+            if (cur) cur.classList.remove("phoenix-keyfocus");
+            i = i < 0 ? (key === "previous" ? items.length - 1 : 0) : (i + (key === "previous" ? -1 : 1) + items.length) % items.length;
+            items[i].classList.add("phoenix-keyfocus");
+            if (items[i].scrollIntoView) items[i].scrollIntoView({ block: "nearest" });
+            return true;
+        };
+        // In the app's own page: the arrows and Enter while its menu is open.
+        if (global.document && global.document.addEventListener) {
+            global.document.addEventListener("keydown", function (e) {
+                if (e.ctrlKey || e.altKey || e.metaKey || !keyNavItems(KEYNAV_MENU).length) return;
+                var k = e.key === "ArrowDown" || (e.key === "Tab" && !e.shiftKey) ? "next"
+                      : e.key === "ArrowUp" || (e.key === "Tab" && e.shiftKey) ? "previous"
+                      : (e.key === "Enter" || e.key === " ") && global.document.querySelector(".phoenix-keyfocus") ? "press" : "";
+                if (k && runtime.keyNav(k, "menu")) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }, true);
+        }
 
         // The shell launched an app that is already running, with new launch
         // params: update PalmSystem.launchParams, then tell the app. Enyo 1.0
@@ -7702,14 +8220,44 @@
 
         // ---- Legacy db8 kinds -------------------------------------------------------------
 
+        // webOS 3's indexer also kept albums (com.palm.media.image.album:1,
+        // a folder of pictures or videos: {name, path, total: {images,
+        // videos}, appGridThumbnails, modifiedTime, sortKey, searchKey}) and
+        // gave each picture and video its album's albumId, the thumbnail it
+        // had cached (appGridThumbnail {path}, appCacheComplete) and its
+        // mediaType; audio files said whether they were ringtones
+        // (isRingtone). luna-systemui's file picker lists them by those
+        // (ImageAlbumList.js:104-113, AlbumGridView.js:124, VideoAlbumList.js:100,
+        // AudioPicker.js:119). The thumbnail here is the picture itself.
+        var ALBUM_KIND = "com.palm.media.image.album:1";
+        var RINGTONE_DIRS = [MEDIA_ROOT + "/ringtones/", "/usr/palm/sounds/"];
+        // Album names as webOS 3's indexer gave them to its own folders
+        // (ImageAlbumList.js:62-71 translates these); others: the folder's name.
+        function albumName(dir) {
+            if (dir === MEDIA_ROOT + "/DCIM/100PHNX" || /^\/media\/internal\/DCIM(\/|$)/.test(dir)) return "Photo roll";
+            if (dir === MEDIA_ROOT + "/screencaptures") return "Screen captures";
+            if (dir === MEDIA_ROOT + "/samples/photos") return "Sample Photos";
+            if (dir === MEDIA_ROOT + "/samples/videos") return "Sample Videos";
+            if (dir === MEDIA_ROOT + "/Downloads") return "Downloads";
+            if (dir === MEDIA_ROOT + "/wallpapers") return "Wallpapers";
+            return dir.replace(/^.*\//, "") || "Photos";
+        }
+        function searchKeyOf(s) { return String(s || "").toLowerCase(); }
+
         function legacyObject(item) {
             var t = Date.parse(item.last_modified_date) || Date.now();
-            var o = { _kind: LEGACY_KINDS[item.type], path: item.file_path, size: item.file_size, mimeType: item.mime,
-                      createdTime: t, modifiedTime: t, title: item.title };
+            var o = { _id: "phoenix-media:" + item.file_path, _kind: LEGACY_KINDS[item.type], path: item.file_path,
+                      size: item.file_size, mimeType: item.mime, createdTime: t, modifiedTime: t, title: item.title,
+                      mediaType: item.type, searchKey: searchKeyOf(item.title) };
             if (item.type === "image" || item.type === "video") {
                 o.width = item.width || 0;
                 o.height = item.height || 0;
                 o.albumPath = item.file_path.replace(/\/[^\/]*$/, "");
+                o.albumId = "phoenix-album:" + o.albumPath;
+                o.appCacheComplete = true;
+                o.capturedOnDevice = /^\/media\/internal\/DCIM\//.test(item.file_path);
+                if (item.type === "image") o.appGridThumbnail = { path: item.file_path };
+                if (item.type === "video") o.duration = item.duration || 0;
             }
             if (item.type === "audio") {
                 o.artist = item.artist || "";
@@ -7718,10 +8266,48 @@
                 o.duration = item.duration || 0;
                 o.track = { position: item.track || 0, total: item.total_tracks || 0 };
                 o.thumbnails = item.thumbnail ? [{ data: item.thumbnail, type: "embedded" }] : [];
+                o.isRingtone = RINGTONE_DIRS.some(function (d) { return item.file_path.indexOf(d) === 0; });
             }
             return o;
         }
 
+        function albumObjects(idx) {
+            var albums = {};
+            ["image", "video"].forEach(function (type) {
+                (idx[type] || []).forEach(function (item) {
+                    var dir = item.file_path.replace(/\/[^\/]*$/, "");
+                    var a = albums[dir] || (albums[dir] = { _id: "phoenix-album:" + dir, _kind: ALBUM_KIND, path: dir,
+                                                            name: albumName(dir), total: { images: 0, videos: 0 },
+                                                            appGridThumbnails: [], modifiedTime: 0 });
+                    a.total[type === "image" ? "images" : "videos"]++;
+                    var t = Math.floor((Date.parse(item.last_modified_date) || 0) / 1000);
+                    if (t > a.modifiedTime) a.modifiedTime = t;
+                    if (type === "image" && a.appGridThumbnails.length < 3) a.appGridThumbnails.push({ path: item.file_path });
+                });
+            });
+            return Object.keys(albums).map(function (dir) {
+                var a = albums[dir];
+                // The camera's album first, as the indexer sorted it.
+                a.sortKey = (a.name === "Photo roll" ? "0" : "1") + a.name.toLowerCase();
+                a.searchKey = searchKeyOf(a.name);
+                return a;
+            });
+        }
+
+        // The ringtones (the system's and the user's), which are not all
+        // in the media index (the system's are not on the USB drive).
+        function ringtoneObjects(idx) {
+            var have = {};
+            (idx.audio || []).forEach(function (it) { have[it.file_path] = true; });
+            var r = callNow("luna://com.webos.service.systemservice/ringtone/listRingtones", {});
+            return ((r && r.ringtones) || []).filter(function (t) { return !have[t.fullPath]; }).map(function (t) {
+                return { _id: "phoenix-media:" + t.fullPath, _kind: LEGACY_KINDS.audio, path: t.fullPath, title: t.name,
+                         mimeType: MIME[extOf(t.fullPath)] || "", size: 0, isRingtone: true, mediaType: "audio",
+                         searchKey: searchKeyOf(t.name), artist: "", album: "", genre: "", duration: 0, thumbnails: [] };
+            });
+        }
+
+        var LEGACY_VERSION = 2;   // what the mirror holds (2: albums, ringtones)
         function mirrorLegacy(idx) {
             var db = runtime.services["com.palm.db"];
             if (!db) return;
@@ -7730,8 +8316,13 @@
             Object.keys(LEGACY_KINDS).forEach(function (type) {
                 db["/del"]({ query: { from: LEGACY_KINDS[type] }, purge: true }, noop, ctx);
                 var objs = (idx[type] || []).map(legacyObject);
+                if (type === "audio") objs = objs.concat(ringtoneObjects(idx));
                 if (objs.length) db["/put"]({ objects: objs }, noop, ctx);
             });
+            db["/del"]({ query: { from: ALBUM_KIND }, purge: true }, noop, ctx);
+            var albums = albumObjects(idx);
+            if (albums.length) db["/put"]({ objects: albums }, noop, ctx);
+            store.set("media:legacyMirror", LEGACY_VERSION);
         }
 
         // ---- Scanning -----------------------------------------------------------------------
@@ -7903,6 +8494,117 @@
             }
         });
 
+        // ---- com.palm.image and com.palm.filecache (legacy) ---------------------------------
+        //
+        // The Contacts framework turns the picture the file picker cropped
+        // into a contact's photo with them (loadable-frameworks contacts
+        // ContactPhoto.js:208-266, 270-346, Contact.js:518-591):
+        //   com.palm.image/convert {src, dest, destType, focusX, focusY,
+        //       scale, cropW, cropH}: the picture scaled by `scale`, then a
+        //       cropW x cropH window around the focus point (focusX, focusY:
+        //       0-1 of its width and height), kept inside the picture;
+        //       without a crop, the whole picture scaled.
+        //   com.palm.image/ezResize {src, dest, destType, destSizeW,
+        //       destSizeH}: the picture made to fit that size, its shape kept.
+        //   com.palm.image/imageInfo {src} -> {width, height, type}
+        // Written to the media store at dest, which pages show by its path
+        // (storedPictures below). A cache object (com.palm.filecache
+        // InsertCacheObject {typeName, fileName, size, subscribe} ->
+        // {pathName}) is a path under /var/file-cache/<typeName>/ for the
+        // caller to write; ExpireCacheObject {pathName} deletes it.
+        function sourceBlob(path) {
+            return files.read(path).then(function (blob) {
+                if (blob) return blob;
+                var fm = runtime.fileManager;
+                return (fm ? fm.url(path) : Promise.resolve(path)).then(readUrl);
+            });
+        }
+        function loadPicture(path) {
+            return sourceBlob(path).then(function (blob) {
+                if (!blob) throw new Error("No such file: " + path);
+                return new Promise(function (resolve, reject) {
+                    var u = URL.createObjectURL(blob), img = new Image();
+                    img.onload = function () { URL.revokeObjectURL(u); resolve(img); };
+                    img.onerror = function () { URL.revokeObjectURL(u); reject(new Error("Not a picture: " + path)); };
+                    img.src = u;
+                });
+            });
+        }
+        function pictureType(p, dest) {
+            var t = String(p.destType || extOf(dest) || "jpg").toLowerCase();
+            return t === "png" ? "image/png" : t === "webp" ? "image/webp" : "image/jpeg";
+        }
+        // Into the Files block's store when it fits (a contact's photo:
+        // palmGetResource reads it there), else the media store.
+        function writePicture(canvas, p) {
+            var type = pictureType(p, p.dest);
+            var fm = runtime.fileManager;
+            if (fm && fm.store && fm.store(p.dest, canvas.toDataURL(type, 0.9).replace(/^data:[^,]*,/, "")))
+                return Promise.resolve();
+            return new Promise(function (resolve) { canvas.toBlob(resolve, type, 0.9); }).then(function (blob) {
+                if (!blob) throw new Error("Could not encode " + p.dest);
+                return files.write(p.dest, blob);
+            });
+        }
+        function imageMethod(draw) {
+            return function (p, reply) {
+                if (!p.src || !p.dest) return reply(fail(-1, "src and dest are required"));
+                if (!global.document) return reply(fail(-1, "No canvas here"));
+                loadPicture(p.src).then(function (img) {
+                    var c = global.document.createElement("canvas");
+                    draw(img, img.naturalWidth, img.naturalHeight, c, p);
+                    return writePicture(c, p);
+                }).then(function () { reply(ok({})); },
+                        function (e) { reply(fail(-1, String(e && e.message || e))); });
+            };
+        }
+        register(["com.palm.image", "com.palm.image2"], {
+            "/convert": imageMethod(function (img, w, h, c, p) {
+                var k = Number(p.scale) > 0 ? Number(p.scale) : 1;
+                var cw = Math.round(Number(p.cropW) || w * k), ch = Math.round(Number(p.cropH) || h * k);
+                // The crop is always the size asked: a picture scaled smaller
+                // than it (a crop view wider than the picture) is scaled up
+                // to fill it.
+                k = Math.max(k, cw / w, ch / h);
+                var sw = w * k, sh = h * k;
+                var fx = p.focusX === undefined ? 0.5 : Number(p.focusX), fy = p.focusY === undefined ? 0.5 : Number(p.focusY);
+                var left = Math.max(0, Math.min(sw - cw, fx * sw - cw / 2));
+                var top = Math.max(0, Math.min(sh - ch, fy * sh - ch / 2));
+                c.width = Math.max(1, cw);
+                c.height = Math.max(1, ch);
+                c.getContext("2d").drawImage(img, left / k, top / k, cw / k, ch / k, 0, 0, c.width, c.height);
+            }),
+            "/ezResize": imageMethod(function (img, w, h, c, p) {
+                var k = Math.min((Number(p.destSizeW) || w) / w, (Number(p.destSizeH) || h) / h);
+                c.width = Math.max(1, Math.round(w * k));
+                c.height = Math.max(1, Math.round(h * k));
+                c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+            }),
+            "/imageInfo": function (p, reply) {
+                loadPicture(p.src || "").then(function (img) {
+                    reply(ok({ width: img.naturalWidth, height: img.naturalHeight, type: (MIME[extOf(p.src)] || "").replace(/^image\//, "") }));
+                }, function (e) { reply(fail(-1, String(e && e.message || e))); });
+            }
+        });
+
+        var cacheSeq = 0;
+        register(["com.palm.filecache"], {
+            "/InsertCacheObject": function (p, reply) {
+                if (!p.typeName) return reply(fail(-1, "typeName is required"));
+                var name = String(p.fileName || "object").replace(/[\/\\]/g, "_");
+                var path = "/var/file-cache/" + p.typeName + "/" + Date.now().toString(36) + (++cacheSeq) + "/" + name;
+                // The subscription is the caller's hold on the object
+                // (it is not removed while it lasts): nothing more comes.
+                reply(ok({ pathName: path, subscribed: !!p.subscribe }));
+            },
+            "/ExpireCacheObject": function (p, reply) {
+                if (!p.pathName) return reply(fail(-1, "pathName is required"));
+                files.remove(p.pathName).then(function () { reply(ok({})); }, function () { reply(ok({})); });
+            },
+            "/DefineType": function (p, reply) { reply(ok({})); },
+            "/GetCacheStatus": function (p, reply) { reply(ok({ numTypes: 0, size: 0, numObjs: 0 })); }
+        });
+
         // ---- org.webosphoenix.service.mediafiles (Phoenix, simulator only so far) ----------
 
         function b64ToBlob(data, type) {
@@ -7927,6 +8629,18 @@
                     function (e) { reply(fail(-1, "remove failed: " + (e && e.message || e))); });
             }
         });
+
+        // The ringtones changed (systemservice addRingtone, deleteRingtone).
+        runtime.refreshLegacyMedia = function () { mirrorLegacy(loadIndex()); };
+
+        // A profile whose legacy kinds were mirrored before they had albums
+        // and ringtones (or never: a legacy page may be the first to ask):
+        // once the services below (the ringtones') are there.
+        setTimeout(function () {
+            try {
+                if (store.get("media:legacyMirror", 0) < LEGACY_VERSION) mirrorLegacy(loadIndex());
+            } catch (e) { console.error("[phoenix-runtime] legacy media kinds", e); }
+        }, 0);
 
         // ---- Screen captures (Phoenix; docs/SCREENSHOTS.md SC1-SC2) -----------------------
         //
@@ -8959,8 +9673,43 @@
             },
             /** Throw the virtual filesystem away and seed it again. */
             reset: function () { store.set(VFS_KEY, seed()); },
+            /** Write a file (base64), making its folders, as a service of the
+                system writes one (com.palm.image's pictures). False when it
+                does not fit in this store. */
+            store: function (path, b64) {
+                var p = norm(path), v = load();
+                if (!p) return false;
+                var size = Math.floor(String(b64).length * 3 / 4);
+                if (size > INLINE_LIMIT) return false;
+                for (var d = parentOf(p), missing = []; !v.nodes[d] && d !== "/"; d = parentOf(d)) missing.unshift(d);
+                missing.forEach(function (dir) { v.nodes[dir] = { t: "d", m: Date.now(), mode: 493 }; });
+                var old = v.nodes[p];
+                if (old && old.t === "d") return false;
+                if (old && old.media && runtime.mediaFiles) runtime.mediaFiles.remove(p);
+                v.nodes[p] = { t: "f", m: Date.now(), mode: old ? old.mode : 420, data: b64, enc: "base64", size: fromB64(b64).length };
+                touch(v, parentOf(p));
+                return save(v);
+            },
             errors: E
         };
+        // palmGetResource reads a file of the device: those this store holds
+        // in itself are read here (the Contacts framework checks that the
+        // photo it made is there, PersonPhotos.js:390-402). Their bytes as
+        // a string, one character a byte, as the device's read gave them.
+        // (Not while this store is being read: making it reads the demo
+        // media's index with getResource.)
+        var readResource = PalmSystem.getResource, reading = false;
+        PalmSystem.getResource = function (path, flags) {
+            var r = readResource(path, flags);
+            if (r !== undefined || typeof path !== "string" || reading) return r;
+            var p = norm(path.replace(/^file:\/\//, "")), n;
+            reading = true;
+            try { n = p && load().nodes[p]; } catch (e) { n = null; } finally { reading = false; }
+            if (!n || n.t !== "f" || n.data === undefined) return r;
+            var text = n.enc === "base64" ? global.atob(n.data) : n.data;
+            return asResource(text, flags);
+        };
+
         // The documents' index (com.palm.media.misc.file:1) is there for
         // apps that read it without asking this service (Quickoffice).
         setTimeout(function () { try { load(); } catch (e) { /* the store is unavailable */ } }, 0);
@@ -8981,6 +9730,35 @@
                 return { name: nameOf(k).replace(/\.[^.]*$/, ""), fullPath: k };
             });
             reply(ok({ ringtones: SYSTEM_RINGTONES.concat(mine) }));
+        };
+        // ringtone/addRingtone {filePath}: a copy in /media/internal/ringtones
+        // (luna-sysservice's RingtoneManager); deleteRingtone {filePath}
+        // removes one of those. luna-systemui's file picker calls both
+        // (RingtonePicker.js:40-43, 64, 112: its "add ringtone" button and
+        // a swipe on a ringtone).
+        var noCancel = { cancelled: function () { return false; }, onCancel: null };
+        function ringtonesChanged(reply) {
+            if (runtime.refreshLegacyMedia) runtime.refreshLegacyMedia();
+            reply(ok({}));
+        }
+        runtime.services["com.webos.service.systemservice"]["/ringtone/addRingtone"] = function (p, reply) {
+            var from = norm(p.filePath || "");
+            if (!from) return reply(fail(-1, "filePath is required"));
+            var to = MEDIA_ROOT + "/ringtones/" + nameOf(from);
+            if (from === to) return ringtonesChanged(reply);
+            dispatch("luna://org.webosphoenix.filemanager/copy", { from: from, to: to, overwrite: true }, function (r) {
+                if (r.returnValue === false) return reply(r);
+                ringtonesChanged(reply);
+            }, noCancel);
+        };
+        runtime.services["com.webos.service.systemservice"]["/ringtone/deleteRingtone"] = function (p, reply) {
+            var path = norm(p.filePath || "");
+            if (!path || path.indexOf(MEDIA_ROOT + "/ringtones/") !== 0)
+                return reply(fail(-1, "Not one of the user's ringtones: " + p.filePath));
+            dispatch("luna://org.webosphoenix.filemanager/remove", { path: path }, function (r) {
+                if (r.returnValue === false) return reply(r);
+                ringtonesChanged(reply);
+            }, noCancel);
         };
     })();
 
@@ -12636,10 +13414,15 @@
     //       title, icon, label}]}: the apps whose appinfo.json says they take
     //       all of these types ("phoenix": {"shareTargets": [{"types":
     //       ["image/*"], "label"?}]}), and the legacy apps below.
-    //   org.webosphoenix.filepicker/pick {kinds: ["image"], title?} ->
-    //       {files: [{fullPath, mimeType, name}]} or {canceled: true}: the
-    //       user picks a picture (SF2, pictures only so far; Messaging's
-    //       picture messages).
+    //   org.webosphoenix.filepicker/pick {kinds?: ["image" | "video" |
+    //       "audio" | "document" | "file"] (default ["image"]), multiple?,
+    //       cropWidth?, cropHeight?, extensions?, title?} -> {files:
+    //       [{fullPath, mimeType, name, size?, cropInfo?, croppedPath?}]} or
+    //       {canceled: true}: the user picks (SF2): pictures album by album,
+    //       videos, music, documents, or any file folder by folder; with
+    //       several kinds, the kind first, as the original. A crop size
+    //       (one picture) shows the crop view: cropInfo as Enyo's
+    //       CroppableImage gave it, and croppedPath the crop at that size.
     //   org.webosphoenix.filepicker/save {name, from?: path, data?: base64,
     //       mimeType?, title?} -> {path} or {canceled: true}: the user picks a
     //       folder of /media/internal (the last one used first) and a name;
@@ -12654,6 +13437,9 @@
         var MEDIA = "/media/internal";
         var CAMERA_DIR = MEDIA + "/DCIM/100PHNX";
         var LAST_FOLDER = "filepicker:lastFolder";
+        // What the picker picks: the original's kinds (FilePickerApp.js:39-45,
+        // ringtones aside), and "file", any file of the USB drive by folder.
+        var PICK_KINDS = ["image", "video", "audio", "document", "file"];
 
         // Legacy apps that cannot say it in their appinfo.json: what they take.
         var LEGACY_TARGETS = {
@@ -12745,7 +13531,7 @@
                 var id = "sheet" + (++seq) + "_" + Date.now();
                 var frame = doc.createElement("iframe");
                 frame.setAttribute("data-phoenix-sheet", kind);
-                frame.setAttribute("title", kind === "save" ? "Save to Files" : kind === "pick" ? "Choose a Picture" : "Share");
+                frame.setAttribute("title", kind === "save" ? "Save to Files" : kind === "pick" ? request.title || "Choose a File" : "Share");
                 frame.src = SHEET_URL + "?launchParams=" + encodeURIComponent(toJson({ kind: kind, id: id }));
                 var st = frame.style;
                 st.position = "fixed"; st.left = "0"; st.top = "0"; st.width = "100%"; st.height = "100%";
@@ -12868,15 +13654,43 @@
         });
 
         register(["org.webosphoenix.filepicker"], {
-            // SF2 for pictures: the user picks from the pictures Photos has
-            // (by album), as the original picker did for "image".
+            // SF2, with the original picker's parameters (enyo.FilePicker
+            // published: fileType, extensions, allowMultiSelect, cropWidth,
+            // cropHeight; luna-systemui FilePickerApp.js:39-45 its kinds).
             "/pick": function (p, reply) {
-                var kinds = p.kinds || ["image"];
-                if (!kinds.length || kinds.some(function (k) { return k !== "image"; }))
-                    return reply(fail(-1, "Only pictures can be picked so far: kinds [\"image\"]"));
-                showSheet("pick", { title: p.title || "Choose a Picture", kinds: kinds }).then(function (r) {
+                var kinds = (p.kinds && p.kinds.length ? p.kinds : ["image"]).map(String);
+                var bad = kinds.filter(function (k) { return PICK_KINDS.indexOf(k) < 0; });
+                if (bad.length) return reply(fail(-1, "Unknown kinds " + bad.join(", ") + ": " + PICK_KINDS.join(", ")));
+                var multiple = !!(p.multiple || p.allowMultiSelect);
+                var cw = Number(p.cropWidth) || 0, ch = Number(p.cropHeight) || 0;
+                // A crop size is for one picture (ImagePicker.js:56-60 crops
+                // only what a tap picks): either side alone makes a square.
+                var crop = (cw > 0 || ch > 0) && kinds.indexOf("image") >= 0 && !multiple
+                    ? { width: Math.round(cw || ch), height: Math.round(ch || cw) } : null;
+                var exts = (p.extensions || []).map(function (e) { return String(e).replace(/^\./, "").toLowerCase(); });
+                var title = p.title || (kinds.length === 1 && kinds[0] === "image" ? (multiple ? "Choose Pictures" : "Choose a Picture")
+                                                                                   : (multiple ? "Choose Files" : "Choose a File"));
+                showSheet("pick", { title: title, kinds: kinds, multiple: multiple, crop: crop, extensions: exts }).then(function (r) {
                     if (!r || r.action !== "pick" || !r.files || !r.files.length) return reply(ok({ canceled: true }));
-                    reply(ok({ files: r.files.map(function (f) { return { fullPath: f.path, mimeType: f.mimeType || "", name: f.path.replace(/^.*\//, "") }; }) }));
+                    var files = r.files.map(function (f) {
+                        var o = { fullPath: f.path, mimeType: f.mimeType || "", name: f.path.replace(/^.*\//, "") };
+                        if (f.size !== undefined) o.size = f.size;
+                        if (f.cropInfo) o.cropInfo = f.cropInfo;
+                        return o;
+                    });
+                    var first = files[0];
+                    if (!crop || !first.cropInfo) return reply(ok({ files: files }));
+                    // The crop made, at the size asked, as the apps of the
+                    // time made it with com.palm.image/convert (ContactPhoto.js:240-251).
+                    var dest = "/var/file-cache/filepicker/" + Date.now().toString(36) + "/" +
+                        first.name.replace(/\.[^.]*$/, "") + ".jpg";
+                    callP("luna://com.palm.image/convert", {
+                        src: first.fullPath, dest: dest, destType: "jpg", focusX: first.cropInfo.focusX, focusY: first.cropInfo.focusY,
+                        scale: crop.width / first.cropInfo.suggestedXsize, cropW: crop.width, cropH: crop.height
+                    }).then(function (c) {
+                        if (c.returnValue !== false) first.croppedPath = dest;
+                        reply(ok({ files: files }));
+                    });
                 });
             },
             "/save": function (p, reply) {

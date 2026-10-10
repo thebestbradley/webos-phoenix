@@ -212,6 +212,9 @@ See [docs/ROADMAP.md](docs/ROADMAP.md).
 | `services/hardware` | `org.webosphoenix.hardware`: the device's hardware matched against the signed driver catalog, the gaps the image leaves (newer firmware, out-of-tree drivers) installed with opkg and rolled back when they do not work (Settings > Hardware; docs/HARDWARE.md, docs/DRIVERS.md); its catalog tool is `server/drivers` |
 | `runtime/` | The webOS web app runtime for the simulator and browsers (`PalmSystem`, simulated Luna services) |
 | `shell/tests` | Behaviour tests (`qmltestrunner`) |
+| `shell/tests-device` | The device shell's `Phoenix.Lsm` types over fake luna-surfacemanager modules (`fakes/`: the bus, `LS`, launch points) |
+| `services/systemmanager` | `com.palm.systemmanager` on a device: the device lock (the passcode as scrypt, the security policies), the shell's state for the apps, the shell's start-up preferences (Node) |
+| `services/clipboard` | `org.webosphoenix.clipboard` on a device: the runtime's clipboard history run as a Luna service (Node) |
 | `shell/assets/openwebos` | Original Open webOS system UI artwork (Apache-2.0) |
 | `meta-phoenix` | OpenEmbedded layer that adds Phoenix to a webOS OSE image |
 | `scripts/setup-build.sh` | Sets up a webOS OSE build with `meta-phoenix` |
@@ -456,6 +459,7 @@ Tests:
 
 ```sh
 QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -input shell/tests
+QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -import shell/tests-device/fakes -input shell/tests-device
 (cd apps && npm test && npm run typecheck)
 ```
 
@@ -466,6 +470,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-voicedial.cjs` | Voice Dial |
 | `node tools/test-media.cjs` | Camera, Photos, Music |
 | `node tools/test-files.cjs` | Files |
+| `node tools/test-filepicker.cjs` | The file pickers: luna-systemui's for Clock, Email and Contacts; `org.webosphoenix.filepicker/pick` |
 | `node tools/test-tasks.cjs` | Tasks and reminders |
 | `node tools/test-db8-pages.cjs` | Db8 shared by pages writing at once |
 | `node tools/test-alarm.cjs` | A Clock alarm rings as a popup alert |
@@ -501,6 +506,8 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -inp
 | `node tools/test-browser.cjs` | The browser: pages, downloads, printing (Save as PDF), find on page, private browsing, the content blocker, user agent and search engine preferences |
 | `node tools/test-links.cjs` | Links between apps: web, `mailto:`, `tel:`, `sms:` and web app links tapped in app pages open the right app with the link |
 | `node tools/test-back.cjs` | The back gesture: an app takes Back where it can go back (Enyo 1 and 2, Phoenix, Ionic) and leaves it at its top level, where the card minimizes |
+| `node tools/test-runtime-device.cjs` | The runtime on a device, in a stand-in for WebAppMgr's page (plain Node): the window properties the device shell reads (orientation, full screen, status bar colour, the caller to return to, a Back the page did not take), `{returnToCaller}` as `$caller`, copies sent to the clipboard service |
+| `python3 tools/test-sounds-pcm.py` | The system sounds' raw PCM twins for OSE's audiod (`tools/sounds-to-pcm.py`) |
 
 ## Build a webOS OSE image (experimental)
 
