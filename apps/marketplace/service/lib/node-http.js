@@ -3,7 +3,7 @@
 //
 // HTTP on a device (Node's http and https): request() -> {status, headers,
 // body} (text) and requestBytes() -> {status, headers, bytes}, which follows
-// redirects (downloads). Like apps/dav/service/lib/node-http.js.
+// redirects (downloads). Like apps/shared/synckit/src/node-http.js.
 
 "use strict";
 

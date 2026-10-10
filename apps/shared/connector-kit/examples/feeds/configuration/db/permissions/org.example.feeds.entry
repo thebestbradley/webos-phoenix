@@ -1,0 +1,24 @@
+[
+    {
+        "type": "db.kind",
+        "object": "org.example.feeds.entry:1",
+        "caller": "com.palm.service.accounts",
+        "operations": {
+            "read": "allow",
+            "create": "allow",
+            "delete": "allow",
+            "update": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "org.example.feeds.entry:1",
+        "caller": "org.example.feeds",
+        "operations": {
+            "read": "allow",
+            "create": "allow",
+            "delete": "allow",
+            "update": "allow"
+        }
+    }
+]

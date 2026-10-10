@@ -1,12 +1,16 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Test doubles for the DAV service: an in-memory db8 with the calls and
-// query features the sync engine uses (kind inheritance, "=" on dotted and
-// array paths, incDel, limit, _rev / _del bookkeeping, merge of nested
-// objects), and a Luna bus that answers db8, tempdb, the accounts
-// service's readCredentials / getAccountInfo and the activity manager.
-// Not installed on devices (tools/install-rootfs.py skips test/).
+// Test doubles for Synergy transports (apps/dav's tests, the connector
+// kit's conformance suite): an in-memory db8 with the calls and query
+// features the sync engines use (kind inheritance, "=" on dotted and array
+// paths, incDel, limit, _rev / _del bookkeeping, merge of nested objects),
+// and a Luna bus that answers db8, tempdb, the accounts service's
+// readCredentials / writeCredentials / getAccountInfo and the activity
+// manager, and any other method the test gives (options.handlers:
+// {"luna://service/method": (params) -> reply}). Every call is recorded
+// (bus.calls). Moved here from apps/dav/service/test/memdb.cjs. Not
+// installed on devices (tools/install-rootfs.py skips test/).
 
 "use strict";
 
@@ -123,8 +127,10 @@ function createFakeBus(options) {
         calls: calls,
         tempdb: tempdb,
         call: function (uri, params) {
+            uri = String(uri).replace(/^palm:/, "luna:");
             calls.push({ uri: uri, params: params });
             var m = /^luna:\/\/([^/]+)\/(.*)$/.exec(uri);
+            if (!m) return Promise.resolve({ returnValue: false, errorText: "not a Luna address: " + uri });
             var svc = m[1], method = m[2];
             if (svc === "com.palm.db") return dbCall(db, method, params);
             if (svc === "com.palm.tempdb") return dbCall(tempdb, method, params);
@@ -132,10 +138,17 @@ function createFakeBus(options) {
                 var c = options.credentials[params.accountId];
                 return Promise.resolve(c ? { returnValue: true, credentials: c[params.name] } : { returnValue: false, errorCode: "CREDENTIALS_NOT_FOUND" });
             }
+            if (svc === "com.palm.service.accounts" && method === "writeCredentials") {
+                var mine = options.credentials[params.accountId] = options.credentials[params.accountId] || {};
+                Object.keys(params.credentials || {}).forEach(function (k) { mine[k] = params.credentials[k]; });
+                return Promise.resolve({ returnValue: true });
+            }
             if (svc === "com.palm.service.accounts" && method === "getAccountInfo") {
                 var a = options.accounts[params.accountId];
                 return Promise.resolve(a ? { returnValue: true, result: a } : { returnValue: false });
             }
+            var h = options.handlers && (options.handlers[uri] || options.handlers["luna://" + svc + "/*"]);
+            if (h) return Promise.resolve(h(params, uri));
             if (svc === "com.palm.activitymanager") return Promise.resolve({ returnValue: true, activityId: calls.length });
             return Promise.resolve({ returnValue: false, errorText: "no such service in the fake bus: " + uri });
         }

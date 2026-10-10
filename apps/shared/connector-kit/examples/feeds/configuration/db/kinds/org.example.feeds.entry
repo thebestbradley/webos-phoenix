@@ -1,0 +1,23 @@
+{
+    "id": "org.example.feeds.entry:1",
+    "owner": "org.example.service.feeds",
+    "sync": false,
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        },
+        {
+            "name": "remoteId",
+            "props": [
+                {
+                    "name": "remoteId"
+                }
+            ]
+        }
+    ]
+}

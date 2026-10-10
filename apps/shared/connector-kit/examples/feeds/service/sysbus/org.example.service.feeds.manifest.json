@@ -1,0 +1,19 @@
+{
+    "id": "org.example.service.feeds",
+    "version": "0.1.0",
+    "roleFiles": [
+        "/usr/share/luna-service2/roles.d/org.example.service.feeds.role.json"
+    ],
+    "serviceFiles": [
+        "/usr/share/luna-service2/services.d/org.example.service.feeds.service"
+    ],
+    "apiPermissionFiles": [
+        "/usr/share/luna-service2/api-permissions.d/org.example.service.feeds.api.json"
+    ],
+    "clientPermissionFiles": [
+        "/usr/share/luna-service2/client-permissions.d/org.example.service.feeds.perm.json"
+    ],
+    "groupsFiles": [
+        "/usr/share/luna-service2/groups.d/org.example.service.feeds.groups.json"
+    ]
+}

@@ -33,8 +33,8 @@ function loadPlaywright() {
 
 const REPO = path.resolve(__dirname, "..");
 const radicale = require(path.join(REPO, "apps/dav/service/test/radicale.cjs"));
-const vcard = require(path.join(REPO, "apps/dav/service/lib/vcard.js"));
-const ical = require(path.join(REPO, "apps/dav/service/lib/ical.js"));
+const vcard = require(path.join(REPO, "apps/shared/synckit/src/vcard.js"));
+const ical = require(path.join(REPO, "apps/shared/synckit/src/ical.js"));
 
 const args = process.argv.slice(2);
 const tablet = args.includes("--tablet");

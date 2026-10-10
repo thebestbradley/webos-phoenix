@@ -1,0 +1,10 @@
+{
+    "accounts.transport": [
+        "org.example.service.feeds/checkCredentials",
+        "org.example.service.feeds/onCreate",
+        "org.example.service.feeds/onEnabled",
+        "org.example.service.feeds/onCredentialsChanged",
+        "org.example.service.feeds/onDelete",
+        "org.example.service.feeds/sync"
+    ]
+}

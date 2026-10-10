@@ -1,0 +1,87 @@
+<!doctype html>
+<!-- Copyright (c) 2026 webOS Phoenix contributors
+     SPDX-License-Identifier: Apache-2.0
+
+     The News Feed account's sign-in page (the template's validator.customUI),
+     in plain HTML: the Accounts app loads it in a frame (Enyo's CrossAppUI)
+     with ?enyoWindowParams={mode, template, account}, and takes the answer
+     posted to it as "enyoCrossAppResult=" + JSON (enyo CrossAppResult.js):
+       create: {returnValue: true, template, templateId, username, credentials, config}
+       modify: {returnValue: true, credentials, config}
+       cancel: {returnValue: false}
+     The validator is the connector's checkCredentials, called over the bus. -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>News Feed</title>
+    <style>
+        body { margin: 0; font-family: Prelude, "Helvetica Neue", Arial, sans-serif; background: #e5e5e5; color: #333; }
+        header { display: flex; align-items: center; justify-content: center; gap: 8px; height: 50px; background: #f4f4f4; border-bottom: 1px solid #bbb; font-size: 18px; }
+        main { padding: 16px; max-width: 480px; margin: 0 auto; }
+        label { display: block; font-size: 13px; font-weight: bold; color: #555; margin: 12px 4px 6px; text-transform: uppercase; }
+        input { box-sizing: border-box; width: 100%; font-size: 17px; padding: 10px; border: 1px solid #aaa; border-radius: 8px; background: #fff; }
+        p { font-size: 14px; line-height: 1.4; margin: 4px; }
+        .error { color: #b00; min-height: 1.4em; }
+        .buttons { display: flex; gap: 10px; margin-top: 16px; }
+        button { flex: 1; font-size: 17px; padding: 10px; border-radius: 8px; border: 1px solid #888; background: #f8f8f8; }
+        button.primary { background: #4a4a4a; color: #fff; border-color: #333; }
+        button:disabled { opacity: 0.5; }
+    </style>
+</head>
+<body>
+    <header><img src="../public/accounts/org.example.feeds/images/feeds-32x32.png" width="32" height="32" alt=""> News Feed</header>
+    <main>
+        <p>The address of an RSS or Atom feed. Its entries are read every hour.</p>
+        <label for="url">Feed address</label>
+        <input id="url" type="url" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="example.com/feed.xml">
+        <p class="error" id="error"></p>
+        <div class="buttons">
+            <button id="cancel">Cancel</button>
+            <button id="add" class="primary" disabled>Add Feed</button>
+        </div>
+    </main>
+    <script>
+        "use strict";
+        var params = {};
+        try { params = JSON.parse(new URLSearchParams(location.search).get("enyoWindowParams") || "{}") || {}; } catch (e) { params = {}; }
+        var url = document.getElementById("url"), add = document.getElementById("add"), error = document.getElementById("error");
+
+        function answer(result) { window.parent.postMessage("enyoCrossAppResult=" + JSON.stringify(result), "*"); }
+
+        function call(uri, p) {
+            return new Promise(function (resolve) {
+                var bridge = new PalmServiceBridge();
+                bridge.onservicecallback = function (text) { resolve(JSON.parse(text)); };
+                bridge.call(uri, JSON.stringify(p));
+            });
+        }
+
+        url.addEventListener("input", function () { add.disabled = !url.value.trim(); });
+        url.addEventListener("keydown", function (e) { if (e.key === "Enter" && !add.disabled) add.click(); });
+        document.getElementById("cancel").addEventListener("click", function () { answer({ returnValue: false }); });
+        add.addEventListener("click", function () {
+            add.disabled = true;
+            add.textContent = "Checking...";
+            error.textContent = "";
+            call("palm://org.example.service.feeds/checkCredentials", { templateId: "org.example.feeds", config: { url: url.value.trim() } })
+                .then(function (r) {
+                    add.textContent = "Add Feed";
+                    add.disabled = false;
+                    if (!r.returnValue) {
+                        error.textContent = r.errorCode === "400_BAD_REQUEST" ? "That address is not a feed." : "Could not read the feed (" + (r.errorText || r.errorCode) + ").";
+                        return;
+                    }
+                    var result = { returnValue: true, credentials: r.credentials, config: r.config };
+                    if (params.mode !== "modify") {
+                        result.template = params.template;
+                        result.templateId = "org.example.feeds";
+                        result.username = r.username;
+                    }
+                    answer(result);
+                });
+        });
+        url.focus();
+    </script>
+</body>
+</html>

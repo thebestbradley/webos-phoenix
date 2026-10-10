@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2018",
+    "lib": ["ES2018", "DOM"],
+    "module": "CommonJS",
+    "moduleResolution": "Node10",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "noEmit": true,
+    "types": ["node"],
+    "paths": {
+      "@phoenix/synckit": ["../synckit/src/index.d.ts"],
+      "@phoenix/synckit/src/test/memdb.js": ["../synckit/src/test/memdb.d.ts"]
+    }
+  },
+  "include": ["src", "examples"]
+}

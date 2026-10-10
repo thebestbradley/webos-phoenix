@@ -47,11 +47,13 @@
 
 "use strict";
 
-var vcard = require("./vcard");
-var ical = require("./ical");
-var DT = require("./datetime");
-var linker = require("./linker");
+var synckit = require("@phoenix/synckit");
 var davclient = require("./davclient");
+
+var vcard = synckit.vcard;
+var ical = synckit.ical;
+var DT = synckit.datetime;
+var linker = synckit.linker;
 
 var KINDS = {
     account: "org.webosphoenix.dav.account:1",
@@ -60,7 +62,7 @@ var KINDS = {
     contact: "com.palm.contact.dav:1",
     calendar: "com.palm.calendar.dav:1",
     event: "com.palm.calendarevent.dav:1",
-    syncState: "com.palm.account.syncstate:1"
+    syncState: synckit.syncstate.KIND
 };
 
 var CAPABILITY_PROVIDERS = {
@@ -115,16 +117,7 @@ function createEngine(ctx) {
     }
 
     function setSyncState(capability, state, error) {
-        var provider = CAPABILITY_PROVIDERS[capability];
-        if (!ctx.tempdb) return Promise.resolve();
-        return ctx.tempdb.delQuery({ from: KINDS.syncState, where: [{ prop: "accountId", op: "=", val: accountId },
-                                                                     { prop: "capabilityProvider", op: "=", val: provider }] })
-            .then(function () {
-                var o = { _kind: KINDS.syncState, accountId: accountId, capabilityProvider: provider, syncState: state };
-                if (error) { o.errorCode = error.errorCode || "UNKNOWN_ERROR"; o.errorText = String(error.message || error); }
-                return ctx.tempdb.put([o]);
-            })
-            .catch(function (e) { log("sync state not written: " + e.message); });
+        return synckit.setSyncState(ctx.tempdb, accountId, CAPABILITY_PROVIDERS[capability], state, error, log);
     }
 
     // Stores the server, principal and home sets (after checkCredentials /

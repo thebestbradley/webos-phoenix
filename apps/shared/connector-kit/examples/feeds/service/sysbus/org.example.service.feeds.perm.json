@@ -1,0 +1,8 @@
+{
+    "org.example.service.feeds": [
+        "database.operation",
+        "activity.operation",
+        "accounts.operation",
+        "accounts.transport"
+    ]
+}

@@ -11,16 +11,24 @@
 // server without sync-collection (ctag / etag sync).
 
 import { createRequire } from "node:module";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import * as synckit from "@phoenix/synckit";
+import * as memdb from "@phoenix/synckit/src/test/memdb.js";
+import { loadCommonJs } from "../../shared/connector-kit/src/test-support";
 
 const require = createRequire(import.meta.url);
+// The service's CommonJS files, with the shared sync layer's sources
+// (@phoenix/synckit), as the simulator's loader runs them: no build and
+// no node_modules link needed.
+const load = (file: string) => loadCommonJs(join(__dirname, file));
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Any = any;
-const { createDavService } = require("./davservice.js") as Any;
-const { createRequest } = require("./lib/node-http.js") as Any;
-const vcard = require("./lib/vcard.js") as Any;
-const ical = require("./lib/ical.js") as Any;
-const { createMemDb, createFakeBus, KIND_PARENTS } = require("./test/memdb.cjs") as Any;
+const { createDavService } = load("davservice.js") as Any;
+const { createRequest } = synckit as Any;
+const vcard = synckit.vcard as Any;
+const ical = synckit.ical as Any;
+const { createMemDb, createFakeBus, KIND_PARENTS } = memdb as Any;
 const radicale = require("./test/radicale.cjs") as Any;
 
 const TZ = "America/New_York";

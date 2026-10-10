@@ -1241,6 +1241,14 @@
             ]
         },
         {
+            "name": "feeds-example",
+            "art": "apps/shared/connector-kit/examples/feeds/public/accounts/org.example.feeds/images",
+            "upscale": [
+                { "art": "feeds-32x32.png", "method": "downscale", "source": "apps/shared/connector-kit/examples/feeds/art/feeds-1024.png" },
+                { "art": "feeds-48x48.png", "method": "downscale", "source": "apps/shared/connector-kit/examples/feeds/art/feeds-1024.png" }
+            ]
+        },
+        {
             "name": "xmpp",
             "art": "runtime/accounts/com.webosphoenix.xmpp/images",
             "upscale": [
