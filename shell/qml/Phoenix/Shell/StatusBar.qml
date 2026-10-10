@@ -36,11 +36,12 @@ Item {
     // Tablet: an app, the launcher or Just Type is up; the bar's fill fades
     // in under its tiled art (StatusBar::fadeBar, setMaximizedAppTitle).
     property bool filled: false
-    // Width of the system group at the right: its indicators and, on
-    // tablets, the separator at its left (StatusBarItemGroup::layoutRight).
-    // Tablet notification icons go just left of it.
-    readonly property real systemGroupWidth: indicators.width + Theme.px(6)
-        + (Theme.tablet ? systemSeparator.width + Theme.px(6) : 0)
+    // Width of the system group at the right: its indicators, on tablets
+    // the arrow at its right end and the separator at its left
+    // (StatusBarItemGroup::layoutRight). Tablet notification icons go just
+    // left of it.
+    readonly property real systemGroupWidth: indicators.width + indicators.anchors.rightMargin
+        + (Theme.tablet && !lockScreen ? systemSeparator.width + Theme.px(6) : 0)
 
     signal systemMenuRequested
     signal appMenuRequested
@@ -252,25 +253,63 @@ Item {
         }
     }
 
-    // Tablets: the system group's separator at its left, between it and the
-    // notification icons; it fades out as the tab fades in (StatusBarItemGroup
-    // paint: opacity 1 - the tab's).
+    // Tablets: the system group has an arrow and a separator (StatusBar.cpp:93,
+    // hasArrow and showSeparator for TypeNormal and TypeDockMode; the lock
+    // screen's bar has neither). The group is actionable from the start
+    // (:138), so the arrow fades in over 500 ms InOutQuad
+    // (StatusBarItemGroup::setActionable, StatusBarItemGroup.cpp:136-158;
+    // statusBarArrowSlide*, lunaAnimations.conf:120-121), the separator with
+    // it. The room for the arrow is there as soon as it starts (layoutRight
+    // when m_arrowAnimProg > 0, :467-487). The lock screen's bar is another
+    // bar (LockWindow's), so locking takes the arrow away at once and
+    // unlocking shows it as it was.
+    readonly property bool _systemArrow: Theme.tablet && !lockScreen
+    property real _systemArrowFade: 0
+    Behavior on _systemArrowFade { NumberAnimation { duration: Theme.statusBarArrowFadeDuration; easing.type: Easing.InOutQuad } }
+    Connections {
+        target: Theme
+        function onTabletChanged() { bar._systemArrowFade = Theme.tablet ? 1 : 0; }
+    }
+    Component.onCompleted: _systemArrowFade = Theme.tablet ? 1 : 0
+    readonly property real _systemArrowProgress: _systemArrow ? _systemArrowFade : 0
+
+    // The separator at the group's left edge, between it and the
+    // notification icons; it fades out as the tab fades in (paint, :426-435:
+    // opacity m_arrowAnimProg * (1 - the tab's)).
     Image {
         id: systemSeparator
         objectName: "systemGroupSeparator"
-        visible: Theme.tablet
+        visible: bar._systemArrow && opacity > 0
         x: bar.width - bar.systemGroupWidth
         anchors.verticalCenter: parent.verticalCenter
         width: Theme.artWidth(source)
         height: Theme.artHeight(source)
         source: Theme.asset("statusBar/status-bar-separator.png")
-        opacity: 1 - menuTab.opacity
+        opacity: bar._systemArrowProgress * (1 - menuTab.opacity)
+    }
+    // menu-arrow.png at the group's right end, ARROW_SPACING (7 px,
+    // StatusBar.h:33) from the screen's edge, over the tab when its menu is
+    // open (paint, :412-416: drawn at -width - ARROW_SPACING, opacity
+    // m_arrowAnimProg only).
+    Image {
+        id: systemArrow
+        objectName: "systemGroupArrow"
+        visible: bar._systemArrow && opacity > 0
+        x: bar.width - width - Theme.px(7)
+        anchors.verticalCenter: parent.verticalCenter
+        width: Theme.artWidth(source)
+        height: Theme.artHeight(source)
+        source: Theme.asset("statusBar/menu-arrow.png")
+        opacity: bar._systemArrowProgress
     }
 
     Row {
         id: indicators
         anchors.right: parent.right
-        anchors.rightMargin: Theme.px(6)
+        // Tablets: left of the arrow and ARROW_SPACING on both its sides
+        // (layoutRight, :479-487); without one, a few pixels' padding.
+        anchors.rightMargin: bar._systemArrow && bar._systemArrowProgress > 0
+                             ? systemArrow.width + 2 * Theme.px(7) : Theme.px(6)
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.statusBarIconSpacing
 
@@ -396,7 +435,7 @@ Item {
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.bottom: parent.bottom
-        width: Math.max(indicators.width + Theme.px(12), parent.width / 3)
+        width: Math.max(indicators.width + indicators.anchors.rightMargin + Theme.px(6), parent.width / 3)
         enabled: !bar.lockScreen
         onClicked: bar.systemMenuRequested()
     }

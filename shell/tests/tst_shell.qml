@@ -1720,5 +1720,65 @@ Item {
             shell.gestureUp();
             tryCompare(shell, "launcherOpen", false, 2000);
         }
+
+        // L1: the cards go once the launcher is fully up, not while it
+        // slides, and come back as soon as it starts down
+        // (OverlayWindowManager.cpp:1438-1448, 1659-1676).
+        function test_launcherHidesTheCardsOnceUp() {
+            windows.launch("org.webosphoenix.email", "");
+            var launcher = findChild(shell, "launcher");
+            var cards = shell.cardView;
+            compare(cards.opacity, 1);
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", true, 2000);
+            // Sliding up: the cards still there behind it.
+            verify(launcher.hidden > 0);
+            compare(cards.opacity, 1);
+            tryCompare(launcher, "fullyOpen", true, 2000);
+            compare(cards.opacity, 0);
+            // Closing: back at once, while it slides down.
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", false, 2000);
+            compare(cards.opacity, 1);
+            verify(launcher.visible);
+            tryCompare(launcher, "visible", false, 2000);
+            compare(cards.opacity, 1);
+        }
+
+        // L2: the scroll shadows: launcher-scrollfade-top.png right under the
+        // tabs, launcher-scrollfade-bottom.png right above the dock, each its
+        // art's height across the launcher; gone once it is fully closed,
+        // back once it is fully up (overlaylayer.cpp:106-140;
+        // dimensionslauncher.cpp:3476-3491).
+        function test_launcherScrollShadows() {
+            var launcher = findChild(shell, "launcher");
+            var top = findChild(launcher, "launcherScrollFadeTop");
+            var bottom = findChild(launcher, "launcherScrollFadeBottom");
+            shell.gestureUp();
+            tryCompare(launcher, "fullyOpen", true, 2000);
+            verify(top.visible);
+            verify(bottom.visible);
+            compare(top.width, launcher.width);
+            compare(top.height, 10);
+            compare(top.y, Theme.launcherTabHeight);
+            compare(bottom.height, 20);
+            compare(bottom.y + bottom.height, launcher.height - launcher.dockHeight);
+            verify(launcher.dockHeight > 0);
+            // The dock's top edge, where the shadow ends.
+            var dock = findChild(shell, "quickLaunch");
+            fuzzyCompare(bottom.mapToItem(null, 0, bottom.height).y, dock.mapToItem(null, 0, 0).y, 0.5);
+            shell.gestureUp();
+            tryCompare(launcher, "visible", false, 2000);
+            verify(!launcher.scrollShadowsShown);
+            // Opening again: not while it slides, then there.
+            shell.gestureUp();
+            tryCompare(shell, "launcherOpen", true, 2000);
+            verify(!top.visible);
+            tryCompare(launcher, "fullyOpen", true, 2000);
+            verify(top.visible);
+            verify(bottom.visible);
+            shell.gestureUp();
+            tryCompare(launcher, "visible", false, 2000);
+        }
     }
 }

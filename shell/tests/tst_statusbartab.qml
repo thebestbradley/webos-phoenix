@@ -109,5 +109,61 @@ Item {
                 verify(p.y >= t.y - 0.5 && p.y + ic.height <= t.y + tab.height + 0.5, name + ": within its height");
             }
         }
+
+        // S8: tablets' system group has menu-arrow.png at its right end,
+        // ARROW_SPACING (7 px) from the edge with the icons 7 px left of it,
+        // and the separator at its left; both fade in over 500 ms. The arrow
+        // stays over the open menu's tab, the separator fades out under it;
+        // the lock screen's bar has neither (StatusBar.cpp:93;
+        // StatusBarItemGroup.cpp:136-158, 412-435, 467-487). Phones: none.
+        function test_systemGroupArrow_data() {
+            return [
+                { tag: "tablet 1024x768", w: 1024, h: 768, tablet: true },
+                { tag: "phone 320x480", w: 320, h: 480, tablet: false },
+            ];
+        }
+        function test_systemGroupArrow(data) {
+            screen.width = data.w;
+            screen.height = data.h;
+            tryCompare(shell, "tablet", data.tablet, 1000);
+            shell.unlock();
+            var bar = findChild(shell, "statusBar");
+            var arrow = findChild(bar, "systemGroupArrow");
+            var sep = findChild(bar, "systemGroupSeparator");
+            var row = findChild(bar, "wifiIcon").parent;
+            if (!data.tablet) {
+                verify(!arrow.visible);
+                verify(!sep.visible);
+                compare(row.anchors.rightMargin, Theme.px(6));
+                return;
+            }
+            tryCompare(arrow, "opacity", 1, 1500);
+            verify(arrow.visible);
+            compare(arrow.width, 15);
+            fuzzyCompare(arrow.x + arrow.width, bar.width - 7, 0.5);
+            fuzzyCompare(row.mapToItem(bar, row.width, 0).x, arrow.x - 7, 0.5);
+            fuzzyCompare(arrow.y + arrow.height / 2, bar.height / 2, 0.5);
+            verify(sep.visible);
+            compare(sep.opacity, 1);
+            fuzzyCompare(sep.x, bar.width - bar.systemGroupWidth, 0.5);
+            verify(sep.x + sep.width <= row.mapToItem(bar, 0, 0).x);
+            // The menu open: the separator goes under the tab, the arrow stays.
+            shell.openSystemMenu();
+            var tab = findChild(bar, "systemMenuTab");
+            tryCompare(tab, "opacity", 1, 1000);
+            compare(sep.opacity, 0);
+            compare(arrow.opacity, 1);
+            var t = tab.mapToItem(bar, 0, 0);
+            verify(arrow.x + arrow.width <= t.x + tab.width - Theme.statusBarTabCap + 0.5);
+            findChild(shell, "systemMenu").open = false;
+            tryCompare(sep, "opacity", 1, 1000);
+            // Locked: neither, at once; unlocked: back as they were.
+            shell.lock();
+            compare(arrow.opacity, 0);
+            verify(!sep.visible);
+            shell.unlock();
+            compare(arrow.opacity, 1);
+            verify(sep.visible);
+        }
     }
 }

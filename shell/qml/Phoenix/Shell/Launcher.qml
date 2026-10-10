@@ -222,7 +222,9 @@ Item {
     // cancelLaunchFeedback, dimensionslauncher.cpp:2926-2995;
     // slotLauncherFullyClosed, :3505).
     property string feedbackId: ""
-    onHiddenChanged: if (hidden === 1) feedbackId = ""
+    // Fully closed (slotLauncherFullyClosed, :3486-3505): the feedback
+    // and the scroll shadows (below) go.
+    onHiddenChanged: if (hidden === 1) { feedbackId = ""; scrollShadowsShown = false; }
     Timer {
         running: launcher.feedbackId !== ""
         interval: Theme.launchFeedbackTimeout
@@ -271,6 +273,9 @@ Item {
     property real hidden: open ? 0 : 1
     Behavior on hidden { NumberAnimation { duration: Theme.launcherDuration; easing.type: Easing.InOutQuint } }
     visible: hidden < 1
+    // Up and done sliding (OverlayWindowManager::launcherAnimationFinished
+    // with the launcher visible, OverlayWindowManager.cpp:1659-1676).
+    readonly property bool fullyOpen: open && hidden === 0
 
     transform: Translate { y: launcher.hidden * (launcher.height + Theme.statusBarHeight) }
 
@@ -1147,10 +1152,34 @@ Item {
         }
     }
 
+    // The scroll shadows over the pages (the launcher's OverlayLayer, z 1,
+    // dimensionslauncher.cpp:120-136, 1416-1420): launcher-scrollfade-top.png
+    // from the tab bar's bottom edge down and launcher-scrollfade-bottom.png
+    // up from the dock's top edge, each as tall as its art and tiled across
+    // the launcher's width (OverlayLayer::recomputeTabBarShadowPosition /
+    // recomputeQuickLaunchShadowPosition and paint, overlaylayer.cpp:106-140,
+    // 163-180). They show from the first open until the launcher is fully
+    // closed, then again once it is fully open (slotLauncherFullyClosed /
+    // slotLauncherFullyOpen, dimensionslauncher.cpp:3476-3491;
+    // OverlayWindowManager::launcherAnimationFinished, :1659-1681).
+    property bool scrollShadowsShown: true
+    onFullyOpenChanged: if (fullyOpen) scrollShadowsShown = true
     Image {
-        anchors.bottom: parent.bottom
+        objectName: "launcherScrollFadeTop"
+        anchors.top: tabBar.bottom
         width: parent.width
         height: Theme.artHeight(source)
+        visible: launcher.scrollShadowsShown
+        source: Theme.asset("launcher3/launcher-scrollfade-top.png")
+        fillMode: Image.Stretch
+    }
+    Image {
+        objectName: "launcherScrollFadeBottom"
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: launcher.dockHeight
+        width: parent.width
+        height: Theme.artHeight(source)
+        visible: launcher.scrollShadowsShown
         source: Theme.asset("launcher3/launcher-scrollfade-bottom.png")
         fillMode: Image.Stretch
     }

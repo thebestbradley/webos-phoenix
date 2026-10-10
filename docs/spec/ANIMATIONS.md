@@ -35,6 +35,7 @@ durations and curves, never wall-clock time).
 | Bar fill colour change | 300 ms linear (`StatusBar.cpp:257-258`; conf `:114-115`) | `StatusBar.qml` ColorAnimation | matches |
 | Title cross-fade (app name / carrier) | 300 ms linear (`StatusBarTitle.cpp:210-211`; conf `:116-117`) | `StatusBar.qml` titleFade | matches |
 | App menu arrow beside the title (tablet) | 500 ms InOutQuad (`StatusBarItemGroup.cpp:137-158`; conf `:120-121`) | `StatusBar.qml` `_arrowProgress` | matches |
+| System group arrow and separator (tablet), at start | 500 ms InOutQuad (`StatusBarItemGroup.cpp:136-158`, actionable from `StatusBar.cpp:138`; conf `:120-121`) | `StatusBar.qml` `_systemArrowFade` | matches |
 | Status icon sliding in/out (Wi-Fi, Bluetooth, mute...) | 1000 ms, width InOutQuad in the first half, fade linear (`StatusBarIcon.cpp:84-205`; conf `:122-123`) | `StatusBar.qml` Indicator | matches |
 | Menu tab behind a group while its menu is open (system menu, app menu, dashboard) | 200 ms linear (`StatusBarItemGroup.cpp:252-306`; conf `:124-125`) | `StatusBar.qml` systemMenuTab, `Notifications.qml` notificationTab | matches |
 | **App menu** (status bar title) open/close | drawn by the app: `enyo.AppMenu` has no animation (its transition is commented out, `enyo: palm/themes/Onyx/css/AppMenu.css:11-24`) | phoenix-ui `AppMenu` appears at once | matches |
