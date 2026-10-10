@@ -238,15 +238,21 @@ Item {
             var b = shell.launch("org.webosphoenix.calendar");
             windows.windowFor(b).ready = false;
             var card = shell.cardView.cardItem(b);
-            wait(Theme.cardAddMaxDuration + Theme.cardSlideDuration + 200);
+            // Long enough for it to have risen, had it not waited for the
+            // app (the prepare step, then the most an add may take).
+            wait(Theme.cardPrepareAddDuration + Theme.cardAddMaxDuration + Theme.cardSlideDuration + 200);
             verify(!shell.maximized);
             compare(shell.cardView.risingUid, "");
             compare(shell.cardView.loadingUid, b);
             compare(shell.cardView.currentUid, b);
             verify(card.loading);
             fuzzyCompare(card.cardScale, shell.cardView.activeScale, 0.001);
-            fuzzyCompare(card.scale, shell.cardView.activeScale, 0.01);
-            fuzzyCompare(card.centerY, shell.cardView.cardOriginY, 1);
+            // Its place in card view, once the layout's animation has run
+            // (the scale is animated: a fixed wait checked it mid-way on a
+            // slow machine, CI's macOS runner).
+            tryVerify(function() { return Math.abs(card.scale - shell.cardView.activeScale) < 0.01; }, 3000, "the card's scale settles");
+            tryVerify(function() { return Math.abs(card.centerY - shell.cardView.cardOriginY) < 1; }, 3000, "the card settles in its place");
+            verify(!shell.maximized);
             windows.windowFor(b).ready = true;
             tryVerify(function() { return shell.maximized && shell.cardView.currentUid === b; }, 2000);
         }
