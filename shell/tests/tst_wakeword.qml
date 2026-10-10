@@ -222,6 +222,44 @@ Item {
             compare(microphone(), "standby");
         }
 
+        // "Hey Phoenix", a pause (the chime, the view opening), then the
+        // request: it listens on. The phrase is not the request's speech:
+        // counted as such, the pause after it ended the recording with
+        // only "Hey Phoenix" in it, and the view closed unasked.
+        function test_wakeThenAPauseThenTheRequest() {
+            var transcriber = shell.dictationCommand;
+            // The phrase alone is heard as itself; the request as the request.
+            shell.dictationCommand = ["sh", "-c", "b=$(wc -c < \"$0\"); if [ \"$b\" -gt 120000 ]; then t='text sam hi'; else t='Hey Phoenix.'; fi; "
+                                      + "printf '{\"returnValue\":true,\"text\":\"%s\"}' \"$t\"", "%f"];
+            try {
+                var heard = shell.wakeWordHeard;
+                listenFor(["hey-phoenix.wav", "talk.wav"]);
+                tryCompare(shell, "wakeWordHeard", heard + 1, 5000);
+                tryCompare(overlay, "open", true, 1000);
+                compare(overlay.listening, true);
+                // Still listening through the pause, and the request is asked.
+                tryVerify(function () { return fake.asks.length === 1; }, 15000, "the request asked");
+                compare(fake.asks[0].text, "text sam hi");
+                compare(fake.asks[0].voice, true);
+            } finally {
+                shell.dictationCommand = transcriber;
+            }
+        }
+        // Woken with nothing said at all: it listens on a while, then
+        // closes without a word.
+        function test_wakeThenNothingClosesQuietly() {
+            overlay.wakeWaitMs = 1000;
+            try {
+                listenFor(["hey-phoenix.wav"]);
+                tryCompare(overlay, "open", true, 5000);
+                tryCompare(overlay, "open", false, 15000);
+                compare(fake.asks.length, 0);
+                compare(fake.phrases.length, 0);
+            } finally {
+                overlay.wakeWaitMs = 15000;
+            }
+        }
+
         // "I'm done" in a spoken conversation: the goodbye, then it closes.
         function test_imDoneSaysGoodbyeAndCloses() {
             shell.dictationInputFiles = [root.recordings + "quiet.wav"];

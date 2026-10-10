@@ -104,6 +104,11 @@ Item {
     // closes. "I'm done" ends it at once (the service's status "goodbye").
     property int voiceWaitMs: 45000
     property int checkInWaitMs: 10000
+    // Woken by the wake word with nothing said yet: it listens on (turn
+    // after turn, each ending after 7 s of nothing) this long from the
+    // wake, then closes without a word (a wake by mistake says nothing).
+    property int wakeWaitMs: 15000
+    property real _wakeUntil: 0
     // "" (no wait yet), "wait", "checkIn", "goodbye"; until when the wait lasts.
     property string _phase: ""
     property real _phaseUntil: 0
@@ -310,6 +315,7 @@ Item {
             handsFree = false;
             _phase = "";
             _asked = false;
+            _wakeUntil = 0;
             phaseTimer.stop();
             stopListening(true);
             input.focus = false;
@@ -643,6 +649,7 @@ Item {
     // Phoenix" in the same breath are already on their way).
     function startVoice() {
         handsFree = true;
+        _wakeUntil = Date.now() + wakeWaitMs;
         listen();
     }
     // Asked again by voice (after the unlock).
@@ -842,7 +849,11 @@ Item {
             var words = ov.withoutWakeWord(text);
             if (!error && words)
                 ov.ask(words);
-            else if (ov._phase !== "") {
+            else if (ov.handsFree && !ov._asked && ov._phase === "" && Date.now() < ov._wakeUntil) {
+                // Just woken, nothing asked yet: still listening.
+                ov.status = "";
+                Qt.callLater(function () { if (ov.open && !ov.listening && !ov._asked) ov.listen(); });
+            } else if (ov._phase !== "") {
                 // Nothing said in the wait: on with it (listening again, or
                 // the check-in or goodbye once it is over).
                 ov._followGrace = 0;

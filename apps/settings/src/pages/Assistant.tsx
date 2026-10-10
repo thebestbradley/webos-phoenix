@@ -326,14 +326,23 @@ export function AssistantPage() {
                 <Row title="Assistant" subtitle="Hold the launcher button to ask">
                     <ToggleButton value={s.enabled} label="Assistant" testId="as-enabled" onChange={(v) => set({ enabled: v })} />
                 </Row>
-                <Row title="Speak answers" subtitle="With the device's voice, also when you type" disabled={off}>
-                    <ToggleButton value={s.speak} label="Speak answers" testId="as-speak" disabled={off} onChange={(v) => set({ speak: v })} />
-                </Row>
                 <ListSelector title="Personality" value={s.personality} disabled={off} testId="as-personality"
                               options={PERSONALITIES} onChange={(v) => set({ personality: v })} />
                 <ListSelector title="Weather units" value={s.units} disabled={off} testId="as-units"
                               options={[{ label: "Automatic", value: "auto" as const }, { label: "°C", value: "metric" as const }, { label: "°F", value: "imperial" as const }]}
                               onChange={(v) => set({ units: v })} />
+            </Group>
+
+            {/* Two choices, not one: an answer to something typed is shown
+                (and spoken only if asked for); to something said, spoken and
+                shown (unless turned off). */}
+            <Group label="Answer aloud">
+                <Row title="When you type" subtitle="Read answers to typed requests aloud too" disabled={off}>
+                    <ToggleButton value={s.speak} label="Answer aloud when you type" testId="as-speak" disabled={off} onChange={(v) => set({ speak: v })} />
+                </Row>
+                <Row title="When you speak" subtitle={"Answers to \u201cHey Phoenix\u201d and the microphone, aloud and on screen"} disabled={off}>
+                    <ToggleButton value={s.voiceReplies} label="Answer aloud when you speak" testId="as-voice-replies" disabled={off} onChange={(v) => set({ voiceReplies: v })} />
+                </Row>
             </Group>
 
             <Group label="Voice">
@@ -343,9 +352,6 @@ export function AssistantPage() {
                 <Row title="When the screen is off or locked" subtitle="Only what shows nothing private; for the rest it asks you to unlock" disabled={off || !s.wakeWord}>
                     <ToggleButton value={s.wakeWhenLocked} label="When the screen is off or locked" testId="as-wake-locked" disabled={off || !s.wakeWord}
                                   onChange={(v) => set({ wakeWhenLocked: v })} />
-                </Row>
-                <Row title="Voice replies" subtitle="Answer spoken requests aloud" disabled={off}>
-                    <ToggleButton value={s.voiceReplies} label="Voice replies" testId="as-voice-replies" disabled={off} onChange={(v) => set({ voiceReplies: v })} />
                 </Row>
                 <ListSelector title="Keep listening" value={s.voiceWait} disabled={off} testId="as-voice-wait"
                               options={VOICE_WAITS.map((n) => ({ label: waitLabel(n), value: n }))}

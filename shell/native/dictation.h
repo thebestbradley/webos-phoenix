@@ -219,6 +219,7 @@ private:
     QByteArray m_ring;           // the last seconds it was given
     qint64 m_ringStart = 0;      // the sample (its clock) at m_ring's start
     QByteArray m_preroll;        // after the phrase, for a start() in wakeHeard
+    qsizetype m_prerollPhraseEnd = 0;   // bytes: where the phrase ends in m_preroll
     bool m_inWake = false;
     int m_channels = 1;
     int m_rate = 16000;

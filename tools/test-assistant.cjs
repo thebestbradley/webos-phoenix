@@ -487,7 +487,7 @@ async function main() {
             check(false, what);
         };
         await st.click("[data-testid='as-speak']");
-        await until((s) => s.speak === false, "Speak answers: off");
+        await until((s) => s.speak === true, "Answer aloud when you type: on (off by default)");
         await st.click("[data-testid='as-units']");
         await st.click("role=option[name='°C']");
         await until((s) => s.units === "metric", "Weather units: °C");

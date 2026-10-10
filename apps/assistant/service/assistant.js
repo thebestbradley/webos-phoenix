@@ -95,7 +95,7 @@ var ERRORS = { BAD_PARAMS: -1, NOT_FOUND: -2, NOT_ALLOWED: -3, OFF: -4, FAILED: 
 
 var DEFAULTS = {
     enabled: true,              // the assistant at all (on by default: docs/AI-AND-MCP.md, 28 September)
-    speak: true,                // answers spoken (on-device text to speech)
+    speak: false,               // answers to typed requests spoken too (on-device text to speech); spoken ones: voiceReplies
     language: "en",
     units: "auto",              // weather: "metric", "imperial", or from the language
     localModel: "",             // the chosen on-device model (lib/models.js id); "" the built-in one, "off" none
