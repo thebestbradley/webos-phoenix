@@ -51,6 +51,12 @@ Item {
         source: keyboard._artFile("keyboard-bg.png")
         fillMode: Image.Stretch
     }
+    // The Phoenix keyboard's look (GAPS V7): flat, without the art.
+    Rectangle {
+        anchors.fill: parent
+        visible: keyboard.phoenixLook === true
+        color: keyboard.cPhoenixBack
+    }
 
     // Category tabs, and search last.
     Row {

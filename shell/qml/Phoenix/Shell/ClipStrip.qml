@@ -120,6 +120,12 @@ Item {
         source: strip.keyboard._artFile("keyboard-bg.png")
         fillMode: Image.Stretch
     }
+    // The Phoenix keyboard's look (GAPS V7): flat, without the art.
+    Rectangle {
+        anchors.fill: parent
+        visible: strip.keyboard.phoenixLook === true
+        color: strip.keyboard.cPhoenixBack
+    }
     MouseArea {
         anchors.fill: parent
         onClicked: menu.close()

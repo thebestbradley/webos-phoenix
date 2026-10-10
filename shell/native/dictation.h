@@ -29,6 +29,12 @@
 //              and quieter) to 1 (-10 dBFS and louder), for each stretch
 //              of the recording (the Assistant's bird follows it); 0 when
 //              not listening
+//   partialText while it listens, what was said so far (GAPS V2: the text
+//              shows while speaking): every partialInterval ms the recording
+//              until then is transcribed in the background, the next one
+//              only once the last is done; "" when not listening, and when
+//              the final text comes (transcribed)
+//   partialInterval  ms between those (default 2000; 0: none)
 //   inputFiles WAV files played as the microphone instead of the real one
 //              (phoenix-sim --microphone-file), one per recording in turn
 //              (the last one again after that), each followed by quiet; for
@@ -79,6 +85,8 @@ class Dictation : public QObject
     Q_PROPERTY(QStringList inputFiles READ inputFiles WRITE setInputFiles NOTIFY inputFilesChanged)
     Q_PROPERTY(QString owner READ owner WRITE setOwner NOTIFY ownerChanged)
     Q_PROPERTY(qreal loudness READ loudness NOTIFY loudnessChanged)
+    Q_PROPERTY(QString partialText READ partialText NOTIFY partialTextChanged)
+    Q_PROPERTY(int partialInterval READ partialInterval WRITE setPartialInterval NOTIFY partialIntervalChanged)
     Q_PROPERTY(QStringList wakeCommand READ wakeCommand WRITE setWakeCommand NOTIFY wakeCommandChanged)
     Q_PROPERTY(bool wakeAvailable READ wakeAvailable NOTIFY wakeCommandChanged)
     Q_PROPERTY(bool wakeWord READ wakeWord WRITE setWakeWord NOTIFY wakeWordChanged)
@@ -106,6 +114,9 @@ public:
     QString owner() const { return m_owner; }
     void setOwner(const QString &o) { if (o != m_owner) { m_owner = o; emit ownerChanged(); } }
     qreal loudness() const { return m_loudness; }
+    QString partialText() const { return m_partialText; }
+    int partialInterval() const { return m_partialInterval; }
+    void setPartialInterval(int ms);
     QStringList wakeCommand() const { return m_wakeCommand; }
     void setWakeCommand(const QStringList &c);
     bool wakeAvailable() const { return !m_wakeCommand.isEmpty() && (available() || !m_inputFiles.isEmpty()); }
@@ -169,6 +180,8 @@ signals:
     void inputFilesChanged();
     void ownerChanged();
     void loudnessChanged();
+    void partialTextChanged();
+    void partialIntervalChanged();
     void wakeCommandChanged();
     void wakeWordChanged();
     void standbyChanged();
@@ -190,6 +203,9 @@ private:
     void runTranscriber(const QString &file, bool removeAfter);
     void recorded(const QByteArray &chunk);
     void setLoudness(qreal l);
+    void transcribePartial();
+    void endPartial();
+    void setPartialText(const QString &t);
 
     QStringList m_command;
     QString m_language;
@@ -228,4 +244,9 @@ private:
     QIODevice *m_io = nullptr;
     QProcess *m_process = nullptr;
     QTimer *m_limit = nullptr;
+    QTimer *m_partialTimer = nullptr;
+    QProcess *m_partialProcess = nullptr;
+    qsizetype m_partialSize = 0;    // the recording's size when last transcribed
+    QString m_partialText;
+    int m_partialInterval = 2000;
 };

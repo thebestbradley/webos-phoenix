@@ -1519,9 +1519,21 @@ FocusScope {
             return false;
         }
         var buttons = _keyButtons(host);
+        var k = event.key;
+        // A popup alert that is a page (luna-systemui's, an app's
+        // createPopupAlert): its buttons are its own; the runtime rings and
+        // presses them (keyNav), the same keys as here. Esc stays Back.
+        if (!buttons.length && host !== deleteDialog && typeof host.runScript === "function") {
+            var nav = k === Qt.Key_Tab || k === Qt.Key_Down || k === Qt.Key_Right ? "next"
+                    : k === Qt.Key_Backtab || k === Qt.Key_Up || k === Qt.Key_Left ? "previous"
+                    : k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space ? "press" : "";
+            if (nav === "")
+                return false;
+            host.runScript("window.__phoenixRuntime && __phoenixRuntime.keyNav && __phoenixRuntime.keyNav(\"" + nav + "\", \"buttons\")");
+            return true;
+        }
         if (!buttons.length)
             return false;
-        var k = event.key;
         var i = buttons.indexOf(_keyButton);
         if (k === Qt.Key_Tab || k === Qt.Key_Backtab || k === Qt.Key_Down || k === Qt.Key_Up || k === Qt.Key_Left || k === Qt.Key_Right) {
             var back = k === Qt.Key_Backtab || k === Qt.Key_Up || k === Qt.Key_Left;
@@ -1631,6 +1643,17 @@ FocusScope {
     // Orange+Sym+P, WindowServer.cpp:687-697) capture at once. On a Mac,
     // Qt's Ctrl is Command and Meta is Control: both Command+Option+P and
     // Control+Option+P capture.
+    // A popup alert in front takes the navigation keys, whatever had the
+    // focus (the app's page under it takes every key): Tab and the arrows
+    // ring its buttons, Enter or Space presses one (_dialogKey; GAPS V8 (3)).
+    SystemKeys {
+        id: alertKeys
+        enabled: notes.alertShown && !shell.locked
+        keys: [Qt.Key_Tab, Qt.Key_Backtab, Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right,
+               Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space]
+        onPressed: (key, autoRepeat) => shell._dialogKey({ key: key })
+    }
+
     SystemKeys {
         id: systemKeys
         // Also the simulator's gestures and demo keys (sim/main.cpp): Esc
@@ -1766,6 +1789,25 @@ FocusScope {
         customRepeat: !!prefs.customRepeat
         repeatDelay: prefs.repeatDelay !== undefined ? prefs.repeatDelay : 500
         repeatInterval: prefs.repeatInterval || 50
+        // Settings > Text Assist > Hardware Keyboard (GAPS V8 (5)): its
+        // layout and the modifier keys remapped.
+        readonly property var hw: shell.system && shell.system.hardwareKeyboardPrefs ? shell.system.hardwareKeyboardPrefs : ({})
+        layout: hw.layout || "auto"
+        keyRemap: hw.remap || ({})
+        onKeyboardKeyPressed: shell.keyboardKey()
+    }
+    // The TouchPad keyboard's keyboard key: the virtual keyboard up or down
+    // (SystemUiController.cpp:620-623, IMEController::setIMEActive). With a
+    // field in use it comes up even with the keyboard attached (V8 (1)).
+    // Down, the field keeps the focus (setIMEActive(false) hides the IME,
+    // unlike the hide key, which ends the editing).
+    function keyboardKey() {
+        if (_imeOpened) {
+            _keyboardAskedFor = false;
+            _hideIMEInternal();
+        } else if (imeClient) {
+            showVirtualKeyboard();
+        }
     }
 
     // ---- The volume keys ----------------------------------------------------------
@@ -2217,6 +2259,43 @@ FocusScope {
         value: speechEngine
         when: !!shell.source && ("speech" in shell.source)
     }
+    // When the app in front is resized for a change of the negative space
+    // (the keyboard, the dashboard, a banner, an alert), as CardWindowManager
+    // did while maximized (MaximizeState::positiveSpaceAboutToChange and
+    // positiveSpaceChangeFinished, CardWindowManagerStates.cpp:256-318): when
+    // the positive space grows (the keyboard going), at the start of the
+    // 400 ms slide (resizeEventSync); when it shrinks (the keyboard coming),
+    // at its end, the keyboard sliding up over the app meanwhile. Size
+    // changes without a slide (rotation, the tablet keyboard's sizes) at once.
+    property real _spaceFrom: 0
+    // (Within half a pixel: the slide eases into its end.)
+    readonly property bool _spaceSettled: Math.abs(notes.negativeSpace - notes.negativeSpaceTarget) < 0.5
+    readonly property real cardBottomInset: _spaceSettled
+        ? notes.negativeSpaceTarget : Math.min(notes.negativeSpaceTarget, _spaceFrom)
+    Connections {
+        target: notes
+        function onNegativeSpaceTargetChanged() { shell._spaceFrom = notes.negativeSpace; }
+        // positiveSpaceChangeFinished: an app that keeps its size is told the
+        // positive space instead (adjustForPositiveSpaceSize ->
+        // Mojo.positiveSpaceChanged, enyo-1.0 palm/system/keyboard.js:224).
+        function onNegativeSpaceChanged() {
+            if (notes.negativeSpace !== notes.negativeSpaceTarget || !cards.maximized)
+                return;
+            var uid = cards.currentUid;
+            if (uid !== "" && shell._cardKeepsSize(uid) && source && typeof source.positiveSpaceChanged === "function")
+                source.positiveSpaceChanged(uid, Math.round(cards.windowWidth),
+                                            Math.round(ui.height - cards.topInset - notes.negativeSpace));
+        }
+    }
+    // The app asked not to be resized (PalmSystem.allowResizeOnPositiveSpaceChange(false)).
+    function _cardKeepsSize(uid) {
+        var m = source ? source.cards : null;
+        for (var i = 0; m && i < m.count; ++i)
+            if (m.get(i).uid === uid)
+                return m.get(i).allowResize === false;
+        return false;
+    }
+
     // IMEController::isIMEOpened (or the platform's keyboard is up). With
     // it the tablet's bezel flick must travel further.
     readonly property bool keyboardOpen: _imeOpened || platformKeyboardHeight > 0
@@ -2279,6 +2358,8 @@ FocusScope {
         imeClient = c;
         if (!same)
             _keyboardAskedFor = false;
+        if (!same && c)
+            ime.inputClientChanged();
         if (c && hardwareKeyboard && !_keyboardAskedFor) {
             ime.editorState = c.state;
             _hideIMEInternal();
@@ -2578,8 +2659,10 @@ FocusScope {
                         // The angry card's stretch, upside down.
                         onFeedbackSound: (name) => shell.sounds.feedback(name)
                         topInset: shell.fullScreen ? 0 : Theme.statusBarHeight
-                        // The app's positive space ends where the notifications' negative space begins.
-                        bottomInset: notes.negativeSpace
+                        // The app's positive space ends where the notifications' negative space begins,
+                        // resized when the original resized it (cardBottomInset).
+                        bottomInset: shell.cardBottomInset
+                        keyboardOverlap: notes.keyboardHeight > 0 ? Math.max(0, shell.cardBottomInset - notes.spaceWithoutKeyboard) : 0
                         uiOrientation: uiRotation.uiOrientation
                         uiPortrait: uiRotation.uiPortrait
                         // First Use's card stays until the app closes it.
@@ -3497,6 +3580,7 @@ FocusScope {
                         KeyInjector.commitText(t, text);
                 }
                 onHideRequested: shell.hideKeyboard()
+                surroundingText: shell._imeSurroundingText
                 // VirtualKeyboardPreferences TapSounds: "Keyboard clicks".
                 tapSounds: !shell.system || shell.system.tapSounds !== false
                 // Settings > Text Assist.
@@ -3507,6 +3591,7 @@ FocusScope {
                 userShortcuts: _assistPrefs.shortcuts || ({})
                 shortcutsOn: _assistPrefs.shortcutsOn !== false
                 spaces2period: _assistPrefs.spaces2period !== false
+                emojiSuggestions: _assistPrefs.emojiSuggestions !== false
                 forgetWordsAt: _assistPrefs.forgetWords || 0
                 // Settings > Text Assist > Personal Dictionary; "Add" in the
                 // candidate bar goes back to the system (x_palm_textinput.userWords).
@@ -3520,6 +3605,12 @@ FocusScope {
                                                                                                   : [{ layout: "qwerty", language: "en" }]
                 keyboard: shell.system && shell.system.keyboard ? shell.system.keyboard : ({ layout: "qwerty", language: "en" })
                 onKeyboardSelected: (k) => { if (shell.system && shell.system.keyboard !== undefined) shell.system.keyboard = k; }
+                // Settings > Text Assist > Keyboards (GAPS V7): the keyboards
+                // installed and the one in use; the globe key picks another.
+                installedKeyboards: shell.system && shell.system.installedKeyboards && shell.system.installedKeyboards.length
+                                    ? shell.system.installedKeyboards : ["classic"]
+                keyboardId: shell.system && shell.system.keyboardId ? shell.system.keyboardId : "classic"
+                onKeyboardChosen: (id) => { if (shell.system && shell.system.keyboardId !== undefined) shell.system.keyboardId = id; }
                 onFeedback: (name) => shell.sounds.feedback(name)
                 // The clipboard key and the clip strip (M6 F2).
                 clipboard: clipboardClient
@@ -3617,6 +3708,29 @@ FocusScope {
         if (w && w.runScript)
             w.runScript("window.__phoenixRuntime && __phoenixRuntime.clipboard && __phoenixRuntime.clipboard.insertImage("
                         + JSON.stringify(String(clip.image || "")) + ")");
+    }
+
+    // The text around the cursor in the keyboard's field, {text, cursor}
+    // (GAPS V3), as an input method asks a field (ImSurroundingText,
+    // ImCursorPosition): a text field of the shell's tells its text and
+    // cursor; a web page's field answers Qt's input method query while its
+    // view has the focus (Chromium reports the text around the selection).
+    function _imeSurroundingText() {
+        var c = imeClient;
+        if (!c)
+            return null;
+        if (c.kind === "item")
+            return c.item.text !== undefined && c.item.cursorPosition !== undefined
+                ? { text: String(c.item.text), cursor: c.item.cursorPosition } : null;
+        var t = _imeTarget();
+        for (var i = _focusItem; i && t; i = i.parent) {
+            if (i === t) {
+                var text = Qt.inputMethod.queryFocusObject(Qt.ImSurroundingText, undefined);
+                var pos = Qt.inputMethod.queryFocusObject(Qt.ImCursorPosition, undefined);
+                return typeof text === "string" && typeof pos === "number" ? { text: text, cursor: pos } : null;
+            }
+        }
+        return null;
     }
 
     // What the keyboard's keys go to: the focused text field, or the web

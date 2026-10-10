@@ -321,6 +321,13 @@ async function main() {
         await page.click("[data-testid='ta-swipe']");
         await page.waitForSelector("[data-testid='ta-swipe'][aria-checked='false']");
         check(last().textAssist.swipe === false, "Swipe typing off reaches the shell");
+        await page.click("[data-testid='ta-emoji']");
+        await page.waitForSelector("[data-testid='ta-emoji'][aria-checked='false']");
+        check(last().textAssist.emojiSuggestions === false, "Emoji suggestions off reaches the shell");
+        // Keyboards (GAPS V7): the Phoenix keyboard installed beside webOS Classic.
+        await page.click("[data-testid='ta-whole-phoenix']");
+        await page.waitForSelector("[data-testid='ta-whole-phoenix'][aria-checked='true']");
+        check(JSON.stringify(last().installedKeyboards) === JSON.stringify(["classic", "phoenix"]), `the Phoenix keyboard installed reaches the shell (${JSON.stringify(last().installedKeyboards)})`);
         // Personal Dictionary: the learned words the keyboard reports, a word
         // added and one deleted reach the keyboard, and Forget Learned Words.
         await page.evaluate(() => window.__phoenixRuntime.applyHostStatus({ learnedWords: ["Kwyjibo"] }));
@@ -361,10 +368,23 @@ async function main() {
         check(last().keyboard && last().keyboard.language === "en", "turned off, the keyboard in use goes back to the first");
         // Hardware keyboard: the shortcut scheme reaches the shell.
         check(last().keyboardShortcuts === "ipad", "iPad-style shortcuts by default");
+        // ... on the Hardware Keyboard page (V8 (5)), with its layout and
+        // modifier keys.
+        await page.click("[data-testid='ta-hardware']");
         await page.click("[data-testid='keyboard-shortcuts']");
         await page.click("role=option[name='Desktop style (Alt, Super)']");
         await page.waitForTimeout(200);
         check(last().keyboardShortcuts === "desktop", `desktop-style shortcuts reach the shell (${last().keyboardShortcuts})`);
+        await page.click("[data-testid='hw-layout']");
+        await page.click("role=option[name='German (QWERTZ)']");
+        await page.click("[data-testid='hw-remap-capslock']");
+        await page.click("role=option[name='Control']");
+        await page.waitForTimeout(200);
+        check(last().hardwareKeyboard && last().hardwareKeyboard.layout === "qwertz" && last().hardwareKeyboard.remap.capslock === "control",
+              `the hardware keyboard's layout and Caps Lock as Control reach the shell (${JSON.stringify(last().hardwareKeyboard)})`);
+        await shot("hardware-keyboard");
+        await page.keyboard.press("Escape");
+        await page.waitForSelector("[data-testid='ta-hardware']");
         // Shortcuts: one added reaches the keyboard; a bad one is refused.
         await page.click("[data-testid='ta-shortcut-add']");
         await page.fill("[data-testid='ta-shortcut-field']", "on my");

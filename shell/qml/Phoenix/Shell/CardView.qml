@@ -92,6 +92,13 @@ Item {
     property real bottomInset: Theme.gestureAreaHeight
     readonly property real windowWidth: width
     readonly property real windowHeight: height - topInset - bottomInset
+    // The part of the bottom inset that is the virtual keyboard's: a window
+    // that does not resize for it (PalmSystem.allowResizeOnPositiveSpaceChange
+    // (false), the card model's allowResize) keeps that much more height,
+    // the keyboard over its bottom (CardWindowManagerState::resizeWindow,
+    // CardWindowManagerStates.cpp:85-98: adjustForPositiveSpaceSize in place
+    // of a resize).
+    property real keyboardOverlap: 0
 
     signal cardClosed(string uid)
     // A card starts closing: the user threw it away, or (byApp) its window
@@ -1115,14 +1122,17 @@ Item {
             splashIcon: info && info.splashIcon ? info.splashIcon : ""
             splashBackground: info && info.splashBackground ? info.splashBackground : ""
             width: modalCard ? view.modalWidth : view.windowWidth
-            height: modalCard ? view.modalHeight : view.windowHeight
+            // A window that does not resize for the keyboard: as tall as
+            // before it came (only the focused card has it in front).
+            readonly property real keepHeight: !modalCard && model.allowResize === false && place !== null && place.focused ? view.keyboardOverlap : 0
+            height: modalCard ? view.modalHeight : view.windowHeight + keepHeight
             window: view.source.windowFor(uid)
             centerX: modalCard ? (parentCard ? parentCard.centerX : view.width / 2)
                      : (rising ? view.width / 2 : lifted ? view.reorderX : place ? place.cx : view.width / 2)
                        + (place && place.focused ? view.edgeNudge : 0)
             centerY: modalCard ? view.maximizedCenterY
-                   : rising ? view.mix(view.height + height / 2, view.maximizedCenterY, view.maximizeProgress)
-                   : lifted ? view.reorderY : place ? place.cy : view.cardOriginY
+                   : (rising ? view.mix(view.height + height / 2, view.maximizedCenterY, view.maximizeProgress)
+                   : lifted ? view.reorderY : place ? place.cy : view.cardOriginY) + keepHeight * cardScale / 2
             cardScale: modalCard || rising ? 1 : lifted ? view.activeScale : place ? place.scale : view.activeScale
             rotation: modalCard || rising || lifted || !place ? 0 : place.rot
             rounded: modalCard || view.maximizeProgress < 1

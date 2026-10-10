@@ -136,6 +136,26 @@ Item {
             verify(!button.visible);
         }
 
+        // The TouchPad keyboard's keyboard key toggles the virtual keyboard
+        // (SystemUiController.cpp:620-623); here Caps Lock remapped to it
+        // (Settings > Text Assist > Hardware Keyboard, V8 (5)).
+        function test_keyboardKey() {
+            sys.hardwareKeyboard = true;
+            sys.hardwareKeyboardPrefs = { layout: "auto", remap: { capslock: "keyboard" } };
+            field.forceActiveFocus();
+            wait(300);
+            verify(!shell.keyboardOpen);
+            keyClick(Qt.Key_CapsLock);
+            tryCompare(shell, "keyboardOpen", true, 1000);
+            wait(100);
+            verify(shell.keyboardOpen, "the key itself does not put it away");
+            keyClick(Qt.Key_CapsLock);
+            tryCompare(shell, "keyboardOpen", false, 1000);
+            sys.hardwareKeyboardPrefs = { layout: "auto", remap: {} };
+            sys.hardwareKeyboard = false;
+            tryCompare(shell, "keyboardOpen", true, 1000);
+        }
+
         function test_showAndHideAnimateOver400ms() {
             compare(Theme.positiveSpaceDuration, 400);
             field.forceActiveFocus();
@@ -722,6 +742,83 @@ Item {
             tryCompare(shell, "keyboardOpen", false, 1000);
         }
 
+        // The emoticon keys show pictures (TabletKeyboard.cpp:1571-1597):
+        // the colour emoji font's faces, as /usr/palm/emoticons was never
+        // released; they still type the original's text.
+        function test_emoticonPictures() {
+            var wink = 0x0120030F, heart = 0x01200312;     // cKey_Emoticon_Wink, _Heart
+            var ops = kb._keyCap({ x: 0, y: 0, w: 60, h: 64 }, 30, 32, wink, 0);
+            compare(ops.length, 1);
+            compare(ops[0].text, "😉");
+            verify(ops[0].emoji);
+            compare(ops[0].x, 8);                            // cPixMargin
+            compare(kb._keyCap({ x: 0, y: 0, w: 60, h: 64 }, 30, 32, heart, 0)[0].text, "❤️");
+            compare(kb._km.displayString(wink, false), ";-)");
+        }
+
+        // The app is resized when the original resized it
+        // (CardWindowManagerStates.cpp:256-318): the keyboard coming up
+        // slides over it and it shrinks at the end; the keyboard going, it
+        // grows at the start.
+        function test_resizeTiming() {
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize();
+            tryVerify(function() { return shell.maximized; }, 2000);
+            var full = shell.cardView.windowHeight;
+            windows.inputFocusChanged(uid, true, { type: 0 });
+            tryCompare(shell, "keyboardOpen", true, 1000);
+            var target = kb.keyboardHeight;
+            wait(150);
+            var mid = shell.notifications.negativeSpace;
+            verify(mid > 0 && mid < target, "sliding: " + mid);
+            compare(shell.cardView.windowHeight, full);           // not yet
+            tryCompare(shell.notifications, "negativeSpace", target, 600);
+            fuzzyCompare(shell.cardView.windowHeight, full - target, 0.01);   // at the end
+            windows.inputFocusChanged(uid, false, null);
+            tryCompare(shell, "keyboardOpen", false, 1000);
+            wait(50);
+            verify(shell.notifications.negativeSpace > 0, "still sliding down");
+            compare(shell.cardView.windowHeight, full);           // at once
+            tryCompare(shell.notifications, "negativeSpace", 0, 600);
+        }
+
+        // PalmSystem.allowResizeOnPositiveSpaceChange(false) (Enyo's
+        // enyo.keyboard.setResizesWindow(false)): the card keeps its size,
+        // the keyboard over its bottom, and the page is told the positive
+        // space instead (CardWindowManagerStates.cpp:85-98).
+        function test_allowResizeOnPositiveSpaceChange() {
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize();
+            tryVerify(function() { return shell.maximized; }, 2000);
+            var card = shell.cardView.cardItem(uid);
+            var full = card.height;
+            var fullY = card.mapToItem(shell, 0, 0).y;
+            for (var i = 0; i < windows.cards.count; ++i)
+                if (windows.cards.get(i).uid === uid)
+                    windows.cards.setProperty(i, "allowResize", false);
+            // The page (a stand-in): what the shell runs in it.
+            var real = windows._windows[uid];
+            var spy = Qt.createQmlObject("import QtQuick; QtObject { property var calls: []; function runScript(js) { "
+                + "var m = /positiveSpaceChanged\\((\\d+),(\\d+)\\)$/.exec(js); if (m) calls = calls.concat([[+m[1], +m[2]]]); } }", root);
+            windows._windows[uid] = spy;
+            windows.inputFocusChanged(uid, true, { type: 0 });
+            tryCompare(shell, "keyboardOpen", true, 1000);
+            tryCompare(shell.notifications, "negativeSpace", kb.keyboardHeight, 1000);
+            wait(50);
+            compare(card.height, full);
+            fuzzyCompare(card.mapToItem(shell, 0, 0).y, fullY, 0.5);
+            // Mojo.positiveSpaceChanged(width, height) at the end of the slide.
+            verify(spy.calls.length >= 1, JSON.stringify(spy.calls));
+            var last = spy.calls[spy.calls.length - 1];
+            compare(last[0], Math.round(shell.cardView.windowWidth));
+            compare(last[1], Math.round(shell.uiRoot.height - Theme.statusBarHeight - kb.keyboardHeight));
+            windows.inputFocusChanged(uid, false, null);
+            tryCompare(shell.notifications, "negativeSpace", 0, 1000);
+            compare(card.height, full);
+            windows._windows[uid] = real;
+            spy.destroy();
+        }
+
         // The lock screen takes the focus: only its password panel types.
         function test_lockScreen() {
             showKeyboard();
@@ -814,6 +911,77 @@ Item {
             type(["d", "o", "n", "t"]);
             tapKey("Space");
             compare(field.text.toLowerCase(), "teh don't ");
+        }
+
+        // The text around the cursor (GAPS V3): a field with text already in
+        // it, or a cursor moved by a tap, predicts and corrects from the
+        // field's own words, not only what the keyboard typed.
+        function test_surroundingText() {
+            kb.textAssistData = "";
+            field.text = "I said teh";
+            field.cursorPosition = field.text.length;
+            showKeyboard();
+            // The word before the cursor is the one being typed: its
+            // correction is in the bar, and the space bar puts it in.
+            tryVerify(function() { return kb.candidates.some(function (c) { return c.kind === "correction"; }); }, 1000,
+                      JSON.stringify(candidateTexts()));
+            compare(kb.candidates.filter(function (c) { return c.kind === "correction"; })[0].text.toLowerCase(), "the");
+            tapKey("Space");
+            compare(field.text, "I said the ");
+            // The cursor moved elsewhere (a tap, not just after a key: a
+            // move within 300 ms of one is the keyboard's own): read again
+            // from there.
+            wait(350);
+            field.text = "Hello. Good wor";
+            field.cursorPosition = field.text.length;
+            tryCompare(kb, "_word", "wor", 1000);
+            verify(candidateTexts().map(function (t) { return t.toLowerCase(); }).indexOf("work") > 0,
+                   JSON.stringify(candidateTexts()));
+            compare(kb._prevWord, "Good");
+            verify(!kb._sentenceStart);
+            // After ". " a sentence starts; inside a word nothing is being
+            // typed (a correction would cut it in two).
+            field.cursorPosition = 7;          // "Hello. |Good"
+            tryCompare(kb, "_sentenceStart", true, 1000);
+            compare(kb._word, "");
+            compare(kb._prevWord, "Hello");
+            field.cursorPosition = 13;         // "w|or"
+            tryCompare(kb, "_sentenceStart", false, 1000);
+            compare(kb._word, "");
+            compare(kb._prevWord, "Good");
+            // The arrows: read again once the cursor has moved.
+            field.cursorPosition = 3;
+            wait(350);
+            tapKey("Space");                    // "Hel lo."
+            compare(field.text, "Hel lo. Good wor");
+            wait(350);
+            field.cursorPosition = field.text.length;
+            tryCompare(kb, "_word", "wor", 1000);
+        }
+
+        // Emoji suggestions for words (GAPS V3, V6): CLDR's keywords; a tap
+        // puts the emoji in place of the word, and it joins the recents.
+        function test_emojiSuggestions() {
+            kb.textAssistData = "";
+            showKeyboard();
+            type(["p", "i", "z", "z", "a"]);
+            tryVerify(function() { return kb.candidates.some(function (c) { return c.kind === "emoji"; }); }, 1000,
+                      JSON.stringify(candidateTexts()));
+            var em = kb.candidates.filter(function (c) { return c.kind === "emoji"; })[0];
+            compare(em.text, "🍕");
+            compare(kb.candidates[kb.candidates.length - 1].kind, "emoji");
+            compare(kb.candidates.length, 3);          // the phone's three cells
+            tapCandidate(em.text);
+            compare(field.text, "🍕 ");
+            compare(kb._emojiRecent[0], "🍕");
+            // No emoji for words without one, nor with the setting off.
+            type(["q", "z", "x"]);
+            verify(!kb.candidates.some(function (c) { return c.kind === "emoji"; }));
+            kb.emojiSuggestions = false;
+            type(["Backspace", "Backspace", "Backspace"]);
+            type(["c", "a", "t"]);
+            verify(!kb.candidates.some(function (c) { return c.kind === "emoji"; }), JSON.stringify(candidateTexts()));
+            kb.emojiSuggestions = true;
         }
 
         // Settings > Text Assist > Shortcuts (x_palm_textinput): the space bar
@@ -986,6 +1154,54 @@ Item {
             compare(sys.keyboard.language, "en");
             sys.keyboards = [{ layout: "qwerty", language: "en" }];
             sys.keyboard = sys.keyboards[0];
+        }
+
+        // Several keyboards side by side (GAPS V7): with another installed
+        // the language key is the globe; a tap goes through the languages,
+        // then to the next keyboard, kept by the system. The Phoenix
+        // keyboard: the same keys, flat, without the art.
+        function test_globeKeySwitchesKeyboards() {
+            sys.keyboards = [{ layout: "qwerty", language: "en" }, { layout: "qwertz", language: "de" }];
+            sys.keyboard = sys.keyboards[0];
+            sys.installedKeyboards = ["classic", "phoenix", "ose"];
+            sys.keyboardId = "classic";
+            showKeyboard();
+            compare(kb.otherKeyboards, ["phoenix"]);             // OSE's is not drawn here
+            verify(!kb.phoenixLook);
+            tapKey("123");
+            tapKey("🌐");                              // the globe: the next language
+            compare(sys.keyboard.language, "de");
+            compare(sys.keyboardId, "classic");
+            tapKey("🌐");                              // then the next keyboard
+            compare(sys.keyboardId, "phoenix");
+            compare(sys.keyboard.language, "en");
+            verify(kb.phoenixLook);
+            verify(!kb.touchpadLook);
+            compare(kb.otherKeyboards, ["classic"]);
+            // Flat keys: no art drawn.
+            tapKey("ABC");
+            var flat = 0;
+            (function walk(o) {
+                for (var i = 0; i < o.children.length; ++i) {
+                    if (o.children[i].flat === true)
+                        ++flat;
+                    walk(o.children[i]);
+                }
+            })(kb);
+            verify(flat > 20, "flat keys: " + flat);
+            type(["h", "i"]);
+            compare(field.text.toLowerCase(), "hi");
+            // Back round to webOS Classic.
+            tapKey("123");
+            tapKey("🌐");
+            compare(sys.keyboard.language, "de");
+            tapKey("🌐");
+            compare(sys.keyboardId, "classic");
+            sys.installedKeyboards = ["classic"];
+            sys.keyboardId = "classic";
+            sys.keyboards = [{ layout: "qwerty", language: "en" }];
+            sys.keyboard = sys.keyboards[0];
+            verify(kb.otherKeyboards.length === 0);
         }
 
         // Held, the language key lists the keyboards (selectKeyboardCombo).
@@ -1258,7 +1474,45 @@ Item {
             compare(heard, "call ada");
             compare(field.text, "Hello there.");
             kb.dictation.owner = "";
+            // Punctuation said aloud is typed as the mark; the recognizer's
+            // own commas around the word go.
+            kb.dictation.command = ["sh", "-c", "echo '{\"returnValue\":true,\"text\":\"see you soon, comma, Ada period\"}'"];
+            kb.dictation.transcribeFile("/dev/null");
+            tryCompare(field, "text", "Hello there. See you soon, Ada.", 3000);
             kb.dictation.command = old;
+        }
+
+        // While dictating: the status bar's microphone is on, and what was
+        // said so far shows in the bar as it is said (GAPS V2). The
+        // microphone is a WAV file here (phoenix-sim --microphone-file).
+        function test_dictationWhileSpeaking() {
+            if (kb.dictation === null)
+                skip("built without Qt Multimedia: no microphone");
+            if (kb.dictation.partialInterval === undefined)
+                skip("Phoenix.Native without partialText: build this checkout's");
+            showKeyboard();
+            field.text = "";
+            var old = kb.dictation.command, oldFiles = kb.dictation.inputFiles;
+            var wav = String(Qt.resolvedUrl("../../services/wakeword/tests/data/hey-phoenix-timer.wav")).replace(/^file:\/\//, "");
+            kb.dictation.inputFiles = [wav];
+            kb.dictation.partialInterval = 300;
+            kb.dictation.command = ["sh", "-c", "echo '{\"returnValue\":true,\"text\":\"set a timer comma please\"}'"];
+            var bar = findChild(shell, "statusBar");
+            compare(bar.microphone, "");
+            kb.toggleDictation();
+            verify(kb.dictation.listening);
+            compare(bar.microphone, "on");
+            var status = findChild(kb, "dictationStatus");
+            tryVerify(function () { return kb.dictation.partialText !== ""; }, 3000);
+            compare(status.text, "set a timer, please");
+            verify(status.visible);
+            kb.toggleDictation();                    // done
+            tryCompare(field, "text", "Set a timer, please", 3000);
+            compare(bar.microphone, "");
+            compare(kb.dictation.partialText, "");
+            kb.dictation.command = old;
+            kb.dictation.inputFiles = oldFiles;
+            kb.dictation.partialInterval = 2000;
         }
 
         function test_noCandidateBarInPasswordFields() {
