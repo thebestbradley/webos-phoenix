@@ -118,6 +118,8 @@ export interface AccountType {
     status: "stable" | "beta" | "experimental";
     package: { id: string; builtin: boolean };
     help: string;
+    /** Where a person without an account gets one (https); "" when there is none. */
+    signUp: string;
     featured: boolean;
 }
 

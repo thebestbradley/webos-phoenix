@@ -777,6 +777,49 @@ Item {
             notes.dashboardOpen = false;
         }
 
+        // A dashboard window's drag mode set later, through its page's
+        // PalmSystem.setWindowProperties {webosDragMode} (WebAppMgr's
+        // PalmSystem.cpp:659-661 -> IpcClientHost.cpp:289-292 ->
+        // DashboardWindow::setWindowProperties, DashboardWindow.cpp:101-105),
+        // is followed from the next touch: DashboardWindowContainer asks
+        // isManualDragWindow as each one begins (:193-197).
+        function test_dashboardWindowDragModeSetLater() {
+            var notes = shell.notifications;
+            var page = addDashboardWindow("s904");
+            addDashboardWindow("s905");
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            var rowFor = function (key) {
+                var rows = dashboardRows();
+                for (var i = 0; i < rows.length; ++i)
+                    if (rows[i].parent.windowKey === key)
+                        return rows[i];
+                return null;
+            };
+            // "manual" now: right of the badge the drag is the page's.
+            windows._systemWindowProperties("s904", { webosDragMode: true });
+            var r = rowFor("s904");
+            verify(r);
+            dragRowFrom(r, 120, 120);
+            compare(page.events[0], "down");
+            compare(page.events[page.events.length - 1], "up");
+            compare(r.parent.x, 0, "the row stays");
+            compare(windows.notifications.count, 2);
+            // Back to the row's drag ("manual" no more): away past a quarter.
+            windows._systemWindowProperties("s904", { webosDragMode: false });
+            page.events = [];
+            dragRowFrom(r, 120, 140);
+            compare(page.events.length, 0);
+            tryCompare(windows.notifications, "count", 1, 1500);
+            compare(windows.notifications.get(0).windowKey, "s905");
+            // Other properties leave it as it is.
+            windows._systemWindowProperties("s905", { blockScreenTimeout: true });
+            compare(windows.notifications.get(0).manualDrag, false);
+            windows.notifications.clear();
+            notes.dashboardOpen = false;
+        }
+
         // GAPS V8 (3): with the dashboard open, Down / Up move a highlight
         // over the rows, Delete dismisses one, Enter opens one, Esc closes.
         function test_dashboardKeyboard() {

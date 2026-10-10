@@ -18,6 +18,13 @@
 //                 request reaches the server before that time
 //   conflict      (two-way capabilities) a field edited on both sides keeps
 //                 both edits or records the loser
+//   share         (with a share declaration) the fixture's share is posted
+//                 by send, as the account chosen, with that account's
+//                 credentials; an account that is not there is refused
+//   share limits  what the declaration does not take (too long, too many,
+//                 a kind it does not take) never reaches send or the server
+//   share errors  a 401 while posting gives 401_UNAUTHORIZED; a 429 gives
+//                 503_SERVICE_UNAVAILABLE, retryable, with retryAt
 //
 //   conformanceChecks(definition, fixture) -> [{name, run()}]   for a test runner
 //   runConformance(definition, fixture) -> [{name, ok, error?}]  (phoenix-connector test)
@@ -58,6 +65,10 @@ export interface ConformanceFixture {
     minObjects?: number;
     /** Two-way: a field to edit on both sides. */
     conflict?: { providerId: string; field: string; localValue: Json; remoteValue: Json };
+    /** With a share declaration: what to post ({content: {text?, url?, files?}, audience?}). */
+    share?: { content: Json; audience?: string };
+    /** Files the share's content names (path -> bytes and type), for ctx.readFile. */
+    files?: Record<string, { bytes: Uint8Array; mimeType: string }>;
 }
 
 export interface ConformanceResult { name: string; ok: boolean; error?: string }
@@ -107,7 +118,12 @@ async function setup(def: ConnectorDefinition, fx: ConformanceFixture, periodic:
     const bus = m.createFakeBus({ db, tempdb, accounts: { [ACCOUNT]: account }, credentials: {}, handlers });
     methods = createConnectorService(def, {
         luna: bus, request: server.request, log: () => {}, periodicSync: periodic, now: () => clock.t,
-        sleep: async (ms: number) => { clock.t += ms; }
+        sleep: async (ms: number) => { clock.t += ms; },
+        readFile: async (path: string) => {
+            const f = fx.files && fx.files[path];
+            if (!f) throw new Error("no file " + path + " in the fixture's files");
+            return f;
+        }
     });
     return { methods, db, tempdb, bus, server, accountId: ACCOUNT, clock, providers };
 }
@@ -263,7 +279,84 @@ export function conformanceChecks(def: ConnectorDefinition, fx: ConformanceFixtu
             assert(recorded || both, "the losing edit of " + c.field + " was neither kept nor recorded");
         }) });
     }
+    if (def.share) addShareChecks(def, fx, checks);
     return checks;
+}
+
+// The share checks: send is watched (which account, which credentials, how often).
+function addShareChecks(def: ConnectorDefinition, fx: ConformanceFixture, checks: { name: string; run(): Promise<void> }[]): void {
+    const share = def.share as NonNullable<ConnectorDefinition["share"]>;
+    const sends: { accountId: string; credentials: Json; content: Json }[] = [];
+    const watched: ConnectorDefinition = Object.assign({}, def, { share: Object.assign({}, share, {
+        send: (ctx: Json, content: Json) => {
+            sends.push({ accountId: ctx.accountId, credentials: ctx.credentials, content });
+            return share.send(ctx, content);
+        }
+    }) });
+    const withServer = (fn: (s: Setup) => Promise<void>) => async () => {
+        sends.length = 0;
+        assert(fx.share && fx.share.content, "the fixture has no share ({content, audience?}) to post");
+        const s = await setup(watched, fx, false);
+        try { await fn(s); } finally { if (s.server.close) await s.server.close(); }
+    };
+    const request = (accountId: string, content: Json, audience?: string) =>
+        ({ accountId, content, audience: audience === undefined ? fx.share && fx.share.audience : audience, idempotencyKey: "conformance-share-1" });
+
+    checks.push({ name: "share: posted by send as the account chosen, with its credentials", run: withServer(async (s) => {
+        const signed = await signIn(s, fx);
+        const r = await s.methods.share(request(s.accountId, (fx.share as Json).content));
+        assert(r.returnValue, "share failed: " + (r.errorCode || "") + " " + (r.errorText || ""));
+        assert(sends.length === 1, "send was called " + sends.length + " times");
+        assert(sends[0].accountId === s.accountId, "send was called for " + sends[0].accountId + ", not the account chosen");
+        assert(JSON.stringify(sends[0].credentials) === JSON.stringify((signed.credentials || {}).common || {}),
+               "send did not get the chosen account's credentials");
+        assert(r.posted && typeof r.posted === "object", "the reply has no posted: {url?, id?}");
+        const other = await s.methods.share(request("conformance-no-such-account", (fx.share as Json).content));
+        assert(other.returnValue === false && other.errorCode === "ACCOUNT_NOT_FOUND" && sends.length === 1,
+               "a share for an account that is not there was not refused (" + other.errorCode + ")");
+    }) });
+
+    checks.push({ name: "share limits: what the declaration does not take never reaches the server", run: withServer(async (s) => {
+        await signIn(s, fx);
+        const before = s.server.requests();
+        const tries: { content: Json; audience?: string; code: string }[] = [];
+        const a = share.accepts as Json;
+        if (a.text && a.text.maxLength) tries.push({ content: { text: "x".repeat(a.text.maxLength + 1) }, code: "SHARE_TOO_LONG" });
+        ["image", "video", "file"].forEach((k) => {
+            if (a[k] && a[k].max) {
+                const type = k === "image" ? "image/png" : k === "video" ? "video/mp4" : "application/pdf";
+                const files = [];
+                for (let i = 0; i <= a[k].max; i++) files.push({ path: "/media/internal/conformance-" + i + "." + type.split("/")[1], mimeType: type });
+                tries.push({ content: { files }, code: "SHARE_TOO_MANY" });
+            }
+        });
+        if (!a.video && !a.file) tries.push({ content: { files: [{ path: "/media/internal/conformance.mp4", mimeType: "video/mp4" }] }, code: "SHARE_NOT_ACCEPTED" });
+        if (!a.text && !a.link) tries.push({ content: { text: "Hello" }, code: "SHARE_NOT_ACCEPTED" });
+        tries.push({ content: {}, code: "SHARE_NOTHING" });
+        if (share.audience) tries.push({ content: (fx.share as Json).content, audience: "conformance-no-such-audience", code: "SHARE_BAD_AUDIENCE" });
+        for (const t of tries) {
+            const r = await s.methods.share(request(s.accountId, t.content, t.audience));
+            assert(r.returnValue === false && r.errorCode === t.code, "a share that should give " + t.code + " gave " + (r.returnValue ? "success" : r.errorCode));
+        }
+        assert(!sends.length, "send was called for a share the declaration does not take");
+        assert(s.server.requests() === before, "a refused share reached the server");
+    }) });
+
+    checks.push({ name: "share errors: a 401 is 401_UNAUTHORIZED, a 429 is retryable with retryAt", run: withServer(async (s) => {
+        await signIn(s, fx);
+        s.server.unauthorized(true);
+        const r = await s.methods.share(request(s.accountId, (fx.share as Json).content));
+        assert(r.returnValue === false && r.errorCode === "401_UNAUTHORIZED" && !r.retryable,
+               "a 401 while posting answered " + JSON.stringify({ returnValue: r.returnValue, errorCode: r.errorCode, retryable: r.retryable }));
+        s.server.unauthorized(false);
+        s.server.throttle(600);
+        const t = await s.methods.share(request(s.accountId, (fx.share as Json).content));
+        assert(t.returnValue === false && t.errorCode === "503_SERVICE_UNAVAILABLE" && t.retryable && t.retryAt >= s.clock.t + 590 * 1000,
+               "a 429 while posting answered " + JSON.stringify({ returnValue: t.returnValue, errorCode: t.errorCode, retryable: t.retryable, retryAt: t.retryAt }));
+        const before = s.server.requests();
+        const again = await s.methods.share(request(s.accountId, (fx.share as Json).content));
+        assert(again.returnValue === false && again.retryAt && s.server.requests() === before, "a share within Retry-After reached the server");
+    }) });
 }
 
 export async function runConformance(def: ConnectorDefinition, fx: ConformanceFixture): Promise<ConformanceResult[]> {

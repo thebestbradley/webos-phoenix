@@ -737,6 +737,9 @@ Item {
     // dismissing it take it away at once (notifySysControllerOfModalStatus,
     // :3130-3175, performPostModalWindowRemovedActions, :914-990).
     property string modalUid: ""
+    // The window keys and Back go to: the modal card while it is up, else
+    // the card in front (CardWindowManager::activeWindow, :2970-2982).
+    readonly property string activeUid: modalUid !== "" && !modalFading ? modalUid : currentUid
     readonly property string modalParentUid: {
         revision;
         var i = indexOf(modalUid);
@@ -744,7 +747,56 @@ Item {
     }
     property bool modalFading: false
     readonly property real modalWidth: Math.min(windowWidth, Theme.px(Theme.modalCardWidth))
-    readonly property real modalHeight: Math.min(windowHeight, Theme.px(Theme.modalCardHeight))
+    // The positive space the modal card is placed in: where the space is
+    // going (SystemUiController's target, which positiveSpaceAboutToChange
+    // carries), not where its slide is (bottomInset). Set by the shell;
+    // the window area otherwise.
+    property real positiveSpaceTarget: windowHeight
+    // When the positive space changes (the keyboard coming or going, a
+    // banner, the dashboard), the modal card is placed again in the new
+    // space: centred in it, and no taller than it, never past 480
+    // (CardWindow::computeModalWindowPlacementInf, positionModalForLess /
+    // MorePositiveSpace, decrease / increaseHeightAndPositionModalCard,
+    // CardWindow.cpp:1868-2172). Its height changes at once
+    // (resizeModalCard, :2218-2239); it moves to its new place over 500 ms
+    // OutCubic (startModalAnimation, :2195-2216: sModalCardAnimationTimeout,
+    // :75, cardDeleteCurve 6), started as the space starts to change
+    // (CardWindow::positiveSpaceChanged, :2254-2289, from the first step of
+    // SystemUiController's slide). While the UI turns it is put there at
+    // once (:2268-2272). The original's arithmetic in the parent's
+    // coordinates comes down to that centre (the space above it is
+    // (newPositiveSpace - height) / 2, and the height never exceeds the space).
+    readonly property real modalHeight: Math.min(positiveSpaceTarget, Theme.px(Theme.modalCardHeight))
+    readonly property real _modalRestY: topInset + positiveSpaceTarget / 2
+    // Placed by _placeModal (no binding: the move must start from where
+    // the card is).
+    property real modalCenterY: 0
+    readonly property bool modalMoving: modalMove.running
+    on_ModalRestYChanged: _placeModal(!_uiResizing)
+    // The UI turning (or the window resized sideways): no move, only the place.
+    property bool _uiResizing: false
+    onWidthChanged: {
+        _uiResizing = true;
+        _placeModal(false);
+        Qt.callLater(function () { view._uiResizing = false; });
+    }
+    function _placeModal(animate) {
+        modalMove.stop();
+        if (modalUid !== "" && animate && !Theme.reduceMotion && Math.abs(modalCenterY - _modalRestY) >= 0.5) {
+            modalMove.from = modalCenterY;
+            modalMove.to = _modalRestY;
+            modalMove.start();
+        } else {
+            modalCenterY = _modalRestY;
+        }
+    }
+    NumberAnimation {
+        id: modalMove
+        target: view
+        property: "modalCenterY"
+        duration: Theme.modalCardMoveDuration
+        easing.type: Easing.OutCubic
+    }
     // The window source asks for a modal card (modalCardRequested): shown
     // if its parent is the maximized card and no other modal is up
     // (proceedToAddModalWindow, :425-466), else refused and closed.
@@ -764,6 +816,7 @@ Item {
         }
         modalFading = false;
         modalUid = uid;
+        _placeModal(false);
         if (source && typeof source.modalResult === "function")
             source.modalResult(uid, "launched");
     }
@@ -1133,7 +1186,7 @@ Item {
             centerX: modalCard ? (parentCard ? parentCard.centerX : view.width / 2)
                      : (rising ? view.width / 2 : lifted ? view.reorderX : place ? place.cx : view.width / 2)
                        + (place && place.focused ? view.edgeNudge : 0)
-            centerY: modalCard ? view.maximizedCenterY
+            centerY: modalCard ? view.modalCenterY
                    : (rising ? view.mix(view.height + height / 2, view.maximizedCenterY, view.maximizeProgress)
                    : lifted ? view.reorderY : place ? place.cy : view.cardOriginY) + keepHeight * cardScale / 2
             cardScale: modalCard || rising ? 1 : lifted ? view.activeScale : place ? place.scale : view.activeScale

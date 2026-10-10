@@ -28,3 +28,20 @@
 		min-width: 150px;
 	}
 }
+
+/* "Don't have an account? Sign up" (source/phoenix-signup.js), under the
+   sign-in fields: the library's hint text, the link in the buttons' blue. */
+.accounts-signup {
+    font-size: 15px;
+    color: #555;
+    margin: 4px 14px 12px;
+    line-height: 1.35;
+}
+.accounts-signup-link {
+    color: #1f75bf;
+    font-weight: bold;
+    cursor: pointer;
+}
+.accounts-signup-servers {
+    margin-top: 4px;
+}

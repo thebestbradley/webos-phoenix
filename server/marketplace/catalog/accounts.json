@@ -1,5 +1,5 @@
 {
-    "//": "The account types the Marketplace's Connections view lists (docs/SYNERGY-CONNECTORS.md 2.1, phase C0): the templates Phoenix has today, all built in. Catalog::publish() checks each one and writes it into the signed index as `accounts`; iconFrom (a file in this repository, not published) is copied to `icon` under the published folder. capabilities use each template's own capabilityProviders[].capability.",
+    "//": "The account types the Marketplace's Connections view lists (docs/SYNERGY-CONNECTORS.md 2.1, phase C0): the templates Phoenix has today, all built in. Catalog::publish() checks each one and writes it into the signed index as `accounts`; iconFrom (a file in this repository, not published) is copied to `icon` under the published folder. capabilities use each template's own capabilityProviders[].capability. signUp: where a person without an account gets one (https), when there is a public page for it: the Fediverse's list of servers, XMPP's list of providers; none for the types whose server is the user's own (CardDAV, mail) or that need no account (a subscribed calendar).",
     "accounts": [
         {
             "templateId": "com.webosphoenix.dav",
@@ -40,6 +40,7 @@
             "push": "poll",
             "status": "beta",
             "package": { "id": "org.webosphoenix.fediverse", "builtin": true },
+            "signUp": "https://joinmastodon.org/servers",
             "featured": true
         },
         {
@@ -94,7 +95,8 @@
             "privacy": { "dataGoesTo": "the server in your Jabber ID", "e2ee": false, "phoenixServers": "none" },
             "push": "poll",
             "status": "experimental",
-            "package": { "id": "org.webosphoenix.service.xmpp", "builtin": true }
+            "package": { "id": "org.webosphoenix.service.xmpp", "builtin": true },
+            "signUp": "https://providers.xmpp.net/"
         }
     ]
 }
