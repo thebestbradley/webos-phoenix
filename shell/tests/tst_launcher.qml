@@ -317,7 +317,13 @@ Item {
             compare(spy.count, 1);
             compare(spy.signalArguments[0][0], shell.launcherLayout.pages[0][1]);
             tryVerify(function() { return !shell.launcherOpen; }, 2000);
-            // Opened again, Esc closes it.
+            // Opened again, Esc closes it. The app launched has had its
+            // prepare step and risen first (as in init()): with the card up,
+            // the gesture goes to card view instead (a slow machine got
+            // there before it opened the launcher).
+            tryVerify(function() { return shell.cardView.waitingUid === "" && !shell.cardView.preparing; }, 3000);
+            tryVerify(function() { return !shell.cardView.maximizing; }, 3000);
+            shell.cardView.maximizeProgress = 0;
             shell.gestureUp();
             tryCompare(launcher, "hidden", 0, 2000);
             compare(launcher.keyIndex, -1);
