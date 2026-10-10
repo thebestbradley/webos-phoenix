@@ -120,6 +120,20 @@ over it (thinking takes the pose). The app plays the entrance on a new
 conversation, then waves. Under Reduce motion both fade instead (250 ms,
 by Animation speed).
 
+### At start-up
+
+The bird ends the start-up animation (`BootStory.qml`, Settings > Advanced >
+Start-up animation: Phoenix): the boot logo's orb, with a dead face, burns
+to ash in flames drawn from its crest (`BootFlame.qml`: the crest's three
+paths and flicker keys, each flame at its own pace); a small gold
+bird-shaped orb shoots out of the ash, flies about the screen trailing
+sparks and arrives where the entrance's fireball bursts (`effects.fireball`
+origin, with the bird where it will land), glowing into it as `enter()`
+plays: the bird is born out of it, lands with its dust, and waves (its
+`hello` pose). It then stands `idle` (breathing, blinking, the idle pool)
+until the boot is over, `glow` on so it reads on black. Under Reduce
+motion it fades in, waving, still.
+
 ### The idle pool
 
 Idle, now and then (`acting.poses.idle.every`: 3 to 7.5 s apart at random)

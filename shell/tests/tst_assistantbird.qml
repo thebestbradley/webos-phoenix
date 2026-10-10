@@ -352,6 +352,9 @@ Item {
             compare(ms, Theme.motion(m.period));
             compare(bird.move, "enter");
             verify(bird.acts.whole.sx < 0.05 && bird.acts.whole.sy < 0.05, "hidden at first: " + bird.acts.whole.sx);
+            // The fireball shows (it starts once its effect is shown).
+            var ball = findChild(bird, "assistantBirdFxBall-fireball");
+            tryVerify(function () { return ball.visible && ball.opacity > 0.5 && ball.scale > 0.5; }, m.period * 2, "the fireball bursts");
             tryVerify(function () { return moved.ended.indexOf("enter") >= 0; }, m.period * 4 + 3000, "the entrance, over");
             verify(acted.range.whole.ty[0] < -190, "born up high: " + acted.range.whole.ty[0]);
             verify(acted.range.body.sy[1] > 1.08, "stretched as it falls: " + acted.range.body.sy[1]);

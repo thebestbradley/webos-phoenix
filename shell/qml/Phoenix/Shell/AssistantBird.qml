@@ -1405,8 +1405,10 @@ Item {
         function play() {
             if (!bird.animated)
                 return;
-            ++plays;
+            // Shown first: the ball starts only when it is (visible), as
+            // plays changes.
             showing.restart();
+            ++plays;
             ++bird.fxCount;
             bird.fxPlayed(name);
         }
@@ -1416,6 +1418,7 @@ Item {
         // glow: a ball of fire, scaled and faded through its keys.
         Shape {
             id: ball
+            objectName: "assistantBirdFxBall-" + fx.name
             visible: fx.spec.kind === "glow" || fx.spec.kind === "surge"
             readonly property bool aura: fx.spec.kind === "surge"
             x: fx.spec.origin[0]

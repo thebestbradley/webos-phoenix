@@ -159,6 +159,17 @@ QtObject {
         }
     }
 
+    // Settings > Advanced (Shell.tweak(); SimSystemStatus.tweaks documents
+    // them). STATUS: placeholder, the defaults (the start-up animation
+    // "phoenix", animation speed "normal"). They must be known before the
+    // boot animation's first frame: M1 reads the system service's
+    // preferences (startupAnimation, animationSpeed, ...) synchronously as
+    // the compositor starts, as LunaSysMgr read its preferences at start
+    // (Preferences::instance), rather than from getPreferences' first reply.
+    // PhoenixViewsRoot does not start the boot animation yet (bootAnimation
+    // is false on a device).
+    property var tweaks: ({})
+
     property var wifiNetworks: []
     property bool wifiScanning: false
     property var bluetoothDevices: []

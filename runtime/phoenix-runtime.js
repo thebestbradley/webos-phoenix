@@ -1374,6 +1374,9 @@
         showBatteryPercent: false,
         keyboardNumberRow: false,
         keyboardStyle: "auto",
+        // Phoenix's start-up animation: "phoenix" (the bird's story,
+        // BootStory.qml) or "classic" (the original logo's glow).
+        startupAnimation: "phoenix",
         // Email's new-mail dashboard goes through the new emails one at a
         // time, with their times and a delete button (the community's
         // Uber Cycling Email Dashboard; compat overlay of the Email app).
@@ -1420,7 +1423,8 @@
             gridDensity: pick(p.launcherGridDensity, ["normal", "dense"], "normal"),
             batteryPercent: !!p.showBatteryPercent,
             numberRow: !!p.keyboardNumberRow,
-            keyboardStyle: pick(p.keyboardStyle, ["auto", "black", "touchpad"], "auto")
+            keyboardStyle: pick(p.keyboardStyle, ["auto", "black", "touchpad"], "auto"),
+            startupAnimation: pick(p.startupAnimation, ["phoenix", "classic"], "phoenix")
         };
     }
     // The page views' settings and the system proxy, as the shell takes
@@ -1439,7 +1443,7 @@
     runtime.networkProxy = networkProxy;
     var TWEAK_KEYS = ["infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges", "sysUiEnableWaveLauncher", "showReticleAnimation",
                       "animationSpeed", "gestureSensitivity", "hapticFeedback", "launcherGridDensity", "showBatteryPercent",
-                      "keyboardNumberRow", "keyboardStyle"];
+                      "keyboardNumberRow", "keyboardStyle", "startupAnimation"];
 
     // Settings > Accessibility's keyboard options, as the shell takes them.
     function keyboardAccess(a) {

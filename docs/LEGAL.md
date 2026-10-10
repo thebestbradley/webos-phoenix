@@ -61,6 +61,19 @@ copies in `compat/rootfs/` that ask for the variants are the original
 Apache-2.0 stylesheets with their `url()`s changed (modified versions under
 the same license).
 
+## The start-up animation
+
+The start-up story (`shell/qml/Phoenix/Shell/BootStory.qml`,
+`BootFlame.qml`) is original Phoenix art, Apache-2.0: the orb with its dead
+and screaming face, the gold glow, the fire, the ash, the smoke and the
+bird-shaped orb are drawn in QML (Qt Quick Shapes and plain items); its
+flames are the Assistant bird's crest (`art/assistant-bird/bird.json`, also
+original, see `art/assistant-bird/PROVENANCE.md`) and the bird is the
+Assistant's own. No picture, sound or shape in it comes from Palm or HP;
+it echoes the classic boot logo's round orb and glow (Phoenix's own
+`boot-logo.png`, not HP's) only in shape. The Classic setting shows that
+logo as before.
+
 ## Open webOS system sounds (`shell/assets/sounds/openwebos/`)
 
 The twelve files of luna-sysmgr's `sounds/` directory (`alert.wav`,

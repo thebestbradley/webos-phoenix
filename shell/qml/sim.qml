@@ -190,6 +190,11 @@ Item {
                 // Fixed clock for reproducible screenshots.
                 fixedTime: typeof simScene !== "undefined" && simScene !== "" ? new Date(2009, 5, 6, 9, 41) : null
                 deviceOrientation: typeof simOrientation !== "undefined" && simOrientation !== "" ? simOrientation : "up"
+                // Settings > Advanced and Reduce motion as they were last
+                // time, before the system UI's page reports them: the boot
+                // animation (its style, its pace) starts with the first frame.
+                tweaks: root.savedTweaks()
+                reduceMotion: typeof simSettings !== "undefined" && !!simSettings && simSettings.value("accessibility/reduceMotion") === "1"
             }
         }
 
@@ -542,6 +547,18 @@ Item {
         }
     }
 
+    // Settings > Advanced as last reported (system/tweaks), or {} (the defaults).
+    function savedTweaks() {
+        if (typeof simSettings === "undefined" || !simSettings)
+            return {};
+        try {
+            var t = JSON.parse(simSettings.value("system/tweaks") || "{}");
+            return t && typeof t === "object" ? t : {};
+        } catch (e) {
+            return {};
+        }
+    }
+
     // The rotation lock and the orientation it holds, kept for the next
     // start, as LunaSysMgr read its rotationLock preference at boot
     // (WindowServer::bootupFinished, WindowServer.cpp:1187-1203): "" off,
@@ -591,6 +608,12 @@ Item {
                 simSettings.setValue("developer/devMode", s.devMode ? "1" : "0");
             if (s.devModeUnlocked !== undefined && typeof simSettings !== "undefined")
                 simSettings.setValue("developer/unlocked", s.devModeUnlocked ? "1" : "0");
+            // Settings > Advanced (the start-up animation, the animation
+            // speed) and Reduce motion, for the boot animation next time.
+            if (s.tweaks && typeof simSettings !== "undefined")
+                simSettings.setValue("system/tweaks", JSON.stringify(s.tweaks));
+            if (s.reduceMotion !== undefined && typeof simSettings !== "undefined")
+                simSettings.setValue("accessibility/reduceMotion", s.reduceMotion ? "1" : "0");
         }
     }
     Connections {
@@ -1481,7 +1504,9 @@ Item {
             return;
         shell.systemScreens.finishBoot();
         if (shell.bootAnimation)
-            console.info("phoenix-sim: booted (touches reach the UI once the logo has gone, " + Theme.motion(700) + " ms)");
+            console.info(shell.systemScreens.boot.finishPending
+                         ? "phoenix-sim: booted (touches reach the UI once the start-up animation is over, then " + Theme.motion(700) + " ms; a tap skips it)"
+                         : "phoenix-sim: booted (touches reach the UI once the logo has gone, " + Theme.motion(700) + " ms)");
     }
     Connections {
         target: windows
