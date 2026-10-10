@@ -472,6 +472,12 @@ QtObject {
     // (CardWindowManager.cpp:2495), a fixed value, not in the conf.
     readonly property int cardFanDuration: motion(200)
     readonly property int cardDeleteDuration: motion(300)                    // curve 6 = OutCubic
+    // A modal card (Settings.cpp:239-240 ModalWindowWidth/Height, legacy px)
+    // and its fade when the minimize gesture takes it away
+    // (CardWindowManager.cpp:66 kModalWindowAnimationTimeout).
+    readonly property int modalCardWidth: 320
+    readonly property int modalCardHeight: 480
+    readonly property int modalCardFadeDuration: motion(45)
     // Loading card (CardLoading.cpp, lunaAnimations.conf:55-60, Settings.cpp:216).
     readonly property int cardLoadingTimeBeforePulse: 900
     readonly property int cardLoadingPulseDuration: 1000             // half up, half down

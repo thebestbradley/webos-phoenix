@@ -15245,6 +15245,11 @@
     //   getBootStatus {subscribe}  -> {finished, firstUse}: firstUse while the
     //                      shell runs First Use (its minimal UI), as the
     //                      shell last said (applyHostStatus {firstUse})
+    //   launchModalApp {subscribe, callerId, launchId, params}  launchId as a
+    //                      modal card over the maximized caller's card:
+    //                      {launchResult, modalId}, then launched or
+    //                      {errorText, errorCode}, then {dismissResult}
+    //   dismissModalApp {subscribe, modalId}  takes it away
     //   subscribeToSystemUI {subscribe}  events for luna-systemui, which it
     //                      turns into popup alerts (data/SystemManagerService.js):
     //                      here only "registerForLocationServiceNotifications"
@@ -15455,6 +15460,40 @@
             if (typeof p.appid !== "string") return reply(fail(-1, "appid (string) is required"));
             host.postToHost("touchToShare", { op: "transferred", appId: p.appid });
             reply(ok());
+        };
+        // Modal cards (SystemService.cpp:4200-4600 launchModalApp,
+        // 4030-4190 dismissModalApp): the calling app, maximized, launches
+        // another as a 320 x 480 card over its own; on the subscription it
+        // hears that the launch began ({launchResult, modalId}), then that
+        // it was launched or why not ({errorText, errorCode}), then why the
+        // modal card went ({dismissResult}). The shell decides
+        // (CardView.addModal) and answers through modalStatus.
+        var modalCalls = {}, modalCount = 0;
+        sm["/launchModalApp"] = function (p, reply, ctx) {
+            if (!p.subscribe) return reply(fail(-1, "Missing parameter: subscribe"));
+            if (typeof p.callerId !== "string" || !p.callerId) return reply(fail(1, "Missing parameter: callerId"));
+            if (typeof p.launchId !== "string" || !p.launchId) return reply(fail(1, "Missing parameter: launchId"));
+            var modalId = "MODAL_WINDOW_" + p.callerId + "_" + p.launchId + "_" + (++modalCount);
+            modalCalls[modalId] = { launch: reply, dismiss: null };
+            reply(ok({ launchResult: "Modal window launch initiated", modalId: modalId, subscribed: true }));
+            host.postToHost("launchModal", { modalId: modalId, callerId: p.callerId, launchId: p.launchId,
+                                             params: p.params && typeof p.params === "object" ? p.params : null });
+        };
+        sm["/dismissModalApp"] = function (p, reply) {
+            if (!p.subscribe) return reply(fail(-1, "Missing parameter: subscribe"));
+            var m = typeof p.modalId === "string" ? modalCalls[p.modalId] : null;
+            if (!m) return reply(fail(-1, "No modal window is active"));
+            m.dismiss = reply;
+            reply(ok({ dismissResult: "Initiating removal of active modal window", subscribed: true }));
+            host.postToHost("dismissModal", { modalId: p.modalId });
+        };
+        // The shell: how the modal card modalId went.
+        runtime.modalStatus = function (modalId, r) {
+            var m = modalCalls[modalId];
+            if (!m) return;
+            m.launch(r);
+            if (r && r.dismissResult !== undefined && m.dismiss) m.dismiss(r);
+            if (!(r && r.returnValue === true && r.launchResult !== undefined)) delete modalCalls[modalId];
         };
         // An app answering {sendDataToShare} (the Isis browser:
         // {data: {target: url, type: "rawdata", mimetype: "text/html"}}).

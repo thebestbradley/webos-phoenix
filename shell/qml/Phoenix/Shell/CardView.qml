@@ -125,7 +125,8 @@ Item {
         var n = source ? source.cards.count : 0;
         for (var i = 0; i < n; ++i) {
             var c = source.cards.get(i);
-            if (closing[c.uid] || c.uid === waitingUid)
+            // A modal card is in no stack (CardWindowManager.cpp:524-549).
+            if (closing[c.uid] || c.uid === waitingUid || c.modal === true)
                 continue;
             if (list.length === 0 || list[list.length - 1].id !== c.groupId)
                 list.push({ id: c.groupId, uids: [], start: i });
@@ -269,6 +270,8 @@ Item {
         var g = groupIndexOf(uid);
         if (g < 0)
             return;
+        if (modalUid !== "" && uid !== modalParentUid)
+            dismissModal("switched", false);
         setFocus(uid);
         if (Math.abs(position - g) > 0.001)
             slideTo(g);
@@ -280,6 +283,13 @@ Item {
     }
 
     function minimize() {
+        // With a modal card up the gesture only takes it away, faded, and
+        // its parent stays maximized (minimizeActiveWindow with
+        // m_addingModalWindow, CardWindowManager.cpp:1151-1164).
+        if (modalUid !== "") {
+            dismissModal("minimized", true);
+            return;
+        }
         cancelRise();
         restoreUid = "";
         if (count === 0)
@@ -339,6 +349,7 @@ Item {
         }
         animateLayout(Theme.cardSlideDuration);
         restoreUid = "";
+        dismissModal("switched", false);
         if (maximized) {
             cardMinimized(currentUid);
             maximize(next);
@@ -367,6 +378,7 @@ Item {
             return;
         _returning = null;
         restoreUid = "";
+        dismissModal("switched", false);
         if (!maximized || currentUid !== fromUid) {
             maximize(uid);
             return;
@@ -450,6 +462,9 @@ Item {
             // One card prepares at a time: one still waiting goes ahead now.
             if (waitingUid !== "")
                 _endWait();
+            // A new card takes the front from a modal card
+            // (CardWindowManager.cpp:507-528, ActiveCardsSwitched).
+            dismissModal("switched", false);
             slideAnim.stop();
             // Launched by the card in front into its stack: that card comes
             // back when this one closes while maximized (C8, C12).
@@ -635,6 +650,18 @@ Item {
     function close(uid, byApp) {
         if (closing[uid])
             return;
+        if (uid !== "" && uid === modalUid) {
+            // The modal card closed itself (or was closed): it goes at once
+            // (removeWindowWithModality, ModalWindowDismissedExternally).
+            cardClosing(uid, !!byApp);
+            dismissModal("closed", false);
+            cardClosed(uid);
+            return;
+        }
+        // Its parent closed: the modal card goes first, at once
+        // (ParentCardDismissed, CardWindowManager.cpp:2840-2852).
+        if (uid !== "" && uid === modalParentUid)
+            dismissModal("parentClosed", false);
         if (uid === waitingUid) {
             // Closed before it was shown (still in its prepare step).
             _cancelWait();
@@ -685,6 +712,85 @@ Item {
                                                 to: -(place.cy + card.height * place.scale / 2) }).start();
         else
             _finishClose(uid);
+    }
+
+    // ---- Modal cards (CardWindowManager::prepareAddWindow, :499-550;
+    // CardWindow::setModalParent, positionModalWindowWrpParent,
+    // CardWindow.cpp:1842-1866; the parent's 60 % shade, :1593-1599) --------
+    // An app the maximized card launched as a modal window
+    // (com.palm.systemmanager/launchModalApp) shows over it, 320 x 480,
+    // centred on it in the screen's positive space, the parent dimmed under
+    // 60 % of #0f0f0f and its touches going to the modal card. It is in no
+    // stack and never in card view: the minimize gesture takes it away
+    // (faded over 45 ms, kModalWindowAnimationTimeout) and leaves the parent
+    // maximized; switching cards, a new card, the parent closing, or its app
+    // dismissing it take it away at once (notifySysControllerOfModalStatus,
+    // :3130-3175, performPostModalWindowRemovedActions, :914-990).
+    property string modalUid: ""
+    readonly property string modalParentUid: {
+        revision;
+        var i = indexOf(modalUid);
+        return i >= 0 ? (source.cards.get(i).modalParent || "") : "";
+    }
+    property bool modalFading: false
+    readonly property real modalWidth: Math.min(windowWidth, Theme.px(Theme.modalCardWidth))
+    readonly property real modalHeight: Math.min(windowHeight, Theme.px(Theme.modalCardHeight))
+    // The window source asks for a modal card (modalCardRequested): shown
+    // if its parent is the maximized card and no other modal is up
+    // (proceedToAddModalWindow, :425-466), else refused and closed.
+    function addModal(uid) {
+        var i = indexOf(uid);
+        if (i < 0)
+            return;
+        var parent = source.cards.get(i).modalParent || "";
+        var result = modalUid !== "" ? "anotherModalActive"
+                   : !maximized || currentUid === "" ? "noMaximizedCard"
+                   : currentUid !== parent ? "parentDifferent" : "launched";
+        if (result !== "launched") {
+            if (source && typeof source.modalResult === "function")
+                source.modalResult(uid, result);
+            source.close(uid, true);
+            return;
+        }
+        modalFading = false;
+        modalUid = uid;
+        if (source && typeof source.modalResult === "function")
+            source.modalResult(uid, "launched");
+    }
+    // Take the modal card away; why: the dismiss reason the window source
+    // reports ("minimized", "switched", "parentClosed", "service", "closed").
+    function dismissModal(why, animate) {
+        if (modalUid === "" || modalFading)
+            return;
+        if (animate && !Theme.reduceMotion) {
+            modalFading = true;
+            modalFade.why = why;
+            modalFade.restart();
+            return;
+        }
+        _endModal(why);
+    }
+    function _endModal(why) {
+        var uid = modalUid;
+        if (uid === "")
+            return;
+        modalUid = "";
+        modalFading = false;
+        if (source && typeof source.modalResult === "function")
+            source.modalResult(uid, why);
+        if (indexOf(uid) >= 0)
+            source.close(uid, true);
+    }
+    Timer {
+        id: modalFade
+        property string why: ""
+        interval: Theme.modalCardFadeDuration
+        onTriggered: view._endModal(why)
+    }
+    Connections {
+        target: view.source
+        ignoreUnknownSignals: true
+        function onModalDismissRequested(uid) { if (uid === view.modalUid) view.dismissModal("service", true); }
     }
 
     // The card that launched the one in front, when that one joined its
@@ -763,6 +869,15 @@ Item {
             loadingUid = "";
         if (waitingUid !== "" && indexOf(waitingUid) < 0)
             _cancelWait();
+        if (modalUid !== "" && indexOf(modalUid) < 0) {
+            var gone = modalUid;
+            modalUid = "";
+            modalFading = false;
+            if (source && typeof source.modalResult === "function")
+                source.modalResult(gone, "closed");
+        } else if (modalUid !== "" && indexOf(modalParentUid) < 0) {
+            dismissModal("parentClosed", false);
+        }
         for (var b in _openedBehind)
             if (indexOf(b) < 0)
                 delete _openedBehind[b];
@@ -984,6 +1099,10 @@ Item {
             // Rising from below the screen: full size, straight up.
             readonly property bool rising: view.risingUid === uid
             readonly property bool lifted: view.reorderUid === uid
+            // A modal card, over its parent; and the parent under it.
+            readonly property bool modalCard: view.modalUid !== "" && view.modalUid === uid
+            readonly property bool modalParent: view.modalUid !== "" && view.modalParentUid === uid
+            readonly property Item parentCard: modalCard ? view.cardItem(view.modalParentUid) : null
 
             uid: model.uid
             title: model.title
@@ -995,31 +1114,40 @@ Item {
             largeIcon: info && info.largeIcon ? info.largeIcon : ""
             splashIcon: info && info.splashIcon ? info.splashIcon : ""
             splashBackground: info && info.splashBackground ? info.splashBackground : ""
-            width: view.windowWidth
-            height: view.windowHeight
+            width: modalCard ? view.modalWidth : view.windowWidth
+            height: modalCard ? view.modalHeight : view.windowHeight
             window: view.source.windowFor(uid)
-            centerX: (rising ? view.width / 2 : lifted ? view.reorderX : place ? place.cx : view.width / 2)
-                     + (place && place.focused ? view.edgeNudge : 0)
-            centerY: rising ? view.mix(view.height + height / 2, view.maximizedCenterY, view.maximizeProgress)
+            centerX: modalCard ? (parentCard ? parentCard.centerX : view.width / 2)
+                     : (rising ? view.width / 2 : lifted ? view.reorderX : place ? place.cx : view.width / 2)
+                       + (place && place.focused ? view.edgeNudge : 0)
+            centerY: modalCard ? view.maximizedCenterY
+                   : rising ? view.mix(view.height + height / 2, view.maximizedCenterY, view.maximizeProgress)
                    : lifted ? view.reorderY : place ? place.cy : view.cardOriginY
-            cardScale: rising ? 1 : lifted ? view.activeScale : place ? place.scale : view.activeScale
-            rotation: rising || lifted || !place ? 0 : place.rot
-            rounded: view.maximizeProgress < 1
+            cardScale: modalCard || rising ? 1 : lifted ? view.activeScale : place ? place.scale : view.activeScale
+            rotation: modalCard || rising || lifted || !place ? 0 : place.rot
+            rounded: modalCard || view.maximizeProgress < 1
+            modalShade: modalParent
             appOrientation: model.orientation !== undefined && model.orientation !== "" ? model.orientation : "free"
             uiOrientation: view.uiOrientation
             uiPortrait: view.uiPortrait
-            interactive: view.maximized && place !== null && place.focused
-            dimmed: place === null || !place.focused
+            interactive: modalCard ? view.maximized : view.maximized && place !== null && place.focused && !modalParent
+            dimmed: !modalCard && (place === null || !place.focused)
             reordering: lifted
             layoutAnimationDuration: lifted || view.closing[uid] || (rising && maximizeAnim.running) ? 0
                                      : view._fanEaseUids[uid] && view.layoutAnimationDuration > 0 ? Theme.cardFanDuration
                                      : view.layoutAnimationDuration
-            z: lifted || rising ? 3000 : place ? place.z : 0
+            z: modalCard ? 3500 : lifted || rising ? 3000 : place ? place.z : 0
+            opacity: modalCard && view.modalFading ? 0 : reordering ? 0.8 : 1
+            Behavior on opacity {
+                enabled: cardDelegate.modalCard && view.modalFading
+                NumberAnimation { duration: Theme.modalCardFadeDuration }
+            }
             // In its prepare step the card is not there yet; its loading
             // screen starts when it is prepared (startLoadingOverlay,
             // CardWindow.cpp:1486-1490).
             prepared: view.waitingUid !== uid
-            visible: prepared && centerX + width * cardScale / 2 > -view.width
+            visible: (modalCard ? view.maximized || view.modalFading
+                      : !(model.modal === true)) && prepared && centerX + width * cardScale / 2 > -view.width
                      && centerX - width * cardScale / 2 < view.width * 2
         }
     }

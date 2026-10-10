@@ -43,6 +43,9 @@ Item {
     property url splashBackground: ""
     // Cards that have lost focus are darkened (CardWindow.cpp:211-213).
     property bool dimmed: false
+    // The parent of a modal card: 60 % of #0f0f0f over it (CardWindow::paint,
+    // CardWindow.cpp:1593-1599).
+    property bool modalShade: false
 
     // The orientation the app asked for (PalmSystem.setWindowOrientation):
     // "free", "up", "down", "left", "right", "landscape" or "portrait";
@@ -189,6 +192,15 @@ Item {
                 splashIcon: card.splashIcon
                 splashBackground: card.splashBackground
             }
+        }
+
+        Rectangle {
+            objectName: "modalShade"
+            anchors.fill: parent
+            z: 3
+            color: "#0f0f0f"
+            opacity: 0.6
+            visible: card.modalShade
         }
 
         // Darkened when it has lost focus (CardWindow.cpp:211-213), inside

@@ -94,7 +94,7 @@ durations and curves, never wall-clock time).
 | Loading card pulse and cross-fade | `CardLoading.cpp:141-142`; conf `:55-60` | `CardLoading.qml` | matches |
 | Scene push/pop (an app's own scenes) | 300 ms easeOutQuad (`CardTransition.cpp`; conf `:61-62`) | `Card.qml` | matches |
 | Touch to Share ghost and glow | 750 ms OutQuart; 1000 ms linear (`CardWindowManager.cpp:2941-2942`, `TouchToShareGlow.cpp:99-127`) | `CardView.qml`, `TouchToShareGlow.qml` | matches |
-| Modal card | 500 ms (`CardWindow.cpp:75, 2210-2211`) | no modal cards (GAPS C11) | n/a |
+| Modal card | appears at once; fades out over 45 ms when the minimize gesture takes it away (`CardWindowManager.cpp:66, 877-884`); moves over 500 ms OutCubic when the positive space changes (`CardWindow.cpp:75, 2210-2211`) | `CardView.qml` (`modalFading`, `Theme.modalCardFadeDuration`) | matches, but no move with the keyboard yet (GAPS C11) |
 
 ## Lock screen, keyboard, rotation, system screens
 
