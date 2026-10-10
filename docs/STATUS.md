@@ -18,7 +18,8 @@ in the documents linked from each item.
   launcher icons, the clipboard history, the Assistant, and the community
   features picked for 1.0. Also the keyboard's dictation, word suggestions,
   swipe typing, emoji and cursor control (GAPS V2-V6), hardware keyboard
-  shortcuts and accessibility (V8), Edit in every app menu (E1), Developer
+  shortcuts and accessibility (V8) and its keyboard button, which keeps clear of
+  notifications, moves to either edge and can be hidden, Edit in every app menu (E1), Developer
   Mode behind the Konami code, and the share sheet with Share in every app
   menu ([SHARE-AND-FILES.md](SHARE-AND-FILES.md)).
 - The start-up animation: the phoenix's death and rebirth (the dead orb

@@ -168,7 +168,39 @@ QtObject {
     // (Preferences::instance), rather than from getPreferences' first reply.
     // PhoenixViewsRoot does not start the boot animation yet (bootAnimation
     // is false on a device).
+    // The shell's tweaks (Shell.tweak; the simulator's come from the
+    // runtime's tweaks(), runtime/phoenix-runtime.js). On a device only the
+    // keyboard button's are read so far, from the same system preferences
+    // (keyboardButton, keyboardButtonSide, keyboardButtonY,
+    // keyboardButtonHintShown), which the shell writes with lunaCall
+    // (Shell.setTweaks); the rest keep their defaults. PLACEHOLDER: the
+    // other Settings > Advanced / Text Assist tweaks are not read here yet.
+    // STATUS: written against systemservice's API, not yet run on a device.
     property var tweaks: ({})
+    property var _tweakPrefs: Service {
+        appId: LS.appId
+        onResponse: (method, payload, token) => {
+            var r = null;
+            try { r = JSON.parse(payload); } catch (e) { return; }
+            if (!r)
+                return;
+            var t = {};
+            for (var k in status.tweaks)
+                t[k] = status.tweaks[k];
+            if (r.keyboardButton !== undefined)
+                t.keyboardButton = r.keyboardButton !== false;
+            if (r.keyboardButtonSide === "left" || r.keyboardButtonSide === "right")
+                t.keyboardButtonSide = r.keyboardButtonSide;
+            if (typeof r.keyboardButtonY === "number" && r.keyboardButtonY >= 0 && r.keyboardButtonY <= 1)
+                t.keyboardButtonY = r.keyboardButtonY;
+            if (r.keyboardButtonHintShown !== undefined)
+                t.keyboardButtonHintShown = r.keyboardButtonHintShown === true;
+            status.tweaks = t;
+        }
+        Component.onCompleted: call("luna://com.webos.service.systemservice", "/getPreferences",
+                                    JSON.stringify({ keys: ["keyboardButton", "keyboardButtonSide", "keyboardButtonY", "keyboardButtonHintShown"],
+                                                     subscribe: true }))
+    }
 
     property var wifiNetworks: []
     property bool wifiScanning: false

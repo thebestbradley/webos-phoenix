@@ -12,7 +12,9 @@
 // goes from one to the next. Hardware Keyboard (HardwareKeyboard.tsx): layout,
 // key repeat, modifier keys and the shell's shortcuts,
 // iPad-style (Ctrl / Command) or desktop-style (Alt, Super), system
-// preference keyboardShortcuts. Shortcuts: the user's text replacements
+// preference keyboardShortcuts; and the keyboard button (the shell's
+// KeyboardButton.qml), system preference keyboardButton, on by default,
+// which its hold menu's Hide Keyboard Button turns off. Shortcuts: the user's text replacements
 // (TextAssistShortcuts.tsx; x_palm_textinput). Number row (Phoenix; the
 // community's keyboard layout patches, docs/M6-PLAN.md F4): digits above
 // the phone keyboard's letters, system preference keyboardNumberRow, off by
@@ -82,7 +84,7 @@ type KeyboardStyle = "auto" | "black" | "touchpad";
 export const keyboardStyle = (v: unknown): KeyboardStyle => (v === "black" || v === "touchpad" ? v : "auto");
 
 export function TextAssistPage() {
-    const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["x_palm_virtualkeyboard_prefs", "keyboardShortcuts", "x_palm_textinput", "keyboardNumberRow", "keyboardStyle", "hardwareKeyboard"], cb, err), []).value ?? {};
+    const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["x_palm_virtualkeyboard_prefs", "keyboardShortcuts", "x_palm_textinput", "keyboardNumberRow", "keyboardStyle", "hardwareKeyboard", "keyboardButton"], cb, err), []).value ?? {};
     const kb = keyboardPrefs(prefs.x_palm_virtualkeyboard_prefs);
     const [dictionary, setDictionary] = useState(false);
     useBack(() => { setDictionary(false); return true; }, dictionary);
@@ -183,6 +185,13 @@ export function TextAssistPage() {
             <Group label="Hardware keyboard">
                 <Row title="Hardware Keyboard" subtitle="Layout, key repeat, modifier keys, shortcuts" chevron testId="ta-hardware"
                      onClick={() => setHardware(true)} />
+                <Row title="Keyboard button" subtitle="With a hardware keyboard, a button that brings up the on-screen keyboard" testId="ta-keyboardbutton-row">
+                    <ToggleButton value={prefs.keyboardButton !== false} label="Keyboard button" testId="ta-keyboardbutton"
+                                  onChange={(v) => void system.setPreferences({ keyboardButton: v })} />
+                </Row>
+                <Note>
+                    Drag the keyboard button to either edge; hold it to hide it.
+                </Note>
             </Group>
         </Page>
     );

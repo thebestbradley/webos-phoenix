@@ -229,6 +229,14 @@ export interface SystemPreferences {
     keyboardStyle?: "auto" | "black" | "touchpad";
     /** Phoenix: the start-up animation: "phoenix" (the bird's story) or "classic" (the logo's glow). */
     startupAnimation?: "phoenix" | "classic";
+    /** Phoenix: with a hardware keyboard, the button that brings up the on-screen keyboard (default on). */
+    keyboardButton?: boolean;
+    /** Phoenix: the edge the keyboard button was dragged to. */
+    keyboardButtonSide?: "left" | "right";
+    /** Phoenix: the keyboard button's height along its edge, 0 (top) to 1 (bottom). */
+    keyboardButtonY?: number;
+    /** Phoenix: the banner saying where to turn the keyboard button back on was shown. */
+    keyboardButtonHintShown?: boolean;
     /** Phoenix: Email's new-mail dashboard cycles through the new emails, with a delete button. */
     emailDashboardCycling?: boolean;
     /** Phoenix: the browser's page views block the content blocker's hosts. */
