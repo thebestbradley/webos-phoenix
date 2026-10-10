@@ -4,7 +4,8 @@
     "trustLevel": "oem",
     "allowedNames": [
         "org.webosphoenix.shellhost",
-        "org.webosphoenix.ongoing"
+        "org.webosphoenix.ongoing",
+        "org.webosphoenix.system"
     ],
     "permissions": [
         {
@@ -13,6 +14,10 @@
         },
         {
             "service": "org.webosphoenix.ongoing",
+            "outbound": []
+        },
+        {
+            "service": "org.webosphoenix.system",
             "outbound": []
         }
     ]

@@ -4,8 +4,9 @@
 // The org.webosphoenix.shellhost Luna service on a device (shellhost.js):
 // the pages' messages for the shell (phoenix-runtime.js installDevice's
 // phoenixHost.postToHost) and the shell's for the pages
-// (LsmWindowSource.qml); and org.webosphoenix.ongoing, the ongoing
-// activities pages and services set (an "ongoing" message for the shell).
+// (LsmWindowSource.qml); org.webosphoenix.ongoing, the ongoing activities
+// pages and services set (an "ongoing" message for the shell); and
+// org.webosphoenix.system's media (what plays, a media key).
 // run-js-service starts it when the shell subscribes at its start, or a
 // caller calls either name; it keeps itself running (webos-service's
 // keep-alive activity: the posts kept for a shell that is not listening
@@ -20,6 +21,7 @@ var sh = require("./shellhost");
 
 var service = new Service(sh.SERVICE);
 var ongoing = new Service(sh.ONGOING);
+var system = new Service(sh.SYSTEM);
 var host = sh.createShellHost({});
 
 // The caller luna-service2 names: a WebAppMgr page's app id, else the
@@ -44,5 +46,6 @@ function bind(svc, methods, names) {
 }
 bind(service, host, sh.METHODS);
 bind(ongoing, host.ongoing, sh.ONGOING_METHODS);
+bind(system, host.system, sh.SYSTEM_METHODS);
 
 service.activityManager.create("keepAlive", function () {});

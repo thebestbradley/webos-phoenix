@@ -874,6 +874,16 @@ static void testPower()
     CHECK(machine.size() == 1 && machine[0] == "off", "power: then it goes off");
     ls2stub::release(off);
     ls2stub::release(shell);
+    // A media key the system presses (the Assistant's "pause"), from the shell.
+    LSMessage *media = ls2stub::call(h.keys, "/media/status", "{\"subscribe\":true}", "com.palm.app.music");
+    LSMessage *mk = ls2stub::call(h.display, "/phoenix/report", "{\"mediaKey\":\"pause\"}", "", SHELL);
+    CHECK(join(replyField(media, "key")) == "pause,pause" && join(replyField(media, "state")) == "down,up",
+          "keys: the shell's media key goes to /media as down, then up");
+    ls2stub::release(mk);
+    mk = ls2stub::call(h.display, "/phoenix/report", "{\"mediaKey\":\"selfdestruct\"}", "", SHELL);
+    CHECK(replyField(media, "key").size() == 2, "keys: not any name");
+    ls2stub::release(mk);
+    ls2stub::release(media);
     LSMessage *t = ls2stub::call(h.power, "/timeout/set", "{\"key\":\"k\"}", "com.palm.app.clock");
     CHECK(!lastReply(t)["returnValue"].boolean(), "power: timeouts point to the activity manager");
     ls2stub::release(t);

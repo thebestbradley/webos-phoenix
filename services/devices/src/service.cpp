@@ -504,6 +504,17 @@ bool DeviceService::onShellReport(LSHandle *sh, LSMessage *msg, void *ctx)
     if (next.state != before.state)
         self->alsFollowDisplay();
         self->accelFollowDisplay();
+    // A media key the system pressed for the user (the Assistant's "pause",
+    // "next song": org.webosphoenix.system/mediaKey through the shell), as
+    // the hardware key's /media events, down then up (the simulator's
+    // DeviceServices.mediaKey).
+    static const char *mediaKeys[] = { "play", "pause", "togglePausePlay", "stop", "next", "prev" };
+    const std::string mediaKey = p["mediaKey"].str();
+    for (const char *k : mediaKeys)
+        if (mediaKey == k) {
+            self->post(KeyStatus, keyJson(mediaKey, "down"), "/media");
+            self->post(KeyStatus, keyJson(mediaKey, "up"), "/media");
+        }
     // The Power key while an app blocks it (DisplayManager :2463-2476).
     if (p["powerKey"].str() == "released") {
         for (auto &s : self->m_subs)

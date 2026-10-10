@@ -7,6 +7,6 @@
 # activity).
 
 [D-BUS Service]
-Name=org.webosphoenix.shellhost;org.webosphoenix.ongoing
+Name=org.webosphoenix.shellhost;org.webosphoenix.ongoing;org.webosphoenix.system
 Exec=/usr/bin/run-js-service -n /usr/palm/services/org.webosphoenix.shellhost
 Type=dynamic

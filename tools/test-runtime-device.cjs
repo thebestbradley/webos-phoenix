@@ -457,6 +457,23 @@ function page(appId, appinfo, launchParams, opts) {
     check(p.callsTo("luna://com.palm.power/com/palm/power/batteryStatusQuery").length === 1, "the rest of com.palm.power is on the bus");
 }
 
+// ---- An app's dictation: the shell's microphone -----------------------------------------
+
+{
+    const p = page("org.webosphoenix.voicedial", { id: "org.webosphoenix.voicedial" });
+    p.run();
+    const b = new p.g.PalmServiceBridge();
+    const got = [];
+    b.onservicecallback = (j) => got.push(JSON.parse(j));
+    b.call("luna://org.webosphoenix.dictation/start", JSON.stringify({ prompt: "Ada Lovelace", subscribe: true }));
+    p.run();
+    check(p.callsTo("luna://org.webosphoenix.dictation/start").length === 0 && p.posts("dictation")[0].payload.op === "start"
+          && p.posts("dictation")[0].payload.prompt === "Ada Lovelace", "dictation: the page asks the shell for its microphone");
+    p.shellEvent("dictationEvent", { state: "listening" });
+    p.shellEvent("dictationEvent", { state: "done", text: " call Ada " });
+    check(got.length === 2 && got[0].state === "listening" && got[1].text === "call Ada", "dictation: the shell's states and text come back");
+}
+
 // ---- Just Type's page (com.palm.launcher) -------------------------------------------------
 
 {

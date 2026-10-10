@@ -45,8 +45,19 @@
 //                               the caller, as the runtime's page service
 //                               posts it in phoenix-sim
 //
+// and org.webosphoenix.system (the runtime's, which the Assistant's service
+// calls on a device: "what's playing", "pause"):
+//
+//   setNowPlaying {title, artist?, album?, playing, appId?}, getNowPlaying
+//                               -> {nowPlaying: {..., appId, time} | null}
+//   mediaKey {key}              a "mediaKey" message for the shell, which
+//                               presses it (com.palm.display/phoenix/report
+//                               {mediaKey}: phoenix-devices' /media events)
+//   restartUi {}                not on a device yet (Luna Restart restarts
+//                               luna-surfacemanager: OPEN-QUESTIONS)
+//
 // createShellHost({isShell(caller), now()}) -> {post, listen, events, send,
-// ongoing: {set, clear}}
+// ongoing: {set, clear}, system: {...}}
 // each (params, caller, respond(reply)) -> cancel() | undefined; the
 // service file binds them to webos-service (service.js).
 // STATUS: written against webos-service's API and shellhost.test.ts; not
@@ -188,13 +199,34 @@ function createShellHost(opts) {
         }
     };
 
-    return { post: post, listen: listen, events: events, send: send, listening: listening, ongoing: ongoing };
+    var nowPlaying = null;
+    var MEDIA_KEYS = ["play", "pause", "togglePausePlay", "stop", "next", "prev"];
+    var system = {
+        setNowPlaying: function (p, caller, respond) {
+            if (typeof p.title !== "string") return respond(fail(-1, "title is required"));
+            nowPlaying = { title: p.title, artist: String(p.artist || ""), album: String(p.album || ""), playing: !!p.playing,
+                           appId: String(p.appId || appIdOf(caller)), time: now() };
+            respond(ok());
+        },
+        getNowPlaying: function (p, caller, respond) { respond(ok({ nowPlaying: nowPlaying })); },
+        mediaKey: function (p, caller, respond) {
+            if (MEDIA_KEYS.indexOf(p.key) < 0) return respond(fail(-1, "key: play, pause, togglePausePlay, stop, next or prev"));
+            post({ type: "mediaKey", payload: { key: p.key } }, caller, function (r) { respond(r.returnValue ? ok() : r); });
+        },
+        restartUi: function (p, caller, respond) {
+            respond(fail(-1, "Restarting the system UI is not available on this device yet"));
+        }
+    };
+
+    return { post: post, listen: listen, events: events, send: send, listening: listening, ongoing: ongoing, system: system };
 }
 
 var METHODS = ["post", "listen", "events", "send"];
 var ONGOING = "org.webosphoenix.ongoing";
 var ONGOING_METHODS = ["set", "clear"];
+var SYSTEM = "org.webosphoenix.system";
+var SYSTEM_METHODS = ["setNowPlaying", "getNowPlaying", "mediaKey", "restartUi"];
 
 module.exports = { createShellHost: createShellHost, appIdOf: appIdOf, METHODS: METHODS, SERVICE: SERVICE,
-                   ONGOING: ONGOING, ONGOING_METHODS: ONGOING_METHODS,
+                   ONGOING: ONGOING, ONGOING_METHODS: ONGOING_METHODS, SYSTEM: SYSTEM, SYSTEM_METHODS: SYSTEM_METHODS,
                    SHELL_NAMES: SHELL_NAMES, KEEP: KEEP, KEEP_MS: KEEP_MS };

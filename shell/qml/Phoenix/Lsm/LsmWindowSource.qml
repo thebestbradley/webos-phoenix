@@ -692,7 +692,10 @@ Item {
         } else if (type === "takeScreenshot") {
             screenshotRequested();
         } else if (type === "mediaKey") {
+            // The Assistant's "pause" (org.webosphoenix.system/mediaKey):
+            // pressed as the hardware key, phoenix-devices' /media events.
             mediaKeyRequested(String(payload.key || ""));
+            lunaCall("luna://com.palm.display/phoenix/report", { mediaKey: String(payload.key || "") }, function() {});
         } else if (type === "progressAnimation") {
             progressAnimationRequested(String(payload.type || ""), String(payload.state || ""));
         } else if (type === "debugOverlay") {

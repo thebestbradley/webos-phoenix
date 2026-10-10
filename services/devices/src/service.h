@@ -25,6 +25,7 @@
 //   report {state, timeout, blockDisplay, active, dockMode, brightness,
 //           maximumBrightness, onWhenConnected}     (any of them)
 //   report {powerKey: "released"}                   Power while an app blocks it
+//   report {mediaKey: "play" | "pause" | ...}        a media key the system presses (the Assistant)
 //   orientation {subscribe} -> {orientation: "up" | "down" | "left" | "right" |
 //               "faceup" | "facedown"}   the accelerometer's, while the display is on
 //   requests -> {holds: {requestBlock, powerKeyBlock, proximity, alsDisabled}}

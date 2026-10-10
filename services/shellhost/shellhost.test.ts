@@ -105,6 +105,21 @@ describe("org.webosphoenix.shellhost", () => {
         expect(replies.pop().returnValue).toBe(false);
     });
 
+    it("serves org.webosphoenix.system: what plays, and a media key for the shell", () => {
+        const w = world();
+        const shell = w.call("listen", { subscribe: true }, "com.webos.surfacemanager");
+        const r: Any[] = [];
+        w.host.system.getNowPlaying({}, "org.webosphoenix.assistant", (x: Any) => r.push(x));
+        expect(r[0]).toEqual({ returnValue: true, nowPlaying: null });
+        w.host.system.setNowPlaying({ title: "Song", artist: "Ada", playing: true }, "org.webosphoenix.music", (x: Any) => r.push(x));
+        w.host.system.getNowPlaying({}, "org.webosphoenix.assistant", (x: Any) => r.push(x));
+        expect(r[2].nowPlaying).toMatchObject({ title: "Song", artist: "Ada", playing: true, appId: "org.webosphoenix.music" });
+        w.host.system.mediaKey({ key: "pause" }, "org.webosphoenix.assistant", (x: Any) => r.push(x));
+        expect(shell.replies[1].message).toMatchObject({ appId: "org.webosphoenix.assistant", type: "mediaKey", payload: { key: "pause" } });
+        w.host.system.mediaKey({ key: "explode" }, "a.b", (x: Any) => r.push(x));
+        expect(r.pop().returnValue).toBe(false);
+    });
+
     it("has luna-service2 files for every method, apps and shell apart", () => {
         const api = JSON.parse(fs.readFileSync(path.join(HERE, "sysbus/org.webosphoenix.shellhost.api.json"), "utf8"));
         const all = [...api["phoenix.shellhost.app"], ...api["phoenix.shellhost.shell"]].map((m: string) => m.split("/")[1]).sort();

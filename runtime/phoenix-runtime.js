@@ -698,7 +698,8 @@
                 if (["selectAll", "cut", "copy", "paste"].indexOf(p.action) >= 0) runtime.edit(p.action);
             },
             openAppMenu: function () { runtime.openAppMenu(); },
-            justType: function (p) { deviceJustType(p, 0); }
+            justType: function (p) { deviceJustType(p, 0); },
+            dictationEvent: function (p) { if (runtime.dictationEvent) runtime.dictationEvent(p); }
         };
         // Just Type's page (com.palm.launcher, luna-applauncher) in the
         // shell's Just Type: the text typed, the stop, Back, as the
@@ -836,7 +837,7 @@
         // ---- The page's own features ------------------------------------------------
         // Each on its own: one that fails on a page leaves the others.
         [legacyAnimationFrames, aliasPreludeFonts, cardActivation, fixLegacyBorderImages, backdropBlur,
-         enyoListSelectorWidth, hidpiArt, installEditing, watchLinks, shareSheet].forEach(function (feature) {
+         enyoListSelectorWidth, hidpiArt, installEditing, watchLinks, shareSheet, dictationServices].forEach(function (feature) {
             try { feature(); }
             catch (e) { console.error("[phoenix-runtime] " + feature.name + " failed on this page", e); }
         });
@@ -11452,11 +11453,15 @@
     // messages ({op: "start" | "stop" | "cancel", prompt, autoStop}) go out,
     // and the states come back through __phoenixRuntime.dictationEvent({state,
     // text?, errorText?}). Anywhere else (a browser) there is no microphone
-    // to lend: start fails with NOT_AVAILABLE.
-    (function dictationServices() {
+    // to lend: start fails with NOT_AVAILABLE. On a device the page serves
+    // it too (installDevice), the shell being luna-surfacemanager's
+    // (org.webosphoenix.shellhost; LsmWindowSource._dictationRequest), which
+    // says itself when it has no microphone.
+    function dictationServices() {
         var E = { BAD_PARAMS: -1, NOT_AVAILABLE: 1, IN_USE: 2, NOTHING_HEARD: 3, FAILED: 4 };
         var hostInfo = null;
         function available() {
+            if (runtime.onDevice) return true;
             if (hostInfo === null) {
                 try { hostInfo = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/host.json") || "{}") || {}; }
                 catch (e) { hostInfo = {}; }
@@ -11511,7 +11516,8 @@
             if (current) { current = null; host.postToHost("dictation", { op: "cancel" }); }
         });
         runtime.dictation = { errors: E };
-    })();
+    }
+    dictationServices();
 
     // ================================================================================
     // The simulator's own (org.webosphoenix.simulator)

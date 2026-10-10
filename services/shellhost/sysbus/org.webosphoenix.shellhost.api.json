@@ -10,5 +10,11 @@
     "phoenix.ongoing": [
         "org.webosphoenix.ongoing/set",
         "org.webosphoenix.ongoing/clear"
+    ],
+    "phoenix.system.media": [
+        "org.webosphoenix.system/setNowPlaying",
+        "org.webosphoenix.system/getNowPlaying",
+        "org.webosphoenix.system/mediaKey",
+        "org.webosphoenix.system/restartUi"
     ]
 }

@@ -289,6 +289,12 @@ Item {
             memos.destroy();
         }
 
+        function test_mediaKeyIsPressedByPhoenixDevices() {
+            FakeBus.clear();
+            post("org.webosphoenix.assistant", "mediaKey", { key: "pause" });
+            compare(FakeBus.last("com.palm.display", "/phoenix/report").params.mediaKey, "pause");
+        }
+
         function test_shutdownFromPowerd() {
             shutdownSpy.clear();
             FakeBus.replyAll("com.palm.display", "/phoenix/requests", { returnValue: true, shutdown: { reason: "power menu" } });
