@@ -7,6 +7,8 @@ and what is missing. Items with nothing to port (dead code, test fixtures) are t
 The pixel and timing details for each feature are in [`legacy-ui-spec.md`](legacy-ui-spec.md), with section numbers in brackets.
 Every animation of the original system UI and the Enyo widgets, against Phoenix's, is in [`ANIMATIONS.md`](ANIMATIONS.md).
 
+**Where it stands (10 October 2026):** ✅ 202 done, ⬜ 9 not done or partly done (each says what is missing). The open ones: status bar icons the device's services report (WAN type, roaming, TTY, HAC), the LED throbber, pinyin and handwriting input, the Pre and Veer keyboard slider, a few `com.palm.systemmanager` methods that answer without acting, Phone on real telephony, SIM Toolkit, Amazon MP3 and Kindle, Quickoffice's editing.
+
 ## 1. Card view / multitasking [spec §1]
 
 - [x] Cards for running apps, with maximized and minimized (card view) states. `Src/lunaui/cards/CardWindowManager.cpp:180-246`
