@@ -1,6 +1,6 @@
 # Synergy accounts, a connector catalog and a developer kit (draft)
 
-*Draft, 10 October 2026. Thoughts and plans only; nothing here is built.*
+*Draft, 10 October 2026. Thoughts and plans only; nothing here is built. The Marketplace view this page calls the Accounts view is named **Connections** (the owner, section 5).*
 
 The owner asked: which accounts fit our Accounts app and fill Synergy with a
 modern twist; a feed for accounts in the catalog with its own Synergy view;
@@ -411,11 +411,14 @@ original apps still work and why old connectors' ideas carry over.
 
 ## 5. Open questions for the owner
 
-1. **Name** of the Marketplace view: "Accounts", "Synergy", "Connections"?
-2. **Third-party connectors before the sandbox:** list them only for
-   Developer Mode users, or wait for the connector tier (4.1)?
-3. **Accounts' "Add an Account" list:** keep the original "Find More..."
-   only, or also show installable rows inline (a change to the original UI)?
+Decided (10 October 2026): the Marketplace view is called
+**Connections**; third-party connectors are installable from the
+Marketplace **for Developer Mode only** until the connector tier (4.1);
+the Accounts app keeps the original **"Find More..." only** (no inline
+rows). The owner wants the plan fleshed out before C0 is built.
+
+Still open:
+
 4. **New capabilities:** agree to define `FEEDS`, `MEDIA`, `PODCASTS`,
    `BOOKMARKS` (and their generic kinds) as Phoenix additions?
 5. **First-party vs community:** which of section 1's P1/P2 rows do we
