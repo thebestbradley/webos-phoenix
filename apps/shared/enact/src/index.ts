@@ -17,7 +17,14 @@
 //     import {PhoenixDecorator, useBack, share} from '@phoenix/enact';
 //     export default PhoenixDecorator(ThemeDecorator(App));
 
-import LS2Request from "@enact/webos/LS2Request";
+// The file itself: this package is an ES module, so webpack (Enact's CLI)
+// resolves its imports fully specified, and @enact/webos/LS2Request is a
+// folder with a package.json of its own.
+import LS2RequestModule from "@enact/webos/LS2Request/LS2Request.js";
+
+// It is CommonJS (exports.default): from an ES module, webpack gives the
+// whole exports object as the default import (Node's rule), Vite the class.
+const LS2Request = ((LS2RequestModule as unknown as { default?: unknown }).default ?? LS2RequestModule) as unknown as new () => Ls2RequestLike;
 import { createElement, useEffect, type ComponentType, type ReactNode } from "react";
 import { applyTheme, noTransport, setTransport, tokens, type LunaReply, type Transport } from "@phoenix/sdk";
 
@@ -72,9 +79,22 @@ export function installEnactTransport(): void {
  */
 export const phoenixAgate = { skin: "carbon", accent: tokens.color.accent, highlight: "#2d6c94" } as const;
 
-/** The CSS custom properties Limestone and Agate read for their fonts, set to Phoenix's (Prelude, then Open Sans). */
+/** The theme's text in Phoenix's fonts (Prelude, then Open Sans), over the theme's own, while the root has `phx-enact`. */
 export function enactFontCss(): string {
-    return `.phx-enact, .phx-enact * { font-family: var(--phx-font-family) !important; }`;
+    // Not the icons: Enact draws them with an icon font (classes Icon_icon__...).
+    return `.phx-enact, .phx-enact *:not([class*="icon" i]) { font-family: var(--phx-font-family) !important; }`;
+}
+
+/** Phoenix's fonts on (or off) for the whole page (PhoenixDecorator turns them on unless told not to). */
+export function setPhoenixFonts(on: boolean): void {
+    if (typeof document === "undefined") return;
+    if (on && !document.getElementById("phoenix-enact-fonts")) {
+        const style = document.createElement("style");
+        style.id = "phoenix-enact-fonts";
+        style.textContent = enactFontCss();
+        document.head.appendChild(style);
+    }
+    document.documentElement.classList.toggle("phx-enact", on);
 }
 
 /**
@@ -82,23 +102,15 @@ export function enactFontCss(): string {
  * LS2Request under the SDK, the tokens (--phx-*) and the classic fonts.
  * Wrap the app (usually outside Enact's ThemeDecorator).
  *
- * `fonts: false` keeps the theme's own fonts (Limestone's Museo Sans).
+ * `fonts: false` keeps the theme's own fonts (Limestone's Museo Sans);
+ * setPhoenixFonts() switches them later (a skin the user picks).
  */
 export function PhoenixDecorator<P extends object>(Wrapped: ComponentType<P>, options: { fonts?: boolean } = {}): ComponentType<P> {
     installEnactTransport();
     function Phoenix(props: P) {
         useEffect(() => {
             applyTheme({ body: false });
-            if (options.fonts !== false && typeof document !== "undefined") {
-                let style = document.getElementById("phoenix-enact-fonts");
-                if (!style) {
-                    style = document.createElement("style");
-                    style.id = "phoenix-enact-fonts";
-                    style.textContent = enactFontCss();
-                    document.head.appendChild(style);
-                }
-                document.documentElement.classList.add("phx-enact");
-            }
+            if (options.fonts !== false) setPhoenixFonts(true);
         }, []);
         return createElement(Wrapped, props);
     }

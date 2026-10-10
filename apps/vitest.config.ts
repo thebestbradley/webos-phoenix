@@ -24,7 +24,7 @@ export default defineConfig({
             { find: /^@phoenix\/react$/, replacement: here("./shared/react/src/index.ts") },
             { find: /^@phoenix\/capacitor$/, replacement: here("./shared/capacitor/src/index.ts") },
             { find: /^@phoenix\/enact$/, replacement: here("./shared/enact/src/index.ts") },
-            { find: /^@enact\/webos\/LS2Request$/, replacement: here("./shared/enact/src/test/LS2Request.ts") },
+            { find: /^@enact\/webos\/LS2Request\/LS2Request\.js$/, replacement: here("./shared/enact/src/test/LS2Request.ts") },
         ],
     },
     test: {

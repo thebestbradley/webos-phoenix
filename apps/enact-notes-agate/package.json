@@ -14,13 +14,16 @@
     "theme": "agate"
   },
   "dependencies": {
+    "@enact/agate": "^3.3.0",
     "@enact/core": "^5.6.0",
     "@enact/i18n": "^5.6.0",
-    "@enact/agate": "^3.3.0",
     "@enact/spotlight": "^5.6.0",
     "@enact/ui": "^5.6.0",
     "@enact/webos": "^5.6.0",
+    "@phoenix/enact": "file:../shared/enact",
     "@phoenix/notes-core": "file:../shared/notes-core",
+    "@phoenix/react": "file:../shared/react",
+    "@phoenix/sdk": "file:../shared/sdk",
     "ilib": "^14.22.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

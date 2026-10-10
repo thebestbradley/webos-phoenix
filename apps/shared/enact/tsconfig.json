@@ -9,7 +9,7 @@
       "@phoenix/sdk": ["../sdk/src/index.ts"],
       "@phoenix/sdk/testing": ["../sdk/src/testing.ts"],
       "@phoenix/react": ["../react/src/index.ts"],
-      "@enact/webos/LS2Request": ["./src/test/LS2Request.ts"]
+      "@enact/webos/LS2Request/LS2Request.js": ["./src/test/LS2Request.ts"]
     }
   },
   "include": ["src"]

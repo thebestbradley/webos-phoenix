@@ -217,6 +217,24 @@ async function main() {
             await page.close();
         }
 
+        // ---- The Phoenix service plugin (@phoenix/enact) ---------------------
+        for (const [id, name] of [[AGATE, "Agate"], [LIMESTONE, "Limestone"]]) {
+            const page = await open(id);
+            await page.evaluate(() => __phoenixRuntime.openAppMenu());
+            await pause(page, 400);
+            const labels = await page.locator(".phx-appmenu-item").allTextContents();
+            check(JSON.stringify(labels) === JSON.stringify(["Edit", "Share", "New Note", "Settings"]),
+                  `${name}: the app menu has Edit, Share, New Note and Settings (${labels.join(", ")})`);
+            await page.screenshot({ path: path.join(outDir, `${name.toLowerCase()}-appmenu.png`) });
+            await page.evaluate(() => __phoenixRuntime.back());
+            await pause(page, 300);
+            await page.evaluate((n) => __phoenixRuntime.relaunch({ share: { title: `Shared to ${n}`, text: "From the share sheet" } }), name);
+            await pause(page, 1500);
+            check(await page.locator("textarea").inputValue().catch(() => "") === `# Shared to ${name}\n\nFrom the share sheet`,
+                  `${name}: a share received becomes a new note`);
+            await page.close();
+        }
+
         check(errors.length === 0, "no page errors" + (errors.length ? ":\n    " + errors.slice(0, 5).join("\n    ") : ""));
         await browser.close();
     } finally {

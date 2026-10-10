@@ -11,7 +11,7 @@
     "paths": {
       "@phoenix/sdk": ["../sdk/dist/types/sdk/src/index.d.ts"],
       "@phoenix/react": ["../react/dist/index.d.ts"],
-      "@enact/webos/LS2Request": ["./src/test/LS2Request.ts"]
+      "@enact/webos/LS2Request/LS2Request.js": ["./src/test/LS2Request.ts"]
     }
   },
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
