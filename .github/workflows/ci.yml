@@ -108,6 +108,14 @@ jobs:
           channel: stable
           cache: true
 
+      # The Phoenix service plugin for Dart, which the Flutter demo uses.
+      - name: Dart package phoenix_services - analyze, unit tests
+        working-directory: apps/shared/phoenix_services
+        run: |
+          dart pub get
+          dart analyze --fatal-infos
+          dart test
+
       - name: Flutter demo app - analyze, unit tests, build
         working-directory: apps/flutter-notes
         run: |
@@ -324,6 +332,7 @@ jobs:
           t node tools/test-enact-notes.cjs --out app-tests/enact-notes
           t node tools/test-ionic-notes.cjs --out app-tests/ionic-notes
           t node tools/test-flutter-notes.cjs --out app-tests/flutter-notes
+          t node tools/test-app-sdk.cjs --out app-tests/app-sdk
 
       # The menus over the screen, with the keyboard focus on the screen.
       - name: The simulator's menu bar

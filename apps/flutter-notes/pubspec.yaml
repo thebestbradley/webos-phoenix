@@ -12,6 +12,9 @@ dependencies:
   flutter_markdown_plus: ^1.0.12
   intl: ^0.20.3
   markdown: ^7.3.1
+  # The Phoenix service plugin for Dart (apps/shared/phoenix_services).
+  phoenix_services:
+    path: ../shared/phoenix_services
   web: ^1.1.1
 
 dev_dependencies:

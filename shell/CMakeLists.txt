@@ -167,9 +167,10 @@ if(PHOENIX_BUILD_APPS)
 
         # The Enact demos are npm projects of their own (Enact's CLI needs
         # the app's packages in its own node_modules; apps/enact-notes-*/
-        # README.md). They take @phoenix/notes-core as built by phoenix-apps
-        # (shared/notes-core/lib), copied in by their `npm ci`, which runs
-        # again when the lock or notes-core's sources change.
+        # README.md). They take @phoenix/notes-core and the Phoenix service
+        # plugin (@phoenix/sdk, react, enact) as built by phoenix-apps
+        # (shared/notes-core/lib, shared/*/dist), copied in by their `npm ci`,
+        # which runs again when the lock or those packages' sources change.
         #
         # Enact's CLI only runs on Node's supported lines (20.12+, 22, 24+),
         # not on odd-numbered releases such as 23. With another Node the
@@ -195,7 +196,9 @@ if(PHOENIX_BUILD_APPS)
                             "(20.12+, 22 or 24+), so the Enact demos (apps/enact-notes-*) are not built. "
                             "Install Node.js 22 or 24 LTS (macOS: `brew install node@22`), then run cmake again.")
         endif()
-        file(GLOB _notes_core_src CONFIGURE_DEPENDS "${PHOENIX_APPS_DIR}/shared/notes-core/src/*.ts")
+        file(GLOB _notes_core_src CONFIGURE_DEPENDS "${PHOENIX_APPS_DIR}/shared/notes-core/src/*.ts"
+             "${PHOENIX_APPS_DIR}/shared/sdk/src/*.ts" "${PHOENIX_APPS_DIR}/shared/react/src/*.ts"
+             "${PHOENIX_APPS_DIR}/shared/enact/src/*.ts")
         foreach(_enact_app IN LISTS _enact_apps)
             set(_dir "${PHOENIX_APPS_DIR}/${_enact_app}")
             set(_stamp "${_dir}/node_modules/.package-lock.json")
@@ -214,7 +217,7 @@ if(PHOENIX_BUILD_APPS)
                 WORKING_DIRECTORY "${_dir}"
                 COMMENT "Building ${_enact_app} (enact pack)"
                 USES_TERMINAL VERBATIM)
-            # notes-core's lib/ must be built before `npm ci` copies it in.
+            # notes-core's lib/ and the plugin's dist/ must be built before `npm ci` copies them in.
             add_dependencies(phoenix-${_enact_app} phoenix-apps)
         endforeach()
     else()
@@ -234,7 +237,8 @@ if(PHOENIX_BUILD_APPS)
     if(PHOENIX_FLUTTER)
         set(_flutter_dir "${PHOENIX_APPS_DIR}/flutter-notes")
         file(GLOB_RECURSE _flutter_src CONFIGURE_DEPENDS
-             "${_flutter_dir}/lib/*.dart" "${_flutter_dir}/web/*" "${_flutter_dir}/fonts/*.ttf")
+             "${_flutter_dir}/lib/*.dart" "${_flutter_dir}/web/*" "${_flutter_dir}/fonts/*.ttf"
+             "${PHOENIX_APPS_DIR}/shared/phoenix_services/lib/*.dart")
         add_custom_command(
             OUTPUT "${_flutter_dir}/dist/main.dart.js"
             COMMAND "${CMAKE_COMMAND}" -E env "FLUTTER=${PHOENIX_FLUTTER}" sh tool/build.sh

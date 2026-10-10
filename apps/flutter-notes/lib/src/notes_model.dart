@@ -197,15 +197,18 @@ class NotesModel extends ChangeNotifier {
 
   int get now => _now();
 
-  Future<void> newNote() async {
+  /// A new note in the open folder: empty (the style's heading), or with
+  /// [body] (a share, Just Type), as notes-core's newNote(body).
+  Future<void> newNote([String? body]) async {
     flush();
     final target = folderId == allNotes || folderId == recentlyDeleted ? defaultFolder : folderId;
     if (folderId == recentlyDeleted) folderId = defaultFolder;
-    final start = switch (settings.newNoteStyle) {
-      NewNoteStyle.title => '# ',
-      NewNoteStyle.heading => '## ',
-      NewNoteStyle.body => '',
-    };
+    final start = body ??
+        switch (settings.newNoteStyle) {
+          NewNoteStyle.title => '# ',
+          NewNoteStyle.heading => '## ',
+          NewNoteStyle.body => '',
+        };
     try {
       final n = await _db.createNote(target, start);
       query = '';
