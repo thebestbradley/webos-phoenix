@@ -120,7 +120,7 @@ def shell_installs(root):
 
     def cm_expand(s):
         return re.sub(r"\$\{([A-Za-z0-9_]+)\}", lambda m: vars_.get(m.group(1), m.group(0)), s)
-    for m in re.finditer(r"install\(\s*DIRECTORY\s+(\S+)\s+DESTINATION\s+(\S+)", text):
+    for m in re.finditer(r"install\(\s*DIRECTORY\s+(\S+)\s+DESTINATION\s+([^\s)]+)", text):
         src, dst = m.group(1), cm_expand(m.group(2))
         src_dir = os.path.join(root, "shell", src.rstrip("/"))
         if src.endswith("/"):
@@ -232,8 +232,11 @@ def check(root):
             path = m.group(1).rstrip("/")
             if "..." in path or path.count("/") < 3:
                 continue
+            # A folder something is installed into exists too (`qml/` installs
+            # qml's children, so /usr/share/phoenix/qml is there).
             if path in shipped or path in shipped_dirs or path in shell_files \
-                    or any(path == d or path.startswith(d + "/") for d in shell_dirs):
+                    or any(path == d or path.startswith(d + "/") or d.startswith(path + "/")
+                           for d in list(shell_dirs) + list(shell_files)):
                 continue
             am = re.match(r"^/usr/palm/applications/([^/]+)(/.*)?$", path)
             if am and am.group(1) in public and os.path.exists(public[am.group(1)] + (am.group(2) or "")):

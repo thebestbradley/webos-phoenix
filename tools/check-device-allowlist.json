@@ -698,6 +698,10 @@
   "owner": "platform (release process)",
   "row": "B6"
  },
+ "recipes:unpinned:phoenix-keyboard_git.bb": {
+  "owner": "platform (release process)",
+  "row": "B6"
+ },
  "recipes:unpinned:phoenix-devices_git.bb": {
   "owner": "platform (release process)",
   "row": "B6"
