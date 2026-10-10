@@ -1,0 +1,158 @@
+#!/bin/sh
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# phoenix-diag: everything needed to understand a problem on a Phoenix
+# device, in one archive (docs/PRE-IMAGE-CHECKLIST.md G2).
+#
+#   phoenix-diag [-o DIR] [--boots N] [--no-journal]
+#
+# Writes DIR/phoenix-diag-<hostname>-<time>.tar.gz (DIR defaults to
+# /media/internal/phoenix-diag, which the Files app and USB mass storage
+# show; /tmp when that is not writable) and prints its path. Run as root
+# (ssh in Developer Mode, or the Terminal with sudo) for the system's
+# journal; as the device user it collects what that user may read.
+#
+# What it collects: the journal of the last boots (luna-hub, the shell's
+# QML console in luna-surfacemanager, WebAppMgr and each app's console,
+# SAM, bootd, Phoenix's services), the kernel log, failed and running
+# units, the boot's timing, coredumps' list, memory, storage, processes,
+# the OS and Phoenix versions, installed packages, the Luna bus's
+# configuration (which roles and permissions are installed, not their
+# contents' secrets), the display and input devices the kernel sees, the
+# network's state (no Wi-Fi passwords: connman's settings are left out),
+# RAUC's slots, and answers from a few Luna services (OS info, boot status,
+# network status). User data (db8, /media/internal, /home) is not read.
+
+set -u
+OUT=/media/internal/phoenix-diag
+BOOTS=2
+JOURNAL=1
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -o) OUT=$2; shift ;;
+        --boots) BOOTS=$2; shift ;;
+        --no-journal) JOURNAL=0 ;;
+        -h|--help) sed -n '5,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "phoenix-diag: unknown option $1" >&2; exit 2 ;;
+    esac
+    shift
+done
+
+mkdir -p "$OUT" 2>/dev/null && [ -w "$OUT" ] || OUT=${TMPDIR:-/tmp}
+STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+NAME=phoenix-diag-$(hostname 2>/dev/null || echo device)-$STAMP
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/phoenix-diag.XXXXXX") || exit 1
+D=$WORK/$NAME
+mkdir -p "$D"
+trap 'rm -rf "$WORK"' EXIT
+
+# run FILE CMD...: the command's output (and how it ended) into FILE.
+run() {
+    f=$D/$1; shift
+    mkdir -p "$(dirname "$f")"
+    { echo "\$ $*"; "$@" 2>&1; echo "[exit $?]"; } > "$f" 2>&1
+}
+have() { command -v "$1" >/dev/null 2>&1; }
+copy() {  # copy FILE...: into the archive at its own path, when readable
+    for p in "$@"; do
+        [ -r "$p" ] || continue
+        mkdir -p "$D/files$(dirname "$p")"
+        cp -L "$p" "$D/files$p" 2>/dev/null
+    done
+}
+luna() {  # luna FILE URI JSON: a Luna call's answer (luna-send, 5 s)
+    have luna-send || return 0
+    run "luna/$1" timeout 5 luna-send -n 1 -f "$2" "$3"
+}
+
+echo "phoenix-diag $STAMP" > "$D/README.txt"
+cat >> "$D/README.txt" <<'EOF'
+journal/       the journal per boot and per unit (luna-hub, the shell, WebAppMgr, SAM, ...)
+system/        kernel log, units, boot timing, memory, storage, processes, packages, devices
+luna/          answers from Luna services; the bus's installed roles and permissions (names only)
+files/         configuration files, at their device paths
+EOF
+
+# The OS and Phoenix.
+copy /etc/os-release /etc/webos-release /etc/build-info /etc/phoenix/device.json \
+     /etc/surface-manager.d/product.env /etc/palm/updates.json /etc/palm/marketplace/sources.json \
+     /etc/palm/hardware/catalog.json /proc/cmdline /proc/version /proc/cpuinfo /proc/meminfo \
+     /var/lib/phoenix/systemmanager/startup.json /etc/rauc/system.conf
+run system/uname.txt uname -a
+run system/uptime.txt uptime
+have opkg && run system/packages.txt opkg list-installed
+
+# The journal: the last boots whole, and the units that matter on their own.
+if [ $JOURNAL = 1 ] && have journalctl; then
+    run journal/boots.txt journalctl --list-boots --no-pager
+    i=0
+    while [ $i -lt "$BOOTS" ]; do
+        run "journal/boot-$i.txt" journalctl -b "-$i" --no-pager -o short-monotonic
+        i=$((i + 1))
+    done
+    for u in ls-hubd surface-manager-daemon webapp-mgr sam bootd configd activitymanager \
+             db8 audiod settings-service phoenix-devices phoenix-pty connman; do
+        run "journal/unit-$u.txt" journalctl -b -u "$u" --no-pager -o short-monotonic
+    done
+    # Node services the hub starts (run-js-service) log under their own names.
+    run journal/js-services.txt journalctl -b --no-pager -o short-monotonic -t run-js-service
+fi
+copy /var/log/messages /var/log/legacy-log /var/log/syslog
+have dmesg && run system/dmesg.txt dmesg
+
+# systemd: what failed, what runs, how long the boot took.
+if have systemctl; then
+    run system/units-failed.txt systemctl --failed --no-pager
+    run system/units.txt systemctl list-units --no-pager --all
+fi
+if have systemd-analyze; then
+    run system/boot-time.txt systemd-analyze
+    run system/boot-blame.txt systemd-analyze blame --no-pager
+    run system/boot-chain.txt systemd-analyze critical-chain --no-pager
+fi
+have coredumpctl && run system/coredumps.txt coredumpctl list --no-pager
+
+# Memory, storage, processes (the web runtime's count and size).
+run system/free.txt free -m
+run system/df.txt df -h
+run system/mounts.txt cat /proc/mounts
+run system/ps.txt ps -eo pid,ppid,user,rss,vsz,pcpu,etime,args
+have lsblk && run system/lsblk.txt lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT,LABEL
+[ -r /proc/pressure/memory ] && run system/pressure.txt cat /proc/pressure/memory /proc/pressure/cpu /proc/pressure/io
+have zramctl && run system/zram.txt zramctl
+
+# Display, input, sound and the hardware the kernel found.
+run system/drm.txt sh -c 'for c in /sys/class/drm/*/status; do echo "$c: $(cat "$c")"; done; for m in /sys/class/drm/*/modes; do echo "$m:"; cat "$m"; done'
+run system/input.txt cat /proc/bus/input/devices
+run system/backlight.txt sh -c 'for b in /sys/class/backlight/*; do echo "$b $(cat "$b/brightness")/$(cat "$b/max_brightness")"; done'
+run system/sound.txt cat /proc/asound/cards
+have aplay && run system/aplay.txt aplay -l
+have lsusb && run system/lsusb.txt lsusb
+have lspci && run system/lspci.txt lspci -nnk
+have lsmod && run system/lsmod.txt lsmod
+have phoenix-devices && run system/phoenix-devices-probe.txt phoenix-devices --probe
+have vcgencmd && run system/rpi.txt sh -c 'vcgencmd measure_temp; vcgencmd get_throttled; vcgencmd get_mem gpu'
+
+# Network (state only; connman's saved networks and their keys are not read).
+have ip && run system/ip.txt sh -c 'ip addr; ip route'
+have connmanctl && run system/connman.txt sh -c 'connmanctl state; connmanctl technologies; connmanctl services'
+copy /etc/resolv.conf
+
+# Updates.
+have rauc && run system/rauc.txt rauc status --detailed
+
+# The Luna bus: which roles and permissions are installed (names), and a few answers.
+run luna/installed.txt sh -c 'for d in roles.d client-permissions.d api-permissions.d services.d manifests.d groups.d; do echo "== /usr/share/luna-service2/$d"; ls /usr/share/luna-service2/$d 2>/dev/null; done'
+luna os-info.json luna://com.webos.service.systemservice/osInfo/query '{}'
+luna device-info.json luna://com.webos.service.systemservice/deviceInfo/query '{}'
+luna boot-status.json luna://com.webos.bootManager/getBootStatus '{}'
+luna connection.json luna://com.webos.service.connectionmanager/getStatus '{}'
+luna running-apps.json luna://com.webos.applicationManager/running '{}'
+luna lock-status.json luna://com.palm.systemmanager/getLockStatus '{}'
+luna updates.json luna://com.palm.update/getStatus '{}'
+
+ARCHIVE=$OUT/$NAME.tar.gz
+tar -czf "$ARCHIVE" -C "$WORK" "$NAME" || exit 1
+chmod 0644 "$ARCHIVE"
+echo "$ARCHIVE"

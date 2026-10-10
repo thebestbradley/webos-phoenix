@@ -1,0 +1,11 @@
+{
+    "//": [
+        "What tools/devicecheck/luna.py knows beyond ose-services.json (generated from OSE's sysbus files).",
+        "services: providers the generated list lacks, {name: {source, methods?}}.",
+        "pageServices: services phoenix-runtime.js answers inside the page on a device too (no bus provider needed); docs/DEVICE-AUDIT.md section 2 says which. Each with why.",
+        "notInImage: OSE services that exist as recipes but that webos-image does not install (calls to them fail as unknown)."
+    ],
+    "services": {},
+    "pageServices": {},
+    "notInImage": []
+}

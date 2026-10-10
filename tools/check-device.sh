@@ -62,6 +62,6 @@ echo
 echo "Device readiness (docs/PRE-IMAGE-CHECKLIST.md):"
 printf '%s' "$summary"
 if [ -n "$failed" ]; then
-    echo "New findings in:$failed. Fix them, or add each to tools/check-device-allowlist.json with its owner and checklist row."
+    echo "Failed:$failed. Fix each new finding, or add it to tools/check-device-allowlist.json with its owner and checklist row; remove stale entries."
     exit 1
 fi

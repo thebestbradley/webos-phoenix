@@ -1,0 +1,6 @@
+{
+    "id": "org.example.nogroups",
+    "type": "web",
+    "main": "index.html",
+    "title": "No groups"
+}

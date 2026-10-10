@@ -13,6 +13,7 @@
   sim-property   one of phoenix-sim's QML context properties (simSettings,
                  simRootfs, ... read from shell/sim/main.cpp) used by the
                  device shell's QML (Phoenix/Shell, Phoenix/Lsm)
+  insecure-url   a plain http:// server on the internet in that configuration
   host           a hard-coded server in the device's update, catalog, driver
                  and feed configuration and services: the platform's hosts
                  must be configuration (/etc/palm/*.json), not code, and
@@ -47,6 +48,10 @@ def device_files(root):
             os.path.join("compat", "rootfs")]
     apps = os.path.join(root, "apps")
     for n in sorted(os.listdir(apps)) if os.path.isdir(apps) else []:
+        # An app whose folder is the app (Enyo and Mojo apps, appinfo.json at the top).
+        if os.path.isfile(os.path.join(apps, n, "appinfo.json")):
+            rels.append(os.path.join("apps", n))
+            continue
         for sub in ("service", "src", "public"):
             if os.path.isdir(os.path.join(apps, n, sub)):
                 rels.append(os.path.join("apps", n, sub))
@@ -87,7 +92,8 @@ def check(root):
             # A line that only compares against loopback (a guard) is fine.
             line = clean[clean.rfind("\n", 0, m.start()) + 1:clean.find("\n", m.end())]
             if re.search(r"(===?|!==?|startsWith|includes|indexOf|test\()\s*\(?\s*['\"]" + re.escape(m.group(1)), line) \
-                    or re.search(re.escape(m.group(1)) + r"['\"]\s*\)?\s*(===?|!==?)", line):
+                    or re.search(re.escape(m.group(1)) + r"['\"]\s*\)?\s*(===?|!==?)", line) \
+                    or re.search(r"/\^?\(?[^/]*" + re.escape(m.group(1)) + r"[^/]*/\.test\(", line):
                 continue
             f.add("loopback", "%s:%s" % (where_file.split(os.sep)[0] + "/" + where_file.split(os.sep)[1]
                                          if os.sep in where_file else where_file, m.group(1)),
@@ -107,6 +113,10 @@ def check(root):
         if any(where_file.startswith(h) for h in HOST_PLACES):
             for m in URL.finditer(clean):
                 host = m.group(1).lower()
+                if m.group(0).startswith("http://") and not PLACEHOLDER.search(host):
+                    f.add("insecure-url", host, "%s fetches from http://%s: plain HTTP to a server on the "
+                          "internet (anyone on the path can change what the device gets)" % (where_file, host),
+                          "%s:%d" % (where_file, line_of(clean, m.start())))
                 if PLACEHOLDER.search(host):
                     f.add("host", host, "%s names the placeholder host %s where the platform's server belongs"
                           % (where_file, host), "%s:%d" % (where_file, line_of(clean, m.start())))

@@ -108,6 +108,31 @@ def hidpi_listed(root):
     return pats
 
 
+HASHED = re.compile(r"^(.+?)[-.][A-Za-z0-9_-]{8}(\.\w+)$")
+
+
+def built_source(root, src):
+    """A built app's file (apps/<app>/dist/...) back to its source: public/
+    as it is, or an asset Vite renamed (name-HASH.ext) from the app's or a
+    shared package's sources. None: bundled from an npm package (whose
+    licence the app's notices carry), or not found."""
+    m = re.match(r"^(apps/[^/]+)/dist/(.+)$", rel(root, src).replace(os.sep, "/"))
+    if not m:
+        return src
+    app, inner = m.group(1), m.group(2)
+    pub = os.path.join(root, app, "public", inner)
+    if os.path.isfile(pub):
+        return pub
+    hm = HASHED.match(os.path.basename(inner))
+    name = hm.group(1) + hm.group(2) if hm else os.path.basename(inner)
+    for base in (os.path.join(root, app), os.path.join(root, "apps", "shared")):
+        for d, dirs, files in os.walk(base):
+            dirs[:] = [x for x in dirs if x not in ("node_modules", "dist", ".git")]
+            if name in files:
+                return os.path.join(d, name)
+    return None
+
+
 def traced(root, src, prov_dirs, hidpi):
     r = rel(root, src)
     if r.startswith("third_party" + os.sep):
@@ -141,12 +166,18 @@ def check(root):
     for d, dirs, files in os.walk(assets):
         sources += [os.path.join(d, fn) for fn in files]
     seen = set()
+    bundled = []   # built assets from npm packages: the apps' licence notices cover them
     for src in sorted(set(sources)):
         if not src.lower().endswith(MEDIA) or src in seen:
             continue
         seen.add(src)
-        if traced(root, src, prov, hidpi):
+        orig = built_source(root, src)
+        if orig is None:
+            bundled.append(rel(root, src))
             continue
+        if traced(root, orig, prov, hidpi):
+            continue
+        src = orig
         key = rel(root, os.path.dirname(src))
         f.add("no-provenance", key, "%s ships pictures, sounds or fonts with no recorded origin (add a "
               "PROVENANCE.md, or list them in tools/hidpi-art.json)" % key, rel(root, src))
@@ -185,6 +216,9 @@ def check(root):
                 f.add("recipe-licence", "%s:%s" % (os.path.basename(path), part),
                       "%s is %s, which docs/LEGAL.md does not allow for Phoenix's own recipes"
                       % (os.path.basename(path), lic), rel(root, path))
+    if bundled:
+        notes.append("%d built assets come from npm packages (the apps' licence notices cover them), e.g. %s"
+                     % (len(bundled), bundled[0]))
     # GPL/LGPL source offer.
     text = legal_text
     m = re.search(r"^## Source offer\s*$(.*?)(?=^## |\Z)", text, re.M | re.S)
@@ -200,4 +234,4 @@ def main(argv=None):
     ap = parser(__doc__.splitlines()[0])
     args = ap.parse_args(argv)
     findings, notes = check(os.path.abspath(args.root))
-    return finish(CHECKER, findings, args, notes=[n for n in notes if "submodule" in n])
+    return finish(CHECKER, findings, args, notes=[n for n in notes if "submodule" in n or "npm" in n])

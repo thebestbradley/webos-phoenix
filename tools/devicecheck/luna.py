@@ -103,6 +103,8 @@ def load_ose():
             ose["services"].setdefault(name, {}).update(entry)
         for name in extra.get("notInImage", []):
             ose["services"].pop(name, None)
+        for name, why in extra.get("pageServices", {}).items():
+            ose["services"].setdefault(name, {"source": "in the page (phoenix-runtime.js): %s" % why})
     return ose
 
 
@@ -262,6 +264,7 @@ def app_info(d):
 
 def clients(root, phoenix_perms):
     out = []
+    compat_perms = compat_permissions(root)
     shared_calls = shared_luna_calls(root)
     overlay_apps = os.path.join(root, "compat", "rootfs", "usr", "palm", "applications")
     for d in app_dirs(root):
@@ -283,6 +286,8 @@ def clients(root, phoenix_perms):
                 pass
         c = Client(app_id, "app", files, alias=True)
         req = info.get("requiredPermissions")
+        if req is None and app_id in compat_perms:
+            req = compat_perms[app_id]
         c.declared = isinstance(req, list)
         c.groups = set(req or [])
         c.info_path = rel(root, info_path)
@@ -354,7 +359,21 @@ def method_groups(methods, method):
     return found
 
 
+SUGGEST = {}   # app id -> the groups its calls need (--suggest)
+
+
+def compat_permissions(root):
+    """compat/app-permissions.json: the ACG groups the original apps (which
+    predate ACG and declare none) get on the image, {app id: [groups]}."""
+    path = os.path.join(root, "compat", "app-permissions.json")
+    if not os.path.isfile(path):
+        return {}
+    data = read_json(path)
+    return {k: v for k, v in data.items() if not k.startswith("//") and isinstance(v, list)}
+
+
 def check(root):
+    SUGGEST.clear()
     f = Findings(CHECKER)
     ose = load_ose()
     ose_services = ose["services"]
@@ -432,6 +451,9 @@ def check(root):
                     continue
                 if c.groups is None:
                     continue
+                if c.kind == "app":
+                    held = [g for g in groups if g in c.groups]
+                    SUGGEST.setdefault(c.name, set()).add(held[0] if held else sorted(groups)[0])
                 if c.kind == "app" and not c.declared:
                     needs.setdefault(tuple(sorted(groups)), []).append((name, method, where))
                     continue
@@ -463,5 +485,11 @@ def check(root):
 
 def main(argv=None):
     ap = parser(__doc__.splitlines()[0])
+    ap.add_argument("--suggest", action="store_true",
+                    help="print, for each app, the ACG groups its calls need (for requiredPermissions)")
     args = ap.parse_args(argv)
-    return finish(CHECKER, check(os.path.abspath(args.root)), args)
+    findings = check(os.path.abspath(args.root))
+    if args.suggest:
+        print(json.dumps({k: sorted(v) for k, v in sorted(SUGGEST.items())}, indent=1))
+        return 0
+    return finish(CHECKER, findings, args)

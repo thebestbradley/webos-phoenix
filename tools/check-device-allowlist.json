@@ -1,0 +1,781 @@
+{
+ "//": [
+  "Known findings of the device-readiness checkers (tools/check-device.sh), each with the owner who will",
+  "fix it and its row in docs/PRE-IMAGE-CHECKLIST.md. A finding not listed here fails CI; an entry nothing",
+  "matches any more is reported as stale: remove it when its gap is closed. Keys are finding ids",
+  "(<checker>:<kind>:<key>, as the checkers print them); fnmatch wildcards are allowed but name each gap",
+  "where you can, so a new one still fails."
+ ],
+ "luna:missing-permission:org.webosphoenix.agenda->com.webos.applicationManager/getAppInfo": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.agenda->com.webos.applicationManager/listApps": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.agenda->com.webos.service.systemservice/deviceInfo/query": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.agenda->com.webos.service.systemservice/getPreferenceValues": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.agenda->com.webos.service.systemservice/getPreferences": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.agenda->com.webos.service.systemservice/osInfo/query": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.agenda->com.webos.service.systemservice/setPreferences": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.agenda->com.webos.service.systemservice/time/getSystemTime": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.agenda->com.webos.service.systemservice/time/setSystemTime": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.authenticator->com.palm.systemmanager/getDeviceLockMode": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.authenticator->com.palm.systemmanager/getLockStatus": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.authenticator->com.palm.systemmanager/matchDevicePasscode": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.authenticator->com.palm.systemmanager/setDevicePasscode": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.fediverse->com.webos.applicationManager/launch": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.maps->com.webos.settingsservice/getSystemSettings": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.maps->com.webos.settingsservice/setSystemSettings": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.music->com.webos.service.audio/controlPlayback": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.music->com.webos.service.audio/getInputVolume": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.music->com.webos.service.audio/master/getVolume": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.music->com.webos.service.audio/playSound": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.music->com.webos.service.audiofocusmanager/releaseFocus": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.music->com.webos.service.audiofocusmanager/requestFocus": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.photos->com.webos.service.camera2/getCameraList": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.photos->com.webos.service.camera2/getInfo": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.photos->com.webos.service.systemservice/deviceInfo/query": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.photos->com.webos.service.systemservice/getPreferenceValues": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.photos->com.webos.service.systemservice/getPreferences": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.photos->com.webos.service.systemservice/osInfo/query": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.photos->com.webos.service.systemservice/time/getSystemTime": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.photos->com.webos.service.systemservice/time/setSystemTime": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.podcasts->com.webos.service.audiofocusmanager/releaseFocus": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.podcasts->com.webos.service.audiofocusmanager/requestFocus": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.podcasts->com.webos.service.downloadmanager/cancelDownload": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.podcasts->com.webos.service.downloadmanager/download": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.videos->com.webos.service.systemservice/setPreferences": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.weather->com.webos.service.location/setState": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.weather->com.webos.service.systemservice/deviceInfo/query": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.weather->com.webos.service.systemservice/getPreferenceValues": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.weather->com.webos.service.systemservice/getPreferences": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.weather->com.webos.service.systemservice/osInfo/query": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.weather->com.webos.service.systemservice/setPreferences": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.weather->com.webos.service.systemservice/time/setSystemTime": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.weather->com.webos.settingsservice/getSystemSettings": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.weather->com.webos.settingsservice/resetSystemSettings": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:missing-permission:org.webosphoenix.weather->com.webos.settingsservice/setSystemSettings": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:no-permissions:org.webosphoenix.assistant": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:no-permissions:org.webosphoenix.clipboard": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:no-permissions:org.webosphoenix.dropshare": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:no-permissions:org.webosphoenix.enyo2demo": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:no-permissions:org.webosphoenix.firstuse": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:no-permissions:org.webosphoenix.help": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:no-permissions:org.webosphoenix.messaging": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:no-permissions:org.webosphoenix.notificationlab": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:no-permissions:org.webosphoenix.phone": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:no-permissions:org.webosphoenix.screenshot": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:no-permissions:org.webosphoenix.settings": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:no-permissions:org.webosphoenix.sharesheet": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:no-permissions:org.webosphoenix.tasks": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:no-permissions:org.webosphoenix.voicedial": {
+  "owner": "the app's owner (appinfo.json requiredPermissions; tools/check-luna.py --suggest)",
+  "row": "C4"
+ },
+ "luna:unknown-group:com.webos.surfacemanager:telephony.query": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:com.webos.surfacemanager:vpn.management": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.agenda:settings.read": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.assistant:applications": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.assistant:applications.internal": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.assistant:messaging.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.assistant:phoenix.location.permissions": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.assistant:phoenix.system.media": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.assistant:phoenix.tethering": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.assistant:systemui.searchprovider": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.assistant:telephony.query": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.assistant:torch.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.assistant:vpn.management": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.camera:media.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.flashlight:torch.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.music:media.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.podcasts:downloadmanager.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.podcasts:media.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.scanner:torch.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.dav:accounts.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.fediverse:accounts.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.fediverse:messaging.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.voicememos:media.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.weather:settings.read": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-method:com.palm.systemmanager/enableFpsCounter": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.palm.systemmanager/enableTouchPlot": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.palm.systemmanager/getBootStatus": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.palm.systemmanager/getDebugOverlays": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.palm.systemmanager/publishToSystemUI": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.palm.systemmanager/takeScreenShot": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.webos.applicationManager/addDockModeLaunchPoint": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.webos.applicationManager/launchPointChanges": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.webos.applicationManager/listAllHandlersForMime": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.webos.applicationManager/listDockModeLaunchPoints": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.webos.applicationManager/open": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.webos.applicationManager/removeDockModeLaunchPoint": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.webos.applicationManager/searchApps": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.webos.applicationManager/setDockModeLaunchPoints": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.webos.service.audio/playFeedback": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.webos.service.mediaindexer/phoenix/thumbnail": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:com.webos.service.systemservice/ringtone/listRingtones": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C5"
+ },
+ "luna:unknown-method:org.webosphoenix.transcriber/listen": {
+  "owner": "keyboard agent (dictation, V5)",
+  "row": "C5"
+ },
+ "luna:unknown-service:com.lge.service.tts": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.accountservices": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.activitymanager": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.appInstallService": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.appinstaller": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.applicationManager": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.audio": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.bluetooth": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.browserServer": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.btmonitor": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.bus": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.certificatemanager": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.connectionmanager": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.deviceprofile": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.downloadmanager": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.eas": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.filenotifyd.js": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.image": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.ime": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.keymanager": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.location": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.mail": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.mediad": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.mediapermissions": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.nettools": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.pop": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.power": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.preferences": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.printmgr": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.pubsubservice": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.service.accounts": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.service.backup": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.service.bluetooth.spp": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.service.calendar.facebook": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.service.calendar.google": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.service.calendar.reminders": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.service.calendar.yahoo": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.service.contacts": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.service.contacts.facebook": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.service.contacts.google": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.service.contacts.linker": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.service.contacts.sim": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.service.contacts.yahoo": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.service.payment": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.smtp": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.storage": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.stservice": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.telephony": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.telluriumservice": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.universalsearch": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.wan": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.wifi": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.palm.yahoo": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
+  "row": "C2"
+ },
+ "luna:unknown-service:com.palm.zeroconf": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.webos.service.devmode": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.webos.service.tv.systemproperty": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:com.webos.service.vpn": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C1"
+ },
+ "luna:unknown-service:org.webosphoenix.battery": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "luna:unknown-service:org.webosphoenix.dictation": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "luna:unknown-service:org.webosphoenix.dropshare": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "luna:unknown-service:org.webosphoenix.filepicker": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "luna:unknown-service:org.webosphoenix.gamepads": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "luna:unknown-service:org.webosphoenix.ongoing": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "luna:unknown-service:org.webosphoenix.service.location": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "luna:unknown-service:org.webosphoenix.service.mediafiles": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "luna:unknown-service:org.webosphoenix.service.reset": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "luna:unknown-service:org.webosphoenix.service.xmpp": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "luna:unknown-service:org.webosphoenix.share": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "luna:unknown-service:org.webosphoenix.simulator": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "luna:unknown-service:org.webosphoenix.system": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "luna:unknown-service:org.webosphoenix.tethering": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "luna:unknown-service:org.webosphoenix.usb": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "luna:unknown-service:org.webosports.service.messaging": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "luna:unknown-service:org.webosports.service.torch": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "simrefs:host:127.0.0.1": {
+  "owner": "platform (PLATFORM.md 12: the feed and catalog URLs)",
+  "row": "Q1"
+ },
+ "simrefs:host:appcatalog.webosarchive.org": {
+  "owner": "owner decision (Q65)",
+  "row": "Q2"
+ },
+ "simrefs:insecure-url:weboslives.eu": {
+  "owner": "owner decision (Q65)",
+  "row": "Q2"
+ },
+ "simrefs:loopback:apps/assistant:127.0.0.1": {
+  "owner": "intended: a server on the device itself (see the row)",
+  "row": "N4"
+ },
+ "simrefs:loopback:apps/assistant:localhost": {
+  "owner": "intended: a server on the device itself (see the row)",
+  "row": "N4"
+ },
+ "simrefs:loopback:apps/marketplace:127.0.0.1": {
+  "owner": "platform (PLATFORM.md 12: the feed and catalog URLs)",
+  "row": "Q1"
+ },
+ "simrefs:loopback:apps/shared:0.0.0.0": {
+  "owner": "intended: a server on the device itself (see the row)",
+  "row": "N4"
+ },
+ "simrefs:loopback:services/oauth:127.0.0.1": {
+  "owner": "owner decision (Q29)",
+  "row": "N4"
+ },
+ "simrefs:loopback:services/updates:127.0.0.1": {
+  "owner": "platform (PLATFORM.md 12: the feed and catalog URLs)",
+  "row": "Q1"
+ },
+ "simrefs:loopback:shell/native:127.0.0.1": {
+  "owner": "intended: a server on the device itself (see the row)",
+  "row": "N4"
+ },
+ "simrefs:sim-service:org.webosphoenix.simulator": {
+  "owner": "device audit (docs/DEVICE-AUDIT.md)",
+  "row": "C3"
+ },
+ "image:missing-path:/etc/phoenix/device.json": {
+  "owner": "platform (per-device adaptation)",
+  "row": "H1"
+ },
+ "image:missing-path:/etc/phoenix/transcriber.json": {
+  "owner": "optional configuration (defaults apply)",
+  "row": "F9"
+ },
+ "recipes:unpinned:phoenix-apps_git.bb": {
+  "owner": "platform (release process)",
+  "row": "B6"
+ },
+ "recipes:unpinned:phoenix-devices_git.bb": {
+  "owner": "platform (release process)",
+  "row": "B6"
+ },
+ "recipes:unpinned:phoenix-pdeath_git.bb": {
+  "owner": "platform (release process)",
+  "row": "B6"
+ },
+ "recipes:unpinned:phoenix-pty_git.bb": {
+  "owner": "platform (release process)",
+  "row": "B6"
+ },
+ "recipes:unpinned:phoenix-shell_git.bb": {
+  "owner": "platform (release process)",
+  "row": "B6"
+ }
+}

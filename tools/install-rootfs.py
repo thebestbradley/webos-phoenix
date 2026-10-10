@@ -285,6 +285,15 @@ def build_plan():
             d = os.path.join(app_dir, "configuration", "db", kind)
             if os.path.isdir(d):
                 copy_tree(d, "/etc/palm/db/" + kind, plan)
+        # Activities the app schedules from the start (the Clock's alarm
+        # updates, the Calendar's reminders): OSE's configurator registers
+        # them with the activity manager from /etc/palm/activities/applications/
+        # <id>/ (configurator src/ActivityConfigurator.cpp:36), where
+        # openwebos/build-desktop put them; in the app's folder nobody reads them.
+        for sub in (os.path.join("configuration", "activities"), "activities"):
+            d = os.path.join(app_dir, sub)
+            if os.path.isdir(d):
+                copy_tree(d, "/etc/palm/activities/applications", plan)
     for svc_id, svc_dir in services:
         plan_service(svc_id, svc_dir, plan)
     for overlay in cfg.get("overlays", []):
@@ -307,6 +316,11 @@ def build_plan():
     # image's own apps get from webos_app_generate_security_files.bbclass
     # (meta-webos): without them luna-hub refuses the app's every call.
     GENERATED.clear()
+    compat_perms = {}
+    cp = os.path.join(REPO, "compat", "app-permissions.json")
+    if os.path.isfile(cp):
+        with open(cp, encoding="utf-8") as f:
+            compat_perms = {k: v for k, v in json.load(f).items() if not k.startswith("//")}
     for dev in sorted(final):
         m = APPINFO.match(dev)
         if not m:
@@ -316,6 +330,9 @@ def build_plan():
                 info = json.loads(f.read())
         except (ValueError, OSError):
             continue
+        # The original apps predate ACG: compat/app-permissions.json gives them their groups.
+        if isinstance(info, dict) and "requiredPermissions" not in info and info.get("id") in compat_perms:
+            info["requiredPermissions"] = compat_perms[info["id"]]
         for path, data in security_files(info).items():
             if path not in final and path.replace(".app.json", ".role.json") not in final:
                 GENERATED[path] = data

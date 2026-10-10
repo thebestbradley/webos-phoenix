@@ -9,6 +9,7 @@
                  defaults to AUTOREV (asks the network at parse time and
                  builds whatever the branch has), an http(s) one without a
                  sha256sum
+  missing-file   a file:// in SRC_URI that is not beside the recipe
   network        a task body that fetches (npm install/ci, pip install,
                  curl, wget, git clone): BitBake forbids the network
                  outside do_fetch
@@ -86,6 +87,15 @@ def check(root):
         # Sources.
         uris = v.get("SRC_URI", "").split()
         for u in uris:
+            fm = re.match(r"^file://([^;$]+)", u)
+            if fm and not fm.group(1).startswith("/"):
+                # BitBake looks in FILESPATH: <recipe dir>/<BPN>-<PV>, <BPN>, files.
+                rdir = os.path.dirname(path)
+                bpn = re.sub(r"_.*$", "", name.rsplit(".", 1)[0])
+                if not any(os.path.exists(os.path.join(rdir, d, fm.group(1))) for d in (bpn, "files", ".")):
+                    f.add("missing-file", "%s:%s" % (name, fm.group(1)), "%s: SRC_URI names file://%s, which is not "
+                          "beside the recipe (files/, %s/): parsing only notes it, the fetch fails"
+                          % (name, fm.group(1), bpn), where)
             if u.startswith(("git://", "gitsm://")):
                 srcrev = v.get("SRCREV", "")
                 resolved = srcrev

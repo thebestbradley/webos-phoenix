@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.example.other
+Exec=/usr/bin/run-js-service -n /usr/palm/services/org.example.elsewhere
+Type=dynamic
