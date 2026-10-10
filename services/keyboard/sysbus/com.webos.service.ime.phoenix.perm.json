@@ -1,0 +1,9 @@
+{
+    "com.webos.service.ime*": [
+        "systemsettings.query",
+        "systemsettings.management",
+        "audio.management",
+        "phoenix.clipboard",
+        "systemmanager.keyboard"
+    ]
+}

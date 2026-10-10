@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "keyinjector.h"
+#include "keytext.h"
 
 #include <QCoreApplication>
 #include <QInputMethodEvent>
@@ -37,29 +38,10 @@ bool KeyInjector::sendImeKey(QQuickItem *client, int key, int modifiers)
     QQuickItem *target = focusTarget(client);
     if (!target)
         return false;
-    // SysmgrIMEDataInterface.cpp:171-187: the character the key types.
-    QChar qchar;
-    switch (key) {
-    case Qt::Key_Return:
-    case Qt::Key_Enter:
-        qchar = QLatin1Char('\r');
-        break;
-    case Qt::Key_Tab:
-        qchar = QLatin1Char('\t');
-        break;
-    case Qt::Key_Backspace:
-        qchar = QLatin1Char('\b');
-        break;
-    default:
-        qchar = QChar(char16_t(key));
-    }
+    // The character the key types (SysmgrIMEDataInterface.cpp:171-187;
+    // keytext.h, shared with the device's Maliit input method).
     const auto mods = Qt::KeyboardModifiers(modifiers);
-    // Only lower case A to Z; other keys are characters with their case already.
-    if (key >= Qt::Key_A && key <= Qt::Key_Z && !(mods & Qt::ShiftModifier))
-        qchar = qchar.toLower();
-    // Arrows and the like type nothing.
-    const QString text = (key & Qt::KeyboardModifierMask) || (key >= Qt::Key_Escape && key != Qt::Key_Return
-            && key != Qt::Key_Enter && key != Qt::Key_Tab && key != Qt::Key_Backspace) ? QString() : QString(qchar);
+    const QString text = PhoenixKeyText::keyText(key, mods);
 
     QKeyEvent press(QEvent::KeyPress, key, mods, text);
     QCoreApplication::sendEvent(target, &press);
@@ -76,6 +58,18 @@ bool KeyInjector::commitText(QQuickItem *client, const QString &text)
         return false;
     QInputMethodEvent event;
     event.setCommitString(text);
+    QCoreApplication::sendEvent(target, &event);
+    return event.isAccepted();
+}
+
+bool KeyInjector::setPreedit(QQuickItem *client, const QString &text)
+{
+    QQuickItem *target = focusTarget(client);
+    if (!target)
+        return false;
+    QList<QInputMethodEvent::Attribute> attributes;
+    attributes << QInputMethodEvent::Attribute(QInputMethodEvent::Cursor, int(text.size()), 1);
+    QInputMethodEvent event(text, attributes);
     QCoreApplication::sendEvent(target, &event);
     return event.isAccepted();
 }

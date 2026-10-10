@@ -15,7 +15,7 @@ DESCRIPTION = "webOS OSE image with the Phoenix mobile shell"
 PHOENIX_PRODUCTION ?= "0"
 IMAGE_FEATURES:remove = "${@'debug-tweaks ssh-server-dropbear ssh-server-openssh' if d.getVar('PHOENIX_PRODUCTION') == '1' else ''}"
 
-IMAGE_INSTALL:append = " phoenix-shell phoenix-apps phoenix-pty phoenix-devices phoenix-diag packagegroup-phoenix-terminal \
+IMAGE_INSTALL:append = " phoenix-shell phoenix-keyboard phoenix-apps phoenix-pty phoenix-devices phoenix-diag packagegroup-phoenix-terminal \
     packagegroup-phoenix-assistant"
 
 # Hardware (docs/HARDWARE.md, "Hardware support and the Hardware app"):

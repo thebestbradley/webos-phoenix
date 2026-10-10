@@ -181,6 +181,21 @@ jobs:
         timeout-minutes: 10
         run: QT_QPA_PLATFORM=offscreen "$QT_ROOT_DIR/bin/qmltestrunner" -import shell/qml -import build/qml -import shell/tests-device/fakes -input shell/tests-device
 
+      - name: The keyboard as the device's input method (Maliit plugin over a fake host; services/keyboard)
+        timeout-minutes: 10
+        run: QT_QPA_PLATFORM=offscreen build/keyboard/keyboard-test
+
+      # The plugin is built against a stand-in of Maliit's plugin API here
+      # (services/keyboard/maliit-stub); this compiles it against the real
+      # headers too, so the stand-in cannot drift from them.
+      - name: The keyboard plugin against maliit-framework-webos's own headers
+        timeout-minutes: 10
+        run: |
+          git clone -q --depth 1 https://github.com/webosose/maliit-framework-webos.git "$RUNNER_TEMP/maliit"
+          cmake -S services/keyboard -B build-keyboard-realapi -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+                -DPHOENIX_KEYBOARD_TESTS=OFF -DPHOENIX_MALIIT_SOURCE_DIR="$RUNNER_TEMP/maliit"
+          cmake --build build-keyboard-realapi --target phoenix-keyboard-realapi -j
+
       - name: The runtime on a device (window properties, Back, the launch's caller, copies)
         timeout-minutes: 10
         run: node tools/test-runtime-device.cjs

@@ -378,6 +378,18 @@ data use "Phoenix Account".
 - RAUC (LGPL-2.1) is a separate program on the device; the service calls its
   command line and does not link it.
 
+## The keyboard's Maliit plugin
+
+- `services/keyboard` (Apache-2.0, original code) is a plugin for
+  maliit-server and links webOS OSE's `libmaliit-plugins`
+  (maliit-framework-webos, LGPL-2.1) dynamically on the device, as OSE's own
+  keyboard (imemanager, Apache-2.0) does; the library is OSE's, unchanged.
+- `services/keyboard/maliit-stub` declares the part of Maliit's plugin API
+  the plugin uses, for building and testing without maliit-framework-webos.
+  It is written for Phoenix (the names and values an API needs to be
+  called), not copied from the LGPL headers, and never ships: the device's
+  build uses the real headers.
+
 ## Firmware and drivers
 
 The owner's decision of October 2026: as much hardware as possible works
