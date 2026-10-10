@@ -11,6 +11,11 @@
 //       on-screen gesture bar; the shell then hides the bar and the key does
 //       its job. Phoenix keeps the gesture bar on phones and tablets alike
 //       otherwise.
+//   homeButtonOrientationAngle  (int, default 0) where that button is, as
+//       the angle from the screen's own bottom edge: 0, 90, 180 or 270
+//       (luna.conf [UI] HomeButtonOrientationAngle; the TouchPad's 270).
+//       The boot animation is drawn upright with the button below, and the
+//       Touch to Share glow comes from its edge.
 
 #pragma once
 
@@ -24,12 +29,14 @@ class DeviceConfig : public QObject
     QML_ELEMENT
     QML_SINGLETON
     Q_PROPERTY(bool hardwareHomeButton READ hardwareHomeButton CONSTANT)
+    Q_PROPERTY(int homeButtonOrientationAngle READ homeButtonOrientationAngle CONSTANT)
     Q_PROPERTY(QString path READ path CONSTANT)
 
 public:
     explicit DeviceConfig(QObject *parent = nullptr);
 
     bool hardwareHomeButton() const;
+    int homeButtonOrientationAngle() const;
     QString path() const { return m_path; }
 
 private:

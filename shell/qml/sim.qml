@@ -161,6 +161,10 @@ Item {
             formFactor: typeof simFormFactor !== "undefined" ? simFormFactor : "auto"
             density: typeof simDensity !== "undefined" ? simDensity : 1
             hardwareHomeButton: typeof simHomeButton !== "undefined" && simHomeButton
+            // A Home button beside a landscape screen is the TouchPad's, on
+            // the right (luna-topaz.conf:32 HomeButtonOrientationAngle=270);
+            // below a portrait one, at the bottom (0).
+            homeButtonOrientationAngle: hardwareHomeButton && width > height ? 270 : 0
             systemKeyPassChords: root.modifiedFunctionKeys
             // The phones and the TouchPad of luna-sysmgr's day had one
             // ([VirtualKeyboard] VirtualKeyboardEnabled).
@@ -538,6 +542,25 @@ Item {
         }
     }
 
+    // The rotation lock and the orientation it holds, kept for the next
+    // start, as LunaSysMgr read its rotationLock preference at boot
+    // (WindowServer::bootupFinished, WindowServer.cpp:1187-1203): "" off,
+    // an orientation, or "on" (locked, the orientation not known yet).
+    function saveRotationLock() {
+        if (typeof simSettings === "undefined")
+            return;
+        simSettings.setValue("display/rotationLock", !status.rotationLocked ? ""
+                             : status.rotationLockOrientation !== "" ? status.rotationLockOrientation : "on");
+    }
+    function restoreRotationLock() {
+        if (typeof simSettings === "undefined")
+            return;
+        var v = simSettings.value("display/rotationLock") || "";
+        if (["up", "down", "left", "right"].indexOf(v) >= 0)
+            status.rotationLockOrientation = v;
+        status.rotationLocked = v !== "";
+    }
+
     // How the UI and the device are turned, for the apps
     // (com.palm.systemmanager getSystemStatus).
     function pushOrientation() {
@@ -576,7 +599,8 @@ Item {
         function onAirplaneModeChanged() { root.statusChanged("airplaneMode"); }
         function onBluetoothOnChanged() { root.statusChanged("bluetoothOn"); }
         function onBrightnessChanged() { root.statusChanged("brightness"); }
-        function onRotationLockedChanged() { root.statusChanged("rotationLocked"); }
+        function onRotationLockedChanged() { root.statusChanged("rotationLocked"); root.saveRotationLock(); }
+        function onRotationLockOrientationChanged() { root.statusChanged("rotationLockOrientation"); root.saveRotationLock(); }
         function onMutedChanged() { root.statusChanged("muted"); }
         function onVolumeChanged() { root.statusChanged("volume"); }
         function onKeyboardChanged() { root.statusChanged("keyboard"); }
@@ -1624,6 +1648,7 @@ Item {
                 if (Array.isArray(exhibitions))
                     status.exhibitionApps = exhibitions;
             } catch (e) { /* the default */ }
+            restoreRotationLock();
             status.devMode = simSettings.value("developer/devMode") === "1";
             status.devModeUnlocked = simSettings.value("developer/unlocked") === "1";
         }
@@ -1686,15 +1711,21 @@ Item {
         if (typeof simTouchstone === "undefined" || !simTouchstone)
             return;
         root.power({ charger: "inductive", percent: 61, puckId: root.touchstones[0] });
-        // Dock mode once the boot animation is over (it holds the screen).
+        // Dock mode once the boot animation is over (it holds the screen);
+        // with --scene systemmenu, dock mode's own (restricted) menu open.
+        var dock = function() {
+            shell.enterDockMode();
+            if (typeof simScene !== "undefined" && simScene === "systemmenu")
+                shell.openSystemMenu();
+        };
         var screens = shell.systemScreens;
         if (!screens.holdsDisplay)
-            return shell.enterDockMode();
+            return dock();
         var after = function() {
             if (screens.holdsDisplay)
                 return;
             screens.holdsDisplayChanged.disconnect(after);
-            shell.enterDockMode();
+            dock();
         };
         screens.holdsDisplayChanged.connect(after);
     }

@@ -90,15 +90,19 @@ LG / Apache-2.0 (the Email app's own `NOTICE` lists its third-party images,
 not this sound), but the file's ID3 tags contradict it: a copyright frame
 (WCOP) reading "@ Peter Steinbach", an album "Top 500 Rock and Roll Songs"
 and "Sound Grinder" as the encoder, which suggests a sound library. It stays
-in the submodule (we do not modify submodules) but `runtime/rootfs.json`
-excludes it, so neither the simulator nor `tools/install-rootfs.py` serves
-or installs it; Email's new-mail sound falls back to the alert tone.
+in the submodule (we do not modify submodules), but the compat overlay puts
+Phoenix's own new-mail sound at its path
+(`compat/rootfs/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3`,
+synthesized, CC0 1.0), and overlays win, so neither the simulator, the dev
+server nor `tools/install-rootfs.py` serves or installs the original.
 
 The Pre's own ringtones (`Pre.mp3`, the Clock's `Flurry.mp3`) and audiod's
-feedback sounds (keyboard clicks, `appclose`, `shutter`) were not released.
-Phoenix synthesizes its own feedback sounds (`shell/assets/sounds/phoenix/`,
+feedback sounds (keyboard clicks, `appclose`, `shutter`, the angry card's
+`carddrag` / `birdappclose`, the launcher's) were not released.
+Phoenix synthesizes its own feedback sounds and a `Flurry.mp3` for the
+Clock's default alarm (`shell/assets/sounds/phoenix/`,
 `tools/make-feedback-sounds.py`, CC0 1.0; see its `PROVENANCE.md`); nothing
-was downloaded.
+was sampled or downloaded.
 
 HiDPI variants (`name@1.5x.png`, `name@2x.png`, `name@3x.png`) sit beside
 some of these images. Three are Open webOS / Enyo originals at 1.5x; the rest

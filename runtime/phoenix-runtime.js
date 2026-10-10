@@ -4466,6 +4466,7 @@
     // when the user flips a toggle in the system menu (docs/APP-RUNTIME.md).
     (function settingsServices() {
         var KEY = "settings:state";
+        var ROTATION_LOCK_ORIENTATIONS = ["up", "down", "left", "right"];
 
         // Simulated access points. "password" is what the simulated AP accepts.
         var AIR = [
@@ -4540,9 +4541,20 @@
                              state: s.wifi.connected === a.ssid ? "ipConfigured" : connecting === a.ssid ? "connecting" : "" };
                 }),
                 bluetoothOn: !!s.bluetooth.powered,
+                // How many devices are paired: none, and the system menu
+                // turning Bluetooth on opens its preferences to pair one (the
+                // original asked the Bluetooth app's "numofprofiles",
+                // StatusBarServicesConnector.cpp:2573-2632).
+                bluetoothPairedCount: s.bluetooth.paired.length,
                 airplaneMode: !!s.offlineMode,
                 brightness: s.settings.picture.backlight,
+                // The rotation lock, and the orientation it holds: the
+                // preference keeps it, as LunaSysMgr's rotationLock kept the
+                // orientation (Preferences.cpp:196-201, read at boot by
+                // WindowServer::bootupFinished). true: locked, the shell
+                // picks how the UI is turned now.
                 rotationLocked: !!p.rotationLock,
+                rotationLockOrientation: ROTATION_LOCK_ORIENTATIONS.indexOf(p.rotationLock) >= 0 ? p.rotationLock : "",
                 timeFormat: p.timeFormat === "HH24" ? "HH24" : "HH12",
                 muted: !!s.audio.muted,
                 // What the shell's system sounds follow (SystemSounds.qml):
@@ -6309,8 +6321,14 @@
                         sys["/setPreferences"]({ x_palm_textinput: next }, function () {}, { cancelled: function () { return false; } });
                     }
                 }
-                if ("rotationLocked" in st && !!st.rotationLocked !== !!prefs().rotationLock)
-                    sys["/setPreferences"]({ rotationLock: !!st.rotationLocked }, function () {}, { cancelled: function () { return false; } });
+                if ("rotationLocked" in st) {
+                    // Locked to the orientation the shell says, else just on.
+                    var lock = !st.rotationLocked ? false
+                             : ROTATION_LOCK_ORIENTATIONS.indexOf(st.rotationLockOrientation) >= 0 ? st.rotationLockOrientation : true;
+                    var was = prefs().rotationLock;
+                    if (lock !== was && !(lock === true && ROTATION_LOCK_ORIENTATIONS.indexOf(was) >= 0))
+                        sys["/setPreferences"]({ rotationLock: lock }, function () {}, { cancelled: function () { return false; } });
+                }
                 if (toJson(s) !== before) save(s);
                 else changed();
             } finally {
@@ -8126,7 +8144,29 @@
 
             var v = { version: SEED_VERSION, nodes: nodes, mediaSeen: {} };
             addSampleFiles(v, samples);
+            addFactoryRingtones(v);
             return v;
+        }
+
+        // The ringtones a device came with on its USB drive
+        // (shell/assets/sounds/phoenix/ringtones, mounted at
+        // /media/internal/ringtones): Phoenix's Flurry.mp3, the Clock's
+        // default alarm (com.palm.app.clock utility/alarm.js:368,
+        // alarmdbmanager.js:100), whose original was never released. Added
+        // once, also to a drive seeded before it shipped; deleting it sticks.
+        var FACTORY_RINGTONES = ["Flurry.mp3"];
+        function addFactoryRingtones(v) {
+            if (v.factoryRingtones) return false;
+            var sm = Date.parse("2026-09-01T08:00:00Z");
+            FACTORY_RINGTONES.forEach(function (n) {
+                var p = MEDIA_ROOT + "/ringtones/" + n;
+                if (v.nodes[p]) return;
+                for (var d = parentOf(p); !v.nodes[d]; d = parentOf(d))
+                    v.nodes[d] = { t: "d", m: sm, mode: 493, ro: false };
+                v.nodes[p] = { t: "f", m: sm, mode: 420, ro: false, ref: p, size: -1 };
+            });
+            v.factoryRingtones = true;
+            return true;
         }
 
         // The demo videos (with their subtitles) and documents, also added
@@ -8175,8 +8215,10 @@
             if (!v || v.version !== SEED_VERSION || !v.nodes) {
                 v = seed();
                 store.set(VFS_KEY, v);
-            } else if (addSampleFiles(v, readSampleIndex())) {
-                save(v);
+            } else {
+                var added = addSampleFiles(v, readSampleIndex());
+                if (addFactoryRingtones(v)) added = true;
+                if (added) save(v);
             }
             syncDocumentIndex(v);
             return v;

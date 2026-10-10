@@ -193,6 +193,25 @@ Item {
             windows._hostMessage("com.palm.systemui", "", "touchToShare", { op: "inRange", inRange: false });
             verify(!glow.active);
             verify(!rings.visible);
+            // From the Home button's edge (TouchToShareGlow.cpp:39-64): the
+            // TouchPad's, on the right of its screen (270).
+            shell.homeButtonOrientationAngle = 270;
+            windows._hostMessage("com.palm.systemui", "", "touchToShare", { op: "inRange", inRange: true });
+            tryCompare(rings, "scale", 1, 1500);
+            c = rings.mapToItem(shell, rings.width / 2, rings.height / 2);
+            fuzzyCompare(c.x, shell.width, 1);
+            fuzzyCompare(c.y, shell.height / 2, 1);
+            compare(rings.rotation, 270);
+            compare(rings.width, shell.height);
+            shell.homeButtonOrientationAngle = 90;
+            c = rings.mapToItem(shell, rings.width / 2, rings.height / 2);
+            fuzzyCompare(c.x, 0, 1);
+            shell.homeButtonOrientationAngle = 180;
+            c = rings.mapToItem(shell, rings.width / 2, rings.height / 2);
+            fuzzyCompare(c.x, shell.width / 2, 1);
+            fuzzyCompare(c.y, 0, 1);
+            windows._hostMessage("com.palm.systemui", "", "touchToShare", { op: "inRange", inRange: false });
+            shell.homeButtonOrientationAngle = 0;
         }
 
         function test_tapSendsTheAppsDataAndThrowsItsCard() {

@@ -226,11 +226,25 @@ QtObject {
     readonly property string ringerSwitch: system && system.ringerSwitch === "down" ? "down" : "up"
     readonly property string headset: system && (system.headset === "headset" || system.headset === "headset-mic") ? system.headset : "none"
     property string _headsetWas: "none"
+    // The ringer's state as com.palm.keys reports it (InputManager's
+    // m_ringerState, set by every Key_Ringer, InputManager.cpp:1160-1166):
+    // the switch, and the system menu's Mute Sound, which sent the same key
+    // (SystemMenu::slotMuteSoundChanged posted Key_Ringer down when muted,
+    // up when not, SystemMenu.cpp:900-915), as the TouchPad had no switch.
+    property string ringerState: "up"
+    function _ringer(state) {
+        if (state === ringerState)
+            return;
+        ringerState = state;
+        _publish({ key: { category: "/switches", key: "ringer", state: state } });
+    }
     onRingerSwitchChanged: {
-        _publish({ key: { category: "/switches", key: "ringer", state: ringerSwitch } });
+        _ringer(ringerSwitch);
         if (system && system.muted !== undefined)
             system.muted = ringerSwitch === "down";
     }
+    readonly property bool _muted: !!system && system.muted === true
+    on_MutedChanged: _ringer(_muted ? "down" : "up")
     onHeadsetChanged: {
         if (_headsetWas !== "none")
             _publish({ key: { category: "/headset", key: _headsetWas, state: "up" } });
@@ -353,7 +367,8 @@ QtObject {
 
     Component.onCompleted: {
         _headsetWas = headset;
-        _publish({ switches: { ringer: ringerSwitch, headset: headset === "headset" ? "down" : "up",
+        ringerState = ringerSwitch === "down" || _muted ? "down" : "up";
+        _publish({ switches: { ringer: ringerState, headset: headset === "headset" ? "down" : "up",
                                "headset-mic": headset === "headset-mic" ? "down" : "up" } });
         _reportDisplay();
         _reportLight();

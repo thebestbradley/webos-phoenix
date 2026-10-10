@@ -758,6 +758,33 @@ Item {
         }
     }
 
+    // The UI is about to turn: the cards off screen keep their windows'
+    // size until it has (Card.queueFlip; a window is on screen when it is
+    // visible and inside the scene, HostWindow.cpp:152). Called before the
+    // UI is resized (UiRotation.rotationStarting).
+    function queueFlips() {
+        for (var i = 0; i < cards.count; ++i) {
+            var c = cards.itemAt(i);
+            if (c && !cardOnScreen(c))
+                c.queueFlip();
+        }
+    }
+    function cardOnScreen(c) {
+        if (!c.visible)
+            return false;
+        var w = c.width * c.cardScale, h = c.height * c.cardScale;
+        var cy = c.centerY + c.flickOffset;
+        return c.centerX + w / 2 > 0 && c.centerX - w / 2 < width && cy + h / 2 > 0 && cy - h / 2 < height;
+    }
+    // The turn is over: they resize now (WindowServer::rotatePendingWindows).
+    function rotatePendingWindows() {
+        for (var i = 0; i < cards.count; ++i) {
+            var c = cards.itemAt(i);
+            if (c)
+                c.flip();
+        }
+    }
+
     function cardItem(uid) {
         for (var i = 0; i < cards.count; ++i) {
             var c = cards.itemAt(i);
@@ -1116,6 +1143,12 @@ Item {
                 var c = view.cardItem(f.uid);
                 if (c)
                     c.flickOffset = dy;
+                // Upside down, pulled past 15 % of the screen's height, it
+                // creaks, once a drag (kAngryCardThreshold, :266; :1523-1527).
+                if (!f.stretched && dy > view.height / 2 * 0.30 && view.playAngryCardSounds) {
+                    f.stretched = true;
+                    view.feedbackSound("carddrag");
+                }
             }
         }
 
@@ -1312,11 +1345,18 @@ Item {
     // 2866-2878), then closed without keep-alive. On the device, upside down,
     // it played the "birdappclose" sound (:1280-1283, 2890-2891).
     signal angryCardClosed(string uid)
+    // CardWindowManager::playAngryCardSounds (:1280-1283): only with the UI
+    // upside down. feedbackSound: one of the angry card's sounds to play.
+    readonly property bool playAngryCardSounds: uiOrientation === "down"
+    signal feedbackSound(string name)
+    property string _angryUid: ""
     function slingshot(card) {
         if (card.uid === pinnedUid) {
             flickAnimation.createObject(card, { target: card, closing: false, to: 0 }).start();
             return;
         }
+        // It flies with "birdappclose" instead of "appclose" (:2890-2893).
+        _angryUid = playAngryCardSounds ? card.uid : "";
         angryCardClosed(card.uid);
         _noKeepAlive[card.uid] = true;
         view.close(card.uid);

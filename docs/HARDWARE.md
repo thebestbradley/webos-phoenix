@@ -686,6 +686,7 @@ missing file or key means the default. Read by `Phoenix.Native`'s
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `hardwareHomeButton` | `false` | The device has a Home button (physical or capacitive) that its maker uses **instead of** the on-screen gesture bar. The shell then hides the bar, the key does its job (`Key_Home`), and tablets take the bottom-edge flick for swipe up. |
+| `homeButtonOrientationAngle` | `0` | Where that Home button is, as the angle from the screen's own bottom edge: `0`, `90`, `180` or `270` (luna-sysmgr's `HomeButtonOrientationAngle`; the TouchPad's was `270`, its button beside its landscape screen). The boot animation is drawn upright with the button below, and the Touch to Share glow comes from its edge. |
 | `backlight` | the first under `/sys/class/backlight` by the kernel's preference (`type` firmware, then platform, then raw) | The panel's backlight, by name (`phoenix-devices`), for a device with several where that picks the wrong one. |
 | `lightSensor` | the first IIO device with illuminance | The light sensor's IIO device, e.g. `"iio:device1"` (`phoenix-devices`). |
 | `ringerSwitch` | none (the ringer is always on) | The ringer switch: `{"type": "EV_SW" \| "EV_KEY", "code": n, "silentValue": 1}`, the input event code it sends and its value when silent. Linux has no code of its own for it (`SW_MUTE_DEVICE`, 14, is the nearest; OnePlus's alert slider sends keys), so each device names its own (`phoenix-devices`). `phoenix-devices --probe` points at any device with `SW_MUTE_DEVICE` and prints the line to add. |

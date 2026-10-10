@@ -30,6 +30,11 @@ QtObject {
     property bool bluetoothOn: false
     property bool bluetoothTurningOn: false
     property bool rotationLocked: false
+    // The orientation the rotation lock holds (Shell._followRotationLock
+    // sets it); a placeholder until the preference is wired.
+    property string rotationLockOrientation: ""
+    // Unlocked, the orientation is forgotten (Orientation_Invalid).
+    onRotationLockedChanged: if (!rotationLocked) rotationLockOrientation = ""
     // The accelerometer's orientation ("up", "down", "left", "right",
     // "faceup", "facedown"), which the shell's UI follows (UiRotation).
     // STATUS: placeholder, always "up". M1 feeds it from the device's

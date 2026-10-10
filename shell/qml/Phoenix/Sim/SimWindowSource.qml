@@ -1130,7 +1130,8 @@ Item {
     property int _nextSound: 1
 
     // The system sounds that ship (runtime/rootfs.json: /usr/palm/sounds,
-    // /usr/share/phoenix/sounds), for soundExists without a rootfs (tests).
+    // /usr/share/phoenix/sounds, and the compat overlay's new-mail sound for
+    // Email), for soundExists without a rootfs (tests).
     property var shippedSounds: [
         "/usr/palm/sounds/alert.wav", "/usr/palm/sounds/notification.wav", "/usr/palm/sounds/phone.wav",
         "/usr/palm/sounds/ringtone.mp3", "/usr/palm/sounds/boot.mp3", "/usr/palm/sounds/shutdown.mp3",
@@ -1138,7 +1139,11 @@ Item {
         "/usr/palm/sounds/error.mp3", "/usr/palm/sounds/panel.mp3", "/usr/palm/sounds/tap_to_share.mp3",
         "/usr/share/phoenix/sounds/feedback/key.wav", "/usr/share/phoenix/sounds/feedback/space.wav",
         "/usr/share/phoenix/sounds/feedback/backspace.wav", "/usr/share/phoenix/sounds/feedback/return.wav",
-        "/usr/share/phoenix/sounds/feedback/appclose.wav"
+        "/usr/share/phoenix/sounds/feedback/appclose.wav", "/usr/share/phoenix/sounds/feedback/shutter.wav",
+        "/usr/share/phoenix/sounds/feedback/listen.wav", "/usr/share/phoenix/sounds/feedback/carddrag.wav",
+        "/usr/share/phoenix/sounds/feedback/birdappclose.wav", "/usr/share/phoenix/sounds/feedback/LauncherOpenApp.wav",
+        "/usr/share/phoenix/sounds/feedback/LauncherCloseApp.wav",
+        "/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3"
     ]
 
     function soundExists(path) {

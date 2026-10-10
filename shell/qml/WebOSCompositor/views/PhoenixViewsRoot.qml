@@ -40,6 +40,7 @@ FocusScope {
         focus: true
         formFactor: "auto"
         hardwareHomeButton: DeviceConfig.hardwareHomeButton
+        homeButtonOrientationAngle: DeviceConfig.homeButtonOrientationAngle
         source: LsmWindowSource { id: windows }
         system: LsmSystemStatus {}
         // OSE's own keyboard (Maliit through com.webos.service.ime, drawn in

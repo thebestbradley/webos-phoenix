@@ -44,6 +44,14 @@ Item {
     readonly property int spinnerTotal: 10      // s_activitySpinnerTotal
     readonly property int frameTime: 80         // s_frameTimeSlow
 
+    // Turned by this much (0, 90, 180, 270, clockwise), so the logo and the
+    // update screen are upright with the Home button below
+    // (HomeButtonOrientationAngle: renderInStateLogo / renderInStateActivity
+    // turn the context, BootupAnimation.cpp:167-180, 283-286, 337-340; the
+    // transition's pixmap, :587-596).
+    property int angle: 0
+    readonly property bool _sideways: angle === 90 || angle === 270
+
     signal finished
 
     // BootupAnimation::start / startActivity.
@@ -117,6 +125,7 @@ Item {
     Item {
         id: logo
         anchors.centerIn: parent
+        rotation: boot.angle
         width: Theme.artWidth(normal.source)
         height: Theme.artHeight(normal.source)
         visible: boot.mode !== "activity"
@@ -140,7 +149,10 @@ Item {
     Item {
         id: activity
         objectName: "bootActivity"
-        anchors.fill: parent
+        anchors.centerIn: parent
+        width: boot._sideways ? parent.height : parent.width
+        height: boot._sideways ? parent.width : parent.height
+        rotation: boot.angle
         visible: boot.mode === "activity"
 
         Image {
