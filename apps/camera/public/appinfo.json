@@ -19,5 +19,8 @@
         "camera.query",
         "camera.operation",
         "media.operation"
-    ]
+    ],
+    "phoenix": {
+        "launchParams": []
+    }
 }

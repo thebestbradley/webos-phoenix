@@ -2,7 +2,9 @@
 // and css/phoenix-compat.css, which show the TouchPad split view (contact
 // list | details) one pane at a time on a phone card, and
 // app/phoenix-tones.js, a contact's ringtone and message tone (Edit's
-// Tones group). Nothing else is changed.
+// Tones group), and app/phoenix-launch.js, other apps' launches the app
+// does not read (Just Type's reminder, Calendar's opencontact:). Nothing
+// else is changed.
 //
 // LICENSE@@@
 //
@@ -66,7 +68,9 @@ var pathsToImport = [
     "app/phoenix-phone.js",
     "css/phoenix-compat.css",
     // Phoenix: a contact's ringtone and message tone (see that file)
-    "app/phoenix-tones.js"
+    "app/phoenix-tones.js",
+    // Phoenix: other apps' launches the app does not read (see that file)
+    "app/phoenix-launch.js"
 ];
 
 var mockPathsToImport = [

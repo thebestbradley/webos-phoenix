@@ -14,7 +14,7 @@
 // and says it is not private (docs/SYNERGY-MODERN.md 3.1).
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { db, hasPresence, isImService, messaging, notPrivateNote, serviceLabel, shareSheet, type ChatThread, type ImBuddy, type Message,
+import { db, hasPresence, isImService, linkedText, messaging, notPrivateNote, serviceLabel, shareSheet, type ChatThread, type ImBuddy, type Message,
          type MessagePart, type Person } from "@phoenix/luna";
 import { useFileUrl } from "@phoenix/luna/react";
 import { Avatar, Button, dayLabel, formatNumber, formatTime, useBack } from "@phoenix/ui";
@@ -62,8 +62,11 @@ function PictureViewer({ part, onClose }: { part: MessagePart; onClose: () => vo
     );
 }
 
-export function Conversation({ threadId, people, buddies, header }: {
+export function Conversation({ threadId, people, buddies, header, initialText, initialParts }: {
     threadId: string; people: readonly Person[]; buddies: readonly ImBuddy[]; header?: boolean;
+    /** In the compose line when it opens (another app asked to send it: launchParams.ts). */
+    initialText?: string;
+    initialParts?: MessagePart[];
 }) {
     const [thread, setThread] = useState<ChatThread | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -140,7 +143,8 @@ export function Conversation({ threadId, people, buddies, header }: {
                         <div className={`bubble ${it.incoming ? "in" : "out"}${it.message.parts?.length ? " has-parts" : ""}`}
                              data-status={it.message.status} data-service={it.message.serviceName}>
                             {it.message.parts?.map((p) => <PartView key={p.path} part={p} onOpen={() => setViewing(p)} onLoad={toEnd} />)}
-                            {it.message.messageText && <div className="bubble-text">{it.message.messageText}</div>}
+                            {/* Its web addresses, e-mail addresses and numbers are links, as in webOS Messaging. */}
+                            {it.message.messageText && <div className="bubble-text" dangerouslySetInnerHTML={{ __html: linkedText(it.message.messageText) }} />}
                         </div>
                         {!it.incoming && it.last && statusLabel(it.message) &&
                             <div className={`chat-status ${it.message.status}`}>{statusLabel(it.message)}</div>}
@@ -148,7 +152,8 @@ export function Conversation({ threadId, people, buddies, header }: {
                 ))}
             </div>
             {error && <div className="compose-error" role="alert">{error}</div>}
-            <ComposeBar onSend={send} disabled={!thread} service={im ? thread?.replyService : "sms"} />
+            <ComposeBar onSend={send} disabled={!thread} service={im ? thread?.replyService : "sms"}
+                        initialText={initialText} initialParts={initialParts} autoFocus={!!(initialText || initialParts?.length)} />
             {viewing && <PictureViewer part={viewing} onClose={() => setViewing(null)} />}
         </div>
     );

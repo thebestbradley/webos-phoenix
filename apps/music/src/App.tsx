@@ -6,7 +6,8 @@
 // and volume. Songs come from the media indexer
 // (com.webos.service.mediaindexer getAudioList, subscribed). Launch params
 // {play: "<artist, album or song>"} play it (the Assistant); {share: {title,
-// files}} plays audio from the system share sheet (SHARE-AND-FILES.md).
+// files}} plays audio from the system share sheet (SHARE-AND-FILES.md);
+// {target} plays an audio file opened with Music (src/launchParams.ts).
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { mediaIndexer, type AudioItem } from "@phoenix/luna";
@@ -15,8 +16,9 @@ import {
     AppMenu, BackProvider, Divider, Glyph, GroupedToolButtons, Page, PageHeader, Row, Slider, Spinner, IconToolButton, Toolbar, ToolSpacer,
     formatSeconds, useBack,
 } from "@phoenix/ui";
-import { albums, artists, artistOf, artistSummary, sharedSongs, songs, songsFor, titleOf, type AlbumEntry, type ArtistEntry, type SharedFile } from "./library";
+import { albums, artists, artistOf, artistSummary, sharedSongs, songs, songsFor, titleOf, type AlbumEntry, type ArtistEntry } from "./library";
 import { PlayerProvider, usePlayer } from "./player";
+import { parseLaunch, type MusicLaunchParams } from "./launchParams";
 
 type Tab = "artists" | "albums" | "songs";
 type View = { kind: "artist"; name: string } | { kind: "album"; name: string; artist: string } | null;
@@ -178,20 +180,27 @@ function Library() {
     const byAlbum = useMemo(() => albums(items ?? []), [items]);
     const bySong = useMemo(() => songs(items ?? []), [items]);
 
+    // What the launch asks to play (launchParams.ts, docs/LAUNCH-CONTRACTS.md):
     // {play: "<artist, album or song>"}: the Assistant's "play ..." (docs/M6-PLAN.md F3).
     // {share: {title, files}}: audio from the share sheet (appinfo.json
-    // shareTargets; a voice memo from Voice Memos' Share) plays at once.
-    const launch = useLaunchParams<{ play?: string; share?: { title?: string; files?: SharedFile[] } }>();
+    // shareTargets; a voice memo from Voice Memos' Share) plays at once;
+    // {target}: an audio file opened with Music (Files, Email's attachments) too.
+    const launch = useLaunchParams<MusicLaunchParams>();
+    const intent = useMemo(() => parseLaunch(launch), [launch]);
     const played = useRef<object | null>(null);
     useEffect(() => {
-        if (!items || (launch.play === undefined && !launch.share) || played.current === launch) return;
-        played.current = launch;
-        const list = launch.share ? sharedSongs(launch.share, items) : songsFor(items, launch.play ?? "");
+        if (!items || intent.kind === "none" || played.current === intent) return;
+        played.current = intent;
+        const list = intent.kind === "share" ? sharedSongs(intent.share, items)
+            : intent.kind === "file" ? (intent.path
+                ? sharedSongs({ title: intent.title, files: [{ path: intent.path, mimeType: intent.mimeType }] }, items)
+                : [{ uri: intent.url!, type: "audio", mime: intent.mimeType, title: intent.title ?? intent.url!.replace(/^.*\//, "") } as AudioItem])
+            : songsFor(items, intent.query);
         if (list && list.length) {
             player.play(list, 0);
             setNowPlaying(true);
         }
-    }, [items, launch, player]);
+    }, [items, intent, player]);
 
     useBack(() => { setNowPlaying(false); return true; }, nowPlaying);
     useBack(() => { setView(null); return true; }, !nowPlaying && view !== null);

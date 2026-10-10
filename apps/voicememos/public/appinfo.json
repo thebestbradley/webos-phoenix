@@ -14,6 +14,7 @@
     "keywords": ["Voice Recorder", "Dictation", "Recording", "Audio", "Transcribe"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launchParams": ["memoId", "newMemo"],
         "launcherTab": 0
     },
     "//universalSearch": "Just Type (com.palm.universalsearch): the \"New Voice Memo\" action starts recording, titled with the typed text; the content search finds memos by title and transcript (searchText, see the kind) and opens them.",

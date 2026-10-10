@@ -14,6 +14,7 @@
     "keywords": ["App Catalog", "Apps", "Store", "Download", "Install", "Web Apps", "PWA", "Updates", "App Museum", "Preware"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 1 = Downloads, where the App Catalog was.",
+        "launchParams": ["section", "sourceId", "id", "common"],
         "launcherTab": 1
     },
     "requiredPermissions": [

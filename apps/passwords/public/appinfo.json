@@ -14,6 +14,7 @@
     "keywords": ["Password Manager", "KeePass", "KDBX", "Logins", "Vault", "Security"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launchParams": ["target", "newEntry"],
         "launcherTab": 0
     },
     "//universalSearch": "None on purpose: entries must never reach Just Type's index or any db8 kind (docs/SECURITY-APPS.md). Just Type finds the app by title and keywords only.",

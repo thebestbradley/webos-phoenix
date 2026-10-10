@@ -343,6 +343,8 @@ body.messaging-app { overflow: hidden; }
 /* A picture message's pictures in its balloon. */
 .bubble.has-parts { padding: 4px; white-space: normal; }
 .bubble.has-parts .bubble-text { padding: 4px 8px 4px; white-space: pre-wrap; }
+/* Links in a message (linkedText): the balloon's colour, underlined. */
+.bubble-text a { color: inherit; text-decoration: underline; }
 .bubble-picture {
     display: block;
     border: 0;

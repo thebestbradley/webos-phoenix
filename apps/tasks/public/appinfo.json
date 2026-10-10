@@ -14,6 +14,7 @@
     "keywords": ["To-do", "Todo", "Reminders", "Checklist"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launchParams": ["taskId", "fromReminder", "text", "reminder"],
         "launcherTab": 0
     },
     "universalSearch": {

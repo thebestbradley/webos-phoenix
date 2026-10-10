@@ -20,5 +20,8 @@
         "application.operation",
         "mediaindexer.operation",
         "systemsettings.management"
-    ]
+    ],
+    "phoenix": {
+        "launchParams": ["imageList", "target", "dockMode", "windowType"]
+    }
 }

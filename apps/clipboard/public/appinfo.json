@@ -14,6 +14,7 @@
     "keywords": ["Clipboard", "Copy", "Paste", "Clips", "History"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launchParams": [],
         "launcherTab": 0
     },
     "//universalSearch": "Not declared: clips can hold secrets, so Just Type does not index them (docs/SECURITY-APPS.md)."

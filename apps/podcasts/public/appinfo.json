@@ -14,6 +14,7 @@
     "keywords": ["Podcast", "RSS", "Episodes", "Radio", "OPML"],
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
+        "launchParams": ["target", "mimeType", "fileName", "imageList", "refresh", "newEpisodes"],
         "launcherTab": 0
     },
     "//mimeTypes": "Podcasts imports OPML subscription lists (Files' \"Open with\", Email attachments).",

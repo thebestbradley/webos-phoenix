@@ -1755,8 +1755,8 @@
             if (click.target) return reply(fail(-1, "onclick.target is not supported in the Phoenix simulator"));
             // For another app (a service's toast: "Updated to ...", opening
             // Settings): its notification, which a tap launches with the params.
-            if (click.appId && appId(click.appId) !== PalmSystem.appIdentifier) {
-                host.postToHost("notification", { appId: appId(click.appId), title: String(p.message), body: "",
+            if (click.appId && appId(click.appId, click.params) !== PalmSystem.appIdentifier) {
+                host.postToHost("notification", { appId: appId(click.appId, click.params), title: String(p.message), body: "",
                                                   params: aliasParams(click.appId, click.params) });
                 return reply(ok({ toastId: "n" + Date.now() }));
             }
@@ -1989,15 +1989,50 @@
         // (enyo-1.0 lib/accounts/source/add-account.js:85-92,
         // entry-first-launch.js:265-271); the Marketplace gets those params
         // as they are and opens Connections.
-        "com.palm.app.enyo-findapps": "org.webosphoenix.marketplace"
+        "com.palm.app.enyo-findapps": "org.webosphoenix.marketplace",
+        // The apps Phoenix's own replace, under the ids the original apps
+        // launch them by (docs/LAUNCH-CONTRACTS.md): Contacts' message and
+        // call buttons (com.palm.app.contacts PseudoDetailsInApp.js:342-369),
+        // Just Type's contact actions (luna-applauncher data/AppLauncher.js:
+        // 40-88), the browser's Share Link (ShareLinkDialog.js:169-175),
+        // Email's attachments (AttachmentsDrawer.js:279-316). Each app reads
+        // the original's launch params (its src/launchParams.ts).
+        "com.palm.app.phone": "org.webosphoenix.phone",
+        "com.palm.app.messaging": "org.webosphoenix.messaging",
+        "com.palm.app.camera": "org.webosphoenix.camera",
+        "com.palm.app.musicplayer": "org.webosphoenix.music",
+        "com.palm.app.streamingmusicplayer": "org.webosphoenix.music",
+        "com.palm.app.videoplayer": "org.webosphoenix.videos",
+        // First Use (luna-systemui SystemServiceAlerts.js:59-66, "Set up
+        // your device" after a reset) and Date & Time (its "Set Time
+        // Temporarily", :124-131), Settings' page now.
+        "com.palm.app.firstuse": "org.webosphoenix.firstuse",
+        "com.palm.app.dateandtime": { id: "org.webosphoenix.settings", params: { page: "datetime" } }
     };
+    // Launches of an original id that open another app for some params:
+    // the phone app's {preferences: true} (luna-systemui
+    // TelephonyAlerts.js:59-67's "Phone Preferences", Enyo's network alerts,
+    // networkalerts/source/NetworkAlertsContent.js:278) opened the phone
+    // app's preferences scene, which is Settings' Phone page in Phoenix.
+    var APP_ROUTES = {
+        "com.palm.app.phone": function (params) {
+            return params && params.preferences === true ? { id: "org.webosphoenix.settings", params: { page: "phone" } } : null;
+        }
+    };
+    function routed(id, params) {
+        return APP_ROUTES[id] ? APP_ROUTES[id](params || {}) : null;
+    }
     var HELP_TOPICS = { universalsearch: "justtype", accountsmgr: "accounts", phone: "phone", messaging: "messaging",
                         camera: "camera", photos: "photos", music: "music", launcher: "launcher", notifications: "notifications" };
-    function appId(id) {
+    function appId(id, params) {
+        var r = routed(id, params);
+        if (r) return r.id;
         var a = APP_ALIASES[id];
         return a ? (typeof a === "string" ? a : a.id) : id;
     }
     function aliasParams(id, params) {
+        var r = routed(id, params);
+        if (r) return r.params;
         var a = APP_ALIASES[id], out = {};
         if (a && typeof a === "object") for (var k in a.params) out[k] = a.params[k];
         for (var j in params || {}) out[j] = params[j];
@@ -2085,12 +2120,12 @@
             revealDeveloperMode(p.id);
             var params = aliasParams(p.id, p.params);
             var caller = appIdFromLocation();
-            if (p.returnToCaller === true && caller && ["com.palm.systemui", "com.palm.launcher", "com.webos.phoenix.unknown"].indexOf(caller) < 0 && caller !== appId(p.id))
+            if (p.returnToCaller === true && caller && ["com.palm.systemui", "com.palm.launcher", "com.webos.phoenix.unknown"].indexOf(caller) < 0 && caller !== appId(p.id, p.params))
                 params = Object.assign({}, params || {}, { $caller: caller });
-            host.postToHost("launch", Object.assign({ id: appId(p.id), params: params },
+            host.postToHost("launch", Object.assign({ id: appId(p.id, p.params), params: params },
                                                     p.newCard === true ? { newCard: true } : {},
                                                     p.behind === true ? { behind: true } : {}));
-            launchedReply(reply, appId(p.id), params);
+            launchedReply(reply, appId(p.id, p.params), params);
         },
         // As on webOS: {id, params} launches the app; {target} goes to the
         // app that handles it (command-resource-handlers.json: mailto: to
@@ -2101,7 +2136,7 @@
         // its own): the card the app is opened from.
         "/open": function (p, reply) {
             revealDeveloperMode(p.id);
-            var handler = appId(p.id) || (p.target && resourceHandler(p.target));
+            var handler = appId(p.id, p.params) || (p.target && resourceHandler(p.target));
             var from = typeof p.$from === "string" ? { from: p.$from } : {};
             if (handler) {
                 var launchParams = p.id ? aliasParams(p.id, p.params) : { target: p.target };
