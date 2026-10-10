@@ -669,3 +669,14 @@ Meshtastic's firmware and protocol definitions are GPL-3.0, so a Phoenix
 client must be written from the published protocol without GPL code (to
 check), or start with MeshCore (MIT). Sign-up link: none needed (a channel
 key); a page on getting a radio. P2, after XMPP.
+
+**What comes with Phoenix** (the owner, 10 October 2026; the pre-installed
+list is tentative): built in, part of the system and not removable, are only
+the generic logins: Contacts & Calendars (any CardDAV / CalDAV server, the
+iCloud, Nextcloud and Fastmail presets, subscribed calendars) and Email (any
+IMAP / SMTP mailbox). Every other account is a connector package in the
+catalog's Connections. Google, Microsoft, the Fediverse, Telegram and LoRa
+mesh come pre-installed at launch, and can be removed and installed again
+like any other; the rest (Jabber, Matrix, Bluesky, LinkedIn, the drives,
+Zoom, Teams, Google Chat with Google, ...) are installed by those who want
+them.
