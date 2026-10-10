@@ -148,13 +148,14 @@ async function main() {
             await shot(page, "email-documents");
             await f.click("text=meeting-notes.docx");
             await f.waitForSelector("text=1 File Selected");
-            // The tap moves the list a few pixels (Enyo's scroller); a tap
-            // on OK at once, while it moved, was not taken (seen once, with
-            // the list 4 px off). A person's next tap comes later.
-            await page.waitForTimeout(500);
+            // OK at once, as a test can (no wait to hide a lost tap: one was
+            // seen once, not reproduced in five runs since; the list's
+            // scroller is logged if it happens again).
             await f.click('text="OK"');
             await page.waitForFunction(() => /meeting-notes\.docx/.test(document.body.innerText), null, { timeout: 5000 }).then(
-                () => check(true, "a document (com.palm.media.misc.file:1) is attached too"), () => check(false, "a document is attached too"));
+                () => check(true, "a document (com.palm.media.misc.file:1) is attached too"),
+                async () => check(false, "a document is attached too (the list's scroller: " + await f.evaluate(() => JSON.stringify(
+                    [...document.querySelectorAll(".enyo-virtual-scroller")].map((e) => [e.scrollTop, e.style.transform || e.style.webkitTransform]))) + ")"));
             await page.waitForTimeout(300);
             await shot(page, "email-attached");
             await context.close();
