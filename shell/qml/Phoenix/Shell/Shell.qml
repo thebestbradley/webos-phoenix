@@ -2369,7 +2369,14 @@ FocusScope {
             type = 6;                                           // FieldType_Phone
         else if (h & (Qt.ImhDigitsOnly | Qt.ImhFormattedNumbersOnly))
             type = 5;                                           // FieldType_Number
-        return { type: type, actions: 0, flags: 0, enterKeyLabel: "" };
+        // Auto-capitalisation (GAPS V1): off unless the field asks, as
+        // LunaSysMgr's own fields never had it (LockWindow.cpp:1547); a
+        // field with Qt.ImhPreferUppercase starts sentences with a capital,
+        // Qt.ImhUppercaseOnly is all capitals.
+        var cap = "none";
+        if (type === 0 && !(h & (Qt.ImhNoAutoUppercase | Qt.ImhLowercaseOnly | Qt.ImhSensitiveData)))
+            cap = h & Qt.ImhUppercaseOnly ? "characters" : h & Qt.ImhPreferUppercase ? "sentences" : "none";
+        return { type: type, actions: 0, flags: 0, enterKeyLabel: "", autoCap: cap };
     }
 
     // Which client has the input focus now; IMEController::setClient /

@@ -4290,11 +4290,43 @@
         return !!el.isContentEditable;
     }
 
+    // Auto-capitalisation (GAPS V1): WebKit told the keyboard when the next
+    // letter should be a capital (ViewHost_AutoCapChanged ->
+    // HostWindow::onAutoCapChanged -> IMEController::notifyAutoCapChanged,
+    // luna-sysmgr Src/base/HostWindow.cpp:297-302), and the keyboard showed
+    // Shift on (keyboard-efigs PhoneKeyboard.cpp:276-280, 1395). WebKit
+    // capitalised a sentence's start unless the field said otherwise; Enyo
+    // 1.0's Input says so with x-palm-disable-auto-cap (autoCapitalize
+    // "lowercase") or x-palm-title-cap ("title"), and its default "sentence"
+    // with neither (enyo-1.0 base/controls/Input.js:39-41, 273-281);
+    // PasswordInput turns it off (palm/controls/input/PasswordInput.js:16).
+    // Palm's WebKit itself was not released: the HTML `autocapitalize`
+    // attribute is followed too, and fields for passwords, numbers, phone
+    // numbers, e-mail and web addresses are left alone (Email turned it off
+    // on its address fields itself, accounts/source/SimpleConfig.js:53).
+    // The shell's keyboard works out where the cursor is (VirtualKeyboard
+    // fieldAutoCap); this is the field's mode.
+    function autoCapFor(el, type) {
+        if (!el || typeof el.getAttribute !== "function" || (type !== 0 && type !== 2))
+            return "none";
+        if ((el.getAttribute("x-palm-disable-auto-cap") || "") === "true")
+            return "none";
+        var title = el.getAttribute("x-palm-title-cap");
+        if (title !== null && title !== "false")
+            return "words";
+        var a = (el.getAttribute("autocapitalize") || "").toLowerCase();
+        if (a === "off" || a === "none")
+            return "none";
+        if (a === "words" || a === "characters")
+            return a;
+        return "sentences";
+    }
+
     function editorState(el) {
         var type = 0;
         if (el && (el.tagName || "").toLowerCase() === "input")
             type = fieldTypes[(el.getAttribute("type") || "").toLowerCase()] || 0;
-        return { type: type, actions: 0, flags: 0, enterKeyLabel: "" };
+        return { type: type, actions: 0, flags: 0, enterKeyLabel: "", autoCap: autoCapFor(el, type) };
     }
 
     var ime = { manual: false, reported: null };

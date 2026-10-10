@@ -1465,6 +1465,9 @@ Item {
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.px(17)
                 clip: true
+                // Requests are sentences: the keyboard starts them with a
+                // capital (GAPS V1; Shell._editorStateFor).
+                inputMethodHints: Qt.ImhPreferUppercase
                 // Not disabled while it thinks: the field keeps the focus,
                 // so the keyboard stays and Enter's release does not reach
                 // the card behind (ask() waits for the answer anyway).
