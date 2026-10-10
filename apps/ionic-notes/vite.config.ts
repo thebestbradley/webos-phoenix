@@ -11,8 +11,14 @@ export default defineConfig({
     plugins: [react()],
     base: "./",
     resolve: {
-        // notes-core from its sources, as tsconfig.json's paths.
-        alias: { "@phoenix/notes-core": resolve(import.meta.dirname, "../shared/notes-core/src/index.ts") },
+        // notes-core and the Phoenix service plugin from their sources, as
+        // tsconfig.json's paths.
+        alias: {
+            "@phoenix/notes-core": resolve(import.meta.dirname, "../shared/notes-core/src/index.ts"),
+            "@phoenix/sdk": resolve(import.meta.dirname, "../shared/sdk/src/index.ts"),
+            "@phoenix/react": resolve(import.meta.dirname, "../shared/react/src/index.ts"),
+            "@phoenix/capacitor": resolve(import.meta.dirname, "../shared/capacitor/src/index.ts"),
+        },
     },
     build: {
         outDir: "dist",

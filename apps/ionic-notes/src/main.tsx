@@ -4,7 +4,9 @@
 import { setupIonicReact } from "@ionic/react";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { Refreshed } from "@phoenix/luna/react";
+import { Phoenix } from "@phoenix/capacitor";
+import { Refreshed } from "@phoenix/react";
+import { app } from "@phoenix/sdk";
 
 // Ionic's required CSS, its optional utilities used here, and the dark
 // palette switched by a class (Settings > Appearance).
@@ -25,24 +27,20 @@ import { readStyle } from "./settings";
 // only in Capacitor apps) takes the webOS back gesture: see below.
 setupIonicReact({ mode: readStyle().mode, hardwareBackButton: true });
 
-// webOS's back gesture reaches a web app as the Escape key. Ionic's own
-// overlays close on Escape; otherwise it becomes Ionic's back button, which
-// closes the side menu, then goes back a page (the note, Settings). Taken,
-// the key's default is prevented; at the notes list with the menu closed
-// nothing takes it, and the system minimizes the card (webOS's Back at an
-// app's top level).
+// webOS's back gesture, through the Phoenix service plugin (app.onBack).
+// Ionic's own overlays close on it (they hear the Escape key it arrives
+// as); otherwise it becomes Ionic's back button, which closes the side
+// menu, then goes back a page (the note, Settings). At the notes list with
+// the menu closed the app does not take it, and the system minimizes the
+// card (webOS's Back at an app's top level).
 const OVERLAYS = ["ion-modal", "ion-popover", "ion-alert", "ion-action-sheet", "ion-loading", "ion-picker"]
     .map((tag) => `${tag}:not(.overlay-hidden)`).join(", ");
-window.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape" || e.defaultPrevented) return;
-    if (document.querySelector(OVERLAYS)) {
-        e.preventDefault();
-        return;
-    }
+app.onBack(() => {
+    if (document.querySelector(OVERLAYS)) return true;
     const route = location.hash.replace(/^#/, "") || "/";
-    if (route === "/" && !document.querySelector("ion-menu.show-menu")) return;
-    e.preventDefault();
+    if (route === "/" && !document.querySelector("ion-menu.show-menu")) return false;
     document.dispatchEvent(new Event("backbutton"));
+    return true;
 });
 
 createRoot(document.getElementById("root")!).render(
@@ -53,5 +51,5 @@ createRoot(document.getElementById("root")!).render(
     </StrictMode>,
 );
 
-// Tell the web runtime the first frame is ready (webOS stageReady).
-(globalThis as { PalmSystem?: { stageReady?: () => void } }).PalmSystem?.stageReady?.();
+// Tell the system the first frame is ready (webOS stageReady), the Capacitor way.
+void Phoenix.stageReady();

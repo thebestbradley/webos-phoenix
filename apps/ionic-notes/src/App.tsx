@@ -14,6 +14,7 @@ import { Navigate, Route } from "react-router-dom";
 
 import { FolderMenu } from "./components/FolderMenu";
 import { NotesContext, type NotesUi } from "./context";
+import { PhoenixIntegration } from "./phoenix";
 import { luna } from "./luna";
 import { Home } from "./pages/Home";
 import { NotePage } from "./pages/NotePage";
@@ -62,6 +63,7 @@ function Shell() {
     return (
         <NotesContext.Provider value={ui}>
             <IonReactHashRouter>
+                <PhoenixIntegration app={app} />
                 <IonSplitPane contentId="main" when="md">
                     <FolderMenu />
                     <IonRouterOutlet id="main">
