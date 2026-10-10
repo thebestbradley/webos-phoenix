@@ -1,0 +1,14 @@
+{
+    "allowedNames": [
+        "com.palm.applicationManager"
+    ],
+    "phoenix.appmanager.query": [
+        "dev"
+    ],
+    "phoenix.appmanager.launch": [
+        "dev"
+    ],
+    "phoenix.appmanager.manage": [
+        "oem"
+    ]
+}

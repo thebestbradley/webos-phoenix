@@ -1,0 +1,10 @@
+{
+    "phoenix.shellhost.app": [
+        "org.webosphoenix.shellhost/post",
+        "org.webosphoenix.shellhost/events"
+    ],
+    "phoenix.shellhost.shell": [
+        "org.webosphoenix.shellhost/listen",
+        "org.webosphoenix.shellhost/send"
+    ]
+}

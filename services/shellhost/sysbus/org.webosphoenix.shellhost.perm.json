@@ -1,0 +1,7 @@
+{
+    "org.webosphoenix.shellhost": [],
+    "com.webos.surfacemanager": [
+        "phoenix.shellhost.app",
+        "phoenix.shellhost.shell"
+    ]
+}

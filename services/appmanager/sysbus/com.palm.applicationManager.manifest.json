@@ -1,0 +1,19 @@
+{
+    "id": "com.palm.applicationManager.service",
+    "version": "0.1.0",
+    "roleFiles": [
+        "/usr/share/luna-service2/roles.d/com.palm.applicationManager.role.json"
+    ],
+    "serviceFiles": [
+        "/usr/share/luna-service2/services.d/com.palm.applicationManager.service"
+    ],
+    "apiPermissionFiles": [
+        "/usr/share/luna-service2/api-permissions.d/com.palm.applicationManager.api.json"
+    ],
+    "clientPermissionFiles": [
+        "/usr/share/luna-service2/client-permissions.d/com.palm.applicationManager.perm.json"
+    ],
+    "groupsFiles": [
+        "/usr/share/luna-service2/groups.d/com.palm.applicationManager.groups.json"
+    ]
+}

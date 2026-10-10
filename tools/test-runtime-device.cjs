@@ -10,7 +10,13 @@
 // PalmSystem.setWindowOrientation / enableFullScreenMode /
 // setWindowProperties, appinfo's requestedWindowOrientation, and Back: the
 // webOS Back key (461) a page does not take goes on as Escape, and one it
-// still does not take is phoenixBack.
+// still does not take is phoenixBack. Then what goes to the shell on the
+// bus (org.webosphoenix.shellhost: banners, sounds, the edit popup, ...)
+// and comes back from it (paste, card activation, the app menu), the
+// PalmSystem calls WebAppMgr drops (neva's injection defines them,
+// WebAppMgr ignores them) put in place, the page's own features (Edit in
+// the app menu, links that leave the app), and the share sheet served in
+// the page with the rest on the bus.
 //
 //   node tools/test-runtime-device.cjs
 //
@@ -46,7 +52,25 @@ class FakeEvent {
 }
 
 class Target {
-    constructor(parent) { this.parent = parent || null; this.listeners = {}; }
+    constructor(parent) {
+        this.parent = parent || null;
+        this.listeners = {};
+        this.style = {};
+        this.children = [];
+        this.attrs = {};
+        this.classList = { add() {}, remove() {}, toggle() {}, contains() { return false; } };
+    }
+    appendChild(c) { this.children.push(c); c.parentNode = this; return c; }
+    removeChild(c) { this.children = this.children.filter((x) => x !== c); c.parentNode = null; return c; }
+    setAttribute(k, v) { this.attrs[k] = String(v); }
+    getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
+    hasAttribute(k) { return k in this.attrs; }
+    closest(sel) {
+        for (let t = this; t; t = t.parent)
+            if (sel.indexOf("a[href]") >= 0 && t.tagName === "A" && t.href) return t;
+        return null;
+    }
+    focus() {}
     addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); }
     removeEventListener(type, fn) {
         this.listeners[type] = (this.listeners[type] || []).filter((f) => f !== fn);
@@ -60,24 +84,38 @@ class Target {
 }
 
 // A page of app appId whose appinfo.json is appinfo, launched with params.
-function page(appId, appinfo, launchParams) {
+// opts.wamPalmSystem: WebAppMgr's own no-op methods on PalmSystem, as neva's
+// injection defines them.
+function page(appId, appinfo, launchParams, opts) {
+    opts = opts || {};
     const props = [];
     const calls = [];
     const timers = [];
+    const commands = [];
     const win = new Target(null);
     const doc = new Target(win);
     const body = new Target(doc);
+    const head = new Target(doc);
     doc.body = body;
+    doc.head = head;
     doc.activeElement = body;
     doc.documentElement = new Target(doc);
     doc.readyState = "complete";
-    doc.createElement = () => new Target(null);
+    doc.createElement = (tag) => { const t = new Target(null); t.tagName = String(tag).toUpperCase(); return t; };
     doc.querySelector = () => null;
     doc.querySelectorAll = () => [];
     doc.getElementsByTagName = () => [];
+    doc.getElementById = (id) => head.children.find((c) => c.id === id) || null;
+    doc.execCommand = (cmd, ui, value) => { commands.push([cmd, value]); return false; };
     function NativeBridge() {
-        this.call = (url, json) => { calls.push({ url, json: JSON.parse(json) }); return 1; };
-        this.cancel = () => {};
+        this.call = (url, json) => { calls.push({ url, json: JSON.parse(json), bridge: this }); return 1; };
+        this.cancel = () => { this.cancelled = true; };
+    }
+    const wam = {};
+    if (opts.wamPalmSystem) {
+        for (const name of ["setWindowOrientation", "enableFullScreenMode", "addBannerMessage", "removeBannerMessage",
+                            "clearBannerMessages", "paste", "simulateMouseClick", "keyboardShow"])
+            wam[name] = () => { wam.dropped = (wam.dropped || 0) + 1; return ""; };
     }
     class XHR {
         open(method, url) { this.url = url; }
@@ -100,7 +138,7 @@ function page(appId, appinfo, launchParams) {
         location: { pathname: "/usr/palm/applications/" + appId + "/index.html", search: "", href: "file:///usr/palm/applications/" + appId + "/index.html", protocol: "file:" },
         navigator: { userAgent: "WebAppManager" },
         PalmServiceBridge: NativeBridge,
-        PalmSystem: { launchParams: JSON.stringify(launchParams || {}), identifier: appId + " 0" },
+        PalmSystem: Object.assign({ launchParams: JSON.stringify(launchParams || {}), identifier: appId + " 0" }, wam),
         webOSSystem: { window: { setProperty: (k, v) => props.push([k, v]) } },
         XMLHttpRequest: XHR,
         KeyboardEvent: FakeEvent, Event: FakeEvent, CustomEvent: FakeEvent,
@@ -110,8 +148,10 @@ function page(appId, appinfo, launchParams) {
         removeEventListener: (t, fn) => win.removeEventListener(t, fn),
         dispatchEvent: (e) => win.dispatchEvent(e),
         localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
-        TextEncoder, TextDecoder, Promise, JSON, Object, Array, Date, Math, RegExp, String, Number, Boolean, Error
+        getComputedStyle: () => ({ userSelect: "auto" }),
+        TextEncoder, TextDecoder, URL, Promise, JSON, Object, Array, Date, Math, RegExp, String, Number, Boolean, Error
     };
+    if (opts.parent) g.top = opts.parent;
     g.window = g;
     g.self = g;
     g.globalThis = g;
@@ -127,7 +167,23 @@ function page(appId, appinfo, launchParams) {
             if (k === name) v = val;
         return v;
     }
-    return { g, win, doc, body, props, calls, run, prop };
+    // The calls to url (without the scheme), and an answer to the last one.
+    const strip = (u) => u.replace(/^(palm|luna):\/\//, "");
+    function callsTo(url) { return calls.filter((c) => strip(c.url) === strip(url)); }
+    function reply(url, obj) {
+        const c = callsTo(url).pop();
+        if (c && c.bridge.onservicecallback) c.bridge.onservicecallback(JSON.stringify(obj));
+        return !!c;
+    }
+    // What this page posted to the shell.
+    function posts(type) {
+        return callsTo("luna://org.webosphoenix.shellhost/post").map((c) => c.json).filter((j) => !type || j.type === type);
+    }
+    // An event from the shell, as org.webosphoenix.shellhost/events sends it.
+    function shellEvent(type, payload) {
+        return reply("luna://org.webosphoenix.shellhost/events", { returnValue: true, subscribed: true, event: { type, payload: payload || {} } });
+    }
+    return { g, win, doc, body, head, props, calls, commands, wam, run, prop, callsTo, reply, posts, shellEvent };
 }
 
 // ---- The bridge: names and {returnToCaller} --------------------------------------
@@ -136,17 +192,22 @@ function page(appId, appinfo, launchParams) {
     const p = page("org.webosphoenix.assistant", { id: "org.webosphoenix.assistant" });
     check(p.g.__phoenixRuntime && p.g.__phoenixRuntime.onDevice === true, "the runtime sees WebAppMgr (onDevice)");
     const b = new p.g.PalmServiceBridge();
+    const before = p.calls.length;
     b.call("palm://com.palm.applicationManager/launch",
            JSON.stringify({ id: "org.webosphoenix.photos", params: { photo: 3 }, returnToCaller: true }));
-    const c = p.calls[0];
-    check(c && c.url === "palm://com.webos.applicationManager/launch", "com.palm.applicationManager goes to OSE's name");
+    const c = p.calls[before];
+    check(c && c.url === "palm://com.palm.applicationManager/launch",
+          "com.palm.applicationManager stays: Phoenix's legacy service on OSE (services/appmanager)");
     check(c && c.json.params.$caller === "org.webosphoenix.assistant" && c.json.params.photo === 3,
           "{returnToCaller}: the caller rides in params.$caller");
     check(c && c.json.returnToCaller === undefined, "returnToCaller itself is not passed on (SAM has no such key)");
     b.call("luna://com.webos.applicationManager/launch", JSON.stringify({ id: "org.webosphoenix.photos", params: {} }));
-    check(p.calls[1].json.params.$caller === undefined, "a launch without it carries no $caller");
+    check(p.calls[before + 1].json.params.$caller === undefined, "a launch without it carries no $caller");
+    b.call("luna://com.webos.applicationManager/launch",
+           JSON.stringify({ id: "org.webosphoenix.photos", params: {}, returnToCaller: true }));
+    check(p.calls[before + 2].json.params.$caller === "org.webosphoenix.assistant", "the same through SAM's own name");
     b.call("luna://com.palm.systemservice/getPreferences", JSON.stringify({ keys: ["x"] }));
-    check(p.calls[2].url === "luna://com.webos.service.systemservice/getPreferences", "systemservice's OSE name");
+    check(p.calls[before + 3].url === "luna://com.webos.service.systemservice/getPreferences", "systemservice's OSE name");
 }
 
 // ---- Window properties ----------------------------------------------------------------
@@ -245,8 +306,148 @@ function page(appId, appinfo, launchParams) {
     check(p.calls.filter((c) => c.url === "luna://org.webosphoenix.clipboard/add").length === 2, "nothing for an empty copy");
 }
 
-if (failures) {
-    console.log(failures + " failed");
-    process.exit(1);
+// ---- What WebAppMgr drops: PalmSystem's methods it defines and ignores ------------------
+
+{
+    const p = page("com.palm.app.clock", { id: "com.palm.app.clock" }, {}, { wamPalmSystem: true });
+    p.run();
+    const ps = p.g.PalmSystem;
+    ps.setWindowOrientation("left");
+    ps.enableFullScreenMode(true);
+    check(p.prop("phoenixOrientation") === "left" && p.prop("phoenixFullScreen") === "true",
+          "WebAppMgr's own setWindowOrientation / enableFullScreenMode (no-ops) are replaced");
+    ps.addBannerMessage("Alarm", "{}", "images/alarm.png", "alarm", "", 0);
+    check(!p.wam.dropped, "nothing goes to WebAppMgr's dropped commands");
+    check(p.g.PalmSystem.appIdentifier === "com.palm.app.clock", "PalmSystem.appIdentifier is the app (the runtime's name for it)");
 }
-console.log("all passed");
+
+// ---- The shell's line: org.webosphoenix.shellhost --------------------------------------
+
+{
+    const p = page("com.palm.app.email", { id: "com.palm.app.email" });
+    p.run();
+    const ev = p.callsTo("luna://org.webosphoenix.shellhost/events");
+    check(ev.length === 1 && ev[0].json.subscribe === true, "the card's page listens to the shell's events");
+    const framed = page("com.palm.app.email", { id: "com.palm.app.email" }, {}, { parent: {} });
+    framed.run();
+    check(framed.callsTo("luna://org.webosphoenix.shellhost/events").length === 0, "a frame in the card does not");
+
+    p.g.phoenixHost.postToHost("notification", { title: "New mail" });
+    const n = p.posts("notification");
+    check(n.length === 1 && n[0].payload.title === "New mail", "phoenixHost.postToHost goes to shellhost/post {type, payload}");
+
+    const ps = p.g.PalmSystem;
+    const id = ps.addBannerMessage("2 new messages", "{\"folder\":\"inbox\"}", "images/notification-small.png", "notifications", "", 0);
+    const b = p.posts("banner")[0];
+    check(typeof id === "string" && b && b.payload.id === id && b.payload.appId === "com.palm.app.email"
+          && b.payload.message === "2 new messages" && b.payload.params === "{\"folder\":\"inbox\"}"
+          && b.payload.soundClass === "notifications",
+          "addBannerMessage: a banner for the shell, its id returned");
+    check(b.payload.icon === "/usr/palm/applications/com.palm.app.email/images/notification-small.png",
+          "a banner's relative icon is the app's file");
+    ps.removeBannerMessage(id);
+    ps.clearBannerMessages();
+    check(p.posts("removeBanner")[0].payload.id === id && p.posts("clearBanners").length === 1, "removeBannerMessage, clearBannerMessages");
+    ps.playSoundNotification("alerts", "/usr/palm/sounds/alert.mp3", 2000);
+    check(p.posts("sound")[0].payload.soundFile === "/usr/palm/sounds/alert.mp3", "playSoundNotification: a sound for the shell");
+    check(ps.runTextIndexer("mail ada@example.com").indexOf("<a href=\"mailto:ada@example.com\">") >= 0,
+          "PalmSystem.runTextIndexer (WebAppMgr has none)");
+
+    // From the shell.
+    let active = null;
+    p.win.addEventListener("phoenixcardactivation", (e) => { active = e.detail.active; });
+    p.shellEvent("cardActivation", { active: false });
+    check(active === false, "the shell's cardActivation: a phoenixcardactivation event");
+    let toggled = 0;
+    p.g.enyo = { appMenu: { toggle: () => toggled++ } };
+    p.shellEvent("openAppMenu", {});
+    check(toggled === 1, "the shell's openAppMenu: Enyo's app menu");
+    check(p.shellEvent("nosuchevent", {}) && true, "an event the page does not know is ignored");
+}
+
+// ---- Paste: the newest copy in the clipboard history -------------------------------------
+
+{
+    const p = page("com.palm.app.memos", { id: "com.palm.app.memos" });
+    p.run();
+    p.shellEvent("editAction", { action: "paste" });
+    check(p.commands.length === 1 && p.commands[0][0] === "paste", "paste tries Chromium's own paste first");
+    const h = p.callsTo("luna://org.webosphoenix.clipboard/history");
+    check(h.length === 1 && h[0].json.limit === 1, "then asks the clipboard history for its newest copy");
+    p.reply("luna://org.webosphoenix.clipboard/history", { returnValue: true, clips: [{ id: "c7", type: "text", text: "Hi" }] });
+    const pc = p.callsTo("luna://org.webosphoenix.clipboard/paste");
+    check(pc.length === 1 && pc[0].json.id === "c7", "and its text (paste {id})");
+    p.reply("luna://org.webosphoenix.clipboard/paste", { returnValue: true, clip: { id: "c7", text: "Hello there" } });
+    check(p.commands.length === 2 && p.commands[1][0] === "insertText" && p.commands[1][1] === "Hello there",
+          "which goes into the field as typed text");
+    p.g.PalmSystem.paste();
+    check(p.callsTo("luna://org.webosphoenix.clipboard/history").length === 2, "PalmSystem.paste does the same");
+}
+
+// ---- The page's own features ----------------------------------------------------------------
+
+{
+    const p = page("com.palm.app.contacts", { id: "com.palm.app.contacts" });
+    p.run();
+    const rt = p.g.__phoenixRuntime;
+    check(typeof rt.editState === "function" && typeof rt.edit === "function" && typeof rt.shareContent === "function",
+          "Edit and Share are the page's (runtime.edit, editState, shareContent)");
+    function AppMenu() {}
+    AppMenu.prototype.initComponents = function () {};
+    p.g.enyo = {};
+    p.g.enyo.AppMenu = AppMenu;
+    check(AppMenu.prototype.__phoenixEditMenu === true, "Enyo 1.0's app menu gets Edit (and Share) as Enyo defines it");
+    check(p.head.children.some((c) => c.id === "phoenix-backdrop-blur"), "the 2011 apps' popup blur style is in the page");
+
+    // A link to another site opens in its app, through the legacy application manager.
+    const a = new Target(p.body);
+    a.tagName = "A";
+    a.href = "https://www.example.org/news";
+    let prevented = false;
+    p.win.dispatchEvent(Object.assign(new FakeEvent("click", {}), { target: a, button: 0, preventDefault() { prevented = true; } }));
+    const open = p.callsTo("luna://com.palm.applicationManager/open");
+    check(prevented && open.length === 1 && open[0].json.target === "https://www.example.org/news",
+          "a link that leaves the app: com.palm.applicationManager/open {target}");
+
+    // Scene transitions: the shell snapshots the card.
+    let settled = false;
+    p.g.PalmSystem.prepareSceneTransition(false).then(() => { settled = true; });
+    check(p.posts("sceneTransition")[0].payload.op === "prepare", "prepareSceneTransition: the shell is asked for a snapshot");
+    p.shellEvent("sceneTransitionPrepared", {});
+    setImmediate(() => check(settled, "the shell's sceneTransitionPrepared lets the page go on"));
+}
+
+// ---- The share sheet: served in the page, the rest on the bus ---------------------------------
+
+const asyncChecks = (async () => {
+    const p = page("org.webosphoenix.photos", { id: "org.webosphoenix.photos" });
+    p.run();
+    const b = new p.g.PalmServiceBridge();
+    let answer = null;
+    b.onservicecallback = (json) => { answer = JSON.parse(json); };
+    b.call("luna://org.webosphoenix.share/targets", JSON.stringify({ types: ["image/png"] }));
+    check(p.callsTo("luna://org.webosphoenix.share/targets").length === 0, "org.webosphoenix.share is answered in the page, not sent");
+    p.run();
+    const la = p.callsTo("luna://com.webos.applicationManager/listApps");
+    check(la.length === 1 && la[0].json.properties.indexOf("phoenix") >= 0, "the apps that take a share: SAM's listApps with appinfo's phoenix");
+    p.reply("luna://com.webos.applicationManager/listApps", { returnValue: true, apps: [
+        { id: "org.webosphoenix.messaging", title: "Messaging", icon: "icon.png", folderPath: "/usr/palm/applications/org.webosphoenix.messaging",
+          phoenix: { shareTargets: [{ types: ["image/*", "text/plain"] }] } },
+        { id: "org.webosphoenix.music", title: "Music", phoenix: { shareTargets: [{ types: ["audio/*"] }] } },
+        { id: "com.palm.app.email", title: "Email" }
+    ] });
+    await new Promise((r) => setImmediate(r));
+    p.run();
+    await new Promise((r) => setImmediate(r));
+    check(answer && answer.returnValue === true && answer.targets.map((t) => t.appId).join() === "com.palm.app.email,org.webosphoenix.messaging",
+          "share/targets: the apps that take pictures (Email's legacy entry too)");
+    check(answer && answer.targets[1].icon === "/usr/palm/applications/org.webosphoenix.messaging/icon.png", "with their icons' paths");
+})();
+
+asyncChecks.then(() => setImmediate(() => {
+    if (failures) {
+        console.log(failures + " failed");
+        process.exit(1);
+    }
+    console.log("all passed");
+}), (e) => { console.error(e); process.exit(1); });

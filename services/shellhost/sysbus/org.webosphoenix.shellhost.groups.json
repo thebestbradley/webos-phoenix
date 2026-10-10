@@ -1,0 +1,11 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.shellhost"
+    ],
+    "phoenix.shellhost.app": [
+        "dev"
+    ],
+    "phoenix.shellhost.shell": [
+        "oem"
+    ]
+}
