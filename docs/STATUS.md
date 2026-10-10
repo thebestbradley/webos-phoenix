@@ -181,6 +181,7 @@ The whole plan, milestone by milestone, with the decisions taken so far:
   small ones are left (a modal card and the keyboard, a dashboard's drag
   mode set late, firm press to select, word-by-word dictation); everything
   else waits on a device: written and tested here, to run on hardware (K1,
-  G1, G2, R1, R2, S6, M2, S2, A1, E2, C8, C12), and the Phoenix keyboard as
-  the device's input method (V5): the first image, and a device to run it
-  on (OPEN-QUESTIONS Q2).
+  G1, G2, R1, R2, S6, M2, S2, A1, E2, C8, C12, and since 10 October 2026 the
+  Phoenix keyboard as the device's input method, V5: a Maliit plugin around
+  the same keyboard QML, tested over a fake Maliit host): the first image,
+  and a device to run it on (OPEN-QUESTIONS Q2).
