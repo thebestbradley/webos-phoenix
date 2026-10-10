@@ -681,8 +681,55 @@
             editAction: function (p) {
                 if (["selectAll", "cut", "copy", "paste"].indexOf(p.action) >= 0) runtime.edit(p.action);
             },
-            openAppMenu: function () { runtime.openAppMenu(); }
+            openAppMenu: function () { runtime.openAppMenu(); },
+            justType: function (p) { deviceJustType(p, 0); }
         };
+        // Just Type's page (com.palm.launcher, luna-applauncher) in the
+        // shell's Just Type: the text typed, the stop, Back, as the
+        // simulator's SimWindowSource runs them in the page (justTypeStart,
+        // justTypeType, justTypeStop, justTypeBack). A start before Enyo has
+        // made the page waits for it (up to five seconds).
+        function deviceJustType(p, tries) {
+            var e = global.enyo;
+            var jt = e && e.$ && e.$.justTypeApp && e.$.justTypeApp.$ && e.$.justTypeApp.$.justType;
+            if (p.op === "back") {
+                var menu = e && e.appMenu;
+                if (menu && menu.isOpen) menu.close();
+                else host.postToHost("justTypeDismiss", {});
+                return;
+            }
+            if (!jt) {
+                if ((p.op === "start" || p.op === "type") && tries < 50)
+                    global.setTimeout(function () { deviceJustType(p, tries + 1); }, 100);
+                return;
+            }
+            var field = jt.$.searchField;
+            // The field's text, the cursor after it (SimWindowSource._justTypeSetText).
+            var setText = function (v) {
+                field.setValue(v);
+                var n = field.$.input && field.$.input.hasNode();
+                if (n && n.setSelectionRange) n.setSelectionRange(v.length, v.length);
+                else if (n && global.document.createRange) {
+                    var r = global.document.createRange();
+                    r.selectNodeContents(n);
+                    r.collapse(false);
+                    var sel = global.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(r);
+                }
+                jt.onValueChange(null, null, v);
+            };
+            if (p.op === "start") {
+                jt.forceFocus();
+                setText(String(p.text || ""));
+            } else if (p.op === "type") {
+                setText(field.getValue() + String(p.text || ""));
+            } else if (p.op === "stop") {
+                jt.justTypeDeactivated();
+                // Its window hides until Just Type opens again (WebAppMgr's hide).
+                if (ps && typeof ps.hide === "function") ps.hide();
+            }
+        }
         runtime.onShellEvent = function (type, fn) { shellEvents[type] = fn; };
         runtime.shellEvent = function (type, payload) {
             var fn = shellEvents[type];

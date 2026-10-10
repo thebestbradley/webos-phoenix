@@ -127,7 +127,9 @@ Item {
     // WebAppMgr's launchingAppId, joins that one's, CardWindowManager.cpp:
     // 556-578; else a new stack right of the one the shell launched from).
     function addSurface(item) {
-        if (isCard(item))
+        if (item && item.appId === justTypeAppId && !item.isProxy() && !item.isPartOfGroup())
+            _adoptJustType(item);
+        else if (isCard(item))
             _adopt(item);
     }
 
@@ -153,6 +155,10 @@ Item {
                                  launchingAppId: f.launchingAppId, returnTo: f.returnTo });
         _pendingAfterUid = "";
         _backSeen[uid] = f.back;
+        // An app Just Type launched: its card comes, Just Type goes (as the
+        // simulator's does on the page's launch).
+        if (_justTypeShown)
+            justTypeDismissed();
         // The page's later requests (orientation, full screen, status bar
         // colour, a Back it did not take) come as window properties
         // (WebOSSurfaceItem::windowPropertiesChanged, webossurfaceitem.cpp:930).
@@ -188,6 +194,10 @@ Item {
     }
 
     function removeSurface(item) {
+        if (_justTypeHost && _justTypeHost.surface === item) {
+            _justTypeHost.surface = null;
+            return;
+        }
         var uid = uidOf(item);
         if (uid === "")
             return;
@@ -687,6 +697,8 @@ Item {
             progressAnimationRequested(String(payload.type || ""), String(payload.state || ""));
         } else if (type === "debugOverlay") {
             debugOverlayRequested(payload);
+        } else if (type === "justTypeDismiss" && appId === justTypeAppId) {
+            justTypeDismissed();
         }
         // Others are the simulator's (its installer, its storaged, its
         // preferences mirror) or reach the shell another way on a device
@@ -760,6 +772,65 @@ Item {
             });
         });
         return true;
+    }
+
+    // ---- Just Type (com.palm.launcher, luna-applauncher's page) ----------------------------
+    // As SimWindowSource.justTypeWindow: the original Just Type page in the
+    // shell's Just Type, given the typed text. On a device the page is a
+    // WebAppMgr app: started hidden (SAM's preload) the first time the
+    // shell asks for it, shown by a launch when Just Type opens, its surface
+    // put in the shell's Just Type rather than in a card; the text, the
+    // stop, Back and the app menu go to the page as its "justType" and
+    // "openAppMenu" events (phoenix-runtime.js installDevice), and it says
+    // when Back leaves Just Type ("justTypeDismiss").
+    readonly property string justTypeAppId: "com.palm.launcher"
+    signal justTypeDismissed
+    property Item _justTypeHost: null
+    property bool _justTypeShown: false
+    function justTypeWindow() {
+        if (!_justTypeHost) {
+            _justTypeHost = hostComponent.createObject(source, {});
+            lunaCall("luna://com.webos.applicationManager/launch", { id: justTypeAppId, preload: "partial", params: {} }, function() {});
+        }
+        return _justTypeHost;
+    }
+    function _adoptJustType(item) {
+        justTypeWindow().surface = item;
+        item.state = Qt.WindowFullScreen;
+    }
+    // done (optional): called once the text is on its way.
+    function justTypeStart(text, done) {
+        justTypeWindow();
+        _justTypeShown = true;
+        lunaCall("luna://com.webos.applicationManager/launch", { id: justTypeAppId, params: { justType: true } }, function() {});
+        sendToApp(justTypeAppId, "justType", { op: "start", text: String(text || "") });
+        if (done)
+            done();
+    }
+    function justTypeType(text) {
+        if (_justTypeShown)
+            sendToApp(justTypeAppId, "justType", { op: "type", text: String(text || "") });
+    }
+    function justTypeStop() {
+        if (!_justTypeShown)
+            return;
+        _justTypeShown = false;
+        sendToApp(justTypeAppId, "justType", { op: "stop" });
+    }
+    function justTypeAppMenu() {
+        if (!_justTypeShown)
+            return false;
+        sendToApp(justTypeAppId, "openAppMenu", {});
+        return true;
+    }
+    // Back: an open app menu closes; otherwise the page says
+    // justTypeDismiss (pageMessage) and Just Type goes.
+    function justTypeBack() {
+        if (!_justTypeShown) {
+            justTypeDismissed();
+            return;
+        }
+        sendToApp(justTypeAppId, "justType", { op: "back" });
     }
 
     // ---- Notifications ------------------------------------------------------------------

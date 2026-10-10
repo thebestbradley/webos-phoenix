@@ -29,6 +29,8 @@ Item {
         property var windowProperties: ({})
         property bool closed: false
         function close() { closed = true; }
+        function isProxy() { return false; }
+        function isPartOfGroup() { return false; }
         function setProperty(k, v) {
             var p = {};
             for (var x in windowProperties)
@@ -302,6 +304,42 @@ Item {
             compare(c.params.ms, 60000);
         }
 
+        function test_justTypeIsThePagesSurface() {
+            FakeBus.clear();
+            jtSpy.clear();
+            var host = windows.justTypeWindow();
+            verify(host);
+            compare(FakeBus.last("com.webos.applicationManager", "/launch").params.preload, "partial");
+            compare(windows.justTypeWindow(), host);
+            var page = wam("com.palm.launcher");
+            var cards = windows.cards.count;
+            windows.addSurface(page);
+            compare(host.surface, page);
+            compare(windows.cards.count, cards);
+            var done = false;
+            windows.justTypeStart("p", function() { done = true; });
+            verify(done);
+            var start = sent("justType");
+            compare(start[start.length - 1].params.appId, "com.palm.launcher");
+            compare(start[start.length - 1].params.payload.text, "p");
+            windows.justTypeType("hoe");
+            compare(sent("justType").pop().params.payload, { op: "type", text: "hoe" });
+            // An app it launches: its card comes, Just Type goes.
+            var app = wam("org.webosphoenix.phone");
+            var uid = windows._adopt(app);
+            compare(jtSpy.count, 1);
+            windows.justTypeStop();
+            compare(sent("justType").pop().params.payload.op, "stop");
+            post("com.palm.launcher", "justTypeDismiss", {});
+            compare(jtSpy.count, 2);
+            post("com.evil", "justTypeDismiss", {});
+            compare(jtSpy.count, 2);
+            windows.removeSurface(page);
+            compare(host.surface, null);
+            windows.removeSurface(app);
+            [page, app].forEach(function(x) { x.destroy(); });
+        }
+
         function test_screenCapturesAreFiled() {
             FakeBus.clear();
             var before = windows.notifications.count;
@@ -326,6 +364,7 @@ Item {
     SignalSpy { id: soundSpy; target: windows; signalName: "soundRequested" }
     SignalSpy { id: sceneSpy; target: windows; signalName: "sceneTransitionRequested" }
     SignalSpy { id: shutdownSpy; target: windows; signalName: "shutdownRequested" }
+    SignalSpy { id: jtSpy; target: windows; signalName: "justTypeDismissed" }
 
     TestCase {
         name: "LsmSystemStatus"

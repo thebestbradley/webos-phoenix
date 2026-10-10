@@ -431,6 +431,36 @@ function page(appId, appinfo, launchParams, opts) {
     setImmediate(() => check(settled, "the shell's sceneTransitionPrepared lets the page go on"));
 }
 
+// ---- Just Type's page (com.palm.launcher) -------------------------------------------------
+
+{
+    const p = page("com.palm.launcher", { id: "com.palm.launcher" });
+    p.run();
+    let hidden = 0;
+    p.g.PalmSystem.hide = () => { hidden++; };
+    const log = [];
+    let value = "";
+    const node = { setSelectionRange: (a, b) => log.push(["sel", a, b]) };
+    const field = { setValue: (v) => { value = v; }, getValue: () => value, $: { input: { hasNode: () => node } } };
+    const jt = { $: { searchField: field }, forceFocus: () => log.push(["focus"]), onValueChange: (a, b, v) => log.push(["search", v]),
+                 justTypeDeactivated: () => log.push(["off"]) };
+    // The shell's start may come before Enyo has made the page.
+    p.shellEvent("justType", { op: "start", text: "pa" });
+    p.g.enyo = { $: { justTypeApp: { $: { justType: jt } } } };
+    p.run();
+    check(value === "pa" && log[0][0] === "focus" && log.some((l) => l[0] === "search" && l[1] === "pa"),
+          "Just Type: the shell's start puts the text in the page's field (once the page is made)");
+    p.shellEvent("justType", { op: "type", text: "lm" });
+    check(value === "palm" && log.some((l) => l[0] === "sel" && l[1] === 4), "Just Type: more text goes at the end, the cursor after it");
+    p.shellEvent("justType", { op: "stop" });
+    check(log[log.length - 1][0] === "off" && hidden === 1, "Just Type: stop deactivates the page and hides its window");
+    p.g.enyo.appMenu = { isOpen: true, close() { this.isOpen = false; } };
+    p.shellEvent("justType", { op: "back" });
+    check(p.posts("justTypeDismiss").length === 0 && !p.g.enyo.appMenu.isOpen, "Just Type: Back closes its app menu first");
+    p.shellEvent("justType", { op: "back" });
+    check(p.posts("justTypeDismiss").length === 1, "Just Type: then Back says the shell may close it");
+}
+
 // ---- The share sheet: served in the page, the rest on the bus ---------------------------------
 
 const asyncChecks = (async () => {

@@ -42,6 +42,12 @@ Item {
         value: host.surface ? Math.min(host.width / host.surface.width, host.height / host.surface.height) : 1
     }
 
+    // The keyboard to the page (Just Type's, once it shows the text).
+    function focusPage() {
+        if (surface)
+            surface.forceActiveFocus();
+    }
+
     // The page's CSS pixels in this item's: its viewport spans the surface,
     // as scaled here.
     function pageScale(viewportWidth) {
