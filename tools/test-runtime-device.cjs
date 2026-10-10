@@ -431,6 +431,32 @@ function page(appId, appinfo, launchParams, opts) {
     setImmediate(() => check(settled, "the shell's sceneTransitionPrepared lets the page go on"));
 }
 
+// ---- Legacy names, and com.palm.power's timeouts ------------------------------------------
+
+{
+    const p = page("com.palm.app.calendar", { id: "com.palm.app.calendar" });
+    p.run();
+    const b = new p.g.PalmServiceBridge();
+    b.call("palm://com.palm.activitymanager/create", JSON.stringify({ activity: { name: "x" } }));
+    b.call("palm://com.palm.downloadmanager/download", JSON.stringify({ target: "http://x/y" }));
+    check(p.callsTo("luna://com.webos.service.activitymanager/create").length === 1
+          && p.callsTo("luna://com.webos.service.downloadmanager/download").length === 1,
+          "com.palm.activitymanager and com.palm.downloadmanager: OSE's names");
+    let answer = null;
+    b.onservicecallback = (j) => { answer = JSON.parse(j); };
+    b.call("palm://com.palm.power/timeout/set", JSON.stringify({ key: "rem", uri: "palm://com.palm.app.calendar/alarm", at: "10/11/2026 07:30:00" }));
+    p.run();
+    const c = p.callsTo("luna://com.webos.service.activitymanager/create").pop();
+    check(c && c.json.activity.name === "timeout:rem" && c.json.activity.schedule.start === "2026-10-11 07:30:00Z"
+          && c.json.activity.callback.method === "palm://com.palm.app.calendar/alarm",
+          "com.palm.power timeout/set: an activity of the activity manager");
+    p.reply("luna://com.webos.service.activitymanager/create", { returnValue: true, activityId: 7 });
+    check(answer && answer.returnValue === true && answer.key === "rem", "and the legacy reply {key}");
+    b.call("palm://com.palm.power/com/palm/power/batteryStatusQuery", "{}");
+    p.run();
+    check(p.callsTo("luna://com.palm.power/com/palm/power/batteryStatusQuery").length === 1, "the rest of com.palm.power is on the bus");
+}
+
 // ---- Just Type's page (com.palm.launcher) -------------------------------------------------
 
 {

@@ -337,9 +337,14 @@
     // open {target} nor its handlers, and launches only for oem callers
     // (sam files/sysbus/com.webos.sam.groups.json), so Phoenix serves the
     // legacy name itself on a device (services/appmanager).
+    // com.palm.activitymanager and com.palm.downloadmanager are OSE's
+    // activitymanager and luna-downloadmgr under their new names
+    // (webosose/activitymanager, luna-downloadmgr files/sysbus).
     var serviceAliases = {
         "com.palm.systemservice": "com.webos.service.systemservice",
-        "com.palm.connectionmanager": "com.webos.service.connectionmanager"
+        "com.palm.connectionmanager": "com.webos.service.connectionmanager",
+        "com.palm.activitymanager": "com.webos.service.activitymanager",
+        "com.palm.downloadmanager": "com.webos.service.downloadmanager"
     };
 
     function aliasUrl(url) {
@@ -639,6 +644,17 @@
         installDeviceShell(ps, me, override, shim);
     }
 
+    // com.palm.power timeout/set {at: "MM/DD/YYYY HH:MM:SS" (UTC) | in:
+    // "HH:MM:SS"} -> the activity's start, "YYYY-MM-DD HH:MM:SSZ", or "".
+    function powerTimeoutStart(p, now) {
+        var m;
+        if (p.at && (m = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/.exec(p.at)))
+            return m[3] + "-" + m[1] + "-" + m[2] + " " + m[4] + ":" + m[5] + ":" + m[6] + "Z";
+        if (p["in"] && (m = /^(\d{2}):(\d{2}):(\d{2})$/.exec(p["in"])))
+            return new Date(now + ((+m[1] * 60 + +m[2]) * 60 + +m[3]) * 1000).toISOString().replace("T", " ").replace(/\.\d+Z$/, "Z");
+        return "";
+    }
+
     // ---- On a device: the shell, and the page's own features --------------------
     //
     // docs/DEVICE-AUDIT.md. In phoenix-sim the shell, the system UI and every
@@ -794,6 +810,28 @@
         });
         shim("getIdentifierForFrame", function () { return ps.identifier; });
         shim("getLocalizedString", function (s) { return s; });
+
+        // com.palm.power's timeouts (the pre-activity alarm API): an
+        // activity of the activity manager, as the simulator's runtime
+        // makes it ("Activity manager and alarms"); the rest of
+        // com.palm.power is phoenix-devices' on the bus.
+        register(["com.palm.power"], {
+            "/timeout/set": function (p, reply, ctx) {
+                if (!p.key || !p.uri) return reply(fail(-1, "key and uri are required"));
+                var start = powerTimeoutStart(p, Date.now());
+                if (!start) return reply(fail(-1, "at or in is required"));
+                runtime.busCall("luna://com.webos.service.activitymanager/create", {
+                    start: true, replace: true,
+                    activity: { name: "timeout:" + p.key, description: "com.palm.power timeout", type: { foreground: true, persist: true },
+                                schedule: { start: start }, callback: { method: p.uri, params: p.params || {} } }
+                }, function (r) { reply(r && r.returnValue ? ok({ key: p.key }) : (r || fail(-1, "No reply"))); }, ctx);
+            },
+            "/timeout/clear": function (p, reply, ctx) {
+                runtime.busCall("luna://com.webos.service.activitymanager/cancel", { activityName: "timeout:" + p.key },
+                                function () { reply(ok({ key: p.key })); }, ctx);
+            },
+            "*": function (p, reply, ctx, method) { runtime.busCall("luna://com.palm.power" + method, p, reply, ctx); }
+        });
 
         // ---- The page's own features ------------------------------------------------
         // Each on its own: one that fails on a page leaves the others.
