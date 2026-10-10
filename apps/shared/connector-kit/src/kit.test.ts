@@ -186,6 +186,145 @@ describe("the sync engine (two-way)", () => {
     });
 });
 
+// ---- Sharing --------------------------------------------------------------------------------
+
+// A board that takes posts: text (280 characters), a link, two pictures of
+// 1 KB with descriptions, public or members only. The notes server keeps
+// each post as a note.
+const boardShare = {
+    label: "Board",
+    accountLabel: "@{username}",
+    accepts: { text: { maxLength: 280 }, link: true as const, image: { max: 2, maxBytes: 1024, altText: { maxLength: 100 } } },
+    audience: { options: [{ value: "public", label: "Everyone" }, { value: "members", label: "Members" }], default: "public" },
+    send: async (ctx: any, content: any) => {
+        const pictures = [];
+        for (const f of content.files) pictures.push({ bytes: (await f.read()).bytes.length, alt: f.description });
+        const r = await ctx.http.json({ method: "POST", url: "https://notes.example/notes", headers: { "Idempotency-Key": content.idempotencyKey },
+                                        json: { title: content.audience, text: [content.text, content.url].filter(Boolean).join(" "), pictures, by: ctx.credentials.password } });
+        return { id: r.id, url: "https://notes.example/notes/" + r.id };
+    }
+};
+const boardConnector = kit.defineConnector(Object.assign({}, notesConnector, {
+    service: "org.example.service.board", templateIds: ["org.example.board"],
+    kinds: { state: "org.example.board.state:1", item: "org.example.board.item:1" },
+    share: boardShare
+}));
+const PICTURE = "/media/internal/DCIM/100PHNX/dusk.jpg";
+const boardFixture = Object.assign({}, notesFixture, {
+    template: { templateId: "org.example.board", capabilityProviders: [{ id: "org.example.notes.memos", capability: "MEMOS" }] },
+    share: { content: { text: "Hello, board", url: "https://example.org/", files: [{ path: PICTURE, mimeType: "image/jpeg", description: "Dusk" }] },
+             audience: "members" },
+    files: { [PICTURE]: { bytes: new Uint8Array(200), mimeType: "image/jpeg" } }
+});
+
+describe("conformance: a connector that shares", () => {
+    const checks = conformanceChecks(boardConnector, boardFixture);
+    it("has the three share checks", () => {
+        expect(checks.map((c) => c.name).filter((n) => /^share/.test(n))).toHaveLength(3);
+    });
+    for (const check of checks) it(check.name, () => check.run());
+    it("a fixture without a share fails the share checks", async () => {
+        const results = await runConformance(boardConnector, Object.assign({}, boardFixture, { share: undefined }));
+        expect(results.filter((r) => !r.ok).map((r) => r.name)).toEqual(results.filter((r) => /^share/.test(r.name)).map((r) => r.name));
+    });
+});
+
+describe("sharing (share.ts and the share method)", () => {
+    it("the declaration makes the appinfo.json share target", () => {
+        expect(kit.shareTarget(boardConnector, "Board app")).toEqual({
+            types: ["text/plain", "text/uri-list", "image/*"], label: "Board",
+            connector: { templateId: "org.example.board", service: "org.example.service.board", accountLabel: "@{username}",
+                         accepts: { text: { maxLength: 280 }, link: true, image: { max: 2, maxBytes: 1024, altText: { maxLength: 100 } } },
+                         audience: { options: [{ value: "public", label: "Everyone" }, { value: "members", label: "Members" }], default: "public" } }
+        });
+        expect(kit.shareTypes({ video: { mimeTypes: ["video/mp4"] }, file: true })).toEqual(["video/mp4", "*/*"]);
+        expect(kit.shareTarget(notesConnector, "Notes")).toBeNull();
+        expect(kit.accountLabel("@{username}", { username: "me@example.social" })).toBe("@me@example.social");
+    });
+
+    it("defineConnector refuses a share with mistakes", () => {
+        const bad = (share: any, more?: any) => () => kit.defineConnector(Object.assign({}, boardConnector, { share }, more || {}));
+        expect(bad({ accepts: { text: true } })).toThrow(/share\.send: a function/);
+        expect(bad({ accepts: {}, send: async () => ({}) })).toThrow(/share\.accepts: what it takes/);
+        expect(bad({ accepts: { poll: true }, send: async () => ({}) })).toThrow(/share\.accepts\.poll: not one of/);
+        expect(bad({ accepts: { image: { max: 1.5 } }, send: async () => ({}) })).toThrow(/share\.accepts\.image\.max: a whole number/);
+        expect(bad({ accepts: { text: { mimeTypes: ["text/plain"] } }, send: async () => ({}) })).toThrow(/mimeTypes: only for image, video and file/);
+        expect(bad({ accepts: { text: true }, audience: { options: [{ value: "a", label: "A" }], default: "b" }, send: async () => ({}) }))
+            .toThrow(/share\.audience\.default/);
+        expect(bad(boardShare, { methods: { share: async () => ({}) } })).toThrow(/methods\.share: the kit makes this one/);
+    });
+
+    async function board() {
+        const memdb = await import("@phoenix/synckit/src/test/memdb.js");
+        const db = memdb.createMemDb({ "com.palm.note.example:1": "com.palm.note:1" });
+        const server = notesServer();
+        const accounts = {
+            a1: { _id: "a1", templateId: "org.example.board", username: "anna", capabilityProviders: [] },
+            a2: { _id: "a2", templateId: "org.example.board", username: "ben", capabilityProviders: [] },
+            n1: { _id: "n1", templateId: "org.example.notes", username: "nora", capabilityProviders: [] }
+        };
+        const credentials = { a1: { common: { password: "anna-secret" } }, a2: { common: { password: "ben-secret" } }, n1: { common: {} } };
+        const read: string[] = [];
+        const files: Record<string, number> = { [PICTURE]: 200, "/media/internal/big.png": 4096, "/media/internal/private.jpg": 10 };
+        const bus = memdb.createFakeBus({ db, accounts, credentials });
+        const m = kit.createConnectorService(boardConnector, { luna: bus, request: server.request as any, periodicSync: false, sleep: async () => {},
+            readFile: async (p: string) => { read.push(p); return { bytes: new Uint8Array(files[p]), mimeType: "image/jpeg" }; } });
+        return { m, server, read };
+    }
+
+    it("posts as the account chosen, with its credentials, and keeps descriptions within the declaration", async () => {
+        const { m, server, read } = await board();
+        const r = await m.share({ accountId: "a2", content: { text: "Hi", url: "https://example.org/", files: [{ path: PICTURE, description: " Dusk " }] },
+                                  audience: "members", idempotencyKey: "k1" });
+        expect(r).toMatchObject({ returnValue: true, posted: { id: expect.any(String), url: expect.stringMatching(/^https:\/\/notes\.example\/notes\//) } });
+        const post = Object.values(server.notes).find((n: any) => n.text === "Hi https://example.org/") as any;
+        expect(post).toMatchObject({ title: "members", by: "ben-secret", pictures: [{ bytes: 200, alt: "Dusk" }] });
+        expect(read).toEqual([PICTURE]);
+        // The audience's default; the account of another template is not this connector's.
+        await m.share({ accountId: "a1", content: { text: "Default audience" } });
+        expect(Object.values(server.notes).find((n: any) => n.text === "Default audience")).toMatchObject({ title: "public", by: "anna-secret" });
+        expect(await m.share({ accountId: "n1", content: { text: "x" } })).toMatchObject({ returnValue: false, errorCode: "ACCOUNT_NOT_FOUND" });
+        expect(await m.share({ content: { text: "x" } })).toMatchObject({ returnValue: false, errorCode: "400_BAD_REQUEST" });
+    });
+
+    it("refuses what the declaration does not take before the server sees it", async () => {
+        const { m, server } = await board();
+        const before = server.requests();
+        const refused = async (p: any) => (await m.share(Object.assign({ accountId: "a1" }, p))).errorCode;
+        expect(await refused({ content: { text: "x".repeat(281) } })).toBe("SHARE_TOO_LONG");
+        expect(await refused({ content: { files: [1, 2, 3].map((i) => ({ path: "/media/internal/" + i + ".jpg" })) } })).toBe("SHARE_TOO_MANY");
+        expect(await refused({ content: { files: [{ path: "/media/internal/clip.mp4" }] } })).toBe("SHARE_NOT_ACCEPTED");
+        expect(await refused({ content: { files: [{ path: PICTURE, description: "x".repeat(101) }] } })).toBe("SHARE_TOO_LONG");
+        expect(await refused({ content: {} })).toBe("SHARE_NOTHING");
+        expect(await refused({ content: { text: "x" }, audience: "friends" })).toBe("SHARE_BAD_AUDIENCE");
+        // Too large shows only when the file is read: nothing posted.
+        const big = await m.share({ accountId: "a1", content: { files: [{ path: "/media/internal/big.png" }] } });
+        expect(big).toMatchObject({ returnValue: false, errorCode: "SHARE_TOO_LARGE", retryable: false });
+        expect(server.requests()).toBe(before);
+    });
+
+    it("send reads only the files of the share", async () => {
+        const sneaky = kit.defineConnector(Object.assign({}, boardConnector, { share: Object.assign({}, boardShare, {
+            send: async (ctx: any) => { await ctx.readFile("/media/internal/private.jpg"); return {}; } }) }));
+        const memdb = await import("@phoenix/synckit/src/test/memdb.js");
+        const read: string[] = [];
+        const bus = memdb.createFakeBus({ db: memdb.createMemDb({}), accounts: { a1: { _id: "a1", templateId: "org.example.board", capabilityProviders: [] } },
+                                          credentials: { a1: { common: {} } } });
+        const m = kit.createConnectorService(sneaky, { luna: bus, request: notesServer().request as any, periodicSync: false,
+            readFile: async (p: string) => { read.push(p); return { bytes: new Uint8Array(1), mimeType: "image/jpeg" }; } });
+        const r = await m.share({ accountId: "a1", content: { files: [{ path: PICTURE }] } });
+        expect(r).toMatchObject({ returnValue: false, errorCode: "PERMISSION_DENIED" });
+        expect(read).toEqual([]);
+    });
+
+    it("a link goes into the text for a service that takes text but no links", () => {
+        const s = Object.assign({}, boardShare, { accepts: { text: { maxLength: 280 } } });
+        expect(kit.checkShare(s as any, { content: { text: "Look", url: "https://example.org/" } })).toMatchObject({ text: "Look\n\nhttps://example.org/", url: "" });
+        expect(() => kit.checkShare(Object.assign({}, s, { accepts: { image: true } }) as any, { content: { url: "https://example.org/" } }))
+            .toThrow(/does not take links/);
+    });
+});
+
 // ---- Package checks -------------------------------------------------------------------------
 
 function caseFiles(base: Record<string, any>, set: Record<string, any>): Files {
@@ -240,6 +379,75 @@ describe("phoenix-connector", () => {
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
+    });
+
+    it("new --share writes the declaration, the compose page and the share target; pack keeps appinfo.json in step", async () => {
+        const dir = mkdtempSync(join(tmpdir(), "connector-"));
+        const out: string[] = [];
+        const io = { log: (s: string) => out.push(s), err: (s: string) => out.push(s) };
+        const w = join(dir, "w");
+        try {
+            expect(await main(["new", "org.example.wall", "--share", "--dir", w], io)).toBe(0);
+            const info = () => JSON.parse(readFileSync(join(w, "appinfo.json"), "utf8"));
+            expect(info().phoenix.shareTargets).toEqual([expect.objectContaining({ types: ["text/plain", "text/uri-list", "image/*"], label: "wall",
+                connector: expect.objectContaining({ templateId: "org.example.wall", service: "org.example.service.wall" }) })]);
+            expect(info().requiredPermissions).toContain("wall.share");
+            expect(readFileSync(join(w, "index.html"), "utf8")).toMatch(/share\/compose\.js/);
+            expect(readFileSync(join(w, "share", "compose.js"), "utf8")).toMatch(/\/share", \{ accountId/);
+            expect(await main(["validate", w], io)).toBe(0);
+            // The definition changes: validate says appinfo.json is behind; pack writes it.
+            const connectorJs = join(w, "service", "connector.js");
+            writeFileSync(connectorJs, readFileSync(connectorJs, "utf8").replace("maxLength: 500", "maxLength: 300"));
+            out.length = 0;
+            expect(await main(["validate", w], io)).toBe(1);
+            expect(out.join("\n")).toMatch(/C14 appinfo\.json: shareTargets is not what the definition's share says/);
+            const r = pack(w, dir, { vendor: false });
+            expect(r.written).toEqual(["appinfo.json"]);
+            expect(info().phoenix.shareTargets[0].connector.accepts.text).toEqual({ maxLength: 300 });
+            expect(await main(["validate", w], io)).toBe(0);
+            // A share target written by hand is refused.
+            const hand = info();
+            hand.phoenix.shareTargets = [{ types: ["image/*"], label: "Wall" }];
+            writeFileSync(join(w, "appinfo.json"), JSON.stringify(hand));
+            expect(checkConnector(readFolder(w)).errors.some((e) => /^C14 .*not by hand/.test(e))).toBe(true);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("signUp: checked by defineConnector, written into the template by pack, compared by validate", async () => {
+        expect(() => kit.defineConnector(Object.assign({}, notesConnector, { signUp: "http://example.com/join" }))).toThrow(/signUp\.url: an https:\/\/ address/);
+        expect(() => kit.defineConnector(Object.assign({}, notesConnector, { signUp: { servers: [{ name: "", url: "https://a.example/" }] } })))
+            .toThrow(/signUp\.servers\[0\]/);
+        expect(kit.templateSignUp("https://example.com/join")).toEqual({ url: "https://example.com/join" });
+        const dir = mkdtempSync(join(tmpdir(), "connector-"));
+        const out: string[] = [];
+        const io = { log: (s: string) => out.push(s), err: (s: string) => out.push(s) };
+        const w = join(dir, "w");
+        try {
+            expect(await main(["new", "org.example.club", "--dir", w], io)).toBe(0);
+            const connectorJs = join(w, "service", "connector.js");
+            writeFileSync(connectorJs, readFileSync(connectorJs, "utf8").replace("// signUp: \"https://example.com/join\",",
+                "signUp: { url: \"https://club.example/join\", servers: [{ name: \"Club One\", url: \"https://one.club.example/signup\" }] },"));
+            expect(await main(["validate", w], io)).toBe(1);
+            expect(out.join("\n")).toMatch(/C16 public\/accounts\/org\.example\.club\/org\.example\.club\.json: signUp is not what the definition's signUp says/);
+            const r = pack(w, dir, { vendor: false });
+            expect(r.written).toEqual(["public/accounts/org.example.club/org.example.club.json"]);
+            const tpl = JSON.parse(readFileSync(join(w, "public/accounts/org.example.club/org.example.club.json"), "utf8"));
+            expect(tpl.signUp).toEqual({ url: "https://club.example/join", servers: [{ name: "Club One", url: "https://one.club.example/signup" }] });
+            expect(await main(["validate", w], io)).toBe(0);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it("the share examples: the Fediverse's appinfo.json is its definition's; the FEEDS example shares nothing", async () => {
+        const { fromDefinition } = await import("./tools/package");
+        const fedi = fromDefinition(join(REPO, "apps", "fediverse"));
+        expect(fedi && fedi.sharing).toBe(true);
+        expect(fedi && fedi.changed, "apps/fediverse's appinfo.json or template is not what its definition says: run phoenix-connector pack").toEqual([]);
+        const f = fromDefinition(FEEDS);
+        expect(f && !f.sharing && !f.changed.length).toBe(true);
     });
 
     it("validate refuses a broken package with the rule's code", async () => {

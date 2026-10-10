@@ -190,6 +190,22 @@ async function main() {
               && await app.locator(".enyo-button:visible, .enyo-custom-button:visible", { hasText: "Sign In" }).count() > 0,
               "a template without its own sign-in page: the credentials view");
         await app.screenshot({ path: path.join(outDir, "3-setup-credentials.png") });
+        check(!(await app.locator(".accounts-signup:visible").count()), "a template without a signUp: no sign-up link");
+        // A template with a signUp (Jabber's: XMPP's list of providers): the
+        // library's own sign-in page says where to get an account (compat
+        // lib/accounts/source/phoenix-signup.js), and the link opens it.
+        await app.goto(accountsUrl({ templateId: "com.webosphoenix.xmpp" }));
+        const signUpLine = app.locator(".accounts-signup:visible");
+        await signUpLine.waitFor({ timeout: 10000 }).catch(() => {});
+        check(/Don't have an account\? Sign up/.test(await signUpLine.textContent().catch(() => "")),
+              "a template with a signUp: \"Don't have an account? Sign up\" under the sign-in fields");
+        await app.waitForTimeout(500);
+        await app.screenshot({ path: path.join(outDir, "3b-sign-up-link.png") });
+        host.length = 0;
+        await app.locator(".accounts-signup-link:visible").first().click().catch(() => {});
+        await app.waitForTimeout(800);
+        check(host.some((m) => JSON.stringify(m.payload || {}).indexOf("https://providers.xmpp.net/") >= 0),
+              "Sign up opens the providers' page in the browser (" + JSON.stringify(host.map((m) => m.type)) + ")");
         await app.goto(accountsUrl());
         await app.waitForTimeout(3000);
         await app.evaluate(() => __phoenixRuntime.relaunch({ templateId: "com.webosphoenix.dav" }));

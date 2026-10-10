@@ -328,13 +328,22 @@ Item {
             tryCompare(cv, "_stackOwn", false, 1000);
             // A maximize that takes over a minimize carries the stack on
             // from where it is (no jump back to the slide's progress).
+            // (The moment is caught on the frame it comes, not by polling:
+            // the window is about 100 ms, which a slow machine's polls miss.)
             cv.maximize(s.c1);
             tryVerify(function () { return shell.maximized; }, 2000);
+            var startCx = NaN, jump = NaN;
+            root.onProgress = function () {
+                if (!isNaN(startCx) || !(cv.stackProgress < 0.5 && cv.maximizeProgress > 0.1))
+                    return;
+                startCx = cv.layout.cards[s.c1].cx;
+                cv.maximize(s.c1);
+                jump = Math.abs(cv.layout.cards[s.c1].cx - startCx);
+            };
             cv.minimize();
-            tryVerify(function () { return cv.stackProgress < 0.5 && cv.maximizeProgress > 0.1; }, 2000);
-            var startCx = cv.layout.cards[s.c1].cx;
-            cv.maximize(s.c1);
-            verify(Math.abs(cv.layout.cards[s.c1].cx - startCx) < 1, "the card carries on from where it is");
+            tryVerify(function () { return !isNaN(jump); }, 2000, "the minimize reached the stack's half while the slide went on");
+            root.onProgress = null;
+            verify(jump < 1, "the card carries on from where it is (" + jump + ")");
             tryVerify(function () { return shell.maximized; }, 2000);
             fuzzyCompare(cv.layout.cards[s.c1].scale, 1, 0.0001);
         }

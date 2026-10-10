@@ -10,6 +10,6 @@
     ],
     "fediverse.account": [
         "org.webosphoenix.service.fediverse/signIn",
-        "org.webosphoenix.service.fediverse/post"
+        "org.webosphoenix.service.fediverse/share"
     ]
 }

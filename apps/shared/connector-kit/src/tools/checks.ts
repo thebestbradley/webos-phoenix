@@ -30,10 +30,23 @@
 //   C12 no native code (ELF, Mach-O, PE; .node, .so, .dylib, .dll, .exe)
 //   C13 the .ipk: files only under its app, no links, no scripts, 64 MB at
 //       most, control file and appinfo.json agreeing
+//   C14 share targets (appinfo.json "phoenix".shareTargets): each one a
+//       connector's, written from the definition's share (no hand-written
+//       ones), its template one of the package's, its service the
+//       package's, accepts and audience well formed, types the ones accepts
+//       gives (share.ts shareTypes)
+//   C15 sharing reaches the service: the api.json lists <service>/share in
+//       a group the app's requiredPermissions name; the app's main page,
+//       which the sheet opens to compose, is in the package
+//   C16 the template's sign-up link (signUp: {url?, servers?: [{name,
+//       url}]}, written from the definition's signUp): https addresses only
 //
 // files: the package's files by path relative to the app's folder.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+import { acceptsProblems, audienceProblems, shareTypes } from "../share";
+import { signUpProblems } from "../signup";
 
 export interface CheckResult {
     errors: string[];
@@ -225,6 +238,7 @@ export function checkConnector(files: Files, options?: { namespaces?: string[] }
             });
         }
         iconObject(tpl.icon, id);
+        signUpProblems(tpl.signUp).forEach((p) => errors.push("C16 " + id + ": " + p));
         if (tpl.validator !== undefined && typeof tpl.validator !== "string" && (typeof tpl.validator !== "object" || tpl.validator === null || Array.isArray(tpl.validator)))
             errors.push("C3 " + id + ": validator must be a string or an object");
         if (!Array.isArray(tpl.capabilityProviders)) { errors.push("C3 " + id + ": capabilityProviders must be an array"); return; }
@@ -282,6 +296,46 @@ export function checkConnector(files: Files, options?: { namespaces?: string[] }
                 if (!ext.some((e) => generics.indexOf(e) >= 0)) errors.push("C10 " + where + ": " + kind + " must extend one of " + generics.join(", "));
             });
         });
+    }
+
+    // C14, C15 sharing (share.ts)
+    const targets = info.value.phoenix && info.value.phoenix.shareTargets;
+    if (targets !== undefined) {
+        if (!Array.isArray(targets)) errors.push("C14 appinfo.json: shareTargets must be a list");
+        else checkShareTargets(targets);
+    }
+    function checkShareTargets(list: any[]) {
+        let sharing = false;
+        list.forEach((t: any, i: number) => {
+            const where = "C14 appinfo.json shareTargets[" + i + "]";
+            const c = t && t.connector;
+            if (!c || typeof c !== "object" || Array.isArray(c)) {
+                errors.push(where + ": a connector's share target is written from its definition's share (phoenix-connector pack), not by hand");
+                return;
+            }
+            sharing = true;
+            if (typeof t.label !== "string" || !t.label) errors.push(where + ": label must be a string");
+            if (out.templates.indexOf(c.templateId) < 0) errors.push(where + ": connector.templateId " + c.templateId + " is not one of the package's templates");
+            if (c.service !== service) errors.push(where + ": connector.service must be " + (service || "the package's service"));
+            if (c.accountLabel !== undefined && typeof c.accountLabel !== "string") errors.push(where + ": connector.accountLabel must be a string");
+            const bad = acceptsProblems(c.accepts).concat(audienceProblems(c.audience));
+            bad.forEach((b) => errors.push(where + ": connector." + b));
+            if (!bad.length) {
+                const want = shareTypes(c.accepts).slice().sort();
+                const got = (Array.isArray(t.types) ? t.types.slice() : []).sort();
+                if (JSON.stringify(want) !== JSON.stringify(got)) errors.push(where + ": types must be " + want.join(", ") + " (what accepts takes)");
+            }
+        });
+        if (!sharing || !service) return;
+        const api = json(files, "service/sysbus/" + service + ".api.json");
+        const groups = api.ok && api.value && typeof api.value === "object" ? Object.keys(api.value).filter((g) =>
+            Array.isArray(api.value[g]) && api.value[g].indexOf(service + "/share") >= 0) : [];
+        const required: string[] = Array.isArray(info.value.requiredPermissions) ? info.value.requiredPermissions : [];
+        if (!groups.length) errors.push("C15 the api.json must list " + service + "/share (the compose page calls it)");
+        else if (!groups.some((g) => required.indexOf(g) >= 0))
+            errors.push("C15 appinfo.json requiredPermissions must name the group of " + service + "/share (" + groups.join(", ") + ")");
+        const main = String(info.value.main || "index.html");
+        if (!files[main]) errors.push("C15 the app's main page " + main + " is not in the package: the share sheet opens it to compose");
     }
     return out;
 }

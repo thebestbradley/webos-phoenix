@@ -43,6 +43,40 @@ Files, in a folder the user picks).
 > `audio/*`) and plays it in Now Playing under the share's title, the
 > library's tags when it has the file (`sharedSongs`, apps/music;
 > `test-voicememos.cjs`). Left: SF6 (2.0).
+>
+> **10 October 2026: accounts in the sheet.** A Synergy connector that
+> posts (the Fediverse) is in the sheet once per signed-in account, and not
+> at all without one; see "Accounts in the sheet" below
+> (`tools/test-sharing.cjs`, `test-fediverse.cjs`).
+
+### Accounts in the sheet
+
+A connector (a Synergy account type, [SYNERGY-SDK.md](SYNERGY-SDK.md)
+section 7) says in its definition what its service takes (`share`:
+text, a link, pictures with alt text, who may see a post) and how to post
+it. `phoenix-connector pack` writes that into its app's `appinfo.json` as a
+share target with the declaration under `connector` (`templateId`,
+`service`, `accepts`, `audience`, `accountLabel`), so a connector's target
+is never written by hand.
+
+The runtime's `targetsFor` (block "Share sheet and save picker") lists such
+a target **once per account** of that template
+(`com.palm.service.accounts/listAccounts {templateId}`, read each time the
+sheet opens, so an account added or removed in Accounts shows at once;
+one being deleted is left out), and **none when no account is signed in**.
+Each entry has the app's icon and two lines, the service and the account
+("Fediverse", "@me" / "@example.social"; its full label "Fediverse ·
+@me@example.social"). Choosing one launches the connector's app with
+`{share, accountId, target}`: its compose page (the kit's, or the
+connector's own, as the Fediverse's) posts as that account through the
+connector's `share` method. `org.webosphoenix.share/targets` answers the
+same entries with `accountId`, `account` and `service`. Like every target,
+an account is offered only for what the declaration takes.
+
+Built and checked in the simulator. On a device not yet checked: the
+listing asks the device's accounts service (`listAccounts`) for the
+connector's template, and the compose page calls the connector's service
+under `run-js-service`.
 
 ### The original picker (SF1)
 
@@ -96,7 +130,7 @@ with nothing selected, Share is dimmed.
 | **SF1. The original file picker** | luna-systemui's own picker, running as on the original: legacy apps' `FilePicker` (Email's attachments, Contacts' photo, Clock's sounds) work unchanged | 1.x |
 | **SF2. Picker service** | `luna://org.webosphoenix.filepicker/pick` for every app (React, Enyo 2, web apps): the same picker, a promise with the chosen files. Types, extensions, several files, a crop size, as the original's parameters | 1.x |
 | **SF3. Save picker** | A Phoenix addition in the same style: `.../save {name, data or path, types}`. It shows the folders of `/media/internal` (Documents, Downloads, Pictures and any the user made), with New Folder and a name field, and writes the file there | 1.x |
-| **SF4. Share sheet** | `luna://org.webosphoenix.share/open {files, text, url, title}`: a sheet that slides up from the bottom, in the classic look. It has two rows. **Actions**: Save to Photos (pictures and videos), Save to Files (SF3), Copy, Print later. **Apps**: those that say in their `appinfo.json` what they take, e.g. `"phoenix": {"shareTargets": [{"types": ["image/*"], "label": "Email"}]}`. The chosen app is launched with `{share: {...}}` | 1.x |
+| **SF4. Share sheet** | `luna://org.webosphoenix.share/open {files, text, url, title}`: a sheet that slides up from the bottom, in the classic look. It has two rows. **Actions**: Save to Photos (pictures and videos), Save to Files (SF3), Copy, Print later. **Apps**: those that say in their `appinfo.json` what they take, e.g. `"phoenix": {"shareTargets": [{"types": ["image/*"], "label": "Email"}]}`, and Synergy accounts that post, one entry per signed-in account ("Accounts in the sheet" above). The chosen app is launched with `{share: {...}}` (and `accountId`) | 1.x |
 | **SF5. Apps** | Screenshot first (Share opens the sheet; Save asks Photos or Files). Then Photos, Docs, Files, Voice Memos, Browser (Share Page), Maps (Share Location): their own menus give way to the sheet | 1.x |
 | **SF6. 2.0** | The sheet's 2.0 look, people to share with (recent conversations), share to nearby devices, extensions that edit in place (markup) | 2.0 |
 

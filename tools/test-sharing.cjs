@@ -260,6 +260,63 @@ async function main() {
         await sender.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pagehide")));
         await until(() => ds.state === "stopped", "closing DropShare stops its session");
 
+        // ---- Synergy accounts in the share sheet ---------------------------------------
+        // A connector's target (appinfo.json shareTargets[].connector, written
+        // by phoenix-connector from its share declaration) is listed once per
+        // signed-in account, and not at all without one (the Fediverse's here;
+        // tools/test-fediverse.cjs signs one in for real).
+        const FEDI = "org.webosphoenix.fediverse", FEDI_TEMPLATE = "com.webosphoenix.fediverse";
+        const fediTargets = async (types) => ((await svc(app, "luna://org.webosphoenix.share/targets", { types })).targets || [])
+            .filter((t) => t.appId === FEDI);
+        check((await fediTargets(["text/plain"])).length === 0, "no Fediverse account: the share sheet does not offer the Fediverse");
+        const putAccount = async (username) => (await svc(app, "luna://com.palm.db/put", { objects: [{ _kind: "com.palm.account:1",
+            templateId: FEDI_TEMPLATE, username, beingDeleted: false, capabilityProviders: [] }] })).results[0].id;
+        const anna = await putAccount("anna@example.social");
+        let fedi = await fediTargets(["text/plain", "text/uri-list"]);
+        check(fedi.length === 1 && fedi[0].accountId === anna && fedi[0].label === "Fediverse · @anna@example.social"
+              && fedi[0].service === "Fediverse" && fedi[0].account === "@anna@example.social",
+              `one account: one entry, "Fediverse · @anna@example.social" (${JSON.stringify(fedi.map((t) => t.label))})`);
+        const ben = await putAccount("ben@fosstodon.example");
+        fedi = await fediTargets(["image/jpeg"]);
+        check(fedi.length === 2 && fedi.map((t) => t.accountId).sort().join() === [anna, ben].sort().join(),
+              "two accounts: an entry each (" + fedi.map((t) => t.label).join(", ") + ")");
+        check((await fediTargets(["video/mp4"])).length === 0, "not for what its declaration does not take (a video)");
+        // The sheet itself, from an app: two entries under the service's icon; one is chosen.
+        const sharer = await context.newPage();
+        watch(sharer, "sharer");
+        await sharer.goto(`${APPS}/org.webosphoenix.dropshare/index.html`);
+        await sharer.waitForFunction(() => !!window.__phoenixRuntime);
+        host.length = 0;
+        const sheetDone = sharer.evaluate(() => window.__phoenixRuntime.share({ title: "webOS Phoenix", url: "https://example.org/phoenix" }));
+        let sheetFrame = null;
+        await until(() => (sheetFrame = sharer.frames().find((f) => /org\.webosphoenix\.sharesheet\/index\.html/.test(f.url()))), "the share sheet opens");
+        await until(async () => (await sheetFrame.locator(`[data-testid='share-app-${FEDI}']`).count()) === 2, "it shows both accounts");
+        const shownAccounts = await sheetFrame.locator(`[data-testid='share-app-${FEDI}'] [data-testid='share-account']`).allTextContents();
+        check(shownAccounts.sort().join() === "@anna@example.social,@ben@fosstodon.example", "each under the service's name (" + shownAccounts.join(", ") + ")");
+        await sharer.waitForTimeout(400);
+        await sharer.screenshot({ path: path.join(outDir, "share-sheet-accounts.png") });
+        await sheetFrame.click(`[data-testid='share-app-${FEDI}'][data-account-id='${ben}']`);
+        const chosen = await sheetDone;
+        const launch = host.find((m) => m.type === "launch" && m.payload.id === FEDI);
+        check(chosen.action === "app" && chosen.accountId === ben && !!launch && launch.payload.params.accountId === ben
+              && launch.payload.params.share.url === "https://example.org/phoenix" && launch.payload.params.target.service === "org.webosphoenix.service.fediverse",
+              "choosing @ben opens the Fediverse's compose page for that account, with the declaration");
+        // Removed accounts are gone the next time the sheet opens.
+        await svc(app, "luna://com.palm.db/merge", { objects: [{ _id: ben, beingDeleted: true }] });
+        fedi = await fediTargets(["text/plain"]);
+        check(fedi.length === 1 && fedi[0].accountId === anna, "an account being deleted is no longer offered");
+        await svc(app, "luna://com.palm.db/del", { ids: [anna, ben] });
+        check((await fediTargets(["text/plain"])).length === 0, "signed out of every account: no Fediverse in the sheet");
+        const sheetAgain = sharer.evaluate(() => window.__phoenixRuntime.share({ title: "webOS Phoenix", url: "https://example.org/phoenix" }));
+        await until(async () => { const f = sharer.frames().find((x) => /sharesheet\/index\.html/.test(x.url()));
+                                  return f && (await f.locator("[data-testid='share-sheet']").count()) === 1 && (sheetFrame = f); }, "the sheet again");
+        await sharer.waitForTimeout(400);
+        check((await sheetFrame.locator(`[data-testid='share-app-${FEDI}']`).count()) === 0, "it lists no Fediverse entry");
+        await sharer.screenshot({ path: path.join(outDir, "share-sheet-no-accounts.png") });
+        await sheetFrame.click("[data-testid='share-cancel']");
+        await sheetAgain;
+        await sharer.close();
+
         // ---- A subscribed calendar (.ics, one way) -------------------------------------
         const ICS_URL = "https://cal.example.org/holidays.ics";
         // Days near today, so the Calendar app's first view shows them.
