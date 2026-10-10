@@ -14,32 +14,43 @@
 //              catalog's signed SHA-256
 //   Classics   the original webOS apps, from the webOS Archive's App Museum
 //              II and Preware feeds: add-on catalogs, off until switched on
+//   Connections  the accounts Phoenix can connect to (Synergy), from the
+//              catalog's account types (Connections.tsx)
 //
 // Launch params: {section: "updates"} (the update notification) opens the
-// installed apps; {sourceId, id} opens an app's page.
+// installed apps; {sourceId, id} opens an app's page; the Accounts app's
+// "Find More..." ({common: {sceneType: "search", params: {type:
+// "connector", connectorInfo}}}) opens Connections with its capabilities.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     apps, localCatalog, LunaError, marketplace,
-    type CatalogSource, type InstalledApp, type InstallProgress, type LocalCatalogStatus, type MarketApp, type PendingKey, type Section,
+    type AccountType, type CatalogSource, type InstalledApp, type InstallProgress, type LocalCatalogStatus, type MarketApp, type PendingKey, type Section,
 } from "@phoenix/luna";
 import { useDevModeShown, useLaunchParams } from "@phoenix/luna/react";
+import { AccountTypePage, AccountTypeRow, ConnectionsFiltered, ConnectionsHome, useAccountTypes, useAddedTemplates } from "./Connections";
+import { findMoreFilter, type ConnectorFilter } from "./connections";
 import { Screenshots } from "./Gallery";
 import { Icon } from "./Icon";
 import { AppMenu, BackProvider, Button, Dialog, ErrorText, Group, Note, Row, Spinner, TextField, ToggleButton, useBack } from "@phoenix/ui";
 
 const errorText = (e: unknown) => (e instanceof LunaError ? e.errorText : e instanceof Error ? e.message : String(e));
 
-const SECTIONS: { id: Section; label: string }[] = [
+type Tab = Section | "connections";
+
+const SECTIONS: { id: Tab; label: string }[] = [
     { id: "featured", label: "Featured" },
     { id: "web", label: "Web Apps" },
     { id: "apps", label: "Apps" },
     { id: "classics", label: "Classics" },
+    { id: "connections", label: "Connections" },
 ];
 
 type View =
     | { kind: "home" }
     | { kind: "app"; sourceId: string; id: string; seed?: MarketApp }
+    | { kind: "account"; type: AccountType }
+    | { kind: "connections"; filter: ConnectorFilter }
     | { kind: "search"; query: string }
     | { kind: "installed" }
     | { kind: "settings" };
@@ -163,8 +174,9 @@ function LocalCatalog({ local }: { local: ReturnType<typeof useLocalCatalog> }) 
     );
 }
 
-function Home({ section, setSection, open, ctx }: {
-    section: Section; setSection: (s: Section) => void; open: (a: MarketApp) => void; ctx: ReturnType<typeof useSources>;
+function Home({ section, setSection, open, ctx, connections }: {
+    section: Tab; setSection: (s: Tab) => void; open: (a: MarketApp) => void; ctx: ReturnType<typeof useSources>;
+    connections: { types: AccountType[] | null; added: Set<string>; open: (t: AccountType) => void };
 }) {
     const [category, setCategory] = useState<string | null>(null);
     const [list, setList] = useState<MarketApp[] | null>(null);
@@ -180,6 +192,8 @@ function Home({ section, setSection, open, ctx }: {
         setList(null);
         setPage(0);
         setError(null);
+        // Connections has its own list (Connections.tsx).
+        if (section === "connections") { setCategories([]); setMore(false); return; }
         marketplace.browse(section, category ?? undefined, 0).then((r) => {
             if (!live) return;
             setList(r.apps);
@@ -190,6 +204,7 @@ function Home({ section, setSection, open, ctx }: {
     }, [section, category, ctx.version]);
 
     async function loadMore() {
+        if (section === "connections") return;
         const next = page + 1;
         const r = await marketplace.browse(section, category ?? undefined, next);
         setList((l) => [...(l ?? []), ...r.apps]);
@@ -230,6 +245,7 @@ function Home({ section, setSection, open, ctx }: {
                     }}>Show the App Museum</Button>
                 </div>
             )}
+            {section === "connections" && <ConnectionsHome {...connections} />}
             {categories.length > 0 && (
                 <div className="mk-cats">
                     <button type="button" className={category === null ? "on" : ""} onClick={() => setCategory(null)}>All</button>
@@ -238,11 +254,13 @@ function Home({ section, setSection, open, ctx }: {
                     ))}
                 </div>
             )}
-            <Group>
-                {list === null ? <Row title="Loading…"><Spinner /></Row>
-                    : list.length === 0 ? <Row title={error ? "Could not load" : "Nothing here yet"} subtitle={error ?? undefined} />
-                    : list.map((a) => <AppRow key={a.sourceId + a.id} a={a} onOpen={() => open(a)} />)}
-            </Group>
+            {section !== "connections" && (
+                <Group>
+                    {list === null ? <Row title="Loading…"><Spinner /></Row>
+                        : list.length === 0 ? <Row title={error ? "Could not load" : "Nothing here yet"} subtitle={error ?? undefined} />
+                        : list.map((a) => <AppRow key={a.sourceId + a.id} a={a} onOpen={() => open(a)} />)}
+                </Group>
+            )}
             {more && <Button onClick={() => void loadMore()} data-testid="more">More</Button>}
         </>
     );
@@ -435,12 +453,14 @@ function Settings({ ctx }: { ctx: ReturnType<typeof useSources> }) {
 // ---- The app ------------------------------------------------------------------------------------
 
 function Marketplace() {
-    const params = useLaunchParams<{ section?: string; sourceId?: string; id?: string }>();
+    const params = useLaunchParams<{ section?: string; sourceId?: string; id?: string; common?: unknown }>();
     const [stack, setStack] = useState<View[]>([{ kind: "home" }]);
-    const [section, setSection] = useState<Section>("featured");
+    const [section, setSection] = useState<Tab>("featured");
     const [query, setQuery] = useState("");
-    const [results, setResults] = useState<MarketApp[] | null>(null);
+    const [results, setResults] = useState<{ apps: MarketApp[]; accountTypes: AccountType[] } | null>(null);
     const ctx = useSources();
+    const accountTypes = useAccountTypes(ctx.version);
+    const added = useAddedTemplates();
     const view = stack[stack.length - 1];
     const main = useRef<HTMLElement>(null);
     // Each view starts at its top.
@@ -453,15 +473,24 @@ function Marketplace() {
         if (params?.section === "updates") setStack([{ kind: "home" }, { kind: "installed" }]);
         else if (params?.sourceId && params?.id) setStack([{ kind: "home" }, { kind: "app", sourceId: params.sourceId, id: params.id }]);
     }, [params?.section, params?.sourceId, params?.id]);
+    // "Find More..." from the Accounts app, on each launch and relaunch:
+    // under it, Connections with all of them.
+    useEffect(() => {
+        const filter = findMoreFilter(params);
+        if (!filter) return;
+        setSection("connections");
+        setStack([{ kind: "home" }, { kind: "connections", filter }]);
+    }, [params]);
 
     async function search() {
         const q = query.trim();
         if (!q) return;
         setResults(null);
         push({ kind: "search", query: q });
-        try { setResults(await marketplace.search(q)); } catch { setResults([]); }
+        try { setResults(await marketplace.searchAll(q)); } catch { setResults({ apps: [], accountTypes: [] }); }
     }
     const openApp = (a: MarketApp) => push({ kind: "app", sourceId: a.sourceId, id: a.id, seed: a });
+    const openType = (t: AccountType) => push({ kind: "account", type: t });
 
     return (
         <div className="mk-root">
@@ -477,15 +506,34 @@ function Marketplace() {
                 </form>
             </header>
             <main className="mk-main" ref={main}>
-                {view.kind === "home" && <Home section={section} setSection={setSection} open={openApp} ctx={ctx} />}
+                {view.kind === "home" && <Home section={section} setSection={setSection} open={openApp} ctx={ctx}
+                                               connections={{ types: accountTypes, added, open: openType }} />}
+                {view.kind === "connections" && (
+                    <ConnectionsFiltered filter={view.filter} types={accountTypes} added={added} open={openType}
+                                         showAll={() => { setSection("connections"); setStack([{ kind: "home" }]); }} />
+                )}
+                {view.kind === "account" && <AccountTypePage key={view.type.templateId} t={view.type} added={added.has(view.type.templateId)} />}
                 {view.kind === "app" && <AppPage key={view.sourceId + view.id} sourceId={view.sourceId} id={view.id} seed={view.seed}
                                                  onRemoved={() => void ctx.reload()} />}
                 {view.kind === "search" && (
-                    <Group label={`Results for "${view.query}"`}>
-                        {results === null ? <Row title="Searching…"><Spinner /></Row>
-                            : results.length === 0 ? <Row title="Nothing found" />
-                            : results.map((a) => <AppRow key={a.sourceId + a.id} a={a} onOpen={() => openApp(a)} />)}
-                    </Group>
+                    <>
+                        {(results === null || results.apps.length > 0 || results.accountTypes.length === 0) && (
+                            <Group label={`Results for "${view.query}"`}>
+                                {results === null ? <Row title="Searching…"><Spinner /></Row>
+                                    : results.apps.length === 0 ? <Row title="Nothing found" />
+                                    : results.apps.map((a) => <AppRow key={a.sourceId + a.id} a={a} onOpen={() => openApp(a)} />)}
+                            </Group>
+                        )}
+                        {results && results.accountTypes.length > 0 && (
+                            <Group label={results.apps.length ? "Connections" : `Connections for "${view.query}"`}>
+                                <div data-testid="search-connections">
+                                    {results.accountTypes.map((t) => (
+                                        <AccountTypeRow key={t.templateId} t={t} added={added.has(t.templateId)} onOpen={() => openType(t)} />
+                                    ))}
+                                </div>
+                            </Group>
+                        )}
+                    </>
                 )}
                 {view.kind === "installed" && <Installed open={(sourceId, id) => push({ kind: "app", sourceId, id })} />}
                 {view.kind === "settings" && <Settings ctx={ctx} />}

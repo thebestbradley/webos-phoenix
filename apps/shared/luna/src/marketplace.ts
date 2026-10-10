@@ -95,6 +95,32 @@ export interface InstallProgress {
 
 export type Section = "featured" | "web" | "apps" | "classics";
 
+/**
+ * An account type Phoenix can connect to (Synergy; docs/SYNERGY-CONNECTORS.md
+ * 2.1): one account template, from a catalog index's "accounts".
+ */
+export interface AccountType {
+    templateId: string;
+    sourceId: string;
+    title: string;
+    provider: string;
+    /** Resolved against the index's address; "" when there is none. */
+    icon: string;
+    summary: string;
+    /** The template's capability names (CONTACTS, CALENDAR, MAIL, ...). */
+    capabilities: { capability: string; direction?: string }[];
+    protocols: string[];
+    /** type "" when the catalog names one this device does not know. */
+    auth: { type: "password" | "app-password" | "oauth" | "api-key" | "none" | ""; registration: "none" | "required" };
+    server: "user" | "fixed" | "discovered" | "";
+    privacy: { dataGoesTo: string; e2ee: boolean; phoenixServers: "none" | "push-relay" | "token-relay" | "" } | null;
+    push: "poll" | "unifiedpush" | "relay";
+    status: "stable" | "beta" | "experimental";
+    package: { id: string; builtin: boolean };
+    help: string;
+    featured: boolean;
+}
+
 export const marketplace = {
     async sources(): Promise<CatalogSource[]> {
         return ((await call(SERVICE + "getSources", {})) as unknown as { sources: CatalogSource[] }).sources;
@@ -121,6 +147,16 @@ export const marketplace = {
     },
     async search(query: string): Promise<MarketApp[]> {
         return ((await call(SERVICE + "search", { query })) as unknown as { apps: MarketApp[] }).apps;
+    },
+    /** Search with the account types that match (title, provider, capability, protocol). */
+    async searchAll(query: string): Promise<{ apps: MarketApp[]; accountTypes: AccountType[] }> {
+        const r = (await call(SERVICE + "search", { query })) as unknown as { apps: MarketApp[]; accountTypes?: AccountType[] };
+        return { apps: r.apps, accountTypes: r.accountTypes ?? [] };
+    },
+    /** The account types of the catalogs; with capabilities, those having any of them. */
+    async accountTypes(capabilities?: string[]): Promise<AccountType[]> {
+        const r = await call(SERVICE + "listAccountTypes", capabilities ? { capability: capabilities } : {});
+        return (r as unknown as { accountTypes?: AccountType[] }).accountTypes ?? [];
     },
     async app(sourceId: string, id: string): Promise<MarketApp> {
         return ((await call(SERVICE + "getApp", { sourceId, id })) as unknown as { app: MarketApp }).app;

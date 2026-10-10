@@ -8,13 +8,15 @@
 //   key.json         {"key": "<base64 Ed25519 public key>", "name": "..."}
 //   index.json       {"version": 1, "build": 12, "generated", "expires",
 //                     "source": {"id", "name"}, "categories": [...],
-//                     "apps": [entry, ...]}
+//                     "apps": [entry, ...], "accounts": [account type, ...]}
 //   index.json.sig   base64 Ed25519 signature of index.json's bytes
 //
 // An entry: {id, kind: "pwa" | "ipk", title, developer: {name, url?},
 // summary, description, categories, icon (URL), screenshots, license,
 // homepage, donation, featured, rating: {stars, count}, version,
-// pwa: {manifest (URL), origin} | release: {url, size, sha256}}.
+// pwa: {manifest (URL), origin} | release: {url, size, sha256}}. An
+// account type (Synergy, docs/SYNERGY-CONNECTORS.md 2.1): lib/accounts.js;
+// its icon may be relative to the index.
 //
 // The device trusts a source's key the first time it is added, after the
 // user sees its fingerprint (like an SSH host key or an F-Droid repo), and
@@ -25,6 +27,7 @@
 
 var ed25519 = require("./ed25519");
 var archive = require("./b64");
+var accounts = require("./accounts");
 
 function fail(code, text, extra) {
     var e = new Error(text);
@@ -74,7 +77,7 @@ function normalize(e, sourceId) {
 
 // The index's bytes, its signature (base64) and the trusted key (base64)
 // -> the index with normalized entries. lastBuild: the newest build taken
-// before. now: Date.
+// before. now: Date. baseUrl: the index's address, for relative icons.
 function verifyIndex(indexBytes, signatureB64, keyB64, opts) {
     var sig = archive.fromBase64(String(signatureB64 || "").trim());
     var key = archive.fromBase64(String(keyB64 || ""));
@@ -97,7 +100,8 @@ function verifyIndex(indexBytes, signatureB64, keyB64, opts) {
                 if (!e || seen[e.id]) return false;
                 seen[e.id] = true;
                 return true;
-            })
+            }),
+            accounts: accounts.normalizeList(idx.accounts, opts.baseUrl, sourceId)
         };
     });
 }

@@ -249,6 +249,24 @@ called this "HP Synergy Services"; we should use our own name).
 | Button | Not installed: **Install**, then **Set up**. Installed or built in: **Set up** (opens the Accounts add flow at that template). Already added: **Open in Accounts** |
 | Search | Matches account types by title, provider, capability and protocol ("caldav", "matrix") |
 
+**Built (C0), as Connections** (the owner's name for it): the fifth tab
+of the Marketplace, after Classics (`apps/marketplace/src/Connections.tsx`,
+`connections.ts`). The device service reads the index's `accounts`
+loosely (`service/lib/accounts.js`: an entry without a usable `templateId`
+is left out, an unknown value falls back to a plain default, an `icon`
+relative to the index is resolved against it; an index without `accounts`
+has none) and answers `listAccountTypes {capability?}`; `search` also
+returns `accountTypes` (title, provider, capability, protocol). The home
+groups them as above, "Featured" first, and "More" for capabilities in no
+group. The type page has the chips, **Where your data goes**, the sign-in,
+the server, how new data arrives, a Beta / Experimental badge and the help
+link. **Set up** launches `com.palm.app.accounts` with `{templateId}`
+(`setUpLaunch` in `connections.ts`); a template already added as an
+account (`listAccounts`) shows **Open in Accounts**. "Find More..." params
+open the filtered list under its `searchBarTitle`, with **All Connections**.
+Not yet: Install for connector packages (disabled, with a note), the
+calendar directory, ratings, terms notes.
+
 ### 2.4 How Accounts reaches it
 
 1. **Keep the original's "Find More..."**. Alias
