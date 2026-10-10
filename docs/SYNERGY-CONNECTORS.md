@@ -116,9 +116,10 @@ the earlier pages.
 | Account | Protocol / API | Auth | Reg | Terms / notes | P |
 | --- | --- | --- | --- | --- | --- |
 | Matrix (and bridged networks on the user's server) | Matrix client-server, sliding sync, E2EE | PW / SSO / OAuth (MAS) | none | SM 2.4; bridges documented, not shipped | P1 |
-| XMPP | XMPP + XEP-0198/0357, OMEMO | PW | none | Simulated today; OMEMO library licence (SM 5, 6a) | P2 |
+| XMPP (Jabber) | XMPP + XEP-0198/0357, OMEMO | PW | none | Simulated today; a real connector added to the plan by the owner (10 October 2026, section 7); OMEMO library licence (SM 5, 6a) | P1 |
 | Telegram | TDLib | phone login | own `api_id` | SM 6b; "Unofficial" naming rule | P3 |
 | **new** Delta Chat (chat over email) | IMAP/SMTP + Autocrypt; core library `deltachat-core-rust` | PW | none | The library is MPL-2.0 *(check)*, which allows linking with per-file copyleft. Fits Synergy because the account is already a mail account | P3 |
+| **new** LoRa mesh (Meshtastic, MeshCore): off-grid text through a paired radio | The radio's client protocol over Bluetooth LE, USB serial or TCP | none (a channel key) | none | Added by the owner (10 October 2026, section 7). Needs a radio; licences to check (Meshtastic GPL-3.0, MeshCore MIT) | P2 |
 | **new** IRC with a bouncer | IRCv3 (`chathistory`, `soju` / `ergo` bouncers) | PW / SASL | none | The user runs the bouncer; one thread per channel or person | P3 |
 | WhatsApp, Signal, iMessage, RCS | - | - | - | Positions in SYNERGY.md 2.12 and SM 6 stand | - |
 
@@ -639,3 +640,32 @@ in Messaging where Graph allows).
 **Box** (C3, with Dropbox, OneDrive and Google Drive): its content API with
 OAuth (Box dropped WebDAV), as a place in Files.
 
+**Jabber (XMPP), a real account** (the owner: "add both"): today's
+"Jabber (XMPP)" account in Connections is simulated (the runtime's
+"Instant messaging" block). It becomes a real connector on the kit: sign-in
+with the Jabber ID and password (SASL SCRAM; the server found from the
+domain's SRV records), chats as Messaging conversations (`com.palm.immessage`
+as the original's IM transports wrote them), the roster as contacts linked
+to people with presence (`com.palm.imbuddystatus`), stream management and
+push (XEP-0198, XEP-0357, with the push service of C6), message carbons and
+archive (XEP-0280, XEP-0313) so other clients' messages show too, file
+upload (XEP-0363) for pictures, and OMEMO end-to-end encryption once a
+permissively licensed library is chosen (until then: TLS to the server, and
+the setup page says the messages are not end-to-end encrypted). Sign-up
+link: a server list (e.g. providers.xmpp.net) or Snikket. Messaging and
+Contacts capabilities; P1, after the connector store work.
+
+**LoRa mesh messaging** (the owner: "add both"): off-grid text over LoRa
+radio, no cell or internet service, through a small paired radio (phones
+have no LoRa radio: about US$25-60, connected over Bluetooth LE, USB or the
+radio's Wi-Fi). Networks: Meshtastic (the largest) and MeshCore. As a
+Synergy account: mesh messages in Messaging, threaded by person and by
+channel and marked "Mesh"; the nodes heard as contacts, with their last
+position for Maps when they share it; new messages as notifications; the
+radio's battery and signal on the account's page. In the simulator: a radio
+on USB serial or the network, or a fake radio for tests; on a device:
+Bluetooth LE (the device work's Bluetooth service). Licences first:
+Meshtastic's firmware and protocol definitions are GPL-3.0, so a Phoenix
+client must be written from the published protocol without GPL code (to
+check), or start with MeshCore (MIT). Sign-up link: none needed (a channel
+key); a page on getting a radio. P2, after XMPP.
