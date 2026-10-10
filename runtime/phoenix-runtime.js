@@ -1360,6 +1360,15 @@
         showBatteryPercent: false,
         keyboardNumberRow: false,
         keyboardStyle: "auto",
+        // The keyboard button (with a hardware keyboard, the button that
+        // brings the on-screen keyboard up; Settings > Text Assist >
+        // Keyboard button, or its hold menu's Hide): shown; the edge it was
+        // dragged to and its height there (0 top, 1 bottom); whether the
+        // banner saying where to turn it back on was shown.
+        keyboardButton: true,
+        keyboardButtonSide: "right",
+        keyboardButtonY: 1,
+        keyboardButtonHintShown: false,
         // Email's new-mail dashboard goes through the new emails one at a
         // time, with their times and a delete button (the community's
         // Uber Cycling Email Dashboard; compat overlay of the Email app).
@@ -1406,7 +1415,11 @@
             gridDensity: pick(p.launcherGridDensity, ["normal", "dense"], "normal"),
             batteryPercent: !!p.showBatteryPercent,
             numberRow: !!p.keyboardNumberRow,
-            keyboardStyle: pick(p.keyboardStyle, ["auto", "black", "touchpad"], "auto")
+            keyboardStyle: pick(p.keyboardStyle, ["auto", "black", "touchpad"], "auto"),
+            keyboardButton: p.keyboardButton !== false,
+            keyboardButtonSide: pick(p.keyboardButtonSide, ["left", "right"], "right"),
+            keyboardButtonY: typeof p.keyboardButtonY === "number" && p.keyboardButtonY >= 0 && p.keyboardButtonY <= 1 ? p.keyboardButtonY : 1,
+            keyboardButtonHintShown: !!p.keyboardButtonHintShown
         };
     }
     // The page views' settings and the system proxy, as the shell takes
@@ -1425,7 +1438,8 @@
     runtime.networkProxy = networkProxy;
     var TWEAK_KEYS = ["infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges", "sysUiEnableWaveLauncher", "showReticleAnimation",
                       "animationSpeed", "gestureSensitivity", "hapticFeedback", "launcherGridDensity", "showBatteryPercent",
-                      "keyboardNumberRow", "keyboardStyle"];
+                      "keyboardNumberRow", "keyboardStyle", "keyboardButton", "keyboardButtonSide", "keyboardButtonY",
+                      "keyboardButtonHintShown"];
 
     // Settings > Accessibility's keyboard options, as the shell takes them.
     function keyboardAccess(a) {

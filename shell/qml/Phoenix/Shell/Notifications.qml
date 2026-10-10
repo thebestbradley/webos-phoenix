@@ -309,6 +309,27 @@ Item {
         : overlay || fullScreen ? 0
         : dashboardOpen ? dashboardHeight
         : hasContent ? Theme.bannerHeight : 0
+    // What the notification area covers now, as rects in this item's
+    // coordinates, for what floats over the screen to keep clear of (the
+    // keyboard button, KeyboardButton.keepOut): phones, the space at the
+    // bottom (banner, dashboard, popup alert) as it opens; tablets, the
+    // drop-down and the popup alert at the top right (the banner is in the
+    // status bar).
+    readonly property var occupiedRects: {
+        var out = [];
+        if (locked)
+            return out;
+        if (!overlay) {
+            if (phoneSpaceHeight > 0)
+                out.push(Qt.rect(0, height - phoneSpaceHeight, width, phoneSpaceHeight));
+            return out;
+        }
+        if (dropDown.visible)
+            out.push(Qt.rect(dropDown.x, dropDown.y, dropDown.width, dropDown.height));
+        if (tabletAlert.visible)
+            out.push(Qt.rect(tabletAlert.x, tabletAlert.y, tabletAlert.width, tabletAlert.height));
+        return out;
+    }
     property real negativeSpace: negativeSpaceTarget
     Behavior on negativeSpace {
         enabled: !root.spaceImmediate

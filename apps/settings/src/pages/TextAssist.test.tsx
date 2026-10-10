@@ -145,3 +145,19 @@ describe("Sounds > alert and notification tones", () => {
         expect(screen.getByTestId("alerttone").textContent).toContain("Phone");
     });
 });
+
+describe("Text Assist > Hardware keyboard > Keyboard button", () => {
+    it("is on by default; off and on again, the shell is told (tweaks.keyboardButton)", async () => {
+        render(<TextAssistPage />);
+        const toggle = await screen.findByTestId("ta-keyboardbutton");
+        expect(screen.getByTestId("ta-keyboardbutton-row").textContent).toContain("With a hardware keyboard, a button that brings up the on-screen keyboard");
+        await waitFor(() => expect(toggle.getAttribute("aria-checked")).toBe("true"));
+        expect((runtime().hostStatus().tweaks as { keyboardButton: boolean }).keyboardButton).toBe(true);
+        fireEvent.click(toggle);
+        await waitFor(() => expect((lastStatus().tweaks as { keyboardButton: boolean }).keyboardButton).toBe(false));
+        await waitFor(() => expect(screen.getByTestId("ta-keyboardbutton").getAttribute("aria-checked")).toBe("false"));
+        // The shell's hold menu turns it off the same way; turned on elsewhere, it shows here.
+        await system.setPreferences({ keyboardButton: true });
+        await waitFor(() => expect(screen.getByTestId("ta-keyboardbutton").getAttribute("aria-checked")).toBe("true"));
+    });
+});

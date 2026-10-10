@@ -11,7 +11,9 @@
 // VirtualKeyboardPreferences kept them); with two or more its language key
 // goes from one to the next. Hardware keyboard: the shell's shortcuts,
 // iPad-style (Ctrl / Command) or desktop-style (Alt, Super), system
-// preference keyboardShortcuts. Shortcuts: the user's text replacements
+// preference keyboardShortcuts; and the keyboard button (the shell's
+// KeyboardButton.qml), system preference keyboardButton, on by default,
+// which its hold menu's Hide Keyboard Button turns off. Shortcuts: the user's text replacements
 // (TextAssistShortcuts.tsx; x_palm_textinput). Number row (Phoenix; the
 // community's keyboard layout patches, docs/M6-PLAN.md F4): digits above
 // the phone keyboard's letters, system preference keyboardNumberRow, off by
@@ -54,7 +56,7 @@ type KeyboardStyle = "auto" | "black" | "touchpad";
 export const keyboardStyle = (v: unknown): KeyboardStyle => (v === "black" || v === "touchpad" ? v : "auto");
 
 export function TextAssistPage() {
-    const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["x_palm_virtualkeyboard_prefs", "keyboardShortcuts", "x_palm_textinput", "keyboardNumberRow", "keyboardStyle"], cb, err), []).value ?? {};
+    const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["x_palm_virtualkeyboard_prefs", "keyboardShortcuts", "x_palm_textinput", "keyboardNumberRow", "keyboardStyle", "keyboardButton"], cb, err), []).value ?? {};
     const kb = keyboardPrefs(prefs.x_palm_virtualkeyboard_prefs);
     const [dictionary, setDictionary] = useState(false);
     useBack(() => { setDictionary(false); return true; }, dictionary);
@@ -123,7 +125,14 @@ export function TextAssistPage() {
                 <ListSelector<"ipad" | "desktop"> title="Shortcuts" value={prefs.keyboardShortcuts === "desktop" ? "desktop" : "ipad"} testId="keyboard-shortcuts"
                     options={[{ label: "iPad style (Ctrl)", value: "ipad" }, { label: "Desktop style (Alt, Super)", value: "desktop" }]}
                     onChange={(v) => void system.setPreferences({ keyboardShortcuts: v })} />
-                <Note>Hold Ctrl (⌘ on a Mac) for iPad style, or Super for desktop style, for a moment to see them all.</Note>
+                <Row title="Keyboard button" subtitle="With a hardware keyboard, a button that brings up the on-screen keyboard" testId="ta-keyboardbutton-row">
+                    <ToggleButton value={prefs.keyboardButton !== false} label="Keyboard button" testId="ta-keyboardbutton"
+                                  onChange={(v) => void system.setPreferences({ keyboardButton: v })} />
+                </Row>
+                <Note>
+                    Hold Ctrl (⌘ on a Mac) for iPad style, or Super for desktop style, for a moment to see them all. Drag the
+                    keyboard button to either edge; hold it to hide it.
+                </Note>
             </Group>
         </Page>
     );

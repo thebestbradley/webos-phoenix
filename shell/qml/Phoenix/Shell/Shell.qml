@@ -118,8 +118,42 @@ FocusScope {
     readonly property var tweakDefaults: ({ infiniteCardCycling: false, maximizeEdges: false, waveLauncher: true, tapRipple: true,
                                             animationSpeed: "normal", gestureSensitivity: "normal", haptics: false,
                                             gridDensity: "normal", batteryPercent: false, numberRow: false,
-                                            keyboardStyle: "auto" })
+                                            keyboardStyle: "auto", keyboardButton: true, keyboardButtonSide: "right",
+                                            keyboardButtonY: 1, keyboardButtonHintShown: false })
     function tweak(name) { return tweaks[name] !== undefined ? tweaks[name] : tweakDefaults[name]; }
+    // Changes tweaks the shell itself makes (the keyboard button's place):
+    // at once in the system's tweaks, and saved as the system preferences
+    // of the same names, which the runtime hands back as tweaks
+    // (runtime/phoenix-runtime.js tweaks(); on a device LsmSystemStatus).
+    function setTweaks(values) {
+        if (shell.system && shell.system.tweaks !== undefined) {
+            var t = {};
+            for (var k in tweaks)
+                t[k] = tweaks[k];
+            for (k in values)
+                t[k] = values[k];
+            shell.system.tweaks = t;
+        }
+        var bus = source && typeof source.lunaCall === "function" ? source
+                : shell.system && typeof shell.system.lunaCall === "function" ? shell.system : null;
+        if (bus)
+            bus.lunaCall("luna://com.webos.service.systemservice/setPreferences", values, function() {});
+    }
+    // The keyboard button's menu, Hide Keyboard Button: off (Settings >
+    // Text Assist > Keyboard button brings it back), and the first time a
+    // banner says so; tapped, it opens that page.
+    function hideKeyboardButton() {
+        var first = !tweak("keyboardButtonHintShown");
+        setTweaks(first ? { keyboardButton: false, keyboardButtonHintShown: true } : { keyboardButton: false });
+        if (!first)
+            return;
+        var settingsId = "org.webosphoenix.settings", a = null;
+        for (var i = 0; source && source.apps && i < source.apps.count; ++i)
+            if (source.apps.get(i).appId === settingsId)
+                a = source.apps.get(i);
+        notes.showBanner(qsTr("Keyboard button off: Text Assist"), a && a.icon ? a.icon : "",
+                         a ? a.color : "#666666", a ? a.glyph : "", settingsId, JSON.stringify({ page: "textassist" }), "keyboardButton");
+    }
     Binding { target: Theme; property: "animationSpeed"; value: shell.tweak("animationSpeed") }
     Binding { target: Theme; property: "gestureSensitivity"; value: shell.tweak("gestureSensitivity") }
     // Tell the window source which card is in front (apps it launches join
@@ -3560,6 +3594,23 @@ FocusScope {
                         shell.gestureUp();
                 }
             }
+
+            // A hardware keyboard attached and a field with the focus: the
+            // button that brings the virtual keyboard up (KeyboardButton),
+            // in the UI as it is turned, clear of the notification area.
+            KeyboardButton {
+                id: keyboardButton
+                anchors.fill: parent
+                shown: shell.virtualKeyboard && shell.hardwareKeyboard && shell.imeClient !== null && !shell._imeOpened
+                       && !shell.locked && shell.tweak("keyboardButton") !== false
+                topInset: shell.fullScreen ? 0 : Theme.statusBarHeight
+                side: shell.tweak("keyboardButtonSide")
+                fraction: shell.tweak("keyboardButtonY")
+                keepOut: notes.occupiedRects.map(function (r) { return Qt.rect(r.x + notes.x, r.y + notes.y, r.width, r.height); })
+                onActivated: shell.showVirtualKeyboard()
+                onPlaceChosen: (side, fraction) => shell.setTweaks({ keyboardButtonSide: side, keyboardButtonY: fraction })
+                onHideRequested: shell.hideKeyboardButton()
+            }
         }
 
         UiRotation {
@@ -3707,42 +3758,6 @@ FocusScope {
         z: 99997
         scheme: shell.keyboardShortcuts
         anchors.centerIn: parent
-    }
-
-    // A hardware keyboard attached and a field with the focus: the button
-    // that brings the virtual keyboard up (the iPad's keyboard bar), at the
-    // bottom right above the gesture bar.
-    Rectangle {
-        id: keyboardButton
-        objectName: "showKeyboardButton"
-        z: 99996
-        visible: shell.virtualKeyboard && shell.hardwareKeyboard && shell.imeClient !== null && !shell._imeOpened && !shell.locked
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.rightMargin: Theme.px(12)
-        anchors.bottomMargin: Theme.gestureAreaHeight + Theme.px(10)
-        width: Theme.px(56)
-        height: Theme.px(40)
-        radius: Theme.px(8)
-        color: keyboardButtonArea.pressed ? "#e0505050" : "#d0202020"
-        border.color: "#60ffffff"
-        Item {
-            anchors.centerIn: parent
-            width: Theme.px(36)
-            height: Theme.px(22)
-            clip: true
-            // icon-hide-keyboard.png without its arrow: just the keyboard.
-            Image {
-                source: Theme.asset("keyboard-tablet/icon-hide-keyboard.png")
-                width: Theme.px(36)
-                height: Theme.px(36) * Theme.artHeight(source) / Math.max(1, Theme.artWidth(source))
-            }
-        }
-        MouseArea {
-            id: keyboardButtonArea
-            anchors.fill: parent
-            onClicked: shell.showVirtualKeyboard()
-        }
     }
 
     // Sticky keys: the modifiers waiting for the next key, and in bold
