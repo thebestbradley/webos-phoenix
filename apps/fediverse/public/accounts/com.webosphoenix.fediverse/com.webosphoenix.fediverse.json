@@ -1,0 +1,81 @@
+{
+    "templateId": "com.webosphoenix.fediverse",
+    "loc_name": "Fediverse",
+    "icon": {
+        "loc_32x32": "images/fediverse-32x32.png",
+        "loc_48x48": "images/fediverse-48x48.png"
+    },
+    "loc_usernameLabel": "HANDLE",
+    "validator": {
+        "customUI": {
+            "appId": "org.webosphoenix.fediverse",
+            "name": "accounts/wizard.html"
+        },
+        "address": "palm://org.webosphoenix.service.fediverse/checkCredentials"
+    },
+    "readPermissions": [
+        "org.webosphoenix.service.fediverse",
+        "org.webosphoenix.fediverse"
+    ],
+    "writePermissions": [
+        "org.webosphoenix.fediverse",
+        "com.palm.app.contacts",
+        "org.webosphoenix.messaging"
+    ],
+    "capabilityProviders": [
+        {
+            "capability": "CONTACTS",
+            "id": "com.webosphoenix.fediverse.contacts",
+            "loc_name": "People you follow",
+            "icon": {
+                "loc_32x32": "images/fediverse-32x32.png",
+                "loc_48x48": "images/fediverse-48x48.png"
+            },
+            "dbkinds": {
+                "contact": "com.palm.contact.fediverse:1"
+            },
+            "readOnlyData": true,
+            "implementation": "palm://org.webosphoenix.service.fediverse/",
+            "onCreate": "palm://org.webosphoenix.service.fediverse/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.fediverse/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.fediverse/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.fediverse/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.fediverse/sync"
+        },
+        {
+            "capability": "MESSAGING",
+            "capabilitySubtype": "IM",
+            "serviceName": "type_fediverse",
+            "id": "com.webosphoenix.fediverse.messaging",
+            "loc_name": "Direct mentions",
+            "icon": {
+                "loc_32x32": "images/fediverse-32x32.png",
+                "loc_48x48": "images/fediverse-48x48.png"
+            },
+            "dbkinds": {
+                "immessage": "com.palm.immessage.fediverse:1"
+            },
+            "implementation": "palm://org.webosphoenix.service.fediverse/",
+            "onCreate": "palm://org.webosphoenix.service.fediverse/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.fediverse/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.fediverse/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.fediverse/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.fediverse/sync"
+        },
+        {
+            "capability": "SOCIAL",
+            "id": "com.webosphoenix.fediverse.notifications",
+            "loc_name": "Notifications",
+            "icon": {
+                "loc_32x32": "images/fediverse-32x32.png",
+                "loc_48x48": "images/fediverse-48x48.png"
+            },
+            "implementation": "palm://org.webosphoenix.service.fediverse/",
+            "onCreate": "palm://org.webosphoenix.service.fediverse/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.fediverse/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.fediverse/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.fediverse/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.fediverse/sync"
+        }
+    ]
+}

@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- The Fediverse: five servers, every one joined to every other: Phoenix's drawing of the Fediverse "pentagram" logo
+     (Eukombos, 2018; CC0 1.0 Public Domain Dedication, https://commons.wikimedia.org/wiki/File:Fediverse_logo_proposal.svg). -->
+<defs>
+  <linearGradient id="e01" gradientUnits="userSpaceOnUse" x1="128.0" y1="44.0" x2="196.5" y2="93.8"><stop offset="0" stop-color="#a730b8"/><stop offset="1" stop-color="#5496be"/></linearGradient>
+  <linearGradient id="e02" gradientUnits="userSpaceOnUse" x1="128.0" y1="44.0" x2="170.3" y2="174.2"><stop offset="0" stop-color="#a730b8"/><stop offset="1" stop-color="#3aaf6a"/></linearGradient>
+  <linearGradient id="e03" gradientUnits="userSpaceOnUse" x1="128.0" y1="44.0" x2="85.7" y2="174.2"><stop offset="0" stop-color="#a730b8"/><stop offset="1" stop-color="#ffca00"/></linearGradient>
+  <linearGradient id="e04" gradientUnits="userSpaceOnUse" x1="128.0" y1="44.0" x2="59.5" y2="93.8"><stop offset="0" stop-color="#a730b8"/><stop offset="1" stop-color="#ef4b6a"/></linearGradient>
+  <linearGradient id="e12" gradientUnits="userSpaceOnUse" x1="196.5" y1="93.8" x2="170.3" y2="174.2"><stop offset="0" stop-color="#5496be"/><stop offset="1" stop-color="#3aaf6a"/></linearGradient>
+  <linearGradient id="e13" gradientUnits="userSpaceOnUse" x1="196.5" y1="93.8" x2="85.7" y2="174.2"><stop offset="0" stop-color="#5496be"/><stop offset="1" stop-color="#ffca00"/></linearGradient>
+  <linearGradient id="e14" gradientUnits="userSpaceOnUse" x1="196.5" y1="93.8" x2="59.5" y2="93.8"><stop offset="0" stop-color="#5496be"/><stop offset="1" stop-color="#ef4b6a"/></linearGradient>
+  <linearGradient id="e23" gradientUnits="userSpaceOnUse" x1="170.3" y1="174.2" x2="85.7" y2="174.2"><stop offset="0" stop-color="#3aaf6a"/><stop offset="1" stop-color="#ffca00"/></linearGradient>
+  <linearGradient id="e24" gradientUnits="userSpaceOnUse" x1="170.3" y1="174.2" x2="59.5" y2="93.8"><stop offset="0" stop-color="#3aaf6a"/><stop offset="1" stop-color="#ef4b6a"/></linearGradient>
+  <linearGradient id="e34" gradientUnits="userSpaceOnUse" x1="85.7" y1="174.2" x2="59.5" y2="93.8"><stop offset="0" stop-color="#ffca00"/><stop offset="1" stop-color="#ef4b6a"/></linearGradient>
+  <radialGradient id="n0" cx="0.38" cy="0.32" r="0.75"><stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/><stop offset="0.35" stop-color="#a730b8"/><stop offset="1" stop-color="#5e1a68"/></radialGradient>
+  <radialGradient id="n1" cx="0.38" cy="0.32" r="0.75"><stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/><stop offset="0.35" stop-color="#5496be"/><stop offset="1" stop-color="#24577a"/></radialGradient>
+  <radialGradient id="n2" cx="0.38" cy="0.32" r="0.75"><stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/><stop offset="0.35" stop-color="#3aaf6a"/><stop offset="1" stop-color="#1a6438"/></radialGradient>
+  <radialGradient id="n3" cx="0.38" cy="0.32" r="0.75"><stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/><stop offset="0.35" stop-color="#ffca00"/><stop offset="1" stop-color="#9a7a00"/></radialGradient>
+  <radialGradient id="n4" cx="0.38" cy="0.32" r="0.75"><stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/><stop offset="0.35" stop-color="#ef4b6a"/><stop offset="1" stop-color="#8f1f37"/></radialGradient>
+</defs>
+<g stroke-linecap="round" fill="none">
+  <line x1="128.0" y1="44.0" x2="170.3" y2="174.2" stroke="#1b2a36" stroke-opacity="0.55" stroke-width="10"/>
+  <line x1="128.0" y1="44.0" x2="170.3" y2="174.2" stroke="url(#e02)" stroke-width="7"/>
+  <line x1="128.0" y1="44.0" x2="85.7" y2="174.2" stroke="#1b2a36" stroke-opacity="0.55" stroke-width="10"/>
+  <line x1="128.0" y1="44.0" x2="85.7" y2="174.2" stroke="url(#e03)" stroke-width="7"/>
+  <line x1="196.5" y1="93.8" x2="85.7" y2="174.2" stroke="#1b2a36" stroke-opacity="0.55" stroke-width="10"/>
+  <line x1="196.5" y1="93.8" x2="85.7" y2="174.2" stroke="url(#e13)" stroke-width="7"/>
+  <line x1="196.5" y1="93.8" x2="59.5" y2="93.8" stroke="#1b2a36" stroke-opacity="0.55" stroke-width="10"/>
+  <line x1="196.5" y1="93.8" x2="59.5" y2="93.8" stroke="url(#e14)" stroke-width="7"/>
+  <line x1="170.3" y1="174.2" x2="59.5" y2="93.8" stroke="#1b2a36" stroke-opacity="0.55" stroke-width="10"/>
+  <line x1="170.3" y1="174.2" x2="59.5" y2="93.8" stroke="url(#e24)" stroke-width="7"/>
+  <line x1="128.0" y1="44.0" x2="196.5" y2="93.8" stroke="#1b2a36" stroke-opacity="0.6" stroke-width="14"/>
+  <line x1="128.0" y1="44.0" x2="196.5" y2="93.8" stroke="url(#e01)" stroke-width="10"/>
+  <line x1="128.0" y1="44.0" x2="59.5" y2="93.8" stroke="#1b2a36" stroke-opacity="0.6" stroke-width="14"/>
+  <line x1="128.0" y1="44.0" x2="59.5" y2="93.8" stroke="url(#e04)" stroke-width="10"/>
+  <line x1="196.5" y1="93.8" x2="170.3" y2="174.2" stroke="#1b2a36" stroke-opacity="0.6" stroke-width="14"/>
+  <line x1="196.5" y1="93.8" x2="170.3" y2="174.2" stroke="url(#e12)" stroke-width="10"/>
+  <line x1="170.3" y1="174.2" x2="85.7" y2="174.2" stroke="#1b2a36" stroke-opacity="0.6" stroke-width="14"/>
+  <line x1="170.3" y1="174.2" x2="85.7" y2="174.2" stroke="url(#e23)" stroke-width="10"/>
+  <line x1="85.7" y1="174.2" x2="59.5" y2="93.8" stroke="#1b2a36" stroke-opacity="0.6" stroke-width="14"/>
+  <line x1="85.7" y1="174.2" x2="59.5" y2="93.8" stroke="url(#e34)" stroke-width="10"/>
+</g>
+<circle cx="128.0" cy="44.0" r="15.0" fill="url(#n0)" stroke="#5e1a68" stroke-width="2.5"/>
+<circle cx="196.5" cy="93.8" r="15.0" fill="url(#n1)" stroke="#24577a" stroke-width="2.5"/>
+<circle cx="170.3" cy="174.2" r="15.0" fill="url(#n2)" stroke="#1a6438" stroke-width="2.5"/>
+<circle cx="85.7" cy="174.2" r="15.0" fill="url(#n3)" stroke="#9a7a00" stroke-width="2.5"/>
+<circle cx="59.5" cy="93.8" r="15.0" fill="url(#n4)" stroke="#8f1f37" stroke-width="2.5"/>
+</svg>

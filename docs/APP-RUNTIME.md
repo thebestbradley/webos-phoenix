@@ -692,6 +692,8 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | `apps/help` | Help (see [below](#help)); its topics are Markdown files in `apps/help/topics` |
 
 | `apps/dav` | The CardDAV & CalDAV account (see [below](#carddav-and-caldav)): a hidden Enyo 1.0 app with the account's sign-in page, its db8 kinds and account template, and `apps/dav/service`, its Node.js Luna service and sync engine |
+| `apps/fediverse` | The Fediverse account (see [below](#synergy-connectors-and-the-fediverse)): a hidden app with the sign-in page, the share target's page, its template and kinds, and `apps/fediverse/service`, a connector on `@phoenix/connector-kit` |
+| `apps/shared/synckit`, `apps/shared/connector-kit` | `@phoenix/synckit` (what Synergy transports share: bus, db8, HTTP, item records and merge, vCard / iCalendar) and `@phoenix/connector-kit` (`defineConnector`, the conformance suite, the `phoenix-connector` command); [SYNERGY-SDK.md](SYNERGY-SDK.md) |
 
 Build (Node.js 22 or 24 LTS; 20.19+ also works):
 
@@ -2343,6 +2345,62 @@ radicale`), adds the account in the original Accounts app, and checks sync
 both ways against db8, Contacts and Calendar; screenshots go to
 `build/dav-tests/`. The device service's tests (`apps/dav/service/*.test.ts`)
 run with `npm test`.
+
+## Synergy connectors and the Fediverse
+
+Transports written on the connector kit ([SYNERGY-SDK.md](SYNERGY-SDK.md);
+the plan in [SYNERGY-CONNECTORS.md](SYNERGY-CONNECTORS.md)): one
+`defineConnector` per service, which the kit turns into the Synergy
+callbacks (`checkCredentials`, `onCreate`, `onEnabled`,
+`onCredentialsChanged`, `onDelete`, `sync`) plus the connector's own
+methods. On a device the service runs under `run-js-service`
+(`service.js` calls `runOnDevice`) and carries `@phoenix/*` in its
+`node_modules` (`tools/install-rootfs.py`, `phoenix-connector pack`).
+
+| Service | Methods | Notes |
+| --- | --- | --- |
+| `org.webosphoenix.service.fediverse` | the callbacks; `signIn {handle}` (the account page's sign-in), `post {accountId, text, visibility, inReplyTo, media: [{path, description}]}` (the share target), `outbox` (the db8 watch on unsent IM messages) | Template `com.webosphoenix.fediverse`: CONTACTS (read only, `com.palm.contact.fediverse:1`), MESSAGING (IM, `com.palm.immessage.fediverse:1`, `serviceName` `type_fediverse`), SOCIAL (notifications as toasts); kinds `org.webosphoenix.fediverse.state:1`, `.item:1` |
+| `org.webosphoenix.service.oauth` (`services/oauth`) | `authorize {authorizationEndpoint, tokenEndpoint, clientId, clientSecret, scope, key}` (code flow with PKCE S256 and `state` in the system's browser sheet; the token goes to the key store under `key`), `token {key}`, `forget {key, revokeEndpoint}`, `client {server, register}` (a server's app registration, kept per server and redirect), `redirectUri` | Only the service that stored a key reads or forgets it (`PERMISSION_DENIED`); errors `CANCELED`, `ACCESS_DENIED`, `NOT_FOUND`. On a device a placeholder: the keys in `/var/lib/phoenix/oauth/keys.json`, no sheet (`UNSUPPORTED`), redirect `http://127.0.0.1/oauth/callback` (RFC 8252) |
+
+Messaging shows a `type_fediverse` conversation without presence (the handle and
+"Fediverse" under the name) and a "Not private" notice above the messages
+(`@phoenix/luna` `messaging.ts`: `IM_SERVICES`, `hasPresence`,
+`notPrivateNote`).
+
+### In the simulator
+
+The runtime's block "Synergy connectors on the kit" loads the compiled
+kit and each connector's `connector.js` into the page (bare `@phoenix/*`
+names resolve under `/usr/lib/phoenix/node_modules/`, mounted from
+`apps/shared`), registers the service on the simulated bus, adds its
+template and kinds, and runs one sync at a time per account across pages.
+The Fediverse is built in; a connector package installed in Developer
+Mode (`installPackage`) is loaded the same way and dropped when the app
+is removed. `__phoenixRuntime.connectors.hosted()` lists them and
+`.service(name)` gives a service's methods (to sync one from a test). Outgoing IM messages of a connector's
+`serviceName` go to its outbox method, as the db8 watch does on a device.
+Photos the connector keeps (`cachePhoto`) go to the file cache
+(`/var/file-cache/<service>/`), as Contacts reads them with
+`palmGetResource`.
+
+The OAuth service runs in the page as well
+(`/usr/palm/services/org.webosphoenix.service.oauth/oauthservice.js`): its
+key store is the runtime's credential storage, and its sheet is the share
+sheet's page with kind `signin` (`runtime.signInSheet(url, redirect)`: the
+server's page in a browser view, its address and a lock above it, Cancel).
+The redirect is the sheet's own `signed-in.html`; the sheet closes when the
+view reaches it and hands the address back.
+
+Requests go through the same proxy as DAV's; a body of bytes (a picture
+being uploaded) travels as `bodyBase64` (`tools/serve-rootfs.py`, and
+phoenix-sim's `RootfsSchemeHandler` from its next build).
+
+`NODE_PATH="$(npm root -g)" node tools/test-fediverse.cjs [--tablet]` runs
+a fake Mastodon server (`apps/fediverse/service/test/fake-mastodon.cjs`)
+and goes through the whole flow: Connections, the sign-in and the sheet,
+contacts on cards, mentions in Messaging and as notifications, a reply,
+sharing a link and a photo with alt text, and the FEEDS example installed
+in Developer Mode. The connectors' own tests run with `npx vitest run`.
 
 ## First Use
 

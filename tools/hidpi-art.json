@@ -1241,6 +1241,14 @@
             ]
         },
         {
+            "name": "fediverse",
+            "art": "apps/fediverse/public/accounts/com.webosphoenix.fediverse/images",
+            "upscale": [
+                { "art": "fediverse-32x32.png", "method": "downscale", "source": "apps/fediverse/icon-512x512.png" },
+                { "art": "fediverse-48x48.png", "method": "downscale", "source": "apps/fediverse/icon-512x512.png" }
+            ]
+        },
+        {
             "name": "feeds-example",
             "art": "apps/shared/connector-kit/examples/feeds/public/accounts/org.example.feeds/images",
             "upscale": [

@@ -10,11 +10,12 @@
 // screen, with Share (the system's sheet: Save to Photos, Email, ...). An
 // IM conversation says the buddy's presence under their name, and its
 // messages go by the buddy's IM service from the account the conversation
-// is on.
+// is on. A conversation of the Fediverse's direct mentions has no presence
+// and says it is not private (docs/SYNERGY-MODERN.md 3.1).
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { db, isImService, messaging, serviceLabel, shareSheet, type ChatThread, type ImBuddy, type Message, type MessagePart,
-         type Person } from "@phoenix/luna";
+import { db, hasPresence, isImService, messaging, notPrivateNote, serviceLabel, shareSheet, type ChatThread, type ImBuddy, type Message,
+         type MessagePart, type Person } from "@phoenix/luna";
 import { useFileUrl } from "@phoenix/luna/react";
 import { Avatar, Button, dayLabel, formatNumber, formatTime, useBack } from "@phoenix/ui";
 import { buddyFor, chatItems, presenceText } from "../lib/threads";
@@ -91,6 +92,7 @@ export function Conversation({ threadId, people, buddies, header }: {
     useLayoutEffect(toEnd, [messages?.length]);
 
     const im = isImService(thread?.replyService);
+    const notPrivate = im ? notPrivateNote(thread?.replyService) : undefined;
     const buddy = im ? buddyFor(thread, buddies) : undefined;
     const person = thread?.personId ? people.find((p) => p._id === thread.personId) : undefined;
     const photo = person?.photos?.localPathList || person?.photos?.localPathSquare;
@@ -114,15 +116,21 @@ export function Conversation({ threadId, people, buddies, header }: {
                     <Avatar size={36} src={photo} />
                     <div className="msg-header-text" data-testid="thread-title">
                         <div className="msg-header-title">{name}</div>
-                        {im ? (
+                        {im && hasPresence(thread?.replyService) ? (
                             <div className="msg-header-sub" data-testid="thread-presence">
                                 <Presence availability={buddy?.availability} /> {presenceText(buddy)} · {serviceLabel(thread?.replyService)}
+                            </div>
+                        ) : im ? (
+                            <div className="msg-header-sub" data-testid="thread-service">
+                                {thread?.replyAddress && thread.displayName !== thread.replyAddress ? "@" + thread.replyAddress + " · " : ""}
+                                {serviceLabel(thread?.replyService)}
                             </div>
                         ) : thread?.replyAddress && thread.displayName !== thread.replyAddress &&
                             <div className="msg-header-sub">{formatNumber(thread.replyAddress)}</div>}
                     </div>
                 </div></div>
             )}
+            {notPrivate && <div className="chat-notice" role="note" data-testid="not-private">{notPrivate}</div>}
             <div className="chat" ref={scroller} data-testid="chat">
                 {messages && chatItems(messages).map((it) => it.kind === "time" ? (
                     <div key={it.key} className="chat-time">{stamp(it.timestamp)}</div>

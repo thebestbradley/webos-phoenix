@@ -37,6 +37,11 @@ is the device side. Each line names its row; the row has the detail.
   `cardReturnRequested` (Back to the caller) without sending it.
 - **P2** C11, R5: scene transitions, the card tutorial, Touch to Share, refusing
   launches in low memory, and dock mode on a device.
+- **P1** Synergy sign-ins on a device: the system's browser sheet for OAuth
+  (the simulator lays it over the card: the share sheet's page, kind
+  `signin`) and the key store behind it (`services/oauth/service.js` keeps
+  tokens in a file meanwhile); the Fediverse account needs both to sign in
+  on hardware (docs/SYNERGY-CONNECTORS.md C2, C3).
 
 **Shell** (in the simulator too):
 

@@ -1,0 +1,9 @@
+{
+    "oauth.signin": [
+        "org.webosphoenix.service.oauth/authorize",
+        "org.webosphoenix.service.oauth/token",
+        "org.webosphoenix.service.oauth/forget",
+        "org.webosphoenix.service.oauth/client",
+        "org.webosphoenix.service.oauth/redirectUri"
+    ]
+}

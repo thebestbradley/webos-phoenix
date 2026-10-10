@@ -1,0 +1,15 @@
+{
+    "accounts.transport": [
+        "org.webosphoenix.service.fediverse/checkCredentials",
+        "org.webosphoenix.service.fediverse/onCreate",
+        "org.webosphoenix.service.fediverse/onEnabled",
+        "org.webosphoenix.service.fediverse/onCredentialsChanged",
+        "org.webosphoenix.service.fediverse/onDelete",
+        "org.webosphoenix.service.fediverse/sync",
+        "org.webosphoenix.service.fediverse/outbox"
+    ],
+    "fediverse.account": [
+        "org.webosphoenix.service.fediverse/signIn",
+        "org.webosphoenix.service.fediverse/post"
+    ]
+}

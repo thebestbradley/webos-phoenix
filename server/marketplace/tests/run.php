@@ -104,8 +104,8 @@ check($idx['version'] === 1 && $idx['build'] === $pub['build'] && count($idx['ap
 
 // ---- Account types (Connections): built in, from catalog/accounts.json ------------------------
 $types = array_column($idx['accounts'] ?? [], null, 'templateId');
-check(array_keys($types) === ['com.webosphoenix.dav', 'com.webosphoenix.webcal', 'com.palm.othermail', 'com.webosphoenix.xmpp']
-      && $pub['accounts'] === 4 && !isset($types['com.palm.palmprofile']),
+check(array_keys($types) === ['com.webosphoenix.dav', 'com.webosphoenix.fediverse', 'com.webosphoenix.webcal', 'com.palm.othermail', 'com.webosphoenix.xmpp']
+      && $pub['accounts'] === 5 && !isset($types['com.palm.palmprofile']),
       'the index lists the account types Phoenix connects to (not the HP webOS profile)');
 $shape = ['templateId', 'title', 'provider', 'icon', 'summary', 'capabilities', 'protocols', 'auth', 'server', 'privacy', 'push', 'status', 'package', 'featured'];
 check(!array_filter($types, fn ($t) => array_keys($t) !== $shape || $t['package']['builtin'] !== true || array_keys($t['auth']) !== ['type', 'registration']
@@ -117,6 +117,11 @@ check($dav['title'] === 'CardDAV & CalDAV' && $dav['capabilities'] === [['capabi
       && $dav['privacy'] === ['dataGoesTo' => 'the server you enter', 'e2ee' => false, 'phoenixServers' => 'none']
       && $dav['package'] === ['id' => 'org.webosphoenix.dav', 'builtin' => true] && $dav['featured'] === true,
       'CardDAV & CalDAV: its capabilities as the template names them, app password, the server you enter');
+$fedi = $types['com.webosphoenix.fediverse'];
+check($fedi['title'] === 'Fediverse' && $fedi['auth'] === ['type' => 'oauth', 'registration' => 'none'] && $fedi['server'] === 'discovered'
+      && array_column($fedi['capabilities'], 'capability') === ['CONTACTS', 'MESSAGING', 'SOCIAL'] && $fedi['featured'] === true
+      && $fedi['package'] === ['id' => 'org.webosphoenix.fediverse', 'builtin' => true] && $fedi['privacy']['phoenixServers'] === 'none',
+      'Fediverse (phase C2): OAuth with the server found from the handle, built in, featured');
 check($types['com.webosphoenix.webcal']['capabilities'] === [['capability' => 'CALENDAR', 'direction' => 'read-only']]
       && $types['com.palm.othermail']['capabilities'][0]['capability'] === 'MAIL'
       && $types['com.webosphoenix.xmpp']['capabilities'][0]['capability'] === 'MESSAGING' && $types['com.webosphoenix.xmpp']['status'] === 'experimental',

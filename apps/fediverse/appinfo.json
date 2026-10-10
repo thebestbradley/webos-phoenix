@@ -1,0 +1,31 @@
+{
+    "id": "org.webosphoenix.fediverse",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Fediverse",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "uiRevision": 2,
+    "phoenix": {
+        "//": "Not in the launcher: the app carries the Fediverse account (accounts/wizard.html, the template in public/accounts, the service) and the share sheet's page for posting (index.html). shareTargets: links, text and pictures (docs/SHARE-AND-FILES.md).",
+        "hidden": true,
+        "shareTargets": [
+            {
+                "types": [
+                    "text/plain",
+                    "text/uri-list",
+                    "image/*"
+                ],
+                "label": "Fediverse"
+            }
+        ]
+    },
+    "requiredPermissions": [
+        "accounts.transport",
+        "fediverse.account"
+    ]
+}

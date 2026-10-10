@@ -1,0 +1,27 @@
+/* Copyright (c) 2026 webOS Phoenix contributors
+   SPDX-License-Identifier: Apache-2.0 */
+
+.fediverse-wizard .box-center {
+    max-width: 500px;
+    margin: 0 auto;
+    padding: 0 10px;
+}
+
+.fediverse-wizard .fediverse-help {
+    font-size: 14px;
+    color: #555;
+    margin: 14px 14px 14px;
+    line-height: 1.3;
+}
+
+.fediverse-wizard .fediverse-hint,
+.fediverse-wizard .fediverse-privacy {
+    font-size: 13px;
+    color: #777;
+    margin: -4px 14px 10px;
+    line-height: 1.3;
+}
+
+.fediverse-wizard .fediverse-privacy {
+    margin-top: 14px;
+}

@@ -11,7 +11,7 @@
 // do) and Delete.
 
 import { useState } from "react";
-import { apps, isImService, type ChatThread, type ImBuddy, type Person } from "@phoenix/luna";
+import { apps, hasPresence, isImService, type ChatThread, type ImBuddy, type Person } from "@phoenix/luna";
 import {
     Avatar, Button, ContextMenu, Dialog, formatNumber, shortWhen, Swipeable, useLongPress, type ContextMenuItem,
 } from "@phoenix/ui";
@@ -52,7 +52,7 @@ function Row({ t, people, buddies, selected, onOpen, onDelete, onMenu }: {
                 <div className="thread-body">
                     <div className="thread-top">
                         <span className="thread-name">
-                            {im && <Presence availability={buddy?.availability} title={presenceText(buddy)} />}
+                            {im && hasPresence(t.replyService) && <Presence availability={buddy?.availability} title={presenceText(buddy)} />}
                             {threadName(t)}
                         </span>
                         <span className="thread-when">{t.timestamp ? shortWhen(t.timestamp) : ""}</span>

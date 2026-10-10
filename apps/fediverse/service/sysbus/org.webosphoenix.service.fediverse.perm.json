@@ -1,0 +1,11 @@
+{
+    "org.webosphoenix.service.fediverse": [
+        "database.operation",
+        "activity.operation",
+        "accounts.operation",
+        "accounts.transport",
+        "oauth.signin",
+        "notification.operation",
+        "messaging.operation"
+    ]
+}

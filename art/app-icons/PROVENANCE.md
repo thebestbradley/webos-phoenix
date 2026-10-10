@@ -56,6 +56,14 @@ bands like a voice's sound waves; `assistantpane` is the same drawing,
 smaller, for Settings > Assistant) and `advancedpane` (Settings > Advanced:
 a brushed metal panel with three sliders) and `hardwarepane` (Settings > Hardware: a circuit board with a chip, standing on its gold edge connector).
 
+`fediverse` (the Fediverse account: its icons and the account template's
+`fediverse-32x32` / `fediverse-48x48`) is our own drawing of the Fediverse
+pentagram, a design by Eukombos dedicated to the public domain (CC0 1.0,
+https://commons.wikimedia.org/wiki/File:Fediverse_logo_proposal.svg,
+checked 10 October 2026): five coloured nodes on a pentagon joined by a
+pentagram, drawn anew in `objects/fediverse.svg`, nothing copied from the
+file. Ours is Apache-2.0 like the rest.
+
 ## The originals' 512 px icons
 
 `compat/rootfs/usr/palm/applications/<id>/icon-512x512.png` (Accounts,
