@@ -145,7 +145,14 @@ async function main() {
         await page.waitForSelector("[data-testid=account-page]");
         const typePage = await page.textContent("[data-testid=account-page]");
         check(/Mastodon/.test(typePage) && /Phoenix's servers: none/.test(typePage), "its page: the servers it works with, and no Phoenix server in between");
+        check(/Don't have an account\? Sign up/.test(await page.textContent("[data-testid=sign-up-line]").catch(() => "")),
+              "its page offers \"Don't have an account? Sign up\" beside Set up");
         await shot(page, "2-connection-page");
+        host.length = 0;
+        await page.click("[data-testid=sign-up]");
+        await page.waitForTimeout(300);
+        check(host.some((m) => JSON.stringify(m.payload || {}).indexOf("https://joinmastodon.org/servers") >= 0),
+              "Sign up opens joinmastodon.org's list of servers in the browser");
         host.length = 0;
         await page.click("[data-testid=set-up]");
         await page.waitForTimeout(300);
@@ -165,6 +172,8 @@ async function main() {
         if (!check(!!wizard, "Accounts opens the Fediverse sign-in page")) throw new Error("no sign-in page");
         await wizard.waitForSelector("input", { timeout: 10000 });
         await accounts.waitForTimeout(800);
+        check(/Don't have an account\? Sign up/.test(await wizard.locator(".accounts-signup").textContent().catch(() => "")),
+              "the sign-in page offers \"Don't have an account? Sign up\" under the handle");
         await wizard.locator("input").first().fill("@phoenix@" + mastodon.domain);
         await wizard.locator("input").first().press("Tab");
         await shot(accounts, "3-sign-in");

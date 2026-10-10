@@ -110,6 +110,40 @@ written again, deleting what the feed no longer lists, the sync state
 Accounts shows, backoff when the server asks for it, and removing every entry
 when the capability is turned off or the account deleted.
 
+### Sign-up link
+
+Not everyone who finds your account type has an account yet. Say where to
+get one in the definition:
+
+```js
+signUp: "https://example.com/join"
+// or, for a federated service: a page to choose a server, and servers to suggest
+signUp: { url: "https://joinmastodon.org/servers",
+          servers: [{ name: "example.social", url: "https://example.social/auth/sign_up" }] }
+```
+
+Every address is `https://` (`defineConnector` and `validate` refuse
+anything else, rule C16). `phoenix-connector pack` writes it into your
+account template as `"signUp": {url?, servers?}` (as it writes the share
+target into `appinfo.json`), and `validate` says when the template is
+behind the definition. The user then sees **"Don't have an account? Sign
+up"**:
+
+- on the sign-in step in Accounts, under the fields: the accounts
+  library's own user name and password page shows it for a template with a
+  `signUp` (Phoenix's compat overlay, `lib/accounts/source/phoenix-signup.js`);
+  a sign-in page of your own adds `{kind: "Accounts.SignUpLink", name:
+  "signUp"}` and calls `this.$.signUp.setTemplate(params.template)` (the
+  Fediverse's `accounts/FediverseWizard.js` does). Suggested servers show as
+  "Or join a, b or c";
+- on your account type's page in the Marketplace's Connections, beside Set
+  up, from the catalog entry's `signUp` (an `https://` address;
+  `server/marketplace/README.md`).
+
+The link opens in the browser; nothing is sent to the service. The
+Fediverse's is joinmastodon.org's list of servers; a feed reader needs no
+account and has none.
+
 The sign-in page (`accounts/signin.html`) is plain HTML: the Accounts app
 loads it in a frame with `?enyoWindowParams={mode, template, account}`, it
 calls the validator over the bus (`PalmServiceBridge`), and posts its answer
@@ -143,6 +177,7 @@ and returns it.
 | `methods` | More service methods, `(ctx, params) -> result`. With `params.accountId`, `ctx` is that account's |
 | `push` | `{unifiedPush: true}`: recorded only, until phase C6 |
 | `share` | What the service takes from the share sheet and `send(ctx, content)` to post it: section 7 |
+| `signUp` | Where a person without an account gets one: `"https://..."`, or `{url?, servers?: [{name, url}]}` (below, "Sign-up link") |
 
 **A capability that is a set of objects** (contacts, events, entries) has a
 `kind` and a `pull`:
@@ -471,6 +506,7 @@ starts with its rule:
 | C13 | (`.ipk`) files only under the app, no links, no maintainer scripts, 64 MB at most, the control file agreeing with `appinfo.json`, `Architecture: all` |
 | C14 | share targets: each written from the definition's `share` (none by hand), its template and service the package's, `accepts` and `audience` well formed, `types` what `accepts` takes; on a folder, `validate` also compares it with the definition |
 | C15 | sharing reaches the service: `<service>/share` in an `.api.json` group the app's `requiredPermissions` names; the app's main page (the compose page) in the package |
+| C16 | the template's `signUp`: `https://` addresses only (`url`, `servers[].url`), each server with a name |
 
 `pack` writes `appinfo.json`'s share target from the definition (section
 7), validates, then writes the `.ipk` the Marketplace takes: every

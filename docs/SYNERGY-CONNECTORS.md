@@ -215,7 +215,12 @@ and `help` are new metadata.
 (Connections)"): the built-in types only, from `catalog/accounts.json`,
 with `templateId, title, provider, icon, summary, capabilities, protocols,
 auth, server, privacy {dataGoesTo, e2ee, phoenixServers}, push, status,
-package {id, builtin}, help?, featured`. `icon` is one address (the
+package {id, builtin}, help?, signUp?, featured`. `signUp` (10 October
+2026, the owner: "the accounts/connectors also need links to sign up and
+register") is an `https://` page where a person without an account gets
+one; the type's page in Connections offers "Don't have an account? Sign
+up" beside Set up, and the template's own `signUp` puts the same link on
+the sign-in step in Accounts (SYNERGY-SDK.md "Sign-up link"). `icon` is one address (the
 catalog's copy of the template's 96 px icon), not the draft's sizes;
 `direction` is `two-way`, `read-only` or `write-only`; `terms`, `regions`,
 `readsFrom`/`writesTo` and `package.minVersion` wait for connector packages

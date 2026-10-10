@@ -92,6 +92,8 @@ export function scaffold(appId: string, capability: string, options?: { share?: 
         "    service: " + JSON.stringify(service) + ",",
         "    templateIds: [" + JSON.stringify(templateId) + "],",
         "    kinds: { state: " + JSON.stringify(stateKind) + ", item: " + JSON.stringify(itemKind) + " },",
+        "    // Where a person without an account signs up (an https page; docs/SYNERGY-SDK.md).",
+        "    // signUp: \"https://example.com/join\",",
         "    // The template's validator: check the sign-in, keep what the sync needs.",
         "    validate: function (ctx, p) {",
         "        var server = String((p.config && p.config.serverUrl) || \"\");",

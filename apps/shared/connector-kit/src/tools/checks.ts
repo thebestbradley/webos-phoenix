@@ -38,12 +38,15 @@
 //   C15 sharing reaches the service: the api.json lists <service>/share in
 //       a group the app's requiredPermissions name; the app's main page,
 //       which the sheet opens to compose, is in the package
+//   C16 the template's sign-up link (signUp: {url?, servers?: [{name,
+//       url}]}, written from the definition's signUp): https addresses only
 //
 // files: the package's files by path relative to the app's folder.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { acceptsProblems, audienceProblems, shareTypes } from "../share";
+import { signUpProblems } from "../signup";
 
 export interface CheckResult {
     errors: string[];
@@ -235,6 +238,7 @@ export function checkConnector(files: Files, options?: { namespaces?: string[] }
             });
         }
         iconObject(tpl.icon, id);
+        signUpProblems(tpl.signUp).forEach((p) => errors.push("C16 " + id + ": " + p));
         if (tpl.validator !== undefined && typeof tpl.validator !== "string" && (typeof tpl.validator !== "object" || tpl.validator === null || Array.isArray(tpl.validator)))
             errors.push("C3 " + id + ": validator must be a string or an object");
         if (!Array.isArray(tpl.capabilityProviders)) { errors.push("C3 " + id + ": capabilityProviders must be an array"); return; }

@@ -35,6 +35,8 @@
 //       audience well formed, types what accepts takes
 //   C15 sharing reaches the service: <service>/share in an api.json group
 //       the app's requiredPermissions name; the app's main page in the package
+//   C16 the template's sign-up link (signUp: {url?, servers?: [{name, url}]}):
+//       https addresses only
 //
 // Phase C4 (connector packages in the catalog) uses this; until then the
 // catalog takes no connector (Catalog::publish, Ipk::check refuses services).
@@ -257,6 +259,47 @@ final class Connector
         return $out;
     }
 
+    /** An https:// address, as a sign-up link must be (signup.ts isHttps). */
+    public static function isHttps($v): bool
+    {
+        return is_string($v) && strlen($v) <= 500 && preg_match('#^https://[^\s/?\#]+[^\s]*$#i', $v) === 1;
+    }
+
+    /** Problems with a template's signUp (signup.ts signUpProblems). */
+    public static function signUpProblems($v): array
+    {
+        $s = is_string($v) ? ['url' => $v] : $v;
+        if (!is_array($s) || ($s !== [] && array_is_list($s))) {
+            return ['signUp: an https:// address, or {url?, servers?}'];
+        }
+        $out = [];
+        if (!array_key_exists('url', $s) && !array_key_exists('servers', $s)) {
+            $out[] = 'signUp: a url or servers';
+        }
+        if (array_key_exists('url', $s) && !self::isHttps($s['url'])) {
+            $out[] = 'signUp.url: an https:// address';
+        }
+        if (array_key_exists('servers', $s)) {
+            $list = $s['servers'];
+            if (!is_array($list) || !array_is_list($list) || $list === [] || count($list) > 10) {
+                $out[] = 'signUp.servers: a list of 1 to 10 {name, url}';
+            } else {
+                foreach ($list as $i => $x) {
+                    if (!is_array($x) || !is_string($x['name'] ?? null) || trim($x['name']) === '' || mb_strlen($x['name']) > 80
+                        || !self::isHttps($x['url'] ?? null)) {
+                        $out[] = "signUp.servers[$i]: {name, url: an https:// address}";
+                    }
+                }
+            }
+        }
+        foreach (array_keys($s) as $k) {
+            if ($k !== 'url' && $k !== 'servers') {
+                $out[] = "signUp.$k: not a field of signUp (url, servers)";
+            }
+        }
+        return $out;
+    }
+
     /** What a connector may say it takes, and the MIME types each kind is by default (share.ts). */
     public const SHARE_KINDS = ['text' => ['text/plain'], 'link' => ['text/uri-list'], 'image' => ['image/*'], 'video' => ['video/*'], 'file' => ['*/*']];
     private const MIME = '#^[a-z0-9][a-z0-9.+-]*/(\*|[a-z0-9][a-z0-9.+-]*)$#i';
@@ -464,6 +507,11 @@ final class Connector
             }
         };
         $iconObject($tpl['icon'] ?? null, $id);
+        if (array_key_exists('signUp', $tpl)) {
+            foreach (self::signUpProblems($tpl['signUp']) as $p) {
+                $errors[] = "C16 $id: $p";
+            }
+        }
         if (array_key_exists('validator', $tpl) && !is_string($tpl['validator']) && !(is_array($tpl['validator']) && !(array_is_list($tpl['validator']) && $tpl['validator'] !== []))) {
             $errors[] = "C3 $id: validator must be a string or an object";
         }

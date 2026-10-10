@@ -116,6 +116,13 @@ export interface ConnectorDefinition {
      * signed-in account; the kit makes the `share` method from it.
      */
     share?: ShareDefinition;
+    /**
+     * Where a person without an account signs up (docs/SYNERGY-SDK.md
+     * "Sign-up link"): the service's page, or for a federated service a page
+     * to choose a server and/or servers to suggest. https only. Written into
+     * the account template by phoenix-connector pack.
+     */
+    signUp?: string | { url?: string; servers?: { name: string; url: string }[] };
 }
 
 /** What a connector can be given to post. */

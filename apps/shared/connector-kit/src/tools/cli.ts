@@ -11,7 +11,7 @@
 //       the Marketplace's checks (checks.ts; the server runs the same)
 //   phoenix-connector pack <folder> [--out DIR] [--namespace NS]... [--force]
 //       the .ipk the Marketplace takes; first writes appinfo.json's share
-//       target from the definition's share
+//       target and the templates' sign-up link from the definition
 //   phoenix-connector test <folder>
 //       the conformance suite, with the connector's fixture
 //       (service/test/fixture.js: module.exports = {template, validateParams, server(), ...})
@@ -108,7 +108,7 @@ export async function main(argv: string[], io?: { log?(s: string): void; err?(s:
         try {
             const r = pack(path.resolve(dir), path.resolve(args.out || "."), { namespaces: ns, force: !!args.force });
             print(r.check.warnings.map((w) => "warning " + w), log);
-            if (r.appinfoWritten) log("Wrote appinfo.json's share target from the definition's share");
+            r.written.forEach((rel: string) => log("Wrote " + rel + " from the definition (" + (rel === "appinfo.json" ? "its share" : "its signUp") + ")"));
             log("Packed " + r.file + " (" + Math.round(r.size / 1024) + " KB)");
             return 0;
         } catch (e) {

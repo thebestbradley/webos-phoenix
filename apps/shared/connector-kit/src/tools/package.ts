@@ -14,6 +14,7 @@ import { checkConnector, type CheckResult, type Files } from "./checks";
 import { readIpk, writeIpk, type IpkFile } from "./ipk";
 import { loadDefinition } from "./load";
 import { shareTarget } from "../share";
+import { templateSignUp } from "../signup";
 
 export const MAX_SIZE = 64 * 1024 * 1024;
 const fs = () => require("fs");
@@ -92,56 +93,93 @@ export function vendoredFiles(): { rel: string; data: Uint8Array }[] {
     return out;
 }
 
-// ---- The share target in appinfo.json, from the definition ---------------------------------
+// ---- What the definition says, in appinfo.json and the templates ---------------------------
+
+export interface FromDefinition {
+    /** Files as the definition says them (path in the folder -> text). */
+    files: Record<string, string>;
+    /** Those that differ from the folder's. */
+    changed: string[];
+    /** The definition has a share. */
+    sharing: boolean;
+}
+
+function jsonText(v: unknown): string { return JSON.stringify(v, null, 4) + "\n"; }
 
 /**
- * appinfo.json as the definition's share says it (docs/SYNERGY-SDK.md,
- * "Sharing to your service"): "phoenix".shareTargets is the one entry
- * share.ts shareTarget() makes, or none without a share. null when the
- * folder has no definition made with the kit (service/connector.js; apps/dav
- * writes the contract by hand). Throws when the definition does not load.
+ * appinfo.json and the account templates as the definition says them
+ * (docs/SYNERGY-SDK.md): appinfo.json's "phoenix".shareTargets is the one
+ * entry share.ts shareTarget() makes from `share`, or none ("Sharing to
+ * your service"); each template of templateIds has `signUp` from the
+ * definition's, or none ("Sign-up link"). null when the folder has no
+ * definition made with the kit (service/connector.js; apps/dav writes the
+ * contract by hand). Throws when the definition does not load.
  */
-export function appinfoFromDefinition(dir: string): { text: string; changed: boolean; sharing: boolean } | null {
+export function fromDefinition(dir: string): FromDefinition | null {
     const p = path(), f = fs();
     if (!f.existsSync(p.join(dir, "service", "connector.js"))) return null;
     const def = loadDefinition(dir);
     if (!def || typeof def !== "object" || typeof def.service !== "string" || !Array.isArray(def.templateIds)) return null;
-    const before = f.readFileSync(p.join(dir, "appinfo.json"), "utf8").replace(/^﻿/, "");
-    const info = JSON.parse(before);
+    const out: FromDefinition = { files: {}, changed: [], sharing: !!def.share };
+    const read = (rel: string) => f.readFileSync(p.join(dir, rel), "utf8").replace(/^﻿/, "");
+    function put(rel: string, before: string, value: unknown) {
+        out.files[rel] = jsonText(value);
+        if (JSON.stringify(JSON.parse(before)) !== JSON.stringify(value)) out.changed.push(rel);
+    }
+
+    const infoText = read("appinfo.json");
+    const info = JSON.parse(infoText);
     const target = shareTarget(def, String(info.title || info.id));
     const phoenix = info.phoenix && typeof info.phoenix === "object" ? info.phoenix : (info.phoenix = {});
     if (target) phoenix.shareTargets = [target];
     else delete phoenix.shareTargets;
-    return { text: JSON.stringify(info, null, 4) + "\n", changed: JSON.stringify(JSON.parse(before)) !== JSON.stringify(info), sharing: !!target };
+    put("appinfo.json", infoText, info);
+
+    const signUp = templateSignUp(def.signUp);
+    def.templateIds.forEach((id: string) => {
+        const rel = "public/accounts/" + id + "/" + id + ".json";
+        if (!f.existsSync(p.join(dir, rel))) return;
+        const text = read(rel);
+        const t = JSON.parse(text);
+        (Array.isArray(t) ? t : [t]).forEach((tpl: any) => {
+            if (!tpl || typeof tpl !== "object") return;
+            if (signUp) tpl.signUp = signUp;
+            else delete tpl.signUp;
+        });
+        put(rel, text, t);
+    });
+    return out;
 }
 
-/** Writes appinfo.json's share target from the definition; true when it changed. */
-export function writeShareTargets(dir: string): boolean {
-    const r = appinfoFromDefinition(dir);
-    if (!r || !r.changed) return false;
-    fs().writeFileSync(path().join(dir, "appinfo.json"), r.text);
-    return true;
+/** Writes what the definition says into appinfo.json and the templates; the files changed. */
+export function writeFromDefinition(dir: string): string[] {
+    const r = fromDefinition(dir);
+    if (!r) return [];
+    r.changed.forEach((rel) => fs().writeFileSync(path().join(dir, rel), r.files[rel]));
+    return r.changed;
 }
 
-/** C14 for a folder: the appinfo.json share target is what the definition says (validate). */
+/** C14, C16 for a folder: appinfo.json and the templates say what the definition says (validate). */
 export function definitionProblems(dir: string): { errors: string[]; warnings: string[] } {
     try {
-        const r = appinfoFromDefinition(dir);
-        if (r && r.changed) return { errors: ["C14 appinfo.json: shareTargets is not what the definition's share says (phoenix-connector pack writes it)"], warnings: [] };
+        const r = fromDefinition(dir);
+        if (!r) return { errors: [], warnings: [] };
+        return { errors: r.changed.map((rel) => rel === "appinfo.json"
+            ? "C14 appinfo.json: shareTargets is not what the definition's share says (phoenix-connector pack writes it)"
+            : "C16 " + rel + ": signUp is not what the definition's signUp says (phoenix-connector pack writes it)"), warnings: [] };
     } catch (e) {
-        return { errors: [], warnings: ["C14 the definition (service/connector.js) did not load, so its share was not compared: " + (e as Error).message] };
+        return { errors: [], warnings: ["C14 the definition (service/connector.js) did not load, so its share and signUp were not compared: " + (e as Error).message] };
     }
-    return { errors: [], warnings: [] };
 }
 
-export interface PackResult { file: string; size: number; check: CheckResult; appinfoWritten: boolean }
+export interface PackResult { file: string; size: number; check: CheckResult; written: string[] }
 
 // vendor: false leaves the kit out (tests; a package must carry it to run on a device).
-// writeAppinfo: false packs appinfo.json as it is (its share target is still checked, C14).
+// writeAppinfo: false packs appinfo.json and the templates as they are (still checked, C14, C16).
 export function pack(dir: string, outDir: string, options?: { namespaces?: string[]; force?: boolean; vendor?: boolean; writeAppinfo?: boolean }): PackResult {
     const p = path(), f = fs();
-    // The share target from the definition, into the folder's appinfo.json first.
-    const appinfoWritten = options && options.writeAppinfo === false ? false : writeShareTargets(dir);
+    // The share target and the sign-up link from the definition, into the folder's files first.
+    const written = options && options.writeAppinfo === false ? [] : writeFromDefinition(dir);
     const files = readFolder(dir);
     const check = checkConnector(files, options);
     if (check.errors.length && !(options && options.force))
@@ -159,5 +197,5 @@ export function pack(dir: string, outDir: string, options?: { namespaces?: strin
     f.mkdirSync(outDir, { recursive: true });
     const file = p.join(outDir, info.id + "_" + info.version + "_all.ipk");
     f.writeFileSync(file, Buffer.from(bytes));
-    return { file, size: bytes.length, check, appinfoWritten };
+    return { file, size: bytes.length, check, written };
 }

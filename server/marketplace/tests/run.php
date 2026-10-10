@@ -108,7 +108,8 @@ check(array_keys($types) === ['com.webosphoenix.dav', 'com.webosphoenix.fedivers
       && $pub['accounts'] === 5 && !isset($types['com.palm.palmprofile']),
       'the index lists the account types Phoenix connects to (not the HP webOS profile)');
 $shape = ['templateId', 'title', 'provider', 'icon', 'summary', 'capabilities', 'protocols', 'auth', 'server', 'privacy', 'push', 'status', 'package', 'featured'];
-check(!array_filter($types, fn ($t) => array_keys($t) !== $shape || $t['package']['builtin'] !== true || array_keys($t['auth']) !== ['type', 'registration']
+$withSignUp = array_merge(array_slice($shape, 0, -1), ['signUp', 'featured']);
+check(!array_filter($types, fn ($t) => array_keys($t) !== (isset($t['signUp']) ? $withSignUp : $shape) || $t['package']['builtin'] !== true || array_keys($t['auth']) !== ['type', 'registration']
                                        || array_keys($t['privacy']) !== ['dataGoesTo', 'e2ee', 'phoenixServers']),
       '... each with the fields devices read, in order, built in, and nothing else (no iconFrom)');
 $dav = $types['com.webosphoenix.dav'];
@@ -122,6 +123,9 @@ check($fedi['title'] === 'Fediverse' && $fedi['auth'] === ['type' => 'oauth', 'r
       && array_column($fedi['capabilities'], 'capability') === ['CONTACTS', 'MESSAGING', 'SOCIAL'] && $fedi['featured'] === true
       && $fedi['package'] === ['id' => 'org.webosphoenix.fediverse', 'builtin' => true] && $fedi['privacy']['phoenixServers'] === 'none',
       'Fediverse (phase C2): OAuth with the server found from the handle, built in, featured');
+check($fedi['signUp'] === 'https://joinmastodon.org/servers' && $types['com.webosphoenix.xmpp']['signUp'] === 'https://providers.xmpp.net/'
+      && !isset($types['com.webosphoenix.dav']['signUp']) && !isset($types['com.webosphoenix.webcal']['signUp']) && !isset($types['com.palm.othermail']['signUp']),
+      'sign-up links: the Fediverse\'s servers, XMPP\'s providers; none where the server is your own or no account is needed');
 check($types['com.webosphoenix.webcal']['capabilities'] === [['capability' => 'CALENDAR', 'direction' => 'read-only']]
       && $types['com.palm.othermail']['capabilities'][0]['capability'] === 'MAIL'
       && $types['com.webosphoenix.xmpp']['capabilities'][0]['capability'] === 'MESSAGING' && $types['com.webosphoenix.xmpp']['status'] === 'experimental',
@@ -162,6 +166,8 @@ $badEntries = [
     'an icon outside icons/accounts' => fn ($e) => ['icon' => '../index.json'] + $e,
     'an icon from outside the checkout' => fn ($e) => ['iconFrom' => '../../etc/passwd'] + $e,
     'an icon that is not a PNG' => fn ($e) => ['iconFrom' => 'server/marketplace/catalog/accounts.json'] + $e,
+    'a sign-up link that is not https' => fn ($e) => ['signUp' => 'http://example.com/join'] + $e,
+    'a sign-up link that is a script' => fn ($e) => ['signUp' => 'javascript:alert(1)'] + $e,
 ];
 $before = file_get_contents("$tmp/data/public/v1/index.json");
 $notRefused = [];

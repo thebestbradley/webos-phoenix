@@ -482,6 +482,9 @@ module.exports = kit.defineConnector({
     templateIds: [TEMPLATE],
     kinds: { state: "org.webosphoenix.fediverse.state:1", item: "org.webosphoenix.fediverse.item:1" },
     userAgent: "webOS-Phoenix-Fediverse/0.1",
+    // No account yet: a server to join first (docs/SYNERGY-SDK.md "Sign-up link");
+    // joinmastodon.org's own list, as no one server is ours to pick.
+    signUp: "https://joinmastodon.org/servers",
 
     // The template's validator: an account key the sign-in got ({config: {server, oauthKey}}).
     validate: function (ctx, p) {

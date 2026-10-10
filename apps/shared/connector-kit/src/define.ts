@@ -6,6 +6,7 @@
 // sync (docs/SYNERGY-SDK.md, "The definition").
 
 import { shareProblems } from "./share";
+import { signUpProblems } from "./signup";
 import type { ConnectorDefinition } from "./types";
 
 const ID = /^[A-Za-z0-9]+([._-][A-Za-z0-9]+)+$/;
@@ -44,6 +45,7 @@ export function defineConnector<T extends ConnectorDefinition>(def: T): T {
             problems.push("methods." + name + ": the kit makes this one from the definition");
     });
     problems.push(...shareProblems(def));
+    problems.push(...signUpProblems(def.signUp));
     if (problems.length) throw new Error("defineConnector " + (def.service || "") + ":\n  " + problems.join("\n  "));
     return def;
 }

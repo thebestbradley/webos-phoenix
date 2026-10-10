@@ -402,7 +402,7 @@ describe("phoenix-connector", () => {
             expect(await main(["validate", w], io)).toBe(1);
             expect(out.join("\n")).toMatch(/C14 appinfo\.json: shareTargets is not what the definition's share says/);
             const r = pack(w, dir, { vendor: false });
-            expect(r.appinfoWritten).toBe(true);
+            expect(r.written).toEqual(["appinfo.json"]);
             expect(info().phoenix.shareTargets[0].connector.accepts.text).toEqual({ maxLength: 300 });
             expect(await main(["validate", w], io)).toBe(0);
             // A share target written by hand is refused.
@@ -415,13 +415,39 @@ describe("phoenix-connector", () => {
         }
     });
 
+    it("signUp: checked by defineConnector, written into the template by pack, compared by validate", async () => {
+        expect(() => kit.defineConnector(Object.assign({}, notesConnector, { signUp: "http://example.com/join" }))).toThrow(/signUp\.url: an https:\/\/ address/);
+        expect(() => kit.defineConnector(Object.assign({}, notesConnector, { signUp: { servers: [{ name: "", url: "https://a.example/" }] } })))
+            .toThrow(/signUp\.servers\[0\]/);
+        expect(kit.templateSignUp("https://example.com/join")).toEqual({ url: "https://example.com/join" });
+        const dir = mkdtempSync(join(tmpdir(), "connector-"));
+        const out: string[] = [];
+        const io = { log: (s: string) => out.push(s), err: (s: string) => out.push(s) };
+        const w = join(dir, "w");
+        try {
+            expect(await main(["new", "org.example.club", "--dir", w], io)).toBe(0);
+            const connectorJs = join(w, "service", "connector.js");
+            writeFileSync(connectorJs, readFileSync(connectorJs, "utf8").replace("// signUp: \"https://example.com/join\",",
+                "signUp: { url: \"https://club.example/join\", servers: [{ name: \"Club One\", url: \"https://one.club.example/signup\" }] },"));
+            expect(await main(["validate", w], io)).toBe(1);
+            expect(out.join("\n")).toMatch(/C16 public\/accounts\/org\.example\.club\/org\.example\.club\.json: signUp is not what the definition's signUp says/);
+            const r = pack(w, dir, { vendor: false });
+            expect(r.written).toEqual(["public/accounts/org.example.club/org.example.club.json"]);
+            const tpl = JSON.parse(readFileSync(join(w, "public/accounts/org.example.club/org.example.club.json"), "utf8"));
+            expect(tpl.signUp).toEqual({ url: "https://club.example/join", servers: [{ name: "Club One", url: "https://one.club.example/signup" }] });
+            expect(await main(["validate", w], io)).toBe(0);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     it("the share examples: the Fediverse's appinfo.json is its definition's; the FEEDS example shares nothing", async () => {
-        const { appinfoFromDefinition } = await import("./tools/package");
-        const fedi = appinfoFromDefinition(join(REPO, "apps", "fediverse"));
+        const { fromDefinition } = await import("./tools/package");
+        const fedi = fromDefinition(join(REPO, "apps", "fediverse"));
         expect(fedi && fedi.sharing).toBe(true);
-        expect(fedi && fedi.changed, "apps/fediverse/appinfo.json is not what its definition's share says: run phoenix-connector pack").toBe(false);
-        const f = appinfoFromDefinition(FEEDS);
-        expect(f && !f.sharing && !f.changed).toBe(true);
+        expect(fedi && fedi.changed, "apps/fediverse's appinfo.json or template is not what its definition says: run phoenix-connector pack").toEqual([]);
+        const f = fromDefinition(FEEDS);
+        expect(f && !f.sharing && !f.changed.length).toBe(true);
     });
 
     it("validate refuses a broken package with the rule's code", async () => {
