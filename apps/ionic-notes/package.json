@@ -11,10 +11,14 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
+    "@capacitor/core": "^8.5.3",
     "@ionic/react": "^9.0.5",
     "@ionic/react-router": "^9.0.5",
+    "@phoenix/capacitor": "*",
     "@phoenix/luna": "*",
     "@phoenix/notes-core": "*",
+    "@phoenix/react": "*",
+    "@phoenix/sdk": "*",
     "ionicons": "^8.1.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

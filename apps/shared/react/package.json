@@ -1,0 +1,27 @@
+{
+  "name": "@phoenix/react",
+  "version": "0.1.0",
+  "description": "React hooks for the Phoenix service plugin (@phoenix/sdk): launch params, back, the app menu, share, Just Type, the Assistant, subscriptions",
+  "license": "Apache-2.0",
+  "type": "module",
+  "keywords": ["webos", "phoenix", "react", "ionic", "hooks"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "README.md"],
+  "sideEffects": false,
+  "peerDependencies": {
+    "@phoenix/sdk": "^0.1.0",
+    "react": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p ."
+  }
+}

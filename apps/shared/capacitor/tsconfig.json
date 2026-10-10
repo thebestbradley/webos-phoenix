@@ -1,0 +1,12 @@
+{
+  // @phoenix/sdk from its sources (as shared/react/tsconfig.json).
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": {
+      "@phoenix/sdk": ["../sdk/src/index.ts"],
+      "@phoenix/sdk/testing": ["../sdk/src/testing.ts"]
+    }
+  },
+  "include": ["src"]
+}

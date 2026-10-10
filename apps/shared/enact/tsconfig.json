@@ -1,0 +1,16 @@
+{
+  // The SDK and the React binding from their sources; Enact's LS2Request
+  // as the tests' stand-in (apps/ has no Enact; its own types are no
+  // better: apps/enact-notes-*/src/enact.ts).
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "paths": {
+      "@phoenix/sdk": ["../sdk/src/index.ts"],
+      "@phoenix/sdk/testing": ["../sdk/src/testing.ts"],
+      "@phoenix/react": ["../react/src/index.ts"],
+      "@enact/webos/LS2Request": ["./src/test/LS2Request.ts"]
+    }
+  },
+  "include": ["src"]
+}

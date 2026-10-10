@@ -1,0 +1,18 @@
+{
+  // As shared/react/tsconfig.build.json: dist/, the other packages as
+  // published (built before this one), LS2Request typed by the stand-in.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    "paths": {
+      "@phoenix/sdk": ["../sdk/dist/types/sdk/src/index.d.ts"],
+      "@phoenix/react": ["../react/dist/index.d.ts"],
+      "@enact/webos/LS2Request": ["./src/test/LS2Request.ts"]
+    }
+  },
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+}
