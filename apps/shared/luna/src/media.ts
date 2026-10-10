@@ -133,6 +133,11 @@ export const mediaIndexer = {
         const r = await call("luna://com.webos.service.mediaindexer/getAudioList", { uri: MEDIA_DEVICE_URI });
         return r.audioList?.results ?? [];
     },
+    /** getVideoList {uri}: one answer. */
+    async videos(): Promise<VideoItem[]> {
+        const r = await call("luna://com.webos.service.mediaindexer/getVideoList", { uri: MEDIA_DEVICE_URI });
+        return r.videoList?.results ?? [];
+    },
     /** requestMediaScan {path}: index new files (com.webos.app.camera does this after a snapshot). */
     scan(path = MEDIA_ROOT) {
         return call("luna://com.webos.service.mediaindexer/requestMediaScan", { path });

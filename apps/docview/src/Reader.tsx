@@ -6,7 +6,8 @@
 // text size and font, and night mode. Where the reader was is kept.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Glyph, IconToolButton, Spinner, Toolbar, ToolSpacer, useBack } from "@phoenix/ui";
+import { AppMenu, Button, Glyph, IconToolButton, Spinner, Toolbar, ToolSpacer, useBack } from "@phoenix/ui";
+import { mimeOf, shareSheet } from "@phoenix/luna";
 import { flatToc } from "./epub";
 import { formatLabel, loadContent, type Content, type Format } from "./formats";
 import type { TapZone } from "./Frame";
@@ -66,10 +67,18 @@ export function Reader({ target, name, format, prefs, onPrefs, load, onClose }: 
     }, []);
 
     const common = { prefs, start, onPosition, onStatus: setStatus, onTap };
+
+    // Share (the toolbar's and the app menu's): the system's share sheet
+    // with the document, its file or its web address (docs/SHARE-AND-FILES.md
+    // SF5); the sheet offers Email, Save to Files and the apps that take it.
+    const web = /^https?:\/\//i.test(target);
+    const shared = () => (web ? { title, url: target } : { title, files: [{ path: target, mimeType: mimeOf(name) }] });
+    const share = () => { void shareSheet.open(shared()).catch(() => setStatus("Could not share")); };
     const toc = content?.kind === "book" ? flatToc(content.book.toc).filter((e) => e.chapter >= 0) : [];
 
     return (
         <div className={"dv-reader" + (prefs.night ? " night" : "") + (chrome ? " chrome" : "")} data-testid="reader">
+            <AppMenu share={shared} items={[{ label: prefs.night ? "Day Mode" : "Night Mode", onSelect: () => onPrefs({ ...prefs, night: !prefs.night }) }]} />
             <div className="dv-content">
                 {!content && !error && <div className="dv-loading"><Spinner large /></div>}
                 {error && (
@@ -105,6 +114,7 @@ export function Reader({ target, name, format, prefs, onPrefs, load, onClose }: 
                                     onClick={() => setPanel(panel === "text" ? null : "text")} />
                     <IconToolButton icon="moon" label={prefs.night ? "Day" : "Night"} testId="night" depressed={prefs.night}
                                     onClick={() => onPrefs({ ...prefs, night: !prefs.night })} />
+                    <IconToolButton icon="share" label="Share" testId="share" onClick={share} />
                 </Toolbar>
             </div>
 

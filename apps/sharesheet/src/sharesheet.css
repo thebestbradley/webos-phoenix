@@ -155,3 +155,41 @@ html:has(> body.ss-body), body.pui-app.ss-body { background: transparent; }
     cursor: pointer;
 }
 .ss-pick-thumb:active { outline: 3px solid var(--pui-label); }
+/* Ticked, as the original's ImageSelectHighlight (several files). */
+.ss-pick-thumb.selected { outline: 3px solid var(--pui-label); outline-offset: -1px; position: relative; }
+.ss-pick-thumb.selected::after {
+    content: "";
+    position: absolute;
+    right: 2px;
+    bottom: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--pui-label);
+    box-shadow: 0 0 0 2px #fff;
+}
+.ss-pick-head { display: flex; flex-direction: column; align-items: center; margin-top: -10px; }
+.ss-pick-head .ss-pick-title { margin-top: 0; }
+
+/* Kinds, videos, music, documents, files: menu rows. */
+.ss-pick-rows { margin: -4px -6px -8px; }
+.ss-pick-rows > .ss-pick-album-name { margin: 8px 10px 4px; }
+.ss-pick-row .pui-menu-label { display: flex; flex-direction: column; min-width: 0; }
+.ss-pick-row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-pick-row-detail { font-size: 13px; color: var(--pui-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-pick-row.selected { background: rgba(31, 117, 191, 0.14); }
+
+/* The crop: the picture behind a frame of the crop's shape. */
+.ss-pick-albums:has(> .ss-crop) { display: flex; flex-direction: column; }
+.ss-crop { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+.ss-crop > :not(.ss-crop-area) { flex: none; }
+.ss-crop-area { flex: 1; min-height: 160px; display: flex; align-items: center; justify-content: center; }
+.ss-crop-frame {
+    position: relative;
+    overflow: hidden;
+    background: #222;
+    box-shadow: 0 0 0 2px #fff, 0 1px 4px rgba(0, 0, 0, 0.5);
+    touch-action: none;
+    cursor: grab;
+}
+.ss-crop-frame img { position: absolute; left: 0; top: 0; max-width: none; user-select: none; pointer-events: none; }

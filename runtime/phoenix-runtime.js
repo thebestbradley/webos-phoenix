@@ -166,6 +166,14 @@
             if (opener && opener.PalmSystem && opener.PalmSystem.appIdentifier)
                 return opener.PalmSystem.appIdentifier;
         } catch (e) { /* another origin */ }
+        // A system page an app shows in a frame of its own page (Enyo's
+        // CrossAppUI: luna-systemui's file picker) runs as that app, as the
+        // frames of an app's card did on webOS.
+        try {
+            var up = global.parent;
+            if (up && up !== global && up.PalmSystem && up.PalmSystem.appIdentifier)
+                return up.PalmSystem.appIdentifier;
+        } catch (e) { /* another origin */ }
         return "com.webos.phoenix.unknown";
     }
 
@@ -3536,10 +3544,18 @@
     // queries "from" a parent kind find objects of its sub-kinds, and
     // revSets properties are bumped on every change.
     (function installSystemKinds() {
-        var VERSION = 2;
+        var VERSION = 3;
         if (store.get("db8SystemKinds", 0) >= VERSION)
             return;
         var kinds = {
+            // webOS 3's media indexer (luna-systemui's file picker finds
+            // pictures and videos of an album "from" the parent kind:
+            // AlbumGridView.js:49, VideoAlbumList.js:47).
+            "com.palm.media.types:1": {},
+            "com.palm.media.image.file:1": { extends: ["com.palm.media.types:1"] },
+            "com.palm.media.video.file:1": { extends: ["com.palm.media.types:1"] },
+            "com.palm.media.audio.file:1": { extends: ["com.palm.media.types:1"] },
+            "com.palm.media.image.album:1": {},
             "com.palm.contact.palmprofile:1": { extends: ["com.palm.contact:1"] },
             "com.palm.calendar:1": { revSets: ["calendarRevset"] },
             "com.palm.calendarevent:1": { revSets: ["eventDisplayRevset"] },
@@ -4065,6 +4081,85 @@
         }
         install(global);
         runtime.hidpiArt = { variants: variants };
+    })();
+
+    // ---- Pictures the media store holds, named by their path -----------------------
+    //
+    // On webOS a page showed a picture of the USB drive or of the file
+    // cache by its path (<img src="/media/internal/DCIM/...">, an inline
+    // background-image url(...)): luna-systemui's file picker its grid
+    // (AlbumGridView.js:105-113, ImageFullView.js:52), Contacts the photo it
+    // made (Edit.js:616). Here the user's files (the camera's, a cropped
+    // contact photo) are in the media store and the Files block's own
+    // store, which the server does not serve: such a reference gets the
+    // file's URL instead (a blob: URL), when there is one. The demo media
+    // under /media/internal/samples/ are served and stay as they are.
+    (function storedPictures() {
+        var doc = global.document;
+        if (!doc || typeof MutationObserver !== "function" || typeof URL !== "function" || typeof WeakMap !== "function")
+            return;
+        var LOCAL = /^\/(?:media\/internal|var\/file-cache)\/(?!samples\/)/;
+        function localPath(url, node) {
+            try {
+                var u = new URL(url, node.ownerDocument.baseURI);
+                var p = decodeURIComponent(u.pathname);
+                return u.origin === global.location.origin && LOCAL.test(p) ? p : null;
+            } catch (e) { return null; }
+        }
+        // The file's URL, or null when the store has no such file.
+        function urlOf(path) {
+            var fm = runtime.fileManager, mf = runtime.mediaFiles;
+            var first = fm ? fm.url(path) : Promise.resolve(path);
+            return first.then(function (u) {
+                if (u !== path) return u;
+                return mf ? mf.url(path) : path;
+            }).then(function (u) { return u === path ? null : u; }, function () { return null; });
+        }
+        var done = new WeakMap();   // element -> the value given here
+        function fixImg(img) {
+            var src = img.getAttribute("src");
+            if (!src || done.get(img) === src) return;
+            var path = localPath(src, img);
+            if (!path) return;
+            urlOf(path).then(function (u) {
+                if (!u || img.getAttribute("src") !== src) return;
+                done.set(img, u);
+                img.setAttribute("src", u);
+            });
+        }
+        var URL_FN = /url\(\s*(['"]?)([^'")]+)\1\s*\)/g;
+        function fixStyle(el) {
+            var st = el.style, value = st && st.getPropertyValue("background-image");
+            if (!value || value.indexOf("url(") < 0 || done.get(el) === value) return;
+            var paths = [];
+            value.replace(URL_FN, function (all, q, url) { var p = localPath(url, el); if (p) paths.push([url, p]); return all; });
+            if (!paths.length) return;
+            Promise.all(paths.map(function (x) { return urlOf(x[1]); })).then(function (urls) {
+                if (st.getPropertyValue("background-image") !== value) return;
+                var out = value;
+                paths.forEach(function (x, i) { if (urls[i]) out = out.split(x[0]).join(urls[i]); });
+                if (out === value) return;
+                done.set(el, out);
+                st.setProperty("background-image", out, st.getPropertyPriority("background-image"));
+            });
+        }
+        function scan(node) {
+            if (!node || node.nodeType !== 1) return;
+            if (node.tagName === "IMG") fixImg(node);
+            if (node.hasAttribute("style")) fixStyle(node);
+            var els = node.querySelectorAll("img[src], [style]");
+            for (var i = 0; i < els.length; ++i) {
+                if (els[i].tagName === "IMG") fixImg(els[i]);
+                if (els[i].hasAttribute("style")) fixStyle(els[i]);
+            }
+        }
+        new MutationObserver(function (records) {
+            records.forEach(function (r) {
+                if (r.type === "childList") Array.prototype.forEach.call(r.addedNodes, scan);
+                else if (r.attributeName === "src" && r.target.tagName === "IMG") fixImg(r.target);
+                else if (r.attributeName === "style") fixStyle(r.target);
+            });
+        }).observe(doc, { childList: true, subtree: true, attributes: true, attributeFilter: ["src", "style"] });
     })();
 
     // Back gesture: the shell calls this; Mojo/Enyo 1.0 apps treat Escape
@@ -7848,14 +7943,44 @@
 
         // ---- Legacy db8 kinds -------------------------------------------------------------
 
+        // webOS 3's indexer also kept albums (com.palm.media.image.album:1,
+        // a folder of pictures or videos: {name, path, total: {images,
+        // videos}, appGridThumbnails, modifiedTime, sortKey, searchKey}) and
+        // gave each picture and video its album's albumId, the thumbnail it
+        // had cached (appGridThumbnail {path}, appCacheComplete) and its
+        // mediaType; audio files said whether they were ringtones
+        // (isRingtone). luna-systemui's file picker lists them by those
+        // (ImageAlbumList.js:104-113, AlbumGridView.js:124, VideoAlbumList.js:100,
+        // AudioPicker.js:119). The thumbnail here is the picture itself.
+        var ALBUM_KIND = "com.palm.media.image.album:1";
+        var RINGTONE_DIRS = [MEDIA_ROOT + "/ringtones/", "/usr/palm/sounds/"];
+        // Album names as webOS 3's indexer gave them to its own folders
+        // (ImageAlbumList.js:62-71 translates these); others: the folder's name.
+        function albumName(dir) {
+            if (dir === MEDIA_ROOT + "/DCIM/100PHNX" || /^\/media\/internal\/DCIM(\/|$)/.test(dir)) return "Photo roll";
+            if (dir === MEDIA_ROOT + "/screencaptures") return "Screen captures";
+            if (dir === MEDIA_ROOT + "/samples/photos") return "Sample Photos";
+            if (dir === MEDIA_ROOT + "/samples/videos") return "Sample Videos";
+            if (dir === MEDIA_ROOT + "/Downloads") return "Downloads";
+            if (dir === MEDIA_ROOT + "/wallpapers") return "Wallpapers";
+            return dir.replace(/^.*\//, "") || "Photos";
+        }
+        function searchKeyOf(s) { return String(s || "").toLowerCase(); }
+
         function legacyObject(item) {
             var t = Date.parse(item.last_modified_date) || Date.now();
-            var o = { _kind: LEGACY_KINDS[item.type], path: item.file_path, size: item.file_size, mimeType: item.mime,
-                      createdTime: t, modifiedTime: t, title: item.title };
+            var o = { _id: "phoenix-media:" + item.file_path, _kind: LEGACY_KINDS[item.type], path: item.file_path,
+                      size: item.file_size, mimeType: item.mime, createdTime: t, modifiedTime: t, title: item.title,
+                      mediaType: item.type, searchKey: searchKeyOf(item.title) };
             if (item.type === "image" || item.type === "video") {
                 o.width = item.width || 0;
                 o.height = item.height || 0;
                 o.albumPath = item.file_path.replace(/\/[^\/]*$/, "");
+                o.albumId = "phoenix-album:" + o.albumPath;
+                o.appCacheComplete = true;
+                o.capturedOnDevice = /^\/media\/internal\/DCIM\//.test(item.file_path);
+                if (item.type === "image") o.appGridThumbnail = { path: item.file_path };
+                if (item.type === "video") o.duration = item.duration || 0;
             }
             if (item.type === "audio") {
                 o.artist = item.artist || "";
@@ -7864,10 +7989,48 @@
                 o.duration = item.duration || 0;
                 o.track = { position: item.track || 0, total: item.total_tracks || 0 };
                 o.thumbnails = item.thumbnail ? [{ data: item.thumbnail, type: "embedded" }] : [];
+                o.isRingtone = RINGTONE_DIRS.some(function (d) { return item.file_path.indexOf(d) === 0; });
             }
             return o;
         }
 
+        function albumObjects(idx) {
+            var albums = {};
+            ["image", "video"].forEach(function (type) {
+                (idx[type] || []).forEach(function (item) {
+                    var dir = item.file_path.replace(/\/[^\/]*$/, "");
+                    var a = albums[dir] || (albums[dir] = { _id: "phoenix-album:" + dir, _kind: ALBUM_KIND, path: dir,
+                                                            name: albumName(dir), total: { images: 0, videos: 0 },
+                                                            appGridThumbnails: [], modifiedTime: 0 });
+                    a.total[type === "image" ? "images" : "videos"]++;
+                    var t = Math.floor((Date.parse(item.last_modified_date) || 0) / 1000);
+                    if (t > a.modifiedTime) a.modifiedTime = t;
+                    if (type === "image" && a.appGridThumbnails.length < 3) a.appGridThumbnails.push({ path: item.file_path });
+                });
+            });
+            return Object.keys(albums).map(function (dir) {
+                var a = albums[dir];
+                // The camera's album first, as the indexer sorted it.
+                a.sortKey = (a.name === "Photo roll" ? "0" : "1") + a.name.toLowerCase();
+                a.searchKey = searchKeyOf(a.name);
+                return a;
+            });
+        }
+
+        // The ringtones (the system's and the user's), which are not all
+        // in the media index (the system's are not on the USB drive).
+        function ringtoneObjects(idx) {
+            var have = {};
+            (idx.audio || []).forEach(function (it) { have[it.file_path] = true; });
+            var r = callNow("luna://com.webos.service.systemservice/ringtone/listRingtones", {});
+            return ((r && r.ringtones) || []).filter(function (t) { return !have[t.fullPath]; }).map(function (t) {
+                return { _id: "phoenix-media:" + t.fullPath, _kind: LEGACY_KINDS.audio, path: t.fullPath, title: t.name,
+                         mimeType: MIME[extOf(t.fullPath)] || "", size: 0, isRingtone: true, mediaType: "audio",
+                         searchKey: searchKeyOf(t.name), artist: "", album: "", genre: "", duration: 0, thumbnails: [] };
+            });
+        }
+
+        var LEGACY_VERSION = 2;   // what the mirror holds (2: albums, ringtones)
         function mirrorLegacy(idx) {
             var db = runtime.services["com.palm.db"];
             if (!db) return;
@@ -7876,8 +8039,13 @@
             Object.keys(LEGACY_KINDS).forEach(function (type) {
                 db["/del"]({ query: { from: LEGACY_KINDS[type] }, purge: true }, noop, ctx);
                 var objs = (idx[type] || []).map(legacyObject);
+                if (type === "audio") objs = objs.concat(ringtoneObjects(idx));
                 if (objs.length) db["/put"]({ objects: objs }, noop, ctx);
             });
+            db["/del"]({ query: { from: ALBUM_KIND }, purge: true }, noop, ctx);
+            var albums = albumObjects(idx);
+            if (albums.length) db["/put"]({ objects: albums }, noop, ctx);
+            store.set("media:legacyMirror", LEGACY_VERSION);
         }
 
         // ---- Scanning -----------------------------------------------------------------------
@@ -8049,6 +8217,117 @@
             }
         });
 
+        // ---- com.palm.image and com.palm.filecache (legacy) ---------------------------------
+        //
+        // The Contacts framework turns the picture the file picker cropped
+        // into a contact's photo with them (loadable-frameworks contacts
+        // ContactPhoto.js:208-266, 270-346, Contact.js:518-591):
+        //   com.palm.image/convert {src, dest, destType, focusX, focusY,
+        //       scale, cropW, cropH}: the picture scaled by `scale`, then a
+        //       cropW x cropH window around the focus point (focusX, focusY:
+        //       0-1 of its width and height), kept inside the picture;
+        //       without a crop, the whole picture scaled.
+        //   com.palm.image/ezResize {src, dest, destType, destSizeW,
+        //       destSizeH}: the picture made to fit that size, its shape kept.
+        //   com.palm.image/imageInfo {src} -> {width, height, type}
+        // Written to the media store at dest, which pages show by its path
+        // (storedPictures below). A cache object (com.palm.filecache
+        // InsertCacheObject {typeName, fileName, size, subscribe} ->
+        // {pathName}) is a path under /var/file-cache/<typeName>/ for the
+        // caller to write; ExpireCacheObject {pathName} deletes it.
+        function sourceBlob(path) {
+            return files.read(path).then(function (blob) {
+                if (blob) return blob;
+                var fm = runtime.fileManager;
+                return (fm ? fm.url(path) : Promise.resolve(path)).then(readUrl);
+            });
+        }
+        function loadPicture(path) {
+            return sourceBlob(path).then(function (blob) {
+                if (!blob) throw new Error("No such file: " + path);
+                return new Promise(function (resolve, reject) {
+                    var u = URL.createObjectURL(blob), img = new Image();
+                    img.onload = function () { URL.revokeObjectURL(u); resolve(img); };
+                    img.onerror = function () { URL.revokeObjectURL(u); reject(new Error("Not a picture: " + path)); };
+                    img.src = u;
+                });
+            });
+        }
+        function pictureType(p, dest) {
+            var t = String(p.destType || extOf(dest) || "jpg").toLowerCase();
+            return t === "png" ? "image/png" : t === "webp" ? "image/webp" : "image/jpeg";
+        }
+        // Into the Files block's store when it fits (a contact's photo:
+        // palmGetResource reads it there), else the media store.
+        function writePicture(canvas, p) {
+            var type = pictureType(p, p.dest);
+            var fm = runtime.fileManager;
+            if (fm && fm.store && fm.store(p.dest, canvas.toDataURL(type, 0.9).replace(/^data:[^,]*,/, "")))
+                return Promise.resolve();
+            return new Promise(function (resolve) { canvas.toBlob(resolve, type, 0.9); }).then(function (blob) {
+                if (!blob) throw new Error("Could not encode " + p.dest);
+                return files.write(p.dest, blob);
+            });
+        }
+        function imageMethod(draw) {
+            return function (p, reply) {
+                if (!p.src || !p.dest) return reply(fail(-1, "src and dest are required"));
+                if (!global.document) return reply(fail(-1, "No canvas here"));
+                loadPicture(p.src).then(function (img) {
+                    var c = global.document.createElement("canvas");
+                    draw(img, img.naturalWidth, img.naturalHeight, c, p);
+                    return writePicture(c, p);
+                }).then(function () { reply(ok({})); },
+                        function (e) { reply(fail(-1, String(e && e.message || e))); });
+            };
+        }
+        register(["com.palm.image", "com.palm.image2"], {
+            "/convert": imageMethod(function (img, w, h, c, p) {
+                var k = Number(p.scale) > 0 ? Number(p.scale) : 1;
+                var cw = Math.round(Number(p.cropW) || w * k), ch = Math.round(Number(p.cropH) || h * k);
+                // The crop is always the size asked: a picture scaled smaller
+                // than it (a crop view wider than the picture) is scaled up
+                // to fill it.
+                k = Math.max(k, cw / w, ch / h);
+                var sw = w * k, sh = h * k;
+                var fx = p.focusX === undefined ? 0.5 : Number(p.focusX), fy = p.focusY === undefined ? 0.5 : Number(p.focusY);
+                var left = Math.max(0, Math.min(sw - cw, fx * sw - cw / 2));
+                var top = Math.max(0, Math.min(sh - ch, fy * sh - ch / 2));
+                c.width = Math.max(1, cw);
+                c.height = Math.max(1, ch);
+                c.getContext("2d").drawImage(img, left / k, top / k, cw / k, ch / k, 0, 0, c.width, c.height);
+            }),
+            "/ezResize": imageMethod(function (img, w, h, c, p) {
+                var k = Math.min((Number(p.destSizeW) || w) / w, (Number(p.destSizeH) || h) / h);
+                c.width = Math.max(1, Math.round(w * k));
+                c.height = Math.max(1, Math.round(h * k));
+                c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+            }),
+            "/imageInfo": function (p, reply) {
+                loadPicture(p.src || "").then(function (img) {
+                    reply(ok({ width: img.naturalWidth, height: img.naturalHeight, type: (MIME[extOf(p.src)] || "").replace(/^image\//, "") }));
+                }, function (e) { reply(fail(-1, String(e && e.message || e))); });
+            }
+        });
+
+        var cacheSeq = 0;
+        register(["com.palm.filecache"], {
+            "/InsertCacheObject": function (p, reply) {
+                if (!p.typeName) return reply(fail(-1, "typeName is required"));
+                var name = String(p.fileName || "object").replace(/[\/\\]/g, "_");
+                var path = "/var/file-cache/" + p.typeName + "/" + Date.now().toString(36) + (++cacheSeq) + "/" + name;
+                // The subscription is the caller's hold on the object
+                // (it is not removed while it lasts): nothing more comes.
+                reply(ok({ pathName: path, subscribed: !!p.subscribe }));
+            },
+            "/ExpireCacheObject": function (p, reply) {
+                if (!p.pathName) return reply(fail(-1, "pathName is required"));
+                files.remove(p.pathName).then(function () { reply(ok({})); }, function () { reply(ok({})); });
+            },
+            "/DefineType": function (p, reply) { reply(ok({})); },
+            "/GetCacheStatus": function (p, reply) { reply(ok({ numTypes: 0, size: 0, numObjs: 0 })); }
+        });
+
         // ---- org.webosphoenix.service.mediafiles (Phoenix, simulator only so far) ----------
 
         function b64ToBlob(data, type) {
@@ -8073,6 +8352,18 @@
                     function (e) { reply(fail(-1, "remove failed: " + (e && e.message || e))); });
             }
         });
+
+        // The ringtones changed (systemservice addRingtone, deleteRingtone).
+        runtime.refreshLegacyMedia = function () { mirrorLegacy(loadIndex()); };
+
+        // A profile whose legacy kinds were mirrored before they had albums
+        // and ringtones (or never: a legacy page may be the first to ask):
+        // once the services below (the ringtones') are there.
+        setTimeout(function () {
+            try {
+                if (store.get("media:legacyMirror", 0) < LEGACY_VERSION) mirrorLegacy(loadIndex());
+            } catch (e) { console.error("[phoenix-runtime] legacy media kinds", e); }
+        }, 0);
 
         // ---- Screen captures (Phoenix; docs/SCREENSHOTS.md SC1-SC2) -----------------------
         //
@@ -9105,8 +9396,43 @@
             },
             /** Throw the virtual filesystem away and seed it again. */
             reset: function () { store.set(VFS_KEY, seed()); },
+            /** Write a file (base64), making its folders, as a service of the
+                system writes one (com.palm.image's pictures). False when it
+                does not fit in this store. */
+            store: function (path, b64) {
+                var p = norm(path), v = load();
+                if (!p) return false;
+                var size = Math.floor(String(b64).length * 3 / 4);
+                if (size > INLINE_LIMIT) return false;
+                for (var d = parentOf(p), missing = []; !v.nodes[d] && d !== "/"; d = parentOf(d)) missing.unshift(d);
+                missing.forEach(function (dir) { v.nodes[dir] = { t: "d", m: Date.now(), mode: 493 }; });
+                var old = v.nodes[p];
+                if (old && old.t === "d") return false;
+                if (old && old.media && runtime.mediaFiles) runtime.mediaFiles.remove(p);
+                v.nodes[p] = { t: "f", m: Date.now(), mode: old ? old.mode : 420, data: b64, enc: "base64", size: fromB64(b64).length };
+                touch(v, parentOf(p));
+                return save(v);
+            },
             errors: E
         };
+        // palmGetResource reads a file of the device: those this store holds
+        // in itself are read here (the Contacts framework checks that the
+        // photo it made is there, PersonPhotos.js:390-402). Their bytes as
+        // a string, one character a byte, as the device's read gave them.
+        // (Not while this store is being read: making it reads the demo
+        // media's index with getResource.)
+        var readResource = PalmSystem.getResource, reading = false;
+        PalmSystem.getResource = function (path, flags) {
+            var r = readResource(path, flags);
+            if (r !== undefined || typeof path !== "string" || reading) return r;
+            var p = norm(path.replace(/^file:\/\//, "")), n;
+            reading = true;
+            try { n = p && load().nodes[p]; } catch (e) { n = null; } finally { reading = false; }
+            if (!n || n.t !== "f" || n.data === undefined) return r;
+            var text = n.enc === "base64" ? global.atob(n.data) : n.data;
+            return asResource(text, flags);
+        };
+
         // The documents' index (com.palm.media.misc.file:1) is there for
         // apps that read it without asking this service (Quickoffice).
         setTimeout(function () { try { load(); } catch (e) { /* the store is unavailable */ } }, 0);
@@ -9127,6 +9453,35 @@
                 return { name: nameOf(k).replace(/\.[^.]*$/, ""), fullPath: k };
             });
             reply(ok({ ringtones: SYSTEM_RINGTONES.concat(mine) }));
+        };
+        // ringtone/addRingtone {filePath}: a copy in /media/internal/ringtones
+        // (luna-sysservice's RingtoneManager); deleteRingtone {filePath}
+        // removes one of those. luna-systemui's file picker calls both
+        // (RingtonePicker.js:40-43, 64, 112: its "add ringtone" button and
+        // a swipe on a ringtone).
+        var noCancel = { cancelled: function () { return false; }, onCancel: null };
+        function ringtonesChanged(reply) {
+            if (runtime.refreshLegacyMedia) runtime.refreshLegacyMedia();
+            reply(ok({}));
+        }
+        runtime.services["com.webos.service.systemservice"]["/ringtone/addRingtone"] = function (p, reply) {
+            var from = norm(p.filePath || "");
+            if (!from) return reply(fail(-1, "filePath is required"));
+            var to = MEDIA_ROOT + "/ringtones/" + nameOf(from);
+            if (from === to) return ringtonesChanged(reply);
+            dispatch("luna://org.webosphoenix.filemanager/copy", { from: from, to: to, overwrite: true }, function (r) {
+                if (r.returnValue === false) return reply(r);
+                ringtonesChanged(reply);
+            }, noCancel);
+        };
+        runtime.services["com.webos.service.systemservice"]["/ringtone/deleteRingtone"] = function (p, reply) {
+            var path = norm(p.filePath || "");
+            if (!path || path.indexOf(MEDIA_ROOT + "/ringtones/") !== 0)
+                return reply(fail(-1, "Not one of the user's ringtones: " + p.filePath));
+            dispatch("luna://org.webosphoenix.filemanager/remove", { path: path }, function (r) {
+                if (r.returnValue === false) return reply(r);
+                ringtonesChanged(reply);
+            }, noCancel);
         };
     })();
 
@@ -12782,10 +13137,15 @@
     //       title, icon, label}]}: the apps whose appinfo.json says they take
     //       all of these types ("phoenix": {"shareTargets": [{"types":
     //       ["image/*"], "label"?}]}), and the legacy apps below.
-    //   org.webosphoenix.filepicker/pick {kinds: ["image"], title?} ->
-    //       {files: [{fullPath, mimeType, name}]} or {canceled: true}: the
-    //       user picks a picture (SF2, pictures only so far; Messaging's
-    //       picture messages).
+    //   org.webosphoenix.filepicker/pick {kinds?: ["image" | "video" |
+    //       "audio" | "document" | "file"] (default ["image"]), multiple?,
+    //       cropWidth?, cropHeight?, extensions?, title?} -> {files:
+    //       [{fullPath, mimeType, name, size?, cropInfo?, croppedPath?}]} or
+    //       {canceled: true}: the user picks (SF2): pictures album by album,
+    //       videos, music, documents, or any file folder by folder; with
+    //       several kinds, the kind first, as the original. A crop size
+    //       (one picture) shows the crop view: cropInfo as Enyo's
+    //       CroppableImage gave it, and croppedPath the crop at that size.
     //   org.webosphoenix.filepicker/save {name, from?: path, data?: base64,
     //       mimeType?, title?} -> {path} or {canceled: true}: the user picks a
     //       folder of /media/internal (the last one used first) and a name;
@@ -12800,6 +13160,9 @@
         var MEDIA = "/media/internal";
         var CAMERA_DIR = MEDIA + "/DCIM/100PHNX";
         var LAST_FOLDER = "filepicker:lastFolder";
+        // What the picker picks: the original's kinds (FilePickerApp.js:39-45,
+        // ringtones aside), and "file", any file of the USB drive by folder.
+        var PICK_KINDS = ["image", "video", "audio", "document", "file"];
 
         // Legacy apps that cannot say it in their appinfo.json: what they take.
         var LEGACY_TARGETS = {
@@ -12891,7 +13254,7 @@
                 var id = "sheet" + (++seq) + "_" + Date.now();
                 var frame = doc.createElement("iframe");
                 frame.setAttribute("data-phoenix-sheet", kind);
-                frame.setAttribute("title", kind === "save" ? "Save to Files" : kind === "pick" ? "Choose a Picture" : "Share");
+                frame.setAttribute("title", kind === "save" ? "Save to Files" : kind === "pick" ? request.title || "Choose a File" : "Share");
                 frame.src = SHEET_URL + "?launchParams=" + encodeURIComponent(toJson({ kind: kind, id: id }));
                 var st = frame.style;
                 st.position = "fixed"; st.left = "0"; st.top = "0"; st.width = "100%"; st.height = "100%";
@@ -13014,15 +13377,43 @@
         });
 
         register(["org.webosphoenix.filepicker"], {
-            // SF2 for pictures: the user picks from the pictures Photos has
-            // (by album), as the original picker did for "image".
+            // SF2, with the original picker's parameters (enyo.FilePicker
+            // published: fileType, extensions, allowMultiSelect, cropWidth,
+            // cropHeight; luna-systemui FilePickerApp.js:39-45 its kinds).
             "/pick": function (p, reply) {
-                var kinds = p.kinds || ["image"];
-                if (!kinds.length || kinds.some(function (k) { return k !== "image"; }))
-                    return reply(fail(-1, "Only pictures can be picked so far: kinds [\"image\"]"));
-                showSheet("pick", { title: p.title || "Choose a Picture", kinds: kinds }).then(function (r) {
+                var kinds = (p.kinds && p.kinds.length ? p.kinds : ["image"]).map(String);
+                var bad = kinds.filter(function (k) { return PICK_KINDS.indexOf(k) < 0; });
+                if (bad.length) return reply(fail(-1, "Unknown kinds " + bad.join(", ") + ": " + PICK_KINDS.join(", ")));
+                var multiple = !!(p.multiple || p.allowMultiSelect);
+                var cw = Number(p.cropWidth) || 0, ch = Number(p.cropHeight) || 0;
+                // A crop size is for one picture (ImagePicker.js:56-60 crops
+                // only what a tap picks): either side alone makes a square.
+                var crop = (cw > 0 || ch > 0) && kinds.indexOf("image") >= 0 && !multiple
+                    ? { width: Math.round(cw || ch), height: Math.round(ch || cw) } : null;
+                var exts = (p.extensions || []).map(function (e) { return String(e).replace(/^\./, "").toLowerCase(); });
+                var title = p.title || (kinds.length === 1 && kinds[0] === "image" ? (multiple ? "Choose Pictures" : "Choose a Picture")
+                                                                                   : (multiple ? "Choose Files" : "Choose a File"));
+                showSheet("pick", { title: title, kinds: kinds, multiple: multiple, crop: crop, extensions: exts }).then(function (r) {
                     if (!r || r.action !== "pick" || !r.files || !r.files.length) return reply(ok({ canceled: true }));
-                    reply(ok({ files: r.files.map(function (f) { return { fullPath: f.path, mimeType: f.mimeType || "", name: f.path.replace(/^.*\//, "") }; }) }));
+                    var files = r.files.map(function (f) {
+                        var o = { fullPath: f.path, mimeType: f.mimeType || "", name: f.path.replace(/^.*\//, "") };
+                        if (f.size !== undefined) o.size = f.size;
+                        if (f.cropInfo) o.cropInfo = f.cropInfo;
+                        return o;
+                    });
+                    var first = files[0];
+                    if (!crop || !first.cropInfo) return reply(ok({ files: files }));
+                    // The crop made, at the size asked, as the apps of the
+                    // time made it with com.palm.image/convert (ContactPhoto.js:240-251).
+                    var dest = "/var/file-cache/filepicker/" + Date.now().toString(36) + "/" +
+                        first.name.replace(/\.[^.]*$/, "") + ".jpg";
+                    callP("luna://com.palm.image/convert", {
+                        src: first.fullPath, dest: dest, destType: "jpg", focusX: first.cropInfo.focusX, focusY: first.cropInfo.focusY,
+                        scale: crop.width / first.cropInfo.suggestedXsize, cropW: crop.width, cropH: crop.height
+                    }).then(function (c) {
+                        if (c.returnValue !== false) first.croppedPath = dest;
+                        reply(ok({ files: files }));
+                    });
                 });
             },
             "/save": function (p, reply) {

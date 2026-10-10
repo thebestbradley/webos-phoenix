@@ -88,4 +88,38 @@ describe("legacy webOS apps", () => {
         await call("luna://org.webosphoenix.filemanager/remove", { path: "/media/internal/Documents/Budget.csv" });
         expect((await find()).some((d) => d.path === "/media/internal/Documents/Budget.csv")).toBe(false);
     });
+
+    // What luna-systemui's file picker reads (docs/SHARE-AND-FILES.md SF1).
+    it("keeps webOS 3's media kinds for luna-systemui's file picker: albums, pictures by album, ringtones", async () => {
+        const find = async (from: string, where?: unknown[]) =>
+            (await call("luna://com.palm.db/find", { query: { from, ...(where ? { where } : {}) } })).results as Record<string, unknown>[];
+        await call("luna://org.webosphoenix.service.mediafiles/write", { path: "/media/internal/DCIM/100PHNX/CIMG0001.jpg", data: btoa("jpeg"), mimeType: "image/jpeg" });
+        await call("luna://com.webos.service.mediaindexer/requestMediaScan", { path: "/media/internal" });
+        await tick(10);
+        // ImageAlbumList.js:104-113: the albums, with their counts.
+        const albums = await find("com.palm.media.image.album:1");
+        const roll = albums.find((a) => a.path === "/media/internal/DCIM/100PHNX");
+        expect(roll).toMatchObject({ name: "Photo roll", total: { images: 1, videos: 0 } });
+        // AlbumGridView.js:124: an album's pictures, "from" the parent kind.
+        const pics = await find("com.palm.media.types:1", [{ prop: "albumId", op: "=", val: roll!._id }]);
+        expect(pics).toHaveLength(1);
+        expect(pics[0]).toMatchObject({ path: "/media/internal/DCIM/100PHNX/CIMG0001.jpg", mediaType: "image", appCacheComplete: true,
+                                        appGridThumbnail: { path: "/media/internal/DCIM/100PHNX/CIMG0001.jpg" } });
+        // AudioPicker.js:119: the ringtones (the system's here).
+        const tones = await find("com.palm.media.audio.file:1", [{ prop: "isRingtone", op: "=", val: true }]);
+        expect(tones.map((t) => t.path)).toEqual(expect.arrayContaining(["/usr/palm/sounds/ringtone.mp3", "/usr/palm/sounds/phone.wav"]));
+        // RingtonePicker.js:64: a song made a ringtone is copied to /media/internal/ringtones.
+        await call("luna://org.webosphoenix.filemanager/write", { path: "/media/internal/Music/tune.mp3", data: btoa("mp3"), encoding: "base64" });
+        expect((await call("luna://com.palm.systemservice/ringtone/addRingtone", { filePath: "/media/internal/Music/tune.mp3" })).returnValue).toBe(true);
+        const after = await find("com.palm.media.audio.file:1", [{ prop: "isRingtone", op: "=", val: true }]);
+        expect(after.some((t) => t.path === "/media/internal/ringtones/tune.mp3")).toBe(true);
+    });
+
+    it("reads with palmGetResource the files the Files store keeps, and hands out file-cache paths", async () => {
+        const w = window as unknown as Win;
+        await call("luna://org.webosphoenix.filemanager/write", { path: "/media/internal/Documents/note.txt", data: "hello" });
+        expect(w.palmGetResource("/media/internal/Documents/note.txt")).toBe("hello");
+        const r = await call("luna://com.palm.filecache/InsertCacheObject", { typeName: "contactphoto", fileName: "a.jpg", size: 1000, subscribe: true });
+        expect(String(r.pathName)).toMatch(/^\/var\/file-cache\/contactphoto\/.+\/a\.jpg$/);
+    });
 });

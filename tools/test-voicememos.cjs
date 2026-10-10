@@ -17,7 +17,7 @@
 //               the "runs on the device" placeholder (never a made-up
 //               transcript); transcripts are searchable in the app and
 //               through Just Type's content search (appinfo.json dbsearch)
-//   rename, share (Email with the file attached), delete (the file, its
+//   rename, share (the system share sheet; Email with the file attached), delete (the file, its
 //               index entry and the memo), "transcribe automatically",
 //               and the Just Type launch params {memoId} and {newMemo}
 //
@@ -228,13 +228,18 @@ async function main() {
 
         // ---- Share -----------------------------------------------------------------------------
         const g = memoSel("Garage sale");
+        // The system's share sheet (docs/SHARE-AND-FILES.md SF5) with the file.
         await page.click(`${g} [data-testid='share']`);
-        await page.waitForSelector(".pui-popup");
-        const shareMenu = await page.textContent(".pui-popup");
-        check(/Email/.test(shareMenu) && /Messaging/.test(shareMenu) && /Open in Music/.test(shareMenu), `share: ${shareMenu.replace(/([a-z])([A-Z])/g, "$1, $2")}`);
+        const sheet = await (await page.waitForSelector("iframe[data-phoenix-sheet=share]")).contentFrame();
+        await sheet.waitForSelector("[data-testid=share-sheet]");
+        check((await sheet.textContent("[data-testid=share-title]")) === "Garage sale", "share: the system's share sheet, with the memo");
+        check(await sheet.locator("[data-testid='share-app-com.palm.app.email']").count() === 1 && await sheet.locator("[data-testid=share-files]").count() === 1,
+              "share: it offers Email and Save to Files");
+        await page.waitForTimeout(400);
         await shot("share");
         host.length = 0;
-        await page.click(".pui-menu-item:has-text('Email')");
+        await sheet.click("[data-testid='share-app-com.palm.app.email']");
+        await page.waitForSelector("iframe[data-phoenix-sheet]", { state: "detached" });
         await page.waitForTimeout(200);
         const email = host.find((m) => m.type === "launch" && m.payload.id === "com.palm.app.email");
         check(email && email.payload.params.attachments[0].fullPath === rec.path && email.payload.params.attachments[0].mimeType === "audio/wav",

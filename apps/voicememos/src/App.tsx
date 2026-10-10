@@ -17,21 +17,22 @@
 //       Just Type searches them through appinfo.json's "dbsearch"
 //   org.webosphoenix.transcriber transcribe {path, language, subscribe}:
 //       speech to text (whisper.cpp on a device), with progress
-//   com.webos.applicationManager launch: share by Email ({attachments}) or
-//       Messaging ({attachment}), as Photos does, or open with another app
+//   org.webosphoenix.share open: Share is the system's share sheet with the
+//       memo's file (docs/SHARE-AND-FILES.md SF5): Email attaches it, Save
+//       to Files, DropShare and any app that takes audio
 //
 // Launch params: {memoId} opens that memo (Just Type's content search),
 // {newMemo: "title"} starts recording one (Just Type's "New Voice Memo").
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-    apps, db, mediaFiles, mediaIndexer, openWith, transcriber, TRANSCRIBE_ERRORS, type LunaError, type MimeHandler, type Subscription,
+    db, mediaFiles, mediaIndexer, shareSheet, transcriber, TRANSCRIBE_ERRORS, type LunaError, type Subscription,
     type TranscribeProgress,
 } from "@phoenix/luna";
 import { useLaunchParams, useLuna, useMediaUrl } from "@phoenix/luna/react";
 import {
     BackProvider, Button, cx, Dialog, Divider, ErrorText, formatSeconds, formatTime, Glyph, ListSelector, Note, PageHeader, PopupMenu, Row,
-    Slider, Spinner, TextField, ToggleButton, Toolbar, ToolSpacer, useBack, type Option,
+    Slider, Spinner, TextField, ToggleButton, Toolbar, ToolSpacer, useBack,
 } from "@phoenix/ui";
 import {
     byDay, LANGUAGES, loadPrefs, matches, MEMO_DIR, MEMO_KIND, MEMO_MIME, memoFileName, nextTitle, savePrefs, searchTextOf, snippet, spokenText,
@@ -43,7 +44,7 @@ import { seedDemoMemos } from "./samples";
 const errorText = (e: unknown) => (e as { errorText?: string }).errorText ?? (e instanceof Error ? e.message : String(e));
 
 type Sheet = { kind: "rename"; memo: Memo } | { kind: "delete"; memo: Memo } | { kind: "prefs" } | null;
-type Menu = { kind: "app" | "share"; anchor: HTMLElement; memo?: Memo } | null;
+type Menu = { kind: "app"; anchor: HTMLElement } | null;
 
 // ---- Glyphs drawn for Voice Memos (32x32, like @phoenix/ui's) -------------------------------
 
@@ -258,7 +259,7 @@ function MemoItem({ memo, open, query, work, audio, onToggle, onTranscribe, onSh
     audio: HTMLAudioElement;
     onToggle: () => void;
     onTranscribe: () => void;
-    onShare: (anchor: HTMLElement) => void;
+    onShare: () => void;
     onRename: () => void;
     onDelete: () => void;
     onSeek: (t: number) => void;
@@ -302,7 +303,7 @@ function MemoItem({ memo, open, query, work, audio, onToggle, onTranscribe, onSh
                         <button type="button" className="vm-action" disabled={busy} onClick={onTranscribe} data-testid="transcribe">
                             {t && !t.placeholder ? "Transcribe Again" : "Transcribe"}
                         </button>
-                        <button type="button" className="vm-action" onClick={(e) => onShare(e.currentTarget)} data-testid="share">Share</button>
+                        <button type="button" className="vm-action" onClick={() => onShare()} data-testid="share">Share</button>
                         <button type="button" className="vm-action" onClick={onRename} data-testid="rename">Rename</button>
                         <button type="button" className="vm-action negative" onClick={onDelete} data-testid="delete">Delete</button>
                     </div>
@@ -390,7 +391,6 @@ function VoiceMemos() {
     const [recording, setRecording] = useState<{ title: string } | null>(null);
     const [sheet, setSheet] = useState<Sheet>(null);
     const [menu, setMenu] = useState<Menu>(null);
-    const [handlers, setHandlers] = useState<MimeHandler[]>([]);
     const [work, setWork] = useState<Record<string, Work>>({});
     const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
     const [seeding, setSeeding] = useState(true);
@@ -400,7 +400,6 @@ function VoiceMemos() {
     memosRef.current = memos;
 
     useEffect(() => { void seedDemoMemos().finally(() => setSeeding(false)); }, []);
-    useEffect(() => { void openWith.handlers(MEMO_MIME).then(setHandlers); }, []);
     useEffect(() => () => audio.pause(), [audio]);
 
     // Just Type: open a memo, or record a new one.
@@ -469,19 +468,10 @@ function VoiceMemos() {
         await db.del([memo._id]);
     };
 
-    const shareOptions: Option<string>[] = [
-        { label: "Email", value: "email" },
-        { label: "Messaging", value: "messaging" },
-        ...handlers.filter((h) => h.appId !== "org.webosphoenix.voicememos")
-            .map((h) => ({ label: `Open in ${h.title ?? h.appId}`, value: "open:" + h.appId })),
-    ];
-    const share = (memo: Memo, how: string) => {
-        if (how === "email")
-            void apps.launch("com.palm.app.email", { attachments: [{ fullPath: memo.path, mimeType: MEMO_MIME }], summary: memo.title });
-        else if (how === "messaging")
-            void apps.launch("org.webosphoenix.messaging", { attachment: memo.path });
-        else if (how.startsWith("open:"))
-            void openWith.launch(how.slice(5), memo.path);
+    // Share: the system's share sheet with the recording, as Photos and
+    // Files share theirs (its own menu of Email and Messaging gave way to it).
+    const share = (memo: Memo) => {
+        void shareSheet.open({ title: memo.title, files: [{ path: memo.path, mimeType: MEMO_MIME }] }).catch(() => {});
     };
 
     const onAppMenu = (v: string) => { if (v === "prefs") setSheet({ kind: "prefs" }); };
@@ -512,7 +502,7 @@ function VoiceMemos() {
                                         <MemoItem key={m._id} memo={m} open={openId === m._id} query={query} work={work[m._id]} audio={audio}
                                                   onToggle={() => setOpenId(openId === m._id ? null : m._id)}
                                                   onTranscribe={() => void transcribe(m)}
-                                                  onShare={(anchor) => setMenu({ kind: "share", anchor, memo: m })}
+                                                  onShare={() => share(m)}
                                                   onRename={() => setSheet({ kind: "rename", memo: m })}
                                                   onDelete={() => setSheet({ kind: "delete", memo: m })}
                                                   onSeek={(t) => { audio.currentTime = t; void audio.play().catch(() => {}); }} />
@@ -538,9 +528,6 @@ function VoiceMemos() {
             )}
             {menu?.kind === "app" && (
                 <PopupMenu options={[{ label: "Preferences", value: "prefs" }]} anchor={menu.anchor} onSelect={onAppMenu} onClose={() => setMenu(null)} />
-            )}
-            {menu?.kind === "share" && menu.memo && (
-                <PopupMenu options={shareOptions} anchor={menu.anchor} onSelect={(v) => share(menu.memo!, v)} onClose={() => setMenu(null)} />
             )}
             {sheet?.kind === "rename" && <RenameDialog memo={sheet.memo} onClose={() => setSheet(null)} />}
             {sheet?.kind === "delete" && (
