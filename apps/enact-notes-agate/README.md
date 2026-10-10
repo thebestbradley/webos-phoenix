@@ -20,8 +20,12 @@ LabeledIconButton, ToggleButton, TabGroup, ContextualPopupDecorator,
 PopupMenu, Popup, Drawer, Input, Scroller, VirtualList, ProgressBar,
 Spinner, RadioItem, CheckboxItem, SwitchItem, Dropdown, SliderButton,
 ArcSlider, ColorPicker; `@enact/ui` Layout and resolution;
-`@enact/webos` LS2Request. Custom styles follow the skin through Agate's
-`.applySkins` LESS mixin.
+`@enact/webos` LS2Request, under the Phoenix service plugin
+(`@phoenix/enact`: the db8 calls, Back, the app menu, received shares and
+Just Type's New Note action; [docs/APP-SDK.md](../../docs/APP-SDK.md)).
+Custom styles follow the skin through Agate's `.applySkins` LESS mixin. The
+Phoenix skin is Agate's Carbon in the Phoenix palette, with Phoenix's fonts
+(`phoenixAgate`, `setPhoenixFonts`).
 
 ## Building
 

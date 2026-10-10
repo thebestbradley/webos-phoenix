@@ -4,6 +4,10 @@ Phoenix runs web apps: the original Open webOS apps (Enyo 1.0, 2011–2012)
 and new Phoenix apps (Settings, Camera, Photos, Music, Tasks, ...). This page explains how they run
 in the simulator, in a desktop browser, and on a device.
 
+Writing an app of your own? The public API, for Enact, React, Ionic, plain
+web pages and Flutter alike, is the Phoenix service plugin:
+[APP-SDK.md](APP-SDK.md).
+
 ## Where the apps come from
 
 | Source | What | License |
@@ -376,8 +380,11 @@ the same Apple Notes-style app in each theme, sharing their notes in db8
   and Back closes the note or the folders.
 - **Served like the other built apps**: `dist/` holds `appinfo.json` (from
   `webos-meta/`), the fonts and iLib's data.
-- **Luna calls** go through Enact's `@enact/webos/LS2Request`, on
-  `PalmServiceBridge` (or `WebOSServiceBridge` on OSE).
+- **Luna calls** go through the Phoenix service plugin (`@phoenix/sdk`)
+  on Enact's `@enact/webos/LS2Request` (`@phoenix/enact`'s
+  `PhoenixDecorator`), on `PalmServiceBridge` (or `WebOSServiceBridge` on
+  OSE); the app menu, Back, received shares and Just Type's action are
+  the plugin's too ([APP-SDK.md](APP-SDK.md)).
 - **TypeScript**: Enact ships type definitions generated from its JSDoc;
   where they are wrong, `src/enact.ts` in each app says so and corrects
   them.
@@ -399,13 +406,19 @@ laid out for phones and tablets and sharing the Enact demos' notes in db8:
 
 - **Ionic** (`apps/ionic-notes`): Ionic 9's React components (iOS and
   Material Design modes) with its router, built with Vite as a workspace of
-  `apps/`. Luna calls go through `@phoenix/luna`; the model is
+  `apps/`. Luna calls go through the Phoenix service plugin
+  (`@phoenix/sdk`), the share sheet and stage ready through its Capacitor
+  plugin (`@phoenix/capacitor`), the app menu and Just Type through
+  `@phoenix/react` ([APP-SDK.md](APP-SDK.md)); the model is
   `@phoenix/notes-core`, the same code as the Enact demos. The back
   gesture (Escape) becomes Ionic's hardware back button. `@ionic/react`
   cannot be tree-shaken, so the app is about 1.5 MB of script.
 - **Flutter** (`apps/flutter-notes`): Flutter's web build (dart2js and the
-  CanvasKit renderer) with Material 3 widgets. Luna calls go through
-  `PalmServiceBridge` from Dart (`dart:js_interop`); the model is a Dart
+  CanvasKit renderer) with Material 3 widgets. Luna calls go through the
+  Phoenix service plugin for Dart (`apps/shared/phoenix_services`:
+  `PalmServiceBridge` through `dart:js_interop`), with the app menu,
+  received shares and Just Type's action ([APP-SDK.md](APP-SDK.md)); the
+  model is a Dart
   port of notes-core, whose tests check it keeps the same kinds and
   welcome note. CanvasKit and the fonts are bundled, so nothing is fetched
   from Google's CDN. Built only when Flutter is installed (CMake finds it). In phoenix-sim it
@@ -681,6 +694,7 @@ New Phoenix apps live in `apps/`, an npm workspace:
 | `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `tasks.ts` Tasks (`com.palm.task:1`, `com.palm.tasklist:1`, reminder activities, `postNotification`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
 
 | `apps/shared/luna` (`@phoenix/luna`) | Typed client for `PalmServiceBridge`: `call()` returns a promise, `subscribe()` a cancellable subscription, errors are `LunaError`s. `types.ts` types the OSE methods the apps use; `services.ts` wraps them (`wifi.connect()`, `bluetooth.pair()`, ...), each citing the OSE source it follows; `db8.ts` (`db.find/put/merge/watch`), `contacts.ts` (`com.palm.person:1`), `telephony.ts` and `messaging.ts` serve Phone and Messaging, `media.ts` Camera, Photos and Music, `files.ts` Files (`fileManager`, `appInstaller`, `openWith`, path and size helpers), `transcriber.ts` Voice Memos (`transcriber.transcribe()` with progress, `TRANSCRIBE_ERRORS`), `location.ts` the location service and per-app permissions (`location`, `locationPermissions`, `LOCATION_ERRORS`), `setup.ts` First Use, the medical ID, accessibility and the emergency numbers (`firstUse`, `emergencyInfo`, `accessibility`, `isEmergencyNumber`); `vpn.ts` the VPN service (`vpn`, file import helpers), `backup.ts` the backup service (`backup`, `BACKUP_PARTS`), `hardware.ts` the hardware and its drivers (`hardware`, `needsAttention`, `installable`), `search.ts` Just Type's preferences (`universalSearch`), `certificates.ts` the certificate store (`certificates`, `CERTIFICATE_ERRORS`), and in `telephony.ts` the phone preferences (`phonePrefs`, `mobileData`); `@phoenix/luna/react` has `useLuna()` and `useLaunchParams()` |
+| `apps/shared/sdk` (`@phoenix/sdk`), `react`, `capacitor`, `enact`, `phoenix_services` | The Phoenix service plugin, the public SDK for app developers built on `@phoenix/luna`, and its bindings for React, Capacitor (Ionic), Enact and Dart (Flutter); `apps/shared/sdk/dist/phoenix-sdk.js` for pages without a bundler, also at `/usr/palm/frameworks/phoenix-sdk/`. See [APP-SDK.md](APP-SDK.md) |
 | `apps/shared/phoenix-ui` (`@phoenix/ui`) | React components with the webOS 1.x/2.x look, drawn with the Enyo 1.0 "Heritage" artwork (copied into `assets/enyo`, see its `PROVENANCE.md`): `PageHeader`, `Group`, `Row`, `Divider`, `ToggleButton`, `Slider` (also as a progress/seek bar), `ListSelector`, `Picker`, `PopupMenu`, `Button`, `Drawer`, `DividerDrawer`, `Dialog`, `Spinner`, `TextField`; for Phone and Messaging the webOS dial pad (`Dialpad`, `DialButton`, `BackspaceButton`, from Enyo's `lib/telephony` art), the command menu (`ToolBar`, `RadioToolGroup`, `ToolButton`), `Avatar` and number / time formatting (`formatDuration` takes milliseconds); for the media apps `Toolbar`, `IconToolButton`, `GroupedToolButtons`, `Glyph` and `formatSeconds`; for Files `CheckBox` (Heritage `checkbox.png`) and file glyphs (copy, cut, paste, new folder, ...); `BackProvider`/`useBack` for the back gesture; TouchPad-style panes after Enyo 1.0's Onyx theme (`SlidingPanes`, `useMultiView`, `GrabButton`, `PaneHeader`, `PaneToolbar`, `Swipeable` swipe to delete) and a long press or right-click menu (`useLongPress`, `ContextMenu`) |
 | `apps/settings` | Settings (see below) |
 | `apps/phone`, `apps/messaging` | Phone and Messaging (see below) |
