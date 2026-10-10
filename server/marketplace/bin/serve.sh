@@ -18,7 +18,8 @@ else
     # The curated web apps as this checkout lists them: a catalog set up
     # with an older catalog/curated-pwas.json gets the ones added since
     # (opted-out origins and apps an admin pulled stay out), then the index
-    # as this version of the catalog writes it (a new build).
+    # as this version of the catalog writes it (a new build), with the
+    # account types in catalog/accounts.json (a bad entry stops here).
     php bin/marketplace.php seed >/dev/null
     php bin/marketplace.php publish >/dev/null
 fi

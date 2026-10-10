@@ -169,6 +169,26 @@ as on the server first, or run the two commands there. Add a site by
 adding a line to `curated-sites.json` (our own summary, its developer,
 categories from the ones already used) and running the probe.
 
+## Account types (Connections)
+
+The index also lists the **account types** Phoenix can connect to, for the
+Marketplace's Connections view (`docs/SYNERGY-CONNECTORS.md` 2.1, phase C0):
+`"accounts": [{templateId, title, provider, icon, summary, capabilities:
+[{capability, direction?}], protocols, auth: {type, registration}, server,
+privacy: {dataGoesTo, e2ee, phoenixServers}, push, status, package: {id,
+builtin}, help?, featured}]`. For now these are the built-in templates only
+(CardDAV & CalDAV, Subscribed Calendar, Email Account, the simulator's
+Jabber), each `package.builtin: true`; connector packages come later (C4).
+
+The list is `catalog/accounts.json`, edited by hand. It is not kept in the
+database: every `publish` reads it, checks each entry (required fields, the
+allowed values in `Catalog::ACCOUNT_ENUMS`, capabilities as the template
+names them) and stops on a bad one, so the published index stays as it was;
+`init` and `seed` check it too. Each entry's `iconFrom` is the template's own
+icon in this checkout (open-source release or Phoenix art, with its
+provenance where it lives); `publish` copies it to
+`/v1/icons/accounts/<templateId>.png`, and the index gives its full address.
+
 ## Tests
 
     php server/marketplace/tests/run.php

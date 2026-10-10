@@ -10,7 +10,9 @@
 //                                             (catalog/curated-pwas.json, the
 //                                             whole list: the ones it no longer
 //                                             has are set gone); FILE only adds
-//                                             and updates the ones it has
+//                                             and updates the ones it has. Also
+//                                             checks catalog/accounts.json, the
+//                                             account types each publish reads
 //   php bin/marketplace.php publish           sign and write the catalog
 //   php bin/marketplace.php admin NAME EMAIL  an admin account; prints its token
 //   php bin/marketplace.php queue             what waits for review
@@ -31,6 +33,7 @@ switch ($cmd) {
     case 'init':
         $n = $app->catalog->seedCurated($curated);
         echo "Curated web apps: $n\n";
+        echo 'Account types: ' . count($app->catalog->accountTypes()) . "\n";
         if (!$app->db->one("SELECT id FROM accounts WHERE role = 'admin'")) {
             $a = $app->api->createAccount('Admin', 'admin@localhost.localdomain', 'admin');
             $file = $app->config['data'] . '/admin.token';
@@ -40,15 +43,18 @@ switch ($cmd) {
             echo "Admin token: in $file\n";
         }
         $p = $app->catalog->publish();
-        echo "Published build {$p['build']}: {$p['apps']} apps\n";
+        echo "Published build {$p['build']}: {$p['apps']} apps, {$p['accounts']} account types\n";
         echo "Key fingerprint: " . $app->signer->fingerprint() . "\n";
         break;
     case 'seed':
         echo 'Curated web apps: ' . $app->catalog->seedCurated($argv[2] ?? $curated, !isset($argv[2])) . "\n";
+        // The account types are not kept in the database: each publish reads them from
+        // catalog/accounts.json. Checked here, so a bad edit shows before the publish.
+        echo 'Account types: ' . count($app->catalog->accountTypes()) . "\n";
         break;
     case 'publish':
         $p = $app->catalog->publish();
-        echo "Published build {$p['build']}: {$p['apps']} apps\n";
+        echo "Published build {$p['build']}: {$p['apps']} apps, {$p['accounts']} account types\n";
         break;
     case 'admin':
         $a = $app->api->createAccount($argv[2] ?? 'Admin', $argv[3] ?? 'admin@localhost.localdomain', 'admin');

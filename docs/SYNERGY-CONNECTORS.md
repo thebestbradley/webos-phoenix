@@ -203,6 +203,16 @@ mirrors the original template's `allowed_locales`/`disallowed_locales`
 from the template inside the package; only `summary`, `privacy`, `terms`
 and `help` are new metadata.
 
+**As built in C0** (`server/marketplace`, its README "Account types
+(Connections)"): the built-in types only, from `catalog/accounts.json`,
+with `templateId, title, provider, icon, summary, capabilities, protocols,
+auth, server, privacy {dataGoesTo, e2ee, phoenixServers}, push, status,
+package {id, builtin}, help?, featured`. `icon` is one address (the
+catalog's copy of the template's 96 px icon), not the draft's sizes;
+`direction` is `two-way`, `read-only` or `write-only`; `terms`, `regions`,
+`readsFrom`/`writesTo` and `package.minVersion` wait for connector packages
+(C4). The index stays `version: 1`; devices ignore keys they do not know.
+
 ### 2.2 Backend changes (`server/marketplace`)
 
 - `apps.kind` gains `connector`; a new table `account_types (template_id,

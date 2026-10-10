@@ -101,6 +101,89 @@ check(sodium_crypto_sign_verify_detached($sig, $index, $key), 'the index is sign
 $idx = json_decode($index, true);
 check($idx['version'] === 1 && $idx['build'] === $pub['build'] && count($idx['apps']) === $curated && strtotime($idx['expires']) > time() + 13 * 86400,
       'version 1, a build number, every listed app, expiring in 14 days');
+
+// ---- Account types (Connections): built in, from catalog/accounts.json ------------------------
+$types = array_column($idx['accounts'] ?? [], null, 'templateId');
+check(array_keys($types) === ['com.webosphoenix.dav', 'com.webosphoenix.webcal', 'com.palm.othermail', 'com.webosphoenix.xmpp']
+      && $pub['accounts'] === 4 && !isset($types['com.palm.palmprofile']),
+      'the index lists the account types Phoenix connects to (not the HP webOS profile)');
+$shape = ['templateId', 'title', 'provider', 'icon', 'summary', 'capabilities', 'protocols', 'auth', 'server', 'privacy', 'push', 'status', 'package', 'featured'];
+check(!array_filter($types, fn ($t) => array_keys($t) !== $shape || $t['package']['builtin'] !== true || array_keys($t['auth']) !== ['type', 'registration']
+                                       || array_keys($t['privacy']) !== ['dataGoesTo', 'e2ee', 'phoenixServers']),
+      '... each with the fields devices read, in order, built in, and nothing else (no iconFrom)');
+$dav = $types['com.webosphoenix.dav'];
+check($dav['title'] === 'CardDAV & CalDAV' && $dav['capabilities'] === [['capability' => 'CONTACTS', 'direction' => 'two-way'], ['capability' => 'CALENDAR', 'direction' => 'two-way']]
+      && $dav['auth'] === ['type' => 'app-password', 'registration' => 'none'] && $dav['server'] === 'user'
+      && $dav['privacy'] === ['dataGoesTo' => 'the server you enter', 'e2ee' => false, 'phoenixServers' => 'none']
+      && $dav['package'] === ['id' => 'org.webosphoenix.dav', 'builtin' => true] && $dav['featured'] === true,
+      'CardDAV & CalDAV: its capabilities as the template names them, app password, the server you enter');
+check($types['com.webosphoenix.webcal']['capabilities'] === [['capability' => 'CALENDAR', 'direction' => 'read-only']]
+      && $types['com.palm.othermail']['capabilities'][0]['capability'] === 'MAIL'
+      && $types['com.webosphoenix.xmpp']['capabilities'][0]['capability'] === 'MESSAGING' && $types['com.webosphoenix.xmpp']['status'] === 'experimental',
+      'the Subscribed Calendar reads only; mail is MAIL, Jabber MESSAGING (experimental)');
+// Every template the list names exists, with those capabilities.
+$templateFiles = ['com.webosphoenix.dav' => 'apps/dav/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json',
+                  'com.webosphoenix.webcal' => 'apps/dav/public/accounts/com.webosphoenix.webcal/com.webosphoenix.webcal.json',
+                  'com.palm.othermail' => 'third_party/app-services/mojomail/imap/files/usr/palm/public/accounts/com.palm.othermail/com.palm.othermail.json',
+                  'com.webosphoenix.xmpp' => 'runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json'];
+$mismatch = [];
+foreach ($templateFiles as $tid => $f) {
+    $t = json_decode((string) @file_get_contents(dirname(__DIR__, 3) . "/$f"), true);
+    $t = isset($t[0]) ? $t[0] : $t;
+    if (($t['templateId'] ?? null) !== $tid
+        || array_column($t['capabilityProviders'] ?? [], 'capability') !== array_column($types[$tid]['capabilities'], 'capability')) {
+        $mismatch[] = $tid;
+    }
+}
+check(!$mismatch, 'each account type matches its template\'s id and capabilities (' . implode(' ', $mismatch) . ')');
+$iconFile = "$tmp/data/public/v1/icons/accounts/com.webosphoenix.dav.png";
+check($dav['icon'] === 'http://127.0.0.1:9999/v1/icons/accounts/com.webosphoenix.dav.png' && is_file($iconFile)
+      && hash_file('sha256', $iconFile) === hash_file('sha256', dirname(__DIR__, 3) . '/apps/dav/public/accounts/com.webosphoenix.dav/images/dav-48x48@2x.png'),
+      'an account type\'s icon is the template\'s own, published with the catalog');
+// Bad entries: the publish stops, and the index stays as it was.
+$good = json_decode(file_get_contents(dirname(__DIR__) . '/catalog/accounts.json'), true);
+$badApp = new App(['accounts' => "$tmp/accounts-bad.json"] + marketplace_config());
+$badEntries = [
+    'no title' => fn ($e) => array_diff_key($e, ['title' => 1]),
+    'unknown auth' => fn ($e) => ['auth' => ['type' => 'magic', 'registration' => 'none']] + $e,
+    'unknown server' => fn ($e) => ['server' => 'anywhere'] + $e,
+    'e2ee not a boolean' => fn ($e) => ['privacy' => ['dataGoesTo' => 'x', 'e2ee' => 'no', 'phoenixServers' => 'none']] + $e,
+    'unknown status' => fn ($e) => ['status' => 'done'] + $e,
+    'lower-case capability' => fn ($e) => ['capabilities' => [['capability' => 'contacts']]] + $e,
+    'unknown direction' => fn ($e) => ['capabilities' => [['capability' => 'CONTACTS', 'direction' => 'sideways']]] + $e,
+    'no capabilities' => fn ($e) => ['capabilities' => []] + $e,
+    'a connector package' => fn ($e) => ['package' => ['id' => 'com.example.connector', 'builtin' => false]] + $e,
+    'an unknown field' => fn ($e) => $e + ['secret' => 1],
+    'an icon outside icons/accounts' => fn ($e) => ['icon' => '../index.json'] + $e,
+    'an icon from outside the checkout' => fn ($e) => ['iconFrom' => '../../etc/passwd'] + $e,
+    'an icon that is not a PNG' => fn ($e) => ['iconFrom' => 'server/marketplace/catalog/accounts.json'] + $e,
+];
+$before = file_get_contents("$tmp/data/public/v1/index.json");
+$notRefused = [];
+foreach ($badEntries as $what => $mutate) {
+    $list = $good;
+    $list['accounts'][0] = $mutate($list['accounts'][0]);
+    file_put_contents("$tmp/accounts-bad.json", json_encode($list));
+    try {
+        $badApp->catalog->publish();
+        $notRefused[] = $what;
+    } catch (Phoenix\Marketplace\CheckFailed $e) {
+        if (!str_starts_with($e->getMessage(), 'account type com.webosphoenix.dav: ')) {
+            $notRefused[] = "$what ({$e->getMessage()})";
+        }
+    }
+}
+$list = $good;
+$list['accounts'][] = $good['accounts'][0];
+file_put_contents("$tmp/accounts-bad.json", json_encode($list));
+try {
+    $badApp->catalog->publish();
+    $notRefused[] = 'twice';
+} catch (Phoenix\Marketplace\CheckFailed $e) {
+}
+check(!$notRefused && file_get_contents("$tmp/data/public/v1/index.json") === $before,
+      'bad account types are refused, naming the entry, and the published index stays as it was (' . implode('; ', $notRefused) . ')');
+
 $x = array_values(array_filter($idx['apps'], fn ($a) => $a['id'] === 'org.webosphoenix.pwa.x'))[0] ?? null;
 check($x && $x['kind'] === 'pwa' && str_starts_with($x['pwa']['manifest'], 'https://x.com/') && $x['pwa']['origin'] === 'https://x.com',
       'a curated web app: its manifest and origin');

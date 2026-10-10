@@ -50,5 +50,8 @@ function marketplace_config(): array
         'fetch_local' => getenv('MARKETPLACE_FETCH_LOCAL') === '1',
         'fetch_proxy' => getenv('MARKETPLACE_FETCH_PROXY') ?: null,
         'updates' => rtrim(getenv('MARKETPLACE_UPDATES') ?: rtrim($data, '/') . '/updates', '/'),
+        // The account types (Connections) and the checkout their icons come from.
+        'accounts' => dirname(__DIR__) . '/catalog/accounts.json',
+        'repo' => dirname(__DIR__, 3),
     ];
 }
