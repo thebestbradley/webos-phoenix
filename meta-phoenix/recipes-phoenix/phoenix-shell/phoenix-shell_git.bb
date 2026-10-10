@@ -27,11 +27,11 @@ inherit qt6-cmake
 
 # The shell is QML, plus one small compiled module (Phoenix.Native, e.g.
 # delivering the Back key to apps), installed with Qt's QML modules.
-# Qt Multimedia: Phoenix.Native's Dictation records the microphone (GAPS V2),
-# for the keyboard (phoenix-keyboard, in maliit-server) and the Assistant;
-# without it there is no microphone (shell/native/CMakeLists.txt).
+# Built without Qt Multimedia, Phoenix.Native's Dictation has no microphone
+# (shell/native/CMakeLists.txt): OSE's qtmultimedia is skipped, it fails to
+# build against its Qt (OPEN-QUESTIONS Q33).
 # The keyboard's Maliit plugin (services/keyboard) is phoenix-keyboard's.
-DEPENDS = "qtbase qtdeclarative qtdeclarative-native qtmultimedia"
+DEPENDS = "qtbase qtdeclarative qtdeclarative-native"
 EXTRA_OECMAKE = "-DPHOENIX_BUILD_SIM=OFF -DPHOENIX_BUILD_KEYBOARD=OFF -DPHOENIX_DATA_DIR=${datadir}/phoenix \
                  -DPHOENIX_NATIVE_QML_DIR=${QT6_INSTALL_QMLDIR}"
 

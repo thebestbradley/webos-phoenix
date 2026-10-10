@@ -42,13 +42,12 @@ FILES:${PN} += " \
 
 # The keyboard's QML and Phoenix.Native (phoenix-shell), maliit-server and
 # OSE's own keyboard beside it (imemanager: the role maliit-server runs
-# with), the QML modules it uses, and Qt Multimedia's backends for
-# dictation's microphone.
+# with) and the QML modules it uses. (Dictation's microphone needs Qt
+# Multimedia, which OSE does not build: OPEN-QUESTIONS Q33.)
 RDEPENDS:${PN} = " \
     phoenix-shell \
     maliit-framework-webos \
     imemanager \
     qml-webos-bridge \
     qtdeclarative-qmlplugins \
-    qtmultimedia-plugins \
 "
