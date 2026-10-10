@@ -123,6 +123,17 @@ async function enyoApp(context) {
     // app's own items.
     await page.evaluate(() => __phoenixRuntime.openAppMenu());
     await page.waitForTimeout(400);
+    // A hardware keyboard in Enyo's menu (GAPS V8 (3)): Down rings Edit,
+    // Down again the next item, and round past a dimmed one (Share, with
+    // nothing to share).
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown");
+    const enyoRing1 = await page.evaluate(() => document.querySelector(".phoenix-keyfocus").textContent.trim());
+    await page.screenshot({ path: path.join(outDir, "memos-menu-keyboard.png") });
+    await page.keyboard.press("ArrowDown");
+    const enyoRing = await page.evaluate(() => [...document.querySelectorAll(".phoenix-keyfocus")].map((n) => n.textContent.trim()));
+    check(enyoRing1 === "Help" && enyoRing.length === 1 && enyoRing[0] === "Edit",
+          "Enyo app menu: the arrows ring its items, round past the dimmed Share (" + JSON.stringify([enyoRing1, enyoRing]) + ")");
     await page.evaluate(() => enyo.appMenu.close());
     await page.waitForTimeout(300);
     const menu = await page.evaluate(() => {
@@ -297,6 +308,29 @@ async function phoenixApp(context) {
           "Phoenix Edit > Copy copies the field's selection");
     check(await page.evaluate(() => document.activeElement && document.activeElement.id) === "edC"
           && await page.locator(".pui-appmenu").count() === 0, "the menu closes, the field keeps the focus");
+
+    // A hardware keyboard in the menu (GAPS V8 (3)): the arrows ring an
+    // item, Enter presses it (Edit opens its drawer; then Select All).
+    await page.evaluate(() => { document.getElementById("edC").setSelectionRange(0, 0); });
+    await page.evaluate(() => __phoenixRuntime.openAppMenu());
+    await page.waitForSelector(".pui-appmenu");
+    await page.keyboard.press("ArrowDown");
+    const ringed = await page.evaluate(() => { const r = document.querySelector(".phoenix-keyfocus"); return r && r.textContent.trim(); });
+    check(ringed === "Edit", "keyboard: Down rings the menu's first item (" + JSON.stringify(ringed) + ")");
+    check(await page.evaluate(() => getComputedStyle(document.querySelector(".phoenix-keyfocus")).outlineStyle) === "solid",
+          "the ring shows");
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(400);
+    await page.keyboard.press("ArrowDown");
+    const second = await page.evaluate(() => { const r = document.querySelector(".phoenix-keyfocus"); return r && r.textContent.trim(); });
+    check(second === "Select All", "Enter opened Edit; Down rings Select All (" + JSON.stringify(second) + ")");
+    await page.screenshot({ path: path.join(outDir, "phoenix-menu-keyboard.png") });
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(200);
+    check(await page.evaluate(() => { const e = document.getElementById("edC"); return e.selectionEnd - e.selectionStart; }) === 7
+          && await page.locator(".pui-appmenu").count() === 0, "Enter pressed Select All, and the menu closed");
+    await page.keyboard.press("ArrowDown");
+    check(await page.evaluate(() => document.querySelector(".phoenix-keyfocus") === null), "no ring with the menu closed");
     check(errors.length === 0, "Files: no page errors" + (errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""));
     await page.close();
 }

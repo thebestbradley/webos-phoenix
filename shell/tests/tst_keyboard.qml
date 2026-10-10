@@ -136,6 +136,26 @@ Item {
             verify(!button.visible);
         }
 
+        // The TouchPad keyboard's keyboard key toggles the virtual keyboard
+        // (SystemUiController.cpp:620-623); here Caps Lock remapped to it
+        // (Settings > Text Assist > Hardware Keyboard, V8 (5)).
+        function test_keyboardKey() {
+            sys.hardwareKeyboard = true;
+            sys.hardwareKeyboardPrefs = { layout: "auto", remap: { capslock: "keyboard" } };
+            field.forceActiveFocus();
+            wait(300);
+            verify(!shell.keyboardOpen);
+            keyClick(Qt.Key_CapsLock);
+            tryCompare(shell, "keyboardOpen", true, 1000);
+            wait(100);
+            verify(shell.keyboardOpen, "the key itself does not put it away");
+            keyClick(Qt.Key_CapsLock);
+            tryCompare(shell, "keyboardOpen", false, 1000);
+            sys.hardwareKeyboardPrefs = { layout: "auto", remap: {} };
+            sys.hardwareKeyboard = false;
+            tryCompare(shell, "keyboardOpen", true, 1000);
+        }
+
         function test_showAndHideAnimateOver400ms() {
             compare(Theme.positiveSpaceDuration, 400);
             field.forceActiveFocus();

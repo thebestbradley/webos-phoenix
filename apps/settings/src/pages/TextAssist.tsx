@@ -9,7 +9,8 @@
 // forgotten), which the shell's keyboard follows. Keyboards: which layouts
 // and languages the keyboard offers (its "keyboards" combos, as
 // VirtualKeyboardPreferences kept them); with two or more its language key
-// goes from one to the next. Hardware keyboard: the shell's shortcuts,
+// goes from one to the next. Hardware Keyboard (HardwareKeyboard.tsx): layout,
+// key repeat, modifier keys and the shell's shortcuts,
 // iPad-style (Ctrl / Command) or desktop-style (Alt, Super), system
 // preference keyboardShortcuts. Shortcuts: the user's text replacements
 // (TextAssistShortcuts.tsx; x_palm_textinput). Number row (Phoenix; the
@@ -37,6 +38,7 @@ import { Group, ListSelector, Note, Page, PageHeader, Row, ToggleButton } from "
 import { useBack } from "../nav";
 import { ReorderList } from "../ReorderList";
 import { PersonalDictionaryPage } from "./PersonalDictionary";
+import { HardwareKeyboardPage } from "./HardwareKeyboard";
 import { ShortcutsSection } from "./TextAssistShortcuts";
 import { textInputPrefs } from "./shortcuts";
 
@@ -80,10 +82,12 @@ type KeyboardStyle = "auto" | "black" | "touchpad";
 export const keyboardStyle = (v: unknown): KeyboardStyle => (v === "black" || v === "touchpad" ? v : "auto");
 
 export function TextAssistPage() {
-    const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["x_palm_virtualkeyboard_prefs", "keyboardShortcuts", "x_palm_textinput", "keyboardNumberRow", "keyboardStyle"], cb, err), []).value ?? {};
+    const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["x_palm_virtualkeyboard_prefs", "keyboardShortcuts", "x_palm_textinput", "keyboardNumberRow", "keyboardStyle", "hardwareKeyboard"], cb, err), []).value ?? {};
     const kb = keyboardPrefs(prefs.x_palm_virtualkeyboard_prefs);
     const [dictionary, setDictionary] = useState(false);
     useBack(() => { setDictionary(false); return true; }, dictionary);
+    const [hardware, setHardware] = useState(false);
+    useBack(() => { setHardware(false); return true; }, hardware);
     const save = (changes: Partial<VirtualKeyboardPrefs>) =>
         system.setPreferences({ x_palm_virtualkeyboard_prefs: withKeyboardPrefs(prefs.x_palm_virtualkeyboard_prefs, changes) });
     const set = (changes: Partial<VirtualKeyboardPrefs>) => void save(changes);
@@ -113,6 +117,8 @@ export function TextAssistPage() {
 
     if (dictionary)
         return <PersonalDictionaryPage prefs={prefs} />;
+    if (hardware)
+        return <HardwareKeyboardPage prefs={prefs} />;
     const added = textInputPrefs(prefs.x_palm_textinput).userWords?.length ?? 0;
     return (
         <Page>
@@ -175,10 +181,8 @@ export function TextAssistPage() {
                 keys and speak; it is turned into text on this device.
             </Note>
             <Group label="Hardware keyboard">
-                <ListSelector<"ipad" | "desktop"> title="Shortcuts" value={prefs.keyboardShortcuts === "desktop" ? "desktop" : "ipad"} testId="keyboard-shortcuts"
-                    options={[{ label: "iPad style (Ctrl)", value: "ipad" }, { label: "Desktop style (Alt, Super)", value: "desktop" }]}
-                    onChange={(v) => void system.setPreferences({ keyboardShortcuts: v })} />
-                <Note>Hold Ctrl (⌘ on a Mac) for iPad style, or Super for desktop style, for a moment to see them all.</Note>
+                <Row title="Hardware Keyboard" subtitle="Layout, key repeat, modifier keys, shortcuts" chevron testId="ta-hardware"
+                     onClick={() => setHardware(true)} />
             </Group>
         </Page>
     );

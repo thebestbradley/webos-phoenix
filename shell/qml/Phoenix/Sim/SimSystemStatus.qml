@@ -116,6 +116,9 @@ QtObject {
     // in the user's order ("classic", "phoenix", "ose"), and the one in use
     // (the globe key picks another).
     property var installedKeyboards: ["classic"]
+    // Settings > Text Assist > Hardware Keyboard: {layout ("auto",
+    // "qwertz", "azerty"), remap {capslock, control, alt, meta}}.
+    property var hardwareKeyboardPrefs: ({ layout: "auto", remap: {} })
     property string keyboardId: "classic"
     property string ringtone: "/usr/palm/sounds/ringtone.mp3"
     property string alerttone: "/usr/palm/sounds/alert.wav"
@@ -437,6 +440,8 @@ QtObject {
             keyboards = s.keyboards;
         if (s.keyboard !== undefined && s.keyboard !== null)
             keyboard = s.keyboard;
+        if (s.hardwareKeyboard && typeof s.hardwareKeyboard === "object")
+            hardwareKeyboardPrefs = s.hardwareKeyboard;
         if (Array.isArray(s.installedKeyboards) && s.installedKeyboards.length)
             installedKeyboards = s.installedKeyboards;
         if (typeof s.keyboardId === "string" && s.keyboardId !== "")

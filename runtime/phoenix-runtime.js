@@ -4736,6 +4736,9 @@
                 // Keyboards, GAPS V7), in order, and the one in use (the
                 // globe key switches).
                 installedKeyboards: installedKeyboards(p),
+                // Settings > Text Assist > Hardware Keyboard (GAPS V8 (5)):
+                // the layout and the modifier keys remapped.
+                hardwareKeyboard: hardwareKeyboardPrefs(p.hardwareKeyboard),
                 keyboardId: keyboardIdInUse(p),
                 ringtone: (p.ringtone && p.ringtone.fullPath) || "",
                 // Phone preferences: unconditional call forwarding on (the
@@ -4851,6 +4854,22 @@
         // user's order (x_palm_virtualkeyboard_prefs installed); the one in
         // use is x_palm_virtualkeyboard_settings keyboardId.
         var KEYBOARD_IDS = ["classic", "phoenix", "ose"];
+        // The hardware keyboard: {layout: "auto" | "qwertz" | "azerty",
+        // remap: {capslock, control, alt, meta: a key's new part}}.
+        var HW_LAYOUTS = ["auto", "qwertz", "azerty"];
+        var HW_REMAP_KEYS = ["capslock", "control", "alt", "meta"];
+        var HW_REMAP_TARGETS = ["capslock", "control", "alt", "meta", "escape", "keyboard", "none"];
+        function hardwareKeyboardPrefs(h) {
+            h = h && typeof h === "object" ? h : {};
+            var remap = {};
+            HW_REMAP_KEYS.forEach(function (k) {
+                var t = h.remap && h.remap[k];
+                if (HW_REMAP_TARGETS.indexOf(t) >= 0 && t !== k)
+                    remap[k] = t;
+            });
+            return { layout: HW_LAYOUTS.indexOf(h.layout) >= 0 ? h.layout : "auto", remap: remap };
+        }
+        runtime.hardwareKeyboardPrefs = hardwareKeyboardPrefs;
         function installedKeyboards(p) {
             var list = (Array.isArray(keyboardPrefs(p).installed) ? keyboardPrefs(p).installed : [])
                 .filter(function (id, i, all) { return KEYBOARD_IDS.indexOf(id) >= 0 && all.indexOf(id) === i; });
@@ -5462,7 +5481,7 @@
                 }
             }
             if (["rotationLock", "wallpaper", "timeFormat", "showAlertsWhenLocked", "lockScreenPreviews", "notificationRepeat", "screenTimeout", "lockTimeout", "enableALS", "sysUiEnableNextPrevGestures", "appRelaunch", "keyboardShortcuts", "systemSounds", "ringtone", "alerttone",
-                 "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility",
+                 "notificationtone", "x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "x_palm_textinput", "accessibility", "hardwareKeyboard",
                  "dockwallpaper", "dockModeSoundPref", "exhibition", "browserContentBlocker", "browserUserAgent",
                  "networkProxy", "devModeUnlocked"].concat(TWEAK_KEYS).some(function (k) { return k in p; })) {
                 if ("devModeUnlocked" in p && runtime.developerGateChanged) runtime.developerGateChanged();
@@ -6547,6 +6566,79 @@
             global.document.dispatchEvent(e);
             return true;
         };
+
+        // Focus navigation with a hardware keyboard (GAPS V8 (3)) in what
+        // Chromium's Tab does not reach well: an app's own app menu (Phoenix's
+        // @phoenix/ui AppMenu, Enyo 1.0's enyo.AppMenu) and the buttons of a
+        // popup alert's page (luna-systemui's NotificationButtons; the shell
+        // passes the keys on, Shell._dialogKey). The arrows (and Tab) move a
+        // ring over the items, Enter or Space presses the one ringed, as the
+        // shell's own dialogs do (ActionButton.keyFocused).
+        var KEYNAV_MENU = ".pui-appmenu [role=menuitem], .enyo-appmenu .enyo-menuitem";
+        var KEYNAV_BUTTONS = ".enyo-notification-button, .enyo-notification-button-affirmative, "
+            + ".enyo-notification-button-negative, .enyo-notification-button-alternate, .enyo-button, button, [role=button]";
+        function keyNavItems(selector) {
+            var doc = global.document;
+            return Array.prototype.slice.call(doc.querySelectorAll(selector)).filter(function (el, i, all) {
+                if (all.indexOf(el) !== i || el.getAttribute("aria-disabled") === "true" || el.disabled) return false;
+                // Enyo 1.0's dimmed item: its own row is "enyo-item-disabled"
+                // (Item.js disabledChanged -> stateChanged).
+                var row = el.firstElementChild;
+                if (/-disabled\b/.test(el.className) || (row && /-disabled\b/.test(row.className))) return false;
+                // Shown: laid out, and not inside a closed drawer.
+                var r = el.getBoundingClientRect();
+                return r.width > 0 && r.height > 0 && global.getComputedStyle(el).visibility !== "hidden";
+            });
+        }
+        function keyNavStyle() {
+            var doc = global.document;
+            if (doc.getElementById("phoenix-keyfocus-style")) return;
+            var st = doc.createElement("style");
+            st.id = "phoenix-keyfocus-style";
+            st.textContent = ".phoenix-keyfocus { outline: 3px solid rgb(75, 151, 222) !important; outline-offset: -3px; }";
+            (doc.head || doc.documentElement).appendChild(st);
+        }
+        // key: "next", "previous", "press"; scope: "menu", "buttons" or ""
+        // (the menu when one is open, else the buttons). True when handled.
+        runtime.keyNav = function (key, scope) {
+            var items = scope === "buttons" ? [] : keyNavItems(KEYNAV_MENU);
+            if (!items.length && scope !== "menu") items = keyNavItems(KEYNAV_BUTTONS);
+            if (!items.length) return false;
+            var doc = global.document;
+            var cur = doc.querySelector(".phoenix-keyfocus");
+            var i = items.indexOf(cur);
+            if (key === "press") {
+                var el = i >= 0 ? items[i] : null;
+                if (!el) return false;
+                // (The ring stays while the item does: Edit opens its drawer
+                // and Down goes on into it.)
+                // A finger's press: Mojo and Enyo widgets act on these.
+                ["mousedown", "mouseup"].forEach(function (t) {
+                    el.dispatchEvent(new global.MouseEvent(t, { bubbles: true, cancelable: true, view: global }));
+                });
+                el.click();
+                return true;
+            }
+            keyNavStyle();
+            if (cur) cur.classList.remove("phoenix-keyfocus");
+            i = i < 0 ? (key === "previous" ? items.length - 1 : 0) : (i + (key === "previous" ? -1 : 1) + items.length) % items.length;
+            items[i].classList.add("phoenix-keyfocus");
+            if (items[i].scrollIntoView) items[i].scrollIntoView({ block: "nearest" });
+            return true;
+        };
+        // In the app's own page: the arrows and Enter while its menu is open.
+        if (global.document && global.document.addEventListener) {
+            global.document.addEventListener("keydown", function (e) {
+                if (e.ctrlKey || e.altKey || e.metaKey || !keyNavItems(KEYNAV_MENU).length) return;
+                var k = e.key === "ArrowDown" || (e.key === "Tab" && !e.shiftKey) ? "next"
+                      : e.key === "ArrowUp" || (e.key === "Tab" && e.shiftKey) ? "previous"
+                      : (e.key === "Enter" || e.key === " ") && global.document.querySelector(".phoenix-keyfocus") ? "press" : "";
+                if (k && runtime.keyNav(k, "menu")) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }, true);
+        }
 
         // The shell launched an app that is already running, with new launch
         // params: update PalmSystem.launchParams, then tell the app. Enyo 1.0

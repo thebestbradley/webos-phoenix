@@ -134,6 +134,63 @@ Item {
             keyRelease(Qt.Key_S);
             compare(field.text, "s");
         }
+
+        // Settings > Text Assist > Hardware Keyboard (GAPS V8 (5)): the
+        // layout, from a US keyboard's keys by their place.
+        function test_layout() {
+            access.layout = "qwertz";
+            keyClick(Qt.Key_Y);
+            keyClick(Qt.Key_Z);
+            keyClick(Qt.Key_Semicolon);
+            keyClick(Qt.Key_At, Qt.ShiftModifier);      // Shift+2
+            compare(field.text, "zyö\"");
+            field.text = "";
+            access.layout = "azerty";
+            keyClick(Qt.Key_Q);
+            keyClick(Qt.Key_W);
+            keyClick(Qt.Key_2);
+            keyClick(Qt.Key_Semicolon);
+            keyClick(Qt.Key_A, Qt.ShiftModifier);
+            compare(field.text, "azémQ");
+            // Shortcuts keep their keys' letters (Ctrl+A on its place).
+            field.text = "select me";
+            keyClick(Qt.Key_A, Qt.ControlModifier);
+            compare(field.selectedText, "select me");
+            access.layout = "auto";
+            field.text = "";
+            keyClick(Qt.Key_Y);
+            compare(field.text, "y");
+        }
+
+        // The modifier keys remapped (as macOS's Modifier Keys), and the
+        // TouchPad keyboard's keyboard key (here Caps Lock remapped to it).
+        function test_keyRemap() {
+            access.keyRemap = { capslock: "control" };
+            field.text = "select me";
+            keyPress(Qt.Key_CapsLock);
+            keyClick(Qt.Key_A);
+            keyRelease(Qt.Key_CapsLock);
+            compare(field.selectedText, "select me", "Caps Lock as Ctrl: Ctrl+A");
+            field.text = "";
+            keyClick(Qt.Key_B);
+            compare(field.text, "b", "let go: no Ctrl");
+            // Ctrl made Meta: Ctrl+A no longer selects all.
+            access.keyRemap = { control: "meta" };
+            field.text = "abc";
+            field.cursorPosition = 3;
+            var spy = signalSpy.createObject(root, { target: access, signalName: "keyboardKeyPressed" });
+            keyClick(Qt.Key_A, Qt.ControlModifier);
+            compare(field.selectedText, "");
+            // Caps Lock as the keyboard key: the signal, nothing typed.
+            access.keyRemap = { capslock: "keyboard" };
+            keyClick(Qt.Key_CapsLock);
+            compare(spy.count, 1);
+            // "none": the key does nothing.
+            access.keyRemap = { alt: "none" };
+            keyClick(Qt.Key_Alt);
+            access.keyRemap = ({});
+            spy.destroy();
+        }
     }
 
     Component {

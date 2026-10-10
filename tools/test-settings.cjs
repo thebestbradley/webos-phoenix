@@ -368,10 +368,23 @@ async function main() {
         check(last().keyboard && last().keyboard.language === "en", "turned off, the keyboard in use goes back to the first");
         // Hardware keyboard: the shortcut scheme reaches the shell.
         check(last().keyboardShortcuts === "ipad", "iPad-style shortcuts by default");
+        // ... on the Hardware Keyboard page (V8 (5)), with its layout and
+        // modifier keys.
+        await page.click("[data-testid='ta-hardware']");
         await page.click("[data-testid='keyboard-shortcuts']");
         await page.click("role=option[name='Desktop style (Alt, Super)']");
         await page.waitForTimeout(200);
         check(last().keyboardShortcuts === "desktop", `desktop-style shortcuts reach the shell (${last().keyboardShortcuts})`);
+        await page.click("[data-testid='hw-layout']");
+        await page.click("role=option[name='German (QWERTZ)']");
+        await page.click("[data-testid='hw-remap-capslock']");
+        await page.click("role=option[name='Control']");
+        await page.waitForTimeout(200);
+        check(last().hardwareKeyboard && last().hardwareKeyboard.layout === "qwertz" && last().hardwareKeyboard.remap.capslock === "control",
+              `the hardware keyboard's layout and Caps Lock as Control reach the shell (${JSON.stringify(last().hardwareKeyboard)})`);
+        await shot("hardware-keyboard");
+        await page.keyboard.press("Escape");
+        await page.waitForSelector("[data-testid='ta-hardware']");
         // Shortcuts: one added reaches the keyboard; a bad one is refused.
         await page.click("[data-testid='ta-shortcut-add']");
         await page.fill("[data-testid='ta-shortcut-field']", "on my");

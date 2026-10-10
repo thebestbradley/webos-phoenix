@@ -1501,9 +1501,21 @@ FocusScope {
             return false;
         }
         var buttons = _keyButtons(host);
+        var k = event.key;
+        // A popup alert that is a page (luna-systemui's, an app's
+        // createPopupAlert): its buttons are its own; the runtime rings and
+        // presses them (keyNav), the same keys as here. Esc stays Back.
+        if (!buttons.length && host !== deleteDialog && typeof host.runScript === "function") {
+            var nav = k === Qt.Key_Tab || k === Qt.Key_Down || k === Qt.Key_Right ? "next"
+                    : k === Qt.Key_Backtab || k === Qt.Key_Up || k === Qt.Key_Left ? "previous"
+                    : k === Qt.Key_Return || k === Qt.Key_Enter || k === Qt.Key_Space ? "press" : "";
+            if (nav === "")
+                return false;
+            host.runScript("window.__phoenixRuntime && __phoenixRuntime.keyNav && __phoenixRuntime.keyNav(\"" + nav + "\", \"buttons\")");
+            return true;
+        }
         if (!buttons.length)
             return false;
-        var k = event.key;
         var i = buttons.indexOf(_keyButton);
         if (k === Qt.Key_Tab || k === Qt.Key_Backtab || k === Qt.Key_Down || k === Qt.Key_Up || k === Qt.Key_Left || k === Qt.Key_Right) {
             var back = k === Qt.Key_Backtab || k === Qt.Key_Up || k === Qt.Key_Left;
@@ -1613,6 +1625,17 @@ FocusScope {
     // Orange+Sym+P, WindowServer.cpp:687-697) capture at once. On a Mac,
     // Qt's Ctrl is Command and Meta is Control: both Command+Option+P and
     // Control+Option+P capture.
+    // A popup alert in front takes the navigation keys, whatever had the
+    // focus (the app's page under it takes every key): Tab and the arrows
+    // ring its buttons, Enter or Space presses one (_dialogKey; GAPS V8 (3)).
+    SystemKeys {
+        id: alertKeys
+        enabled: notes.alertShown && !shell.locked
+        keys: [Qt.Key_Tab, Qt.Key_Backtab, Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right,
+               Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space]
+        onPressed: (key, autoRepeat) => shell._dialogKey({ key: key })
+    }
+
     SystemKeys {
         id: systemKeys
         // Also the simulator's gestures and demo keys (sim/main.cpp): Esc
@@ -1748,6 +1771,25 @@ FocusScope {
         customRepeat: !!prefs.customRepeat
         repeatDelay: prefs.repeatDelay !== undefined ? prefs.repeatDelay : 500
         repeatInterval: prefs.repeatInterval || 50
+        // Settings > Text Assist > Hardware Keyboard (GAPS V8 (5)): its
+        // layout and the modifier keys remapped.
+        readonly property var hw: shell.system && shell.system.hardwareKeyboardPrefs ? shell.system.hardwareKeyboardPrefs : ({})
+        layout: hw.layout || "auto"
+        keyRemap: hw.remap || ({})
+        onKeyboardKeyPressed: shell.keyboardKey()
+    }
+    // The TouchPad keyboard's keyboard key: the virtual keyboard up or down
+    // (SystemUiController.cpp:620-623, IMEController::setIMEActive). With a
+    // field in use it comes up even with the keyboard attached (V8 (1)).
+    // Down, the field keeps the focus (setIMEActive(false) hides the IME,
+    // unlike the hide key, which ends the editing).
+    function keyboardKey() {
+        if (_imeOpened) {
+            _keyboardAskedFor = false;
+            _hideIMEInternal();
+        } else if (imeClient) {
+            showVirtualKeyboard();
+        }
     }
 
     // ---- The volume keys ----------------------------------------------------------

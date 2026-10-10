@@ -404,6 +404,27 @@ Item {
             verify(!app.appMenuOpen);
         }
 
+        // A popup alert that is a page (luna-systemui's): Tab and the arrows
+        // ring its buttons and Enter presses one, through the runtime's
+        // keyNav, whatever has the focus (GAPS V8 (3)).
+        function test_webPopupAlertKeyboard() {
+            // A stand-in for its WebAppWindow: what the shell runs in it.
+            var page = Qt.createQmlObject("import QtQuick; Item { property var calls: []; function runScript(js) { calls = calls.concat([js]); } }", root);
+            windows._windows["alert-web"] = page;
+            windows.alerts.append({ key: "alert-web", appId: "com.palm.systemui", height: 150 });
+            tryCompare(shell.notifications, "alertShown", true, 2000);
+            keyClick(Qt.Key_Tab);
+            keyClick(Qt.Key_Up);
+            keyClick(Qt.Key_Return);
+            var navs = page.calls.filter(function (j) { return j.indexOf("keyNav") >= 0; }).map(function (j) { return /keyNav\("(\w+)"/.exec(j)[1]; });
+            compare(navs, ["next", "previous", "press"]);
+            windows.alerts.clear();
+            delete windows._windows["alert-web"];
+            page.destroy();
+            shell.notifications.bannerActive = false;
+            tryCompare(shell.notifications, "alertShown", false, 2000);
+        }
+
         // A popup alert takes the negative space (phones), above the bar.
         function test_popupAlertTakesTheNegativeSpace() {
             windows.launch("org.webosphoenix.email", "");
