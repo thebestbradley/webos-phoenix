@@ -324,6 +324,10 @@ async function main() {
         await page.click("[data-testid='ta-emoji']");
         await page.waitForSelector("[data-testid='ta-emoji'][aria-checked='false']");
         check(last().textAssist.emojiSuggestions === false, "Emoji suggestions off reaches the shell");
+        // Keyboards (GAPS V7): the Phoenix keyboard installed beside webOS Classic.
+        await page.click("[data-testid='ta-whole-phoenix']");
+        await page.waitForSelector("[data-testid='ta-whole-phoenix'][aria-checked='true']");
+        check(JSON.stringify(last().installedKeyboards) === JSON.stringify(["classic", "phoenix"]), `the Phoenix keyboard installed reaches the shell (${JSON.stringify(last().installedKeyboards)})`);
         // Personal Dictionary: the learned words the keyboard reports, a word
         // added and one deleted reach the keyboard, and Forget Learned Words.
         await page.evaluate(() => window.__phoenixRuntime.applyHostStatus({ learnedWords: ["Kwyjibo"] }));

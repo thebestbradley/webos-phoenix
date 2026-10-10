@@ -12,7 +12,7 @@ import { resolve } from "node:path";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
 import { system } from "@phoenix/luna";
-import { keyboardStyle, TextAssistPage } from "./TextAssist";
+import { installedKeyboards, keyboardStyle, moveKeyboard, TextAssistPage } from "./TextAssist";
 import { SoundsPage, toneOptions, SYSTEM_TONES } from "./Sounds";
 import { shortcutProblem, textInputPrefs, withShortcut, withoutShortcut } from "./shortcuts";
 
@@ -115,6 +115,29 @@ describe("Text Assist > Keyboard style", () => {
         fireEvent.click(screen.getByTestId("ta-keyboard-style"));
         fireEvent.click(screen.getByRole("option", { name: "Black" }));
         await waitFor(() => expect((runtime().hostStatus().tweaks as { keyboardStyle: string }).keyboardStyle).toBe("black"));
+    });
+});
+
+describe("Text Assist > Keyboards (GAPS V7)", () => {
+    it("reads the installed keyboards, known ones in order", () => {
+        expect(installedKeyboards(undefined)).toEqual(["classic"]);
+        expect(installedKeyboards(["phoenix", "nope", "classic", "phoenix"])).toEqual(["phoenix", "classic"]);
+        expect(moveKeyboard(["classic", "phoenix"], "phoenix", 0)).toEqual(["phoenix", "classic"]);
+    });
+    it("installs the Phoenix keyboard, and the shell's keyboard is told", async () => {
+        render(<TextAssistPage />);
+        const phoenix = await screen.findByTestId("ta-whole-phoenix");
+        expect(phoenix.getAttribute("aria-checked")).toBe("false");
+        // OSE's: on a device only.
+        expect((screen.getByTestId("ta-whole-ose") as HTMLButtonElement).disabled ||
+               screen.getByTestId("ta-whole-ose").getAttribute("aria-disabled") === "true").toBe(true);
+        fireEvent.click(phoenix);
+        await waitFor(() => expect(runtime().hostStatus().installedKeyboards).toEqual(["classic", "phoenix"]));
+        expect(runtime().hostStatus().keyboardId).toBe("classic");
+        await waitFor(() => expect(screen.getByTestId("ta-whole-phoenix").getAttribute("aria-checked")).toBe("true"));
+        // Removed again; the last one cannot be.
+        fireEvent.click(screen.getByTestId("ta-whole-phoenix"));
+        await waitFor(() => expect(runtime().hostStatus().installedKeyboards).toEqual(["classic"]));
     });
 });
 

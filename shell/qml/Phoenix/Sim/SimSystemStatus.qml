@@ -112,6 +112,11 @@ QtObject {
     // and the one in use (the keyboard's language key picks another).
     property var keyboards: [{ layout: "qwerty", language: "en" }]
     property var keyboard: ({ layout: "qwerty", language: "en" })
+    // Settings > Text Assist > Keyboards (GAPS V7): the keyboards installed,
+    // in the user's order ("classic", "phoenix", "ose"), and the one in use
+    // (the globe key picks another).
+    property var installedKeyboards: ["classic"]
+    property string keyboardId: "classic"
     property string ringtone: "/usr/palm/sounds/ringtone.mp3"
     property string alerttone: "/usr/palm/sounds/alert.wav"
     property string notificationtone: "/usr/palm/sounds/notification.wav"
@@ -432,6 +437,10 @@ QtObject {
             keyboards = s.keyboards;
         if (s.keyboard !== undefined && s.keyboard !== null)
             keyboard = s.keyboard;
+        if (Array.isArray(s.installedKeyboards) && s.installedKeyboards.length)
+            installedKeyboards = s.installedKeyboards;
+        if (typeof s.keyboardId === "string" && s.keyboardId !== "")
+            keyboardId = s.keyboardId;
         if (s.ringtone !== undefined)
             ringtone = s.ringtone;
         if (s.alerttone !== undefined)
@@ -490,6 +499,7 @@ QtObject {
         case "muted": return { muted: muted };
         case "volume": return { volume: volume };
         case "keyboard": return { keyboard: keyboard };
+        case "keyboardId": return { keyboardId: keyboardId };
         }
         return {};
     }

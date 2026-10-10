@@ -1136,6 +1136,54 @@ Item {
             sys.keyboard = sys.keyboards[0];
         }
 
+        // Several keyboards side by side (GAPS V7): with another installed
+        // the language key is the globe; a tap goes through the languages,
+        // then to the next keyboard, kept by the system. The Phoenix
+        // keyboard: the same keys, flat, without the art.
+        function test_globeKeySwitchesKeyboards() {
+            sys.keyboards = [{ layout: "qwerty", language: "en" }, { layout: "qwertz", language: "de" }];
+            sys.keyboard = sys.keyboards[0];
+            sys.installedKeyboards = ["classic", "phoenix", "ose"];
+            sys.keyboardId = "classic";
+            showKeyboard();
+            compare(kb.otherKeyboards, ["phoenix"]);             // OSE's is not drawn here
+            verify(!kb.phoenixLook);
+            tapKey("123");
+            tapKey("🌐");                              // the globe: the next language
+            compare(sys.keyboard.language, "de");
+            compare(sys.keyboardId, "classic");
+            tapKey("🌐");                              // then the next keyboard
+            compare(sys.keyboardId, "phoenix");
+            compare(sys.keyboard.language, "en");
+            verify(kb.phoenixLook);
+            verify(!kb.touchpadLook);
+            compare(kb.otherKeyboards, ["classic"]);
+            // Flat keys: no art drawn.
+            tapKey("ABC");
+            var flat = 0;
+            (function walk(o) {
+                for (var i = 0; i < o.children.length; ++i) {
+                    if (o.children[i].flat === true)
+                        ++flat;
+                    walk(o.children[i]);
+                }
+            })(kb);
+            verify(flat > 20, "flat keys: " + flat);
+            type(["h", "i"]);
+            compare(field.text.toLowerCase(), "hi");
+            // Back round to webOS Classic.
+            tapKey("123");
+            tapKey("🌐");
+            compare(sys.keyboard.language, "de");
+            tapKey("🌐");
+            compare(sys.keyboardId, "classic");
+            sys.installedKeyboards = ["classic"];
+            sys.keyboardId = "classic";
+            sys.keyboards = [{ layout: "qwerty", language: "en" }];
+            sys.keyboard = sys.keyboards[0];
+            verify(kb.otherKeyboards.length === 0);
+        }
+
         // Held, the language key lists the keyboards (selectKeyboardCombo).
         function test_languageKeyHeldLists() {
             sys.keyboards = [{ layout: "qwerty", language: "en" }, { layout: "azerty", language: "fr" }];

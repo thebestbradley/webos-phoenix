@@ -312,6 +312,8 @@ export interface VirtualKeyboardPrefs {
     EmojiSuggestions?: boolean;
     /** When the user asked for the learned words to be forgotten (ms). */
     ForgetWords?: number;
+    /** Phoenix (GAPS V7): the whole keyboards installed, in order ("classic", "phoenix", "ose"). */
+    installed?: string[];
 }
 
 export interface SystemTime {

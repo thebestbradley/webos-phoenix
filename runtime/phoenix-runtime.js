@@ -4732,6 +4732,11 @@
                 // one in use (the language key switches).
                 keyboards: keyboardCombos(p),
                 keyboard: keyboardInUse(p),
+                // The keyboards installed (Settings > Text Assist >
+                // Keyboards, GAPS V7), in order, and the one in use (the
+                // globe key switches).
+                installedKeyboards: installedKeyboards(p),
+                keyboardId: keyboardIdInUse(p),
                 ringtone: (p.ringtone && p.ringtone.fullPath) || "",
                 // Phone preferences: unconditional call forwarding on (the
                 // status bar's call-forward icon, StatusBarInfo::setCallForward).
@@ -4838,6 +4843,27 @@
         function keyboardCombos(p) {
             var list = (keyboardPrefs(p).keyboards || []).map(keyboardCombo).filter(Boolean);
             return list.length ? list : [{ layout: "qwerty", language: "en" }];
+        }
+        // Phoenix (GAPS V7; the owner, 29 September 2026): whole keyboards
+        // side by side, as iOS has: "classic" (the Pre's and TouchPad's,
+        // V1), "phoenix" (Phoenix's own look over the same keys and Text
+        // Assist), "ose" (OSE's own Maliit keyboard: on a device). In the
+        // user's order (x_palm_virtualkeyboard_prefs installed); the one in
+        // use is x_palm_virtualkeyboard_settings keyboardId.
+        var KEYBOARD_IDS = ["classic", "phoenix", "ose"];
+        function installedKeyboards(p) {
+            var list = (Array.isArray(keyboardPrefs(p).installed) ? keyboardPrefs(p).installed : [])
+                .filter(function (id, i, all) { return KEYBOARD_IDS.indexOf(id) >= 0 && all.indexOf(id) === i; });
+            return list.length ? list : ["classic"];
+        }
+        function keyboardSettings(p) {
+            var st = p.x_palm_virtualkeyboard_settings;
+            if (typeof st === "string") { try { st = JSON.parse(st); } catch (e) { st = null; } }
+            return st && typeof st === "object" ? st : {};
+        }
+        function keyboardIdInUse(p) {
+            var id = keyboardSettings(p).keyboardId, list = installedKeyboards(p);
+            return list.indexOf(id) >= 0 ? id : list[0];
         }
         function keyboardInUse(p) {
             var st = p.x_palm_virtualkeyboard_settings;
@@ -6466,9 +6492,21 @@
             suppressHost = true;
             try {
                 // The keyboard's language key chose another keyboard.
+                // ... or the globe key another whole keyboard (V7). Both
+                // are kept in x_palm_virtualkeyboard_settings.
+                var kbSettings = null;
                 if (st.keyboard && keyboardCombo(st.keyboard))
-                    sys["/setPreferences"]({ x_palm_virtualkeyboard_settings: JSON.stringify(keyboardCombo(st.keyboard)) },
+                    kbSettings = keyboardCombo(st.keyboard);
+                if (typeof st.keyboardId === "string" && installedKeyboards(prefs()).indexOf(st.keyboardId) >= 0
+                        && st.keyboardId !== keyboardIdInUse(prefs()))
+                    kbSettings = kbSettings || keyboardCombo(keyboardSettings(prefs())) || keyboardInUse(prefs());
+                if (kbSettings) {
+                    var nextId = typeof st.keyboardId === "string" && installedKeyboards(prefs()).indexOf(st.keyboardId) >= 0
+                        ? st.keyboardId : keyboardIdInUse(prefs());
+                    sys["/setPreferences"]({ x_palm_virtualkeyboard_settings: JSON.stringify({ layout: kbSettings.layout, language: kbSettings.language,
+                                                                                             keyboardId: nextId }) },
                                            function () {}, { cancelled: function () { return false; } });
+                }
                 // The keyboard's "Add" (after backspace put back a corrected
                 // word): into the personal dictionary.
                 if (typeof st.dictionaryWordAdded === "string" && DICTIONARY_WORD.test(st.dictionaryWordAdded)) {

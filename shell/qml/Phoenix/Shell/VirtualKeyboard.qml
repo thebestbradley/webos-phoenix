@@ -115,6 +115,44 @@ Item {
             return;
         keyboardSelected(keyboards[index]);
     }
+    // ---- Several keyboards (GAPS V7; the owner, 29 September 2026) ----------------------
+    // Whole keyboards side by side, as on iOS (Settings > Text Assist >
+    // Keyboards, in the user's order): "classic" (the Pre's and TouchPad's,
+    // V1) and "phoenix" (Phoenix's own look over the same keys; dictation,
+    // prediction, swipe, emoji and cursor control are shared parts of
+    // both). OSE's own keyboard ("ose") is a Maliit plugin on a device, not
+    // drawn here. With another installed, the language key is the globe: a
+    // tap goes to the next language and after the last to the next
+    // keyboard; held, it lists the languages and the keyboards
+    // (keyboardChosen tells the shell, which keeps it).
+    property var installedKeyboards: ["classic"]
+    property string keyboardId: "classic"
+    signal keyboardChosen(string id)
+    readonly property var drawnKeyboards: ["classic", "phoenix"]
+    readonly property var keyboardNames: ({ classic: "webOS Classic", phoenix: "Phoenix", ose: "webOS OSE" })
+    // The other keyboards this shell draws, the next one first.
+    readonly property var otherKeyboards: {
+        var list = installedKeyboards.filter(function (id) { return kb.drawnKeyboards.indexOf(id) >= 0; });
+        var i = list.indexOf(keyboardId);
+        return i < 0 ? list : list.slice(i + 1).concat(list.slice(0, i));
+    }
+    readonly property bool phoenixLook: keyboardId === "phoenix"
+    // The Phoenix look's colours: flat keys on a near-black ground.
+    readonly property color cPhoenixBack: "#16181c"
+    readonly property color cPhoenixLetter: "#3a3d44"
+    readonly property color cPhoenixFunction: "#262930"
+    readonly property color cPhoenixPressed: "#5b6070"
+    function _nextLanguageOrKeyboard() {
+        if (keyboardIndex + 1 < keyboards.length)
+            selectKeyboard(keyboardIndex + 1);
+        else if (otherKeyboards.length) {
+            if (keyboards.length > 1)
+                selectKeyboard(0);
+            keyboardChosen(otherKeyboards[0]);
+        } else if (keyboards.length > 1)
+            selectKeyboard(0);
+    }
+
     // Tablet: the keyboard size, -2 to 1 (XS, S, M, L).
     property int keyboardSize: 0
     // Settings > Text Assist > Number row (docs/M6-PLAN.md F4; the
@@ -129,7 +167,7 @@ Item {
     // tablet's keys); "touchpad": the TouchPad's everywhere (its art in the
     // phone's keys).
     property string keyboardStyle: "auto"
-    readonly property bool touchpadLook: keyboardStyle === "touchpad" || (keyboardStyle !== "black" && tablet)
+    readonly property bool touchpadLook: !phoenixLook && (keyboardStyle === "touchpad" || (keyboardStyle !== "black" && tablet))
     onTouchpadLookChanged: {
         // The keys' trim follows the art (_setKeyboardHeight).
         if (_km && _keymapHeight > 0)
@@ -1087,11 +1125,14 @@ Item {
     // The language key's name for each keyboard (comboLanguageName).
     readonly property var _comboNames: keyboards.map(function (k) {
         return KM.comboLanguageName(k.language, ({ qwerty: "En", qwertz: "De", azerty: "Fr" })[k.layout]);
-    })
+    }).concat(otherKeyboards.map(function (id) { return kb.keyboardNames[id] || id; }))
+    // The globe's cap, with other keyboards installed.
+    readonly property string _comboCap: otherKeyboards.length ? "\uD83C\uDF10" : ""
+    on_ComboCapChanged: _updateCombos()
     on_ComboNamesChanged: _updateCombos()
     onKeyboardIndexChanged: _updateCombos()
     function _updateCombos() {
-        if (_km && _km.setCombos(_comboNames, keyboardIndex))
+        if (_km && _km.setCombos(_comboNames, keyboardIndex, _comboCap))
             _layoutChanged();
     }
     onLanguageChanged: {
@@ -1100,7 +1141,7 @@ Item {
     }
     function _reset() {
         _km = new KM.Keymap(tablet, layoutName, numberRow);
-        _km.setCombos(_comboNames, keyboardIndex);
+        _km.setCombos(_comboNames, keyboardIndex, _comboCap);
         _touches = ({});
         _extendedKeys = null;
         _availableSpaceChanged();
@@ -1177,7 +1218,7 @@ Item {
     Component.onCompleted: {
         _km = new KM.Keymap(tablet, "qwerty", numberRow);
         _km.setLayoutFamily(layoutName);
-        _km.setCombos(_comboNames, keyboardIndex);
+        _km.setCombos(_comboNames, keyboardIndex, _comboCap);
         TA.setLanguage(language, layoutName);
         _km.setRowHeight(0, _rowHalf(0));
         _availableSpaceChanged();
@@ -1782,7 +1823,11 @@ Item {
         } else if (KM.isTextShortcutKey(key)) {
             qtkey = key;
         } else if (KM.isComboKey(key)) {
-            selectKeyboard(key - KM.Key.ComboFirst);   // selectKeyboardCombo
+            // selectKeyboardCombo; past the languages, another keyboard (V7).
+            if (key - KM.Key.ComboFirst < keyboards.length)
+                selectKeyboard(key - KM.Key.ComboFirst);
+            else if (otherKeyboards[key - KM.Key.ComboFirst - keyboards.length])
+                keyboardChosen(otherKeyboards[key - KM.Key.ComboFirst - keyboards.length]);
         } else {
             switch (key) {
             case KM.Key.Backspace:
@@ -1828,9 +1873,9 @@ Item {
                 kb.hideRequested();
                 break;
             case KM.Key.ToggleLanguage:
-                // selectNextKeyboardCombo.
-                if (keyboards.length > 1)
-                    selectKeyboard((keyboardIndex + 1) % keyboards.length);
+                // selectNextKeyboardCombo; after the last language, the
+                // next keyboard (V7).
+                _nextLanguageOrKeyboard();
                 break;
             case KM.Key.Emoji:
                 openEmoji();
@@ -2170,7 +2215,22 @@ Item {
         property int corner: 22
         property real trim: 0
         property real insetV: 0
+        // The Phoenix look (GAPS V7): a flat rounded key, by its kind
+        // (a letter's art, key-white.png, or another).
+        property bool flat: false
+        property string background: ""
+        Rectangle {
+            visible: tile.flat
+            x: 3
+            y: 5
+            width: tile.width - 6
+            height: tile.height - 10
+            radius: 7
+            color: tile.pressed ? kb.cPhoenixPressed
+                 : tile.background === "key-white.png" ? kb.cPhoenixLetter : kb.cPhoenixFunction
+        }
         Item {
+            visible: !tile.flat
             y: tile.insetV
             width: tile.width
             height: tile.height - 2 * tile.insetV
@@ -2320,6 +2380,12 @@ Item {
             anchors.fill: parent
             source: kb._artFile("keyboard-bg.png")
             fillMode: Image.Stretch
+            // The Phoenix look: its flat ground.
+            Rectangle {
+                anchors.fill: parent
+                visible: kb.phoenixLook
+                color: kb.cPhoenixBack
+            }
         }
 
         Repeater {
@@ -2336,6 +2402,8 @@ Item {
                 height: modelData.h
                 KeyTile {
                     anchors.fill: parent
+                    flat: kb.phoenixLook
+                    background: keyItem.modelData.background
                     source: String(Theme.variant(keyItem.modelData.art + keyItem.modelData.background, kb.pixelScale))
                     half: kb._keyHalfFor(keyItem.modelData.background)
                     corner: kb._corner
@@ -2420,10 +2488,17 @@ Item {
                         height: frame.height
                         source: kb._artFile("keyboard-bg.png")
                         fillMode: Image.Stretch
+                        Rectangle {
+                            anchors.fill: parent
+                            visible: kb.phoenixLook
+                            color: kb.cPhoenixBack
+                        }
                     }
                     KeyTile {
                         anchors.fill: parent
                         objectName: "pressedKey"
+                        flat: kb.phoenixLook
+                        background: pressedItem.modelData.background
                         source: String(Theme.variant(pressedItem.modelData.art + pressedItem.modelData.background, kb.pixelScale))
                         pressed: true
                         half: kb._keyHalfFor(pressedItem.modelData.background)

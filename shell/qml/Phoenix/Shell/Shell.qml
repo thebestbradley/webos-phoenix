@@ -3523,6 +3523,12 @@ FocusScope {
                                                                                                   : [{ layout: "qwerty", language: "en" }]
                 keyboard: shell.system && shell.system.keyboard ? shell.system.keyboard : ({ layout: "qwerty", language: "en" })
                 onKeyboardSelected: (k) => { if (shell.system && shell.system.keyboard !== undefined) shell.system.keyboard = k; }
+                // Settings > Text Assist > Keyboards (GAPS V7): the keyboards
+                // installed and the one in use; the globe key picks another.
+                installedKeyboards: shell.system && shell.system.installedKeyboards && shell.system.installedKeyboards.length
+                                    ? shell.system.installedKeyboards : ["classic"]
+                keyboardId: shell.system && shell.system.keyboardId ? shell.system.keyboardId : "classic"
+                onKeyboardChosen: (id) => { if (shell.system && shell.system.keyboardId !== undefined) shell.system.keyboardId = id; }
                 onFeedback: (name) => shell.sounds.feedback(name)
                 // The clipboard key and the clip strip (M6 F2).
                 clipboard: clipboardClient

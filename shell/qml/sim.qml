@@ -580,6 +580,7 @@ Item {
         function onMutedChanged() { root.statusChanged("muted"); }
         function onVolumeChanged() { root.statusChanged("volume"); }
         function onKeyboardChanged() { root.statusChanged("keyboard"); }
+        function onKeyboardIdChanged() { root.statusChanged("keyboardId"); }
     }
     // The browser's page views and the system proxy (the runtime's
     // systemStatus browser and proxy; shell/sim/simbrowser.h).

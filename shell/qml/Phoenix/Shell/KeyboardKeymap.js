@@ -789,10 +789,12 @@ Keymap.prototype.updateLanguageKey = function (row) {
 // (comboLanguageName), and which is in use (keyboardCombosChanged,
 // setLanguageName). With fewer than two there is no language key (tablet)
 // and nothing behind Shift (phone). True when the keys change.
-Keymap.prototype.setCombos = function (names, active) {
+Keymap.prototype.setCombos = function (names, active, cap) {
     this.comboNames = names.slice();
     this.comboKeys = names.map(function (n, k) { return Key.ComboFirst + k; });
-    var name = names.length > 1 ? (names[active] || "") : "";
+    // Phoenix (GAPS V7): with other keyboards installed the key is the
+    // globe, its cap `cap`.
+    var name = names.length > 1 ? (cap || names[active] || "") : "";
     if (name === this.languageName)
         return false;
     this.languageName = name;

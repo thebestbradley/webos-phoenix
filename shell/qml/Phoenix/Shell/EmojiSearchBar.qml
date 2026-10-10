@@ -23,6 +23,12 @@ Item {
         source: bar.keyboard._artFile("keyboard-bg.png")
         fillMode: Image.Stretch
     }
+    // The Phoenix keyboard's look (GAPS V7): flat, without the art.
+    Rectangle {
+        anchors.fill: parent
+        visible: bar.keyboard.phoenixLook === true
+        color: bar.keyboard.cPhoenixBack
+    }
 
     // Back, and the search typed so far.
     Item {
