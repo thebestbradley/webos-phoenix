@@ -165,6 +165,22 @@ def check(root):
     assets = os.path.join(root, "shell", "assets")
     for d, dirs, files in os.walk(assets):
         sources += [os.path.join(d, fn) for fn in files]
+    # The built apps' files come from their public/ (as is) and src/ (what
+    # the bundle imports): check those, so the result is the same whether
+    # or not the apps were built here (CI builds them first).
+    apps = os.path.join(root, "apps")
+    for n in sorted(os.listdir(apps)) if os.path.isdir(apps) else []:
+        for sub in ("public", "src"):
+            base = os.path.join(apps, n, sub)
+            for d, dirs, files in os.walk(base):
+                dirs[:] = [x for x in dirs if x not in ("node_modules", "test", "tests", "__tests__", "fixtures")]
+                sources += [os.path.join(d, fn) for fn in files]
+    shared = os.path.join(apps, "shared")
+    for n in sorted(os.listdir(shared)) if os.path.isdir(shared) else []:
+        for sub in ("src", "assets"):
+            for d, dirs, files in os.walk(os.path.join(shared, n, sub)):
+                dirs[:] = [x for x in dirs if x not in ("node_modules", "test", "tests", "__tests__", "fixtures")]
+                sources += [os.path.join(d, fn) for fn in files]
     seen = set()
     bundled = []   # built assets from npm packages: the apps' licence notices cover them
     for src in sorted(set(sources)):

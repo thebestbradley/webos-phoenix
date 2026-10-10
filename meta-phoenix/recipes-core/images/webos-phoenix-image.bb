@@ -5,6 +5,16 @@ require recipes-core/images/webos-image.bb
 
 DESCRIPTION = "webOS OSE image with the Phoenix mobile shell"
 
+# A production image (docs/PRE-IMAGE-CHECKLIST.md X1, OPEN-QUESTIONS Q66):
+# OSE builds every image as a pre-release unless WEBOS_DISTRO_PRERELEASE is
+# empty ("devel" by default, webos_prerelease_dep.bbclass), which brings
+# debug-tweaks (root without a password) and a Dropbear SSH server that
+# starts at boot (webos_image.bbclass). PHOENIX_PRODUCTION = "1" in
+# local.conf takes both out of this image whatever the distro says;
+# Developer Mode is then the way in.
+PHOENIX_PRODUCTION ?= "0"
+IMAGE_FEATURES:remove = "${@'debug-tweaks ssh-server-dropbear ssh-server-openssh' if d.getVar('PHOENIX_PRODUCTION') == '1' else ''}"
+
 IMAGE_INSTALL:append = " phoenix-shell phoenix-apps phoenix-pty phoenix-devices phoenix-diag packagegroup-phoenix-terminal \
     packagegroup-phoenix-assistant"
 

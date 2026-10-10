@@ -777,5 +777,9 @@
  "recipes:unpinned:phoenix-shell_git.bb": {
   "owner": "platform (release process)",
   "row": "B6"
+ },
+ "licences:no-provenance:apps/settings/public/icons": {
+  "owner": "Settings (record where the Time exhibition icon comes from)",
+  "row": "L1"
  }
 }

@@ -5,13 +5,14 @@ OpenEmbedded layer that adds the Phoenix shell to a webOS OSE build.
 | Recipe | What it does |
 | --- | --- |
 | `phoenix-shell` | Installs the QML shell and Open webOS artwork to `/usr/share/phoenix`, plus `/etc/surface-manager.d/product.env` pointing luna-surfacemanager at it. |
-| `phoenix-apps` | The original Open webOS apps and frameworks, the Phoenix web apps, their Node.js Luna services (Files' `org.webosphoenix.filemanager`, Voice Memos' `org.webosphoenix.transcriber`, the Hardware app's `org.webosphoenix.hardware`) and the web app runtime, installed by `tools/install-rootfs.py`. |
+| `phoenix-apps` | The original Open webOS apps and frameworks, the Phoenix web apps, their Node.js Luna services (Files' `org.webosphoenix.filemanager`, Voice Memos' `org.webosphoenix.transcriber`, the Hardware app's `org.webosphoenix.hardware`) and the web app runtime, installed by `tools/install-rootfs.py`, with each app's luna-service2 role and permissions (as meta-webos writes them for OSE's apps) and its activities for the configurator. The built web apps come from `PHOENIX_APPS_DIST` (an archive `tools/pack-apps-dist.sh` or CI's `apps-dist` artifact makes): BitBake runs no npm. |
+| `phoenix-diag` | `phoenix-diag`: the journal of the last boots, the kernel log, units, boot timing, memory, storage, devices, network state and a few Luna answers in one archive under `/media/internal/phoenix-diag` (docs/PRE-IMAGE-CHECKLIST.md G2). |
 | `phoenix-pty` | `org.webosphoenix.pty`, the Terminal's PTY service (`services/pty`, C++), its luna-service2 files and systemd unit, and the unprivileged `user` account (uid 1000) its shells run as. |
 | `phoenix-devices` | LunaSysMgr's device services, which OSE lacks: `com.palm.display`, `com.palm.keys`, `com.palm.vibrate`, `com.palm.ambientLightSensor` (`services/devices`, C++), over the backlight (sysfs), evdev, the vibrator and the IIO light sensor; its luna-service2 files and systemd unit. |
 | `phoenix-pdeath` | `phoenix-pdeath SIGNAL -- PROGRAM`: runs a program that ends when its parent dies (`services/pdeath`, C, Apache-2.0); the Assistant service starts llama-server through it. |
 | `packagegroup-phoenix-terminal` | The Terminal's shells and tools: bash (the default), zsh, coreutils, less, nano, vim-tiny, tmux, htop, ssh, curl, the xterm-256color terminfo and DejaVu Sans Mono. |
 | `packagegroup-phoenix-assistant` | What the Assistant and dictation run: `whisper-cpp` + `whisper-cpp-model-base-en`, `llama-cpp-server` + `phoenix-pdeath`, `qwen3-0.6b-gguf` (the built-in language model, 639 MB; `PHOENIX_BASE_MODEL`), `libvosk` + `vosk-model-small-en-us` (the wake word; x86-64, aarch64 and armv7 only), the voice: `onnxruntime` + `kitten-tts-nano` + `cmudict` for `phoenix-tts` (Kitten TTS, which `phoenix-shell` builds; x86-64 and aarch64, `PHOENIX_KITTEN`), and a fallback speech program (`PHOENIX_TTS`, Flite by default). Larger language models are downloaded in Settings > Assistant. |
-| `webos-phoenix-image` | `webos-image` + `phoenix-shell` + `phoenix-apps` + `phoenix-pty` + `phoenix-devices` + `packagegroup-phoenix-terminal` + `packagegroup-phoenix-assistant` + `kernel-modules` (every open source driver built) + `packagegroup-phoenix-firmware` + `opkg`. `PHOENIX_FIRMWARE_EXCLUDE` leaves firmware out of a small image. |
+| `webos-phoenix-image` | `webos-image` + `phoenix-shell` + `phoenix-apps` + `phoenix-pty` + `phoenix-devices` + `phoenix-diag` + `packagegroup-phoenix-terminal` + `packagegroup-phoenix-assistant` + `kernel-modules` (every open source driver built) + `packagegroup-phoenix-firmware` + `opkg`. `PHOENIX_FIRMWARE_EXCLUDE` leaves firmware out of a small image; `PHOENIX_PRODUCTION = "1"` leaves out OSE's pre-release debug-tweaks (root without a password) and its SSH server. |
 | `linux-yocto`, `linux-raspberrypi` (bbappends) | Config fragments (`recipes-kernel/linux/files/phoenix-hardware*.cfg`) that build the drivers for as much hardware as possible as modules: USB classes, HID and input, storage, Wi-Fi, Bluetooth, GPUs, cameras, sensors. OE packages each module on its own (`kernel-module-*`). |
 | `packagegroup-phoenix-firmware` | The redistributable firmware for common Wi-Fi, Bluetooth, Ethernet and graphics hardware (linux-firmware split per chip, with its licence packages), recommended so it can be excluded; about 570 MB as shipped, 216 MB with `PHOENIX_FIRMWARE_COMPRESS = "xz"`, 232 MB with `"zstd"` (docs/HARDWARE.md, "Firmware in the image"). |
 | `linux-firmware` (bbappend) | `PHOENIX_FIRMWARE_COMPRESS` (in `local.conf`; default `""`, the files as shipped): `"xz"` or `"zstd"` compresses the firmware after `do_install` as upstream's `copy-firmware.sh --xz/--zstd` does (links remade to the compressed names, licence files left as they are, each package's `FILES` matching the new names) and logs the size before and after. |
@@ -28,6 +29,12 @@ webOS OSE's `build-webos/weboslayers.py`. Use `scripts/setup-build.sh` from
 the repository root to set up a build directory with this layer added.
 
 ## Checking the layer without a build host
+
+Before the first image: docs/PRE-IMAGE-CHECKLIST.md, and
+`./phoenix check-device` (the static checkers: Luna calls and ACG groups,
+the image's contents against these recipes' `FILES`, the recipes'
+licences, pins and units, simulator-only references, licences of what
+ships), which CI runs on every change.
 
 `scripts/parse-check.sh [MACHINE...]` (default `qemux86-64 raspberrypi4-64`)
 parses every recipe and dry-runs `webos-phoenix-image` (plus the `torchd`
