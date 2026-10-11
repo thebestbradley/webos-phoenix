@@ -934,8 +934,8 @@ Accessibility, Location Services, Emergency Info, Certificate Manager,
 Device Info, Backup, Updates, VPN, Developer Mode.
 Launched without a page it lists them all. The launcher icons are drawn in
 `art/app-icons` (on the grey diamond, as Palm's preference apps were) and the
-wallpapers by
-`tools/make-wallpapers.py` (CC0); Palm's were never open-sourced.
+wallpapers by `tools/wallpapers/generate.py` (twelve, Northern Lights the
+default; `public/wallpapers/PROVENANCE.md`); Palm's were never open-sourced.
 
 ### Services
 

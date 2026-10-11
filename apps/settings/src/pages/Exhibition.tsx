@@ -82,14 +82,14 @@ export function ExhibitionPage() {
         void dockMode.setEnabled(ids);
     };
 
-    const wallpaper = WALLPAPERS.find((w) => w.file && prefs.dockwallpaper?.wallpaperFile === APP_DIR + w.file) ?? null;
+    const wallpaper = WALLPAPERS.find((w) => prefs.dockwallpaper?.wallpaperFile === APP_DIR + w.file) ?? null;
 
     if (picking) {
         return (
             <Page>
                 <PageHeader title="Exhibition Wallpaper" icon="icons/exhibition.png" />
                 <div className="wallpaper-grid">
-                    {[{ name: "None", file: "" }, ...WALLPAPERS.filter((w) => w.file)].map((w) => {
+                    {[{ name: "None", file: "", thumb: "" }, ...WALLPAPERS].map((w) => {
                         const chosen = w.file ? wallpaper === w : !wallpaper;
                         return (
                             <button key={w.name} type="button" className={"wallpaper-tile" + (chosen ? " selected" : "")}
@@ -99,7 +99,7 @@ export function ExhibitionPage() {
                                         setPicking(false);
                                     }}>
                                 <span className={"wallpaper-thumb" + (w.file ? "" : " none")}
-                                      style={w.file ? { backgroundImage: `url(${w.file})` } : undefined} />
+                                      style={w.file ? { backgroundImage: `url(${w.thumb})` } : undefined} />
                                 <span className="wallpaper-name">{w.name}</span>
                                 {chosen && <Checkmark />}
                             </button>
@@ -186,7 +186,7 @@ export function ExhibitionPage() {
                     <Group label="Wallpaper">
                         <Row title={wallpaper ? wallpaper.name : "None"} chevron onClick={() => setPicking(true)} testId="exhibition-wallpaper"
                              icon={<span className={"wallpaper-mini" + (wallpaper ? "" : " none")}
-                                         style={wallpaper ? { backgroundImage: `url(${wallpaper.file})` } : undefined} />} />
+                                         style={wallpaper ? { backgroundImage: `url(${wallpaper.thumb})` } : undefined} />} />
                     </Group>
                 </>
             )}

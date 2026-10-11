@@ -1848,7 +1848,10 @@
             return { ZoneID: z, City: z.split("/").pop().replace(/_/g, " "), Country: "" };
         })(PalmSystem.TZ),
         useNetworkTime: true,
-        wallpaper: { wallpaperName: "", wallpaperFile: "" },
+        // A file, as luna-sysmgr's conf/defaultPreferences.txt named one:
+        // Settings' Northern Lights (Theme.defaultWallpaperPath).
+        wallpaper: { wallpaperName: "Northern Lights",
+                     wallpaperFile: "/usr/palm/applications/org.webosphoenix.settings/wallpapers/northern-lights.jpg" },
         // Dock mode's own wallpaper (Preferences.cpp "dockwallpaper"), behind
         // the exhibitions; none: dock mode is black, the Time exhibition on
         // its clock_bg.png.
