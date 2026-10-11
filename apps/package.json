@@ -47,7 +47,8 @@
     "agenda",
     "clipboard",
     "assistant",
-    "dropshare"
+    "dropshare",
+    "connectors/drives/service"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

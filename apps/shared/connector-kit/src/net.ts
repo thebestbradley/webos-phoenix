@@ -3,7 +3,10 @@
 //
 // ctx.net: the sockets a connector may open (docs/SYNERGY-SDK.md "Staying
 // connected"), over what the host gives (Environment.net: a device's Node
-// net, tls and dns; the simulator's WebSocket). The same rule as ctx.http
+// net, tls and dns; the simulator's WebSocket, and binary TCP through its
+// host's relay: phoenix-sim's, tools/serve-rootfs.py's). Text sockets carry
+// XMPP and the like; binary ones ({binary: true}: writeBytes, onBytes) a
+// protocol that frames and encrypts itself (SSH). The same rule as ctx.http
 // (docs/SYNERGY-CONNECTORS.md 3.2 rule 8): only the user's server, the
 // hosts the definition names, and the targets the SRV records of those
 // name. While the server asked the account to wait (the backoff the kit
@@ -31,7 +34,7 @@ export function createNet(options: {
         }
     }
     return {
-        supports: { srv: !!env.resolveSrv, tcp: !!env.connect, websocket: !!env.websocket },
+        supports: { srv: !!env.resolveSrv, tcp: !!env.connect && !env.binaryOnly, websocket: !!env.websocket, binary: !!env.connect },
         allowHost(host: string) { if (host && !allowed(host)) hosts.push(host.toLowerCase()); },
         async resolveSrv(name: string): Promise<SrvRecord[]> {
             const domain = name.replace(/^_[^.]+\._[^.]+\./, "");
@@ -46,9 +49,15 @@ export function createNet(options: {
         },
         async connect(o): Promise<NetSocket> {
             if (!env.connect) throw refused("This device cannot open a connection to " + o.host, "UNSUPPORTED");
+            if (env.binaryOnly && (!o.binary || o.tls)) throw refused("Only binary connections without TLS can be opened here (" + o.host + ")", "UNSUPPORTED");
             if (!allowed(o.host)) throw refused("Not this account's server: " + o.host, "PERMISSION_DENIED");
             waiting();
-            return env.connect(o);
+            const sock = await env.connect(o);
+            if (o.binary && (typeof sock.writeBytes !== "function" || typeof sock.onBytes !== "function")) {
+                sock.close();
+                throw refused("This host's sockets carry text only (" + o.host + ")", "UNSUPPORTED");
+            }
+            return sock;
         },
         async websocket(url: string, protocols?: string[]): Promise<NetSocket> {
             if (!env.websocket) throw refused("WebSockets are not available here", "UNSUPPORTED");

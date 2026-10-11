@@ -1313,6 +1313,14 @@
             ]
         },
         {
+            "name": "drive-sftp",
+            "art": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.sftp/images",
+            "upscale": [
+                { "art": "drive-32x32.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" },
+                { "art": "drive-48x48.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" }
+            ]
+        },
+        {
             "name": "matrix",
             "art": "apps/connectors/matrix/public/accounts/com.webosphoenix.matrix/images",
             "upscale": [
