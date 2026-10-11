@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Google (the Google account's connector: Calendar, Contacts, Tasks): an address card and a day of the calendar
+     side by side, a tick on the day, drawn for Phoenix (Apache-2.0). Not Google's logo or its products' icons. -->
+<defs>
+  <linearGradient id="card" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e3e9e4"/></linearGradient>
+  <linearGradient id="day" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e7ece9"/></linearGradient>
+  <linearGradient id="head" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3cae7b"/><stop offset="1" stop-color="#1f7f55"/></linearGradient>
+  <linearGradient id="person" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fb3e8"/><stop offset="1" stop-color="#3f78b6"/></linearGradient>
+</defs>
+<!-- The address card behind, leaning left. -->
+<g transform="rotate(-8 100 120)">
+  <rect x="48" y="70" width="108" height="86" rx="9" fill="url(#card)" stroke="#5f6f66" stroke-width="3"/>
+  <circle cx="80" cy="104" r="14" fill="url(#person)"/>
+  <path d="M60 140 a20 18 0 0 1 40 0 z" fill="url(#person)"/>
+  <path d="M110 98 h34 M110 114 h28 M110 130 h32" stroke="#a9b6ae" stroke-width="5" stroke-linecap="round"/>
+</g>
+<!-- The day in front. -->
+<rect x="118" y="78" width="88" height="96" rx="9" fill="url(#day)" stroke="#3e5d4d" stroke-width="3"/>
+<path d="M118 87 a9 9 0 0 1 9 -9 h70 a9 9 0 0 1 9 9 v15 H118 z" fill="url(#head)"/>
+<g fill="#b4c3ba">
+  <rect x="130" y="112" width="14" height="11" rx="2"/><rect x="148" y="112" width="14" height="11" rx="2"/><rect x="166" y="112" width="14" height="11" rx="2"/><rect x="184" y="112" width="12" height="11" rx="2"/>
+  <rect x="130" y="128" width="14" height="11" rx="2"/><rect x="166" y="128" width="14" height="11" rx="2"/>
+  <rect x="130" y="144" width="14" height="11" rx="2"/><rect x="148" y="144" width="14" height="11" rx="2"/>
+</g>
+<rect x="148" y="128" width="14" height="11" rx="2" fill="#2f9a68"/>
+<circle cx="194" cy="166" r="20" fill="#2f9a68" stroke="#1d5c3f" stroke-width="3"/>
+<path d="M184 166 l7 7 l13 -15" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
