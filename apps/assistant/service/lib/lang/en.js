@@ -678,6 +678,8 @@ function textMessageWords(t, ctx) {
 function sleepTimer(t) {
     var m = /^(?:set |start |put on |turn on )?(?:a |an |the |my )?sleep timer(?: for| of| in)? (.+)$/.exec(t)
         || /^(?:stop|pause|turn off|end|fade out|switch off) (?:the |my |this )?(?:music|song|songs|playback|audio|podcast|playing|it)(?: playing)? (?:in|after) (.+)$/.exec(t)
+        // "Turn the music off in 45 minutes" (the held-out set: Qwen3 0.6B paused it at once).
+        || /^(?:turn|switch|shut) (?:the |my |this )?(?:music|song|songs|playback|audio|podcast|it) off (?:in|after) (.+)$/.exec(t)
         || /^(?:set |start )?(?:a |an )?(.+?) sleep timer$/.exec(t);
     if (!m) return null;
     var s = duration(m[1]);
@@ -1078,6 +1080,8 @@ function readMessages(t) {
 function media(t) {
     var THIS = "(?: (?:the |this |my )?(?:music|song|track|tune|playback|audio|podcast|it|album|player))?";
     if (new RegExp("^(?:pause|hold)" + THIS + "$|^stop (?:the |this |my )?(?:music|song|track|playback|audio|podcast|playing)$").test(t)) return { action: "pause" };
+    // "Turn off the music", "turn the music off" (as "stop the music": Music has no off).
+    if (/^(?:turn|switch|shut) off (?:the |this |my )?(?:music|song|track|playback|audio|podcast)$|^(?:turn|switch|shut) (?:the |this |my )?(?:music|song|track|playback|audio|podcast) off$/.test(t)) return { action: "pause" };
     if (new RegExp("^(?:resume|unpause|continue|keep playing|restart)" + THIS + "$|^(?:play|start)(?: the| my)? (?:music|song|playback) (?:again|back)$|^(?:play)$|^continue playing$").test(t)) return { action: "play" };
     if (/^(?:next|skip)(?: (?:the |this )?(?:song|track|tune|one))?$|^(?:play |go to )?(?:the )?next (?:song|track|tune|one)$|^skip (?:this|it|ahead)$/.test(t)) return { action: "next" };
     // "Play it again", "replay this song": from its start (the previous-track

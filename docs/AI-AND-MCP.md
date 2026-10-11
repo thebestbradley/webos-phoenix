@@ -1570,7 +1570,14 @@ answered right by the grammar, the original service one. Of the original
 an alarm at 5:30 tomorrow morning", "put a timer on for 4 minutes", "did
 anyone text me" and "is it going to rain this weekend". The sweep had
 the same or like phrasings, written after its author had seen the
-held-out set's misses, so these four are not a clean measure.
+held-out set's misses, so these four are not a clean measure. Nor is
+h-a-4 now: with Qwen3 0.6B behind the grammar, "turn the music off in 45
+minutes" paused the music at once (the evaluation's one unsafe action),
+so the grammar reads it as the sleep timer it is, with "turn off the
+music" (which went to the model) and "switch the music off after an
+hour" (a-sw-56, a-sw-57). And h-a-6 ("put toothpaste on the shopping
+list") may go to a list called Shopping where an account has one (the
+Synergy world's Todoist), never to a new list.
 
 ### The Assistant and Synergy (11 October 2026)
 
