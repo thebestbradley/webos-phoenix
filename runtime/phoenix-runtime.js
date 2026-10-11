@@ -5101,6 +5101,14 @@
         // After the focus has moved on (focusout fires first).
         global.document.addEventListener("focusout", function () { setTimeout(followFocus, 0); }, true);
     }
+    // The page itself going away with a field focused: a frame taken out of
+    // its card (Accounts closes a template's sign-in page when it answers,
+    // with its code field still focused) fires no focusout, and its watch
+    // goes with it: the keyboard is told, as WebKit told the IMEController
+    // when the frame went.
+    if (global.addEventListener) global.addEventListener("pagehide", function () {
+        if (!ime.manual && ime.reported) reportInput(false);
+    });
 
     runtime.imeSetManual = function (on) {
         ime.manual = !!on;

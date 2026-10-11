@@ -16,6 +16,8 @@
 //    PalmSystem.setManualKeyboardEnabled / keyboardShow / keyboardHide)
 //    shows and hides it on request and stops following the focus;
 //  * the shell's hide key blurs the element (__phoenixRuntime.imeRemoveFocus);
+//  * a focused field whose view goes, hides, or whose frame is emptied (a
+//    sign-in page Accounts is done with) tells the shell the focus went;
 //  * the keyboard coming up or going reaches the app as Enyo's
 //    "keyboardShown" event (Mojo.keyboardShown), and
 //    com.palm.systemmanager/getSystemStatus reports ime.visible as the
@@ -197,6 +199,25 @@ async function main() {
         check(last().focused === false && await page.evaluate(() => document.activeElement === document.body),
               "its view hides: the field loses the focus and the keyboard goes");
         await page.evaluate(() => document.getElementById("kbHidden").remove());
+        // ...and a frame emptied with its field focused (Accounts empties a
+        // template's sign-in page when it answers: CrossAppUI sets its src to "").
+        await page.evaluate((src) => new Promise((res) => {
+            const f = document.createElement("iframe");
+            f.id = "kbFrame";
+            f.onload = () => res();
+            f.src = src;
+            document.body.appendChild(f);
+        }), base);
+        const frame = page.frames().find((fr) => fr !== page.mainFrame() && /com\.palm\.app\.notes/.test(fr.url()));
+        await frame.waitForFunction(() => !!window.__phoenixRuntime);
+        await frame.evaluate(() => { const i = document.createElement("input"); i.id = "kbInFrame"; document.body.appendChild(i); });
+        await frame.focus("#kbInFrame");
+        await settle();
+        check(last().focused === true, "a field in a frame: focused");
+        await page.evaluate(() => { document.getElementById("kbFrame").src = ""; });
+        await page.waitForTimeout(300);
+        check(last().focused === false, "the frame emptied: the shell hears the focus went (pagehide)");
+        await page.evaluate(() => document.getElementById("kbFrame").remove());
 
         // ---- Enyo's manual mode -------------------------------------------------------------------
         await page.evaluate(() => enyo.keyboard.forceShow(enyo.keyboard.typeEmail));
