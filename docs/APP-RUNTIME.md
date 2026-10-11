@@ -2529,7 +2529,10 @@ Update All, Catalogs). Behind it is `org.webosphoenix.service.packages`
 which runs unchanged in the simulator:
 
 - **Sources** (`/etc/palm/marketplace/sources.json`, then the user's):
-  the Phoenix Marketplace (a signed catalog; for now at
+  the Phoenix Marketplace (a signed catalog whose address and pinned root
+  key are `/etc/palm/phoenix/servers.json`'s "catalog",
+  [PLATFORM-CLIENT.md](PLATFORM-CLIENT.md#the-app-catalog), with the signed
+  revocation list and staged app rollouts; in the simulator at
   `http://127.0.0.1:8088/v1/`, `server/marketplace/bin/serve.sh`, or the
   simulator's Services > Marketplace Catalog or `phoenix-sim --marketplace`,
   which start it and open the Marketplace). When it cannot be reached, the
@@ -2725,7 +2728,9 @@ which is `com.palm.app.updates` (the alerts open it).
 The system is installed with RAUC into two root slots, so:
 
 1. a daily activity reads the feed, `<feed>/<compatible>/<channel>.json`
-   (`/etc/palm/updates.json`; `server/updates` writes them), stable or beta;
+   (`/etc/palm/phoenix/servers.json` "updates"; `server/updates` writes them),
+   stable, beta or dev; signed (format 2) through the owner's root when the image
+   pins it, with staged rollouts and revoked builds ([PLATFORM-CLIENT.md](PLATFORM-CLIENT.md#system-updates));
 2. over Wi-Fi (or when asked) it downloads the bundle, checks its size and
    SHA-256 against the feed, and RAUC writes it to the other slot, while the
    device is in use. Both are an ongoing activity in the notification area;
@@ -2758,10 +2763,12 @@ its bundles, and publishes releases with its admin API (`POST
 /api/admin/updates?compatible=&version=&build=&channel=&note=...` with the
 bundle as the body; `POST /api/admin/updates/withdraw`; `GET /api/updates`
 lists every channel). Both it and `server/updates/bin/updates.php` write the
-feed with `server/updates/src/UpdateFeed.php`. A device's default
-(`/etc/palm/updates.json`) is that server: `http://127.0.0.1:8088/updates/`
-on this computer (the simulator's Services > Marketplace Catalog starts it),
-the catalog server's public address once it is hosted.
+feed with `server/updates/src/UpdateFeed.php`. The simulator's servers.json
+(`services/account/etc/palm/phoenix/servers.json`) names that server:
+`http://127.0.0.1:8088/updates/` on this computer (the simulator's Services >
+Marketplace Catalog starts it); a device image's names the platform's feeds
+host (meta-phoenix `PHOENIX_FEEDS_URL`). After the restart into a new system
+the service marks it good (`rauc status mark-good`).
 `com.palm.power/shutdown/machineReboot` restarts phoenix-sim (`simProcess`),
 or reloads the page under `tools/serve-rootfs.py`; for a system update
 (`reason: "System update"`) phoenix-sim starts again with `--updating`, and

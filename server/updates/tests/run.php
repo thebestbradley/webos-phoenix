@@ -53,6 +53,13 @@ check('builds are whole numbers', $code !== 0 && str_contains($out, 'whole numbe
 run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinephonepro --version 1.2.0-beta1 --build 115 --channel beta", $code);
 check('channels are separate', $code === 0 && feedOf('phoenix-pinephonepro', 'beta')['release']['build'] === 115
     && feedOf('phoenix-pinephonepro')['release']['build'] === 110);
+run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinephonepro --version 1.3.0-dev.7 --build 130 --channel dev --rollout 25 --seed n7", $code);
+$d = feedOf('phoenix-pinephonepro', 'dev')['release'] ?? [];
+check('the dev channel, with a staged rollout', $code === 0 && $d['build'] === 130 && $d['rollout'] === ['percent' => 25, 'seed' => 'n7']);
+$out = run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinephonepro --version 1.3.1 --build 131 --channel dev --rollout 120", $code);
+check('a rollout is a percentage', $code !== 0 && str_contains($out, 'percentage'));
+$out = run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinephonepro --version 1.3.1 --build 131 --channel nightly", $code);
+check('channels are stable, beta and dev', $code !== 0);
 
 run('withdraw --compatible phoenix-pinephonepro', $code);
 $f = feedOf('phoenix-pinephonepro');

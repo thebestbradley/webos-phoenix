@@ -49,8 +49,43 @@ DEPENDS = "mpg123-native"
 do_configure[noexec] = "1"
 do_compile[noexec] = "1"
 
+# Where the image's devices find the Phoenix platform and which keys they
+# trust: /etc/palm/phoenix/servers.json, the one configuration every
+# platform client reads (docs/PLATFORM-CLIENT.md; tools/servers-json.py).
+# Set them in local.conf or a distro/machine conf; the hosts below are the
+# proposal of docs/PLATFORM.md 3 (OPEN-QUESTIONS Q1). The keys are the
+# public halves the owner makes offline (docs/PLATFORM.md 7.1, Q45): with
+# PHOENIX_CATALOG_ROOT_KEY and PHOENIX_UPDATES_ROOT_KEY set, devices take
+# only catalogs and update feeds the root's delegated key signed; left
+# empty (development images), the catalog's key is checked by the user and
+# update feeds are taken unsigned (RAUC still checks every bundle).
+# PHOENIX_API_URL empty: no account, cloud backup, push or assistant
+# service ("not set up").
+PHOENIX_FEEDS_URL ?= "https://feeds.webosphoenix.org/"
+PHOENIX_API_URL ?= "https://api.webosphoenix.org/"
+PHOENIX_ACCOUNT_ISSUER ?= "https://api.webosphoenix.org"
+PHOENIX_PUSH_URL ?= "https://push.webosphoenix.org/"
+PHOENIX_PROBE_URL ?= "https://connect.webosphoenix.org/generate_204"
+PHOENIX_UPDATE_CHANNEL ?= "stable"
+PHOENIX_UPDATE_CHANNELS ?= "stable,beta,dev"
+PHOENIX_CATALOG_KEY ?= ""
+PHOENIX_CATALOG_ROOT_KEY ?= ""
+PHOENIX_UPDATES_KEY ?= ""
+PHOENIX_UPDATES_ROOT_KEY ?= ""
+PHOENIX_DRIVERS_KEY ?= ""
+PHOENIX_API_KEY ?= ""
+
 do_install() {
     ${PYTHON} ${S}/tools/install-rootfs.py ${D}
+    # The simulator's servers.json (this computer's servers) is replaced
+    # with the image's.
+    ${PYTHON} ${S}/tools/servers-json.py ${D}${sysconfdir}/palm/phoenix/servers.json \
+        --name "${DISTRO_NAME} ${MACHINE}" --feeds "${PHOENIX_FEEDS_URL}" --api "${PHOENIX_API_URL}" \
+        --issuer "${PHOENIX_ACCOUNT_ISSUER}" --push "${PHOENIX_PUSH_URL}" --probe "${PHOENIX_PROBE_URL}" \
+        --channel "${PHOENIX_UPDATE_CHANNEL}" --channels "${PHOENIX_UPDATE_CHANNELS}" \
+        --catalog-key "${PHOENIX_CATALOG_KEY}" --catalog-root "${PHOENIX_CATALOG_ROOT_KEY}" \
+        --updates-key "${PHOENIX_UPDATES_KEY}" --updates-root "${PHOENIX_UPDATES_ROOT_KEY}" \
+        --drivers-key "${PHOENIX_DRIVERS_KEY}" --account-key "${PHOENIX_API_KEY}"
     # OSE's audiod plays raw PCM only (no MP3, no WAV header): every system
     # sound, ringtone and app sound gets "<file>.pcm", 16-bit 44.1 kHz
     # stereo, which the shell plays (tools/sounds-to-pcm.py,
@@ -71,7 +106,8 @@ do_install() {
 # /usr/palm; Just Type and the system alerts' pages under /usr/lib/luna;
 # the services' and apps' luna-service2 files (with each app's generated
 # role and permissions); their /etc/palm configuration (db8 kinds, backup
-# registrations, the update, Marketplace and Hardware sources).
+# registrations, the Marketplace and Hardware sources, and
+# /etc/palm/phoenix/servers.json: the platform's servers and keys).
 FILES:${PN} = " \
     /media/cryptofs/apps \
     /media/internal/ringtones \

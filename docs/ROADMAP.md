@@ -471,8 +471,9 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
       (`server/marketplace`: `/updates/`, published with its admin API; the
       device's default feed) ([APP-RUNTIME.md](APP-RUNTIME.md#system-updates)); to do:
       the A/B image, RAUC's bootloader setup and signing keys per device,
-      and hosting the catalog server (its public address in
-      `/etc/palm/updates.json` and the Marketplace's sources)
+      and hosting the platform (its addresses and keys in
+      `/etc/palm/phoenix/servers.json`, meta-phoenix's `PHOENIX_*` settings;
+      the device side is ready: [PLATFORM-CLIENT.md](PLATFORM-CLIENT.md))
 
 ## 2.0: modern webOS
 

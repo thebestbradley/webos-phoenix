@@ -16,7 +16,10 @@ and the device installs only a bundle newer than what it runs.
 **Phoenix's catalog server serves it** (`server/marketplace`: the
 Marketplace's catalog at `/v1/`, this feed at `/updates/`, one server), and
 publishes releases with its admin API (`POST /api/admin/updates`). Devices
-read it there by default (`services/updates/etc/palm/updates.json`).
+read it there in the simulator (its `/etc/palm/phoenix/servers.json`,
+"updates"). Channels: stable, beta and dev; `--rollout PERCENT [--seed TEXT]`
+stages a release (docs/PLATFORM-CLIENT.md). This server writes format 1,
+unsigned, as a development feed; the platform writes format 2, signed.
 `src/UpdateFeed.php` writes the feed for both that server and this command.
 
 ## On this computer

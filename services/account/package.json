@@ -1,0 +1,11 @@
+{
+  "name": "org.webosphoenix.service.account",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix's Phoenix Account (Luna): the platform's servers (/etc/palm/phoenix/servers.json and Developer Mode's override), sign-in with the device authorization grant or the browser sheet, the device's registration, signed entitlements, and the clients of Phoenix Cloud backup, push relay channels, the OAuth token relay and the assistant provider; inert until a server is configured",
+  "license": "Apache-2.0",
+  "main": "service.js",
+  "dependencies": {
+    "@phoenix/platform": "*"
+  }
+}

@@ -6,7 +6,7 @@
     "permissions": [
         {
             "service": "org.webosphoenix.hardware",
-            "outbound": ["com.palm.activitymanager", "com.webos.notification", "org.webosphoenix.ongoing"]
+            "outbound": ["com.palm.activitymanager", "com.webos.notification", "org.webosphoenix.ongoing", "com.webos.service.devmode"]
         }
     ]
 }
