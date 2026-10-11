@@ -65,9 +65,13 @@ export async function registeredClient(ctx: BaseContext, file: string, provider:
     return out;
 }
 
-/** "<name> is not available in this build" (errorCode NOT_AVAILABLE): Phoenix's app is not registered here. */
-export function notAvailable(name: string): Error {
-    return fail(name + " is not available in this build: Phoenix's app is not registered with " + name +
+/**
+ * "<what> is not available in this build" (errorCode NOT_AVAILABLE):
+ * Phoenix's app is not registered with the provider (name) here. what: the
+ * provider's name, or what needs it ("Sign In with Todoist").
+ */
+export function notAvailable(name: string, what?: string): Error {
+    return fail((what || name) + " is not available in this build: Phoenix's app is not registered with " + name +
                 " here (docs/DEVELOPER-APPS.md)", "NOT_AVAILABLE");
 }
 
@@ -141,7 +145,7 @@ export function formBody(o: Record<string, Json>): string {
 /** JSON calls to a provider's REST API (docs above). */
 export function restApi(ctx: BaseContext, opts: RestOptions): RestApi {
     const url = (path: string, query?: Record<string, Json>): string => {
-        const u = /^https?:\/\//.test(path) ? path : opts.base.replace(/\/+$/, "") + (path.charAt(0) === "/" ? "" : "/") + path;
+        const u = /^https?:\/\//.test(path) ? path : !path ? opts.base : opts.base.replace(/\/+$/, "") + (path.charAt(0) === "/" ? "" : "/") + path;
         const q = queryString(query);
         return q ? u + (u.indexOf("?") < 0 ? "?" : "&") + q : u;
     };

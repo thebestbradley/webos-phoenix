@@ -32,5 +32,5 @@ export type { CapabilityStats } from "./engine";
 export * from "./types";
 export { registeredClient, notAvailable, oauthSignIn, forgetOldKey, restApi, formBody } from "./registered";
 export type { RegisteredClient, RestApi, RestOptions } from "./registered";
-export { syncContainers, containerRemoteIds, rruleOf, rruleText, joinUrlOf, meetingNote } from "./pim";
+export { syncContainers, containerRemoteIds, rruleOf, rruleText, joinUrlOf, meetingNote, alarmBefore, alarmMinutes, dateParts, allDaySpan, allDayDates, plainText } from "./pim";
 export type { Container } from "./pim";

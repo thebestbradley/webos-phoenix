@@ -74,8 +74,9 @@ enyo.kind({
         this.templateId = t.templateId || "";
         this.$.title.setContent(t.loc_name || "");
         // The template's own icon (this page is the app's accounts/wizard.html).
+        // (The Accounts app may hand the template with its icons' paths made absolute: their file name is enough.)
         var icon = t.icon && (t.icon.loc_48x48 || t.icon.loc_32x32);
-        if (icon) this.$.titleIcon.setSrc("../public/accounts/" + this.templateId + "/" + icon);
+        if (icon) this.$.titleIcon.setSrc("../public/accounts/" + this.templateId + "/images/" + String(icon).replace(/^.*\//, ""));
         // The service is the one the template's validator names.
         var address = (t.validator && t.validator.address) || "";
         this.service = address.replace(/checkCredentials$/, "") || "";

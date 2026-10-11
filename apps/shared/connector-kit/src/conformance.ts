@@ -70,6 +70,8 @@ export interface ConformanceFixture {
     share?: { content: Json; audience?: string };
     /** Files the share's content names (path -> bytes and type), for ctx.readFile. */
     files?: Record<string, { bytes: Uint8Array; mimeType: string }>;
+    /** The image's settings the connector reads (/etc/palm/<name>: a provider's registration, pointing at the fake server). */
+    systemConfig?(name: string): Json | null;
 }
 
 export interface ConformanceResult { name: string; ok: boolean; error?: string }
@@ -126,7 +128,8 @@ async function setup(def: ConnectorDefinition, fx: ConformanceFixture, periodic:
             const f = fx.files && fx.files[path];
             if (!f) throw new Error("no file " + path + " in the fixture's files");
             return f;
-        }
+        },
+        systemConfig: async (name: string) => (fx.systemConfig ? fx.systemConfig(name) : null)
     });
     return { methods, db, tempdb, bus, server, accountId: ACCOUNT, clock, providers, files };
 }

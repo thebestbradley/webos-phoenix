@@ -87,6 +87,65 @@ export function rruleText(rrule: Json, ev: { allDay?: boolean; tzId?: string }):
     return synckit.ical.rruleValue(rrule, ev, ev.tzId || "UTC");
 }
 
+/** A reminder this many minutes before the start, as the Calendar app keeps one (an iCalendar VALARM's trigger). */
+export function alarmBefore(minutes: number | null | undefined): Json[] {
+    if (minutes === null || minutes === undefined || !(minutes >= 0)) return [];
+    const m = Math.round(minutes);
+    const value = m === 0 ? "PT0M" : m % 1440 === 0 ? "-P" + m / 1440 + "D" : m % 60 === 0 ? "-PT" + m / 60 + "H" : "-PT" + m + "M";
+    return [{ action: "display", alarmTrigger: { valueType: "DURATION", value } }];
+}
+
+/** The first reminder's minutes before the start, or null (an absolute or after-start trigger: none). */
+export function alarmMinutes(alarm: Json): number | null {
+    const a = (Array.isArray(alarm) ? alarm : []).find((x: Json) => x && x.alarmTrigger && x.alarmTrigger.valueType === "DURATION" && x.alarmTrigger.related !== "end");
+    if (!a) return null;
+    const ms = synckit.datetime.parseDuration(String(a.alarmTrigger.value || ""));
+    if (ms === null || isNaN(ms) || ms > 0) return null;
+    return Math.round(-ms / 60000) || 0;
+}
+
+/** "2026-10-12" (or "2026-10-12T00:00:00...") -> {year, month, day}. */
+export function dateParts(s: string): { year: number; month: number; day: number } | null {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || ""));
+    return m ? { year: +m[1], month: +m[2], day: +m[3] } : null;
+}
+
+/**
+ * An all-day event's span, from its first day and the day after its last
+ * (exclusive, as Graph, Google and iCalendar give it) -> dtstart at local
+ * midnight and dtend at 23:59:59 of the last day, as apps/dav writes them.
+ */
+export function allDaySpan(first: string, endExclusive: string, tz: string): { dtstart: number; dtend: number } | null {
+    const a = dateParts(first);
+    if (!a) return null;
+    const b = dateParts(endExclusive) || a;
+    const days = Math.max(1, Math.round((Date.UTC(b.year, b.month - 1, b.day) - Date.UTC(a.year, a.month - 1, a.day)) / 86400000));
+    const last = new Date(Date.UTC(a.year, a.month - 1, a.day + days - 1));
+    return {
+        dtstart: synckit.datetime.fromWall({ year: a.year, month: a.month, day: a.day, hour: 0, minute: 0, second: 0 }, tz),
+        dtend: synckit.datetime.fromWall({ year: last.getUTCFullYear(), month: last.getUTCMonth() + 1, day: last.getUTCDate(), hour: 23, minute: 59, second: 59 }, tz)
+    };
+}
+
+/** An all-day event's days back: the first day and the day after the last ("YYYY-MM-DD"). */
+export function allDayDates(dtstart: number, dtend: number, tz: string): { first: string; endExclusive: string } {
+    const s = synckit.datetime.wall(dtstart, tz), e = synckit.datetime.wall(Math.max(dtstart, dtend), tz);
+    const after = new Date(Date.UTC(e.year, e.month - 1, e.day + 1));
+    const iso = (y: number, m: number, d: number) => y + "-" + pad(m) + "-" + pad(d);
+    return { first: iso(s.year, s.month, s.day), endExclusive: iso(after.getUTCFullYear(), after.getUTCMonth() + 1, after.getUTCDate()) };
+}
+
+/** The text of an HTML body (an event's or a task's notes): tags dropped, entities decoded, blank lines kept short. */
+export function plainText(html: string): string {
+    return String(html || "")
+        .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, "")
+        .replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|tr|h\d)>/gi, "\n")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#39;|&apos;/g, "'")
+        .replace(/&#(\d+);/g, (_m, n) => String.fromCharCode(Number(n))).replace(/&amp;/g, "&")
+        .replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 // Meeting services whose addresses get a Join (docs/SYNERGY-CONNECTORS.md 7).
 const MEETING = /https:\/\/(?:[a-z0-9-]+\.)*(?:teams\.microsoft\.com\/l\/meetup-join|teams\.live\.com\/meet|zoom\.us\/(?:j|my|w)|zoomgov\.com\/j|meet\.google\.com|[a-z0-9-]+\.webex\.com\/(?:meet|join|[a-z0-9-]+\/j\.php)|meet\.jit\.si)[^\s<>"')\]]*/i;
 

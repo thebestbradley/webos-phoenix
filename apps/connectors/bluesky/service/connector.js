@@ -75,7 +75,7 @@ function settings(ctx) {
 // Sign In with Bluesky needs the client's address and the system's sheet for the browser step.
 function oauthAvailable(ctx) {
     return settings(ctx).then(function (c) {
-        if (!c.clientId || !c.redirectUri) return { available: false, reason: kit.notAvailable("Sign In with Bluesky").message + ". An app password works instead." };
+        if (!c.clientId || !c.redirectUri) return { available: false, reason: kit.notAvailable("Bluesky", "Sign In with Bluesky").message + ". An app password works instead." };
         return Promise.resolve().then(function () { return ctx.luna.call(OAUTH_SVC + "sheet", { probe: true }); }).then(function (r) {
             if (r && r.returnValue !== false) return { available: true, client: c };
             throw new Error("no sheet");
