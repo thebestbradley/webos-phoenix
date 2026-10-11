@@ -559,8 +559,34 @@ function nameAtStart(rest, ctx) {
     return best;
 }
 
-// "text sam i'm late", "send a message to sam saying hi", "tell sam that ..."
+// The chat network a message is to go by ("message sam on telegram: hi",
+// "send a matrix message to sam saying hi"): {t: the words without it, via}.
+var CHAT_NET = "(jabber|xmpp|matrix|delta ?chat|telegram)";
+function chatNetwork(t) {
+    var via = "", m;
+    function net(w) { return /^(?:jabber|xmpp)$/.test(w) ? "jabber" : /^delta ?chat$/.test(w) ? "deltachat" : w; }
+    if ((m = new RegExp("^(send (?:a |an )?)" + CHAT_NET + " (?:message|text|chat|msg) to ").exec(t))) {
+        via = net(m[2]);
+        t = m[1] + "message to " + t.slice(m[0].length);
+    } else if ((m = new RegExp("^((?:text|message|send|write to|tell|ping) .+?) (?:on|via|over|through|using|by) " + CHAT_NET + "(?=$|,|:| saying| that| to say| and say)").exec(t))) {
+        via = net(m[2]);
+        t = m[1] + t.slice(m[0].length);
+    } else if ((m = new RegExp("^((?:text|message|send|write to|ping) \\S+(?: \\S+)?) (?:on|via|over|through|using) " + CHAT_NET + " (.+)$").exec(t))) {
+        via = net(m[2]);
+        t = m[1] + ": " + m[3];
+    }
+    return { t: t, via: via };
+}
+
+// "text sam i'm late", "send a message to sam saying hi", "tell sam that ...",
+// "message sam on telegram: hi" (via: the chat network)
 function textMessage(t, ctx) {
+    var cn = chatNetwork(t);
+    var r = textMessageWords(cn.t, ctx);
+    if (r && cn.via) r.via = cn.via;
+    return r;
+}
+function textMessageWords(t, ctx) {
     var m = /^(?:text|message|sms|imessage|send (?:a |an )?(?:text|message|sms)(?: message)? to|send|tell|write to|write) (.+)$/.exec(t);
     if (!m) return null;
     var rest = m[1];
@@ -2527,6 +2553,10 @@ var say = {
     confirmCall: function (who, number) { return "Call " + (who ? who + " (" + number + ")" : number) + "?"; },
     calling: function (who) { return "Calling " + who + "."; },
     confirmText: function (who, message) { return "Send \"" + message + "\" to " + who + "?"; },
+    confirmChat: function (who, message, net) { return "Send \"" + message + "\" to " + who + " on " + net + "?"; },
+    sentChat: function (who, net) { return "Sent to " + who + " on " + net + "."; },
+    noChatAccount: function (net) { return "You're not signed in to " + net + ". Add the account in Accounts first."; },
+    noChatAddress: function (who, net) { return who + " has no " + net + " address in your contacts."; },
     sent: function (who) { return "Sent to " + who + "."; },
     composing: function (who) { return "What would you like to say to " + who + "? I've opened Messaging."; },
     cancelled: function () { return "OK, I won't."; },

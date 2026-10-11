@@ -1,0 +1,11 @@
+{
+    "org.webosphoenix.service.matrix": [
+        "database.operation",
+        "activity.operation",
+        "accounts.operation",
+        "accounts.transport",
+        "notification.operation",
+        "messaging.operation",
+        "oauth.signin"
+    ]
+}

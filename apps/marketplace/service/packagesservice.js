@@ -115,9 +115,9 @@ function clone(o) { return JSON.parse(JSON.stringify(o)); }
 //            (/etc/palm/marketplace/preinstalled.json), the version each
 //            has now (its appinfo.json)
 //   firstParty() (optional) -> [{id, sourceId}]: Phoenix's own connector
-//            packages the device does not come with but trusts from its
-//            catalog (preinstalled.json "catalog": the drives), installed
-//            without Developer Mode as the pre-installed ones are
+//            packages the device does not come with but trusts as it trusts
+//            those (preinstalled.json "firstParty": the drives, Jabber,
+//            Matrix, Delta Chat)
 //   now(), log(msg) (optional)
 //   pending({appId, catalogId, sourceId, title, icon, state, progress,
 //            errorText}) (optional): an install as it goes, for the
@@ -177,8 +177,11 @@ function createPackagesService(deps) {
         try { return (deps.preinstalled ? deps.preinstalled() : []) || []; } catch (e) { return []; }
     }
     function isPreinstalled(id) { return preinstalledList().some(function (p) { return p.id === id; }); }
+    // Phoenix's own connector packages the device does not come with but
+    // vouches for (preinstalled.json "firstParty": the drives, Jabber,
+    // Matrix, Delta Chat): installed from a Phoenix catalog it ships with as a
+    // pre-installed one is, without Developer Mode.
     function isFirstParty(id) {
-        if (isPreinstalled(id)) return true;
         try { return ((deps.firstParty ? deps.firstParty() : []) || []).some(function (p) { return p.id === id; }); } catch (e) { return false; }
     }
     function sourceOf(s, id) { return s.sources.filter(function (x) { return x.id === id; })[0] || null; }
@@ -373,9 +376,9 @@ function createPackagesService(deps) {
                 if (seen[t.templateId]) return;
                 seen[t.templateId] = true;
                 // Phoenix's own connector from the catalog the device ships with
-                // (pre-installed or preinstalled.json "catalog": the drives):
+                // (pre-installed or preinstalled.json "firstParty": the drives, Jabber, ...):
                 // installed without Developer Mode (firstPartyEntry).
-                if (t.package && !t.package.builtin && isFirstParty(t.package.id) && src.builtin && !!src.key) {
+                if (t.package && !t.package.builtin && (isPreinstalled(t.package.id) || isFirstParty(t.package.id)) && src.builtin && !!src.key) {
                     t = Object.assign({}, t, { package: Object.assign({}, t.package, { firstParty: true }) });
                 }
                 out.push(t);
@@ -443,7 +446,8 @@ function createPackagesService(deps) {
     // SHA-256 in the index) is the catalog's.
     function firstPartyEntry(s, entry) {
         var src = sourceOf(s, entry.sourceId);
-        return entry.kind === "connector" && isFirstParty(entry.id) && !!src && src.builtin && src.kind === "phoenix" && !!src.key;
+        return entry.kind === "connector" && (isPreinstalled(entry.id) || isFirstParty(entry.id)) &&
+            !!src && src.builtin && src.kind === "phoenix" && !!src.key;
     }
 
     // The package's bytes -> its app, or an error saying why it cannot be installed.

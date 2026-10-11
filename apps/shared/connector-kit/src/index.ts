@@ -28,5 +28,6 @@ export { shareTarget, shareTypes, shareDeclaration, checkShare, accountLabel, SH
 export { templateSignUp, signUpProblems } from "./signup";
 export type { SignUp } from "./signup";
 export { syncObjects, removeObjects, emptyStats } from "./engine";
+export { createNet } from "./net";
 export type { CapabilityStats } from "./engine";
 export * from "./types";

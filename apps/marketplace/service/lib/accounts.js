@@ -30,7 +30,7 @@ var AUTH = ["password", "app-password", "oauth", "api-key", "none"];
 var REGISTRATION = ["none", "required"];
 var SERVER = ["user", "fixed", "discovered"];
 var PHOENIX_SERVERS = ["none", "push-relay", "token-relay"];
-var PUSH = ["poll", "unifiedpush", "relay"];
+var PUSH = ["poll", "unifiedpush", "relay", "connection"];
 var STATUS = ["stable", "beta", "experimental"];
 
 function str(v, max) { return typeof v === "string" ? v.slice(0, max || 4000) : ""; }

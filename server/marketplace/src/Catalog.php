@@ -477,7 +477,7 @@ final class Catalog
         'auth.registration' => ['none', 'required'],
         'server' => ['user', 'fixed', 'discovered'],
         'privacy.phoenixServers' => ['none', 'push-relay', 'token-relay'],
-        'push' => ['poll', 'unifiedpush', 'relay'],
+        'push' => ['poll', 'unifiedpush', 'relay', 'connection'],
         'status' => ['stable', 'beta', 'experimental'],
     ];
 
@@ -576,7 +576,7 @@ final class Catalog
         // as Phoenix's own, firstPartyPackages), or one of Phoenix's own connector packages that
         // is installed from the catalog only (builtin false, no preinstalled: the drives; its id
         // in Phoenix's namespaces, the package uploaded as Phoenix's own; devices trust it from
-        // preinstalled.json "catalog"). A developer's connector lists its own (catalog.json).
+        // preinstalled.json "firstParty"). A developer's connector lists its own (catalog.json).
         $preinstalled = $package['preinstalled'] ?? false;
         if (!is_bool($preinstalled) || ($preinstalled && ($package['builtin'] ?? null) !== false)) {
             throw new CheckFailed('package: preinstalled is true or false, and only for a package (builtin: false)');

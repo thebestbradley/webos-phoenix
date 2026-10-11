@@ -1,0 +1,22 @@
+{
+    "appId": "org.webosphoenix.service.telegram",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.service.telegram"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.telegram",
+            "outbound": [
+                "org.webosphoenix.service.telegram",
+                "com.palm.db",
+                "com.palm.tempdb",
+                "com.palm.activitymanager",
+                "com.palm.service.accounts",
+                "com.webos.notification",
+                "org.webosports.service.messaging"
+            ]
+        }
+    ]
+}

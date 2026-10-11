@@ -37,7 +37,7 @@ import type { DbObject, RequestFn } from "@phoenix/synckit";
 import * as memdbModule from "@phoenix/synckit/src/test/memdb.js";
 import { createConnectorService, hasFiles } from "./service";
 import type { LocalFiles } from "./files";
-import type { ConnectorDefinition, Json, ServiceMethods, ValidateParams } from "./types";
+import type { ConnectorDefinition, Environment, Json, ServiceMethods, ValidateParams } from "./types";
 
 export interface FakeServer {
     request: RequestFn;
@@ -70,6 +70,18 @@ export interface ConformanceFixture {
     share?: { content: Json; audience?: string };
     /** Files the share's content names (path -> bytes and type), for ctx.readFile. */
     files?: Record<string, { bytes: Uint8Array; mimeType: string }>;
+    /**
+     * More of the environment the connector runs in, from its fake server:
+     * sockets (net) for a connector that keeps a connection, helpers, settings.
+     * The server's unauthorized() and throttle() then concern those too.
+     */
+    environment?(server: FakeServer): Partial<Environment>;
+    /**
+     * The steps the sign-in page takes before the validator (a phone number,
+     * then the code sent to it): run with the service's methods, they give
+     * more of the validator's parameters (a finished session's key).
+     */
+    beforeValidate?(methods: ServiceMethods, server: FakeServer): Promise<Json>;
 }
 
 export interface ConformanceResult { name: string; ok: boolean; error?: string }
@@ -119,7 +131,7 @@ async function setup(def: ConnectorDefinition, fx: ConformanceFixture, periodic:
     };
     const bus = m.createFakeBus({ db, tempdb, accounts: { [ACCOUNT]: account }, credentials: {}, handlers });
     const files = memoryFiles();
-    methods = createConnectorService(def, {
+    methods = createConnectorService(def, Object.assign({}, fx.environment ? fx.environment(server) : {}, {
         luna: bus, request: server.request, log: () => {}, periodicSync: periodic, now: () => clock.t, files,
         sleep: async (ms: number) => { clock.t += ms; },
         readFile: async (path: string) => {
@@ -127,7 +139,7 @@ async function setup(def: ConnectorDefinition, fx: ConformanceFixture, periodic:
             if (!f) throw new Error("no file " + path + " in the fixture's files");
             return f;
         }
-    });
+    }));
     return { methods, db, tempdb, bus, server, accountId: ACCOUNT, clock, providers, files };
 }
 
@@ -146,7 +158,8 @@ function memoryFiles(): LocalFiles & { data: Record<string, Uint8Array> } {
 }
 
 async function signIn(s: Setup, fx: ConformanceFixture): Promise<Json> {
-    const r = await s.methods.checkCredentials(Object.assign({ templateId: fx.template.templateId }, fx.validateParams));
+    const before = fx.beforeValidate ? await fx.beforeValidate(s.methods, s.server) : {};
+    const r = await s.methods.checkCredentials(Object.assign({ templateId: fx.template.templateId }, fx.validateParams, before));
     assert(r.returnValue, "checkCredentials failed: " + (r.errorCode || "") + " " + (r.errorText || ""));
     assert(r.credentials && typeof r.credentials === "object", "checkCredentials gave no credentials");
     // What com.palm.service.accounts does with the validator's answer (handlers/create.js).

@@ -46,8 +46,16 @@ export function defineConnector<T extends ConnectorDefinition>(def: T): T {
         if (!(s >= 900)) problems.push("schedule.every: 15m or more (docs/SYNERGY-CONNECTORS.md 3.2 rule 6)");
     }
     Object.keys(def.methods || {}).forEach((name) => {
-        if (["checkCredentials", "onCreate", "onEnabled", "onCredentialsChanged", "onDelete", "sync"].concat(FILES_METHODS).indexOf(name) >= 0)
+        if (["checkCredentials", "onCreate", "onEnabled", "onCredentialsChanged", "onDelete", "sync"].concat(FILES_METHODS).indexOf(name) >= 0 ||
+            (def.connection && ["connect", "disconnect"].indexOf(name) >= 0))
             problems.push("methods." + name + ": the kit makes this one from the definition");
+    });
+    if (def.connection !== undefined && (!def.connection || typeof def.connection.open !== "function"))
+        problems.push("connection.open: a function (ctx) -> the open connection, with close()");
+    (["settings", "helpers"] as const).forEach((k) => {
+        const v = def[k];
+        if (v !== undefined && (!Array.isArray(v) || v.some((x) => typeof x !== "string" || !/^[A-Za-z0-9._-]+$/.test(x))))
+            problems.push(k + ": names (letters, digits, . _ -)");
     });
     problems.push(...shareProblems(def));
     problems.push(...signUpProblems(def.signUp));

@@ -1,0 +1,166 @@
+<!doctype html>
+<!-- Copyright (c) 2026 webOS Phoenix contributors
+     SPDX-License-Identifier: Apache-2.0
+
+     The Delta Chat account's sign-in page (the template's validator.customUI;
+     the protocol of the kit's example page: ?enyoWindowParams, and the
+     answer posted as "enyoCrossAppResult=" + JSON). An email address and
+     its password (Delta Chat's core finds the servers), or a new address on
+     a chatmail server, as Delta Chat's own apps make one ("dcaccount:").
+     A build without Delta Chat's core says so first (available). -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>Delta Chat</title>
+    <style>
+        body { margin: 0; font-family: Prelude, "Helvetica Neue", Arial, sans-serif; background: #e5e5e5; color: #333; }
+        header { display: flex; align-items: center; justify-content: center; gap: 8px; height: 50px; background: #f4f4f4; border-bottom: 1px solid #bbb; font-size: 18px; }
+        main { padding: 12px 16px 16px; max-width: 480px; margin: 0 auto; }
+        label { display: block; font-size: 13px; font-weight: bold; color: #555; margin: 12px 4px 6px; text-transform: uppercase; }
+        input { box-sizing: border-box; width: 100%; font-size: 17px; padding: 10px; border: 1px solid #aaa; border-radius: 8px; background: #fff; }
+        p { font-size: 14px; line-height: 1.4; margin: 4px; }
+        .tabs { display: flex; margin-top: 8px; border: 1px solid #888; border-radius: 8px; overflow: hidden; }
+        .tabs button { flex: 1; border: 0; border-radius: 0; font-size: 15px; padding: 8px; background: #f8f8f8; }
+        .tabs button.on { background: #4a4a4a; color: #fff; }
+        .note { margin-top: 12px; padding: 8px 10px; border-radius: 8px; background: #e3eefa; border: 1px solid #9fbbe0; font-size: 13px; }
+        .note.warn { background: #f6f1dc; border-color: #d8cc9a; }
+        .error { color: #b00; min-height: 1.4em; }
+        .buttons { display: flex; gap: 10px; margin-top: 12px; }
+        .buttons button { flex: 1; font-size: 17px; padding: 10px; border-radius: 8px; border: 1px solid #888; background: #f8f8f8; }
+        button.primary { background: #4a4a4a; color: #fff; border-color: #333; }
+        button:disabled { opacity: 0.5; }
+        .hidden { display: none; }
+        .signup { text-align: center; margin-top: 14px; font-size: 14px; }
+        .signup a { color: #1f5fa8; }
+    </style>
+</head>
+<body>
+    <header><img src="../public/accounts/com.webosphoenix.deltachat/images/deltachat-32x32.png" srcset="../public/accounts/com.webosphoenix.deltachat/images/deltachat-32x32@2x.png 2x, ../public/accounts/com.webosphoenix.deltachat/images/deltachat-32x32@3x.png 3x" width="32" height="32" alt=""> Delta Chat</header>
+    <main>
+        <p class="note warn hidden" id="unavailable" role="alert"></p>
+        <div id="form">
+            <div class="tabs" id="tabs">
+                <button id="tabLogin" class="on">I have an address</button>
+                <button id="tabNew">New address</button>
+            </div>
+            <div id="loginBox">
+                <label for="user">Email address</label>
+                <input id="user" type="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.org">
+                <label for="password">Password</label>
+                <input id="password" type="password">
+            </div>
+            <div id="newBox" class="hidden">
+                <label for="relay">Chatmail server</label>
+                <input id="relay" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="nine.testrun.org">
+                <p>The server makes a new address for you, with nothing asked: no phone number, no name.</p>
+            </div>
+            <p class="note" id="privacy">Messages between Delta Chat users are end-to-end encrypted by Delta Chat's own core on this device. Mail to people without Delta Chat goes as ordinary email.</p>
+            <p class="error" id="error" role="alert"></p>
+        </div>
+        <div class="buttons">
+            <button id="cancel">Cancel</button>
+            <button id="next" class="primary" disabled>Sign In</button>
+        </div>
+        <p class="signup" id="signup">No address? <a href="https://chatmail.at/relays" id="signupLink">Chatmail servers</a></p>
+    </main>
+    <script>
+        "use strict";
+        var params = {};
+        try { params = JSON.parse(new URLSearchParams(location.search).get("enyoWindowParams") || "{}") || {}; } catch (e) { params = {}; }
+        var SERVICE = "palm://org.webosphoenix.service.deltachat/";
+        var TEMPLATE = "com.webosphoenix.deltachat";
+        var user = document.getElementById("user"), password = document.getElementById("password"), relay = document.getElementById("relay");
+        var next = document.getElementById("next"), error = document.getElementById("error");
+        var modify = params.mode === "modify";
+        var fresh = false, available = false;
+
+        function answer(result) { window.parent.postMessage("enyoCrossAppResult=" + JSON.stringify(result), "*"); }
+        function call(uri, p) {
+            return new Promise(function (resolve) {
+                var bridge = new PalmServiceBridge();
+                bridge.onservicecallback = function (text) { resolve(JSON.parse(text)); };
+                bridge.call(uri, JSON.stringify(p));
+            });
+        }
+        document.getElementById("signupLink").addEventListener("click", function (e) {
+            e.preventDefault();
+            call("palm://com.palm.applicationManager/open", { target: this.href });
+        });
+        function tab(isNew) {
+            fresh = isNew;
+            document.getElementById("tabLogin").className = isNew ? "" : "on";
+            document.getElementById("tabNew").className = isNew ? "on" : "";
+            document.getElementById("loginBox").className = isNew ? "hidden" : "";
+            document.getElementById("newBox").className = isNew ? "" : "hidden";
+            next.textContent = isNew ? "Create Address" : "Sign In";
+            error.textContent = "";
+            update();
+        }
+        document.getElementById("tabLogin").addEventListener("click", function () { tab(false); });
+        document.getElementById("tabNew").addEventListener("click", function () { tab(true); });
+        if (modify && params.account) {
+            user.value = params.account.username || "";
+            user.disabled = true;
+            document.getElementById("tabs").className = "hidden";
+            document.getElementById("signup").style.display = "none";
+        }
+        function update() {
+            next.disabled = !available || (fresh ? !relay.value.trim() : !user.value.trim() || !password.value);
+        }
+        [user, password, relay].forEach(function (i) {
+            i.addEventListener("input", function () { error.textContent = ""; update(); });
+            i.addEventListener("keydown", function (e) { if (e.key === "Enter" && !next.disabled) next.click(); });
+        });
+        document.getElementById("cancel").addEventListener("click", function () { answer({ returnValue: false }); });
+
+        var MESSAGES = {
+            "401_UNAUTHORIZED": "The mail server did not accept that address and password.",
+            "INVALID_USER": "Enter an email address, like you@example.org (or a chatmail server's name).",
+            "HELPER_NOT_AVAILABLE": "Delta Chat is not available in this build.",
+            "HELPER_EXITED": "Delta Chat's core stopped. Try again.",
+            "503_SERVICE_UNAVAILABLE": "The server asked to wait. Try again later."
+        };
+        function done(r) {
+            update();
+            next.textContent = fresh ? "Create Address" : "Sign In";
+            if (!r.returnValue) {
+                // The core's own words where it has them (they end with a full stop).
+                error.textContent = MESSAGES[r.errorCode] || (r.errorText ? "Could not sign in: " + r.errorText.replace(/([^.])$/, "$1.") : "Could not sign in.");
+                return;
+            }
+            var result = { returnValue: true, credentials: r.credentials, config: r.config };
+            if (!modify) { result.template = params.template; result.templateId = TEMPLATE; result.username = r.username; }
+            answer(result);
+        }
+        next.addEventListener("click", function () {
+            next.disabled = true;
+            error.textContent = "";
+            next.textContent = fresh ? "Creating..." : "Signing in...";
+            var p = fresh ? { templateId: TEMPLATE, config: { chatmail: relay.value.trim() } }
+                          : { templateId: TEMPLATE, username: user.value.trim(), password: password.value };
+            call(SERVICE + "checkCredentials", p).then(done);
+        });
+
+        // This build's Delta Chat: its core is a program the system image brings.
+        call(SERVICE + "available", {}).then(function (r) {
+            available = !!(r && r.returnValue && r.available);
+            if (!available) {
+                var u = document.getElementById("unavailable");
+                u.textContent = (r && r.reason) || "Delta Chat is not available in this build.";
+                u.className = "note warn";
+                document.getElementById("form").className = "hidden";
+                document.getElementById("signup").style.display = "none";
+            }
+            else if (/demo/.test(r.core || "")) {
+                // The simulator's stand-in for the core.
+                var d = document.getElementById("unavailable");
+                d.textContent = "Simulator demo: an address at chatmail.example signs in with any password, or make a new one with chatmail.example.";
+                d.className = "note warn";
+            }
+            update();
+            if (available) (modify ? password : user).focus();
+        });
+    </script>
+</body>
+</html>

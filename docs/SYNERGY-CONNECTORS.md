@@ -29,9 +29,9 @@ kit**, and a few gaps found in today's code that block third-party connectors.
 | Piece | Today | Where |
 | --- | --- | --- |
 | Accounts app | The original Enyo app, unmodified, over the runtime's simulated `com.palm.service.accounts` | `third_party/core-apps/com.palm.app.accounts`, overlay in `compat/rootfs/usr/palm/applications/com.palm.app.accounts` |
-| Templates | HP profile, IMAP, POP, other mail; CardDAV & CalDAV; Subscribed Calendar (webcal); a simulated Jabber (XMPP) account | `compat/rootfs/usr/palm/public/accounts/`, `apps/dav/public/accounts/`, runtime block "Instant messaging" |
+| Templates | HP profile, IMAP, POP, other mail; CardDAV & CalDAV; Subscribed Calendar (webcal); the connector packages' own (the Fediverse, Unofficial Telegram; Jabber, Matrix, Delta Chat from the catalog) | `compat/rootfs/usr/palm/public/accounts/`, `apps/dav/public/accounts/`, each package's `public/accounts/` |
 | Reference connector | `apps/dav`: hidden app + wizard + template + db8 kinds and permissions + Node service with luna-service2 files | `apps/dav/` (layout in section 3.1) |
-| Marketplace | Index kinds `pwa`, `ipk` and (C4) `connector`: a package with a service only as a connector that passes the rules; third-party connectors need Developer Mode on the device, the pre-installed ones (the Fediverse) do not | `server/marketplace/src/Catalog.php` `publish()`, `src/Ipk.php` (header: "no services"), `apps/marketplace/service/packagesservice.js` lines 338-357 |
+| Marketplace | Index kinds `pwa`, `ipk` and (C4) `connector`: a package with a service only as a connector that passes the rules; third-party connectors need Developer Mode on the device, the pre-installed ones (the Fediverse, Unofficial Telegram) and Phoenix's own in its catalog (Jabber, Matrix, Delta Chat: `preinstalled.json` "firstParty", OPEN-QUESTIONS Q94) do not | `server/marketplace/src/Catalog.php` `publish()`, `src/Ipk.php` (header: "no services"), `apps/marketplace/service/packagesservice.js` lines 338-357 |
 | OAuth, key store, push, synckit | synckit built (C1); the OAuth service's sign-in with PKCE built for the Fediverse (C2), its sheet and key store in the simulator only; push planned. Simulator keeps credentials in localStorage | SYNERGY.md 2.3, 2.9; SYNERGY-MODERN.md 4.2, 4.8; `services/oauth` |
 
 **Gaps that matter for third-party connectors** (found while reading the code):
@@ -115,10 +115,10 @@ the earlier pages.
 
 | Account | Protocol / API | Auth | Reg | Terms / notes | P |
 | --- | --- | --- | --- | --- | --- |
-| Matrix (and bridged networks on the user's server) | Matrix client-server, sliding sync, E2EE | PW / SSO / OAuth (MAS) | none | SM 2.4; bridges documented, not shipped | P1 |
-| XMPP (Jabber) | XMPP + XEP-0198/0357, OMEMO | PW | none | Simulated today; a real connector added to the plan by the owner (10 October 2026, section 7); OMEMO library licence (SM 5, 6a) | P1 |
-| Telegram | TDLib | phone login | own `api_id` | SM 6b; "Unofficial" naming rule | P3 |
-| **new** Delta Chat (chat over email) | IMAP/SMTP + Autocrypt; core library `deltachat-core-rust` | PW | none | The library is MPL-2.0 *(check)*, which allows linking with per-file copyleft. Fits Synergy because the account is already a mail account | P3 |
+| Matrix (and bridged networks on the user's server) | Matrix client-server, sliding sync, E2EE | PW / SSO / OAuth (MAS) | none | SM 2.4; bridges documented, not shipped. **Built** (11 October 2026, `apps/connectors/matrix`): E2EE not yet (OPEN-QUESTIONS Q91) | P1 |
+| XMPP (Jabber) | XMPP + XEP-0198/0357, OMEMO | PW | none | **Built** (11 October 2026, `apps/connectors/xmpp`; section 7); OMEMO: no permissive library (OPEN-QUESTIONS Q90) | P1 |
+| Telegram | TDLib | phone login | own `api_id` | SM 6b; "Unofficial" naming rule. **Built** (11 October 2026, `apps/telegram`, "Unofficial Telegram"): works where the build has the app id (Q16) and TDLib | P3 |
+| **new** Delta Chat (chat over email) | IMAP/SMTP + Autocrypt; core library `deltachat-core-rust` | PW | none | The core is MPL-2.0 (checked: chatmail/core's LICENSE), run as its own program (`deltachat-rpc-server`), not linked. **Built** (11 October 2026, `apps/connectors/deltachat`); in images on the owner's decision (Q89) | P3 |
 | **new** LoRa mesh (Meshtastic, MeshCore): off-grid text through a paired radio | The radio's client protocol over Bluetooth LE, USB serial or TCP | none (a channel key) | none | Added by the owner (10 October 2026, section 7). Needs a radio; licences to check (Meshtastic GPL-3.0, MeshCore MIT) | P2 |
 | **new** IRC with a bouncer | IRCv3 (`chathistory`, `soju` / `ergo` bouncers) | PW / SASL | none | The user runs the bouncer; one thread per channel or person | P3 |
 | WhatsApp, Signal, iMessage, RCS | - | - | - | Positions in SYNERGY.md 2.12 and SM 6 stand | - |
@@ -666,9 +666,8 @@ in Messaging where Graph allows).
 **Box** (C3, with Dropbox, OneDrive and Google Drive): its content API with
 OAuth (Box dropped WebDAV), as a place in Files.
 
-**Jabber (XMPP), a real account** (the owner: "add both"): today's
-"Jabber (XMPP)" account in Connections is simulated (the runtime's
-"Instant messaging" block). It becomes a real connector on the kit: sign-in
+**Jabber (XMPP), a real account** (the owner: "add both"). *Built, 11
+October 2026: see "Messaging accounts, as built" below.* It becomes a real connector on the kit: sign-in
 with the Jabber ID and password (SASL SCRAM; the server found from the
 domain's SRV records), chats as Messaging conversations (`com.palm.immessage`
 as the original's IM transports wrote them), the roster as contacts linked
@@ -741,6 +740,36 @@ registered by the Phoenix project account (OPEN-QUESTIONS Q17) and listed
 in the Slack Marketplace (Slack's review); a workspace's admins can also
 refuse outside apps. Until it is listed it is built and tested with those
 limits.
+
+**Messaging accounts, as built** (11 October 2026). Four IM transports on
+the kit (docs/SYNERGY-SDK.md "Staying connected"), each a connector package
+with its template, db8 kinds (`com.palm.immessage.<x>:1`,
+`com.palm.imloginstate.<x>:1`, a contact kind, and Jabber's
+`com.palm.imbuddystatus.<x>:1` in tempdb) and messages written as the
+original IM transports wrote them (LuneOS's imlibpurpleservice:
+`src/IMMessage.cpp` createDBObject; `inc/IMMessage.h` for `chatType`,
+`channelName`, `channelDisplayName`, `serviceMessageId`, `deliveryStatus`;
+`BuddyListConsolidator.cpp` for the buddies and their contacts;
+`IMLoginState.cpp` for the login state Messaging's My Status writes):
+
+| Account | Package | How | Works today |
+| --- | --- | --- | --- |
+| Jabber (XMPP) | `apps/connectors/xmpp`, catalog | its own XMPP client (`service/lib`): SRV (`_xmpps-client`, `_xmpp-client`), STARTTLS or direct TLS, plain TCP refused but to the loopback, SASL SCRAM-SHA-256/1 (PLAIN only inside TLS), bind, stream management with resumption (XEP-0198), carbons (0280), archive catch-up (0313), HTTP upload (0363) and out-of-band links for pictures, receipts and markers (0184, 0333), chat states (0085), push hooks (0357, for C6), WebSocket (RFC 7395, found through host-meta XEP-0156) where there is no TCP | against Prosody 0.12 (`tools/test-xmpp-server.cjs`), its fake server (vitest, the conformance suite), and in the simulator's pages over WebSocket to the demo server chat.example (`tools/test-xmpp.cjs`). OMEMO: no permissive library (Q90); the sign-in page says the messages are encrypted to the server only |
+| Matrix | `apps/connectors/matrix`, catalog | client-server API: discovery (`.well-known`), simplified sliding sync (MSC4186) or `/v3/sync`, password or the homeserver's OAuth 2.0 (MAS: RFC 7591 registration, PKCE, the system's sign-in sheet), rooms as conversations (direct chats by the other person's Matrix ID, linked to contacts), authenticated media both ways, read receipts both ways, presence | against its fake homeserver (vitest, conformance) and the simulator's demo matrix.example (`tools/test-matrix.cjs`). Encrypted rooms: shown as encrypted, nothing sent into them (Q91) |
+| Delta Chat | `apps/connectors/deltachat`, catalog | Delta Chat's own core, `deltachat-rpc-server` (MPL-2.0, a separate program; JSON-RPC on its standard input and output; the kit starts it as a system helper with its accounts in the service's own folder): an address and password, or a new chatmail address (`dcaccount:`); chats and groups by Message-ID, pictures, delivered and read, read receipts sent; end-to-end encrypted by the core (Autocrypt) | against the real core 2.63 (method names, shapes and errors, offline) and a fake core (vitest, conformance, the simulator's chatmail.example, `tools/test-deltachat.cjs`). The image has the core only with `PHOENIX_DELTACHAT = "1"` (Q89) |
+| Unofficial Telegram | `apps/telegram`, comes with Phoenix | TDLib (BSL-1.0) through `phoenix-tdjson`, a small C bridge putting TDLib's JSON interface on standard input and output (`meta-phoenix/recipes-connectors/tdlib`); phone, code and two-step password; private chats, groups and secret chats (no channels: Q92), pictures, read receipts both ways; the app id a build-time setting (Q16) | against a fake tdjson (vitest, conformance, `tools/test-telegram.cjs` with a test app id); the bridge against a stub libtdjson. Without the app id or TDLib: "not available in this build". Named "Unofficial Telegram", with a picture of its own, as Telegram's terms ask |
+
+Each keeps one connection per account while a capability is on
+(`definition.connection`), signs out on the server when the account is
+deleted, notifies new messages (Messaging opens the conversation), and has a
+sign-up link. Messaging sends pictures where the network takes them, shows
+Delivered and Read, and says on Telegram's conversations what its servers
+can read. Sharing to a person on these networks goes through Messaging's
+share target (the person and network picked there). Just Type's chat
+action reaches them as the original did (`compose.ims`), and the Assistant
+sends on them ("message Priya on Telegram: ..."). The simulator's demos
+(`runtime/rootfs.json`: `/usr/share/phoenix/demo/`) answer only for their
+own domains.
 
 **More platforms** (the owner, 10 October 2026: "add them with the others
 as potentials or not likely"; catalog packages, none pre-installed):

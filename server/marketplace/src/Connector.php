@@ -178,7 +178,7 @@ final class Connector
         sort($paths);
         $kinds = [];
         foreach ($paths as $p) {
-            if (!preg_match('#^configuration/db/kinds/[^/]+$#', $p)) {
+            if (!preg_match('#^configuration/(?:db|tempdb)/kinds/[^/]+$#', $p)) {
                 continue;
             }
             [$kok, $k] = $json($p);
@@ -205,7 +205,7 @@ final class Connector
 
         // C11
         foreach ($paths as $p) {
-            if (!preg_match('#^configuration/db/permissions/[^/]+$#', $p)) {
+            if (!preg_match('#^configuration/(?:db|tempdb)/permissions/[^/]+$#', $p)) {
                 continue;
             }
             [$pok, $perm] = $json($p);

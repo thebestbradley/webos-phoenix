@@ -1,0 +1,23 @@
+{
+    "appId": "org.webosphoenix.service.matrix",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.service.matrix"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.matrix",
+            "outbound": [
+                "org.webosphoenix.service.matrix",
+                "com.palm.db",
+                "com.palm.tempdb",
+                "com.palm.activitymanager",
+                "com.palm.service.accounts",
+                "com.webos.notification",
+                "org.webosports.service.messaging",
+                "org.webosphoenix.service.oauth"
+            ]
+        }
+    ]
+}

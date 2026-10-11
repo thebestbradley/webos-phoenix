@@ -106,9 +106,9 @@ check($idx['version'] === 1 && $idx['build'] === $pub['build'] && count($idx['ap
 $types = array_column($idx['accounts'] ?? [], null, 'templateId');
 $drives = ['com.webosphoenix.drive.nextcloud', 'com.webosphoenix.drive.owncloud', 'com.webosphoenix.drive.webdav', 'com.webosphoenix.drive.s3',
            'com.webosphoenix.drive.dropbox', 'com.webosphoenix.drive.onedrive', 'com.webosphoenix.drive.googledrive', 'com.webosphoenix.drive.box'];
-check(array_keys($types) === array_merge(['com.webosphoenix.dav', 'com.webosphoenix.fediverse', 'com.webosphoenix.webcal', 'com.palm.othermail', 'com.webosphoenix.xmpp'], $drives)
-      && $pub['accounts'] === 13 && !isset($types['com.palm.palmprofile']),
-      'the index lists the account types Phoenix connects to (not the HP webOS profile), the drives among them');
+check(array_keys($types) === array_merge(['com.webosphoenix.dav', 'com.webosphoenix.fediverse', 'com.webosphoenix.webcal', 'com.palm.othermail'], $drives)
+      && $pub['accounts'] === 12 && !isset($types['com.palm.palmprofile']) && !isset($types['com.webosphoenix.xmpp']),
+      'the index lists the account types Phoenix connects to (not the HP webOS profile), the drives among them; Jabber\'s comes from its package (catalog.json)');
 $shape = ['templateId', 'title', 'provider', 'icon', 'summary', 'capabilities', 'protocols', 'auth', 'server', 'privacy', 'push', 'status', 'package', 'featured'];
 // Built in, but for the connector packages Phoenix comes with (pre-installed, removable: the Fediverse).
 $withSignUp = array_merge(array_slice($shape, 0, -1), ['signUp', 'featured']);
@@ -125,8 +125,8 @@ check($nc['capabilities'] === [['capability' => 'DOCUMENTS', 'direction' => 'two
       && $box['auth'] === ['type' => 'oauth', 'registration' => 'required'] && $box['status'] === 'experimental' && $box['server'] === 'fixed'
       && !array_filter($drives, fn ($d) => $types[$d]['package'] !== ['id' => 'org.webosphoenix.drives', 'builtin' => false] || $types[$d]['privacy']['phoenixServers'] !== 'none'),
       'the drives (DOCUMENTS): Phoenix\'s own package from the catalog, not pre-installed; no registration for WebDAV and S3 (beta), the OAuth ones experimental until registered');
-check(array_keys(array_filter($types, fn ($t) => $t['package']['builtin'])) === ['com.webosphoenix.dav', 'com.webosphoenix.webcal', 'com.palm.othermail', 'com.webosphoenix.xmpp'],
-      '... only the generic logins are built in (Contacts & Calendars, Email; the simulator\'s Jabber)');
+check(array_keys(array_filter($types, fn ($t) => $t['package']['builtin'])) === ['com.webosphoenix.dav', 'com.webosphoenix.webcal', 'com.palm.othermail'],
+      '... only the generic logins are built in (Contacts & Calendars, Email)');
 $dav = $types['com.webosphoenix.dav'];
 check($dav['title'] === 'CardDAV & CalDAV' && $dav['capabilities'] === [['capability' => 'CONTACTS', 'direction' => 'two-way'], ['capability' => 'CALENDAR', 'direction' => 'two-way']]
       && $dav['auth'] === ['type' => 'app-password', 'registration' => 'none'] && $dav['server'] === 'user'
@@ -138,18 +138,16 @@ check($fedi['title'] === 'Fediverse' && $fedi['auth'] === ['type' => 'oauth', 'r
       && array_column($fedi['capabilities'], 'capability') === ['CONTACTS', 'MESSAGING', 'SOCIAL'] && $fedi['featured'] === true
       && $fedi['package'] === ['id' => 'org.webosphoenix.fediverse', 'builtin' => false, 'preinstalled' => true] && $fedi['privacy']['phoenixServers'] === 'none',
       'Fediverse (phase C2): OAuth with the server found from the handle, a connector package Phoenix comes with (pre-installed), featured');
-check($fedi['signUp'] === 'https://joinmastodon.org/servers' && $types['com.webosphoenix.xmpp']['signUp'] === 'https://providers.xmpp.net/'
+check($fedi['signUp'] === 'https://joinmastodon.org/servers'
       && !isset($types['com.webosphoenix.dav']['signUp']) && !isset($types['com.webosphoenix.webcal']['signUp']) && !isset($types['com.palm.othermail']['signUp']),
-      'sign-up links: the Fediverse\'s servers, XMPP\'s providers; none where the server is your own or no account is needed');
+      'sign-up links: the Fediverse\'s servers; none where the server is your own or no account is needed');
 check($types['com.webosphoenix.webcal']['capabilities'] === [['capability' => 'CALENDAR', 'direction' => 'read-only']]
-      && $types['com.palm.othermail']['capabilities'][0]['capability'] === 'MAIL'
-      && $types['com.webosphoenix.xmpp']['capabilities'][0]['capability'] === 'MESSAGING' && $types['com.webosphoenix.xmpp']['status'] === 'experimental',
-      'the Subscribed Calendar reads only; mail is MAIL, Jabber MESSAGING (experimental)');
+      && $types['com.palm.othermail']['capabilities'][0]['capability'] === 'MAIL',
+      'the Subscribed Calendar reads only; mail is MAIL');
 // Every template the list names exists, with those capabilities.
 $templateFiles = ['com.webosphoenix.dav' => 'apps/dav/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json',
                   'com.webosphoenix.webcal' => 'apps/dav/public/accounts/com.webosphoenix.webcal/com.webosphoenix.webcal.json',
-                  'com.palm.othermail' => 'third_party/app-services/mojomail/imap/files/usr/palm/public/accounts/com.palm.othermail/com.palm.othermail.json',
-                  'com.webosphoenix.xmpp' => 'runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json'];
+                  'com.palm.othermail' => 'third_party/app-services/mojomail/imap/files/usr/palm/public/accounts/com.palm.othermail/com.palm.othermail.json'];
 $mismatch = [];
 foreach ($templateFiles as $tid => $f) {
     $t = json_decode((string) @file_get_contents(dirname(__DIR__, 3) . "/$f"), true);

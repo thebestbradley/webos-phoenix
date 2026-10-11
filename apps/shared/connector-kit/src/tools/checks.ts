@@ -176,7 +176,7 @@ export function checkConnector(files: Files, options?: { namespaces?: string[] }
 
     // C10 kinds
     const kinds: Record<string, any> = {};
-    Object.keys(files).sort().filter((p) => /^configuration\/db\/kinds\/[^/]+$/.test(p)).forEach((p) => {
+    Object.keys(files).sort().filter((p) => /^configuration\/(?:db|tempdb)\/kinds\/[^/]+$/.test(p)).forEach((p) => {
         const k = json(files, p);
         if (!k.ok || !k.value || !KIND_ID.test(String(k.value.id || ""))) { errors.push("C10 " + p + ": not a db8 kind"); return; }
         const id = String(k.value.id);
@@ -193,7 +193,7 @@ export function checkConnector(files: Files, options?: { namespaces?: string[] }
     });
 
     // C11 permissions
-    Object.keys(files).sort().filter((p) => /^configuration\/db\/permissions\/[^/]+$/.test(p)).forEach((p) => {
+    Object.keys(files).sort().filter((p) => /^configuration\/(?:db|tempdb)\/permissions\/[^/]+$/.test(p)).forEach((p) => {
         const perm = json(files, p);
         const list = perm.ok ? (Array.isArray(perm.value) ? perm.value : [perm.value]) : null;
         if (!list) { errors.push("C11 " + p + ": not valid JSON"); return; }

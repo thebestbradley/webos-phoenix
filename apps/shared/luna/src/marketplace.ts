@@ -114,7 +114,7 @@ export interface AccountType {
     auth: { type: "password" | "app-password" | "oauth" | "api-key" | "none" | ""; registration: "none" | "required" };
     server: "user" | "fixed" | "discovered" | "";
     privacy: { dataGoesTo: string; e2ee: boolean; phoenixServers: "none" | "push-relay" | "token-relay" | "" } | null;
-    push: "poll" | "unifiedpush" | "relay";
+    push: "poll" | "unifiedpush" | "relay" | "connection";
     status: "stable" | "beta" | "experimental";
     /**
      * builtin: part of the system (the generic logins), never removed; else a

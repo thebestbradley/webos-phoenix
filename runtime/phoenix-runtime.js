@@ -3720,7 +3720,7 @@
     // serves the templates released with Open webOS (com.palm.*: the HP webOS
     // profile and the email templates), which have no transport here: a new
     // account is not validated against a server. The others (CardDAV and
-    // CalDAV, the Subscribed Calendar, Jabber, connectors whose service
+    // CalDAV, the Subscribed Calendar, connectors whose service
     // runs here) go through the block "CardDAV and CalDAV" (Synergy
     // transport), which calls their callbacks.
     //
@@ -3731,7 +3731,7 @@
     // folder, so here they are:
     //   - /usr/palm/public/accounts/<dir>/<dir>.json for each folder
     //     runtime/rootfs.json mounts there (BUILTIN_TEMPLATES if it cannot
-    //     be read), and the runtime's own (the simulated Jabber account);
+    //     be read);
     //   - for each app the user installed, the templates its package had in
     //     the app's public/accounts/<dir>/ (the connector layout,
     //     docs/SYNERGY-CONNECTORS.md 3.1), which installPackage records
@@ -3747,8 +3747,6 @@
     // (/etc/palm/marketplace/preinstalled.json; tools/install-rootfs.py and
     // phoenix-sim put them among the installed apps): [{id, sourceId,
     // service, templates}].
-    // Its "catalog": Phoenix's own connectors installed from the catalog, not
-    // pre-installed (the drives): trusted as the pre-installed ones are.
     var preinstalledCache = null, firstPartyCache = null;
     runtime.preinstalledPackages = function () {
         if (!preinstalledCache) {
@@ -3757,12 +3755,13 @@
         }
         return preinstalledCache;
     };
+    // Phoenix's own connector packages it does not come with but trusts as
+    // those (the same file's "firstParty": the drives, Jabber, Matrix,
+    // Delta Chat): installed from its catalog without Developer Mode.
     runtime.firstPartyPackages = function () {
         if (!firstPartyCache) {
-            var catalog = [];
-            try { catalog = JSON.parse(PalmSystem.getResource("/etc/palm/marketplace/preinstalled.json") || "{}").catalog || []; }
-            catch (e) { catalog = []; }
-            firstPartyCache = runtime.preinstalledPackages().concat(catalog);
+            try { firstPartyCache = JSON.parse(PalmSystem.getResource("/etc/palm/marketplace/preinstalled.json") || "{}").firstParty || []; }
+            catch (e) { firstPartyCache = []; }
         }
         return firstPartyCache;
     };
@@ -3777,7 +3776,7 @@
             "/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json",
             "/usr/palm/public/accounts/com.webosphoenix.webcal/com.webosphoenix.webcal.json"
         ];
-        var RUNTIME_TEMPLATES = ["/usr/share/phoenix/runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json"];
+        // (The simulated Jabber template that was here is the Jabber connector's now: apps/connectors/xmpp.)
         var PACKAGED = "accountTemplateFiles";   // store: {appId: [paths in the app]}
         var ACCOUNT_KIND = "com.palm.account:1";
         var SIGNAL_KIND = "com.palm.signaling:1";
@@ -3803,7 +3802,7 @@
                 if (!lp.removable || lp.dynamic || seen[lp.id]) return;
                 seen[lp.id] = true;
                 var base = "/usr/palm/applications/" + lp.id + "/";
-                var pre = runtime.firstPartyPackages().filter(function (p) { return p.id === lp.id; })[0];
+                var pre = runtime.preinstalledPackages().concat(runtime.firstPartyPackages()).filter(function (p) { return p.id === lp.id; })[0];
                 var named = pre && pre.templates ? pre.templates.map(function (t) { return "public/accounts/" + t + "/" + t + ".json"; }) : null;
                 (packaged[lp.id] || named || ["public/accounts/" + lp.id + "/" + lp.id + ".json"]).forEach(function (rel) {
                     out.push(base + rel);
@@ -3831,7 +3830,7 @@
         function allTemplates() {
             if (templateCache) return clone(templateCache);
             var list = [], ids = {};
-            builtinFiles().concat(RUNTIME_TEMPLATES, installedFiles()).forEach(function (file) {
+            builtinFiles().concat(installedFiles()).forEach(function (file) {
                 var text = PalmSystem.getResource(file);
                 if (!text) return;
                 var dir = file.slice(0, file.lastIndexOf("/") + 1), parsed;
@@ -5105,6 +5104,14 @@
         // After the focus has moved on (focusout fires first).
         global.document.addEventListener("focusout", function () { setTimeout(followFocus, 0); }, true);
     }
+    // The page itself going away with a field focused: a frame taken out of
+    // its card (Accounts closes a template's sign-in page when it answers,
+    // with its code field still focused) fires no focusout, and its watch
+    // goes with it: the keyboard is told, as WebKit told the IMEController
+    // when the frame went.
+    if (global.addEventListener) global.addEventListener("pagehide", function () {
+        if (!ime.manual && ime.reported) reportInput(false);
+    });
 
     runtime.imeSetManual = function (on) {
         ime.manual = !!on;
@@ -8011,11 +8018,19 @@
         function isIm(service) { return /^type_/.test(String(service || "")); }
         // The person an IM buddy is (the transport links its roster to the
         // address book, as the contacts linker did: imbuddystatus personId).
+        // Networks without buddies (Matrix, Delta Chat, Telegram: no
+        // presence) link through the person's IM addresses, which their
+        // contacts carry (ims [{value, type: the service}]).
         function personForIm(addr, service) {
+            var a = String(addr).toLowerCase();
             var b = (tempdbCall("/find", { query: { from: IM_BUDDY_KIND } }).results || []).filter(function (x) {
-                return x.serviceName === service && String(x.username).toLowerCase() === String(addr).toLowerCase();
+                return x.serviceName === service && String(x.username).toLowerCase() === a;
             })[0];
-            return b && b.personId ? (dbCall("/get", { ids: [b.personId] }).results || [])[0] || null : null;
+            if (b && b.personId) return (dbCall("/get", { ids: [b.personId] }).results || [])[0] || null;
+            var people = dbCall("/find", { query: { from: "com.palm.person:1" } }).results || [];
+            return people.filter(function (p) {
+                return (p.ims || []).some(function (im) { return im.type === service && String(im.value).toLowerCase() === a; });
+            })[0] || null;
         }
         // What a conversation's last line says of a picture message.
         function summaryOf(msg) {
@@ -8111,10 +8126,9 @@
             }));
         }
 
-        // The IM transports deliver outgoing instant messages
-        // (org.webosphoenix.service.xmpp, block "Instant messaging" below).
-        // Others (block "Synergy connectors on the kit") answer by name when
-        // a message is sent: runtime.resolveImTransport(fn(serviceName) ->
+        // The IM transports (block "Synergy connectors on the kit": Jabber,
+        // Matrix, the Fediverse, ...) deliver outgoing instant messages: they
+        // answer by name when a message is sent: runtime.resolveImTransport(fn(serviceName) ->
         // send or null), so nothing reads the templates as the page starts.
         var imTransports = {}, imResolvers = [];
         runtime.registerImTransport = function (service, send) { imTransports[service] = send; };
@@ -8306,221 +8320,65 @@
     })();
 
     // ================================================================================
-    // Instant messaging (simulated XMPP: org.webosphoenix.service.xmpp)
+    // Instant messaging: the Jabber demo server (chat.example)
     // ================================================================================
     //
-    // An IM transport as webOS's Synergy ones were (libpurple's AIM and
-    // Google Talk), shaped like the XMPP transport Phoenix plans
-    // (docs/SYNERGY-MODERN.md: template com.webosphoenix.xmpp, MESSAGING
-    // with capabilitySubtype "IM", serviceName "type_jabber"), against a
-    // simulated server, chat.example, whose people are fictional and linked
-    // to the sample contacts.
-    //
-    //   The account: Accounts > Add Account > Jabber (XMPP), with any
-    //   address on chat.example (you@chat.example) and a password; the
-    //   template (runtime/accounts/com.webosphoenix.xmpp/) goes through the
-    //   accounts block of "CardDAV and CalDAV", which calls this service's
-    //   checkCredentials, onCreate, onEnabled and onDelete as Synergy did.
-    //   Signed in, the account's state is a com.palm.imloginstate:1 (db8:
-    //   accountId, username, serviceName, state "online" | "offline",
-    //   availability 0 available, 2 busy, 4 offline, customMessage) and its
-    //   roster com.palm.imbuddystatus:1 objects (tempdb: accountId, username
-    //   (the buddy's address), serviceName, displayName, personId,
-    //   availability, personAvailability, status, group), which Messaging's
-    //   Buddies and Contacts' presence read, as on webOS.
-    //   Messages are com.palm.immessage.xmpp:1 (extends com.palm.immessage:1,
-    //   extends com.palm.message:1: folder, status, serviceName, username =
-    //   the account's address, from / to, messageText), put through
-    //   putMessage like texts and threaded per buddy; the outbox goes out
-    //   here (successful, or failed while signed out or in airplane mode).
-    //   A buddy who is available or busy answers after a moment (the
-    //   simulated server); an offline one does not.
-    //
-    //   setPresence {accountId, availability, customMessage?} (Phoenix): your
-    //   own status; 4 signs out (the roster goes offline), else signs in.
+    // Jabber (XMPP) is a real connector now (apps/connectors/xmpp, block "Synergy
+    // connectors on the kit"), which speaks XMPP to any server. The
+    // simulator's demo is a server, not a pretend account: chat.example, the
+    // connector's fake XMPP server (apps/connectors/xmpp/service/test/fake-xmpp.cjs
+    // demoServer), runs in the page that keeps the connection, and the
+    // connector reaches it as it reaches any server over a WebSocket. Any
+    // name on chat.example signs in with any password; its people are
+    // fictional (Ada Palmer, Marcus Reyes, Lena Okafor, Theo Lindqvist),
+    // named as the sample contacts, and answer a message after a moment.
     //
     // Simulator helpers (phoenix-sim Ctrl+F5, the tests):
-    //   __phoenixRuntime.simulateIncomingIm({from?, text?}) -> thread id
-    //   __phoenixRuntime.xmpp.setBuddyPresence(jid, availability, status?)
+    //   __phoenixRuntime.simulateIncomingIm({from?, text?}) -> Promise<thread id | null>
+    //   __phoenixRuntime.xmpp.setBuddyPresence(jid, availability, status?) -> Promise<bool>
     (function instantMessaging() {
         var M = runtime.messaging;
         if (!M) return;
         var SERVICE = "org.webosphoenix.service.xmpp";
-        var TEMPLATE = "com.webosphoenix.xmpp";
-        var IM_SERVICE = "type_jabber";
-        var MSG_KIND = "com.palm.immessage.xmpp:1";
         var SERVER = "chat.example";
-        var MESSAGING_APP = runtime.messagingAppId;
-        var AVAILABLE = 0, BUSY = 2, OFFLINE = 4;
+        var DEFAULT_FROM = "ada.palmer@" + SERVER;
 
-        // The simulated server's people, and how they answer.
-        var ROSTER = [
-            { jid: "ada.palmer@" + SERVER, given: "Ada", family: "Palmer", availability: AVAILABLE, status: "Flashing a Pre 3",
-              replies: ["Ha, yes!", "Cards forever.", "Send me a picture when it boots?", "On my way."] },
-            { jid: "marcus.reyes@" + SERVER, given: "Marcus", family: "Reyes", availability: BUSY, status: "In a meeting until 3",
-              replies: ["In a meeting, will reply after.", "Can't talk now, later?"] },
-            { jid: "lena.okafor@" + SERVER, given: "Lena", family: "Okafor", availability: AVAILABLE, status: "",
-              replies: ["Hi! Just landed.", "Sounds good.", "See you there."] },
-            { jid: "theo.lindqvist@" + SERVER, given: "Theo", family: "Lindqvist", availability: OFFLINE, status: "", replies: [] }
-        ];
-        function rosterEntry(jid) {
-            return ROSTER.filter(function (b) { return b.jid === String(jid).toLowerCase(); })[0] || null;
+        function threadOfMessage(text, from, since) {
+            var found = (M.dbCall("/find", { query: { from: "com.palm.immessage.xmpp:1" } }).results || []).filter(function (m) {
+                return m.folder === "inbox" && m.messageText === text && m.from && m.from.addr === from && (m.localTimestamp || 0) >= since;
+            })[0];
+            return found && found.conversations ? found.conversations[0] : null;
         }
-
-        function db(method, params) { return M.dbCall(method, params); }
-        function tdb(method, params) { return M.tempdbCall(method, params); }
-        function account(id) { return (db("/get", { ids: [id] }).results || [])[0] || null; }
-        function loginState(accountId) {
-            return (db("/find", { query: { from: M.IM_LOGIN_KIND, where: [{ prop: "accountId", op: "=", val: accountId }] } }).results || [])[0] || null;
-        }
-        function signedInAccounts() {
-            return (db("/find", { query: { from: M.IM_LOGIN_KIND } }).results || []).filter(function (s) {
-                return s.serviceName === IM_SERVICE && s.state === "online";
-            });
-        }
-        function personByName(given, family) {
-            return (db("/find", { query: { from: "com.palm.person:1" } }).results || []).filter(function (p) {
-                return p.name && p.name.givenName === given && p.name.familyName === family;
-            })[0] || null;
-        }
-
-        // Presence (the buddies' and your own) as stored for the apps.
-        // The server's view of the buddies' presence, per account
-        // ("xmpp:presence:<account>": jid -> {availability, status}); a buddy
-        // not in it has the roster's.
-        function buddyPresence(accountId, b) {
-            return store.get("xmpp:presence:" + accountId, {})[b.jid] || { availability: b.availability, status: b.status };
-        }
-        function writeRoster(accountId, signedIn) {
-            tdb("/del", { purge: true, query: { from: M.IM_BUDDY_KIND, where: [{ prop: "accountId", op: "=", val: accountId }] } });
-            if (!signedIn) return;
-            tdb("/put", { objects: ROSTER.map(function (b) {
-                var person = personByName(b.given, b.family), pr = buddyPresence(accountId, b);
-                var o = { _kind: M.IM_BUDDY_KIND, accountId: accountId, serviceName: IM_SERVICE, username: b.jid,
-                          displayName: b.given + " " + b.family, availability: pr.availability, personAvailability: pr.availability,
-                          status: pr.status || "", group: "Buddies" };
-                if (person) o.personId = person._id;
-                return o;
-            }) });
-        }
-        function setLogin(acc, availability, customMessage) {
-            var cur = loginState(acc._id);
-            var online = availability !== OFFLINE;
-            var o = { _kind: M.IM_LOGIN_KIND, accountId: acc._id, serviceName: IM_SERVICE, username: acc.username,
-                      state: online ? "online" : "offline", availability: availability,
-                      customMessage: customMessage !== undefined ? customMessage : cur && cur.customMessage || "" };
-            if (cur) { o._id = cur._id; db("/merge", { objects: [o] }); }
-            else db("/put", { objects: [o] });
-            writeRoster(acc._id, online);
-        }
-
-        // ---- Messages ----------------------------------------------------------------------
-
-        function deliver(acc, jid, text) {
-            var b = rosterEntry(jid);
-            var now = Date.now();
-            var r = M.assign({ _kind: MSG_KIND, folder: "inbox", status: "successful", serviceName: IM_SERVICE,
-                               username: acc.username, messageText: text, localTimestamp: now, timestamp: now,
-                               from: { addr: jid, name: b ? b.given + " " + b.family : jid }, flags: { read: false, visible: true } });
-            host.postToHost("notification", { appId: MESSAGING_APP, title: b ? b.given + " " + b.family : jid, body: text,
-                                              params: { threadId: r.threadId }, soundClass: "notifications" });
-            return r.threadId;
-        }
-        var replySeq = {};
-        function send(messageId) {
-            var m = (db("/get", { ids: [messageId] }).results || [])[0];
-            if (!m || m.status !== "pending") return;
-            var login = (db("/find", { query: { from: M.IM_LOGIN_KIND, where: [{ prop: "username", op: "=", val: m.username }] } }).results || [])[0];
-            var st = store.get("settings:state", null);
-            var ok_ = login && login.state === "online" && !(st && st.offlineMode);
-            db("/merge", { objects: [{ _id: m._id, status: "sending" }] });
-            setTimeout(function () {
-                db("/merge", { objects: [{ _id: m._id, status: ok_ ? "successful" : "failed" }] });
-                if (!ok_) return;
-                var jid = m.to && m.to[0] && m.to[0].addr, b = rosterEntry(jid);
-                var acc = account(login.accountId);
-                if (!b || !acc || !b.replies.length) return;
-                var pr = buddyPresence(acc._id, b);
-                if (pr.availability === OFFLINE) return;
-                var n = replySeq[b.jid] = (replySeq[b.jid] || 0) + 1;
-                setTimeout(function () {
-                    var still = loginState(acc._id);
-                    if (still && still.state === "online") deliver(acc, b.jid, b.replies[(n - 1) % b.replies.length]);
-                }, 1800);
-            }, 400);
-        }
-        runtime.registerImTransport(IM_SERVICE, send);
-
-        // ---- The transport's service (Synergy callbacks) -------------------------------------
-
-        register([SERVICE], {
-            // Any address on the simulated server with a password signs in.
-            "/checkCredentials": function (p, reply) {
-                var user = String(p.username || "").trim().toLowerCase();
-                if (!/^[^@\s]+@[^@\s]+$/.test(user))
-                    return reply({ returnValue: false, errorCode: "401_UNAUTHORIZED", errorText: "Enter your address, like you@" + SERVER });
-                if (user.split("@")[1] !== SERVER)
-                    return reply({ returnValue: false, errorCode: "HOST_NOT_FOUND", errorText: "Only the simulated server, " + SERVER + ", is reachable here" });
-                if (!p.password)
-                    return reply({ returnValue: false, errorCode: "401_UNAUTHORIZED", errorText: "Enter your password" });
-                reply(ok({ credentials: { common: { password: String(p.password) } }, config: { server: SERVER } }));
-            },
-            "/onCreate": function (p, reply) { reply(ok()); },
-            "/onEnabled": function (p, reply) {
-                var acc = account(p.accountId);
-                if (!acc) return reply(fail(-1, "No such account: " + p.accountId));
-                setLogin(acc, p.enabled ? AVAILABLE : OFFLINE);
-                reply(ok());
-            },
-            // The account goes: its state, roster, messages and conversations.
-            "/onDelete": function (p, reply) {
-                var acc = account(p.accountId) || { _id: p.accountId, username: "" };
-                writeRoster(acc._id, false);
-                db("/del", { query: { from: M.IM_LOGIN_KIND, where: [{ prop: "accountId", op: "=", val: acc._id }] } });
-                var threads = (db("/find", { query: { from: "com.palm.chatthread:1" } }).results || []).filter(function (t) {
-                    return t.replyService === IM_SERVICE && (!acc.username || t.username === acc.username);
-                });
-                threads.forEach(function (t) {
-                    db("/del", { query: { from: "com.palm.message:1", where: [{ prop: "conversations", op: "=", val: t._id }] } });
-                    db("/del", { ids: [t._id] });
-                });
-                reply(ok());
-            },
-            "/setPresence": function (p, reply) {
-                var acc = account(p.accountId);
-                if (!acc) return reply(fail(-1, "No such account: " + p.accountId));
-                var a = Number(p.availability);
-                if ([AVAILABLE, BUSY, OFFLINE].indexOf(a) < 0) return reply(fail(-1, "availability: 0, 2 or 4"));
-                setLogin(acc, a, p.customMessage);
-                reply(ok());
-            }
-        });
-
-        // ---- Helpers for the simulator and the tests ----------------------------------------
 
         runtime.simulateIncomingIm = function (opts) {
             opts = opts || {};
-            var login = signedInAccounts()[0];
-            if (!login) return null;
-            var acc = account(login.accountId);
-            return acc ? deliver(acc, opts.from || ROSTER[0].jid, opts.text || "Are you on Phoenix yet?") : null;
+            var from = opts.from || DEFAULT_FROM, text = opts.text || "Are you on Phoenix yet?", since = Date.now() - 1000;
+            if (!runtime.connectorDemo) return Promise.resolve(null);
+            return runtime.connectorDemo(SERVICE, { op: "deliver", from: from, text: text }).then(function (r) {
+                if (!r || r.returnValue === false) return null;
+                return new Promise(function (resolve) {
+                    var tries = 0;
+                    (function look() {
+                        var t = threadOfMessage(text, from, since);
+                        if (t || ++tries > 40) return resolve(t);
+                        setTimeout(look, 150);
+                    })();
+                });
+            });
         };
         runtime.xmpp = {
             server: SERVER,
-            roster: function () { return ROSTER.map(function (b) { return { jid: b.jid, name: b.given + " " + b.family }; }); },
+            // 0 available, 2 busy, 4 offline (webOS's numbers) as the server's presence.
             setBuddyPresence: function (jid, availability, status) {
-                var b = rosterEntry(jid);
-                if (!b) return false;
-                signedInAccounts().forEach(function (login) {
-                    var mine = store.get("xmpp:presence:" + login.accountId, {});
-                    mine[b.jid] = { availability: availability, status: status || "" };
-                    store.set("xmpp:presence:" + login.accountId, mine);
-                    writeRoster(login.accountId, true);
+                var show = availability === 4 ? "unavailable" : availability === 2 ? "away" : "available";
+                if (!runtime.connectorDemo) return Promise.resolve(false);
+                return runtime.connectorDemo(SERVICE, { op: "presence", jid: jid, show: show, status: status || "" }).then(function (r) {
+                    return !!(r && r.done);
                 });
-                return true;
             }
         };
     })();
+
 
     // ================================================================================
     // Media services (simulated webOS OSE APIs used by apps/camera, apps/photos, apps/music)
@@ -12182,6 +12040,16 @@
         function readFile(path) {
             var type = MIME[String(path).replace(/^.*\./, "").toLowerCase()] || "application/octet-stream";
             var fromStore = runtime.mediaFiles ? runtime.mediaFiles.read(path) : Promise.resolve(null);
+            // A file the apps wrote (a picture picked in Files, one received): the file manager's store.
+            fromStore = fromStore.then(function (blob) {
+                if (blob) return blob;
+                return new Promise(function (resolve) {
+                    dispatch("luna://org.webosphoenix.filemanager/read", { path: path, encoding: "base64" }, function (r) {
+                        if (!r || !r.returnValue || typeof r.data !== "string") return resolve(null);
+                        resolve(new Blob([fromBase64(r.data)], { type: type }));
+                    }, { cancelled: function () { return false; }, onCancel: null });
+                });
+            });
             return fromStore.then(function (blob) {
                 // Not a stored file: one of the system's (the samples), from where it is served.
                 return blob || global.fetch(path).then(function (res) {
@@ -12229,6 +12097,232 @@
             try { return Promise.resolve(JSON.parse(PalmSystem.getResource("/etc/palm/" + name) || "null")); } catch (e) { return Promise.resolve(null); }
         }
 
+        // ---- Connections that stay open (definition.connection) ---------------------------------
+        //
+        // A device runs one copy of a connector's service; the simulator one
+        // per page. A connection (an XMPP stream, a Matrix sync) is kept by
+        // one page at a time: the one that holds "connector:live:<service>"
+        // in the shared store (every few seconds it says it is still there;
+        // a page gone quiet for 15 s is taken over). The system UI's page,
+        // which runs as long as the simulator does, opens the accounts'
+        // connections as it starts. Another page asked for something that
+        // needs the connection (Messaging sending, "Sync now") gets
+        // NOT_LIVE_HERE from the kit and hands the call to the keeping page
+        // through the store ("connector:call:<id>", answered in
+        // "connector:reply:<id>").
+        var PAGE_ID = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        var LIVE_FRESH_MS = 15000, LIVE_BEAT_MS = 4000, CALL_WAIT_MS = 45000;
+        var liveHeld = {}, beatTimer = null, callSeq = 0;
+        function beat() {
+            store.set("connector:alive:" + PAGE_ID, Date.now());
+            Object.keys(liveHeld).forEach(function (svc) { store.set("connector:live:" + svc, { page: PAGE_ID, at: Date.now() }); });
+        }
+        function startBeat() {
+            beat();
+            if (!beatTimer) beatTimer = setInterval(beat, LIVE_BEAT_MS);
+        }
+        // A sync lock is held while its page runs (a page gone, its card
+        // closed mid-sync, leaves none behind) and for at most LOCK_MS.
+        function lockHeld(v) {
+            if (typeof v === "number") return Date.now() - v < LOCK_MS;
+            if (!v || Date.now() - (v.at || 0) >= LOCK_MS) return false;
+            return v.page === PAGE_ID || Date.now() - store.get("connector:alive:" + v.page, 0) < LIVE_FRESH_MS;
+        }
+        function claimLive(service) {
+            if (liveHeld[service]) return true;
+            var o = store.get("connector:live:" + service, null);
+            if (o && o.page !== PAGE_ID && Date.now() - (o.at || 0) < LIVE_FRESH_MS) return false;
+            liveHeld[service] = true;
+            startBeat();
+            return true;
+        }
+        try {
+            global.addEventListener("pagehide", function () {
+                store.remove("connector:alive:" + PAGE_ID);
+                Object.keys(liveHeld).forEach(function (svc) {
+                    var o = store.get("connector:live:" + svc, null);
+                    if (o && o.page === PAGE_ID) store.remove("connector:live:" + svc);
+                });
+            });
+        } catch (e) { /* no window events */ }
+
+        // A call for the page that keeps the connection.
+        function forwardCall(service, method, params) {
+            var id = PAGE_ID + "-" + (++callSeq);
+            return new Promise(function (resolve) {
+                var done = false, timer = null, poll = null;
+                function finish(r) {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timer);
+                    clearInterval(poll);
+                    try { global.removeEventListener("storage", onStorage); } catch (e) { /* none */ }
+                    store.remove("connector:call:" + id);
+                    store.remove("connector:reply:" + id);
+                    resolve(r);
+                }
+                function check() { var r = store.get("connector:reply:" + id, null); if (r) finish(r); }
+                function onStorage(e) { if (e.key === "phoenix:connector:reply:" + id) check(); }
+                try { global.addEventListener("storage", onStorage); } catch (e) { /* none */ }
+                poll = setInterval(check, 500);
+                timer = setTimeout(function () {
+                    finish(fail("CONNECTION_FAILED", "The page that keeps the connection did not answer"));
+                }, CALL_WAIT_MS);
+                store.set("connector:call:" + id, { service: service, method: method, params: params, at: Date.now() });
+            });
+        }
+        function answerCall(key) {
+            var c = store.get(key, null);
+            if (!c || !liveHeld[c.service] || !hosted[c.service]) return;
+            store.remove(key);
+            var id = key.slice("connector:call:".length);
+            var run = c.method === "__demo" ? demoOp(c.service, c.params) : callHere(c.service, c.method, c.params);
+            Promise.resolve(run).then(function (r) {
+                store.set("connector:reply:" + id, r || ok());
+            }, function (e) {
+                store.set("connector:reply:" + id, fail("UNKNOWN_ERROR", String(e && e.message || e)));
+            });
+        }
+        try {
+            global.addEventListener("storage", function (e) {
+                if (e.key && e.key.indexOf("phoenix:connector:call:") === 0 && e.newValue) answerCall(e.key.slice(8));
+            });
+        } catch (e) { /* no window events */ }
+        function callHere(service, name, p) {
+            var m = hosted[service].load();
+            if (!m.methods[name]) return Promise.resolve(fail(-1, "No method " + name + " on " + service));
+            return m.methods[name](p);
+        }
+
+        // ---- Sockets: WebSocket from the page; the demo servers ------------------------------------
+        //
+        // A page has no TCP: a connector reaches its server by WebSocket
+        // (XMPP's RFC 7395, found through the domain's host-meta). The
+        // simulator's demo servers answer for their own domains (chat.example:
+        // the Jabber connector's fake server, apps/connectors/xmpp/service/test), in the
+        // page that keeps the connection.
+        var demos = {};
+        var DEMO_HOSTS = {
+            "org.webosphoenix.service.xmpp": { hosts: ["chat.example", "upload.chat.example"], dir: "/usr/share/phoenix/demo/xmpp/",
+                                               module: "test/fake-xmpp.cjs", make: "demoServer" },
+            "org.webosphoenix.service.matrix": { hosts: ["matrix.example"], dir: "/usr/share/phoenix/demo/matrix/",
+                                                 module: "test/fake-homeserver.cjs", make: "demoHomeserver" },
+            // No server but a system helper: Delta Chat's core, faked (its
+            // test's fake deltachat-rpc-server), for addresses at
+            // chatmail.example only.
+            "org.webosphoenix.service.deltachat": { hosts: [], helper: "deltachat-rpc-server", dir: "/usr/share/phoenix/demo/deltachat/",
+                                                    module: "test/fake-rpc-server.cjs", make: "demoRpcServer" },
+            // TDLib, faked (its test's fake tdjson): reached only where the
+            // checkout has a Telegram app id for the simulator
+            // (runtime/connector-settings/, not in the repository); without
+            // one the account says it is not available in this build.
+            "org.webosphoenix.service.telegram": { hosts: [], helper: "phoenix-tdjson", dir: "/usr/share/phoenix/demo/telegram/",
+                                                   module: "test/fake-tdjson.cjs", make: "demoTdjson" }
+        };
+        function demoServer(service, host) {
+            var d = DEMO_HOSTS[service];
+            if (!d || d.hosts.indexOf(String(host).replace(/:\d+$/, "")) < 0 || !hosted[service]) return null;
+            return loadDemo(service);
+        }
+        function demoHelper(service, name) {
+            var d = DEMO_HOSTS[service];
+            return d && d.helper === name && hosted[service] ? loadDemo(service) : null;
+        }
+        function loadDemo(service) {
+            var d = DEMO_HOSTS[service];
+            if (!demos[service]) {
+                try {
+                    var mod = nodeServiceLoader(d.dir, service + " demo")(d.module);
+                    demos[service] = mod[d.make]();
+                } catch (e) {
+                    console.warn("[phoenix-runtime] no demo server for " + service + ": " + (e && e.message));
+                    demos[service] = false;
+                }
+            }
+            return demos[service] || null;
+        }
+        function hostOf(url) { try { return new URL(url).host; } catch (e) { return ""; } }
+        function websocket(service, url, protocols) {
+            var demo = demoServer(service, hostOf(url));
+            if (demo) return Promise.resolve(demo.socket({ framing: "message", secure: true }));
+            return new Promise(function (resolve, reject) {
+                var ws;
+                try { ws = new global.WebSocket(url, protocols); } catch (e) { return reject(Object.assign(new Error(String(e.message || e)), { code: "ECONNREFUSED" })); }
+                var dataFns = [], closeFns = [], opened = false;
+                ws.onopen = function () {
+                    opened = true;
+                    resolve({
+                        framing: "message", secure: /^wss:/.test(url),
+                        write: function (t) { try { ws.send(t); } catch (e) { /* closed */ } },
+                        close: function () { try { ws.close(); } catch (e) { /* closed */ } },
+                        onData: function (f) { dataFns.push(f); },
+                        onClose: function (f) { closeFns.push(f); }
+                    });
+                };
+                ws.onerror = function () { if (!opened) reject(Object.assign(new Error("Could not connect to " + url), { code: "ECONNREFUSED" })); };
+                ws.onmessage = function (m) { var t = String(m.data); dataFns.forEach(function (f) { f(t); }); };
+                ws.onclose = function () { if (opened) closeFns.forEach(function (f) { f(); }); };
+            });
+        }
+        function requestFor(service) {
+            return function (req) {
+                var demo = demoServer(service, hostOf(req.url));
+                return demo ? demo.request(req) : request(req);
+            };
+        }
+        // What the demo servers do for the simulator's menu and the tests,
+        // in the page that keeps the connection.
+        function demoOp(service, p) {
+            var demo = demos[service];
+            if (!demo) return Promise.resolve(fail("NOT_FOUND", "No demo server runs here"));
+            if (p.op === "deliver") {
+                var user = demo.signedIn();
+                if (!user) return Promise.resolve(fail("NOT_FOUND", "No account is signed in to the demo server"));
+                // {picture: true}: the last picture put on the server, sent back.
+                if (!demo.deliver(p.from, user, p.text, { picture: !!p.picture }))
+                    return Promise.resolve(fail("NOT_FOUND", "Nothing to send back yet"));
+                return Promise.resolve(ok({ to: user }));
+            }
+            if (p.op === "presence" && demo.setPresence) return Promise.resolve(ok({ done: demo.setPresence(p.jid, p.show, p.status) }));
+            return Promise.resolve(fail(-1, "No demo op " + p.op));
+        }
+        runtime.connectorDemo = function (service, p) {
+            if (liveHeld[service] && demos[service]) return demoOp(service, p);
+            var o = store.get("connector:live:" + service, null);
+            if (o && o.page !== PAGE_ID && Date.now() - (o.at || 0) < LIVE_FRESH_MS) return forwardCall(service, "__demo", p);
+            // No page keeps the connections: this one does, from now.
+            connectAll();
+            return new Promise(function (resolve) {
+                var tries = 0;
+                (function wait() {
+                    var d = demos[service];
+                    if ((d && d.signedIn()) || ++tries > 60) return resolve(demoOp(service, p));
+                    setTimeout(wait, 250);
+                })();
+            });
+        };
+
+        // Files a connector keeps (pictures received): the Files block's
+        // store, as avatars are (up to 1 MB each in the simulator).
+        function writeFile(service, name, bytes) {
+            var path = "/media/internal/.phoenix/connector-files/" + service + "/" + name;
+            var fm = runtime.fileManager;
+            if (fm && fm.store && fm.store(path, toBase64(bytes))) return Promise.resolve(path);
+            return Promise.reject(Object.assign(new Error("Too large to keep here: " + name), { errorCode: "SHARE_TOO_LARGE" }));
+        }
+        // Build-time settings (/etc/phoenix/connectors/<service>.json: an app
+        // id registered with a service), from the checkout's
+        // runtime/connector-settings/ (not in the repository; README there).
+        function settings(service) {
+            try { return Promise.resolve(JSON.parse(PalmSystem.getResource("/etc/phoenix/connectors/" + service + ".json") || "null")); }
+            catch (e) { return Promise.resolve(null); }
+        }
+        // System helpers a first-party connector starts (TDLib's, Delta
+        // Chat's JSON interfaces): none run in a page. A simulated one is
+        // registered here by name (runtime.registerHelper) for demos and tests.
+        var helpers = {};
+        runtime.registerHelper = function (name, make) { helpers[name] = make; };
+
         function host(appId, service) {
             if (hosted[service]) return;
             var dir = "/usr/palm/applications/" + appId + "/service/";
@@ -12240,11 +12334,21 @@
                 var kit = loadModule("@phoenix/connector-kit");
                 var def = loadModule("connector.js");
                 made = { def: def, kit: kit, methods: kit.createConnectorService(def, {
-                    luna: luna, request: request, readFile: readFile,
+                    luna: luna, request: requestFor(service), readFile: readFile,
                     files: runtime.fileManager && runtime.fileManager.localFiles,
                     systemConfig: systemConfig,
                     cachePhoto: function (key, url) { return cachePhoto(service, key, url); },
-                    log: function (m) { console.info("[" + service + "] " + m); }
+                    log: function (m) { console.info("[" + service + "] " + m); },
+                    net: { websocket: function (url, protocols) { return websocket(service, url, protocols); } },
+                    live: function () { return claimLive(service); },
+                    writeFile: writeFile,
+                    settings: settings,
+                    helper: function (name, args) {
+                        if (helpers[name]) return Promise.resolve(helpers[name](args || [], service));
+                        var demo = demoHelper(service, name);
+                        if (demo) return Promise.resolve(demo.process());
+                        return Promise.reject(Object.assign(new Error(name + " is not on this device"), { errorCode: "HELPER_NOT_AVAILABLE" }));
+                    }
                 }) };
                 installKinds(appId, service, def);
                 return made;
@@ -12258,11 +12362,15 @@
                     var lock = name === "sync" && p.accountId ? "connector:syncLock:" + service + ":" + p.accountId : null;
                     if (lock) {
                         var held = store.get(lock, 0);
-                        if (held && Date.now() - held < LOCK_MS) return reply(ok({ alreadyRunning: true }));
-                        store.set(lock, Date.now());
+                        if (held && lockHeld(held)) return reply(ok({ alreadyRunning: true }));
+                        store.set(lock, { page: PAGE_ID, at: Date.now() });
+                        startBeat();
                     }
                     m.methods[name](p).then(function (r) {
                         if (lock) store.set(lock, 0);
+                        // Another page keeps this connector's connections: it does it there.
+                        if (r && r.returnValue === false && r.errorCode === "NOT_LIVE_HERE")
+                            return forwardCall(service, name, p).then(reply);
                         reply(r);
                     }, function (e) {
                         if (lock) store.set(lock, 0);
@@ -12271,6 +12379,50 @@
                 }
             });
         }
+
+        // The system UI's page opens the connections of the accounts of
+        // connectors that keep one, as a device's services start with it.
+        // A connector's accounts (its templates', as the app has them).
+        function accountsOf(service, def) {
+            return Promise.all((def.templateIds || []).map(function (tid) {
+                return callP("luna://com.palm.service.accounts/listAccounts", { templateId: tid }).then(function (r) { return r.results || []; });
+            })).then(function (lists) { return [].concat.apply([], lists); });
+        }
+        function connectAll() {
+            Object.keys(hosted).forEach(function (service) {
+                var m;
+                try { m = hosted[service].load(); } catch (e) { return; }
+                if (!m.def.connection) return;
+                accountsOf(service, m.def).then(function (list) {
+                    if (!list.length || !claimLive(service)) return;
+                    list.forEach(function (a) {
+                        // A sync: the connection opened after it, and what came meanwhile filed.
+                        callP("luna://" + service + "/sync", { accountId: a._id }).then(function (x) {
+                            if (x && x.returnValue === false) console.info("[" + service + "] " + a.username + ": " + (x.errorText || x.errorCode));
+                        });
+                    });
+                });
+            });
+        }
+        function callP(uri, params) {
+            return new Promise(function (resolve) {
+                dispatch(uri, params || {}, resolve, { cancelled: function () { return false; }, onCancel: null });
+            });
+        }
+        setTimeout(function () { if (PalmSystem.appIdentifier === "com.palm.systemui") connectAll(); }, 2500);
+        runtime.connectConnectors = connectAll;
+        // No page keeps them (the one that did went, its card closed, or the
+        // account was made in a page that closed before it connected): one
+        // takes over within a quarter of a minute, as a device's service
+        // would simply still run.
+        setInterval(function () {
+            var orphaned = Object.keys(hosted).some(function (service) {
+                if (liveHeld[service]) return false;
+                var o = store.get("connector:live:" + service, null);
+                return !o || Date.now() - (o.at || 0) >= LIVE_FRESH_MS;
+            });
+            if (orphaned) connectAll();
+        }, LIVE_FRESH_MS + Math.floor(Math.random() * 3000));
 
         // The templates of the connector's app (its public/accounts).
         function templatesOf(service) {
@@ -12292,16 +12444,28 @@
             var done = store.get("connectorKinds", {});
             if (done[service] === version) return;
             var ids = [def.kinds.state].concat(def.kinds.item ? [def.kinds.item] : []);
-            templatesOf(service).forEach(function (t) {
+            // The templates as the app has them (the accounts block's list may not be read yet).
+            var templates = templatesOf(service);
+            (def.templateIds || []).forEach(function (tid) {
+                try {
+                    var t = JSON.parse(PalmSystem.getResource("/usr/palm/applications/" + appId + "/public/accounts/" + tid + "/" + tid + ".json") || "null");
+                    if (t) templates.push(t);
+                } catch (e) { /* not there */ }
+            });
+            templates.forEach(function (t) {
                 (t.capabilityProviders || []).forEach(function (cp) {
                     Object.keys(cp.dbkinds || {}).forEach(function (k) { if (ids.indexOf(cp.dbkinds[k]) < 0) ids.push(cp.dbkinds[k]); });
                 });
             });
             ids.forEach(function (id) {
-                var file = "/usr/palm/applications/" + appId + "/configuration/db/kinds/" + id.replace(/:\d+$/, "");
-                var k = null;
-                try { k = JSON.parse(PalmSystem.getResource(file) || "null"); } catch (e) { k = null; }
-                callNow("palm://com.palm.db/putKind", { id: id, owner: service, extends: (k && k.extends) || [] });
+                // configuration/db/kinds, or tempdb's (a buddy's presence lives in tempdb).
+                var name = id.replace(/:\d+$/, ""), k = null, temp = false;
+                try { k = JSON.parse(PalmSystem.getResource("/usr/palm/applications/" + appId + "/configuration/db/kinds/" + name) || "null"); } catch (e) { k = null; }
+                if (!k) {
+                    try { k = JSON.parse(PalmSystem.getResource("/usr/palm/applications/" + appId + "/configuration/tempdb/kinds/" + name) || "null"); } catch (e) { k = null; }
+                    temp = !!k;
+                }
+                callNow(temp ? "palm://com.palm.tempdb/putKind" : "palm://com.palm.db/putKind", { id: id, owner: service, extends: (k && k.extends) || [] });
             });
             done[service] = version;
             store.set("connectorKinds", done);
@@ -12479,9 +12643,8 @@
 
         // The templates this block serves (runtime.accountTemplateHasTransport,
         // block "Accounts"): CardDAV and CalDAV, the Subscribed Calendar (a
-        // public .ics, one way: lib/webcal.js), the simulated Jabber (XMPP)
-        // account (block "Instant messaging"), and any other whose service
-        // is on the simulated bus.
+        // public .ics, one way: lib/webcal.js), and any other whose service
+        // is on the simulated bus (the connectors on the kit).
         function templates() {
             return runtime.accountTemplates().filter(runtime.accountTemplateHasTransport);
         }
@@ -13109,7 +13272,7 @@
                 var serviceFile = pkg.files.filter(function (f) { return f.path === app.dir + "service/package.json"; })[0];
                 var connectorService = "";
                 if (serviceFile) {
-                    if (!dev && !(firstParty && runtime.firstPartyPackages().some(function (p) { return p.id === id; })))
+                    if (!dev && !(firstParty && runtime.preinstalledPackages().concat(runtime.firstPartyPackages()).some(function (p) { return p.id === id; })))
                         throw Object.assign(new Error("Synergy connectors (an account type with a background service) need Developer Mode"), { code: "NEEDS_DEVMODE" });
                     try { connectorService = JSON.parse(new TextDecoder().decode(serviceFile.data)).name || ""; } catch (e) { connectorService = ""; }
                 }
@@ -13457,6 +13620,9 @@
                             });
                         }
                         return preinstalledInfo;
+                    },
+                    firstParty: function () {
+                        return runtime.firstPartyPackages().map(function (p) { return { id: p.id, sourceId: p.sourceId || "phoenix" }; });
                     },
                     log: function (m) { console.info("[marketplace] " + m); },
                     // The launcher's pending icon: a tap opens the app's page

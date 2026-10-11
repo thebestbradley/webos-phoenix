@@ -664,6 +664,42 @@ pinned revision. "Jev" (TypeSafe), which Laya compares itself with, is a
 hosted, closed service: not used. The typed-decisions checkpoint was not
 used (it was tuned on its benchmark's test split, its card says).
 
+## Messaging accounts (Jabber, Matrix, Delta Chat, Unofficial Telegram)
+
+The four connectors (`apps/connectors/xmpp`, `matrix`, `deltachat`,
+`apps/telegram`; docs/SYNERGY-CONNECTORS.md 7) are Phoenix's code,
+Apache-2.0, with no npm dependency of their own. Each library considered,
+its licence checked (11 October 2026):
+
+- **XMPP**: Phoenix's own client (`service/lib`: XML stream parser, SCRAM,
+  stream management). `@xmpp/client` (ISC) was not taken: ECMAScript
+  modules only, with a dozen dependencies, where the connector runs as
+  CommonJS under `run-js-service`. No **OMEMO** library is permissive
+  (libsignal, libomemo-c and `@privacyresearch/libsignal-protocol-typescript`
+  are GPL-3.0), so none is used (OPEN-QUESTIONS Q90). `tools/test-xmpp-server.cjs`
+  runs against **Prosody** (MIT), a test tool installed on the test machine,
+  never shipped.
+- **Matrix**: Phoenix's own client of the client-server API.
+  `@matrix-org/matrix-sdk-crypto-wasm` (Apache-2.0, about 9 MB) would bring
+  end-to-end encryption; not used yet (Q91).
+- **Delta Chat**: its core, chatmail/core's `deltachat-rpc-server`, is
+  **MPL-2.0** (its LICENSE; also `@deltachat/jsonrpc-client`, read for the
+  method names only, not used). The connector only runs it as a separate
+  program and speaks JSON-RPC to it; nothing of it is copied or linked. It
+  is not a licence this file allows Phoenix's own recipes, so the image
+  installs it only when the owner decides (`PHOENIX_DELTACHAT = "1"`,
+  OPEN-QUESTIONS Q89); an image with it ships the core unmodified and offers
+  its source as the GPL components' (below, "Source offer"; MPL-2.0 3.2).
+- **Telegram**: **TDLib** (Boost Software License 1.0, LICENSE_1_0.txt),
+  built by meta-phoenix's `tdlib` recipe with OpenSSL (Apache-2.0) and zlib;
+  `phoenix-tdjson`, the bridge to it, is Phoenix's (Apache-2.0). `tdl`
+  (MIT) was not taken: a native Node addon. The account is not called
+  "Telegram" and does not use Telegram's logo or blue, as Telegram's API
+  terms ask of third-party clients; its app id is the project's (Q16), kept
+  out of the repository.
+- The pictures of all four are drawn for Phoenix (each package's
+  PROVENANCE.md); none is a network's logo.
+
 ## Fonts
 
 Legacy webOS used **Prelude**, which was made for Palm and is not openly

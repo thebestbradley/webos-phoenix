@@ -32,7 +32,7 @@ export default defineConfig({
         setupFiles: ["./vitest.setup.ts"],
         include: ["shared/*/src/**/*.test.{ts,tsx}", "settings/src/**/*.test.{ts,tsx}",
                   "{phone,messaging,camera,photos,music,files,tasks,voicememos,flashlight,scanner,weather,maps,passwords,authenticator,terminal,videos,podcasts,pdfview,docview,help,firstuse,screenshot,notificationlab,agenda,printmanager,voicedial,clipboard,assistant,dropshare,marketplace}/src/**/*.test.{ts,tsx}",
-                  "{files,voicememos,dav,fediverse,settings,marketplace,assistant}/service/**/*.test.ts", "connectors/*/service/**/*.test.ts",
+                  "{files,voicememos,dav,fediverse,telegram,settings,marketplace,assistant}/service/**/*.test.ts", "connectors/*/service/**/*.test.ts",
                   "../services/updates/**/*.test.ts", "../services/hardware/**/*.test.ts",
                   "../services/systemmanager/**/*.test.ts", "../services/clipboard/**/*.test.ts",
                   "../services/{shellhost,appmanager,accessories,dropshare}/**/*.test.ts"],

@@ -17,7 +17,7 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import * as kit from "@phoenix/connector-kit";
 import * as synckit from "@phoenix/synckit";
 import { conformanceChecks } from "../../../shared/connector-kit/src/conformance";
@@ -34,6 +34,10 @@ const T = drives.TEMPLATES;
 const template = (k: string) => JSON.parse(readFileSync(join(__dirname, "..", "public", "accounts", T[k], T[k] + ".json"), "utf8"));
 const request = synckit.createRequest({ timeoutMs: 20000 });
 const E = kit.FILE_ERRORS;
+// The walks move 17-21 MB through the stand-in servers over real HTTP: 2-3 s
+// each alone, past vitest's default 5 s on a busy machine (Box's walk took
+// 5.1 s on 4 cores at a load of 11, and 18.5 s with 8 more busy processes).
+vi.setConfig({ testTimeout: 60000 });
 
 let fake: any;
 beforeAll(async () => { fake = await createFakeDrives({ autoApprove: true }).start(0); });
