@@ -168,10 +168,14 @@ async function main() {
         });
 
         const page = await context.newPage();
+        // Chromium keeps 16 WebGL contexts and loses the oldest past that,
+        // the map's once anything makes contexts as it renders.
+        let tooManyContexts = 0;
         page.on("pageerror", (e) => errors.push(e.message));
         page.on("console", (m) => {
             const t = m.text();
             if (t.startsWith("__phoenix__")) host.push(JSON.parse(t.slice(11)));
+            else if (/Too many active WebGL contexts/.test(t)) tooManyContexts++;
             else if (m.type() === "error" && !/Failed to load resource|ERR_FAILED|status of 404|status of 503/.test(t)) errors.push(t);
         });
         const shot = (name) => page.screenshot({ path: path.join(outDir, name + ".png") });
@@ -490,6 +494,7 @@ async function main() {
 
         check(external.length === 0, `no requests to other servers${external.length ? ": " + external.slice(0, 3).join(", ") : ""}`);
         check(errors.length === 0, `no page errors${errors.length ? ": " + errors.slice(0, 3).join(" | ") : ""}`);
+        check(tooManyContexts === 0, `the map keeps its WebGL context (${tooManyContexts} "Too many active WebGL contexts")`);
         await browser.close();
     } finally {
         server.kill();
