@@ -1187,6 +1187,12 @@ Item {
                     width: row.thinking ? dotsRow.width + Theme.px(28) : Math.min(list.width * 0.86, words.implicitWidth + Theme.px(24))
                     height: row.thinking ? Theme.px(36) : words.implicitHeight + Theme.px(16) + (via.visible ? via.height : 0)
                     radius: Theme.px(14)
+                    // The speaker's lower corner nearly square, as the
+                    // Assistant app's and Messaging's bubbles have it
+                    // (apps/assistant/src/assistant.css:33-34: the
+                    // answer's lower left, the user's lower right).
+                    bottomLeftRadius: row.mine ? radius : Theme.px(4)
+                    bottomRightRadius: row.mine ? Theme.px(4) : radius
                     color: row.mine ? "#E8FFFFFF" : (row.modelData.status === "failed" ? "#B04A2020" : "#A0303438")
                     border.color: row.mine ? "transparent" : "#40FFFFFF"
                     border.width: row.mine ? 0 : 1
