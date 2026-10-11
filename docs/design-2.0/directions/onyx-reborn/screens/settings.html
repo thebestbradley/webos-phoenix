@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings</title>
+<link rel="stylesheet" href="../css/onyx.css">
+<script src="../js/icons.js"></script>
+<script src="../js/frame.js"></script>
+<style>
+  .toolbar.top { height: 60px; padding: 0 12px 0 16px; }
+  .toolbar.top .glyph { width: 32px; height: 32px; border-radius: 9px; --g1: #6A7078; --g2: #4A4F56; }
+  .body { flex: 1; padding: 12px 12px 0; display: flex; flex-direction: column; gap: 14px; overflow: hidden; }
+  .groupbox .item { min-height: 54px; }
+  .wpthumb { width: 28px; height: 42px; border-radius: 6px; background: url("../assets/silk.jpg") center / cover; box-shadow: 0 0 0 1px rgba(0,0,0,.2), 0 1px 3px rgba(0,0,0,.25); }
+  /* the dashboard: webOS's notification strip across the bottom */
+  .dashboard { flex: none; display: flex; align-items: center; gap: 12px; padding: 0 12px 0 10px; height: 64px; color: #fff; position: relative; z-index: 3;
+    background: linear-gradient(180deg, #34383D, #24272B); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 -1px 0 #121416, 0 -6px 14px -6px rgba(0,0,0,.35); }
+  .dashboard .appicon { width: 42px; height: 42px; border-radius: 11px; }
+  .dashboard .appicon .ic { width: 22px; height: 22px; }
+  .dashboard .t1 { font-size: 15px; font-weight: 700; }
+  .dashboard .t2 { font-size: 13px; color: #B9BFC7; }
+  .dashboard .btn { margin-left: auto; }
+</style>
+</head>
+<body class="phone">
+  <header class="statusbar" data-app="Settings"></header>
+  <main class="app">
+    <div class="toolbar top">
+      <span class="glyph"><i data-i="gear"></i></span>
+      <span class="title">Settings</span><span class="sp"></span>
+      <button class="ibtn"><i data-i="search"></i></button>
+    </div>
+    <div class="body">
+      <div class="groupbox">
+        <div class="cap">Connections</div>
+        <div class="item"><span class="glyph" style="--g1:#2F8BD6;--g2:#1A6DB3"><i data-i="wifi"></i></span><span class="label">Wi-Fi<small>Phoenix 5G</small></span><span class="toggle on"></span></div>
+        <div class="item"><span class="glyph" style="--g1:#5964D8;--g2:#3E47B5"><i data-i="bluetooth"></i></span><span class="label">Bluetooth<small>Pebble Time, Car audio</small></span><span class="toggle on"></span></div>
+        <div class="item"><span class="glyph" style="--g1:#E38B2C;--g2:#C46A12"><i data-i="airplane"></i></span><span class="label">Airplane Mode</span><span class="toggle"></span></div>
+        <div class="item"><span class="glyph"><i data-i="shield"></i></span><span class="label">VPN</span><span class="value">Not connected</span><i data-i="chevR" class="chev"></i></div>
+      </div>
+      <div class="groupbox">
+        <div class="cap">Personalize</div>
+        <div class="item"><span class="glyph" style="--g1:#D9548A;--g2:#B8336A"><i data-i="image"></i></span><span class="label">Wallpaper<small>Silk</small></span><span class="wpthumb"></span><i data-i="chevR" class="chev"></i></div>
+        <div class="item"><span class="glyph" style="--g1:#7A5BD6;--g2:#5B3FB5"><i data-i="moon"></i></span><span class="label">Appearance</span><span class="value" id="appearance">Dark</span><i data-i="chevR" class="chev"></i></div>
+        <div class="item"><span class="glyph" style="--g1:#D6493F;--g2:#B32F27"><i data-i="speaker"></i></span><span class="label">Sounds &amp; Ringtones</span><span class="value">Vibrate</span><i data-i="chevR" class="chev"></i></div>
+        <div class="item"><span class="glyph" style="--g1:#D9A21E;--g2:#B88207"><i data-i="sun"></i></span><span class="label">Screen &amp; Lock</span><span class="value">1 min</span><i data-i="chevR" class="chev"></i></div>
+      </div>
+      <div class="groupbox">
+        <div class="cap">Device<span class="r">Fairphone 6</span></div>
+        <div class="item"><span class="glyph" style="--g1:#3E9B56;--g2:#2A7B3E"><i data-i="battery"></i></span><span class="label">Battery</span><span class="value">76% · 11 h left</span><i data-i="chevR" class="chev"></i></div>
+        <div class="item"><span class="glyph" style="--g1:#2A9AA6;--g2:#167B86"><i data-i="search"></i></span><span class="label">Just Type</span><span class="value">Web, Contacts</span><i data-i="chevR" class="chev"></i></div>
+        <div class="item"><span class="glyph"><i data-i="clock"></i></span><span class="label">Date &amp; Time</span><span class="value">Automatic</span><i data-i="chevR" class="chev"></i></div>
+      </div>
+    </div>
+    <div class="dashboard">
+      <span class="appicon" style="--c1:#6A7078;--c2:#454A50"><i data-i="download"></i></span>
+      <div style="min-width:0"><div class="t1">System update</div><div class="t2">webOS Phoenix 2.0.1 is ready</div></div>
+      <button class="btn sm blue">Install</button>
+    </div>
+  </main>
+  <footer class="gesture"></footer>
+<script>
+  document.getElementById("appearance").textContent = document.documentElement.dataset.theme === "light" ? "Light" : "Dark";
+  phxReady();
+</script>
+</body>
+</html>

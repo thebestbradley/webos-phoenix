@@ -16,7 +16,8 @@ export const NOW = shared.NOW;
 export const at = shared.at;
 
 type Opts = { offline?: boolean; locationAllowed?: boolean | null; seed?: (put: (o: any) => string) => void; llm?: object;
-              llmRequest?: (r: object) => Promise<any>; apps?: { id: string; title: string }[]; settings?: object; deps?: object };
+              llmRequest?: (r: object) => Promise<any>; apps?: { id: string; title: string; [k: string]: any }[]; settings?: object; deps?: object;
+              driveFiles?: Record<string, object[]>; shareApps?: boolean; templates?: Record<string, object>; kinds?: Record<string, string> };
 
 export function device(opts: Opts = {}) {
     const d = shared.device(opts);
@@ -28,6 +29,7 @@ export function device(opts: Opts = {}) {
         state: d.state as Record<string, any>,
         calls: d.calls as { uri: string; params: any }[],
         of: d.of as (kind: string) => any[],
+        put: d.put as (o: any) => string,
         called: d.called as (part: string) => { uri: string; params: any }[],
         ask: (text: string, extra?: object): Promise<Msg> => checked(d.ask(text, extra)),
         askAll: (text: string, extra?: object): Promise<Msg[]> => checked(d.askAll(text, extra)),

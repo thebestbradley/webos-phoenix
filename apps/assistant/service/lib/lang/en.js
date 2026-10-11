@@ -560,10 +560,11 @@ function nameAtStart(rest, ctx) {
 }
 
 // The chat network a message is to go by ("message sam on telegram: hi",
-// "send a matrix message to sam saying hi"): {t: the words without it, via}.
-var CHAT_NET = "(jabber|xmpp|matrix|delta ?chat|telegram)";
-function chatNetwork(t) {
-    var via = "", m;
+// "send a matrix message to sam saying hi", "text sam on slack: hi"):
+// {t: the words without it, via}. The networks: the services people name
+// and the device's own messaging accounts (lib/lang/en-synergy.js chatWords).
+function chatNetwork(t, ctx) {
+    var via = "", m, CHAT_NET = "(" + synergyWords.chatWords(ctx) + ")";
     function net(w) { return /^(?:jabber|xmpp)$/.test(w) ? "jabber" : /^delta ?chat$/.test(w) ? "deltachat" : w; }
     if ((m = new RegExp("^(send (?:a |an )?)" + CHAT_NET + " (?:message|text|chat|msg) to ").exec(t))) {
         via = net(m[2]);
@@ -581,7 +582,7 @@ function chatNetwork(t) {
 // "text sam i'm late", "send a message to sam saying hi", "tell sam that ...",
 // "message sam on telegram: hi" (via: the chat network)
 function textMessage(t, ctx) {
-    var cn = chatNetwork(t);
+    var cn = chatNetwork(t, ctx);
     var r = textMessageWords(cn.t, ctx);
     if (r && cn.via) r.via = cn.via;
     return r;
@@ -2317,8 +2318,8 @@ var say = {
     },
     // Calendar
     eventWhen: function () { return "When is it? Say a day and a time, like \"tomorrow at 3\"."; },
-    eventAdded: function (title, start, end, allDay, now, location, repeat) {
-        return "Added " + quote(title) + " to your calendar, " + whenText(start, end, allDay, now) + (repeat ? ", " + repeatText(repeat) : "") +
+    eventAdded: function (title, start, end, allDay, now, location, repeat, calendar) {
+        return "Added " + quote(title) + " to your " + (calendar ? calendar + " " : "") + "calendar, " + whenText(start, end, allDay, now) + (repeat ? ", " + repeatText(repeat) : "") +
             (location ? ", at " + location : "") + ".";
     },
     noCalendar: function () { return "There's no calendar to add it to. Open Calendar to set one up."; },
@@ -2609,8 +2610,8 @@ var say = {
     // "distance".
     location: function (why, purpose) {
         var own = say.locationNeed ? say.locationNeed(purpose) : "";   // the everyday features' (en-places.js)
-        var need = own || (purpose === "distance" ? "work out how far that is" : purpose === "places" ? "find places near you and the way there" : "check the weather where you are");
-        var instead = own || purpose === "distance" || purpose === "places" ? "" : " Or say a city, like \u201cweather in Paris\u201d.";
+        var need = own || (purpose === "distance" ? "work out how far that is" : purpose === "share" ? "send where you are" : purpose === "places" ? "find places near you and the way there" : "check the weather where you are");
+        var instead = own || purpose === "distance" || purpose === "places" || purpose === "share" ? "" : " Or say a city, like \u201cweather in Paris\u201d.";
         if (why === "ask") return "To " + need + ", I need your location. Is it OK if I use it?";
         if (why === "denied") return "I'm not allowed to use your location. Allow it, here or in Settings > Location Services, and I'll " + need + "." + instead;
         if (why === "off") return "Location Services are off. Turn them on and I'll " + need + "." + instead;
@@ -2743,7 +2744,8 @@ function choiceAnswer(text, options, partial, places) {
 var CHOICE_PHRASES = { "Pause": "pause it", "Play": "play it", "Next": "skip to the next one", "Save as Memo": "save it as a memo",
                        "Show in Maps": "show it in Maps", "Allow": "use your location", "Don't Allow": "leave your location alone",
                        "Allow Location": "use your location", "Copy It Instead": "copy it instead", "Location Settings": "open Location Settings",
-                       "Start Navigation": "start navigation", "Call Voicemail": "call voicemail" };
+                       "Start Navigation": "start navigation", "Call Voicemail": "call voicemail",
+                       "Join Now": "join it now", "Open Post": "open the post" };
 function choicePhrase(o) {
     if (o.kind === "web") return "search the web";
     if (o.kind === "cloud") return "ask " + o.name;
@@ -3033,11 +3035,22 @@ Object.keys(everyday.MENTIONS).forEach(function (k) { if (!(k in MENTIONS)) MENT
 var describeCommand = say.describe;
 say.describe = function (command, args, title) { return everyday.describe(command, args, title) || describeCommand(command, args, title); };
 
+// What is connected through Synergy (lib/lang/en-synergy.js): its rules
+// before the others (they hear an account named: "on Slack", "my work
+// calendar"), its words for a model's choice, and what it says.
+var synergyWords = require("./en-synergy")({ quote: quote, list: list, plural: plural, cap: cap, cased: cased, excerpt: excerpt, whenText: whenText, timeText: timeText,
+                                             extract: extract, rules: function () { return rules; } });
+Array.prototype.splice.apply(rules, [rules.map(function (r) { return r[0]; }).indexOf("beyond"), 0].concat(synergyWords.RULES));
+Object.keys(synergyWords.MENTIONS).forEach(function (k) { MENTIONS[k] = synergyWords.MENTIONS[k]; });
+Object.keys(synergyWords.say).forEach(function (k) { say[k] = synergyWords.say[k]; });
+
 module.exports = {
     // Help's examples for the everyday features ([{title, examples}]).
     everydayHelp: everyday.help,
     id: "en",
     name: "English",
+    // The services people name, for lib/commands-synergy.js (canon: "gmail" -> "google").
+    synergy: { serviceOf: synergyWords.serviceOf, canon: synergyWords.canon },
     clean: clean,
     rules: rules,
     casual: casual,

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Messaging, conversations</title>
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/icons.js"></script>
+<script src="../assets/app.js"></script>
+<style>
+  .card { background: var(--md-surface-container); display: flex; flex-direction: column; }
+  html[data-theme="dark"] .card { background: var(--md-surface-container-low); }
+  .top { display: flex; align-items: flex-start; padding: 22px 12px 0 24px; }
+  .top .titles { flex: 1; }
+  .top .sub { margin-top: 2px; }
+  .top .sub b { color: var(--md-primary); font-weight: 650; }
+  .search { margin: 18px 16px 0; background: var(--md-surface-container-highest); }
+  html[data-theme="dark"] .search { background: var(--md-surface-container-high); }
+  .search .me { width: 36px; height: 36px; }
+  .seg { margin: 14px 16px 14px; }
+  .seg .badge { height: 18px; min-width: 18px; line-height: 18px; font-size: 11px; padding: 0 5px; background: var(--md-on-secondary); color: var(--md-secondary); }
+  .seg .n { font-weight: 500; opacity: .8; }
+  .sheet { flex: 1; background: var(--md-surface-container-lowest); border-radius: var(--r-xl) var(--r-xl) 0 0; padding: 8px 0 0; --av-ring: var(--md-surface-container-lowest); position: relative; }
+  html[data-theme="dark"] .sheet { background: var(--md-surface); --av-ring: var(--md-surface); }
+  .conv { display: flex; gap: 14px; align-items: center; padding: 11px 20px 11px 18px; }
+  .conv .txt { flex: 1; min-width: 0; }
+  .conv .l1 { display: flex; align-items: baseline; gap: 8px; }
+  .conv .name { flex: 1; font-size: 16.5px; line-height: 24px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv .when { font-size: 12.5px; font-weight: 600; color: var(--md-on-surface-variant); }
+  .conv.unread .when { color: var(--md-primary); }
+  .conv .l2 { display: flex; align-items: center; gap: 6px; margin-top: 1px; }
+  .conv .snip { flex: 1; font-size: 14.5px; line-height: 20px; color: var(--md-on-surface-variant); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv.unread .snip { color: var(--md-on-surface); font-weight: 600; }
+  .conv .via { width: 16px; height: 16px; flex: none; }
+  .via.sms { color: var(--acc-sms); } .via.jabber { color: var(--acc-jabber); }
+  .conv.sel { background: var(--md-secondary-container); margin: 0 8px; padding-left: 10px; padding-right: 12px; border-radius: var(--r-xl); --av-ring: var(--md-secondary-container); }
+  .conv.sel .name, .conv.sel .snip { color: var(--md-on-secondary-container); }
+  .fab { position: absolute; right: 16px; bottom: 16px; }
+  .daylabel { padding: 10px 24px 4px; }
+</style>
+<script>
+const convs = [
+  { n: 'Ada Palmer', i: 'AP', c: 'c4', when: '9:41', snip: 'Running late, grab us a table by the window?', via: 'jabber', accs: ['sms', 'jabber'], unread: 2, pres: 'on' },
+  { n: 'Marcus Chen', i: 'MC', c: 'c3', when: '9:12', snip: 'Sent you the photos from Saturday', via: 'jabber', accs: ['jabber'], unread: 1, pres: 'on' },
+  { n: 'Mom', i: 'M', c: 'c5', when: '8:30', snip: 'Call when you land. Love you', via: 'sms', accs: ['sms'] },
+  { n: 'Book club', i: 'BC', c: 'c2', when: 'Mon', snip: 'Priya: Chapter nine for next week!', via: 'sms', group: true },
+  { n: 'Jonas Weber', i: 'JW', c: 'c6', when: 'Mon', snip: 'Ha, that card-shuffle trick is genius', via: 'jabber', accs: ['sms', 'jabber'], pres: 'away' },
+  { n: 'Lena Ortiz', i: 'LO', c: 'c1', when: 'Mon', snip: 'Can we move stand-up to 10?', via: 'sms', accs: ['sms'] },
+  { n: 'Sam Delgado', i: 'SD', c: 'c7', when: 'Sun', snip: 'Got it, see you at 6', via: 'sms', accs: ['sms'] },
+  { n: 'Noor Haddad', i: 'NH', c: 'c5', when: 'Sun', snip: 'The pull request is merged! Drinks on me', via: 'jabber', accs: ['jabber'], pres: 'on' },
+  { n: 'Dr. Okafor’s office', i: 'DO', c: 'c3', when: 'Sat', snip: 'Reminder: Thu 15 Oct at 3:15 PM. Reply C to confirm', via: 'sms' },
+];
+function build() {
+  const list = document.getElementById('list');
+  list.innerHTML = convs.map(c => c.day ? `<div class="daylabel label-m dim">${c.day}</div>` : `
+    <div class="conv ${c.unread ? 'unread' : ''} ${c.sel ? 'sel' : ''}">
+      <div class="av ${c.c}">${c.group ? '<i data-i="groups-fill"></i>' : c.i}
+        ${c.accs && c.accs.length > 1 ? `<div class="accs">${c.accs.map(a => `<span class="a-${a}"><i data-i="${a === 'sms' ? 'sms' : 'chat-fill'}"></i></span>`).join('')}</div>` : ''}
+        ${!(c.accs && c.accs.length > 1) && c.pres ? `<div class="presence ${c.pres === 'away' ? 'away' : ''}"></div>` : ''}
+      </div>
+      <div class="txt">
+        <div class="l1"><div class="name">${c.n}</div><div class="when">${c.when}</div></div>
+        <div class="l2"><i data-i="${c.via === 'sms' ? 'sms' : 'chat'}" class="via ${c.via}"></i><div class="snip">${c.snip}</div>${c.unread ? `<div class="badge">${c.unread}</div>` : ''}</div>
+      </div>
+    </div>`).join('');
+}
+</script>
+</head>
+<body>
+<div class="device" data-app="Messaging">
+  <main class="card">
+    <div class="top">
+      <div class="titles">
+        <div class="headline-l">Messaging</div>
+        <div class="sub body-m dim"><b>3 unread</b> · 4 buddies online</div>
+      </div>
+      <div class="icon-btn"><i data-i="more_vert"></i></div>
+    </div>
+    <div class="search"><i data-i="search"></i><div class="ph">Search or start a chat</div><div class="av xs c1 me">JR</div></div>
+    <div class="seg">
+      <div class="sel"><i data-i="forum-fill"></i>Conversations <span class="badge">3</span></div>
+      <div><i data-i="person"></i>Buddies <span class="n">4</span></div>
+    </div>
+    <section class="sheet fade-bottom">
+      <div id="list"></div>
+    </section>
+    <div class="fab"><i data-i="edit-fill"></i>New chat</div>
+  </main>
+</div>
+</body>
+</html>

@@ -46,6 +46,11 @@ module.exports = function (h) {
             areas.forEach(function (a) { if (a.phrases) out.routines = a.phrases(env); });
             return out;
         },
+        // Home, work or a saved place by name (lib/commands-places.js): {name, detail, lat, lon} | null.
+        savedPlace: function (env, which) {
+            for (var i = 0; i < areas.length; ++i) if (areas[i].savedPlace) return areas[i].savedPlace(env, which);
+            return Promise.resolve(null);
+        },
         // The service's own methods, each (params) -> Promise<reply>.
         service: function (s) {
             var out = {};

@@ -368,7 +368,15 @@ module.exports = function (h) {
             if (cmd.id === "setPlace") return setPlace({ place: args.place, address: args.address }, env);
             return null;
         },
+        // Home or work (or another saved place by its name): {name, detail, lat, lon} | null,
+        // for whatever else needs them ("send Sam my ETA home": lib/commands-synergy.js).
+        savedPlace: function (env, which) {
+            return savedPlaces(env).then(function (list) {
+                var p = placeNamed(list, which === "home" || which === "work" ? placeLabel(which) : which);
+                return p ? { name: p.name, detail: p.detail || "", lat: p.lat, lon: p.lon } : null;
+            });
+        },
         // For tests and the simulator's checks.
-        fence: { box: box, within: within, enterTrigger: enterTrigger, exitTrigger: exitTrigger, ARRIVE_M: ARRIVE_M, LEAVE_M: LEAVE_M }
+        fence:{ box: box, within: within, enterTrigger: enterTrigger, exitTrigger: exitTrigger, ARRIVE_M: ARRIVE_M, LEAVE_M: LEAVE_M }
     };
 };

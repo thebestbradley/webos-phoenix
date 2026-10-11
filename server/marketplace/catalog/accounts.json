@@ -232,6 +232,24 @@
             "signUp": "https://account.box.com/signup/personal"
         },
         {
+            "templateId": "com.webosphoenix.drive.sftp",
+            "title": "SFTP",
+            "provider": "Any SSH server (a NAS, a Raspberry Pi, your own server)",
+            "icon": "icons/accounts/com.webosphoenix.drive.sftp.png",
+            "iconFrom": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.sftp/images/drive-48x48@2x.png",
+            "summary": "A folder of any SSH server as a place in Files, the file pickers and Save to Files, over SFTP. Sign in with a password or a key made on the device; the server's key is checked on first use and refused if it changes.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["ssh-2", "sftp-3"],
+            "auth": { "type": "password", "registration": "none" },
+            "server": "user",
+            "privacy": { "dataGoesTo": "the SSH server you enter", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "beta",
+            "package": { "id": "org.webosphoenix.drives", "builtin": false }
+        },
+        {
             "templateId": "com.webosphoenix.todoist",
             "title": "Todoist",
             "provider": "Todoist",

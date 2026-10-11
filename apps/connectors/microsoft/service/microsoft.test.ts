@@ -162,6 +162,25 @@ describe("Microsoft", () => {
         expect(await w.find(K.calendar)).toEqual([]);
     });
 
+    it("sends the user's answer to an invitation as Graph's reply, not as an edit", async () => {
+        const { w, id } = await signedIn();
+        await w.enable(id, P.calendar);
+        expect((await w.sync(id)).returnValue).toBe(true);
+        // Anna is a guest at Megan's "Project sync"; on the device (Calendar or the Assistant) she declines.
+        const sync = (await w.find(K.event)).find((e: any) => e.subject === "Project sync");
+        await w.db.merge([{ _id: sync._id, attendees: sync.attendees.map((a: any) => a.email === "anna@contoso.example" ? { ...a, participationStatus: "DECLINED" } : a) }]);
+        const before = base.requests.length;
+        const r = await w.sync(id);
+        expect(r.stats[P.calendar].pushed).toMatchObject({ updated: 1 });
+        expect(g.replies).toEqual([{ id: g.teams.id, action: "decline", body: { sendResponse: true } }]);
+        expect(g.teams.attendees[0].status.response).toBe("declined");
+        // The organizer's event itself is not edited by a guest.
+        expect(base.requests.slice(before).some((q: any) => q.method === "PATCH")).toBe(false);
+        // Answered once: the next sync sends nothing more.
+        await w.sync(id);
+        expect(g.replies).toHaveLength(1);
+    });
+
     it("brings Microsoft To Do's lists and tasks, both ways", async () => {
         const { w, id } = await signedIn();
         await w.enable(id, P.tasks);

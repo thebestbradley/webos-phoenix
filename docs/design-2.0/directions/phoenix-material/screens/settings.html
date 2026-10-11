@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings</title>
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/icons.js"></script>
+<script src="../assets/app.js"></script>
+<style>
+  .card { background: var(--md-surface-container-low); }
+  html[data-theme="dark"] .card { background: var(--md-surface); }
+  .scroll { position: absolute; inset: 0; padding: 0 12px; overflow: hidden; }
+  .top { display: flex; align-items: center; padding: 26px 0 0 12px; }
+  .top .headline-l { flex: 1; }
+  .search { margin: 16px 0 0; background: var(--md-surface-container-high); }
+  html[data-theme="dark"] .search { background: var(--md-surface-container-high); }
+  .hero { margin-top: 16px; border-radius: var(--r-xl); background: var(--md-primary-container); color: var(--md-on-primary-container); padding: 14px; display: flex; gap: 16px; }
+  .thumb { width: 92px; height: 132px; border-radius: var(--r-lgi); background: var(--wall) center / cover; flex: none; position: relative; overflow: hidden; box-shadow: var(--e1); }
+  .thumb::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 8px; background: rgb(0 0 0 / .35); }
+  .thumb::after { content: ""; position: absolute; left: 24px; right: 24px; top: 46px; bottom: 16px; border-radius: 8px; background: color-mix(in srgb, var(--md-surface) 90%, transparent); box-shadow: -30px 6px 0 -6px color-mix(in srgb, var(--md-surface) 55%, transparent), 30px 6px 0 -6px color-mix(in srgb, var(--md-surface) 55%, transparent); }
+  .hero .info { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .hero .k { font-size: 12px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; opacity: .75; }
+  .hero .name { font-size: 22px; line-height: 28px; font-weight: 700; margin-top: 2px; }
+  .hero .d { font-size: 13.5px; line-height: 18px; opacity: .85; margin-top: 2px; }
+  .sw { display: flex; gap: 10px; margin-top: auto; }
+  .sw > div { width: 40px; height: 40px; border-radius: 50%; position: relative; overflow: hidden; box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-on-primary-container) 18%, transparent); }
+  .sw > div i { position: absolute; }
+  .sw > div .a { inset: 0 0 50% 0; } .sw > div .b { inset: 50% 50% 0 0; } .sw > div .c { inset: 50% 0 0 50%; }
+  .sw > div.picked { box-shadow: 0 0 0 3px var(--md-primary-container), 0 0 0 5.5px var(--md-on-primary-container); }
+  .sw .chk { position: absolute; z-index: 2; inset: 10px; border-radius: 50%; display: grid; place-items: center; background: var(--md-on-primary-container); color: var(--md-primary-container); }
+  .sw .chk .ic { width: 15px; height: 15px; }
+  .group-label { padding: 22px 16px 8px; }
+  .group > .row { background: var(--md-surface-container-lowest); min-height: 72px; }
+  html[data-theme="dark"] .group > .row { background: var(--md-surface-container); }
+  .row .lead.on { background: var(--md-primary-container); color: var(--md-on-primary-container); }
+  .row .lead.off { background: var(--md-surface-container-highest); color: var(--md-on-surface-variant); }
+  .row .lead.t { background: var(--md-tertiary-container); color: var(--md-on-tertiary-container); }
+  .row .chev { color: var(--md-on-surface-variant); }
+  .row .vsep { width: 1px; height: 32px; background: var(--md-outline-variant); margin-right: 2px; }
+  .batt { display: flex; align-items: center; gap: 8px; }
+  .batt .bar { width: 64px; height: 10px; border-radius: 5px; background: var(--md-secondary-container); overflow: hidden; }
+  .batt .bar i { display: block; width: 82%; height: 100%; border-radius: 5px; background: var(--md-primary); }
+  .batt b { font-size: 14px; font-weight: 700; }
+</style>
+<script>
+function build() {
+  const cs = getComputedStyle(document.documentElement);
+  const picked = parseInt(cs.getPropertyValue('--picked')) || 0;
+  document.getElementById('sw').innerHTML = [0, 1, 2, 3].map(i => `<div class="${i === picked ? 'picked' : ''}"><i class="a" style="background:var(--offer-${i}-a)"></i><i class="b" style="background:var(--offer-${i}-b)"></i><i class="c" style="background:var(--offer-${i}-c)"></i>${i === picked ? '<span class="chk"><i data-i="check"></i></span>' : ''}</div>`).join('');
+  document.getElementById('wallname').textContent = document.documentElement.dataset.wall === 'lily-pads' ? 'Lily Pads' : 'Northern Lights';
+}
+</script>
+</head>
+<body>
+<div class="device" data-app="Settings">
+  <main class="card">
+    <div class="scroll fade-bottom">
+      <div class="top"><div class="headline-l">Settings</div><div class="icon-btn"><i data-i="more_vert"></i></div></div>
+      <div class="search"><i data-i="search"></i><div class="ph">Search settings</div><div class="icon-btn"><i data-i="mic"></i></div></div>
+
+      <div class="hero">
+        <div class="thumb"></div>
+        <div class="info">
+          <div class="k">Wallpaper &amp; colour</div>
+          <div class="name" id="wallname">Northern Lights</div>
+          <div class="d">Colours picked from your wallpaper</div>
+          <div class="sw" id="sw"></div>
+        </div>
+      </div>
+
+      <div class="group-label">Connections</div>
+      <div class="group">
+        <div class="row"><div class="lead on"><i data-i="wifi-fill"></i></div><div class="txt"><div class="t">Wi-Fi</div><div class="s">Phoenix Home · 5 GHz</div></div><div class="vsep"></div><div class="switch on"></div></div>
+        <div class="row"><div class="lead on"><i data-i="bluetooth-fill"></i></div><div class="txt"><div class="t">Bluetooth</div><div class="s">Kai’s headphones connected</div></div><div class="vsep"></div><div class="switch on"></div></div>
+        <div class="row"><div class="lead off"><i data-i="flight-fill"></i></div><div class="txt"><div class="t">Airplane mode</div><div class="s">Off</div></div><div class="switch"></div></div>
+        <div class="row"><div class="lead off"><i data-i="vpn_key-fill"></i></div><div class="txt"><div class="t">VPN</div><div class="s">Not connected</div></div><i data-i="chevron_right" class="chev"></i></div>
+      </div>
+
+      <div class="group-label">Device</div>
+      <div class="group">
+        <div class="row"><div class="lead t"><i data-i="brightness_6-fill"></i></div><div class="txt"><div class="t">Screen &amp; lock</div><div class="s">Adaptive brightness · Lock after 1 min</div></div><i data-i="chevron_right" class="chev"></i></div>
+        <div class="row"><div class="lead t"><i data-i="volume_up-fill"></i></div><div class="txt"><div class="t">Sounds &amp; alerts</div><div class="s">Ringer on · Vibrate</div></div><i data-i="chevron_right" class="chev"></i></div>
+        <div class="row"><div class="lead t"><i data-i="battery_5_bar"></i></div><div class="txt"><div class="t">Battery</div><div class="s">About 1 day 4 h left</div></div><div class="batt"><div class="bar"><i></i></div><b>82%</b></div></div>
+        <div class="row"><div class="lead t"><i data-i="search"></i></div><div class="txt"><div class="t">Just Type</div><div class="s">Search, quick actions, the Assistant</div></div><i data-i="chevron_right" class="chev"></i></div>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

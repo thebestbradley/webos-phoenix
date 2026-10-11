@@ -102,6 +102,18 @@
 {"id":"h-c-park-1","cat":"places","say":"can you save the spot where my car is","expect":{"command":"parking","args":{"action":"save"}}},
 {"id":"h-c-park-2","cat":"places","say":"which way is my car","storage":{"assistant:parking":{"lat":37.373,"lon":-122.04,"at":1791358200000,"note":"","address":""}},"expect":{"command":"findParking"}},
 {"id":"h-c-place-1","cat":"places","say":"once I'm home remind me to feed the cat","db":[{"_id":"pl-home","_kind":"org.webosphoenix.maps.place:1","name":"Home","detail":"","lat":37.4,"lon":-122.08,"created":1,"searchText":"home"}],"expect":{"command":"placeReminder","args":{"place":"home","when":"arrive"}}},
-{"id":"h-c-place-2","cat":"places","say":"remind me about the dry cleaning when I head out of the office","db":[{"_id":"pl-work","_kind":"org.webosphoenix.maps.place:1","name":"Work","detail":"","lat":37.37,"lon":-122.04,"created":1,"searchText":"work"}],"expect":{"command":"placeReminder","args":{"place":"work","when":"leave"}}}
+{"id":"h-c-place-2","cat":"places","say":"remind me about the dry cleaning when I head out of the office","db":[{"_id":"pl-work","_kind":"org.webosphoenix.maps.place:1","name":"Work","detail":"","lat":37.37,"lon":-122.04,"created":1,"searchText":"work"}],"expect":{"command":"placeReminder","args":{"place":"work","when":"leave"}}},
+{"id":"h-syn-1","cat":"synergy","say":"shoot Sam a slack message saying I'm in the lobby","expect":{"command":"text","args":{"chat":{"service":"type_slack"}},"status":"pending"}},
+{"id":"h-syn-2","cat":"synergy","say":"anything new on slack","expect":{"command":"readMessages","args":{"via":"slack"}}},
+{"id":"h-syn-3","cat":"synergy","say":"what's on the work calendar on friday","expect":{"command":"agenda","args":{"calendar":"work"}}},
+{"id":"h-syn-4","cat":"synergy","say":"throw coffee filters on my todoist shopping list","expect":{"command":"task"},"effects":[{"kind":"com.palm.task.todoist:1","where":{"summary":"Coffee filters","listId":"tl-todo-shop"},"count":1}]},
+{"id":"h-syn-5","cat":"synergy","say":"anything in my work inbox","expect":{"command":"searchEmail","args":{"account":"work"}}},
+{"id":"h-syn-6","cat":"synergy","say":"put the trip itinerary on dropbox","expect":{"command":"saveToDrive","status":["pending","failed"]},"forbid":["saveToDrive"]},
+{"id":"h-syn-7","cat":"synergy","say":"skeet good morning everyone","expect":{"command":"post","status":"pending"},"text":"bluesky"},
+{"id":"h-syn-8","cat":"synergy","say":"say yes to the offsite","expect":{"command":"inviteReply","args":{"response":"accepted"},"status":"pending"}},
+{"id":"h-syn-9","cat":"synergy","say":"hop on the zoom call","expect":{"command":"joinMeeting"}},
+{"id":"h-syn-10","cat":"synergy","say":"which of my accounts can I post from","expect":{"anyOf":[{"command":"accounts"},{"command":"post","status":"ask"},{"answer":"fallback"}]},"forbid":["post"]},
+{"id":"h-syn-11","cat":"synergy","say":"let Noor see where I am","expect":{"command":"shareLocation","status":"pending"},"text":"telegram"},
+{"id":"h-syn-12","cat":"synergy","say":"message Sam on slack with my ETA to the airport","expect":{"command":"shareLocation","args":{"chat":{"service":"type_slack"}},"status":"pending"}}
 ]
 }

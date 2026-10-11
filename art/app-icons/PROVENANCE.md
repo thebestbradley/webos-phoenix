@@ -57,8 +57,8 @@ smaller, for Settings > Assistant) and `advancedpane` (Settings > Advanced:
 a brushed metal panel with three sliders) and `hardwarepane` (Settings > Hardware: a circuit board with a chip, standing on its gold edge connector).
 
 `drives` (the drives' connector, `apps/connectors/drives`: its icons and
-every drive template's `drive-32x32` / `drive-48x48`, Nextcloud's and
-Dropbox's alike) is a folder with a cloud and an arrow in front, drawn for
+every drive template's `drive-32x32` / `drive-48x48`, Nextcloud's,
+Dropbox's and SFTP's alike) is a folder with a cloud and an arrow in front, drawn for
 Phoenix; no provider's logo is used, so no trademark or logo licence is
 involved.
 

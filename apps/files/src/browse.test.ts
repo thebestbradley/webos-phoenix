@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { beforeEach, describe, expect, it } from "vitest";
-import { crumbs, DEFAULT_FAVORITES, folderTitle, kindLabel, loadPrefs, planPaste, savePrefs, shortDate } from "./browse";
+import { FILE_ERRORS } from "@phoenix/luna";
+import { crumbs, DEFAULT_FAVORITES, folderProblem, folderTitle, kindLabel, loadPrefs, planPaste, savePrefs, shortDate } from "./browse";
 
 beforeEach(() => localStorage.clear());
 
@@ -58,5 +59,15 @@ describe("Files helpers", () => {
         expect(loadPrefs()).toEqual({ sort: "date", showHidden: true, favorites: ["/tmp"] });
         localStorage.setItem("org.webosphoenix.files:prefs", "{bad json");
         expect(loadPrefs().sort).toBe("name");
+    });
+
+    it("says why a drive's folder did not open, loudest for a server whose key changed", () => {
+        expect(folderProblem(FILE_ERRORS.OFFLINE, undefined, "x", "SFTP")).toEqual(
+            { message: "SFTP can't be reached. Check your connection; nothing was lost.", warning: false, accounts: false });
+        expect(folderProblem(FILE_ERRORS.AUTH, "401_UNAUTHORIZED", "x", "Nextcloud")).toEqual(
+            { message: "Nextcloud did not accept the sign-in. Sign in again in Accounts.", warning: false, accounts: true });
+        const changed = "WARNING: the key of nas.local has changed. It was SHA256:a and is now SHA256:b.";
+        expect(folderProblem(FILE_ERRORS.AUTH, "HOST_KEY_CHANGED", changed, "SFTP")).toEqual({ message: changed, warning: true, accounts: true });
+        expect(folderProblem(FILE_ERRORS.PERMISSION, undefined, "Permission denied", "SFTP").message).toBe("Permission denied");
     });
 });

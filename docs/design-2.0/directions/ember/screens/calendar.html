@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calendar, week</title>
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/icons.js"></script>
+<script src="../assets/app.js"></script>
+<style>
+  :root { --cal-w: var(--sms); --cal-f: var(--personal); --cal-h: var(--ink-3); }
+  .card { display: flex; padding: 14px 14px 14px 0; }
+  .side { width: 276px; flex: none; padding: 14px 22px 0 28px; display: flex; flex-direction: column; }
+  .side .display { font-size: 48px; line-height: 52px; }
+  .side .yr { margin-top: 2px; }
+  .mm { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; margin-top: 22px; position: relative; }
+  .mm .dh { font-size: 10.5px; font-weight: 700; letter-spacing: 1px; color: var(--ink-3); height: 24px; line-height: 24px; }
+  .mm .d { height: 31px; line-height: 31px; font-size: 13px; font-weight: 550; position: relative; z-index: 1; }
+  .mm .d.o { color: var(--ink-3); opacity: .6; }
+  .mm .wk { position: absolute; left: -4px; right: -4px; height: 31px; border-radius: 16px; box-shadow: inset 0 0 0 var(--hair) var(--line-2); background: var(--sunk); }
+  .mm .d.today { color: var(--on-inverse); font-weight: 700; }
+  .mm .d.today::before { content: ""; position: absolute; z-index: -1; left: 50%; top: 1px; width: 29px; height: 29px; margin-left: -14.5px; border-radius: 50%; background: var(--inverse); }
+  .mm .d.has::after { content: ""; position: absolute; left: 50%; bottom: 2px; width: 3px; height: 3px; margin-left: -1.5px; border-radius: 50%; background: var(--ink-3); }
+  .next { margin-top: 26px; position: relative; padding: 14px 16px 14px 20px; }
+  .next .active-bar { top: 16px; bottom: 16px; left: 8px; }
+  .next .t { font-size: 16px; font-weight: 650; margin-top: 4px; }
+  .next .in { font-size: 13px; color: var(--ember-text); font-weight: 650; margin-top: 2px; }
+  .cals { margin-top: 26px; }
+  .cal { display: flex; align-items: center; gap: 12px; height: 40px; font-size: 14.5px; font-weight: 550; }
+  .cal .sw { width: 14px; height: 3px; border-radius: 2px; }
+  .cal .txt { flex: 1; }
+  .cal .check { width: 20px; height: 20px; border-radius: 6px; }
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; border-radius: 26px; }
+  .mh { display: flex; align-items: center; gap: 10px; padding: 18px 18px 8px 28px; }
+  .mh .ttl { flex: 1; }
+  .mh .seg { width: 252px; }
+  .grid { --gut: 62px; --hr: 44px; position: relative; flex: 1; }
+  .days { display: grid; grid-template-columns: var(--gut) repeat(7, 1fr); padding-top: 6px; }
+  .days .dd { padding: 6px 0 10px 12px; position: relative; }
+  .days .dd .w { color: var(--ink-3); }
+  .days .dd .n { font-size: 26px; line-height: 30px; font-weight: 300; letter-spacing: -.5px; margin-top: 2px; }
+  .days .dd.today .w { color: var(--ember-text); }
+  .days .dd.today .n { font-weight: 500; }
+  .days .dd.today::after { content: ""; position: absolute; left: 12px; width: 26px; bottom: 4px; height: 2px; border-radius: 1px; background: var(--ember); box-shadow: 0 0 8px rgb(255 110 40 / .6); }
+  .allday { display: grid; grid-template-columns: var(--gut) repeat(7, 1fr); padding: 0 0 8px; box-shadow: inset 0 calc(-1 * var(--hair)) 0 var(--line-2); }
+  .allday .lab { color: var(--ink-3); text-align: right; padding: 6px 10px 0 0; font-size: 9.5px; }
+  .ad { height: 24px; margin: 0 4px; border-radius: 7px; padding: 0 9px; font-size: 12px; line-height: 24px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: inset 2px 0 0 var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); }
+  .hours { position: relative; height: calc(12 * var(--hr)); }
+  .hrow { position: absolute; right: 0; height: var(--hair); background: var(--line-2); }
+  .hlab { position: absolute; left: 0; width: calc(var(--gut) - 12px); text-align: right; font-size: 11px; font-weight: 600; color: var(--ink-3); transform: translateY(-7px); }
+  .vcol { position: absolute; top: 0; bottom: 0; width: var(--hair); background: var(--line); }
+  .ev { position: absolute; border-radius: 10px; padding: 6px 10px 6px 12px; overflow: hidden; font-size: 12.5px; line-height: 16px; background: color-mix(in srgb, var(--c) 11%, var(--plane-solid)); box-shadow: inset 2.5px 0 0 var(--c), inset 0 0 0 var(--hair) color-mix(in srgb, var(--c) 30%, transparent); }
+  .ev b { display: block; font-weight: 650; font-size: 13px; line-height: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ev span { color: var(--ink-2); display: block; white-space: nowrap; }
+  .ev span.sub { overflow: hidden; text-overflow: ellipsis; }
+  .ev.short { padding: 0 8px 0 10px; display: flex; gap: 6px; align-items: center; }
+  .ev.short b { font-size: 12px; }
+  .ev.short span { display: inline; }
+  .ev.w { --c: var(--cal-w); } .ev.f { --c: var(--cal-f); }
+  .now { position: absolute; height: 2px; background: var(--ember); box-shadow: 0 0 10px rgb(255 110 40 / .7); border-radius: 1px; }
+  .now::before { content: ""; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: #ff5a1f; box-shadow: 0 0 10px 2px rgb(255 110 40 / .7); }
+  .nowfaint { position: absolute; height: var(--hair); background: color-mix(in srgb, var(--ember-a) 45%, transparent); }
+</style>
+<script>
+const evs = [
+  { d: 0, s: 11, e: 12.5, t: 'Pumpkin patch', sub: 'Hilltop Farm', c: 'f' },
+  { d: 0, s: 15, e: 16, t: 'Call Grandma', c: 'f' },
+  { d: 1, s: 10, e: 10.25, t: 'Stand-up', c: 'w' },
+  { d: 1, s: 11, e: 12.25, t: 'Design review', sub: 'Phoenix 2.0 UI layer', c: 'w' },
+  { d: 1, s: 12.5, e: 13.5, t: 'Lunch with Ada', sub: 'Marlow’s', c: 'f' },
+  { d: 1, s: 17, e: 18, t: 'Mia’s swim class', c: 'f' },
+  { d: 2, s: 9.5, e: 9.75, t: 'Stand-up', c: 'w' },
+  { d: 2, s: 14, e: 14.5, t: '1:1 with Lena', c: 'w' },
+  { d: 2, s: 15.5, e: 17, t: 'Card view: motion pass', sub: 'Focus time', c: 'w' },
+  { d: 3, s: 9.5, e: 9.75, t: 'Stand-up', c: 'w' },
+  { d: 3, s: 13, e: 14.5, t: 'Sprint planning', sub: 'Room 4B', c: 'w' },
+  { d: 3, s: 15.25, e: 16, t: 'Dr. Okafor', c: 'f' },
+  { d: 3, s: 18.5, e: 21, t: 'Launch party', sub: 'Marlow’s back room', c: 'w' },
+  { d: 4, s: 8.5, e: 9.25, t: 'School drop-off', c: 'f' },
+  { d: 4, s: 9.5, e: 9.75, t: 'Stand-up', c: 'w' },
+  { d: 4, s: 16, e: 17.5, t: 'Demo dry run', sub: 'Lab', c: 'w' },
+  { d: 5, s: 9, e: 11, t: 'Farmers market', sub: 'Riverside', c: 'f' },
+  { d: 6, s: 10, e: 12, t: 'Brunch at Mom’s', c: 'f' },
+];
+function fmt(h, full) { const H = Math.floor(h), m = Math.round((h - H) * 60); const h12 = ((H + 11) % 12) + 1; return `${h12}${m || full ? ':' + String(m).padStart(2, '0') : ''}`; }
+function build() {
+  let h = '';
+  const colW = `((100% - var(--gut)) / 7)`;
+  for (let i = 0; i < 12; i++) {
+    h += `<div class="hrow" style="top:calc(var(--hr) * ${i}); left: var(--gut)"></div>`;
+    if (i) h += `<div class="hlab" style="top:calc(var(--hr) * ${i})">${fmt(8 + i)} ${8 + i < 12 ? 'AM' : 'PM'}</div>`;
+  }
+  for (let d = 0; d < 7; d++) h += `<div class="vcol" style="left:calc(var(--gut) + ${colW} * ${d})"></div>`;
+  const now = 9 + 41 / 60 - 8;
+  h += `<div class="nowfaint" style="left:var(--gut);right:0;top:calc(var(--hr) * ${now})"></div>`;
+  for (const e of evs) {
+    const short = e.e - e.s <= 0.75;
+    const top = e.s - 8, hgt = Math.max(Math.min(e.e, 20) - e.s, 0.4);
+    h += `<div class="ev ${e.c} ${short ? 'short' : ''}" style="left:calc(var(--gut) + ${colW} * ${e.d} + 4px);width:calc(${colW} - 8px);top:calc(var(--hr) * ${top} + 1px);height:calc(var(--hr) * ${hgt} - 2px)">` +
+      (short ? `<b>${e.t}</b><span>${fmt(e.s, 1)}</span>` : `<b>${e.t}</b><span>${fmt(e.s)} – ${fmt(e.e)}</span>${e.sub && e.e - e.s >= 1.5 ? `<span class="sub">${e.sub}</span>` : ''}`) + `</div>`;
+  }
+  h += `<div class="now" style="left:calc(var(--gut) + ${colW} * 1);width:calc(${colW});top:calc(var(--hr) * ${now} - 1px)"></div>`;
+  document.getElementById('hours').innerHTML = h;
+}
+</script>
+</head>
+<body>
+<div class="device tablet" data-app="Calendar">
+  <main class="card">
+    <aside class="side">
+      <div class="display">October</div>
+      <div class="yr small dim">2026 · week 42</div>
+      <div class="mm">
+        <div class="dh">M</div><div class="dh">T</div><div class="dh">W</div><div class="dh">T</div><div class="dh">F</div><div class="dh">S</div><div class="dh">S</div>
+        <div class="d o">28</div><div class="d o">29</div><div class="d o">30</div><div class="d">1</div><div class="d">2</div><div class="d">3</div><div class="d">4</div>
+        <div class="d">5</div><div class="d">6</div><div class="d">7</div><div class="d has">8</div><div class="d">9</div><div class="d">10</div><div class="d">11</div>
+        <div class="wk" style="top:86px"></div>
+        <div class="d">12</div><div class="d today">13</div><div class="d">14</div><div class="d has">15</div><div class="d">16</div><div class="d">17</div><div class="d">18</div>
+        <div class="d">19</div><div class="d has">20</div><div class="d">21</div><div class="d">22</div><div class="d">23</div><div class="d">24</div><div class="d">25</div>
+        <div class="d">26</div><div class="d">27</div><div class="d">28</div><div class="d">29</div><div class="d has">30</div><div class="d">31</div><div class="d o">1</div>
+      </div>
+      <div class="next plane">
+        <span class="active-bar"></span>
+        <div class="micro dimmer">Next</div>
+        <div class="t">Stand-up</div>
+        <div class="in">in 19 min · 10:00</div>
+      </div>
+      <div class="cals">
+        <div class="micro dimmer" style="margin-bottom:6px">Calendars</div>
+        <div class="cal"><span class="sw" style="background:var(--cal-w)"></span><div class="txt">Work <span class="small dimmer">Exchange</span></div><div class="check on"><i data-i="check"></i></div></div>
+        <div class="cal"><span class="sw" style="background:var(--cal-f)"></span><div class="txt">Family <span class="small dimmer">CalDAV</span></div><div class="check on"><i data-i="check"></i></div></div>
+        <div class="cal"><span class="sw" style="background:var(--cal-h)"></span><div class="txt">Holidays <span class="small dimmer">Canada</span></div><div class="check on"><i data-i="check"></i></div></div>
+      </div>
+    </aside>
+    <section class="main plane">
+      <div class="mh">
+        <div class="ttl"><div class="title-l">12 – 18 October</div></div>
+        <div class="pill sm">Today</div>
+        <div class="ring-btn"><i data-i="caret-left"></i></div>
+        <div class="ring-btn"><i data-i="caret-right"></i></div>
+        <div class="seg"><div>Day</div><div class="sel">Week</div><div>Month</div></div>
+      </div>
+      <div class="grid">
+        <div class="days">
+          <div></div>
+          <div class="dd"><div class="w micro">Mon</div><div class="n">12</div></div>
+          <div class="dd today"><div class="w micro">Today</div><div class="n">13</div></div>
+          <div class="dd"><div class="w micro">Wed</div><div class="n">14</div></div>
+          <div class="dd"><div class="w micro">Thu</div><div class="n">15</div></div>
+          <div class="dd"><div class="w micro">Fri</div><div class="n">16</div></div>
+          <div class="dd"><div class="w micro">Sat</div><div class="n">17</div></div>
+          <div class="dd"><div class="w micro">Sun</div><div class="n">18</div></div>
+        </div>
+        <div class="allday">
+          <div class="lab micro">All day</div>
+          <div class="ad" style="grid-column: 2; --c: var(--ink-3)">Thanksgiving (CA)</div>
+          <div class="ad" style="grid-column: 8; --c: var(--cal-f)">Mom’s birthday</div>
+        </div>
+        <div class="hours" id="hours"></div>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

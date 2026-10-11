@@ -268,6 +268,18 @@ var details = require("./details")({ D: D, lunaCall: lunaCall, dbFind: dbFind, f
                                      whenShown: whenShown, cards: cards, findPerson: findPerson, personName: personName, emailOf: emailOf,
                                      addTask: addTask, scheduleAlarm: scheduleAlarm, nextRing: nextRing });
 Array.prototype.push.apply(BUILT_IN, details.COMMANDS);
+// What is connected through Synergy (lib/commands-synergy.js): its commands,
+// and the account each of these may be given ("on Slack", "my work calendar").
+var synergy = require("./commands-synergy")({ D: D, lunaCall: lunaCall, dbFind: dbFind, dbPut: dbPut, dbGet: dbGet, launch: launch, cards: cards,
+                                             whenShown: whenShown, eventCard: eventCard, eventsIn: eventsIn, findEvent: findEvent, matches: matches, words: words,
+                                             findPeople: findPeople, findPerson: findPerson, ambiguous: ambiguous, personName: personName, people: people,
+                                             samePhone: samePhone, nameForPhone: nameForPhone, receivedEmails: receivedEmails, withConfirm: withConfirm,
+                                             here: here, resolvePlace: resolvePlace, routeSummary: routeSummary, blockedReply: blockedReply,
+                                             // Home and work, saved in Maps (lib/commands-places.js; everyday is made below).
+                                             savedPlace: function (e, which) { return everyday.savedPlace(e, which); },
+                                             prepareInner: function (c, a, e) { return prepareInner(c, a, e); }, runInner: function (c, a, e) { return runInner(c, a, e); } });
+Array.prototype.push.apply(BUILT_IN, synergy.COMMANDS);
+synergy.extend(BUILT_IN);
 // How people ask for each, in other words (lib/examples.js): for a model choosing one.
 (function (examples) {
     BUILT_IN.forEach(function (c) { if (examples[c.id] && !c.examples) c.examples = examples[c.id]; });
@@ -496,63 +508,7 @@ function emailOf(p) {
     return pick ? pick.value : null;
 }
 
-// ---- Chat messages: the IM accounts' networks (docs/SYNERGY-CONNECTORS.md 7) ------------------
-//
-// A message on a chat network goes as Messaging sends one (luna messaging.ts
-// sendIm): into the network's message kind, in the outbox, from the account
-// signed in on it (its imloginstate); the account's transport sends it.
-var CHAT_NETS = {
-    jabber: { service: "type_jabber", kind: "com.palm.immessage.xmpp:1", label: "Jabber", address: /^[^\s@]+@[^\s@]+\.[^\s@]+$/ },
-    matrix: { service: "type_matrix", kind: "com.palm.immessage.matrix:1", label: "Matrix", address: /^@[^\s:]+:\S+$/ },
-    deltachat: { service: "type_deltachat", kind: "com.palm.immessage.deltachat:1", label: "Delta Chat", address: /^[^\s@]+@[^\s@]+\.[^\s@]+$/ },
-    telegram: { service: "type_telegram", kind: "com.palm.immessage.telegram:1", label: "Telegram", address: /^(?:\+\d{6,15}|@\w{4,})$/ }
-};
-function chatAccounts(env) {
-    return dbFind(env, "com.palm.imloginstate:1").catch(function () { return []; });
-}
-// args.chat for the person on a network (net), or, with none named, on the
-// first network they have an address on and the user an account: else why not.
-function chatTarget(env, cmd, args, net, person) {
-    var say = env.lang.say, who = String(args.who || "").trim();
-    return chatAccounts(env).then(function (accounts) {
-        function accountOn(n) { return accounts.filter(function (a) { return a.serviceName === n.service; })[0]; }
-        if (net && !accountOn(net)) return { args: args, reply: say.noChatAccount(net.label) };
-        if (net && net.address.test(who)) {
-            args.chat = { service: net.service, kind: net.kind, label: net.label, username: accountOn(net).username, addr: who };
-            args.name = "";
-            return withConfirm(cmd, args, env);
-        }
-        var found = person ? Promise.resolve(person) : findPerson(env, who);
-        return found.then(function (p) {
-            if (!p) return { args: args, reply: say.noSuchContact(who) };
-            var name = personName(p) || who;
-            var nets = net ? [net] : Object.keys(CHAT_NETS).map(function (k) { return CHAT_NETS[k]; }).filter(accountOn);
-            for (var i = 0; i < nets.length; ++i) {
-                var im = (p.ims || []).filter(function (x) { return x.type === nets[i].service && x.value; })[0];
-                if (im) {
-                    args.chat = { service: nets[i].service, kind: nets[i].kind, label: nets[i].label, username: accountOn(nets[i]).username, addr: im.value };
-                    args.name = name;
-                    args.personId = p._id;
-                    return withConfirm(cmd, args, env);
-                }
-            }
-            return { args: args, reply: net ? say.noChatAddress(name, net.label) : say.noNumber(name) };
-        });
-    });
-}
-function sendChat(env, args, now) {
-    var say = env.lang.say, c = args.chat, name = args.name || c.addr;
-    if (!String(args.message || "").trim()) {
-        var params = { compose: { ims: [{ value: c.addr, type: c.service }], personId: args.personId || "" } };
-        return launch(env, MESSAGING_APP, params)
-            .then(function () { return { text: say.composing(name), open: { appId: MESSAGING_APP, params: params, title: "Messaging" } }; });
-    }
-    return lunaCall(env, "luna://org.webosports.service.messaging/putMessage", { message: {
-        _kind: c.kind, folder: "outbox", status: "pending", serviceName: c.service, username: c.username,
-        messageText: String(args.message), to: [{ addr: c.addr, name: args.name || "" }],
-        localTimestamp: now, timestamp: now, flags: { visible: true, read: true } } })
-        .then(function () { return { text: say.sentChat(name, c.label), open: { appId: MESSAGING_APP, params: {}, title: "Messaging" } }; });
-}
+// Chat messages on the messaging accounts (Jabber, Matrix, Slack, ...): lib/commands-synergy.js.
 // Who a number or address belongs to, for messages and email.
 // A person's phoneNumbers[].normalizedValue, as the contacts linker writes it.
 function normalizedPhone(number) {
@@ -650,9 +606,11 @@ function fromModel(cmd, args, env) {
 
 // ---- Prepare: resolve, decide whether to ask ----------------------------------------------------
 
-// "it" first (the item the conversation is about: lib/details.js).
+// "it" first (the item the conversation is about: lib/details.js), then
+// the account said (lib/commands-synergy.js).
 function prepare(cmd, args, env) {
-    return details.prepare(cmd, Object.assign({}, args || {}), env).then(function (a) { return prepareInner(cmd, a, env); });
+    return details.prepare(cmd, Object.assign({}, args || {}), env).then(function (a) { return synergy.prepare(cmd, a, env); })
+        .then(function (p) { return p.pass ? prepareInner(cmd, p.pass, env) : p; });
 }
 function prepareInner(cmd, args, env) {
     var say = env.lang.say;
@@ -660,7 +618,6 @@ function prepareInner(cmd, args, env) {
     function reply(text) { return Promise.resolve({ args: args, reply: text }); }
     var own = everyday.prepare(cmd, args, env);
     if (own) return own;
-    if (cmd.id === "text" && args.via && args.via !== "sms") return chatTarget(env, cmd, args, CHAT_NETS[args.via]);
     if (cmd.id === "call" || cmd.id === "text") {
         var who = String(args.who || "").trim();
         var raw = args.number || (/^[+\d][\d\s().-]{2,}$/.test(who) ? who : "");
@@ -675,8 +632,8 @@ function prepareInner(cmd, args, env) {
             if (!p) return { args: args, reply: say.noSuchContact(who) };
             if (several) return { args: args, reply: say.whichPerson(several), awaiting: { command: cmd.id, args: args, field: "who", options: several } };
             var number = numberOf(p, args.label);
-            // No number to text, but an address on a chat network the user is signed in to: that.
-            if (!number && cmd.id === "text") return chatTarget(env, cmd, args, null, p);
+            // No number to text, but an address on a messaging account the user has: that.
+            if (!number && cmd.id === "text") return synergy.chatTarget(env, cmd, args, p, false);
             if (!number) return { args: args, reply: say.noNumber(personName(p) || who) };
             args.name = personName(p) || who;
             args.number = number;
@@ -1259,15 +1216,6 @@ function eventCard(env, e) {
 
 // ---- Calendar ----------------------------------------------------------------------------------
 
-// The calendar a new event goes in: the first one that can take it, the
-// device's own (the profile account's local calendar) first, as the
-// Calendar app's default.
-function defaultCalendar(env) {
-    return dbFind(env, "com.palm.calendar:1").then(function (cals) {
-        var ok2 = cals.filter(function (c) { return !c.isReadOnly; });
-        return ok2.filter(function (c) { return c.syncSource === "Local"; })[0] || ok2[0] || null;
-    });
-}
 // The events in [from, to), repeats expanded: [{id, title, start, end, allDay, location}] by start.
 function eventsIn(env, from, to) {
     return dbFind(env, "com.palm.calendarevent:1").then(function (all) {
@@ -1285,9 +1233,13 @@ function eventsIn(env, from, to) {
         return out.sort(function (a, b) { return (a.allDay === b.allDay ? 0 : a.allDay ? -1 : 1) || a.start - b.start; });
     });
 }
+// The calendar named (args.calendarId: "my Google calendar"), else the
+// default; an account's event goes in its own kind, for its connector to
+// send on (lib/commands-synergy.js pickCalendar).
 function addEvent(args, env) {
     var say = env.lang.say, now = env.now();
-    return defaultCalendar(env).then(function (cal) {
+    return synergy.pickCalendar(env, args.calendarId).then(function (picked) {
+        var cal = picked && picked.calendar;
         if (!cal) return { text: say.noCalendar(), open: { appId: CALENDAR_APP, params: {}, title: "Calendar" } };
         var invited = (args.invitees || []).map(function (n) {
             return findPerson(env, n).then(function (p) { return p && emailOf(p) ? { email: emailOf(p), commonName: personName(p), organizer: false } : null; });
@@ -1297,14 +1249,14 @@ function addEvent(args, env) {
             var start = args.allDay ? D.startOfDay(args.start) : args.start;
             // All day: midnight to 23:59:59, as the Calendar app saves one; else an hour by default.
             var end = args.allDay ? D.at(start, 23, 59) + 59000 : (args.end > start ? args.end : start + 3600000);
-            var ev = { _kind: "com.palm.calendarevent:1", calendarId: cal._id, accountId: cal.accountId || "",
+            var ev = { _kind: picked.eventKind, calendarId: cal._id, accountId: cal.accountId || "",
                 subject: String(args.title || "New event"), location: String(args.location || ""), note: String(args.note || ""),
                 dtstart: start, dtend: end, allDay: !!args.allDay, tzId: timeZone(),
                 rrule: args.repeat ? D.rrule(args.repeat, start) : null,
                 alarm: [{ action: "display", alarmTrigger: { value: args.allDay ? "-P1D" : "-PT15M", valueType: "DURATION" } }],
                 attendees: attendees, created: now, lastModified: now, transp: "OPAQUE" };
             return dbPut(env, [ev]).then(function (ids) {
-                return { text: say.eventAdded(ev.subject, start, end, ev.allDay, now, ev.location, args.repeat),
+                return { text: say.eventAdded(ev.subject, start, end, ev.allDay, now, ev.location, args.repeat, args.calendarName || ""),
                          data: { eventId: ids[0] },
                          open: { appId: CALENDAR_APP, params: { showEventDetail: ids[0] }, title: "Calendar" },
                          undo: { kind: "db", ids: ids, what: say.undoWhat.event(ev.subject) } };
@@ -1401,6 +1353,8 @@ var MEMO_COLORS = ["blue", "yellow", "green", "pink", "salmon"];
 // ---- Tasks ---------------------------------------------------------------------------------------
 
 function taskList(env, name) {
+    // One list by its id (an account's: lib/commands-synergy.js).
+    if (name && name.id) return dbGet(env, name.id).then(function (l) { return l ? listOf(l, l.name) : taskList(env, ""); });
     return dbFind(env, "com.palm.tasklist:1").then(function (lists) {
         if (name) {
             var n = words(name);
@@ -1575,12 +1529,13 @@ function runInner(cmd, args, env) {
     var say = env.lang.say, now = env.now();
     var detailed = details.run(cmd, args, env) || everyday.run(cmd, args, env);
     if (detailed) return detailed;
+    var connected = synergy.run(cmd, args, env);
+    if (connected) return connected;
     switch (cmd.id) {
     case "call":
         return launch(env, "org.webosphoenix.phone", { number: args.number, dial: true })
             .then(function () { return { text: say.calling(args.name || args.number), open: { appId: "org.webosphoenix.phone", params: {}, title: "Phone" } }; });
     case "text":
-        if (args.chat) return sendChat(env, args, now);
         if (!String(args.message || "").trim())
             return launch(env, MESSAGING_APP, { to: args.number, name: args.name || "" })
                 .then(function () { return { text: say.composing(args.name || args.number), open: { appId: MESSAGING_APP, params: { to: args.number, name: args.name || "" }, title: "Messaging" } }; });
@@ -1735,7 +1690,7 @@ function runInner(cmd, args, env) {
                      undo: { kind: "db", ids: [r.taskId], activities: r.task.due ? ["org.webosphoenix.tasks.remind." + r.taskId] : [], what: say.undoWhat.task(r.task.summary) } };
         });
     case "task":
-        return addTask(env, args.text, args.list || "", args.due || null, false).then(function (r) {
+        return addTask(env, args.text, args.listId ? { id: args.listId } : args.list || "", args.due || null, false).then(function (r) {
             return { text: say.taskAdded(r.task.summary, r.list.name, r.task.due, now, r.list.made),
                      open: { appId: TASKS_APP, params: { taskId: r.taskId }, title: "Tasks" }, data: { taskId: r.taskId },
                      undo: { kind: "db", ids: r.list.made ? [r.taskId, r.list.id] : [r.taskId], what: say.undoWhat.task(r.task.summary) } };

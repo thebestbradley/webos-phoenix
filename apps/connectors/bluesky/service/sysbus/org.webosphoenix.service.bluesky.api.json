@@ -12,5 +12,8 @@
         "org.webosphoenix.service.bluesky/providerInfo",
         "org.webosphoenix.service.bluesky/signIn",
         "org.webosphoenix.service.bluesky/share"
+    ],
+    "phoenix.connector.share": [
+        "org.webosphoenix.service.bluesky/share"
     ]
 }
