@@ -33,14 +33,15 @@ Each is a 2048 x 2048 square (the TouchPad's 1024 x 1024 at 2x), JPEG at
 quality 84 with a little grain and dither against banding; the shell crops
 it to the screen about the centre (`shell/qml/Phoenix/Shell/Wallpaper.qml`).
 `thumbs/` holds a 240 x 360 crop of the centre of each, for Settings'
-picker.
+picker, which shows these twelve as the album "Artistic" and the
+photographs below as "Nature".
 
 ## Photographs
 
 The phones' and the TouchPad's wallpapers included photographs of nature
 close up (smooth stones under water, a clownfish in its anemone, flowers,
-water drops). Phoenix has its own photographs of such subjects, after the
-drawn ones in Settings' picker: real photographs, each under an open licence
+water drops, lily pads). Phoenix has its own photographs of such subjects,
+the album "Nature" in Settings' picker: real photographs, each under an open licence
 (CC0, or CC BY with the credit below; none CC BY-SA, NC or ND), found on
 Wikimedia Commons and checked on its description page (author, licence,
 FlickreviewR's check of the Flickr licence where it came from Flickr). Each
@@ -71,6 +72,7 @@ changed, added or removed.
 | `gerbera.jpg` (Gerbera) | "Gerber Daisy - Pennsylvania", a red gerbera's heart | Donald Olszewski | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) | [Commons](https://commons.wikimedia.org/wiki/File:Gerber_Daisy_-_Pennsylvania.jpg), from [Flickr](https://www.flickr.com/photos/186499581@N05/54959532398/) | crop 0.32, 0.5, 1.0; 2.0 px; -0.6 stop; 0.9; 0.9/0.49, 0.5/0.78 |
 | `wave.jpg` (Wave) | "crispy curls", a breaking wave at Laguna Beach | Chris Kuga | [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/) | [Commons](https://commons.wikimedia.org/wiki/File:Crispy_curls_-_Flickr_-_chris_kuga.jpg), from [Flickr](https://www.flickr.com/photos/126928999@N04/16086023438/) | crop 0.6, 0.5, 1.0; 0.8 px; -0.7 stop; 1.0; 0.9/0.5, 0.5/0.78 |
 | `seashells.jpg` (Seashells) | "Shell beach.", shells heaped on a beach | Bernard Spragg. NZ | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | [Commons](https://commons.wikimedia.org/wiki/File:Shell_beach._-_Flickr_-_Bernard_Spragg.jpg), from [Flickr](https://www.flickr.com/photos/volvob12b/20745959392/) | crop 0.5, 0.5, 1.0; 1.2 px; -1.0 stop; 0.9; 0.9/0.49, 0.9/0.5 |
+| `lily-pads.jpg` (Lily Pads) | "Lily Pad In Bloom near Assiniboine Park Pavilion In Winnipeg Manitoba Canada", apricot water lilies among their pads on dark water | NotPavlychenko | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | [Commons](https://commons.wikimedia.org/wiki/File:20260817_LilyPad.jpg) (own work) | crop 0.38, 0.5, 1.0; 0.6 px; -0.5 stop; 0.95; 0.9/0.39, 0.71/0.71 |
 
 The CC BY photographs are credited as their licences ask in the repository's
 `NOTICE` and in Settings > Device Info > Open Source Licenses; the changes are

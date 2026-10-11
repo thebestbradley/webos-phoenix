@@ -935,9 +935,12 @@ Device Info, Backup, Updates, VPN, Developer Mode.
 Launched without a page it lists them all. The launcher icons are drawn in
 `art/app-icons` (on the grey diamond, as Palm's preference apps were) and the
 wallpapers by `tools/wallpapers/generate.py` (twelve, Northern Lights the
-default) and eight photographs under CC0 or CC BY prepared by
-`tools/wallpapers/photos.py` (authors and licences in
-`public/wallpapers/PROVENANCE.md`); Palm's were never open-sourced.
+default; the picker's album "Artistic") and nine photographs under CC0 or
+CC BY prepared by `tools/wallpapers/photos.py` (the album "Nature"; authors
+and licences in `public/wallpapers/PROVENANCE.md`); Palm's were never
+open-sourced. The picker (`src/WallpaperPicker.tsx`, Screen & Lock's and
+Exhibition's) lists the albums and opens one into a grid, as the system
+file picker's albums did (luna-systemui `app/FilePicker/ImageAlbumList.js`).
 
 ### Services
 

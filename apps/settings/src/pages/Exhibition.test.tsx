@@ -92,6 +92,11 @@ describe("Settings > Exhibition", () => {
         await waitFor(() => expect(screen.getByTestId("exhibition-wallpaper")).toBeTruthy());
         expect(screen.getByTestId("exhibition-wallpaper").textContent).toContain("None");
         fireEvent.click(screen.getByTestId("exhibition-wallpaper"));
+        // The albums first ("None" above them), then the album's pictures.
+        expect((await screen.findByTestId("dock-wallpaper-None")).textContent).toContain("None");
+        expect(screen.getByTestId("dock-wallpaper-album-Artistic").textContent).toContain("(12)");
+        expect(screen.getByTestId("dock-wallpaper-album-Nature").textContent).toContain("(9)");
+        fireEvent.click(screen.getByTestId("dock-wallpaper-album-Artistic"));
         fireEvent.click(await screen.findByTestId("dock-wallpaper-Dawn"));
         await waitFor(() => expect(lastStatus()?.dockWallpaperFile).toBe("/usr/palm/applications/org.webosphoenix.settings/wallpapers/dawn.jpg"));
         // The main wallpaper is not touched.

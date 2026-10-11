@@ -43,6 +43,8 @@ export const LICENSES = [
             + "flickr.com/photos/186499581@N05/54959532398. "
             + "Jellyfish: \"Lion's mane jellyfish in Gullmarn fjord at Sämstad 8\" by W.carter, CC0 1.0, "
             + "Wikimedia Commons. "
-            + "Seashells: \"Shell beach.\" by Bernard Spragg. NZ, CC0 1.0, flickr.com/photos/volvob12b/20745959392.",
+            + "Seashells: \"Shell beach.\" by Bernard Spragg. NZ, CC0 1.0, flickr.com/photos/volvob12b/20745959392. "
+            + "Lily Pads: \"Lily Pad In Bloom near Assiniboine Park Pavilion In Winnipeg Manitoba Canada\" by "
+            + "NotPavlychenko, CC0 1.0, Wikimedia Commons.",
     },
 ];

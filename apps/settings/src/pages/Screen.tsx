@@ -16,27 +16,12 @@ import { useEffect, useState } from "react";
 import { deviceLock, LunaError, settings, system, systemStatus, type LockMode, type SystemPreferences, type SystemStatus } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
 import {
-    Button, Checkmark, Dialog, ErrorText, Group, ListSelector, Page, PageHeader, Row, Slider, TextField, ToggleButton,
+    Button, Dialog, ErrorText, Group, ListSelector, Page, PageHeader, Row, Slider, TextField, ToggleButton,
 } from "@phoenix/ui";
 import { useBack } from "../nav";
+import { WALLPAPERS, WallpaperPicker } from "../WallpaperPicker";
 
 const APP_DIR = "/usr/palm/applications/org.webosphoenix.settings/";
-
-/** Bundled wallpapers: the drawn ones (tools/wallpapers/generate.py), then
- *  photographs under open licences (tools/wallpapers/photos.py; authors and
- *  licences in public/wallpapers/PROVENANCE.md and the licences page). A
- *  square master each, which the shell crops to the screen, and a 2:3
- *  thumbnail for the picker. The first is the default (the system service's
- *  default wallpaper preference, runtime/phoenix-runtime.js), shown too while
- *  none is set. */
-export const WALLPAPERS: { name: string; file: string; thumb: string }[] = [
-    "Northern Lights", "Phoenix", "Twilight", "Amber", "Garden", "Sea and Sky",
-    "Dawn", "Silk", "Midnight", "Bloom", "Shallows", "Linen",
-    "River Stones", "Clownfish", "Jellyfish", "Raindrops", "Dandelion", "Gerbera", "Wave", "Seashells",
-].map((name) => {
-    const slug = name.toLowerCase().replace(/ /g, "-");
-    return { name, file: `wallpapers/${slug}.jpg`, thumb: `wallpapers/thumbs/${slug}.jpg` };
-});
 
 const TIMEOUTS = [
     { label: "30 seconds", value: 30 },
@@ -87,23 +72,11 @@ export function ScreenPage() {
 
     if (picking) {
         return (
-            <Page>
-                <PageHeader title="Wallpaper" icon="icons/screen.png" />
-                <div className="wallpaper-grid">
-                    {WALLPAPERS.map((w) => (
-                        <button key={w.name} type="button" className={"wallpaper-tile" + (w === wallpaper ? " selected" : "")}
-                                data-testid={`wallpaper-${w.name}`}
-                                onClick={() => {
-                                    setPref({ wallpaper: { wallpaperName: w.name, wallpaperFile: APP_DIR + w.file } });
-                                    setPicking(false);
-                                }}>
-                            <span className="wallpaper-thumb" style={{ backgroundImage: `url(${w.thumb})` }} />
-                            <span className="wallpaper-name">{w.name}</span>
-                            {w === wallpaper && <Checkmark />}
-                        </button>
-                    ))}
-                </div>
-            </Page>
+            <WallpaperPicker title="Wallpaper" icon="icons/screen.png" chosen={wallpaper} testPrefix="wallpaper"
+                             onPick={(w) => {
+                                 if (w) setPref({ wallpaper: { wallpaperName: w.name, wallpaperFile: APP_DIR + w.file } });
+                                 setPicking(false);
+                             }} />
         );
     }
 

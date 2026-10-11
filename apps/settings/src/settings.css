@@ -70,6 +70,33 @@
 .wallpaper-tile:active .wallpaper-thumb { filter: brightness(0.7); }
 .wallpaper-name { font-size: 14px; margin-top: 4px; }
 .wallpaper-tile .pui-check { position: absolute; top: 4px; right: 2px; }
+/* The picker's albums: a picture in a white frame over another, as the file
+   picker's album art (luna-systemui app/FilePicker/css/ImageAlbumList.css,
+   .icon-album-background / .icon-album-foreground), and "(count)" after the
+   name. */
+.wallpaper-album-art {
+    position: relative;
+    width: 44px;
+    height: 52px;
+    margin-right: 8px;
+}
+.wallpaper-album-art::before, .wallpaper-album-photo {
+    position: absolute;
+    top: 3px;
+    left: 6px;
+    width: 30px;
+    height: 42px;
+    box-sizing: content-box;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+.wallpaper-album-art::before {
+    content: "";
+    background: #c8c8c8;
+    transform: rotate(8deg);
+}
+.wallpaper-album-photo { background: center / cover no-repeat; }
+.wallpaper-album-count { color: #6b6b6b; font-weight: normal; }
 
 /* Sounds ---------------------------------------------------------------------------- */
 

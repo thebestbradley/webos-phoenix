@@ -116,6 +116,14 @@ PHOTOS = [
          source="https://www.flickr.com/photos/volvob12b/20745959392/",
          crop=(0.5, 0.5, 1.0), soften=1.2, exposure=-1.0, saturation=0.9, warmth=0.0,
          top=0.6, top_to=0.26, bottom=0.55, bottom_from=0.76),
+    dict(slug="lily-pads", name="Lily Pads",
+         file="20260817 LilyPad.jpg",
+         title="Lily Pad In Bloom near Assiniboine Park Pavilion In Winnipeg Manitoba Canada",
+         author="NotPavlychenko", licence="CC0 1.0",
+         licence_url="https://creativecommons.org/publicdomain/zero/1.0/",
+         source=None,
+         crop=(0.38, 0.5, 1.0), soften=0.6, exposure=-0.5, saturation=0.95, warmth=0.0,
+         top=0.55, top_to=0.24, bottom=0.5, bottom_from=0.78),
 ]
 
 QUALITY = 86

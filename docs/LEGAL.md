@@ -215,9 +215,10 @@ data use "Phoenix Account".
   are kept in `art/icons-previous` (not installed). The wallpapers
   (`apps/settings/public/wallpapers`) are original, drawn from numbers
   alone by `tools/wallpapers/generate.py` (Apache-2.0; seeds and
-  descriptions in their `PROVENANCE.md`). Eight more are photographs of
+  descriptions in their `PROVENANCE.md`). Nine more are photographs of
   the kinds of subject Palm's were (stones under water, a clownfish, a
-  jellyfish, drops on a leaf, a dandelion, a gerbera, a wave, seashells),
+  jellyfish, drops on a leaf, a dandelion, a gerbera, a wave, seashells,
+  lily pads),
   chosen for compositions of their own, from Wikimedia Commons under CC0
   or CC BY 2.0 / 4.0 (never BY-SA, NC or ND) and prepared by
   `tools/wallpapers/photos.py`; each one's author, licence, source and
