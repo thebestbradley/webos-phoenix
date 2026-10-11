@@ -46,6 +46,42 @@ consumer, and CI fails when the generated files are out of date:
 The versions follow what webos-phoenix's own Enact, Ionic and Flutter demos
 already use (`apps/enact-notes-*`, `apps/ionic-notes`, `apps/flutter-notes`).
 
+## Frameworks on the device: shared, versioned (decided 11 October 2026)
+
+The owner: "agree with the shared." As webOS kept Mojo and Enyo once on
+the device for every app (`/usr/palm/frameworks/<name>/<version>/`, each
+app naming the version it wants), and as Flatpak shares versioned runtimes:
+
+- **Installed once, side by side by major version:** Ember Glass UI's CSS,
+  tokens, icons and fonts; a prebuilt framework bundle of React + Enact +
+  `@ember-glass/enact` (Enact's own framework-bundle build, as LG's system
+  apps share theirs) and one for Ionic React + `@ember-glass/ionic`; one
+  Flutter engine per Flutter version (meta-flutter's shared engine), the
+  largest saving (about 10 MB an app otherwise).
+- **In each app:** only its own code; for Flutter apps, `ember_glass`'s
+  widgets compile into the app (tree-shaken).
+- **Declared:** an app names what it uses in `appinfo.json`
+  (`"frameworks": {"ember-glass": "1", "enact": "5"}`); the OS keeps the
+  older majors an installed app still names; the Marketplace installs a
+  missing one as a dependency; a third-party app may still bundle its own.
+
+## The default apps: phoenix-default-apps
+
+The built-in apps are rebuilt for 2.0 in their own repository,
+**`phoenix-default-apps`** (github.com/thebestbradley/phoenix-default-apps),
+on Enact, with their UI through one facade so Ember Glass UI is applied
+when its components are ready; each rebuilt app also gains what it lacks
+against today's phones (iOS's apps the measure), in webOS's way. First:
+Email, Calendar, Messaging, Memos and Notes; then every other app Phoenix
+has. After the OS rebuild they are installed as the image's defaults.
+
+**Settings, one app and many cards** (the owner, 11 October 2026): webOS
+kept each preference as its own app and card (Wi-Fi, Screen & Lock,
+Date & Time, ...). 2.0 keeps those launch icons and cards, and adds a
+unified Settings app that holds every panel: one codebase, each panel also
+a launch point of its own (`appinfo.json` launch points), so tapping
+Wi-Fi opens a card with just that panel, and Settings opens them all.
+
 ## The glass, and what the shell gives an app
 
 Ember Glass has four glass levels (SPEC.md, "Glass tokens"):
