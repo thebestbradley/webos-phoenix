@@ -21,6 +21,12 @@ const require = createRequire(import.meta.url);
 type Any = any;
 const updates = require("./updatesservice.js") as Any;
 const node = require("./lib/node.js") as Any;
+const platform = require("@phoenix/platform") as Any;
+const keys = require("../../tools/platform-mock/keys.cjs") as Any;
+
+// What servers.json pins for the update feed ({key} or {root}); none by default.
+let pins: Any = {};
+let clock = new Date("2026-10-01T12:00:00Z");
 
 // Every RAUC command is a Node process (fake-rauc.cjs, as rauc is one on
 // a device), several a test: 0.7-2 s a test on an idle desktop, and past
@@ -36,7 +42,8 @@ const COMPATIBLE = "phoenix-pinephone";
 let dir: string;
 let server: http.Server;
 let base: string;
-let files: Record<string, { status?: number; body: Buffer | string }> = {};
+let files: Record<string, { status?: number; body: Buffer | string; cutAt?: number }> = {};
+let ranges: string[] = [];
 
 function bundle(version: string, build: number, compatible = COMPATIBLE) {
     return `[update]\ncompatible=${compatible}\nversion=${version}\nbuild=${build}\n\n[image.rootfs]\nfilename=rootfs.ext4\n`;
@@ -115,9 +122,16 @@ function service() {
                 return Promise.resolve({ returnValue: true });
             },
         },
-        config: () => ({ feed: base, channel: "stable" }),
+        requestBytes: node.requestBytes,
+        crypto: {
+            sha256: async (b: Uint8Array) => new Uint8Array(crypto.createHash("sha256").update(b).digest()),
+            sha512: async (b: Uint8Array) => new Uint8Array(crypto.createHash("sha512").update(b).digest()),
+            randomBytes: (n: number) => new Uint8Array(crypto.randomBytes(n)),
+        },
+        // /etc/palm/phoenix/servers.json, resolved (@phoenix/platform).
+        servers: async () => platform.servers.resolve({ feeds: base, updates: Object.assign({ url: "./", channel: "stable" }, pins) }, null, false),
         state: { load: () => state && JSON.parse(JSON.stringify(state)), save: (o: Any) => { state = JSON.parse(JSON.stringify(o)); } },
-        now: () => new Date("2026-10-01T12:00:00Z"),
+        now: () => clock,
     });
 }
 function palmEvents(svc: Any) {
@@ -132,9 +146,21 @@ beforeAll(async () => {
     process.env.FAKE_RAUC_STATE = path.join(dir, "rauc.json");
     server = http.createServer((req, res) => {
         const f = files[req.url ?? ""];
+        ranges.push(String(req.headers.range ?? ""));
         if (!f) { res.writeHead(404); return res.end("not found"); }
-        res.writeHead(f.status ?? 200, { "Content-Type": "application/octet-stream" });
-        res.end(f.body);
+        const body = Buffer.from(f.body);
+        const m = /^bytes=(\d+)-$/.exec(String(req.headers.range ?? ""));
+        if (m && !f.status) {
+            const from = Number(m[1]);
+            if (from >= body.length) { res.writeHead(416); return res.end(); }
+            res.writeHead(206, { "Content-Type": "application/octet-stream", "Content-Range": `bytes ${from}-${body.length - 1}/${body.length}`,
+                                 "Content-Length": String(body.length - from) });
+            return res.end(body.subarray(from));
+        }
+        res.writeHead(f.status ?? 200, { "Content-Type": "application/octet-stream", "Content-Length": String(body.length) });
+        // cutAt: the connection drops after that many bytes (a download that stops).
+        if (f.cutAt !== undefined) { res.write(body.subarray(0, f.cutAt)); return setTimeout(() => res.destroy(), 20); }
+        res.end(body);
     });
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));
     base = `http://127.0.0.1:${(server.address() as Any).port}/`;
@@ -145,6 +171,8 @@ afterAll(() => {
 });
 beforeEach(() => {
     files = {};
+    pins = {};
+    clock = new Date("2026-10-01T12:00:00Z");
     state = null;
     calls = [];
     wifi = true;
@@ -309,5 +337,139 @@ describe("installing", () => {
         expect(palm.at(-1)).toEqual({ returnValue: true, status: "CancelAlert" });
         expect(await svc.setPreferences({ channel: "nightly" })).toMatchObject({ errorCode: "BAD_PARAMS" });
         expect((await svc.setPreferences({ channel: "beta" })).channel).toBe("beta");
+    });
+});
+
+// ---- The platform's side (docs/PLATFORM-CLIENT.md, "System updates") ----------------------------
+
+// A format 2 feed, signed by key (and the root's delegation of key in key.json when root is given).
+function publishSigned(version: string, build: number, opts: { key: Any; root?: Any; sequence?: number; expires?: string;
+                                                                rollout?: Any; revoked?: number[]; release?: null; channel?: string; delegation?: Any }) {
+    publish(version, build, { channel: opts.channel });
+    const name = `/${COMPATIBLE}/${opts.channel ?? "stable"}.json`;
+    const f1 = JSON.parse(String(files[name].body));
+    const doc = { format: 2, compatible: COMPATIBLE, channel: opts.channel ?? "stable", sequence: opts.sequence ?? 1,
+                  generated: "2026-10-01T00:00:00Z", expires: opts.expires ?? "2026-10-15T00:00:00Z", revoked: opts.revoked ?? [],
+                  release: opts.release === null ? null : Object.assign(f1.release, opts.rollout ? { rollout: opts.rollout } : {}) };
+    const bytes = Buffer.from(JSON.stringify(doc, null, 2) + "\n");
+    files[name] = { body: bytes };
+    files[name + ".sig"] = { body: keys.sigFile(opts.key, bytes) };
+    if (opts.root) files["/key.json"] = { body: JSON.stringify({ key: opts.key.publicKey, name: "Phoenix updates", fingerprint: opts.key.fingerprint,
+        delegations: [opts.delegation ?? keys.delegate(opts.root, opts.key, "updates", "2026-09-01T00:00:00Z", "2026-12-01T00:00:00Z")] }) };
+}
+
+describe("signed feeds, rollout, resume and the boot check", () => {
+    it("a device that pins the updates key takes only a signed format 2 feed", async () => {
+        const online = keys.keypair();
+        pins = { key: online.publicKey };
+        publish("1.1.0", 110);   // format 1, unsigned
+        expect(await service().check({})).toMatchObject({ errorCode: "BAD_SIGNATURE" });
+        publishSigned("1.1.0", 110, { key: keys.keypair() });   // signed by another key
+        expect(await service().check({})).toMatchObject({ errorCode: "BAD_SIGNATURE" });
+        publishSigned("1.1.0", 110, { key: online });
+        const st = await service().check({});
+        expect(st).toMatchObject({ returnValue: true, verified: true, available: { version: "1.1.0", build: 110 } });
+        // The signature is over the exact bytes: one changed byte and it is refused.
+        const name = `/${COMPATIBLE}/stable.json`;
+        files[name] = { body: String(files[name].body).replace("Faster cards", "Faster cardz") };
+        expect(await service().check({})).toMatchObject({ errorCode: "BAD_SIGNATURE" });
+    });
+
+    it("the offline root delegates to the online key; an expired or foreign delegation is refused", async () => {
+        const root = keys.keypair(), online = keys.keypair();
+        pins = { root: root.publicKey };
+        publishSigned("1.1.0", 110, { key: online, root });
+        expect(await service().check({})).toMatchObject({ verified: true, available: { build: 110 } });
+        // Rotation: a new online key, delegated by the same root.
+        const next = keys.keypair();
+        publishSigned("1.1.0", 110, { key: next, root, sequence: 2 });
+        expect(await service().check({})).toMatchObject({ returnValue: true, available: { build: 110 } });
+        publishSigned("1.1.0", 110, { key: next, root, sequence: 3,
+            delegation: keys.delegate(root, next, "updates", "2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z") });
+        expect(await service().check({})).toMatchObject({ errorCode: "NO_DELEGATION" });
+        publishSigned("1.1.0", 110, { key: next, root, sequence: 3, delegation: keys.delegate(root, next, "catalog", "2026-09-01T00:00:00Z", "2026-12-01T00:00:00Z") });
+        expect(await service().check({})).toMatchObject({ errorCode: "NO_DELEGATION" });
+        const stranger = keys.keypair();
+        publishSigned("1.1.0", 110, { key: next, root, sequence: 3, delegation: keys.delegate(stranger, next, "updates", "2026-09-01T00:00:00Z", "2026-12-01T00:00:00Z") });
+        expect(await service().check({})).toMatchObject({ errorCode: "NO_DELEGATION" });
+    });
+
+    it("an expired feed, or an older sequence than one taken, is refused (a mirror holding the device back)", async () => {
+        const online = keys.keypair();
+        pins = { key: online.publicKey };
+        publishSigned("1.1.0", 110, { key: online, sequence: 5 });
+        expect(await service().check({})).toMatchObject({ returnValue: true });
+        publishSigned("1.0.5", 105, { key: online, sequence: 4 });
+        expect(await service().check({})).toMatchObject({ errorCode: "ROLLBACK" });
+        publishSigned("1.1.0", 110, { key: online, sequence: 6, expires: "2026-09-30T00:00:00Z" });
+        expect(await service().check({})).toMatchObject({ errorCode: "EXPIRED" });
+    });
+
+    it("a revoked build that was prepared is dropped and its alerts closed", async () => {
+        const online = keys.keypair();
+        pins = { key: online.publicKey };
+        publishSigned("1.1.0", 110, { key: online, sequence: 1 });
+        const svc = service();
+        await svc.check({});
+        expect((await svc.download({})).state).toBe("ready");
+        const palm = palmEvents(svc);
+        publishSigned("1.1.0", 110, { key: online, sequence: 2, release: null, revoked: [110] });
+        const st = await svc.check({});
+        expect(st).toMatchObject({ state: "idle", available: null });
+        expect(palm.at(-1)).toEqual({ returnValue: true, status: "CancelAlert" });
+    });
+
+    it("a staged rollout reaches the devices in its percentage, by a stable bucket", async () => {
+        const online = keys.keypair();
+        pins = { key: online.publicKey };
+        publishSigned("1.1.0", 110, { key: online, rollout: { percent: 0, seed: "r110" } });
+        const svc = service();
+        const paused = await svc.check({});
+        expect(paused).toMatchObject({ available: null, rollout: { percent: 0, waiting: true, version: "1.1.0" } });
+        // This device's bucket: the one the platform's rule gives (rollout.js).
+        const bucket = await platform.rollout.bucket("r110", state.rolloutId, async (b: Uint8Array) => crypto.createHash("sha256").update(b).digest());
+        publishSigned("1.1.0", 110, { key: online, sequence: 2, rollout: { percent: bucket, seed: "r110" } });
+        expect((await svc.check({})).available).toBeNull();
+        publishSigned("1.1.0", 110, { key: online, sequence: 3, rollout: { percent: bucket + 1, seed: "r110" } });
+        expect((await svc.check({})).available).toMatchObject({ build: 110 });
+        expect(state.rolloutId).toMatch(/^[0-9a-f]{32}$/);
+    });
+
+    it("a download that stops continues where it was (HTTP range), and the whole is checked", async () => {
+        const big = bundle("1.1.0", 110) + "#".repeat(200000) + "\n";
+        publish("1.1.0", 110, { bundleText: big });
+        const file = `/${COMPATIBLE}/phoenix-1.1.0.raucb`;
+        files[file].cutAt = 50000;
+        const svc = service();
+        await svc.check({});
+        expect(await svc.download({})).toMatchObject({ returnValue: false, errorCode: "DOWNLOAD_FAILED" });
+        const kept = fs.statSync(path.join(dir, "downloads", "phoenix-110.raucb")).size;
+        expect(kept).toBeGreaterThan(0);
+        expect(kept).toBeLessThan(Buffer.byteLength(big));
+        delete files[file].cutAt;
+        ranges = [];
+        expect((await svc.download({})).state).toBe("ready");
+        expect(ranges).toContain(`bytes=${kept}-`);
+    });
+
+    it("marks the running slot good when it starts, and offers the dev channel", async () => {
+        const svc = service();
+        await svc.getStatus({});
+        expect(raucState().calls).toContain("status mark-good");
+        expect((await svc.getStatus({})).channels).toEqual(["stable", "beta", "dev"]);
+        expect((await svc.setPreferences({ channel: "dev" })).channel).toBe("dev");
+        publish("1.2.0-dev.3", 121, { channel: "dev" });
+        expect((await svc.check({})).available).toMatchObject({ build: 121 });
+    });
+
+    it("says when no update server is set up", async () => {
+        const svc = updates.createUpdatesService(Object.assign({}, {
+            rauc: node.createRauc({ command: FAKE_RAUC, osRelease: path.join(dir, "os-release") }),
+            power: async () => null, luna: { call: async () => ({ returnValue: true }) },
+            state: { load: () => null, save: () => {} },
+            servers: async () => platform.servers.resolve({ feeds: null }, null, false),
+        }));
+        expect(await svc.check({})).toMatchObject({ errorCode: "NOT_SET_UP" });
+        expect(await svc.getStatus({})).toMatchObject({ configured: false, channels: ["stable"] });
     });
 });
