@@ -14,6 +14,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QRegularExpression>
 #include <QTemporaryDir>
 #include <cstdio>
@@ -185,6 +186,65 @@ int main(int argc, char **argv)
         third.setInstalledDir(fresh.path());
         QFile info(fresh.path() + QStringLiteral("/usr/palm/applications/") + fedi + QStringLiteral("/appinfo.json"));
         check(info.open(QIODevice::ReadOnly) && info.readAll().contains("9.9.9"), "... and kept as installed, not replaced by the checkout's copy");
+    }
+
+    // An extra rootfs (--extra-rootfs: apps built outside the checkout, as
+    // phoenix-default-apps stages them): its app replaces the built-in one
+    // with its id, without the overlay's fixes for the original, and its
+    // other files (a shared framework) are served over the checkout's.
+    {
+        QTemporaryDir repo, extra, installed;
+        const auto write = [](const QString &path, const QByteArray &data) {
+            QDir().mkpath(QFileInfo(path).path());
+            QFile f(path);
+            f.open(QIODevice::WriteOnly);
+            f.write(data);
+        };
+        const auto read = [](const QString &path) {
+            QFile f(path);
+            return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+        };
+        write(repo.filePath(QStringLiteral("runtime/rootfs.json")),
+              R"({"overlays": ["compat/rootfs"], "mounts": {"/usr/palm/frameworks/enact/": "frameworks/enact/"}, "applicationDirs": ["apps"]})");
+        write(repo.filePath(QStringLiteral("apps/memos/appinfo.json")), R"({"id": "com.palm.app.notes", "title": "Memos", "version": "3.0.2500"})");
+        write(repo.filePath(QStringLiteral("apps/memos/index.html")), "original");
+        write(repo.filePath(QStringLiteral("apps/memos/depends.js")), "enyo");
+        write(repo.filePath(QStringLiteral("apps/memos/icon.png")), "png");
+        write(repo.filePath(QStringLiteral("compat/rootfs/usr/palm/applications/com.palm.app.notes/css/memos.css")), "fix");
+        write(repo.filePath(QStringLiteral("compat/rootfs/usr/palm/applications/com.palm.app.notes/icon-512x512.png")), "big");
+        write(repo.filePath(QStringLiteral("frameworks/enact/5/react.js")), "checkout's");
+        write(repo.filePath(QStringLiteral("frameworks/enact/4/react.js")), "older");
+        const QString rebuilt = extra.filePath(QStringLiteral("usr/palm/applications/com.palm.app.notes/"));
+        write(rebuilt + QStringLiteral("appinfo.json"), R"({"id": "com.palm.app.notes", "title": "Memos", "version": "2.0.0"})");
+        write(rebuilt + QStringLiteral("index.html"), "rebuilt");
+        write(rebuilt + QStringLiteral("icon.png"), "png");
+        write(extra.filePath(QStringLiteral("usr/palm/applications/org.example.notes/appinfo.json")), R"({"id": "org.example.notes", "title": "Notes"})");
+        write(extra.filePath(QStringLiteral("usr/palm/frameworks/enact/5/react.js")), "extra's");
+        Rootfs fs(repo.path());
+        const int before = fs.apps().size();
+        fs.addExtraRootfs(extra.path());
+        fs.setInstalledDir(installed.path());
+        const QVariantMap memos = entry(fs, QStringLiteral("com.palm.app.notes"));
+        check(fs.apps().size() == before + 1 && memos.value(QStringLiteral("version")).toString() == QStringLiteral("2.0.0")
+              && fs.isExtraApp(QStringLiteral("com.palm.app.notes")) && !entry(fs, QStringLiteral("org.example.notes")).isEmpty(),
+              "an extra rootfs' app replaces the built-in one with its id; a new one is added");
+        check(read(fs.resolve(QStringLiteral("/usr/palm/applications/com.palm.app.notes/index.html"))) == "rebuilt",
+              "... and is served from the extra rootfs");
+        check(!QFile::exists(fs.resolve(QStringLiteral("/usr/palm/applications/com.palm.app.notes/css/memos.css")))
+              && !QFile::exists(fs.resolve(QStringLiteral("/usr/palm/applications/com.palm.app.notes/depends.js")))
+              && memos.value(QStringLiteral("largeIcon")).toString().isEmpty(),
+              "... without the overlay's fixes or the original's files");
+        bool twinned = false;
+        for (const auto &p : fs.twinDirectories())
+            twinned = twinned || p.second.endsWith(QStringLiteral("com.palm.app.notes"));
+        check(!twinned, "... nor the overlay's pictures beside it");
+        check(read(fs.resolve(QStringLiteral("/usr/palm/frameworks/enact/5/react.js"))) == "extra's"
+              && read(fs.resolve(QStringLiteral("/usr/palm/frameworks/enact/4/react.js"))) == "older",
+              "its other files are served over the checkout's, the rest as before");
+        SimInstaller inst(&fs);
+        check(!inst.install(QStringLiteral("com.palm.app.notes"), { file(QStringLiteral("appinfo.json"), R"({"id": "com.palm.app.notes"})") }).isEmpty()
+              && !inst.remove(QStringLiteral("com.palm.app.notes")).isEmpty(),
+              "its apps are built in: not installed over, not removed");
     }
     std::printf(failures ? "%d failed\n" : "all passed\n", failures);
     return failures ? 1 : 0;
