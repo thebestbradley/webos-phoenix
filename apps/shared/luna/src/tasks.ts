@@ -85,6 +85,8 @@ export interface TasksLaunchParams {
     taskId?: string;
     /** With taskId: it was opened from its reminder (offer Snooze and Done). */
     fromReminder?: boolean;
+    /** Open this list (the Assistant's "what's on my shopping list"). */
+    listId?: string;
     /** Start a new task with this summary (Just Type "New Task"). */
     text?: string;
     /** A reminder is due for this task (the activity's callback). */
