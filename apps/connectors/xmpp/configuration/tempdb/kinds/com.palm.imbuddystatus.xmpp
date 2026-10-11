@@ -1,0 +1,25 @@
+{
+    "id": "com.palm.imbuddystatus.xmpp:1",
+    "owner": "org.webosphoenix.service.xmpp",
+    "extends": [
+        "com.palm.imbuddystatus:1"
+    ],
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        },
+        {
+            "name": "username",
+            "props": [
+                {
+                    "name": "username"
+                }
+            ]
+        }
+    ]
+}

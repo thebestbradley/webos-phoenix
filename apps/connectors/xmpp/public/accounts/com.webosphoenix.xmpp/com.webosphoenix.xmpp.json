@@ -1,0 +1,82 @@
+{
+    "templateId": "com.webosphoenix.xmpp",
+    "loc_name": "Jabber (XMPP)",
+    "icon": {
+        "loc_32x32": "images/xmpp-32x32.png",
+        "loc_48x48": "images/xmpp-48x48.png"
+    },
+    "loc_usernameLabel": "JABBER ID",
+    "loc_usernameExplainLabel": "you@example.org",
+    "loc_passwordLabel": "PASSWORD",
+    "signUp": {
+        "url": "https://providers.xmpp.net/",
+        "servers": [
+            {
+                "name": "Snikket (run your own)",
+                "url": "https://snikket.org/"
+            }
+        ]
+    },
+    "validator": {
+        "customUI": {
+            "appId": "org.webosphoenix.xmpp",
+            "name": "accounts/signin.html"
+        },
+        "address": "palm://org.webosphoenix.service.xmpp/checkCredentials"
+    },
+    "readPermissions": [
+        "org.webosphoenix.service.xmpp",
+        "org.webosphoenix.xmpp",
+        "org.webosphoenix.messaging"
+    ],
+    "writePermissions": [
+        "org.webosphoenix.xmpp",
+        "org.webosphoenix.messaging"
+    ],
+    "capabilityProviders": [
+        {
+            "capability": "CONTACTS",
+            "id": "com.webosphoenix.xmpp.contacts",
+            "loc_name": "Buddies in Contacts",
+            "icon": {
+                "loc_32x32": "images/xmpp-32x32.png",
+                "loc_48x48": "images/xmpp-48x48.png"
+            },
+            "dbkinds": {
+                "contact": "com.palm.contact.xmpp:1"
+            },
+            "readOnlyData": true,
+            "implementation": "palm://org.webosphoenix.service.xmpp/",
+            "onCreate": "palm://org.webosphoenix.service.xmpp/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.xmpp/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.xmpp/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.xmpp/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.xmpp/sync"
+        },
+        {
+            "capability": "MESSAGING",
+            "capabilitySubtype": "IM",
+            "id": "com.webosphoenix.xmpp.im",
+            "serviceName": "type_jabber",
+            "loc_name": "Instant Messaging",
+            "loc_shortName": "Jabber",
+            "chatWithNonBuddies": true,
+            "icon": {
+                "loc_32x32": "images/xmpp-32x32.png",
+                "loc_48x48": "images/xmpp-48x48.png",
+                "splitter": "images/xmpp-32x32.png"
+            },
+            "dbkinds": {
+                "immessage": "com.palm.immessage.xmpp:1",
+                "imloginstate": "com.palm.imloginstate.xmpp:1",
+                "imbuddystatus": "com.palm.imbuddystatus.xmpp:1"
+            },
+            "implementation": "palm://org.webosphoenix.service.xmpp/",
+            "onCreate": "palm://org.webosphoenix.service.xmpp/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.xmpp/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.xmpp/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.xmpp/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.xmpp/sync"
+        }
+    ]
+}

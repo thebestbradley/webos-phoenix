@@ -56,7 +56,8 @@ describe("English", () => {
         expect(parse("send a message to Sam saying on my way")).toEqual({ command: "text", args: { who: "sam", message: "on my way" } });
         expect(parse("tell Mary that dinner is ready")).toEqual({ command: "text", args: { who: "mary", message: "dinner is ready" } });
         expect(parse("text Sam")).toEqual({ command: "text", args: { who: "sam", message: "" } });
-        expect(parse("tell me a joke")).toBeNull();
+        // Small talk is the grammar's now (the owner's "Hello, can you hear me?" got "I can't do that").
+        expect(parse("tell me a joke")).toEqual({ command: "chat", args: { kind: "joke" } });
     });
 
     it("sets timers", () => {
@@ -176,8 +177,9 @@ describe("English", () => {
     });
 
     it("leaves free-form questions to the next layer", () => {
-        for (const t of ["who wrote the odyssey", "explain quantum computing simply", "why is the sky blue", "hello"])
+        for (const t of ["who wrote the odyssey", "explain quantum computing simply", "why is the sky blue"])
             expect(parse(t)).toBeNull();
+        expect(parse("hello")).toEqual({ command: "chat", args: { kind: "greeting" } });
     });
 });
 

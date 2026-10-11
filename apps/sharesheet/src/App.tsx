@@ -10,12 +10,16 @@
 //          sideways; then the system's actions as menu rows: Save to Photos,
 //          Save to Files..., Copy. The webOS popup art, laid out the way the
 //          latest iOS sheet mixes icons and a list.
-//   save   A folder of /media/internal (the last one used first), its
-//          subfolders, New Folder, the file's name; Replace asks first.
+//   save   A folder of /media/internal or of a drive (the last one used
+//          first), its subfolders, New Folder, the file's name; Replace asks
+//          first. Above Internal Storage, the places: it and each drive
+//          (Synergy accounts with the DOCUMENTS capability, /media/drives;
+//          docs/SHARE-AND-FILES.md "Drives"), where the file is uploaded.
 //   pick   luna-systemui's file picker in this look: the kind first when
 //          there are several, pictures album by album (Camera Roll first),
-//          videos, music, documents, any file by folder; one file or
-//          several; a crop frame for a picture
+//          videos, music, documents, any file by folder (the drives
+//          beside Internal Storage); one file or several; a crop frame for
+//          a picture
 //          (org.webosphoenix.filepicker/pick, SF2).
 //   signin The system's browser sheet for an OAuth sign-in
 //          (org.webosphoenix.service.oauth authorize; docs/SYNERGY-CONNECTORS.md
@@ -29,8 +33,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-    extensionOf, fileManager, fileUrl, findFiles, formatSize, joinPath, kindOf, LunaError, mediaIndexer, mediaUrl, mimeOf, parentOf,
-    type AudioItem, type CropInfo, type FileEntry, type ImageItem, type PickKind, type VideoItem,
+    driveRootOf, DRIVES_ROOT, extensionOf, FILE_ERRORS, fileManager, fileUrl, findFiles, formatSize, joinPath, kindOf, LunaError, mediaIndexer, mediaUrl,
+    mimeOf, parentOf, type AudioItem, type CropInfo, type FileEntry, type ImageItem, type PickKind, type VideoItem,
 } from "@phoenix/luna";
 import { useLaunchParams, useMediaUrl } from "@phoenix/luna/react";
 import { Button, Checkmark, Dialog, FileIcon, Slider, Spinner, TextField, type FileIconKind } from "@phoenix/ui";
@@ -61,7 +65,21 @@ const baseName = (p: string) => p.replace(/^.*\//, "");
 const isPicture = (f: SharedFile) => /^image\//.test(f.mimeType) || /\.(png|jpe?g|gif|webp|bmp)$/i.test(f.path);
 const isVideo = (f: SharedFile) => /^video\//.test(f.mimeType) || /\.(mp4|m4v|mov|webm)$/i.test(f.path);
 const isAudio = (f: SharedFile) => /^audio\//.test(f.mimeType) || /\.(wav|mp3|ogg|oga|m4a|aac|flac)$/i.test(f.path);
-const folderTitle = (p: string) => (p === MEDIA ? "Internal Storage" : baseName(p));
+// The places above the folders: Internal Storage and each drive ("" is the list of them).
+const PLACES = "";
+const folderTitle = (p: string, drives: FileEntry[] = []) =>
+    p === PLACES ? "Places" : p === MEDIA ? "Internal Storage" : drives.find((d) => d.path === p)?.drive?.title ?? baseName(p);
+const internalPlace = { name: "Internal Storage", path: MEDIA, type: "directory", size: 0, mtime: 0, mode: 0o755 } as FileEntry;
+// Up from a folder: the places above Internal Storage and a drive's own folder (when there are drives).
+const upOf = (p: string, drives: FileEntry[]) => (p === MEDIA || driveRootOf(p) === p ? (drives.length ? PLACES : p) : parentOf(p));
+function useDrives(): FileEntry[] {
+    const [drives, setDrives] = useState<FileEntry[]>([]);
+    useEffect(() => { let live = true; fileManager.drives().then((d) => { if (live) setDrives(d); }); return () => { live = false; }; }, []);
+    return drives;
+}
+const listError = (e: unknown) => (e instanceof LunaError && e.errorCode === FILE_ERRORS.OFFLINE ? "Can't reach the drive. Check your connection."
+    : e instanceof LunaError && e.errorCode === FILE_ERRORS.AUTH ? "The drive did not accept the sign-in: sign in again in Accounts."
+    : e instanceof LunaError ? e.errorText : "Could not open the folder");
 
 async function copyText(text: string): Promise<boolean> {
     try {
@@ -311,30 +329,49 @@ function SavePicker({ request, finish, backHandler }: SheetProps<SaveRequest>) {
     const [newFolder, setNewFolder] = useState<string | null>(null);
     const [replace, setReplace] = useState(false);
     const [error, setError] = useState("");
+    const drives = useDrives();
+    const drivesRef = useRef<FileEntry[]>([]);
+    drivesRef.current = drives;
 
     const open = useCallback(async (path: string) => {
         setEntries(null);
+        setError("");
+        if (path === PLACES) {
+            setFolder(PLACES);
+            setEntries([internalPlace, ...drivesRef.current]);
+            return;
+        }
         try {
             const list = await fileManager.list(path);
             setFolder(path);
             setEntries(list.filter((e) => e.type === "directory" && !e.name.startsWith(".")).sort((a, b) => a.name.localeCompare(b.name)));
-        } catch {
+        } catch (e) {
+            if (driveRootOf(path)) {
+                // A drive that cannot be reached now: say so, and stay (Up goes to the places).
+                setFolder(path);
+                setEntries([]);
+                setError(listError(e));
+                return;
+            }
             // The last folder is gone: up to Documents, then the top.
             if (path !== MEDIA) void open(path === MEDIA + "/Documents" ? MEDIA : MEDIA + "/Documents");
         }
     }, []);
-    useEffect(() => { void open(request.folder.indexOf(MEDIA) === 0 ? request.folder : MEDIA); }, [open, request.folder]);
+    useEffect(() => {
+        void open(request.folder.indexOf(MEDIA) === 0 || request.folder.indexOf(DRIVES_ROOT + "/") === 0 ? request.folder : MEDIA);
+    }, [open, request.folder]);
+    const canUp = folder !== null && folder !== PLACES && upOf(folder, drives) !== folder;
 
     backHandler.current = () => {
         if (newFolder !== null) setNewFolder(null);
         else if (replace) setReplace(false);
-        else if (folder && folder !== MEDIA) void open(parentOf(folder));
+        else if (folder !== null && canUp) void open(upOf(folder, drives));
         else finish({ action: "cancel" });
     };
 
     const clean = name.trim().replace(/[\/\\]/g, "-");
     const save = async (overwrite: boolean) => {
-        if (!folder || !clean) return;
+        if (!folder || !clean || error) return;
         if (!overwrite) {
             const exists = await fileManager.stat(joinPath(folder, clean)).then(() => true, () => false);
             if (exists) return setReplace(true);
@@ -356,18 +393,21 @@ function SavePicker({ request, finish, backHandler }: SheetProps<SaveRequest>) {
     return (
         <div className="ss-sheet ss-save" role="dialog" aria-label={request.title} data-testid="save-picker">
             <div className="ss-save-head">
-                <button type="button" className="ss-up" disabled={!folder || folder === MEDIA} aria-label="Up"
-                        data-testid="save-up" onClick={() => folder && void open(parentOf(folder))} />
-                <div className="ss-title" data-testid="save-folder">{folder ? folderTitle(folder) : request.title}</div>
-                <button type="button" className="ss-link" data-testid="save-new-folder" disabled={!folder} onClick={() => setNewFolder("")}>New Folder</button>
+                <button type="button" className="ss-up" disabled={!canUp} aria-label="Up"
+                        data-testid="save-up" onClick={() => folder !== null && void open(upOf(folder, drives))} />
+                <div className="ss-title" data-testid="save-folder">{folder !== null ? folderTitle(folder, drives) : request.title}</div>
+                <button type="button" className="ss-link" data-testid="save-new-folder" disabled={!folder || !!error} onClick={() => setNewFolder("")}>New Folder</button>
             </div>
             <div className="ss-folders" data-testid="save-folders">
                 {entries === null ? <div className="ss-loading"><Spinner /></div>
+                    : error ? <div className="ss-empty ss-drive-error" data-testid="save-error">{error}</div>
                     : entries.length === 0 ? <div className="ss-empty">No folders here</div>
                     : entries.map((e) => (
-                        <div key={e.path} className="pui-menu-item" role="button" data-testid={"save-folder-" + e.name} onClick={() => void open(e.path)}>
-                            <FileIcon kind="folder" size={28} />
-                            <span className="pui-menu-label">{e.name}</span>
+                        <div key={e.path} className={"pui-menu-item" + (e.drive ? " ss-pick-row" : "")} role="button"
+                             data-testid={"save-folder-" + (e.drive ? e.drive.title : e.name)} onClick={() => void open(e.path)}>
+                            <FileIcon kind={e.drive ? "drive" : "folder"} size={28} />
+                            <span className="pui-menu-label"><span className="ss-pick-row-title">{e.drive ? e.drive.title : e.name}</span>
+                                {e.drive && <span className="ss-pick-row-detail">{e.drive.account}</span>}</span>
                             <span className="pui-row-chevron" />
                         </div>
                     ))}
@@ -376,7 +416,7 @@ function SavePicker({ request, finish, backHandler }: SheetProps<SaveRequest>) {
             {error && <div className="ss-error">{error}</div>}
             <div className="ss-buttons">
                 <Button onClick={() => finish({ action: "cancel" })} data-testid="save-cancel">Cancel</Button>
-                <Button variant="affirmative" disabled={!folder || !clean} onClick={() => void save(false)} data-testid="save-confirm">Save</Button>
+                <Button variant="affirmative" disabled={!folder || !clean || !!error} onClick={() => void save(false)} data-testid="save-confirm">Save</Button>
             </div>
             <Dialog open={newFolder !== null} title="New Folder" onClose={() => setNewFolder(null)} testId="new-folder-dialog">
                 <TextField value={newFolder ?? ""} onChange={setNewFolder} onSubmit={() => void makeFolder()} autoFocus testId="new-folder-name" />
@@ -430,6 +470,7 @@ function FilePicker({ request, finish, backHandler }: SheetProps<PickRequest>) {
     const [selected, setSelected] = useState<Picked[]>([]);
     const [cropping, setCropping] = useState<ImageItem | null>(null);
     const [folder, setFolder] = useState(MEDIA);
+    const drives = useDrives();
     const cropOf = useRef<() => CropInfo | null>(() => null);
 
     const isSelected = (path: string) => selected.some((f) => f.path === path);
@@ -444,10 +485,11 @@ function FilePicker({ request, finish, backHandler }: SheetProps<PickRequest>) {
     // Back goes up a step, as the picker's own Back did (its views'
     // backHandler, FilePickerApp.js:240-247, 268-283): out of the crop,
     // up a folder, to the kinds (the files ticked are let go), then away.
-    const nested = !!cropping || (kind === "file" && folder !== MEDIA) || (!!kind && kinds.length > 1);
+    const folderUp = upOf(folder, drives);
+    const nested = !!cropping || (kind === "file" && folder !== PLACES && folderUp !== folder) || (!!kind && kinds.length > 1);
     const back = () => {
         if (cropping) setCropping(null);
-        else if (kind === "file" && folder !== MEDIA) setFolder(parentOf(folder));
+        else if (kind === "file" && folder !== PLACES && folderUp !== folder) setFolder(folderUp);
         else if (kind && kinds.length > 1) { setKind(null); setSelected([]); }
         else finish({ action: "cancel" });
     };
@@ -488,7 +530,7 @@ function FilePicker({ request, finish, backHandler }: SheetProps<PickRequest>) {
                     : kind === "video" ? <MediaRows kind="video" choose={choose} isSelected={isSelected} />
                     : kind === "audio" ? <MediaRows kind="audio" choose={choose} isSelected={isSelected} />
                     : kind === "document" ? <Documents extensions={request.extensions} choose={choose} isSelected={isSelected} />
-                    : <Folder path={folder} open={setFolder} extensions={request.extensions} choose={choose} isSelected={isSelected} />}
+                    : <Folder path={folder} open={setFolder} extensions={request.extensions} choose={choose} isSelected={isSelected} drives={drives} />}
             </div>
             <div className="ss-buttons">
                 <Button onClick={back} data-testid="pick-cancel">{nested ? "Back" : "Cancel"}</Button>
@@ -605,26 +647,33 @@ function Documents({ extensions, choose, isSelected }: ListProps & { extensions:
     );
 }
 
-function Folder({ path, open, extensions, choose, isSelected }: ListProps & { path: string; open: (p: string) => void; extensions: string[] }) {
-    const [entries, setEntries] = useState<{ path: string; list: FileEntry[] } | null>(null);
+function Folder({ path, open, extensions, choose, isSelected, drives }: ListProps & {
+    path: string; open: (p: string) => void; extensions: string[]; drives: FileEntry[];
+}) {
+    const [entries, setEntries] = useState<{ path: string; list: FileEntry[]; error?: string } | null>(null);
     useEffect(() => {
         let gone = false;
-        fileManager.list(path).then((list) => { if (!gone) setEntries({ path, list }); }, () => { if (!gone) setEntries({ path, list: [] }); });
+        if (path === PLACES) { setEntries({ path, list: [internalPlace, ...drives] }); return; }
+        fileManager.list(path).then((list) => { if (!gone) setEntries({ path, list }); },
+                                    (e) => { if (!gone) setEntries({ path, list: [], error: driveRootOf(path) ? listError(e) : undefined }); });
         return () => { gone = true; };
-    }, [path]);
+    }, [path, drives]);
     if (!entries || entries.path !== path) return <div className="ss-loading"><Spinner /></div>;
+    if (entries.error) return <div className="ss-empty ss-drive-error" data-testid="pick-error">{entries.error}</div>;
     const want = new Set(extensions);
     const shown = entries.list.filter((e) => !e.name.startsWith(".") &&
         (e.type === "directory" || !want.size || want.has(extensionOf(e.name).toLowerCase())))
         .sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === "directory" ? -1 : 1));
     return (
         <div className="ss-pick-rows">
-            <div className="ss-pick-album-name" data-testid="pick-folder">{folderTitle(path)}</div>
+            <div className="ss-pick-album-name" data-testid="pick-folder">{folderTitle(path, drives)}</div>
             {!shown.length && <div className="ss-empty">Nothing here</div>}
             {shown.map((e) => e.type === "directory" ? (
-                <div key={e.path} className="pui-menu-item" role="button" data-testid={"pick-folder-" + e.name} onClick={() => open(e.path)}>
-                    <FileIcon kind="folder" size={28} />
-                    <span className="pui-menu-label">{e.name}</span>
+                <div key={e.path} className={"pui-menu-item" + (e.drive ? " ss-pick-row" : "")} role="button"
+                     data-testid={"pick-folder-" + (e.drive ? e.drive.title : e.name)} onClick={() => open(e.path)}>
+                    <FileIcon kind={e.drive ? "drive" : "folder"} size={28} />
+                    <span className="pui-menu-label"><span className="ss-pick-row-title">{e.drive ? e.drive.title : e.name}</span>
+                        {e.drive && <span className="ss-pick-row-detail">{e.drive.account}</span>}</span>
                     <span className="pui-row-chevron" />
                 </div>
             ) : (

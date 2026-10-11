@@ -6,7 +6,10 @@
     "permissions": [
         {
             "service": "org.webosphoenix.filemanager",
-            "outbound": []
+            "outbound": [
+                "com.palm.service.accounts",
+                "org.webosphoenix.service.drives"
+            ]
         }
     ]
 }

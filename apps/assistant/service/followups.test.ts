@@ -245,6 +245,25 @@ describe("later, as a notification", () => {
         expect(await t.queue()).toEqual([]);
     });
 
+    it("is sent once when several copies of the service wake at once (the owner's burst of thirteen)", async () => {
+        // In the simulator each app page runs the service on the one store;
+        // on 10 October 2026 four woke together and each sent every question.
+        const t = setup();
+        const q = await queued(t);
+        const copies = [t.svc, (t.restart(), t.svc), (t.restart(), t.svc), (t.restart(), t.svc)];
+        t.at(START + HOUR);
+        const woke = await Promise.all(copies.map((c) => c.followUpWake({})));
+        expect(woke.reduce((n, r) => n + r.delivered, 0)).toBe(1);
+        expect(t.notes).toHaveLength(1);
+        const thread = await t.svc.thread({});
+        expect(thread.messages.filter((m: any) => m.followUp && m.followUp.id === q.id)).toHaveLength(1);
+        // And again later: once.
+        t.at(START + HOUR + RULES.againMs);
+        const again = await Promise.all(copies.map((c) => c.followUpWake({})));
+        expect(again.reduce((n, r) => n + r.delivered, 0)).toBe(1);
+        expect(t.notes).toHaveLength(2);
+    });
+
     it("waits out the quiet hours, Do Not Disturb and calls", async () => {
         const t = setup();
         t.at(new Date(2026, 9, 7, 21, 30).getTime());

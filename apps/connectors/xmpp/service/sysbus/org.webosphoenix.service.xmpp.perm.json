@@ -1,0 +1,10 @@
+{
+    "org.webosphoenix.service.xmpp": [
+        "database.operation",
+        "activity.operation",
+        "accounts.operation",
+        "accounts.transport",
+        "notification.operation",
+        "messaging.operation"
+    ]
+}

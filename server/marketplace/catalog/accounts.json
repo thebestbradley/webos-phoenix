@@ -1,5 +1,5 @@
 {
-    "//": "The account types the Marketplace's Connections view lists (docs/SYNERGY-CONNECTORS.md 2.1, phase C0): the templates Phoenix has today, all built in. Catalog::publish() checks each one and writes it into the signed index as `accounts`; iconFrom (a file in this repository, not published) is copied to `icon` under the published folder. capabilities use each template's own capabilityProviders[].capability. signUp: where a person without an account gets one (https), when there is a public page for it: the Fediverse's list of servers, XMPP's list of providers; none for the types whose server is the user's own (CardDAV, mail) or that need no account (a subscribed calendar).",
+    "//": "The account types the Marketplace's Connections view lists (docs/SYNERGY-CONNECTORS.md 2.1, phase C0): the templates Phoenix has: built in (the generic logins), the connector packages Phoenix comes with (pre-installed, removable: the Fediverse), and Phoenix's own connector packages installed from the catalog (the drives: package.builtin false, not pre-installed; docs/SYNERGY-CONNECTORS.md 7). Catalog::publish() checks each one and writes it into the signed index as `accounts`; iconFrom (a file in this repository, not published) is copied to `icon` under the published folder. capabilities use each template's own capabilityProviders[].capability. signUp: where a person without an account gets one (https), when there is a public page for it: the Fediverse's list of servers; none for the types whose server is the user's own (CardDAV, mail) or that need no account (a subscribed calendar). Phoenix's own connector packages in the catalog that it does not come with list their types here (the drives) or from their packages (catalog.json: Jabber, Matrix, Delta Chat, which bin/serve.sh uploads as Phoenix's, as a developer's do).",
     "accounts": [
         {
             "templateId": "com.webosphoenix.dav",
@@ -80,23 +80,156 @@
             "package": { "id": "com.palm.app.email", "builtin": true }
         },
         {
-            "templateId": "com.webosphoenix.xmpp",
-            "title": "Jabber (XMPP)",
-            "provider": "Any XMPP server",
-            "icon": "icons/accounts/com.webosphoenix.xmpp.png",
-            "iconFrom": "runtime/accounts/com.webosphoenix.xmpp/images/xmpp-48x48@2x.png",
-            "summary": "Chats and buddies' presence in Messaging and Contacts. Simulator only for now, against the simulated server chat.example.",
+            "templateId": "com.webosphoenix.drive.nextcloud",
+            "title": "Nextcloud",
+            "provider": "Your Nextcloud, or a Nextcloud provider's",
+            "icon": "icons/accounts/com.webosphoenix.drive.nextcloud.png",
+            "iconFrom": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.nextcloud/images/drive-48x48@2x.png",
+            "summary": "Your Nextcloud's files as a place in Files, the file pickers and Save to Files. Sign in on your server's own page: Phoenix gets an app password you can revoke there.",
             "capabilities": [
-                { "capability": "MESSAGING", "direction": "two-way" }
+                { "capability": "DOCUMENTS", "direction": "two-way" }
             ],
-            "protocols": ["xmpp"],
+            "protocols": ["webdav", "nextcloud-login-flow-v2"],
+            "auth": { "type": "app-password", "registration": "none" },
+            "server": "user",
+            "privacy": { "dataGoesTo": "the Nextcloud server you sign in to", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "beta",
+            "package": { "id": "org.webosphoenix.drives", "builtin": false },
+            "signUp": "https://nextcloud.com/sign-up/",
+            "featured": true
+        },
+        {
+            "templateId": "com.webosphoenix.drive.owncloud",
+            "title": "ownCloud",
+            "provider": "Your ownCloud server",
+            "icon": "icons/accounts/com.webosphoenix.drive.owncloud.png",
+            "iconFrom": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.owncloud/images/drive-48x48@2x.png",
+            "summary": "Your ownCloud's files as a place in Files, the file pickers and Save to Files, with an app password from ownCloud's settings.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["webdav"],
+            "auth": { "type": "app-password", "registration": "none" },
+            "server": "user",
+            "privacy": { "dataGoesTo": "the ownCloud server you enter", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "beta",
+            "package": { "id": "org.webosphoenix.drives", "builtin": false },
+            "signUp": "https://owncloud.com/"
+        },
+        {
+            "templateId": "com.webosphoenix.drive.webdav",
+            "title": "WebDAV",
+            "provider": "Any WebDAV server",
+            "icon": "icons/accounts/com.webosphoenix.drive.webdav.png",
+            "iconFrom": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.webdav/images/drive-48x48@2x.png",
+            "summary": "Any WebDAV server's files (a NAS, a hosting provider, your own server) as a place in Files, the file pickers and Save to Files.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["webdav"],
             "auth": { "type": "password", "registration": "none" },
-            "server": "discovered",
-            "privacy": { "dataGoesTo": "the server in your Jabber ID", "e2ee": false, "phoenixServers": "none" },
+            "server": "user",
+            "privacy": { "dataGoesTo": "the server you enter", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "beta",
+            "package": { "id": "org.webosphoenix.drives", "builtin": false }
+        },
+        {
+            "templateId": "com.webosphoenix.drive.s3",
+            "title": "S3 Storage",
+            "provider": "Backblaze B2, Wasabi, MinIO and other S3-compatible storage",
+            "icon": "icons/accounts/com.webosphoenix.drive.s3.png",
+            "iconFrom": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.s3/images/drive-48x48@2x.png",
+            "summary": "A bucket of S3-compatible storage as a place in Files, the file pickers and Save to Files, with an access key you make in the provider's console. Large files go up in parts.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["s3"],
+            "auth": { "type": "api-key", "registration": "none" },
+            "server": "user",
+            "privacy": { "dataGoesTo": "the storage provider you enter", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "beta",
+            "package": { "id": "org.webosphoenix.drives", "builtin": false },
+            "signUp": "https://www.backblaze.com/sign-up/cloud-storage"
+        },
+        {
+            "templateId": "com.webosphoenix.drive.dropbox",
+            "title": "Dropbox",
+            "provider": "Dropbox",
+            "icon": "icons/accounts/com.webosphoenix.drive.dropbox.png",
+            "iconFrom": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.dropbox/images/drive-48x48@2x.png",
+            "summary": "Your Dropbox as a place in Files, the file pickers and Save to Files. Sign in on Dropbox's own page.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["dropbox-api-v2"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Dropbox", "e2ee": false, "phoenixServers": "none" },
             "push": "poll",
             "status": "experimental",
-            "package": { "id": "org.webosphoenix.service.xmpp", "builtin": true },
-            "signUp": "https://providers.xmpp.net/"
+            "package": { "id": "org.webosphoenix.drives", "builtin": false },
+            "signUp": "https://www.dropbox.com/register"
+        },
+        {
+            "templateId": "com.webosphoenix.drive.onedrive",
+            "title": "OneDrive",
+            "provider": "Microsoft OneDrive (personal, work or school)",
+            "icon": "icons/accounts/com.webosphoenix.drive.onedrive.png",
+            "iconFrom": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.onedrive/images/drive-48x48@2x.png",
+            "summary": "Your OneDrive as a place in Files, the file pickers and Save to Files, through Microsoft Graph. Sign in on Microsoft's own page.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["microsoft-graph"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Microsoft", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental",
+            "package": { "id": "org.webosphoenix.drives", "builtin": false },
+            "signUp": "https://signup.live.com/"
+        },
+        {
+            "templateId": "com.webosphoenix.drive.googledrive",
+            "title": "Google Drive",
+            "provider": "Google Drive",
+            "icon": "icons/accounts/com.webosphoenix.drive.googledrive.png",
+            "iconFrom": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.googledrive/images/drive-48x48@2x.png",
+            "summary": "Google Drive as a place in Files, the file pickers and Save to Files. Phoenix sees the files it saves there or opens from there (Google's per-file access), not the rest of your drive.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["google-drive-api-v3"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Google", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental",
+            "package": { "id": "org.webosphoenix.drives", "builtin": false },
+            "signUp": "https://accounts.google.com/signup"
+        },
+        {
+            "templateId": "com.webosphoenix.drive.box",
+            "title": "Box",
+            "provider": "Box",
+            "icon": "icons/accounts/com.webosphoenix.drive.box.png",
+            "iconFrom": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.box/images/drive-48x48@2x.png",
+            "summary": "Your Box as a place in Files, the file pickers and Save to Files, through Box's content API. Sign in on Box's own page.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["box-content-api"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Box", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental",
+            "package": { "id": "org.webosphoenix.drives", "builtin": false },
+            "signUp": "https://account.box.com/signup/personal"
         }
     ]
 }

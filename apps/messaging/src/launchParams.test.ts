@@ -80,5 +80,21 @@ describe("Messaging's launch params", () => {
                                     { threads: [], buddies, accounts });
             expect(v).toMatchObject({ kind: "compose", to: { addr: "ada@jabber.example", service: "type_jabber", account: "me@jabber.example", name: "Ada" } });
         });
+
+        // Just Type's chat action on a contact's Matrix, Delta Chat or Telegram address
+        // (luna-applauncher data/AppLauncher.js launchMessaging): those networks have
+        // no buddies (no presence), so the account is the one signed in on that network.
+        it("starts a chat on a network without buddies from its account", () => {
+            const more = accounts.concat([
+                { _id: "l2", accountId: "acc2", username: "@me:matrix.example", serviceName: "type_matrix", state: "online", availability: 0 },
+                { _id: "l3", accountId: "acc3", username: "+15550100", serviceName: "type_telegram", state: "online", availability: 0 },
+                { _id: "l4", accountId: "acc4", username: "me@chatmail.example", serviceName: "type_deltachat", state: "online", availability: 0 },
+            ] as ImLoginState[]);
+            for (const [value, type, account] of [["@sam:matrix.example", "type_matrix", "@me:matrix.example"], ["+15550101", "type_telegram", "+15550100"],
+                                                  ["sam@chatmail.example", "type_deltachat", "me@chatmail.example"]]) {
+                const v = resolveLaunch(parseLaunch({ compose: { personId: "p", ims: [{ value, type }] } }), { threads: [], buddies, accounts: more, personName: "Sam" });
+                expect(v).toMatchObject({ kind: "compose", to: { addr: value, service: type, account, name: "Sam", personId: "p" } });
+            }
+        });
     });
 });

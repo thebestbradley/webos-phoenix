@@ -19,15 +19,22 @@ import Phoenix.Shell
 Item {
     id: host
     property Item surface
+    // The app of the surface, and the Sign In card's bar when it is that
+    // card (LsmWindowSource.signInCard: {host, secure} from the OAuth
+    // service; Phoenix.Shell SignInBar). The surface then sits under the
+    // bar, scaled to the room left: WebAppMgr sizes its window itself.
+    property string appId: ""
+    property var signIn: null
 
     signal editTriggered(string action)
+    signal signInCancel()
 
     clip: true
 
     onSurfaceChanged: {
         if (!surface)
             return;
-        surface.parent = host;
+        surface.parent = content;
         surface.x = 0;
         surface.y = 0;
         surface.transformOrigin = Item.TopLeft;
@@ -35,11 +42,35 @@ Item {
         editPopup.z = 1;
     }
 
+    SignInBar {
+        id: signInBar
+        objectName: "surfaceSignInBar"
+        visible: host.signIn !== null
+        anchors { left: parent.left; right: parent.right; top: parent.top }
+        height: host.signIn !== null ? Theme.px(40) : 0
+        hostName: host.signIn ? String(host.signIn.host || "") : ""
+        secure: !!(host.signIn && host.signIn.secure)
+        onCancel: host.signInCancel()
+    }
+
+    Item {
+        id: content
+        anchors { left: parent.left; right: parent.right; bottom: parent.bottom; top: signInBar.bottom }
+        clip: true
+    }
+
     Binding {
         target: host.surface
         when: host.surface && host.surface.width > 0 && host.surface.height > 0
         property: "scale"
-        value: host.surface ? Math.min(host.width / host.surface.width, host.height / host.surface.height) : 1
+        value: host.surface ? Math.min(content.width / host.surface.width, content.height / host.surface.height) : 1
+    }
+    // Under the bar the surface is narrower than the card: centred.
+    Binding {
+        target: host.surface
+        when: host.surface && host.surface.width > 0
+        property: "x"
+        value: host.surface ? Math.max(0, (content.width - host.surface.width * host.surface.scale) / 2) : 0
     }
 
     // The keyboard to the page (Just Type's, once it shows the text).
@@ -74,7 +105,7 @@ Item {
 
     EditPopup {
         id: editPopup
-        anchors.fill: parent
+        anchors.fill: content
         onTriggered: (action) => host.editTriggered(action)
     }
 }

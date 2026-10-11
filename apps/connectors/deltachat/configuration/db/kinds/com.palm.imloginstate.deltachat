@@ -1,0 +1,26 @@
+{
+    "id": "com.palm.imloginstate.deltachat:1",
+    "owner": "org.webosphoenix.service.deltachat",
+    "sync": false,
+    "extends": [
+        "com.palm.imloginstate:1"
+    ],
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        },
+        {
+            "name": "username",
+            "props": [
+                {
+                    "name": "username"
+                }
+            ]
+        }
+    ]
+}

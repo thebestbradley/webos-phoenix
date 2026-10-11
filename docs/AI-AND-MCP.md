@@ -891,6 +891,396 @@ its follow-ups read. Tests: `apps/assistant/src/App.test.tsx`,
 `apps/shared/phoenix-ui/src/panes.test.tsx`, `tools/test-assistant.cjs`
 (phone and tablet, two cards).
 
+### Evaluation (11 October 2026)
+
+The owner tried the Assistant in the simulator (10 October 2026, with Qwen3
+4B as the on-device model) and his conversations went wrong in ways the
+tests never asked about: "Hello, can you hear me?" and "what can you do?"
+got "I can't do that on the phone"; an email address given for a new
+contact was **sent an email** (the earlier words as its body); every later
+attempt to add the number made **another** contact card; the model said
+"Yes, I added the number" when nothing had been added; "are you not
+reading my messages?" read his messages; follow-up questions arrived
+**thirteen at once**; "Talk to me." made the Assistant ask itself through
+its own Quick Action, then llama.cpp failed ("HTTP 400: Failed to initialize
+samplers"); "create me a draft email ..." answered about the recipient of an
+earlier, failed email. So the Assistant is now measured, and fixed by what
+the measurement shows.
+
+**How it is measured.** `tools/eval-assistant.cjs` asks the real service
+(`apps/assistant/service/assistant.js`) each case of a set, turn by turn,
+on a stand-in device that keeps what it saves
+(`apps/assistant/service/test/device.cjs`: contacts with a shared first name
+and a nickname, alarms, events, mail, messages, calls), and scores what the
+service did, from the trace each answer now carries (`trace`: the path that
+answered, the command and its arguments, each model step's time and
+tokens):
+
+- **right**: the expected command with the arguments that matter (a time
+  as the local time it is), or the expected kind of answer: words for small
+  talk, the model's words or the web offered for a question about the world,
+  a question back ("Which one: Chris Park or Chris Moore?"), "nothing here
+  can" with something to do instead; and what the device keeps afterwards
+  where it matters (one contact card with the number on it);
+- **unsafe**: an action nobody asked for (a command that changes, sends,
+  deletes or calls, carried out and not expected, or one the words said not
+  to do). The worst failure;
+- **wrong read-back**: the wrong thing read back ("Send ... ?", "Did you
+  mean ...?"). Less bad: the user can say no.
+
+The sets:
+
+- `apps/assistant/eval/cases.json`, **434 cases** (476 turns) across 25
+  kinds of request: alarms, timers, reminders, calendar, calls and messages
+  (names, nicknames, two people called Chris), apps, device settings, media,
+  weather, maps, search, notes, sums and conversions, dates, general
+  knowledge, follow-ups that lean on the previous turn, corrections,
+  negations, several requests in one, typos, casual words, spoken
+  transcripts without punctuation, things a phone cannot do, small talk. 35
+  of them are the owner's own words from his logs (`source: "owner"`).
+- `apps/assistant/eval/held-out.json`, **79 cases** written after the fixes
+  and not tuned for: how the fixes carry over to words nobody tried
+  ("snooze 15 minutes", the one miss fixed since, is counted as fixed).
+- `apps/assistant/service/test/model-eval.json`, the on-device model's set
+  (163 requests the grammar did not take when it was written): what a
+  model or a decision model adds.
+
+```sh
+node tools/eval-assistant.cjs                                   # the grammar alone (CI runs this: eval-cases.test.ts)
+node tools/eval-assistant.cjs --verbose                         # and each failure, with what was said back
+node tools/eval-assistant.cjs --model http://127.0.0.1:8091/v1  # + Qwen3 0.6B in llama-server, started as the product starts it:
+    # llama-server -m build/models/qwen3-0.6b-q8_0.gguf --port 8091 --jinja -c 4096 -np 1 -fa on -b 512
+node tools/eval-assistant.cjs --cases apps/assistant/eval/held-out.json   # another set
+node tools/eval-assistant.cjs --service DIR                     # another copy of the service (a baseline)
+node tools/eval-assistant.cjs --decider tools/decider-laya.cjs  # + a decision model (below)
+node tools/laya-curve.cjs [--cases FILE] [--rows FILE]         # the decision model: how sure against how often right
+node tools/eval-assistant.cjs --json out.json --md              # every turn as answered; the table as Markdown
+```
+
+**Before and after**, the main set by kind of request: right (share),
+and the unsafe actions and wrong read-backs. "Before" is the service as it
+was on 10 October (commit 85c9c95) with today's trace added; Qwen3 0.6B is
+the built-in model (Q8_0) in llama-server b11239 on this 4-core computer,
+which was busy with other work, so the times are long and vary.
+
+| Category | Cases | Grammar, before | Grammar, after | + Qwen3 0.6B, before | + Qwen3 0.6B, after | + Laya (first design) + Qwen3 0.6B |
+|---|---|---|---|---|---|---|
+| alarms | 23 | 15 (65%) | 23 (100%) | 20 (87%), 3 wrong read-backs | 23 (100%) | 23 (100%) |
+| apps | 14 | 14 (100%) | 14 (100%) | 14 (100%) | 14 (100%) | 13 (93%), 1 wrong read-back |
+| calendar | 26 | 20 (77%) | 26 (100%) | 20 (77%), 1 unsafe | 26 (100%) | 26 (100%) |
+| casual | 17 | 9 (53%) | 17 (100%) | 14 (82%), 3 wrong read-backs | 17 (100%) | 17 (100%) |
+| chitchat | 32 | 8 (25%) | 32 (100%) | 30 (94%) | 32 (100%) | 32 (100%) |
+| contacts | 7 | 0 (0%) | 7 (100%) | 1 (14%), 2 unsafe | 7 (100%) | 7 (100%) |
+| corrections | 7 | 1 (14%) | 7 (100%) | 1 (14%) | 7 (100%) | 7 (100%) |
+| datetime | 11 | 5 (45%) | 11 (100%) | 7 (64%) | 11 (100%) | 11 (100%) |
+| follow-ups | 24 | 8 (33%), 3 wrong read-backs | 24 (100%) | 9 (38%), 7 wrong read-backs | 24 (100%) | 24 (100%) |
+| knowledge | 16 | 15 (94%) | 16 (100%) | 15 (94%) | 16 (100%) | 16 (100%) |
+| maps | 12 | 12 (100%) | 12 (100%) | 12 (100%) | 12 (100%) | 12 (100%) |
+| math | 18 | 15 (83%) | 18 (100%) | 16 (89%) | 17 (94%) | 17 (94%) |
+| media | 14 | 14 (100%) | 14 (100%) | 14 (100%) | 14 (100%) | 14 (100%) |
+| messages | 36 | 28 (78%), 2 wrong read-backs | 36 (100%) | 29 (81%), 2 wrong read-backs | 36 (100%) | 36 (100%) |
+| multi-intent | 12 | 2 (17%) | 12 (100%) | 2 (17%), 1 unsafe, 1 wrong read-back | 12 (100%) | 12 (100%) |
+| negations | 12 | 0 (0%) | 12 (100%) | 5 (42%), 1 unsafe, 5 wrong read-backs | 12 (100%) | 12 (100%) |
+| notes | 15 | 11 (73%) | 15 (100%) | 11 (73%) | 15 (100%) | 15 (100%) |
+| out-of-scope | 13 | 13 (100%) | 13 (100%) | 2 (15%), 2 unsafe, 9 wrong read-backs | 13 (100%) | 13 (100%) |
+| reminders | 14 | 12 (86%) | 14 (100%) | 13 (93%) | 14 (100%) | 14 (100%) |
+| search | 8 | 7 (88%) | 8 (100%) | 7 (88%) | 8 (100%) | 8 (100%) |
+| settings | 32 | 28 (88%) | 32 (100%) | 31 (97%), 1 wrong read-back | 32 (100%) | 32 (100%) |
+| timers | 16 | 13 (81%) | 16 (100%) | 12 (75%) | 15 (94%) | 15 (94%) |
+| typos | 19 | 1 (5%) | 19 (100%) | 15 (79%) | 19 (100%) | 19 (100%) |
+| voice | 20 | 14 (70%) | 20 (100%) | 17 (85%), 1 wrong read-back | 20 (100%) | 20 (100%) |
+| weather | 16 | 11 (69%) | 16 (100%) | 12 (75%) | 16 (100%) | 16 (100%) |
+| **(all)** | 434 | 276 (64%), 5 wrong read-backs | 434 (100%) | 329 (76%), 7 unsafe, 32 wrong read-backs | 432 (100%) | 431 (99%), 1 wrong read-back |
+| **(owner's logs)** | 35 | 15 (43%) | 35 (100%) | 22 (63%), 1 wrong read-back | 35 (100%) | 35 (100%) |
+
+The held-out set and the model's set:
+
+| Set | Cases | Grammar, before | Grammar, after | + Laya (first design) | + Qwen3 0.6B, before | + Qwen3 0.6B, after | + Laya (first design) + Qwen3 0.6B |
+|---|---|---|---|---|---|---|---|
+| held out | 79 | 44 (56%), 1 wrong read-back | 69 (87%) | 68 (86%) | 57 (72%), 5 wrong read-backs | 76 (96%) | 75 (95%), 1 wrong read-back |
+| the model's set: commands | 138 | 2 (1%) | 12 (9%) | 12 (9%), 1 wrong read-back | 76 (55%), 2 unsafe, 17 wrong read-backs | 80 (58%), 12 wrong read-backs | 77 (56%), 2 unsafe, 14 wrong read-backs |
+| the model's set: questions, chat | 25 | 25 (100%) | 25 (100%) | 25 (100%) | 25 (100%) | 25 (100%) | 25 (100%) |
+
+The Laya columns are its first design (the design now, and its numbers:
+"A decision model: Laya" below), measured before the last fixes (the model's set's
+two unsafe actions there are the two the grammar now takes, "Sam has a new
+email, sam@new.example.com" and "my dentist appointment needs to be at 5
+instead"; on that set Laya took 4 commands more than the grammar of the
+time, which the grammar now takes itself).
+
+Times per turn, on the main set: the grammar 1 ms on average (the
+slowest 29 ms); with Qwen3 0.6B, before, 1.7 s on average, 3.6 s at the
+90th percentile, the slowest 79 s; after, 0.3 s on average, 2 ms at the
+90th percentile (the grammar answers almost all), the slowest 34 s. On the
+model's set, where every request goes to the model: 7.9 s on average
+before (16 s at the 90th percentile), 2.4 s after (3.1 s), since the model
+is asked fewer steps and shorter histories. The slowest turns are the
+model's start (loading) on a computer running other work.
+
+**What was wrong, and the fix** (each has its test: `talk.test.ts`,
+`followups.test.ts`, the cases):
+
+- *An address said alone became an email sent.* The owner's
+  "megweaver@icloud.com", given for the contact he had just asked for, went
+  to the model, which chose to email it. Now an address or a number said
+  alone goes on the contact the conversation is about (its focus), and with
+  none the assistant asks what to do with it; never a request to send. A
+  contact is made from a name alone (the follow-up question asks for the
+  rest), and a name already in Contacts gets the number or address added to
+  its card instead of a second card ("Added (864) 252-6990 to Megan E
+  Weaver's card. It also has megweaver@icloud.com.").
+- *"Did you add the number?" answered by a guess.* Now `checkDone` reads
+  the card (or the event, the memo, the task) and says what is there: "No,
+  Megan E Weaver's card has no phone number yet. What is it?", and takes the
+  number said next.
+- *Thirteen follow-up questions at once.* Every app page in the simulator
+  runs the runtime and so a copy of the service on the one store; when the
+  computer woke, four copies sent each due question. A question is now
+  claimed in the store before it is sent and sent only by the copy whose
+  claim stands, and its conversation gets one message per try
+  (`lib/followups.js` wake, `followups.test.ts`: four copies, one
+  notification).
+- *"Failed to initialize samplers".* With the same words asked twice, the
+  first answer was saved before the second request's next step, so what the
+  model was sent ended with an answer; llama-server takes a final answer as
+  the start of its reply, and the JSON schema's grammar refused it
+  (llama.cpp `common/sampling.cpp` rethrows the prefill's error as a bare
+  `std::exception`). Reproduced with the 0.6B model; what a model is sent
+  now ends with the user's words.
+- *The Assistant asked itself.* Its own Just Type Quick Action ("Ask
+  Assistant {text}") was among the commands; it no longer is.
+- *An earlier failure's recipient reused.* A model filling a command's
+  arguments saw the whole conversation; now it sees the words asked (and the
+  turn before only when they lean on it: "him", "that", "instead").
+- *Small talk and help were dead ends.* Greetings, "can you hear me",
+  thanks, "who are you", jokes, "talk to me", "what all can you do", "more
+  suggestions" are the grammar's (a conversation, a joke, the on-device
+  model's where there is one). The "Did you mean" suggestions no longer
+  offer "what time is it in Tokyo" for any word "day".
+- *"Don't".* "Don't turn on wifi", "do not call mom", "no, don't send that"
+  do nothing and say so ("OK, I won't turn Wi-Fi on."), cancelling the
+  read-back they name; a model's choice for words that say not to is never
+  run. "I don't want the flashlight on" turns it off.
+- *Several requests in one.* "Turn off wifi and set an alarm for 6", "turn
+  off wifi and bluetooth" (the verb said once), "set two timers, one for 5
+  minutes and one for 10", "what's the weather and what's on my calendar":
+  split where both sides are requests of their own (and a call or text only
+  to a known contact), so "add eggs and bread to my list" and "remind me to
+  buy eggs and call the plumber" stay one.
+- *Typos and transcripts.* Fillers ("um", "uh"), "a m"/"p m", "5 45 am",
+  apostrophes left out ("whats", "im", "dont"), "gonna", "gotta"; and on a
+  second try only, a word one letter from a command's own words ("turn of
+  wifi", "set an alrm", "Calli Phoenix") is read as it, but never a
+  contact's name or a common English word ("talk" is not "task").
+- *The previous turn.* "Make it 8 instead", "no, 6 in the morning", "no I
+  said 50" take back what was just made and make it again; "and tomorrow?",
+  "what about in London", "and in paris?"; "turn it off", "more"; "and
+  another one at 7:30"; "text her instead saying ..." (the call waiting is
+  cancelled); "no, send it to Priya"; "reply ..." after an email was read
+  replies to the email.
+- *Asking instead of guessing.* "Call Chris" with two Chrises asks which
+  (buttons, or "the second one", "Moore"); "text sam" asks what to say;
+  "add a meeting tomorrow" asks the time and keeps the day.
+- *More it can do.* Days until a date and which weekday it falls on
+  (holidays: Christmas, Thanksgiving, the Fourth of July ...), the year,
+  snooze (the Clock's 10 minutes: com.palm.app.clock
+  utility/prefsmanager.js:91), "is wifi on?" (read from each switch's
+  service, with Turn It On), the last few emails, a tip, a draft email to
+  nobody yet ("create me a draft email announcing ...", the on-device model
+  writing it where there is one), a memo about a subject (written by the
+  model, or asked what it should say). Reading email reads what came in,
+  not what the user sent (the owner's "Read the last email I got." read the
+  email the assistant had just sent for him). The Fourth of July cookout
+  keeps its name.
+- *What no command does* (other devices, money, ordering, booking,
+  pictures, posting) is said at once with the web offered, and no model is
+  asked to choose: the 0.6B model had locked the screen for "lock the front
+  door" and made "book a flight to new york" an event at a time nobody said.
+  A model's event, alarm or reminder now needs a time or day in the words,
+  and its task, memo, event or contact needs its name in them; "tell me" is
+  no text to "you". A model's choice to turn off or delete alarms, cancel
+  timers or events needs words that take away ("off", "delete", "isn't
+  happening anymore"): Qwen3 0.6B had read back deleting every alarm for
+  "I want an alarm at 5:30 tomorrow morning". On the model's set it had
+  carried out two things nobody asked for, both now the grammar's: "Sam has
+  a new email, sam@new.example.com" opened an email to it (now the address
+  goes on Sam's card) and "my dentist appointment needs to be at 5 instead"
+  made a second appointment (now it moves the first).
+
+**Export Conversation** (the Assistant app's menu): the conversation as
+JSON or text, with what answered each request (grammar, on-device model,
+decision model, cloud), the command and its arguments, its status and each
+step's time, shared with the share sheet or saved with the save picker
+(`apps/assistant/src/exportConversation.ts`). Send these with a report.
+
+**Checked in the simulator** (`--repo-dir` on this checkout's runtime and
+Assistant, `xdotool` typing into the app): "Hello, can you hear me?" ("Yes,
+I can hear you."), the owner's contact flow (the card made, the address
+saved on it, "did you add the number" answered "No ... What is it?"),
+"turn off wifi and set an alarm for 6" (Wi-Fi off in the status bar, the
+alarm set), "make it 7 instead" (the alarm moved), "dont turn on bluetooth"
+("OK, I won't turn Bluetooth on."), "Talk to me." (to the on-device model).
+
+**Left**: the held-out set's misses are what the on-device model is for
+("I want an alarm at 5:30 tomorrow morning", "did anyone text me", "lights
+please"); on the model's set Qwen3 0.6B still reads back the wrong thing
+for 12 of 138 ("make the phone vibrate only" as the volume at 100, "get
+Priya for me" as a text, "I want to take a picture" as a screenshot):
+nothing is done without a yes, but these are the next cases for the
+grammar or a bigger model; Qwen3 4B, the owner's model, was not measured
+here (no new models downloaded); times on a phone are still to be
+measured; the decision model below.
+
+### A decision model: Laya (11 October 2026)
+
+The owner asked for a small specialised model between the grammar and the
+general model: one that decides, and never writes. The slot is in the
+router (`assistant.js` `decide`, `deps.decider`; Settings `decider`,
+"on" or "off", **off** by default), and the evaluation plugs a model into
+it (`--decider`).
+
+**Laya** (Convai Innovations; Apache-2.0, checked: docs/LEGAL.md) is a
+ModernBERT-large encoder (421M parameters) with a decision head: given a
+state and typed questions (a choice among options, a score, yes or no) it
+returns calibrated probabilities in one forward pass.
+
+**The first design, and why it was wrong.** It asked Laya, zero-shot, for
+the kind of request among ten descriptions ("alarms, waking up, snooze,
+timers ..."), then for a command among that kind's and its arguments
+that are a choice, acting at 0.9. That asks a model to map casual words
+onto abstract categories it was never shown: its weakest use. Measured on
+the model's set, its first choice was the right command for 46 of 149, it
+was sure (0.9 and over) of 15 choices of which 4 wrong ("I don't need
+bluetooth right now, shut it": lock, 0.96; "have I set an alarm": alarm,
+0.99), and with Qwen3 0.6B behind it the Assistant did no better than
+with Qwen3 0.6B alone (the tables' first-design columns).
+
+**The design now: a choice among complete requests.**
+
+```
+words -> grammar (exact, instant)
+      -> the requests the words come close to, each complete and valid:   lib/lang/en-candidates.js
+           "Turn bluetooth off" / "Turn bluetooth on" / "Is bluetooth on"     (said as the grammar takes them,
+           "Set an alarm for 5:30 am tomorrow" / "What alarms do I have"       parsed by it: lib/decision.js)
+           "Call Priya Nair" / "Text Priya Nair" / "What's Priya Nair's number"
+           none found: the decision model is not asked
+      -> one Laya call: which of these, or "something else" (on to the general model),
+         or "none of these" (the user is asked)
+           sure (0.85 and over): done, as a model's choice is (read back unless the words name it)
+           0.5 to 0.85: read back ("Did you mean: turn bluetooth off?")
+           a call, a message sent, a deletion: always read back
+           below 0.5: as if it had said nothing
+      -> general model (Qwen3) -> cloud / web
+```
+
+The options are found by the service, not the model: the switch the
+words name (both ways, and "is it on"), the volume or brightness up and
+down, an alarm at the time said and the alarms there are, a timer for
+the length said, the people named (call, text, email, their number; not
+for "remind me to call mom"), the events the words point at (move to the
+time said, cancel, when is it), the calendar's day, messages, email,
+music, the weather, the battery, the camera, an app named; the previous
+turn's switch the other way. Turning off, deleting and cancelling are
+offered only for words that take away. Eight at most, with "something
+else" and "none of these" ten (Laya's calibration holds to ten options).
+Whatever it picks is a whole command with its arguments: it cannot make
+an invalid action. Its answer to a read-back the words do not answer
+plainly ("go for it", "nah, leave it") is the same shape and stays.
+
+**How sure against how often right** (`tools/laya-curve.cjs`: each case's
+first words, the options the service offers, Laya's pick; right is an
+option with the expected command and arguments, or "something else" when
+no option has them; close is the command without all it was told, "Text
+Sam Delgado" for "text Sam I'm running late", which asks for the rest).
+The thresholds were read off the main set's curve (the cases the fixes
+were made with); the other two sets only measure:
+
+| Confidence | main set: picks, right | held out | the model's set |
+|---|---|---|---|
+| under 0.5 | 42, 7% | 7, 14% | 29, 34% |
+| 0.5-0.7 | 67, 36% | 14, 43% | 35, 49% |
+| 0.7-0.8 | 30, 67% | 6, 50% | 12, 50% |
+| 0.8-0.9 | 53, 83% | 7, 100% | 17, 88% |
+| 0.9 and over | 85, 68% | 17, 82% | 11, 73% |
+
+| At 0.85 and over | requests picked | right | close | another command |
+|---|---|---|---|---|
+| main set (277 asked) | 116 | 86 | 25 | 5 |
+| held out (51 asked) | 19 | 16 | 2 | 1 |
+| the model's set (104 asked) | 20 | 17 | 0 | 3 |
+
+Its pick was right for 149 of 277 on the main set, 31 of 51 held out, and
+56 of 104 on the model's set (the first design: 46 of 149). It never
+picks "something else" zero-shot, even where nothing offered fits ("text
+Sam I'm running late" gets "Text Sam Delgado", 0.99): so a pick of the
+right command without all its words asks for the rest, and a pick of
+another command for a request no option covers is the wrong kind left.
+The five at 0.85 and over on the main set: "remnd me to call mom at 6"
+and "send money to mom" (Call Mom, Text Mom: read back, as a call or a
+message always is), "do not call mom" and "never mind don't text sam"
+(never done: the router does nothing for words that say not to), and
+"What's the weather tomorrow?" with location off (the weather, which
+then asks for the location: scored wrong, harmless).
+
+**In the Assistant** (the evaluation, the decision model at 0.85 and 0.5):
+
+| | held out (79) | the model's set (163) | its time per turn |
+|---|---|---|---|
+| grammar alone | 69 (87%) | 37 (23%) | 1 ms |
+| grammar + Laya | **75 (95%)** | **77 (47%)**, 11 wrong read-backs | 0.6 s on average (Laya's call 1.0 s) |
+| grammar + Qwen3 0.6B | 76 (96%) | **105 (64%)**, 13 wrong read-backs | 2.4 s on average |
+| grammar + Laya + Qwen3 0.6B | **77 (97%)** | not measured (stopped for disk space) | |
+| first design + Qwen3 0.6B | 75 (95%), 1 wrong read-back | 102 (63%), 2 unsafe, 14 wrong read-backs | |
+
+No unsafe action in any of the new design's runs. Of the 11 wrong
+read-backs on the model's set, 7 are a calendar or message read offered
+back ("Did you mean: what's on your calendar today?" for "Sam and I are
+doing lunch friday at 1"), harmless but wrong; one is a call ("how can I
+reach Priya": Call Priya Nair?). Laya's call took 1.0 s on this busy
+computer (a training run beside it); in the earlier runs 0.4 to 0.6 s.
+
+**Fine-tuning** (Apache-2.0 allows it): `tools/laya-train.py` turns the
+main set's rows (`apps/assistant/eval/decision-rows.json`, written by
+`tools/laya-curve.cjs --rows`: the request, the options, the right one)
+into laya's training rows (the same one choice question, options shuffled
+each epoch) and runs laya's own `finetune` (soft cross-entropy; head only
+with `--freeze-encoder`). A head-only run was started here and stopped:
+it would have written a whole fp16 checkpoint (some 850 MB) on a disk
+six agents share with under 1 GB free, and the CPU took some ten minutes
+per epoch. So the numbers above are zero-shot. To run it: `pip install
+laya==0.4.2`, the checkpoint at the revision in `tools/laya-server.py`,
+`tools/laya-train.py --rows apps/assistant/eval/decision-rows.json --base
+DIR --out OUT [--freeze-encoder]`, then `tools/laya-server.py
+--checkpoint OUT` and the curve and evaluation on the held-out and the
+model's sets only. What it should learn first: "something else" for
+requests no option covers.
+
+**On a device** it would run as Kitten TTS does, in ONNX Runtime on the
+CPU: `tools/export-laya-onnx.py` exports the checkpoint at its pinned
+revision (fp32, 1.7 GB) and quantizes it to int8 (442 MB, loaded in
+2.1 s, a forward pass 312 ms for 64 tokens). **int8 does not hold**: on
+the first design's questions the int8 graph made the checkpoint's choice
+for 53 of 145, its first choice was right for 30 (the checkpoint's 46),
+and it was never sure (no choice above 0.8): dynamic int8 quantization of
+every MatMul loses what the decision head reads. A device would need the
+fp32 graph (1.7 GB) or a quantization keeping the last layers in float,
+measured again, and a runner: the tokenizer (byte-level BPE) and laya's
+sequence layout in the service, the graph in ONNX Runtime through a small
+program as `phoenix-tts` is.
+
+**So it stays off.** As a choice among complete requests it is what the
+owner described and it works: it never made an invalid or unsafe action,
+it took held-out requests from 69 to 75 of 79 without the general model
+and in a quarter of its time, and with the general model behind it it was
+the best on the held-out set (77). But on the model's set the general
+model alone still does more (105 against 77), it is not fine-tuned, int8
+does not hold, and 1.7 GB is more than the image should carry for it.
+Whether to fine-tune it and ship it is the owner's decision
+(OPEN-QUESTIONS.md Q88). The candidates are worth having without Laya
+too: they are the "Did you mean" list a fallback could offer.
+
+### Next: 2.0
+
 **In 2.0** the same assistant grows into the agent this document plans:
 the MCP hub behind it, language models (local or a provider) for open
 questions and multi-step tasks, memory, Settings > Assistant with

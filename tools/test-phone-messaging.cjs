@@ -8,8 +8,8 @@
 // number and places, holds and ends a call; answers, and ignores, a
 // simulated incoming call; sends a text to a contact and receives one;
 // sends a picture message (MMS) with a picture from the picker and
-// receives one; signs in to the simulated Jabber (XMPP) server, chats with
-// a buddy and gets the answer, and signs out.
+// receives one; Buddies without an IM account (Jabber with Messaging:
+// tools/test-xmpp.cjs).
 // Both apps run as two pages of one browser context, sharing the
 // simulated services' store as two cards do in phoenix-sim.
 //
@@ -392,63 +392,15 @@ async function main() {
         await msg.click("[data-testid='picture-done']");
         await msg.waitForSelector("[data-testid='picture-viewer']", { state: "detached" });
 
-        // ---- Instant messaging: a Jabber (XMPP) account on the simulated server -----------------------------------
+        // ---- Instant messaging: the Buddies view without an IM account ------------------------------------------
+        // (The IM accounts are connectors with tests of their own: Jabber with
+        // Messaging is tools/test-xmpp.cjs.)
         await msg.keyboard.press("Escape");
         if (!tablet) await msg.waitForSelector("[data-testid='msg-tabs']");
         await msg.click("[data-testid='msg-tabs'] [data-value='buddies']");
         await msg.waitForSelector("[data-testid='add-im-account']");
         check((await msg.locator("[data-testid='im-network']").count()) >= 3, "Buddies lists the networks Phoenix cannot reach as unavailable");
-        const created = await luna(msg, "palm://com.palm.service.accounts/createAccount", {
-            templateId: "com.webosphoenix.xmpp", username: "jordan@chat.example", alias: "Jabber (XMPP)",
-            credentials: { common: { password: "phoenix" } }, config: { server: "chat.example" },
-            capabilityProviders: [{ id: "com.webosphoenix.xmpp.im" }] });
-        check(created.returnValue === true, "an account of the Jabber (XMPP) template is created");
-        await msg.waitForSelector("[data-testid='buddy']");
-        check(true, "signing in lists its buddies (com.palm.imbuddystatus:1 in tempdb)");
-        await msg.waitForTimeout(300);
-        const groups = await msg.$$eval("[data-testid^='buddy-group-']",
-            (els) => els.map((e) => e.getAttribute("data-testid").slice(12) + ":" + e.querySelectorAll("[data-testid='buddy']").length));
-        check(groups.join(",") === "available:2,busy:1,offline:1", "grouped by presence: " + groups.join(","));
-        check(/Flashing a Pre 3/.test(await msg.textContent("[data-testid='buddy-group-available']")), "with their status messages");
-        await shot(msg, "messaging-buddies");
-        await msg.click("[data-testid='buddy-group-available'] [data-testid='buddy'] >> text=Ada Palmer");
-        // No conversation with her yet: a new message to the buddy.
-        await msg.waitForSelector("[data-testid='recipient-chip']");
-        check(/Ada Palmer/.test(await msg.textContent("[data-testid='recipient-chip']")), "a buddy starts a message to them");
-        check((await msg.textContent("[data-testid='transport']")).startsWith("Jabber"), "which goes by Jabber");
-        check((await msg.locator("[data-testid='attach']").count()) === 0, "instant messages are text only");
-        await msg.fill("[data-testid='message-input']", "Running Phoenix on the Pre 3?");
-        await msg.keyboard.press("Enter");
-        await msg.waitForSelector(".bubble.out[data-service='type_jabber'][data-status='successful']", { timeout: 4000 });
-        check(true, "the instant message is sent");
-        check(/Available: Flashing a Pre 3/.test(await msg.textContent("[data-testid='thread-presence']")), "the chat says the buddy's presence");
-        await msg.waitForSelector(".bubble.in[data-service='type_jabber'] >> text=Ha, yes!", { timeout: 5000 });
-        check(true, "and the buddy answers");
-        check(host.some((m) => m.type === "notification" && m.payload.title === "Ada Palmer" && m.payload.body === "Ha, yes!"),
-            "with a notification");
-        await msg.waitForTimeout(300);
-        await shot(msg, "messaging-im-chat");
-        const imThreads = (await luna(msg, "luna://com.palm.db/find",
-            { query: { from: "com.palm.chatthread:1", where: [{ prop: "replyService", op: "=", val: "type_jabber" }] } })).results;
-        check(imThreads.length === 1 && imThreads[0].replyAddress === "ada.palmer@chat.example" && !imThreads[0].unreadCount,
-            "an IM conversation of its own, read while open");
-        // An instant message while the conversation is closed counts as unread.
-        await msg.keyboard.press("Escape");
-        if (!tablet) await msg.waitForSelector("[data-testid='msg-tabs']");
-        await msg.click("[data-testid='msg-tabs'] [data-value='conversations']");
-        await phone.evaluate(() => window.__phoenixRuntime.simulateIncomingIm({ from: "lena.okafor@chat.example", text: "Hi! Just landed." }));
-        await msg.waitForFunction(() => /Hi! Just landed\./.test(document.querySelector("[data-testid='thread-row']")?.textContent || ""), null, { timeout: 4000 });
-        check((await msg.getAttribute("[data-testid='thread-row']", "data-service")) === "type_jabber", "a received instant message is listed");
-        check((await msg.textContent("[data-testid='thread-row'] .thread-unread")) === "1", "and unread");
-        await shot(msg, "messaging-im-list");
-        // Your own status: Offline signs out (the buddies go).
-        await msg.click("[data-testid='msg-tabs'] [data-value='buddies']");
-        await msg.waitForSelector("[data-testid='buddy']");
-        const login = (await luna(msg, "luna://com.palm.db/find", { query: { from: "com.palm.imloginstate:1" } })).results[0];
-        await luna(msg, "palm://org.webosphoenix.service.xmpp/setPresence", { accountId: login.accountId, availability: 4 });
-        await msg.waitForSelector("[data-testid='buddy']", { state: "detached", timeout: 4000 });
-        check(/sign in/.test(await msg.textContent(".buddies")), "going Offline signs out: no buddies, a note to sign in");
-        await shot(msg, "messaging-buddies-offline");
+        await shot(msg, "messaging-buddies-none");
 
         // Swipe a conversation across: Delete takes it and its messages.
         await msg.click("[data-testid='msg-tabs'] [data-value='conversations']");

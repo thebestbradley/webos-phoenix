@@ -35,8 +35,9 @@
 
 import type { DbObject, RequestFn } from "@phoenix/synckit";
 import * as memdbModule from "@phoenix/synckit/src/test/memdb.js";
-import { createConnectorService } from "./service";
-import type { ConnectorDefinition, Json, ServiceMethods, ValidateParams } from "./types";
+import { createConnectorService, hasFiles } from "./service";
+import type { LocalFiles } from "./files";
+import type { ConnectorDefinition, Environment, Json, ServiceMethods, ValidateParams } from "./types";
 
 export interface FakeServer {
     request: RequestFn;
@@ -69,6 +70,18 @@ export interface ConformanceFixture {
     share?: { content: Json; audience?: string };
     /** Files the share's content names (path -> bytes and type), for ctx.readFile. */
     files?: Record<string, { bytes: Uint8Array; mimeType: string }>;
+    /**
+     * More of the environment the connector runs in, from its fake server:
+     * sockets (net) for a connector that keeps a connection, helpers, settings.
+     * The server's unauthorized() and throttle() then concern those too.
+     */
+    environment?(server: FakeServer): Partial<Environment>;
+    /**
+     * The steps the sign-in page takes before the validator (a phone number,
+     * then the code sent to it): run with the service's methods, they give
+     * more of the validator's parameters (a finished session's key).
+     */
+    beforeValidate?(methods: ServiceMethods, server: FakeServer): Promise<Json>;
 }
 
 export interface ConformanceResult { name: string; ok: boolean; error?: string }
@@ -82,6 +95,7 @@ interface Setup {
     accountId: string;
     clock: { t: number };
     providers: string[];
+    files: ReturnType<typeof memoryFiles>;
 }
 
 function assert(cond: unknown, message: string): void {
@@ -116,20 +130,36 @@ async function setup(def: ConnectorDefinition, fx: ConformanceFixture, periodic:
         return r.then((x: Json) => ({ returnValue: true, threadids: ["thread-1"], id: x[0].id }));
     };
     const bus = m.createFakeBus({ db, tempdb, accounts: { [ACCOUNT]: account }, credentials: {}, handlers });
-    methods = createConnectorService(def, {
-        luna: bus, request: server.request, log: () => {}, periodicSync: periodic, now: () => clock.t,
+    const files = memoryFiles();
+    methods = createConnectorService(def, Object.assign({}, fx.environment ? fx.environment(server) : {}, {
+        luna: bus, request: server.request, log: () => {}, periodicSync: periodic, now: () => clock.t, files,
         sleep: async (ms: number) => { clock.t += ms; },
         readFile: async (path: string) => {
             const f = fx.files && fx.files[path];
             if (!f) throw new Error("no file " + path + " in the fixture's files");
             return f;
         }
-    });
-    return { methods, db, tempdb, bus, server, accountId: ACCOUNT, clock, providers };
+    }));
+    return { methods, db, tempdb, bus, server, accountId: ACCOUNT, clock, providers, files };
+}
+
+// The device's files for a drive's transfers, in memory.
+function memoryFiles(): LocalFiles & { data: Record<string, Uint8Array> } {
+    const data: Record<string, Uint8Array> = {};
+    const join = (a: Uint8Array, b: Uint8Array) => { const o = new Uint8Array(a.length + b.length); o.set(a); o.set(b, a.length); return o; };
+    return {
+        data,
+        size: async (p) => { if (!data[p]) throw new Error("no file " + p); return data[p].length; },
+        read: async (p, offset, length) => { if (!data[p]) throw new Error("no file " + p); return data[p].slice(offset, offset + length); },
+        write: async (p, bytes, append) => { data[p] = append && data[p] ? join(data[p], bytes) : new Uint8Array(bytes); },
+        rename: async (a, b) => { data[b] = data[a]; delete data[a]; },
+        remove: async (p) => { delete data[p]; }
+    };
 }
 
 async function signIn(s: Setup, fx: ConformanceFixture): Promise<Json> {
-    const r = await s.methods.checkCredentials(Object.assign({ templateId: fx.template.templateId }, fx.validateParams));
+    const before = fx.beforeValidate ? await fx.beforeValidate(s.methods, s.server) : {};
+    const r = await s.methods.checkCredentials(Object.assign({ templateId: fx.template.templateId }, fx.validateParams, before));
     assert(r.returnValue, "checkCredentials failed: " + (r.errorCode || "") + " " + (r.errorText || ""));
     assert(r.credentials && typeof r.credentials === "object", "checkCredentials gave no credentials");
     // What com.palm.service.accounts does with the validator's answer (handlers/create.js).
@@ -172,6 +202,8 @@ async function syncStates(tempdb: Json, accountId: string): Promise<DbObject[]> 
 
 export function conformanceChecks(def: ConnectorDefinition, fx: ConformanceFixture): { name: string; run(): Promise<void> }[] {
     const checks: { name: string; run(): Promise<void> }[] = [];
+    const caps = Object.keys(def.capabilities).map((id) => def.capabilities[id]);
+    if (hasFiles(def) && caps.every((c) => c.files && !c.pull && !c.sync)) return driveChecks(def, fx);
     const twoWay = Object.keys(def.capabilities).some((id) => typeof def.capabilities[id].push === "function");
     const withServer = (periodic: boolean, fn: (s: Setup) => Promise<void>) => async () => {
         const s = await setup(def, fx, periodic);
@@ -357,6 +389,91 @@ function addShareChecks(def: ConnectorDefinition, fx: ConformanceFixture, checks
         const again = await s.methods.share(request(s.accountId, (fx.share as Json).content));
         assert(again.returnValue === false && again.retryAt && s.server.requests() === before, "a share within Retry-After reached the server");
     }) });
+}
+
+// A drive (the DOCUMENTS capability only): it keeps nothing on the device
+// and syncs nothing in the background; its files methods answer the file
+// manager's error codes (files.ts FILE_ERRORS).
+function driveChecks(def: ConnectorDefinition, fx: ConformanceFixture): { name: string; run(): Promise<void> }[] {
+    const checks: { name: string; run(): Promise<void> }[] = [];
+    const withServer = (fn: (s: Setup) => Promise<void>) => async () => {
+        const s = await setup(def, fx, true);
+        try { await fn(s); } finally { if (s.server.close) await s.server.close(); }
+    };
+    const list = (s: Setup) => s.methods.listFiles({ accountId: s.accountId, path: "/" });
+
+    checks.push({ name: "validate: the validator signs in and gives credentials", run: withServer(async (s) => { await signIn(s, fx); }) });
+
+    checks.push({ name: "drive lifecycle: no periodic sync, the sync checks the drive, delete leaves nothing", run: withServer(async (s) => {
+        await signIn(s, fx);
+        await enableAll(s);
+        const creates = s.bus.calls.filter((c: Json) => c.uri === "luna://com.palm.activitymanager/create" && c.params.activity.schedule);
+        assert(!creates.length, "a drive set up a periodic sync: it is browsed on demand");
+        const r = await sync(s);
+        assert(r.returnValue, "the sync (a check of the drive) failed: " + (r.errorText || r.errorCode));
+        const l = await list(s);
+        assert(l.returnValue && Array.isArray(l.entries), "listFiles / failed: " + (l.errorText || l.errorCode));
+        assert(!ofAccount(s.db, s.accountId).filter((o) => o._kind !== def.kinds.state).length, "a drive wrote objects of the account to db8");
+        const del = await s.methods.onDelete({ accountId: s.accountId });
+        assert(del.returnValue, "onDelete failed: " + (del.errorText || del.errorCode));
+        assert(!ofAccount(s.db, s.accountId).length, "left behind: " + ofAccount(s.db, s.accountId).map((o) => o._kind).join(", "));
+        assert(!(await syncStates(s.tempdb, s.accountId)).length, "sync state records left behind");
+    }) });
+
+    checks.push({ name: "drive files: upload, list, download, refuse to overwrite, rename, remove", run: withServer(async (s) => {
+        await signIn(s, fx);
+        await enableAll(s);
+        const bytes = new Uint8Array(70000).map((_x, i) => (i * 7) & 255);
+        s.files.data["/tmp/conformance.bin"] = bytes;
+        const id = s.accountId;
+        const up = await s.methods.uploadFile({ accountId: id, from: "/tmp/conformance.bin", to: "/conformance.bin" });
+        assert(up.returnValue && up.entry && up.entry.size === bytes.length, "uploadFile failed: " + (up.errorText || up.errorCode));
+        const l = await list(s);
+        assert((l.entries || []).some((e: Json) => e.name === "conformance.bin" && e.type === "file"), "the upload is not listed");
+        const down = await s.methods.downloadFile({ accountId: id, path: "/conformance.bin", to: "/tmp/back.bin" });
+        assert(down.returnValue, "downloadFile failed: " + (down.errorText || down.errorCode));
+        const back = s.files.data["/tmp/back.bin"];
+        assert(back && back.length === bytes.length && back.every((b, i) => b === bytes[i]), "the download is not the file uploaded");
+        const again = await s.methods.uploadFile({ accountId: id, from: "/tmp/conformance.bin", to: "/conformance.bin", overwrite: false });
+        assert(again.returnValue === false && again.errorCode === 2, "uploading over a file without overwrite gave " + (again.errorCode || "success"));
+        const mv = await s.methods.moveFile({ accountId: id, from: "/conformance.bin", to: "/renamed.bin" });
+        assert(mv.returnValue, "moveFile failed: " + (mv.errorText || mv.errorCode));
+        const rm = await s.methods.removeFile({ accountId: id, path: "/renamed.bin" });
+        assert(rm.returnValue, "removeFile failed: " + (rm.errorText || rm.errorCode));
+        const gone = await s.methods.statFile({ accountId: id, path: "/renamed.bin" });
+        assert(gone.returnValue === false && gone.errorCode === 1, "a removed file is still there (" + (gone.errorCode || "found") + ")");
+    }) });
+
+    checks.push({ name: "drive unauthorized: a 401 is AUTH for the files, 401_UNAUTHORIZED for the account", run: withServer(async (s) => {
+        await signIn(s, fx);
+        await enableAll(s);
+        s.server.unauthorized(true);
+        const l = await list(s);
+        assert(l.returnValue === false && l.errorCode === 11, "listFiles answered " + JSON.stringify({ returnValue: l.returnValue, errorCode: l.errorCode }));
+        const r = await sync(s);
+        assert(r.returnValue === false && r.errorCode === "401_UNAUTHORIZED", "sync answered " + JSON.stringify({ returnValue: r.returnValue, errorCode: r.errorCode }));
+        const states = await syncStates(s.tempdb, s.accountId);
+        assert(states.length > 0 && states.every((o) => o.syncState === "ERROR" && o.errorCode === "401_UNAUTHORIZED"), "sync states: " +
+               JSON.stringify(states.map((o) => [o.syncState, o.errorCode])));
+    }) });
+
+    checks.push({ name: "drive rate limit: a 429 with Retry-After is honoured", run: withServer(async (s) => {
+        await signIn(s, fx);
+        await enableAll(s);
+        s.server.throttle(600);
+        const l = await list(s);
+        assert(l.returnValue === false && l.errorCode === 16 && l.retryAt >= s.clock.t + 590 * 1000,
+               "listFiles answered " + JSON.stringify({ returnValue: l.returnValue, errorCode: l.errorCode, retryAt: l.retryAt }));
+        const before = s.server.requests();
+        s.clock.t += 60 * 1000;
+        const again = await list(s);
+        assert(again.returnValue === false && s.server.requests() === before, "a request within Retry-After reached the server");
+        s.server.throttle(0);
+        s.clock.t += 600 * 1000;
+        const after = await list(s);
+        assert(after.returnValue, "listFiles after Retry-After failed: " + (after.errorText || after.errorCode));
+    }) });
+    return checks;
 }
 
 export async function runConformance(def: ConnectorDefinition, fx: ConformanceFixture): Promise<ConformanceResult[]> {

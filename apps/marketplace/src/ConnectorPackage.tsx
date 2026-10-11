@@ -10,7 +10,9 @@
 // as the owner decided, until Phoenix runs connectors in a sandbox (C5):
 // without it, Install says so and leads to Settings > Developer Mode. The
 // connectors Phoenix comes with (package.preinstalled: the Fediverse) are
-// installed already, removable, and installed again without Developer Mode.
+// installed already, removable, and installed again without Developer Mode;
+// so are Phoenix's own that come from the catalog only (package.firstParty:
+// the drives).
 // Remove takes the package's accounts with it, after a confirmation that
 // says so.
 
@@ -40,7 +42,7 @@ export function removeAccountsText(accounts: { username?: string; alias?: string
  * packagesservice.js firstPartyEntry).
  */
 export function needsDevMode(t: AccountType, devModeOn: boolean): boolean {
-    return !t.package.builtin && !t.package.preinstalled && !devModeOn;
+    return !t.package.builtin && !t.package.preinstalled && !t.package.firstParty && !devModeOn;
 }
 
 // The ids of the apps installed from the catalogs, shared by the rows of a
@@ -178,11 +180,12 @@ export function ConnectorPackage({ t, added }: { t: AccountType; added: boolean 
                 <Note testId="connector-installed">
                     {t.package.preinstalled
                         ? "Installed: it comes with Phoenix. You can remove it, and install it again from here."
+                        : t.package.firstParty ? "Installed from the catalog: one of Phoenix's own. You can remove it, and install it again from here."
                         : "Installed from the catalog. It runs as a third-party connector, in Developer Mode."}
                 </Note>
             )}
             {installed === null && !inCatalog && <Note>The catalog does not have its package now.</Note>}
-            {installed === null && inCatalog && !askDevMode && !t.package.preinstalled && (
+            {installed === null && inCatalog && !askDevMode && !t.package.preinstalled && !t.package.firstParty && (
                 <Note testId="connector-third-party">A third-party connector: it installs in Developer Mode, until Phoenix can run connectors in a sandbox.</Note>
             )}
             {askDevMode && (
@@ -204,7 +207,7 @@ export function ConnectorPackage({ t, added }: { t: AccountType; added: boolean 
                 <Note testId="install-skipped">Installed without its {progress.skipped.join(" and ")}: this device cannot run them yet.</Note>
             )}
             <Dialog open={confirmRemove} title={`Remove ${t.title}?`} onClose={() => setConfirmRemove(false)} testId="connector-remove-dialog"
-                    message={[removeAccountsText(mine), t.package.preinstalled ? "You can install it again from Connections." : ""]
+                    message={[removeAccountsText(mine), t.package.preinstalled || t.package.firstParty ? "You can install it again from Connections." : ""]
                         .filter(Boolean).join(" ") || "It is removed from this device."}>
                 <Button variant="negative" data-testid="connector-remove-confirm" onClick={() => void remove()}>
                     {mine.length > 1 ? "Remove It and Its Accounts" : mine.length ? "Remove It and Its Account" : "Remove"}

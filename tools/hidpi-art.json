@@ -1249,6 +1249,94 @@
             ]
         },
         {
+            "name": "drive-nextcloud",
+            "art": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.nextcloud/images",
+            "upscale": [
+                { "art": "drive-32x32.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" },
+                { "art": "drive-48x48.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "drive-owncloud",
+            "art": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.owncloud/images",
+            "upscale": [
+                { "art": "drive-32x32.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" },
+                { "art": "drive-48x48.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "drive-webdav",
+            "art": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.webdav/images",
+            "upscale": [
+                { "art": "drive-32x32.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" },
+                { "art": "drive-48x48.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "drive-s3",
+            "art": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.s3/images",
+            "upscale": [
+                { "art": "drive-32x32.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" },
+                { "art": "drive-48x48.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "drive-dropbox",
+            "art": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.dropbox/images",
+            "upscale": [
+                { "art": "drive-32x32.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" },
+                { "art": "drive-48x48.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "drive-onedrive",
+            "art": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.onedrive/images",
+            "upscale": [
+                { "art": "drive-32x32.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" },
+                { "art": "drive-48x48.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "drive-googledrive",
+            "art": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.googledrive/images",
+            "upscale": [
+                { "art": "drive-32x32.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" },
+                { "art": "drive-48x48.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "drive-box",
+            "art": "apps/connectors/drives/public/accounts/com.webosphoenix.drive.box/images",
+            "upscale": [
+                { "art": "drive-32x32.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" },
+                { "art": "drive-48x48.png", "method": "downscale", "source": "apps/connectors/drives/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "matrix",
+            "art": "apps/connectors/matrix/public/accounts/com.webosphoenix.matrix/images",
+            "upscale": [
+                { "art": "matrix-32x32.png", "method": "downscale", "source": "apps/connectors/matrix/art/matrix-1024.png" },
+                { "art": "matrix-48x48.png", "method": "downscale", "source": "apps/connectors/matrix/art/matrix-1024.png" }
+            ]
+        },
+        {
+            "name": "deltachat",
+            "art": "apps/connectors/deltachat/public/accounts/com.webosphoenix.deltachat/images",
+            "upscale": [
+                { "art": "deltachat-32x32.png", "method": "downscale", "source": "apps/connectors/deltachat/art/deltachat-1024.png" },
+                { "art": "deltachat-48x48.png", "method": "downscale", "source": "apps/connectors/deltachat/art/deltachat-1024.png" }
+            ]
+        },
+        {
+            "name": "telegram",
+            "art": "apps/telegram/public/accounts/com.webosphoenix.telegram/images",
+            "upscale": [
+                { "art": "cloudchat-32x32.png", "method": "downscale", "source": "apps/telegram/art/cloudchat-1024.png" },
+                { "art": "cloudchat-48x48.png", "method": "downscale", "source": "apps/telegram/art/cloudchat-1024.png" }
+            ]
+        },
+        {
             "name": "feeds-example",
             "art": "apps/shared/connector-kit/examples/feeds/public/accounts/org.example.feeds/images",
             "upscale": [
@@ -1258,7 +1346,7 @@
         },
         {
             "name": "xmpp",
-            "art": "runtime/accounts/com.webosphoenix.xmpp/images",
+            "art": "apps/connectors/xmpp/public/accounts/com.webosphoenix.xmpp/images",
             "upscale": [
                 { "art": "xmpp-32x32.png", "method": "downscale", "source": "apps/messaging/public/icon-256x256.png" },
                 { "art": "xmpp-48x48.png", "method": "downscale", "source": "apps/messaging/public/icon-256x256.png" }

@@ -1,0 +1,6 @@
+{
+    "formFactor": "phone",
+    "density": 2.5,
+    "hardwareHomeButton": false,
+    "ringerSwitch": {"type": "EV_SW", "code": 14, "silentValue": 1}
+}

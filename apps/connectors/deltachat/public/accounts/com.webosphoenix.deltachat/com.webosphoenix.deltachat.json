@@ -1,0 +1,75 @@
+{
+    "templateId": "com.webosphoenix.deltachat",
+    "loc_name": "Delta Chat",
+    "icon": {
+        "loc_32x32": "images/deltachat-32x32.png",
+        "loc_48x48": "images/deltachat-48x48.png"
+    },
+    "loc_usernameLabel": "EMAIL ADDRESS",
+    "loc_usernameExplainLabel": "you@example.org",
+    "loc_passwordLabel": "PASSWORD",
+    "signUp": {
+        "url": "https://chatmail.at/relays"
+    },
+    "validator": {
+        "customUI": {
+            "appId": "org.webosphoenix.deltachat",
+            "name": "accounts/signin.html"
+        },
+        "address": "palm://org.webosphoenix.service.deltachat/checkCredentials"
+    },
+    "readPermissions": [
+        "org.webosphoenix.service.deltachat",
+        "org.webosphoenix.deltachat",
+        "org.webosphoenix.messaging"
+    ],
+    "writePermissions": [
+        "org.webosphoenix.deltachat",
+        "org.webosphoenix.messaging"
+    ],
+    "capabilityProviders": [
+        {
+            "capability": "CONTACTS",
+            "id": "com.webosphoenix.deltachat.contacts",
+            "loc_name": "People you chat with",
+            "icon": {
+                "loc_32x32": "images/deltachat-32x32.png",
+                "loc_48x48": "images/deltachat-48x48.png"
+            },
+            "dbkinds": {
+                "contact": "com.palm.contact.deltachat:1"
+            },
+            "readOnlyData": true,
+            "implementation": "palm://org.webosphoenix.service.deltachat/",
+            "onCreate": "palm://org.webosphoenix.service.deltachat/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.deltachat/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.deltachat/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.deltachat/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.deltachat/sync"
+        },
+        {
+            "capability": "MESSAGING",
+            "capabilitySubtype": "IM",
+            "id": "com.webosphoenix.deltachat.im",
+            "serviceName": "type_deltachat",
+            "loc_name": "Chats and groups",
+            "loc_shortName": "Delta Chat",
+            "chatWithNonBuddies": true,
+            "icon": {
+                "loc_32x32": "images/deltachat-32x32.png",
+                "loc_48x48": "images/deltachat-48x48.png",
+                "splitter": "images/deltachat-32x32.png"
+            },
+            "dbkinds": {
+                "immessage": "com.palm.immessage.deltachat:1",
+                "imloginstate": "com.palm.imloginstate.deltachat:1"
+            },
+            "implementation": "palm://org.webosphoenix.service.deltachat/",
+            "onCreate": "palm://org.webosphoenix.service.deltachat/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.deltachat/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.deltachat/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.deltachat/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.deltachat/sync"
+        }
+    ]
+}

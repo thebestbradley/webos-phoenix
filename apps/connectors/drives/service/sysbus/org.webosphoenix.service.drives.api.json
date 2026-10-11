@@ -1,0 +1,30 @@
+{
+    "accounts.transport": [
+        "org.webosphoenix.service.drives/checkCredentials",
+        "org.webosphoenix.service.drives/onCreate",
+        "org.webosphoenix.service.drives/onEnabled",
+        "org.webosphoenix.service.drives/onCredentialsChanged",
+        "org.webosphoenix.service.drives/onDelete",
+        "org.webosphoenix.service.drives/sync"
+    ],
+    "drives.files": [
+        "org.webosphoenix.service.drives/listFiles",
+        "org.webosphoenix.service.drives/statFile",
+        "org.webosphoenix.service.drives/downloadFile",
+        "org.webosphoenix.service.drives/uploadFile",
+        "org.webosphoenix.service.drives/makeFolder",
+        "org.webosphoenix.service.drives/moveFile",
+        "org.webosphoenix.service.drives/copyFile",
+        "org.webosphoenix.service.drives/removeFile",
+        "org.webosphoenix.service.drives/searchFiles",
+        "org.webosphoenix.service.drives/driveQuota",
+        "org.webosphoenix.service.drives/transfers",
+        "org.webosphoenix.service.drives/cancelTransfer"
+    ],
+    "drives.account": [
+        "org.webosphoenix.service.drives/providerInfo",
+        "org.webosphoenix.service.drives/signIn",
+        "org.webosphoenix.service.drives/loginFlowStart",
+        "org.webosphoenix.service.drives/loginFlowPoll"
+    ]
+}

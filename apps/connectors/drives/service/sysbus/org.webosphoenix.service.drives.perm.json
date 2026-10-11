@@ -1,0 +1,10 @@
+{
+    "org.webosphoenix.service.drives": [
+        "database.operation",
+        "activity.operation",
+        "accounts.operation",
+        "accounts.transport",
+        "oauth.signin",
+        "phoenix.ongoing"
+    ]
+}

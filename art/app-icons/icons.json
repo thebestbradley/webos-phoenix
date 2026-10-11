@@ -187,6 +187,14 @@
             "apps/sharesheet/public/icon"
         ]
     },
+    "signin": {
+        "platter": "diamond",
+        "base": 178,
+        "foot": 60,
+        "out": [
+            "apps/signin/icon"
+        ]
+    },
     "screenshot": {
         "platter": "diamond",
         "base": 178,
@@ -233,6 +241,14 @@
         "foot": 50,
         "out": [
             "apps/fediverse/icon"
+        ]
+    },
+    "drives": {
+        "platter": "diamond",
+        "base": 180,
+        "foot": 78,
+        "out": [
+            "apps/connectors/drives/icon"
         ]
     },
     "wifi": {

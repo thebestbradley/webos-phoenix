@@ -185,6 +185,9 @@ Item {
             // The launch-at-boot apps start with the simulator, as with
             // LunaSysMgr (WebAppMgrProxy.cpp:117).
             source: SimWindowSource { id: windows; bootAppsEnabled: true }
+            // The default wallpaper from the first frame, until the system
+            // service tells the shell the one chosen (below).
+            wallpaper: windows.resolveDevicePath(Theme.defaultWallpaperPath)
             system: SimSystemStatus {
                 id: status
                 // Fixed clock for reproducible screenshots.

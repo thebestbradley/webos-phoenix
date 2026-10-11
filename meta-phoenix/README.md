@@ -19,6 +19,10 @@ OpenEmbedded layer that adds the Phoenix shell to a webOS OSE build.
 | `phoenix-firmware-policy` (class) | Fails an image that would install firmware whose licence does not allow redistribution (`PHOENIX_FIRMWARE_LICENSES`), and writes `/usr/share/phoenix/firmware/licences.json` (each firmware package, its licence and licence files, shown in Settings > Device Info). |
 | `rtl8812au`, `rtl8814au` | Out-of-tree USB Wi-Fi drivers (aircrack-ng's 88XXau for RTL8812AU/8821AU; morrownr's 8814au) built per kernel into `lib/modules/<kernel>/updates`, for the Hardware app; not in the image. GPL-2.0. |
 | `phoenix-driver-feed` | Collects what the Hardware app offers beyond the image (the out-of-tree drivers; firmware for images built without it), with a driver manifest each (`files/drivers/*.json`), into `${DEPLOY_DIR_IMAGE}/phoenix-drivers/` for `server/drivers` (docs/DRIVERS.md). Not in the image. |
+| `phoenix-device-config` | `/etc/phoenix/device.json` (form factor, density, Home button, ringer switch) and `/etc/phoenix/compositor.env` (the compositor's geometry, which `product.env` sources) for the `MACHINE` (`files/<MACHINE>/`, else the defaults). In the image. |
+| Machines (`conf/machine/`) | `fairphone-fp6` (Fairphone 6 and 6+), `ayn-odin2portal`, `pinephone`, `pinephonepro`, `pinetab2`, on `include/phoenix-mobile.inc`; no BSP layer needed. `scripts/setup-build.sh` adds them to build-webos's `Machines`. docs/HARDWARE.md, "First targets". |
+| `linux-phoenix-milos`, `-ayn`, `-megi`, `-pinetab2` | Each device's kernel tree at a pinned commit (milos-mainline, AYN's, megi's, DanctNIX's) with the configuration its distribution uses (pmaports, ROCKNIX), plus `phoenix-hardware*.cfg` (never demoting a built-in) and `phoenix-ose.cfg` (`linux-phoenix-device.inc`). GPL-2.0-only. |
+| `phoenix-bootimg`, `mkbootimg-native` | The Fairphone's Android boot image (`boot-<MACHINE>.img`, header v2, AOSP's mkbootimg at `android-16.0.0_r1`). The other devices boot `wic/phoenix-extlinux.wks.in` (GPT, FAT boot partition with `extlinux.conf`, ext4 root). |
 
 None of these has been built on real hardware yet: CI parses and
 dry-runs them (below). Sizes, licences and why each model is in the image
@@ -36,7 +40,8 @@ the image's contents against these recipes' `FILES`, the recipes'
 licences, pins and units, simulator-only references, licences of what
 ships), which CI runs on every change.
 
-`scripts/parse-check.sh [MACHINE...]` (default `qemux86-64 raspberrypi4-64`)
+`scripts/parse-check.sh [MACHINE...]` (default `qemux86-64 raspberrypi4-64`;
+CI also runs `fairphone-fp6 ayn-odin2portal pinephone pinephonepro pinetab2`)
 parses every recipe and dry-runs `webos-phoenix-image` (plus the `torchd`
 stub; and, on the first machine, the image again with
 `PHOENIX_FIRMWARE_COMPRESS` set to `xz` and to `zstd`) for each machine, with the same pinned layers but

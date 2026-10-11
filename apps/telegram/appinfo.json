@@ -1,0 +1,19 @@
+{
+    "id": "org.webosphoenix.telegram",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Unofficial Telegram",
+    "icon": "icon.png",
+    "uiRevision": 2,
+    "phoenix": {
+        "//": "Not in the launcher: the app carries the Unofficial Telegram account (accounts/signin.html, the template in public/accounts, the service). Chats are in Messaging; sharing to a person goes through Messaging's share target. Named and drawn as Telegram's API terms ask of a third-party client: not 'Telegram', not its logo. It needs Telegram's app id for Phoenix (a build-time setting) and TDLib (phoenix-tdjson), which the image brings.",
+        "hidden": true
+    },
+    "requiredPermissions": [
+        "accounts.transport",
+        "telegram.account",
+        "phoenix.appmanager.launch"
+    ]
+}
