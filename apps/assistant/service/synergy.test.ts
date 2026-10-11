@@ -63,6 +63,7 @@ describe("the grammar hears accounts by their names", () => {
         ["add milk to todoist", "task", { text: "Milk", account: "todoist" }],
         ["add milk to my acme board list", "task", { text: "Milk", list: "Acme board" }],
         ["find the budget file on dropbox", "findFiles", { query: "budget", drive: "dropbox" }],
+        ["find the budget file on sftp", "findFiles", { query: "budget", drive: "sftp" }],
         ["save it to google drive", "saveToDrive", { it: true, drive: "google drive" }],
         ["post to bluesky: hello", "post", { service: "bluesky", text: "hello" }],
         ["toot good morning", "post", { service: "mastodon", text: "good morning" }],

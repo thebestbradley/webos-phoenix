@@ -59,6 +59,7 @@ var SERVICES = [
     { name: "ownCloud", words: ["owncloud", "own cloud"], caps: ["DOCUMENTS"] },
     { name: "WebDAV", words: ["webdav"], caps: ["DOCUMENTS"] },
     { name: "S3 Storage", words: ["s3"], caps: ["DOCUMENTS"] },
+    { name: "SFTP", words: ["sftp"], caps: ["DOCUMENTS"] },
     // Out of reach (docs/SYNERGY-CONNECTORS.md 7: "WhatsApp (no client API) and Signal ... stay out";
     // "Not likely": Facebook, Instagram, Threads; section 7: iCloud Drive).
     { name: "Signal", words: ["signal"], caps: ["MESSAGING"], none: "Signal has no way in for other apps" },
