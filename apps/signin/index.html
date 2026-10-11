@@ -1,0 +1,28 @@
+<!doctype html>
+<!-- Copyright (c) 2026 webOS Phoenix contributors
+     SPDX-License-Identifier: Apache-2.0
+
+     The Sign In card's own page (org.webosphoenix.signin; services/oauth/
+     signincard.js). It is seen for a moment only: it asks the OAuth
+     service for the address of the sign-in it was launched for and
+     replaces itself with the provider's page, which then fills the card.
+     The bar above (the provider's host, the lock, Cancel) is the shell's,
+     not this page's. -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta name="referrer" content="no-referrer">
+    <title>Sign In</title>
+    <link rel="stylesheet" href="signin.css">
+</head>
+<body>
+    <div class="si-box" role="status" aria-live="polite">
+        <img class="si-icon" src="icon-128x128.png" width="64" height="64" alt="">
+        <p id="message">Opening the sign-in page&hellip;</p>
+        <div id="spinner" class="si-spinner" aria-hidden="true"></div>
+        <button id="close" type="button" hidden>Close</button>
+    </div>
+    <script src="signin.js"></script>
+</body>
+</html>

@@ -178,7 +178,7 @@ filling in only missing methods never applied: the runtime overrides them.
 | Screen captures | the window | LSM's view | 🟡 |
 | Keyboard over a page | `Shell` | Maliit (V5, another agent) | 🚫 |
 | Browser page views | `phoenix-sim` | none (Q38) | ⬜ |
-| OAuth sign-in sheet | a page view | `services/oauth` exists; the sheet needs a page view (Q38) | ⬜ |
+| OAuth sign-in | the share sheet's page view (and, with `oauthUseCard`, the Sign In card) | the Sign In card (`apps/signin`), its bar drawn by `SurfaceHost` (`SignInBar`) from the OAuth service's `signInCard` message; the loopback listener and sealed key store (`services/oauth`) | 🟡 |
 | High contrast | the shell filters the pages | not yet on LSM | ⬜ |
 
 ## 5. App and Node services
@@ -196,7 +196,9 @@ of them: apps without `requiredPermissions` get trust `dev`, and some groups
 
 - **WAM child windows** (Q37): luna-systemui's dashboards and popup alerts
   come from `window.open`; WAM needs an extension. Biggest gap left.
-- **Browser page views and OAuth** (Q38): WAM has no `<webview>`.
+- **Browser page views** (Q38): WAM has no `<webview>`. OAuth sign-ins use
+  the Sign In card instead (written; its bar follows the page only with a
+  WAM extension, Q79).
 - **Restart UI on a device** (Q39): `systemctl restart` of LSM needs a route
   the shell may take.
 - **LuneOS's packages of Open webOS** (Q61): universalsearchmgr, mojomail,

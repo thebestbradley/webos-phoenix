@@ -206,6 +206,25 @@ cloud provider API keys and can act on the device.
   it allows `unsafe-eval` because the simulator runs the service in the
   page. Answers are shown as text, never as HTML, and links are not loaded.
 
+## Synergy sign-ins (OAuth tokens)
+
+`org.webosphoenix.service.oauth` holds the accounts' OAuth tokens and the
+client secrets of servers that register the app themselves (Mastodon).
+Design and tests: [SYNERGY-CONNECTORS.md 4.1](SYNERGY-CONNECTORS.md),
+"As built: OAuth sign-ins on a device".
+
+| Attacker | Protected? | Why |
+| --- | --- | --- |
+| A connector's page, or any app's | Yes | The provider's page is in the Sign In card, a card of its own; the page that asked hears only the result. Tokens go only to the service that owns the key (the owner check, ACG group `oauth.signin`, oem). |
+| A page drawing a fake address bar | Yes | The card's bar is the shell's, raised only by the OAuth service's message. |
+| A local program catching the redirect (it guesses the port) | Yes | The listener ends only on this sign-in's `state`; a code without the PKCE verifier is useless. |
+| Someone with a copy of `/var/lib/phoenix/oauth/keys.enc` alone | Yes | AES-256-GCM under a key in `master.key`. |
+| Someone with the whole data partition (both files), or root | **No** | The key is a file until the key store service wraps it with a TPM/TEE key (OPEN-QUESTIONS Q80). |
+| The provider's page in the card calling Luna | Partly | WebAppMgr gives every page of the card its `webOSSystem` and bridge; the card's groups (`oauth.card`, `public`) let it ask for the open sign-in's address only (Q79). |
+
+Erase (the shell's Full Erase, a security policy's Wipe) calls `wipe` first:
+the sealed store and its key go.
+
 ## Just Type and db8
 
 Neither app declares `universalSearch` in `appinfo.json` (the fields are

@@ -1007,6 +1007,22 @@
   "svg": "9901451393fee30f0c6410864b9c0da4f00c4596a582ad13c221531495796fc5",
   "png": "850f701010df69bfb535017a2af1670299daffdeaeb82f95bb51ccd8876fc6dd"
  },
+ "apps/signin/icon-128x128.png": {
+  "svg": "c32374b8f3b05e24edc6899c0d78fca0d2fbf3843f9e9da21dfeb1d5442fef96",
+  "png": "553132cbf542adef74bc2c7c5cebc520927efaf105a288eba8163b716e7f0638"
+ },
+ "apps/signin/icon-256x256.png": {
+  "svg": "b2c37d0dc643efd8a78b421e9b9de721c3ad2ffe4816adbda1f029551bd544f0",
+  "png": "8ade43b6b86416c9d3d1ea68a103a492f226ed417f95d91a7c8e558ae0ae0936"
+ },
+ "apps/signin/icon-512x512.png": {
+  "svg": "2545385cb643f6bc04f6eef1a817b01407f72f79cacc958d8afb226f9aed2387",
+  "png": "81276f20c788b328fcebeb6e9b42ed6a4e422e7b6d437dcb9fe1d71aa5681688"
+ },
+ "apps/signin/icon.png": {
+  "svg": "446f36a5aacd7c633492d64f2a541b02b8383d858d6913f0d48fc6054a1131e4",
+  "png": "679d4b1fa28b9546c9166dd132272bfa85c520ba7834ebaa9d420db8ef4dcedb"
+ },
  "apps/tasks/public/icon-128x128.png": {
   "svg": "843667770ecb583cdcd5a53df51526b51f4a4e6d6b62da3da4346b6c522f6cc7",
   "png": "c239db5c0ed54f9db98c233ef1848c2d662741c44c223e8b8b88a6d2aa70a14c"

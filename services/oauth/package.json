@@ -2,7 +2,7 @@
   "name": "org.webosphoenix.service.oauth",
   "version": "0.1.0",
   "private": true,
-  "description": "webOS Phoenix OAuth for Synergy connectors (Luna): the authorization code flow with PKCE in a system browser sheet, tokens kept in the key store and given only to the service that owns them",
+  "description": "webOS Phoenix OAuth for Synergy connectors (Luna): the authorization code flow with PKCE in the Sign In card, the RFC 8252 loopback redirect, tokens sealed in the key store and given only to the service that owns them",
   "license": "Apache-2.0",
   "main": "service.js",
   "dependencies": {
