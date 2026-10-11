@@ -66,9 +66,12 @@ describe("LinkedIn", () => {
     });
 
     it("is not available without the registration and its secret (or the relay)", async () => {
-        const w = await world({ dir: DIR, def, config: { "linkedin/clients.json": { linkedin: { clientId: "only-an-id" } } }, kindParents });
-        expect((await w.methods.providerInfo({})).oauth).toMatchObject({ available: false, reason: expect.stringMatching(/^LinkedIn is not available in this build/) });
-        expect((await w.methods.signIn({})).errorCode).toBe("NOT_AVAILABLE");
+        // Also with a relay named, as long as this build's OAuth service has no broker.
+        for (const cfg of [{ linkedin: { clientId: "only-an-id" } }, { linkedin: { clientId: "id", relay: "https://relay.example/v1/oauth-broker/linkedin" } }]) {
+            const w = await world({ dir: DIR, def, config: { "linkedin/clients.json": cfg }, kindParents });
+            expect((await w.methods.providerInfo({})).oauth).toMatchObject({ available: false, reason: expect.stringMatching(/^LinkedIn is not available in this build/) });
+            expect((await w.methods.signIn({})).errorCode).toBe("NOT_AVAILABLE");
+        }
     });
 
     it("signs in with LinkedIn, imports the connections into Contacts, and shares", async () => {

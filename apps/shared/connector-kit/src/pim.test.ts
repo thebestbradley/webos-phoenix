@@ -9,7 +9,7 @@
 import { describe, expect, it } from "vitest";
 import * as memdb from "@phoenix/synckit/src/test/memdb.js";
 import { alarmBefore, alarmMinutes, allDayDates, allDaySpan, joinUrlOf, meetingNote, plainText, rruleOf, rruleText, syncContainers } from "./pim";
-import { notAvailable, registeredClient, restApi } from "./registered";
+import { notAvailable, oauthSignIn, registeredClient, restApi, viaRelay } from "./registered";
 
 describe("pim", () => {
     it("reads an RRULE into the Calendar app's rrule, and writes it back", () => {
@@ -79,6 +79,31 @@ describe("registered providers", () => {
         const e = notAvailable("Todoist", "Sign In with Todoist") as any;
         expect(e.errorCode).toBe("NOT_AVAILABLE");
         expect(e.message).toBe("Sign In with Todoist is not available in this build: Phoenix's app is not registered with Todoist here (docs/DEVELOPER-APPS.md)");
+    });
+
+    it("go through Phoenix's token relay only when the OAuth service has its broker", async () => {
+        const reg = { clientId: "id1", clientSecret: "s", authorizationEndpoint: "https://zoom.example/authorize", tokenEndpoint: "https://zoom.example/token",
+                      scope: "a", relay: "https://relay.example/v1/oauth-broker/zoom/" };
+        const asked: any[] = [];
+        const withBroker = (answer: any): any => ({ luna: { call: async (uri: string, p: any) => {
+            asked.push([uri, p]);
+            if (uri.endsWith("/broker")) { if (answer instanceof Error) throw answer; return answer; }
+            if (uri.endsWith("/redirectUri")) return { returnValue: true, redirectUri: "http://127.0.0.1/oauth/callback" };
+            return { returnValue: true, keyId: "k1" };
+        } } });
+        expect(await viaRelay(withBroker(new Error("no such method")), reg)).toBeNull();
+        expect(await viaRelay(withBroker({ returnValue: false }), reg)).toBeNull();
+        expect(await viaRelay(withBroker({ returnValue: true }), null)).toBeNull();
+        expect(await viaRelay(withBroker({ returnValue: true }), { ...reg, relay: undefined })).toBeNull();
+        const ctx = withBroker({ returnValue: true });
+        const c = await viaRelay(ctx, reg);
+        expect(c).toMatchObject({ clientId: "id1", scope: "a", broker: "https://relay.example/v1/oauth-broker/zoom",
+                                  authorizationEndpoint: "https://relay.example/v1/oauth-broker/zoom/authorize", tokenEndpoint: "https://relay.example/v1/oauth-broker/zoom/redeem" });
+        expect(c!.clientSecret).toBeUndefined();
+        expect(await oauthSignIn(ctx, c!)).toBe("k1");
+        expect(asked[asked.length - 1]).toEqual(["luna://org.webosphoenix.service.oauth/authorize", expect.objectContaining({ broker: "https://relay.example/v1/oauth-broker/zoom",
+            tokenEndpoint: "https://relay.example/v1/oauth-broker/zoom/redeem", redirectUri: "http://127.0.0.1/oauth/callback" })]);
+        expect(asked[asked.length - 1][1].clientSecret).toBeUndefined();
     });
 
     it("call REST APIs with the token", async () => {

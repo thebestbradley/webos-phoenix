@@ -49,7 +49,7 @@ var OAUTH = {
 function fail(message, errorCode) { var e = new Error(message); e.errorCode = errorCode; return e; }
 
 function clientOf(ctx) {
-    return kit.registeredClient(ctx, CLIENTS, "linkedin", OAUTH).then(function (c) { return c && (c.clientSecret || c.relay) ? c : null; });
+    return kit.registeredClient(ctx, CLIENTS, "linkedin", OAUTH).then(function (c) { return c && c.clientSecret ? c : kit.viaRelay(ctx, c); });
 }
 function notAvailable() {
     return fail("LinkedIn is not available in this build: Phoenix's LinkedIn app is not registered here, and LinkedIn's sign-in needs its client secret, " +
@@ -62,9 +62,10 @@ function api(ctx, token, client) {
                               describe: function (b) { return b && b.message ? String(b.message) : ""; } });
 }
 
+// A signed-in account's API calls need only the registration (the OAuth service refreshes its token).
 function session(ctx) {
     var key = (ctx.credentials && ctx.credentials.oauthKey) || (ctx.config && ctx.config.oauthKey);
-    return clientOf(ctx).then(function (c) {
+    return kit.registeredClient(ctx, CLIENTS, "linkedin", OAUTH).then(function (c) {
         if (!c) throw notAvailable();
         return api(ctx, function () { return ctx.oauth.token(key); }, c);
     });
@@ -171,7 +172,7 @@ module.exports = kit.defineConnector({
     validate: function (ctx, p) {
         var c = p.config || {};
         if (!c.oauthKey) return Promise.reject(fail("Sign in with LinkedIn first", "401_UNAUTHORIZED"));
-        return clientOf(ctx).then(function (client) {
+        return kit.registeredClient(ctx, CLIENTS, "linkedin", OAUTH).then(function (client) {
             if (!client) throw notAvailable();
             return whoAmI(api(ctx, function () { return ctx.oauth.token(c.oauthKey); }, client));
         }).then(function (me) { return result(me, c.oauthKey); });
@@ -194,7 +195,8 @@ module.exports = kit.defineConnector({
                     name: "LinkedIn",
                     help: "Sign In with LinkedIn shares from the share sheet as you. Your connections come to Contacts from your own data export (LinkedIn's Settings, Data privacy, Get a copy of your data: Connections), imported on the LinkedIn page.",
                     oauth: c ? { available: true, label: "Sign In with LinkedIn" } : { available: false, reason: notAvailable().message },
-                    privacy: "What you share goes between this device and LinkedIn. LinkedIn's sign-in goes through Phoenix's token relay, which sees the sign-in's tokens as they pass and keeps nothing. Your Connections.csv stays on this device."
+                    privacy: "What you share goes between this device and LinkedIn." + (c && c.broker ? " LinkedIn's sign-in goes through Phoenix's token relay, which sees the sign-in's tokens as they pass and keeps nothing." : "") +
+                             " Your Connections.csv stays on this device."
                 };
             });
         },

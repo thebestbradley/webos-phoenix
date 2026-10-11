@@ -53,7 +53,8 @@ describe("Zoom", () => {
     beforeEach(fresh);
 
     it("is not available without Phoenix's registration and its secret (or the relay)", async () => {
-        for (const cfg of [null, { zoom: { clientId: "id-only" } }]) {
+        // A relay named, but no broker in this build's OAuth service: still not available.
+        for (const cfg of [null, { zoom: { clientId: "id-only" } }, { zoom: { clientId: "id", relay: "https://relay.example/v1/oauth-broker/zoom" } }]) {
             const w = await world({ dir: DIR, def, config: { "zoom/clients.json": cfg }, kindParents });
             const info = await w.methods.providerInfo({});
             expect(info.oauth.available).toBe(false);

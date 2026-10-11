@@ -50,10 +50,10 @@ var OAUTH = {
 
 function fail(message, errorCode) { var e = new Error(message); e.errorCode = errorCode; return e; }
 
-// The registration: a client id and (until the relay) the secret.
+// The registration: a client id and the secret, or the relay that keeps it.
 function clientOf(ctx) {
     return kit.registeredClient(ctx, CLIENTS, "zoom", OAUTH).then(function (c) {
-        return c && (c.clientSecret || c.relay) ? c : null;
+        return c && c.clientSecret ? c : kit.viaRelay(ctx, c);
     });
 }
 
@@ -67,9 +67,10 @@ function api(ctx, token, client) {
                               describe: function (b) { return b && (b.message || b.reason) ? String(b.message || b.reason) : ""; } });
 }
 
+// A signed-in account's API calls need only the registration (the OAuth service refreshes its token).
 function session(ctx) {
     var key = (ctx.credentials && ctx.credentials.oauthKey) || (ctx.config && ctx.config.oauthKey);
-    return clientOf(ctx).then(function (c) {
+    return kit.registeredClient(ctx, CLIENTS, "zoom", OAUTH).then(function (c) {
         if (!c) throw notAvailable();
         return api(ctx, function () { return ctx.oauth.token(key); }, c);
     });
@@ -170,7 +171,7 @@ module.exports = kit.defineConnector({
     validate: function (ctx, p) {
         var c = p.config || {};
         if (!c.oauthKey) return Promise.reject(fail("Sign in with Zoom first", "401_UNAUTHORIZED"));
-        return clientOf(ctx).then(function (client) {
+        return kit.registeredClient(ctx, CLIENTS, "zoom", OAUTH).then(function (client) {
             if (!client) throw notAvailable();
             return whoAmI(api(ctx, function () { return ctx.oauth.token(c.oauthKey); }, client));
         }).then(function (me) {
@@ -193,7 +194,7 @@ module.exports = kit.defineConnector({
                     name: "Zoom",
                     help: "Your upcoming Zoom meetings in Calendar, each with where to join. Meetings open in the browser.",
                     oauth: c ? { available: true, label: "Sign In with Zoom" } : { available: false, reason: notAvailable().message },
-                    privacy: "Your meetings go between this device and Zoom. Zoom's sign-in goes through Phoenix's token relay, which sees the sign-in's tokens as they pass and keeps nothing (docs/PLATFORM.md 6.5.4)."
+                    privacy: "Your meetings go between this device and Zoom." + (c && c.broker ? " Zoom's sign-in goes through Phoenix's token relay, which sees the sign-in's tokens as they pass and keeps nothing (docs/PLATFORM.md 6.5.4)." : "")
                 };
             });
         },

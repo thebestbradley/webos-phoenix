@@ -30,7 +30,7 @@ export type { SignUp } from "./signup";
 export { syncObjects, removeObjects, emptyStats } from "./engine";
 export type { CapabilityStats } from "./engine";
 export * from "./types";
-export { registeredClient, notAvailable, oauthSignIn, forgetOldKey, restApi, formBody } from "./registered";
+export { registeredClient, notAvailable, viaRelay, oauthSignIn, forgetOldKey, restApi, formBody } from "./registered";
 export type { RegisteredClient, RestApi, RestOptions } from "./registered";
 export { syncContainers, containerRemoteIds, rruleOf, rruleText, joinUrlOf, meetingNote, alarmBefore, alarmMinutes, dateParts, allDaySpan, allDayDates, plainText } from "./pim";
 export type { Container } from "./pim";

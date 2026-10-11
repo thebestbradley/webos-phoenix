@@ -62,11 +62,12 @@ function settingOf(ctx) {
 
 // Sign In with Slack: Phoenix's app, the relay, and the OAuth service's broker.
 function signInAvailable(ctx) {
-    return settingOf(ctx).then(function (c) {
-        if (!c.clientId || !c.relay) return { available: false, reason: notAvailable().message };
-        return Promise.resolve().then(function () { return ctx.luna.call("luna://org.webosphoenix.service.oauth/broker", { probe: true }); })
-            .then(function (r) { return r && r.returnValue !== false ? { available: true, client: c } : { available: false, reason: notAvailable().message }; },
-                  function () { return { available: false, reason: notAvailable().message }; });
+    return settingOf(ctx).then(function () {
+        return kit.registeredClient(ctx, CLIENTS, "slack", OAUTH);
+    }).then(function (c) {
+        return kit.viaRelay(ctx, c);
+    }).then(function (c) {
+        return c ? { available: true, client: c } : { available: false, reason: notAvailable().message };
     });
 }
 function notAvailable() {
@@ -319,8 +320,7 @@ module.exports = kit.defineConnector({
             return signInAvailable(ctx).then(function (o) {
                 if (!o.available) throw notAvailable();
                 // The relay's sign-in, through the OAuth service's broker (not in this build: signInAvailable says so).
-                return kit.oauthSignIn(ctx, Object.assign({}, OAUTH, o.client, { authorizationEndpoint: o.client.relay + "/authorize", tokenEndpoint: o.client.relay + "/redeem" }),
-                                       { accountId: p.accountId });
+                return kit.oauthSignIn(ctx, o.client, { accountId: p.accountId });
             }).then(function (keyId) {
                 return module.exports.validate(ctx, { config: { oauthKey: keyId } });
             });

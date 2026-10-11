@@ -15,6 +15,9 @@
 //   notAvailable(name)
 //       the error a sign-in page shows instead of Sign In:
 //       "<name> is not available in this build", errorCode NOT_AVAILABLE
+//   viaRelay(ctx, client)
+//       the registration through Phoenix's token relay, for providers whose
+//       token exchange needs the client secret; null without one
 //   oauthSignIn(ctx, client, {accountId?})
 //       the provider's page in the system's sign-in sheet through
 //       org.webosphoenix.service.oauth (authorization code with PKCE) ->
@@ -81,6 +84,29 @@ async function lunaOk(ctx: BaseContext, uri: string, params: Json): Promise<Json
     return r;
 }
 
+/**
+ * A registration whose client secret stays with Phoenix's token relay
+ * (docs/PLATFORM.md 6.5.4, OPEN-QUESTIONS Q49: Slack, LinkedIn, Zoom): the
+ * setting names it ({"relay": "https://.../v1/oauth-broker/<provider>"});
+ * the sign-in starts at its /authorize and redeems the handle at its
+ * /redeem, and the OAuth service refreshes through it (its `broker`
+ * option). Null when the setting names no relay or the OAuth service has
+ * no broker (not in this build).
+ */
+export async function viaRelay(ctx: BaseContext, client: RegisteredClient | null): Promise<RegisteredClient | null> {
+    if (!client || typeof client.relay !== "string" || !/^https?:\/\//.test(client.relay)) return null;
+    try {
+        const r = await ctx.luna.call(OAUTH + "broker", { probe: true });
+        if (!r || r.returnValue === false) return null;
+    } catch (e) {
+        return null;
+    }
+    const relay = client.relay.replace(/\/+$/, "");
+    const out = Object.assign({}, client, { authorizationEndpoint: relay + "/authorize", tokenEndpoint: relay + "/redeem", broker: relay }) as RegisteredClient;
+    delete out.clientSecret;
+    return out;
+}
+
 /** The provider's sign-in page in the sheet (OAuth with PKCE) -> the OAuth service's key of the tokens. */
 export async function oauthSignIn(ctx: BaseContext, client: RegisteredClient, opts?: { accountId?: string; scope?: string }): Promise<string> {
     const r = await lunaOk(ctx, OAUTH + "redirectUri", {});
@@ -88,6 +114,7 @@ export async function oauthSignIn(ctx: BaseContext, client: RegisteredClient, op
         authorizationEndpoint: client.authorizationEndpoint, tokenEndpoint: client.tokenEndpoint, clientId: client.clientId,
         scope: (opts && opts.scope) || client.scope || "", redirectUri: client.redirectUri || r.redirectUri
     };
+    if (typeof client.broker === "string") req.broker = client.broker;
     if (client.clientSecret) req.clientSecret = client.clientSecret;
     if (client.revocationEndpoint) req.revocationEndpoint = client.revocationEndpoint;
     if (client.params) req.params = client.params;
