@@ -1,0 +1,89 @@
+{
+    "templateId": "com.webosphoenix.google",
+    "loc_name": "Google",
+    "icon": {
+        "loc_32x32": "images/google-32x32.png",
+        "loc_48x48": "images/google-48x48.png"
+    },
+    "loc_usernameLabel": "EMAIL",
+    "validator": {
+        "customUI": {
+            "appId": "org.webosphoenix.google",
+            "name": "accounts/wizard.html"
+        },
+        "address": "palm://org.webosphoenix.service.google/checkCredentials"
+    },
+    "readPermissions": [
+        "org.webosphoenix.service.google",
+        "org.webosphoenix.google",
+        "com.palm.app.calendar",
+        "org.webosphoenix.tasks"
+    ],
+    "writePermissions": [
+        "org.webosphoenix.google",
+        "com.palm.app.contacts",
+        "com.palm.app.calendar",
+        "org.webosphoenix.tasks"
+    ],
+    "capabilityProviders": [
+        {
+            "capability": "CONTACTS",
+            "id": "com.webosphoenix.google.contacts",
+            "loc_name": "Contacts",
+            "icon": {
+                "loc_32x32": "images/google-32x32.png",
+                "loc_48x48": "images/google-48x48.png"
+            },
+            "dbkinds": {
+                "contact": "com.palm.contact.google:1"
+            },
+            "implementation": "palm://org.webosphoenix.service.google/",
+            "onCreate": "palm://org.webosphoenix.service.google/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.google/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.google/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.google/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.google/sync"
+        },
+        {
+            "capability": "CALENDAR",
+            "id": "com.webosphoenix.google.calendar",
+            "loc_name": "Calendar",
+            "icon": {
+                "loc_32x32": "images/google-32x32.png",
+                "loc_48x48": "images/google-48x48.png"
+            },
+            "dbkinds": {
+                "calendar": "com.palm.calendar.google:1",
+                "calendarevent": "com.palm.calendarevent.google:1"
+            },
+            "implementation": "palm://org.webosphoenix.service.google/",
+            "onCreate": "palm://org.webosphoenix.service.google/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.google/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.google/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.google/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.google/sync"
+        },
+        {
+            "capability": "TASKS",
+            "id": "com.webosphoenix.google.tasks",
+            "loc_name": "Tasks",
+            "icon": {
+                "loc_32x32": "images/google-32x32.png",
+                "loc_48x48": "images/google-48x48.png"
+            },
+            "dbkinds": {
+                "task": "com.palm.task.google:1",
+                "tasklist": "com.palm.tasklist.google:1"
+            },
+            "implementation": "palm://org.webosphoenix.service.google/",
+            "onCreate": "palm://org.webosphoenix.service.google/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.google/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.google/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.google/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.google/sync"
+        }
+    ],
+    "signUp": {
+        "url": "https://accounts.google.com/signup"
+    }
+}

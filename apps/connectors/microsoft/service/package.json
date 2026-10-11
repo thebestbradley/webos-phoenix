@@ -1,0 +1,11 @@
+{
+    "name": "org.webosphoenix.service.microsoft",
+    "version": "0.1.0",
+    "private": true,
+    "description": "webOS Phoenix's Microsoft account (Synergy connector on @phoenix/connector-kit): Outlook.com and Microsoft 365 contacts, calendars (Teams meetings with where to join) and Microsoft To Do, both ways, through Microsoft Graph with one sign-in",
+    "license": "Apache-2.0",
+    "main": "service.js",
+    "dependencies": {
+        "@phoenix/connector-kit": "*"
+    }
+}

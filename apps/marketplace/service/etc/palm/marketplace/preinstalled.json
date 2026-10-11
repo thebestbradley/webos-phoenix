@@ -35,6 +35,20 @@
             "from": "apps/connectors/bluesky",
             "service": "org.webosphoenix.service.bluesky",
             "templates": ["com.webosphoenix.bluesky"]
+        },
+        {
+            "id": "org.webosphoenix.microsoft",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/microsoft",
+            "service": "org.webosphoenix.service.microsoft",
+            "templates": ["com.webosphoenix.microsoft"]
+        },
+        {
+            "id": "org.webosphoenix.google",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/google",
+            "service": "org.webosphoenix.service.google",
+            "templates": ["com.webosphoenix.google"]
         }
     ]
 }

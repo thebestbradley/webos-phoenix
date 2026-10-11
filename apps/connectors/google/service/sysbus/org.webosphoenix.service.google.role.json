@@ -1,0 +1,21 @@
+{
+    "appId": "org.webosphoenix.service.google",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.service.google"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.google",
+            "outbound": [
+                "org.webosphoenix.service.google",
+                "com.palm.db",
+                "com.palm.tempdb",
+                "com.palm.activitymanager",
+                "com.palm.service.accounts",
+                "org.webosphoenix.service.oauth"
+            ]
+        }
+    ]
+}

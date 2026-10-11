@@ -1343,6 +1343,22 @@
                 { "art": "bluesky-32x32.png", "method": "downscale", "source": "apps/connectors/bluesky/icon-512x512.png" },
                 { "art": "bluesky-48x48.png", "method": "downscale", "source": "apps/connectors/bluesky/icon-512x512.png" }
             ]
+        },
+        {
+            "name": "connector-microsoft",
+            "art": "apps/connectors/microsoft/public/accounts/com.webosphoenix.microsoft/images",
+            "upscale": [
+                { "art": "microsoft-32x32.png", "method": "downscale", "source": "apps/connectors/microsoft/icon-512x512.png" },
+                { "art": "microsoft-48x48.png", "method": "downscale", "source": "apps/connectors/microsoft/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "connector-google",
+            "art": "apps/connectors/google/public/accounts/com.webosphoenix.google/images",
+            "upscale": [
+                { "art": "google-32x32.png", "method": "downscale", "source": "apps/connectors/google/icon-512x512.png" },
+                { "art": "google-48x48.png", "method": "downscale", "source": "apps/connectors/google/icon-512x512.png" }
+            ]
         }
     ]
 }

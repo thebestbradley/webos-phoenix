@@ -1,0 +1,11 @@
+{
+    "name": "org.webosphoenix.service.google",
+    "version": "0.1.0",
+    "private": true,
+    "description": "webOS Phoenix's Google account (Synergy connector on @phoenix/connector-kit): Google Calendar, Contacts and Tasks both ways with one sign-in",
+    "license": "Apache-2.0",
+    "main": "service.js",
+    "dependencies": {
+        "@phoenix/connector-kit": "*"
+    }
+}

@@ -1,0 +1,22 @@
+{
+    "//": "What the Marketplace's Connections view says of this connector package's account type (server/marketplace Catalog::connectorTypes; docs/SYNERGY-SDK.md). One of Phoenix's own, installed from the catalog (preinstalled.json \"catalog\"); the catalog's own entry (catalog/accounts.json) is the one listed, this one is checked when the package is uploaded.",
+    "accountTypes": [
+        {
+            "templateId": "com.webosphoenix.microsoft",
+            "title": "Microsoft",
+            "provider": "Outlook.com and Microsoft 365 (work or school)",
+            "summary": "Your contacts, calendars and Microsoft To Do, kept in step both ways, with one sign-in on Microsoft's own page. Teams meetings show in Calendar with where to join.",
+            "capabilities": [
+                { "capability": "CONTACTS", "direction": "two-way" },
+                { "capability": "CALENDAR", "direction": "two-way" },
+                { "capability": "TASKS", "direction": "two-way" }
+            ],
+            "protocols": ["microsoft-graph"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Microsoft", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental"
+        }
+    ]
+}

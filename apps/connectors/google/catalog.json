@@ -1,0 +1,22 @@
+{
+    "//": "What the Marketplace's Connections view says of this connector package's account type (server/marketplace Catalog::connectorTypes; docs/SYNERGY-SDK.md). One of Phoenix's own, installed from the catalog (preinstalled.json \"catalog\"); the catalog's own entry (catalog/accounts.json) is the one listed, this one is checked when the package is uploaded.",
+    "accountTypes": [
+        {
+            "templateId": "com.webosphoenix.google",
+            "title": "Google",
+            "provider": "Google Calendar, Contacts and Tasks",
+            "summary": "Your Google Calendar, Contacts and Tasks, kept in step both ways, with one sign-in on Google's own page. Google Meet meetings show in Calendar with where to join.",
+            "capabilities": [
+                { "capability": "CONTACTS", "direction": "two-way" },
+                { "capability": "CALENDAR", "direction": "two-way" },
+                { "capability": "TASKS", "direction": "two-way" }
+            ],
+            "protocols": ["google-calendar-api-v3", "google-people-api-v1", "google-tasks-api-v1"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Google", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental"
+        }
+    ]
+}
