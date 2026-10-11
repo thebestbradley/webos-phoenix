@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Calendar: week</title>
+<link rel="stylesheet" href="../css/aurora.css">
+<script src="../js/icons.js"></script>
+<script src="../js/data.js"></script>
+<script src="../js/frame.js"></script>
+<style>
+  .panes { position: absolute; inset: 0; display: grid; grid-template-columns: 250px 1fr; gap: 10px; padding: 10px; }
+  .side { padding: 8px 6px 0 8px; display: flex; flex-direction: column; gap: 4px; }
+  .side .top { display: flex; align-items: center; justify-content: space-between; padding: 2px 2px 8px 6px; }
+  .mm { padding: 12px 10px 10px; }
+  .mm .mh { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 8px; font-size: 14px; font-weight: 800; }
+  .mm .mh .ic { width: 16px; height: 16px; color: var(--text-3); stroke-width: 2.4; }
+  .mm .g { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px; text-align: center; font-size: 12px; font-weight: 600; }
+  .mm .g .dn { font-size: 10.5px; font-weight: 800; color: var(--text-3); padding-bottom: 4px; }
+  .mm .g span { height: 26px; line-height: 26px; }
+  .mm .g .o { color: var(--text-3); opacity: .55; }
+  .mm .g .wk { background: var(--accent-soft); }
+  .mm .g .wk.first { border-radius: 13px 0 0 13px; } .mm .g .wk.last { border-radius: 0 13px 13px 0; }
+  .mm .g .td { color: var(--on-accent); font-weight: 800; position: relative; z-index: 0; }
+  .mm .g .td::before { content: ""; position: absolute; left: 50%; top: 0; width: 26px; height: 26px; margin-left: -13px; border-radius: 50%; background: var(--accent); z-index: -1; }
+  .over { padding: 14px 8px 6px; }
+  .cal { height: 38px; display: flex; align-items: center; gap: 11px; padding: 0 8px; font-size: 14.5px; font-weight: 600; }
+  .cal .n { margin-left: auto; font-size: 12px; color: var(--text-3); font-weight: 700; }
+  .upnext { margin-top: auto; margin-bottom: 10px; padding: 12px 14px; border-left: 0; }
+  .upnext .t { font-size: 14.5px; font-weight: 800; margin-top: 4px; }
+  .upnext .s { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin-top: 2px; display: flex; align-items: center; gap: 6px; }
+  .upnext .s .ic { width: 14px; height: 14px; }
+  .main { display: flex; flex-direction: column; overflow: hidden; }
+  .bar { display: flex; align-items: center; gap: 10px; padding: 14px 16px 12px 20px; }
+  .bar .ttl { flex: 1; display: flex; align-items: baseline; gap: 12px; }
+  .bar .iconbtn { width: 36px; height: 36px; }
+  .bar .iconbtn .ic { width: 19px; height: 19px; }
+  .grid { position: relative; flex: 1; --gut: 58px; --hh: 49px; --start: 8; }
+  .days { display: grid; grid-template-columns: var(--gut) repeat(7, 1fr); border-bottom: 1px solid var(--hair); }
+  .days .d { padding: 6px 0 8px 10px; display: flex; align-items: baseline; gap: 7px; }
+  .days .d .w { font-size: 11.5px; font-weight: 800; letter-spacing: .08em; color: var(--text-3); text-transform: uppercase; }
+  .days .d .n { font-size: 20px; font-weight: 800; }
+  .days .d.today .n { width: 34px; height: 34px; margin: -5px 0 -5px -3px; border-radius: 17px; display: inline-grid; place-items: center; background: var(--accent); color: var(--on-accent); font-size: 18px; box-shadow: 0 6px 14px -6px var(--accent-glow); }
+  .days .d.today .w { color: var(--accent-ink); }
+  .allday { display: grid; grid-template-columns: var(--gut) repeat(7, 1fr); border-bottom: 1px solid var(--hair); min-height: 34px; align-items: center; }
+  .allday .lab { font-size: 10.5px; font-weight: 800; color: var(--text-3); text-align: right; padding-right: 10px; letter-spacing: .04em; }
+  .ad { margin: 4px 3px; height: 24px; border-radius: 8px; padding: 0 9px; display: flex; align-items: center; font-size: 12.5px; font-weight: 800; white-space: nowrap; overflow: hidden; }
+  .body { position: relative; height: calc(var(--hh) * 11.5); }
+  .hline { position: absolute; left: var(--gut); right: 0; height: 1px; background: var(--hair); }
+  .hlab { position: absolute; left: 0; width: calc(var(--gut) - 10px); text-align: right; font-size: 11px; font-weight: 700; color: var(--text-3); transform: translateY(-7px); }
+  .col { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--hair); }
+  .col.wkend { background: rgba(127,127,127,.05); }
+  .col.today { background: linear-gradient(180deg, var(--accent-soft), transparent 70%); }
+  .ev { position: absolute; border-radius: 9px; padding: 4px 8px 4px 10px; overflow: hidden; font-size: 12.5px; line-height: 16px; font-weight: 800; }
+  .ev::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3.5px; background: var(--c); }
+  .ev .tt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ev .tt.two { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .ev .w { font-weight: 600; font-size: 11.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ev.short { display: flex; align-items: center; padding-top: 0; padding-bottom: 0; white-space: nowrap; }
+  .ev.short .w { margin-left: 6px; }
+  .now { position: absolute; height: 2px; background: var(--aurora-rose); box-shadow: 0 0 8px rgba(255,112,150,.8); z-index: 3; }
+  .now::before { content: ""; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--aurora-rose); }
+  .nowlab { position: absolute; left: 4px; width: 50px; text-align: center; font-size: 10.5px; font-weight: 800; color: #fff; background: #E8466F; border-radius: 8px; padding: 2px 0; transform: translateY(-50%); z-index: 3; }
+  html[data-theme="light"] .now { background: #E0366A; } html[data-theme="light"] .now::before { background: #E0366A; }
+</style>
+</head>
+<body class="tablet">
+  <div class="wallpaper"></div>
+  <header class="statusbar" data-app="Calendar"></header>
+  <main class="sheet">
+    <div class="panes">
+      <aside class="side">
+        <div class="top"><span class="t-title">Calendar</span><button class="iconbtn"><i data-i="gear"></i></button></div>
+        <div class="mm panel" id="mm"></div>
+        <div class="over t-over">Calendars</div>
+        <div class="cal"><span class="check on" style="--c:var(--cal-work);--on-c:#fff"><i data-i="check"></i></span>Work<span class="n">Exchange</span></div>
+        <div class="cal"><span class="check on" style="--c:var(--cal-home);--on-c:#fff"><i data-i="check"></i></span>Personal<span class="n">CalDAV</span></div>
+        <div class="cal"><span class="check"><i data-i="check"></i></span><span class="dim">Holidays</span></div>
+        <div class="upnext panel">
+          <div class="t-over" style="font-size:10.5px">Up next · in 1 h 19 min</div>
+          <div class="t">1:1 Priya</div>
+          <div class="s"><span class="dot" style="--c:var(--cal-work)"></span>11:00 – 11:45 AM · Work</div>
+        </div>
+      </aside>
+      <section class="main panel">
+        <div class="bar">
+          <div class="ttl"><span class="t-title">October 2026</span><span class="t-cap">Week 42 · 12 – 18 Oct</span></div>
+          <button class="btn sm glass">Today</button>
+          <button class="iconbtn"><i data-i="chevL"></i></button>
+          <button class="iconbtn"><i data-i="chevR"></i></button>
+          <div class="segmented sm" style="width:228px"><button>Day</button><button class="on">Week</button><button>Month</button></div>
+          <button class="btn sm primary"><i data-i="plus"></i>Event</button>
+        </div>
+        <div class="grid" id="grid"></div>
+      </section>
+    </div>
+  </main>
+  <footer class="gesture"></footer>
+<script>
+  const D = PHX_DATA;
+  // mini month: October 2026 starts on a Thursday (Monday-first grid)
+  let mm = `<div class="mh"><span>October 2026</span><span style="display:flex;gap:6px"><i data-i="chevL"></i><i data-i="chevR"></i></span></div><div class="g">`;
+  "MTWTFSS".split("").forEach((d) => mm += `<span class="dn">${d}</span>`);
+  const cells = [28, 29, 30].map((d) => [d, "o"]);
+  for (let d = 1; d <= 31; d++) cells.push([d, ""]);
+  cells.push([1, "o"]);
+  cells.forEach(([d, c], i) => {
+    const inWeek = !c && d >= 12 && d <= 18;
+    const cls = [c, inWeek ? "wk" : "", d === 12 && inWeek ? "first" : "", d === 18 && inWeek ? "last" : "", d === 14 && !c ? "td" : ""].join(" ");
+    mm += `<span class="${cls}">${d}</span>`;
+  });
+  document.getElementById("mm").innerHTML = mm + "</div>";
+
+  const g = document.getElementById("grid");
+  let h = `<div class="days"><span></span>` + D.week.days.map((d, i) => {
+    const [w, n] = d.split(" ");
+    return `<div class="d ${i === D.week.today ? "today" : ""}"><span class="w">${w}</span><span class="n">${n}</span></div>`;
+  }).join("") + `</div>`;
+  h += `<div class="allday"><span class="lab">ALL DAY</span>`;
+  const ad = Array(7).fill("");
+  D.allDay.forEach((e) => { ad[e.day] = `<div class="ad" style="grid-column:${e.day + 2} / span ${e.span};background:var(--cal-${e.cal}-fill);box-shadow:inset 3px 0 0 var(--cal-${e.cal})">${e.title}</div>`; });
+  h += D.allDay.map((e) => `<div class="ad" style="grid-row:1;grid-column:${e.day + 2} / span ${e.span};background:var(--cal-${e.cal}-fill);box-shadow:inset 3.5px 0 0 var(--cal-${e.cal})">${e.title}</div>`).join("") + `</div>`;
+  h += `<div class="body" id="body">`;
+  const fmt = (t) => { const hh = Math.floor(t), m = Math.round((t - hh) * 60); const ap = hh >= 12 ? "PM" : "AM"; const h12 = ((hh + 11) % 12) + 1; return h12 + (m ? ":" + String(m).padStart(2, "0") : "") + " " + ap; };
+  for (let i = 0; i < 7; i++) {
+    h += `<div class="col ${i >= 5 ? "wkend" : ""} ${i === D.week.today ? "today" : ""}" style="left:calc(var(--gut) + (100% - var(--gut)) * ${i} / 7);width:calc((100% - var(--gut)) / 7)"></div>`;
+  }
+  h += `<div class="hlab" style="top:2px;transform:none">8 AM</div>`;
+  for (let t = 9; t <= 19; t++) {
+    h += `<div class="hline" style="top:calc(var(--hh) * ${t - 8})"></div><div class="hlab" style="top:calc(var(--hh) * ${t - 8})">${((t + 11) % 12) + 1} ${t >= 12 ? "PM" : "AM"}</div>`;
+  }
+  D.events.forEach((e) => {
+    const short = e.end - e.start <= 0.5;
+    h += `<div class="ev ${short ? "short" : ""}" style="--c:var(--cal-${e.cal});background:var(--cal-${e.cal}-fill);top:calc(var(--hh) * ${e.start - 8} + 1px);height:calc(var(--hh) * ${e.end - e.start} - 3px);left:calc(var(--gut) + (100% - var(--gut)) * ${e.day} / 7 + 3px);width:calc((100% - var(--gut)) / 7 - 6px)">
+      <div class="tt ${e.end - e.start >= 1.5 ? "two" : ""}">${e.title}</div>${short ? "" : `<div class="w">${fmt(e.start)}${e.where ? " · " + e.where : ""}</div>`}</div>`;
+  });
+  const now = 9 + 41 / 60;
+  h += `<div class="now" style="top:calc(var(--hh) * ${now - 8});left:calc(var(--gut) + (100% - var(--gut)) * 2 / 7);width:calc((100% - var(--gut)) / 7)"></div><div class="nowlab" style="top:calc(var(--hh) * ${now - 8})">9:41</div>`;
+  g.innerHTML = h + `</div>`;
+  phxReady();
+</script>
+</body>
+</html>

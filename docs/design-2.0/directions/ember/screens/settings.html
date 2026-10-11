@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings</title>
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/icons.js"></script>
+<script src="../assets/app.js"></script>
+<style>
+  .scroll { position: absolute; inset: 0; padding: 30px 18px 0; overflow: hidden; }
+  .top { display: flex; align-items: center; padding: 0 0 0 8px; }
+  .top .display { flex: 1; }
+  .search { margin: 20px 0 0; }
+  .hero { margin-top: 18px; padding: 18px 20px 18px 22px; display: flex; align-items: center; gap: 18px; }
+  .hero .txt { flex: 1; }
+  .hero .big { font-size: 56px; line-height: 58px; font-weight: 200; letter-spacing: -2.5px; margin-top: 6px; }
+  .hero .big span { font-size: 26px; letter-spacing: -.5px; color: var(--ink-2); margin-left: 2px; }
+  .hero .meta { margin-top: 2px; }
+  .gauge { width: 96px; height: 96px; position: relative; }
+  .gauge svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .gauge .ic { position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px; color: var(--ink-2); }
+  .grp { margin-top: 24px; }
+  .grp .plane { padding: 2px 0; }
+  .row .glyph { width: 23px; height: 23px; }
+  .thumb { width: 34px; height: 46px; border-radius: 8px; background: url(../assets/phoenix.jpg) center / cover; box-shadow: inset 0 0 0 var(--hair) var(--line-2); flex: none; }
+  .row .orb { width: 26px; height: 26px; margin: 0 -1px; }
+  .row .val { font-size: 14px; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="device" data-app="Settings">
+  <main class="card">
+    <div class="scroll fade-bottom">
+      <div class="top"><div class="display">Settings</div><div class="ring-btn"><i data-i="dots-three"></i></div></div>
+      <div class="search"><i data-i="magnifying-glass"></i><div class="ph">Search settings</div></div>
+
+      <div class="hero plane">
+        <div class="txt">
+          <div class="micro dimmer">This phone · Fairphone 6</div>
+          <div class="big">82<span>%</span></div>
+          <div class="meta small dim">About 1 day 4 h left · 128 GB free</div>
+        </div>
+        <div class="gauge">
+          <svg viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="44" fill="none" stroke="var(--line-2)" stroke-width="1.2"/>
+            <circle cx="50" cy="50" r="44" fill="none" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round" stroke-dasharray="226.7 276.5"/>
+          </svg>
+          <i data-i="battery-high"></i>
+        </div>
+      </div>
+
+      <div class="grp">
+        <div class="group-h micro">Connections</div>
+        <div class="plane">
+          <div class="row"><i data-i="wifi-high" class="glyph"></i><div class="txt"><div class="t">Wi-Fi</div><div class="s">Phoenix Home · 5 GHz</div></div><div class="toggle on"></div></div>
+          <div class="row"><i data-i="bluetooth" class="glyph"></i><div class="txt"><div class="t">Bluetooth</div><div class="s">Kai’s headphones</div></div><div class="toggle on"></div></div>
+          <div class="row"><i data-i="airplane" class="glyph"></i><div class="txt"><div class="t">Airplane mode</div><div class="s">Off</div></div><div class="toggle"></div></div>
+          <div class="row"><i data-i="shield-check" class="glyph"></i><div class="txt"><div class="t">VPN</div><div class="s">Not connected</div></div><i data-i="caret-right" class="chev"></i></div>
+        </div>
+      </div>
+
+      <div class="grp">
+        <div class="group-h micro">Personal</div>
+        <div class="plane">
+          <div class="row"><div class="thumb"></div><div class="txt"><div class="t">Wallpaper</div><div class="s">Phoenix · dark frame</div></div><i data-i="caret-right" class="chev"></i></div>
+          <div class="row"><div class="orb"></div><div class="txt"><div class="t">Assistant</div><div class="s">On this phone · “Hey Phoenix” on</div></div><i data-i="caret-right" class="chev"></i></div>
+          <div class="row"><i data-i="sun" class="glyph"></i><div class="txt"><div class="t">Screen &amp; lock</div><div class="s">Adaptive · lock after 1 min</div></div><i data-i="caret-right" class="chev"></i></div>
+          <div class="row"><i data-i="speaker-high" class="glyph"></i><div class="txt"><div class="t">Sounds</div><div class="s">Ringer on · vibrate</div></div><i data-i="caret-right" class="chev"></i></div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ember Glass, contact sheet</title>
+<style>
+  @font-face { font-family: Manrope; src: url(assets/Manrope.woff2) format('woff2'); font-weight: 200 800; }
+  body { margin: 0; background: radial-gradient(80% 40% at 50% 100%, #2a1206, transparent), #0b0b0d; font-family: Manrope, sans-serif; color: #f3f2ef; }
+  .wrap { padding: 44px 48px 48px; width: max-content; }
+  h1 { margin: 0; font-size: 56px; font-weight: 250; letter-spacing: -2px; }
+  .lede { font-size: 19px; color: #a9a7ae; margin: 6px 0 26px; max-width: 1500px; line-height: 27px; }
+  h2 { font-size: 13px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: #ff8f4d; margin: 28px 0 12px; }
+  .row { display: flex; gap: 18px; align-items: flex-start; }
+  figure { margin: 0; }
+  figure img { display: block; height: var(--h, 520px); border-radius: 14px; box-shadow: 0 0 0 1px rgb(255 255 255 / .1), 0 10px 30px rgb(0 0 0 / .5); }
+  figcaption { font-size: 14px; font-weight: 600; color: #8f8d94; margin-top: 8px; }
+</style>
+<script>
+const R = (n, c) => `<figure><img src="renders/${n}.png"><figcaption>${c}</figcaption></figure>`;
+const phones = ['messaging-list', 'messaging-thread', 'settings', 'music', 'cards'];
+const names = { 'messaging-list': 'Messaging', 'messaging-thread': 'Conversation', settings: 'Settings', music: 'Music', cards: 'Card view', email: 'Email (tablet)', calendar: 'Calendar (tablet)', components: 'Components' };
+window.addEventListener('DOMContentLoaded', () => {
+  const m = document.getElementById('m');
+  m.innerHTML =
+    `<h2>Phone · light and dark</h2><div class="row">${phones.map(p => R(p + '-light', names[p] + ' · light')).join('')}${phones.map(p => R(p + '-dark', names[p] + ' · dark')).join('')}</div>` +
+    `<h2>Tablet and components · light</h2><div class="row">${['email', 'calendar', 'components'].map(p => R(p + '-light', names[p])).join('')}</div>` +
+    `<h2>Tablet and components · dark</h2><div class="row">${['email', 'calendar', 'components'].map(p => R(p + '-dark', names[p])).join('')}</div>`;
+  Promise.all([...document.images].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; }))).then(() => { window.__ready = true; });
+});
+</script>
+</head>
+<body>
+<div class="wrap">
+  <h1>Ember Glass</h1>
+  <div class="lede">Ember's layout, type and ember accent, made of glass: every card, pane, bar and sheet is frosted glass over the phoenix wallpaper, as in Aurora Glass. Each column of a tablet screen ends in a toolbar with Enyo 2's slider at its left, and the gesture light is Onyx Reborn's longer bar with fading ends, lit gold to ember.</div>
+  <div id="m"></div>
+</div>
+</body>
+</html>

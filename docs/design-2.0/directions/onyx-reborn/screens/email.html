@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Email: panels</title>
+<link rel="stylesheet" href="../css/onyx.css">
+<script src="../js/icons.js"></script>
+<script src="../js/data.js"></script>
+<script src="../js/frame.js"></script>
+<style>
+  /* Enyo 2 Panels (CollapsingArranger): each panel has its own toolbars; the
+     message panel slides over the list and casts a soft shadow on it. */
+  .panels { flex: 1; display: flex; min-height: 0; }
+  .panel { display: flex; flex-direction: column; min-height: 0; position: relative; }
+  .nav { width: 250px; flex: none; }
+  html[data-theme="light"] .nav { background: #E3E6EA; }
+  html[data-theme="dark"] .nav { background: #0E1012; }
+  .lst { width: 396px; flex: none; background: var(--surface); box-shadow: 1px 0 0 var(--line); }
+  .msg { flex: 1; background: var(--surface); margin-left: -6px; box-shadow: var(--shadow-panel), -1px 0 0 var(--line-2); z-index: 2; border-radius: 10px 0 0 0; }
+  .msg > .toolbar { border-radius: 10px 0 0 0; }
+  .lst > .toolbar, .msg > .toolbar { box-shadow: inset 0 1px 0 var(--bar-edge), inset 1px 0 0 rgba(255,255,255,.06), -1px 0 0 rgba(0,0,0,.55), 0 1px 0 var(--bar-line), 0 4px 10px -4px rgba(0,0,0,.35); }
+  .toolbar { height: 56px; }
+  .toolbar .title { font-size: 17px; }
+  .navbody { flex: 1; padding: 12px 10px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .navbody .groupbox > .cap { height: 28px; font-size: 11px; }
+  .navbody .item { min-height: 40px; font-size: 14.5px; gap: 10px; padding: 0 12px; }
+  .navbody .item .ic { width: 18px; height: 18px; color: var(--text-2); }
+  .navbody .item .n { margin-left: auto; font-size: 12.5px; font-weight: 650; color: var(--text-3); }
+  .navbody .item.sel { background: var(--sel); color: var(--blue-ink); font-weight: 600; box-shadow: inset 3px 0 0 var(--blue); }
+  .navbody .item.sel .ic, .navbody .item.sel .n { color: var(--blue-ink); }
+  .filters { padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--surface-2); display: flex; gap: 10px; align-items: center; }
+  .mails { flex: 1; overflow: hidden; }
+  .mail { padding: 11px 14px 12px 16px; border-bottom: 1px solid var(--line); position: relative; }
+  .mail .l1 { display: flex; align-items: center; gap: 8px; }
+  .mail .from { font-size: 15px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mail .time { font-size: 12.5px; color: var(--text-3); }
+  .mail .subj { font-size: 14px; font-weight: 600; margin-top: 2px; display: flex; gap: 6px; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mail .subj .ic { width: 15px; height: 15px; color: var(--text-3); flex: none; }
+  .mail .subj .flag { color: #D9641A; }
+  .mail .pre { font-size: 13px; line-height: 18px; color: var(--text-2); margin-top: 3px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .mail.unread .from { font-weight: 750; }
+  .mail.unread .time { color: var(--blue-ink); font-weight: 650; }
+  .mail .ud { width: 8px; height: 8px; border-radius: 50%; background: var(--blue); }
+  .mail.sel { background: var(--sel); box-shadow: inset 4px 0 0 var(--blue); }
+  .acct { width: 4px; align-self: stretch; border-radius: 2px; }
+  .mhead { padding: 18px 26px 16px; border-bottom: 1px solid var(--line); }
+  .mhead h1 { margin: 0; font-size: 22px; line-height: 28px; font-weight: 700; letter-spacing: -.018em; }
+  .mhead .row { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+  .mhead .avatar { width: 42px; height: 42px; border-radius: 11px; font-size: 14px; }
+  .mhead .nm { font-size: 15px; font-weight: 650; }
+  .mhead .to { font-size: 13px; color: var(--text-3); margin-top: 1px; }
+  .mhead .when { margin-left: auto; text-align: right; font-size: 13px; color: var(--text-3); }
+  .mhead .chips { display: flex; gap: 8px; margin-top: 10px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 12px; font-size: 12px; font-weight: 600; color: var(--text-2); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
+  .chip .ic { width: 13px; height: 13px; }
+  .mtext { flex: 1; padding: 16px 26px 0; font-size: 15px; line-height: 23px; overflow: hidden; }
+  .mtext p { margin: 0 0 11px; max-width: 580px; }
+  .mtext ul { margin: 0 0 11px; padding-left: 20px; max-width: 580px; }
+  .mtext li { margin-bottom: 3px; }
+  .mtext li::marker { color: var(--blue); }
+  .atts { display: flex; gap: 10px; margin-top: 4px; }
+  .file { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; border-radius: 12px; background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
+  .file .glyph { width: 34px; height: 34px; }
+  .file b { display: block; font-size: 13.5px; font-weight: 650; }
+  .file div span { font-size: 12px; color: var(--text-3); }
+  .bottom .field { flex: 1; height: 38px; border-radius: 19px; }
+  .bottom .status { font-size: 12.5px; color: var(--bar-text-2); }
+  .tbgroup { display: inline-flex; border-radius: 20px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,.45); }
+  .tbgroup button { width: 46px; height: 38px; display: grid; place-items: center; color: var(--bar-text); background: linear-gradient(180deg, var(--bar-btn-1), var(--bar-btn-2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
+  .tbgroup button + button { border-left: 1px solid rgba(0,0,0,.4); }
+  .tbgroup .ic { width: 19px; height: 19px; }
+</style>
+</head>
+<body class="tablet">
+  <header class="statusbar" data-app="Email"></header>
+  <main class="app">
+    <div class="panels">
+      <section class="panel nav">
+        <div class="toolbar"><span class="title">Email</span><span class="sp"></span><button class="ibtn"><i data-i="compose"></i></button></div>
+        <div class="navbody" id="nav"></div>
+        <div class="toolbar bottom"><button class="ibtn"><i data-i="gear"></i></button><span class="status">3 accounts</span></div>
+      </section>
+      <section class="panel lst">
+        <div class="toolbar"><div class="field" style="flex:1;height:38px;border-radius:19px"><i data-i="search"></i>Search All Inboxes</div></div>
+        <div class="filters"><div class="radios light"><button class="on">All</button><button>Unread</button><button>Flagged</button></div><span class="sp" style="flex:1"></span><span class="tag">12 unread</span></div>
+        <div class="mails" id="mails"></div>
+        <div class="toolbar bottom"><span class="grabber"><i></i><i></i><i></i></span><button class="ibtn"><i data-i="refresh"></i></button><span class="status">Updated 9:41 AM</span></div>
+      </section>
+      <section class="panel msg">
+        <div class="toolbar">
+          <div class="tbgroup"><button><i data-i="reply"></i></button><button><i data-i="replyAll"></i></button><button><i data-i="forward"></i></button></div>
+          <span class="sp"></span>
+          <div class="tbgroup"><button><i data-i="flag"></i></button><button><i data-i="folder"></i></button><button><i data-i="archive"></i></button></div>
+          <button class="btn sm red"><i data-i="trash"></i>Delete</button>
+        </div>
+        <div class="mhead">
+          <h1>Card view: stacking and throw-to-close notes</h1>
+          <div class="chips"><span class="chip"><span class="dot" style="--c:var(--acct-work);width:7px;height:7px"></span>Work · Inbox</span><span class="chip"><i data-i="clip"></i>2 attachments</span></div>
+          <div class="row">
+            <div class="avatar" style="--h:162">LO</div>
+            <div><div class="nm">Lena Okafor</div><div class="to">to Jordan Lee, cc Marcus Reyes</div></div>
+            <div class="when">Today, 9:41 AM</div>
+          </div>
+        </div>
+        <div class="mtext">
+          <p>Hi Jordan,</p>
+          <p>Attached are the timing curves I pulled from luna-sysmgr's card view. Throw-to-close feels right at 280 ms with the original ease-out, but a card landing in a stack wants a little more overshoot.</p>
+          <p>Three things I'd like to keep from the original:</p>
+          <ul>
+            <li>Cards keep their rounded corners while they scale, even mid-gesture.</li>
+            <li>A flick past half the screen height always closes, whatever the speed.</li>
+            <li>Stacks fan out by 24 px, not a percentage, so phones and tablets match.</li>
+          </ul>
+          <p>I'll bring the TouchPad to Thursday's meetup if you want to compare side by side.</p>
+          <p>Lena</p>
+          <div class="atts">
+            <div class="file"><span class="glyph" style="--g1:#D6493F;--g2:#B32F27"><i data-i="doc"></i></span><div><b>card-timings.pdf</b><span>214 KB</span></div></div>
+            <div class="file"><span class="glyph" style="--g1:#2F8BD6;--g2:#1A6DB3"><i data-i="image"></i></span><div><b>stack-fan.png</b><span>1.2 MB</span></div></div>
+          </div>
+        </div>
+        <div class="toolbar bottom"><span class="grabber"><i></i><i></i><i></i></span><div class="field">Quick reply to Lena…</div><button class="btn sm blue"><i data-i="plane"></i>Send</button></div>
+      </section>
+    </div>
+  </main>
+  <footer class="gesture"></footer>
+<script>
+  const D = PHX_DATA;
+  document.getElementById("nav").innerHTML = D.mailFolders.map((g) => `
+    <div class="groupbox"><div class="cap">${g.account ? `<span class="dot" style="--c:var(--acct-${g.account});width:7px;height:7px;margin-right:8px"></span>` : ""}${g.group}</div>
+      ${g.items.map((f) => `<div class="item ${f.sel ? "sel" : ""}"><i data-i="${f.icon}"></i>${f.name}${f.count ? `<span class="n">${f.count}</span>` : ""}</div>`).join("")}
+    </div>`).join("");
+  document.getElementById("mails").innerHTML = D.mails.map((m) => `
+    <div class="mail ${m.unread ? "unread" : ""} ${m.sel ? "sel" : ""}">
+      <div class="l1"><span class="dot" style="--c:var(--acct-${m.acct});width:7px;height:7px"></span><span class="from">${m.from}</span>${m.unread ? '<span class="ud"></span>' : ""}<span class="time">${m.time}</span></div>
+      <div class="subj">${m.subject}${m.clip ? '<i data-i="clip"></i>' : ""}${m.flag ? '<i data-i="flagF" class="flag"></i>' : ""}</div>
+      <div class="pre">${m.preview}</div>
+    </div>`).join("");
+  phxReady();
+</script>
+</body>
+</html>

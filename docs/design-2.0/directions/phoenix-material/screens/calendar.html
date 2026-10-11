@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calendar, week</title>
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/icons.js"></script>
+<script src="../assets/app.js"></script>
+<style>
+  .card { background: var(--md-surface-container); display: flex; padding: 12px 12px 12px 0; }
+  html[data-theme="dark"] .card { background: var(--md-surface-container-lowest); }
+  :root { --cal-work: var(--acc-sms); --cal-work-c: var(--acc-sms-container); --cal-work-on: var(--acc-sms-on-container);
+          --cal-fam: var(--acc-family); --cal-fam-c: var(--acc-family-container); --cal-fam-on: var(--acc-family-on-container);
+          --cal-hol: var(--md-tertiary); --cal-hol-c: var(--md-tertiary-container); --cal-hol-on: var(--md-on-tertiary-container); }
+  .side { width: 268px; flex: none; padding: 6px 14px 0 16px; display: flex; flex-direction: column; }
+  .side .fab { align-self: flex-start; margin: 4px 0 20px; box-shadow: var(--e1); }
+  .mm-h { display: flex; align-items: center; padding: 0 0 6px 8px; }
+  .mm-h .title-m { flex: 1; }
+  .mm-h .icon-btn { width: 34px; height: 34px; }
+  .mm-h .icon-btn .ic { width: 20px; height: 20px; }
+  .mm { display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 2px; text-align: center; font-size: 13px; font-weight: 600; }
+  .mm .dh { font-size: 11.5px; font-weight: 700; color: var(--md-on-surface-variant); height: 26px; line-height: 26px; }
+  .mm .d { height: 32px; line-height: 32px; position: relative; z-index: 1; }
+  .mm .d.o { color: var(--md-on-surface-variant); opacity: .55; }
+  .mm .wk { grid-column: 1 / -1; height: 32px; margin-bottom: -34px; border-radius: 16px; background: var(--md-secondary-container); z-index: 0; }
+  .mm .d.today { color: var(--md-on-primary); }
+  .mm .d.today::before { content: ""; position: absolute; z-index: -1; left: 50%; top: 0; width: 32px; height: 32px; margin-left: -16px; border-radius: 50%; background: var(--md-primary); }
+  .mm .d.dot::after { content: ""; position: absolute; left: 50%; bottom: 2px; width: 4px; height: 4px; margin-left: -2px; border-radius: 2px; background: var(--md-primary); }
+  .cals { margin-top: 18px; }
+  .cals .k { padding: 0 8px 6px; }
+  .cal { display: flex; align-items: center; gap: 14px; height: 46px; padding: 0 8px; font-size: 14.5px; font-weight: 600; }
+  .cal .sub { font-size: 12.5px; font-weight: 500; color: var(--md-on-surface-variant); }
+  .cal .txt { flex: 1; line-height: 18px; }
+  .checkbox.w { background: var(--cal-work); } .checkbox.f { background: var(--cal-fam); } .checkbox.h { background: var(--cal-hol); }
+  .checkbox.w, .checkbox.f, .checkbox.h { color: #fff; box-shadow: none; border-radius: 4px; }
+  html[data-theme="dark"] .checkbox.w, html[data-theme="dark"] .checkbox.f, html[data-theme="dark"] .checkbox.h { color: #000; }
+  .main { flex: 1; border-radius: var(--r-xl); background: var(--md-surface); display: flex; flex-direction: column; overflow: hidden; }
+  html[data-theme="dark"] .main { background: var(--md-surface-container-low); }
+  .mh { display: flex; align-items: center; gap: 10px; padding: 16px 16px 10px 24px; }
+  .mh .ttl { flex: 1; }
+  .mh .ttl .headline-m { font-weight: 750; }
+  .mh .seg { width: 270px; }
+  .grid { --gut: 58px; --hr: 44px; position: relative; flex: 1; }
+  .days { display: grid; grid-template-columns: var(--gut) repeat(7, 1fr); }
+  .days .dd { padding: 4px 0 8px 10px; display: flex; align-items: baseline; gap: 8px; }
+  .days .dd .w { font-size: 12px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--md-on-surface-variant); }
+  .days .dd .n { font-size: 22px; font-weight: 650; width: 38px; height: 38px; line-height: 38px; text-align: center; border-radius: 50%; margin-left: -6px; }
+  .days .dd.today .n { background: var(--md-primary); color: var(--md-on-primary); }
+  .days .dd.today .w { color: var(--md-primary); }
+  .allday { display: grid; grid-template-columns: var(--gut) repeat(7, 1fr); padding-bottom: 6px; box-shadow: inset 0 -1px 0 var(--md-outline-variant); }
+  .allday .lab { font-size: 11px; font-weight: 600; color: var(--md-on-surface-variant); text-align: right; padding: 6px 8px 0 0; }
+  .chipev.h { background: var(--cal-hol-c); color: var(--cal-hol-on); } .chipev.f { background: var(--cal-fam-c); color: var(--cal-fam-on); }
+  .chipev { height: 26px; margin: 0 3px; border-radius: 8px; padding: 0 10px; font-size: 12.5px; line-height: 26px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hours { position: relative; height: calc(12 * var(--hr)); }
+  .hrow { position: absolute; left: 0; right: 0; height: 1px; background: var(--md-outline-variant); opacity: .7; }
+  .hlab { position: absolute; left: 0; width: calc(var(--gut) - 10px); text-align: right; font-size: 11.5px; font-weight: 600; color: var(--md-on-surface-variant); transform: translateY(-8px); }
+  .vcol { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--md-outline-variant); opacity: .5; }
+  .todaycol { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--md-primary) 6%, transparent); }
+  .ev { position: absolute; border-radius: 10px; padding: 5px 9px; overflow: hidden; font-size: 12.5px; line-height: 16px; box-shadow: 0 0 0 1.5px var(--ring, var(--md-surface)); }
+  html[data-theme="dark"] .ev { --ring: var(--md-surface-container-low); }
+  html[data-theme="dark"] { --cal-work-c: color-mix(in oklab, var(--acc-sms-container) 62%, var(--md-surface-container-high)); --cal-fam-c: color-mix(in oklab, var(--acc-family-container) 62%, var(--md-surface-container-high)); --cal-work-on: var(--acc-sms-on-container); --cal-fam-on: var(--acc-family-on-container); }
+  .ev b { display: block; font-weight: 700; font-size: 13px; line-height: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ev span { opacity: .85; white-space: nowrap; display: block; }
+  .ev span.sub { white-space: normal; }
+  .ev.short span { display: inline; }
+  .ev.short { padding: 1px 8px; display: flex; gap: 6px; align-items: center; }
+  .ev.short b { font-size: 12px; }
+  .ev.w { background: var(--cal-work-c); color: var(--cal-work-on); }
+  .ev.f { background: var(--cal-fam-c); color: var(--cal-fam-on); }
+  .ev.h { background: var(--cal-hol-c); color: var(--cal-hol-on); }
+  .ev.strong.w { background: var(--cal-work); color: var(--acc-sms-on); }
+  .now { position: absolute; height: 2px; background: var(--md-error); }
+  .now::before { content: ""; position: absolute; left: -6px; top: -5px; width: 12px; height: 12px; border-radius: 50%; background: var(--md-error); }
+  .nowlab { position: absolute; left: 4px; transform: translateY(-50%); height: 20px; line-height: 20px; padding: 0 5px; border-radius: 10px; background: var(--md-error); color: var(--md-on-error); font-size: 11px; font-weight: 700; }
+</style>
+<script>
+// day 0 = Mon 12 Oct 2026; hours from 8:00
+const evs = [
+  { d: 0, s: 11, e: 12.5, t: 'Pumpkin patch', sub: 'Hilltop Farm', c: 'f' },
+  { d: 0, s: 15, e: 16, t: 'Call Grandma', sub: '', c: 'f' },
+  { d: 1, s: 10, e: 10.25, t: 'Stand-up', c: 'w', short: 1 },
+  { d: 1, s: 11, e: 12.25, t: 'Design review', sub: 'Phoenix 2.0 UI layer', c: 'w', strong: 1 },
+  { d: 1, s: 12.5, e: 13.5, t: 'Lunch with Ada', sub: 'Marlow’s, 214 Pine St', c: 'f' },
+  { d: 1, s: 17, e: 18, t: 'Mia’s swim class', sub: 'Aquatic centre', c: 'f' },
+  { d: 2, s: 9.5, e: 9.75, t: 'Stand-up', c: 'w', short: 1 },
+  { d: 2, s: 14, e: 14.5, t: '1:1 with Lena', sub: '', c: 'w' },
+  { d: 2, s: 15.5, e: 17, t: 'Card view: motion pass', sub: 'Focus time', c: 'w' },
+  { d: 3, s: 9.5, e: 9.75, t: 'Stand-up', c: 'w', short: 1 },
+  { d: 3, s: 13, e: 14.5, t: 'Sprint planning', sub: 'Room 4B', c: 'w' },
+  { d: 3, s: 15.25, e: 16, t: 'Dr. Okafor', c: 'f' },
+  { d: 3, s: 18.5, e: 21, t: 'Launch party', sub: 'Marlow’s back room', c: 'w', strong: 1 },
+  { d: 4, s: 8.5, e: 9.25, t: 'School drop-off', sub: '', c: 'f' },
+  { d: 4, s: 9.5, e: 9.75, t: 'Stand-up', c: 'w', short: 1 },
+  { d: 4, s: 16, e: 17.5, t: 'Demo dry run', sub: 'Lab', c: 'w' },
+  { d: 5, s: 9, e: 11, t: 'Farmers market', sub: 'Riverside', c: 'f' },
+  { d: 6, s: 10, e: 12, t: 'Brunch at Mom’s', sub: '', c: 'f' },
+];
+function fmt(h, full) { const H = Math.floor(h), m = Math.round((h - H) * 60); const h12 = ((H + 11) % 12) + 1; return `${h12}${m || full ? ':' + String(m).padStart(2, '0') : ''}`; }
+function build() {
+  const hrs = document.getElementById('hours');
+  let h = '';
+  const colW = `((100% - var(--gut)) / 7)`;
+  h += `<div class="todaycol" style="left:calc(var(--gut) + ${colW} * 1);width:calc(${colW})"></div>`;
+  for (let i = 0; i < 12; i++) {
+    h += `<div class="hrow" style="top:calc(var(--hr) * ${i}); left: var(--gut)"></div>`;
+    if (i) h += `<div class="hlab" style="top:calc(var(--hr) * ${i})">${fmt(8 + i)} ${8 + i < 12 ? 'AM' : 'PM'}</div>`;
+  }
+  for (let d = 0; d < 7; d++) h += `<div class="vcol" style="left:calc(var(--gut) + ${colW} * ${d})"></div>`;
+  for (const e of evs) {
+    const top = (e.s - 8), hgt = Math.max(Math.min(e.e, 20) - e.s, 0.4); if (e.e - e.s <= 0.75) e.short = 1;
+    h += `<div class="ev ${e.c} ${e.short ? 'short' : ''} ${e.strong ? 'strong' : ''}" style="left:calc(var(--gut) + ${colW} * ${e.d} + 3px);width:calc(${colW} - 7px);top:calc(var(--hr) * ${top} + 1px);height:calc(var(--hr) * ${hgt} - 2px)">` +
+      (e.short ? `<b>${e.t}</b><span>${fmt(e.s, 1)}</span>` : `<b>${e.t}</b><span>${fmt(e.s)} – ${fmt(e.e)}</span>${e.sub && e.e - e.s >= 1.5 ? `<span class="sub">${e.sub}</span>` : ''}`) + `</div>`;
+  }
+  const now = 9 + 41 / 60 - 8;
+  h += `<div class="now" style="left:calc(var(--gut) + ${colW} * 1);width:calc(${colW});top:calc(var(--hr) * ${now})"></div>`;
+  hrs.innerHTML = h;
+}
+</script>
+</head>
+<body>
+<div class="device tablet" data-app="Calendar">
+  <main class="card">
+    <aside class="side">
+      <div class="fab"><i data-i="add"></i>New event</div>
+      <div class="mm-h"><div class="title-m">October 2026</div><div class="icon-btn"><i data-i="chevron_left"></i></div><div class="icon-btn"><i data-i="chevron_right"></i></div></div>
+      <div class="mm">
+        <div class="dh">M</div><div class="dh">T</div><div class="dh">W</div><div class="dh">T</div><div class="dh">F</div><div class="dh">S</div><div class="dh">S</div>
+        <div class="d o">28</div><div class="d o">29</div><div class="d o">30</div><div class="d">1</div><div class="d">2</div><div class="d">3</div><div class="d">4</div>
+        <div class="d">5</div><div class="d">6</div><div class="d">7</div><div class="d dot">8</div><div class="d">9</div><div class="d">10</div><div class="d">11</div>
+        <div class="wk"></div>
+        <div class="d">12</div><div class="d today">13</div><div class="d">14</div><div class="d dot">15</div><div class="d">16</div><div class="d">17</div><div class="d">18</div>
+        <div class="d">19</div><div class="d dot">20</div><div class="d">21</div><div class="d">22</div><div class="d">23</div><div class="d">24</div><div class="d">25</div>
+        <div class="d">26</div><div class="d">27</div><div class="d">28</div><div class="d">29</div><div class="d dot">30</div><div class="d">31</div><div class="d o">1</div>
+      </div>
+      <div class="cals">
+        <div class="k label-l dim">Calendars</div>
+        <div class="cal"><div class="checkbox on w"><i data-i="check"></i></div><div class="txt">Work<div class="sub">Exchange · jordan@northwind</div></div></div>
+        <div class="cal"><div class="checkbox on f"><i data-i="check"></i></div><div class="txt">Family<div class="sub">CalDAV · shared with 3</div></div></div>
+        <div class="cal"><div class="checkbox on h"><i data-i="check"></i></div><div class="txt">Holidays<div class="sub">Canada</div></div></div>
+      </div>
+    </aside>
+    <section class="main">
+      <div class="mh">
+        <div class="ttl"><div class="headline-m">October 12 – 18</div><div class="body-m dim">Week 42 · 2026</div></div>
+        <div class="btn outlined">Today</div>
+        <div class="icon-btn"><i data-i="chevron_left"></i></div>
+        <div class="icon-btn"><i data-i="chevron_right"></i></div>
+        <div class="seg"><div>Day</div><div class="sel"><i data-i="check"></i>Week</div><div>Month</div></div>
+      </div>
+      <div class="grid">
+        <div class="days">
+          <div></div>
+          <div class="dd"><span class="w">Mon</span><span class="n">12</span></div>
+          <div class="dd today"><span class="w">Tue</span><span class="n">13</span></div>
+          <div class="dd"><span class="w">Wed</span><span class="n">14</span></div>
+          <div class="dd"><span class="w">Thu</span><span class="n">15</span></div>
+          <div class="dd"><span class="w">Fri</span><span class="n">16</span></div>
+          <div class="dd"><span class="w">Sat</span><span class="n">17</span></div>
+          <div class="dd"><span class="w">Sun</span><span class="n">18</span></div>
+        </div>
+        <div class="allday">
+          <div class="lab">All day</div>
+          <div class="chipev h" style="grid-column: 2">Thanksgiving</div>
+          <div class="chipev f" style="grid-column: 8">Mom’s birthday</div>
+        </div>
+        <div class="hours" id="hours"></div>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

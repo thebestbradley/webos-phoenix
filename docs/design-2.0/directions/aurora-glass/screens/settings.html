@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Settings</title>
+<link rel="stylesheet" href="../css/aurora.css">
+<script src="../js/icons.js"></script>
+<script src="../js/frame.js"></script>
+<style>
+  .head { padding: 18px 16px 4px; display: flex; flex-direction: column; gap: 12px; }
+  .head .top { display: flex; align-items: center; justify-content: space-between; padding: 0 2px; }
+  .me { display: flex; align-items: center; gap: 10px; }
+  .me .avatar { width: 36px; height: 36px; font-size: 13px; }
+  .group { margin: 0 12px; }
+  .over { padding: 16px 16px 8px 18px; }
+  .rows .row { min-height: 54px; }
+  .rows { --inset: 60px; }
+  .wpthumb { width: 30px; height: 44px; border-radius: 8px; background: url("../assets/northern-lights.jpg") center / cover; box-shadow: inset 0 0 0 1px rgba(255,255,255,.25), 0 2px 6px rgba(0,0,0,.25); }
+  .sub { display: block; font-size: 12.5px; font-weight: 600; color: var(--text-3); margin-top: 1px; }
+  .note { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 10; }
+  .note .appicon { width: 42px; height: 42px; border-radius: 13px; }
+  .note .appicon .ic { width: 23px; height: 23px; }
+  .note .btn { margin-left: auto; }
+  .note .btn.primary { color: #032419; background: linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,0) 55%), #46E8B2; }
+</style>
+</head>
+<body class="phone">
+  <div class="wallpaper"></div>
+  <header class="statusbar" data-app="Settings"></header>
+  <main class="sheet">
+    <div class="head">
+      <div class="top">
+        <div class="t-large">Settings</div>
+        <div class="me"><div class="avatar" style="--h:215">JL</div></div>
+      </div>
+      <div class="field"><i data-i="search"></i>Search settings</div>
+    </div>
+
+    <div class="over t-over">Connections</div>
+    <div class="group panel rows">
+      <div class="row"><span class="tile" style="--c1:#4AA3FF;--c2:#2463E0"><i data-i="wifi"></i></span><span class="label">Wi-Fi<span class="sub">Phoenix 5G</span></span><span class="toggle on"></span></div>
+      <div class="row"><span class="tile" style="--c1:#7C8CFF;--c2:#4B4FD8"><i data-i="bluetooth"></i></span><span class="label">Bluetooth<span class="sub">Pebble Time, Car audio</span></span><span class="toggle on"></span></div>
+      <div class="row"><span class="tile" style="--c1:#FFB547;--c2:#F07A1A"><i data-i="airplane"></i></span><span class="label">Airplane Mode</span><span class="toggle"></span></div>
+      <div class="row"><span class="tile" style="--c1:#7D8BA1;--c2:#4C5870"><i data-i="shield"></i></span><span class="label">VPN</span><span class="value">Not connected</span><i data-i="chevR" class="chev"></i></div>
+    </div>
+
+    <div class="over t-over">Personalize</div>
+    <div class="group panel rows">
+      <div class="row"><span class="tile" style="--c1:#FF7AA8;--c2:#D9407A"><i data-i="image"></i></span><span class="label">Wallpaper<span class="sub">Northern Lights · accent follows it</span></span><span class="wpthumb"></span><i data-i="chevR" class="chev"></i></div>
+      <div class="row"><span class="tile" style="--c1:#A88BFF;--c2:#6C4FE0"><i data-i="moon"></i></span><span class="label">Appearance</span><span class="value" id="appearance">Dark</span><i data-i="chevR" class="chev"></i></div>
+      <div class="row"><span class="tile" style="--c1:#FF6F6F;--c2:#D9364A"><i data-i="speaker"></i></span><span class="label">Sounds &amp; Ringtones</span><span class="value">Vibrate</span><i data-i="chevR" class="chev"></i></div>
+      <div class="row"><span class="tile" style="--c1:#FFD25C;--c2:#E59A12"><i data-i="sun"></i></span><span class="label">Screen &amp; Lock</span><span class="value">1 min</span><i data-i="chevR" class="chev"></i></div>
+    </div>
+
+    <div class="over t-over">Device</div>
+    <div class="group panel rows">
+      <div class="row"><span class="tile" style="--c1:#5BE39A;--c2:#1FA463"><i data-i="battery"></i></span><span class="label">Battery</span><span class="value">76% · 11 h left</span><i data-i="chevR" class="chev"></i></div>
+      <div class="row"><span class="tile" style="--c1:#3FD6D0;--c2:#138E9C"><i data-i="search"></i></span><span class="label">Just Type</span><span class="value">Web, Contacts</span><i data-i="chevR" class="chev"></i></div>
+      <div class="row"><span class="tile" style="--c1:#9AA6B8;--c2:#5E6A80"><i data-i="clock"></i></span><span class="label">Date &amp; Time</span><span class="value">Automatic</span><i data-i="chevR" class="chev"></i></div>
+    </div>
+
+    <div class="note banner">
+      <span class="appicon" style="--c1:#9AA6B8;--c2:#4C5870"><i data-i="download"></i></span>
+      <div style="min-width:0">
+        <div class="t1">System update</div>
+        <div class="t2">webOS Phoenix 2.0.1 is ready</div>
+      </div>
+      <button class="btn sm primary">Install</button>
+    </div>
+  </main>
+  <footer class="gesture"></footer>
+<script>
+  document.getElementById("appearance").textContent = document.documentElement.dataset.theme === "light" ? "Light" : "Dark";
+  phxReady();
+</script>
+</body>
+</html>

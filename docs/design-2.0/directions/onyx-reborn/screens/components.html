@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Onyx Reborn: components</title>
+<link rel="stylesheet" href="../css/onyx.css">
+<script src="../js/icons.js"></script>
+<script src="../js/frame.js"></script>
+<style>
+  body.board { width: 1280px; height: 900px; background: var(--bg); }
+  .head { height: 60px; padding: 0 22px; border-radius: 0; }
+  .head .title { font-size: 20px; }
+  .head .mode { font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--bar-text-2); padding: 6px 12px; border-radius: 14px; background: rgba(0,0,0,.25); box-shadow: inset 0 1px 2px rgba(0,0,0,.3); }
+  .cols { position: absolute; top: 60px; left: 0; right: 0; bottom: 0; padding: 18px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  .col { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+  .pad { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+  .line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .bgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .bgrid .btn { padding: 0 10px; }
+  .lbl { font-size: 12px; font-weight: 500; color: var(--text-3); }
+  .darkstrip { background: var(--bar); border-radius: 10px; padding: 10px; display: flex; align-items: center; gap: 8px; box-shadow: inset 0 1px 0 var(--bar-edge); }
+  .tbgroup { display: inline-flex; border-radius: 20px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,.45); }
+  .tbgroup button { width: 44px; height: 36px; display: grid; place-items: center; color: var(--bar-text); background: linear-gradient(180deg, var(--bar-btn-1), var(--bar-btn-2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
+  .tbgroup button + button { border-left: 1px solid rgba(0,0,0,.4); }
+  .tbgroup .ic { width: 18px; height: 18px; }
+  .tip { position: absolute; bottom: 34px; transform: translateX(-50%); padding: 4px 9px; border-radius: 7px; font-size: 12px; font-weight: 700; color: #fff; background: linear-gradient(180deg, #2A7AB8, #1D5F93); box-shadow: 0 4px 10px -2px rgba(0,0,0,.35); white-space: nowrap; }
+  .tip::after { content: ""; position: absolute; left: 50%; bottom: -5px; margin-left: -5px; border: 5px solid transparent; border-bottom: 0; border-top-color: #1D5F93; }
+  .pbar { height: 8px; border-radius: 4px; background: var(--line-2); box-shadow: inset 0 1px 2px rgba(0,0,0,.15); overflow: hidden; }
+  .pbar i { display: block; height: 100%; width: 64%; border-radius: 4px; background-color: var(--blue);
+    background-image: linear-gradient(-45deg, rgba(255,255,255,.18) 25%, transparent 25%, transparent 50%, rgba(255,255,255,.18) 50%, rgba(255,255,255,.18) 75%, transparent 75%); background-size: 16px 16px; }
+  .spin { width: 24px; height: 24px; border-radius: 50%; border: 3px solid var(--line-2); border-top-color: var(--blue); }
+  /* Onyx SwipeableItem: a row slid aside to reveal Delete */
+  .swipe { position: relative; height: 52px; overflow: hidden; border-top: 1px solid var(--line); background: linear-gradient(180deg, var(--red-1), var(--red-2)); }
+  .swipe .act { position: absolute; right: 0; top: 0; bottom: 0; width: 96px; display: flex; align-items: center; justify-content: center; gap: 6px; color: #fff; font-weight: 600; font-size: 14.5px; }
+  .swipe .act .ic { width: 18px; height: 18px; }
+  .swipe .item { position: absolute; inset: 0; right: 96px; background: var(--surface); box-shadow: 4px 0 10px -2px rgba(0,0,0,.25); border-top: 0 !important; }
+  .scene { position: relative; height: 214px; border-radius: 12px; overflow: hidden; background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); }
+  .scene .ghost { height: 11px; border-radius: 5px; background: var(--line-2); margin: 12px 14px 0; width: 60%; }
+  .scene .ghost.s { width: 38%; }
+  .scene .toolbar { height: 40px; }
+  .dlg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -46%); width: 244px; padding: 16px 16px 14px; text-align: center; }
+  .dlg .t { font-size: 16px; font-weight: 700; }
+  .dlg .m { font-size: 13px; line-height: 18px; color: #C0C6CE; margin: 6px 0 14px; }
+  .dlg .acts { display: flex; gap: 8px; } .dlg .acts .btn { flex: 1; height: 36px; font-size: 14px; }
+  .menuscene { position: relative; height: 250px; border-radius: 12px; overflow: hidden; background: #000; }
+  .menuscene .bg { position: absolute; left: 0; right: 0; top: 30px; bottom: 0; border-radius: 12px 12px 0 0; background: var(--bg); }
+  .menuscene .apptab { position: absolute; top: 0; left: 10px; }
+  .menu { position: absolute; top: 36px; left: 10px; width: 236px; padding: 6px; border-radius: 4px 14px 14px 14px; }
+  .menu .mi { height: 38px; display: flex; align-items: center; gap: 11px; padding: 0 10px; border-radius: 8px; font-size: 14.5px; font-weight: 500; }
+  .menu .mi .ic { width: 18px; height: 18px; color: #AEB5BE; }
+  .menu .mi .r { margin-left: auto; width: 16px; height: 16px; }
+  .menu .mi.hl { background: linear-gradient(180deg, var(--blue-1), var(--blue-2)); color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,.2); }
+  .menu .mi.hl .ic { color: #fff; }
+  .menu .mi.off { color: #8D949D; }
+  .menu .sep { height: 1px; background: rgba(255,255,255,.08); margin: 4px 6px; }
+  .dash { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 12px 0 8px; border-radius: 10px; color: #fff; background: linear-gradient(180deg, #34383D, #24272B); box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 0 0 1px rgba(0,0,0,.5); }
+  .dash .appicon { width: 36px; height: 36px; border-radius: 9px; } .dash .appicon .ic { width: 20px; height: 20px; }
+  .dash .t1 { font-size: 14px; font-weight: 700; } .dash .t2 { font-size: 12.5px; color: #B9BFC7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .minibar { display: flex; align-items: center; gap: 12px; height: 34px; padding: 0 12px; border-radius: 10px; background: #0B0C0E; color: #D5DAE0; }
+  .minibar .ic { width: 17px; height: 17px; }
+  .minibar .n { margin-left: auto; font-size: 12px; color: #9AA1AA; }
+  .sw { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .sw div { height: 44px; border-radius: 8px; display: flex; align-items: flex-end; padding: 4px 5px; font-size: 9.5px; font-weight: 700; color: #fff; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+  .types div { display: flex; align-items: baseline; justify-content: space-between; white-space: nowrap; }
+  .types div + div { margin-top: 4px; }
+</style>
+</head>
+<body class="board">
+  <div class="toolbar head"><span class="glyph" style="--g1:#2F8BD6;--g2:#1A6DB3"><i data-i="sliders"></i></span><span class="title">Onyx Reborn</span><span class="sub">Components · charcoal chrome, light content, the onyx blue</span><span class="sp"></span><span class="mode" id="mode">Light</span></div>
+  <div class="cols">
+    <div class="col">
+      <div class="groupbox"><div class="cap">Buttons</div>
+        <div class="pad">
+          <div class="bgrid">
+            <button class="btn blue">Send</button><button class="btn">Cancel</button>
+            <button class="btn red"><i data-i="trash"></i>Delete</button><button class="btn green"><i data-i="check"></i>Accept</button>
+            <button class="btn flat">Learn more</button><button class="btn blue" disabled>Saving…</button>
+          </div>
+          <div class="darkstrip"><button class="btn sm">Done</button><div class="tbgroup"><button><i data-i="reply"></i></button><button><i data-i="replyAll"></i></button><button><i data-i="forward"></i></button></div><span style="flex:1"></span><button class="ibtn" style="width:36px;height:36px"><i data-i="more" style="width:18px;height:18px"></i></button></div>
+        </div>
+      </div>
+      <div class="groupbox"><div class="cap">Toggles, checks, radio groups</div>
+        <div class="pad">
+          <div class="line"><span class="toggle on"></span><span class="toggle"></span><span class="check on"><i data-i="check"></i></span><span class="check"><i data-i="check"></i></span><span class="check on" style="--c1:#D26A2A;--c2:#B0500F"><i data-i="check"></i></span></div>
+          <div class="line"><div class="radios light" style="flex:1;display:flex"><button style="flex:1;justify-content:center">Day</button><button class="on" style="flex:1;justify-content:center">Week</button><button style="flex:1;justify-content:center">Month</button></div></div>
+          <div class="darkstrip"><div class="radios" style="flex:1;display:flex"><button class="on" style="flex:1;justify-content:center">Conversations</button><button style="flex:1;justify-content:center">Buddies</button></div></div>
+        </div>
+      </div>
+      <div class="groupbox"><div class="cap">Inputs</div>
+        <div class="pad">
+          <div class="field"><i data-i="search"></i>Just type…</div>
+          <div class="field focus"><span>Lena Ok</span><span class="caret"></span><span class="lbl" style="margin-left:auto">To</span></div>
+          <div class="darkstrip"><div class="field" style="flex:1;height:36px;border-radius:18px"><i data-i="search"></i>Search in a toolbar</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="groupbox"><div class="cap">Slider, progress, tooltip</div>
+        <div class="pad" style="gap:14px">
+          <div class="slider" style="margin-top:34px"><span class="track"></span><span class="fill" style="width:68%"></span><span class="knob active" style="left:68%"></span><span class="tip" style="left:68%">68%</span></div>
+          <div class="line" style="flex-wrap:nowrap"><div style="flex:1"><div class="line" style="justify-content:space-between;margin-bottom:6px"><span class="lbl">Downloading 2.0.1</span><span class="lbl" style="color:var(--text)">64%</span></div><div class="pbar"><i></i></div></div><span class="spin"></span></div>
+        </div>
+      </div>
+      <div class="groupbox"><div class="cap">List items<span class="r">swipe to delete</span></div>
+        <div class="item"><span class="glyph" style="--g1:#2F8BD6;--g2:#1A6DB3"><i data-i="wifi"></i></span><span class="label">Wi-Fi<small>Phoenix 5G</small></span><span class="toggle on"></span></div>
+        <div class="item"><span class="avatar" style="--h:28;width:32px;height:32px;border-radius:9px;font-size:12px">MR</span><span class="label">Marcus Reyes</span><span class="badge">2</span></div>
+        <div class="item sel"><span class="glyph"><i data-i="inbox"></i></span><span class="label" style="color:var(--blue-ink);font-weight:600">Selected item</span><i data-i="check" class="chev" style="color:var(--blue-ink)"></i></div>
+        <div class="swipe"><div class="item"><span class="glyph" style="--g1:#D26A2A;--g2:#B0500F"><i data-i="calendar"></i></span><span class="label">Dentist<small>Wed 1 PM</small></span></div><div class="act"><i data-i="trash"></i>Delete</div></div>
+      </div>
+      <div class="groupbox"><div class="cap">Date and time pickers</div>
+        <div class="pad">
+          <div style="display:grid;grid-template-columns:1.3fr 1fr 1.3fr;gap:8px"><span class="pickbtn">Oct<i data-i="chevD"></i></span><span class="pickbtn">14<i data-i="chevD"></i></span><span class="pickbtn">2026<i data-i="chevD"></i></span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px"><span class="pickbtn">9<i data-i="chevD"></i></span><span class="pickbtn">41<i data-i="chevD"></i></span><span class="pickbtn">AM<i data-i="chevD"></i></span></div>
+        </div>
+      </div>
+      <div class="groupbox"><div class="cap">Type · Inter (OFL)</div>
+        <div class="pad types" style="gap:0">
+          <div><span style="font-size:22px;font-weight:700;letter-spacing:-.02em">Title 22</span><span class="lbl">700 · headers</span></div>
+          <div><span style="font-size:18px;font-weight:650">Toolbar 18</span><span class="lbl">650 · on charcoal</span></div>
+          <div><span style="font-size:16px;font-weight:500">Body 16 · items</span><span class="lbl">500</span></div>
+          <div><span style="font-size:13.5px;color:var(--text-2)">Secondary 13.5</span><span class="tag">Caps 11.5</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="groupbox"><div class="cap">Toolbars and the grabber</div>
+        <div class="pad">
+          <div class="darkstrip" style="height:52px"><button class="ibtn" style="width:36px;height:36px"><i data-i="chevL" style="width:18px;height:18px"></i></button><span style="color:#fff;font-weight:650;font-size:16px;flex:1">Wi-Fi</span><button class="btn sm blue">Join</button></div>
+          <div class="darkstrip" style="height:52px"><span class="grabber"><i></i><i></i><i></i></span><button class="ibtn" style="width:36px;height:36px"><i data-i="refresh" style="width:18px;height:18px"></i></button><span style="flex:1;color:#B4BAC2;font-size:12.5px">Drag to slide</span><button class="ibtn" style="width:36px;height:36px"><i data-i="more" style="width:18px;height:18px"></i></button></div>
+        </div>
+      </div>
+      <div class="groupbox"><div class="cap">Popup</div>
+        <div class="pad">
+          <div class="scene">
+            <div class="toolbar"><span style="font-weight:650;font-size:14.5px">Messaging</span></div>
+            <div class="ghost"></div><div class="ghost s"></div><div class="ghost"></div><div class="ghost s"></div>
+            <div class="scrim"></div>
+            <div class="popup dlg">
+              <div class="t">Delete conversation?</div>
+              <div class="m">Messages with Lena on SMS and Jabber are removed from this device.</div>
+              <div class="acts"><button class="btn dark">Cancel</button><button class="btn red">Delete</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="groupbox"><div class="cap">Colour</div>
+        <div class="pad">
+          <div class="sw">
+            <div style="background:#1477C2">#1477C2</div><div style="background:#35A8EE">#35A8EE</div><div style="background:linear-gradient(180deg,#3A3E44,#2B2E33)">#2E3237</div><div style="background:#2E7D4F">#2E7D4F</div><div style="background:#C62F29">#C62F29</div>
+          </div>
+          <div class="lbl">Onyx blue (fills, 4.7:1 with white) · onyx sky (glow) · charcoal chrome · affirmative · negative</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="groupbox"><div class="cap">App menu</div>
+        <div class="pad">
+          <div class="menuscene">
+            <div class="bg"></div>
+            <button class="apptab">Messaging<i data-i="chevD" class="tab-chev"></i></button>
+            <div class="popup menu">
+              <div class="mi"><i data-i="type"></i>Edit<i data-i="chevR" class="r"></i></div>
+              <div class="mi off"><i data-i="forward"></i>Share</div>
+              <div class="sep"></div>
+              <div class="mi hl"><i data-i="people"></i>Preferences &amp; Accounts</div>
+              <div class="mi"><i data-i="bell"></i>Notifications</div>
+              <div class="mi"><i data-i="sparkle"></i>Help</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="groupbox"><div class="cap">Picker, open</div>
+        <div class="pad">
+          <span class="pickbtn" style="width:150px"><span style="display:inline-flex;align-items:center;gap:8px"><span class="dot" style="--c:var(--acct-sms)"></span>SMS</span><i data-i="chevU"></i></span>
+          <div class="picklist">
+            <div class="on"><span class="dot" style="--c:var(--acct-sms)"></span>SMS · Mobile<i data-i="check"></i></div>
+            <div><span class="dot" style="--c:var(--acct-jabber)"></span>Jabber · lena.okafor</div>
+            <div><span class="dot" style="--c:#8F97A1"></span>Email · lena@northwind.dev</div>
+          </div>
+        </div>
+      </div>
+      <div class="groupbox"><div class="cap">Notifications · at the bottom</div>
+        <div class="pad">
+          <div class="dash"><span class="appicon" style="--c1:#2F8BD6;--c2:#1A6DB3"><i data-i="chat"></i></span><div style="min-width:0;flex:1"><div class="t1">Lena Okafor</div><div class="t2">Pushed the card-stacking fix…</div></div><span style="font-size:11.5px;color:#9AA1AA;align-self:flex-start;margin-top:8px">now</span></div>
+          <div class="dash"><span class="appicon" style="--c1:#D26A2A;--c2:#B0500F"><i data-i="calendar"></i></span><div style="min-width:0;flex:1"><div class="t1">1:1 Priya</div><div class="t2">11:00 · in 15 min</div></div><button class="btn sm dark">Snooze</button></div>
+          <div class="minibar"><i data-i="chat"></i><i data-i="mail"></i><i data-i="calendar"></i><i data-i="download"></i><span class="n">4 waiting · swipe up</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+<script>
+  document.getElementById("mode").textContent = document.documentElement.dataset.theme === "light" ? "Light" : "Dark";
+  phxReady();
+</script>
+</body>
+</html>

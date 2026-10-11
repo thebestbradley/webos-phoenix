@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Music: now playing</title>
+<link rel="stylesheet" href="../css/aurora.css">
+<script src="../js/icons.js"></script>
+<script src="../js/data.js"></script>
+<script src="../js/frame.js"></script>
+<style>
+  /* Now playing: the cover art takes the wallpaper's place (pre-blurred once, not live). */
+  .ambient { position: absolute; inset: -20%; background: url("../assets/album.svg") center / cover; filter: blur(60px) saturate(140%); transform: scale(1.1); }
+  /* The accent follows the art here, as it follows the wallpaper elsewhere. */
+  html[data-theme="dark"] { --accent: #FF8FB0; --accent-2: #B98CFF; --on-accent: #2A0716; --accent-ink: #FFA3C0; --accent-soft: rgba(255,143,176,.18); --accent-glow: rgba(255,111,145,.55); }
+  html[data-theme="light"] { --accent: #B4245E; --accent-2: #6C3FD0; --on-accent: #fff; --accent-ink: #A31F55; --accent-soft: rgba(180,36,94,.12); --accent-glow: rgba(255,111,145,.6); }
+  html[data-theme="dark"] .sheet { --sheet: rgba(14, 9, 30, 0.56); --sheet-filter: blur(40px) saturate(120%); }
+  html[data-theme="light"] .sheet { --sheet: rgba(250, 248, 255, 0.72); }
+  .lyrics { margin: 22px 12px 0; padding: 14px 18px; }
+  .lyrics .now { font-size: 17px; line-height: 24px; font-weight: 800; }
+  .lyrics .soon { font-size: 15px; line-height: 22px; font-weight: 600; color: var(--text-3); margin-top: 4px; }
+  .top { display: flex; align-items: center; justify-content: space-between; padding: 14px 14px 0; }
+  .top .mid { text-align: center; }
+  .top .mid .t-over { font-size: 10.5px; }
+  .top .mid .alb { font-size: 14.5px; font-weight: 800; margin-top: 2px; }
+  .art { position: relative; width: 340px; height: 340px; margin: 22px auto 0; border-radius: 26px; overflow: hidden;
+    box-shadow: 0 30px 60px -20px rgba(20, 6, 60, .75), 0 0 0 1px rgba(255,255,255,.12), inset 0 1px 0 rgba(255,255,255,.3); }
+  .art img { width: 100%; height: 100%; display: block; }
+  .art .cap { position: absolute; left: 0; right: 0; bottom: 18px; text-align: center; color: #F3F0FF; }
+  .art .cap b { display: block; font-size: 17px; font-weight: 800; letter-spacing: .32em; }
+  .art .cap span { display: block; font-size: 9.5px; font-weight: 700; letter-spacing: .3em; color: #B9AEE8; margin-top: 4px; }
+  .info { display: flex; align-items: center; gap: 12px; padding: 26px 30px 0; }
+  .info .title { font-size: 25px; line-height: 31px; font-weight: 800; letter-spacing: -.01em; }
+  .info .artist { font-size: 15px; font-weight: 600; color: var(--text-2); margin-top: 2px; }
+  .info .iconbtn { margin-left: auto; color: var(--aurora-rose); }
+  html[data-theme="light"] .info .iconbtn { color: #D6336C; }
+  .progress { padding: 20px 30px 0; }
+  .times { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12.5px; font-weight: 700; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .controls { display: flex; align-items: center; justify-content: space-between; padding: 14px 26px 0; }
+  .controls .bare { width: 46px; height: 46px; color: var(--text-2); }
+  .controls .bare.big { width: 56px; height: 56px; color: var(--text); }
+  .controls .bare.big .ic { width: 32px; height: 32px; }
+  .controls .bare.on { color: var(--accent-ink); }
+  .play { width: 82px; height: 82px; border-radius: 41px; display: grid; place-items: center; color: var(--on-accent);
+    background: linear-gradient(180deg, rgba(255,255,255,.3), rgba(255,255,255,0) 60%), linear-gradient(140deg, var(--accent), var(--accent-2));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 16px 30px -10px var(--accent-glow), 0 6px 14px -6px rgba(0,0,0,.4); }
+  .play .ic { width: 36px; height: 36px; }
+  .volume { display: flex; align-items: center; gap: 14px; padding: 18px 30px 0; color: var(--text-3); }
+  .volume .slider { flex: 1; }
+  .volume .ic { width: 20px; height: 20px; }
+  .next { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 10px; border-radius: 22px; }
+  .next .mini { width: 46px; height: 46px; border-radius: 12px; background: url("../assets/album.svg") 50% 30% / 160%; box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); filter: hue-rotate(60deg); }
+  .next .t1 { font-size: 15px; font-weight: 800; }
+  .next .t2 { font-size: 13px; font-weight: 600; color: var(--text-2); }
+  .next .out { margin-left: auto; display: flex; gap: 8px; }
+</style>
+</head>
+<body class="phone">
+  <div class="wallpaper" style="overflow:hidden"><div class="ambient"></div></div>
+  <header class="statusbar" data-app="Music"></header>
+  <main class="sheet">
+    <div class="top">
+      <button class="iconbtn"><i data-i="chevD"></i></button>
+      <div class="mid"><div class="t-over">Playing from album</div><div class="alb">Night Transit</div></div>
+      <button class="iconbtn"><i data-i="moreV"></i></button>
+    </div>
+    <div class="art"><img src="../assets/album.svg" alt=""><div class="cap"><b>NIGHT TRANSIT</b><span>THE LUMEN PILOTS</span></div></div>
+    <div class="info">
+      <div><div class="title">Northern Static</div><div class="artist">The Lumen Pilots</div></div>
+      <button class="iconbtn"><i data-i="heartF"></i></button>
+    </div>
+    <div class="progress">
+      <div class="slider"><span class="track"></span><span class="fill" style="width:43%"></span><span class="knob" style="left:43%"></span></div>
+      <div class="times"><span>1:42</span><span>-2:16</span></div>
+    </div>
+    <div class="controls">
+      <button class="iconbtn bare on"><i data-i="shuffle"></i></button>
+      <button class="iconbtn bare big"><i data-i="prev"></i></button>
+      <button class="play"><i data-i="pause"></i></button>
+      <button class="iconbtn bare big"><i data-i="next"></i></button>
+      <button class="iconbtn bare"><i data-i="repeat"></i></button>
+    </div>
+    <div class="volume">
+      <i data-i="speaker"></i>
+      <div class="slider"><span class="track"></span><span class="fill" style="width:62%"></span><span class="knob" style="left:62%"></span></div>
+    </div>
+    <div class="lyrics panel">
+      <div class="t-over" style="font-size:10.5px;margin-bottom:6px">Lyrics</div>
+      <div class="now">and every window down the line</div>
+      <div class="soon">is holding someone else's time</div>
+    </div>
+    <div class="next float">
+      <span class="mini"></span>
+      <div><div class="t-over" style="font-size:10.5px">Up next</div><div class="t1">Glass Harbour</div><div class="t2">The Lumen Pilots · 4:12</div></div>
+      <div class="out"><button class="iconbtn"><i data-i="hotspot"></i></button><button class="iconbtn"><i data-i="queue"></i></button></div>
+    </div>
+  </main>
+  <footer class="gesture"></footer>
+<script>phxReady();</script>
+</body>
+</html>

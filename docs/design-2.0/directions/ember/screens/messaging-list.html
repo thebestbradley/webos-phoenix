@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Messaging, conversations</title>
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/icons.js"></script>
+<script src="../assets/app.js"></script>
+<style>
+  .card { display: flex; flex-direction: column; }
+  .head { padding: 30px 18px 0 26px; display: flex; align-items: flex-start; gap: 8px; }
+  .head .ttl { flex: 1; }
+  .head .sub { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+  .head .sub .dot-ember { width: 6px; height: 6px; }
+  .search { margin: 24px 20px 0; }
+  .seg { margin: 14px 20px 6px; }
+  .list { flex: 1; overflow: hidden; padding: 0 0 0 0; }
+  .gh { padding: 22px 26px 6px; }
+  .conv { display: flex; align-items: center; gap: 16px; padding: 13px 22px 13px 26px; position: relative; --pres-ring: var(--bg); }
+  .conv + .conv::before { content: ""; position: absolute; top: 0; left: 88px; right: 22px; height: var(--hair); background: var(--line-2); }
+  .conv .txt { flex: 1; min-width: 0; }
+  .conv .l1 { display: flex; align-items: baseline; gap: 10px; }
+  .conv .name { flex: 1; font-size: 16.5px; line-height: 23px; font-weight: 550; letter-spacing: -.15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv .when { font-size: 12.5px; font-weight: 500; color: var(--ink-3); }
+  .conv .l2 { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+  .conv .snip { flex: 1; font-size: 14.5px; line-height: 20px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv.unread .name { font-weight: 700; }
+  .conv.unread .snip { color: var(--ink); }
+  .conv.unread .when { color: var(--ink); font-weight: 700; }
+  .conv .n { font-size: 11.5px; font-weight: 700; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; display: grid; place-items: center; color: var(--on-inverse); background: var(--inverse); }
+  .via { font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; }
+  .via.sms { color: var(--sms); } .via.jabber { color: var(--jabber); }
+</style>
+<script>
+const convs = [
+  { h: 'Today' },
+  { n: 'Ada Palmer', i: 'AP', when: '9:41', snip: 'Running late, grab us a table by the window?', accs: ['sms', 'jabber'], unread: 2, pres: 'on' },
+  { n: 'Marcus Chen', i: 'MC', when: '9:12', snip: 'Sent you the photos from Saturday', accs: ['jabber'], unread: 1, pres: 'on' },
+  { n: 'Mom', i: 'M', when: '8:30', snip: 'Call when you land. Love you', accs: ['sms'] },
+  { h: 'Earlier' },
+  { n: 'Book club', i: 'BC', when: 'Mon', snip: 'Priya: Chapter nine for next week!', group: 1 },
+  { n: 'Jonas Weber', i: 'JW', when: 'Mon', snip: 'Ha, that card-shuffle trick is genius', accs: ['sms', 'jabber', 'work'], pres: 'away' },
+  { n: 'Lena Ortiz', i: 'LO', when: 'Mon', snip: 'Can we move stand-up to 10?', accs: ['sms'] },
+  { n: 'Sam Delgado', i: 'SD', when: 'Sun', snip: 'Got it, see you at 6', accs: ['sms'] },
+  { n: 'Noor Haddad', i: 'NH', when: 'Sat', snip: 'The pull request is merged! Drinks on me', accs: ['jabber'], pres: 'on' },
+  { n: 'Dr. Okafor’s office', i: 'DO', when: 'Sat', snip: 'Reminder: Thu 15 Oct at 3:15 PM. Reply C to confirm', accs: ['sms'] },
+];
+function build() {
+  document.getElementById('list').innerHTML = convs.map(c => c.h ? `<div class="gh micro dimmer">${c.h}</div>` : `
+    <div class="conv ${c.unread ? 'unread' : ''}">
+      <div class="av">${c.group ? '<i data-i="users"></i>' : c.i}${ring(c.accs)}${c.pres ? `<span class="pres ${c.pres === 'away' ? 'away' : ''}"></span>` : ''}</div>
+      <div class="txt">
+        <div class="l1"><div class="name">${c.n}</div><div class="when">${c.when}</div></div>
+        <div class="l2"><div class="snip">${c.snip}</div>${c.unread ? `<div class="n">${c.unread}</div>` : ''}</div>
+      </div>
+    </div>`).join('');
+}
+</script>
+</head>
+<body>
+<div class="device" data-app="Messaging">
+  <main class="card">
+    <div class="head">
+      <div class="ttl">
+        <div class="display">Messages</div>
+        <div class="sub small dim"><b style="color:var(--ink);font-weight:650">3 unread</b> · 4 buddies online</div>
+      </div>
+      <div class="ring-btn"><i data-i="pencil-simple"></i></div>
+    </div>
+    <div class="search"><i data-i="magnifying-glass"></i><div class="ph">Just type a name or number</div><div class="ring-btn bare"><i data-i="microphone"></i></div></div>
+    <div class="seg"><div class="sel">Conversations</div><div>Buddies <span class="n">4</span></div></div>
+    <div class="list fade-bottom" id="list"></div>
+  </main>
+</div>
+</body>
+</html>
