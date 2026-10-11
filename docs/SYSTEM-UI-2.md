@@ -350,7 +350,9 @@ second after (the adaptive simulator resizes in a stream of sizes).
 `tools/glass-screenshots.sh OUT_DIR` takes them on the Fairphone 6's screen
 (the renders' frame) with the test page (`tools/fixtures/glass-app`, three
 copies: dark, light, dark). Kept, as small JPEGs, in
-`docs/design-2.0/img/system-ui-2/`, each beside its render:
+`docs/design-2.0/img/system-ui-2/`, each beside its render
+(`tools/glass-compare.py SHOTS_DIR GLASS_SIM_DIR OUT_DIR` makes them from
+those screenshots and `tools/test-glass-sim.py`'s):
 
 | File | What |
 | --- | --- |
