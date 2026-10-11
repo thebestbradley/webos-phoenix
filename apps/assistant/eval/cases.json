@@ -512,6 +512,8 @@
 {"id":"talk-26","cat":"talk mode","voice":true,"turns":[{"say":"text sam I'm running late","expect":{"command":"text","status":"pending"}},{"say":"that's okay","expect":{"answer":"chat"},"forbid":["text"]}]},
 {"id":"talk-27","cat":"talk mode","voice":true,"turns":[{"say":"text chris I'm on my way","expect":{"answer":"clarify"},"forbid":["text"]},{"say":"the last one","expect":{"command":"text","status":"pending","args":{"name":{"$re":"moore"}}}},{"say":"yes","expect":{"command":"text","status":"done"}}]},
 {"id":"talk-28","cat":"talk mode","voice":true,"turns":[{"say":"read my last message","expect":{"command":"readMessages"},"text":"want me to reply to"},{"say":"sure","expect":{"answer":"clarify"},"forbid":["replyMessage","text"]},{"say":"I'll call you back in ten","expect":{"command":"replyMessage","status":"pending","args":{"message":{"$re":"call you back"}}}},{"say":"yes","expect":{"command":"replyMessage","status":"done"}}]},
-{"id":"talk-29","cat":"talk mode","voice":true,"turns":[{"say":"navigate to the nearest coffee shop","expect":{"command":"navigate"},"text":"want me to start navigation\\?"},{"say":"yes","expect":{"answer":"chat"}}]}
+{"id":"talk-29","cat":"talk mode","voice":true,"turns":[{"say":"navigate to the nearest coffee shop","expect":{"command":"navigate"},"text":"want me to start navigation\\?"},{"say":"yes","expect":{"answer":"chat"}}]},
+{"id":"voice-21","cat":"voice","say":"Text Sam. I'm running late.","expect":{"command":"text","status":"pending","args":{"who":"sam","message":{"$re":"^I'm running late$"}}}},
+{"id":"ws-19","cat":"search","turns":[{"say":"Who won the 1998 World Series?","expect":{"answer":"knowledge"}},{"say":"Sure.","expect":{"command":"search","args":{"query":"Who won the 1998 World Series"}},"text":"“Who won the 1998 World Series”\\.$"}]}
 ]
 }

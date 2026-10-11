@@ -599,7 +599,9 @@ function textMessageWords(t, ctx) {
     if (/^write (?:this|that|it|down)\b/.test(t)) return null;   // "write this down: ...": a note
     // "send Mom a message saying call me back": who, without the message's name.
     rest = rest.replace(/^(.+?) (?:a |an )?(?:quick )?(?:text|message|sms|note|line)(?: message)?(?=,|:| saying| that says| to say| and say| that)/, "$1");
-    var sep = /^(.+?)(?:,|:| saying| that says| to say| and say| that)\s+(.+)$/.exec(rest);
+    // (A transcript writes the pause after the name as a full stop: "Text
+    // Sam. I'm running late." Whisper, in phoenix-sim, 11 October 2026.)
+    var sep = /^(.+?)(?:,|:|\.| saying| that says| to say| and say| that)\s+(.+)$/.exec(rest);
     // "tell me a joke" is no message; "tell priya i'll be late" is, to a contact.
     if (/^tell /.test(t) && !sep && !nameAtStart(rest, ctx)) return null;
     if (sep && !/^(?:me|us)$/.test(sep[1])) return { who: sep[1], message: cased(sep[2], ctx) };

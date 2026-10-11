@@ -43,6 +43,7 @@ Item {
     QtObject {
         id: fake
         property var asks: []
+        property var chosen: []
         property var phrases: []
         property var messages: []
         property string tid: ""
@@ -102,6 +103,13 @@ Item {
                 messages = messages.concat(added);
                 reply.thread = { id: tid };
                 reply.messages = added;
+            } else if (method === "choose") {
+                // A button tapped in a spoken conversation: Sam Lee's read-back.
+                chosen.push(JSON.parse(JSON.stringify(params)));
+                var said2 = msg({ role: "assistant", text: "Send \"hi\" to Sam Lee?", command: "text", status: "pending", confirm: { command: "text", args: {} } });
+                messages = messages.concat([said2]);
+                reply.thread = { id: tid };
+                reply.messages = [said2];
             } else if (method === "sessionPhrase") {
                 phrases.push(params.kind);
                 var said = msg(params.kind === "goodbye" ? { role: "assistant", text: "Bye for now!", status: "goodbye" }
@@ -146,6 +154,7 @@ Item {
             shell.unlock();
             shell.closeAssistant();
             fake.asks = [];
+            fake.chosen = [];
             fake.phrases = [];
             fake.messages = [];
             fake.tid = "";
@@ -346,6 +355,28 @@ Item {
             fakeSpeech.speaking = false;
             tryCompare(overlay, "open", false, 3000);
             compare(fake.phrases.length, 0);
+        }
+        // The same choice by touch, in a spoken conversation: asked as
+        // spoken (what comes next is asked aloud), and the session goes on
+        // listening for it.
+        function test_aTapGoesOnListening() {
+            shell.dictationInputFiles = [root.recordings + "quiet.wav"];
+            shell.assistantSettings = { enabled: true };
+            shell.openAssistant(false);
+            tryCompare(overlay, "open", true, 2000);
+            overlay.voice = true;
+            overlay.ask("who won the 1998 world series");
+            tryVerify(function () { return overlay.asking; }, 3000, "the question waits");
+            overlay.stopListening(true);
+            var which = fake.msg({ role: "assistant", text: "Which one: Sam Delgado or Sam Lee?", command: "text", status: "ask",
+                                   choices: [{ id: "pick:0", label: "Sam Delgado" }, { id: "pick:1", label: "Sam Lee" }],
+                                   data: { awaiting: { command: "text", field: "who", options: ["Sam Delgado", "Sam Lee"] } } });
+            fake.messages = fake.messages.concat([which]);
+            overlay.choose(which, which.choices[1]);
+            tryVerify(function () { return fake.chosen.length === 1; }, 3000);
+            compare(fake.chosen[0].voice, true);
+            tryCompare(overlay, "listening", true, 3000);
+            verify(overlay.open);
         }
         // Typed: the same search closes the view at once (as the button does).
         function test_typedSearchMakesWayAtOnce() {

@@ -2021,10 +2021,14 @@ function runInner(cmd, args, env) {
             if (env.storage) env.storage.set("assistant:chatTurn", (env.storage.get("assistant:chatTurn") || 0) + 1);
             return r;
         });
-    case "search":
-        return defaultSearchUrl(env, args.query).then(function (url) {
+    case "search": {
+        // The words as asked, without the question's own mark ("Searching
+        // the web for “who won the 1998 World Series”.").
+        var query = String(args.query || "").trim().replace(/[\s?.!]+$/, "");
+        return defaultSearchUrl(env, query).then(function (url) {
             return lunaCall(env, "luna://com.palm.applicationManager/open", { target: url });
-        }).then(function () { return { text: say.searching(args.query) }; });
+        }).then(function () { return { text: say.searching(query) }; });
+    }
     case "callBack":
     case "voicemail":
         if (cmd.id === "voicemail" && args.action !== "call") {

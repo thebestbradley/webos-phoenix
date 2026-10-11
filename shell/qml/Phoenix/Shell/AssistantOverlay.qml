@@ -449,12 +449,19 @@ Item {
             return;
         }
         busy = true;
-        _call("choose", { threadId: threadId, messageId: message.id, choice: choice.id }, function (r) {
+        var p = { threadId: threadId, messageId: message.id, choice: choice.id };
+        // A spoken conversation goes on after a tap: what comes next is
+        // asked aloud too, and listened for.
+        if (voice)
+            p.voice = true;
+        _call("choose", p, function (r) {
             _settled(r);
             // Settings, the browser or the app offered came up ("open", or
             // "open:<n>", one of the things to do next): out of their way.
             if (r && r.returnValue !== false && (choice.id === "settings" || choice.id === "web" || choice.id === "open" || choice.id.indexOf("open:") === 0))
                 ov.closeRequested();
+            else
+                ov._afterReply();
         });
     }
     // An item an answer shows (a photo, an event), tapped: its app comes
