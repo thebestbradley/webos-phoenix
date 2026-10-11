@@ -38,7 +38,11 @@ Item {
         function init() {
             shell.unlock();
             launcher.open = true;
-            tryCompare(launcher, "hidden", 0, 2000);
+            // fullyOpen (hidden === 0), not tryCompare(launcher, "hidden", 0):
+            // TestCase's compare takes numbers within 1e-5 as equal, and
+            // InOutQuint's tail is that close while it still runs, which
+            // left test_glass's place.y at 32.0011 under load.
+            tryCompare(launcher, "fullyOpen", true, 2000);
         }
         function cleanup() {
             launcher.editMode = false;
