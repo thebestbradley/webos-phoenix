@@ -46,6 +46,19 @@
 
 import { call, type LunaError, type Subscription } from "./bridge";
 import { db, tempdb, type DbObject } from "./db8";
+import { removeNotificationGroup } from "./tasks";
+
+/** Messaging's app id: its notifications are a stack per conversation, grouped by the thread id. */
+export const MESSAGING_APP = "org.webosphoenix.messaging";
+
+/**
+ * A conversation's notifications taken away: the runtime and the IM
+ * connectors post each message's with the thread id as its group
+ * (phoenix-runtime.js simulateIncomingSms, the connectors' ctx.notify).
+ */
+export function clearConversationNotifications(threadId: string): void {
+    removeNotificationGroup(MESSAGING_APP, threadId);
+}
 
 export const MESSAGE_KIND = "com.palm.message:1";
 export const SMS_KIND = "com.palm.smsmessage:1";
@@ -292,8 +305,14 @@ export const messaging = {
         if (!svc || !accountId || !thread.replyAddress) return;
         await call(`luna://${svc}/chatState`, { accountId, to: thread.replyAddress, state }).catch(() => undefined);
     },
-    /** Mark a conversation read: its inbox messages' flags.read and the thread's unreadCount. */
+    /**
+     * Mark a conversation read: its inbox messages' flags.read and the
+     * thread's unreadCount; its notifications (one stack, grouped by the
+     * thread) leave the notification area, as webOS's dashboards closed
+     * once their messages were read.
+     */
     async markRead(threadId: string): Promise<void> {
+        clearConversationNotifications(threadId);
         const unread = await db.find<Message>({
             from: MESSAGE_KIND,
             where: [{ prop: "conversations", op: "=", val: threadId }, { prop: "folder", op: "=", val: "inbox" }],

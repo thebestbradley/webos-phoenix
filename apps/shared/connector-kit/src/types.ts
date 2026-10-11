@@ -346,8 +346,12 @@ export interface AccountContext extends BaseContext {
     config: Record<string, Json>;
     /** The connector's own per-account state; saved after the call when changed. */
     state: Record<string, Json>;
-    /** A webOS notification (com.webos.notification createToast). */
-    notify(n: { title: string; body?: string; appId?: string; params?: Json }): Promise<void>;
+    /**
+     * A webOS notification (com.webos.notification createToast: {title, message}).
+     * group (Phoenix): stacks it with the app's notifications of that group, e.g.
+     * a conversation's messages (the shell's NotificationStacks.js).
+     */
+    notify(n: { title: string; body?: string; appId?: string; params?: Json; group?: string }): Promise<void>;
     /** A message into Messaging (org.webosports.service.messaging putMessage). */
     putMessage(message: Json): Promise<Json>;
     /** The account's open connection (definition.connection), or null. */

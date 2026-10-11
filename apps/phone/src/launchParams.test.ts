@@ -36,4 +36,8 @@ describe("Phone's launch params", () => {
     it("reads {preferences: true} as the phone preferences (TelephonyAlerts.js:59-67)", () => {
         expect(parseLaunch({ preferences: true })).toEqual({ kind: "preferences" });
     });
+
+    it("opens the missed calls from their notification ({action: \"missedcalls\"})", () => {
+        expect(parseLaunch({ action: "missedcalls" })).toEqual({ kind: "missedcalls" });
+    });
 });

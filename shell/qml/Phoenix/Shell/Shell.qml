@@ -3532,6 +3532,14 @@ FocusScope {
                 anchors.bottom: parent.bottom
                 model: shell.source ? shell.source.notifications : null
                 onDismissRequested: (index) => shell.source.dismissNotification(index)
+                // A stack's top layer swiped away (a source without stacks:
+                // the row).
+                onLayerPopRequested: (index) => {
+                    if (typeof shell.source.popNotificationLayer === "function")
+                        shell.source.popNotificationLayer(index);
+                    else
+                        shell.source.dismissNotification(index);
+                }
                 onActivated: (appId, params) => {
                     var p = null;
                     try { p = params ? JSON.parse(params) : null; } catch (e) { p = null; }

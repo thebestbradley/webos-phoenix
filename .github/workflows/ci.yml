@@ -302,6 +302,8 @@ jobs:
           t node tools/test-updates.cjs --tablet --out app-tests/updates-tablet
           t node tools/test-phone-messaging.cjs --out app-tests/phone-messaging-phone
           t node tools/test-phone-messaging.cjs --tablet --out app-tests/phone-messaging-tablet
+          t node tools/test-notification-stacks.cjs --out app-tests/notification-stacks-phone
+          t node tools/test-notification-stacks.cjs --tablet --out app-tests/notification-stacks-tablet
           t node tools/test-media.cjs --out app-tests/media-phone
           t node tools/test-media.cjs --tablet --out app-tests/media-tablet
           t node tools/test-justtype.cjs --out app-tests/justtype-phone

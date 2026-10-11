@@ -178,6 +178,12 @@ Item {
     // (LockWindow::changeState, slotBannerActivated/Deactivated,
     // :836-946, 1024-1045).
     property var notifications: null
+    // Bumped as the rows' contents change, for the dashboard's copies.
+    property int _rowsRevision: 0
+    Connections {
+        target: lock.notifications
+        function onDataChanged() { lock._rowsRevision++; }
+    }
     property bool bannerActive: false
     property string bannerText: ""
     property color bannerColor: "#666666"
@@ -192,13 +198,16 @@ Item {
     // came, "New Message", with the app's name and icon, never who sent it
     // or what it says (a dashboard window is not shown either).
     readonly property bool privatePreviews: !!system && system.lockScreenPreviews === false
-    function privateText(appId) {
+    // count: how many a stack holds (NotificationStacks.js): "3 New
+    // Messages", still no names.
+    function privateText(appId, count) {
         var id = String(appId || "");
+        var n = count > 1 ? count : 1;
         if (/messaging/.test(id))
-            return qsTr("New Message");
+            return n > 1 ? qsTr("%1 New Messages").arg(n) : qsTr("New Message");
         if (/email/.test(id))
-            return qsTr("New Email");
-        return qsTr("New Notification");
+            return n > 1 ? qsTr("%1 New Emails").arg(n) : qsTr("New Email");
+        return n > 1 ? qsTr("%1 New Notifications").arg(n) : qsTr("New Notification");
     }
     function appTitle(appId) {
         for (var i = 0; source && source.apps && i < source.apps.count; ++i)
@@ -541,7 +550,20 @@ Item {
                     delegate: Column {
                         id: row
                         required property int index
-                        readonly property var entry: lock.notifications.get(lock.notifications.count - 1 - index)
+                        // A copy of the row, made again whenever the rows
+                        // change (a layer pushed on a stack, a live
+                        // activity's progress): ListModel.get's object does
+                        // not tell its readers of a change.
+                        readonly property var entry: {
+                            var rev = lock._rowsRevision;
+                            var n = lock.notifications.get(lock.notifications.count - 1 - index);
+                            return {
+                                appId: n.appId, windowKey: n.windowKey || "", title: n.title, body: n.body,
+                                color: n.color, glyph: n.glyph, icon: n.icon, progress: n.progress,
+                                clickableWhenLocked: !!n.clickableWhenLocked,
+                                layerCount: n.layerCount > 1 ? n.layerCount : 1, layers: n.layers || ""
+                            };
+                        }
                         width: dashboardRows.width
                         DashboardItem {
                             objectName: "lockDashboardItem"
@@ -551,7 +573,11 @@ Item {
                             // its window (which shows what it says).
                             windowKey: lock.privatePreviews ? "" : row.entry.windowKey
                             title: lock.privatePreviews ? (lock.appTitle(row.entry.appId) || row.entry.title) : row.entry.title
-                            body: lock.privatePreviews ? lock.privateText(row.entry.appId) : row.entry.body
+                            body: lock.privatePreviews ? lock.privateText(row.entry.appId, row.entry.layerCount) : row.entry.body
+                            // A stack: its count, and its layers peeking
+                            // out (empty when private: nobody's words).
+                            layerCount: row.entry.layerCount > 1 ? row.entry.layerCount : 1
+                            layers: lock.privatePreviews ? "" : (row.entry.layers || "")
                             color: row.entry.color
                             glyph: row.entry.glyph
                             icon: row.entry.icon

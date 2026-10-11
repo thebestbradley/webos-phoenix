@@ -145,6 +145,17 @@ async function main() {
             await popup.screenshot({ path: path.join(outDir, `${button}.png`) });
             await popup.close();
         }
+        // Stacks: each a notification of its group (the shell piles them, NotificationStacks.js).
+        host.length = 0;
+        for (const id of ["stack-ada", "stack-ada", "stack-ben"]) await page.getByTestId(id).click();
+        await until(() => host.filter((m) => m.type === "notification").length >= 3);
+        const stacked = host.filter((m) => m.type === "notification").map((m) => m.payload);
+        check(stacked.length === 3 && stacked.map((p) => p.group).join() === "lab-ada,lab-ada,lab-ben"
+              && stacked.every((p) => p.appId === APP && p.params.from === "stack"),
+              "Ada's Stack, Ben's Stack: notifications of their groups: " + JSON.stringify(stacked.map((p) => [p.title, p.group])));
+        await page.getByTestId("stack-clear").click();
+        check(await until(() => host.filter((m) => m.type === "notification" && m.payload.remove).map((m) => m.payload.group).join() === "lab-ada,lab-ben"),
+              "Clear Stacks takes both groups away");
 
         // ---- Background task ----
         host.length = 0;

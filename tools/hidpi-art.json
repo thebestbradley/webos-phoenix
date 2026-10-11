@@ -156,6 +156,8 @@
         { "art": "dock-item-shadow-tile.png", "method": "smooth" },
         { "art": "dashboard-mask-*.png", "method": "smooth" },
         { "art": "dashboard-scroll-fade.png", "method": "smooth" },
+        { "art": "dashboard-newitem-badge.png", "method": "copy", "from": "third_party/enyo-1.0/framework/build/palm/system/dashboard-window/images/dashboard-newitem-badge.png" },
+        { "art": "notification-divider.png", "method": "copy", "from": "third_party/enyo-1.0/framework/build/palm/system/dashboard-window/images/notification-divider.png" },
         { "art": "glow-bg.png", "method": "smooth" },
         { "art": "normal-bg.png", "method": "smooth" },
         { "art": "loading-bg.png", "method": "smooth" },

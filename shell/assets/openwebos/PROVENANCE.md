@@ -6,6 +6,17 @@ Removed: `hp-logo.png`, `hp-logo-bright.png` (trademarks) and `normal-usb.png`,
 `fsck-usb.png` (pictures of the TouchPad hardware).
 See `docs/LEGAL.md` and `NOTICE` at the repository root.
 
+Also copied unmodified, from `enyojs/enyo-1.0`
+`framework/build/palm/system/dashboard-window/images/` at commit
+`52886009e73b665a94a65c5a66b5f285d2cf321d` (Apache-2.0), the art Enyo's
+standard dashboard drew its stacked layers with (`DashboardContent.js`,
+`dashboard.css`), for the notification area's stacks:
+`dashboard-newitem-badge.png` (the count badge) and
+`notification-divider.png` (a layer's left edge). Their `@2x` / `@3x` are
+the ones Phoenix made for Enyo's copies (`tools/hidpi-art.json`, method
+`copy`: the badge's from Email's `attachment-count-badge.png`, the divider
+enlarged `smooth`).
+
 ## HiDPI variants (`*@1.5x.png`, `*@2x.png`, `*@3x.png`)
 
 Larger copies of the art above, which the shell draws on dense screens

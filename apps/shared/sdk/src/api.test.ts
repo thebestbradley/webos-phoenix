@@ -218,6 +218,20 @@ describe("notifications", () => {
         ]);
     });
 
+    it("stacks a group's notifications and takes the stack away", async () => {
+        const postToHost = vi.fn();
+        g.phoenixHost = { postToHost };
+        await notifications.post({ title: "Ada", body: "Lunch?", params: { threadId: "t1" }, group: "t1" });
+        await notifications.post({ title: "Ada", body: "At noon", params: { threadId: "t1" }, group: "t1" });
+        notifications.removeGroup("t1");
+        notifications.removeGroup("");
+        expect(postToHost.mock.calls).toEqual([
+            ["notification", { appId: "com.example.app", title: "Ada", body: "Lunch?", params: { threadId: "t1" }, group: "t1" }],
+            ["notification", { appId: "com.example.app", title: "Ada", body: "At noon", params: { threadId: "t1" }, group: "t1" }],
+            ["notification", { appId: "com.example.app", remove: true, group: "t1" }],
+        ]);
+    });
+
     it("opens a dashboard window with webOS's attributes", () => {
         const open = vi.spyOn(window, "open").mockImplementation(() => null);
         notifications.dashboard("dash.html", { name: "timer", height: 104, persistent: true });

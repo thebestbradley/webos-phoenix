@@ -213,7 +213,7 @@ describe("tasks client", () => {
         expect(l).toEqual([{ id: TASKS_APP_ID, params: { reminder: t._id, $activity: expect.objectContaining({ name: reminderActivityName(t._id!) }) } }]);
         expect(await tasks.handleReminder(l[0].params.reminder as string)).toMatchObject({ _id: t._id });
         const n = hostMessages.find((m) => m.type === "notification");
-        expect(n?.payload).toEqual({ appId: TASKS_APP_ID, title: "Call Ada", body: `Due ${dueText({ due, allDay: false })}`, params: { taskId: t._id, fromReminder: true } });
+        expect(n?.payload).toEqual({ appId: TASKS_APP_ID, title: "Call Ada", body: `Due ${dueText({ due, allDay: false })}`, params: { taskId: t._id, fromReminder: true }, group: "reminders" });
         expect(activity(reminderActivityName(t._id!))).toBeUndefined();
 
         const now = Date.now();

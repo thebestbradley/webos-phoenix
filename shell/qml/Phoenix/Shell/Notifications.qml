@@ -24,6 +24,20 @@
 //
 // Tapping a notification launches its app with the notification's params
 // (e.g. the task a reminder is for).
+//
+// An app's notifications of one group are one row, a stack of layers
+// (NotificationStacks.js; Enyo 1.0's enyo.Dashboard and its window,
+// palm/system/Dashboard.js, dashboard-window/DashboardContent.js): the
+// newest on top with the count, the next ones peeking out at its left
+// (DashboardItem). Each new layer still brings its banner (the original
+// apps pushed a layer and a banner). Swiping the top layer (right of the
+// icon) pops it and shows the next (layerSwiped, :51-64; onLayerSwipe);
+// swiping the last one, or the row by its icon, takes the row
+// (dbSwiped, :47-49; the row's drag on the badge, DashboardWindowContainer.
+// cpp:193-217); a tap opens the app with the top layer's params and the
+// stack is done with (doTap / doMessageTap with the top layer, :25-39, as
+// Email's dashboard cleared its account's layers on a tap,
+// DashboardManager.js:647-661). One icon per stack in the bar.
 
 import QtQuick
 import "NotificationPolicy.js" as Policy
@@ -32,6 +46,7 @@ Item {
     id: root
 
     property var model            // ListModel: appId, title, body, color, glyph, icon, params (JSON or ""), windowKey,
+                                  // group, layerCount, layers (a stack: NotificationStacks.js),
                                   // ongoing (an ongoing activity: a download, an install; it stays
                                   // until it ends), progress (0-100, -1: none); a dashboard window's
                                   // persistent (not dismissable: DashboardWindow::persistent) and
@@ -86,6 +101,11 @@ Item {
             return true;
         }
         if ((k === Qt.Key_Delete || k === Qt.Key_Backspace) && !kept(n)) {
+            // A stack: its top layer, as a swipe on it (the row stays).
+            if (stacked(n)) {
+                layerPopRequested(keyRow);
+                return true;
+            }
             var at2 = order.indexOf(keyRow);
             dismissRequested(keyRow);
             // The row after it (or before, at the end) keeps the highlight.
@@ -103,7 +123,12 @@ Item {
     property real screenHeight: height
 
     signal dismissRequested(int index)
+    // The top layer of the stack at index swiped away (the source pops it;
+    // the last one takes the row).
+    signal layerPopRequested(int index)
     signal activated(string appId, string params)
+    // A row the shell draws as a stack of two or more layers.
+    function stacked(n) { return !!n && !n.windowKey && n.layerCount > 1; }
 
     // A notification's button (DashboardItem actions; Phoenix): the app's
     // own service called, as the system UI, with the notification's params
@@ -357,14 +382,43 @@ Item {
     // The banner fades to 0.25 as it leaves; the lock screen's copy follows.
     readonly property real bannerOpacity: bannerContent.opacity
 
+    // Each row's layer count as last seen: a layer pushed on a stack is a
+    // new notification, with its banner, as a new row is.
+    property var _layersSeen: ({})
+    function _bannerFor(n) {
+        root.showBanner(n.title + (n.body ? ": " + n.body : ""), n.icon || "", n.color, n.glyph, n.appId, n.params || "", n.key || "");
+    }
     Connections {
         target: root.model
         function onRowsInserted(parent, first, last) {
+            for (var i = first; i <= last; ++i) {
+                var r = root.model.get(i);
+                root._layersSeen[r.id] = r.layerCount > 1 ? r.layerCount : 1;
+            }
             var n = root.model.get(last);
             // A dashboard window shows itself; its app sends its own banner.
             if (n.windowKey)
                 return;
-            root.showBanner(n.title + (n.body ? ": " + n.body : ""), n.icon || "", n.color, n.glyph, n.appId, n.params || "", n.key || "");
+            root._bannerFor(n);
+        }
+        function onDataChanged(topLeft, bottomRight) {
+            for (var i = topLeft.row; i <= bottomRight.row && i < root.model.count; ++i) {
+                var n = root.model.get(i);
+                var c = n.layerCount > 1 ? n.layerCount : 1;
+                var was = root._layersSeen[n.id];
+                root._layersSeen[n.id] = c;
+                if (was !== undefined && c > was && !n.windowKey)
+                    root._bannerFor(n);
+            }
+        }
+        function onRowsRemoved() {
+            var seen = {};
+            for (var i = 0; i < root.model.count; ++i) {
+                var id = root.model.get(i).id;
+                if (root._layersSeen[id] !== undefined)
+                    seen[id] = root._layersSeen[id];
+            }
+            root._layersSeen = seen;
         }
         function onCountChanged() {
             if (root.model.count === 0)
@@ -921,6 +975,7 @@ Item {
             onActivated: (appId, params) => root.activated(appId, params)
             onActionRequested: (index, actionId) => root.runAction(index, actionId)
             onDismissRequested: (index) => root.dismissRequested(index)
+            onLayerPopRequested: (index) => root.layerPopRequested(index)
         }
     }
 
@@ -1029,17 +1084,63 @@ Item {
 
                 // A trackpad's swipe (the list's TrackpadSwipe): as the
                 // finger's drag below, and its release.
-                readonly property bool wheelSwipeable: !item.ongoing && !root.selecting && !remove.running
+                // A stack: sideways, its top layer moves (rightwards only,
+                // as Enyo's layers: allowLeft false), not the row.
+                readonly property bool wheelSwipeable: !item.ongoing && !root.selecting && !remove.running && !layerOut.running
                 function wheelMove(x) {
                     snap.stop();
-                    content.x = x;
+                    if (item.stacked) {
+                        layerBack.stop();
+                        content.layerX = Math.max(0, x);
+                    } else {
+                        content.x = x;
+                    }
                 }
                 function wheelRelease(vx) {
+                    if (item.stacked) {
+                        item.releaseLayer();
+                        return;
+                    }
                     if (!item.persistent && (Math.abs(vx) > Theme.wheelFlickVelocity
                                              || Math.abs(content.x) > content.width * Theme.dashboardDismissRatio))
                         remove.start();
                     else if (content.x !== 0)
                         snap.start();
+                }
+
+                // A stack of layers (NotificationStacks.js): its top layer
+                // swiped right of the icon. Let go past 35% of the layer's
+                // width it slides on and is popped, the next layer on top;
+                // otherwise it slides back (AnimatedSwipeableItem.
+                // dragfinishHandler, AnimatedSwipeableItem.js:13-37).
+                readonly property bool stacked: item.windowKey === "" && item.model.layerCount > 1
+                function releaseLayer() {
+                    var w = content.width - content.topEdge;
+                    if (content.layerX > w * Theme.dashboardLayerSwipeRatio) {
+                        layerOut.to = w;
+                        layerOut.duration = Theme.motion(Math.round((w - content.layerX) / (Theme.dashboardLayerExitSpeed * Theme.u)));
+                        layerOut.start();
+                    } else if (content.layerX > 0) {
+                        layerBack.duration = Theme.motion(Math.round(content.layerX / (Theme.dashboardLayerResetSpeed * Theme.u)));
+                        layerBack.start();
+                    }
+                }
+                NumberAnimation {
+                    id: layerOut
+                    objectName: "dashboardLayerOut"
+                    target: content
+                    property: "layerX"
+                    onFinished: {
+                        root.layerPopRequested(item.index);
+                        content.layerX = 0;
+                        content.shiftIn();
+                    }
+                }
+                NumberAnimation {
+                    id: layerBack
+                    target: content
+                    property: "layerX"
+                    to: 0
                 }
 
                 // The keyboard's highlight.
@@ -1104,6 +1205,8 @@ Item {
                     icon: item.icon
                     progress: item.progress
                     actions: item.model.actions || ""
+                    layerCount: item.model.layerCount > 1 ? item.model.layerCount : 1
+                    layers: item.model.layers || ""
                     onActionTapped: (actionId) => root.runAction(item.index, actionId)
 
                     // The lock screen showed the window while locked; it
@@ -1126,11 +1229,19 @@ Item {
                         // answers' buttons otherwise.
                         z: item.windowKey !== "" ? 3 : 0
                         // An ongoing activity stays until it ends.
-                        drag.target: item.ongoing || root.selecting || forwarding ? null : content
+                        drag.target: item.ongoing || root.selecting || forwarding || layering ? null : content
                         drag.axis: Drag.XAxis
-                        enabled: !remove.running
+                        enabled: !remove.running && !layerOut.running
                         property point start
                         property real startTime: 0
+                        // A stack's top layer, pressed right of the icon
+                        // (the badge's 50 px drag the whole row, as
+                        // DashboardWindowContainer did for a dashboard that
+                        // swiped its own layers, :193-217): 0 not yet past
+                        // the tap radius, 1 sideways (the layer follows),
+                        // 2 up or down (the list's).
+                        property bool layering: false
+                        property int layerMode: 0
                         // DashboardWindowContainer had the touches on a
                         // dashboard window and passed a tap on to it
                         // (handleTap, :1104-1146: a pen down and up). A
@@ -1154,8 +1265,25 @@ Item {
                             forwarding = item.manualDrag && !root.selecting && content.x === 0 && m.x > Theme.dashboardBadgeWidth;
                             if (forwarding)
                                 content.pointer("down", m.x, m.y);
+                            layerBack.stop();
+                            layering = !forwarding && item.stacked && !root.selecting && content.x === 0
+                                       && m.x > Theme.dashboardBadgeWidth;
+                            layerMode = 0;
                         }
                         onPositionChanged: (m) => {
+                            if (layering) {
+                                var lp = mapToItem(root, m.x, m.y);
+                                var ldx = lp.x - start.x, ldy = lp.y - start.y;
+                                if (layerMode === 0) {
+                                    if (ldx * ldx + ldy * ldy < Theme.tapRadius * Theme.tapRadius)
+                                        return;
+                                    layerMode = Math.abs(ldx) > Math.abs(ldy) ? 1 : 2;
+                                    preventStealing = layerMode === 1;
+                                }
+                                if (layerMode === 1)
+                                    content.layerX = Math.max(0, ldx);
+                                return;
+                            }
                             if (!forwarding)
                                 return;
                             var p = mapToItem(root, m.x, m.y);
@@ -1174,10 +1302,23 @@ Item {
                             if (forwarding)
                                 content.pointer("cancel", start.x, start.y);
                             forwarding = false;
+                            if (layering) {
+                                layering = false;
+                                preventStealing = false;
+                                if (content.layerX > 0)
+                                    item.releaseLayer();
+                            }
                             if (content.x !== 0)
                                 snap.start();
                         }
                         onReleased: (m) => {
+                            if (layering) {
+                                preventStealing = false;
+                                if (layerMode === 1)
+                                    item.releaseLayer();
+                                layering = false;
+                                return;
+                            }
                             if (forwarding) {
                                 forwarding = false;
                                 // Not past the tap radius: a tap (the page
@@ -1190,7 +1331,7 @@ Item {
                             item.releaseDrag(ms > 0 ? (p.x - start.x) / ms : 0, ms > 0 ? (p.y - start.y) / ms : 0);
                         }
                         onClicked: (m) => {
-                            if (content.x !== 0 || item.manualDrag && moved)
+                            if (content.x !== 0 || item.manualDrag && moved || layerMode !== 0 || content.layerX !== 0)
                                 return;
                             if (root.selecting) {
                                 if (item.selectable)

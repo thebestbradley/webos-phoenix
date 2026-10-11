@@ -11,6 +11,16 @@
 // on the row's second line in place of its message, e.g. the Assistant's
 // follow-up questions ("Where is Dentist?" Office · Video call · Skip).
 // A tap on one says actionTapped(id); the row's own tap still opens the app.
+//
+// A stack of the app's notifications (NotificationStacks.js: layerCount > 1)
+// is drawn as Enyo 1.0's standard dashboard drew its layers (palm/system/
+// dashboard-window/DashboardContent.js:8-23, 99-123; dashboard.css): the top
+// layer's title and message, with the count in the blue badge over the
+// icon's top right corner (.dashboard-count); the layer under it peeks out
+// at its left, edge on (notification-divider.png), a third further left
+// once there are three or more (.layer-1, .layer-2). While the top layer is
+// swiped (layerX, set by the row) the one under it shows through where it
+// was (configureClipping, :201-205).
 
 import QtQuick
 
@@ -40,6 +50,53 @@ Item {
         }
     }
     signal actionTapped(string actionId)
+
+    // A stack: how many layers, and their JSON ([{title, body, ...}],
+    // oldest first; title and body above are the top one's). Without the
+    // JSON (the lock screen's private previews) the layers peek out empty.
+    property int layerCount: 1
+    property string layers: ""
+    // The top layer's offset while it is swiped away (the row moves it).
+    property real layerX: 0
+    readonly property bool stacked: _own && layerCount > 1
+    readonly property var _layerList: {
+        if (!layers)
+            return [];
+        try {
+            var a = JSON.parse(layers);
+            return Array.isArray(a) ? a : [];
+        } catch (e) {
+            return [];
+        }
+    }
+    // The layer under the top one, if known.
+    readonly property var underLayer: stacked && _layerList.length >= 2 ? _layerList[_layerList.length - 2] : null
+    // Where the top layer's left edge rests: the second layer's place with
+    // two, 12 px right of it with more (.layer-1 / .layer-2).
+    readonly property real topEdge: layerCount >= 3 ? Theme.dashboardLayerEdge + Theme.dashboardLayerStep : Theme.dashboardLayerEdge
+    // Popped with three or more left: the new top layer comes from the
+    // second's place to its own (layerSwiped, DashboardContent.js:55-63).
+    property real _shift: 0
+    function shiftIn() {
+        if (layerCount < 3)
+            return;
+        shiftAnim.stop();
+        _shift = -Theme.dashboardLayerStep;
+        shiftAnim.start();
+    }
+    NumberAnimation {
+        id: shiftAnim
+        target: item
+        property: "_shift"
+        to: 0
+        duration: Theme.dashboardLayerShiftDuration
+        // CSS "ease": cubic-bezier(0.25, 0.1, 0.25, 1).
+        easing.type: Easing.Bezier
+        easing.bezierCurve: [0.25, 0.1, 0.25, 1, 1, 1]
+    }
+    readonly property real _topX: topEdge + layerX + _shift
+    // The single row's text, where a stack's bottom layer has its own.
+    readonly property real _plainTextX: Theme.px(10) + Theme.px(32) + Theme.px(10)
 
     height: Theme.dashboardItemHeight
 
@@ -91,12 +148,106 @@ Item {
         glyph: item.glyph
         source: item.icon
     }
+
+    // The count, over the icon's top right corner (.dashboard-count: shown
+    // from two layers, DashboardContent.js:117-122): the top half of
+    // dashboard-newitem-badge.png (the bottom half is its pressed look)
+    // with 12 px caps, the number bold 16 px white on its top 24 px.
+    Item {
+        id: badge
+        objectName: "dashboardCount"
+        visible: item._own && item.layerCount > 1
+        z: 2
+        width: Math.max(Theme.px(24), countLabel.implicitWidth + Theme.px(16))
+        height: Theme.px(28)
+        x: dIcon.x + dIcon.width + Theme.px(3) - width
+        y: dIcon.y - Theme.px(3)
+        scale: Theme.dashboardBadgeScale
+        transformOrigin: Item.TopRight
+        clip: true
+        ArtBorderImage {
+            width: parent.width
+            height: 2 * parent.height
+            source: Theme.asset("dashboard-newitem-badge.png")
+            border { left: Theme.artBorder(12, source); right: Theme.artBorder(12, source); top: 0; bottom: Theme.artBorder(28, source) }
+        }
+        Text {
+            id: countLabel
+            objectName: "dashboardCountLabel"
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: (Theme.px(24) - height) / 2
+            text: String(item.layerCount)
+            color: "#ffffff"
+            font.family: Theme.fontFamily
+            font.pixelSize: Theme.px(16)
+            font.bold: true
+        }
+    }
+
+    // The layer under the top one, where it rests: shown only as far as
+    // the top layer has moved off it, and its edge (15 px) when there are
+    // three or more (DashboardLayer clipControl / leftOffset, :76-77,
+    // 201-205). With two, it is the bottom layer: no edge, its text where a
+    // single row has it (.layer-0).
+    Item {
+        id: under
+        objectName: "dashboardUnderLayer"
+        visible: item.stacked && width > 0
+        x: Theme.dashboardLayerEdge
+        width: Math.max(0, Math.min(item.width - x,
+            item.layerCount >= 3 ? Theme.dashboardLayerPeek + item.layerX + item._shift : item.layerX))
+        height: parent.height
+        clip: true
+        Image {
+            visible: item.layerCount >= 3
+            y: (parent.height - height) / 2
+            width: Theme.artWidth(source)
+            height: Theme.artHeight(source)
+            source: Theme.asset("notification-divider.png")
+        }
+        Column {
+            x: item.layerCount >= 3 ? Theme.dashboardLayerTextInset : item._plainTextX - under.x
+            width: item.width - under.x - x
+            anchors.verticalCenter: parent.verticalCenter
+            Text {
+                objectName: "dashboardUnderTitle"
+                width: parent.width
+                elide: Text.ElideRight
+                text: item.underLayer ? item.underLayer.title : ""
+                color: Theme.text
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.px(16)
+                font.bold: true
+            }
+            Text {
+                width: parent.width
+                elide: Text.ElideRight
+                text: item.underLayer ? item.underLayer.body : ""
+                color: Theme.textDim
+                font.family: Theme.fontFamily
+                font.pixelSize: Theme.px(14)
+            }
+        }
+    }
+    // The top layer's own edge.
+    Image {
+        objectName: "dashboardTopDivider"
+        visible: item.stacked
+        x: item._topX
+        y: (parent.height - height) / 2
+        width: Theme.artWidth(source)
+        height: Theme.artHeight(source)
+        opacity: textColumn.opacity
+        source: Theme.asset("notification-divider.png")
+    }
+
     Column {
         id: textColumn
         visible: item._own
-        anchors.left: dIcon.right
-        anchors.leftMargin: Theme.px(10)
-        anchors.right: parent.right
+        x: item.stacked ? item._topX + Theme.dashboardLayerTextInset : item._plainTextX
+        width: parent.width - (item.stacked ? item.topEdge + Theme.dashboardLayerTextInset : item._plainTextX)
+        // Fading as it is swiped away, as the row does.
+        opacity: item.stacked ? Math.max(0, 1 - item.layerX / Math.max(1, item.width - item.topEdge)) : 1
         anchors.verticalCenter: parent.verticalCenter
         Text {
             width: parent.width
