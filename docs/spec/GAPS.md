@@ -98,6 +98,18 @@ device, not yet run"):
 - 🟠 ~~V8: Settings > Hardware Keyboard, the keyboard key, menus, popup alerts and the PIN pad by keyboard, the keyboard button~~ (one layout case left)
 - ✅ ~~E5: SF1, SF2, SF5: the original file picker, the picker's kinds, Share in Docs, Voice Memos and Maps, Open in Music~~ (SF6 is 2.0)
 
+**The platform's clients** (11 October 2026; not luna-sysmgr's, so not a
+row here): the device side of Palm's update, App Catalog and Palm Profile
+servers' successors is done against a mock platform: one
+`/etc/palm/phoenix/servers.json`, signed catalog and update feeds with the
+owner's root delegating to online keys, the revocation list, staged
+rollouts, the dev channel, resumed downloads and RAUC's mark-good, the
+Phoenix Account (sign-in with a code, First Use's step), Phoenix Cloud
+backup and restore, push and token-relay registration, the assistant
+provider ([PLATFORM-CLIENT.md](../PLATFORM-CLIENT.md)). Left: the real
+platform (checked with `tools/test-platform-client.cjs`), RAUC in
+meta-phoenix, the push service's ntfy connection (Synergy C6).
+
 **In the inventory, not in a row here** ([feature-inventory.md](feature-inventory.md)):
 the LED throbber and Blink Notifications (GESTURE-BAR.md GB6), the Pre and
 Veer keyboard slider, the `com.palm.systemmanager` methods that answer

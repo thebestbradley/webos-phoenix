@@ -193,7 +193,7 @@ its owner. Counts are on 10 October 2026.
 | U1 | RAUC on the image | ⬜ | platform | **No RAUC recipe, keyring, `system.conf` or partition layout in meta-phoenix yet** (PLATFORM.md 12). The `com.palm.update` service calls `rauc` and answers that it is missing; add meta-rauc (scarthgap) to the layers, a `rauc-conf` bbappend per machine with the slots, and the wic layout with two root slots |
 | U2 | Slots per target | ⬜ | platform | Pi 4: the firmware's `tryboot` or U-Boot (RAUC documents both); qemux86-64: GRUB or systemd-boot EFI |
 | U3 | The keyring | ⬜ | platform, owner decision | The signing key's public half in the image; LGPL-3.0 (Qt) and GPL-3.0 (bash) need the owner able to install modified versions (LEGAL.md, Source offer): Developer Mode accepting the owner's key, or unsigned bundles in Developer Mode |
-| U4 | The first OTA and rollback | 🟡 | updates service | `services/updates` reads the feed (`/etc/palm/updates.json`), downloads, `rauc install`, marks good after a good start; the feed URL is a placeholder (Q1) and `rauc-mark-good` after the boot is not wired (HARDWARE.md, OTA) |
+| U4 | The first OTA and rollback | 🟡 | updates service | `services/updates` reads the feed (servers.json `updates`: signed format 2, the root's delegated key, channels stable/beta/dev, staged rollout, revoked builds), downloads with resume, `rauc install`, and marks the running slot good (`rauc status mark-good`) when it first starts after the System UI is up, so a system that does not get there is reverted by the boot counter (PLATFORM-CLIENT.md, System updates). Waits on U1-U3 (RAUC in the image) |
 | U5 | Firmware and driver updates | 🚫 | owner decision | The Hardware app installs opkg packages from the driver feed into the root, which an A/B update replaces: they must be reinstalled after each update, or go to a data overlay |
 
 ## R. Recovery and factory reset
@@ -244,13 +244,14 @@ its owner. Counts are on 10 October 2026.
 
 | Row | Item | Status | Owner | Notes |
 | --- | --- | --- | --- | --- |
-| Q1 | Real URLs and pinned keys | ⬜ | platform | `services/updates/etc/palm/updates.json` (`http://127.0.0.1:8088/updates/`), the Marketplace's `sources.json` (`http://127.0.0.1:8088/v1/`, key trusted on first use), `services/hardware/etc/palm/hardware/catalog.json`: before the first image (known findings of `check-simrefs.py`) |
-| Q2 | Third-party catalogs | 🚫 | owner decision (Q65) | App Museum's host in code, PreCentral over HTTP (X4) |
-| Q3 | The `dev` update channel and `rollout` | ⬜ | updates service | `updatesservice.js:81`, Settings > Updates; before the first image (Q56) |
+| Q1 | Real URLs and pinned keys | 🟡 | platform, owner | One file: `/etc/palm/phoenix/servers.json`, written by `phoenix-apps_git.bb` from `PHOENIX_FEEDS_URL`, `PHOENIX_API_URL`, `PHOENIX_ACCOUNT_ISSUER`, `PHOENIX_PUSH_URL`, `PHOENIX_PROBE_URL`, `PHOENIX_UPDATE_CHANNEL(S)` and the keys `PHOENIX_CATALOG_ROOT_KEY`, `PHOENIX_UPDATES_ROOT_KEY`, `PHOENIX_DRIVERS_KEY`, `PHOENIX_API_KEY` (`tools/servers-json.py`; PLATFORM-CLIENT.md). The hosts are the recipe's defaults (Q1 of OPEN-QUESTIONS still open); the keys are empty until the owner's key ceremony: set them for the first handed-out image |
+| Q2 | Third-party catalogs | 🚫 | owner decision (Q65) | Both off by default; the App Museum's address is `sources.json`'s; the Marketplace now marks a plain-HTTP source (PreCentral) as not secure (`getSources` `insecure`); whether images keep them is the owner's (X4) |
+| Q3 | The `dev` update channel and `rollout` | ✅ | updates service | stable, beta, dev and staged rollouts for system and app updates, a signed update feed (format 2) and the signed revocation list (Q56; PLATFORM-CLIENT.md) |
 | Q4 | RAUC keyring | ⬜ | platform | U1, U3 |
+| Q8 | The platform conformance suite against staging | ⬜ | platform | `node tools/test-platform-client.cjs --api <staging api> --token <t> --ui` passes against the Laravel platform's staging before the first image points at production (PLATFORM-CLIENT.md, Conformance) |
 | Q5 | Connectivity probe and NTP vendor zone | ⬜ | platform | meta-phoenix configuration (connman's online check URL, timesyncd's servers) |
 | Q6 | Device Info links to the release's source | ⬜ | Settings | With the source offer (L2) |
-| Q7 | Catalog key delegation, revocations, the account service | ⬜ | platform | Before 1.0 (Q45, PLATFORM.md 12) |
+| Q7 | Catalog key delegation, revocations, the account service | ✅ | platform | Done on the device (Q45, PLATFORM.md 12): the roots in servers.json, `org.webosphoenix.service.account`, Phoenix Cloud backup, First Use's account step; checked by `tools/test-platform-client.cjs` against the mock platform; the real platform runs the same suite (PLATFORM-CLIENT.md, Conformance) |
 
 ## H. Per device
 

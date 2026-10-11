@@ -299,6 +299,8 @@ jobs:
           t node tools/test-appmanager.cjs
           t node tools/test-updates.cjs --out app-tests/updates-phone
           t node tools/test-updates.cjs --tablet --out app-tests/updates-tablet
+          t node tools/test-platform-client.cjs --ui --out app-tests/platform-client-phone
+          t node tools/test-platform-client.cjs --ui --tablet --out app-tests/platform-client-tablet
           t node tools/test-phone-messaging.cjs --out app-tests/phone-messaging-phone
           t node tools/test-phone-messaging.cjs --tablet --out app-tests/phone-messaging-tablet
           t node tools/test-media.cjs --out app-tests/media-phone

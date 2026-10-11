@@ -70,9 +70,11 @@ publishes a release with the bundle as the request body:
 (`note=` repeats, one line each; for `compatible=phoenix-sim` with no body,
 the simulator's stand-in bundle.) `POST /api/admin/updates/withdraw
 {compatible, channel}` takes a release back; `GET /api/updates` lists every
-channel. A device's default feed (`services/updates/etc/palm/updates.json`)
-is this server's `/updates/`. The feed is not signed; the bundles are
-(RAUC, on the device), and builds only go up.
+channel. The simulator's `/etc/palm/phoenix/servers.json` names this
+server's `/updates/` (and its `/v1/` catalog). The feed is format 1, not
+signed (a development feed: the platform's is signed, format 2,
+docs/PLATFORM-CLIENT.md); the bundles are (RAUC, on the device), and
+builds only go up.
 
 ## On a server
 
