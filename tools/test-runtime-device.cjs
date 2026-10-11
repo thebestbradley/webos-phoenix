@@ -55,7 +55,8 @@ class Target {
     constructor(parent) {
         this.parent = parent || null;
         this.listeners = {};
-        this.style = {};
+        // style.setProperty / removeProperty keep custom properties in props.
+        this.style = { props: {}, setProperty(k, v) { this.props[k] = String(v); }, removeProperty(k) { delete this.props[k]; } };
         this.children = [];
         this.attrs = {};
         this.classList = { add() {}, remove() {}, toggle() {}, contains() { return false; } };
@@ -63,6 +64,7 @@ class Target {
     appendChild(c) { this.children.push(c); c.parentNode = this; return c; }
     removeChild(c) { this.children = this.children.filter((x) => x !== c); c.parentNode = null; return c; }
     setAttribute(k, v) { this.attrs[k] = String(v); }
+    removeAttribute(k) { delete this.attrs[k]; }
     getAttribute(k) { return k in this.attrs ? this.attrs[k] : null; }
     hasAttribute(k) { return k in this.attrs; }
     closest(sel) {
@@ -363,6 +365,22 @@ function page(appId, appinfo, launchParams, opts) {
     p.shellEvent("openAppMenu", {});
     check(toggled === 1, "the shell's openAppMenu: Enyo's app menu");
     check(p.shellEvent("nosuchevent", {}) && true, "an event the page does not know is ignored");
+
+    // Ember Glass (docs/SYSTEM-UI-2.md, "The shell contract"): the shell's
+    // "glass" event gives the page the blurred wallpaper and its window's place.
+    let glassDetail;
+    p.doc.addEventListener("phoenixGlass", (e) => { glassDetail = e.detail; });
+    p.shellEvent("glass", { wallpaperBlurred: "file:///var/run/phoenix/wallpaper-blurred.png", window: { x: 0, y: 32, width: 446, height: 940 },
+                            screen: { width: 446, height: 994 }, windowRadius: 30, blur: "none" });
+    const css = p.doc.documentElement.style.props;
+    check(css["--eg-wallpaper-blurred"] === 'url("file:///var/run/phoenix/wallpaper-blurred.png")' && css["--eg-window-y"] === "32px"
+          && css["--eg-screen-h"] === "994px" && css["--eg-window-radius"] === "30px" && p.doc.documentElement.getAttribute("data-eg-blur") === "none",
+          "the shell's glass event: Ember Glass's custom properties and data-eg-blur on <html>");
+    check(JSON.parse(ps.glass).window.y === 32 && glassDetail && glassDetail.screen.height === 994,
+          "... PalmSystem.glass and a phoenixGlass event");
+    p.shellEvent("glass", { glass: null });
+    check(!("--eg-window-y" in css) && p.doc.documentElement.getAttribute("data-eg-blur") === null && glassDetail === null,
+          "{glass: null}: taken away again");
 }
 
 // ---- Paste: the newest copy in the clipboard history -------------------------------------

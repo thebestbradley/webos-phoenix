@@ -326,6 +326,113 @@
         };
     })();
 
+    // ---- Ember Glass: what the shell gives a page for its glass ---------------------
+    //
+    // Phoenix 2.0 (docs/SYSTEM-UI-2.md, "The shell contract"; Ember Glass UI's
+    // docs/SHELL-CONTRACT.md). Ember Glass's card is frosted glass over the
+    // wallpaper, and a page cannot blur what lies behind its own window: the
+    // shell blurs the wallpaper once and tells each page where that picture
+    // is and where the page's window lies on the screen. The page (Ember Glass
+    // UI's .eg-window) draws the picture under its tint, offset by the
+    // window's place, so the blur lines up with the sharp wallpaper around
+    // the card. The shell calls glassChanged(data) once the page has loaded
+    // and whenever a value changes (phoenix-sim: WebAppWindow.glass; a
+    // device: org.webosphoenix.shellhost's "glass" event, below), with, in
+    // CSS px:
+    //   {wallpaperBlurred: an address or "", window: {x, y, width, height},
+    //    screen: {width, height}, windowRadius, blur: "live" | "none"}
+    // and the page gets
+    //   PalmSystem.glass   that data as JSON (a string, as deviceInfo and
+    //                      launchParams are)
+    //   on <html>          --eg-wallpaper-blurred (url("...")), --eg-window-x,
+    //                      --eg-window-y, --eg-screen-w, --eg-screen-h and
+    //                      --eg-window-radius; data-eg-blur="none" when the
+    //                      device has no live blur
+    //   "phoenixGlass"     an event on document, its detail the data.
+    // null (1.0's look) takes them away again: Ember Glass UI's tint-only
+    // fallback.
+    (function () {
+        var GLASS_PROPS = ["--eg-wallpaper-blurred", "--eg-window-x", "--eg-window-y",
+                           "--eg-screen-w", "--eg-screen-h", "--eg-window-radius"];
+        var last = null;
+        function num(v) {
+            v = Number(v);
+            return isFinite(v) ? Math.round(v * 100) / 100 : 0;
+        }
+        // The data as the page is given it: only what the contract has, numbers
+        // as numbers.
+        function clean(d) {
+            if (!d || typeof d !== "object")
+                return null;
+            var w = d.window || {}, sc = d.screen || {};
+            return {
+                wallpaperBlurred: typeof d.wallpaperBlurred === "string" ? d.wallpaperBlurred : "",
+                window: { x: num(w.x), y: num(w.y), width: num(w.width), height: num(w.height) },
+                screen: { width: num(sc.width), height: num(sc.height) },
+                windowRadius: num(d.windowRadius),
+                blur: d.blur === "none" ? "none" : "live"
+            };
+        }
+        // url("...") for an address: its quotes, backslashes and line breaks
+        // escaped as a URL would have them.
+        function cssUrl(u) {
+            return 'url("' + String(u).replace(/["\\\n\r]/g, function (c) {
+                return "%" + c.charCodeAt(0).toString(16).toUpperCase().replace(/^(.)$/, "0$1");
+            }) + '")';
+        }
+        function apply(d) {
+            var doc = global.document;
+            var root = doc && doc.documentElement;
+            if (!root) {
+                // Not parsed yet: as soon as it is.
+                if (doc && doc.addEventListener)
+                    doc.addEventListener("DOMContentLoaded", function () { apply(last); }, { once: true });
+                return;
+            }
+            var st = root.style;
+            if (!d) {
+                GLASS_PROPS.forEach(function (k) { st.removeProperty(k); });
+                root.removeAttribute("data-eg-blur");
+                return;
+            }
+            if (d.wallpaperBlurred)
+                st.setProperty("--eg-wallpaper-blurred", cssUrl(d.wallpaperBlurred));
+            else
+                st.removeProperty("--eg-wallpaper-blurred");
+            st.setProperty("--eg-window-x", d.window.x + "px");
+            st.setProperty("--eg-window-y", d.window.y + "px");
+            st.setProperty("--eg-screen-w", d.screen.width + "px");
+            st.setProperty("--eg-screen-h", d.screen.height + "px");
+            st.setProperty("--eg-window-radius", d.windowRadius + "px");
+            if (d.blur === "none")
+                root.setAttribute("data-eg-blur", "none");
+            else
+                root.removeAttribute("data-eg-blur");
+        }
+        runtime.glassChanged = function (data) {
+            var d = clean(typeof data === "string" ? (function () { try { return JSON.parse(data); } catch (e) { return null; } })() : data);
+            var json = d ? JSON.stringify(d) : "";
+            if (json === (last ? JSON.stringify(last) : ""))
+                return;
+            last = d;
+            apply(d);
+            var ps = global.PalmSystem;
+            if (ps) {
+                try { ps.glass = json; } catch (e) { /* a read-only object */ }
+                if (ps.glass !== json) {
+                    try { Object.defineProperty(ps, "glass", { configurable: true, enumerable: true, get: function () { return last ? JSON.stringify(last) : ""; } }); }
+                    catch (e) { /* the page keeps the CSS and the event */ }
+                }
+            }
+            var doc = global.document;
+            if (doc && typeof global.CustomEvent === "function") {
+                try { doc.dispatchEvent(new global.CustomEvent("phoenixGlass", { detail: d ? JSON.parse(json) : null })); }
+                catch (e) { console.error("[phoenix-runtime] phoenixGlass failed", e); }
+            }
+        };
+        runtime.glass = function () { return last ? JSON.parse(JSON.stringify(last)) : null; };
+    })();
+
     // ---- Device compatibility -------------------------------------------------------
 
     // Legacy service names that webOS OSE serves under a different name,
@@ -699,7 +806,11 @@
             },
             openAppMenu: function () { runtime.openAppMenu(); },
             justType: function (p) { deviceJustType(p, 0); },
-            dictationEvent: function (p) { if (runtime.dictationEvent) runtime.dictationEvent(p); }
+            dictationEvent: function (p) { if (runtime.dictationEvent) runtime.dictationEvent(p); },
+            // Ember Glass: the blurred wallpaper and the window's place
+            // (glassChanged above; docs/SYSTEM-UI-2.md). {glass: null}
+            // takes them away.
+            glass: function (p) { runtime.glassChanged("glass" in p ? p.glass : p); }
         };
         // Just Type's page (com.palm.launcher, luna-applauncher) in the
         // shell's Just Type: the text typed, the stop, Back, as the
@@ -2051,10 +2162,18 @@
         };
     }
 
+    // Phoenix 2.0's Ember Glass is drawn over the phoenix (SPEC.md,
+    // "Licences"): while the shell's look is Ember Glass (applyHostStatus
+    // {look}) and the user has chosen no wallpaper, it is the default
+    // (docs/SYSTEM-UI-2.md, owner question 3; Theme.defaultWallpaperPath).
+    var EMBER_GLASS_WALLPAPER = { wallpaperName: "Phoenix",
+                                  wallpaperFile: "/usr/palm/applications/org.webosphoenix.settings/wallpapers/phoenix.jpg" };
     function prefs() {
         var p = store.get("prefs", {});
         var out = {};
         for (var k in defaultPrefs) out[k] = defaultPrefs[k];
+        if (store.get("shellLook", "") === "ember-glass")
+            out.wallpaper = EMBER_GLASS_WALLPAPER;
         for (k in p) out[k] = p[k];
         return out;
     }
@@ -7429,6 +7548,13 @@
             // The device has a gesture area (getSystemStatus gestureArea).
             if ("gestureArea" in st && !!st.gestureArea !== !!store.get("gestureArea", false)) {
                 store.set("gestureArea", !!st.gestureArea);
+                changed();
+            }
+            // The shell's look (docs/SYSTEM-UI-2.md): Ember Glass brings its
+            // own default wallpaper (prefs()); the system's status, which
+            // carries the wallpaper, goes back to the shell below.
+            if (typeof st.look === "string" && st.look !== store.get("shellLook", "")) {
+                store.set("shellLook", st.look);
                 changed();
             }
             // A cable from a computer is in (com.palm.storage diskmode/hostIsConnected).
