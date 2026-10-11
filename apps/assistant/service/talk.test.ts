@@ -277,3 +277,38 @@ describe("dates", () => {
         expect((await d.ask("what year is it")).text).toBe("It's 2026.");
     });
 });
+
+describe("the decision model's slot", () => {
+    // A stand-in decision model: picks the option the test names, as sure as it says.
+    const decider = (pick: (opts: string[]) => number | string, confidence: number, seen: string[][]) => ({
+        name: "Test", threshold: 0.85, readBackAt: 0.5,
+        decide: (input: { options: string[] }) => {
+            seen.push(input.options);
+            return Promise.resolve({ choice: pick(input.options), confidence });
+        }
+    });
+    const ask = (text: string, d: object) => device({ settings: { followUps: false, localModel: "off", decider: "on" }, deps: { decider: d } }).ask(text);
+    it("chooses among complete requests, each one the grammar takes", async () => {
+        const seen: string[][] = [];
+        const m = await ask("bluetooth is draining me, off with it", decider((o) => o.indexOf("Turn bluetooth off"), 0.95, seen));
+        expect(seen[0]).toEqual(["Turn bluetooth off", "Turn bluetooth on", "Is bluetooth on"]);
+        expect(m.command).toBe("toggle");
+        expect(m.status).toBe("done");
+    });
+    it("reads back what it is not sure of, and every call or message", async () => {
+        const unsure = await ask("bluetooth is draining me, off with it", decider((o) => o.indexOf("Turn bluetooth off"), 0.6, []));
+        expect(unsure.status).toBe("pending");
+        expect(unsure.text).toMatch(/bluetooth off/i);
+        const call = await ask("get Priya for me", decider((o) => o.indexOf("Call Priya Nair"), 0.99, []));
+        expect(call.command).toBe("call");
+        expect(call.status).toBe("pending");
+    });
+    it("passes on below its threshold, for something else, and with no options", async () => {
+        const seen: string[][] = [];
+        expect((await ask("bluetooth is draining me, off with it", decider(() => 0, 0.3, seen))).command || "").toBe("");
+        expect((await ask("make the phone vibrate only", decider(() => "else", 0.99, seen))).command || "").toBe("");
+        const before = seen.length;
+        await ask("tell me a story about dragons", decider(() => 0, 0.99, seen));
+        expect(seen.length).toBe(before);
+    });
+});

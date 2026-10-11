@@ -80,6 +80,7 @@
 "use strict";
 
 var grammar = require("./lib/grammar");
+var decision = require("./lib/decision");
 var region = require("./lib/region");
 var commands = require("./lib/commands");
 var providers = require("./lib/providers");
@@ -419,7 +420,8 @@ function createAssistantService(deps) {
         thread.focus = focus;
         putThread(t);
     }
-    function act(thread, cmd, args, layer, source, asked) {
+    // opts.readBack: read back whatever it is (the decision model when not quite sure).
+    function act(thread, cmd, args, layer, source, asked, opts) {
         var e = env(), s = lang().say;
         // "it": the item the conversation is about (lib/details.js).
         e.focus = thread.focus || null;
@@ -443,6 +445,7 @@ function createAssistantService(deps) {
             }
             if (p.reply) return [say(thread, p.reply, { via: layer, source: source, command: cmd.id, status: "failed" })];
             var confirm = p.confirm;
+            if (!confirm && opts && opts.readBack) confirm = s.didYouMean(s.describe(cmd.id, p.args, cmd.title));
             // A model's choice runs only when the words name it and what it
             // works on (a task's, memo's or event's words are in what was said):
             // otherwise it is read back first (the 0.6B model made "book a
@@ -1044,8 +1047,7 @@ function createAssistantService(deps) {
         if (e && e.deadline && s.localTimeout) return offer(thread, function (app) { return s.localTimeout(app); }, true, asked);
         return offer(thread, s.localFailed(e && e.message || "no answer"), false, asked);
     }
-    // hint (the decision model's, decide()): {words} answer in words, {command} fill its arguments.
-    function askLocal(thread, model, cat, hint) {
+    function askLocal(thread, model, cat) {
         return bounded(thread, function (left, stage) {
             return deps.llm.ensure(model).then(function (srv) {
                 stage("thinking");
@@ -1057,9 +1059,7 @@ function createAssistantService(deps) {
                 // made a memo (measured: docs/AI-AND-MCP.md).
                 var ctx = lang().say.context ? lang().say.context(lastAsked(thread)) : { question: false, smallTalk: false };
                 var pre = localPrefix(cat);
-                if (ctx.smallTalk || (hint && hint.words)) return callModel(p, "", thread, [], undefined, left(), pre);
-                if (hint && hint.command && REMOVES[hint.command.id] && lang().removing && !lang().removing(lang().clean(lastAsked(thread)))) hint = null;
-                if (hint && hint.command) return callCommand(p, thread, hint.command, left(), pre);
+                if (ctx.smallTalk) return callModel(p, "", thread, [], undefined, left(), pre);
                 return pickCommand(p, thread, cat, left()).then(function (c) {
                     if (c && ctx.question && c.risk !== "read") c = null;
                     // A choice that takes away, for words that say nothing of
@@ -1286,34 +1286,50 @@ function createAssistantService(deps) {
             });
         }).then(function (r) { return [say(thread, r.text || lang().say.done(), { via: "on-device", source: model.name })]; });
     }
-    // The decision model's slot (docs/AI-AND-MCP.md "A decision model"):
-    // deps.decider.decide({text, history, last, commands, now}) ->
-    // Promise<{command, args, confidence, escalate} | null>. Its choice runs
-    // as a model's does (read back unless the words name it), and only
-    // when it is sure; "escalate" (or not sure) goes on to the general model.
-    // What it decided, for what comes after: {done: messages} it acted;
-    // {words: true} a question or chat (the general model answers in
-    // words, offered no command); {command} the general model fills that
-    // command's arguments (no choosing); {nothing: true} nothing here can
-    // (no model is asked: it would only pick something); null not sure.
+    // The decision model's slot (docs/AI-AND-MCP.md "A decision model"): a
+    // choice among complete requests. The language says which requests the
+    // words come close to ("turn bluetooth off", "turn bluetooth on", "is
+    // bluetooth on"; lib/lang/en-candidates.js), each parsed by the grammar,
+    // so every option is a valid command with its arguments; the model only
+    // picks one, or "something else" (on to the general model) or "none of
+    // these" (the user is asked). With no option, it is not asked.
+    // deps.decider.decide({text, history, last, options: [label], now}) ->
+    // Promise<{choice: index | "else" | "none", confidence} | null>.
+    // At its threshold the choice runs as a model's does (read back unless
+    // the words name it); from readBackAt it is read back ("Did you mean:
+    // turn Bluetooth off?"); below that, as if it had said nothing.
+    // What it decided, for what comes after: {done: messages} it acted or
+    // read back; {nothing: true} the user is asked; null on to the general model.
+    function decisionOptions(thread, text, cat) {
+        return decision.world(env(), commands.dbFind, cat, now()).then(function (w) {
+            return decision.options({ lang: lang(), grammar: grammar, text: text, world: w, last: thread.last, now: now(),
+                                      parseCtx: { lang: settings().language, now: now(), apps: cat.apps, names: cat.names || [], appCommands: cat.compiled },
+                                      commands: function (id) { var c = commands.find(cat.all, id); return !!c && allowed(c); } });
+        });
+    }
     function decide(thread, text, cat) {
         var d = deps.decider;
         if (!d || !d.decide || settings().decider === "off") return Promise.resolve(null);
-        var usable = cat.all.filter(function (c) { return allowed(c) && !c.internal; });
         var t0 = Date.now();
-        return Promise.resolve(d.decide({ text: text, history: fitted(history(thread), 1200), last: thread.last || null, now: now(),
-                                          commands: usable.map(function (c) { return { id: c.id, title: c.title, description: c.description, examples: c.examples || [], parameters: c.parameters }; }) }))
-            .then(function (r) {
-                noteStep(thread, "decide", t0, "", r ? { choice: r.escalate ? "escalate:" + (r.kind || "") : r.command || "none", confidence: r.confidence } : { choice: "none" });
-                if (!r || !(r.confidence >= (d.threshold || 0.9))) return null;
-                if (r.escalate) return { words: true };
-                if (r.command === "none") return { nothing: true };
-                var cmd = commands.find(cat.all, r.command);
-                if (!cmd || !allowed(cmd)) return null;
-                if (r.needsArgs) return { command: cmd };
-                return act(thread, cmd, commands.fromModel(cmd, r.args || {}, env()), "decider", d.name || "decision model", text)
-                    .then(function (out) { return { done: out }; });
-            }, function (e) { log("decision model failed: " + (e && e.message)); return null; });
+        return decisionOptions(thread, text, cat).then(function (options) {
+            if (!options.length) { noteStep(thread, "decide", t0, "", { choice: "no options" }); return null; }
+            return Promise.resolve(d.decide({ text: text, history: fitted(history(thread), 1200), last: thread.last || null, now: now(),
+                                              options: options.map(function (o) { return o.label; }) }))
+                .then(function (r) {
+                    var o = r && typeof r.choice === "number" ? options[r.choice] : null;
+                    noteStep(thread, "decide", t0, "", { choice: o ? o.command : r ? String(r.choice) : "none", confidence: r ? r.confidence : 0 });
+                    if (!r) return null;
+                    var sure = r.confidence >= (d.threshold || 0.9), readBack = r.confidence >= (d.readBackAt || d.threshold || 0.9);
+                    if (r.choice === "none" && sure) return { nothing: true };
+                    if (!o || !readBack) return null;
+                    var cmd = commands.find(cat.all, o.command);
+                    if (!cmd || !allowed(cmd)) return null;
+                    // A call, a message sent, something deleted: always read back first.
+                    return act(thread, cmd, Object.assign({}, o.args), "decider", d.name || "decision model", text,
+                               { readBack: !sure || /^(?:call|send|delete)$/.test(cmd.risk) })
+                        .then(function (out) { return { done: out }; });
+                });
+        }).catch(function (e) { log("decision model failed: " + (e && e.message)); return null; });
     }
 
     function route(thread, text, fq) {
@@ -1368,7 +1384,7 @@ function createAssistantService(deps) {
             if (d && d.nothing) return offer(thread, note, !!note, text);
             return localReady().then(function (m) {
                 if (!m) return offer(thread, note, !!note, text);
-                return askLocal(thread, m, cat, d).catch(function (e) { return localFailed(thread, e, text); });
+                return askLocal(thread, m, cat).catch(function (e) { return localFailed(thread, e, text); });
             });
         });
     }

@@ -4,7 +4,8 @@
 // The decision model for the evaluation (tools/eval-assistant.cjs
 // --decider tools/decider-laya.cjs): apps/assistant/service/lib/decider-laya.js
 // asking a Laya over HTTP (tools/laya-server.py, LAYA_URL, default
-// http://127.0.0.1:8093). LAYA_THRESHOLD: the confidence it acts on (0.9).
+// http://127.0.0.1:8093). LAYA_THRESHOLD: the confidence it acts on (0.9);
+// LAYA_READ_BACK: the confidence from which its choice is read back.
 
 "use strict";
 
@@ -36,6 +37,7 @@ function predict(state, questions) {
     });
 }
 
-var decider = lib.createLayaDecider({ predict: predict, threshold: Number(process.env.LAYA_THRESHOLD) || 0.9 });
+var decider = lib.createLayaDecider({ predict: predict, threshold: Number(process.env.LAYA_THRESHOLD) || 0.9,
+                                     readBackAt: Number(process.env.LAYA_READ_BACK) || undefined });
 decider.stats = function () { return { calls: calls, meanMs: Math.round(ms / (calls || 1)) }; };
 module.exports = decider;

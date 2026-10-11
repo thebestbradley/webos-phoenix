@@ -311,7 +311,8 @@ function table(sum, md) {
     return lines.join("\n");
 }
 
-module.exports = { run: run, runCase: runCase, summarize: summarize, table: table, matches: matches, loadCases: loadCases, CASES: CASES };
+module.exports = { run: run, runCase: runCase, summarize: summarize, table: table, matches: matches, loadCases: loadCases, CASES: CASES,
+                   seed: seed, APPS: APPS };
 
 if (require.main === module) {
     var argv = process.argv.slice(2), opts = { progress: null };

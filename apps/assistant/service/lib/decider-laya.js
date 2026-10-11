@@ -5,131 +5,73 @@
 // (docs/AI-AND-MCP.md "A decision model: Laya"): Convai Innovations' Laya
 // (Apache-2.0, ModernBERT-large, 421M), which answers typed questions
 // about a state ("which of these?", "yes or no?") with calibrated
-// probabilities in one forward pass, writing no words. It decides:
+// probabilities in one forward pass, writing no words.
 //
-//   - the kind of request (DOMAINS), then the command among that kind's
-//     (two small choices: Laya is weak past some 20 options, its model card
-//     says), and the arguments that are a choice (which switch, on or off,
-//     up or down, today or tomorrow)
-//   - whether the general model is needed: a question or chat (words), or a
-//     command whose arguments are free words (a message, a title, a time:
-//     the general model fills them, told which command)
-//   - "not sure": below the threshold it decides nothing, and the router
-//     goes on as if it were not there
+// It is asked one multiple choice: which of the complete requests the
+// service found the words close to ("Turn bluetooth off", "Turn bluetooth
+// on", "Is bluetooth on"; assistant.js decisionOptions), or "something
+// else" (another request, a question, chat: the general model's), or
+// "none of these" (unclear: the user is asked). Every option is a whole,
+// valid command, so whatever it picks can be done; how sure it is decides
+// whether it is done, read back, or passed on (the router's thresholds).
+// (The first design asked it, zero-shot, for a kind of request among ten
+// descriptions and then a command among the kind's: its weakest use, and
+// measured no better than nothing: docs/AI-AND-MCP.md.)
 //
 // createLayaDecider({predict(state, questions) -> Promise<{answers}>,
-//   threshold}) -> the router's deps.decider (assistant.js decide):
-//   decide({text, history, last, commands, now}) -> Promise<{command, args,
-//     confidence, escalate, needsArgs} | null>
+//   threshold, readBackAt}) -> the router's deps.decider:
+//   decide({text, history, last, options: [label], now}) ->
+//     Promise<{choice: index | "else" | "none", confidence, ranked} | null>
+//   yesNo(text, question) -> Promise<"yes" | "no" | null>
 // predict is Laya's own call shape (laya Agent.predict, laya-serve's
-// /v1/systemone): lib/node-device.js runs the ONNX export on a device,
-// tools/decider-laya.cjs a laya-serve for the evaluation.
+// /v1/systemone); tools/decider-laya.cjs asks a laya-server for the evaluation.
 
 "use strict";
 
-// Kinds of request, each with what it covers (Laya reads these as the
-// options' descriptions) and its commands.
-// Ten at most: Laya's calibration (its temperatures) holds to ten options;
-// past that the checkpoint's own are out of range and clamped.
-var DOMAINS = {
-    clock: { text: "alarms, waking up, snooze, timers, countdowns, the stopwatch",
-             commands: ["alarm", "alarmList", "alarmManage", "timer", "timerStatus", "timerCancel", "stopwatch"] },
-    lists: { text: "reminders, to-do tasks, shopping and grocery lists, notes and memos",
-             commands: ["reminder", "task", "taskList", "taskDone", "note", "findNotes", "noteAppend"] },
-    calendar: { text: "calendar events, meetings, appointments, what is on the schedule, being free or busy",
-                commands: ["event", "agenda", "eventMove", "eventCancel", "freeTime"] },
-    calls: { text: "phone calls, calling someone back, missed calls, voicemail, contacts and their numbers",
-             commands: ["call", "callBack", "callLog", "voicemail", "contactAdd", "contactInfo"] },
-    messages: { text: "text messages and email: sending, reading, replying",
-                commands: ["text", "readMessages", "replyMessage", "email", "readEmail", "searchEmail", "emailReply"] },
-    device: { text: "switching wifi, bluetooth, airplane mode, the flashlight, do not disturb, location or rotation lock on or off; the volume; the screen brightness; the battery; storage; locking the phone; screenshots",
-              commands: ["toggle", "settingStatus", "volume", "brightness", "battery", "storage", "lock", "screenshot", "settings"] },
-    apps: { text: "playing or pausing music, opening an app or a website, searching the web, finding files or photos, the app store, help",
-            commands: ["play", "media", "open", "search", "website", "appStore", "photos", "findFiles", "help"] },
-    places: { text: "the weather, directions, navigation, places nearby, how far a place is, travel time",
-              commands: ["weather", "navigate", "nearby", "distance", "travelTime"] },
-    facts: { text: "what time or date it is, the time in another city, arithmetic, percentages, converting units or currencies",
-             commands: ["time", "worldTime", "calculate", "convert"] },
-    talk: { text: "a question about the world, a recipe, advice, chatting or small talk, or something a phone cannot do", commands: [] }
-};
-// Arguments that are a choice, per command: [argument, instructions, {value: description}].
-var CHOICES = {
-    toggle: [["setting", "Which setting?", { wifi: "Wi-Fi, wireless internet", bluetooth: "Bluetooth", airplane: "airplane mode, flight mode",
-                                              flashlight: "the flashlight, torch, a light", dnd: "do not disturb, silence calls", location: "location services, GPS",
-                                              rotationLock: "rotation lock, stop the screen turning", hotspot: "the hotspot, sharing the internet" }],
-             ["state", "Should it be turned on or off?", { on: "on, enable, start, I need it", off: "off, disable, stop, kill, I don't need it" }]],
-    settingStatus: [["setting", "Which setting is asked about?", { wifi: "Wi-Fi", bluetooth: "Bluetooth", airplane: "airplane mode", flashlight: "the flashlight",
-                                                                  dnd: "do not disturb", location: "location services", rotationLock: "rotation lock" }]],
-    volume: [["action", "What should the volume do?", { up: "louder, up, raise", down: "quieter, down, lower", mute: "mute, silence", unmute: "unmute, sound back on" }]],
-    brightness: [["action", "What should the screen do?", { up: "brighter, the screen is too dark", down: "dimmer, darker, the screen is too bright" }]],
-    media: [["action", "What should the music do?", { pause: "pause, stop", play: "resume, play again", next: "skip, next song", prev: "back, previous song", status: "what song is playing" }]],
-    agenda: [["range", "Which time is asked about?", { today: "today", tomorrow: "tomorrow", "this week": "this week", "next week": "next week", next: "the next event" }]],
-    weather: [["day", "When?", { "": "now, today", tomorrow: "tomorrow", "this week": "this week", "this weekend": "this weekend" }]],
-    callBack: [["which", "Who to call?", { back: "call back the last person who called", redial: "redial the last number called" }]],
-    stopwatch: [["action", "What should the stopwatch do?", { start: "start", stop: "stop, pause", reset: "reset", status: "how long it has run" }]],
-    time: [["what", "What is asked?", { time: "the time", date: "the date, the day" }]],
-    voicemail: [["action", "What about voicemail?", { status: "whether there is voicemail", call: "call voicemail" }]],
-    timerCancel: [], alarmList: [], timerStatus: [], taskList: [], readMessages: [], readEmail: [], callLog: [], battery: [], storage: [],
-    lock: [], screenshot: [], play: [], help: []
-};
-var CHAT_LIKE = { talk: true };
+var ELSE = "Something else: another request, a question, or chat";
+var NONE = "None of these: unclear, ask what they mean";
 
 function sorted(probs) {
     return Object.keys(probs || {}).map(function (k) { return [k, probs[k]]; }).sort(function (a, b) { return b[1] - a[1]; });
 }
 function choiceOf(a) {
     var p = sorted(a && a.probabilities);
-    return p.length ? { value: p[0][0], p: p[0][1] } : a && a.choice !== undefined ? { value: a.choice, p: a.confidence || 0 } : null;
+    return p.length ? { value: p[0][0], p: p[0][1], ranked: p } : a && a.choice !== undefined ? { value: a.choice, p: a.confidence || 0, ranked: [[a.choice, a.confidence || 0]] } : null;
+}
+
+// The state Laya reads: the request, and the turn before it when there is one.
+function stateOf(input) {
+    var s = { request: String(input.text || "") };
+    var before = (input.history || []).slice(-3, -1).map(function (m) { return (m.role === "user" ? "user: " : "assistant: ") + m.text; });
+    if (before.length) s.before = before.join(" | ");
+    return s;
+}
+// The question: the options as o0..o7 (eight at most, with the two others
+// ten: Laya's calibration holds to ten options).
+function questionOf(options) {
+    var criteria = {};
+    options.slice(0, 8).forEach(function (o, i) { criteria["o" + i] = o; });
+    criteria["else"] = ELSE;
+    criteria.none = NONE;
+    return { pick: { type: "choice", instructions: "Which of these does the user ask their phone's assistant to do?", criteria: criteria } };
+}
+function answerOf(r) {
+    var c = choiceOf(r && r.answers && r.answers.pick);
+    if (!c) return null;
+    var key = function (k) { return /^o\d+$/.test(k) ? Number(k.slice(1)) : k; };
+    return { choice: key(c.value), confidence: c.p, ranked: c.ranked.map(function (x) { return [key(x[0]), x[1]]; }) };
 }
 
 function createLayaDecider(opts) {
     var predict = opts.predict, threshold = opts.threshold || 0.9;
-    function state(input) {
-        var s = { request: String(input.text || "") };
-        var before = (input.history || []).slice(-3, -1).map(function (m) { return (m.role === "user" ? "user: " : "assistant: ") + m.text; });
-        if (before.length) s.before = before.join(" | ");
-        return s;
-    }
     return {
         name: "Laya",
         threshold: threshold,
-        DOMAINS: DOMAINS,
+        readBackAt: opts.readBackAt || threshold,
         decide: function (input) {
-            var st = state(input), usable = {};
-            (input.commands || []).forEach(function (c) { usable[c.id] = c; });
-            var crit = {};
-            Object.keys(DOMAINS).forEach(function (k) { crit[k] = DOMAINS[k].text; });
-            return predict(st, { kind: { type: "choice", instructions: "What does the user want from their phone's assistant?", criteria: crit } }).then(function (r1) {
-                var kind = choiceOf(r1.answers && r1.answers.kind);
-                if (!kind) return null;
-                if (CHAT_LIKE[kind.value]) return { command: "none", escalate: true, confidence: kind.p, kind: kind.value };
-                var cmds = DOMAINS[kind.value].commands.filter(function (id) { return usable[id]; });
-                if (!cmds.length) return null;
-                // The command, and the arguments that are a choice for each
-                // command it may be: one forward pass for all of them.
-                var q = {};
-                if (cmds.length > 1) {
-                    var cc = {};
-                    cmds.forEach(function (id) { cc[id] = String(usable[id].description || usable[id].title).split(/\.\s/)[0]; });
-                    q.command = { type: "choice", instructions: "Which of these does the user ask for?", criteria: cc };
-                }
-                cmds.forEach(function (id) {
-                    (CHOICES[id] || []).forEach(function (e) { q[id + "." + e[0]] = { type: "choice", instructions: e[1], criteria: e[2] }; });
-                });
-                return (Object.keys(q).length ? predict(st, q) : Promise.resolve({ answers: {} })).then(function (r2) {
-                    var a = (r2 && r2.answers) || {};
-                    var cmd = cmds.length > 1 ? choiceOf(a.command) : { value: cmds[0], p: 1 };
-                    if (!cmd) return null;
-                    var conf = Math.min(kind.p, cmd.p), args = {}, extra = CHOICES[cmd.value];
-                    // Arguments that are free words: the general model fills them.
-                    if (!extra) return { command: cmd.value, args: {}, confidence: conf, needsArgs: true, kind: kind.value };
-                    extra.forEach(function (e) {
-                        var c = choiceOf(a[cmd.value + "." + e[0]]);
-                        if (c) { args[e[0]] = c.value; conf = Math.min(conf, c.p); }
-                    });
-                    return { command: cmd.value, args: args, confidence: conf, kind: kind.value };
-                });
-            });
+            var options = input.options || [];
+            if (!options.length) return Promise.resolve(null);
+            return predict(stateOf(input), questionOf(options)).then(answerOf);
         },
         // An answer to a read-back ("Send it?") the words do not say plainly ("go for it", "nah, leave it").
         yesNo: function (text, question) {
@@ -143,4 +85,4 @@ function createLayaDecider(opts) {
     };
 }
 
-module.exports = { createLayaDecider: createLayaDecider, DOMAINS: DOMAINS, CHOICES: CHOICES };
+module.exports = { createLayaDecider: createLayaDecider, stateOf: stateOf, questionOf: questionOf, answerOf: answerOf, ELSE: ELSE, NONE: NONE };
