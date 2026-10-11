@@ -221,7 +221,7 @@ function createPackagesService(deps) {
     // dropped with it.
     function adoptKey(s, src, d) {
         if (!src || !src.builtin) return;
-        if (d.url !== undefined && src.url !== d.url) {
+        if (d.id === "phoenix" && deps.servers && d.url !== undefined && src.url !== d.url) {
             src.url = d.url;
             src.key = d.key || null;
             src.root = d.root || null;

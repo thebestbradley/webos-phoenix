@@ -116,7 +116,10 @@ async function main() {
         await page.goto(settingsUrl());
         await page.evaluate((f) => {
             localStorage.clear();
-            localStorage.setItem("phoenix:updates:config", JSON.stringify({ feed: f }));
+            // The feed: servers.json's "updates" with Developer Mode's override
+            // (runtime/phoenix-runtime.js "Platform servers").
+            localStorage.setItem("phoenix:devMode", "true");
+            localStorage.setItem("phoenix:platform:servers", JSON.stringify({ updates: { url: f } }));
         }, `http://127.0.0.1:${feedPort}/`);
         await page.goto(settingsUrl());
 

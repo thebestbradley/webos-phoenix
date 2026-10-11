@@ -443,7 +443,9 @@ async function ui(P, control, servers) {
     fs.mkdirSync(outDir, { recursive: true });
     const port = await freePort();
     const origin = `http://127.0.0.1:${port}`;
-    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port)], { stdio: "ignore" });
+    // Installed apps go to a folder of their own (as a device's /media/cryptofs/apps).
+    const installedDir = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-conf-installed-"));
+    const rootfs = spawn("python3", [path.join(__dirname, "serve-rootfs.py"), "--port", String(port), "--installed-dir", installedDir], { stdio: "ignore" });
     let browser;
     try {
         await until(async () => { try { return (await fetch(origin + "/apps.json")).ok; } catch (e) { return false; } }, 20000, "serve-rootfs");
@@ -501,9 +503,97 @@ async function ui(P, control, servers) {
         await page.locator("[data-testid=devmode-servers-use]").scrollIntoViewIfNeeded();
         await shot("8-devmode-servers");
         check(errors.length === 0, "no page errors", errors.join("; "));
+        await marketplaceUi(browser, origin, control, servers, errors);
     } finally {
         if (browser) await browser.close();
         rootfs.kill();
+        fs.rmSync(installedDir, { recursive: true, force: true });
+    }
+}
+
+// The Marketplace and Connections with the platform's catalog as the
+// image's servers.json names it (no Developer Mode): a package installed,
+// its staged update, and a connector installed from Connections.
+async function marketplaceUi(browser, origin, control, servers, errors) {
+    console.log("== ui: Marketplace and Connections");
+    const { pack } = require(path.join(REPO, "apps/shared/connector-kit/lib/tools/package.js"));
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-conf-pack-"));
+    const P = "luna://org.webosphoenix.service.packages/";
+    try {
+        const feeds = pack(path.join(REPO, "apps/shared/connector-kit/examples/feeds"), out, { vendor: false });
+        const meta = JSON.parse(fs.readFileSync(path.join(REPO, "apps/shared/connector-kit/examples/feeds/catalog.json"), "utf8")).accountTypes[0];
+        const tpl = JSON.parse(fs.readFileSync(path.join(REPO, "apps/shared/connector-kit/examples/feeds/public/accounts/org.example.feeds/org.example.feeds.json"), "utf8"));
+        // As the catalog writes a connector's account type (server/marketplace Catalog::connectorTypes).
+        const accountType = Object.assign({}, meta, { icon: "icons/org.example.feeds.svg", package: { id: "org.example.feeds", builtin: false },
+            capabilities: (tpl.capabilityProviders || []).map((c) => Object.assign({ capability: c.capability }, c.readOnlyData ? { direction: "read-only" } : {})) });
+        const pkgs = await mockLib.samplePackages(ipk);
+        const pkgs2 = await mockLib.samplePackages(ipk, { appVersion: "1.1.0" });
+        const b64 = (u8) => Buffer.from(u8).toString("base64");
+        const app = (v, p, rollout) => Object.assign({ id: "org.example.mockapp", kind: "ipk", title: "Mock App", summary: "From the platform's catalog",
+                                                       categories: ["Utilities"], version: v, package: b64(p) }, rollout ? { rollout } : {});
+        const connector = { id: "org.example.feeds", kind: "connector", title: "News Feed (example)", summary: "A connector from the platform's catalog",
+                            categories: ["News"], version: "0.1.0", package: b64(fs.readFileSync(feeds.file)) };
+        await control("revocations", { apps: [] });
+        let r = await control("catalog", { apps: [app("1.0.0", pkgs.app), connector], accounts: [accountType] });
+        check(r.status === 200, "control: the catalog with an app and a connector");
+
+        const ctx = await browser.newContext({ viewport: tablet ? { width: 1024, height: 740 } : { width: 320, height: 520 } });
+        // The image's servers.json: the platform under test.
+        await ctx.route("**/etc/palm/phoenix/servers.json", (rt) => rt.fulfill({ contentType: "application/json", body: JSON.stringify(servers) }));
+        const page = await ctx.newPage();
+        page.on("pageerror", (e) => errors.push(e.message));
+        const shot = async (name) => { await page.waitForTimeout(400); await page.screenshot({ path: path.join(outDir, name + ".png") }); };
+        const luna = (uri, params) => page.evaluate(([u, p]) => new Promise((res) => {
+            const bb = new PalmServiceBridge();
+            bb.onservicecallback = (x) => res(JSON.parse(x));
+            bb.call(u, JSON.stringify(p || {}));
+        }), [uri, params]);
+        const appUrl = (params) => `${origin}/usr/palm/applications/org.webosphoenix.marketplace/index.html` + (params ? "?launchParams=" + encodeURIComponent(JSON.stringify(params)) : "");
+        await page.goto(appUrl());
+        await page.evaluate(() => localStorage.clear());
+        await page.goto(appUrl());
+        await page.click("[data-testid=tab-apps]");
+        await page.waitForSelector("[data-testid='app-org.example.mockapp']", { timeout: 20000 });
+        const src = (await luna(P + "getSources", {})).sources.find((s) => s.id === "phoenix");
+        check(src && src.trusted && src.pinned && !src.error, "the catalog is trusted through the image's pinned root, without asking", JSON.stringify(src));
+        await shot("9-marketplace-apps");
+        await page.click("[data-testid='app-org.example.mockapp']");
+        await page.click("[data-testid=install-app]");
+        await page.waitForSelector("[data-testid=open-app]", { timeout: 20000 });
+        const served = await fetch(origin + "/usr/palm/applications/org.example.mockapp/index.html");
+        check(served.status === 200 && (await served.text()).includes("Mock App 1.0.0"), "Marketplace: the platform's package installs");
+        await shot("10-marketplace-installed");
+        await control("catalog", { apps: [app("1.1.0", pkgs2.app, { percent: 100, seed: "ui-1.1.0" }), connector], accounts: [accountType] });
+        await luna(P + "refresh", {});
+        await page.goto(appUrl({ section: "updates" }));
+        await page.waitForSelector("[data-testid=update-all]", { timeout: 15000 });
+        check(/1\.0\.0 → 1\.1\.0/.test(await page.textContent("[data-testid='installed-org.example.mockapp']")), "its update (rollout 100%) is offered");
+        await shot("11-marketplace-update");
+        await page.click("[data-testid=update-all]");
+        await page.waitForFunction(() => /Updated 1 app/.test(document.body.innerText), null, { timeout: 20000 });
+        check((await (await fetch(origin + "/usr/palm/applications/org.example.mockapp/index.html")).text()).includes("1.1.0"), "Update All installs it");
+
+        await page.goto(appUrl());
+        await page.click("[data-testid=tab-connections]");
+        await page.waitForSelector("[data-testid='account-org.example.feeds']", { timeout: 15000 });
+        await shot("12-connections");
+        await page.click("[data-testid='account-org.example.feeds']");
+        await page.waitForSelector("[data-testid=connector-install]");
+        await luna("luna://com.webos.service.devmode/setDevMode", { status: "enabled" });
+        await page.click("[data-testid=connector-install]");
+        await page.waitForSelector("[data-testid=set-up]", { timeout: 30000 });
+        const tpls = await luna("luna://com.palm.service.accounts/listAccountTemplates", {});
+        check(tpls.results.some((t) => t.templateId === "org.example.feeds"), "Connections: the platform's connector installs (Developer Mode), Accounts has its template");
+        await shot("13-connections-installed");
+        await luna("luna://com.webos.service.devmode/setDevMode", { status: "disabled" });
+
+        await control("revocations", { apps: [{ id: "org.example.mockapp", kind: "app", reason: "malware", date: "2026-10-11" }] });
+        await luna(P + "refresh", {});
+        const gone = await fetch(origin + "/usr/palm/applications/org.example.mockapp/index.html");
+        check(gone.status === 404, "a malware revocation removes the app from the device");
+        await ctx.close();
+    } finally {
+        fs.rmSync(out, { recursive: true, force: true });
     }
 }
 

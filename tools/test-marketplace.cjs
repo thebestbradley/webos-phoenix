@@ -386,10 +386,12 @@ async function main() {
             const simPort = await servers.freePort();
             const sim = await browser.newContext({ viewport });
             await sim.route("**/usr/share/phoenix/host.json", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ marketplaceCatalog: true }) }));
-            await sim.route("**/etc/palm/marketplace/sources.json", async (r) => {
+            // The device's servers.json, its feeds at that port (where the built-in
+            // Phoenix catalog looks: docs/PLATFORM-CLIENT.md).
+            await sim.route("**/etc/palm/phoenix/servers.json", async (r) => {
                 const res = await r.fetch();
                 const json = await res.json();
-                json.sources.find((x) => x.id === "phoenix").url = `http://127.0.0.1:${simPort}/v1/`;
+                json.feeds = `http://127.0.0.1:${simPort}/`;
                 await r.fulfill({ response: res, body: JSON.stringify(json) });
             });
             const sp = await sim.newPage();
