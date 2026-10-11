@@ -18,7 +18,8 @@
 // newer than what it runs.
 //
 //   php bin/updates.php publish BUNDLE --compatible C --version V --build N
-//                                [--channel stable|beta] [--name NAME]
+//                                [--channel stable|beta|dev] [--name NAME]
+//                                [--rollout PERCENT [--seed TEXT]]
 //                                [--date YYYY-MM-DD] [--note TEXT]...
 //       copies the bundle in and makes it the channel's release; with RAUC
 //       installed here, the bundle's own manifest must say the same
