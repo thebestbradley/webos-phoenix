@@ -631,8 +631,9 @@ describe("the on-device model", () => {
             // Qwen3 1.7B stays listed beside the Qwen3.5 2B that replaces it:
             // it is installed.
             ["qwen3-0.6b-q8_0", true, true, false, true], [MODEL, false, false, true, false],
-            ["qwen3.5-2b-q8_0", false, false, false, false],
-            ["qwen3.5-4b-q4_k_m", false, false, false, false], ["qwen3.5-9b-q4_k_m", false, false, false, false],
+            ["qwen3.5-2b-q8_0", false, false, false, false], ["gemma-4-e2b-it-qat-q4_0", false, false, false, false],
+            ["qwen3.5-4b-q4_k_m", false, false, false, false], ["gemma-4-e4b-it-qat-q4_0", false, false, false, false],
+            ["qwen3.5-9b-q4_k_m", false, false, false, false],
             ["qwen3-14b-q4_k_m", false, false, false, false], ["qwen3-30b-a3b-q4_k_m", false, false, false, false]]);
     });
 
@@ -643,6 +644,22 @@ describe("the on-device model", () => {
         expect([3.7, 5.6, 7.5, 11.4, 15.5, 31, 62].map(best)).toEqual([
             "qwen3-0.6b-q8_0", "qwen3.5-2b-q8_0", "qwen3.5-4b-q4_k_m", "qwen3.5-9b-q4_k_m", "qwen3-14b-q4_k_m",
             "qwen3-30b-a3b-q4_k_m", "qwen3-30b-a3b-q4_k_m"]);
+    });
+
+    // Gemma 4 (Apache-2.0 from this generation): Google's own QAT GGUFs,
+    // offered beside Qwen and not recommended until measured.
+    it("offers Gemma 4 E2B and E4B from Google's own GGUFs, pinned, not recommended", () => {
+        const models = req("./lib/models.js") as { find(id: string): any; forDevice(r: number): { id: string; recommended: boolean; fits: boolean }[]; BUILT_IN: string };
+        const e2b = models.find("gemma-4-e2b-it-qat-q4_0"), e4b = models.find("gemma-4-e4b-it-qat-q4_0");
+        expect(e2b).toMatchObject({ licence: "Apache-2.0", source: "google/gemma-4-E2B-it-qat-q4_0-gguf", size: 3349516256, ram: 6 * 2 ** 30 });
+        expect(e2b.url).toBe("https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf/resolve/675cff42a74c774d6cb76f76d8eacb49b48c9b93/gemma-4-E2B_q4_0-it.gguf");
+        expect(e4b).toMatchObject({ licence: "Apache-2.0", source: "google/gemma-4-E4B-it-qat-q4_0-gguf", size: 5154941280, ram: 8 * 2 ** 30 });
+        expect(e4b.sha256).toMatch(/^[0-9a-f]{64}$/);
+        const at8 = models.forDevice(7.5 * 2 ** 30);
+        expect(at8.find((m) => m.id === "gemma-4-e4b-it-qat-q4_0")).toMatchObject({ fits: true, recommended: false });
+        expect(models.BUILT_IN).toBe("qwen3-0.6b-q8_0");
+        // No Gemma 3 or older: their terms are Google's own.
+        expect(at8.some((m) => /gemma-[123]\b|gemma-3/.test(m.id))).toBe(false);
     });
 
     // The owner's rule: the Qwen team's GGUF first, Phoenix's conversion of

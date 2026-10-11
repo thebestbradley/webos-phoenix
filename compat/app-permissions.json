@@ -30,7 +30,7 @@
                            "devices.power.query"],
     "com.palm.app.notes": ["database.operation", "application.launcher", "phoenix.appmanager.launch"],
     "com.palm.launcher": ["application.launcher", "application.operation", "database.operation",
-                          "phoenix.appmanager.launch", "phoenix.appmanager.query"],
+                          "phoenix.appmanager.launch", "phoenix.appmanager.query", "index.search"],
     "com.palm.systemui": ["application.operation", "database.management", "devices.display.control",
                           "systemsettings.management", "systemsettings.query", "systemupdate.management",
                           "time.query", "activity.operation", "phoenix.appmanager.launch",

@@ -185,9 +185,11 @@ Item {
     // Phoenix's own key store goes first, whatever the storage service does
     // with /var: the OAuth service's sealed tokens and their key
     // (services/oauth/keystore.js wipe), so a copy of the data partition
-    // holds none.
+    // holds none; and the search index of the user's things (services/index
+    // wipe: what it learned of their memos, email and messages).
     function _eraseDevice() {
         _call("luna://org.webosphoenix.service.oauth/wipe", {}, function () {});
+        _call("luna://org.webosphoenix.service.index/wipe", {}, function () {});
         _call("palm://com.palm.storage/erase/EraseAll", {}, function (r) {
             if (r && r.returnValue !== false)
                 return;

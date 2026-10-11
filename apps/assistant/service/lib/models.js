@@ -30,6 +30,24 @@
 // until Qwen publishes GGUFs (the models workflow checks every week). All
 // Apache-2.0 (each repository's model card, checked 9 October 2026).
 //
+// Google's Gemma 4 E2B and E4B (instruction-tuned), from Google's own GGUF
+// builds (google/gemma-4-E2B-it-qat-q4_0-gguf, -E4B-: Q4_0 trained for it,
+// quantization-aware, "similar quality to bfloat16" per their model card),
+// Apache-2.0 from this generation (the model card and the Gemma 4 licence
+// page it links, checked 11 October 2026; Gemma 3 and older came under
+// Google's own Gemma Terms of Use, so none of them is offered). Built for
+// phones: "E" is effective parameters, the per-layer embeddings (most of
+// the file) only looked up. Their chat template (Google's canonical one of
+// 9 July 2026, in the GGUF) takes tools, and enable_thinking off, as
+// llama-server --jinja reads it (docs/AI-AND-MCP.md "Gemma 4"). ggml-org's
+// and Unsloth's GGUFs of the same weights exist (Q4_0 2.8 GB; Unsloth's
+// table: E2B 4 GB, E4B 5.5-6 GB of memory at 4 bits); Google's QAT build is
+// the one to offer, as for Qwen the team's own. Offered, not recommended
+// (unmeasured) until the Assistant's evaluation has measured them on a
+// device (tools/eval-assistant.cjs --model; the check of their template
+// in docs/AI-AND-MCP.md "Gemma 4"): Qwen stays the recommendation, and
+// Qwen3 0.6B the built-in model.
+//
 // ram: the device memory to run it well (the file, a 4,096-token cache,
 // as big as 8,192 in 8 bits was, and the rest of the system): the list
 // offers what fits and recommends the largest that does. By device: 4 GB
@@ -74,6 +92,16 @@ var MODELS = [
       file: "Qwen3-14B-Q4_K_M.gguf", size: 9001752960,
       sha256: "500a8806e85ee9c83f3ae08420295592451379b4f8cf2d0f41c15dffeb6b81f0",
       ram: 16 * GiB, note: "Excellent answers; for 16 GB devices and computers" },
+    { id: "gemma-4-e2b-it-qat-q4_0", name: "Gemma 4 E2B", family: "Gemma 4", params: "E2B (2.3B effective)",
+      licence: "Apache-2.0", source: "google/gemma-4-E2B-it-qat-q4_0-gguf", revision: "675cff42a74c774d6cb76f76d8eacb49b48c9b93",
+      file: "gemma-4-E2B_q4_0-it.gguf", size: 3349516256,
+      sha256: "fa401b55b07ee70a54c6dae3903c783a6e65064312529ea57175cb5f8dec6634",
+      ram: 6 * GiB, unmeasured: true, note: "Google's, built for phones; good commands and answers; for 6 GB phones" },
+    { id: "gemma-4-e4b-it-qat-q4_0", name: "Gemma 4 E4B", family: "Gemma 4", params: "E4B (4.5B effective)",
+      licence: "Apache-2.0", source: "google/gemma-4-E4B-it-qat-q4_0-gguf", revision: "4b4a2c1d584be7264f87aac328a1bc739ce81b6c",
+      file: "gemma-4-E4B_q4_0-it.gguf", size: 5154941280,
+      sha256: "676c35070db6dbe52f93e9c864ee0fba4eddea94b9c875d9cb10daff453fbaee",
+      ram: 8 * GiB, unmeasured: true, note: "Google's, built for phones; better answers; for 8 GB phones and tablets" },
     { id: "qwen3-30b-a3b-q4_k_m", name: "Qwen3 30B-A3B", family: "Qwen3", params: "30B (3B active)",
       licence: "Apache-2.0", source: "Qwen/Qwen3-30B-A3B-GGUF", revision: "e4d4bafdfb96a411a163846265362aceb0b9c63a",
       file: "Qwen3-30B-A3B-Q4_K_M.gguf", size: 18556685824,
@@ -147,8 +175,9 @@ function catalog(converted) {
         // A device sold as 8 GB reports 7.3 to 7.7 GiB: 15% of room.
         var all = offered(keep).sort(function (a, b) { return a.ram - b.ram || (a.size || 0) - (b.size || 0); })
             .map(function (m) { return Object.assign({}, m, { fits: !ramBytes || m.ram <= ramBytes * 1.15 }); });
-        // Not a dense 27B: the MoE beside it answers as well, far sooner.
-        var quick = all.filter(function (m) { return m.fits && !m.slow; });
+        // Not a dense 27B: the MoE beside it answers as well, far sooner;
+        // nor one the evaluation has not measured yet (unmeasured).
+        var quick = all.filter(function (m) { return m.fits && !m.slow && !m.unmeasured; });
         var best = quick.length ? quick[quick.length - 1] : all[0];
         all.forEach(function (m) { m.recommended = m === best; });
         return all;

@@ -816,7 +816,8 @@ installed by the setup scripts on a computer and by meta-phoenix's
 | --- | --- | --- | --- | --- |
 | Speech recognition: `whisper-cli` | Homebrew `whisper-cpp` | Built from whisper.cpp `d09f61a` into `/usr/local/bin` (3 MB) | `whisper-cpp` (static) | MIT |
 | Its model, `ggml-base.en.bin` (148 MB) | `build/whisper` (`tools/get-whisper-model.py`) | `build/whisper` | `whisper-cpp-model-base-en`, in the image, `/usr/share/whisper` | MIT (OpenAI's Whisper weights) |
-| On-device model runner: `llama-server` | Homebrew `llama.cpp` | Built from llama.cpp b11239 into `/usr/local/bin` (15 MB) | `llama-cpp-server` (static, b11239) | MIT |
+| On-device model runner: `llama-server` | Homebrew `llama.cpp` | Built from llama.cpp b11552 into `/usr/local/bin` (15 MB) | `llama-cpp-server` (static, b11552) | MIT |
+| Search your phone's model: EmbeddingGemma 2 Q8_0 (310 MB), and its vision and audio encoders (`mmproj`, 555 MB) for photos and voice memos | Downloaded in Settings > Assistant > Search your phone | Same | Same, into `/media/internal/.phoenix/models/index` | Apache-2.0 (Google) |
 | The larger language models (1.8 to 19 GB) | Downloaded in Settings > Assistant | Same | Same, into `/media/internal/.phoenix/models` | Apache-2.0 (Qwen) |
 | Wake word: `phoenix-wakeword` | Built with phoenix-sim | Built with phoenix-sim | `phoenix-shell` | Apache-2.0 (Phoenix) |
 | Wake word: libvosk | `build/wakeword` (`tools/get-wakeword.py`, 13 MB) | `build/wakeword` (26 MB) | `libvosk`, prebuilt from Alpha Cephei's PyPI wheels (x86-64, aarch64, armv7) | Apache-2.0; Kaldi, OpenFST Apache-2.0; OpenBLAS, CLAPACK BSD-3-Clause |
@@ -1537,6 +1538,176 @@ held-out set shows it misses ("shoot Sam a slack message saying ...",
 "anything new on Slack", "anything in my work inbox"). Decisions for the
 owner: OPEN-QUESTIONS.md Q140-Q146.
 
+### Search your phone (11 October 2026)
+
+The owner (11 October 2026): "Gemma embeddings 2 is out and I think we
+need to look into creating a layer in our assistant that can use it for
+advanced search." It is built: a search of the user's own things by what
+they mean, on the device, which the Assistant and Just Type use. Off
+until the user turns it on (Settings > Assistant > Search your phone).
+
+**The model.** Google's EmbeddingGemma 2 (6 October 2026; Apache-2.0, its
+model card at `google/embeddinggemma-2` and the Gemma 4 licence page it
+links): a 270M text and code model (130M transformer, 140M embeddings)
+with optional vision (170M) and audio (300M) encoders, one 768-dimension
+space for text, code, pictures and sound, 8K tokens, Matryoshka
+dimensions 768/512/256/128. llama.cpp's own conversion
+(`ggml-org/embeddinggemma-2-GGUF` at `bfcd298`, converted with b11451):
+the text model Q8_0, 310 MB, and the projector with both encoders
+(`mmproj`) Q8_0, 555 MB, downloaded in Settings with their SHA-256
+checked (`services/index/lib/model.js`). Its model card's prompts are
+used: a passage is `title: {title} | text: {content}` (`title: none`
+without one), a query `task: search result | query: {query}`; pictures
+and sound without a prefix. Not float16 (the card: its activations
+overflow it); llama.cpp's CPU backend computes in float32.
+
+**llama.cpp.** The model is llama.cpp's `gemma-embedding2` from b11451;
+`./phoenix` and meta-phoenix's `llama-cpp` now build b11552 (`23b0202`,
+10 October 2026), which also takes pictures and sound in
+`/v1/embeddings` (`{"input": [{"content": [{"type": "image_url", ...}]}]}`
+or `input_audio`, the server started with `--mmproj`). `./phoenix`
+builds llama-server again when the one installed is older than b11451
+(`brew upgrade llama.cpp` on a Mac). **Pictures and sound work**: the
+seven sample photos embedded from their pixels and searched with words
+each found its own picture first (7 of 7: "a beach with sand dunes" the
+dunes, 0.742 against at most 0.652; "northern lights in the night sky"
+the aurora 0.795; "boats in a harbor at dusk" the harbour 0.733), and the
+two sample voice memos from their sound ("how to record and transcribe a
+memo": the welcome memo 0.797 against 0.601; llama.cpp calls its audio
+input experimental). On this 4-core computer under load a picture took
+10-15 s and a 8 s recording 3-4 s, one thread; with "Include photos and
+voice memos" off, photos are found by their names, albums and dates and
+voice memos by their titles and transcripts.
+
+**The service** (`services/index`, `org.webosphoenix.service.index`, Node.js
+like the other services; the simulator runs the same code in the page):
+
+| Source | db8 | Opens |
+| --- | --- | --- |
+| Memos | `com.palm.note:1` | Memos `{memoId}` |
+| Tasks | `com.palm.task:1` | Tasks `{taskId}` |
+| Calendar | `com.palm.calendarevent:1` | Calendar `{showEventDetail}` |
+| Contacts | `com.palm.person:1` | Contacts `{id}` |
+| Email | `com.palm.email:1` and every kind that extends it (IMAP, POP, EAS, a connector's) | Email `{emailId}` |
+| Messages | `com.palm.message:1` and every kind that extends it: SMS, MMS and every Synergy account's chat, today's and any future connector's (the messaging contract has each extend it) | Messaging `{threadId}` |
+| Files | `/media/internal` through the file manager: names, and the words of text files and PDFs (`lib/pdftext.js`: content streams, inflated) | Files `{path: its folder}` |
+| Photos | `com.palm.media.image.file:1`: name, album, date; the picture itself with the encoders | Photos `{imageList}` |
+| Voice memos | `org.webosphoenix.voicememo:1`: title, date, transcript; the recording itself with the encoders | Voice Memos `{memoId}` |
+
+Each source is a switch; one turned off takes its part of the index
+with it. Passages are at most 160 words and 700 characters (a passage
+of text without spaces was 785 tokens and stopped a pass in the
+simulator), 8 a record. Vectors are cut to 256 dimensions, normalized
+again and kept as 8 bits with a scale each: 260 bytes a passage, in one
+file per source (`lib/store.js`) in `/var/lib/phoenix/index` (the
+service's own; not on the USB drive; no backup registration, so never in
+a backup or Phoenix Cloud: OPEN-QUESTIONS asks the owner), with no text:
+a result is read again from its record (so one deleted is never shown).
+Full Erase wipes it (Settings' and the security policy's: the shell's
+`SystemScreens._eraseDevice` and the system manager call `wipe` beside the
+OAuth service's).
+
+**Keeping up.** A pass asks db8 for what changed after the last revision
+it indexed, deletions included (`_rev > N`, `incDel`), as the contacts
+linker does (`autolinker.js:1680-1760`), a page of 50 at a time, embeds
+only passages whose text changed, and saves what it has with the
+revision every minute and at its end: it stops between pages when it
+must and goes on from there. On a device an activity per source wakes it
+(a db8 watch on that revision, made again after each pass) and a daily
+one with the charger required looks at files and at records db8 purged;
+the simulator's indexing page looks every 30 seconds. **When**: never on
+a battery saver (the system preference `batterySaver`, when Phoenix has
+one); up to 50 changes at any time above 15% battery; a backlog (the
+first build) while charging, or with the screen off and 30% or more.
+The model's own llama-server (a second one beside the Assistant's chat
+model, stopped after 2 idle minutes) runs one thread: a background job,
+and on this computer at a load average of 40, one thread embedded a
+200-token passage in 0.44-0.62 s and a query in 50 ms, two threads in
+2.1-3.6 s and 115-340 ms (their threads waiting on each other). A search
+goes before the pass's next batch.
+
+**Searching.** The query's embedding (one call; the last 64 kept), a dot
+product with every passage (brute force: 50,000 passages of 256
+dimensions in 45 ms on this computer; 12.4 MB of vectors), the best
+passage of each record, results at least 0.70 and within 0.10 of the
+best (unrelated passages score 0.6 to 0.78 with the simulator's data,
+what was asked for 0.8 to 0.9), a little more for the words asked
+themselves. With the simulator's own data (`tools/test-index-sim.cjs`,
+the real model):
+
+| Asked | Found first (score) | Words in common |
+| --- | --- | --- |
+| "internet password" | the memo "Wi-Fi at the cabin: network "Lakeview", password on the fridge" (0.818) | "password" |
+| "when are the servers down" | the email "Scheduled maintenance this weekend" (0.817) | none |
+| "lunch with Priya" | the event "Lunch with Priya" (0.901), the email "Lunch today?" (0.861) | all, and "lunch" |
+| "the paper about birds" | the memo "Books to read" (its "A Field Guide to Coastal Birds", 0.803), then two emails ("Your order has shipped" 0.724, "Paper draft for review" 0.713) | "birds"; "paper" |
+| "a trip with mountains and a lake" | the Wi-Fi memo ("Lakeview", 0.730), the photo "Alpine Lake" (0.724), the file "Trip notes.md" (0.714) | none; "lake"; "trip" |
+| "what did Daniel send about the hike" | the email "Photos from the hike" (0.868) | "hike" |
+| "how do I get online at the lake house" (Just Type) | the Wi-Fi memo (0.805) | none |
+
+The simulator's 62 items (69 passages: 4 memos, 11 events, 14 contacts,
+7 emails, 8 messages, 11 files, 7 photos by name) were indexed in 33 s
+on one thread of this busy computer, into 25 KB; a query took 56 to 160
+ms with the model's server running (5.5 s for the first, which starts it).
+"The paper about birds" shows the limit: the memo of books has the bird,
+the email of the paper is third.
+
+**In the Assistant** (`apps/assistant/service/lib/commands-search.js`,
+`lib/lang/en-search.js`): `searchPhone` ("what did Sam say about the
+party": Sam's messages and email only, by his numbers and addresses;
+"where's that note about the wifi password"; "find anything about the
+boiler"; "search my phone for ..."), the results as cards with their
+app's icon, each opening its app on itself; and a layer under the
+commands that look for words: when `findNotes`, `searchEmail`,
+`findFiles` or `photos` of something find nothing with the words, the
+index answers ("No emails have those words, but this one is about
+“boiler”."). With the index off they answer as before, and searchPhone
+looks for the words and says how to search by meaning. **Questions to a
+model** about the user's things ("what's my wifi password at the
+cabin?"): with "Use in answers" on, the passages found go with the
+question, marked as the user's data and never instructions, to the
+model the conversation is already using (on the device, or the cloud
+model the user chose: nothing goes to a cloud model it would not have
+seen), with no tools that turn (the taint rule, Safety), and where they
+came from shown under the answer. Evaluation: `cases-search.json` (14
+cases, all right, grammar alone; the stand-in device runs the real
+service with a deterministic fake embedder,
+`services/index/test/fake-embedder.cjs`); held-out: 2 of 4 new phrasings
+by the grammar.
+
+**In Just Type**: "From your phone", under the exact matches (the apps'
+content searches) and above the web: at most five, each with its app's
+icon, half a second after typing stops, leaving out what has the typed
+words (those are above); a tap opens the app on it. Added to the
+original Just Type (luna-applauncher, which runs as `com.palm.launcher`)
+through the compat overlay
+(`compat/rootfs/usr/palm/applications/com.palm.launcher/app/PhoenixPhoneSearch.js`,
+listed in that overlay's `depends.js`).
+
+#### Gemma 4 E2B and E4B
+
+Settings > Assistant offers them (`lib/models.js`), from Google's own
+QAT GGUFs (`google/gemma-4-E2B-it-qat-q4_0-gguf` at `675cff4`, 3.35 GB,
+for 6 GB devices; `-E4B-` at `4b4a2c1`, 5.15 GB, for 8 GB; Apache-2.0 from
+this generation; Gemma 3 and older are not offered: their terms are
+Google's own), not recommended until the evaluation has measured them on
+a device (Qwen stays the recommendation, Qwen3 0.6B the built-in model).
+**The template check** (they are too big for this computer's disk): a
+tiny random-weight Gemma 4 GGUF (`Bingsu/tiny-random-gemma-4-moe`, MIT)
+in llama-server b11552 with `--jinja --chat-template-file` the E2B GGUF's
+own template (Google's of 9 July 2026, the same in the E4B GGUF and
+ggml-org's): every request the Assistant makes was taken (HTTP 200: the
+command choice and a command's arguments, each held to a JSON schema,
+which the grammar enforced even with random weights; answers in words;
+`chat_template_kwargs: {enable_thinking: false}`, which the template
+reads), the Assistant's system prompt is Gemma's `<|turn>system` turn,
+and tools, a call and its result render as Gemma 4's
+`<|tool>declaration:...`, `<|tool_call>call:...` and `<|tool_response>`.
+What it cannot say is how well the real model chooses: for the owner's
+Mac, download Gemma 4 E2B in Settings > Assistant, then
+`llama-server -m <models>/gemma-4-e2b-it-qat-q4_0.gguf --port 8091 -c 4096 -np 1 -fa on -b 512 --jinja`
+and `node tools/eval-assistant.cjs --model http://127.0.0.1:8091/v1`.
+
 ### Next: 2.0
 
 **In 2.0** the same assistant grows into the agent this document plans:
@@ -2047,7 +2218,7 @@ shipping one, as for the Whisper model in [LEGAL.md](LEGAL.md)):
 | Model | Sizes | Licence | Notes |
 | --- | --- | --- | --- |
 | **Qwen3.5** small (March 2026) | 0.8B, 2B, 4B, 9B | Apache-2.0 | Tool use, thinking and non-thinking modes, multimodal. **Default candidate**: 0.8B for the Pi and command parsing, 2B for phones |
-| **Gemma 4** E2B, E4B (April 2026) | ~2B and ~4B effective | Apache-2.0 (a change from Gemma 3's own terms) | Built for phones; Google's own runtime is LiteRT-LM. Good second choice |
+| **Gemma 4** E2B, E4B (April 2026) | ~2B and ~4B effective | Apache-2.0 (a change from Gemma 3's own terms) | Built for phones; Google's own runtime is LiteRT-LM. **Offered** in Settings > Assistant (11 October 2026, Google's QAT GGUFs), not recommended until measured ("Search your phone" above; OPEN-QUESTIONS Q162) |
 | Phi-4-mini | 3.8B | MIT (*per the model card, unverified here*) | Strong reasoning for its size |
 | Llama 3.2 | 1B, 3B | Llama 3.2 Community License (not OSI open source, has an acceptable use policy) | Widely tested for tool calling; do not ship by default, let users download it |
 
@@ -2059,7 +2230,7 @@ against a list shipped with Phoenix.
 
 | Runtime | Licence | Fit for Phoenix |
 | --- | --- | --- |
-| **llama.cpp** (`llama-server`) | MIT | **Chosen.** Plain C/C++, builds with Yocto like the `whisper-cpp` recipe (same ggml), CPU NEON everywhere, Vulkan and OpenCL backends to try on GPUs, OpenAI-compatible server with tool calls and JSON Schema grammars, GGUF models for every candidate. Daily builds (b11239 on 28 September 2026) |
+| **llama.cpp** (`llama-server`) | MIT | **Chosen.** Plain C/C++, builds with Yocto like the `whisper-cpp` recipe (same ggml), CPU NEON everywhere, Vulkan and OpenCL backends to try on GPUs, OpenAI-compatible server with tool calls and JSON Schema grammars, GGUF models for every candidate. Daily builds; Phoenix builds b11552 (10 October 2026), which embeds EmbeddingGemma 2's text, pictures and sound (`/v1/embeddings`) |
 | ExecuTorch (1.0 in October 2025, 1.4 now per PyPI) | BSD-3-Clause | ARM64 Linux supported; strong on Android/iOS and NPUs through vendor delegates. More build machinery, per-model export step. Revisit for NPUs |
 | LiteRT-LM (Google) | Apache-2.0 | Linux and Raspberry Pi CLI and Python API; best path for Gemma. A second backend if Gemma 4 becomes the default |
 | ONNX Runtime GenAI (0.17, September 2026) | MIT | Good on Windows and DirectML/QNN; less natural on our Yocto ARM Linux |
@@ -2209,10 +2380,11 @@ small label on each answer: "On device", "Home server (Ollama)",
 | Memories ("my partner is Sam", "I prefer metric") | db8 `org.webosphoenix.assistant.memory:1` | Until deleted | Listed in Settings > Assistant > Memories, editable. The assistant proposes a memory and the user confirms ("Remember this?"); nothing is remembered silently |
 | Personal data (contacts, messages, ...) | Where it already is | Not copied | Read on demand through the hub, per grant; tool results are kept in the conversation only as a short summary |
 | Screen content | Not read by default | | An explicit "Ask about this screen" action takes a screenshot of the front card for that one turn |
+| Search your phone's index | `/var/lib/phoenix/index` (the service's own) | Until turned off, deleted or erased | The Assistant and Just Type, through `org.webosphoenix.service.index`; what it finds goes to a model only with "Use in answers" on, and only to the model the conversation already uses |
 
-There is no background indexing of the user's data for the assistant in
-this plan. A local semantic index (embeddings of notes and email for "find
-the email about the boiler") is an open question, not a default.
+A local semantic index of the user's things is built (11 October 2026,
+"Search your phone" above): off until the user turns it on, on the
+device, vectors without text, never in a backup, wiped by Full Erase.
 
 ### Safety
 
@@ -2449,12 +2621,13 @@ Accessed 28 September 2026 unless noted.
 - MCP Apps (26 January 2026): <https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/>, <https://modelcontextprotocol.io/seps/1865-mcp-apps-interactive-user-interfaces-for-mcp>
 - Android AppFunctions: <https://developer.android.com/ai/appfunctions>; Android Developers Blog (February 2026): <https://android-developers.googleblog.com/2026/02/the-intelligent-os-making-ai-agents.html>; Jetpack release list: <https://developer.android.com/jetpack/androidx/releases/appfunctions>
 - Apple WWDC26 Apple Intelligence guide (App Intents, schemas, View Annotations, Foundation Models): <https://developer.apple.com/wwdc26/guides/apple-intelligence/>
-- llama.cpp releases (b11239, 28 September 2026): <https://github.com/ggml-org/llama.cpp/releases>; OpenCL backend for Adreno (IWOCL 2026 slides): <https://www.iwocl.org/wp-content/uploads/IWOCL-2026-Wang-Llamacpp.pdf>
+- llama.cpp releases (b11239, 28 September 2026; b11552, 10 October 2026): <https://github.com/ggml-org/llama.cpp/releases>; OpenCL backend for Adreno (IWOCL 2026 slides): <https://www.iwocl.org/wp-content/uploads/IWOCL-2026-Wang-Llamacpp.pdf>
 - ExecuTorch 1.0: <https://pytorch.org/blog/introducing-executorch-1-0/>; releases: <https://github.com/pytorch/executorch/releases>
 - LiteRT-LM: <https://ai.google.dev/edge/litert-lm/overview>
 - ONNX Runtime GenAI (0.17.0 on PyPI): <https://pypi.org/project/onnxruntime-genai/>
 - MLC LLM: <https://llm.mlc.ai/>
 - Gemma 4 under Apache-2.0: <https://opensource.googleblog.com/2026/03/gemma-4-expanding-the-gemmaverse-with-apache-20.html>
+- EmbeddingGemma 2's model card: <https://huggingface.co/google/embeddinggemma-2>; llama.cpp's GGUFs: <https://huggingface.co/ggml-org/embeddinggemma-2-GGUF>; Gemma 4's QAT GGUFs: <https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf>, <https://huggingface.co/google/gemma-4-E4B-it-qat-q4_0-gguf>
 - Qwen3.5 small models (2 March 2026, Apache-2.0): <https://artificialanalysis.ai/articles/qwen3-5-small-models> (secondary)
 - Raspberry Pi 4 and 5 llama.cpp speeds: <https://www.sitepoint.com/llms-raspberry-pi-edge/>, <https://www.stratosphereips.org/blog/2025/6/5/how-well-do-llms-perform-on-a-raspberry-pi-5> (secondary)
 - Design Patterns for Securing LLM Agents against Prompt Injections (June 2025): <https://arxiv.org/abs/2506.08837>; CaMeL, Defeating Prompt Injections by Design (March 2025): <https://arxiv.org/abs/2503.18813>

@@ -101,6 +101,10 @@
 {"id":"h-syn-9","cat":"synergy","say":"hop on the zoom call","expect":{"command":"joinMeeting"}},
 {"id":"h-syn-10","cat":"synergy","say":"which of my accounts can I post from","expect":{"anyOf":[{"command":"accounts"},{"command":"post","status":"ask"},{"answer":"fallback"}]},"forbid":["post"]},
 {"id":"h-syn-11","cat":"synergy","say":"let Noor see where I am","expect":{"command":"shareLocation","status":"pending"},"text":"telegram"},
-{"id":"h-syn-12","cat":"synergy","say":"message Sam on slack with my ETA to the airport","expect":{"command":"shareLocation","args":{"chat":{"service":"type_slack"}},"status":"pending"}}
+{"id":"h-syn-12","cat":"synergy","say":"message Sam on slack with my ETA to the airport","expect":{"command":"shareLocation","args":{"chat":{"service":"type_slack"}},"status":"pending"}},
+{"id":"h-phonesearch-1","cat":"search by meaning","say":"did Sam mention anything about the cake","deviceState":{"index":{"on":true,"seed":[{"_id":"sms-cake","_kind":"com.palm.smsmessage:1","folder":"inbox","messageText":"The surprise cake for Saturday is ordered","from":{"addr":"3035550135"},"localTimestamp":1791200000000,"threadId":"t-sam","flags":{"read":true,"visible":true}}]}},"expect":{"command":"searchPhone","args":{"source":"messages"}},"text":"surprise cake"},
+{"id":"h-phonesearch-2","cat":"search by meaning","say":"look through my phone for the heating engineer","deviceState":{"index":{"on":true,"seed":[{"_id":"mail-furnace","_kind":"com.palm.email:1","subject":"Your furnace visit","from":{"name":"Northside Heating","addr":"jobs@northside.example"},"timestamp":1791100000000,"flags":{"read":true,"visible":true},"parts":[{"type":"body","mimeType":"text/plain","content":"Our engineer will service the radiators on Tuesday."}]}]}},"expect":{"command":"searchPhone"},"text":"furnace"},
+{"id":"h-phonesearch-3","cat":"search by meaning","say":"where did I put the note with the wifi password","deviceState":{"index":{"on":true}},"expect":{"command":["searchPhone","findNotes"]},"text":"Wi-Fi at the cabin"},
+{"id":"h-phonesearch-4","cat":"search by meaning","say":"show me what Priya said about lunch","deviceState":{"index":{"on":true}},"expect":{"command":["searchPhone","readMessages"]},"text":"Lunch at noon"}
 ]
 }

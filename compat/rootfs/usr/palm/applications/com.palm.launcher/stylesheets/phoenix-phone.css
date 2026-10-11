@@ -1,0 +1,10 @@
+/* webOS Phoenix: Just Type's "From your phone" group (app/PhoenixPhoneSearch.js).
+   Each result's icon is its app's own, of any size: shown at the list icon's. */
+.phoenix-phone-icon {
+	background-size: 40px 40px;
+	flex: none;
+}
+.phoenix-phone-text {
+	width: auto;
+	max-width: 500px;
+}

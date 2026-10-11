@@ -65,6 +65,7 @@ const GROUPS: [RegExp, string][] = [
     [/^com\.palm\.universalsearch\//, "systemui.searchprovider"],
     [/^com\.palm\.systemmanager\/takeScreenShot$/, "devices.display.control"],
     [/^com\.palm\.power\/com\/palm\/power\//, "devices.power.query"],                                  // services/devices
+    [/^org\.webosphoenix\.service\.index\/search$/, "index.search"],                                       // services/index
 ];
 const PERM = JSON.parse(readFileSync(resolve(__dirname, "sysbus/org.webosphoenix.assistant.perm.json"), "utf8"))["org.webosphoenix.assistant"] as string[];
 type Grant = { object: string; caller: string; operations: Record<string, string> };
