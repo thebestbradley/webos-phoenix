@@ -11,6 +11,7 @@
         "org.webosphoenix.assistant/clearHistory",
         "org.webosphoenix.assistant/connect",
         "org.webosphoenix.assistant/retry",
+        "org.webosphoenix.assistant/warm",
         "org.webosphoenix.assistant/followUps",
         "org.webosphoenix.assistant/answerFollowUp",
         "org.webosphoenix.assistant/followUpOpen",

@@ -1,0 +1,26 @@
+{
+"about": "Speed and correctness (11 October 2026): the review's six bugs and the misreadings found by a sweep of everyday phrasings (docs/AI-AND-MCP.md \"Speed and correctness\"). The device and seed are the main set's (cases.json). Ids start with a-.",
+"cases": [
+{"id":"a-bug-eta-1","cat":"messages","say":"send my ETA to Sam","expect":{"anyOf":[{"answer":"fallback"},{"answer":"clarify"},{"command":["text","shareLocation"],"status":["pending","ask"],"args":{"name":{"$re":"sam"}}}]},"notText":"find my\\b|\\bmy in your contacts"},
+{"id":"a-bug-eta-2","cat":"messages","say":"text Mom my location","expect":{"anyOf":[{"answer":"fallback"},{"answer":"clarify"},{"command":["text","shareLocation"],"status":["pending","ask"],"args":{"name":{"$re":"mom"}}}]},"notText":"find my\\b"},
+{"id":"a-bug-eta-3","cat":"messages","say":"send happy birthday to Mom","expect":{"command":"text","status":"pending","args":{"name":"Mom","message":{"$re":"^happy birthday$"}}}},
+{"id":"a-bug-eta-4","cat":"messages","say":"send the photo to Sam","expect":{"answer":["fallback","clarify"]},"forbid":["text"],"notText":"find the\\b"},
+{"id":"a-bug-place-1","cat":"reminders","say":"remind me to buy milk when I get home","expect":{"anyOf":[{"answer":"clarify"},{"command":"reminder","status":["ask","done","pending"],"args":{"place":{"$re":"home"}}}]},"effects":[{"kind":"com.palm.task:1","where":{"summary":{"$re":"when i get home"}},"count":0}]},
+{"id":"a-bug-place-2","cat":"reminders","say":"remind me to call mom when I leave work","expect":{"anyOf":[{"answer":"clarify"},{"command":"reminder","status":["ask","done","pending"],"args":{"place":{"$re":"work"}}}]},"effects":[{"kind":"com.palm.task:1","where":{"summary":{"$re":"leave work"}},"count":0}]},
+{"id":"a-bug-place-3","cat":"reminders","turns":[{"say":"remind me to buy milk when I get home","expect":{"answer":"clarify"}},{"say":"at 6 tonight","expect":{"command":"reminder","args":{"text":{"$re":"^buy milk$"},"due":"2026-10-07T18:00"}},"effects":[{"kind":"com.palm.task:1","where":{"summary":{"$re":"^buy milk$"}},"count":1}]}]},
+{"id":"a-bug-place-4","cat":"reminders","say":"remind me to take my pills when I wake up","expect":{"command":"reminder","args":{"text":{"$re":"take my pills"}}}},
+{"id":"a-bug-sleep-1","cat":"timers","say":"set a sleep timer for 30 minutes","expect":{"command":"timer","args":{"seconds":1800,"sleep":true}},"text":"music"},
+{"id":"a-bug-sleep-2","cat":"timers","say":"stop the music in 20 minutes","expect":{"command":"timer","args":{"seconds":1200,"sleep":true}}},
+{"id":"a-bug-sleep-3","cat":"timers","say":"turn off the music after an hour","expect":{"command":"timer","args":{"seconds":3600,"sleep":true}}},
+{"id":"a-bug-podcast-1","cat":"media","say":"play my podcast","expect":{"anyOf":[{"answer":"fallback"},{"command":["open","podcast","playPodcast"]}]},"forbid":["play"],"notText":"^Playing podcast"},
+{"id":"a-bug-podcast-2","cat":"media","say":"play the latest episode of the daily","expect":{"anyOf":[{"answer":"fallback"},{"command":["open","podcast","playPodcast"]}]},"forbid":["play"]},
+{"id":"a-bug-911-1","cat":"messages","say":"call 911","expect":{"command":"call","status":"pending","args":{"number":"911","emergency":true}},"notText":"^Call 911\\?$"},
+{"id":"a-bug-911-2","cat":"messages","say":"call the police","expect":{"command":"call","status":"pending","args":{"number":"911","emergency":true}}},
+{"id":"a-bug-911-3","cat":"negations","say":"don't call 911","expect":{"answer":"chat"},"forbid":["call"]},
+{"id":"a-bug-screen-1","cat":"out-of-scope","say":"what's on my screen","expect":{"answer":"fallback"},"notText":"brightness"},
+{"id":"a-bug-screen-2","cat":"out-of-scope","say":"can you read my screen","expect":{"answer":"fallback"},"notText":"brightness"},
+{"id":"a-speed-1","cat":"calendar","say":"add an event called dentist friday-ish","expect":{"command":"event","args":{"title":"Dentist","start":"2026-10-09T00:00","allDay":true}}},
+{"id":"a-speed-2","cat":"notes","say":"take a note about the parking spot","expect":{"answer":"clarify"}},
+{"id":"a-speed-3","cat":"notes","say":"write me a memo about the trip to Lisbon","expect":{"anyOf":[{"answer":"clarify"},{"command":"note","args":{"text":{"$re":"lisbon"}}}]}}
+]
+}

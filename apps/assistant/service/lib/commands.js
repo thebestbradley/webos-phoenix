@@ -103,6 +103,7 @@ var D = require("./dates");
 var units = require("./units");
 var places = require("./places");
 var nearbyLib = require("./nearby");
+var emergency = require("./emergency");
 
 var CLOCK_APP = "com.palm.app.clock";
 var CALENDAR_APP = "com.palm.app.calendar";
@@ -146,8 +147,9 @@ var BUILT_IN = [
     { id: "agenda", title: "Calendar agenda", risk: "read", description: "Tell what is on the calendar: a day, a week, the next event, or when an event is.",
       parameters: { type: "object", properties: { range: { type: "string", enum: ["today", "tomorrow", "day", "this week", "next week", "next", "find"] },
         day: { type: "string", description: "For range day: the day, as said or ISO 8601" }, query: { type: "string", description: "For range find: the event's name" } } } },
-    { id: "timer", title: "Timers", risk: "change", description: "Start a countdown timer.",
-      parameters: { type: "object", properties: { seconds: { type: "integer", minimum: 1, description: "How long, in seconds" }, label: S }, required: ["seconds"] } },
+    { id: "timer", title: "Timers", risk: "change", description: "Start a countdown timer, or a sleep timer that stops the music.",
+      parameters: { type: "object", properties: { seconds: { type: "integer", minimum: 1, description: "How long, in seconds" }, label: S,
+        sleep: { type: "boolean", description: "A sleep timer: the music stops when it ends, nothing rings" } }, required: ["seconds"] } },
     { id: "timerStatus", title: "Time left on timers", risk: "read", description: "Tell how much time is left on the running timers.",
       parameters: { type: "object", properties: {} } },
     { id: "timerCancel", title: "Cancelling timers", risk: "change", description: "Cancel a running timer (by its label) or all of them.",
@@ -659,6 +661,16 @@ function prepareInner(cmd, args, env) {
     args = Object.assign({}, args || {});
     function reply(text) { return Promise.resolve({ args: args, reply: text }); }
     if (cmd.id === "text" && args.via && args.via !== "sms") return chatTarget(env, cmd, args, CHAT_NETS[args.via]);
+    // An emergency number ("call 911", "call the police"): never refused
+    // and never held for a yes; placed after a short countdown the user can
+    // cancel (countdown, lib/emergency.js), as Siri and Google Assistant do.
+    // The review's "call 911" asked "Call 911?" like any number.
+    if (cmd.id === "call" && (args.emergency || emergency.isEmergency(args.number || args.who, env.country))) {
+        var sos = args.emergency && !args.number ? emergency.primary(env.country) : String(args.number || args.who).replace(/[^\d+]/g, "");
+        args = Object.assign({}, args, { number: sos, name: "", emergency: true });
+        delete args.who;
+        return Promise.resolve({ args: args, confirm: say.emergencyCall(sos, emergency.COUNTDOWN_S), countdown: emergency.COUNTDOWN_S });
+    }
     if (cmd.id === "call" || cmd.id === "text") {
         var who = String(args.who || "").trim();
         var raw = args.number || (/^[+\d][\d\s().-]{2,}$/.test(who) ? who : "");
@@ -721,6 +733,17 @@ function prepareInner(cmd, args, env) {
     if (cmd.id === "timer" && !(args.seconds > 0)) return reply(say.failed("how long?"));
     if (cmd.id === "alarm" && !(args.time > env.now())) return reply(say.failed("that time has passed"));
     if (cmd.id === "reminder" && !String(args.text || "").trim()) return reply(say.failed("remind you of what?"));
+    // A reminder for a place ("when I get home"): there is no reminder by
+    // place on the device yet, so a time is asked for (the next words are
+    // it), never a plain task with the place left out (the review's "remind
+    // me to buy milk when I get home", 11 October 2026).
+    if (cmd.id === "reminder" && args.place && !args.due) {
+        var timed = Object.assign({}, args);
+        delete timed.place;
+        delete timed.leaving;
+        return Promise.resolve({ args: args, reply: say.placeReminder(args.text, args.place, !!args.leaving),
+                                 awaiting: { command: "reminder", args: timed, field: "due" } });
+    }
     if (cmd.id === "task" && !String(args.text || "").trim()) return reply(say.failed("add what?"));
     if (cmd.id === "note" && !String(args.text || "").trim()) {
         if (args.topic) return Promise.resolve({ args: args, reply: say.memoWhat(args.topic), awaiting: { command: "note", args: args, field: "text" } });
@@ -1646,15 +1669,22 @@ function runInner(cmd, args, env) {
     case "timer": {
         var id = "assistant.timer." + now.toString(36) + Math.random().toString(36).slice(2, 6);
         var label = String(args.label || "");
+        // A sleep timer pauses whatever plays when it ends, and rings
+        // nothing: the media key the player with the audio focus acts on
+        // (as "pause" does), straight from the activity.
+        var sleep = !!args.sleep || /^sleep$/i.test(label);
+        if (sleep) label = "sleep";
+        var callback = sleep ? { method: "luna://org.webosphoenix.system/mediaKey", params: { key: "pause" } }
+            : { method: "palm://com.palm.applicationManager/launch",
+                params: { id: ASSISTANT_APP, params: { timerDone: { id: id, label: label, seconds: args.seconds } } } };
         return lunaCall(env, AM + "create", { start: true, replace: true, activity: {
-            name: id, description: "Assistant timer" + (label ? ": " + label : ""),
+            name: id, description: (sleep ? "Assistant sleep timer" : "Assistant timer" + (label ? ": " + label : "")),
             type: { foreground: true, persist: true },
             schedule: { start: activityDate(now + args.seconds * 1000) },
-            callback: { method: "palm://com.palm.applicationManager/launch",
-                        params: { id: ASSISTANT_APP, params: { timerDone: { id: id, label: label, seconds: args.seconds } } } } } })
+            callback: callback } })
             .then(function () {
-                env.storage.set("assistant:timer:" + id, { id: id, label: label, seconds: args.seconds, ends: now + args.seconds * 1000 });
-                return { text: say.timerSet(args.seconds, label), data: { timer: id, ends: now + args.seconds * 1000 },
+                env.storage.set("assistant:timer:" + id, { id: id, label: label, seconds: args.seconds, ends: now + args.seconds * 1000, sleep: sleep });
+                return { text: sleep ? say.sleepTimerSet(args.seconds) : say.timerSet(args.seconds, label), data: { timer: id, ends: now + args.seconds * 1000 },
                          undo: { kind: "timer", ids: [id], what: say.undoWhat.timer() } };
             });
     }

@@ -283,6 +283,10 @@ Item {
             _entering = true;
             ++_session;
             _fetchVocabulary();
+            // The on-device model started while the user speaks, so a
+            // request that needs it does not wait for it to load (the
+            // service's warm: where it fits the memory; nothing waits).
+            _call("warm", {});
             if (!listening)
                 status = "";
             busy = false;
@@ -381,6 +385,18 @@ Item {
         if (r.thread)
             threadId = r.thread.id;
         refresh();
+        // An emergency call counting down (the service places it when the
+        // countdown ends, unless Cancel): read again then, to show it placed.
+        var said = r.messages || [], last = said[said.length - 1];
+        if (last && last.status === "pending" && last.confirm && last.confirm.countdown) {
+            countdownRefresh.interval = last.confirm.countdown * 1000 + 600;
+            countdownRefresh.restart();
+        }
+    }
+    Timer {
+        id: countdownRefresh
+        repeat: false
+        onTriggered: ov.refresh()
     }
 
     // done (optional) hears the reply, after the view has.
@@ -1336,7 +1352,8 @@ Item {
                         width: Theme.px(120)
                         height: Theme.px(40)
                         affirmative: true
-                        caption: row.modelData.command === "text" ? qsTr("Send") : row.modelData.command === "call" ? qsTr("Call") : qsTr("Yes")
+                        caption: row.modelData.confirm && row.modelData.confirm.countdown ? qsTr("Call Now")
+                                 : row.modelData.command === "text" ? qsTr("Send") : row.modelData.command === "call" ? qsTr("Call") : qsTr("Yes")
                         onAction: ov.confirm(row.modelData, true)
                         readonly property real appear: actions.shareOf(actions.choices.length + actions.suggestions.length)
                         opacity: appear
