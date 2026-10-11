@@ -35,10 +35,14 @@ device, not yet run"):
 - ⬜ **P0** Run it: a first image on qemux86-64 or a Raspberry Pi 4 (OPEN-QUESTIONS Q2),
   and every item below checked there.
 - 🟡 **P0** The first targets (OPEN-QUESTIONS Q2, decided 11 October 2026): Fairphone 6/6+,
-  AYN Odin 2 Portal, PinePhone Pro, PinePhone, PineTab2 have machines, pinned kernels,
+  AYN Odin 2 Portal, PinePhone Pro, PineTab2 have machines, pinned kernels,
   boot images and device.json in meta-phoenix (HARDWARE.md, "First targets"), parsed in
-  CI, not built or booted; the shell takes `formFactor` and `density` from device.json.
-  Blocked on a Mesa new enough for their Adreno GPUs (Q82) and on hardware (Q79-Q85).
+  CI, not built or booted; the shell takes `formFactor`, `density`, the corners and the
+  camera cutout from device.json. Blocked on a Mesa new enough for their Adreno GPUs
+  (Q82) and on hardware (Q79-Q85). Before the hardware: `phoenix-sim --device <id>`
+  shows each (done), and the ARM64 VM `phoenix-vm-arm64` runs the real image as each
+  (`scripts/vm.sh <id>`; parsed, not built or booted: the owner's first boot on the Mac;
+  HARDWARE.md, "Device profiles", "Device VMs").
 - 🟡 **P0** E1: Edit and the long-press popup written for WebAppMgr (through the pages'
   line to the shell, `services/shellhost`), not run.
 - 🟡 **P0** The one-process audit (docs/DEVICE-AUDIT.md): what a page did by calling the
@@ -203,6 +207,7 @@ buttons and `setButton` (GESTURE-BAR.md, open questions). Every decision waiting
 | 🟡 S6 | App-tinted status bar, 300 ms lerp (tablet) | **Done** (`tst_tablet` test_statusBar): `PalmSystem.setWindowProperties({statusBarColor: 0xRRGGBB})` (`IpcClientHost.cpp:294-296`) tints the tablet's bar while that card is maximized, fading over 300 ms; Just Type and the launcher keep their own; phones stay black (`StatusBar::paint`). On a device written, not run: `setWindowProperties {statusBarColor}` as the `phoenixStatusBarColor` window property (`tst_lsmcards`) | P2 · S |
 | ✅ S7 | Tablet: clock at the right of the system group; fill fades in when an app maximizes (`StatusBar.cpp:98-104,240-262`) | **Done**: the clock is the rightmost item; the #515558 fill fades in (300 ms) under the tiled art while an app, the launcher or Just Type is up, and out in card view. Not the per-app tint (S6) | P1 · S |
 | ✅ S8 | Menu tab highlight 3-slice fading 300 ms; icons slide in over 1000 ms | **Done**: status icons slide in and out over 1000 ms (width InOutQuad over the first half, opacity linear; `StatusBarIcon.cpp:84-205`); the tablet tab is `status-bar-menu-dropdown-tab.png` in three slices with 11 px caps, fading over 200 ms (`statusBarMenuFade`; the 300 ms is the group's own show/hide). The tablet system group's `menu-arrow.png` at its right end, 7 px (ARROW_SPACING) from the edge with the icons 7 px left of it, and its separator at its left, fading in together over 500 ms InOutQuad; the arrow stays over the open menu's tab while the separator fades out under it; none on the lock screen's bar or on phones (`StatusBar.cpp:93,138`; `StatusBarItemGroup.cpp:136-158,412-435,467-487`; `StatusBar.qml`; `tst_statusbartab` test_systemGroupArrow) | — |
+| 🟡 S9 | (Phoenix addition: webOS's screens had no cutouts) A camera cutout and rounded corners (device.json `displayCutouts`, `displayCornerRadius`) | **Done** while the UI is upright: the bar holds a cutout at the top edge (`Theme.safeAreaTop`, Android's rule), the clock moves beside it and the bar's ends keep out of the corners (Phosh's `get_clock_pos`, `get_corner_shift`; `tst_screenshape`). Not yet: the UI turned on its side, where the hole is at a side and covers a little of the cards and apps (Android letterboxes there); the corners of full-screen apps | P2 · M |
 
 ## 6. System menu
 

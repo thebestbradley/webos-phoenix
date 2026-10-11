@@ -151,11 +151,23 @@ mouse pointer, shows the Mac's menu bar and only reaches as far as the Mac.
       developer account and shared through TestFlight. Qt WebEngine does not
       exist on iOS, so cards use WKWebView (Qt WebView): the live page while
       maximized, a snapshot while the card is scaled, stacked or thrown
-- [ ] **ARM64 virtual machine image** (`qemuarm64`-style, UEFI) for UTM on
-      Apple silicon Macs: runs OSE and Phoenix at near-native speed through
-      Apple's virtualization, the real OS rather than the simulator. On an
-      iPad, UTM can only emulate (no hypervisor access), which is far too
+- [ ] 🟡 **ARM64 virtual machine image**: `phoenix-vm-arm64` (OE's
+      `qemuarm64`, QEMU's kernel boot rather than UEFI, virtio GPU, multitouch,
+      network, sound and disk) with the phones' package set and every first
+      target's configuration, chosen at boot (`phoenix.device=`);
+      `scripts/vm.sh <device>` starts it with QEMU (HVF on Apple silicon, KVM
+      or TCG on Linux) at the device's CPU count, memory and resolution, and
+      prints UTM's settings ([HARDWARE.md](HARDWARE.md#device-vms),
+      [BUILDING-MAC.md](BUILDING-MAC.md#run-it-in-a-vm)). Parses and resolves
+      (`scripts/parse-check.sh`, 11 October 2026; in CI's matrix); not built or
+      booted yet: the owner's first boot, on the Mac. The real OS rather than the simulator, at near-native speed.
+      On an iPad, UTM can only emulate (no hypervisor access), which is far too
       slow for OSE and Chromium, and touch reaches the guest as a pointer
+- [x] **Device profiles in the simulator**: `phoenix-sim --device <id>`
+      (View > Device) is each first target as its image configures it: exact
+      pixels, density, layout, buttons, rounded corners and camera cutout
+      (the status bar makes room for the cutout; HARDWARE.md, "Device
+      profiles")
 
 ## M1: running on webOS OSE
 
@@ -233,10 +245,10 @@ Device tiers, the driver plan and the phased timeline are in
 [HARDWARE.md](HARDWARE.md).
 
 - [ ] 🟡 First targets (owner, 11 October 2026; [HARDWARE.md](HARDWARE.md#first-targets)):
-      Fairphone 6/6+ (phone), AYN Odin 2 Portal (tablet), PinePhone Pro, PinePhone and
-      PineTab2, on mainline kernels: machines, pinned kernels, boot images and device
-      configuration in meta-phoenix, parsed in CI; not built, waiting on hardware and a
-      newer Mesa ([OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q79-Q86)
+      Fairphone 6/6+ (phone), AYN Odin 2 Portal (tablet), PinePhone Pro and
+      PineTab2 (the original PinePhone dropped, 11 October 2026), on mainline
+      kernels: machines, pinned kernels, boot images and device configuration in
+      meta-phoenix, parsed in CI; not built, waiting on hardware and a newer Mesa ([OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q79-Q86)
 - [ ] Later devices on LuneOS's layers: Pixel 3a (Halium and mainline), OnePlus 6, FuriLabs FLX1s
 - [ ] A keyboard phone: Zinwa Q25 (unlocked, LuneOS config `q25`)
 - [ ] Telephony and SMS (oFono, LuneOS's `webos-telephonyd`), cellular indicators

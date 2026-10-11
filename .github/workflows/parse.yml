@@ -31,9 +31,9 @@ jobs:
       fail-fast: false
       matrix:
         # OSE's two machines, and meta-phoenix's own (docs/HARDWARE.md,
-        # "First targets"), which need no layer beyond OSE's. The firmware
-        # compression cases (PHOENIX_PARSE_COMPRESS) are resolved on OSE's
-        # two only: they do not depend on the machine.
+        # "First targets" and "Device VMs"), which need no layer beyond
+        # OSE's. The firmware compression cases (PHOENIX_PARSE_COMPRESS) are
+        # resolved on OSE's two only: they do not depend on the machine.
         include:
           - machine: qemux86-64
             compress: xz zstd
@@ -43,11 +43,13 @@ jobs:
             compress: ""
           - machine: ayn-odin2portal
             compress: ""
-          - machine: pinephone
-            compress: ""
           - machine: pinephonepro
             compress: ""
           - machine: pinetab2
+            compress: ""
+          # The ARM64 VM that stands in for each of them (docs/HARDWARE.md,
+          # "Device VMs"): OE's qemuarm64 with the phones' package set.
+          - machine: phoenix-vm-arm64
             compress: ""
     steps:
       # HEAD's commit id is all the recipes need from the checkout; no

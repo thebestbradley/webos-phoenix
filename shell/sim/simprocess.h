@@ -51,7 +51,8 @@ public:
     {
         const QStringList withValues = { QStringLiteral("size"), QStringLiteral("scale"), QStringLiteral("scene"),
                                          QStringLiteral("launch"), QStringLiteral("open"), QStringLiteral("turn"),
-                                         QStringLiteral("orientation"), QStringLiteral("erase-data") };
+                                         QStringLiteral("orientation"), QStringLiteral("device"), QStringLiteral("zoom"),
+                                         QStringLiteral("erase-data") };
         QStringList args = withoutOptions(QCoreApplication::arguments().mid(1),
                                           dropped + QStringList { QStringLiteral("updating"), QStringLiteral("erase-data") },
                                           withValues);

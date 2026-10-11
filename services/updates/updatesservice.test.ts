@@ -31,7 +31,7 @@ const node = require("./lib/node.js") as Any;
 vi.setConfig({ testTimeout: 30_000 });
 
 const FAKE_RAUC = path.join(__dirname, "test/fake-rauc.cjs");
-const COMPATIBLE = "phoenix-pinephone";
+const COMPATIBLE = "phoenix-pinephonepro";
 
 let dir: string;
 let server: http.Server;

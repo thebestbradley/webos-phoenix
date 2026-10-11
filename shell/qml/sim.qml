@@ -43,8 +43,15 @@
 //                  toolbar (SimChrome), or null: resizeScreen(w, h)
 //   simMarketplace the Marketplace's catalog service (SimMarketplace), or
 //                  null: the Services menu
+//   simDevice      --device: the first target it is (device-profiles.json's
+//                  entry: id, name, panel, diagonal, buttons; its image's
+//                  device.json under deviceConfig, which DeviceConfig
+//                  reads too), or an empty object
+//   simDevices     every profile, {id, name}, for View > Device
+//   simZoom        --zoom: the screen's size on the monitor (1: its pixels)
 
 import QtQuick
+import QtQuick.Shapes
 import Phoenix.Native
 import Phoenix.Shell
 import Phoenix.Sim
@@ -67,6 +74,21 @@ Item {
     // the screen takes the new size (a bigger tablet, a narrower phone), and
     // the shell lays itself out again.
     readonly property bool sideways: deviceAngle % 180 !== 0
+    // --device: one of the first targets (simDevice), as its image
+    // configures it; --zoom: the screen shown smaller than its pixels.
+    readonly property var simDeviceProfile: typeof simDevice !== "undefined" && simDevice && simDevice.id ? simDevice : null
+    readonly property real zoom: typeof simZoom !== "undefined" && simZoom > 0 ? simZoom : 1
+    // The device's buttons: a profile's (device-profiles.json, and the
+    // ringer switch where its device.json has one), else all of them.
+    function hasButton(id) {
+        if (!simDeviceProfile)
+            return true;
+        if (id === "ringer")
+            return DeviceConfig.hasRingerSwitch;
+        if (id === "power" || id === "volumeUp" || id === "volumeDown")
+            return (simDeviceProfile.buttons || []).indexOf(id) >= 0;
+        return true;
+    }
 
     // ---- Adaptive: a phone or a tablet by the window's size ---------------------------
     // Without --phone or --tablet (--adaptive, ./phoenix run) the shell's
@@ -100,7 +122,7 @@ Item {
     // The screen (upright, legacy pixels) at this size; the window turns it
     // as the device is held.
     function resizeScreen(width, height) {
-        var w = Math.round(width * shell.effectiveDensity), h = Math.round(height * shell.effectiveDensity);
+        var w = Math.round(width * shell.effectiveDensity * root.zoom), h = Math.round(height * shell.effectiveDensity * root.zoom);
         if (sideways) {
             var t = w;
             w = h;
@@ -144,15 +166,19 @@ Item {
         value: !shell.tablet
     }
     // The window's title says what the screen is.
-    readonly property string screenInfo: "%1x%2, %3%4".arg(screenWidth).arg(screenHeight)
+    readonly property string screenInfo: (simDeviceProfile ? simDeviceProfile.name + ", " : "")
+        + "%1x%2, %3%4".arg(screenWidth).arg(screenHeight)
         .arg(shell.tablet ? qsTr("tablet") : qsTr("phone")).arg(adaptive ? qsTr(" (adaptive)") : "")
+        + (zoom !== 1 ? qsTr(", shown at %1%").arg(Math.round(zoom * 100)) : "")
     onScreenInfoChanged: if (typeof simChrome !== "undefined" && simChrome) simChrome.setScreenInfo(screenInfo)
 
     Item {
         id: device
         anchors.centerIn: parent
-        width: root.sideways ? root.height : root.width
-        height: root.sideways ? root.width : root.height
+        // The screen at its own pixels, shown at --zoom on the monitor.
+        width: (root.sideways ? root.height : root.width) / root.zoom
+        height: (root.sideways ? root.width : root.height) / root.zoom
+        scale: root.zoom
         rotation: -root.deviceAngle
 
         Shell {
@@ -165,6 +191,10 @@ Item {
             // the right (luna-topaz.conf:32 HomeButtonOrientationAngle=270);
             // below a portrait one, at the bottom (0).
             homeButtonOrientationAngle: hardwareHomeButton && width > height ? 270 : 0
+            // --device: the screen's corners and camera cutout, from its
+            // image's device.json (DeviceConfig, as on the device).
+            displayCornerRadius: root.simDeviceProfile ? DeviceConfig.displayCornerRadius : 0
+            displayCutouts: root.simDeviceProfile ? DeviceConfig.displayCutouts : []
             systemKeyPassChords: root.modifiedFunctionKeys
             // The phones and the TouchPad of luna-sysmgr's day had one
             // ([VirtualKeyboard] VirtualKeyboardEnabled).
@@ -346,6 +376,49 @@ Item {
                 }
             }
         }
+
+        // --device: what the panel does not show, drawn over the screen in
+        // black: its rounded corners and the camera's cutout (device.json's
+        // displayCornerRadius, displayCutouts). It turns with the device.
+        Shape {
+            id: screenMask
+            objectName: "simScreenMask"
+            anchors.fill: parent
+            visible: shell.displayCornerRadius > 0 || shell.displayCutouts.length > 0
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+                fillColor: "black"
+                strokeColor: "transparent"
+                fillRule: ShapePath.OddEvenFill
+                PathSvg { path: root.screenMaskPath(screenMask.width, screenMask.height) }
+            }
+        }
+    }
+    // The mask's outline (SVG): the screen's rectangle, and inside it the
+    // rounded rectangle the panel shows (even-odd: the corners between them
+    // are filled), then each cutout (filled).
+    function screenMaskPath(w, h) {
+        var r = Math.min(shell.displayCornerRadius, w / 2, h / 2);
+        var d = "M0 0 H" + w + " V" + h + " H0 Z";
+        if (r > 0)
+            d += " M" + r + " 0 H" + (w - r) + " A" + r + " " + r + " 0 0 1 " + w + " " + r
+                + " V" + (h - r) + " A" + r + " " + r + " 0 0 1 " + (w - r) + " " + h
+                + " H" + r + " A" + r + " " + r + " 0 0 1 0 " + (h - r)
+                + " V" + r + " A" + r + " " + r + " 0 0 1 " + r + " 0 Z";
+        else
+            d += " M0 0 H" + w + " V" + h + " H0 Z";
+        var cutouts = shell.displayCutouts || [];
+        for (var i = 0; i < cutouts.length; ++i) {
+            var c = cutouts[i];
+            if (c.shape === "circle") {
+                var rx = c.width / 2, ry = c.height / 2;
+                d += " M" + c.x + " " + (c.y + ry) + " A" + rx + " " + ry + " 0 1 0 " + (c.x + c.width) + " " + (c.y + ry)
+                    + " A" + rx + " " + ry + " 0 1 0 " + c.x + " " + (c.y + ry) + " Z";
+            } else {
+                d += " M" + c.x + " " + c.y + " H" + (c.x + c.width) + " V" + (c.y + c.height) + " H" + c.x + " Z";
+            }
+        }
+        return d;
     }
 
     // The screen's state (Shell.display): dimmed or off. A device sets its
@@ -1067,7 +1140,7 @@ Item {
               if (root.adaptive)
                   root.snapToPreset("pre");
               else if (shell.tablet)
-                  root.restartSim(["tablet", "phone", "adaptive", "size", "scale"], ["--phone"]);
+                  root.restartSim(["tablet", "phone", "adaptive", "size", "scale", "device", "zoom"], ["--phone"]);
           } },
         { id: "tablet", menu: "view", text: qsTr("Tablet"), radio: "formFactor", icon: "tablet",
           tip: qsTr("A tablet: the TouchPad, 1024x768 (adaptive: the window takes its size; else a restart)"),
@@ -1076,7 +1149,7 @@ Item {
               if (root.adaptive)
                   root.snapToPreset("touchpad");
               else if (!shell.tablet)
-                  root.restartSim(["tablet", "phone", "adaptive", "size", "scale"], ["--tablet"]);
+                  root.restartSim(["tablet", "phone", "adaptive", "size", "scale", "device", "zoom"], ["--tablet"]);
           } },
         { id: "adaptive", menu: "view", text: qsTr("Adaptive (Phone or Tablet by Size)"), radio: "formFactor",
           tip: qsTr("Resize the window freely: the shell becomes a tablet once its shorter side reaches %1 pixels, "
@@ -1084,7 +1157,7 @@ Item {
           checked: function () { return root.adaptive; },
           run: function () {
               if (!root.adaptive)
-                  root.restartSim(["tablet", "phone", "adaptive"], ["--adaptive"]);
+                  root.restartSim(["tablet", "phone", "adaptive", "device", "zoom"], ["--adaptive"]);
           } }
     ].concat(simLocation.actions).concat(devicePresets.map(function (p) {
         return { id: "size-" + p.id, menu: "view", submenu: qsTr("Device Size"), text: p.text, radio: "deviceSize",
@@ -1092,6 +1165,18 @@ Item {
                       .arg(Theme.tabletLayoutFor(p.width, p.height, 1) ? qsTr("tablet") : qsTr("phone")),
                  checked: function () { return root.screenWidth === p.width && root.screenHeight === p.height; },
                  run: function () { root.snapToPreset(p.id); } };
+    })).concat([{ id: "device-none", menu: "view", submenu: qsTr("Device"), text: qsTr("None (Any Size)"), radio: "device",
+                   tip: qsTr("Restart as a resizable screen, without a device's profile"),
+                   checked: function () { return !root.simDeviceProfile; },
+                   run: function () { if (root.simDeviceProfile) root.restartSim(["device", "zoom"], []); } }])
+    .concat((typeof simDevices !== "undefined" ? simDevices : []).map(function (d) {
+        return { id: "device-" + d.id, menu: "view", submenu: qsTr("Device"), text: d.name, radio: "device",
+                 tip: qsTr("Restart as the %1, as its image configures it (--device %2)").arg(d.name).arg(d.id),
+                 checked: function () { return !!root.simDeviceProfile && root.simDeviceProfile.id === d.id; },
+                 run: function () {
+                     root.restartSim(["device", "zoom", "size", "scale", "tablet", "phone", "adaptive", "home-button"],
+                                     ["--device", d.id]);
+                 } };
     })).concat([
         { separator: true, menu: "view" }
     ]).concat([1, 1.5, 2].map(function (n) {
@@ -1100,7 +1185,7 @@ Item {
                  checked: function () { return shell.density === n; },
                  run: function () {
                      // The screen it has now, at the new density.
-                     root.restartSim(["size", "scale"], ["--scale", String(n), "--size",
+                     root.restartSim(["size", "scale", "device", "zoom"], ["--scale", String(n), "--size",
                                      Math.round(root.screenWidth * n) + "x" + Math.round(root.screenHeight * n)]);
                  } };
     })).concat([""].concat(scenes).map(function (name) {
@@ -1162,10 +1247,11 @@ Item {
         { id: "cardView", menu: "", text: qsTr("Card View"), keyText: Qt.platform.os === "osx" ? "" : qsTr("Super, on its own") }
     ])
     // The toolbar's, in order ("|" separates).
+    // A --device profile's: only the buttons it has (hasButton).
     readonly property var simToolbar: ["power", "volumeUp", "volumeDown", "ringer", "|", "home", "back", "|", "keyboard", "virtualKeyboard", "|",
                                        "rotateLeft", "rotateRight", "capture", "|",
                                        "call", "sms", "notification", "|", "lowBattery", "charger", "touchstone", "|",
-                                       "phone", "tablet"]
+                                       "phone", "tablet"].filter(function (id) { return root.hasButton(id); })
     // The demo scenes (--scene; buildScene()).
     readonly property var scenes: ["locked", "cards", "stacks", "longstack", "reorder", "maximized", "heldcard",
                                    "launcher", "launcheredit", "launchermenu", "launchergroup", "launchergroupopen", "launchertabs", "launcherinstall", "wave", "powermenu", "hot", "pin", "emergency", "firstuse",

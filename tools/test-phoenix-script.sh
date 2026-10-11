@@ -273,6 +273,12 @@ check "run --no-marketplace: goes to the simulator, which starts no catalog" \
 unmock php
 phoenix run --dry-run --no-assistant phone -- --help
 check "run phone -- ARGS" 'has "phoenix-sim --phone --help$"'
+# A device profile sets its own screen and layout: no mode is added.
+phoenix --dry-run --no-assistant run --device fairphone-fp6 --scene cards
+check "run --device ID: the device, no mode" '[ $status = 0 ]' 'has "would run: .*phoenix-sim --device fairphone-fp6 --scene cards$"' \
+    'has "Starting the simulator (device)"'
+phoenix --dry-run --no-assistant run tablet --device pinetab2
+check "run MODE --device: usage error" '[ $status = 2 ]' 'has "leave out tablet"'
 phoenix phone
 check "a mode without run: usage error" '[ $status = 2 ]' 'has "only ./phoenix run"'
 phoenix --bogus

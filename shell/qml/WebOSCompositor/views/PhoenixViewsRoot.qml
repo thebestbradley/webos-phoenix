@@ -44,6 +44,8 @@ FocusScope {
         density: DeviceConfig.density
         hardwareHomeButton: DeviceConfig.hardwareHomeButton
         homeButtonOrientationAngle: DeviceConfig.homeButtonOrientationAngle
+        displayCornerRadius: DeviceConfig.displayCornerRadius
+        displayCutouts: DeviceConfig.displayCutouts
         source: LsmWindowSource { id: windows }
         system: LsmSystemStatus {}
         // STATUS: the default wallpaper; the wallpaper preference is not
