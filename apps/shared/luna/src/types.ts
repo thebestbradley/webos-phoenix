@@ -229,6 +229,10 @@ export interface SystemPreferences {
     keyboardStyle?: "auto" | "black" | "touchpad";
     /** Phoenix: the start-up animation: "phoenix" (the bird's story) or "classic" (the logo's glow). */
     startupAnimation?: "phoenix" | "classic";
+    /** Phoenix 2.0: the shell's look, 1.0's ("classic") or Ember Glass (docs/SYSTEM-UI-2.md); unset, the shell's default. */
+    look?: "classic" | "ember-glass";
+    /** Phoenix 2.0: Ember Glass's floats and overlays blur live, or are plain tints ("none", for a low-end device). */
+    glassBlur?: "live" | "none";
     /** Phoenix: with a hardware keyboard, the button that brings up the on-screen keyboard (default on). */
     keyboardButton?: boolean;
     /** Phoenix: the edge the keyboard button was dragged to. */

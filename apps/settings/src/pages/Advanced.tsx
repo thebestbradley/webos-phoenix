@@ -37,6 +37,11 @@
 //                            born from it, BootStory.qml) or Classic (the
 //                            original logo's glow) (Phoenix; the shell
 //                            reads it before the next start)
+//   look                     the shell's look: Phoenix 1.0 (classic) or Ember
+//                            Glass, 2.0's, while it is being built
+//                            (docs/SYSTEM-UI-2.md; unset, the shell's default)
+//   glassBlur                Ember Glass's live blur: on (live) or off (none,
+//                            plain tints, for a low-end device)
 //   appRelaunch              opening an app that already has a card (its
 //                            icon, Just Type, a link, the assistant):
 //                            Bring to front (the default, its card as it
@@ -50,7 +55,8 @@ import { Group, ListSelector, Note, Page, PageHeader, Row, ToggleButton } from "
 
 const KEYS: (keyof SystemPreferences)[] = ["launcherGridDensity", "infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges",
     "sysUiEnableWaveLauncher", "animationSpeed", "gestureSensitivity", "showReticleAnimation", "hapticFeedback",
-    "showBatteryPercent", "emailDashboardCycling", "sysUiEnableNextPrevGestures", "appRelaunch", "startupAnimation"];
+    "showBatteryPercent", "emailDashboardCycling", "sysUiEnableNextPrevGestures", "appRelaunch", "startupAnimation",
+    "look", "glassBlur"];
 
 export function AdvancedPage() {
     const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(KEYS, cb, err), []).value;
@@ -105,6 +111,17 @@ export function AdvancedPage() {
                               options={[{ label: "Normal", value: "normal" as const }, { label: "Fast", value: "fast" as const }]}
                               onChange={(v) => set({ animationSpeed: v })} />
                 {toggle("hapticFeedback", "Vibrate on tap", "A short buzz with every tap, where the device can")}
+            </Group>
+            <Group label="Look">
+                <ListSelector title="Look" value={prefs?.look ?? "classic"} testId="adv-look"
+                              options={[{ label: "Phoenix 1.0", value: "classic" as const },
+                                        { label: "Ember Glass (2.0 preview)", value: "ember-glass" as const }]}
+                              onChange={(v) => set({ look: v })} />
+                <Row title="Live blur" subtitle="Ember Glass's bars and menus blur what is behind them; off, they are plain tints"
+                     testId="adv-row-glassBlur">
+                    <ToggleButton value={prefs ? prefs.glassBlur !== "none" : true} disabled={!prefs} label="Live blur"
+                                  testId="adv-glassBlur" onChange={(v) => set({ glassBlur: v ? "live" : "none" })} />
+                </Row>
             </Group>
             <Group label="Start-up">
                 <ListSelector title="Start-up animation" value={prefs?.startupAnimation ?? "phoenix"} testId="adv-startupAnimation"

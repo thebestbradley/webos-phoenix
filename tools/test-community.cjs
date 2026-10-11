@@ -123,11 +123,17 @@ async function main() {
         for (const [id, option, key, want] of [["adv-launcherGridDensity", "Dense", "gridDensity", "dense"],
                                                ["adv-gestureSensitivity", "High", "gestureSensitivity", "high"],
                                                ["adv-animationSpeed", "Fast", "animationSpeed", "fast"],
-                                               ["adv-startupAnimation", "Classic", "startupAnimation", "classic"]]) {
+                                               ["adv-startupAnimation", "Classic", "startupAnimation", "classic"],
+                                               // Phoenix 2.0's look (docs/SYSTEM-UI-2.md).
+                                               ["adv-look", "Ember Glass (2.0 preview)", "look", "ember-glass"]]) {
             await st.click(`[data-testid='${id}']`);
             await st.click(`role=option[name='${option}']`);
             await until(() => tweaks()[key] === want, `Advanced: ${key} ${want} reaches the shell`);
         }
+        // Ember Glass's live blur off: plain tints (a low-end device).
+        check(await st.getAttribute("[data-testid='adv-glassBlur']", "aria-checked") === "true", "Advanced: Live blur on by default");
+        await st.click("[data-testid='adv-glassBlur']");
+        await until(() => tweaks().glassBlur === "none", "Advanced: Live blur off reaches the shell");
         // Switch apps (Screen & Lock's Advanced gestures, here beside the
         // wave launcher): only where there is a gesture area.
         check(await st.locator("[data-testid='adv-sysUiEnableNextPrevGestures']").count() === 0, "Advanced: no Switch apps without a gesture area");
