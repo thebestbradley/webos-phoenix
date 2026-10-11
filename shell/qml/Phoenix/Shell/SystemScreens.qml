@@ -182,7 +182,14 @@ Item {
     // com.palm.storage/erase/EraseAll; the device restarts once it is done
     // (exit(-2)). If it fails, the countdown goes so it can be tried again
     // (cbFullEraseCallback, WindowServerLuna.cpp:847-879).
+    // Phoenix's own key store goes first, whatever the storage service does
+    // with /var: the OAuth service's sealed tokens and their key
+    // (services/oauth/keystore.js wipe), so a copy of the data partition
+    // holds none; and the search index of the user's things (services/index
+    // wipe: what it learned of their memos, email and messages).
     function _eraseDevice() {
+        _call("luna://org.webosphoenix.service.oauth/wipe", {}, function () {});
+        _call("luna://org.webosphoenix.service.index/wipe", {}, function () {});
         _call("palm://com.palm.storage/erase/EraseAll", {}, function (r) {
             if (r && r.returnValue !== false)
                 return;

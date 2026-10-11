@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- Copyright (c) 2026 webOS Phoenix contributors
+     SPDX-License-Identifier: Apache-2.0
+
+     org.webosphoenix.zoom is not in the launcher: it carries the Zoom account (the
+     template in public/accounts, the sign-in page accounts/wizard.html, the
+     service in service/). Opened anyway (a search result, a link), it says
+     where the account is and opens Accounts at it. -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Zoom</title>
+    <style>
+        body { font-family: "Prelude", sans-serif; margin: 0; background: #f3f1ec; color: #333; }
+        header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #e6e2d8; border-bottom: 1px solid #cfc9bb; }
+        h1 { font-size: 20px; margin: 0; font-weight: normal; }
+        p { margin: 16px; line-height: 1.4; }
+        button { margin: 0 16px; padding: 10px 18px; font-size: 16px; border-radius: 8px; border: 1px solid #8a8a8a; background: #fff; }
+    </style>
+</head>
+<body>
+    <header><img src="icon.png" width="32" height="32" alt=""><h1>Zoom</h1></header>
+    <p>Your upcoming Zoom meetings are in Calendar, each with where to join. Add the account, or change what it brings, in Accounts.</p>
+    <button id="accounts" type="button">Open Accounts</button>
+    <script>
+        document.getElementById("accounts").onclick = function () {
+            var b = new PalmServiceBridge();
+            b.call("luna://com.webos.applicationManager/launch", JSON.stringify({ id: "com.palm.app.accounts", params: { templateId: "com.webosphoenix.zoom" } }));
+        };
+    </script>
+</body>
+</html>

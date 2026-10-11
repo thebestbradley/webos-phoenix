@@ -14,7 +14,8 @@
 // and says it is not private (docs/SYNERGY-MODERN.md 3.1).
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { db, hasPresence, isImService, linkedText, messaging, notPrivateNote, serviceLabel, shareSheet, type ChatThread, type ImBuddy, type Message,
+import { clearConversationNotifications, db, hasPresence, isImService, linkedText, messaging, notPrivateNote, serviceLabel, shareSheet,
+         type ChatThread, type ImBuddy, type Message,
          type MessagePart, type Person } from "@phoenix/luna";
 import { useFileUrl } from "@phoenix/luna/react";
 import { Avatar, Button, dayLabel, formatNumber, formatTime, useBack } from "@phoenix/ui";
@@ -27,8 +28,11 @@ function statusLabel(m: Message): string | null {
     switch (m.status) {
     case "pending": case "sending": return "Sending…";
     case "failed": case "permanent-fail": return "Not sent";
-    default: return null;
     }
+    // An instant message the other side has (a receipt, a chat marker).
+    if (m.deliveryStatus === "read") return "Read";
+    if (m.deliveryStatus === "delivered") return "Delivered";
+    return null;
 }
 
 function stamp(ts: number): string {
@@ -80,10 +84,13 @@ export function Conversation({ threadId, people, buddies, header, initialText, i
         return () => { alive = false; };
     }, [threadId, messages]);
 
-    // Read while open.
+    // Read while open, and its notifications (the conversation's stack in
+    // the notification area) gone with it: markRead takes them, and so does
+    // opening it read.
     const unreadIn = messages?.some((m) => m.folder === "inbox" && !m.flags?.read) ?? false;
     useEffect(() => {
         if (unreadIn || (thread?.unreadCount ?? 0) > 0) messaging.markRead(threadId).catch(() => {});
+        else clearConversationNotifications(threadId);
     }, [threadId, unreadIn, thread?.unreadCount]);
 
     // The newest message in view; again when a picture has loaded and
@@ -105,7 +112,7 @@ export function Conversation({ threadId, people, buddies, header, initialText, i
         setError(null);
         const to = { addr: thread.replyAddress, name: thread.displayName };
         const sent = im
-            ? thread.username ? messaging.sendIm(thread.replyService!, thread.username, to, text, threadId)
+            ? thread.username ? messaging.sendIm(thread.replyService!, thread.username, to, text, threadId, parts)
                               : Promise.reject(new Error("This conversation's IM account is gone"))
             : parts.length ? messaging.sendMms(to, text, parts, threadId)
             : messaging.sendSms(to, text, threadId);
@@ -121,11 +128,12 @@ export function Conversation({ threadId, people, buddies, header, initialText, i
                         <div className="msg-header-title">{name}</div>
                         {im && hasPresence(thread?.replyService) ? (
                             <div className="msg-header-sub" data-testid="thread-presence">
-                                <Presence availability={buddy?.availability} /> {presenceText(buddy)} · {serviceLabel(thread?.replyService)}
+                                <Presence availability={buddy?.availability} />{" "}
+                                {buddy?.chatState === "composing" ? <span data-testid="typing">typing…</span> : presenceText(buddy)} · {serviceLabel(thread?.replyService)}
                             </div>
                         ) : im ? (
                             <div className="msg-header-sub" data-testid="thread-service">
-                                {thread?.replyAddress && thread.displayName !== thread.replyAddress ? "@" + thread.replyAddress + " · " : ""}
+                                {thread?.replyAddress && thread.displayName !== thread.replyAddress ? (thread.replyService === "type_fediverse" && !thread.replyAddress.startsWith("@") ? "@" : "") + thread.replyAddress + " · " : ""}
                                 {serviceLabel(thread?.replyService)}
                             </div>
                         ) : thread?.replyAddress && thread.displayName !== thread.replyAddress &&

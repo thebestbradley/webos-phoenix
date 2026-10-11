@@ -1,0 +1,37 @@
+<!doctype html>
+<!-- Copyright (c) 2026 webOS Phoenix contributors
+     SPDX-License-Identifier: Apache-2.0
+
+     The Jabber account's app page, when something launches it: the account
+     is added in Accounts, its chats are in Messaging. -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>Jabber</title>
+    <style>
+        body { margin: 0; font-family: Prelude, "Helvetica Neue", Arial, sans-serif; background: #e5e5e5; color: #333; }
+        main { padding: 24px 16px; max-width: 480px; margin: 0 auto; text-align: center; }
+        p { font-size: 15px; line-height: 1.45; }
+        button { font-size: 17px; padding: 10px 18px; border-radius: 8px; border: 1px solid #333; background: #4a4a4a; color: #fff; margin: 6px; }
+    </style>
+</head>
+<body>
+    <main>
+        <img src="public/accounts/com.webosphoenix.xmpp/images/xmpp-48x48.png" srcset="public/accounts/com.webosphoenix.xmpp/images/xmpp-48x48@2x.png 2x, public/accounts/com.webosphoenix.xmpp/images/xmpp-48x48@3x.png 3x" width="48" height="48" alt="">
+        <p>Your Jabber (XMPP) chats are in Messaging, and your buddies in Contacts.</p>
+        <button id="accounts">Add an Account</button>
+        <button id="messaging">Open Messaging</button>
+    </main>
+    <script>
+        "use strict";
+        function launch(id, params) {
+            var b = new PalmServiceBridge();
+            b.onservicecallback = function () {};
+            b.call("palm://com.palm.applicationManager/launch", JSON.stringify({ id: id, params: params || {} }));
+        }
+        document.getElementById("accounts").addEventListener("click", function () { launch("com.palm.app.accounts", { templateId: "com.webosphoenix.xmpp" }); });
+        document.getElementById("messaging").addEventListener("click", function () { launch("org.webosphoenix.messaging"); });
+    </script>
+</body>
+</html>

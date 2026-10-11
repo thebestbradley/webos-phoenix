@@ -415,6 +415,11 @@ html:has(> body.phone-app), body.phone-app {
 .emergency-root .dialer-number { line-height: 36px; }
 .emergency-root .dialer-contact { height: 18px; }
 .emergency-title { color: #ffb3aa; font-weight: bold; letter-spacing: 0.3px; }
+/* The Assistant's "call 911": the seconds left to cancel (views/Emergency.tsx). */
+.emergency-countdown { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; box-sizing: border-box; }
+.emergency-countdown-title { color: #ffb3aa; font-size: 22px; font-weight: bold; text-align: center; }
+.emergency-countdown-number { color: #fff; font-size: 120px; font-weight: bold; line-height: 1; }
+.emergency-countdown .emergency-actions { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 320px; }
 .emergency-dial { padding-bottom: 8px; }
 .emergency-actions {
     display: flex;

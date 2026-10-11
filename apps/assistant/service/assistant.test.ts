@@ -31,6 +31,13 @@ const NOW = new Date(2026, 9, 7, 10, 0, 0).getTime();
 const PEOPLE = [
     { _id: "p1", name: { givenName: "Sam", familyName: "Jones" }, phoneNumbers: [{ value: "555-0100", type: "type_mobile" }] },
     { _id: "p2", name: { givenName: "Mary", familyName: "Spetzler" }, phoneNumbers: [{ value: "555-0199", type: "type_work" }] },
+    // Chat addresses only, as the Matrix and Telegram accounts' contacts give them.
+    { _id: "p3", name: { givenName: "Priya", familyName: "Nair" }, ims: [{ value: "@priya:matrix.example", type: "type_matrix" }, { value: "+15550102", type: "type_telegram" }] },
+];
+// The IM accounts signed in (their login states): Matrix and Telegram, not Delta Chat.
+const LOGINS = [
+    { _id: "l1", _kind: "com.palm.imloginstate.matrix:1", accountId: "a1", serviceName: "type_matrix", username: "@me:matrix.example", state: "online" },
+    { _id: "l2", _kind: "com.palm.imloginstate.telegram:1", accountId: "a2", serviceName: "type_telegram", username: "+15550100", state: "online" },
 ];
 const APPS = [{ id: "org.webosphoenix.maps", title: "Maps" }, { id: "org.webosphoenix.music", title: "Music" }];
 
@@ -47,7 +54,8 @@ function setup(opts: { llm?: object; voice?: () => unknown; deadlineMs?: number 
             calls.push({ uri, params });
             if (uri.endsWith("/listLaunchPoints")) return Promise.resolve({ returnValue: true, launchPoints: APPS });
             if (uri === "luna://com.palm.db/find")
-                return Promise.resolve({ returnValue: true, results: params.query.from === "com.palm.person:1" ? PEOPLE : [] });
+                return Promise.resolve({ returnValue: true, results: params.query.from === "com.palm.person:1" ? PEOPLE
+                    : params.query.from === "com.palm.imloginstate:1" ? LOGINS : [] });
             if (uri === "luna://com.palm.db/put")
                 return Promise.resolve({ returnValue: true, results: params.objects.map(() => ({ id: "db" + ++n, rev: 1 })) });
             if (uri.endsWith("/getUniversalSearchList"))
@@ -187,6 +195,33 @@ describe("confirmation for what sends or calls", () => {
         expect((await t.svc.confirm({ threadId: r.thread.id, messageId: m.id, accept: true })).returnValue).toBe(false);
     });
 
+    it("sends a chat message on the network asked for, from the account on it", async () => {
+        const t = setup();
+        const r = await ask(t, "message Priya on Telegram: I'm on my way");
+        const m = last(r);
+        expect(m).toMatchObject({ status: "pending", text: "Send \"I'm on my way\" to Priya Nair on Telegram?" });
+        expect(t.called("messaging/putMessage")).toHaveLength(0);
+        const done = await t.svc.confirm({ threadId: r.thread.id, messageId: m.id, accept: true });
+        expect(last(done).text).toBe("Sent to Priya Nair on Telegram.");
+        expect(t.called("messaging/putMessage")[0].params.message).toMatchObject({
+            _kind: "com.palm.immessage.telegram:1", serviceName: "type_telegram", username: "+15550100", folder: "outbox", status: "pending",
+            messageText: "I'm on my way", to: [{ addr: "+15550102", name: "Priya Nair" }] });
+    });
+
+    it("texts someone with no number on a chat network they are on, asking which of two; says what is missing", async () => {
+        const t = setup();
+        // On two networks, neither asked for nor talked on lately: which (never a guess for what is sent).
+        const q = await ask(t, "text Priya see you at noon");
+        expect(last(q)).toMatchObject({ status: "ask", text: "On Matrix or Telegram?", choices: [{ id: "pick:0", label: "Matrix" }, { id: "pick:1", label: "Telegram" }] });
+        const r = await t.svc.choose({ threadId: q.thread.id, messageId: last(q).id, choice: "pick:0" });
+        expect(last(r)).toMatchObject({ status: "pending", text: "Send \"see you at noon\" to Priya Nair on Matrix?" });
+        await t.svc.confirm({ threadId: r.thread.id, messageId: last(r).id, accept: true });
+        expect(t.called("messaging/putMessage")[0].params.message).toMatchObject({ _kind: "com.palm.immessage.matrix:1", username: "@me:matrix.example",
+                                                                                  to: [{ addr: "@priya:matrix.example" }] });
+        expect(last(await ask(t, "send a matrix message to Sam saying hi")).text).toBe("Sam Jones has no Matrix address in your contacts.");
+        expect(last(await ask(t, "message Priya on Delta Chat: hi")).text).toBe("You're not signed in to Delta Chat. Add the account in Accounts first.");
+    });
+
     it("sends nothing on No", async () => {
         const t = setup();
         const r = await ask(t, "text Mary see you soon");
@@ -218,7 +253,7 @@ describe("when nothing on the phone can answer", () => {
         const r = await ask(t, "who wrote the odyssey");
         expect(last(r).choices).toEqual([{ id: "web", label: "Search the web" }, { id: "connect", label: "Connect model" }]);
         const w = await t.svc.choose({ threadId: r.thread.id, messageId: last(r).id, choice: "web" });
-        expect(last(w).text).toBe("Searching the web for \"who wrote the odyssey\".");
+        expect(last(w).text).toBe("Searching the web for “who wrote the odyssey”.");
         expect(t.called("applicationManager/open")[0].params.target).toBe("https://www.google.com/search?q=who%20wrote%20the%20odyssey");
     });
 
@@ -357,14 +392,19 @@ describe("never a dead end (the owner's banana pudding, 9 October 2026)", () => 
         t.as("org.webosphoenix.settings");
         await t.svc.selectModel({ id: MODEL });
         t.as("org.webosphoenix.assistant");
-        const r = await ask(t, "tell me a joke");
+        // A joke is the grammar's, at once: the model is not waited for.
+        const before = mock.requests.length;
+        const joke = await ask(t, "tell me a joke");
+        expect(last(joke)).toMatchObject({ via: "commands", command: "chat" });
+        expect(mock.requests.length).toBe(before);
+        const r = await ask(t, "you're great at this");
         expect(r.messages).toHaveLength(2);
-        expect(last(r)).toMatchObject({ via: "on-device", text: "chat says: tell me a joke" });
+        expect(last(r)).toMatchObject({ via: "on-device", text: "chat says: you're great at this" });
         expect(last(r).choices).toBeUndefined();
         const q = await ask(t, "who wrote the odyssey");
         expect(last(q).choices).toEqual([{ id: "web", label: "Search the web" }]);
         const w = await t.svc.choose({ threadId: q.thread.id, messageId: last(q).id, choice: "web" });
-        expect(last(w).text).toBe("Searching the web for \"who wrote the odyssey\".");
+        expect(last(w).text).toBe("Searching the web for “who wrote the odyssey”.");
         // Device requests still go to the tools.
         const f = await ask(t, "can you put the torch on for me");
         expect(last(f)).toMatchObject({ command: "toggle", status: "done", via: "on-device" });
@@ -528,9 +568,14 @@ describe("the on-device model", () => {
         t.as("com.palm.systemui");
         const from = mock.requests.length;
         await ask(t, "it's dark, put the flashlight on for me");
-        await ask(t, "why is the sky blue");
+        // (A question of the owner's goes through the choice; "why is the sky
+        // blue", about the world alone, is answered without it: below.)
+        await ask(t, "why is my sky blue");
         const sent = mock.requests.slice(from).map((r) => r.body);
         const [pick, call, pick2, chat] = sent;
+        const before = mock.requests.length;
+        await ask(t, "why is the sky blue");
+        expect(mock.requests.slice(before).map((r) => !!r.body.response_format)).toEqual([false]);
         expect(pick.response_format).toBeDefined();
         expect(call.tools).toBeUndefined();
         expect(Object.keys(call.response_format.json_schema.schema.properties)).toContain("setting");
@@ -596,8 +641,9 @@ describe("the on-device model", () => {
             // Qwen3 1.7B stays listed beside the Qwen3.5 2B that replaces it:
             // it is installed.
             ["qwen3-0.6b-q8_0", true, true, false, true], [MODEL, false, false, true, false],
-            ["qwen3.5-2b-q8_0", false, false, false, false],
-            ["qwen3.5-4b-q4_k_m", false, false, false, false], ["qwen3.5-9b-q4_k_m", false, false, false, false],
+            ["qwen3.5-2b-q8_0", false, false, false, false], ["gemma-4-e2b-it-qat-q4_0", false, false, false, false],
+            ["qwen3.5-4b-q4_k_m", false, false, false, false], ["gemma-4-e4b-it-qat-q4_0", false, false, false, false],
+            ["qwen3.5-9b-q4_k_m", false, false, false, false],
             ["qwen3-14b-q4_k_m", false, false, false, false], ["qwen3-30b-a3b-q4_k_m", false, false, false, false]]);
     });
 
@@ -608,6 +654,22 @@ describe("the on-device model", () => {
         expect([3.7, 5.6, 7.5, 11.4, 15.5, 31, 62].map(best)).toEqual([
             "qwen3-0.6b-q8_0", "qwen3.5-2b-q8_0", "qwen3.5-4b-q4_k_m", "qwen3.5-9b-q4_k_m", "qwen3-14b-q4_k_m",
             "qwen3-30b-a3b-q4_k_m", "qwen3-30b-a3b-q4_k_m"]);
+    });
+
+    // Gemma 4 (Apache-2.0 from this generation): Google's own QAT GGUFs,
+    // offered beside Qwen and not recommended until measured.
+    it("offers Gemma 4 E2B and E4B from Google's own GGUFs, pinned, not recommended", () => {
+        const models = req("./lib/models.js") as { find(id: string): any; forDevice(r: number): { id: string; recommended: boolean; fits: boolean }[]; BUILT_IN: string };
+        const e2b = models.find("gemma-4-e2b-it-qat-q4_0"), e4b = models.find("gemma-4-e4b-it-qat-q4_0");
+        expect(e2b).toMatchObject({ licence: "Apache-2.0", source: "google/gemma-4-E2B-it-qat-q4_0-gguf", size: 3349516256, ram: 6 * 2 ** 30 });
+        expect(e2b.url).toBe("https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf/resolve/675cff42a74c774d6cb76f76d8eacb49b48c9b93/gemma-4-E2B_q4_0-it.gguf");
+        expect(e4b).toMatchObject({ licence: "Apache-2.0", source: "google/gemma-4-E4B-it-qat-q4_0-gguf", size: 5154941280, ram: 8 * 2 ** 30 });
+        expect(e4b.sha256).toMatch(/^[0-9a-f]{64}$/);
+        const at8 = models.forDevice(7.5 * 2 ** 30);
+        expect(at8.find((m) => m.id === "gemma-4-e4b-it-qat-q4_0")).toMatchObject({ fits: true, recommended: false });
+        expect(models.BUILT_IN).toBe("qwen3-0.6b-q8_0");
+        // No Gemma 3 or older: their terms are Google's own.
+        expect(at8.some((m) => /gemma-[123]\b|gemma-3/.test(m.id))).toBe(false);
     });
 
     // The owner's rule: the Qwen team's GGUF first, Phoenix's conversion of
@@ -757,7 +819,7 @@ describe("the on-device model", () => {
     });
 });
 
-describe("the grammar knew the command, not all it needs: the model fills it in", () => {
+describe("the grammar knew the command, not all it needs: the command asks", () => {
     const BUILT_IN = "qwen3-0.6b-q8_0";
     const withModel = () => ({
         status: () => Promise.resolve({ available: true, installed: [{ id: BUILT_IN, builtIn: true }], ramBytes: 2 * 2 ** 30 }),
@@ -765,31 +827,31 @@ describe("the grammar knew the command, not all it needs: the model fills it in"
         download: () => Promise.resolve(), cancel: () => Promise.resolve(), remove: () => Promise.resolve(),
     });
 
-    it("a time the grammar could not read, held to the command's parameters", async () => {
+    // What a command asks for itself ("When is it?") it asks at once: the
+    // model is not waited for (the owner, 11 October 2026; speed.test.ts).
+    // "Friday-ish" is the grammar's Friday now; the model filled it before.
+    it("a day said roughly is the grammar's, with no model asked", async () => {
         const t = setup({ llm: withModel() });
         const before = mock.requests.length;
         const r = await ask(t, "add an event called dentist friday-ish");
-        expect(mock.requests.length).toBe(before + 1);
-        const fill = mock.requests.at(-1)!.body;
-        expect(Object.keys(fill.response_format.json_schema.schema.properties)).toContain("start");
-        expect(fill.response_format.json_schema.schema.required).toEqual([]);
-        expect(fill.temperature).toBe(0);
-        // The model's Friday 9 AM is the start: the event is made (this test has
-        // no calendar to make it in), not asked "When is it?".
-        expect(last(r)).toMatchObject({ via: "on-device", source: "Qwen3 0.6B", command: "event" });
+        expect(mock.requests.length).toBe(before);
+        // Made on Friday (this test has no calendar to make it in), not asked "When is it?".
+        expect(last(r)).toMatchObject({ via: "commands", command: "event" });
         expect(last(r).data?.awaiting).toBeUndefined();
         expect(last(r).text).toMatch(/no calendar/);
     });
 
-    it("what the words never said is dropped, and asked for as before", async () => {
+    it("what the words never said is asked for at once, without the model", async () => {
         const t = setup({ llm: withModel() });
+        const before = mock.requests.length;
         const r = await ask(t, "add an event called dentist");
         expect(last(r)).toMatchObject({ via: "commands", command: "event", data: { awaiting: { command: "event" } } });
+        expect(mock.requests.length).toBe(before);
     });
 
     it("without an on-device model, the grammar asks as before", async () => {
         const t = setup();
-        const r = await ask(t, "add an event called dentist friday-ish");
+        const r = await ask(t, "add an event called dentist");
         expect(last(r)).toMatchObject({ via: "commands", data: { awaiting: { command: "event" } } });
     });
 });

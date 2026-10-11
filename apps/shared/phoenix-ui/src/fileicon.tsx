@@ -3,14 +3,15 @@
 //
 // List icons by file type, drawn for Phoenix in the webOS 2.x manner (a
 // small illustrated object with a soft shade). A folder, or a sheet of
-// paper with a coloured band and a mark for its kind. Files and the
-// system's save picker show them.
+// paper with a coloured band and a mark for its kind; a drive (a Synergy
+// account's files: Nextcloud, Dropbox, ...) is a folder with a cloud on it.
+// Files and the system's save picker show them.
 
 import { useId } from "react";
 
-/** The kinds a file icon can show (@phoenix/luna's FileKind). */
-export type FileIconKind = "folder" | "image" | "audio" | "video" | "text" | "code" | "archive" | "package" | "pdf" | "document" | "book" | "file";
-type FileKind = FileIconKind;
+/** The kinds a file icon can show (@phoenix/luna's FileKind, and a drive). */
+export type FileIconKind = "folder" | "drive" | "image" | "audio" | "video" | "text" | "code" | "archive" | "package" | "pdf" | "document" | "book" | "file";
+type FileKind = Exclude<FileIconKind, "drive">;
 
 const BANDS: Record<Exclude<FileKind, "folder">, string> = {
     image: "#3f9a4a", audio: "#e07a1f", video: "#7a4fc0", text: "#4f7fb8", code: "#4a5563",
@@ -32,8 +33,27 @@ const MARKS: Partial<Record<FileKind, string>> = {
     pdf: "M10 21h3.2a1.6 1.6 0 0 1 0 3.2H11.3V26H10zm1.3 1.2v.8h1.8a.4.4 0 0 0 0-.8zM15 21h2.2a2.5 2.5 0 0 1 0 5H15zm1.3 1.2v2.6h.9a1.3 1.3 0 0 0 0-2.6zM20 21h3v1.2h-1.7v.8h1.5v1.2h-1.5V26H20z",
 };
 
-export function FileIcon({ kind, size = 32 }: { kind: FileKind; size?: number }) {
+export function FileIcon({ kind, size = 32 }: { kind: FileIconKind; size?: number }) {
     const id = useId().replace(/:/g, "");
+    if (kind === "drive") {
+        return (
+            <svg className="pui-file-icon" width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
+                <defs>
+                    <linearGradient id={`${id}f`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stopColor="#ffe08a" /><stop offset="1" stopColor="#e3a92c" />
+                    </linearGradient>
+                    <linearGradient id={`${id}c`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stopColor="#fff" /><stop offset="1" stopColor="#cfe0ef" />
+                    </linearGradient>
+                </defs>
+                <path d="M2 8a2 2 0 0 1 2-2h8l3 3h13a2 2 0 0 1 2 2v2H2z" fill="#c78f1f" />
+                <path d="M2 12h28v13a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z" fill={`url(#${id}f)`} stroke="#a8761a" strokeWidth="0.8" />
+                <path d="M11.5 26a3.3 3.3 0 0 1 .5-6.6 4.6 4.6 0 0 1 8.8-.9 3.1 3.1 0 0 1 3.2 3.1 2.2 2.2 0 0 1-.3 4.4z"
+                      fill={`url(#${id}c)`} stroke="#4f6f8f" strokeWidth="0.9" />
+                <path d="M16.3 24.8v-3.6m-1.4 1.3l1.4-1.4 1.4 1.4" fill="none" stroke="#2a6db0" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+        );
+    }
     if (kind === "folder") {
         return (
             <svg className="pui-file-icon" width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">

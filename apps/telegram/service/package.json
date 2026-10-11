@@ -1,0 +1,11 @@
+{
+    "name": "org.webosphoenix.service.telegram",
+    "version": "0.1.0",
+    "private": true,
+    "description": "webOS Phoenix Unofficial Telegram account (Synergy connector on @phoenix/connector-kit): TDLib's JSON interface through phoenix-tdjson (a system helper the image installs), private chats, groups and secret chats in Messaging, the people you chat with in Contacts, pictures, read receipts",
+    "license": "Apache-2.0",
+    "main": "service.js",
+    "dependencies": {
+        "@phoenix/connector-kit": "*"
+    }
+}

@@ -22,7 +22,8 @@ namespace Phoenix\Updates;
 
 final class UpdateFeed
 {
-    public const CHANNELS = ['stable', 'beta'];
+    /** stable, beta and dev (nightlies; OPEN-QUESTIONS Q56), as com.palm.update offers them. */
+    public const CHANNELS = ['stable', 'beta', 'dev'];
 
     public function __construct(public readonly string $dir)
     {
@@ -69,8 +70,18 @@ final class UpdateFeed
         if (trim($name) === '' || mb_strlen($name) > 80) {
             throw new \InvalidArgumentException('name: up to 80 characters');
         }
-        return ['name' => $name, 'version' => $version, 'build' => (int) $build,
+        $rel = ['name' => $name, 'version' => $version, 'build' => (int) $build,
                 'date' => $date, 'notes' => array_values($notes), 'channel' => $channel];
+        // A staged rollout (docs/PLATFORM-CLIENT.md, "Staged rollout"): devices
+        // whose bucket for the seed is below the percentage take it.
+        if (isset($o['rollout']) && $o['rollout'] !== '' && $o['rollout'] !== null) {
+            $pct = (string) $o['rollout'];
+            if (!ctype_digit($pct) || (int) $pct > 100) {
+                throw new \InvalidArgumentException('rollout: a percentage, 0 to 100');
+            }
+            $rel['rollout'] = ['percent' => (int) $pct, 'seed' => (string) ($o['seed'] ?? ($version . '-' . $build))];
+        }
+        return $rel;
     }
 
     private function mkdir(string $d): void

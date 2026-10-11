@@ -42,6 +42,21 @@ export function grabFrame(video: HTMLVideoElement, longSide = 640, quality = 0.8
         canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("capture failed"))), "image/jpeg", quality));
 }
 
+/**
+ * A capture asked for by launch params (the Assistant's "take a selfie in 3
+ * seconds", "record a video", "stop recording"): {capture: "photo" |
+ * "video" | "stop", facing?: "user" | "environment", timer?: seconds}.
+ * null when the params ask for none. The timer is held to 0..30 seconds.
+ */
+export interface CaptureOrder { capture: "photo" | "video" | "stop"; facing: "user" | "environment" | null; timer: number }
+export function captureOrder(params: { capture?: unknown; facing?: unknown; timer?: unknown } | null | undefined): CaptureOrder | null {
+    const c = params?.capture;
+    if (c !== "photo" && c !== "video" && c !== "stop") return null;
+    const f = params?.facing;
+    const t = Math.round(Number(params?.timer) || 0);
+    return { capture: c, facing: f === "user" || f === "environment" ? f : null, timer: Math.max(0, Math.min(30, t)) };
+}
+
 /** "0:07" */
 export function recordingTime(ms: number): string {
     const s = Math.floor(ms / 1000);

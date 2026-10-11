@@ -19,8 +19,12 @@ import {
 import { albums, artists, artistOf, artistSummary, sharedSongs, songs, songsFor, titleOf, type AlbumEntry, type ArtistEntry } from "./library";
 import { PlayerProvider, usePlayer } from "./player";
 import { parseLaunch, type MusicLaunchParams } from "./launchParams";
+import { favoriteOf, favorites, favoriteSongs, type Favorite } from "./favorites";
 
-type Tab = "artists" | "albums" | "songs";
+type Tab = "artists" | "albums" | "songs" | "favorites";
+
+/** The favorite songs (favorites.ts), watched once for the whole app. */
+const Favorites = createContext<Favorite[] | null>(null);
 type View = { kind: "artist"; name: string } | { kind: "album"; name: string; artist: string } | null;
 
 /** Opens Now Playing (tapping a song plays it and shows it, as on webOS). */
@@ -120,7 +124,9 @@ function NowPlaying({ onClose }: { onClose: () => void }) {
     const cur = player.current;
     const artUrl = useMediaUrl(cur?.thumbnail);
     const [scrub, setScrub] = useState<number | null>(null);
+    const favs = useContext(Favorites);
     if (!cur) return null;
+    const fav = favoriteOf(favs ?? [], cur);
     const duration = player.duration || cur.duration || 0;
     const pos = scrub ?? player.position;
     const repeatNext = { off: "all", all: "one", one: "off" } as const;
@@ -133,6 +139,8 @@ function NowPlaying({ onClose }: { onClose: () => void }) {
                     <div className="mu-np-title" data-testid="np-title">{titleOf(cur)}</div>
                     <div className="mu-np-sub">{artistOf(cur)}{cur.album ? ` – ${cur.album}` : ""}</div>
                 </div>
+                <IconToolButton icon="star" label={fav ? "Remove from Favorites" : "Add to Favorites"} depressed={!!fav} testId="np-favorite"
+                                onClick={() => void (fav ? favorites.remove(fav) : favorites.add(cur))} />
             </div>
             <div className="mu-np-body">
                 <div className="mu-np-art">
@@ -176,31 +184,48 @@ function Library() {
     const [nowPlaying, setNowPlaying] = useState(false);
     const player = usePlayer();
 
+    const favs = useContext(Favorites);
     const byArtist = useMemo(() => artists(items ?? []), [items]);
     const byAlbum = useMemo(() => albums(items ?? []), [items]);
     const bySong = useMemo(() => songs(items ?? []), [items]);
+    const byFavorite = useMemo(() => favoriteSongs(items ?? [], favs ?? []), [items, favs]);
 
     // What the launch asks to play (launchParams.ts, docs/LAUNCH-CONTRACTS.md):
     // {play: "<artist, album or song>"}: the Assistant's "play ..." (docs/M6-PLAN.md F3).
     // {share: {title, files}}: audio from the share sheet (appinfo.json
     // shareTargets; a voice memo from Voice Memos' Share) plays at once;
     // {target}: an audio file opened with Music (Files, Email's attachments) too.
+    // {favorites: true}: the favorite songs; {shuffle}, {repeat}: how what plays plays.
     const launch = useLaunchParams<MusicLaunchParams>();
     const intent = useMemo(() => parseLaunch(launch), [launch]);
     const played = useRef<object | null>(null);
     useEffect(() => {
         if (!items || intent.kind === "none" || played.current === intent) return;
+        if (intent.kind === "mode") {
+            played.current = intent;
+            if (intent.shuffle !== undefined) player.setShuffle(intent.shuffle);
+            if (intent.repeat) player.setRepeat(intent.repeat);
+            return;
+        }
+        // The favorites come from db8 after the library: wait for them (an empty list is an answer too).
+        if (intent.kind === "favorites" && favs === null) return;
         played.current = intent;
         const list = intent.kind === "share" ? sharedSongs(intent.share, items)
             : intent.kind === "file" ? (intent.path
                 ? sharedSongs({ title: intent.title, files: [{ path: intent.path, mimeType: intent.mimeType }] }, items)
                 : [{ uri: intent.url!, type: "audio", mime: intent.mimeType, title: intent.title ?? intent.url!.replace(/^.*\//, "") } as AudioItem])
+            : intent.kind === "favorites" ? byFavorite
             : songsFor(items, intent.query);
         if (list && list.length) {
-            player.play(list, 0);
+            // Shuffled: from any song, not always the first.
+            const shuffle = (intent.kind === "play" || intent.kind === "favorites") ? intent.shuffle : undefined;
+            if (shuffle !== undefined) player.setShuffle(shuffle);
+            player.play(list, shuffle ? Math.floor(Math.random() * list.length) : 0);
             setNowPlaying(true);
+        } else if (intent.kind === "favorites") {
+            setTab("favorites");
         }
-    }, [items, intent, player]);
+    }, [items, intent, player, favs, byFavorite]);
 
     useBack(() => { setNowPlaying(false); return true; }, nowPlaying);
     useBack(() => { setView(null); return true; }, !nowPlaying && view !== null);
@@ -227,9 +252,13 @@ function Library() {
                         { value: "artists", caption: "Artists", testId: "tab-artists" },
                         { value: "albums", caption: "Albums", testId: "tab-albums" },
                         { value: "songs", caption: "Songs", testId: "tab-songs" },
+                        // A star, not a word: four words do not fit a phone's width.
+                        { value: "favorites", icon: "star", label: "Favorites", testId: "tab-favorites" },
                     ]} />
                 </div>
                 {items.length === 0 && <div className="mu-empty">No music yet. Copy songs to the device to see them here.</div>}
+                {items.length > 0 && tab === "favorites" && byFavorite.length === 0 &&
+                    <div className="mu-empty" data-testid="favorites-empty">No favorites yet. Tap the star while a song plays, or say “like this song”.</div>}
                 <div className="mu-list">
                     {tab === "artists" && byArtist.map((a) => (
                         <Row key={a.name} icon={<Art path={a.albums[0]?.art} size={40} />} title={a.name} subtitle={artistSummary(a)} chevron
@@ -240,6 +269,7 @@ function Library() {
                              onClick={() => setView({ kind: "album", name: a.name, artist: a.artist })} testId={`album-${a.name}`} />
                     ))}
                     {tab === "songs" && bySong.map((s, i) => <SongRow key={s.uri} song={s} index={i} list={bySong} showAlbum />)}
+                    {tab === "favorites" && byFavorite.map((s, i) => <SongRow key={s.uri} song={s} index={i} list={byFavorite} showAlbum />)}
                 </div>
             </Page>
         );
@@ -253,6 +283,7 @@ function Library() {
                     { label: "Artists", onSelect: () => { setTab("artists"); setView(null); } },
                     { label: "Albums", onSelect: () => { setTab("albums"); setView(null); } },
                     { label: "Songs", onSelect: () => { setTab("songs"); setView(null); } },
+                    { label: "Favorites", onSelect: () => { setTab("favorites"); setView(null); } },
                 ]} />
                 <div className="mu-scroll">{body}</div>
                 <MiniPlayer onOpen={openNowPlaying} />
@@ -262,10 +293,13 @@ function Library() {
 }
 
 export function App() {
+    const favs = useLuna<Favorite[]>((cb) => favorites.watch(cb), []);
     return (
         <BackProvider>
             <PlayerProvider>
-                <Library />
+                <Favorites.Provider value={favs.value ?? null}>
+                    <Library />
+                </Favorites.Provider>
             </PlayerProvider>
         </BackProvider>
     );

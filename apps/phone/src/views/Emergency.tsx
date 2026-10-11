@@ -171,6 +171,33 @@ export function EmergencyPhone() {
         return () => window.removeEventListener("keydown", onKey);
     });
 
+    // The Assistant's emergency call ({emergency, number, countdown}: Shell
+    // openEmergency): the call, at once (countdown 0: the Assistant counted
+    // down already) or after the seconds given, counted down with Cancel.
+    const sos = useLaunchParams<{ number?: string; countdown?: number }>();
+    const sosNumber = typeof sos.number === "string" && isEmergencyNumber(dialable(sos.number), country) ? dialable(sos.number) : "";
+    // (countdown 0: "call now", at once.)
+    const [left, setLeft] = useState<number | null>(() => (sosNumber && typeof sos.countdown === "number" && sos.countdown >= 0 ? Math.min(10, Math.round(sos.countdown)) : null));
+    useEffect(() => {
+        if (left === null) return;
+        if (left <= 0) { setLeft(null); dial(sosNumber); return; }
+        const t = setTimeout(() => setLeft((n) => (n === null ? null : n - 1)), 1000);
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [left]);
+
+    if (left !== null && !call)
+        return (
+            <div className="phone-root emergency-root emergency-countdown" data-testid="emergency-countdown">
+                <div className="emergency-countdown-title">Calling {formatNumber(sosNumber)} in</div>
+                <div className="emergency-countdown-number" data-testid="emergency-countdown-number" aria-live="assertive">{left}</div>
+                <div className="emergency-actions">
+                    <Button variant="negative" onClick={() => { setLeft(null); closeWindow(); }} data-testid="emergency-countdown-cancel">Cancel</Button>
+                    <Button variant="dark" onClick={() => setLeft(0)} data-testid="emergency-countdown-now">Call Now</Button>
+                </div>
+            </div>
+        );
+
     if (call || ended)
         return <div className="phone-root call-screen emergency-root"><InCall key={(call ?? ended)!.id} status={status} call={(call ?? ended)!} people={[]} /></div>;
 

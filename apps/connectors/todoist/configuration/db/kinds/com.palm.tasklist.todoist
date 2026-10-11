@@ -1,0 +1,18 @@
+{
+    "id": "com.palm.tasklist.todoist:1",
+    "owner": "org.webosphoenix.service.todoist",
+    "sync": false,
+    "extends": [
+        "com.palm.tasklist:1"
+    ],
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        }
+    ]
+}

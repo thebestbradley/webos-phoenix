@@ -21,6 +21,6 @@
         "media.operation"
     ],
     "phoenix": {
-        "launchParams": []
+        "launchParams": ["capture", "facing", "timer"]
     }
 }

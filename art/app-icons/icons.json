@@ -187,6 +187,14 @@
             "apps/sharesheet/public/icon"
         ]
     },
+    "signin": {
+        "platter": "diamond",
+        "base": 178,
+        "foot": 60,
+        "out": [
+            "apps/signin/icon"
+        ]
+    },
     "screenshot": {
         "platter": "diamond",
         "base": 178,
@@ -233,6 +241,14 @@
         "foot": 50,
         "out": [
             "apps/fediverse/icon"
+        ]
+    },
+    "drives": {
+        "platter": "diamond",
+        "base": 180,
+        "foot": 78,
+        "out": [
+            "apps/connectors/drives/icon"
         ]
     },
     "wifi": {
@@ -492,6 +508,62 @@
         "foot": 36,
         "out": [
             "apps/settings/public/icons/hardware"
+        ]
+    },
+    "todoist": {
+        "platter": "diamond",
+        "base": 180,
+        "foot": 78,
+        "out": [
+            "apps/connectors/todoist/icon"
+        ]
+    },
+    "bluesky": {
+        "platter": "diamond",
+        "base": 180,
+        "foot": 78,
+        "out": [
+            "apps/connectors/bluesky/icon"
+        ]
+    },
+    "microsoft": {
+        "platter": "diamond",
+        "base": 180,
+        "foot": 78,
+        "out": [
+            "apps/connectors/microsoft/icon"
+        ]
+    },
+    "google": {
+        "platter": "diamond",
+        "base": 180,
+        "foot": 78,
+        "out": [
+            "apps/connectors/google/icon"
+        ]
+    },
+    "zoom": {
+        "platter": "diamond",
+        "base": 180,
+        "foot": 78,
+        "out": [
+            "apps/connectors/zoom/icon"
+        ]
+    },
+    "slack": {
+        "platter": "diamond",
+        "base": 180,
+        "foot": 78,
+        "out": [
+            "apps/connectors/slack/icon"
+        ]
+    },
+    "linkedin": {
+        "platter": "diamond",
+        "base": 180,
+        "foot": 78,
+        "out": [
+            "apps/connectors/linkedin/icon"
         ]
     }
 }

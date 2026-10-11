@@ -12,6 +12,7 @@ import { DateTimePage } from "./DateTime";
 import { LanguagePage } from "./Language";
 import { DeviceInfoPage } from "./DeviceInfo";
 import { UpdatesPage } from "./Updates";
+import { AccountPage } from "./Account";
 import { BackupPage } from "./Backup";
 import { LocationPage } from "./Location";
 import { EmergencyPage } from "./Emergency";
@@ -65,6 +66,7 @@ export const PAGES = {
     emergency: { title: "Emergency Info", icon: "icons/emergency.png", component: EmergencyPage },
     accessibility: { title: "Accessibility", icon: "icons/accessibility.png", component: AccessibilityPage },
     deviceinfo: { title: "Device Info", icon: "icons/deviceinfo.png", component: DeviceInfoPage },
+    account: { title: "Phoenix Account", icon: "icons/backup.png", component: AccountPage },
     backup: { title: "Backup", icon: "icons/backup.png", component: BackupPage },
     updates: { title: "Updates", icon: "icons/updates.png", component: UpdatesPage },
     certificates: { title: "Certificate Manager", icon: "icons/certificates.png", component: CertificatesPage },

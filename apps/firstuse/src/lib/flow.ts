@@ -8,9 +8,10 @@
 // privacy choices added. Hardware (after Wi-Fi, so downloads work) offers
 // the firmware and drivers the device's hardware needs and the system image
 // does not carry (docs/HARDWARE.md, "First boot"); it is left out when
-// nothing needs any.
+// nothing needs any. The Phoenix Account step (sign in, optional) comes
+// before Restore when an account server is set up.
 
-export type StepId = "welcome" | "wifi" | "hardware" | "restore" | "datetime" | "accounts" | "passcode" | "privacy" | "tutorial" | "done";
+export type StepId = "welcome" | "wifi" | "hardware" | "account" | "restore" | "datetime" | "accounts" | "passcode" | "privacy" | "tutorial" | "done";
 
 export interface StepInfo {
     id: StepId;
@@ -23,6 +24,10 @@ export const STEPS: StepInfo[] = [
     { id: "welcome", title: "Welcome", skippable: false },
     { id: "wifi", title: "Wi-Fi", skippable: true },
     { id: "hardware", title: "Hardware", skippable: true },
+    // The Phoenix Account (docs/PLATFORM.md 6.3: after Wi-Fi, before Restore,
+    // which then lists the account's cloud backups); left out when no
+    // account server is set up (servers.json) or the device is offline.
+    { id: "account", title: "Phoenix Account", skippable: true },
     { id: "restore", title: "Restore", skippable: true },
     { id: "datetime", title: "Date & Time", skippable: true },
     { id: "accounts", title: "Accounts", skippable: true },

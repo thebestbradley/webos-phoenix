@@ -43,6 +43,15 @@ the token, or from another origin, are refused, so other web pages cannot
 open shells. It is YOUR shell with YOUR rights: only serve on 127.0.0.1.
 --terminal-shell PATH runs that program instead (the tests use /bin/sh).
 Without --terminal the runtime's simulated shell answers.
+
+/__phoenix/tcp?token=&host=&port= is a TCP relay for the connectors that
+speak a protocol of their own over bytes (the drives' SFTP: SSH), as
+phoenix-sim's SimTcp is: a WebSocket per connection, whose first message is
+{"connected": true} or {"error": code, "message"}, then binary frames both
+ways. The token and the origin are checked as the terminal's are; the
+page learns the address from host.json ("tcp": "websocket", "tcpUrl").
+It reaches what this computer reaches, as /__phoenix/proxy does; --no-tcp
+turns it off.
 """
 
 import argparse
@@ -520,9 +529,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if self.server.terminal:
                 info = {"pty": "websocket",
                         "url": "ws://%s/__phoenix/pty?token=%s" % (self.headers.get("Host", ""), self.server.token)}
+            if self.server.tcp:
+                info["tcp"] = "websocket"
+                info["tcpUrl"] = "ws://%s/__phoenix/tcp?token=%s" % (self.headers.get("Host", ""), self.server.token)
             return self.send(200, "application/json", json.dumps(info).encode())
         if path in ("/__phoenix/pty", "/__phoenix/pty/shells"):
             return pty_request(self, path)
+        if path == "/__phoenix/tcp":
+            return tcp_request(self)
         if path == "/__phoenix/proxy/progress":
             q = urllib.parse.parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
             info = PROXY_PROGRESS.get((q.get("id") or [""])[0], {})
@@ -956,6 +970,128 @@ class PtySession:
                     return
 
 
+def ws_accept(handler):
+    """Answers a WebSocket upgrade (RFC 6455 4.2.2); False when it is not one."""
+    key = handler.headers.get("Sec-WebSocket-Key")
+    if handler.headers.get("Upgrade", "").lower() != "websocket" or not key:
+        handler.send(400, "text/plain", b"WebSocket only")
+        return False
+    accept = base64.b64encode(hashlib.sha1((key + WS_GUID).encode()).digest()).decode()
+    handler.send_response(101, "Switching Protocols")
+    handler.send_header("Upgrade", "websocket")
+    handler.send_header("Connection", "Upgrade")
+    handler.send_header("Sec-WebSocket-Accept", accept)
+    handler.end_headers()
+    handler.wfile.flush()
+    handler.close_connection = True
+    return True
+
+
+def ws_frame(opcode, data):
+    n = len(data)
+    head = bytes([0x80 | opcode]) + (bytes([n]) if n < 126 else bytes([126]) + struct.pack(">H", n) if n < 65536
+                                     else bytes([127]) + struct.pack(">Q", n))
+    return head + data
+
+
+def ws_unmask(data, mask):
+    """The page's payload unmasked (whole words at once: a transfer's frames are large)."""
+    n = len(data)
+    if not n:
+        return data
+    m = (mask * (n // 4 + 1))[:n]
+    return (int.from_bytes(data, "big") ^ int.from_bytes(m, "big")).to_bytes(n, "big")
+
+
+def tcp_request(handler):
+    """/__phoenix/tcp: one TCP connection for the page, over one WebSocket."""
+    srv = handler.server
+    query = urllib.parse.parse_qs(urllib.parse.urlsplit(handler.path).query)
+    origin = handler.headers.get("Origin")
+    if not srv.tcp or query.get("token", [""])[0] != srv.token:
+        return handler.send(403, "text/plain", b"forbidden")
+    if origin is not None and origin != "http://" + handler.headers.get("Host", ""):
+        return handler.send(403, "text/plain", b"forbidden origin")
+    host = query.get("host", [""])[0]
+    try:
+        port = int(query.get("port", ["0"])[0])
+    except ValueError:
+        port = 0
+    if not ws_accept(handler):
+        return
+    ws = handler.connection
+    if not host or not 0 < port < 65536:
+        ws.sendall(ws_frame(1, json.dumps({"error": "EINVAL", "message": "No host or port"}).encode()) + ws_frame(8, b""))
+        return
+    try:
+        upstream = socket.create_connection((host, port), timeout=20)
+    except socket.gaierror as e:
+        ws.sendall(ws_frame(1, json.dumps({"error": "ENOTFOUND", "message": "%s: %s" % (host, e)}).encode()) + ws_frame(8, b""))
+        return
+    except OSError as e:
+        code = errno.errorcode.get(e.errno or 0, "ECONNREFUSED") if not isinstance(e, socket.timeout) else "ETIMEDOUT"
+        ws.sendall(ws_frame(1, json.dumps({"error": code, "message": "%s:%d: %s" % (host, port, e)}).encode()) + ws_frame(8, b""))
+        return
+    upstream.settimeout(None)
+    ws.sendall(ws_frame(1, json.dumps({"connected": True}).encode()))
+    if srv.verbose:
+        print("tcp relay: %s:%d open" % (host, port))
+    inbuf = b""
+    try:
+        while True:
+            ready, _, _ = select.select([ws, upstream], [], [], 30)
+            if upstream in ready:
+                data = upstream.recv(262144)
+                if not data:
+                    break
+                ws.sendall(ws_frame(2, data))
+            if ws in ready:
+                data = ws.recv(262144)
+                if not data:
+                    break
+                inbuf += data
+                closed = False
+                while len(inbuf) >= 2:
+                    op, n, i = inbuf[0] & 0x0F, inbuf[1] & 0x7F, 2
+                    if n == 126:
+                        if len(inbuf) < 4:
+                            break
+                        n, i = struct.unpack(">H", inbuf[2:4])[0], 4
+                    elif n == 127:
+                        if len(inbuf) < 10:
+                            break
+                        n, i = struct.unpack(">Q", inbuf[2:10])[0], 10
+                    masked = inbuf[1] & 0x80
+                    mask = inbuf[i:i + 4] if masked else b""
+                    i += 4 if masked else 0
+                    if len(inbuf) < i + n:
+                        break
+                    payload = ws_unmask(inbuf[i:i + n], mask) if masked else inbuf[i:i + n]
+                    inbuf = inbuf[i + n:]
+                    if op == 8:
+                        closed = True
+                        break
+                    if op == 9:
+                        ws.sendall(ws_frame(10, payload))
+                    elif op in (0, 2):
+                        upstream.sendall(payload)
+                if closed:
+                    break
+    except OSError:
+        pass
+    finally:
+        try:
+            upstream.close()
+        except OSError:
+            pass
+        try:
+            ws.sendall(ws_frame(8, b""))
+        except OSError:
+            pass
+        if srv.verbose:
+            print("tcp relay: %s:%d closed" % (host, port))
+
+
 def inject_runtime(data):
     """Put the runtime before any of the page's own scripts."""
     low = data.lower()
@@ -975,6 +1111,7 @@ def main():
                     help="give the Terminal app a real shell on this computer (a WebSocket with a random token)")
     ap.add_argument("--terminal-shell", metavar="PATH", help="run this program in the Terminal instead of the shell it asks for")
     ap.add_argument("--installed-dir", metavar="DIR", help="where installed apps go (default: a new temporary folder)")
+    ap.add_argument("--no-tcp", action="store_true", help="no TCP relay for the pages' connectors (/__phoenix/tcp: the drives' SFTP)")
     args = ap.parse_args()
     global INSTALLED_DIR
     INSTALLED_DIR = args.installed_dir or tempfile.mkdtemp(prefix="phoenix-installed-")
@@ -985,6 +1122,7 @@ def main():
     srv.verbose = args.verbose
     srv.terminal = args.terminal
     srv.terminal_shell = args.terminal_shell
+    srv.tcp = not args.no_tcp
     srv.token = secrets.token_urlsafe(24)
     print("Serving %d apps at http://%s:%d/" % (len(APPS), args.host, args.port))
     if args.terminal:

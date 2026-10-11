@@ -334,6 +334,13 @@ async function main() {
         // Assistant is refused, and on again.
         const PHRASES = require(path.join(REPO, "apps/assistant/service/test/phrases.cjs"));
         const currentBefore = (await svc(app, A + "threads", {})).current, made = new Set();
+        // A routine for the routine commands' requests ("good night"), removed after.
+        const routine = (await svc(app, A + "setRoutine", { routine: { name: "Good night", steps: [{ text: "turn on do not disturb" }] } })).routine;
+        // A Home Assistant for the home's commands (the service's stand-in, served on 127.0.0.1), disconnected after.
+        const house = require(path.join(REPO, "apps/assistant/service/test/home-assistant.cjs")).create();
+        const haServer = await house.serve();
+        const haLinked = await svc(app, A + "setHomeAssistant", { url: haServer.url, token: house.TOKEN });
+        check(haLinked.connected === true && haLinked.entities === 10, "Home Assistant connects through the simulator's network: " + JSON.stringify(haLinked));
         const broken = [];
         for (const [id, text] of Object.entries(PHRASES)) {
             if (!text || id === "lock") continue;   // locking the page's screen: test-device-services.cjs
@@ -358,6 +365,9 @@ async function main() {
             if (!/is turned off in Settings > Assistant\.$/.test(m.text)) notOff.push(`${id}: ${m.text}`);
         }
         await svc(app, A + "setSettings", { disabledCommands: [] });
+        if (routine) await svc(app, A + "removeRoutine", { id: routine.id });
+        await svc(app, A + "removeHomeAssistant", {});
+        haServer.close();
         for (const id of made) await svc(app, A + "deleteThread", { id });
         await svc(app, A + "setCurrent", { id: currentBefore });
         check(notOff.length === 0, "each command turned off in Settings is refused" + (notOff.length ? ": " + notOff.join(" | ") : ""));
@@ -482,7 +492,7 @@ async function main() {
         check(/llama-server/.test(await st.textContent("[data-testid='as-local-status']")), "without llama.cpp, it says how to get it");
         // (The models come with their own answer, after the page.)
         await st.waitForFunction(() => document.querySelectorAll("[data-testid^='as-model-']").length > 0);
-        check(await st.locator("[data-testid^='as-model-']").count() === 6, "six on-device models offered, with size and memory");
+        check(await st.locator("[data-testid^='as-model-']").count() === 8, "eight on-device models offered (six Qwen3, Gemma 4 E2B and E4B), with size and memory");
         const builtIn = st.locator("[data-testid='as-model-qwen3-0.6b-q8_0']");
         check(/Qwen3 0\.6BBuilt in/.test(await builtIn.textContent()) && await builtIn.locator("button").count() === 0,
               "Qwen3 0.6B is built in: nothing to download or remove");

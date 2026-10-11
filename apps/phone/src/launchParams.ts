@@ -9,7 +9,11 @@
 //   {number}                 on the dial pad
 //   {number, dial: true}     called at once (Voice Dial after "yes", the Assistant)
 //   {target: "tel:..."}      a tel: link (@phoenix/luna links.ts): on the dial pad
-//   {emergency: true}        the lock screen's emergency calls (views/Emergency)
+//   {emergency: true}        the lock screen's emergency calls (views/Emergency);
+//                            with {number, countdown}: the Assistant's "call 911",
+//                            counted down with Cancel, then called
+//   {action: "missedcalls"}  the missed calls' notification (lib/hooks.ts
+//                            notifyMissedCall): the call log, its missed calls
 //
 // The original webOS callers' (com.palm.app.phone):
 //   {address, transport: "com.palm.telephony", video?}
@@ -34,7 +38,7 @@
 import { telTarget } from "@phoenix/luna";
 
 /** The keys read here: appinfo.json "phoenix.launchParams" must list the same. */
-export const LAUNCH_PARAMS = ["number", "dial", "target", "emergency",
+export const LAUNCH_PARAMS = ["number", "dial", "target", "emergency", "countdown",
                               "address", "transport", "video", "personId", "label", "service", "action", "preferences"] as const;
 
 export interface PhoneLaunchParams {
@@ -42,6 +46,8 @@ export interface PhoneLaunchParams {
     dial?: boolean;
     target?: string;
     emergency?: boolean;
+    /** With emergency and number: seconds to count down before calling (the Assistant's SOS). */
+    countdown?: number;
     address?: string;
     transport?: string;
     video?: boolean;
@@ -61,7 +67,9 @@ export type PhoneIntent =
     | { kind: "call"; number: string }
     | { kind: "voicemail" }
     | { kind: "preferences" }
-    | { kind: "emergency" };
+    | { kind: "emergency" }
+    /** The call log, on the missed calls. */
+    | { kind: "missedcalls" };
 
 const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 /** A phone number as it can be dialed: digits, +, *, #, pauses and the like, with at least one digit. */
@@ -72,6 +80,7 @@ export function parseLaunch(p: PhoneLaunchParams | null | undefined): PhoneInten
     if (p.emergency === true) return { kind: "emergency" };
     if (p.preferences === true) return { kind: "preferences" };
     if (p.action === "voicemail") return { kind: "voicemail" };
+    if (p.action === "missedcalls") return { kind: "missedcalls" };
     const number = str(p.number);
     if (number) return p.dial === true ? { kind: "call", number } : { kind: "show", number };
     const address = str(p.address);

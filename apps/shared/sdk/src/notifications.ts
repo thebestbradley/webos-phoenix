@@ -11,11 +11,15 @@
 //       plain OSE com.webos.notification/createToast (the Phoenix runtime
 //       shows a toast as the app's banner too).
 //   Notification: the Phoenix shell's "notification" message (phoenixHost,
-//       SimWindowSource.qml): {appId, title, body, params, tag, actions,
-//       soundClass}; {tag} replaces the app's row of that tag, {tag,
-//       remove: true} takes it away; actions {uri, params, items: [{id,
-//       label}]} are buttons, each calling the app's service uri with
-//       {...params, action: id} (Notifications.qml runAction).
+//       SimWindowSource.qml): {appId, title, body, params, tag, group,
+//       actions, soundClass}; {tag} replaces the app's row of that tag, {tag,
+//       remove: true} takes it away; {group} stacks the app's notifications
+//       of that group in one row, newest on top, as webOS's dashboards held
+//       their layers (enyo.Dashboard; the shell's NotificationStacks.js),
+//       and {group, remove: true} takes the stack away; actions {uri,
+//       params, items: [{id, label}]} are buttons, each calling the app's
+//       service uri with {...params, action: id} (Notifications.qml
+//       runAction).
 //   Dashboard: a window the app opens with window.open(url, name,
 //       'attributes={"window":"dashboard", ...}') (Enyo's
 //       enyo.windows.openDashboard), which LunaSysMgr put in the
@@ -54,6 +58,15 @@ export interface NotificationOptions {
     params?: object;
     /** Replaces the app's earlier notification of this tag; remove(tag) takes it away. */
     tag?: string;
+    /**
+     * Stacks it with the app's other notifications of this group (a
+     * conversation, an account): one row in the notification area, the
+     * newest on top with the count, as webOS's dashboards held their layers.
+     * A swipe on the row takes its top one away, a tap opens the app with
+     * the top one's params; removeGroup(group) takes the stack away (the
+     * user read them). Without a group, a row of its own.
+     */
+    group?: string;
     /**
      * Buttons on the row. A tap calls `uri` (the app's own Luna service)
      * with {...params, action: id} without opening the app; the reply's
@@ -144,12 +157,14 @@ export const notifications = {
      * shell, a banner.
      *
      *     notifications.post({ title: "Upload finished", body: "12 photos", params: { album: id }, tag: "upload" });
+     *     notifications.post({ title: "Ada", body: "Lunch?", params: { threadId }, group: threadId });
      */
     async post(n: NotificationOptions): Promise<void> {
         const host = phoenixHost();
         if (host) {
             host.postToHost("notification", { appId: app.id, title: n.title, body: n.body ?? "", params: n.params ?? {},
-                                              ...(n.tag ? { tag: n.tag } : {}), ...(n.actions ? { actions: n.actions } : {}),
+                                              ...(n.tag ? { tag: n.tag } : {}), ...(n.group ? { group: n.group } : {}),
+                                              ...(n.actions ? { actions: n.actions } : {}),
                                               ...(n.soundClass ? { soundClass: n.soundClass } : {}), ...(n.soundFile ? { soundFile: n.soundFile } : {}) });
             return;
         }
@@ -159,6 +174,11 @@ export const notifications = {
     /** Take away the app's notification of this tag (with prefix: every tag starting with it). */
     remove(tag: string, prefix = false): void {
         phoenixHost()?.postToHost("notification", { appId: app.id, remove: true, ...(prefix ? { tagPrefix: tag } : { tag }) });
+    },
+
+    /** Take away the app's stack of this group, every layer of it (the user has read them). */
+    removeGroup(group: string): void {
+        if (group) phoenixHost()?.postToHost("notification", { appId: app.id, remove: true, group });
     },
 
     /**

@@ -97,6 +97,24 @@ FocusScope {
     // Touch to Share glow comes from that edge (TouchToShareGlow.cpp:39-64).
     // Anything else counts as 0, and -90 as 270 (Settings.cpp:662-672).
     property int homeButtonOrientationAngle: 0
+    // The screen's shape (device.json displayCornerRadius, displayCutouts;
+    // phoenix-sim --device): its rounded corners' radius and the camera's
+    // holes, in device pixels on the screen upright. webOS's own devices
+    // had square screens and no cutouts; a modern phone's front camera
+    // sits in the screen. While the UI is upright, a cutout at the top
+    // edge makes the status bar tall enough to hold it (Theme.safeAreaTop)
+    // and moves the clock beside it (StatusBar); the corners keep the bar's
+    // content in from the edges at any turn.
+    property real displayCornerRadius: 0
+    property var displayCutouts: []
+    // The cutouts the status bar can meet: those that start within the
+    // Pre's 28 px bar.
+    readonly property var topCutouts: (displayCutouts || []).filter(function (c) { return c.y < Theme.px(28); })
+    Binding {
+        target: Theme
+        property: "safeAreaTop"
+        value: shell._barAngle !== 0 ? 0 : Math.ceil(shell.topCutouts.reduce(function (m, c) { return Math.max(m, c.y + c.height); }, 0))
+    }
     readonly property int homeButtonAngle: {
         var a = homeButtonOrientationAngle;
         if (a >= 360)
@@ -899,10 +917,20 @@ FocusScope {
     readonly property bool emergencyShown: emergencyWindow.windowKey !== ""
     readonly property bool emergencyAvailable: !!source && typeof source.openSystemWindow === "function"
 
-    function openEmergency() {
+    // extra: the Assistant's emergency call ({number, countdown}: Phone calls,
+    // after counting down with Cancel when countdown is given; apps/phone
+    // views/Emergency.tsx), which replaces a window already open.
+    function openEmergency(extra) {
+        if (emergencyShown && extra)
+            closeEmergency();
         if (emergencyShown || !emergencyAvailable)
             return emergencyShown;
-        var key = source.openSystemWindow(emergencyAppId, { emergency: true }, "emergency");
+        var params = { emergency: true };
+        if (extra && extra.number) {
+            params.number = String(extra.number);
+            params.countdown = Number(extra.countdown) || 0;
+        }
+        var key = source.openSystemWindow(emergencyAppId, params, "emergency");
         emergencyWindow.windowKey = key || "";
         return emergencyShown;
     }
@@ -931,6 +959,11 @@ FocusScope {
                 return;
             emergencyWindow.windowKey = "";
             shell._emergencyClosed();
+        }
+        // The Assistant's emergency call, its countdown over ({number, countdown}).
+        function onEmergencyCallRequested(params) {
+            if (params && params.number)
+                shell.openEmergency(params);
         }
     }
 
@@ -2250,6 +2283,38 @@ FocusScope {
         target: dictationEngine
         function onWakeHeard(heard) { shell.wakeAssistant(); }
     }
+    // The notification list for the services that read it, and each new
+    // notification for the Assistant to announce (driving mode; headphones
+    // in with Announce Messages on): NotificationFeed.qml.
+    NotificationFeed {
+        id: notificationFeed
+        source: shell.source
+        locked: shell.locked
+        previews: !shell.system || shell.system.lockScreenPreviews !== false
+        headphones: !!shell.system && ((shell.system.headset !== undefined && shell.system.headset !== "none")
+                                       || /head(?:set|phone)|ear ?(?:bud|phone)|airpods/i.test(String(shell.system.bluetoothDevice || "")))
+        onReplyByVoice: (threadId) => shell.listenForReply(threadId)
+    }
+    // Put on charge, connected to the car: the Assistant's routines that
+    // wait for them (AssistantMoments.qml).
+    AssistantMoments {
+        source: shell.source
+        system: shell.system
+    }
+    // Driving mode: a message read aloud asks "Want to reply?", and the
+    // Assistant listens for the answer in that conversation (over the lock
+    // screen too, as a spoken request may be).
+    function listenForReply(threadId) {
+        if (firstUse || dockMode)
+            return;
+        justType.open = false;
+        iconMenu.open = false;
+        assistantView.listenOnOpen = false;
+        assistantView.origin = Qt.point(assistantView.width / 2, assistantView.height);
+        if (!assistantView.open)
+            assistantView.open = true;
+        assistantView.replyByVoice(threadId);
+    }
     function wakeAssistant() {
         if (!wakeWordListening)
             return;
@@ -2304,6 +2369,15 @@ FocusScope {
         property: "speech"
         value: speechEngine
         when: !!shell.source && ("speech" in shell.source)
+    }
+    // Search your phone's model (services/index: EmbeddingGemma 2), in the
+    // models folder's index/, its own llama-server beside the Assistant's.
+    readonly property alias indexModels: indexModelsEngine
+    Binding {
+        target: shell.source
+        property: "indexModels"
+        value: shell.localModelsDir !== "" ? indexModelsEngine : null
+        when: !!shell.source && ("indexModels" in shell.source)
     }
     // When the app in front is resized for a change of the negative space
     // (the keyboard, the dashboard, a banner, an alert), as CardWindowManager
@@ -3479,6 +3553,8 @@ FocusScope {
                          : _mode === "app" && cards.currentStatusBarColor !== "" ? cards.currentStatusBarColor
                          : Theme.statusBarFill
                 systemMenuOpen: systemMenu.open
+                cutouts: shell._barAngle === 0 ? shell.topCutouts : []
+                cornerRadius: shell.displayCornerRadius
                 lockScreen: shell.locked && !shell.dockMode && !shell._dockTransition
                 filled: cards.maximized || launcher.open || justType.open || shell.dockMode || shell._dockTransition
                 onSystemMenuRequested: {
@@ -3532,6 +3608,14 @@ FocusScope {
                 anchors.bottom: parent.bottom
                 model: shell.source ? shell.source.notifications : null
                 onDismissRequested: (index) => shell.source.dismissNotification(index)
+                // A stack's top layer swiped away (a source without stacks:
+                // the row).
+                onLayerPopRequested: (index) => {
+                    if (typeof shell.source.popNotificationLayer === "function")
+                        shell.source.popNotificationLayer(index);
+                    else
+                        shell.source.dismissNotification(index);
+                }
                 onActivated: (appId, params) => {
                     var p = null;
                     try { p = params ? JSON.parse(params) : null; } catch (e) { p = null; }
@@ -3594,6 +3678,21 @@ FocusScope {
                 id: localModelsEngine
                 modelsDir: shell.localModelsDir
                 serverCommand: shell.llamaServerCommand
+            }
+            // The index's (Search your phone): llama-server --embedding, one
+            // thread (a background job; on a busy 4-core computer one thread
+            // embedded a passage in 0.5 s and a query in 50 ms, two in 2-3.6 s
+            // and 0.1-0.3 s: services/index/device.js),
+            // and --mmproj with the vision and audio encoders when pictures
+            // and recordings are embedded (SimWindowSource "index" ensure
+            // sets mmproj). After these come LocalModels' own arguments.
+            LocalModels {
+                id: indexModelsEngine
+                property string mmproj: ""
+                modelsDir: shell.localModelsDir !== "" ? shell.localModelsDir + "/index" : ""
+                builtInDirs: []
+                serverCommand: (shell.llamaServerCommand.length ? [shell.llamaServerCommand[0]] : ["llama-server"])
+                               .concat(["--embedding", "-t", "1"]).concat(mmproj !== "" ? ["--mmproj", mmproj] : [])
             }
             Speech {
                 id: speechEngine

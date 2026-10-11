@@ -98,4 +98,6 @@ export const vcard: any;
 export const ical: any;
 export const datetime: any;
 export const contentline: any;
+/** A small namespace-aware XML reader (WebDAV multistatus bodies): parse, children, child, path, text, escape. */
+export const xml: any;
 export function createRequest(options?: { timeoutMs?: number; userAgent?: string }): RequestFn;

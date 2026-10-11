@@ -559,6 +559,64 @@ Item {
             closeMenu();
         }
 
+        // Stacks in the drop-down (NotificationStacks.js): one row per
+        // conversation, its count, one status bar icon per stack; right of
+        // the icon a drag moves the top layer only, and past 35% of its
+        // width pops it; on the icon, the row and its stack go.
+        function test_dashboardMenuStacks() {
+            var notes = shell.notifications;
+            var app = "org.webosphoenix.messaging";
+            function text(from, body, thread) {
+                windows._hostMessage(app, "", "notification", { title: from, body: body, params: { threadId: thread }, group: thread });
+            }
+            text("Ada Palmer", "One", "ta");
+            text("Marcus Reyes", "Hi", "tm");
+            text("Ada Palmer", "Two", "ta");
+            text("Ada Palmer", "Three", "ta");
+            text("Marcus Reyes", "Hello?", "tm");
+            compare(windows.notifications.count, 2);
+            notes.bannerActive = false;
+            var icons = findChild(shell.notifications, "tabletNotificationIcons");
+            var shown = 0;
+            (function walk(o) {
+                for (var i = 0; i < o.children.length; ++i) {
+                    if (o.children[i].hasOwnProperty("glyph") && o.children[i].hasOwnProperty("showLabel"))
+                        ++shown;
+                    else
+                        walk(o.children[i]);
+                }
+            })(icons);
+            compare(shown, 2);
+            notes.dashboardOpen = true;
+            var menu = findChild(shell, "dashboardMenu");
+            tryCompare(menu, "opacity", 1, 1000);
+            var rows = menuRows();
+            compare(rows.length, 2);
+            // Newest row at the top: Marcus's stack was made after Ada's.
+            compare(rows[0].title, "Marcus Reyes");
+            compare(rows[1].title, "Ada Palmer");
+            compare(rows[1].layerCount, 3);
+            compare(findChild(rows[1], "dashboardCountLabel").text, "3");
+            var item = findChild(rows[1], "dashboardUnderLayer").parent;
+            var w = item.width - item.topEdge;
+            // Right of the icon, past 35%: the top layer goes, the row stays.
+            var p = rows[1].mapToItem(root, 120, 26);
+            mousePress(root, p.x, p.y);
+            for (var d = 1; d <= 10; ++d) { wait(15); mouseMove(root, p.x + w * 0.5 * d / 10, p.y); }
+            verify(item.layerX > 0);
+            compare(rows[1].swipeX, 0, "the row stays put");
+            mouseRelease(root, p.x + w * 0.5, p.y);
+            tryCompare(windows.notifications.get(0), "layerCount", 2, 2000);
+            compare(windows.notifications.get(0).body, "Two");
+            compare(windows.notifications.count, 2);
+            // On the icon, past a quarter: the whole stack.
+            rows = menuRows();
+            dragRow(rows[1], 120, 10, 20);
+            tryCompare(windows.notifications, "count", 1, 1500);
+            compare(windows.notifications.get(0).title, "Marcus Reyes");
+            closeMenu();
+        }
+
         // A tap on a row opens its app; a tap outside closes the menu.
         SignalSpy { id: activatedSpy; target: shell.notifications; signalName: "activated" }
         function test_dashboardMenuTap() {

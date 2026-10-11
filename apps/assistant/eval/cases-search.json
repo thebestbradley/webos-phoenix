@@ -1,0 +1,49 @@
+{
+    "about": "Search your phone (apps/assistant/service/lib/commands-search.js, services/index): the user's own things found by what they mean. deviceState.index turns the index on in the stand-in device (services/index/test/standin.cjs: the real service with a deterministic fake embedder, services/index/test/fake-embedder.cjs, in which a furnace and a boiler share a concept) and seed adds the records these cases are about to the evaluation's world. Without index.on the index is off, as it is until the user turns it on.",
+    "cases": [
+        { "id": "phonesearch-01", "cat": "search by meaning", "say": "find the email about the boiler",
+          "deviceState": { "index": { "on": true, "seed": [
+              { "_id": "mail-furnace", "_kind": "com.palm.email:1", "subject": "Your furnace visit", "from": { "name": "Northside Heating", "addr": "jobs@northside.example" },
+                "summary": "Our engineer will service the radiators on Tuesday", "timestamp": 1791100000000, "flags": { "read": true, "visible": true },
+                "parts": [{ "type": "body", "mimeType": "text/plain", "content": "Our engineer will service the radiators on Tuesday between 8 and 10." }] } ] } },
+          "expect": { "command": "searchEmail" }, "text": "furnace visit" },
+        { "id": "phonesearch-02", "cat": "search by meaning", "say": "what did Sam say about the party",
+          "deviceState": { "index": { "on": true, "seed": [
+              { "_id": "sms-cake", "_kind": "com.palm.smsmessage:1", "folder": "inbox", "messageText": "The surprise cake for Saturday is ordered", "from": { "addr": "3035550135" },
+                "localTimestamp": 1791200000000, "threadId": "t-sam", "flags": { "read": true, "visible": true } },
+              { "_id": "sms-priya-bday", "_kind": "com.palm.smsmessage:1", "folder": "inbox", "messageText": "Birthday dinner at mine on Friday?", "from": { "addr": "4155550123" },
+                "localTimestamp": 1791210000000, "threadId": "t-priya", "flags": { "read": true, "visible": true } } ] } },
+          "expect": { "command": "searchPhone", "args": { "source": "messages", "who": "Sam" } }, "text": "surprise cake", "notText": "Birthday dinner" },
+        { "id": "phonesearch-03", "cat": "search by meaning", "say": "where's that note about the internet password", "deviceState": { "index": { "on": true } },
+          "expect": { "command": "searchPhone", "args": { "source": "memos" } }, "text": "Wi-Fi at the cabin" },
+        { "id": "phonesearch-04", "cat": "search by meaning", "say": "find anything about the heating",
+          "deviceState": { "index": { "on": true, "seed": [
+              { "_id": "mail-furnace", "_kind": "com.palm.email:1", "subject": "Your furnace visit", "from": { "name": "Northside Heating", "addr": "jobs@northside.example" },
+                "timestamp": 1791100000000, "flags": { "read": true, "visible": true },
+                "parts": [{ "type": "body", "mimeType": "text/plain", "content": "Our engineer will service the radiators on Tuesday." }] } ] } },
+          "expect": { "command": "searchPhone", "args": { "source": "" } }, "text": "furnace visit" },
+        { "id": "phonesearch-05", "cat": "search by meaning", "say": "did Priya text me anything about lunch", "deviceState": { "index": { "on": true } },
+          "expect": { "command": "searchPhone", "args": { "source": "messages", "who": "Priya" } }, "text": "Lunch at noon" },
+        { "id": "phonesearch-06", "cat": "search by meaning", "say": "find my notes about the internet", "deviceState": { "index": { "on": true } },
+          "expect": { "command": "findNotes" }, "text": "No memos have those words.*Wi-Fi at the cabin" },
+        { "id": "phonesearch-07", "cat": "search by meaning", "say": "search my phone for the dentist", "deviceState": { "index": { "on": true } },
+          "expect": { "command": "searchPhone" }, "text": "Dentist" },
+        { "id": "phonesearch-08", "cat": "search by meaning", "say": "find the voice memo about the garden", "deviceState": { "index": { "on": true } },
+          "expect": { "command": "searchPhone", "args": { "source": "voicememos" } }, "text": "couldn't find a voice memo" },
+        { "id": "phonesearch-09", "cat": "search by meaning", "say": "find anything about the boiler",
+          "expect": { "command": "searchPhone" }, "text": "turn on Search your phone" },
+        { "id": "phonesearch-10", "cat": "search by meaning", "say": "what did Sam say about running late",
+          "expect": { "command": "searchPhone", "args": { "who": "Sam" } }, "text": "Running 5 min late" },
+        { "id": "phonesearch-11", "cat": "search by meaning", "say": "where's that note about books",
+          "expect": { "command": "searchPhone", "args": { "source": "memos" } }, "text": "Books to read" },
+        { "id": "phonesearch-12", "cat": "search by meaning", "say": "what did Sam say", "deviceState": { "index": { "on": true } },
+          "expect": { "command": "readMessages" }, "forbid": ["searchPhone"] },
+        { "id": "phonesearch-13", "cat": "search by meaning", "say": "find the email about the invoice", "deviceState": { "index": { "on": true } },
+          "expect": { "command": "searchEmail" }, "text": "Invoice 2231", "notText": "have those words" },
+        { "id": "phonesearch-14", "cat": "search by meaning", "turns": [
+            { "say": "where's that note about the wifi password",
+              "expect": { "command": "searchPhone" }, "text": "Wi-Fi at the cabin" },
+            { "say": "what does it say", "expect": { "command": ["detail", "searchPhone"] }, "text": "Lakeview" } ],
+          "deviceState": { "index": { "on": true } } }
+    ]
+}

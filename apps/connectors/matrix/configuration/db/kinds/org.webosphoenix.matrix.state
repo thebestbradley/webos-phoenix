@@ -1,0 +1,15 @@
+{
+    "id": "org.webosphoenix.matrix.state:1",
+    "owner": "org.webosphoenix.service.matrix",
+    "sync": false,
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        }
+    ]
+}

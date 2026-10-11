@@ -1,0 +1,15 @@
+{
+    "id": "org.webosphoenix.bluesky.item:1",
+    "owner": "org.webosphoenix.service.bluesky",
+    "sync": false,
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        }
+    ]
+}

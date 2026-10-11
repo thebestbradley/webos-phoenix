@@ -1,0 +1,18 @@
+{
+    "accounts.transport": [
+        "org.webosphoenix.service.todoist/checkCredentials",
+        "org.webosphoenix.service.todoist/onCreate",
+        "org.webosphoenix.service.todoist/onEnabled",
+        "org.webosphoenix.service.todoist/onCredentialsChanged",
+        "org.webosphoenix.service.todoist/onDelete",
+        "org.webosphoenix.service.todoist/sync"
+    ],
+    "todoist.account": [
+        "org.webosphoenix.service.todoist/providerInfo",
+        "org.webosphoenix.service.todoist/signIn",
+        "org.webosphoenix.service.todoist/share"
+    ],
+    "phoenix.connector.share": [
+        "org.webosphoenix.service.todoist/share"
+    ]
+}

@@ -20,7 +20,7 @@ export const ASSISTANT_APP_ID = "org.webosphoenix.assistant";
 export const ASSISTANT_ERRORS = { BAD_PARAMS: -1, NOT_FOUND: -2, NOT_ALLOWED: -3, OFF: -4, FAILED: -5 } as const;
 
 /** Which layer answered: the grammar, the on-device model, or a cloud model. */
-export type AssistantVia = "commands" | "on-device" | "cloud";
+export type AssistantVia = "commands" | "on-device" | "cloud" | "decider";
 
 export interface AssistantChoice {
     /** "cloud:<provider id>", "web", "open", "connect" (no model yet: ask which kind, then connect()) or "settings" (older messages). */
@@ -43,8 +43,10 @@ export interface AssistantMessage {
     /** The command it ran or wants to run. */
     command?: string;
     /** "pending": waits for confirm (it sends, deletes or calls). */
-    status?: "pending" | "done" | "cancelled" | "failed";
-    confirm?: { command: string; args: Record<string, unknown> };
+    /** "pending": waits for confirm (it sends, deletes or calls); "ask": a question back (which one, what to say). */
+    status?: "pending" | "done" | "cancelled" | "failed" | "ask" | "running";
+    /** countdown: seconds after `time` when it runs unless cancelled (an emergency call). */
+    confirm?: { command: string; args: Record<string, unknown>; countdown?: number };
     /** Nothing on the phone could answer: what the user may do next. */
     choices?: AssistantChoice[];
     /** The choice taken. */
@@ -52,7 +54,20 @@ export interface AssistantMessage {
     data?: Record<string, unknown>;
     /** A follow-up question about what a command just made; its choices
      *  ("fu:<n>", "fu:skip") are the answers, and so are the next words. */
-    followUp?: { id: string; kind: FollowUpKind | "doubt" };
+    followUp?: { id: string; kind: FollowUpKind | "doubt"; attempt?: number };
+    /** What answered and how long it took (the service's trace; Export Conversation saves it). */
+    trace?: AssistantTrace;
+}
+
+/** Which path answered a request, the command and its arguments, and the time it took. */
+export interface AssistantTrace {
+    path: "grammar" | "on-device" | "cloud" | "decider" | "fallback" | "follow-up";
+    command?: string;
+    args?: Record<string, unknown>;
+    /** The models' steps: choosing, calling, answering, filling in, writing, deciding. */
+    steps?: { step: string; ms: number; tokens?: number; choice?: string; command?: string; confidence?: number }[];
+    /** Milliseconds from the words to this answer. */
+    ms: number;
 }
 
 /** What a follow-up question asks for. */
@@ -130,6 +145,13 @@ export interface AssistantSettings {
     followUpAgain: number;
     /** Follow-up topics turned off (Settings, or "Stop asking" when it asked whether they help). */
     followUpTopicsOff: FollowUpKind[];
+    /** The decision model between the grammar and the general model (Laya, docs/AI-AND-MCP.md): "on" or "off" (default). */
+    decider?: "on" | "off";
+    /** What nothing on the phone can answer is searched on the web at once, with the default search engine,
+     *  rather than offered (off by default: the words go to the engine; only Settings may turn it on). */
+    autoSearch: boolean;
+    /** Messages read aloud as they come while headphones are in (off by default). */
+    announceMessages?: boolean;
 }
 
 /** Settings > Assistant: the personalities, speeds and waits the service takes. */
@@ -262,6 +284,15 @@ export const assistant = {
         const r = await c("retry", { threadId });
         return { thread: r.thread, messages: r.messages || [] };
     },
+    /**
+     * The Assistant opened: the on-device model started in the background
+     * (where it fits the device's memory), so the first request that needs
+     * it does not wait for it to load. Nothing waits for this.
+     */
+    async warm(): Promise<boolean> {
+        const r = await c("warm");
+        return !!r.warming;
+    },
     /** Answer a read-back: run it (accept) or not. */
     async confirm(threadId: string, messageId: string, accept: boolean): Promise<AskResult> {
         const r = await c("confirm", { threadId, messageId, accept });
@@ -348,7 +379,79 @@ export const assistant = {
     async cancelDownload(id: string): Promise<void> { await c("cancelDownload", { id }); },
     async removeModel(id: string): Promise<void> { await c("removeModel", { id }); },
     async selectModel(id: string): Promise<void> { await c("selectModel", { id }); },
+
+    // ---- The everyday features (the service's lib/commands-everyday.js) ----
+    /** Driving mode: as it is, or turned on or off (messages read aloud, replies by voice, the rest quiet). */
+    async driving(on?: boolean): Promise<{ on: boolean; since: number }> {
+        const r = await c("driving", on === undefined ? {} : { on });
+        return { on: !!r.on, since: r.since || 0 };
+    },
+    /** The routines, the starters offered (off until added) and the steps the editor offers. */
+    async routines(): Promise<{ routines: Routine[]; starters: Routine[]; templates: RoutineTemplate[] }> {
+        const r = await c("routines");
+        return { routines: r.routines || [], starters: r.starters || [], templates: r.templates || [] };
+    },
+    /** Make (no id) or change a routine; every step is checked (an error says which cannot be one). */
+    async setRoutine(routine: Partial<Routine>): Promise<{ routine: Routine; nextAt: number }> {
+        const r = await c("setRoutine", { routine });
+        return { routine: r.routine, nextAt: r.nextAt || 0 };
+    },
+    async removeRoutine(id: string): Promise<void> { await c("removeRoutine", { id }); },
+    /** Run it now: what it did, as it says it. */
+    async runRoutine(id: string): Promise<string> { return (await c("runRoutine", { id })).text || ""; },
+    /** Home and work: the saved places in Maps called "Home" and "Work" (null: none yet). */
+    async places(): Promise<{ home: SavedPlaceInfo | null; work: SavedPlaceInfo | null }> {
+        const r = await c("places");
+        return { home: r.home || null, work: r.work || null };
+    },
+    /** The news feeds "what's the news" reads (RSS or Atom), and the ones a new phone starts with. */
+    async newsFeeds(): Promise<{ feeds: NewsFeed[]; defaults: NewsFeed[] }> {
+        const r = await c("newsFeeds");
+        return { feeds: r.feeds || [], defaults: r.defaults || [] };
+    },
+    async setNewsFeeds(feeds: NewsFeed[]): Promise<NewsFeed[]> { return (await c("setNewsFeeds", { feeds })).feeds || []; },
+    /** The user's Home Assistant (lib/commands-home.js): its address, and how many devices it has. */
+    async homeAssistant(): Promise<HomeAssistantInfo> {
+        const r = await c("homeAssistant");
+        return { url: r.url || "", connected: !!r.connected, entities: r.entities || 0 };
+    },
+    /** Connect it: the address and a long-lived access token, checked first (an error says what is wrong). */
+    async setHomeAssistant(url: string, token: string): Promise<HomeAssistantInfo> {
+        const r = await c("setHomeAssistant", { url, token });
+        return { url: r.url || url, connected: !!r.connected, entities: r.entities || 0 };
+    },
+    async removeHomeAssistant(): Promise<void> { await c("removeHomeAssistant"); },
+    /** Home or work set to where the device is now (what the assistant said), or cleared. */
+    async setPlace(place: "home" | "work", clear = false): Promise<string> {
+        return (await c("setPlace", clear ? { place, clear: true } : { place })).text || "";
+    },
 };
+
+/** A saved place in Maps (org.webosphoenix.maps.place:1), as Settings shows it. */
+export interface SavedPlaceInfo { id: string; name: string; detail: string; lat: number; lon: number }
+/** A news feed (the service's lib/commands-facts.js): its name and its address. */
+export interface NewsFeed { title: string; url: string }
+/** The user's Home Assistant, as Settings shows it (the token never leaves the service). */
+export interface HomeAssistantInfo { url: string; connected: boolean; entities: number }
+
+/** A routine (the service's lib/commands-routines.js): its steps are requests in words. */
+export interface Routine {
+    id: string;
+    name: string;
+    /** What starts it when said ("good night"); the name when none. */
+    phrases: string[];
+    steps: { text: string; command?: string }[];
+    /** "HH:MM" it runs at ("" none), on these days (0 Sunday .. 6; none: every day). */
+    time: string;
+    days: number[];
+    /** And when the device is put on charge, or connects to a car. */
+    events: ("charging" | "car")[];
+    enabled: boolean;
+    /** The starter it came from ("goodnight", "goodmorning"). */
+    starter?: string;
+}
+/** A step the editor offers: {field} in text filled in, from fields' defaults. */
+export interface RoutineTemplate { label: string; text: string; fields?: Record<string, string> }
 
 export const tts = {
     /** Say it with the device's voice (org.webosphoenix.tts). */

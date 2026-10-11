@@ -60,6 +60,8 @@
 .as-work .ab-bird { flex: none; margin-top: 18px; }
 .as-work-say { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
 .as-working { margin: 4px 2px 0; font-size: 13px; color: #777; }
+/* An emergency call's countdown: large and red, as the Phone's emergency view. */
+.as-countdown { margin: 6px 2px 0; font-size: 20px; font-weight: bold; color: #c62828; }
 .as-empty p { font-size: 17px; line-height: 1.4; margin: 12px auto; max-width: 420px; }
 .as-off { text-align: center; padding: 40px 24px; font-size: 17px; }
 

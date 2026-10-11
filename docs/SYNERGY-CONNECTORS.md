@@ -1,6 +1,6 @@
 # Synergy accounts, a connector catalog and a developer kit (draft)
 
-*Draft, 10 October 2026, with what is built since: phases C0, C1 (the kit) and C2 (the Fediverse account), each in an "As built" note; since, sharing in the kit (a connector's accounts in the share sheet, SYNERGY-SDK.md section 7). The Marketplace view this page calls the Accounts view is named **Connections** (the owner, section 5). Developers: [SYNERGY-SDK.md](SYNERGY-SDK.md).*
+*Draft, 10 October 2026, with what is built since: phases C0, C1 (the kit) and C2 (the Fediverse account), each in an "As built" note; since, sharing in the kit (a connector's accounts in the share sheet, SYNERGY-SDK.md section 7); and the provider accounts built ahead of their registrations, Todoist and Bluesky working fully without any (section 8, 11 October 2026). The Marketplace view this page calls the Accounts view is named **Connections** (the owner, section 5). Developers: [SYNERGY-SDK.md](SYNERGY-SDK.md).*
 
 The owner asked: which accounts fit our Accounts app and fill Synergy with a
 modern twist; a feed for accounts in the catalog with its own Synergy view;
@@ -29,10 +29,10 @@ kit**, and a few gaps found in today's code that block third-party connectors.
 | Piece | Today | Where |
 | --- | --- | --- |
 | Accounts app | The original Enyo app, unmodified, over the runtime's simulated `com.palm.service.accounts` | `third_party/core-apps/com.palm.app.accounts`, overlay in `compat/rootfs/usr/palm/applications/com.palm.app.accounts` |
-| Templates | HP profile, IMAP, POP, other mail; CardDAV & CalDAV; Subscribed Calendar (webcal); a simulated Jabber (XMPP) account | `compat/rootfs/usr/palm/public/accounts/`, `apps/dav/public/accounts/`, runtime block "Instant messaging" |
+| Templates | HP profile, IMAP, POP, other mail; CardDAV & CalDAV; Subscribed Calendar (webcal); the connector packages' own (the Fediverse, Unofficial Telegram; Jabber, Matrix, Delta Chat from the catalog) | `compat/rootfs/usr/palm/public/accounts/`, `apps/dav/public/accounts/`, each package's `public/accounts/` |
 | Reference connector | `apps/dav`: hidden app + wizard + template + db8 kinds and permissions + Node service with luna-service2 files | `apps/dav/` (layout in section 3.1) |
-| Marketplace | Index kinds `pwa`, `ipk` and (C4) `connector`: a package with a service only as a connector that passes the rules; third-party connectors need Developer Mode on the device, the pre-installed ones (the Fediverse) do not | `server/marketplace/src/Catalog.php` `publish()`, `src/Ipk.php` (header: "no services"), `apps/marketplace/service/packagesservice.js` lines 338-357 |
-| OAuth, key store, push, synckit | synckit built (C1); the OAuth service's sign-in with PKCE built for the Fediverse (C2), its sheet and key store in the simulator only; push planned. Simulator keeps credentials in localStorage | SYNERGY.md 2.3, 2.9; SYNERGY-MODERN.md 4.2, 4.8; `services/oauth` |
+| Marketplace | Index kinds `pwa`, `ipk` and (C4) `connector`: a package with a service only as a connector that passes the rules; third-party connectors need Developer Mode on the device, the pre-installed ones (the Fediverse, Unofficial Telegram) and Phoenix's own in its catalog (Jabber, Matrix, Delta Chat: `preinstalled.json` "firstParty", OPEN-QUESTIONS Q94) do not | `server/marketplace/src/Catalog.php` `publish()`, `src/Ipk.php` (header: "no services"), `apps/marketplace/service/packagesservice.js` lines 338-357 |
+| OAuth, key store, push, synckit | synckit built (C1); the OAuth service's sign-in with PKCE built for the Fediverse (C2), on a device through the Sign In card, the loopback redirect and a sealed key store (4.1, "As built"; written, not run on hardware); push planned. Simulator keeps credentials in localStorage | SYNERGY.md 2.3, 2.9; SYNERGY-MODERN.md 4.2, 4.8; `services/oauth` |
 
 **Gaps that matter for third-party connectors** (found while reading the code):
 
@@ -96,8 +96,8 @@ the earlier pages.
 | Any CardDAV/CalDAV server | CardDAV, CalDAV | PW | none | Built (`com.webosphoenix.dav`) | done |
 | iCloud, Fastmail, Nextcloud, Yahoo presets | DAV with fixed hosts | PW, LF | none | Presets planned (SM 4.1) | P1 |
 | Subscribed calendars (webcal) | HTTPS `.ics` | none | none | Built (`com.webosphoenix.webcal`) | done |
-| Microsoft 365 / Outlook.com | Graph | OAuth | Entra app | SM 1.3; EWS ends 2026-27 | P1 |
-| Google | People + Calendar API | OAuth | Cloud project + verification | SM 1.2 | P2 |
+| Microsoft 365 / Outlook.com | Graph | OAuth | Entra app | SM 1.3; EWS ends 2026-27. *Built (section 8), waiting on the registration* | P1 |
+| Google | People + Calendar API | OAuth | Cloud project + verification | SM 1.2. *Built (section 8), waiting on the registration* | P2 |
 | **new** Holidays, sports, school calendars as a curated list | `.ics` feeds through the webcal account | none | none | A "calendar directory" in the Accounts view (section 2); check each feed's terms | P2 |
 | **new** Company directory | LDAP / CardDAV directory search (REMOTECONTACTS) | PW | none | Just Type remote contacts (SM 4.1 `REMOTECONTACTS`) | P3 |
 
@@ -115,10 +115,10 @@ the earlier pages.
 
 | Account | Protocol / API | Auth | Reg | Terms / notes | P |
 | --- | --- | --- | --- | --- | --- |
-| Matrix (and bridged networks on the user's server) | Matrix client-server, sliding sync, E2EE | PW / SSO / OAuth (MAS) | none | SM 2.4; bridges documented, not shipped | P1 |
-| XMPP (Jabber) | XMPP + XEP-0198/0357, OMEMO | PW | none | Simulated today; a real connector added to the plan by the owner (10 October 2026, section 7); OMEMO library licence (SM 5, 6a) | P1 |
-| Telegram | TDLib | phone login | own `api_id` | SM 6b; "Unofficial" naming rule | P3 |
-| **new** Delta Chat (chat over email) | IMAP/SMTP + Autocrypt; core library `deltachat-core-rust` | PW | none | The library is MPL-2.0 *(check)*, which allows linking with per-file copyleft. Fits Synergy because the account is already a mail account | P3 |
+| Matrix (and bridged networks on the user's server) | Matrix client-server, sliding sync, E2EE | PW / SSO / OAuth (MAS) | none | SM 2.4; bridges documented, not shipped. **Built** (11 October 2026, `apps/connectors/matrix`): E2EE not yet (OPEN-QUESTIONS Q91) | P1 |
+| XMPP (Jabber) | XMPP + XEP-0198/0357, OMEMO | PW | none | **Built** (11 October 2026, `apps/connectors/xmpp`; section 7); OMEMO: no permissive library (OPEN-QUESTIONS Q90) | P1 |
+| Telegram | TDLib | phone login | own `api_id` | SM 6b; "Unofficial" naming rule. **Built** (11 October 2026, `apps/telegram`, "Unofficial Telegram"): works where the build has the app id (Q16) and TDLib | P3 |
+| **new** Delta Chat (chat over email) | IMAP/SMTP + Autocrypt; core library `deltachat-core-rust` | PW | none | The core is MPL-2.0 (checked: chatmail/core's LICENSE), run as its own program (`deltachat-rpc-server`), not linked. **Built** (11 October 2026, `apps/connectors/deltachat`); in images on the owner's decision (Q89) | P3 |
 | **new** LoRa mesh (Meshtastic, MeshCore): off-grid text through a paired radio | The radio's client protocol over Bluetooth LE, USB serial or TCP | none (a channel key) | none | Added by the owner (10 October 2026, section 7). Needs a radio; licences to check (Meshtastic GPL-3.0, MeshCore MIT) | P2 |
 | **new** IRC with a bouncer | IRCv3 (`chathistory`, `soju` / `ergo` bouncers) | PW / SASL | none | The user runs the bouncer; one thread per channel or person | P3 |
 | WhatsApp, Signal, iMessage, RCS | - | - | - | Positions in SYNERGY.md 2.12 and SM 6 stand | - |
@@ -129,7 +129,7 @@ the earlier pages.
 | Account | Protocol / API | Auth | Reg | Terms / notes | P |
 | --- | --- | --- | --- | --- | --- |
 | **Fediverse** (Mastodon, Pixelfed, GoToSocial, Akkoma, Friendica, ...): **the flagship connector** (the owner, 10 October 2026) | Mastodon client API, NodeInfo | OAuth per server, the app registering itself with each server | none | SM 3.1: contact enrichment, notifications, DMs, sharing; phase C2 | **P0** |
-| Bluesky | AT Protocol | OAuth (atproto) | static client-metadata file | SM 3.1 | P2 |
+| Bluesky | AT Protocol | OAuth (atproto), or an app password | static client-metadata file | SM 3.1. *Built (section 8): works with an app password; OAuth waits on hosting the file* | P2 |
 | **new** RSS reader sync: FreshRSS, Miniflux, Nextcloud News, Inoreader, Feedly | Google Reader API (FreshRSS, Inoreader), Miniflux REST, Fever, Nextcloud News API | Key / PW (Inoreader and Feedly: OAuth + registration) | none for self-hosted | A new `FEEDS` capability: subscriptions and read state, for a reader app or a "Feeds" exhibition/Just Type. Plain RSS needs no account at all | P2 |
 | **new** "Follow" on the open web | RSS/Atom, WebSub, h-feed | none | none | Subscriptions saved locally; a FEEDS account only syncs them | P3 |
 
@@ -140,6 +140,7 @@ the earlier pages.
 | Immich | REST | Key | none | SM 3.2, first photos source | P1 |
 | Nextcloud / WebDAV (files, photos) | WebDAV | PW / LF | none | SM 3.3 | P1 |
 | OneDrive, Dropbox, Google Drive (`drive.file`), Box, S3 | REST / S3 | OAuth / Key | per provider | SM 3.3 | P2 |
+| **new** SFTP (any SSH server: NAS, Raspberry Pi, VPS, a Phoenix device) | SSH-2 + SFTP v3 over `ctx.net` (binary TCP) | PW / Key (Ed25519 made on the device, or imported) | none | Host key trusted on first use and pinned; Phoenix's own SSH client on `@noble` (MIT); built (`apps/connectors/drives`, SHARE-AND-FILES.md "Drives") | P1 |
 | **new** PhotoPrism, Nextcloud Memories | REST / WebDAV | Key / PW | none | Same PHOTO provider shape as Immich | P3 |
 | **new** Flickr | Flickr API | OAuth 1.0a + API key | key | Non-commercial key terms *(check)*; a nod to webOS's photo accounts | P3 |
 | **new** Jellyfin, Navidrome / Subsonic, Plex | Jellyfin REST, Subsonic API, Plex API | PW / Key (Plex: account sign-in) | none (Plex: product id) | A new `MEDIA` capability so Music, Videos and Podcasts see the user's own library (APP-GAPS.md lists these). Plex terms *(check)* | P2 |
@@ -149,8 +150,8 @@ the earlier pages.
 | Account | Protocol / API | Auth | Reg | Terms / notes | P |
 | --- | --- | --- | --- | --- | --- |
 | CalDAV tasks (VTODO) | CalDAV | PW | none | Fills the Tasks app's missing sync (`com.palm.task:1`); the DAV engine already keeps VTODO | P1 |
-| Microsoft To Do, Google Tasks | Graph, Tasks API | OAuth | as above | SYNERGY.md phase 4 | P2 |
-| **new** Todoist, Vikunja | REST | Key (Todoist: OAuth or personal token) | Todoist app *(optional)* | Todoist's API terms *(check)*; Vikunja is self-hosted (AGPL server, separate program) | P3 |
+| Microsoft To Do, Google Tasks | Graph, Tasks API | OAuth | as above | SYNERGY.md phase 4. *Built with the Microsoft and Google accounts (section 8)* | P2 |
+| **new** Todoist, Vikunja | REST | Key (Todoist: OAuth or personal token) | Todoist app *(optional)* | Todoist's API terms *(check)*; Vikunja is self-hosted (AGPL server, separate program). *Todoist built (section 8), working with the personal token* | P3 |
 | **new** Notes: Nextcloud Notes, Joplin (WebDAV/Joplin Server), Standard Notes | REST, WebDAV, E2EE API | PW / Key | none | `MEMOS` (legacy name; Notes uses `com.palm.note:1`). Standard Notes is end-to-end encrypted: keys stay on the device (section 4) | P2 |
 | **new** Bookmarks: Nextcloud Bookmarks, Floccus (WebDAV/Git file), xBrowserSync | REST, WebDAV | PW / LF | none | A new `BOOKMARKS` capability for the browser | P3 |
 | **new** Podcasts: gpodder.net, Nextcloud gPodder Sync | gpodder API v2 | PW | none | A new `PODCASTS` capability: subscriptions and episode progress for `apps/podcasts`, which already reads OPML | P2 |
@@ -475,7 +476,7 @@ They are not listed as connectors.
 | Template discovery | Scan both roots, reload on install or remove (gap 2) | Original behaviour; needed by anything installable |
 | Connector trust tier | A sandbox level between web apps and Developer Mode: JS service only, no native code, a fixed luna allow-list (3.2 rule 10), network limited to declared hosts or the user's server, a CPU/wake budget | The concrete form of APP-STORE.md A5 for connectors |
 | db8 permissions | Readers of a generic kind may read kinds that extend it; a connector may grant access only to its own kinds (gap 4) | Verify OSE db8 semantics first |
-| OAuth service | `org.webosphoenix.service.oauth`: PKCE, loopback redirect, device-code fallback (SYNERGY.md 2.3, SM 4.4), shown as a **system browser sheet** over the Accounts card. The address bar is visible and the page can't be read by the connector | Never an embedded web view; bring-your-own client id per connector |
+| OAuth service | `org.webosphoenix.service.oauth`: PKCE, loopback redirect, device-code fallback (SYNERGY.md 2.3, SM 4.4), shown as a **system browser sheet** over the Accounts card (on a device the **Sign In card**: "As built" below). The address bar is visible and the page can't be read by the connector | Never an embedded web view; bring-your-own client id per connector |
 | Key store | `org.webosphoenix.service.keystore` behind the legacy `com.palm.keymanager` API (SYNERGY.md 2.9). Also holds per-account keys for encrypted local stores (Matrix, Standard Notes, Bitwarden) | Exclude it from unencrypted backup (SM 4.5) |
 | Push | UnifiedPush distributor over Luna + optional relay (SM 4.8, 4.9); the kit's `push` option registers for the connector | Polling stays the fallback |
 | Rate limits | Per-account backoff in the kit; a per-connector budget enforced by the activity manager; show "paused: provider asked us to slow down" | |
@@ -484,6 +485,66 @@ They are not listed as connectors.
 | Per-account data permissions | In Accounts: what each account syncs (already capability switches) **and which apps may see it** (e.g. a work account's contacts hidden from Messaging), plus "Export my data" and "Remove data on sign-out" | New UI in an overlay; enforced by db8 queries per app |
 | Account health | One list of sync states, last sync, errors, data used, battery attributed per account | Builds on `lib/syncui` dashboards |
 | Webhooks | Only through the relay; the device creates subscriptions itself so the relay never holds tokens (SM 4.9) | |
+
+**As built: OAuth sign-ins on a device** (11 October 2026; the owner's
+design: a system card rather than a sheet, as WebAppMgr has no web view,
+OPEN-QUESTIONS Q38). Written against OSE's sources and tested in Node,
+Chromium and phoenix-sim; not yet run on hardware.
+
+- **The Sign In card** `org.webosphoenix.signin` (`apps/signin`): the OAuth
+  service launches it through SAM with `{session}` only; its page asks
+  `pending {session}` (group `oauth.card`, the card's only one) for the
+  address and replaces itself with the provider's real page, which
+  WebAppMgr loads in the card like any page (WAM has no navigation policy
+  for an app's main frame: `web_page_blink.cc:686-698` only logs it). The
+  original showed a connector's sign-in inside Accounts (the template's
+  `validator.customUI` page in a cross-app iframe, enyo-1.0
+  `lib/accounts/source/entry-add.js:55-56`, `cross-app.js:17-26`) with an
+  embedded browser view for a provider's site (`palm/controls/BasicWebView.js:92`),
+  which the connector's page could script; here no page of the connector
+  sees the provider's page or the tokens. The card is `trustLevel`
+  `default` (a trusted app's page may load local files,
+  `web_page_blink.cc:139-143`). Phoenix's runtime is not in the provider's
+  page (install-rootfs.py adds it to the app's own HTML only); WebAppMgr's
+  own `webOSSystem` and bridge are, as in every page it loads
+  (`web_page_blink.cc:957-960`), limited by the card's groups (Q95).
+- **The bar**: the shell draws it over the card (`Phoenix.Shell
+  SignInBar`: the provider's host, a lock for https, Cancel), from the
+  OAuth service's `signInCard` message through `org.webosphoenix.shellhost`,
+  which only that service's bus name can send; Cancel closes the card.
+  phoenix-sim's bar follows the page's address; a device's shows the host
+  the sign-in started at (Q95).
+- **The redirect**: RFC 8252 7.3 loopback, `services/oauth/loopback.js`:
+  127.0.0.1 only, only while a sign-in waits; an ephemeral port, or the
+  fixed 47613 for providers that match exactly (per provider:
+  DEVELOPER-APPS.md "The redirect on a device"). It answers only its
+  path with this sign-in's `state` (others get 404 or 400, so a program
+  guessing the port cannot end the sign-in), then stops; the code is
+  exchanged with the PKCE verifier, the card closed, the caller answered.
+  The card closed by the user (SAM's `getAppLifeEvents` "close"/"stop"):
+  `CANCELED`; nothing back in ten minutes: `TIMEOUT`; a second sign-in
+  replaces the first once its card has gone.
+- **The key store**: `services/oauth/keystore.js`, one AES-256-GCM sealed
+  file (`/var/lib/phoenix/oauth/keys.enc`, a fresh IV per write) under a
+  data key in `master.key` (0600 in a 0700 folder) until the key store
+  service (Q96); tokens, refresh tokens and client secrets (a Mastodon
+  server's) inside; the placeholder's plain `keys.json` is sealed in and
+  overwritten on first use. Tokens go only to the service that owns the
+  key (ACG group `oauth.signin`, oem; the owner check), never to a page;
+  a sign-out's `forget` revokes and deletes; `wipe` (the shell's Full
+  Erase, the system manager's Wipe; group `oauth.erase`) removes the store
+  and its key.
+- **Simulator**: the sheet stays the default; `__phoenixRuntime.oauthUseCard(true)`
+  switches the runtime's OAuth service to the card (`tools/test-signin-card-sim.cjs`;
+  `docs/screenshots/signin-card-phone.png`, `signin-card-tablet.png`: a
+  fake provider's page in the card, the bar's open grey lock for its plain
+  `http`).
+- **Tests**: `services/oauth/oauth.test.ts` (PKCE, state, the listener,
+  cancel, timeout, a second sign-in, refresh, revocation, sealing,
+  migration, wipe), the Fediverse's `connector.test.ts` on the device
+  path, `tools/test-signin-card.cjs` (the card's page in Chromium against a
+  fake provider and the fake Mastodon server), `shell/tests-device/tst_lsm.qml`
+  and `shell/tests/tst_signinbar.qml` (the bar).
 
 ### 4.2 Keep
 
@@ -553,8 +614,8 @@ with provider" flag.
   with PKCE in the system's browser sheet (the share sheet's page, kind
   `signin`: the server's page in a web view, its address above it); the
   token in the key store (in the simulator the runtime's credential storage;
-  on a device a placeholder file until the key store, and no sheet yet:
-  `services/oauth/service.js`); the account's credentials keep only the key.
+  on a device sealed with AES-256-GCM, and the sign-in in the Sign In card:
+  4.1, "As built"); the account's credentials keep only the key.
   Scopes: `read:accounts read:follows read:notifications read:statuses
   write:statuses write:media`.
 - **Contacts** (read only): the accounts you follow, as
@@ -583,8 +644,8 @@ with provider" flag.
   visibility chosen (public, unlisted, followers, mentioned only), through
   the kit's `share` method, with an `Idempotency-Key`.
 - **Not done**: Pixelfed albums in Photos (no PHOTO capability or kinds yet;
-  OPEN-QUESTIONS.md Q3), Bluesky, Web Push (C6), the sheet and key store on
-  a device (C3).
+  OPEN-QUESTIONS.md Q3), Bluesky, Web Push (C6). (The sign-in and key
+  store on a device: 4.1, "As built", 11 October 2026.)
 - **Tests**: a fake Mastodon server (`apps/fediverse/service/test/fake-mastodon.cjs`,
   following docs.joinmastodon.org page by page), the conformance suite and
   unit tests (`connector.test.ts`), and `tools/test-fediverse.cjs`, the whole
@@ -619,7 +680,10 @@ ownCloud, any server; an app password), SFTP and S3-compatible storage
 (Backblaze B2, MinIO, Wasabi); then with the OAuth service (C3) Dropbox,
 OneDrive (Microsoft Graph) and Google Drive (its restricted scope needs
 Google's verification; the per-file scope avoids most of it). iCloud Drive:
-not planned.
+not planned. *Built in the simulator (11 October 2026), SFTP too (its own
+SSH client over the kit's binary sockets, checked against OpenSSH):
+[SHARE-AND-FILES.md](SHARE-AND-FILES.md) "Drives"; the registrations each
+OAuth drive needs: [DEVELOPER-APPS.md](DEVELOPER-APPS.md).*
 
 **Telegram** (C3, after Bluesky): a Messaging and Contacts connector on
 TDLib (Telegram's own client library, Boost Software License), driven from
@@ -664,9 +728,8 @@ in Messaging where Graph allows).
 **Box** (C3, with Dropbox, OneDrive and Google Drive): its content API with
 OAuth (Box dropped WebDAV), as a place in Files.
 
-**Jabber (XMPP), a real account** (the owner: "add both"): today's
-"Jabber (XMPP)" account in Connections is simulated (the runtime's
-"Instant messaging" block). It becomes a real connector on the kit: sign-in
+**Jabber (XMPP), a real account** (the owner: "add both"). *Built, 11
+October 2026: see "Messaging accounts, as built" below.* It becomes a real connector on the kit: sign-in
 with the Jabber ID and password (SASL SCRAM; the server found from the
 domain's SRV records), chats as Messaging conversations (`com.palm.immessage`
 as the original's IM transports wrote them), the roster as contacts linked
@@ -740,6 +803,36 @@ in the Slack Marketplace (Slack's review); a workspace's admins can also
 refuse outside apps. Until it is listed it is built and tested with those
 limits.
 
+**Messaging accounts, as built** (11 October 2026). Four IM transports on
+the kit (docs/SYNERGY-SDK.md "Staying connected"), each a connector package
+with its template, db8 kinds (`com.palm.immessage.<x>:1`,
+`com.palm.imloginstate.<x>:1`, a contact kind, and Jabber's
+`com.palm.imbuddystatus.<x>:1` in tempdb) and messages written as the
+original IM transports wrote them (LuneOS's imlibpurpleservice:
+`src/IMMessage.cpp` createDBObject; `inc/IMMessage.h` for `chatType`,
+`channelName`, `channelDisplayName`, `serviceMessageId`, `deliveryStatus`;
+`BuddyListConsolidator.cpp` for the buddies and their contacts;
+`IMLoginState.cpp` for the login state Messaging's My Status writes):
+
+| Account | Package | How | Works today |
+| --- | --- | --- | --- |
+| Jabber (XMPP) | `apps/connectors/xmpp`, catalog | its own XMPP client (`service/lib`): SRV (`_xmpps-client`, `_xmpp-client`), STARTTLS or direct TLS, plain TCP refused but to the loopback, SASL SCRAM-SHA-256/1 (PLAIN only inside TLS), bind, stream management with resumption (XEP-0198), carbons (0280), archive catch-up (0313), HTTP upload (0363) and out-of-band links for pictures, receipts and markers (0184, 0333), chat states (0085), push hooks (0357, for C6), WebSocket (RFC 7395, found through host-meta XEP-0156) where there is no TCP | against Prosody 0.12 (`tools/test-xmpp-server.cjs`), its fake server (vitest, the conformance suite), and in the simulator's pages over WebSocket to the demo server chat.example (`tools/test-xmpp.cjs`). OMEMO: no permissive library (Q90); the sign-in page says the messages are encrypted to the server only |
+| Matrix | `apps/connectors/matrix`, catalog | client-server API: discovery (`.well-known`), simplified sliding sync (MSC4186) or `/v3/sync`, password or the homeserver's OAuth 2.0 (MAS: RFC 7591 registration, PKCE, the system's sign-in sheet), rooms as conversations (direct chats by the other person's Matrix ID, linked to contacts), authenticated media both ways, read receipts both ways, presence | against its fake homeserver (vitest, conformance) and the simulator's demo matrix.example (`tools/test-matrix.cjs`). Encrypted rooms: shown as encrypted, nothing sent into them (Q91) |
+| Delta Chat | `apps/connectors/deltachat`, catalog | Delta Chat's own core, `deltachat-rpc-server` (MPL-2.0, a separate program; JSON-RPC on its standard input and output; the kit starts it as a system helper with its accounts in the service's own folder): an address and password, or a new chatmail address (`dcaccount:`); chats and groups by Message-ID, pictures, delivered and read, read receipts sent; end-to-end encrypted by the core (Autocrypt) | against the real core 2.63 (method names, shapes and errors, offline) and a fake core (vitest, conformance, the simulator's chatmail.example, `tools/test-deltachat.cjs`). The image has the core only with `PHOENIX_DELTACHAT = "1"` (Q89) |
+| Unofficial Telegram | `apps/telegram`, comes with Phoenix | TDLib (BSL-1.0) through `phoenix-tdjson`, a small C bridge putting TDLib's JSON interface on standard input and output (`meta-phoenix/recipes-connectors/tdlib`); phone, code and two-step password; private chats, groups and secret chats (no channels: Q92), pictures, read receipts both ways; the app id a build-time setting (Q16) | against a fake tdjson (vitest, conformance, `tools/test-telegram.cjs` with a test app id); the bridge against a stub libtdjson. Without the app id or TDLib: "not available in this build". Named "Unofficial Telegram", with a picture of its own, as Telegram's terms ask |
+
+Each keeps one connection per account while a capability is on
+(`definition.connection`), signs out on the server when the account is
+deleted, notifies new messages (Messaging opens the conversation), and has a
+sign-up link. Messaging sends pictures where the network takes them, shows
+Delivered and Read, and says on Telegram's conversations what its servers
+can read. Sharing to a person on these networks goes through Messaging's
+share target (the person and network picked there). Just Type's chat
+action reaches them as the original did (`compose.ims`), and the Assistant
+sends on them ("message Priya on Telegram: ..."). The simulator's demos
+(`runtime/rootfs.json`: `/usr/share/phoenix/demo/`) answer only for their
+own domains.
+
 **More platforms** (the owner, 10 October 2026: "add them with the others
 as potentials or not likely"; catalog packages, none pre-installed):
 
@@ -763,3 +856,78 @@ Not likely, and why:
 | Instagram | Its API is only for business and creator accounts; no direct messages for personal ones | Its web app |
 | Threads | Its API posts and reads the user's own posts only | The Fediverse account reaches Threads profiles that share to the fediverse |
 | YouTube as an account | Little an account adds | Channel subscriptions as RSS feeds through the feeds connector |
+
+## 8. Provider connectors, built ahead of their registrations (11 October 2026)
+
+The accounts that need a provider's registration or keys, written against
+each provider's documented API on the kit and tested against local
+stand-ins of those APIs (`apps/connectors/testing/`: their sign-in pages,
+token endpoints and APIs, one server for all of them in
+`fake-providers.cjs`). Each is a package in `apps/connectors/<name>/` (a
+hidden app with the sign-in page, the account template, db8 kinds and
+permissions, the Node service and its bus files), listed in the catalog's
+Connections with `status: "experimental"` and a sign-up link, and in the
+device's pre-installed list as a catalog entry (installed by those who want
+it). Without its registration an account type stays listed and its sign-in
+page says "&lt;Provider&gt; is not available in this build"; Todoist and
+Bluesky have sign-ins that need none and work fully today. What each
+provider asks of Phoenix: [DEVELOPER-APPS.md](DEVELOPER-APPS.md) "The
+accounts".
+
+| Connector | Built | Tested against | Waiting on |
+| --- | --- | --- | --- |
+| **Todoist** | Tasks both ways: projects as lists, open tasks and those done in the last 14 days (due dates, priorities, notes); "Add to Todoist" in the share sheet; sign-in with the personal API token, or Todoist's OAuth | Todoist API v1 and OAuth stand-in (13 tests with the kit's conformance suite); Chromium end to end (Connections, sign-in, Tasks both ways, sharing); phoenix-sim | Nothing with the token. Sign In with Todoist: Phoenix's Todoist app and where its secret lives (Q123) |
+| **Bluesky** | People followed as contacts; direct messages in Messaging both ways (labelled not end-to-end encrypted); likes, reposts, follows, mentions, replies and quotes as notifications; posting from the share sheet (link facets, up to four pictures with alt text, one post per share); sign-in with an app password, or AT Protocol OAuth (PAR, PKCE, DPoP) | A PDS, PLC directory and authorization server stand-in that checks DPoP proofs and nonces (17 tests); Chromium end to end; phoenix-sim (sign-in, contacts, a reply sent from Messaging) | Nothing with an app password. Sign In with Bluesky: the client metadata hosted (Q120) and the OAuth service lending its sheet (Q121) |
+| **Microsoft** (Outlook.com, Microsoft 365) | Graph: contacts, calendars and events (repeats both ways, reminders, attendees, a Teams meeting's join address on the event), Microsoft To Do lists and tasks, all both ways; one sign-in (public client, PKCE) | Graph and Microsoft identity platform stand-in (12 tests) | Phoenix's Entra app (the OneDrive one, Q17) with the scopes added. Outlook mail in Email: not built (Q124) |
+| **Google** | Calendar (sync tokens, a 410 starting over), contacts through the People API, Google Tasks (a task moved between lists keeps its id), all both ways; Meet addresses on events | Calendar, People, Tasks and OAuth stand-in (10 tests) | Phoenix's Google project (the Drive one) with the three APIs on, and Google's verification of the sensitive scopes before more than 100 users |
+| **Zoom** | Upcoming meetings in a read-only "Zoom" calendar with where to join (a recurring meeting's occurrences one by one); a `createMeeting` method that schedules one (neither Calendar nor the Assistant calls it yet) | Zoom API v2 and OAuth stand-in (7 tests) | Phoenix's Zoom app, and the token relay with the OAuth service's broker (Q49, Q122) |
+| **LinkedIn** | Sign In with LinkedIn (OpenID Connect); sharing as the user (Posts API); connections on contact cards from the user's own `Connections.csv`, imported from a file | OpenID Connect, Posts API and OAuth stand-in (11 tests, the CSV reader among them) | Phoenix's LinkedIn app (its Page verified), and the token relay |
+| **Slack** | Direct messages and channels in Messaging both ways (one conversation's history per sync outside the Slack Marketplace, all of them once listed), the workspace's people as contacts, direct messages and mentions as notifications | Slack Web API stand-in with Slack's 2025 limits (8 tests) | Phoenix's Slack app, the token relay with the broker, and the Slack Marketplace listing (Q17) |
+
+Shared pieces in the kit for these: `registeredClient`, `notAvailable`,
+`viaRelay`, `oauthSignIn` and `restApi` (`src/registered.ts`), calendar and
+task helpers (`src/pim.ts`: containers, repeat rules through synckit's
+iCalendar reader, reminders, all-day spans, plain text from HTML notes,
+meeting addresses), and an account's syncs and methods taking turns with
+its state (`inTurn`, which an import racing a sync showed was needed).
+Around them: Tasks puts a new task in the kind of its list's account
+(`@phoenix/luna` tasks.ts), as the Assistant now does; the accounts
+library's Tasks switch shows (a compat overlay of `modify.js`, which hid
+TASKS "until there is a tasks app"); Messaging knows `type_bluesky` and
+`type_slack`.
+
+**Not done in this round** (the brief's "if time"): the iCloud presets,
+CalDAV tasks, Immich, Jellyfin and Navidrome (`MEDIA`), FreshRSS and
+Miniflux (`FEEDS`). None needs a registration.
+
+**Known limits.** An edit made on the device (a task ticked in Tasks, an
+event moved in Calendar) reaches the provider at the account's next sync
+(every 15 minutes; Contacts' and Calendar's Sync Now sooner), not at once:
+the kit has no watch on local changes yet, as mojomail's IMAP transport had
+(`ImapActivityFactory.cpp` lines 174-184, a db8 watch on its `upsyncRev`),
+and the simulator's activity manager does not fire db8 triggers.
+
+**The Assistant** (11 October 2026; [AI-AND-MCP.md](AI-AND-MCP.md) "The
+Assistant and Synergy") reaches every account here as soon as it is signed
+in: it sends on Slack, Bluesky and the chat accounts, reads one account's
+messages, puts a new event in the account's calendar named ("add it to my
+Google calendar") in that account's event kind, adds to and reads Todoist,
+Google Tasks and Microsoft To Do lists, posts to Bluesky, the Fediverse
+and LinkedIn through their share targets, finds and uploads files on the
+drives, and joins a meeting from its Teams, Zoom or Meet address. An
+invitation answered on the device ("accept the invite from Alex") now
+reaches the organizer: Microsoft's connector sends Graph's `accept`,
+`decline` or `tentativelyAccept`, Google's the attendees with
+`sendUpdates=all`, CalDAV the attendee's `PARTSTAT` (the kit's
+`answerChanged`). Zoom's `createMeeting` is still called by nothing.
+
+Screenshots from phoenix-sim with the stand-ins:
+[Bluesky's sign-in](screenshots/connectors-bluesky-signin.png),
+[Todoist's projects in Tasks](screenshots/connectors-todoist-tasks.png),
+[a Bluesky conversation in Messaging](screenshots/connectors-bluesky-messaging.png).
+
+```sh
+cd apps && npx vitest run connectors shared/connector-kit
+NODE_PATH="$(npm root -g)" node tools/test-connectors.cjs   # Todoist and Bluesky in Chromium
+node apps/connectors/testing/fake-providers.cjs 8098       # the stand-ins, for the simulator
+```

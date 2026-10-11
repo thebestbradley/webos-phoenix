@@ -26,6 +26,7 @@ const sub = { cancel() {} };
 const luna = vi.hoisted(() => ({
     launch: vi.fn(() => Promise.resolve({})),
     setCurrent: vi.fn((id: string) => { void id; return Promise.resolve(); }),
+    warm: vi.fn(() => Promise.resolve(true)),
 }));
 
 vi.mock("@phoenix/luna", async (orig) => {
@@ -43,6 +44,7 @@ vi.mock("@phoenix/luna", async (orig) => {
                 return sub;
             },
             setCurrent: luna.setCurrent,
+            warm: luna.warm,
             markRead: () => Promise.resolve(),
             newThread: () => Promise.resolve(T("t3", "")),
             deleteThread: () => Promise.resolve(),
@@ -64,6 +66,12 @@ describe("the Assistant as a TouchPad app", () => {
     let width = 0;
     beforeEach(() => { width = window.innerWidth; state.current = "t1"; luna.launch.mockClear(); luna.setCurrent.mockClear(); launchWith(null); });
     afterEach(() => { resize(width); launchWith(null); });
+
+    it("starts the on-device model as it opens, waiting for nothing", async () => {
+        luna.warm.mockClear();
+        render(<App />);
+        await waitFor(() => expect(luna.warm).toHaveBeenCalledTimes(1));
+    });
 
     it("shows the list beside the conversation on a tablet, and one at a time on a phone, as the card is resized", async () => {
         resize(1024);

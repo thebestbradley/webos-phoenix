@@ -1,0 +1,23 @@
+{
+    "appId": "org.webosphoenix.service.slack",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.service.slack"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.slack",
+            "outbound": [
+                "org.webosphoenix.service.slack",
+                "com.palm.db",
+                "com.palm.tempdb",
+                "com.palm.activitymanager",
+                "com.palm.service.accounts",
+                "org.webosphoenix.service.oauth",
+                "com.webos.notification",
+                "org.webosports.service.messaging"
+            ]
+        }
+    ]
+}

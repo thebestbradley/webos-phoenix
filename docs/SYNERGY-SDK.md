@@ -182,6 +182,9 @@ and returns it.
 | `push` | `{unifiedPush: true}`: recorded only, until phase C6 |
 | `share` | What the service takes from the share sheet and `send(ctx, content)` to post it: section 7 |
 | `signUp` | Where a person without an account gets one: `"https://..."`, or `{url?, servers?: [{name, url}]}` (below, "Sign-up link") |
+| `connection` | `{open(ctx) -> handle}`: a connection kept open per account while a capability is on (a chat network's socket or sync loop): section 5, "Staying connected" |
+| `settings` | Names of build-time settings the service reads (`ctx.setting`): an app id registered with the service, written into the image by its recipe (`/etc/phoenix/connectors/<service>.json`), never in the package |
+| `helpers` | System programs the service starts (`ctx.helper`): only those the image installs for Phoenix's own connectors (a package cannot bring native code, C12) |
 
 **A capability that is a set of objects** (contacts, events, entries) has a
 `kind` and a `pull`:
@@ -201,6 +204,33 @@ have `watch: {query, method}`: an activity with a db8 trigger calls that
 method when the query matches (the outbox of pending messages, as mojomail
 watched its outbox).
 
+**A drive** (cloud storage as a place in Files, the pickers and Save to
+Files) is the legacy `DOCUMENTS` capability with `files(ctx)` instead: it
+returns the account's provider (`DriveProvider`, connector-kit
+`src/files.ts`): `list(path)`, `stat(path)`, `download(entry, sink, opts)`
+(`kit.downloadInRanges` does it with ranged GETs), `upload(path, source,
+opts)` (source: `{size, name, mimeType, read(offset, length)}`;
+`kit.forEachChunk` cuts it in `opts.chunkSize` pieces, reporting
+`opts.onProgress(done, total)` and stopping when `opts.signal.aborted`),
+`mkdir`, `move(from, to, {overwrite})`, `copy?`, `remove`,
+`search?(query, {path, limit})` and `quota?()`. Paths are the drive's own
+(`/Photos/lake.png`); entries are `{name, path, type: "file" |
+"directory", size, mtime, mimeType?, etag?, id?}`.
+The kit makes the service methods from it (`listFiles`, `statFile`,
+`downloadFile`, `uploadFile`, `makeFolder`, `moveFile`, `copyFile`,
+`removeFile`, `searchFiles`, `driveQuota`, `transfers`, `cancelTransfer`:
+reserved names), runs transfers as ongoing activities with progress and
+cancel, and turns failures into the numbers apps see (`FILE_ERRORS`:
+OFFLINE 10 for no connection, AUTH 11 for a 401, QUOTA 12, CANCELED 13,
+NOT_AVAILABLE 14, UNSUPPORTED 15, RATE_LIMITED 16 with `retryAt`;
+`kit.fileError(code, text)`, `kit.httpError(status, what)`). A drive has
+no periodic sync (its "sync" checks the drive answers); nothing is copied
+ahead. `chunkSize` (64 KB or more, 8 MB by default) on the capability.
+Files reaches it through the kit's drive router (`createDriveRouter`,
+`/media/drives/<accountId>/...`; [SHARE-AND-FILES.md](SHARE-AND-FILES.md)
+"Drives"). `apps/connectors/drives` is the worked example: WebDAV, S3,
+Dropbox, Microsoft Graph, Google Drive and Box behind that one interface.
+
 **What every function gets (`ctx`):**
 
 | | |
@@ -210,8 +240,53 @@ watched its outbox).
 | `ctx.oauth` | `token(keyId)`, `forget(keyId)`: tokens the OAuth service keeps for you (section 6) |
 | `ctx.cachePhoto(key, url)` | A remote picture as a file of the device (a contact's photo must be a file: the Contacts framework checks with `palmGetResource`) |
 | `ctx.readFile(path)` | A file the user shares: `{bytes, mimeType}` |
+| `ctx.systemConfig(name)` | `/etc/palm/<name>` of the image, parsed (an OAuth client id kept out of the source tree: [DEVELOPER-APPS.md](DEVELOPER-APPS.md)); `null` when there is none |
 | `ctx.log(text)`, `ctx.now()` | Never log tokens, message text or addresses (3.2 rule 9) |
-| Account functions also: `ctx.accountId`, `ctx.account`, `ctx.credentials` (the account's `common` credentials), `ctx.config` (the validator's config, kept since `onCreate`), `ctx.state` (yours, saved after the call when it changed), `ctx.notify({title, body, appId, params})` (a notification: `com.webos.notification` `createToast`), `ctx.putMessage(message)` (into Messaging: `org.webosports.service.messaging` `putMessage`) | |
+| `ctx.net` | Sockets for a connection: `resolveSrv(name)`, `connect({host, port, tls, servername, binary})` (with `startTls`; `binary: true` gives a socket of bytes, `writeBytes(Uint8Array)` and `onBytes(fn)`, for a protocol that is not text, as SSH), `websocket(url, protocols)`; the same hosts as `ctx.http` (and the targets of the user's server's SRV records), the same backoff. In a page (the simulator) WebSocket, and binary TCP through the simulator's relay (`binaryOnly`: phoenix-sim's own sockets, or `serve-rootfs.py`'s `/__phoenix/tcp`; `net.supports.binary`) |
+| `ctx.setting(name)` | A build-time setting (`settings`), or `undefined` in a build without it: say "not available in this build" before asking anything |
+| `ctx.helper(name, args?)` | A running system helper (`helpers`): lines in and out (`send`, `onLine`, `onExit`, `kill`); one process per name for all your accounts, started again after it exits; `HELPER_NOT_AVAILABLE` where the image has none |
+| `ctx.writeFile(name, bytes, mimeType?)` | Keeps a file received (a picture in a chat) where Messaging can show it -> its path |
+| `ctx.setTimeout`, `ctx.clearTimeout` | Timers (the tests drive them) |
+| Account functions also: `ctx.accountId`, `ctx.account`, `ctx.credentials` (the account's `common` credentials), `ctx.config` (the validator's config, kept since `onCreate`), `ctx.state` (yours, saved after the call when it changed), `ctx.notify({title, body, appId, params, group})` (a notification: `com.webos.notification` `createToast` with `{title, message}`; `group`, Phoenix's, stacks it with the app's others of that group, e.g. a conversation's messages), `ctx.putMessage(message)` (into Messaging: `org.webosports.service.messaging` `putMessage`); with `connection`: `ctx.connect()` (the account's open connection, opened if need be), `ctx.live()` (it, or null), `ctx.connectionsHere()`, `ctx.saveState()` (state changed between calls, by a connection) | |
+
+### The Assistant
+
+The Assistant reaches an account of your connector as soon as it is signed
+in, with nothing registered and no code of its own for you
+([AI-AND-MCP.md](AI-AND-MCP.md) "The Assistant and Synergy"). It finds the
+account through `listAccounts` and reads your template: what each
+capability provider says is what it uses, so fill it in:
+
+| In your template's provider | What the Assistant does with it |
+| --- | --- |
+| `capability`, `capabilitySubtype` | Which requests the account answers: `MESSAGING` with `IM` (messages), `CALENDAR`, `TASKS`, `MAIL`, `DOCUMENTS`, `CONTACTS`, `SOCIAL` |
+| `loc_name`, `loc_shortName`, the account's alias and user name | The names it is heard and spoken by ("text Ola on Acme Chat", "On Slack or Acme?") |
+| `serviceName`, `dbkinds.immessage` | A message it sends: put in your message kind in the outbox (`status: "pending"`), from the account's user name (your `imloginstate`'s, if you keep one), through Messaging's `putMessage`: your outbox `watch` sends it, as it sends Messaging's |
+| `dbkinds.calendarevent` | A new event "on my Acme calendar": put in your event kind with your calendar's `calendarId`, for your `push` to send |
+| `tasklist` objects' `taskKind` | A task added to one of your lists, in that kind |
+| `DOCUMENTS` (`files`) | A drive at `/media/drives/<accountId>`: its files found by your `search` (if you give one), a file uploaded with `upload` |
+| `share` (section 7) | "Post to Acme: ...": your service's `share` method, as the account, after the user hears it read back naming the account |
+
+What it reads it reads in the standard kinds (`com.palm.immessage:1`,
+`com.palm.chatthread:1`, `com.palm.calendar:1`, `com.palm.calendarevent:1`,
+`com.palm.tasklist:1`, `com.palm.task:1`, the email kinds), which include
+your sub-kinds. On a device that needs two grants of you:
+
+- **db8**: your sub-kinds' permission files grant `org.webosphoenix.assistant`
+  `read` (and `create`, `update`, `delete` for event and task kinds, which it
+  writes); `phoenix-connector new` writes the read grant on your item kind.
+- **Luna**: your `share` method is in your own group and also in
+  `phoenix.connector.share` (the kit's `SYSTEM_SHARE_GROUP`, which the
+  scaffold writes), the group the Assistant holds for posting.
+
+**Invitations.** "Accept the invite from Alex" changes the user's own entry
+in the event's `attendees` (`participationStatus`: `ACCEPTED`, `DECLINED`
+or `TENTATIVE`), which reaches your `push` as an update. The kit's
+`answerChanged(change, address)` (`src/pim.ts`) tells you when that is all
+that changed and what the answer is, so you send it the way your service
+tells the organizer (Microsoft Graph's `accept`, `decline` and
+`tentativelyAccept`; Google's attendees with `sendUpdates=all`; CalDAV's
+`PARTSTAT`) rather than as an edit of the event.
 
 ## 4. The sync engine
 
@@ -251,6 +326,30 @@ account, and **no request is sent before then** (a sync asked meanwhile
 answers `{skipped: "backoff"}`). Network errors and 502, 504 are retried
 twice with backoff; every request has a 60 s timeout.
 
+### Staying connected
+
+A chat network is not polled: it pushes messages down a connection kept
+open. `definition.connection.open(ctx)` opens one for an account and returns
+a handle (`close()`, `closed`, and whatever your methods call: `flush`,
+`markRead`, `setPresence`). The kit keeps one per account: a sync or a
+method opens it with `ctx.connect()` (as does the service's `connect`
+method), each sync that succeeds opens it again if it dropped (so the
+periodic sync reconnects), and it is closed when the last capability is
+disabled, the account is deleted, or on `disconnect`. A failed open fails
+the sync that asked for it; its `retryAt` holds the next opens off as
+section 5's backoff does, and a `401_UNAUTHORIZED` puts every capability in
+`ERROR`. Keep the account's own data in `ctx.state` and `ctx.saveState()`
+when it changes between calls (a sync token, the last message filed).
+
+On a device the service holds the connections; in the simulator one page
+does (the system UI's, or the first that asks), and calls from other pages
+are forwarded to it (`NOT_LIVE_HERE`). The four messaging accounts
+(SYNERGY-CONNECTORS.md 7, "Messaging accounts, as built") are the examples:
+a socket and its stream management (Jabber), a long-poll sync loop
+(Matrix), a system helper's events (Delta Chat's core, TDLib).
+
+In the catalog, such an account says `"push": "connection"`.
+
 ## 6. Signing in with OAuth
 
 A connector whose service uses OAuth 2.0 asks
@@ -271,6 +370,33 @@ never the token. The Fediverse connector's `signIn` method
 NodeInfo find the server, the app registers itself with it once, then
 `authorize`. On a device the sheet and the key store are placeholders until
 C3 (`services/oauth/service.js`).
+
+**A provider with one registration** (Microsoft, Google, Todoist, ...: an
+app Phoenix registers once, [DEVELOPER-APPS.md](DEVELOPER-APPS.md)) has the
+kit's helpers (`src/registered.ts`):
+
+| | |
+| --- | --- |
+| `kit.registeredClient(ctx, "<name>/clients.json", "<provider>", defaults)` | The registration from the image's setting `/etc/palm/<name>/clients.json` over your defaults (endpoints, scope, `params`), or `null` when the build has none; a test server's addresses in it may be reached |
+| `kit.notAvailable(name, what?)` | The error a sign-in page shows instead of its Sign In: "&lt;what&gt; is not available in this build", `NOT_AVAILABLE` |
+| `kit.viaRelay(ctx, client)` | For a provider whose token exchange needs the client secret: the registration through Phoenix's token relay (PLATFORM.md 6.5.4), or `null` while the OAuth service has no broker |
+| `kit.oauthSignIn(ctx, client, {accountId?, scope?})` | `authorize` with the registration -> the key; `kit.forgetOldKey(ctx, accountId, key)` forgets the account's previous one |
+| `kit.restApi(ctx, {base, token, headers?, describe?})` | `get`, `post`, `patch`, `put`, `del` and `send` of JSON (or a form) with the Bearer token; an answer of 400 or more throws with its status and the provider's explanation (`401_UNAUTHORIZED`, `PERMISSION_DENIED`, `NOT_FOUND`) |
+
+Calendars and task lists (`src/pim.ts`): `kit.syncContainers(ctx, kind,
+[{remoteId, fields}])` keeps an account's calendars or lists and answers
+their ids, for the events' `calendarId` or the tasks' `listId`;
+`kit.rruleOf(rule, {dtstart, tzId, allDay})` reads an iCalendar `RRULE` into
+the Calendar app's form and `kit.rruleText` writes one back;
+`kit.alarmBefore(minutes)` and `kit.alarmMinutes(alarm)`, reminders;
+`kit.allDaySpan` and `kit.allDayDates`, the Calendar's all-day times;
+`kit.plainText(html)`, a note from HTML; `kit.joinUrlOf(...texts)` and
+`kit.meetingNote(note, url, provider)`, a Teams, Zoom, Meet, Webex or Jitsi
+address found and put first in the note.
+
+An account's syncs and its methods with `accountId` (an import, a share)
+**take turns**: each loads the account's state, changes it and saves it
+whole, so two at once would lose one's changes.
 
 ## 7. Sharing to your service
 
@@ -460,6 +586,7 @@ manager in memory. A connector must pass it to be listed:
 | rate limit | a 429 with `Retry-After` stops the sync, and nothing reaches the server before then |
 | conflict | (two-way) a field edited on both sides keeps both edits or records the loser |
 | share, share limits, share errors | (with `share`) section 7, "Testing it" |
+| drive lifecycle, drive files, drive unauthorized, drive rate limit | (a drive, in place of lifecycle to rate limit) no periodic sync and the sync checks the drive; upload, list, download, refuse to overwrite, rename, remove; a 401 is AUTH (11) for the files and `401_UNAUTHORIZED` for the account; a 429 is RATE_LIMITED (16) and nothing is sent before its `retryAt` |
 
 The fixture (`service/test/fixture.js`) gives the template, what the sign-in
 page sends (`validateParams`), `server()` (a fake server: `request`,
@@ -467,7 +594,13 @@ page sends (`validateParams`), `server()` (a fake server: `request`,
 `editRemote(remoteId, field, value)`), `handlers` for other Luna calls (the
 OAuth service's `token`), `minObjects`, for two-way `conflict: {providerId,
 field, localValue, remoteValue}`, and with `share` what to post (`share`,
-`files`; section 7). Run it:
+`files`; section 7). A connector that keeps a connection gives
+`environment(server)`: more of what it runs in, from the fake server
+(`net`'s sockets, a `helper`, `settings`), whose `unauthorized()` and
+`throttle()` then concern those; one whose sign-in takes steps before the
+validator (a phone number, then a code) gives `beforeValidate(methods,
+server)`, which takes them and returns more of the validator's parameters.
+Run it:
 
 ```sh
 phoenix-connector test path/to/org.example.feeds        # 5 checks, 6 two-way, 3 more with share
@@ -516,7 +649,12 @@ starts with its rule:
 7), validates, then writes the `.ipk` the Marketplace takes: every
 file under `usr/palm/applications/<app id>/`, the kit and the sync layer in
 `service/node_modules/@phoenix/` (a device's `run-js-service` finds them
-there), tests and sources of a build left out.
+there), the service's own npm dependencies (its `package.json`'s
+`dependencies`, with theirs) in `service/node_modules/` too, tests and
+sources of a build left out. A dependency must be plain CommonJS
+JavaScript: one with native code fails C12, and its ES-module copies,
+source maps and type files are left out (the drives' SFTP carries
+`@noble/hashes`, `@noble/curves` and `@noble/ciphers` this way).
 
 ### Publishing
 
@@ -622,8 +760,9 @@ node tools/test-fediverse.cjs        # the Fediverse and the News Feed example, 
 ```
 
 **On a device.** `service.js` runs the kit's `runOnDevice(definition)` under
-`run-js-service`. Built-in connectors get the kit in their `node_modules` from
-`tools/install-rootfs.py`; a package carries it (`pack`).
+`run-js-service`. Built-in connectors get the kit (and their own npm
+dependencies) in their `node_modules` from `tools/install-rootfs.py`; a
+package carries them (`pack`).
 
 ## 11. The worked examples
 
@@ -646,13 +785,36 @@ extra methods (`signIn`, `outbox`), and sharing: its `share` declaration
 (text, a link, four pictures with alt text, Mastodon's visibilities) with
 its own compose page in place of the kit's.
 
+**The messaging accounts** (`apps/connectors/xmpp`, `apps/connectors/matrix`,
+`apps/connectors/deltachat`, `apps/telegram`) keep a connection
+(section 5, "Staying connected"), write Messaging's IM kinds as the
+original transports did, and each has a fake server or program for its
+tests and the simulator's demo (`service/test/`): a fake XMPP server, a
+Matrix homeserver, Delta Chat's core, TDLib's JSON interface.
+
+**`apps/connectors/`** has the provider accounts (SYNERGY-CONNECTORS.md 8):
+`todoist` is the smallest two-way one (a TASKS capability with its own
+sub-kinds, `pull` and `push`, two sign-ins, a share target); `microsoft` and
+`google` have contacts, calendars and tasks both ways on the helpers above;
+`bluesky` runs a sign-in the OAuth service cannot (the AT Protocol's,
+`lib/oauth.js`); `linkedin` imports a file the user picks; `slack` keeps
+within a provider's rate limits. `testing/` has their stand-ins and
+`world.ts`, a device in memory with the real OAuth service, for tests like
+theirs.
+
 ## 12. Not yet
 
 - The trust tier and the db8 permission rule for generic kinds (C5); until
   then third-party connectors install in Developer Mode only. Review of a
   connector's first release on a public catalog, and the privacy and terms
   fields for reviewers (C4's admin side).
-- Push (UnifiedPush) registration (C6); connectors poll meanwhile.
+- Push (UnifiedPush) registration (C6); connectors poll meanwhile, or keep a
+  connection (section 5).
+- A watch on local changes: an edit made on the device reaches the server at
+  the next sync (or Sync Now), not at once, as mojomail's IMAP transport did
+  with a db8 watch on its `upsyncRev`.
+- System helpers for third parties: only Phoenix's own connectors start
+  programs the image installs (Delta Chat's core, TDLib's bridge).
 - The OAuth sheet and the key store on a device (C3; placeholders).
 - Generic kinds for FEEDS, SOCIAL, PHOTO, MEDIA, PODCASTS and BOOKMARKS
   (OPEN-QUESTIONS.md Q3).

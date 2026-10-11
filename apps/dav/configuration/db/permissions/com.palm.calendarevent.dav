@@ -31,5 +31,16 @@
             "delete": "allow",
             "update": "allow"
         }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.calendarevent.dav:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "create": "allow",
+            "read": "allow",
+            "update": "allow",
+            "delete": "allow"
+        }
     }
 ]

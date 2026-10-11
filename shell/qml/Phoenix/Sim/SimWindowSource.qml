@@ -35,7 +35,16 @@
 //                            is the app's own dashboard, "" otherwise),
 //                            clickableWhenLocked (the dashboard takes taps
 //                            on the lock screen: its {clickableWhenLocked:
-//                            true} window attribute)
+//                            true} window attribute), group, layerCount,
+//                            layers (a stack of the app's notifications of
+//                            one group, the top layer's fields the row's:
+//                            NotificationStacks.js), time (ms, when its top
+//                            layer came), dashboardTitle and dashboardBody
+//                            (a dashboard window's words, from its page)
+//   dismissNotification(index), popNotificationLayer(index)
+//                            the row (its whole stack) gone; its top layer gone
+//   publishNotifications(digest)  (optional) the list for the services
+//                            that read it (NotificationFeed.qml)
 //   alerts        ListModel  key, appId, height (legacy px), sound,
 //                            soundClass (the window's sound attributes):
 //                            popup alert windows (windowFor(key)), front first
@@ -113,6 +122,11 @@
 //                            this computer; "pty" host messages go to it and
 //                            its replies back to the window (runtime block
 //                            "Terminal"); null with --no-host-shell
+//   simTcp (context property, C++ SimTcp): TCP connections for the pages'
+//                            connectors (the drives' SFTP); "tcp" host
+//                            messages go to it and its events back to the
+//                            window (runtime: "Binary TCP: the host's
+//                            relay"); null with --no-tcp-relay
 //   dictation                the shell's Dictation (Shell.dictation; null
 //                            when it cannot record): "dictation" host
 //                            messages ({op: start | stop | cancel, prompt,
@@ -154,6 +168,7 @@ import QtQuick
 import Phoenix.Native
 import Phoenix.Shell
 import "../Shell/NotificationPolicy.js" as Policy
+import "../Shell/NotificationStacks.js" as Stacks
 import "Links.js" as Links
 
 Item {
@@ -226,6 +241,8 @@ Item {
         Qt.callLater(_bootSystemApps);
         if (_simPty())
             _simPty().event.connect(_ptyEvent);
+        if (_simTcp())
+            _simTcp().event.connect(_tcpEvent);
     }
 
     // A launcher entry for a web app (Rootfs::apps()). Launch points
@@ -518,6 +535,18 @@ Item {
             w.runScript("window.__phoenixRuntime && __phoenixRuntime.ptyEvent && __phoenixRuntime.ptyEvent(" + json + ")");
     }
 
+    // ---- The connectors' TCP (phoenix-sim's SimTcp) ---------------------------------
+
+    function _simTcp() {
+        return typeof simTcp !== "undefined" && simTcp ? simTcp : null;
+    }
+
+    function _tcpEvent(uid, json) {
+        var w = _windows[uid];
+        if (w && w.runScript)
+            w.runScript("window.__phoenixRuntime && __phoenixRuntime.tcpEvent && __phoenixRuntime.tcpEvent(" + json + ")");
+    }
+
     function appIdByTitle(titleText) {
         for (var i = 0; i < apps.count; ++i)
             if (apps.get(i).title === titleText)
@@ -680,7 +709,33 @@ Item {
                 payload.duration | 0];
     }
 
+    // The Sign In card's events for the OAuth service waiting in some page
+    // (runtime/phoenix-runtime.js, "OAuth": oauthCardEvent): told to one
+    // page with the runtime, which shares them with the others through
+    // the store, as a device's application manager and loopback listener
+    // tell the service (services/oauth/signincard.js, loopback.js).
+    readonly property string signInAppId: "org.webosphoenix.signin"
+    function _oauthCardEvent(ev) {
+        var js = "window.__phoenixRuntime && __phoenixRuntime.oauthCardEvent && __phoenixRuntime.oauthCardEvent(" + JSON.stringify(ev) + ")";
+        var page = _headless["com.palm.systemui"] || null;
+        if (!page)
+            for (var u in _windows) {
+                var w = _windows[u];
+                if (w && w.runScript && w.appId !== signInAppId && !w.site) {
+                    page = w;
+                    break;
+                }
+            }
+        if (page && page.runScript)
+            page.runScript(js);
+    }
+
     function _hostMessage(appId, uid, type, payload) {
+        if (type === "signInRedirect") {
+            if (appId === signInAppId && payload && typeof payload.url === "string")
+                _oauthCardEvent({ type: "redirect", url: payload.url });
+            return;
+        }
         if (appId === justTypeAppId && (type === "launch" || type === "open"))
             Qt.callLater(source.justTypeDismissed);
         // A link opened for a card from another page (openLink): as if
@@ -805,16 +860,23 @@ Item {
             // tag starting with it: a deleted folder's captures); {actions: {uri, params,
             // items: [{id, label}]}} adds buttons (Notifications.qml
             // runAction), e.g. the Assistant's follow-up answers.
+            // {group}: the app's notifications of one group are one stack
+            // of layers, the newest on top (NotificationStacks.js, as
+            // Enyo's enyo.Dashboard); {group, remove: true} takes the
+            // stack away (the app read them).
             var target = payload.appId && appInfo(payload.appId) ? payload.appId : appId;
             if (payload.tag)
                 removeTagged(target, String(payload.tag));
             if (payload.remove) {
                 if (payload.tagPrefix)
                     removeTagged(target, String(payload.tagPrefix), true);
+                if (payload.group)
+                    removeGroup(target, String(payload.group));
                 return;
             }
             notify(target, payload.title || "", payload.body || "", payload.params,
-                   { tag: payload.tag ? String(payload.tag) : "", actions: payload.actions || null });
+                   { tag: payload.tag ? String(payload.tag) : "", actions: payload.actions || null,
+                     group: payload.group ? String(payload.group) : "" });
             if (payload.soundClass || payload.soundFile) {
                 var ns = _soundArgs(payload);
                 soundRequested(target, ns[0], ns[1], ns[2]);
@@ -862,11 +924,17 @@ Item {
             // shell's record of the window, not the page's say-so.
             if (_simPty() && uid !== "")
                 _simPty().request(uid, appId, payload);
+        } else if (type === "tcp") {
+            // A connector's TCP connection (the drives' SFTP), in the window it runs in.
+            if (_simTcp() && uid !== "")
+                _simTcp().request(uid, payload || {});
         } else if (type === "dictation") {
             if (uid !== "")
                 _dictationRequest(uid, payload || {});
         } else if (type === "assistant") {
             _assistantRequest(appId, uid, payload || {});
+        } else if (type === "index") {
+            _indexRequest(appId, uid, payload || {});
         } else if (type === "simulator") {
             // What the simulator does on this computer for a page (the
             // runtime's org.webosphoenix.simulator): sim.qml's, by the
@@ -888,6 +956,9 @@ Item {
             shutdownRequested(payload.reason ? String(payload.reason) : "");
         } else if (type === "restartUi") {
             restartUiRequested();
+        } else if (type === "emergencyCall") {
+            // The Assistant's "call 911" (org.webosphoenix.system/emergencyCall): Shell.openEmergency.
+            emergencyCallRequested(payload || {});
         } else if (type === "mediaKey") {
             mediaKeyRequested(String(payload.key || ""));
         } else if (type === "takeScreenshot") {
@@ -970,6 +1041,8 @@ Item {
     // A media key pressed by a service (org.webosphoenix.system/mediaKey),
     // and a screen capture asked for (com.palm.systemmanager/takeScreenShot).
     signal mediaKeyRequested(string key)
+    // The Assistant's emergency call, placed: {number, countdown} (org.webosphoenix.system/emergencyCall).
+    signal emergencyCallRequested(var params)
     signal screenshotRequested
     // A page asked the simulator for something it does on this computer
     // ("simulator" host messages: {op: "startMarketplaceCatalog"}).
@@ -1340,6 +1413,12 @@ Item {
                 params: "", windowKey: key,
                 clickableWhenLocked: _param(url, "phoenixClickableWhenLocked") === "1",
                 ongoing: false, progress: -1, tag: "", actions: "",
+                // Its page draws its own layers (enyo.Dashboard's
+                // DashboardContent): one layer to the shell.
+                group: "", layerCount: 1, layers: "",
+                // When it came, and its words as its page reports them
+                // (windowProperties {dashboardText}): NotificationFeed.qml.
+                time: Date.now(), dashboardTitle: "", dashboardBody: "",
                 // Its window attributes {persistent: true} (no swipe or flick
                 // dismisses it: DashboardWindow::persistent; luna-systemui's
                 // update dashboard, SysUpdateService.js:184-188) and
@@ -1362,6 +1441,16 @@ Item {
     // persistent flag has no such way: WebAppMgr sends it once, from the
     // window's attributes (DashboardWebApp::attach, DashboardWebApp.cpp:86-96).
     function _systemWindowProperties(key, payload) {
+        // A dashboard's words (the runtime reads them from its page), for
+        // the services that read the list (NotificationFeed.qml).
+        if (payload.dashboardText && typeof payload.dashboardText === "object") {
+            for (var d = 0; d < notifications.count; ++d) {
+                if (notifications.get(d).windowKey === key) {
+                    notifications.setProperty(d, "dashboardTitle", String(payload.dashboardText.title || ""));
+                    notifications.setProperty(d, "dashboardBody", String(payload.dashboardText.body || ""));
+                }
+            }
+        }
         if (payload.webosDragMode === undefined)
             return;
         for (var i = 0; i < notifications.count; ++i) {
@@ -1657,6 +1746,8 @@ Item {
         _clearOngoingOf(appId);
         if (activeCallBanner !== null && activeCallBanner.appId === appId)
             activeCallBanner = null;
+        if (appId === signInAppId)
+            _oauthCardEvent({ type: "closed" });
         // The system UI's alerts for it (its location alert) close too.
         var sysui = _headless["com.palm.systemui"];
         if (sysui && sysui.runScript)
@@ -1933,7 +2024,7 @@ Item {
     // not the pages' to overrule.
     readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout", "gestureArea", "dockMode",
                                         "debugOverlays", "usbHost", "gamepads", "usbDrives", "formFactor", "screen",
-                                        "marketplaceCatalog", "learnedWords"]
+                                        "marketplaceCatalog", "learnedWords", "notifications"]
     property var _shellStatus: ({})
 
     function pushSystemStatus(changes) {
@@ -1969,6 +2060,12 @@ Item {
         var writer = _writerPage();
         for (var i = 0; i < pages.length; ++i)
             pages[i].runScript(_statusScript(changes, pages[i] === writer));
+    }
+
+    // The notification list as NotificationFeed.qml reads it ({notifications,
+    // locked, previews}): the pages' org.webosphoenix.system getNotifications.
+    function publishNotifications(digest) {
+        pushSystemStatus({ notifications: digest });
     }
 
     // A screen capture for the runtime to save (runtime.saveScreenshot:
@@ -2647,8 +2744,13 @@ Item {
     // requestId -> {appId, uid} of an ensure under way.
     property var _assistantWaiting: ({})
 
+    // The page that asked: a card's, a headless app's, or Just Type's (no
+    // card, uid ""; its "From your phone" group asks the index's model for
+    // the query's embedding).
     function _assistantPage(appId, uid) {
-        return uid !== "" ? _windows[uid] : (_headless[appId] || null);
+        if (uid !== "")
+            return _windows[uid];
+        return _headless[appId] || (appId === justTypeAppId ? _justType : null);
     }
     function _assistantEvent(page, ev) {
         if (page && page.runScript)
@@ -2731,6 +2833,84 @@ Item {
         }
     }
 
+    // ---- Search your phone's model ("index" host messages; services/index) ---------------
+    // The runtime's org.webosphoenix.service.index asks for its model as the
+    // Assistant does (above), of the shell's second LocalModels
+    // (Shell.indexModels): status, download {id, sources}, cancel, remove,
+    // ensure {id, media, mediaId}: the server, with the vision and audio
+    // encoders (--mmproj) when media; a server of the other kind is stopped
+    // first. Answers through __phoenixRuntime.indexHostEvent.
+    property var indexModels: null
+    property var _indexWaiting: ({})
+    function _indexEvent(page, ev) {
+        if (page && page.runScript)
+            page.runScript("window.__phoenixRuntime && __phoenixRuntime.indexHostEvent && __phoenixRuntime.indexHostEvent("
+                           + JSON.stringify(ev) + ")");
+    }
+    function _indexRequest(appId, uid, p) {
+        var page = _assistantPage(appId, uid);
+        var answer = function (o) { o.requestId = p.requestId; _indexEvent(page, o); };
+        var lm = indexModels;
+        if (!lm) { answer(p.op === "status" ? { available: false, installed: [] } : { error: qsTr("No on-device models here.") }); return; }
+        switch (p.op) {
+        case "status":
+            answer(lm.status());
+            break;
+        case "download":
+            lm.downloadFrom(String(p.id), p.sources || []);
+            answer(lm.error && lm.status().downloading === null ? { error: lm.error } : {});
+            break;
+        case "cancel":
+            lm.cancel(String(p.id));
+            answer({});
+            break;
+        case "remove":
+            lm.remove(String(p.id));
+            answer({});
+            break;
+        case "ensure": {
+            var mmproj = p.media && p.mediaId ? lm.modelsDir + "/" + String(p.mediaId).replace(/[^A-Za-z0-9._-]/g, "_") + ".gguf" : "";
+            if (mmproj !== lm.mmproj) {
+                lm.stop();
+                lm.mmproj = mmproj;
+            }
+            var w = _indexWaiting;
+            w[p.requestId] = { appId: appId, uid: uid };
+            _indexWaiting = w;
+            lm.ensure(String(p.id), String(p.requestId));
+            break;
+        }
+        default:
+            answer({ error: "unknown op " + p.op });
+        }
+    }
+    function _indexSettle(requestId, ev) {
+        var who = _indexWaiting[requestId];
+        if (!who)
+            return;
+        var w = _indexWaiting;
+        delete w[requestId];
+        _indexWaiting = w;
+        ev.requestId = requestId;
+        _indexEvent(_assistantPage(who.appId, who.uid), ev);
+    }
+    Connections {
+        target: source.indexModels
+        ignoreUnknownSignals: true
+        function onReady(requestId, baseUrl) { source._indexSettle(requestId, { baseUrl: baseUrl }); }
+        function onFailed(requestId, error) { source._indexSettle(requestId, { error: error }); }
+        function onChanged() { if (!indexChangedTimer.running) indexChangedTimer.start(); }
+    }
+    Timer {
+        id: indexChangedTimer
+        interval: 500
+        onTriggered: {
+            var pages = source._webPages();
+            for (var i = 0; i < pages.length; ++i)
+                source._indexEvent(pages[i], { changed: true });
+        }
+    }
+
     // disableKeepAlive: close for good, kept alive or not (the angry card,
     // CardWindowManager::closeWindow -> setDisableKeepAlive; an app removed).
     function close(uid, disableKeepAlive) {
@@ -2750,9 +2930,12 @@ Item {
             _park(uid, card);
             return;
         }
-        // Throwing a Terminal card away hangs its shell up (SIGHUP).
+        // Throwing a Terminal card away hangs its shell up (SIGHUP);
+        // any card's connectors' connections close with it.
         if (_simPty())
             _simPty().closeWindow(uid);
+        if (_simTcp())
+            _simTcp().closeWindow(uid);
         var win = _windows[uid];
         delete _windows[uid];
         if (_keepAliveAsked[uid]) {
@@ -2789,29 +2972,33 @@ Item {
     }
 
     // params: launch params for the app when the notification is tapped.
-    // extra: {tag, actions} (see the "notification" host message).
+    // extra: {tag, actions, group} (see the "notification" host message):
+    // with a group the app has a stack of, it goes on top of that stack.
+    property int _notificationSeq: 0
     function notify(appId, titleText, body, params, extra) {
         var info = appInfo(appId) || { color: "#666666", glyph: "!", icon: "" };
         var acts = extra && extra.actions && Array.isArray(extra.actions.items) && extra.actions.items.length ? extra.actions : null;
-        notifications.append({
-            id: "n" + Date.now() + "_" + notifications.count,
+        Stacks.push(notifications, {
+            id: "n" + Date.now() + "_" + (++_notificationSeq),
             appId: appId, title: titleText, body: body,
             color: info.color, glyph: info.glyph, icon: info.icon || "",
             params: params && typeof params === "object" ? JSON.stringify(params) : "",
             windowKey: "", clickableWhenLocked: false,
             ongoing: false, progress: -1,
             tag: extra && extra.tag ? extra.tag : "",
-            actions: acts ? JSON.stringify(acts) : ""
-        });
+            actions: acts ? JSON.stringify(acts) : "",
+            time: Date.now(), dashboardTitle: "", dashboardBody: ""
+        }, extra && extra.group ? String(extra.group) : "");
     }
     // The app's notification of that tag, gone (replaced or taken back);
-    // prefix: every one whose tag starts with it.
+    // prefix: every one whose tag starts with it. Out of its stack, which
+    // goes with its last layer.
     function removeTagged(appId, tag, prefix) {
-        for (var i = notifications.count - 1; i >= 0; --i) {
-            var n = notifications.get(i);
-            if (n.appId === appId && (prefix ? n.tag !== "" && n.tag.indexOf(tag) === 0 : n.tag === tag))
-                notifications.remove(i);
-        }
+        Stacks.removeTagged(notifications, appId, tag, prefix);
+    }
+    // The app's stack of this group, gone at once (the app read them).
+    function removeGroup(appId, group) {
+        Stacks.removeGroup(notifications, appId, group);
     }
 
     // An ongoing activity (a download, an install; org.webosphoenix.ongoing
@@ -2847,10 +3034,13 @@ Item {
             id: key, appId: target, title: p.title || "", body: p.body || "",
             color: info.color, glyph: info.glyph, icon: p.icon ? _iconUrl(p.icon, target) : (info.icon || ""),
             params: params, windowKey: "", clickableWhenLocked: false,
-            ongoing: true, progress: progress, tag: "", actions: ""
+            ongoing: true, progress: progress, tag: "", actions: "",
+            group: "", layerCount: 1, layers: "",
+            time: Date.now(), dashboardTitle: "", dashboardBody: ""
         });
     }
 
+    // The row, its whole stack with it.
     function dismissNotification(index) {
         if (index < 0 || index >= notifications.count)
             return;
@@ -2859,6 +3049,16 @@ Item {
             _closeSystemWindow(key);
         else
             notifications.remove(index);
+    }
+    // Its top layer swiped away: the next one shows, and the last one
+    // takes the row (DashboardContent.layerSwiped, DashboardContent.js:51-64).
+    function popNotificationLayer(index) {
+        if (index < 0 || index >= notifications.count)
+            return;
+        if (notifications.get(index).windowKey)
+            dismissNotification(index);
+        else
+            Stacks.pop(notifications, index);
     }
 
     Component {

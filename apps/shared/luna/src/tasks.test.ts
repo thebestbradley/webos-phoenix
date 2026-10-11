@@ -11,7 +11,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { call, LunaError } from "./bridge";
 import { db } from "./db8";
 import {
-    activityDateString, dueText, PRIORITY, reminderActivityName, TASK_KIND, TASKLIST_KIND, tasks, TASKS_APP_ID, type Task, type TaskInput,
+    activityDateString, dueText, PRIORITY, reminderActivityName, TASK_KIND, TASKLIST_KIND, tasks, TASKS_APP_ID, type Task, type TaskInput, type TaskList,
 } from "./tasks";
 
 interface Activity { activityId: number; name: string; state: string; schedule?: { start: string }; callback?: { params?: Record<string, unknown> } }
@@ -191,6 +191,23 @@ describe("tasks client", () => {
         expect(found.map((x) => x._id)).toEqual([t._id]);
     });
 
+    it("keeps an account's tasks in the kind its list names (a connector's sub-kind), and out of it in a list of the device", async () => {
+        await call("luna://com.palm.db/putKind", { id: "com.palm.task.example:1", owner: "org.example.service", extends: [TASK_KIND] });
+        const list: TaskList = { _kind: TASKLIST_KIND, name: "Work", accountId: "acct-1", sortOrder: 5, taskKind: "com.palm.task.example:1" };
+        const [r] = await db.put([list]);
+        const t = await newTask({ listId: r.id, accountId: "acct-1" });
+        expect(t._kind).toBe("com.palm.task.example:1");
+        const synced = await db.find<Task>({ from: "com.palm.task.example:1", where: [{ prop: "accountId", op: "=", val: "acct-1" }] });
+        expect(synced.map((x) => x._id)).toEqual([t._id]);
+        // Edited: still the account's.
+        await tasks.save({ ...t, summary: "Buy oat milk" });
+        expect((await tasks.get(t._id!))!._kind).toBe("com.palm.task.example:1");
+        // Put in a list of the device: a task of the device.
+        const inbox = await tasks.ensureInbox();
+        await tasks.save({ ...t, listId: inbox._id!, accountId: "" });
+        expect((await tasks.get(t._id!))!._kind).toBe(TASK_KIND);
+    });
+
     it("schedules a reminder the way the Clock app sets alarms, and drops it when done", async () => {
         const at = Date.now() + 2 * HOUR;
         const t = await newTask({ remind: at });
@@ -213,7 +230,7 @@ describe("tasks client", () => {
         expect(l).toEqual([{ id: TASKS_APP_ID, params: { reminder: t._id, $activity: expect.objectContaining({ name: reminderActivityName(t._id!) }) } }]);
         expect(await tasks.handleReminder(l[0].params.reminder as string)).toMatchObject({ _id: t._id });
         const n = hostMessages.find((m) => m.type === "notification");
-        expect(n?.payload).toEqual({ appId: TASKS_APP_ID, title: "Call Ada", body: `Due ${dueText({ due, allDay: false })}`, params: { taskId: t._id, fromReminder: true } });
+        expect(n?.payload).toEqual({ appId: TASKS_APP_ID, title: "Call Ada", body: `Due ${dueText({ due, allDay: false })}`, params: { taskId: t._id, fromReminder: true }, group: "reminders" });
         expect(activity(reminderActivityName(t._id!))).toBeUndefined();
 
         const now = Date.now();

@@ -1,0 +1,26 @@
+{
+    "//": "What the Marketplace's Connections view says of this connector package (docs/SYNERGY-SDK.md 'Publishing'). Comes with Phoenix (preinstalled.json); works in a build with Telegram's app id and TDLib, and its sign-in page says so where it has not.",
+    "accountTypes": [
+        {
+            "templateId": "com.webosphoenix.telegram",
+            "title": "Unofficial Telegram",
+            "provider": "Your Telegram account, through Telegram's own library (TDLib); not made by Telegram",
+            "summary": "Private chats, groups and secret chats in Messaging, pictures included, read receipts both ways, and the people you chat with in Contacts. Chats other than secret chats are kept on Telegram's servers, which can read them. Channels are not shown.",
+            "capabilities": [
+                { "capability": "CONTACTS", "direction": "read-only" },
+                { "capability": "MESSAGING", "direction": "two-way" }
+            ],
+            "protocols": ["mtproto", "tdlib"],
+            "auth": { "type": "password", "registration": "required" },
+            "server": "fixed",
+            "privacy": {
+                "dataGoesTo": "Telegram (its servers keep every chat but secret chats)",
+                "e2ee": false,
+                "phoenixServers": "none"
+            },
+            "push": "connection",
+            "status": "experimental",
+            "signUp": "https://telegram.org/apps"
+        }
+    ]
+}

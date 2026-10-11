@@ -16,6 +16,15 @@ describe("Music's launch params", () => {
         expect(parseLaunch({ share })).toEqual({ kind: "share", share });
     });
 
+    it("reads the Assistant's shuffle, repeat and favorites", () => {
+        expect(parseLaunch({ play: "", shuffle: true })).toEqual({ kind: "play", query: "", shuffle: true });
+        expect(parseLaunch({ favorites: true })).toEqual({ kind: "favorites" });
+        expect(parseLaunch({ favorites: true, shuffle: true })).toEqual({ kind: "favorites", shuffle: true });
+        expect(parseLaunch({ shuffle: false })).toEqual({ kind: "mode", shuffle: false });
+        expect(parseLaunch({ repeat: "one" })).toEqual({ kind: "mode", repeat: "one" });
+        expect(parseLaunch({ repeat: "sometimes" })).toEqual({ kind: "none" });
+    });
+
     it("plays an audio file opened with it: Files' {target: path}, Email's {target: uri, mimeType, fileName}", () => {
         expect(parseLaunch({ target: "/media/internal/music/song.mp3" })).toEqual({ kind: "file", path: "/media/internal/music/song.mp3" });
         expect(parseLaunch({ target: "file:///media/internal/.email/My%20Song.mp3", mimeType: "audio/mpeg", fileName: "My Song.mp3" }))

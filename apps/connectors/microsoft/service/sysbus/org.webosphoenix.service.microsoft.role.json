@@ -1,0 +1,21 @@
+{
+    "appId": "org.webosphoenix.service.microsoft",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.service.microsoft"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.microsoft",
+            "outbound": [
+                "org.webosphoenix.service.microsoft",
+                "com.palm.db",
+                "com.palm.tempdb",
+                "com.palm.activitymanager",
+                "com.palm.service.accounts",
+                "org.webosphoenix.service.oauth"
+            ]
+        }
+    ]
+}

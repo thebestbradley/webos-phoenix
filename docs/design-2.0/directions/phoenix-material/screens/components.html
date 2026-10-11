@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phoenix Material, components</title>
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/icons.js"></script>
+<script src="../assets/app.js"></script>
+<style>
+  body { background: var(--md-surface-container); overflow: hidden; }
+  html[data-theme="dark"] body { background: var(--md-surface-container-lowest); }
+  .sheet { padding: 26px 30px; display: grid; grid-template-columns: 1fr 1fr 372px; grid-template-rows: auto 1fr; gap: 18px 22px; height: 100vh; }
+  .hdr { grid-column: 1 / -1; display: flex; align-items: flex-end; gap: 24px; }
+  .hdr .ttl { flex: 1; }
+  .hdr .ttl .k { font-size: 12px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--md-primary); }
+  .ramps { display: flex; flex-direction: column; gap: 4px; }
+  .ramp { display: flex; align-items: center; gap: 3px; }
+  .ramp .l { width: 64px; font-size: 11px; font-weight: 700; color: var(--md-on-surface-variant); }
+  .ramp i { width: 22px; height: 16px; border-radius: 4px; display: block; }
+  .ramp i:first-of-type { border-radius: 8px 4px 4px 8px; } .ramp i:last-of-type { border-radius: 4px 8px 8px 4px; }
+  .seedchip { display: flex; align-items: center; gap: 10px; padding: 6px 14px 6px 6px; border-radius: 24px; background: var(--md-surface-container-high); font-size: 13px; font-weight: 650; }
+  .seedchip .th { width: 36px; height: 36px; border-radius: 50%; background: var(--wall) center / cover; }
+  .seedchip .sd { width: 16px; height: 16px; border-radius: 50%; background: var(--seed); box-shadow: 0 0 0 2px var(--md-surface-container-high), 0 0 0 3px var(--md-outline-variant); }
+  .col { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+  .blk { background: var(--md-surface); border-radius: var(--r-xl); padding: 16px 18px 18px; }
+  html[data-theme="dark"] .blk { background: var(--md-surface-container-low); }
+  .blk > .k { font-size: 12px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: var(--md-on-surface-variant); margin-bottom: 12px; }
+  .r { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .r + .r { margin-top: 12px; }
+  .cap { font-size: 12px; color: var(--md-on-surface-variant); font-weight: 550; }
+  .sel-grid { display: grid; grid-template-columns: auto auto auto; gap: 14px 26px; align-items: center; justify-content: start; }
+  .sel-grid .cap { margin-left: -14px; }
+  .lrow { display: flex; align-items: center; gap: 14px; padding: 10px 14px; background: var(--md-surface-container); --av-ring: var(--md-surface-container); }
+  .lrow:first-child { border-radius: 20px 20px 4px 4px; } .lrow:last-child { border-radius: 4px 4px 20px 20px; margin-top: 2px; }
+  .lrow .txt { flex: 1; } .lrow .t { font-size: 15px; font-weight: 650; line-height: 20px; } .lrow .s { font-size: 13px; color: var(--md-on-surface-variant); line-height: 18px; }
+  .appbar { display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 8px; border-radius: var(--r-lgi); background: var(--md-surface-container); }
+  .appbar .t { flex: 1; font-size: 20px; font-weight: 700; padding-left: 4px; }
+  /* Glass stage: the frame over the wallpaper */
+  .stage { grid-row: 2; grid-column: 3; position: relative; border-radius: var(--r-xl); overflow: hidden; background: var(--wall) center 35% / cover; }
+  .stage .statusbar { position: absolute; }
+  .stage .menu { position: absolute; top: 34px; left: 0; width: 262px; z-index: 30; }
+  .stage .scrim { position: absolute; inset: 34px 0 0; background: linear-gradient(rgb(0 0 0 / .05), rgb(0 0 0 / .25)); }
+  .stage .lbl { position: absolute; right: 14px; font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase; color: rgb(255 255 255 / .85); background: rgb(0 0 0 / .35); padding: 4px 10px; border-radius: 10px; }
+  .stage .notif { position: absolute; left: 12px; right: 12px; bottom: 76px; }
+  .notif .ico { width: 40px; height: 40px; border-radius: 14px; display: grid; place-items: center; background: var(--md-primary-container); color: var(--md-on-primary-container); flex: none; }
+  .notif .acts { display: flex; gap: 8px; margin-top: 10px; }
+  .notif .acts .btn { height: 34px; padding: 0 16px; font-size: 13px; }
+  .notif .txt { flex: 1; min-width: 0; }
+  .dash { position: absolute; left: 0; right: 0; bottom: 24px; height: 40px; display: flex; align-items: center; gap: 14px; padding: 0 16px; color: #fff; background: rgb(4 8 10 / .45); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+  .dash .ic { width: 20px; height: 20px; }
+  .dash .sp { flex: 1; }
+  .dash .cnt { font-size: 12px; font-weight: 700; opacity: .85; }
+  .stage .gesture { position: absolute; }
+  .shapes { display: flex; gap: 14px; }
+  .shapes > div { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 650; color: var(--md-on-surface-variant); }
+  .shapes i { display: block; width: 54px; height: 54px; background: var(--md-primary-container); }
+  .stage .menu hr { background: color-mix(in srgb, var(--md-on-surface) 22%, transparent); }
+  .dialog .ic-h { color: var(--md-secondary); display: flex; justify-content: center; }
+  .dialog .h { text-align: center; margin: 12px 0 10px; font-size: 22px; line-height: 28px; }
+</style>
+<script>
+function build() {
+  const r = document.getElementById('ramps');
+  const tones = [10, 20, 30, 40, 50, 60, 70, 80, 90, 95, 99];
+  r.innerHTML = [['p', 'Primary'], ['s', 'Secondary'], ['t', 'Tertiary'], ['n', 'Neutral']].map(([k, n]) => `<div class="ramp"><span class="l">${n}</span>${tones.map(t => `<i style="background:var(--tone-${k}-${t})"></i>`).join('')}</div>`).join('');
+  document.getElementById('wn').textContent = document.documentElement.dataset.wall === 'lily-pads' ? 'Lily Pads' : 'Northern Lights';
+}
+</script>
+</head>
+<body>
+<div class="sheet">
+  <div class="hdr">
+    <div class="ttl"><div class="k">Phoenix Material · components</div><div class="headline-l">Tonal, expressive, from your wallpaper</div></div>
+    <div class="seedchip"><span class="th"></span>Colour from <span id="wn">Northern Lights</span><span class="sd"></span></div>
+    <div class="ramps" id="ramps"></div>
+  </div>
+
+  <div class="col">
+    <div class="blk">
+      <div class="k">Buttons</div>
+      <div class="r"><div class="btn"><i data-i="send-fill"></i>Send</div><div class="btn tonal">Reply</div><div class="btn outlined">Cancel</div></div>
+      <div class="r"><div class="btn danger"><i data-i="delete-fill"></i>Delete</div><div class="btn elevated">Elevated</div><div class="btn text">Learn more</div></div>
+      <div class="r"><div class="icon-btn filled"><i data-i="call-fill"></i></div><div class="icon-btn tonal"><i data-i="videocam-fill"></i></div><div class="icon-btn outlined"><i data-i="star"></i></div><div class="icon-btn"><i data-i="more_vert"></i></div><div class="btn square">Pressed</div></div>
+      <div class="r"><div class="fab icon-only" style="width:56px"><i data-i="edit-fill"></i></div><div class="fab"><i data-i="add"></i>New chat</div></div>
+    </div>
+    <div class="blk">
+      <div class="k">Segmented · tabs · chips</div>
+      <div class="seg"><div>Day</div><div class="sel"><i data-i="check"></i>Week</div><div>Month</div></div>
+      <div class="tabs" style="margin-top:12px"><div class="sel"><i data-i="forum-fill"></i>Chats</div><div><i data-i="person"></i>Buddies</div><div><i data-i="star"></i>Favourites</div></div>
+      <div class="r" style="margin-top:14px"><div class="chip sel"><i data-i="check"></i>Unread</div><div class="chip"><i data-i="attach_file"></i>Files</div><div class="chip">Jabber</div><div class="badge">3</div></div>
+    </div>
+    <div class="blk">
+      <div class="k">Header / toolbar</div>
+      <div class="appbar"><div class="icon-btn"><i data-i="arrow_back"></i></div><div class="t">Preferences</div><div class="icon-btn"><i data-i="search"></i></div><div class="icon-btn"><i data-i="more_vert"></i></div></div>
+    </div>
+    <div class="blk">
+      <div class="k">Shape &amp; elevation</div>
+      <div class="shapes">
+        <div><i style="border-radius:4px"></i>4</div><div><i style="border-radius:12px"></i>12</div><div><i style="border-radius:20px"></i>20</div><div><i style="border-radius:28px;box-shadow:var(--e2)"></i>28 card</div><div><i style="border-radius:999px;box-shadow:var(--e3)"></i>full</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="blk">
+      <div class="k">Selection</div>
+      <div class="sel-grid">
+        <div class="switch on"></div><div class="switch"></div><span class="cap">Switch</span>
+        <div class="checkbox on"><i data-i="check"></i></div><div class="checkbox"></div><span class="cap">Checkbox</span>
+        <div class="radio on"></div><div class="radio"></div><span class="cap">Radio</span>
+      </div>
+      <div class="r" style="margin-top:14px; flex-wrap:nowrap"><i data-i="volume_up" style="color:var(--md-on-surface-variant)"></i><div class="slider" style="flex:1"><div class="act" style="width:58%"></div><div class="handle"></div><div class="inact"></div></div></div>
+    </div>
+    <div class="blk">
+      <div class="k">Text field</div>
+      <div class="field focus"><div class="lbl">Subject</div><div class="val">Launch party<span class="caret"></span></div></div>
+      <div class="search" style="margin-top:12px;height:48px"><i data-i="search"></i><div class="ph" style="font-size:15px">Just type…</div><i data-i="mic"></i></div>
+    </div>
+    <div class="blk">
+      <div class="k">List rows</div>
+      <div class="lrow"><div class="av sm c4">AP<div class="accs"><span class="a-sms"><i data-i="sms-fill"></i></span><span class="a-jabber"><i data-i="chat-fill"></i></span></div></div><div class="txt"><div class="t">Ada Palmer</div><div class="s">SMS · Jabber · Work email</div></div><i data-i="chevron_right" style="color:var(--md-on-surface-variant)"></i></div>
+      <div class="lrow"><div class="lead"><i data-i="wifi-fill"></i></div><div class="txt"><div class="t">Wi-Fi</div><div class="s">Phoenix Home</div></div><div class="switch on"></div></div>
+    </div>
+    <div class="blk" style="background:transparent;padding:0">
+      <div class="dialog">
+        <div class="ic-h"><i data-i="delete"></i></div>
+        <div class="h">Delete conversation?</div>
+        <div class="b" style="text-align:center">Messages with Ada on SMS and Jabber will be removed from this device.</div>
+        <div class="acts" style="margin-top:14px"><div class="btn text">Cancel</div><div class="btn text" style="color:var(--md-error)">Delete</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <header class="statusbar glass"><div class="appmenu-tab"><span>Messaging</span><i data-i="keyboard_arrow_down"></i></div><div class="sb-clock">9:41</div><div class="sb-right"><i data-i="wifi"></i><span class="sb-batt"><i data-i="battery_5_bar"></i>82%</span></div></header>
+    <div class="scrim"></div>
+    <div class="menu">
+      <div class="mi"><i data-i="edit"></i>New conversation</div>
+      <div class="mi sel"><i data-i="person"></i>Add an IM account</div>
+      <div class="mi"><i data-i="settings"></i>Preferences &amp; Accounts</div>
+      <hr>
+      <div class="mi"><i data-i="info"></i>Help</div>
+    </div>
+    <div class="lbl" style="top:304px">Glass: app menu</div>
+    <div class="lbl" style="bottom:258px">Glass: notification</div>
+    <div class="notif">
+      <div class="ico"><i data-i="chat-fill"></i></div>
+      <div class="txt"><div class="t">Ada Palmer</div><div class="s">Running late, grab us a table by the window?</div>
+        <div class="acts"><div class="btn tonal">Reply</div><div class="btn text">Mark read</div></div></div>
+      <div class="when">now</div>
+    </div>
+    <div class="dash"><i data-i="chat_bubble-fill"></i><i data-i="mail-fill"></i><i data-i="calendar_month-fill"></i><span class="sp"></span><span class="cnt">3 notifications</span></div>
+    <footer class="gesture glass"><div class="gesture-light"></div></footer>
+  </div>
+</div>
+</body>
+</html>

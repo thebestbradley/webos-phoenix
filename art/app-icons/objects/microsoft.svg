@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Microsoft 365 / Outlook.com (the Microsoft account's connector: mail, calendar, contacts, To Do): a calendar page
+     with a letter in front, drawn for Phoenix (Apache-2.0). Not Microsoft's logo or Outlook's. -->
+<defs>
+  <linearGradient id="page" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e4e8ee"/></linearGradient>
+  <linearGradient id="top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3f86d6"/><stop offset="1" stop-color="#1c5aa6"/></linearGradient>
+  <linearGradient id="env" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7fafd"/><stop offset="1" stop-color="#cfdcea"/></linearGradient>
+  <linearGradient id="flap" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4b93e0"/><stop offset="1" stop-color="#235fa8"/></linearGradient>
+</defs>
+<!-- The calendar page, its rings and days. -->
+<rect x="64" y="50" width="128" height="116" rx="9" fill="url(#page)" stroke="#5b6b80" stroke-width="3"/>
+<path d="M64 59 a9 9 0 0 1 9 -9 h110 a9 9 0 0 1 9 9 v19 H64 z" fill="url(#top)"/>
+<rect x="90" y="42" width="8" height="20" rx="4" fill="#d9dee5" stroke="#5b6b80" stroke-width="2"/>
+<rect x="158" y="42" width="8" height="20" rx="4" fill="#d9dee5" stroke="#5b6b80" stroke-width="2"/>
+<g fill="#b6c2d1">
+  <rect x="78" y="90" width="16" height="12" rx="2"/><rect x="100" y="90" width="16" height="12" rx="2"/><rect x="122" y="90" width="16" height="12" rx="2"/><rect x="144" y="90" width="16" height="12" rx="2"/><rect x="166" y="90" width="16" height="12" rx="2"/>
+  <rect x="78" y="108" width="16" height="12" rx="2"/><rect x="100" y="108" width="16" height="12" rx="2"/>
+</g>
+<rect x="122" y="108" width="16" height="12" rx="2" fill="#2f74c4"/>
+<!-- The letter in front. -->
+<rect x="96" y="118" width="104" height="66" rx="7" fill="url(#env)" stroke="#2b4f7a" stroke-width="3"/>
+<path d="M98 122 l50 34 l50 -34" fill="none" stroke="url(#flap)" stroke-width="5" stroke-linejoin="round"/>
+<path d="M99 182 l34 -26 M197 182 l-34 -26" stroke="#9db3cb" stroke-width="3"/>
+</svg>

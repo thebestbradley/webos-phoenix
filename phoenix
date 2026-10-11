@@ -13,6 +13,11 @@
 #                                 phone or tablet by its size), phone, tablet.
 #                                 ARGS go to phoenix-sim (./phoenix run phone
 #                                 --scene cards; phoenix-sim --help lists them)
+#   ./phoenix run --device ID [ARGS]  as one of the first target devices:
+#                                 fairphone-fp6, ayn-odin2portal, pinephonepro,
+#                                 pinetab2, raspberrypi4-64 (its exact screen,
+#                                 density, layout, buttons, corners and
+#                                 camera cutout; View > Device)
 #                                 The Marketplace's catalog service (PHP 8)
 #                                 starts with it, on this computer, where
 #                                 PHP is: the simulator's Marketplace and
@@ -78,7 +83,11 @@ QT_PREFIX=${QT_PREFIX:-/opt/Qt}
 # whisper.cpp and llama.cpp at the commits meta-phoenix's recipes pin
 # (meta-phoenix/recipes-support), built on Linux; Homebrew has both.
 WHISPER_COMMIT=d09f61a708f3487afa956ff578e60eae5e7a233c   # whisper.cpp master, 2026-09-24 (1.9.4)
-LLAMA_COMMIT=66e665c4276ee46f3ec9872dd7e5a496842bc44f     # llama.cpp b11239, 2026-09-28
+LLAMA_COMMIT=23b0202a189c44a54625aadcb37a946dd1d6278d     # llama.cpp b11552, 2026-10-10
+LLAMA_BUILD=11552
+# The oldest llama-server Phoenix runs: EmbeddingGemma 2 (Search your
+# phone, services/index) is llama.cpp's "gemma-embedding2" from b11451.
+LLAMA_MIN_BUILD=11451
 
 # ---- Arguments ----------------------------------------------------------------------
 COMMAND=""
@@ -118,6 +127,16 @@ if [ $# -gt 0 ] && [ "$COMMAND" != run ]; then
     exit 2
 fi
 [ "$COMMAND" = check ] && DRY=1
+# ./phoenix run --device ID: one of the first targets (phoenix-sim
+# --device), which sets its own screen and layout: no MODE.
+case " $* " in
+    *" --device "*|*" --device="*)
+        if [ -n "$MODE" ]; then
+            echo "phoenix: --device sets the screen and the layout; leave out $MODE (./phoenix run --device ID)" >&2
+            exit 2
+        fi
+        MODE=device ;;
+esac
 MODE=${MODE:-adaptive}
 
 # ---- Output -------------------------------------------------------------------------
@@ -237,6 +256,15 @@ mac_prerequisites() {
         # shellcheck disable=SC2086
         run "$BREW" install $missing
     fi
+    # Homebrew's llama.cpp older than EmbeddingGemma 2 (Search your phone) needs.
+    if [ $ASSISTANT = 1 ] && [ -d "$BREW_PREFIX/opt/llama.cpp" ] && have llama-server; then
+        b=$(llama_build)
+        if [ "${b:-0}" -lt "$LLAMA_MIN_BUILD" ]; then
+            installing "llama.cpp $LLAMA_MIN_BUILD or newer (it has ${b:-an unknown build})" "about 30 MB"
+            need_network "llama.cpp"
+            run "$BREW" upgrade llama.cpp
+        fi
+    fi
     # Node 22 LTS is keg-only: on the PATH for the build. Odd-numbered
     # releases (Homebrew's plain node may be one) are refused by Enact's CLI.
     export PATH="$BREW_PREFIX/opt/node@22/bin:$PATH"
@@ -347,13 +375,22 @@ linux_node() {
     run $SUDO apt-get install -y nodejs
 }
 
+# llama-server's build number ("version: 0.6.0-dev (build 11552, ...)"), 0 if none.
+llama_build() { llama-server --version 2>&1 | sed -n 's/.*(build \([0-9][0-9]*\).*/\1/p' | head -n 1; }
+
 # A static whisper.cpp / llama.cpp program (their ggml inside) into
-# /usr/local/bin; Ubuntu 24.04 packages neither.
+# /usr/local/bin; Ubuntu 24.04 packages neither. llama-server older than
+# LLAMA_MIN_BUILD is built again.
 build_ggml_program() {  # NAME REPO COMMIT TARGET CMAKE_FLAGS...
     name=$1; repo=$2; commit=$3; target=$4; shift 4
     if have "$target"; then
-        ok "$target ($(command -v "$target"))"
-        return
+        b=0
+        [ "$target" = llama-server ] && b=$(llama_build) && b=${b:-0}
+        if [ "$target" != llama-server ] || [ "$b" -ge "$LLAMA_MIN_BUILD" ]; then
+            ok "$target ($(command -v "$target"))"
+            return
+        fi
+        echo "  note: llama-server build $b is older than $LLAMA_MIN_BUILD, which EmbeddingGemma 2 (Search your phone) needs"
     fi
     if [ $OFFLINE = 1 ]; then
         skip "$target (--offline)"
@@ -386,7 +423,7 @@ linux_prerequisites() {
             -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DWHISPER_SDL2=OFF -DWHISPER_CURL=OFF
         build_ggml_program llama.cpp https://github.com/ggml-org/llama.cpp.git "$LLAMA_COMMIT" llama-server \
             -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_APP=OFF -DLLAMA_BUILD_UI=OFF \
-            -DLLAMA_USE_PREBUILT_UI=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_NUMBER=11239
+            -DLLAMA_USE_PREBUILT_UI=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_NUMBER="$LLAMA_BUILD"
     fi
 }
 
@@ -585,7 +622,7 @@ case " $* " in
     *) if have php; then step "Starting the simulator ($MODE), with the Marketplace's catalog"
        else step "Starting the simulator ($MODE)"; fi ;;
 esac
-set -- "--$MODE" "$@"
+[ "$MODE" = device ] || set -- "--$MODE" "$@"
 if [ "$OS" = Linux ]; then
     # Chromium refuses to run as root with its sandbox (cloud containers).
     [ "$(id -u)" -ne 0 ] || export QTWEBENGINE_DISABLE_SANDBOX=1

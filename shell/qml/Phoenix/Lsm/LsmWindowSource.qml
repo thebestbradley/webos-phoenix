@@ -16,6 +16,7 @@ import WebOS.Global 1.0
 import Phoenix.Native
 import "LsmCards.js" as LsmCards
 import "../Shell/NotificationPolicy.js" as Policy
+import "../Shell/NotificationStacks.js" as Stacks
 
 Item {
     id: source
@@ -140,8 +141,15 @@ Item {
             return uidOf(item);
         var uid = "s" + (_nextUid++);
         _surfaces.push({ uid: uid, item: item });
-        var host = hostComponent.createObject(source, { surface: item });
+        var host = hostComponent.createObject(source, { surface: item, appId: item.appId });
         _hosts[uid] = host;
+        // The Sign In card's bar, while the OAuth service says a sign-in is
+        // open in it; its Cancel closes the card (the service hears the
+        // close from the application manager and ends the sign-in).
+        host.signIn = Qt.binding(function() {
+            return source.signInCard !== null && source.signInCard.appId === host.appId ? source.signInCard : null;
+        });
+        host.signInCancel.connect(function() { source.close(uid); });
         // The card's edit popup: the command goes back to its page.
         var appOfCard = item.appId;
         host.editTriggered.connect(function(action) { source.sendToApp(appOfCard, "editAction", { action: action }); });
@@ -371,9 +379,15 @@ Item {
             lunaCall("luna://org.webosphoenix.battery/phoenix/usageTick", changes.usageTick, function() {});
     }
 
+    // The row, its whole stack with it.
     function dismissNotification(index) {
         if (index >= 0 && index < notifications.count)
             notifications.remove(index);
+    }
+    // Its top layer swiped away; the last takes the row (SimWindowSource's).
+    function popNotificationLayer(index) {
+        if (index >= 0 && index < notifications.count)
+            Stacks.pop(notifications, index);
     }
 
     // ---- System sounds (SystemSounds.qml decides; audiod plays) ------------------------
@@ -567,6 +581,8 @@ Item {
     signal sceneTransitionRequested(string uid, string op, string transition, bool isPop)
     signal screenshotRequested
     signal mediaKeyRequested(string key)
+    // The Assistant's emergency call, placed: {number, countdown} (org.webosphoenix.system/emergencyCall).
+    signal emergencyCallRequested(var params)
     signal progressAnimationRequested(string type, string state)
     signal debugOverlayRequested(var request)
     property var activeCallBanner: null
@@ -577,6 +593,12 @@ Item {
     property var speech: null
 
     readonly property string shellHost: "luna://org.webosphoenix.shellhost"
+    // The Sign In card's bar: {appId, session, host, secure} while a sign-in
+    // is open in it, from org.webosphoenix.service.oauth only (its
+    // "signInCard" message: services/oauth/signincard.js); never from a page,
+    // so the provider's page in the card cannot draw the bar.
+    readonly property string oauthServiceId: "org.webosphoenix.service.oauth"
+    property var signInCard: null
 
     // A message for every page of appId (its runtime's shellEvent).
     function sendToApp(appId, type, payload) {
@@ -639,17 +661,22 @@ Item {
         } else if (type === "notification") {
             // A notification for this app or one it names (a text the
             // telephony service received for Messaging); {tag} replaces,
-            // {tag, remove} takes back (tagPrefix: all starting with it).
+            // {tag, remove} takes back (tagPrefix: all starting with it);
+            // {group} stacks it on the app's notifications of that group,
+            // {group, remove} takes the stack away (SimWindowSource's).
             var target = payload.appId && appInfo(payload.appId) ? payload.appId : appId;
             if (payload.tag)
                 removeTagged(target, String(payload.tag));
             if (payload.remove) {
                 if (payload.tagPrefix)
                     removeTagged(target, String(payload.tagPrefix), true);
+                if (payload.group)
+                    removeGroup(target, String(payload.group));
                 return;
             }
             notify(target, payload.title || "", payload.body || "", payload.params,
-                   { tag: payload.tag ? String(payload.tag) : "", actions: payload.actions || null });
+                   { tag: payload.tag ? String(payload.tag) : "", actions: payload.actions || null,
+                     group: payload.group ? String(payload.group) : "" });
             if (payload.soundClass || payload.soundFile) {
                 var ns = _soundArgs(payload);
                 soundRequested(target, ns[0], ns[1], ns[2]);
@@ -691,6 +718,9 @@ Item {
             _assistantRequest(appId, payload);
         } else if (type === "takeScreenshot") {
             screenshotRequested();
+        } else if (type === "emergencyCall") {
+            // The Assistant's "call 911" (org.webosphoenix.system/emergencyCall): Shell.openEmergency.
+            emergencyCallRequested(payload || {});
         } else if (type === "mediaKey") {
             // The Assistant's "pause" (org.webosphoenix.system/mediaKey):
             // pressed as the hardware key, phoenix-devices' /media events.
@@ -700,6 +730,10 @@ Item {
             progressAnimationRequested(String(payload.type || ""), String(payload.state || ""));
         } else if (type === "debugOverlay") {
             debugOverlayRequested(payload);
+        } else if (type === "signInCard" && appId === oauthServiceId) {
+            signInCard = payload.closed || !payload.appId ? null
+                : { appId: String(payload.appId), session: String(payload.session || ""),
+                    host: String(payload.host || ""), secure: payload.secure === true };
         } else if (type === "justTypeDismiss" && appId === justTypeAppId) {
             justTypeDismissed();
         }
@@ -837,23 +871,34 @@ Item {
     }
 
     // ---- Notifications ------------------------------------------------------------------
-    // params: the app's launch params when it is tapped; extra: {tag, actions}.
+    // params: the app's launch params when it is tapped; extra: {tag,
+    // actions, group}: with a group the app has a stack of, on top of it.
+    property int _notificationSeq: 0
     function notify(appId, title, body, params, extra) {
         var info = appInfo(appId) || { color: "#666666", glyph: "!", icon: "" };
         var acts = extra && extra.actions && Array.isArray(extra.actions.items) && extra.actions.items.length ? extra.actions : null;
-        notifications.append({ id: "n" + Date.now() + "_" + notifications.count, appId: appId, title: title, body: body || "",
-                               color: info.color || "#666666", glyph: info.glyph || "!", icon: info.icon || "",
-                               params: params && typeof params === "object" ? JSON.stringify(params) : (typeof params === "string" ? params : ""),
-                               windowKey: "", clickableWhenLocked: false, ongoing: false, progress: -1,
-                               tag: extra && extra.tag ? extra.tag : "", actions: acts ? JSON.stringify(acts) : "" });
+        Stacks.push(notifications, { id: "n" + Date.now() + "_" + (++_notificationSeq), appId: appId, title: title, body: body || "",
+                                     color: info.color || "#666666", glyph: info.glyph || "!", icon: info.icon || "",
+                                     params: params && typeof params === "object" ? JSON.stringify(params) : (typeof params === "string" ? params : ""),
+                                     windowKey: "", clickableWhenLocked: false, ongoing: false, progress: -1,
+                                     tag: extra && extra.tag ? extra.tag : "", actions: acts ? JSON.stringify(acts) : "",
+                                     time: Date.now(), dashboardTitle: "", dashboardBody: "" },
+                    extra && extra.group ? String(extra.group) : "");
+    }
+
+    // The list as NotificationFeed.qml reads it ({notifications, locked,
+    // previews}): to org.webosphoenix.system (services/shellhost), which
+    // answers getNotifications (the Assistant's "what did I miss").
+    // STATUS: written against shellhost.test.ts; not yet run on a device.
+    function publishNotifications(digest) {
+        lunaCall("luna://org.webosphoenix.system/setNotifications", digest, function() {});
     }
 
     function removeTagged(appId, tag, prefix) {
-        for (var i = notifications.count - 1; i >= 0; --i) {
-            var n = notifications.get(i);
-            if (n.appId === appId && (prefix ? n.tag !== "" && n.tag.indexOf(tag) === 0 : n.tag === tag))
-                notifications.remove(i);
-        }
+        Stacks.removeTagged(notifications, appId, tag, prefix);
+    }
+    function removeGroup(appId, group) {
+        Stacks.removeGroup(notifications, appId, group);
     }
 
     // An ongoing activity: {id, title, body, icon?, progress, params?} or
@@ -885,7 +930,9 @@ Item {
         notifications.insert(Policy.ongoingInsertIndex(flags), {
             id: key, appId: target, title: p.title || "", body: p.body || "",
             color: info.color || "#666666", glyph: info.glyph || "!", icon: p.icon ? _iconUrl(p.icon, target) : (info.icon || ""),
-            params: params, windowKey: "", clickableWhenLocked: false, ongoing: true, progress: progress, tag: "", actions: ""
+            params: params, windowKey: "", clickableWhenLocked: false, ongoing: true, progress: progress, tag: "", actions: "",
+            group: "", layerCount: 1, layers: "",
+            time: Date.now(), dashboardTitle: "", dashboardBody: ""
         });
     }
 

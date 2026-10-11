@@ -1,0 +1,13 @@
+[
+    {
+        "type": "db.kind",
+        "object": "org.webosphoenix.music.favorite:1",
+        "caller": "org.webosphoenix.music",
+        "operations": {
+            "create": "allow",
+            "read": "allow",
+            "update": "allow",
+            "delete": "allow"
+        }
+    }
+]

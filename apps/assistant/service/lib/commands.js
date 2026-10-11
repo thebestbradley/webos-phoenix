@@ -38,6 +38,9 @@
 //                the Memos app places a new one (com.palm.app.notes
 //                app/agents/GridAgent.js:91-97, app/models/Memo.js:98-180)
 //   findNotes    com.palm.note:1 by its words
+//   searchPhone  the user's things by what they mean (lib/commands-search.js:
+//                org.webosphoenix.service.index), and the same for findNotes,
+//                searchEmail, findFiles and photos when no item has the words
 //   contactAdd   a local contact and its person (com.palm.contact.palmprofile:1,
 //                com.palm.person:1), as the contacts linker builds them
 //   contactInfo  a contact's number, email, address or birthday
@@ -103,6 +106,7 @@ var D = require("./dates");
 var units = require("./units");
 var places = require("./places");
 var nearbyLib = require("./nearby");
+var emergency = require("./emergency");
 
 var CLOCK_APP = "com.palm.app.clock";
 var CALENDAR_APP = "com.palm.app.calendar";
@@ -130,8 +134,9 @@ var WHEN = { type: "string", description: "When, as said (\"tomorrow at 3pm\", \
 var BUILT_IN = [
     { id: "call", title: "Phone calls", risk: "call", description: "Phone a contact or a number.",
       parameters: { type: "object", properties: { who: { type: "string", description: "Contact name" }, number: { type: "string", description: "Phone number, if no contact" }, label: { type: "string", enum: ["", "mobile", "home", "work"] } } } },
-    { id: "text", title: "Text messages", risk: "send", description: "Send a text message (SMS) to a contact.",
-      parameters: { type: "object", properties: { who: { type: "string", description: "Contact name or number" }, message: { type: "string", description: "The words to send" } }, required: ["who"] } },
+    { id: "text", title: "Text messages", risk: "send", description: "Send a text message (SMS) to a contact, or a chat message on Jabber, Matrix, Delta Chat or Telegram.",
+      parameters: { type: "object", properties: { who: { type: "string", description: "Contact name or number (or their address on the chat network)" }, message: { type: "string", description: "The words to send" },
+        via: { type: "string", enum: ["", "sms", "jabber", "matrix", "deltachat", "telegram"], description: "The chat network, if the person asked for one; empty for a text message" } }, required: ["who"] } },
     { id: "readMessages", title: "Reading messages", risk: "read", description: "Read the last text message received, from anyone or from a contact, or the unread ones.",
       parameters: { type: "object", properties: { who: { type: "string", description: "Contact name; empty for anyone" }, unread: B } } },
     { id: "email", title: "Email", risk: "send", description: "Send an email to a contact (read back first); without a body, open a new email to them.",
@@ -145,8 +150,9 @@ var BUILT_IN = [
     { id: "agenda", title: "Calendar agenda", risk: "read", description: "Tell what is on the calendar: a day, a week, the next event, or when an event is.",
       parameters: { type: "object", properties: { range: { type: "string", enum: ["today", "tomorrow", "day", "this week", "next week", "next", "find"] },
         day: { type: "string", description: "For range day: the day, as said or ISO 8601" }, query: { type: "string", description: "For range find: the event's name" } } } },
-    { id: "timer", title: "Timers", risk: "change", description: "Start a countdown timer.",
-      parameters: { type: "object", properties: { seconds: { type: "integer", minimum: 1, description: "How long, in seconds" }, label: S }, required: ["seconds"] } },
+    { id: "timer", title: "Timers", risk: "change", description: "Start a countdown timer, or a sleep timer that stops the music.",
+      parameters: { type: "object", properties: { seconds: { type: "integer", minimum: 1, description: "How long, in seconds" }, label: S,
+        sleep: { type: "boolean", description: "A sleep timer: the music stops when it ends, nothing rings" } }, required: ["seconds"] } },
     { id: "timerStatus", title: "Time left on timers", risk: "read", description: "Tell how much time is left on the running timers.",
       parameters: { type: "object", properties: {} } },
     { id: "timerCancel", title: "Cancelling timers", risk: "change", description: "Cancel a running timer (by its label) or all of them.",
@@ -156,7 +162,8 @@ var BUILT_IN = [
     { id: "alarm", title: "Alarms", risk: "change", description: "Set an alarm in the Clock app, once or repeating.",
       parameters: { type: "object", properties: { time: { type: "string", description: "When, as said: \"7:30 am\", \"tomorrow at 6\", or ISO 8601 local time" }, label: S,
         repeat: { type: "string", enum: ["once", "daily", "weekdays", "weekends"] } }, required: ["time"] } },
-    { id: "alarmList", title: "Listing alarms", risk: "read", description: "Tell which alarms are set.", parameters: { type: "object", properties: {} } },
+    { id: "alarmList", title: "Listing alarms", risk: "read", description: "Tell which alarms are set, or when the next one rings.",
+      parameters: { type: "object", properties: { next: { type: "boolean", description: "Only the next alarm to ring, and how long until it does" } } } },
     { id: "alarmManage", title: "Turning off and deleting alarms", risk: "change", description: "Turn off or delete an alarm (by its time) or all alarms.",
       parameters: { type: "object", properties: { action: { type: "string", enum: ["off", "delete"] }, time: { type: "string", description: "The alarm's time, \"7am\"" }, all: B }, required: ["action"] } },
     { id: "reminder", title: "Reminders", risk: "change", description: "Add a task to Tasks, with a reminder when a time is given.",
@@ -165,7 +172,7 @@ var BUILT_IN = [
       parameters: { type: "object", properties: { text: S, list: { type: "string", description: "The list's name; empty for the default" }, due: WHEN }, required: ["text"] } },
     { id: "note", title: "Memos", risk: "change", description: "Save a memo in Memos.", parameters: { type: "object", properties: { text: S }, required: ["text"] } },
     { id: "findNotes", title: "Finding memos", risk: "read", description: "Find memos by their words.", parameters: { type: "object", properties: { query: S } } },
-    { id: "contactAdd", title: "Adding contacts", risk: "change", description: "Add a contact with a phone number and/or email address.",
+    { id: "contactAdd", title: "Adding contacts", risk: "change", description: "Add a contact, or add a phone number or email address to one.",
       parameters: { type: "object", properties: { name: S, number: S, email: S, label: { type: "string", enum: ["", "mobile", "home", "work"] } }, required: ["name"] } },
     { id: "contactInfo", title: "Contact details", risk: "read", description: "Tell a contact's phone number, email, address or birthday.",
       parameters: { type: "object", properties: { who: S, what: { type: "string", enum: ["phone", "email", "address", "birthday"] }, label: S }, required: ["who"] } },
@@ -239,8 +246,9 @@ var BUILT_IN = [
         "notifications", "systemmenu", "unlock", "passcode", "location", "screenshot", "assistant"] } } } },
     { id: "findFiles", title: "Finding files", risk: "read", description: "Find files and folders on the device by their names.",
       parameters: { type: "object", properties: { query: { type: "string", description: "Words of the file's name" }, kind: { type: "string", enum: ["", "pdf"] } }, required: ["query"] } },
-    { id: "readEmail", title: "Reading email", risk: "read", description: "Read the latest email, or the latest from someone.",
-      parameters: { type: "object", properties: { who: { type: "string", description: "Who it is from; empty for anyone" } } } },
+    { id: "readEmail", title: "Reading email", risk: "read", description: "Read the latest email, or the latest from someone, or the last few.",
+      parameters: { type: "object", properties: { who: { type: "string", description: "Who it is from; empty for anyone" },
+                                                  count: { type: "integer", minimum: 1, maximum: 10, description: "How many of the latest; 1 unless asked for more" } } } },
     { id: "emailReply", title: "Replying to email", risk: "send", description: "Reply to the latest email (from someone): sent after a read-back, or a reply opened to write.",
       parameters: { type: "object", properties: { who: S, body: { type: "string", description: "The words; empty to write them in Email" } } } },
     { id: "travelTime", title: "Travel time", risk: "read", description: "Tell how long it takes to drive, walk or cycle to a place from here (no live traffic).",
@@ -250,13 +258,39 @@ var BUILT_IN = [
     { id: "locationAccess", title: "Location", risk: "change", internal: true, description: "Let the Assistant use the device's location, or not.",
       parameters: { type: "object", properties: { allow: B }, required: ["allow"] } },
     { id: "undo", title: "Undo", risk: "delete", internal: true, description: "Take back what the assistant just did.",
-      parameters: { type: "object", properties: {} } }
+      parameters: { type: "object", properties: {} } },
+    // Small talk the grammar answers ("hello", "thanks", "are you there?").
+    { id: "chat", title: "Small talk", risk: "read", internal: true, description: "Answer a greeting, thanks or small talk.",
+      parameters: { type: "object", properties: { kind: S } } },
+    // "Is wifi on?": how a switch is, read from its service.
+    { id: "settingStatus", title: "Checking switches", risk: "read", description: "Tell whether a device setting (Wi-Fi, Bluetooth, airplane mode, the flashlight, Location Services, rotation lock, Do Not Disturb) is on.",
+      parameters: { type: "object", properties: { setting: { type: "string", enum: ["wifi", "bluetooth", "airplane", "flashlight", "ringer", "dnd", "location", "rotationLock"] } }, required: ["setting"] } },
+    // "Did you add the number?": what was done, read back from the device (assistant.js checkDone).
+    { id: "checkDone", title: "Checking what was done", risk: "read", internal: true, description: "Say whether the last thing asked for was done.",
+      parameters: { type: "object", properties: { field: S } } }
 ];
 // One thing about one item, and the item a conversation is about (lib/details.js).
 var details = require("./details")({ D: D, lunaCall: lunaCall, dbFind: dbFind, findEvent: findEvent, matches: matches, words: words,
                                      whenShown: whenShown, cards: cards, findPerson: findPerson, personName: personName, emailOf: emailOf,
-                                     addTask: addTask, scheduleAlarm: scheduleAlarm, nextRing: nextRing });
+                                     addTask: addTask, scheduleAlarm: scheduleAlarm, nextRing: nextRing, listNamed: listNamed });
 Array.prototype.push.apply(BUILT_IN, details.COMMANDS);
+// What is connected through Synergy (lib/commands-synergy.js): its commands,
+// and the account each of these may be given ("on Slack", "my work calendar").
+var synergy = require("./commands-synergy")({ D: D, lunaCall: lunaCall, dbFind: dbFind, dbPut: dbPut, dbGet: dbGet, launch: launch, cards: cards,
+                                             whenShown: whenShown, eventCard: eventCard, eventsIn: eventsIn, findEvent: findEvent, matches: matches, words: words,
+                                             findPeople: findPeople, findPerson: findPerson, ambiguous: ambiguous, personName: personName, people: people,
+                                             samePhone: samePhone, nameForPhone: nameForPhone, receivedEmails: receivedEmails, withConfirm: withConfirm,
+                                             here: here, resolvePlace: resolvePlace, routeSummary: routeSummary, blockedReply: blockedReply,
+                                             // Home and work, saved in Maps (lib/commands-places.js; everyday is made below).
+                                             savedPlace: function (e, which) { return everyday.savedPlace(e, which); },
+                                             prepareInner: function (c, a, e) { return prepareInner(c, a, e); }, runInner: function (c, a, e) { return runInner(c, a, e); } });
+Array.prototype.push.apply(BUILT_IN, synergy.COMMANDS);
+synergy.extend(BUILT_IN);
+// Search your phone, by meaning (lib/commands-search.js; services/index).
+var phoneSearch = require("./commands-search").create({ findPerson: findPerson, personName: personName, whenShown: whenShown, dbFind: dbFind, matches: matches,
+    sameAddress: function (a, b) { return samePhone(a, b) || String(a || "").toLowerCase() === String(b || "").toLowerCase(); },
+    runCommand: function (id, args, env) { return runInner(find(BUILT_IN, id), args, env); } });
+Array.prototype.push.apply(BUILT_IN, phoneSearch.COMMANDS);
 // How people ask for each, in other words (lib/examples.js): for a model choosing one.
 (function (examples) {
     BUILT_IN.forEach(function (c) { if (examples[c.id] && !c.examples) c.examples = examples[c.id]; });
@@ -361,6 +395,50 @@ function namedIn(items, nameOf, said) {
     return names.length > 1 ? { ambiguous: names } : { hit: top[0].x };
 }
 function digitsOnly(s) { return String(s || "").replace(/\D/g, ""); }
+// A number as people write it: (864) 252-6990 for ten digits, else as said.
+function phoneShown(n) {
+    var d = digitsOnly(n);
+    if (d.length === 10 && !/^\+/.test(String(n).trim())) return "(" + d.slice(0, 3) + ") " + d.slice(3, 6) + "-" + d.slice(6);
+    return String(n).trim();
+}
+function dbGet(env, id) {
+    return lunaCall(env, DB + "get", { ids: [id] }).then(function (r) { var o = (r.results || [])[0]; return o && !o._del ? o : null; }, function () { return null; });
+}
+// A number or an address added to the contact there (its person and its
+// contacts), beside what it has; what it already has is not added twice.
+function addToContact(args, env) {
+    var say = env.lang.say;
+    return dbGet(env, args.personId).then(function (p) {
+        if (!p) return { text: say.noSuchContact(args.name) };
+        var name = personName(p) || args.name, change = {}, old = {}, added = [];
+        if (args.number) {
+            var phones = (p.phoneNumbers || []).slice();
+            if (!phones.some(function (x) { return samePhone(x.value, args.number); })) {
+                old.phoneNumbers = p.phoneNumbers || [];
+                phones.push({ value: phoneShown(args.number), type: "type_" + (args.label || "mobile"), primary: !phones.length, normalizedValue: normalizedPhone(args.number), speedDial: "", favoriteData: {} });
+                change.phoneNumbers = phones;
+                added.push(phoneShown(args.number));
+            }
+        }
+        if (args.email) {
+            var mails = (p.emails || []).slice();
+            if (!mails.some(function (x) { return String(x.value).toLowerCase() === String(args.email).toLowerCase(); })) {
+                old.emails = p.emails || [];
+                mails.push({ value: String(args.email), type: "type_home", primary: !mails.length, normalizedValue: String(args.email).toLowerCase(), favoriteData: {} });
+                change.emails = mails;
+                added.push(String(args.email));
+            }
+        }
+        var person = { appId: CONTACTS_APP, params: { launchType: "showPerson", id: p._id }, title: "Contacts" };
+        var has = (change.phoneNumbers || p.phoneNumbers || []).map(function (x) { return x.value; }).concat((change.emails || p.emails || []).map(function (x) { return x.value; }));
+        if (!added.length) return { text: say.contactHasIt(name, has), open: person };
+        var ids = [p._id].concat(p.contactIds || []);
+        return lunaCall(env, DB + "merge", { objects: ids.map(function (id) { return Object.assign({ _id: id }, change); }) }).then(function () {
+            return { text: say.contactUpdated(name, added, has), open: person, data: { personId: p._id },
+                     undo: { kind: "merge", objects: ids.map(function (id) { return Object.assign({ _id: id }, old); }), what: say.undoWhat.edit(name + "'s card") } };
+        });
+    });
+}
 function samePhone(a, b) {
     var x = digitsOnly(a), y = digitsOnly(b);
     return x.length >= 7 && y.length >= 7 && x.slice(-7) === y.slice(-7);
@@ -387,6 +465,28 @@ function contactNames(env) {
         });
         return names;
     });
+}
+// Everyone the words could mean, best first: [] none; one, or several
+// that fit as well as each other (a first name two people share).
+function findPeople(env, who) {
+    var w = String(who || "").toLowerCase().trim().replace(/^my /, "");
+    return people(env).then(function (all) {
+        var tests = [
+            function (p) { return personName(p).toLowerCase() === w; },
+            function (p) { return p.nickname && p.nickname.toLowerCase() === w; },
+            function (p) { return p.name && p.name.givenName && p.name.givenName.toLowerCase() === w; },
+            function (p) { return w.length >= 2 && personName(p).toLowerCase().indexOf(w) === 0; }
+        ];
+        for (var i = 0; i < tests.length; ++i) {
+            var hit = all.filter(tests[i]);
+            if (hit.length) return hit.sort(function (a, b) { return (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0); });
+        }
+        return [];
+    });
+}
+// Several fit equally and none is a favourite: the user is asked which.
+function ambiguous(list) {
+    return list.length > 1 && !list[0].favorite ? list.slice(0, 4).map(personName) : null;
 }
 function findPerson(env, who) {
     var w = String(who || "").toLowerCase().trim();
@@ -418,6 +518,8 @@ function emailOf(p) {
     var pick = list.filter(function (e) { return e.primary; })[0] || list[0];
     return pick ? pick.value : null;
 }
+
+// Chat messages on the messaging accounts (Jabber, Matrix, Slack, ...): lib/commands-synergy.js.
 // Who a number or address belongs to, for messages and email.
 // A person's phoneNumbers[].normalizedValue, as the contacts linker writes it.
 function normalizedPhone(number) {
@@ -515,14 +617,28 @@ function fromModel(cmd, args, env) {
 
 // ---- Prepare: resolve, decide whether to ask ----------------------------------------------------
 
-// "it" first (the item the conversation is about: lib/details.js).
+// "it" first (the item the conversation is about: lib/details.js), then
+// the account said (lib/commands-synergy.js).
 function prepare(cmd, args, env) {
-    return details.prepare(cmd, Object.assign({}, args || {}), env).then(function (a) { return prepareInner(cmd, a, env); });
+    return details.prepare(cmd, Object.assign({}, args || {}), env).then(function (a) { return synergy.prepare(cmd, a, env); })
+        .then(function (p) { return p.pass ? prepareInner(cmd, p.pass, env) : p; });
 }
 function prepareInner(cmd, args, env) {
     var say = env.lang.say;
     args = Object.assign({}, args || {});
     function reply(text) { return Promise.resolve({ args: args, reply: text }); }
+    var own = everyday.prepare(cmd, args, env);
+    if (own) return own;
+    // An emergency number ("call 911", "call the police"): never refused
+    // and never held for a yes; placed after a short countdown the user can
+    // cancel (countdown, lib/emergency.js), as Siri and Google Assistant do.
+    // The review's "call 911" asked "Call 911?" like any number.
+    if (cmd.id === "call" && (args.emergency || emergency.isEmergency(args.number || args.who, env.country))) {
+        var sos = args.emergency && !args.number ? emergency.primary(env.country) : String(args.number || args.who).replace(/[^\d+]/g, "");
+        args = Object.assign({}, args, { number: sos, name: "", emergency: true });
+        delete args.who;
+        return Promise.resolve({ args: args, confirm: say.emergencyCall(sos, emergency.COUNTDOWN_S), countdown: emergency.COUNTDOWN_S });
+    }
     if (cmd.id === "call" || cmd.id === "text") {
         var who = String(args.who || "").trim();
         var raw = args.number || (/^[+\d][\d\s().-]{2,}$/.test(who) ? who : "");
@@ -532,26 +648,39 @@ function prepareInner(cmd, args, env) {
             return Promise.resolve(withConfirm(cmd, args, env));
         }
         if (!who) return reply(say.noSuchContact("that person"));
-        return findPerson(env, who).then(function (p) {
+        return findPeople(env, who).then(function (list) {
+            var p = list[0], several = ambiguous(list);
             if (!p) return { args: args, reply: say.noSuchContact(who) };
+            if (several) return { args: args, reply: say.whichPerson(several), awaiting: { command: cmd.id, args: args, field: "who", options: several } };
             var number = numberOf(p, args.label);
+            // No number to text, but an address on a messaging account the user has: that.
+            if (!number && cmd.id === "text") return synergy.chatTarget(env, cmd, args, p, false);
             if (!number) return { args: args, reply: say.noNumber(personName(p) || who) };
             args.name = personName(p) || who;
             args.number = number;
             args.personId = p._id;
+            // "text sam": what to say, asked (the next words are it).
+            if (cmd.id === "text" && !String(args.message || "").trim() && !args.compose)
+                return { args: args, reply: say.whatToSay(args.name), awaiting: { command: "text", args: args, field: "message" } };
             return withConfirm(cmd, args, env);
         });
     }
     if (cmd.id === "email") {
         var to = String(args.who || "").trim();
+        // A draft to nobody yet ("write an email announcing the new version"):
+        // Email's new message with the words, the recipient left to the user.
+        if (!to && (args.draft || args.subject || args.body)) return Promise.resolve({ args: Object.assign(args, { addr: "", name: "" }) });
         if (!to) return reply(say.noSuchContact("that person"));
         var direct = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(to) ? Promise.resolve({ name: "", addr: to })
-            : findPerson(env, to).then(function (p) {
+            : findPeople(env, to).then(function (list) {
+                var p = list[0], several = ambiguous(list);
+                if (several) return { which: several };
                 if (!p) return { error: say.noSuchContact(to) };
                 var addr = emailOf(p);
                 return addr ? { name: personName(p), addr: addr } : { error: say.noEmail(personName(p) || to) };
             });
         return direct.then(function (r) {
+            if (r.which) return { args: args, reply: say.whichPerson(r.which), awaiting: { command: "email", args: args, field: "who", options: r.which } };
             if (r.error) return { args: args, reply: r.error };
             args.name = r.name; args.addr = r.addr;
             return withConfirm(cmd, args, env);
@@ -569,19 +698,48 @@ function prepareInner(cmd, args, env) {
             return { args: args };
         });
     }
+    // "Search the web" with nothing to search for: asked, and the next words are it.
+    if (cmd.id === "search" && !String(args.query || "").trim())
+        return Promise.resolve({ args: args, reply: say.searchWhat(), awaiting: { command: "search", args: args, field: "query" } });
     if (cmd.id === "timer" && !(args.seconds > 0)) return reply(say.failed("how long?"));
     if (cmd.id === "alarm" && !(args.time > env.now())) return reply(say.failed("that time has passed"));
     if (cmd.id === "reminder" && !String(args.text || "").trim()) return reply(say.failed("remind you of what?"));
+    // A reminder for a place ("when I get home"): there is no reminder by
+    // place on the device yet, so a time is asked for (the next words are
+    // it), never a plain task with the place left out (the review's "remind
+    // me to buy milk when I get home", 11 October 2026).
+    if (cmd.id === "reminder" && args.place && !args.due) {
+        var timed = Object.assign({}, args);
+        delete timed.place;
+        delete timed.leaving;
+        return Promise.resolve({ args: args, reply: say.placeReminder(args.text, args.place, !!args.leaving),
+                                 awaiting: { command: "reminder", args: timed, field: "due" } });
+    }
     if (cmd.id === "task" && !String(args.text || "").trim()) return reply(say.failed("add what?"));
-    if (cmd.id === "note" && !String(args.text || "").trim()) return reply(say.failed("what should the memo say?"));
+    if (cmd.id === "note" && !String(args.text || "").trim()) {
+        if (args.topic) return Promise.resolve({ args: args, reply: say.memoWhat(args.topic), awaiting: { command: "note", args: args, field: "text" } });
+        return reply(say.failed("what should the memo say?"));
+    }
     if (cmd.id === "event") {
         if (!args.title) args.title = "New event";
-        if (!(args.start > 0)) return Promise.resolve({ args: args, reply: say.eventWhen(), awaiting: { command: "event", args: args } });
+        if (!(args.start > 0)) return Promise.resolve({ args: args, reply: args.day ? say.eventWhatTime(args.title) : say.eventWhen(), awaiting: { command: "event", args: args } });
         return Promise.resolve({ args: args });
     }
     if (cmd.id === "contactAdd") {
-        if (!String(args.name || "").trim() || !(args.number || args.email)) return reply(say.contactNeedsMore());
-        return Promise.resolve({ args: args });
+        if (!String(args.name || "").trim() && !args.personId) return reply(say.contactNeedsMore());
+        // The one already there by that name (or the one in focus, personId)
+        // gets the number or address: never a second card (the owner's
+        // "add 8642526990 to Megan E Weaver's contact" made three).
+        var same = args.personId ? dbGet(env, args.personId).then(function (p) { return p ? [p] : []; })
+            : people(env).then(function (all) {
+                var n = String(args.name).toLowerCase().replace(/\s+/g, " ").trim();
+                return all.filter(function (p) { return !p._del && personName(p).toLowerCase().replace(/\s+/g, " ") === n; });
+            });
+        return same.then(function (hit) {
+            if (hit.length) { args.personId = hit[0]._id; args.name = personName(hit[0]) || args.name; args.update = true; }
+            if (args.update && !(args.number || args.email)) return { args: args, reply: say.contactExists(args.name) };
+            return { args: args };
+        });
     }
     if (cmd.id === "alarmManage") {
         return dbFind(env, "com.palm.clock.alarm:1").then(function (all) {
@@ -630,9 +788,20 @@ function prepareInner(cmd, args, env) {
             return people(env).then(function (all) {
                 args.number = String(last.from.addr);
                 args.name = last.from.name || nameForPhone(all, last.from.addr);
+                // Reply, its button (or a yes to it, spoken): what to say,
+                // asked here (the next words are it), the conversation in front.
+                if (!String(args.message || "").trim() && args.ask)
+                    return { args: args, reply: say.whatToSay(args.name || args.number), awaiting: { command: "replyMessage", args: args, field: "message" } };
                 if (!String(args.message || "").trim()) return { args: args };
                 return { args: args, confirm: say.confirmText(args.name || args.number, args.message) };
             });
+        });
+    }
+    if (cmd.id === "readEmail" && Number(args.count) > 1) {
+        return receivedEmails(env, args.who).then(function (list) {
+            if (!list.length) return { args: args, reply: args.who ? say.noEmailFrom(args.who) : say.noEmails() };
+            args.list = list.slice(0, Math.min(10, Number(args.count)));
+            return { args: args };
         });
     }
     if (cmd.id === "emailReply" || cmd.id === "readEmail") {
@@ -643,6 +812,9 @@ function prepareInner(cmd, args, env) {
             if (cmd.id === "readEmail") return { args: args };
             args.addr = args.from.addr; args.name = args.from.name || "";
             args.subject = /^re:/i.test(args.subject) ? args.subject : "Re: " + args.subject;
+            // Reply, its button: what to say, asked here (as replyMessage).
+            if (!String(args.body || "").trim() && args.ask)
+                return { args: args, reply: say.whatToSay(args.name || args.addr), awaiting: { command: "emailReply", args: args, field: "body" } };
             if (!String(args.body || "").trim()) return { args: args };
             return { args: args, confirm: say.confirmEmail(args.name || args.addr, args.subject, args.body) };
         });
@@ -724,6 +896,7 @@ function withConfirm(cmd, args, env) {
     if (cmd.id === "call") return { args: args, confirm: say.confirmCall(args.name, args.number) };
     if (cmd.id === "text") {
         if (!String(args.message || "").trim()) return { args: args };   // compose: nothing is sent
+        if (args.chat) return { args: args, confirm: say.confirmChat(args.name || args.chat.addr, args.message, args.chat.label) };
         return { args: args, confirm: say.confirmText(args.name || args.number, args.message) };
     }
     if (cmd.id === "email") {
@@ -838,10 +1011,14 @@ var LOCATION_PERMISSIONS = "luna://org.webosphoenix.service.location/";
 function locationBlocked(env, why, purpose) {
     var say = env.lang.say, actions = [];
     var settings = { label: say.locationSettings(), open: { appId: SETTINGS_APP, params: { page: "location" }, title: "Location Services" } };
-    if (why === "ask") actions = [{ label: say.allow(), run: { command: "locationAccess", args: { allow: true } } },
-                                  { label: say.dontAllow(), run: { command: "locationAccess", args: { allow: false } } }];
-    else if (why === "denied") actions = [{ label: say.allowLocation(), run: { command: "locationAccess", args: { allow: true } } }, settings];
-    else if (why === "off") actions = [{ label: say.turnOnLocation(), run: { command: "toggle", args: { setting: "location", state: "on" } } }, settings];
+    // ("Is it OK if I use it?": a spoken or typed yes is Allow, no Don't Allow: assistant.js answerChoice.)
+    if (why === "ask") actions = [{ label: say.allow(), answer: "yes", run: { command: "locationAccess", args: { allow: true } } },
+                                  { label: say.dontAllow(), answer: "no", run: { command: "locationAccess", args: { allow: false } } }];
+    else if (why === "denied") actions = [{ label: say.allowLocation(), answer: "yes", run: { command: "locationAccess", args: { allow: true } } }, settings];
+    else if (why === "off") actions = [{ label: say.turnOnLocation(), answer: "yes", run: { command: "toggle", args: { setting: "location", state: "on" } } }, settings];
+    // No fix yet: the setting at least, never a dead end (the owner's first
+    // "I don't know where you are" had no button at all).
+    else actions = [settings];
     return Object.assign(new Error("location " + why), { said: say.location(why, purpose), actions: actions, location: why });
 }
 function here(env, purpose) {
@@ -868,7 +1045,7 @@ function here(env, purpose) {
 // what to do, and the request again once it is done (then).
 function blockedReply(e, then) {
     return { text: e.said, failed: e.location !== "ask", actions: (e.actions || []).map(function (a) {
-        return a.run && !(a.run.command === "locationAccess" && !a.run.args.allow) ? { label: a.label, run: Object.assign({}, a.run, { then: then }) } : a;
+        return a.run && !(a.run.command === "locationAccess" && !a.run.args.allow) ? Object.assign({}, a, { run: Object.assign({}, a.run, { then: then }) }) : a;
     }) };
 }
 
@@ -879,15 +1056,19 @@ function weather(args, env) {
     var say = env.lang.say;
     var imperial = env.units === "imperial";
     var week = args.day === "this week" || args.day === "this weekend";
+    // A day of the week ("the weather on Saturday"): its forecast, up to a week ahead.
+    var wd = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"].indexOf(String(args.day || "").replace(/^(?:on|this|next) /, ""));
+    var ahead = wd >= 0 ? (wd - new Date(env.now()).getDay() + 7) % 7 : args.day === "tomorrow" ? 1 : 0;
     var where = args.place ? geocode(env, args.place) : here(env, "weather");
     return where.then(function (pl) {
         var url = "https://api.open-meteo.com/v1/forecast?latitude=" + pl.lat + "&longitude=" + pl.lon +
             "&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max" +
             (typeof args.hour === "number" ? "&hourly=temperature_2m,weather_code,precipitation_probability" : "") +
-            "&forecast_days=" + (week ? 7 : 2) + "&timezone=auto" + (imperial ? "&temperature_unit=fahrenheit" : "");
+            "&forecast_days=" + (week ? 7 : Math.max(2, ahead + 1)) + "&timezone=auto" + (imperial ? "&temperature_unit=fahrenheit" : "");
         return getJson(env, url).then(function (f) {
             var unit = imperial ? "F" : "C";
-            var i = args.day === "tomorrow" ? 1 : 0, daily = f.daily || {};
+            var i = ahead, daily = f.daily || {};
+            if (wd >= 0 && (!daily.temperature_2m_max || daily.temperature_2m_max[i] === undefined)) throw new Error("no forecast for " + args.day);
             var open = { appId: "org.webosphoenix.weather", params: {}, title: "Weather" };
             if (week) {
                 var now = env.now(), days = (daily.time || (daily.temperature_2m_max || []).map(function (x, k) { return D.addDays(D.startOfDay(now), k); }))
@@ -909,7 +1090,7 @@ function weather(args, env) {
                                                  (f.hourly.precipitation_probability || [])[k], args.about, env.now()), open: open };
             }
             var hi = daily.temperature_2m_max ? daily.temperature_2m_max[i] : null, lo = daily.temperature_2m_min ? daily.temperature_2m_min[i] : null;
-            var code = i === 1 ? (daily.weather_code || [])[1] : f.current && f.current.weather_code;
+            var code = i >= 1 ? (daily.weather_code || [])[i] : f.current && f.current.weather_code;
             if (args.about) {
                 var chance = (daily.precipitation_probability_max || [])[i];
                 return { text: say.weatherWill(args.about, pl.name, args.day || "today", chance, WMO[(daily.weather_code || [])[i]] || "", hi, lo, unit), open: open };
@@ -1071,15 +1252,6 @@ function eventCard(env, e) {
 
 // ---- Calendar ----------------------------------------------------------------------------------
 
-// The calendar a new event goes in: the first one that can take it, the
-// device's own (the profile account's local calendar) first, as the
-// Calendar app's default.
-function defaultCalendar(env) {
-    return dbFind(env, "com.palm.calendar:1").then(function (cals) {
-        var ok2 = cals.filter(function (c) { return !c.isReadOnly; });
-        return ok2.filter(function (c) { return c.syncSource === "Local"; })[0] || ok2[0] || null;
-    });
-}
 // The events in [from, to), repeats expanded: [{id, title, start, end, allDay, location}] by start.
 function eventsIn(env, from, to) {
     return dbFind(env, "com.palm.calendarevent:1").then(function (all) {
@@ -1097,9 +1269,13 @@ function eventsIn(env, from, to) {
         return out.sort(function (a, b) { return (a.allDay === b.allDay ? 0 : a.allDay ? -1 : 1) || a.start - b.start; });
     });
 }
+// The calendar named (args.calendarId: "my Google calendar"), else the
+// default; an account's event goes in its own kind, for its connector to
+// send on (lib/commands-synergy.js pickCalendar).
 function addEvent(args, env) {
     var say = env.lang.say, now = env.now();
-    return defaultCalendar(env).then(function (cal) {
+    return synergy.pickCalendar(env, args.calendarId).then(function (picked) {
+        var cal = picked && picked.calendar;
         if (!cal) return { text: say.noCalendar(), open: { appId: CALENDAR_APP, params: {}, title: "Calendar" } };
         var invited = (args.invitees || []).map(function (n) {
             return findPerson(env, n).then(function (p) { return p && emailOf(p) ? { email: emailOf(p), commonName: personName(p), organizer: false } : null; });
@@ -1109,14 +1285,14 @@ function addEvent(args, env) {
             var start = args.allDay ? D.startOfDay(args.start) : args.start;
             // All day: midnight to 23:59:59, as the Calendar app saves one; else an hour by default.
             var end = args.allDay ? D.at(start, 23, 59) + 59000 : (args.end > start ? args.end : start + 3600000);
-            var ev = { _kind: "com.palm.calendarevent:1", calendarId: cal._id, accountId: cal.accountId || "",
+            var ev = { _kind: picked.eventKind, calendarId: cal._id, accountId: cal.accountId || "",
                 subject: String(args.title || "New event"), location: String(args.location || ""), note: String(args.note || ""),
                 dtstart: start, dtend: end, allDay: !!args.allDay, tzId: timeZone(),
                 rrule: args.repeat ? D.rrule(args.repeat, start) : null,
                 alarm: [{ action: "display", alarmTrigger: { value: args.allDay ? "-P1D" : "-PT15M", valueType: "DURATION" } }],
                 attendees: attendees, created: now, lastModified: now, transp: "OPAQUE" };
             return dbPut(env, [ev]).then(function (ids) {
-                return { text: say.eventAdded(ev.subject, start, end, ev.allDay, now, ev.location, args.repeat),
+                return { text: say.eventAdded(ev.subject, start, end, ev.allDay, now, ev.location, args.repeat, args.calendarName || ""),
                          data: { eventId: ids[0] },
                          open: { appId: CALENDAR_APP, params: { showEventDetail: ids[0] }, title: "Calendar" },
                          undo: { kind: "db", ids: ids, what: say.undoWhat.event(ev.subject) } };
@@ -1212,28 +1388,51 @@ var MEMO_COLORS = ["blue", "yellow", "green", "pink", "salmon"];
 
 // ---- Tasks ---------------------------------------------------------------------------------------
 
+// A list's name as people say it: "grocery", "groceries" and "the shopping
+// list" are one list, as Siri's and Google Assistant's shopping list is (the
+// sweep: "add batteries to the grocery list" made a second list beside
+// Groceries); "to do", "tasks", "reminders": the default list ("").
+function listKey(name) {
+    // "Add milk to my list": the default one (it made a list called "My").
+    var n = words(name).replace(/^(?:my|the|our)(?: |$)/, "").replace(/(?:^| )list$/, "").trim();
+    if (/^(?:|to ?-?dos?|todos?|tasks?|reminders?|inbox)$/.test(n)) return "";
+    if (/^(?:grocery|groceries|shopping|grocery shopping|food shopping|supermarket)$/.test(n)) return "grocery";
+    return n.replace(/ies$/, "y").replace(/([^s])s$/, "$1");
+}
+function listNamed(lists, name) {
+    var key = listKey(name), n = words(name);
+    if (!key) return lists.filter(function (l) { return l.isDefault; })[0] || null;
+    return lists.filter(function (l) { return words(l.name) === n; })[0]
+        || lists.filter(function (l) { return listKey(l.name) === key; })[0]
+        || lists.filter(function (l) { return words(l.name).indexOf(n) === 0; })[0] || null;
+}
 function taskList(env, name) {
+    // One list by its id (an account's: lib/commands-synergy.js).
+    if (name && name.id) return dbGet(env, name.id).then(function (l) { return l ? listOf(l, l.name) : taskList(env, ""); });
     return dbFind(env, "com.palm.tasklist:1").then(function (lists) {
-        if (name) {
-            var n = words(name);
-            var hit = lists.filter(function (l) { return words(l.name) === n; })[0]
-                || lists.filter(function (l) { return words(l.name).replace(/ list$/, "") === n.replace(/ list$/, ""); })[0]
-                || lists.filter(function (l) { return words(l.name).indexOf(n) === 0; })[0];
-            if (hit) return { id: hit._id, name: hit.name, made: false };
+        if (name && listKey(name)) {
+            var hit = listNamed(lists, name);
+            if (hit) return listOf(hit, hit.name);
             return dbPut(env, [{ _kind: "com.palm.tasklist:1", name: name, accountId: "", sortOrder: lists.length }])
                 .then(function (ids) { return { id: ids[0], name: name, made: true }; });
         }
         var inbox = lists.filter(function (l) { return l.isDefault; })[0];
-        if (inbox) return { id: inbox._id, name: "", made: false };
+        if (inbox) return listOf(inbox, "");
         return dbPut(env, [{ _kind: "com.palm.tasklist:1", name: "Inbox", accountId: "", sortOrder: 0, isDefault: true }])
             .then(function (ids) { return { id: ids[0], name: "", made: false }; });
     });
 }
+// A list of an account's (Todoist, Microsoft To Do, Google Tasks) names the kind its tasks go in, so its
+// connector sends them on, and the account (as Tasks does: @phoenix/luna tasks.ts save()).
+function listOf(l, name) {
+    var kind = typeof l.taskKind === "string" && /^[\w.-]+:\d+$/.test(l.taskKind) ? l.taskKind : "com.palm.task:1";
+    return { id: l._id, name: name, made: false, kind: kind, accountId: l.accountId || "" };
+}
 function addTask(env, text, list, due, remind) {
     var now = env.now();
     return taskList(env, list).then(function (l) {
-        var task = { _kind: "com.palm.task:1", summary: String(text).trim(), due: due, allDay: false, completed: false,
-            completedTime: null, priority: 0, listId: l.id, accountId: "", remind: remind ? due : null,
+        var task = { _kind: l.kind || "com.palm.task:1", summary: String(text).trim(), due: due, allDay: false, completed: false,
+            completedTime: null, priority: 0, listId: l.id, accountId: l.accountId || "", remind: remind ? due : null,
             uid: now.toString(36) + "-assistant@webosphoenix", createdTime: now, modifiedTime: now };
         return dbPut(env, [task]).then(function (ids) {
             var taskId = ids[0];
@@ -1254,14 +1453,28 @@ function remindTask(env, taskId, due) {
 
 // ---- Email ---------------------------------------------------------------------------------------
 // The newest email (from who, by name or address), and its words without markup.
-function latestEmail(env, who) {
-    return dbFind(env, "com.palm.email:1").then(function (all) {
+// The email received, newest first: not what the user sent, drafted or
+// deleted (their account's Sent, Outbox, Drafts and Trash folders, and
+// their own address: the owner's "Read the last email I got." read the
+// email the assistant had just sent for him).
+function receivedEmails(env, who) {
+    return Promise.all([dbFind(env, "com.palm.email:1"), dbFind(env, "com.palm.mail.account:1")]).then(function (got) {
+        var own = {}, mine = {};
+        got[1].forEach(function (a) {
+            ["sentFolderId", "outboxFolderId", "draftsFolderId", "trashFolderId"].forEach(function (k) { if (a[k]) own[a[k]] = true; });
+            if (a.email) mine[String(a.email).toLowerCase()] = true;
+            if (a.username) mine[String(a.username).toLowerCase()] = true;
+        });
         var w = String(who || "").trim();
-        return all.filter(function (e) {
-            if (e._del || (e.flags && e.flags.visible === false) || e.folderId === "outbox") return false;
+        return got[0].filter(function (e) {
+            if (e._del || (e.flags && e.flags.visible === false) || e.folderId === "outbox" || own[e.folderId]) return false;
+            if (e.from && e.from.addr && mine[String(e.from.addr).toLowerCase()]) return false;
             return !w || matches((e.from ? (e.from.name || "") + " " + (e.from.addr || "") : ""), w);
-        }).sort(function (a, b) { return (b.timestamp || 0) - (a.timestamp || 0); })[0] || null;
+        }).sort(function (a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
     });
+}
+function latestEmail(env, who) {
+    return receivedEmails(env, who).then(function (list) { return list[0] || null; });
 }
 function textOf(e) {
     var body = ((e.parts || []).filter(function (p) { return p.type === "body"; })[0] || {}).content || "";
@@ -1365,12 +1578,27 @@ function helpNow(env) {
 
 function runInner(cmd, args, env) {
     var say = env.lang.say, now = env.now();
-    var detailed = details.run(cmd, args, env);
+    var detailed = details.run(cmd, args, env) || everyday.run(cmd, args, env);
     if (detailed) return detailed;
+    var connected = synergy.run(cmd, args, env);
+    if (connected) return connected;
+    var searched = phoneSearch.run(cmd, args, env);
+    if (searched) return searched;
     switch (cmd.id) {
     case "call":
-        return launch(env, "org.webosphoenix.phone", { number: args.number, dial: true })
-            .then(function () { return { text: say.calling(args.name || args.number), open: { appId: "org.webosphoenix.phone", params: {}, title: "Phone" } }; });
+        // An emergency call, its countdown over: Phone's emergency window,
+        // which the shell opens over everything, the lock screen too (a
+        // card's call is behind it there), and which calls at once
+        // (org.webosphoenix.system emergencyCall: the runtime's, services/shellhost's);
+        // Phone's card where the shell cannot.
+        return (args.emergency ? lunaCall(env, "luna://org.webosphoenix.system/emergencyCall", { number: args.number, countdown: 0 }) : Promise.reject(null))
+            .catch(function () { return launch(env, "org.webosphoenix.phone", { number: args.number, dial: true }); })
+            // An emergency call: with Text My Location to the emergency contacts (lib/commands-sos.js).
+            .then(function () { return args.emergency ? everyday.sosOffer(env, args.number) : []; })
+            .then(function (actions) {
+                return Object.assign({ text: say.calling(args.name || args.number), open: { appId: "org.webosphoenix.phone", params: {}, title: "Phone" } },
+                                     actions.length ? { actions: actions } : {}, args.emergency ? { data: { opened: true } } : {});
+            });
     case "text":
         if (!String(args.message || "").trim())
             return launch(env, MESSAGING_APP, { to: args.number, name: args.name || "" })
@@ -1399,13 +1627,19 @@ function runInner(cmd, args, env) {
                 var threadOf = function (m) { return { appId: MESSAGING_APP, params: m.threadId ? { threadId: m.threadId } : {}, title: "Messaging" }; };
                 var said = say.lastMessage(from, last.messageText || "", last.localTimestamp || last.timestamp, now);
                 return { text: unread ? say.unreadMessages(unread.length) + " " + said : said, open: threadOf(last),
-                         actions: [{ label: say.replyTo(from), run: { command: "replyMessage", args: { message: "" } } }],
+                         actions: [{ label: say.replyTo(from), run: { command: "replyMessage", args: { message: "", ask: true } } }],
                          attachments: cards((unread || [last]).map(function (m) {
                              return { title: nameOf(m), subtitle: whenShown(env, m.localTimestamp || m.timestamp, null, false), detail: m.messageText || "", open: threadOf(m) };
                          })) };
             });
         });
     case "email":
+        if (!args.addr && (args.draft || !String(args.body || "").trim())) {
+            // A draft for the user to finish: Email's compose with the words, no recipient yet.
+            var draftParams = { summary: String(args.subject || ""), text: String(args.body || "") };
+            return launch(env, EMAIL_APP, draftParams)
+                .then(function () { return { text: say.emailDraft(args.subject, args.body), open: { appId: EMAIL_APP, params: draftParams, title: "Email" } }; });
+        }
         if (!String(args.body || "").trim())
             return launch(env, EMAIL_APP, { recipients: [{ type: "email", role: 1, value: args.addr, contactDisplay: args.name || args.addr }],
                                             summary: String(args.subject || "") })
@@ -1444,15 +1678,22 @@ function runInner(cmd, args, env) {
     case "timer": {
         var id = "assistant.timer." + now.toString(36) + Math.random().toString(36).slice(2, 6);
         var label = String(args.label || "");
+        // A sleep timer pauses whatever plays when it ends, and rings
+        // nothing: the media key the player with the audio focus acts on
+        // (as "pause" does), straight from the activity.
+        var sleep = !!args.sleep || /^sleep$/i.test(label);
+        if (sleep) label = "sleep";
+        var callback = sleep ? { method: "luna://org.webosphoenix.system/mediaKey", params: { key: "pause" } }
+            : { method: "palm://com.palm.applicationManager/launch",
+                params: { id: ASSISTANT_APP, params: { timerDone: { id: id, label: label, seconds: args.seconds } } } };
         return lunaCall(env, AM + "create", { start: true, replace: true, activity: {
-            name: id, description: "Assistant timer" + (label ? ": " + label : ""),
+            name: id, description: (sleep ? "Assistant sleep timer" : "Assistant timer" + (label ? ": " + label : "")),
             type: { foreground: true, persist: true },
             schedule: { start: activityDate(now + args.seconds * 1000) },
-            callback: { method: "palm://com.palm.applicationManager/launch",
-                        params: { id: ASSISTANT_APP, params: { timerDone: { id: id, label: label, seconds: args.seconds } } } } } })
+            callback: callback } })
             .then(function () {
-                env.storage.set("assistant:timer:" + id, { id: id, label: label, seconds: args.seconds, ends: now + args.seconds * 1000 });
-                return { text: say.timerSet(args.seconds, label), data: { timer: id, ends: now + args.seconds * 1000 },
+                env.storage.set("assistant:timer:" + id, { id: id, label: label, seconds: args.seconds, ends: now + args.seconds * 1000, sleep: sleep });
+                return { text: sleep ? say.sleepTimerSet(args.seconds) : say.timerSet(args.seconds, label), data: { timer: id, ends: now + args.seconds * 1000 },
                          undo: { kind: "timer", ids: [id], what: say.undoWhat.timer() } };
             });
     }
@@ -1498,6 +1739,12 @@ function runInner(cmd, args, env) {
     case "alarmList":
         return dbFind(env, "com.palm.clock.alarm:1").then(function (all) {
             all.sort(function (a, b) { return (a.hour * 60 + a.minute) - (b.hour * 60 + b.minute); });
+            // "When's my next alarm", "how long until my alarm goes off": the one to ring first, when.
+            if (args.next) {
+                var rings = all.filter(function (a) { return a.enabled !== false && !a._del; })
+                    .map(function (a) { return nextRing(a, now); }).filter(function (t) { return t; }).sort(function (a, b) { return a - b; });
+                return { text: say.nextAlarm(rings.length ? rings[0] : null, now), open: { appId: CLOCK_APP, params: {}, title: "Clock" } };
+            }
             return { text: say.alarmsList(all), open: { appId: CLOCK_APP, params: {}, title: "Clock" } };
         });
     case "alarmManage": {
@@ -1520,7 +1767,7 @@ function runInner(cmd, args, env) {
                      undo: { kind: "db", ids: [r.taskId], activities: r.task.due ? ["org.webosphoenix.tasks.remind." + r.taskId] : [], what: say.undoWhat.task(r.task.summary) } };
         });
     case "task":
-        return addTask(env, args.text, args.list || "", args.due || null, false).then(function (r) {
+        return addTask(env, args.text, args.listId ? { id: args.listId } : args.list || "", args.due || null, false).then(function (r) {
             return { text: say.taskAdded(r.task.summary, r.list.name, r.task.due, now, r.list.made),
                      open: { appId: TASKS_APP, params: { taskId: r.taskId }, title: "Tasks" }, data: { taskId: r.taskId },
                      undo: { kind: "db", ids: r.list.made ? [r.taskId, r.list.id] : [r.taskId], what: say.undoWhat.task(r.task.summary) } };
@@ -1552,6 +1799,7 @@ function runInner(cmd, args, env) {
                      })) };
         });
     case "contactAdd": {
+        if (args.update && args.personId) return addToContact(args, env);
         // As runtime/sample-data.js and the contacts linker store a local
         // contact: the contact in the profile account, and its person.
         return dbFind(env, "com.palm.account:1").then(function (accounts) {
@@ -1560,7 +1808,7 @@ function runInner(cmd, args, env) {
             var given = parts.length > 1 ? parts.slice(0, -1).join(" ") : parts[0], family = parts.length > 1 ? parts[parts.length - 1] : "";
             var name = { givenName: given, familyName: family, middleName: "", honorificPrefix: "", honorificSuffix: "" };
             var type = "type_" + (args.label || "mobile");
-            var phones = args.number ? [{ value: String(args.number), type: type, primary: true }] : [];
+            var phones = args.number ? [{ value: phoneShown(args.number), type: type, primary: true }] : [];
             var emails = args.email ? [{ value: String(args.email), type: "type_home", primary: true }] : [];
             return lunaCall(env, DB + "reserveIds", { count: 2 }).then(function (r) {
                 var cid = r.ids[0], pid = r.ids[1];
@@ -1785,11 +2033,42 @@ function runInner(cmd, args, env) {
         return Promise.resolve({ text: say.answer(arith.pretty(args.expression), arith.format(v)), data: { value: v } });
     }
     case "time":
+        if (args.what === "until") return Promise.resolve({ text: say.daysUntil(args.name, Math.round((D.startOfDay(args.day) - D.startOfDay(now)) / 864e5), args.unit, args.day, now) });
+        if (args.what === "weekday") return Promise.resolve({ text: say.dayOfWeek(args.name, args.day, now) });
+        if (args.what === "year") return Promise.resolve({ text: say.year(now) });
         return Promise.resolve({ text: args.what === "date" ? say.date(now) : say.time(now) });
-    case "search":
-        return defaultSearchUrl(env, args.query).then(function (url) {
+    case "settingStatus": {
+        var READ = {
+            wifi: function () { return lunaCall(env, "luna://com.webos.service.wifi/getstatus", {}).then(function (r) { return r.status ? r.status !== "serviceDisabled" : null; }); },
+            bluetooth: function () { return lunaCall(env, "luna://com.webos.service.bluetooth2/adapter/getStatus", {}).then(function (r) { var a = (r.adapters || [])[0]; return a ? !!a.powered : null; }); },
+            airplane: function () { return lunaCall(env, "luna://com.webos.service.connectionmanager/getstatus", {}).then(function (r) { return r.offlineMode ? r.offlineMode === "enabled" : null; }); },
+            flashlight: function () { return lunaCall(env, "luna://org.webosports.service.torch/getStatus", {}).then(function (r) { return typeof r.on === "boolean" ? r.on : null; }); },
+            location: function () { return lunaCall(env, LOCATION + "getAllLocationHandlers", {}).then(function (r) { return (r.handlers || []).length ? r.handlers.some(function (h) { return h.state; }) : null; }); },
+            rotationLock: function () { return lunaCall(env, SYSTEM_SERVICE + "getPreferences", { keys: ["rotationLock"] }).then(function (r) { return typeof r.rotationLock === "boolean" ? r.rotationLock : null; }); },
+            rotation: function () { return lunaCall(env, SYSTEM_SERVICE + "getPreferences", { keys: ["rotationLock"] }).then(function (r) { return typeof r.rotationLock === "boolean" ? !r.rotationLock : null; }); },
+            dnd: function () { return lunaCall(env, AUDIO + "getInputVolume", { streamType: "pringtones" }).then(function (r) { return typeof r.volume === "number" ? r.volume === 0 : null; }); },
+            ringer: function () { return lunaCall(env, AUDIO + "getInputVolume", { streamType: "pringtones" }).then(function (r) { return typeof r.volume === "number" ? r.volume > 0 : null; }); }
+        };
+        var read = READ[args.setting];
+        return (read ? read() : Promise.resolve(null)).catch(function () { return null; }).then(function (on) {
+            var out = { text: say.settingIs(args.setting, on) };
+            if (on !== null && TOGGLE_RUN[args.setting]) out.actions = [{ label: say.turnItOn(args.setting, !on), run: { command: "toggle", args: { setting: args.setting, state: on ? "off" : "on" } } }];
+            return out;
+        });
+    }
+    case "chat":
+        return Promise.resolve({ text: say.chat(args.kind || "", env.storage ? (env.storage.get("assistant:chatTurn") || 0) : 0) }).then(function (r) {
+            if (env.storage) env.storage.set("assistant:chatTurn", (env.storage.get("assistant:chatTurn") || 0) + 1);
+            return r;
+        });
+    case "search": {
+        // The words as asked, without the question's own mark ("Searching
+        // the web for “who won the 1998 World Series”.").
+        var query = String(args.query || "").trim().replace(/[\s?.!]+$/, "");
+        return defaultSearchUrl(env, query).then(function (url) {
             return lunaCall(env, "luna://com.palm.applicationManager/open", { target: url });
-        }).then(function () { return { text: say.searching(args.query) }; });
+        }).then(function () { return { text: say.searching(query) }; });
+    }
     case "callBack":
     case "voicemail":
         if (cmd.id === "voicemail" && args.action !== "call") {
@@ -1800,11 +2079,20 @@ function runInner(cmd, args, env) {
             return { text: say.calling(cmd.id === "voicemail" ? "voicemail" : args.name || args.number), open: { appId: "org.webosphoenix.phone", params: {}, title: "Phone" } };
         });
     case "readEmail": {
+        if (args.list && args.list.length > 1) {
+            var box = { appId: EMAIL_APP, params: {}, title: "Email" };
+            return Promise.resolve({ text: say.readEmails(args.list.map(function (e) { return { from: e.from ? e.from.name || e.from.addr : "", subject: e.subject || "", at: e.timestamp || 0 }; }), now),
+                                     open: box,
+                                     attachments: cards(args.list.map(function (e) {
+                                         var o = { appId: EMAIL_APP, params: { emailId: e._id }, title: "Email" };
+                                         return { title: e.subject || say.noSubject(), subtitle: (e.from ? e.from.name || e.from.addr : "") + " · " + whenShown(env, e.timestamp, null, false), detail: e.summary || textOf(e), open: o };
+                                     })) });
+        }
         var mail = { appId: EMAIL_APP, params: { emailId: args.emailId }, title: "Email" };
         var fromName = args.from.name || args.from.addr || "someone";
         return Promise.resolve({ text: say.readEmail(fromName, args.subject, args.summary, args.at, now), open: mail,
                                  attachments: cards([{ title: args.subject || "(no subject)", subtitle: fromName + " · " + whenShown(env, args.at, null, false), detail: args.summary, open: mail }]),
-                                 actions: [{ label: say.replyTo(fromName), run: { command: "emailReply", args: { who: args.from.addr || fromName, body: "" } } }] });
+                                 actions: [{ label: say.replyTo(fromName), run: { command: "emailReply", args: { who: args.from.addr || fromName, body: "", ask: true } } }] });
     }
     case "emailReply":
         return runInner(find(BUILT_IN, "email"), { who: args.addr, addr: args.addr, name: args.name, subject: args.subject, body: args.body }, env);
@@ -1908,9 +2196,9 @@ function runInner(cmd, args, env) {
     }
     case "taskList":
         return dbFind(env, "com.palm.tasklist:1").then(function (lists) {
-            var name = String(args.list || ""), n = words(name).replace(/ list$/, "");
-            var l = name ? lists.filter(function (x) { return words(x.name).replace(/ list$/, "") === n; })[0] || lists.filter(function (x) { return words(x.name).indexOf(n) === 0; })[0]
-                         : lists.filter(function (x) { return x.isDefault; })[0];
+            var name = String(args.list || "");
+            if (!listKey(name)) name = "";
+            var l = name ? listNamed(lists, name) : lists.filter(function (x) { return x.isDefault; })[0];
             if (name && !l) return { text: say.noList(name), open: { appId: TASKS_APP, params: {}, title: "Tasks" } };
             return dbFind(env, "com.palm.task:1").then(function (tasks) {
                 // "for today": what is due by the end of that day (or of the week).
@@ -1965,7 +2253,7 @@ function runInner(cmd, args, env) {
         }
         return helpNow(env).then(function (nowList) {
             var groups = [{ type: "examples", title: say.rightNow(), items: nowList.map(function (x) { return { text: x }; }) }]
-                .concat(HELP_GROUPS.map(function (g) { return { type: "examples", title: g.title, items: g.examples.map(function (x) { return { text: x }; }) }; }));
+                .concat(HELP_GROUPS.concat(env.lang.everydayHelp || []).map(function (g) { return { type: "examples", title: g.title, items: g.examples.map(function (x) { return { text: x }; }) }; }));
             return { text: say.helpOverview(), attachments: groups, open: { appId: HELP_APP, params: {}, title: "Help" } };
         });
     }
@@ -2007,6 +2295,9 @@ function run(cmd, args, env) {
         });
     } });
     return runInner(cmd, args, Object.assign({}, env, { luna: spy })).then(function (out) {
+        // None had the words: what they mean, when the index is on (lib/commands-search.js).
+        return phoneSearch.augment(cmd, args, env, out);
+    }).then(function (out) {
         // The one item the answer shows: what "it" means next (lib/details.js).
         if (out && out.focus === undefined) {
             var f = details.focusOf(out);
@@ -2083,10 +2374,28 @@ function undo(u, env) {
     if (u.kind === "merge") return lunaCall(env, DB + "merge", { objects: u.objects || [] });
     if (u.kind === "multi") return (u.steps || []).reduce(function (p, step) { return p.then(function () { return undo(step, env); }); }, Promise.resolve());
     if (u.kind === "put") return lunaCall(env, DB + "put", { objects: (u.objects || []).map(function (o) { var c = Object.assign({}, o); delete c._rev; delete c._del; return c; }) });
+    // A system preference as it was, or the Assistant's own setting (lib/commands-settings.js).
+    if (u.kind === "prefs") return lunaCall(env, SYSTEM_SERVICE + "setPreferences", u.prefs || {});
+    if (u.kind === "settings") return Promise.resolve(env.setSettings(u.settings || {}));
+    // The everyday features' own (lib/commands-everyday.js: the home's devices as they were).
+    var own = everyday.undo(u, env);
+    if (own) return own;
     return cancel(u.activities).then(function () { return lunaCall(env, DB + "del", { ids: u.ids || [] }); });
 }
 
+// The everyday features (lib/commands-everyday.js: each area's own file).
+var everyday = require("./commands-everyday")({ D: D, lunaCall: lunaCall, dbFind: dbFind, cards: cards, whenShown: whenShown, launch: launch,
+                                                TOGGLE_RUN: TOGGLE_RUN, TOGGLE_STATE: TOGGLE_STATE, activityDate: activityDate, localDate: localDate,
+                                                personName: personName, findPerson: findPerson, people: people, here: here, getJson: getJson,
+                                                blockedReply: blockedReply, addTask: addTask,
+                                                prepare: prepare, run: run, find: find, needsConfirm: needsConfirm, BUILT_IN: BUILT_IN });
+Array.prototype.push.apply(BUILT_IN, everyday.COMMANDS);
+
 module.exports = {
+    everyday: everyday,
+    findPeople: findPeople,
+    personName: personName,
+    dbGet: dbGet,
     BUILT_IN: BUILT_IN,
     HELP_GROUPS: HELP_GROUPS,
     catalogue: catalogue,
@@ -2110,6 +2419,8 @@ module.exports = {
     emailOf: emailOf,
     taskList: taskList,
     remindTask: remindTask,
+    // What Search your phone found, as the conversation shows it (cards, pictures).
+    phoneShown: function (env, results) { return phoneSearch.shown(env, results); },
     scheduleAlarm: scheduleAlarm,
     nextRing: nextRing,
     normalizedPhone: normalizedPhone

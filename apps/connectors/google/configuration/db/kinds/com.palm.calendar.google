@@ -1,0 +1,18 @@
+{
+    "id": "com.palm.calendar.google:1",
+    "owner": "org.webosphoenix.service.google",
+    "sync": false,
+    "extends": [
+        "com.palm.calendar:1"
+    ],
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        }
+    ]
+}

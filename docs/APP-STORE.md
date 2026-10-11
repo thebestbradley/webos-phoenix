@@ -736,6 +736,13 @@ months, for one developer working part-time-ish on it.
 | **A5** | Native and services | Sandboxed native apps (jailer) and JS services; per-ACG review; update of ACG allowlist | **L** | A3; a sandbox design |
 | later | Payments | Only if needed | — | — |
 
+Small client improvements offered to the owner (11 October 2026, when the
+web-app feed looked like "the original 15": the list showed the first page
+of the catalog only), not built yet: the list loads the next page as it is
+scrolled, with the catalog's total shown ("1,240 apps"); and the letter
+icon drawn for an app without one (1.3) made to look like a webOS icon
+(the plate, the shadow, a colour from the app's `theme_color` or name).
+
 Dependencies on OSE features, in one place:
 
 | OSE feature | Used for | Risk |

@@ -6,8 +6,9 @@
 // (apps/assistant/service/assistant.js outcome), as
 //   {type: "images", total, items: [{path, open}]}  a strip of thumbnails,
 //       "+N more" past those shown;
-//   {type: "cards", items: [{title, subtitle?, detail?, open?}]}  a card
-//       each (an event, a contact, a memo, an email);
+//   {type: "cards", items: [{title, subtitle?, detail?, icon?, open?}]}  a card
+//       each (an event, a contact, a memo, an email); icon: the app it opens
+//       (a device path: Search your phone's results), at its left;
 //   {type: "examples", title, items: [{text}]}  things to ask (help), as
 //       chips under their app's name: a tap puts it in the field (asked(index)).
 // A tap on one is shown(index), index across every attachment's items (the
@@ -153,16 +154,31 @@ Column {
                             required property int index
                             objectName: "assistantCard-" + index
                             width: att.maxWidth
-                            height: cardText.implicitHeight + Theme.px(16)
+                            height: Math.max(cardText.implicitHeight, cardIcon.visible ? cardIcon.height : 0) + Theme.px(16)
                             radius: Theme.px(10)
                             color: cardArea.pressed ? "#50FFFFFF" : "#30FFFFFF"
                             border.color: "#50FFFFFF"
                             border.width: 1
+                            Image {
+                                id: cardIcon
+                                visible: !!card.modelData.icon && status !== Image.Error
+                                x: Theme.px(10)
+                                y: Theme.px(8)
+                                width: Theme.px(32)
+                                height: Theme.px(32)
+                                fillMode: Image.PreserveAspectFit
+                                asynchronous: true
+                                sourceSize.width: width * 2
+                                source: !card.modelData.icon ? ""
+                                        : att.source && typeof att.source._iconUrl === "function"
+                                          ? att.source._iconUrl(card.modelData.icon, card.modelData.open ? card.modelData.open.appId : "")
+                                          : "file://" + card.modelData.icon
+                            }
                             Column {
                                 id: cardText
-                                x: Theme.px(12)
+                                x: cardIcon.visible ? cardIcon.x + cardIcon.width + Theme.px(10) : Theme.px(12)
                                 y: Theme.px(8)
-                                width: parent.width - Theme.px(24)
+                                width: parent.width - x - Theme.px(12)
                                 Text {
                                     width: parent.width
                                     text: card.modelData.title || ""

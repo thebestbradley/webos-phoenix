@@ -15,10 +15,10 @@ plan, milestone by milestone. Every gap still open, by area and priority:
 | M0: shell in a simulator (done) | 13 | 0 |
 | Source material still to mine | 3 | 1 |
 | Build infrastructure | 1 | 2 |
-| Development devices | 0 | 3 |
+| Development devices | 0 | 4 |
 | M1: running on webOS OSE | 0 | 10 |
 | M2: legacy UI parity | 18 | 2 |
-| M3: phones and tablets | 0 | 7 |
+| M3: phones and tablets | 0 | 8 |
 | M4: core apps and services | 12 | 10 |
 | M5: modernize, within 1.x | 2 | 3 |
 | M6: the last 1.0 features | 13 | 1 |
@@ -63,15 +63,18 @@ Phoenix UI, PixiOS with Bennu UI, an XR bird) are in [BRANDING.md](BRANDING.md).
 | [APP-STORE.md](APP-STORE.md) | Web apps as webOS apps, the Phoenix Catalog, App Museum II and Preware, streaming apps and DRM | 1.0, 2.0 |
 | [ANDROID.md](ANDROID.md) | Android apps through Waydroid, as webOS cards | 1.0 |
 | [AI-AND-MCP.md](AI-AND-MCP.md) | The voice assistant (1.0), the MCP layer and the AI agent (2.0) | 1.0, 2.0 |
+| [ASSISTANT-PARITY.md](ASSISTANT-PARITY.md) | The Assistant measured against the others (11 October 2026): the review's bugs, the everyday features, what needs a model | 1.0, 2.0 |
 | [TERMINAL.md](TERMINAL.md) | The Terminal app and Developer Mode | M5 |
 | [SCREENSHOTS.md](SCREENSHOTS.md) | Screenshots as the original took them (1.x), and preview, markup, recording, text and AI look-up (2.0) | 1.0, 2.0 |
 | [GESTURE-BAR.md](GESTURE-BAR.md) | The original's light bar animations (1.x), buttons at the ends of the gesture area, and the animated 2.0 bar | 1.0, 2.0 |
 | [COMMUNITY-FEATURES.md](COMMUNITY-FEATURES.md) | What the community added after HP (webOS CE 3.1.0, LunaCE, Preware patches, webOS Archive), ranked, with 1.x and 2.0 targets | 1.0, 2.0 |
 | [SECURITY-APPS.md](SECURITY-APPS.md) | Passwords and Authenticator threat model | M4 |
 | [CONVERGENCE.md](CONVERGENCE.md) | 2.0: desktop mode, TV mode, wireless display | 2.0 |
+| [design-2.0/](design-2.0/README.md) | 2.0's UI layer: five design directions drawn on the same screens (Aurora Glass, Onyx Reborn, Phoenix Material, Ember, Ember Glass), with their specs, sources and a gallery | 2.0 |
 | [LUNEOS.md](LUNEOS.md), [WEBOS-FAMILY.md](WEBOS-FAMILY.md) | LuneOS, webOS Community Edition, OSE and Phoenix compared; which LuneOS layers to build on | M1, M3 |
 | [LEGAL.md](LEGAL.md), [BRANDING.md](BRANDING.md) | Licences, artwork and sounds, names and trademarks | all |
 | [PLATFORM.md](PLATFORM.md), [PLATFORM-BUILD-PROMPT.md](PLATFORM-BUILD-PROMPT.md) | The servers: website, account, developer portal, the signed feeds (catalog, updates, drivers), downloads, cloud services; the prompt for building them in Laravel | 1.0 |
+| [DEV-EXTENSION-PROMPT.md](DEV-EXTENSION-PROMPT.md) | The brief for a later VS Code and Cursor extension for developers (its own repository) | later |
 
 ## Decisions so far
 
@@ -150,11 +153,36 @@ mouse pointer, shows the Mac's menu bar and only reaches as far as the Mac.
       developer account and shared through TestFlight. Qt WebEngine does not
       exist on iOS, so cards use WKWebView (Qt WebView): the live page while
       maximized, a snapshot while the card is scaled, stacked or thrown
-- [ ] **ARM64 virtual machine image** (`qemuarm64`-style, UEFI) for UTM on
-      Apple silicon Macs: runs OSE and Phoenix at near-native speed through
-      Apple's virtualization, the real OS rather than the simulator. On an
-      iPad, UTM can only emulate (no hypervisor access), which is far too
-      slow for OSE and Chromium, and touch reaches the guest as a pointer
+- [ ] 🟡 **ARM64 virtual machine image**: `phoenix-vm-arm64` (OE's
+      `qemuarm64`, QEMU's kernel boot rather than UEFI, virtio GPU, multitouch,
+      network, sound and disk) with the phones' package set and every first
+      target's configuration, chosen at boot (`phoenix.device=`);
+      `scripts/vm.sh <device>` starts it with QEMU (HVF on Apple silicon, KVM
+      or TCG on Linux) at the device's CPU count, memory and resolution, and
+      prints UTM's settings ([HARDWARE.md](HARDWARE.md#device-vms),
+      [BUILDING-MAC.md](BUILDING-MAC.md#run-it-in-a-vm)). Parses and resolves
+      (`scripts/parse-check.sh`, 11 October 2026; in CI's matrix); not built or
+      booted yet: the owner's first boot, on the Mac. The real OS rather than the simulator, at near-native speed.
+      On an iPad, UTM can only emulate (no hypervisor access), expected to be
+      far too slow for OSE and Chromium, and touch reaches the guest as a
+      pointer: the next item tries it
+- [ ] 🟡 **iPad (and Mac), in UTM**: `scripts/make-utm.sh <device>` makes a
+      UTM bundle of the ARM64 image with `vm.sh`'s machine, for UTM SE (App
+      Store, interpreter) or UTM with JIT (sideloaded) on an iPad, or UTM on
+      a Mac: the PineTab2 by default, at most 4 CPUs and 3 GB on an iPad,
+      virgl GL, UTM's USB tablet and keyboard (one pointer: SPICE carries no
+      touches), long systemd timeouts for emulation
+      ([BUILDING-MAC.md](BUILDING-MAC.md#run-it-on-an-ipad-with-utm)).
+      Checked against UTM's source (4.0 to 5.0.6: `tools/check-utm-bundle.py`)
+      and UTM's QEMU command started with a stand-in kernel
+      (`tools/test-make-utm.py --boot`, 11 October 2026); not run in UTM or
+      with the image yet: the owner's first try decides whether it is a
+      development route (OPEN-QUESTIONS Q170-Q173)
+- [x] **Device profiles in the simulator**: `phoenix-sim --device <id>`
+      (View > Device) is each first target as its image configures it: exact
+      pixels, density, layout, buttons, rounded corners and camera cutout
+      (the status bar makes room for the cutout; HARDWARE.md, "Device
+      profiles")
 
 ## M1: running on webOS OSE
 
@@ -171,7 +199,8 @@ build on LuneOS's layers ([LUNEOS.md](LUNEOS.md#9-recommendation)).
 - [ ] Browser on the device: a native page view for enyo.WebView under WebAppMgr
       (OSE has no BrowserAdapter), e.g. a compositor-side view like the simulator's
 - [ ] Rotation on the device: the orientation sensor and apps' orientation requests
-- [ ] `device.json` read on the device (hardware home button, and later other features)
+- [ ] `device.json` read on the device (hardware home button, form factor, density; installed per
+      machine by `phoenix-device-config`)
 - [ ] Pixel comparison against reference screenshots of real devices
 
 ## M2: legacy UI parity
@@ -230,7 +259,12 @@ simulator, the P2 rows are listed there.
 Device tiers, the driver plan and the phased timeline are in
 [HARDWARE.md](HARDWARE.md).
 
-- [ ] First devices on LuneOS's layers: Pixel 3a (Halium and mainline), OnePlus 6, PinePhone Pro, FuriLabs FLX1s
+- [ ] 🟡 First targets (owner, 11 October 2026; [HARDWARE.md](HARDWARE.md#first-targets)):
+      Fairphone 6/6+ (phone), AYN Odin 2 Portal (tablet), PinePhone Pro and
+      PineTab2 (the original PinePhone dropped, 11 October 2026), on mainline
+      kernels: machines, pinned kernels, boot images and device configuration in
+      meta-phoenix, parsed in CI; not built, waiting on hardware and a newer Mesa ([OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q79-Q86)
+- [ ] Later devices on LuneOS's layers: Pixel 3a (Halium and mainline), OnePlus 6, FuriLabs FLX1s
 - [ ] A keyboard phone: Zinwa Q25 (unlocked, LuneOS config `q25`)
 - [ ] Telephony and SMS (oFono, LuneOS's `webos-telephonyd`), cellular indicators
 - [ ] Sensors: accelerometer, proximity, ambient light
@@ -452,8 +486,9 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
       (`server/marketplace`: `/updates/`, published with its admin API; the
       device's default feed) ([APP-RUNTIME.md](APP-RUNTIME.md#system-updates)); to do:
       the A/B image, RAUC's bootloader setup and signing keys per device,
-      and hosting the catalog server (its public address in
-      `/etc/palm/updates.json` and the Marketplace's sources)
+      and hosting the platform (its addresses and keys in
+      `/etc/palm/phoenix/servers.json`, meta-phoenix's `PHOENIX_*` settings;
+      the device side is ready: [PLATFORM-CLIENT.md](PLATFORM-CLIENT.md))
 
 ## 2.0: modern webOS
 
@@ -493,6 +528,12 @@ supported alongside it.
       for pages without a bundler; the four Notes demos use it
       ([APP-SDK.md](APP-SDK.md)). Next: publishing it (OPEN-QUESTIONS.md
       Q62), a full Enact theme (Q63)
+- [ ] Later, when there are people for it: a developer extension for VS
+      Code and Cursor, in its own repository (the owner, 11 October 2026):
+      installs and updates the simulator, new projects in each supported
+      framework, run on the device profiles, connector tests, the catalog's
+      checks, publishing. The brief for the agent that builds it:
+      [DEV-EXTENSION-PROMPT.md](DEV-EXTENSION-PROMPT.md)
 - [ ] Screenshots on a par with iOS and Android: preview, markup, full
       page, recording, text in screenshots, Ask and circle to look up
       ([SCREENSHOTS.md](SCREENSHOTS.md) SC3-SC8)

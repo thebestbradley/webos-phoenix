@@ -1,0 +1,8 @@
+{
+  "name": "@phoenix/platform",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix's client side of the Phoenix platform (docs/PLATFORM.md, docs/PLATFORM-CLIENT.md): the one server configuration (/etc/palm/phoenix/servers.json and its Developer Mode override), signed feeds (detached Ed25519 signatures, the offline root's key delegations), staged rollout buckets, the signed revocation list, and the account, backup, push and assistant API clients. Plain CommonJS without dependencies: runs on a device (run-js-service), in the simulator and in tests",
+  "license": "Apache-2.0",
+  "main": "src/index.js"
+}

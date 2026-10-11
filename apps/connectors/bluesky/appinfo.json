@@ -1,0 +1,59 @@
+{
+    "id": "org.webosphoenix.bluesky",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Bluesky",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "uiRevision": 2,
+    "phoenix": {
+        "//": "Not in the launcher: the app carries the Bluesky account (accounts/wizard.html, the template in public/accounts, the service) and the share sheet's page for posting (index.html, the kit's compose page). oauth/client-metadata.json is the AT Protocol OAuth client's metadata document, hosted at its client_id address (docs/PLATFORM.md 6.5.6), not read on the device. A connector package of Phoenix's own, installed from the catalog's Connections (docs/SYNERGY-CONNECTORS.md 7). shareTargets is written from the definition's share (service/connector.js).",
+        "hidden": true,
+        "shareTargets": [
+            {
+                "types": [
+                    "text/plain",
+                    "text/uri-list",
+                    "image/jpeg",
+                    "image/png",
+                    "image/webp",
+                    "image/gif"
+                ],
+                "label": "Bluesky",
+                "connector": {
+                    "templateId": "com.webosphoenix.bluesky",
+                    "service": "org.webosphoenix.service.bluesky",
+                    "accepts": {
+                        "text": {
+                            "maxLength": 300
+                        },
+                        "link": true,
+                        "image": {
+                            "max": 4,
+                            "maxBytes": 1000000,
+                            "mimeTypes": [
+                                "image/jpeg",
+                                "image/png",
+                                "image/webp",
+                                "image/gif"
+                            ],
+                            "altText": {
+                                "maxLength": 2000
+                            }
+                        }
+                    },
+                    "accountLabel": "@{username}"
+                }
+            }
+        ]
+    },
+    "requiredPermissions": [
+        "accounts.transport",
+        "bluesky.account",
+        "phoenix.appmanager.launch"
+    ]
+}

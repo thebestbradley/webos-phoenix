@@ -53,6 +53,13 @@
 // 45 s by default; the owner, 10 October 2026); then it asks whether there
 // is anything else, listens 10 s more, and says goodbye in its personality
 // and closes; "I'm done" (or "no" to the check-in) says goodbye at once.
+// Every reply that ends on buttons asks them aloud there (the service's
+// ask {voice}: "Want me to search the web for that?", a read-back, "Which
+// one: ...?"), and the answer is listened for in that wait like any other
+// words; the buttons stay, and whichever answers first answers both. A
+// read-back nobody answered before the wait is over is cancelled at the
+// check-in (never done). A search, or an app a spoken choice opened, comes
+// up in front: said, the view makes way, as for the button.
 // Woken with nothing said, it closes after a moment. Over the lock screen
 // (locked) the service does only what shows nothing private; for the rest
 // it says to unlock, and unlockNeeded hands the words to the shell, which
@@ -283,6 +290,10 @@ Item {
             _entering = true;
             ++_session;
             _fetchVocabulary();
+            // The on-device model started while the user speaks, so a
+            // request that needs it does not wait for it to load (the
+            // service's warm: where it fits the memory; nothing waits).
+            _call("warm", {});
             if (!listening)
                 status = "";
             busy = false;
@@ -381,6 +392,31 @@ Item {
         if (r.thread)
             threadId = r.thread.id;
         refresh();
+        // An emergency call counting down (the service places it when the
+        // countdown ends, unless Cancel): read again then, to show it placed.
+        var said = r.messages || [], last = said[said.length - 1];
+        if (last && last.status === "pending" && last.confirm && last.confirm.countdown) {
+            countdownRefresh.interval = last.confirm.countdown * 1000 + 600;
+            countdownRefresh.restart();
+        }
+    }
+    Timer {
+        id: countdownRefresh
+        repeat: false
+        onTriggered: ov._countdownOver()
+    }
+    // Read again as the countdown ends: placed, Phone's emergency window is
+    // up over everything (the reply's data.opened), and the view makes way.
+    function _countdownOver() {
+        if (threadId === "")
+            return;
+        _call("thread", { id: threadId }, function (r) {
+            if (!r || r.returnValue === false)
+                return;
+            ov.messages = r.messages || [];
+            if (ov._opened(r.messages))
+                ov.closeRequested();
+        });
     }
 
     // done (optional) hears the reply, after the view has.
@@ -410,10 +446,25 @@ Item {
             p.newThread = true;
         _call("ask", p, function (r) {
             _settled(r);
-            ov._afterReply();
+            // Typed, and the browser came up (a web search, a site): out of
+            // its way at once, as for the Search the web button. Spoken: once
+            // it has been said (followTimer).
+            if (!ov.voice && !ov.handsFree && ov._opened(r && r.messages))
+                ov.closeRequested();
+            else
+                ov._afterReply();
             if (done)
                 done(r);
         });
+    }
+    // The reply brought something up in front (the service's data.opened:
+    // the browser on a search, an app a spoken choice opened, Settings).
+    function _opened(list) {
+        var last = null;
+        for (var i = (list || []).length - 1; i >= 0 && !last; --i)
+            if (list[i] && list[i].role === "assistant")
+                last = list[i];
+        return !!(last && last.data && last.data.opened);
     }
     function choose(message, choice) {
         if (busy)
@@ -427,12 +478,19 @@ Item {
             return;
         }
         busy = true;
-        _call("choose", { threadId: threadId, messageId: message.id, choice: choice.id }, function (r) {
+        var p = { threadId: threadId, messageId: message.id, choice: choice.id };
+        // A spoken conversation goes on after a tap: what comes next is
+        // asked aloud too, and listened for.
+        if (voice)
+            p.voice = true;
+        _call("choose", p, function (r) {
             _settled(r);
             // Settings, the browser or the app offered came up ("open", or
             // "open:<n>", one of the things to do next): out of their way.
             if (r && r.returnValue !== false && (choice.id === "settings" || choice.id === "web" || choice.id === "open" || choice.id.indexOf("open:") === 0))
                 ov.closeRequested();
+            else
+                ov._afterReply();
         });
     }
     // An item an answer shows (a photo, an event), tapped: its app comes
@@ -461,7 +519,11 @@ Item {
             p.voice = true;
         _call("confirm", p, function (r) {
             _settled(r);
-            ov._afterReply();
+            // As for a request (ask): what it brought up in front, out of its way.
+            if (!ov.voice && !ov.handsFree && ov._opened(r && r.messages))
+                ov.closeRequested();
+            else
+                ov._afterReply();
         });
     }
     // New: a fresh conversation here. The one before is kept (it has
@@ -483,7 +545,8 @@ Item {
     // ---- The bird ----------------------------------------------------------------------
     // What a request's reply was, from its new messages (the service's
     // message status, apps/assistant/service/assistant.js): "done" (a
-    // command ran), "failed", "asking" (a read-back waits), "choices"
+    // command ran), "failed", "asking" (a read-back or a question waits: status
+    // "pending" or "ask"), "choices"
     // ("I can't do that" with Ask/Search), "cancelled", or "answer".
     function outcomeOf(list) {
         var last = null;
@@ -496,7 +559,7 @@ Item {
             return "answer";
         if (last.status === "failed")
             return "failed";
-        if (last.status === "pending" && last.confirm)
+        if ((last.status === "pending" && last.confirm) || last.status === "ask")
             return "asking";
         // (A command done may offer its app, "Open Calendar": still done.)
         if (last.status === "done" && last.command)
@@ -569,13 +632,21 @@ Item {
         }
     }
     readonly property bool speaking: !!speech && !!speech.speaking
-    // A read-back waiting for its answer, or a follow-up question (the
-    // service's lib/followups.js: "Where is it?" with its answers): the bird
-    // asks, and a spoken turn listens for the answer.
+    // A read-back waiting for its answer, a follow-up question (the
+    // service's lib/followups.js: "Where is it?" with its answers), a
+    // "which one?", or buttons asked aloud in a spoken conversation ("Want
+    // me to search the web for that?": the service's data.asked): the bird
+    // asks, and a spoken turn listens for the answer (as after any answer:
+    // until the wait is over).
     readonly property bool asking: {
-        for (var i = messages.length - 1; i >= 0; --i)
-            if (messages[i].role === "assistant")
-                return (messages[i].status === "pending" && !!messages[i].confirm) || (!!messages[i].followUp && !messages[i].chosen);
+        for (var i = messages.length - 1; i >= 0; --i) {
+            var m = messages[i];
+            if (m.role !== "assistant")
+                continue;
+            if (m.status === "pending" && !!m.confirm)
+                return true;
+            return !m.chosen && (!!m.followUp || !!(m.data && (m.data.asked || (m.data.awaiting && m.choices && m.choices.length))));
+        }
         return false;
     }
     // (What goes on comes before the opening's wave: a request asked
@@ -652,6 +723,33 @@ Item {
         _wakeUntil = Date.now() + wakeWaitMs;
         listen();
     }
+    // A message read aloud in driving mode ("Sam says: ... Want to reply?",
+    // the service's announce; NotificationFeed.qml): its conversation, and
+    // listening for the answer once it has been said.
+    property int _replyWait: 0
+    function replyByVoice(id) {
+        if (String(id || "") !== "")
+            threadId = String(id);
+        voice = true;
+        handsFree = true;
+        _asked = true;
+        refresh();
+        _replyWait = 3;
+        replyTimer.restart();
+    }
+    Timer {
+        id: replyTimer
+        interval: 250
+        repeat: true
+        onTriggered: {
+            // Speech starts a moment after the announcement: a little grace.
+            if (!ov.open) { stop(); return; }
+            if (ov.speaking || ov.busy || ov.listening || ov._replyWait-- > 0)
+                return;
+            stop();
+            ov.listen();
+        }
+    }
     // Asked again by voice (after the unlock).
     function askByVoice(text) {
         voice = true;
@@ -720,17 +818,16 @@ Item {
             if (!ov._followDone) {
                 ov._followDone = true;
                 var last = ov._lastAssistant();
-                // "I'm done": the goodbye has been said.
-                if (last && last.status === "goodbye") {
+                // "I'm done": the goodbye has been said. The browser (a
+                // search) or an app came up: said, the view makes way.
+                if (last && (last.status === "goodbye" || (last.data && last.data.opened))) {
                     stop();
                     ov.closeRequested();
                     return;
                 }
-                if (ov.voice && ov.asking) {
-                    stop();
-                    ov.listen();
-                    return;
-                }
+                // (A question waiting, a read-back or a button's asked aloud,
+                // listens like any answer: on, until the wait is over. Then
+                // the service's check-in cancels a read-back nobody answered.)
                 if (last && last.status === "locked") {
                     stop();
                     ov.unlockNeeded(ov._lastUserText());
@@ -1186,6 +1283,12 @@ Item {
                     width: row.thinking ? dotsRow.width + Theme.px(28) : Math.min(list.width * 0.86, words.implicitWidth + Theme.px(24))
                     height: row.thinking ? Theme.px(36) : words.implicitHeight + Theme.px(16) + (via.visible ? via.height : 0)
                     radius: Theme.px(14)
+                    // The speaker's lower corner nearly square, as the
+                    // Assistant app's and Messaging's bubbles have it
+                    // (apps/assistant/src/assistant.css:33-34: the
+                    // answer's lower left, the user's lower right).
+                    bottomLeftRadius: row.mine ? radius : Theme.px(4)
+                    bottomRightRadius: row.mine ? Theme.px(4) : radius
                     color: row.mine ? "#E8FFFFFF" : (row.modelData.status === "failed" ? "#B04A2020" : "#A0303438")
                     border.color: row.mine ? "transparent" : "#40FFFFFF"
                     border.width: row.mine ? 0 : 1
@@ -1335,7 +1438,8 @@ Item {
                         width: Theme.px(120)
                         height: Theme.px(40)
                         affirmative: true
-                        caption: row.modelData.command === "text" ? qsTr("Send") : row.modelData.command === "call" ? qsTr("Call") : qsTr("Yes")
+                        caption: row.modelData.confirm && row.modelData.confirm.countdown ? qsTr("Call Now")
+                                 : row.modelData.command === "text" ? qsTr("Send") : row.modelData.command === "call" ? qsTr("Call") : qsTr("Yes")
                         onAction: ov.confirm(row.modelData, true)
                         readonly property real appear: actions.shareOf(actions.choices.length + actions.suggestions.length)
                         opacity: appear

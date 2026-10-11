@@ -78,6 +78,115 @@ listing asks the device's accounts service (`listAccounts`) for the
 connector's template, and the compose page calls the connector's service
 under `run-js-service`.
 
+### Drives
+
+Cloud storage as places beside Internal Storage (11 October 2026, built in
+the simulator): in Files (a **Drives** section under the favourites, the
+path bar starting at "Drives"), in the file picker's Files kind (SF2), in
+Save to Files (SF3: Back from Internal Storage shows **Places**, Internal
+Storage and every drive) and so in every share sheet. Each drive is a
+Synergy account (DOCUMENTS) of the drives' connector
+(`apps/connectors/drives`, `org.webosphoenix.drives`), added in Accounts
+or Connections, with a sign-up link:
+
+| Account type | Sign-in | Status |
+| --- | --- | --- |
+| Nextcloud | Login Flow v2 (the server's own page in the browser; an app password comes back, revoked when the account is removed) or an app password | beta |
+| ownCloud, WebDAV (any server) | app password / password | beta |
+| S3 Storage (Backblaze B2, Wasabi, MinIO, Amazon S3, any) | access key and secret; Signature V4 | beta |
+| Dropbox, OneDrive (Microsoft Graph), Google Drive, Box | OAuth with PKCE through `org.webosphoenix.service.oauth`; "not available in this build" without Phoenix's registration ([DEVELOPER-APPS.md](DEVELOPER-APPS.md)) | experimental |
+| SFTP (any SSH server: a NAS, a Raspberry Pi, a VPS, a Phoenix device) | a password, or a key: Ed25519 made on the device (its public key shown with Copy, for the server's `authorized_keys`) or one pasted in (OpenSSH, PKCS #1/#8, SEC 1; not one with a passphrase yet); the server's host key shown as a fingerprint and trusted on first use | beta |
+
+The package is Phoenix's own but **not pre-installed**: it is in the
+catalog (`server/marketplace/catalog/accounts.json`), and installing it
+from Connections needs no Developer Mode (`preinstalled.json` "catalog",
+`packagesservice.js` `isFirstParty`).
+
+**Paths.** A drive is `/media/drives/<accountId>/...` to Files'
+service (`org.webosphoenix.filemanager`), which hands those paths to the
+kit's drive router (`createDriveRouter`, connector-kit `src/drives.ts`):
+list, stat, mkdir, rename and move inside a drive, delete, search, and
+copy between the device and a drive (an upload or a download) or between
+drives. New methods: `open {path}` (a drive file as a device copy, under
+`/media/internal/.phoenix/drive-cache/<accountId>/`, used as is when the
+drive cannot be reached: `stale: true`), `quota`, `transfers`, `cancel
+{id}`. Apps open a drive file through its device copy, so viewers, Email's
+attachments and the pickers read it as any file; the file picker answers
+`fullPath` (the copy) and `remotePath`.
+
+**Transfers.** Uploads go in chunks (8 MB; Nextcloud's chunked upload,
+S3 multipart, Dropbox's upload session, Graph's upload session, Google's
+resumable upload, Box's chunked upload above its threshold), downloads in
+ranges; each transfer is an ongoing activity in the notification area
+(`org.webosphoenix.ongoing`, "Uploading big.bin", with its progress),
+which Files' bar shows with Cancel; a cancel stops between chunks and
+drops the provider's upload session where it has a way to (Dropbox's expire by themselves).
+
+**Offline.** No connection: the folder says the drive can't be reached,
+with Try Again; nothing is lost; a file opened before opens from its
+device copy. A refused sign-in (401) says so with a way to Accounts.
+Errors are the kit's numbers (`FILE_ERRORS`: OFFLINE 10, AUTH 11, QUOTA
+12, CANCELED 13, NOT_AVAILABLE 14, UNSUPPORTED 15, RATE_LIMITED 16, after
+the file manager's own).
+
+**SFTP** (11 October 2026, built and checked in Chromium and phoenix-sim
+against OpenSSH 9.6). The drive is a folder of an SSH server (the home
+folder, or one given), `com.webosphoenix.drive.sftp` in the same package.
+The connector speaks SSH itself (`service/lib/ssh`): pure JavaScript on
+the audited `@noble` libraries (MIT), so the same code runs on a device's
+Node and in the simulator's page, over the kit's sockets (`ctx.net.connect
+{binary: true}`; docs/SYNERGY-SDK.md "Staying connected"). `ssh2` (MIT)
+was not taken: it needs Node's `crypto`, which the simulator's page does
+not have, so it could not be tested there as every other drive is.
+
+- **Protocol:** SSH-2 with curve25519-sha256, ECDH (P-256, P-384) or DH
+  group 16/14 key exchange; Ed25519, ECDSA and RSA-SHA2 host keys;
+  chacha20-poly1305 or AES-CTR with HMAC-SHA2 (and its encrypt-then-MAC
+  form); strict key exchange (the "Terrapin" fix); keys exchanged again
+  after a gigabyte or when the server asks. Sign-in by key, password or
+  keyboard-interactive (the password prompt). SFTP version 3 with
+  OpenSSH's extensions: reads and writes pipelined 64 deep; downloads in
+  ranges of 8 MB (a picture opens through the device's cache as any
+  drive's); uploads in chunks into a hidden `.name.phoenix-part` beside
+  the file, renamed over it at the end (`posix-rename@openssh.com`), so a
+  cancelled or broken upload never leaves half a file; copies on the
+  server with `copy-data` (OpenSSH 9.0 and later), else through the
+  device; how full the disk is with `statvfs@openssh.com`. No search (SFTP
+  has none). One connection per account, kept a minute after the last call.
+- **Trust:** Sign In first shows the server's key (type and SHA256
+  fingerprint, as `ssh-keygen -l` prints it) to trust; it is pinned in the
+  account. A different key is refused loudly: Files shows the warning with
+  both fingerprints in red, a notification says so once, the account asks
+  to sign in again, and the sign-in page shows the old key and the new in
+  red before anything is trusted.
+- **Keys:** kept sealed in the OAuth service's key store (its `client`
+  records, readable by the drives' service only); the account's credentials
+  name the key, never hold it; removing the account removes its key, and a
+  key made on the sign-in page that no account took is removed when the
+  page is left.
+- **Simulator:** a page has no TCP, so its host relays it: phoenix-sim's
+  `SimTcp` (`shell/sim/simtcp.cpp`, "tcp" host messages; `--no-tcp-relay`)
+  and `tools/serve-rootfs.py`'s `/__phoenix/tcp` WebSocket (token and
+  origin checked; `--no-tcp`). The demo server `files.example` answers in
+  the page (any name, any password or key; the drive's test server).
+- **Server side:** a Phoenix device is an SFTP server wherever an SSH
+  server runs: the image has OpenSSH's `sftp-server`
+  (`packagegroup-phoenix-terminal`), which a development image's Dropbear
+  runs for `sftp`, and the Developer Mode SSH server will (TERMINAL.md T4).
+- **Tests:** `apps/connectors/drives/service/sftp.test.ts` (the drive
+  conformance suite and the protocol, against `service/test/fake-sftp.cjs`:
+  the same transport in its server role) and `tools/test-sftp.cjs` (the
+  demo server, then a real OpenSSH `sshd` with its `sftp-server`, in
+  Chromium; skipped without `openssh-server`).
+
+**Not yet:** the original picker (SF1) lists what the media indexer has,
+so drives are not in it (the Files kind of SF2 has them); no offline
+"keep on this device" pinning beyond the cache; device OAuth sign-in waits
+for the browser sheet on devices (`services/oauth/service.js`:
+`UNSUPPORTED` there), so on a device only the WebDAV, S3 and SFTP drives
+sign in today. SFTP: no key with a passphrase (bcrypt-pbkdf), no
+certificates, no jump hosts, no search.
+
 ### The original picker (SF1)
 
 Enyo 1's `enyo.FilePicker` (FilePicker.js:48) shows

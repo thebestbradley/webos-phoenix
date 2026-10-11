@@ -59,7 +59,10 @@ export class PhoenixWeb extends WebPlugin {
         return { id: await notifications.banner(message, rest) };
     }
     async postNotification(o: Parameters<PhoenixPlugin["postNotification"]>[0]) { await notifications.post(o); }
-    async removeNotification(o: { tag: string }) { notifications.remove(o.tag); }
+    async removeNotification(o: { tag?: string; group?: string }) {
+        if (o.tag) notifications.remove(o.tag);
+        if (o.group) notifications.removeGroup(o.group);
+    }
     async setOngoing(o: Parameters<PhoenixPlugin["setOngoing"]>[0]) { await ongoing.set(o); }
     async clearOngoing(o: { id: string }) { await ongoing.clear(o.id); }
     async scheduleActivity(o: Parameters<PhoenixPlugin["scheduleActivity"]>[0]) { await activities.schedule(o); }

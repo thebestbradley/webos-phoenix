@@ -142,14 +142,66 @@ def shared_packages():
     return out
 
 
+def npm_package_dir(name, start):
+    """Where Node would find npm package `name` from folder `start` (its
+    node_modules, then each folder up), or None."""
+    d = os.path.realpath(start)
+    while True:
+        cand = os.path.join(d, "node_modules", name)
+        if os.path.isfile(os.path.join(cand, "package.json")):
+            return os.path.realpath(cand)
+        up = os.path.dirname(d)
+        if up == d:
+            return None
+        d = up
+
+
+def plan_npm_package(name, start, dest, plan, seen):
+    """A service's own npm dependency (plain JavaScript: the drives' SSH
+    client's @noble packages) into its node_modules, as phoenix-connector
+    pack vendors it (connector-kit tools/package.ts dependencyFiles): its
+    CommonJS, licence and package.json, not its sources, ES module copy,
+    source maps or type files; then its own dependencies."""
+    src = npm_package_dir(name, start)
+    if not src:
+        not_built("%s: the npm package %s is not installed (cd apps && npm ci)" % (os.path.relpath(start, REPO), name))
+        return
+    with open(os.path.join(src, "package.json"), encoding="utf-8") as f:
+        info = json.load(f)
+    main_dir = os.path.dirname(os.path.normpath(info.get("main", "index.js"))) or "."
+    target = "%s/node_modules/%s" % (dest, name)
+    for root, dirs, files in os.walk(src):
+        rel_root = os.path.relpath(root, src)
+        top = rel_root.split(os.sep)[0]
+        if rel_root != "." and (top == "src" or (top == "esm" and main_dir.split("/")[0] != "esm")):
+            dirs[:] = []
+            continue
+        dirs[:] = sorted(d for d in dirs if d not in SKIP_NAMES)
+        for fn in sorted(files):
+            if fn.endswith((".map", ".ts", ".tsx", ".mts", ".cts", ".node")) or fn == "binding.gyp" or re.match(r"(README|CHANGELOG)", fn, re.I):
+                continue
+            full = os.path.join(root, fn)
+            plan.append((full, target + "/" + os.path.relpath(full, src).replace(os.sep, "/")))
+    for dep in sorted(info.get("dependencies") or {}):
+        if dep not in seen:
+            seen.add(dep)
+            plan_npm_package(dep, src, dest, plan, seen)
+
+
 def plan_dependencies(svc_dir, dest, plan, shared, seen=None):
     """A service's @phoenix/* dependencies into its node_modules, as npm would
-    put them there, so require("@phoenix/synckit") works under run-js-service."""
+    put them there, so require("@phoenix/synckit") works under run-js-service,
+    and its own npm dependencies (plan_npm_package)."""
     seen = set() if seen is None else seen
     with open(os.path.join(svc_dir, "package.json"), encoding="utf-8") as f:
         deps = json.load(f).get("dependencies") or {}
     for name in sorted(deps):
-        if name in seen or name not in shared:
+        if name in seen:
+            continue
+        if name not in shared:
+            if not name.startswith("@phoenix/"):
+                seen.add(name)
+                plan_npm_package(name, svc_dir, dest, plan, seen)
             continue
         seen.add(name)
         src, info = shared[name]
@@ -328,6 +380,11 @@ def build_plan():
         # The simulator's stand-ins for what servers hold (the sample driver
         # catalog, server/drivers/sample) are not part of a device.
         if target.startswith("server/"):
+            continue
+        # The simulator's demo servers (chat.example: the Jabber connector's
+        # fake server) and its connector settings (runtime/connector-settings:
+        # a device's come from the image's recipe, never from the tree).
+        if prefix.startswith("/usr/share/phoenix/demo/") or prefix == "/etc/phoenix/connectors/":
             continue
         # The shared packages the simulator's service loader finds by name:
         # a device has a copy in each service that needs one (plan_service).

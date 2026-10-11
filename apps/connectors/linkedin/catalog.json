@@ -1,0 +1,20 @@
+{
+    "//": "What the Marketplace's Connections view says of this connector package's account type (server/marketplace Catalog::connectorTypes; docs/SYNERGY-SDK.md). One of Phoenix's own, installed from the catalog (preinstalled.json \"catalog\"); the catalog's own entry (catalog/accounts.json) is the one listed, this one is checked when the package is uploaded.",
+    "accountTypes": [
+        {
+            "templateId": "com.webosphoenix.linkedin",
+            "title": "LinkedIn",
+            "provider": "LinkedIn",
+            "summary": "Sign In with LinkedIn and share from the share sheet as you; your connections come to Contacts from your own data export (Connections.csv), imported, not live.",
+            "capabilities": [
+                { "capability": "CONTACTS", "direction": "read-only" }
+            ],
+            "protocols": ["openid-connect", "linkedin-posts-api"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "LinkedIn (what you share); your connections stay on this device", "e2ee": false, "phoenixServers": "token-relay" },
+            "push": "poll",
+            "status": "experimental"
+        }
+    ]
+}

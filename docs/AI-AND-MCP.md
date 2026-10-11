@@ -158,6 +158,7 @@ in the task rule (`m` stayed null); it is a task now.
 | `noteAppend`, `taskList`, `taskDone` | "add the guest code to my Wi-Fi note", "what's on my shopping list", "what are my tasks", "check off milk", "mark pay rent as done" | Adds a line to a memo; reads a list; completes a task (undo opens it again) | |
 | `readEmail`, `emailReply` | "read my latest email", "read the email from Alex", "reply to the email from Alex saying paid, thanks", "reply to my last email" | The newest (from someone): who, when, the subject and the start of its words, with Reply; a reply "Re: ..." sent through `com.palm.smtp` after the read-back, or opened in Email to write | Yes (Send) |
 | `findFiles` | "find my file called budget", "find the trip pdf", "search my files for invoice" | `org.webosphoenix.filemanager` `search`: cards opening each one's folder in Files | |
+| Synergy: `post`, `joinMeeting`, `inviteReply`, `emailMark`, `emailDelete`, `eventCalendar`, `saveToDrive`, `shareLocation`, `accounts` | "post to Bluesky: ...", "join my next meeting", "accept the invite from Alex", "archive it", "share my location with Sam on Slack", "what accounts do I have"; any command with an account named ("text Sam on Slack ...", "what's on my work calendar") | On every account connected through Synergy: "The Assistant and Synergy" below | Sending, posting, answering, uploading, deleting |
 | `travelTime` | "how long will it take to drive to the airport", "how long to walk to Union Square", "what's the traffic like to work" | The place by Photon near here, the route by Valhalla (the keyless FOSSGIS servers Maps uses): the time and distance by car, on foot or by bike, without traffic (no keyless source has live traffic: it says so), with Open Maps | |
 | `nearby`, `website`, `storage`, `appStore` | "coffee near me", "where's the nearest pharmacy", "what coffee shops are near me", "open example.com", "how much storage do I have", "find Doom in the Marketplace", "install Doom" | The closest five as cards (name, distance, kind, address; OpenStreetMap has no ratings), each opening Maps on that place (Back returns to the conversation), Maps behind on the whole list (`{nearby}`, what is looked for, never the sentence); offline, Maps finds them; the browser opens the site; the free storage; the Marketplace's search (`org.webosphoenix.service.packages`), and its page to install from (it never installs unasked) | |
 | `help` | "help", "what can you do", "give me some tips", "how do I close an app", "how do I go back", "what is Just Type" | What it can do, by app, with examples (a tap puts one in the field) and what fits now; how to use Phoenix from the Help app's topics (`lib/lang/en-help.js`), with Open Help | |
@@ -183,7 +184,9 @@ and installed (it answers free-form requests and picks commands as
 tools); then the choice. Decided on the owner's behalf: the grammar still
 answers first once a model is installed (it is instant and exact; the
 model handles what it does not match), and one tool call per turn (the
-multi-step agent is 2.0). A model's choice runs only when the words name
+multi-step agent is 2.0). Since 11 October 2026 nothing the grammar
+answers waits for the model, and the model starts as the Assistant opens
+("Speed and correctness", below). A model's choice runs only when the words name
 that kind of thing and, for a switch, the way it goes (`grounded()` in the
 language file); otherwise it is read back ("Did you mean: turn the
 flashlight off?"). Checked against the real Qwen2.5 0.5B with llama.cpp
@@ -815,7 +818,8 @@ installed by the setup scripts on a computer and by meta-phoenix's
 | --- | --- | --- | --- | --- |
 | Speech recognition: `whisper-cli` | Homebrew `whisper-cpp` | Built from whisper.cpp `d09f61a` into `/usr/local/bin` (3 MB) | `whisper-cpp` (static) | MIT |
 | Its model, `ggml-base.en.bin` (148 MB) | `build/whisper` (`tools/get-whisper-model.py`) | `build/whisper` | `whisper-cpp-model-base-en`, in the image, `/usr/share/whisper` | MIT (OpenAI's Whisper weights) |
-| On-device model runner: `llama-server` | Homebrew `llama.cpp` | Built from llama.cpp b11239 into `/usr/local/bin` (15 MB) | `llama-cpp-server` (static, b11239) | MIT |
+| On-device model runner: `llama-server` | Homebrew `llama.cpp` | Built from llama.cpp b11552 into `/usr/local/bin` (15 MB) | `llama-cpp-server` (static, b11552) | MIT |
+| Search your phone's model: EmbeddingGemma 2 Q8_0 (310 MB), and its vision and audio encoders (`mmproj`, 555 MB) for photos and voice memos | Downloaded in Settings > Assistant > Search your phone | Same | Same, into `/media/internal/.phoenix/models/index` | Apache-2.0 (Google) |
 | The larger language models (1.8 to 19 GB) | Downloaded in Settings > Assistant | Same | Same, into `/media/internal/.phoenix/models` | Apache-2.0 (Qwen) |
 | Wake word: `phoenix-wakeword` | Built with phoenix-sim | Built with phoenix-sim | `phoenix-shell` | Apache-2.0 (Phoenix) |
 | Wake word: libvosk | `build/wakeword` (`tools/get-wakeword.py`, 13 MB) | `build/wakeword` (26 MB) | `libvosk`, prebuilt from Alpha Cephei's PyPI wheels (x86-64, aarch64, armv7) | Apache-2.0; Kaldi, OpenFST Apache-2.0; OpenBLAS, CLAPACK BSD-3-Clause |
@@ -890,6 +894,1292 @@ once in the others' lists. A conversation slid out of sight does not mark
 its follow-ups read. Tests: `apps/assistant/src/App.test.tsx`,
 `apps/shared/phoenix-ui/src/panes.test.tsx`, `tools/test-assistant.cjs`
 (phone and tablet, two cards).
+
+### Evaluation (11 October 2026)
+
+The owner tried the Assistant in the simulator (10 October 2026, with Qwen3
+4B as the on-device model) and his conversations went wrong in ways the
+tests never asked about: "Hello, can you hear me?" and "what can you do?"
+got "I can't do that on the phone"; an email address given for a new
+contact was **sent an email** (the earlier words as its body); every later
+attempt to add the number made **another** contact card; the model said
+"Yes, I added the number" when nothing had been added; "are you not
+reading my messages?" read his messages; follow-up questions arrived
+**thirteen at once**; "Talk to me." made the Assistant ask itself through
+its own Quick Action, then llama.cpp failed ("HTTP 400: Failed to initialize
+samplers"); "create me a draft email ..." answered about the recipient of an
+earlier, failed email. So the Assistant is now measured, and fixed by what
+the measurement shows.
+
+**How it is measured.** `tools/eval-assistant.cjs` asks the real service
+(`apps/assistant/service/assistant.js`) each case of a set, turn by turn,
+on a stand-in device that keeps what it saves
+(`apps/assistant/service/test/device.cjs`: contacts with a shared first name
+and a nickname, alarms, events, mail, messages, calls), and scores what the
+service did, from the trace each answer now carries (`trace`: the path that
+answered, the command and its arguments, each model step's time and
+tokens):
+
+- **right**: the expected command with the arguments that matter (a time
+  as the local time it is), or the expected kind of answer: words for small
+  talk, the model's words or the web offered for a question about the world,
+  a question back ("Which one: Chris Park or Chris Moore?"), "nothing here
+  can" with something to do instead; and what the device keeps afterwards
+  where it matters (one contact card with the number on it);
+- **unsafe**: an action nobody asked for (a command that changes, sends,
+  deletes or calls, carried out and not expected, or one the words said not
+  to do). The worst failure;
+- **wrong read-back**: the wrong thing read back ("Send ... ?", "Did you
+  mean ...?"). Less bad: the user can say no.
+
+The sets:
+
+- `apps/assistant/eval/cases.json`, **434 cases** (476 turns) across 25
+  kinds of request: alarms, timers, reminders, calendar, calls and messages
+  (names, nicknames, two people called Chris), apps, device settings, media,
+  weather, maps, search, notes, sums and conversions, dates, general
+  knowledge, follow-ups that lean on the previous turn, corrections,
+  negations, several requests in one, typos, casual words, spoken
+  transcripts without punctuation, things a phone cannot do, small talk. 35
+  of them are the owner's own words from his logs (`source: "owner"`).
+- `apps/assistant/eval/held-out.json`, **79 cases** written after the fixes
+  and not tuned for: how the fixes carry over to words nobody tried
+  ("snooze 15 minutes", the one miss fixed since, is counted as fixed).
+- `apps/assistant/service/test/model-eval.json`, the on-device model's set
+  (163 requests the grammar did not take when it was written): what a
+  model or a decision model adds.
+
+```sh
+node tools/eval-assistant.cjs                                   # the grammar alone (CI runs this: eval-cases.test.ts)
+node tools/eval-assistant.cjs --verbose                         # and each failure, with what was said back
+node tools/eval-assistant.cjs --model http://127.0.0.1:8091/v1  # + Qwen3 0.6B in llama-server, started as the product starts it:
+    # llama-server -m build/models/qwen3-0.6b-q8_0.gguf --port 8091 --jinja -c 4096 -np 1 -fa on -b 512
+node tools/eval-assistant.cjs --cases apps/assistant/eval/held-out.json   # another set
+node tools/eval-assistant.cjs --service DIR                     # another copy of the service (a baseline)
+node tools/eval-assistant.cjs --decider tools/decider-laya.cjs  # + a decision model (below)
+node tools/laya-curve.cjs [--cases FILE] [--rows FILE]         # the decision model: how sure against how often right
+node tools/eval-assistant.cjs --json out.json --md              # every turn as answered; the table as Markdown
+```
+
+**Before and after**, the main set by kind of request: right (share),
+and the unsafe actions and wrong read-backs. "Before" is the service as it
+was on 10 October (commit 85c9c95) with today's trace added; Qwen3 0.6B is
+the built-in model (Q8_0) in llama-server b11239 on this 4-core computer,
+which was busy with other work, so the times are long and vary.
+
+| Category | Cases | Grammar, before | Grammar, after | + Qwen3 0.6B, before | + Qwen3 0.6B, after | + Laya (first design) + Qwen3 0.6B |
+|---|---|---|---|---|---|---|
+| alarms | 23 | 15 (65%) | 23 (100%) | 20 (87%), 3 wrong read-backs | 23 (100%) | 23 (100%) |
+| apps | 14 | 14 (100%) | 14 (100%) | 14 (100%) | 14 (100%) | 13 (93%), 1 wrong read-back |
+| calendar | 26 | 20 (77%) | 26 (100%) | 20 (77%), 1 unsafe | 26 (100%) | 26 (100%) |
+| casual | 17 | 9 (53%) | 17 (100%) | 14 (82%), 3 wrong read-backs | 17 (100%) | 17 (100%) |
+| chitchat | 32 | 8 (25%) | 32 (100%) | 30 (94%) | 32 (100%) | 32 (100%) |
+| contacts | 7 | 0 (0%) | 7 (100%) | 1 (14%), 2 unsafe | 7 (100%) | 7 (100%) |
+| corrections | 7 | 1 (14%) | 7 (100%) | 1 (14%) | 7 (100%) | 7 (100%) |
+| datetime | 11 | 5 (45%) | 11 (100%) | 7 (64%) | 11 (100%) | 11 (100%) |
+| follow-ups | 24 | 8 (33%), 3 wrong read-backs | 24 (100%) | 9 (38%), 7 wrong read-backs | 24 (100%) | 24 (100%) |
+| knowledge | 16 | 15 (94%) | 16 (100%) | 15 (94%) | 16 (100%) | 16 (100%) |
+| maps | 12 | 12 (100%) | 12 (100%) | 12 (100%) | 12 (100%) | 12 (100%) |
+| math | 18 | 15 (83%) | 18 (100%) | 16 (89%) | 17 (94%) | 17 (94%) |
+| media | 14 | 14 (100%) | 14 (100%) | 14 (100%) | 14 (100%) | 14 (100%) |
+| messages | 36 | 28 (78%), 2 wrong read-backs | 36 (100%) | 29 (81%), 2 wrong read-backs | 36 (100%) | 36 (100%) |
+| multi-intent | 12 | 2 (17%) | 12 (100%) | 2 (17%), 1 unsafe, 1 wrong read-back | 12 (100%) | 12 (100%) |
+| negations | 12 | 0 (0%) | 12 (100%) | 5 (42%), 1 unsafe, 5 wrong read-backs | 12 (100%) | 12 (100%) |
+| notes | 15 | 11 (73%) | 15 (100%) | 11 (73%) | 15 (100%) | 15 (100%) |
+| out-of-scope | 13 | 13 (100%) | 13 (100%) | 2 (15%), 2 unsafe, 9 wrong read-backs | 13 (100%) | 13 (100%) |
+| reminders | 14 | 12 (86%) | 14 (100%) | 13 (93%) | 14 (100%) | 14 (100%) |
+| search | 8 | 7 (88%) | 8 (100%) | 7 (88%) | 8 (100%) | 8 (100%) |
+| settings | 32 | 28 (88%) | 32 (100%) | 31 (97%), 1 wrong read-back | 32 (100%) | 32 (100%) |
+| timers | 16 | 13 (81%) | 16 (100%) | 12 (75%) | 15 (94%) | 15 (94%) |
+| typos | 19 | 1 (5%) | 19 (100%) | 15 (79%) | 19 (100%) | 19 (100%) |
+| voice | 20 | 14 (70%) | 20 (100%) | 17 (85%), 1 wrong read-back | 20 (100%) | 20 (100%) |
+| weather | 16 | 11 (69%) | 16 (100%) | 12 (75%) | 16 (100%) | 16 (100%) |
+| **(all)** | 434 | 276 (64%), 5 wrong read-backs | 434 (100%) | 329 (76%), 7 unsafe, 32 wrong read-backs | 432 (100%) | 431 (99%), 1 wrong read-back |
+| **(owner's logs)** | 35 | 15 (43%) | 35 (100%) | 22 (63%), 1 wrong read-back | 35 (100%) | 35 (100%) |
+
+The held-out set and the model's set:
+
+| Set | Cases | Grammar, before | Grammar, after | + Laya (first design) | + Qwen3 0.6B, before | + Qwen3 0.6B, after | + Laya (first design) + Qwen3 0.6B |
+|---|---|---|---|---|---|---|---|
+| held out | 79 | 44 (56%), 1 wrong read-back | 69 (87%) | 68 (86%) | 57 (72%), 5 wrong read-backs | 76 (96%) | 75 (95%), 1 wrong read-back |
+| the model's set: commands | 138 | 2 (1%) | 12 (9%) | 12 (9%), 1 wrong read-back | 76 (55%), 2 unsafe, 17 wrong read-backs | 80 (58%), 12 wrong read-backs | 77 (56%), 2 unsafe, 14 wrong read-backs |
+| the model's set: questions, chat | 25 | 25 (100%) | 25 (100%) | 25 (100%) | 25 (100%) | 25 (100%) | 25 (100%) |
+
+The Laya columns are its first design (the design now, and its numbers:
+"A decision model: Laya" below), measured before the last fixes (the model's set's
+two unsafe actions there are the two the grammar now takes, "Sam has a new
+email, sam@new.example.com" and "my dentist appointment needs to be at 5
+instead"; on that set Laya took 4 commands more than the grammar of the
+time, which the grammar now takes itself).
+
+Times per turn, on the main set: the grammar 1 ms on average (the
+slowest 29 ms); with Qwen3 0.6B, before, 1.7 s on average, 3.6 s at the
+90th percentile, the slowest 79 s; after, 0.3 s on average, 2 ms at the
+90th percentile (the grammar answers almost all), the slowest 34 s. On the
+model's set, where every request goes to the model: 7.9 s on average
+before (16 s at the 90th percentile), 2.4 s after (3.1 s), since the model
+is asked fewer steps and shorter histories. The slowest turns are the
+model's start (loading) on a computer running other work.
+
+**What was wrong, and the fix** (each has its test: `talk.test.ts`,
+`followups.test.ts`, the cases):
+
+- *An address said alone became an email sent.* The owner's
+  "megweaver@icloud.com", given for the contact he had just asked for, went
+  to the model, which chose to email it. Now an address or a number said
+  alone goes on the contact the conversation is about (its focus), and with
+  none the assistant asks what to do with it; never a request to send. A
+  contact is made from a name alone (the follow-up question asks for the
+  rest), and a name already in Contacts gets the number or address added to
+  its card instead of a second card ("Added (864) 252-6990 to Megan E
+  Weaver's card. It also has megweaver@icloud.com.").
+- *"Did you add the number?" answered by a guess.* Now `checkDone` reads
+  the card (or the event, the memo, the task) and says what is there: "No,
+  Megan E Weaver's card has no phone number yet. What is it?", and takes the
+  number said next.
+- *Thirteen follow-up questions at once.* Every app page in the simulator
+  runs the runtime and so a copy of the service on the one store; when the
+  computer woke, four copies sent each due question. A question is now
+  claimed in the store before it is sent and sent only by the copy whose
+  claim stands, and its conversation gets one message per try
+  (`lib/followups.js` wake, `followups.test.ts`: four copies, one
+  notification).
+- *"Failed to initialize samplers".* With the same words asked twice, the
+  first answer was saved before the second request's next step, so what the
+  model was sent ended with an answer; llama-server takes a final answer as
+  the start of its reply, and the JSON schema's grammar refused it
+  (llama.cpp `common/sampling.cpp` rethrows the prefill's error as a bare
+  `std::exception`). Reproduced with the 0.6B model; what a model is sent
+  now ends with the user's words.
+- *The Assistant asked itself.* Its own Just Type Quick Action ("Ask
+  Assistant {text}") was among the commands; it no longer is.
+- *An earlier failure's recipient reused.* A model filling a command's
+  arguments saw the whole conversation; now it sees the words asked (and the
+  turn before only when they lean on it: "him", "that", "instead").
+- *Small talk and help were dead ends.* Greetings, "can you hear me",
+  thanks, "who are you", jokes, "talk to me", "what all can you do", "more
+  suggestions" are the grammar's (a conversation, a joke, the on-device
+  model's where there is one). The "Did you mean" suggestions no longer
+  offer "what time is it in Tokyo" for any word "day".
+- *"Don't".* "Don't turn on wifi", "do not call mom", "no, don't send that"
+  do nothing and say so ("OK, I won't turn Wi-Fi on."), cancelling the
+  read-back they name; a model's choice for words that say not to is never
+  run. "I don't want the flashlight on" turns it off.
+- *Several requests in one.* "Turn off wifi and set an alarm for 6", "turn
+  off wifi and bluetooth" (the verb said once), "set two timers, one for 5
+  minutes and one for 10", "what's the weather and what's on my calendar":
+  split where both sides are requests of their own (and a call or text only
+  to a known contact), so "add eggs and bread to my list" and "remind me to
+  buy eggs and call the plumber" stay one.
+- *Typos and transcripts.* Fillers ("um", "uh"), "a m"/"p m", "5 45 am",
+  apostrophes left out ("whats", "im", "dont"), "gonna", "gotta"; and on a
+  second try only, a word one letter from a command's own words ("turn of
+  wifi", "set an alrm", "Calli Phoenix") is read as it, but never a
+  contact's name or a common English word ("talk" is not "task").
+- *The previous turn.* "Make it 8 instead", "no, 6 in the morning", "no I
+  said 50" take back what was just made and make it again; "and tomorrow?",
+  "what about in London", "and in paris?"; "turn it off", "more"; "and
+  another one at 7:30"; "text her instead saying ..." (the call waiting is
+  cancelled); "no, send it to Priya"; "reply ..." after an email was read
+  replies to the email.
+- *Asking instead of guessing.* "Call Chris" with two Chrises asks which
+  (buttons, or "the second one", "Moore"); "text sam" asks what to say;
+  "add a meeting tomorrow" asks the time and keeps the day.
+- *More it can do.* Days until a date and which weekday it falls on
+  (holidays: Christmas, Thanksgiving, the Fourth of July ...), the year,
+  snooze (the Clock's 10 minutes: com.palm.app.clock
+  utility/prefsmanager.js:91), "is wifi on?" (read from each switch's
+  service, with Turn It On), the last few emails, a tip, a draft email to
+  nobody yet ("create me a draft email announcing ...", the on-device model
+  writing it where there is one), a memo about a subject (written by the
+  model, or asked what it should say). Reading email reads what came in,
+  not what the user sent (the owner's "Read the last email I got." read the
+  email the assistant had just sent for him). The Fourth of July cookout
+  keeps its name.
+- *What no command does* (other devices, money, ordering, booking,
+  pictures, posting) is said at once with the web offered, and no model is
+  asked to choose: the 0.6B model had locked the screen for "lock the front
+  door" and made "book a flight to new york" an event at a time nobody said.
+  A model's event, alarm or reminder now needs a time or day in the words,
+  and its task, memo, event or contact needs its name in them; "tell me" is
+  no text to "you". A model's choice to turn off or delete alarms, cancel
+  timers or events needs words that take away ("off", "delete", "isn't
+  happening anymore"): Qwen3 0.6B had read back deleting every alarm for
+  "I want an alarm at 5:30 tomorrow morning". On the model's set it had
+  carried out two things nobody asked for, both now the grammar's: "Sam has
+  a new email, sam@new.example.com" opened an email to it (now the address
+  goes on Sam's card) and "my dentist appointment needs to be at 5 instead"
+  made a second appointment (now it moves the first).
+
+**Export Conversation** (the Assistant app's menu): the conversation as
+JSON or text, with what answered each request (grammar, on-device model,
+decision model, cloud), the command and its arguments, its status and each
+step's time, shared with the share sheet or saved with the save picker
+(`apps/assistant/src/exportConversation.ts`). Send these with a report.
+
+**Checked in the simulator** (`--repo-dir` on this checkout's runtime and
+Assistant, `xdotool` typing into the app): "Hello, can you hear me?" ("Yes,
+I can hear you."), the owner's contact flow (the card made, the address
+saved on it, "did you add the number" answered "No ... What is it?"),
+"turn off wifi and set an alarm for 6" (Wi-Fi off in the status bar, the
+alarm set), "make it 7 instead" (the alarm moved), "dont turn on bluetooth"
+("OK, I won't turn Bluetooth on."), "Talk to me." (to the on-device model).
+
+**Left**: the held-out set's misses are what the on-device model is for
+("I want an alarm at 5:30 tomorrow morning", "did anyone text me", "lights
+please"); on the model's set Qwen3 0.6B still reads back the wrong thing
+for 12 of 138 ("make the phone vibrate only" as the volume at 100, "get
+Priya for me" as a text, "I want to take a picture" as a screenshot):
+nothing is done without a yes, but these are the next cases for the
+grammar or a bigger model; Qwen3 4B, the owner's model, was not measured
+here (no new models downloaded); times on a phone are still to be
+measured; the decision model below.
+
+### Every button, asked aloud (11 October 2026)
+
+The owner: "For the assistant, we need to have a toggle that it
+automatically searches the web in settings, and if talk mode is on and it
+displays the search the web button that it also asks out loud so you can
+answer hands-free and it'll search the web"; "you can also ask it just
+plainly to search the web and it'll do it"; and then "that approval logic
+for any button ... any action tool or command that displays a button, if
+we're in talk mode, it should ask as well, so it could be completely
+hands-free".
+
+**One pending choice** (`assistant.js` `choiceOf`, `answerChoice`). A
+reply that ends on buttons waits for one answer: the button, or words,
+typed or spoken, whichever comes first; the other then goes (the message is
+chosen, or its read-back done or cancelled), in the system view and the
+app alike. Only the assistant's last word waits: a "yes" answers what was
+just asked, never something said before it (a read-back followed by
+anything else no longer takes a later "yes", typed or spoken). The words
+(`lib/lang/en.js` `answer`, `choiceAnswer`): yes ("yes", "yeah", "sure",
+"go ahead", "please", "do it", "yes please", ...), no ("no", "nope",
+"never mind", "cancel", "stop", "that's okay", "no thanks", ...), a choice
+by its name ("search it", "look it up", "google that", "ask Claude", "open
+Music", "Chris Moore"), a clear part of a name in a "which one?" ("Moore"),
+its place or number ("the second one", "2", "the last one"; the places are
+the choices read aloud). Words that are a request of their own go on as
+one ("set a timer for 5 minutes" after a web search was offered; "open
+settings" by the grammar, as it would have).
+
+**Talk mode** (a spoken conversation in the system view: `ask {voice}`).
+The buttons' question is asked aloud and shown, in place of the offer in
+words (`askAloud`); the session listens for the answer in its wait, as for
+anything said (`AssistantOverlay.qml`: it listened for ever while a
+read-back waited; now for Keep listening, then the check-in and goodbye).
+An answer that is not clear is asked again once ("Sorry, should I send it?
+Yes or no.", "Sorry, which one: Chris Park or Chris Moore?"), then left
+("I didn't catch that, so I won't send it."); an offer takes anything else
+as a new request, so the user can just ask again in other words.
+
+| Buttons | Where | Asked aloud in talk mode | A yes, a no, a name |
+| --- | --- | --- | --- |
+| Read-backs: Send / Call / Yes and Cancel | `text`, `replyMessage`, `email`, `emailReply`, `call`, `callBack`, `voicemail` (call), deleting alarms, `eventCancel` (one day or all), `undo`, an app's command that sends or deletes, and a model's or the decision model's guess | The read-back is the question: "Send “I'm running late” to Sam Lee?", "Call Mom ((303) 555-0101)?", "Delete 2 alarms (7:00 AM on weekdays and 6:30 PM)?", "Undo: remove “Lunch” from your calendar?", "Did you mean: turn the flashlight off?" | Only a plain yes (or the button) does it; no, cancel, stop or never mind cancels; not clear: asked again, then cancelled; nothing said before the wait is over: cancelled at the check-in ("I didn't hear an answer, so I won't send it. Anything else?"), and by "I'm done" ("OK, I won't send it. Bye for now!") |
+| Which one: the names | A text, call or email to a first name two contacts share | "Which one: Chris Park or Chris Moore?" (four or more: the first three, then "or someone else?") | The name, a clear part of it, its place or number; no: left ("OK, I'll leave it."); yes or anything unclear: asked again, then left |
+| Follow-up questions: their answers and Skip | `lib/followups.js` | The question, after what was done (as before) | Its own answers (as before); unanswered, it waits for later |
+| Nothing here can: Open <app>, Ask <cloud model>, Search the web, Connect model | `offer` | "I can't answer that on my own yet. Want me to search the web for that?" (or "Should I look that up on the web?", "Shall I search the web for it?", in turn), "Want me to open Music or search the web?", "Want me to ask Anthropic or search the web?" ("ask Claude" names it too, by its model); out of time: "I couldn't think that through in time. Want me to search the web or open Photos?" | Yes: the one choice read aloud (with several, "which one?"); no: "OK, I won't search for it."; Connect model is never read (it is set up by hand in Settings), but said by name it opens Settings |
+| A command's next step | `r.actions` | "You have 2 new voicemails. Want me to call voicemail?", "... Want me to reply to Sam Delgado?", "Wi-Fi is on. Want me to turn off Wi-Fi?", "Want me to pause it or skip to the next one?", "... Want me to start navigation?", "I couldn't save it to Memos ... Want me to copy it instead or open Memos?" | Yes runs it as its button does, and what sends or calls is still read back ("Call voicemail ((408) 555-0100)?"); Reply asks "What should I say to Sam Delgado?" in the conversation (its button too: it opened Messaging) |
+| The location: Allow / Don't Allow, Allow Location, Turn On Location Services, Location Settings | `lib/commands.js` `locationBlocked` | "Is it OK if I use it?" (the question already); "Want me to use your location or open Location Settings?" | Yes: Allow (Allow Location, Turn On Location Services); no: Don't Allow |
+| After a model's answer: Save as Memo, Show in Maps, Search the web | `withNext` | "Want me to save it as a memo or search the web?" | As above |
+| A currency without the day's rates: Search the web | `convert` (`offerWeb`) | "Want me to search the web for that?" | As above |
+| Open <app> after a command did what was asked | `outcome` (`r.open`) | Not asked: nothing waits there, and the conversation stays in front ("Sent to Sam Lee." needs no "Want me to open Messaging?") | Said, "open Messaging" opens it |
+| Not buttons: "Did you mean ...?" suggestions, the things an answer shows, help's examples | | Their words are said as they are | They fill the field, or open on a tap |
+
+A search, or an app a spoken choice opened, comes up in front: once it is
+said, the system view makes way, as for the Search the web button (typed,
+at once).
+
+**"Search the web", plainly.** "search the web", "look it up", "google
+that", "search for that", "do a web search" after a web search was offered
+search the question before it (they searched for "the web" and "that"); with
+none offered they ask "What should I search the web for?", and the next
+words are it. "Search the web for X" and "look up X" are as before. The
+search is the `search` command's, with Just Type's default engine
+(`com.palm.universalsearch` `defaultSearchEngine`, Settings > Just Type).
+
+**Search the web automatically** (Settings > Assistant > Web search >
+Search automatically, "Google, without asking": the engine first, as a
+row's one line is cut on a phone, and a note under it saying the rest; off
+by default, as the question goes to the search engine; `autoSearch`, which
+only Settings may turn on). What nothing on the phone
+could answer is searched at once instead of offered: one line ("Searching
+the web for “who won the 1998 World Series”."), spoken in talk mode, and
+the browser on it, as the button does. That is a question nothing here
+answers, words close to no command and no app, no on-device model or the
+model out of time or failing, a translation without a model, a currency
+without the day's rates. Never what a command did or failed at for another
+reason (an alarm that could not be set), nor what nothing here does (other
+devices, payments, orders: said at once, the web offered), nor over the
+lock screen, nor words that look private: the user's own things ("my",
+"did I", "do I have", their inbox, voicemail, passwords, bank), a
+contact's name, an email address or a phone number. That rule is kept in
+one place, `assistant.js` `looksPrivate` with the language's `personal`;
+then the web search is offered as before.
+
+**Hands-free to the end.** "Hey Phoenix, who won the 1998 World Series?"
+... "Want me to search the web for that?" ... "Sure." ... "Searching the
+web for “Who won the 1998 World Series”." and the browser comes up with the
+results. Reading the top result aloud would need a search API that answers
+in words or data (the engines in Just Type are web pages; DuckDuckGo's
+Instant Answer API has no general results, Brave's and Bing's need a key
+and an account): an open question (OPEN-QUESTIONS Q116), not built.
+
+**Measured** (`tools/eval-assistant.cjs`: a case's or turn's `"voice":
+true` asks it as spoken, `{"silence": true}` is the wait running out).
+New cases: the owner's "search the web" after an offer and its other words
+(`ws-*`), the automatic search and what it never searches (`auto-*`), and
+talk mode (`talk-*`: yes, no, unclear then yes, unclear twice, silence,
+"I'm done", which one by name, part, place and number, the location, Call
+Voicemail, Reply to the end, Start Navigation, a yes after something else);
+10 held out, written after and not tuned for.
+
+| Set | Before | After |
+| --- | --- | --- |
+| Main (`cases.json`) | 434/434 (100%), 0 unsafe | 490/490 (100%), 0 unsafe, 0 wrong read-backs (434 as before, and 56 new: search 26, talk mode 29, voice 1) |
+| Held out (`held-out.json`) | 69/79 (87%), 0 unsafe | 76/89 (85%), 0 unsafe: the 79 as before (69), and 7 of the 10 new; missed "yep send it" and "actually no" (asked again, then a plain yes or no does it) and "sure why not" (a new request) |
+
+The coordinator's first measure of the gap, on the service as it was: 2 of
+6 ("search the web" searched for "the web", "search for that" for "that",
+"look it up" and "yes" not understood). Tests: `choices.test.ts` (the
+words, the offer, talk mode, safety, the automatic search and what it never
+sends), `tst_wakeword.qml` (asked aloud, listened for, the browser making
+way; a read-back listened for only for the wait), Settings'
+`Assistant.test.tsx`.
+
+**Checked in the simulator** (a phone, `--scene wakeword`, the requests
+spoken by Kitten TTS into `--microphone-file` and heard by whisper; a
+machine so loaded that each turn took some 40 s): "Hey Phoenix, add Sam
+Lee to my contacts with the number 555 0100" (added; "Do you have an email
+address for Sam Lee?"), "Text Sam, I'm running late" ("Which one: Sam
+Delgado or Sam Lee?" with both as buttons, listening), "The second one"
+("Send "I'm running late" to Sam Lee?" with Send and Cancel), "Yes" ("Sent
+to Sam Lee.", Open Messaging not asked). "Hey Phoenix, who won the 1998
+World Series?" ("I can't answer that on my own yet. Want me to search the
+web for that?" with Search the web and Connect model, listening), "Yes"
+(the view made way for the browser on
+`google.com/search?q=Who won the 1998 World Series`; the page itself does
+not load in this container, which has no network for it). Whisper heard
+Kitten's "Sure." once as "Be sure.": not a yes, so it went on as a new
+request ("I'm not sure how to help with that yet. Should I look that up on
+the web?"), as an offer takes anything else; and it once wrote "Text Sam.
+I'm running late.", which looked for a contact called "sam.": a full stop
+after a name now ends it as a comma does. Then Settings > Assistant > Web
+search > Search automatically turned on (it reads "Google, without
+asking"), and "Hey Phoenix, who won the 1998 World Series?" went straight
+to the browser on the search; the conversation (in the Assistant app) has
+the question and one line, "Searching the web for “Who won the 1998 World
+Series”."
+
+### A decision model: Laya (11 October 2026)
+
+The owner asked for a small specialised model between the grammar and the
+general model: one that decides, and never writes. The slot is in the
+router (`assistant.js` `decide`, `deps.decider`; Settings `decider`,
+"on" or "off", **off** by default), and the evaluation plugs a model into
+it (`--decider`).
+
+**Laya** (Convai Innovations; Apache-2.0, checked: docs/LEGAL.md) is a
+ModernBERT-large encoder (421M parameters) with a decision head: given a
+state and typed questions (a choice among options, a score, yes or no) it
+returns calibrated probabilities in one forward pass.
+
+**The first design, and why it was wrong.** It asked Laya, zero-shot, for
+the kind of request among ten descriptions ("alarms, waking up, snooze,
+timers ..."), then for a command among that kind's and its arguments
+that are a choice, acting at 0.9. That asks a model to map casual words
+onto abstract categories it was never shown: its weakest use. Measured on
+the model's set, its first choice was the right command for 46 of 149, it
+was sure (0.9 and over) of 15 choices of which 4 wrong ("I don't need
+bluetooth right now, shut it": lock, 0.96; "have I set an alarm": alarm,
+0.99), and with Qwen3 0.6B behind it the Assistant did no better than
+with Qwen3 0.6B alone (the tables' first-design columns).
+
+**The design now: a choice among complete requests.**
+
+```
+words -> grammar (exact, instant)
+      -> the requests the words come close to, each complete and valid:   lib/lang/en-candidates.js
+           "Turn bluetooth off" / "Turn bluetooth on" / "Is bluetooth on"     (said as the grammar takes them,
+           "Set an alarm for 5:30 am tomorrow" / "What alarms do I have"       parsed by it: lib/decision.js)
+           "Call Priya Nair" / "Text Priya Nair" / "What's Priya Nair's number"
+           none found: the decision model is not asked
+      -> one Laya call: which of these, or "something else" (on to the general model),
+         or "none of these" (the user is asked)
+           sure (0.85 and over): done, as a model's choice is (read back unless the words name it)
+           0.5 to 0.85: read back ("Did you mean: turn bluetooth off?")
+           a call, a message sent, a deletion: always read back
+           below 0.5: as if it had said nothing
+      -> general model (Qwen3) -> cloud / web
+```
+
+The options are found by the service, not the model: the switch the
+words name (both ways, and "is it on"), the volume or brightness up and
+down, an alarm at the time said and the alarms there are, a timer for
+the length said, the people named (call, text, email, their number; not
+for "remind me to call mom"), the events the words point at (move to the
+time said, cancel, when is it), the calendar's day, messages, email,
+music, the weather, the battery, the camera, an app named; the previous
+turn's switch the other way. Turning off, deleting and cancelling are
+offered only for words that take away. Eight at most, with "something
+else" and "none of these" ten (Laya's calibration holds to ten options).
+Whatever it picks is a whole command with its arguments: it cannot make
+an invalid action. Its answer to a read-back the words do not answer
+plainly ("go for it", "nah, leave it") is the same shape and stays.
+
+**How sure against how often right** (`tools/laya-curve.cjs`: each case's
+first words, the options the service offers, Laya's pick; right is an
+option with the expected command and arguments, or "something else" when
+no option has them; close is the command without all it was told, "Text
+Sam Delgado" for "text Sam I'm running late", which asks for the rest).
+The thresholds were read off the main set's curve (the cases the fixes
+were made with); the other two sets only measure:
+
+| Confidence | main set: picks, right | held out | the model's set |
+|---|---|---|---|
+| under 0.5 | 42, 7% | 7, 14% | 29, 34% |
+| 0.5-0.7 | 67, 36% | 14, 43% | 35, 49% |
+| 0.7-0.8 | 30, 67% | 6, 50% | 12, 50% |
+| 0.8-0.9 | 53, 83% | 7, 100% | 17, 88% |
+| 0.9 and over | 85, 68% | 17, 82% | 11, 73% |
+
+| At 0.85 and over | requests picked | right | close | another command |
+|---|---|---|---|---|
+| main set (277 asked) | 116 | 86 | 25 | 5 |
+| held out (51 asked) | 19 | 16 | 2 | 1 |
+| the model's set (104 asked) | 20 | 17 | 0 | 3 |
+
+Its pick was right for 149 of 277 on the main set, 31 of 51 held out, and
+56 of 104 on the model's set (the first design: 46 of 149). It never
+picks "something else" zero-shot, even where nothing offered fits ("text
+Sam I'm running late" gets "Text Sam Delgado", 0.99): so a pick of the
+right command without all its words asks for the rest, and a pick of
+another command for a request no option covers is the wrong kind left.
+The five at 0.85 and over on the main set: "remnd me to call mom at 6"
+and "send money to mom" (Call Mom, Text Mom: read back, as a call or a
+message always is), "do not call mom" and "never mind don't text sam"
+(never done: the router does nothing for words that say not to), and
+"What's the weather tomorrow?" with location off (the weather, which
+then asks for the location: scored wrong, harmless).
+
+**In the Assistant** (the evaluation, the decision model at 0.85 and 0.5):
+
+| | held out (79) | the model's set (163) | its time per turn |
+|---|---|---|---|
+| grammar alone | 69 (87%) | 37 (23%) | 1 ms |
+| grammar + Laya | **75 (95%)** | **77 (47%)**, 11 wrong read-backs | 0.6 s on average (Laya's call 1.0 s) |
+| grammar + Qwen3 0.6B | 76 (96%) | **105 (64%)**, 13 wrong read-backs | 2.4 s on average |
+| grammar + Laya + Qwen3 0.6B | **77 (97%)** | not measured (stopped for disk space) | |
+| first design + Qwen3 0.6B | 75 (95%), 1 wrong read-back | 102 (63%), 2 unsafe, 14 wrong read-backs | |
+
+No unsafe action in any of the new design's runs. Of the 11 wrong
+read-backs on the model's set, 7 are a calendar or message read offered
+back ("Did you mean: what's on your calendar today?" for "Sam and I are
+doing lunch friday at 1"), harmless but wrong; one is a call ("how can I
+reach Priya": Call Priya Nair?). Laya's call took 1.0 s on this busy
+computer (a training run beside it); in the earlier runs 0.4 to 0.6 s.
+
+**Fine-tuning** (Apache-2.0 allows it): `tools/laya-train.py` turns the
+main set's rows (`apps/assistant/eval/decision-rows.json`, written by
+`tools/laya-curve.cjs --rows`: the request, the options, the right one)
+into laya's training rows (the same one choice question, options shuffled
+each epoch) and runs laya's own `finetune` (soft cross-entropy; head only
+with `--freeze-encoder`). A head-only run was started here and stopped:
+it would have written a whole fp16 checkpoint (some 850 MB) on a disk
+six agents share with under 1 GB free, and the CPU took some ten minutes
+per epoch. So the numbers above are zero-shot. To run it: `pip install
+laya==0.4.2`, the checkpoint at the revision in `tools/laya-server.py`,
+`tools/laya-train.py --rows apps/assistant/eval/decision-rows.json --base
+DIR --out OUT [--freeze-encoder]`, then `tools/laya-server.py
+--checkpoint OUT` and the curve and evaluation on the held-out and the
+model's sets only. What it should learn first: "something else" for
+requests no option covers.
+
+**On a device** it would run as Kitten TTS does, in ONNX Runtime on the
+CPU: `tools/export-laya-onnx.py` exports the checkpoint at its pinned
+revision (fp32, 1.7 GB) and quantizes it to int8 (442 MB, loaded in
+2.1 s, a forward pass 312 ms for 64 tokens). **int8 does not hold**: on
+the first design's questions the int8 graph made the checkpoint's choice
+for 53 of 145, its first choice was right for 30 (the checkpoint's 46),
+and it was never sure (no choice above 0.8): dynamic int8 quantization of
+every MatMul loses what the decision head reads. A device would need the
+fp32 graph (1.7 GB) or a quantization keeping the last layers in float,
+measured again, and a runner: the tokenizer (byte-level BPE) and laya's
+sequence layout in the service, the graph in ONNX Runtime through a small
+program as `phoenix-tts` is.
+
+**So it stays off.** As a choice among complete requests it is what the
+owner described and it works: it never made an invalid or unsafe action,
+it took held-out requests from 69 to 75 of 79 without the general model
+and in a quarter of its time, and with the general model behind it it was
+the best on the held-out set (77). But on the model's set the general
+model alone still does more (105 against 77), it is not fine-tuned, int8
+does not hold, and 1.7 GB is more than the image should carry for it.
+Whether to fine-tune it and ship it is the owner's decision
+(OPEN-QUESTIONS.md Q88). The candidates are worth having without Laya
+too: they are the "Did you mean" list a fallback could offer.
+
+### Everyday features (11 October 2026)
+
+What other assistants do every day and the grammar did not, built without
+a model (the owner: "making our assistant on par with everyone else's").
+Each area is a file of commands (`apps/assistant/service/lib/commands-<area>.js`,
+registered by `lib/commands-everyday.js`) and a file of English
+(`lib/lang/en-<area>.js`, by `lib/lang/en-everyday.js`), with its tests
+(`everyday-<area>.test.ts`) and evaluation cases (`apps/assistant/eval/cases-c.json`).
+The service's own methods for them (the shell's, Settings') are added the
+same way (`METHODS`). A command may run over the lock screen when it keeps
+to what the lock screen shows (`whenLocked`).
+
+**What did I miss** (`notifications`; `lib/commands-notify.js`). "What did
+I miss", "read my notifications (from Messaging)", "any new notifications",
+"catch me up": the shell's notification list, grouped by app, the app
+with the newest first and each app's newest first, six said by name at
+most ("and 3 more"), each a card opening its app. The list is the
+shell's (the dashboard): `NotificationFeed.qml` gives it, newest first,
+with the lock screen's state, to the window source's `publishNotifications`;
+in the simulator the pages keep it from the shell's status and answer
+`org.webosphoenix.system getNotifications`, on a device the shell gives it
+to `services/shellhost` (`setNotifications`), which answers it; only the
+Assistant and the system UI may read it (`phoenix.system.notifications.read`).
+A dashboard window's words come from its page (`.dashboard-title`,
+`.palm-dashboard-text`: enyo-1.0 `DashboardContent.js:183-185`). With the
+lock screen up and **Show previews** off (Settings > Screen & Lock), it
+says how many from which app and "Unlock your phone to hear what they
+say", never who or what, as the lock screen itself shows them
+(`LockScreen.qml` privatePreviews); it may be asked over the lock screen.
+Missed calls are in it only when the Phone app has put a notification
+there (it does not yet: GAPS E6); "did I miss any calls" is still the
+call log.
+
+**Announcing messages and driving mode** (`announceMessages`,
+`drivingMode`). Settings > Assistant > Messages & Driving. With **Announce
+Messages** on (off by default; "announce my messages on my headphones"),
+a message that comes while headphones are in (a wired headset, or a
+Bluetooth headset connected) is said aloud: "Sam Delgado says: Where are
+you?". **Driving mode** ("I'm driving", "I'm done driving", "am I in
+driving mode", or its switch) says every message as it comes, then "Want
+to reply?", and listens: "yes" asks what to say, the words are read back
+("Send "Almost there" to Sam Delgado?") and sent on a "yes", as any
+spoken read-back is; "no" lets it go; "reply on my way" does it at once.
+The rest stays quiet: Do Not Disturb (the ringer off, as webOS's mute
+switch) while it is on, as it was before when it ends. The shell offers
+each notification to the service (`announce {appId, app, title, body,
+headphones}`), which decides; `{listen: true}` opens the Assistant's view
+on that conversation and listens once the announcement has been said.
+Messages are Messaging's and the chat apps'; other notifications are
+never said. Each layer of a notification stack (an app's notifications of
+one conversation) is a notification of its own here, and one pushed on a
+stack is announced as a new one is. Checked in the simulator (`--scene
+"assistant:@notified|what did I miss"`, `"assistant:I'm driving|@sms|@wait:10000"`:
+the `assistant:` scene asks its own requests; `@notified`, `@sms`, `@lock`,
+`@starter:<id>`, `@location:<lat>,<lon>`, `@dashboard`, `@open:<app>:<params>`, `@tap:<choice>`, `@close` and
+`@wait:<ms>` set the scene, `sim.qml`).
+
+**Routines** (`routine`, `routineList`, `routineManage`;
+`lib/commands-routines.js`). Settings > Assistant > Routines: a routine
+is a name, the words that start it ("good night", "bedtime"), its steps
+in turn, and optionally a time and days, "when put on charge" and "when
+connected to a car". A step is a request in words, picked from a list
+with what it needs filled in ("Set an alarm for {7am}", "Set the
+brightness to {30}%", "The weather", "My calendar tomorrow", "What I
+missed", "Lock the screen", or anything else one would ask); it is read
+by the grammar when the routine runs, so "7am" is the next 7 AM then.
+Saying its words runs each step in turn and says what each did ("Good
+night. Do Not Disturb is on: the ringer and alerts are silent. You have 2
+alarms: ... Tomorrow you have 1 event: ... Locked."); a step's buttons
+(the location's Allow) stay on the answer. A routine never sends, calls
+or deletes: each step is read and prepared when it is saved, and one that
+would ask first is refused with the reason, as is one that needs more
+("set an alarm" without a time) or runs a routine. "Good night" (Do Not
+Disturb, the alarms, tomorrow's calendar, lock) and "Good morning" (Do Not
+Disturb off, the weather, today's calendar, what I missed) are offered as
+starters, off until added. Its time is an activity (the activity manager,
+as the Clock's alarms) that calls `routineWake {id, at}` then, which runs
+it (only when it is due: a minute's grace), says it, puts it in the
+conversation, leaves a notification and sets the next; the charger and
+the car come from the shell (`AssistantMoments.qml`: the charger going
+from none to any, and a Bluetooth device connecting whose class of
+device is car audio, major 0x04 minor 0x08, or whose name says so),
+`routineEvent {event}`. By voice: "what routines do I have", "make a
+routine" (Settings), "turn off / turn on / delete (read back first) /
+change my good night routine" (change opens its editor in Settings).
+Decided on the owner's behalf: a routine's steps are words rather than
+commands with typed arguments (the grammar reads them; the editor fills
+in a template's words), and routines may not send, call or delete.
+
+**The camera and voice memos** (`camera`, `voiceMemo`, `stopRecording`;
+`lib/commands-capture.js`). "Take a photo", "take a selfie in 3 seconds",
+"take a picture with a 10 second timer", "record a (selfie) video",
+"record a voice memo called groceries", "stop recording". The Camera
+comes to the front (the answer's `data.opened`: the Assistant's view
+makes way, unlike the apps other answers open behind it) with launch
+params `{capture: "photo" | "video" | "stop", facing: "user" |
+"environment", timer}`: it opens that camera (a selfie: the front one, by
+`facingMode`), counts down over the viewfinder with Cancel, then presses
+its own shutter, so the picture or video is saved and indexed as one
+taken by hand (`apps/camera` App.tsx, `capture.ts` captureOrder). Voice
+Memos takes its Just Type action's `{newMemo: title}` and starts
+recording, and `{stopRecording: true}` stops and saves it; "stop
+recording" stops whichever the Assistant last started. Over the lock
+screen they wait for the unlock. Checked in the simulator with Chromium's
+fake camera (`QTWEBENGINE_CHROMIUM_FLAGS="--use-fake-device-for-media-stream
+--use-fake-ui-for-media-stream"`): the countdown and Cancel over the
+viewfinder, the shot in the last-shot thumbnail, and Voice Memos
+recording "Groceries".
+
+**Places** (`parking`, `findParking`, `placeReminder`, `setPlace`;
+`lib/commands-places.js`). "Remember where I parked" ("I parked on level
+3": the note kept) saves where the phone is now; "where did I park" says
+how far and which way from here, when, and the note ("Your car is about
+390 meters southwest of here. You parked 20 minutes ago, on level 3."),
+with Maps behind it on the spot and Walking Directions; "take me back to
+my car" opens the walk; "forget where I parked". **Home and work** are
+the user's saved places in Maps called "Home" and "Work"
+(`org.webosphoenix.maps.place:1`, which Maps lists, renames and removes),
+one store for everything that needs them: "this is my home" or "set my
+work location to here" saves one where the phone is (taken back by
+"undo"), as Settings > Assistant > Home & Work does ("Set to Where I Am
+Now", "Clear"); an address is Maps' to find and save ("set my home address
+to 12 Main Street" looks it up there). **Reminders at a place**: "remind me
+to buy milk when I get home", "when I leave work remind me to call Mom",
+"remind me to lock the door when I leave" (here), "... when I get to the
+gym" (any saved place by its name). The reminder is a task in Tasks (its
+note "When you get home") and a geofence the device watches. OSE's
+location service has no geofences (its methods: `getLocationUpdates` and
+the rest), so it is an activity of the activity manager's whose trigger is
+`getLocationUpdates` (a fix a minute at most, or 50 m on) with db8 where
+clauses on the reply's latitude and longitude: inside a box 150 m each way
+about the place to arrive, outside one of 250 m (`{or: [...]}`, a side
+each) to leave, so a fix at the edge does not come and go. Nothing of the
+Assistant runs until a fix matches; then `placeWake` gets the fix as
+`$activity.trigger` (as com.palm.service.contacts reads its trigger,
+`contactsService.js:347-352`) and restarts the activity with the next
+trigger (`complete {restart, trigger}`, `contactsService.js:433-465`), or
+at the end launches Tasks with `{reminder: taskId}`, which posts the
+reminder as it does a timed one. Made at the place itself, "when I get
+home" first waits to be away (and "when I leave work", said elsewhere,
+first to get there). With no fix (location off) it tries again in 15
+minutes. With no Home yet it asks "Should I use where you are now?" (Set
+Home to Here, or Settings); a place Maps does not have still gets the task,
+and says how to have the reminder there. The simulator's activity manager
+has OSE's triggers for it (where clauses, `and`/`or`, an error firing
+it, `$activity.trigger`, `complete {restart: true, trigger}`; the system
+UI's page subscribes, `runtime/phoenix-runtime.js`), and its location
+moves with Simulate > Location or the scene step `@location:<lat>,<lon>`:
+checked with `--scene "assistant:this is my home|yes|@location:37.3437,-121.8907|remind
+me to buy milk when I get home|@close|@location:37.3338,-121.8906|@wait:8000|@dashboard"`,
+Tasks' "buy milk / When you get home" in the dashboard. On a device the
+same calls go to OSE's activity manager and location service; not run on
+one yet. "Send Sam my ETA home" (the Synergy commands' `shareLocation`)
+uses the same saved Home and Work.
+
+**Music and podcasts** (`musicMode`, `favorites`, `podcast`;
+`lib/commands-music.js`). "Shuffle my music" plays everything shuffled;
+"turn on shuffle", "turn shuffle off", "repeat this song", "repeat all",
+"stop repeating", "is shuffle on": Music behind the answer with
+`{shuffle}` or `{repeat: "off" | "all" | "one"}`, which its player takes
+as its own buttons set them (`apps/music` launchParams.ts); Music now says
+what plays with its uri, shuffle and repeat (`setNowPlaying`, which
+`services/shellhost` and the simulator keep). "Like this song", "add this
+to my favorites", "unlike this song": Music's favorites, new, in db8
+(`org.webosphoenix.music.favorite:1`, `apps/music` favorites.ts): the star
+on Now Playing, a Favorites tab (a star, so four tabs fit a phone), and
+"play my favorites" / "shuffle my favorites" (`{favorites: true}`); the
+Assistant writes the song Music says plays and checks it is there. The
+sleep timer is the timer command's (below, "Speed and correctness"): "set
+a sleep timer" with no time asks "For how long?", and the time said sets
+it; "when does the music stop" is how long is left. Podcasts: "play the
+latest episode of The Daily", "play the Hard Fork podcast", "resume my
+podcast": the episode is chosen from Podcasts' own (the one left
+part-way, else the newest not played, else the newest; "latest": the
+newest) and Podcasts plays it from where it was left (`{playEpisode:
+id}`); a podcast not followed is said, with the ones that are. Shuffle
+and repeat are Music's: asked while a podcast plays, it says so. Checked
+in the simulator (`--scene 'assistant:@open:org.webosphoenix.music:{"play":""}|like
+this song|repeat this song'`: the star lit and repeat-one on Now Playing).
+
+**Quick facts** (`define`, `spell`, `coin`, `dice`, `randomNumber`,
+`wikipedia`, `news`; `lib/commands-facts.js`). "Define ephemeral", "what
+does serendipity mean": the dictionary on the phone, offline
+(`data/dictionary.json`, 66,603 words from Princeton WordNet 3.0 by
+`tools/make-dictionary.py`, its licence beside it: LEGAL.md), the commonest
+part of speech first, a second sense after ("Ephemeral, adjective: lasting
+a very short time. Also, as a noun: ..."); "ran" is found as "run", "cats"
+as "cat" (WordNet's own forms and suffix rules); a word it does not have
+offers the web. "How do you spell rhythm": letter by letter. "Flip a coin",
+"roll two dice", "roll a d20", "pick a random number between 1 and 50".
+"Look up Ada Lovelace on Wikipedia", "what does Wikipedia say about the
+Eiffel Tower": the article's summary from Wikipedia's REST API, said as
+"From Wikipedia, ...", with a card naming Wikipedia and its licence and
+opening the article. Open questions ("who was Ada Lovelace") stay the
+model's or the web's, as before; whether they should try Wikipedia first
+when no model is connected is the owner's to say (OPEN-QUESTIONS.md Q154).
+"What's the news", "read me the headlines": the five newest headlines of
+the user's feeds (RSS or Atom), each a card opening the story; the feeds
+are in Settings > Assistant > News (two public ones to start with, the
+owner's choice: OPEN-QUESTIONS.md Q153).
+
+**Settings by voice** (`deviceSetting`; `lib/commands-settings.js`). The
+switches of Settings the toggle command (Wi-Fi, Bluetooth, airplane mode,
+the flashlight, the ringer, Do Not Disturb, Location Services, rotation,
+the hotspot, VPN), volume and brightness did not have: previews and
+notifications on the lock screen, the notification light, system sounds,
+keyboard clicks, high contrast, reduce motion ("turn off animations"),
+captions, mono audio, DropShare, network time, Exhibition's night mode,
+"Hey Phoenix", answers aloud; and "set the screen timeout to 2 minutes"
+(Settings' nearest choice). Each is set in the system preference
+Settings reads (an object preference keeping its other fields), read back
+before it is said, and taken back by "undo"; "is high contrast on"
+answers with Turn It Off. Showing previews on the lock screen is read back
+first: it shows what messages say to whoever holds the phone. Phoenix has
+no dark mode (webOS's look had none; 2.0's design brings light and dark):
+"turn on dark mode" says so and offers high contrast (OPEN-QUESTIONS.md Q155).
+
+**Emergency calls** (the call command's, `lib/emergency.js`, with
+`emergencyText` in `lib/commands-sos.js`). The call is the one "Speed and
+correctness" (below) describes: "call 911", "call the police", placed after
+a five-second countdown with Cancel and Call Now, never held for a yes,
+over the lock screen too. More words reach it (`lib/lang/en-sos.js`):
+"emergency", "SOS", "this is an emergency", "get the paramedics", "call
+911 now"; and while it counts, any few words with a stop in them ("wait,
+no, stop", "false alarm", "never mind") stop it as "no" and "cancel" do,
+"hurry" and "call now" place it at once (`countdownAnswer`, asked before
+the decision model in `assistant.js` confirmAnswer). With emergency
+contacts (Settings > Emergency Info), the call's answer offers Text My
+Location to them: "text my location to my emergency contacts" reads back
+"Text Mom and Sam: “I've called 911. I'm here: <map link>”?" and sends a
+text to each. The tests never place a call (a test device that records).
+
+**The smart home, through Home Assistant** (`home`, `homeScene`;
+`lib/commands-home.js`). Settings > Assistant > Smart Home keeps the
+user's Home Assistant: its address and a long-lived access token (made in
+Home Assistant under the user's profile, Security), both checked against
+its REST API (`GET /api/`) before they are kept, the token sealed as the
+model providers' keys are and never shown again (`homeAssistant`,
+`setHomeAssistant`, `removeHomeAssistant`, Settings' and the system UI's
+only). The Assistant then reads the house (`GET /api/states`: lights,
+switches, fans, input booleans, thermostats, locks, covers and scenes, by
+their friendly names) and calls its services (`POST
+/api/services/<domain>/<service>`). "Turn off the living room lamp", "turn
+on all the lights", "kitchen lights off", "dim the bedroom light to 30%",
+"start the coffee maker", "set the thermostat to 70", "turn up the heat"
+(two degrees Fahrenheit, one Celsius), "make it warmer", "lock the front
+door", "close the garage door", "is the front door locked", "what's the
+temperature inside", "activate movie night" (a scene by its name). A
+device is the one whose name has all the words said, or every one of the
+kind said ("the lights", "the thermostat"). Each change is read back from
+Home Assistant (`GET /api/states/<id>`, once more 1.5 s later for a slow
+device) before it is said: "Turned off the Living Room Lamp", or "I asked
+Home Assistant to ..., but it doesn't say it did"; a lock still locking or
+a door still closing is said so ("Locking the Front Door."). Unlocking a
+lock and opening a garage door or blinds are read back first, by Home
+Assistant's names ("Unlock the Front Door?"), a model's choice too. "Undo"
+puts lights, switches, fans and the thermostat back as they were, never a
+lock or a door. The words wait for Home Assistant to be connected (the
+grammar's context: the entities' names and kinds); until then "turn off the
+lights" is still "I can't control other devices ... by myself. With Home
+Assistant, I can: connect it in Settings > Assistant > Smart Home", and the
+phone's own words stay the phone's ("turn on the flashlight", "lock the
+screen", "turn off the alarm", "set the volume to 50"). Words for a device
+it cannot act on ("preheat the oven") say what it can do. Tested against a
+stand-in Home Assistant (`test/home-assistant.cjs`: its REST API on a small
+house, served over HTTP for the simulator's checks). The owner's questions on
+these features: OPEN-QUESTIONS.md Q150-Q157.
+
+### Speed and correctness (11 October 2026)
+
+The owner: "if the language model is installed ... some of the commands
+now are taking a long time because the language model is doing it;
+shouldn't it go through our tool first so it's done quicker before the
+language model". The grammar did answer first; but some of what it
+matched still waited for the model afterwards. Measured with Qwen3 0.6B
+(Q8_0) in llama-server, every request of the main set and the held-out
+set, and each turn's trace (which steps ran, how long): of the turns the
+grammar answers alone, these waited for the model (the times on this
+4-core computer under load, 1 to 25 s per step):
+
+| Request | What waited | Time |
+|---|---|---|
+| "create me a draft email announcing the new webos version" | the model writing the email (asked for) | 28.6 s |
+| "tell me a joke" | the model's joke (`chatAnswer`) | 17.0 s |
+| "make me a note about the newest and greatest features ..." | the model writing the memo (asked for) | 6.1 s |
+| "Talk to me." (twice), "What do you want to talk about?" | the model's words | 4.1 s, 3.7 s, 1.2 s |
+| "add an event called dentist" | the model reading a time the words do not say (`fillArgs`), then "When is it?" anyway | 1.7 s |
+| "make a note about the newest features in webos" | the model writing a memo nobody asked to have written | 1.0 s |
+
+And outside what the evaluation sees (its stand-in starts no server):
+llama-server loads the model when the first request needs it (1.5 s
+here for Qwen3 0.6B, and it stops after five idle minutes), so the first
+such request after a pause also waited for that.
+
+**The rule now** (`assistant.js` actParsed, chatAnswer, warm):
+
+- What the grammar can do runs at once. A command missing something it
+  can ask for ("When is it?", "What should I say to Sam?") asks at once
+  (`asksItself`: the command's own `prepare` says whether it asks); the
+  model fills in an argument only where the grammar could not read it
+  and the command cannot ask for it (no English rule leaves one so today).
+- Small talk is the grammar's, jokes and "talk to me" included
+  (OPEN-QUESTIONS Q130); what follows that the grammar does not take is
+  the model's.
+- The model writes a memo or an email only when the words ask for
+  writing: "write me a memo about", "make me a note explaining", "draft
+  an email announcing" (`args.write`); "take a note about the parking
+  spot" asks what it should say, "email Sam I'm late" sends those words
+  (Q135).
+- The model runs only when the grammar (and the decision model's
+  complete candidates, when it is on) cannot; the view shows the dots at
+  once and the thread's stage ("Starting the on-device model", "Thinking
+  it over") from the first moment of its work (`bounded`).
+- `warm`: the Assistant app and the system's view call it as they open,
+  and the model's server starts in the background where the model fits
+  the device's memory (`models.forDevice`); nothing waits for it (Q134).
+  Checked in phoenix-sim: the app opening started llama-server.
+- A question about the world alone ("who wrote Pride and Prejudice": no
+  "my", no contact's name, nothing the commands keep or measure:
+  `say.context` world) is answered in words without the choice among
+  commands first, which could only have picked a command that reads the
+  phone's things. On the main set the choice those questions skip took
+  6.6 s on average (1.2 to 22 s; 27% of their time); on the model's set
+  it is skipped for 12 of the 25 questions and none of the 138 requests
+  to act.
+- A time a model writes for an alarm, a reminder or an event is the
+  grammar's reading of the words where it reads one (Qwen3 0.6B set "I
+  want an alarm at 5:30 tomorrow morning" for 6:30).
+- A sleep timer a model chooses (it stops the music) holds only where the
+  words speak of the music, sleep or playing (`lib/lang/en.js` sleepSaid; Qwen3 0.6B
+  made "add 5 minutes to the timer" one); "add 5 minutes to the timer"
+  is said at once to be out of reach (a running timer is not lengthened
+  yet), as "put 10 more minutes on the timer".
+
+`speed.test.ts` asks every request of the main and held-out sets the
+grammar answers alone again with a model installed: none may make a
+request of it but the writing asked for (the six above failed it).
+
+**Measured after** (Qwen3 0.6B Q8_0 in llama-server on this computer,
+other work running beside it; `tools/eval-assistant.cjs --model`, each
+turn's steps from its trace):
+
+| | Before | After |
+|---|---|---|
+| The main set's original 434, with the model | 432 right, 0 unsafe | 433 right, 0 unsafe |
+| The held-out set's original 79, with the model | 76 right, 0 unsafe | 78 right, 0 unsafe |
+| Turns the grammar answers that waited for the model (main, held out) | 7, 0 | 2, 0: the two that ask for writing |
+| The model's requests in the turns that need it (main, held out) | 44 (21 of them a choice among commands), 26 (13) | 30 (9), 16 (7) |
+| The 40 cases that reached the model in either, asked of both one right after the other (which first alternating; the code as of the first merge) | 77 requests (34 choices); per case: median 2.9 s, 90th percentile 67.6 s | 50 requests (17 choices); median 2.2 s, 90th percentile 6.9 s |
+| One request of a kind, in the same pairs (median) | a choice 1.3 s, a call 1.5 s, an answer 5.2 s | 1.4 s, 1.8 s, 3.7 s |
+
+The slow end before is the machine's load as much as the model ("open
+spotify": the same two requests took 189 s one time and 3.6 s the next),
+so the measure is the requests no longer made; each costs about what it
+did (the choice reads a longer list of commands now, Synergy's among
+them).
+
+The whole sets now (talk mode's, Synergy's, Search your phone's and
+these cases too): the grammar alone, main 646 of 646 (0 unsafe, 0 wrong
+read-backs), held out 97 of 115 (0 unsafe; 1 wrong read-back, talk
+mode's "actually no" after "call daniel", as on the base). With the
+model: main 639 of 646 (0 unsafe, 1 wrong read-back), held out 102 of
+115 (0 unsafe, the same 1). The model's misses on the main set: "how
+many kilometers is a marathon" (as before), and six of talk mode's
+web-search cases, written for no model: with one, the question is
+answered, so the "yes" to an offer never made goes to the model, and
+"translate good morning into spanish" was read back as a reply to Sam
+(the wrong read-back). The base branch with the model misses five of
+those six too, and searches the web unasked three times ("search the
+web", "look it up") where this branch asks what to search for.
+
+**The review's bugs** (the lead's 42 requests, 11 October 2026; each with
+cases in `eval/cases-a.json` and `review.test.ts`):
+
+| Said | Was | Now |
+|---|---|---|
+| "send my ETA to Sam" | a text to a contact called "my" | `shareLocation` ("The Assistant and Synergy", below), which reads it first; no word like "my", "the", "this" is taken for a name; "send happy birthday to Mom" texts Mom; "send the photo to Sam" is not a text |
+| "remind me to buy milk when I get home" | a plain task "buy milk when I get home" | a reminder at the place ("Everyday features", above: a task and a geofence; where home is asked first when Maps has no Home); the time-only stopgap this row first had is gone ("when I wake up" stays a reminder's words) |
+| "set a sleep timer for 30 minutes" | a timer ringing over the music | a timer whose activity presses pause (`org.webosphoenix.system` mediaKey, as "pause" does) and rings nothing; "stop the music in 20 minutes", "turn off the music after an hour" |
+| "play my podcast" | Music searched for "podcast" | the podcast command ("Everyday features", above): the podcasts the user follows, by name or where left off; a podcast to find is still "not yet" |
+| "call 911" | "Call 911?" like any number | `lib/emergency.js` (the Phone's lists: 3GPP TS 22.101's numbers and the national ones): "Calling 911 in 5 seconds. Cancel to stop." with Call Now and Cancel and the seconds counting down; the service places it when they run out (also with the app closed); "no", "cancel" or Cancel stop it; asked over the lock screen too. "Call the police", "call an ambulance": the region's number (999 for en-GB). A model's choice of one is read back as any call (Q133) |
+| "what's on my screen" | "Did you mean set brightness to 50%?" | "I can't see what's on your screen yet."; the brightness suggestion needs brightness words |
+
+**A sweep of everyday phrasings.** Some 200 requests as people say them
+to Siri, Google Assistant and Alexa, across the commands (fillers,
+corrections mid-sentence, several at once, numbers as words, contacts
+named Will, Rose and Mark), asked of the grammar; each misreading fixed
+where it came from (cases a-sw-*, with a case's own contacts: `put`):
+
+- A correction mid-sentence is the sentence as meant
+  (`lib/lang/en-corrections.js`, tried before the words as said): "set
+  an alarm for seven no wait eight", "remind me at 3 to call the dentist
+  actually make it 4" (the evening kept for 4), "set a timer for 5
+  minutes no 10", "text Sam wait no text Priya that I'm outside", "call
+  Sam no Priya". Only a whole request, a time, number or day, or a
+  contact can be the correction, so "text Sam no worries" and "text Sam I
+  actually liked the movie" stay texts.
+- Fillers and politeness: "hey can you ...", "at like six thirty",
+  "would you mind turning off the wifi", "do me a favor and ...", "you
+  know what, ...", "I need an alarm for 6", "I'd like a timer for 20
+  minutes", "put a timer on for 4 minutes", "snooze for five more
+  minutes", "in a couple of hours", "set the volume to seventy percent",
+  "what's 20 percent of 45 dollars", "friday-ish".
+- Lists: "the grocery list", "groceries" and "the shopping list" are one
+  list (it made a Grocery list beside Groceries; Q132), "my to do list"
+  is the default one ("You don't have a list called to do").
+- Several at once: "text Will, Rose and Mark that dinner is at 7" texts
+  each (it texted Will "Rose and Mark that dinner is at 7"); "remind me
+  tomorrow at 9 to call Will and text Rose" is one reminder (it texted
+  Rose); "what's the weather tomorrow and do I have any meetings" asks
+  about tomorrow's; "set an alarm for 6:15 and another for 6:30"; "one
+  for five minutes and one for twelve" (minutes).
+- "Put lunch with Will on my calendar for Thursday at noon" was titled
+  "Lunch with will for"; "what's the weather on Saturday" read the
+  calendar; "is it going to snow this week", "what's the high today",
+  "what am I doing tomorrow night", "did anyone call me", "when's my next
+  alarm" and "how long until my alarm goes off" (the next one and how
+  long, not the list), "play it again" (it searched Music for "it
+  again"), "play Will Smith" (said back as "will smith"), "put the phone
+  on do not disturb", "text my sister I'm running late" ("I couldn't find
+  sister", not "my"), "email my boss ...", "set an alarm for 6 30" (a
+  transcript's time), "how much longer on the timer", "what meetings do I
+  have today", "call mom on speaker", "turn up the volume all the way",
+  "open the photos app" (it searched photos for "app"), "launch messages"
+  (what people call the apps: Messaging), "will I need a jacket tonight"
+  (the cold, not the rain), "send Mark a message" (it read back a text
+  saying "a message"; now it asks what to say).
+- "Send the photo to Sam", "email Mom the pictures from the trip": "I
+  can't send photos or videos yet." (the model's set: Qwen3 0.6B offered
+  a screenshot); "text Rose I got the pictures" stays a text.
+- "Add a timer for 5 minutes" was a timer called "add a"; "add milk to my
+  list" made a list called "My" (now the default list), and with
+  Synergy's accounts "add stamps to my to do list" went to Microsoft's To
+  Do ("To Do" is as generic a name as "Tasks" now, `lib/synergy.js`).
+
+And one found by the talk-mode work (tools/test-assistant.cjs): "did you
+add it?" went on being answered with its switch off in Settings >
+Assistant > Commands, the router answering it past `act()`'s check; the
+switch is checked there now, and `review.test.ts` asks every command's
+phrase with its switch off.
+
+Left from the sweep, for others or the owner: adding several items in
+one ("eggs, milk and bread": one task, Q131), a group text as one
+message, "turn off the lights and lock the screen" (smart home with a
+phone request), video calls, "open youtube" (no such app: the web could
+be offered), "where am I", contacts' addresses for "navigate to Rose's
+house" (Synergy), "turn off my alarm for tomorrow" (the Clock has no
+skipping one day of a repeating alarm), sunrise and sunset, "how many
+days until my birthday" (the owner's own card), "next Thursday" said on a
+Wednesday (the coming one, as decided; many mean the week after), and the
+features the parity work adds (reminders by place,
+podcasts, dark mode).
+
+**Held out.** Ten requests written after these fixes and not tuned for
+were added to the end of `held-out.json` (h-a-1 to h-a-10): eight
+answered right by the grammar, the original service one. Of the original
+79, four more are now answered by the grammar alone (69 to 73): "I want
+an alarm at 5:30 tomorrow morning", "put a timer on for 4 minutes", "did
+anyone text me" and "is it going to rain this weekend". The sweep had
+the same or like phrasings, written after its author had seen the
+held-out set's misses, so these four are not a clean measure. Nor is
+h-a-4 now: with Qwen3 0.6B behind the grammar, "turn the music off in 45
+minutes" paused the music at once (the evaluation's one unsafe action),
+so the grammar reads it as the sleep timer it is, with "turn off the
+music" (which went to the model) and "switch the music off after an
+hour" (a-sw-56, a-sw-57). And h-a-6 ("put toothpaste on the shopping
+list") may go to a list called Shopping where an account has one (the
+Synergy world's Todoist), never to a new list.
+
+### The Assistant and Synergy (11 October 2026)
+
+The owner: "anything connected through the Synergy system should be
+accessible to the Assistant, and it should be able to act on it."
+
+**Found when asked, not known in advance** (`lib/synergy.js`). The
+Assistant asks the accounts service which accounts there are
+(`com.palm.service.accounts/listAccounts`, each annotated with its
+template's capability providers as the original's `Account.annotate` does:
+app-services `models/account-model.js`:26-71) and reads what each provider
+says about itself: its capability (`MESSAGING` with subtype `IM`,
+`CALENDAR`, `TASKS`, `MAIL`, `DOCUMENTS`, `CONTACTS`, `SOCIAL`), its
+`serviceName` (`type_slack`), its db8 kinds (`dbkinds.immessage`,
+`calendarevent`, `task`, `tasklist`), its names (`loc_name`,
+`loc_shortName`) and the account's alias and user name. Sharing targets come
+from the installed apps' `phoenix.shareTargets[].connector`, drives from
+`/media/drives/<accountId>`. So a connector installed later, a third
+party's included, is heard by its names and acted on as soon as its account
+is signed in, with no change to the Assistant: `synergy.test.ts` "a
+connector no code here knows" installs an "Acme Chat" connector the code has
+never seen and sends on it, reads it, lists it and posts to it. The grammar
+hears accounts by those names (`ctx.accounts`) and by the services people
+name ("Gmail" is the Google account, "Mastodon" the Fediverse one,
+`lib/lang/en-synergy.js` `SERVICES`).
+
+**What it can read and do, by what is connected:**
+
+| Through Synergy | Accounts (today) | The Assistant reads | The Assistant does | Asks first |
+| --- | --- | --- | --- | --- |
+| Messages | Texts (SMS/MMS); Jabber, Matrix, Delta Chat, Unofficial Telegram, Slack (people and channels), Bluesky and Fediverse direct messages; any `MESSAGING`/`IM` provider | Every account's new messages, or one account's ("read my unread Slack messages", "what did Sam say on Slack", "any new messages on Telegram"), with Reply on the account they came by | Sends to a person or a group conversation ("text Sam on Jabber: ...", "message the #design channel on Slack: ..."), from the account's user name, in its message kind, as Messaging sends; with no account named, as Messaging would: the person's latest conversation's network, else a text, else their one network; several: "On Slack or Jabber?" | Yes, naming the account ("Send ... to Sam Delgado on Slack?") |
+| Where you are | The same accounts | | "Share my location with Sam on Slack", "send my ETA to Sam", "let Priya know when I'll be at the airport": a map link (as Maps shares a place) or the time the route gives, sent as a message is | Yes, naming the account ("Send your location to Sam Delgado on Slack?", "Text Sam Delgado that you'll be at San Jose Airport around 10:18 AM?") |
+| Calendars | The device's, CardDAV & CalDAV, Subscribed Calendar (read only), Google, Microsoft, Zoom (read only) | One calendar's or one account's events and free time ("what's on my work calendar", "am I free at 3 on my Google calendar") | A new event in the account's calendar, in its own event kind for its connector to send on (com.palm.app.calendar `CalendarsManager.js`:320-337); an event moved to another calendar ("add it to my Google calendar"), undone by "undo"; a read-only calendar refused | No (undo) |
+| Meetings | A Zoom, Teams, Google Meet, Webex or Jitsi link on any event | The meeting now or next | Opens its link ("join my next meeting", "join the design review"); a later one asks "Join it now?" | No |
+| Invitations | Google, Microsoft, CalDAV events with the user as a guest; email invitations | Which are waiting | Accept, decline, maybe: the user's attendee entry, which the account's connector sends to the organizer (Graph `accept`/`decline`/`tentativelyAccept`, Google's attendees with `sendUpdates=all`, CalDAV's `PARTSTAT`); an email invitation's `meetingInfo.response`, as Email's buttons set it (`MessageDisplay.js`:461-500) | Yes, naming the organizer ("... from Alex Rivera on your Work calendar? Alex will be told.") |
+| Tasks | The device's lists, Todoist, Google Tasks, Microsoft To Do; any `TASKS` provider | An account's lists or one of them ("what's on my Microsoft To Do") | Adds to an account's list in its kind ("add milk to my Todoist shopping list") | No (undo) |
+| Email | IMAP and POP accounts (the original transports), any account writing the email kinds | One account's mail ("any new emails in my work account", "read my latest email in my work mail inbox") | Archive (to the account's Archive folder, as Email moves mail: `Email.js`:235-241), mark read or unread, flag, unflag, mark all read; delete (`Email.js`:244-262) | Deleting, naming the account |
+| Posting | Bluesky, the Fediverse, LinkedIn; any connector with a share target | | Posts through the account's `share` method ("post to Bluesky: ...", "toot ...", "share this on LinkedIn"), within its length, with its default audience | Yes, naming the account and who sees it ("Post to Fediverse as @jordan@mastodon.example: “hello fediverse”? Who can see it: Public."); with none named and several accounts, which |
+| Files | Nextcloud, ownCloud, WebDAV, S3, SFTP, Dropbox, OneDrive, Google Drive, Box | A drive's files by name ("find the budget file on Dropbox") | Uploads the file found to a drive ("save it to Google Drive") | Yes |
+| Contacts | People merged across accounts | Names, numbers, addresses, chat addresses (as before) | | |
+| The accounts | All | "What accounts do I have": each and what it does, by name | | |
+| Out of reach | Signal, WhatsApp, iCloud Drive, X, Facebook, Instagram, Threads | | Says why ("I can't reach Signal: Signal has no way in for other apps."); an account not signed in: "You're not signed in to Matrix. Add the account in Accounts first." | |
+
+**The rules.** Sending, posting, answering an invitation, uploading,
+sharing where you are and deleting are read back first and name the account
+they go by. When several accounts fit an outward action and none was named,
+it asks which ("On Slack or Jabber?", "Which account: Bluesky
+(@jordan.bsky.social), LinkedIn (Jordan Avery) or Fediverse
+(@jordan@mastodon.example)?"), never a model's guess: a model may name an account only from
+the words said. Every button these answers carry is one pending choice
+("Every button, asked aloud"): "Jabber", "yes", "join it now" answer it
+hands-free.
+
+**On a device** a command can do only what its grants allow
+("Permissions"): the Assistant's db8 grants cover the standard kinds it
+reads and writes (the email kinds, folders, messages, chat threads, login
+states, calendars, events, task lists); a connector's own sub-kinds grant it
+too (each connector's `configuration/db/permissions`: the message and login
+kinds, the DAV calendars), and every connector's `share` method is also in
+the system's posting group, `phoenix.connector.share`, which the Assistant
+holds (the kit's scaffold writes it: `SYSTEM_SHARE_GROUP`).
+`permissions.test.ts` checks each Synergy command's calls and kinds against
+them, the connectors' files included. How a connector developer gets this:
+[SYNERGY-SDK.md](SYNERGY-SDK.md) "The Assistant".
+
+| Command | Say, for example | Does | Asks first |
+| --- | --- | --- | --- |
+| `post` | "post to Bluesky: shipping today", "toot good morning", "share this on LinkedIn" | Posts through the account's share target | Yes |
+| `joinMeeting` | "join my next meeting", "join the Zoom call", "join the design review" | Opens the meeting's link | |
+| `inviteReply` | "accept the invite from Alex", "decline it", "tentatively accept the design review" | The user's answer, for the organizer | Yes |
+| `emailMark`, `emailDelete` | "archive it", "mark the email from Priya as unread", "flag it", "mark all as read", "delete the email from Alex" | As Email does | Deleting |
+| `eventCalendar` | "add it to my Google calendar", "move the dentist to my work calendar" | Moves the event | |
+| `saveToDrive` | "save it to Google Drive", "upload the budget file to Dropbox" | Uploads the file found | Yes |
+| `shareLocation` | "share my location with Sam on Slack", "send my ETA to Sam" | Where you are, or when you'll be there, as a message | Yes |
+| `accounts` | "what accounts do I have" | The accounts and what each does | |
+| an account named | "text Sam on Slack ...", "read my unread Slack messages", "what's on my work calendar", "add lunch Friday at noon to my Google calendar", "any new emails in my work account", "what's on my Microsoft To Do", "add milk to Todoist", "find the budget file on Dropbox" | `text`, `readMessages`, `agenda`, `freeTime`, `event`, `task`, `taskList`, `searchEmail`, `readEmail`, `findFiles` take the account (`via`, `calendar`, `account`, `drive`) | As the command does |
+
+**Measured.** `apps/assistant/eval/cases-b.json`, 61 cases in a world of
+the user's accounts (`test/accounts-world.cjs`: Slack, Bluesky, the
+Fediverse, Jabber, Unofficial Telegram, Google, Microsoft named "Work",
+Zoom, Todoist, Dropbox, Google Drive, LinkedIn, two email accounts),
+loaded with the main set. The grammar alone, before and after: the main
+set 494 of 551 right with 1 unsafe (the Synergy cases 4 of 61; "send Sam
+my ETA to the airport" texted Sam the words "my ETA to the airport")
+against 551 of 551, none unsafe and no wrong read-backs; held out (12
+Synergy phrasings written after, not tuned for) 1 of 12 against 6 of 12,
+the rest of that set unchanged (76 of 89). The time per turn went from 1
+to 2-4 ms on average (the accounts are read for each request).
+With Qwen3 0.6B behind the grammar the Synergy cases stay 61 of 61 (the
+grammar answers them all) and the held-out ones 6 of 12, none unsafe: for
+"anything new on Slack" the model chose reading messages but named no
+account (it said "None", taken now as none, not an account called None). In phoenix-sim (`tools/test-assistant-synergy-sim.cjs`,
+the real connectors against their stand-ins and the Jabber demo server):
+"add oat milk to my todoist groceries list" puts it in Todoist's kind and,
+after a sync, on Todoist; "what's on my todoist groceries list" reads it;
+"post to bluesky: ..." is read back as "Post to Bluesky as @anna.test:
+...?", nothing posted before Yes, then on Bluesky's server; "message Ada on
+Jabber: the mock-ups are ready" is read back naming Jabber and sent from the
+account; "what accounts do I have" lists them
+([the read-backs](screenshots/assistant-synergy-readbacks.png),
+[the accounts](screenshots/assistant-synergy-accounts.png)).
+
+**Found on the way, in the simulator.** The accounts service gave a
+connector's account with its providers bare (an id and a capability), so
+the Assistant said "You're not signed in to Jabber": the runtime's
+`annotate` let the account's fields overwrite the template's providers
+before completing them from it. Two pages could both keep a connector's
+connections (each found none kept), every message handed to both; the page
+that started first now keeps them. And Chromium slowed the hidden pages
+that keep them to a timer a minute after five minutes out of sight, so a
+message waited up to a minute for its acknowledgement: phoenix-sim now
+keeps hidden pages running (`shell/sim/main.cpp`), as a device's services
+run.
+
+**Not yet.** Reading a social feed or its notifications ("what's new on
+Bluesky": no FEEDS kinds yet, OPEN-QUESTIONS.md Q3); Outlook and Gmail mail
+(Phoenix's Google and Microsoft accounts bring no email, Q124: the Assistant
+says so); Zoom's `createMeeting` ("schedule a Zoom meeting"); a phrasing the
+held-out set shows it misses ("shoot Sam a slack message saying ...",
+"anything new on Slack", "anything in my work inbox"). Decisions for the
+owner: OPEN-QUESTIONS.md Q140-Q146.
+
+### Search your phone (11 October 2026)
+
+The owner (11 October 2026): "Gemma embeddings 2 is out and I think we
+need to look into creating a layer in our assistant that can use it for
+advanced search." It is built: a search of the user's own things by what
+they mean, on the device, which the Assistant and Just Type use. Off
+until the user turns it on (Settings > Assistant > Search your phone).
+
+**The model.** Google's EmbeddingGemma 2 (6 October 2026; Apache-2.0, its
+model card at `google/embeddinggemma-2` and the Gemma 4 licence page it
+links): a 270M text and code model (130M transformer, 140M embeddings)
+with optional vision (170M) and audio (300M) encoders, one 768-dimension
+space for text, code, pictures and sound, 8K tokens, Matryoshka
+dimensions 768/512/256/128. llama.cpp's own conversion
+(`ggml-org/embeddinggemma-2-GGUF` at `bfcd298`, converted with b11451):
+the text model Q8_0, 310 MB, and the projector with both encoders
+(`mmproj`) Q8_0, 555 MB, downloaded in Settings with their SHA-256
+checked (`services/index/lib/model.js`). Its model card's prompts are
+used: a passage is `title: {title} | text: {content}` (`title: none`
+without one), a query `task: search result | query: {query}`; pictures
+and sound without a prefix. Not float16 (the card: its activations
+overflow it); llama.cpp's CPU backend computes in float32.
+
+**llama.cpp.** The model is llama.cpp's `gemma-embedding2` from b11451;
+`./phoenix` and meta-phoenix's `llama-cpp` now build b11552 (`23b0202`,
+10 October 2026), which also takes pictures and sound in
+`/v1/embeddings` (`{"input": [{"content": [{"type": "image_url", ...}]}]}`
+or `input_audio`, the server started with `--mmproj`). `./phoenix`
+builds llama-server again when the one installed is older than b11451
+(`brew upgrade llama.cpp` on a Mac). **Pictures and sound work**: the
+seven sample photos embedded from their pixels and searched with words
+each found its own picture first (7 of 7: "a beach with sand dunes" the
+dunes, 0.742 against at most 0.652; "northern lights in the night sky"
+the aurora 0.795; "boats in a harbor at dusk" the harbour 0.733), and the
+two sample voice memos from their sound ("how to record and transcribe a
+memo": the welcome memo 0.797 against 0.601; llama.cpp calls its audio
+input experimental). On this 4-core computer under load a picture took
+10-15 s and a 8 s recording 3-4 s, one thread; with "Include photos and
+voice memos" off, photos are found by their names, albums and dates and
+voice memos by their titles and transcripts.
+
+**The service** (`services/index`, `org.webosphoenix.service.index`, Node.js
+like the other services; the simulator runs the same code in the page):
+
+| Source | db8 | Opens |
+| --- | --- | --- |
+| Memos | `com.palm.note:1` | Memos `{memoId}` |
+| Tasks | `com.palm.task:1` | Tasks `{taskId}` |
+| Calendar | `com.palm.calendarevent:1` | Calendar `{showEventDetail}` |
+| Contacts | `com.palm.person:1` | Contacts `{id}` |
+| Email | `com.palm.email:1` and every kind that extends it (IMAP, POP, EAS, a connector's) | Email `{emailId}` |
+| Messages | `com.palm.message:1` and every kind that extends it: SMS, MMS and every Synergy account's chat, today's and any future connector's (the messaging contract has each extend it) | Messaging `{threadId}` |
+| Files | `/media/internal` through the file manager: names, and the words of text files and PDFs (`lib/pdftext.js`: content streams, inflated) | Files `{path: its folder}` |
+| Photos | `com.palm.media.image.file:1`: name, album, date; the picture itself with the encoders | Photos `{imageList}` |
+| Voice memos | `org.webosphoenix.voicememo:1`: title, date, transcript; the recording itself with the encoders | Voice Memos `{memoId}` |
+
+Each source is a switch; one turned off takes its part of the index
+with it. Passages are at most 160 words and 700 characters (a passage
+of text without spaces was 785 tokens and stopped a pass in the
+simulator), 8 a record. Vectors are cut to 256 dimensions, normalized
+again and kept as 8 bits with a scale each: 260 bytes a passage, in one
+file per source (`lib/store.js`) in `/var/lib/phoenix/index` (the
+service's own; not on the USB drive; no backup registration, so never in
+a backup or Phoenix Cloud: OPEN-QUESTIONS asks the owner), with no text:
+a result is read again from its record (so one deleted is never shown).
+Full Erase wipes it (Settings' and the security policy's: the shell's
+`SystemScreens._eraseDevice` and the system manager call `wipe` beside the
+OAuth service's).
+
+**Keeping up.** A pass asks db8 for what changed after the last revision
+it indexed, deletions included (`_rev > N`, `incDel`), as the contacts
+linker does (`autolinker.js:1680-1760`), a page of 50 at a time, embeds
+only passages whose text changed, and saves what it has with the
+revision every minute and at its end: it stops between pages when it
+must and goes on from there. On a device an activity per source wakes it
+(a db8 watch on that revision, made again after each pass) and a daily
+one with the charger required looks at files and at records db8 purged;
+the simulator's indexing page looks every 30 seconds. **When**: never on
+a battery saver (the system preference `batterySaver`, when Phoenix has
+one); up to 50 changes at any time above 15% battery; a backlog (the
+first build) while charging, or with the screen off and 30% or more.
+The model's own llama-server (a second one beside the Assistant's chat
+model, stopped after 2 idle minutes) runs one thread: a background job,
+and on this computer at a load average of 40, one thread embedded a
+200-token passage in 0.44-0.62 s and a query in 50 ms, two threads in
+2.1-3.6 s and 115-340 ms (their threads waiting on each other). A search
+goes before the pass's next batch.
+
+**Searching.** The query's embedding (one call; the last 64 kept), a dot
+product with every passage (brute force: 50,000 passages of 256
+dimensions in 45 ms on this computer; 12.4 MB of vectors), the best
+passage of each record, results at least 0.70 and within 0.10 of the
+best (unrelated passages score 0.6 to 0.78 with the simulator's data,
+what was asked for 0.8 to 0.9), a little more for the words asked
+themselves. With the simulator's own data (`tools/test-index-sim.cjs`,
+the real model):
+
+| Asked | Found first (score) | Words in common |
+| --- | --- | --- |
+| "internet password" | the memo "Wi-Fi at the cabin: network "Lakeview", password on the fridge" (0.818) | "password" |
+| "when are the servers down" | the email "Scheduled maintenance this weekend" (0.817) | none |
+| "lunch with Priya" | the event "Lunch with Priya" (0.901), the email "Lunch today?" (0.861) | all, and "lunch" |
+| "the paper about birds" | the memo "Books to read" (its "A Field Guide to Coastal Birds", 0.803), then two emails ("Your order has shipped" 0.724, "Paper draft for review" 0.713) | "birds"; "paper" |
+| "a trip with mountains and a lake" | the Wi-Fi memo ("Lakeview", 0.730), the photo "Alpine Lake" (0.724), the file "Trip notes.md" (0.714) | none; "lake"; "trip" |
+| "what did Daniel send about the hike" | the email "Photos from the hike" (0.868) | "hike" |
+| "how do I get online at the lake house" (Just Type) | the Wi-Fi memo (0.805) | none |
+
+The simulator's 62 items (69 passages: 4 memos, 11 events, 14 contacts,
+7 emails, 8 messages, 11 files, 7 photos by name) were indexed in 33 s
+on one thread of this busy computer, into 25 KB; a query took 56 to 160
+ms with the model's server running (5.5 s for the first, which starts it).
+"The paper about birds" shows the limit: the memo of books has the bird,
+the email of the paper is third.
+
+**In the Assistant** (`apps/assistant/service/lib/commands-search.js`,
+`lib/lang/en-search.js`): `searchPhone` ("what did Sam say about the
+party": Sam's messages and email only, by his numbers and addresses;
+"where's that note about the wifi password"; "find anything about the
+boiler"; "search my phone for ..."), the results as cards with their
+app's icon, each opening its app on itself; and a layer under the
+commands that look for words: when `findNotes`, `searchEmail`,
+`findFiles` or `photos` of something find nothing with the words, the
+index answers ("No emails have those words, but this one is about
+“boiler”."). With the index off they answer as before, and searchPhone
+looks for the words and says how to search by meaning. **Questions to a
+model** about the user's things ("what's my wifi password at the
+cabin?"): with "Use in answers" on, the passages found go with the
+question, marked as the user's data and never instructions, to the
+model the conversation is already using (on the device, or the cloud
+model the user chose: nothing goes to a cloud model it would not have
+seen), with no tools that turn (the taint rule, Safety), and where they
+came from shown under the answer. Evaluation: `cases-search.json` (14
+cases, all right, grammar alone; the stand-in device runs the real
+service with a deterministic fake embedder,
+`services/index/test/fake-embedder.cjs`); held-out: 2 of 4 new phrasings
+by the grammar.
+
+**In Just Type**: "From your phone", under the exact matches (the apps'
+content searches) and above the web: at most five, each with its app's
+icon, half a second after typing stops, leaving out what has the typed
+words (those are above); a tap opens the app on it. Added to the
+original Just Type (luna-applauncher, which runs as `com.palm.launcher`)
+through the compat overlay
+(`compat/rootfs/usr/palm/applications/com.palm.launcher/app/PhoenixPhoneSearch.js`,
+listed in that overlay's `depends.js`).
+
+#### Gemma 4 E2B and E4B
+
+Settings > Assistant offers them (`lib/models.js`), from Google's own
+QAT GGUFs (`google/gemma-4-E2B-it-qat-q4_0-gguf` at `675cff4`, 3.35 GB,
+for 6 GB devices; `-E4B-` at `4b4a2c1`, 5.15 GB, for 8 GB; Apache-2.0 from
+this generation; Gemma 3 and older are not offered: their terms are
+Google's own), not recommended until the evaluation has measured them on
+a device (Qwen stays the recommendation, Qwen3 0.6B the built-in model).
+**The template check** (they are too big for this computer's disk): a
+tiny random-weight Gemma 4 GGUF (`Bingsu/tiny-random-gemma-4-moe`, MIT)
+in llama-server b11552 with `--jinja --chat-template-file` the E2B GGUF's
+own template (Google's of 9 July 2026, the same in the E4B GGUF and
+ggml-org's): every request the Assistant makes was taken (HTTP 200: the
+command choice and a command's arguments, each held to a JSON schema,
+which the grammar enforced even with random weights; answers in words;
+`chat_template_kwargs: {enable_thinking: false}`, which the template
+reads), the Assistant's system prompt is Gemma's `<|turn>system` turn,
+and tools, a call and its result render as Gemma 4's
+`<|tool>declaration:...`, `<|tool_call>call:...` and `<|tool_response>`.
+What it cannot say is how well the real model chooses: for the owner's
+Mac, download Gemma 4 E2B in Settings > Assistant, then
+`llama-server -m <models>/gemma-4-e2b-it-qat-q4_0.gguf --port 8091 -c 4096 -np 1 -fa on -b 512 --jinja`
+and `node tools/eval-assistant.cjs --model http://127.0.0.1:8091/v1`.
+
+### Next: 2.0
 
 **In 2.0** the same assistant grows into the agent this document plans:
 the MCP hub behind it, language models (local or a provider) for open
@@ -1399,7 +2689,7 @@ shipping one, as for the Whisper model in [LEGAL.md](LEGAL.md)):
 | Model | Sizes | Licence | Notes |
 | --- | --- | --- | --- |
 | **Qwen3.5** small (March 2026) | 0.8B, 2B, 4B, 9B | Apache-2.0 | Tool use, thinking and non-thinking modes, multimodal. **Default candidate**: 0.8B for the Pi and command parsing, 2B for phones |
-| **Gemma 4** E2B, E4B (April 2026) | ~2B and ~4B effective | Apache-2.0 (a change from Gemma 3's own terms) | Built for phones; Google's own runtime is LiteRT-LM. Good second choice |
+| **Gemma 4** E2B, E4B (April 2026) | ~2B and ~4B effective | Apache-2.0 (a change from Gemma 3's own terms) | Built for phones; Google's own runtime is LiteRT-LM. **Offered** in Settings > Assistant (11 October 2026, Google's QAT GGUFs), not recommended until measured ("Search your phone" above; OPEN-QUESTIONS Q162) |
 | Phi-4-mini | 3.8B | MIT (*per the model card, unverified here*) | Strong reasoning for its size |
 | Llama 3.2 | 1B, 3B | Llama 3.2 Community License (not OSI open source, has an acceptable use policy) | Widely tested for tool calling; do not ship by default, let users download it |
 
@@ -1411,7 +2701,7 @@ against a list shipped with Phoenix.
 
 | Runtime | Licence | Fit for Phoenix |
 | --- | --- | --- |
-| **llama.cpp** (`llama-server`) | MIT | **Chosen.** Plain C/C++, builds with Yocto like the `whisper-cpp` recipe (same ggml), CPU NEON everywhere, Vulkan and OpenCL backends to try on GPUs, OpenAI-compatible server with tool calls and JSON Schema grammars, GGUF models for every candidate. Daily builds (b11239 on 28 September 2026) |
+| **llama.cpp** (`llama-server`) | MIT | **Chosen.** Plain C/C++, builds with Yocto like the `whisper-cpp` recipe (same ggml), CPU NEON everywhere, Vulkan and OpenCL backends to try on GPUs, OpenAI-compatible server with tool calls and JSON Schema grammars, GGUF models for every candidate. Daily builds; Phoenix builds b11552 (10 October 2026), which embeds EmbeddingGemma 2's text, pictures and sound (`/v1/embeddings`) |
 | ExecuTorch (1.0 in October 2025, 1.4 now per PyPI) | BSD-3-Clause | ARM64 Linux supported; strong on Android/iOS and NPUs through vendor delegates. More build machinery, per-model export step. Revisit for NPUs |
 | LiteRT-LM (Google) | Apache-2.0 | Linux and Raspberry Pi CLI and Python API; best path for Gemma. A second backend if Gemma 4 becomes the default |
 | ONNX Runtime GenAI (0.17, September 2026) | MIT | Good on Windows and DirectML/QNN; less natural on our Yocto ARM Linux |
@@ -1561,10 +2851,11 @@ small label on each answer: "On device", "Home server (Ollama)",
 | Memories ("my partner is Sam", "I prefer metric") | db8 `org.webosphoenix.assistant.memory:1` | Until deleted | Listed in Settings > Assistant > Memories, editable. The assistant proposes a memory and the user confirms ("Remember this?"); nothing is remembered silently |
 | Personal data (contacts, messages, ...) | Where it already is | Not copied | Read on demand through the hub, per grant; tool results are kept in the conversation only as a short summary |
 | Screen content | Not read by default | | An explicit "Ask about this screen" action takes a screenshot of the front card for that one turn |
+| Search your phone's index | `/var/lib/phoenix/index` (the service's own) | Until turned off, deleted or erased | The Assistant and Just Type, through `org.webosphoenix.service.index`; what it finds goes to a model only with "Use in answers" on, and only to the model the conversation already uses |
 
-There is no background indexing of the user's data for the assistant in
-this plan. A local semantic index (embeddings of notes and email for "find
-the email about the boiler") is an open question, not a default.
+A local semantic index of the user's things is built (11 October 2026,
+"Search your phone" above): off until the user turns it on, on the
+device, vectors without text, never in a backup, wiped by Full Erase.
 
 ### Safety
 
@@ -1801,12 +3092,13 @@ Accessed 28 September 2026 unless noted.
 - MCP Apps (26 January 2026): <https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/>, <https://modelcontextprotocol.io/seps/1865-mcp-apps-interactive-user-interfaces-for-mcp>
 - Android AppFunctions: <https://developer.android.com/ai/appfunctions>; Android Developers Blog (February 2026): <https://android-developers.googleblog.com/2026/02/the-intelligent-os-making-ai-agents.html>; Jetpack release list: <https://developer.android.com/jetpack/androidx/releases/appfunctions>
 - Apple WWDC26 Apple Intelligence guide (App Intents, schemas, View Annotations, Foundation Models): <https://developer.apple.com/wwdc26/guides/apple-intelligence/>
-- llama.cpp releases (b11239, 28 September 2026): <https://github.com/ggml-org/llama.cpp/releases>; OpenCL backend for Adreno (IWOCL 2026 slides): <https://www.iwocl.org/wp-content/uploads/IWOCL-2026-Wang-Llamacpp.pdf>
+- llama.cpp releases (b11239, 28 September 2026; b11552, 10 October 2026): <https://github.com/ggml-org/llama.cpp/releases>; OpenCL backend for Adreno (IWOCL 2026 slides): <https://www.iwocl.org/wp-content/uploads/IWOCL-2026-Wang-Llamacpp.pdf>
 - ExecuTorch 1.0: <https://pytorch.org/blog/introducing-executorch-1-0/>; releases: <https://github.com/pytorch/executorch/releases>
 - LiteRT-LM: <https://ai.google.dev/edge/litert-lm/overview>
 - ONNX Runtime GenAI (0.17.0 on PyPI): <https://pypi.org/project/onnxruntime-genai/>
 - MLC LLM: <https://llm.mlc.ai/>
 - Gemma 4 under Apache-2.0: <https://opensource.googleblog.com/2026/03/gemma-4-expanding-the-gemmaverse-with-apache-20.html>
+- EmbeddingGemma 2's model card: <https://huggingface.co/google/embeddinggemma-2>; llama.cpp's GGUFs: <https://huggingface.co/ggml-org/embeddinggemma-2-GGUF>; Gemma 4's QAT GGUFs: <https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf>, <https://huggingface.co/google/gemma-4-E4B-it-qat-q4_0-gguf>
 - Qwen3.5 small models (2 March 2026, Apache-2.0): <https://artificialanalysis.ai/articles/qwen3-5-small-models> (secondary)
 - Raspberry Pi 4 and 5 llama.cpp speeds: <https://www.sitepoint.com/llms-raspberry-pi-edge/>, <https://www.stratosphereips.org/blog/2025/6/5/how-well-do-llms-perform-on-a-raspberry-pi-5> (secondary)
 - Design Patterns for Securing LLM Agents against Prompt Injections (June 2025): <https://arxiv.org/abs/2506.08837>; CaMeL, Defeating Prompt Injections by Design (March 2025): <https://arxiv.org/abs/2503.18813>

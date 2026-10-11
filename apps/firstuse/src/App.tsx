@@ -25,7 +25,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import {
-    apps, assistant, backup, backupErrorCode, BACKUP_PARTS, call, deviceLock, deviceTitle, firstUse, hardware, installable, LunaError, location, needsAttention, reflowLicense, settings,
+    apps, assistant, backup, backupErrorCode, BACKUP_PARTS, call, phoenixAccount, type AccountStatus, deviceLock, deviceTitle, firstUse, hardware, installable, LunaError, location, needsAttention, reflowLicense, settings,
     system, wifi, WIFI_ERROR_INVALID_KEY,
     type AssistantSettings, type BackupDestination, type BackupFile, type DriverOffer, type HardwareDevice, type HardwareList,
     type LocaleInfo, type LocationHandler, type LockMode, type SystemPreferences, type TimeZone, type WifiNetworkInfo, type WifiStatus,
@@ -251,20 +251,77 @@ function HardwareStep(nav: NavProps & { list: HardwareList | null }) {
     );
 }
 
+// ---- Phoenix Account -----------------------------------------------------------------------
+//
+// docs/PLATFORM.md 6.3: "Sign in to your Phoenix Account (optional)" with a
+// code and its QR code to approve on a phone or computer (the device
+// authorization grant), and Skip. Signed in, Restore lists the account's
+// cloud backups first. Shown only when an account server is set up.
+
+function AccountStep(nav: NavProps & { status: AccountStatus | undefined }) {
+    const st = nav.status;
+    const [error, setError] = useState<string | null>(null);
+    const [qr, setQr] = useState<string | null>(null);
+    const name = st?.accountName ?? "Phoenix Account";
+    const uri = st?.signIn?.verificationUriComplete ?? null;
+    useEffect(() => {
+        let gone = false;
+        setQr(null);
+        // The QR code writer (zxing-wasm, as Settings and DropShare use) only for this.
+        if (uri) import("../../settings/src/qr").then((m) => m.qrSvg(uri)).then((svg) => { if (!gone) setQr(svg); }, () => setQr(null));
+        return () => { gone = true; };
+    }, [uri]);
+    async function signIn() {
+        setError(null);
+        try { await phoenixAccount.signIn("code"); } catch (e) { setError(e instanceof LunaError ? e.errorText : String(e)); }
+    }
+    if (st?.state === "signedIn") {
+        return (
+            <StepPage testId="account" title={name} {...nav} onSkip={undefined} intro={`Signed in as ${st.account?.email ?? ""}.`}>
+                <Note>Your cloud backups are offered in the next step.</Note>
+            </StepPage>
+        );
+    }
+    if (st?.state === "signingIn" && st.signIn?.userCode) {
+        return (
+            <StepPage testId="account" title={name} {...nav} nextLabel="Not Now" onNext={() => { void phoenixAccount.cancelSignIn(); nav.onNext(); }}
+                      intro={<>On your phone or computer, go to <b>{st.signIn.verificationUri}</b> and enter this code:</>}>
+                <div className="fu-account-code" data-testid="account-code">{st.signIn.userCode}</div>
+                {qr && <div className="fu-account-qr" data-testid="account-qr" dangerouslySetInnerHTML={{ __html: qr }} />}
+                <Row title="Waiting for approval…" icon={<Spinner />} />
+            </StepPage>
+        );
+    }
+    return (
+        <StepPage testId="account" title={name} {...nav}
+                  intro={`Sign in to your ${name} (optional): it keeps encrypted backups of this device in the cloud, and restores them on a new one.`}>
+            <Group>
+                <Row title="Sign In" chevron testId="account-sign-in" onClick={() => void signIn()} />
+            </Group>
+            <Note>Nothing else needs an account. You can sign in later in Settings.</Note>
+            {(error || st?.error) && <ErrorText testId="account-error">{error ?? st?.error?.errorText}</ErrorText>}
+        </StepPage>
+    );
+}
+
 // ---- Restore -----------------------------------------------------------------------------
 //
 // A backup made by Settings > Backup on another (or this) device: where it
 // is, which one, its passphrase. Afterwards this device backs up to the same
 // place, every day, with the same passphrase.
 
-function RestoreStep(nav: NavProps) {
+/** A backup, and (Phoenix Cloud) the device whose folder it is in. */
+type RestoreFile = BackupFile & { deviceId?: string; deviceName?: string };
+
+function RestoreStep(nav: NavProps & { cloud: boolean }) {
     const [mode, setMode] = useState<"ask" | "where" | "list" | "restored">("ask");
-    const [type, setType] = useState<"usb" | "webdav">("usb");
+    // Signed in to the Phoenix Account: its cloud backups first.
+    const [type, setType] = useState<"usb" | "webdav" | "phoenix">(nav.cloud ? "phoenix" : "usb");
     const [url, setUrl] = useState("");
     const [user, setUser] = useState("");
     const [password, setPassword] = useState("");
-    const [files, setFiles] = useState<BackupFile[] | null>(null);
-    const [chosen, setChosen] = useState<BackupFile | null>(null);
+    const [files, setFiles] = useState<RestoreFile[] | null>(null);
+    const [chosen, setChosen] = useState<RestoreFile | null>(null);
     const [pass, setPass] = useState("");
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -274,10 +331,19 @@ function RestoreStep(nav: NavProps) {
     async function look() {
         setBusy(true);
         setError(null);
-        const destination: BackupDestination = type === "usb" ? { type: "usb" } : { type: "webdav", url: url.trim(), username: user.trim(), password };
+        const destination: BackupDestination = type === "usb" ? { type: "usb" } : type === "phoenix" ? { type: "phoenix" }
+            : { type: "webdav", url: url.trim(), username: user.trim(), password };
         try {
             await backup.configure({ destination });
-            setFiles(await backup.list());
+            if (type === "phoenix") {
+                // Every device's backups in the account, newest first.
+                const sum = await phoenixAccount.backupSummary();
+                setFiles(sum.devices.flatMap((d) => d.files.filter((f) => /\.pbak$/.test(f.name)).map((f) => ({
+                    name: f.name, size: f.size, created: f.modified, deviceId: d.deviceId, deviceName: d.name,
+                }))).sort((a, b) => (a.created < b.created ? 1 : -1)));
+            } else {
+                setFiles(await backup.list());
+            }
             setMode("list");
         } catch (e) {
             setError(backupErrorCode(e) === "UNAUTHORIZED" ? "The server did not accept the user name or password." : text(e));
@@ -290,7 +356,7 @@ function RestoreStep(nav: NavProps) {
         setBusy(true);
         setError(null);
         try {
-            const r = await backup.restore(chosen.name, pass);
+            const r = await backup.restore(chosen.name, pass, chosen.deviceId ? { type: "phoenix", deviceId: chosen.deviceId } : undefined);
             // Keep backing up there, with the same passphrase.
             await backup.configure({ passphrase: pass, auto: true });
             setRestored(r.restored);
@@ -327,10 +393,13 @@ function RestoreStep(nav: NavProps) {
             <StepPage testId="restore" title="Where Is It?" onBack={() => setMode("ask")} onNext={() => void look()}
                       nextLabel={busy ? "Looking…" : "Find Backups"} nextDisabled={busy || (type === "webdav" && !url.trim())}>
                 <Group>
-                    <ListSelector title="Place" value={type} testId="restore-type" onChange={(v) => setType(v as "usb" | "webdav")}
-                                  options={[{ label: "USB drive", value: "usb" }, { label: "WebDAV server", value: "webdav" }]} />
+                    <ListSelector title="Place" value={type} testId="restore-type" onChange={(v) => setType(v as "usb" | "webdav" | "phoenix")}
+                                  options={[...(nav.cloud ? [{ label: "Phoenix Cloud", value: "phoenix" }] : []),
+                                            { label: "USB drive", value: "usb" }, { label: "WebDAV server", value: "webdav" }]} />
                 </Group>
-                {type === "usb"
+                {type === "phoenix"
+                    ? <Note>Your Phoenix Account's cloud backups, from all your devices.</Note>
+                    : type === "usb"
                     ? <Note>Copy the backup file into the backups folder of this device's USB drive from your computer first.</Note>
                     : <Group>
                         <TextField label="Folder address" value={url} onChange={setUrl} testId="restore-url" />
@@ -346,7 +415,7 @@ function RestoreStep(nav: NavProps) {
             <Group>
                 {files?.length === 0 && <Row title="No backups there" />}
                 {files?.map((f) => (
-                    <Row key={f.name} title={f.created ? new Date(f.created).toLocaleString() : f.name} chevron
+                    <Row key={(f.deviceId ?? "") + f.name} title={f.created ? new Date(f.created).toLocaleString() : f.name} chevron subtitle={f.deviceName}
                          testId={`restore-file-${f.name}`} onClick={() => { setChosen(f); setPass(""); setError(null); }} />
                 ))}
             </Group>
@@ -569,7 +638,10 @@ function FirstUse() {
         return () => { live = false; };
     }, []);
     // Until the hardware has been looked at, the step stays in (it waits for it).
-    const hidden: StepId[] = !hw || hw.devices.some((d) => neededOffer(d)) ? [] : ["hardware"];
+    // The Phoenix Account step: only with an account server (servers.json).
+    const account = useLuna<AccountStatus>((cb, err) => phoenixAccount.watchStatus(cb, err), []);
+    const noAccount = account.value?.state === "notSetUp" || (!!account.error && !account.value);
+    const hidden: StepId[] = [...(!hw || hw.devices.some((d) => neededOffer(d)) ? [] : ["hardware" as const]), ...(noAccount ? ["account" as const] : [])];
 
     const finish = async () => {
         try { await firstUse.complete(); } catch { /* the shell hears the window close anyway */ }
@@ -588,7 +660,8 @@ function FirstUse() {
     case "welcome": page = <Welcome onNext={nav.onNext} onSkipAll={() => setConfirmSkip(true)} />; break;
     case "wifi": page = <WifiStep {...nav} />; break;
     case "hardware": page = <HardwareStep {...nav} list={hw} />; break;
-    case "restore": page = <RestoreStep {...nav} />; break;
+    case "account": page = <AccountStep {...nav} status={account.value} />; break;
+    case "restore": page = <RestoreStep {...nav} cloud={account.value?.state === "signedIn"} />; break;
     case "datetime": page = <DateTimeStep {...nav} />; break;
     case "accounts": page = <AccountsStep {...nav} />; break;
     case "passcode": page = <PasscodeStep {...nav} />; break;

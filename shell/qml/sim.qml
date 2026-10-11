@@ -5,8 +5,10 @@
 //
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "longstack" | "reorder" | "maximized" | "heldcard" | "launcher" |
-//                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" | "drawer" | "capture" | "capturepreview" |
-//                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistantbird" | "assistantbirds" | "assistantbirdmoves" |
+//                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" |
+//                  "notifystacks" | "notifystacksbar" | "notifystackslocked" | "drawer" | "capture" | "capturepreview" |
+//                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistant:<request>|<request>|..." |
+//                  "assistantbird" | "assistantbirds" | "assistantbirdmoves" |
 //                  "wakeword" | "wakewordlocked" | "modal" |
 //                  "systemmenu" | "empty"
 //   simFirstUse    start with First Use (--first-use); without it First Use
@@ -43,8 +45,15 @@
 //                  toolbar (SimChrome), or null: resizeScreen(w, h)
 //   simMarketplace the Marketplace's catalog service (SimMarketplace), or
 //                  null: the Services menu
+//   simDevice      --device: the first target it is (device-profiles.json's
+//                  entry: id, name, panel, diagonal, buttons; its image's
+//                  device.json under deviceConfig, which DeviceConfig
+//                  reads too), or an empty object
+//   simDevices     every profile, {id, name}, for View > Device
+//   simZoom        --zoom: the screen's size on the monitor (1: its pixels)
 
 import QtQuick
+import QtQuick.Shapes
 import Phoenix.Native
 import Phoenix.Shell
 import Phoenix.Sim
@@ -67,6 +76,21 @@ Item {
     // the screen takes the new size (a bigger tablet, a narrower phone), and
     // the shell lays itself out again.
     readonly property bool sideways: deviceAngle % 180 !== 0
+    // --device: one of the first targets (simDevice), as its image
+    // configures it; --zoom: the screen shown smaller than its pixels.
+    readonly property var simDeviceProfile: typeof simDevice !== "undefined" && simDevice && simDevice.id ? simDevice : null
+    readonly property real zoom: typeof simZoom !== "undefined" && simZoom > 0 ? simZoom : 1
+    // The device's buttons: a profile's (device-profiles.json, and the
+    // ringer switch where its device.json has one), else all of them.
+    function hasButton(id) {
+        if (!simDeviceProfile)
+            return true;
+        if (id === "ringer")
+            return DeviceConfig.hasRingerSwitch;
+        if (id === "power" || id === "volumeUp" || id === "volumeDown")
+            return (simDeviceProfile.buttons || []).indexOf(id) >= 0;
+        return true;
+    }
 
     // ---- Adaptive: a phone or a tablet by the window's size ---------------------------
     // Without --phone or --tablet (--adaptive, ./phoenix run) the shell's
@@ -100,7 +124,7 @@ Item {
     // The screen (upright, legacy pixels) at this size; the window turns it
     // as the device is held.
     function resizeScreen(width, height) {
-        var w = Math.round(width * shell.effectiveDensity), h = Math.round(height * shell.effectiveDensity);
+        var w = Math.round(width * shell.effectiveDensity * root.zoom), h = Math.round(height * shell.effectiveDensity * root.zoom);
         if (sideways) {
             var t = w;
             w = h;
@@ -144,15 +168,19 @@ Item {
         value: !shell.tablet
     }
     // The window's title says what the screen is.
-    readonly property string screenInfo: "%1x%2, %3%4".arg(screenWidth).arg(screenHeight)
+    readonly property string screenInfo: (simDeviceProfile ? simDeviceProfile.name + ", " : "")
+        + "%1x%2, %3%4".arg(screenWidth).arg(screenHeight)
         .arg(shell.tablet ? qsTr("tablet") : qsTr("phone")).arg(adaptive ? qsTr(" (adaptive)") : "")
+        + (zoom !== 1 ? qsTr(", shown at %1%").arg(Math.round(zoom * 100)) : "")
     onScreenInfoChanged: if (typeof simChrome !== "undefined" && simChrome) simChrome.setScreenInfo(screenInfo)
 
     Item {
         id: device
         anchors.centerIn: parent
-        width: root.sideways ? root.height : root.width
-        height: root.sideways ? root.width : root.height
+        // The screen at its own pixels, shown at --zoom on the monitor.
+        width: (root.sideways ? root.height : root.width) / root.zoom
+        height: (root.sideways ? root.width : root.height) / root.zoom
+        scale: root.zoom
         rotation: -root.deviceAngle
 
         Shell {
@@ -165,6 +193,10 @@ Item {
             // the right (luna-topaz.conf:32 HomeButtonOrientationAngle=270);
             // below a portrait one, at the bottom (0).
             homeButtonOrientationAngle: hardwareHomeButton && width > height ? 270 : 0
+            // --device: the screen's corners and camera cutout, from its
+            // image's device.json (DeviceConfig, as on the device).
+            displayCornerRadius: root.simDeviceProfile ? DeviceConfig.displayCornerRadius : 0
+            displayCutouts: root.simDeviceProfile ? DeviceConfig.displayCutouts : []
             systemKeyPassChords: root.modifiedFunctionKeys
             // The phones and the TouchPad of luna-sysmgr's day had one
             // ([VirtualKeyboard] VirtualKeyboardEnabled).
@@ -185,6 +217,9 @@ Item {
             // The launch-at-boot apps start with the simulator, as with
             // LunaSysMgr (WebAppMgrProxy.cpp:117).
             source: SimWindowSource { id: windows; bootAppsEnabled: true }
+            // The default wallpaper from the first frame, until the system
+            // service tells the shell the one chosen (below).
+            wallpaper: windows.resolveDevicePath(Theme.defaultWallpaperPath)
             system: SimSystemStatus {
                 id: status
                 // Fixed clock for reproducible screenshots.
@@ -343,6 +378,49 @@ Item {
                 }
             }
         }
+
+        // --device: what the panel does not show, drawn over the screen in
+        // black: its rounded corners and the camera's cutout (device.json's
+        // displayCornerRadius, displayCutouts). It turns with the device.
+        Shape {
+            id: screenMask
+            objectName: "simScreenMask"
+            anchors.fill: parent
+            visible: shell.displayCornerRadius > 0 || shell.displayCutouts.length > 0
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+                fillColor: "black"
+                strokeColor: "transparent"
+                fillRule: ShapePath.OddEvenFill
+                PathSvg { path: root.screenMaskPath(screenMask.width, screenMask.height) }
+            }
+        }
+    }
+    // The mask's outline (SVG): the screen's rectangle, and inside it the
+    // rounded rectangle the panel shows (even-odd: the corners between them
+    // are filled), then each cutout (filled).
+    function screenMaskPath(w, h) {
+        var r = Math.min(shell.displayCornerRadius, w / 2, h / 2);
+        var d = "M0 0 H" + w + " V" + h + " H0 Z";
+        if (r > 0)
+            d += " M" + r + " 0 H" + (w - r) + " A" + r + " " + r + " 0 0 1 " + w + " " + r
+                + " V" + (h - r) + " A" + r + " " + r + " 0 0 1 " + (w - r) + " " + h
+                + " H" + r + " A" + r + " " + r + " 0 0 1 0 " + (h - r)
+                + " V" + r + " A" + r + " " + r + " 0 0 1 " + r + " 0 Z";
+        else
+            d += " M0 0 H" + w + " V" + h + " H0 Z";
+        var cutouts = shell.displayCutouts || [];
+        for (var i = 0; i < cutouts.length; ++i) {
+            var c = cutouts[i];
+            if (c.shape === "circle") {
+                var rx = c.width / 2, ry = c.height / 2;
+                d += " M" + c.x + " " + (c.y + ry) + " A" + rx + " " + ry + " 0 1 0 " + (c.x + c.width) + " " + (c.y + ry)
+                    + " A" + rx + " " + ry + " 0 1 0 " + c.x + " " + (c.y + ry) + " Z";
+            } else {
+                d += " M" + c.x + " " + c.y + " H" + (c.x + c.width) + " V" + (c.y + c.height) + " H" + c.x + " Z";
+            }
+        }
+        return d;
     }
 
     // The screen's state (Shell.display): dimmed or off. A device sets its
@@ -1064,7 +1142,7 @@ Item {
               if (root.adaptive)
                   root.snapToPreset("pre");
               else if (shell.tablet)
-                  root.restartSim(["tablet", "phone", "adaptive", "size", "scale"], ["--phone"]);
+                  root.restartSim(["tablet", "phone", "adaptive", "size", "scale", "device", "zoom"], ["--phone"]);
           } },
         { id: "tablet", menu: "view", text: qsTr("Tablet"), radio: "formFactor", icon: "tablet",
           tip: qsTr("A tablet: the TouchPad, 1024x768 (adaptive: the window takes its size; else a restart)"),
@@ -1073,7 +1151,7 @@ Item {
               if (root.adaptive)
                   root.snapToPreset("touchpad");
               else if (!shell.tablet)
-                  root.restartSim(["tablet", "phone", "adaptive", "size", "scale"], ["--tablet"]);
+                  root.restartSim(["tablet", "phone", "adaptive", "size", "scale", "device", "zoom"], ["--tablet"]);
           } },
         { id: "adaptive", menu: "view", text: qsTr("Adaptive (Phone or Tablet by Size)"), radio: "formFactor",
           tip: qsTr("Resize the window freely: the shell becomes a tablet once its shorter side reaches %1 pixels, "
@@ -1081,7 +1159,7 @@ Item {
           checked: function () { return root.adaptive; },
           run: function () {
               if (!root.adaptive)
-                  root.restartSim(["tablet", "phone", "adaptive"], ["--adaptive"]);
+                  root.restartSim(["tablet", "phone", "adaptive", "device", "zoom"], ["--adaptive"]);
           } }
     ].concat(simLocation.actions).concat(devicePresets.map(function (p) {
         return { id: "size-" + p.id, menu: "view", submenu: qsTr("Device Size"), text: p.text, radio: "deviceSize",
@@ -1089,6 +1167,18 @@ Item {
                       .arg(Theme.tabletLayoutFor(p.width, p.height, 1) ? qsTr("tablet") : qsTr("phone")),
                  checked: function () { return root.screenWidth === p.width && root.screenHeight === p.height; },
                  run: function () { root.snapToPreset(p.id); } };
+    })).concat([{ id: "device-none", menu: "view", submenu: qsTr("Device"), text: qsTr("None (Any Size)"), radio: "device",
+                   tip: qsTr("Restart as a resizable screen, without a device's profile"),
+                   checked: function () { return !root.simDeviceProfile; },
+                   run: function () { if (root.simDeviceProfile) root.restartSim(["device", "zoom"], []); } }])
+    .concat((typeof simDevices !== "undefined" ? simDevices : []).map(function (d) {
+        return { id: "device-" + d.id, menu: "view", submenu: qsTr("Device"), text: d.name, radio: "device",
+                 tip: qsTr("Restart as the %1, as its image configures it (--device %2)").arg(d.name).arg(d.id),
+                 checked: function () { return !!root.simDeviceProfile && root.simDeviceProfile.id === d.id; },
+                 run: function () {
+                     root.restartSim(["device", "zoom", "size", "scale", "tablet", "phone", "adaptive", "home-button"],
+                                     ["--device", d.id]);
+                 } };
     })).concat([
         { separator: true, menu: "view" }
     ]).concat([1, 1.5, 2].map(function (n) {
@@ -1097,7 +1187,7 @@ Item {
                  checked: function () { return shell.density === n; },
                  run: function () {
                      // The screen it has now, at the new density.
-                     root.restartSim(["size", "scale"], ["--scale", String(n), "--size",
+                     root.restartSim(["size", "scale", "device", "zoom"], ["--scale", String(n), "--size",
                                      Math.round(root.screenWidth * n) + "x" + Math.round(root.screenHeight * n)]);
                  } };
     })).concat([""].concat(scenes).map(function (name) {
@@ -1159,14 +1249,15 @@ Item {
         { id: "cardView", menu: "", text: qsTr("Card View"), keyText: Qt.platform.os === "osx" ? "" : qsTr("Super, on its own") }
     ])
     // The toolbar's, in order ("|" separates).
+    // A --device profile's: only the buttons it has (hasButton).
     readonly property var simToolbar: ["power", "volumeUp", "volumeDown", "ringer", "|", "home", "back", "|", "keyboard", "virtualKeyboard", "|",
                                        "rotateLeft", "rotateRight", "capture", "|",
                                        "call", "sms", "notification", "|", "lowBattery", "charger", "touchstone", "|",
-                                       "phone", "tablet"]
+                                       "phone", "tablet"].filter(function (id) { return root.hasButton(id); })
     // The demo scenes (--scene; buildScene()).
     readonly property var scenes: ["locked", "cards", "stacks", "longstack", "reorder", "maximized", "heldcard",
                                    "launcher", "launcheredit", "launchermenu", "launchergroup", "launchergroupopen", "launchertabs", "launcherinstall", "wave", "powermenu", "hot", "pin", "emergency", "firstuse",
-                                   "lowbattery", "banner", "notified", "dashboard", "drawer", "capture",
+                                   "lowbattery", "banner", "notified", "dashboard", "notifystacks", "notifystacksbar", "notifystackslocked", "drawer", "capture",
                                    "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "assistantbird", "assistantbirds", "assistantbirdmoves",
                                    "wakeword", "wakewordlocked", "modal", "systemmenu", "empty"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
@@ -1716,7 +1807,7 @@ Item {
                 if (typeof simScene !== "undefined" && simScene === "clipstrip")
                     root.clipStripScene();
                 // --scene assistant with --launch: the assistant over that app.
-                if (typeof simScene !== "undefined" && simScene === "assistant")
+                if (typeof simScene !== "undefined" && (simScene === "assistant" || simScene.indexOf("assistant:") === 0))
                     root.assistantScene();
                 root.startOnTouchstone();
             });
@@ -1773,7 +1864,7 @@ Item {
             return shell.unlock();
         if (scene === "firstuse")
             return shell.startFirstUse();
-        if (scene !== "locked" && scene !== "pin" && scene !== "emergency")
+        if (scene !== "locked" && scene !== "pin" && scene !== "emergency" && scene !== "notifystackslocked")
             shell.unlock();
         // Real apps where the simulator has them (Memos, Calculator), placeholders otherwise.
         var ids = ["Messaging", "Memos", "Calculator", "Web"].map(windows.appIdByTitle);
@@ -1888,6 +1979,24 @@ Item {
             windows.notify(windows.appIdByTitle("Calendar"), "Launch party", "Tomorrow, 9:41 AM");
             if (scene === "dashboard")
                 shell.notifications.dashboardOpen = true;
+        } else if (scene === "notifystacks" || scene === "notifystacksbar" || scene === "notifystackslocked") {
+            // Texts from two people, a stack for each conversation
+            // (NotificationStacks.js): three from Ada, two from Marcus, and
+            // a reminder of its own. "notifystacks": the dashboard open;
+            // "notifystacksbar": the icons in the bar; "notifystackslocked":
+            // the lock screen's dashboard.
+            if (scene !== "notifystackslocked")
+                shell.cardView.maximizeProgress = 1;
+            var msgApp = windows.appIdByTitle("Messaging");
+            var texts = [["Ada Palmer", "Are you there?", "demo-ada"], ["Marcus Reyes", "Lunch at noon?", "demo-marcus"],
+                         ["Ada Palmer", "Call me when you can", "demo-ada"], ["Ada Palmer", "It's about Friday", "demo-ada"],
+                         ["Marcus Reyes", "Or 1 if that's easier", "demo-marcus"]];
+            for (var ti = 0; ti < texts.length; ++ti)
+                windows.notify(msgApp, texts[ti][0], texts[ti][1], { threadId: texts[ti][2] }, { group: texts[ti][2] });
+            windows.notify(windows.appIdByTitle("Calendar"), "Launch party", "Tomorrow, 9:41 AM");
+            shell.notifications.bannerActive = false;
+            if (scene === "notifystacks")
+                shell.notifications.dashboardOpen = true;
         } else if (scene === "pin" || scene === "emergency") {
             // The PIN panel as it asks for the passcode (nothing is set: the
             // scene only shows it); "emergency" then taps its Emergency Call.
@@ -1904,7 +2013,7 @@ Item {
         } else if (scene === "clipstrip") {
             shell.startJustType("");
             clipStripScene();
-        } else if (scene === "assistant") {
+        } else if (scene === "assistant" || scene.indexOf("assistant:") === 0) {
             assistantScene();
         } else if (scene === "wakeword" || scene === "wakewordlocked") {
             wakeWordScene.locked = scene === "wakewordlocked";
@@ -1940,8 +2049,21 @@ Item {
     // its own; with --launch org.webosphoenix.assistant the app has it
     // instead. Each request waits for an answer; one made before a page
     // with the runtime was up is made again.
+    // "assistant:<request>|<request>|...": these requests instead, in turn
+    // (each in the same conversation). A step "@notified" puts the
+    // "notified" scene's notifications in the dashboard first; "@sms" a
+    // text received (as the toolbar's SMS button); "@lock" locks;
+    // "@starter:<id>" adds one of the routines' starters ("goodnight");
+    // "@location:<lat>,<lon>" moves the simulated phone (Simulate > Location);
+    // "@homeassistant:<url>,<token>" connects a Home Assistant (Settings > Assistant > Smart Home);
+    // "@dashboard" opens the notification dashboard;
+    // "@open:<appId>:<params JSON>" opens an app, the view closed; "@close"
+    // closes the view (what it opened behind it shows); "@tap:<choice>" taps
+    // one of the last answer's buttons ("@tap:open");
+    // "@wait:<ms>" waits. For checking the Assistant's features by hand.
     function assistantScene() {
-        assistantSceneSteps.asks = ["What's 15% of 80?", "Set a timer for 10 minutes", "Who wrote the Odyssey?"];
+        var custom = scene.indexOf("assistant:") === 0 ? scene.slice(10).split("|").filter(function (s) { return s.trim() !== ""; }) : [];
+        assistantSceneSteps.asks = custom.length ? custom : ["What's 15% of 80?", "Set a timer for 10 minutes", "Who wrote the Odyssey?"];
         assistantSceneSteps.inApp = shell.cardView.maximized && shell._appIdOf(shell.cardView.currentUid) === "org.webosphoenix.assistant";
         assistantSceneSteps.up = false;
         assistantSceneSteps.next();
@@ -1981,6 +2103,70 @@ Item {
                 stop();
                 return;
             }
+            // A step of the scene's own ("assistant:@notified|what did I miss").
+            var step = String(asks[0]).trim();
+            console.info("phoenix-sim: assistant scene: " + step);
+            if (step.charAt(0) === "@") {
+                assistantSceneSteps.asks = assistantSceneSteps.asks.slice(1);
+                if (step === "@notified") {
+                    windows.notify(windows.appIdByTitle("Messaging"), "Palm Pre", "It's good to be back.");
+                    windows.notify(windows.appIdByTitle("Email"), "3 new emails", "webOS Phoenix build passed");
+                    windows.notify(windows.appIdByTitle("Calendar"), "Launch party", "Tomorrow, 9:41 AM");
+                } else if (step === "@sms") {
+                    windows.simulateIncomingSms();
+                } else if (step === "@lock") {
+                    shell.lock();
+                } else if (step === "@close") {
+                    // The view closed: what it opened behind it shows.
+                    shell.assistantOverlay.open = false;
+                } else if (step === "@dashboard") {
+                    // The notification dashboard opened (what came in shows).
+                    shell.assistantOverlay.open = false;
+                    shell.notifications.dashboardOpen = true;
+                } else if (step.indexOf("@tap:") === 0) {
+                    // One of the last answer's buttons, tapped ("@tap:open": Open Settings).
+                    var ov = shell.assistantOverlay, choiceId = step.slice(5);
+                    for (var mi = ov.messages.length - 1; mi >= 0; --mi) {
+                        var cs = ov.messages[mi].choices || [];
+                        var hit = cs.filter(function (c) { return c.id === choiceId; })[0];
+                        if (hit) { ov.choose(ov.messages[mi], hit); break; }
+                    }
+                } else if (step.indexOf("@starter:") === 0) {
+                    // One of the routines' starters, added ("@starter:goodnight").
+                    var which = step.slice(9);
+                    windows.lunaCall("luna://org.webosphoenix.assistant/routines", {}, function (r) {
+                        var s = ((r && r.starters) || []).filter(function (x) { return x.starter === which; })[0];
+                        if (s)
+                            windows.lunaCall("luna://org.webosphoenix.assistant/setRoutine", { routine: s }, function () {});
+                    });
+                } else if (step.indexOf("@location:") === 0) {
+                    // The simulated phone moved ("@location:37.3337,-121.8907"), as Simulate > Location moves it.
+                    var ll = step.slice(10).split(",").map(Number);
+                    if (ll.length === 2 && !isNaN(ll[0]) && !isNaN(ll[1]))
+                        windows.lunaCall("luna://com.webos.service.location/mock/setLocation",
+                                         { name: "gps", location: { latitude: ll[0], longitude: ll[1] } }, function () {});
+                } else if (step.indexOf("@homeassistant:") === 0) {
+                    // The user's Home Assistant connected ("@homeassistant:http://127.0.0.1:8123,<token>"),
+                    // as Settings > Assistant > Smart Home connects it.
+                    var ha = step.slice(15), comma = ha.lastIndexOf(",");
+                    windows.lunaCall("luna://org.webosphoenix.assistant/setHomeAssistant",
+                                     { url: ha.slice(0, comma), token: ha.slice(comma + 1) }, function (r) {
+                        console.info("phoenix-sim: Home Assistant: " + JSON.stringify(r));
+                    });
+                } else if (step.indexOf("@open:") === 0) {
+                    // An app with launch params ("@open:org.webosphoenix.settings:{\"page\":\"assistant\"}").
+                    var rest = step.slice(6), colon = rest.indexOf(":");
+                    var params = null;
+                    try { params = colon > 0 ? JSON.parse(rest.slice(colon + 1)) : null; } catch (e) { params = null; }
+                    shell.assistantOverlay.open = false;
+                    shell.launch(colon > 0 ? rest.slice(0, colon) : rest, params);
+                }
+                var pause = /^@wait:(\d+)$/.exec(step);
+                assistantSceneSteps.interval = pause ? Number(pause[1]) : 1500;
+                assistantSceneSteps.restart();
+                return;
+            }
+            assistantSceneSteps.interval = 3000;
             var answered = function (r) {
                 if (mine !== assistantSceneSteps.serial)
                     return;

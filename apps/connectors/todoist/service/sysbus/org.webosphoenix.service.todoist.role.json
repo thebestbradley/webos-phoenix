@@ -1,0 +1,21 @@
+{
+    "appId": "org.webosphoenix.service.todoist",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.service.todoist"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.todoist",
+            "outbound": [
+                "org.webosphoenix.service.todoist",
+                "com.palm.db",
+                "com.palm.tempdb",
+                "com.palm.activitymanager",
+                "com.palm.service.accounts",
+                "org.webosphoenix.service.oauth"
+            ]
+        }
+    ]
+}

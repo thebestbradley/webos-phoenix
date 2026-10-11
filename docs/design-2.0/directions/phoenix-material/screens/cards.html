@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Card view</title>
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/icons.js"></script>
+<script src="../assets/app.js"></script>
+<style>
+  .device .wall { background-position: center 40%; }
+  .appmenu-tab { background: rgb(255 255 255 / .14); color: #fff; box-shadow: inset -1px -1px 0 rgb(255 255 255 / .18); }
+  .jt { position: absolute; z-index: 10; top: 48px; left: 16px; right: 16px; height: 52px; border-radius: 26px; display: flex; align-items: center; gap: 12px; padding: 0 8px 0 18px;
+        background: var(--glass-strong); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: var(--e2), inset 0 0 0 1px var(--glass-line); color: var(--md-on-surface-variant); }
+  .jt .ph { flex: 1; font-size: 16px; }
+  .jt .spark { width: 38px; height: 38px; border-radius: 14px; display: grid; place-items: center; background: var(--md-tertiary-container); color: var(--md-on-tertiary-container); }
+  .jt .spark .ic { width: 20px; height: 20px; }
+  .deck { position: absolute; z-index: 5; top: 132px; left: 0; right: 0; height: 600px; }
+  .cardv { position: absolute; top: 0; width: calc(446px * var(--s)); height: calc(936px * var(--s)); border-radius: 20px; overflow: hidden; box-shadow: 0 24px 50px -10px rgb(0 0 0 / .55), 0 4px 10px rgb(0 0 0 / .25); background: var(--md-surface); }
+  .cardv iframe { width: 446px; height: 936px; border: 0; transform: scale(var(--s)); transform-origin: 0 0; display: block; pointer-events: none; }
+  .deck { --s: .64; }
+  .c0 { left: calc(50% - 446px * .32 - 446px * .64 - 20px); }
+  .c1 { left: calc(50% - 446px * .32); z-index: 3; }
+  .c2 { left: calc(50% + 446px * .32 + 20px); }
+  /* a stack (webOS 3): the conversation card sits behind the list, fanned */
+  .c1b { left: calc(50% - 446px * .32 + 12px); top: -12px; z-index: 2; transform: scale(.97); transform-origin: top right; filter: brightness(.72); }
+  .label { position: absolute; z-index: 6; top: 752px; left: 0; right: 0; display: flex; justify-content: center; }
+  .label > div { display: flex; align-items: center; gap: 8px; color: #fff; font-size: 14px; font-weight: 650; text-shadow: 0 1px 6px rgb(0 0 0 / .6); }
+  .label .n { font-weight: 500; opacity: .8; }
+  .dock { position: absolute; z-index: 10; left: 16px; right: 16px; bottom: 82px; height: 84px; border-radius: 30px; display: flex; align-items: center; justify-content: space-around; padding: 0 10px;
+          background: rgb(255 255 255 / .12); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .16); }
+  .app { width: 58px; height: 58px; border-radius: 20px; display: grid; place-items: center; box-shadow: 0 4px 10px rgb(0 0 0 / .25); }
+  .app .ic { width: 30px; height: 30px; }
+  .app.a1 { background: var(--md-primary-container); color: var(--md-on-primary-container); }
+  .app.a2 { background: var(--acc-sms-container); color: var(--acc-sms-on-container); }
+  .app.a3 { background: var(--md-tertiary-container); color: var(--md-on-tertiary-container); }
+  .app.a4 { background: var(--acc-family-container); color: var(--acc-family-on-container); }
+  .app.launch { background: rgb(255 255 255 / .18); color: #fff; box-shadow: none; border-radius: 50%; }
+  .notes { position: absolute; z-index: 10; left: 0; right: 0; bottom: 24px; height: 48px; display: flex; align-items: center; gap: 16px; padding: 0 18px; color: #fff;
+           background: rgb(4 8 10 / .42); -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur); }
+  .notes .ic { width: 22px; height: 22px; }
+  .notes .sp { flex: 1; }
+  .notes .t { font-size: 13px; font-weight: 600; opacity: .9; white-space: nowrap; }
+  .notes .pill { display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 14px 0 6px; border-radius: 17px; background: rgb(255 255 255 / .12); }
+  .notes .pill .av { --av-ring: transparent; }
+  .gesture.glass { background: rgb(4 8 10 / .42); }
+</style>
+<script>
+function build() {
+  const q = new URLSearchParams(location.search);
+  const p = `?embed=1&theme=${q.get('theme') || 'light'}&wall=${q.get('wall') || 'northern-lights'}`;
+  document.querySelectorAll('iframe[data-src]').forEach(f => f.src = f.dataset.src + p);
+}
+</script>
+</head>
+<body>
+<div class="device" data-app="Phoenix">
+  <div class="jt"><i data-i="search"></i><div class="ph">Just type…</div><div class="spark"><i data-i="spark-fill"></i></div></div>
+  <div class="deck">
+    <div class="cardv c0"><iframe data-src="music.html"></iframe></div>
+    <div class="cardv c1b"><iframe data-src="messaging-thread.html"></iframe></div>
+    <div class="cardv c1"><iframe data-src="messaging-list.html"></iframe></div>
+    <div class="cardv c2"><iframe data-src="settings.html"></iframe></div>
+  </div>
+  <div class="label"><div>Messaging <span class="n">· 2 cards</span></div></div>
+  <div class="dock">
+    <div class="app a1"><i data-i="call-fill"></i></div>
+    <div class="app a2"><i data-i="mail-fill"></i></div>
+    <div class="app a3"><i data-i="chat_bubble-fill"></i></div>
+    <div class="app a4"><i data-i="calendar_month-fill"></i></div>
+    <div class="app launch"><i data-i="apps"></i></div>
+  </div>
+  <div class="notes">
+    <div class="pill"><div class="av xs c4">AP</div><span class="t">Ada: Running late…</span></div>
+    <span class="sp"></span>
+    <i data-i="mail-fill"></i><i data-i="calendar_month-fill"></i><i data-i="music_note-fill"></i>
+  </div>
+</div>
+</body>
+</html>

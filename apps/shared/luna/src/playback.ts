@@ -49,6 +49,10 @@ export interface NowPlaying {
     artist?: string;
     album?: string;
     playing: boolean;
+    /** Music's: the song (its media indexer uri), shuffled, repeating. */
+    uri?: string;
+    shuffle?: boolean;
+    repeat?: "off" | "all" | "one";
     /** The app playing (Music, Podcasts, ...). */
     appId?: string;
 }

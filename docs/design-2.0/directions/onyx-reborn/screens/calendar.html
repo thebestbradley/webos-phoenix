@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Calendar: week</title>
+<link rel="stylesheet" href="../css/onyx.css">
+<script src="../js/icons.js"></script>
+<script src="../js/data.js"></script>
+<script src="../js/frame.js"></script>
+<style>
+  .toolbar { height: 58px; }
+  .toolbar .title { font-size: 18px; }
+  .tbgroup { display: inline-flex; border-radius: 20px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,.45); }
+  .tbgroup button { width: 42px; height: 36px; display: grid; place-items: center; color: var(--bar-text); background: linear-gradient(180deg, var(--bar-btn-1), var(--bar-btn-2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
+  .tbgroup button + button { border-left: 1px solid rgba(0,0,0,.4); }
+  .tbgroup .ic { width: 19px; height: 19px; }
+  .panels { flex: 1; display: flex; min-height: 0; }
+  .side { width: 256px; flex: none; padding: 12px 10px; display: flex; flex-direction: column; gap: 12px; }
+  html[data-theme="light"] .side { background: #E3E6EA; }
+  html[data-theme="dark"] .side { background: #0E1012; }
+  .mm { padding: 8px 8px 10px; display: grid; grid-template-columns: repeat(7, 1fr); row-gap: 1px; text-align: center; font-size: 12.5px; font-weight: 500; }
+  .mm .dn { font-size: 10.5px; font-weight: 700; color: var(--text-3); padding: 2px 0 4px; }
+  .mm span { height: 27px; line-height: 27px; }
+  .mm .o { color: var(--text-3); opacity: .6; }
+  .mm .wk { background: var(--sel); }
+  .mm .wk.first { border-radius: 6px 0 0 6px; } .mm .wk.last { border-radius: 0 6px 6px 0; }
+  .mm .td { color: #fff; font-weight: 700; background: linear-gradient(180deg, var(--blue-1), var(--blue-2)); border-radius: 6px; box-shadow: inset 0 1px 0 rgba(255,255,255,.25); }
+  .side .item { min-height: 44px; font-size: 15px; }
+  .side .item small { font-size: 12px; }
+  .next .item { align-items: flex-start; padding-top: 10px; padding-bottom: 10px; }
+  .main { flex: 1; display: flex; flex-direction: column; background: var(--surface); box-shadow: var(--shadow-panel), -1px 0 0 var(--line-2); z-index: 2; min-width: 0; }
+  .grid { position: relative; flex: 1; --gut: 58px; --hh: 48px; overflow: hidden; }
+  .days { display: grid; grid-template-columns: var(--gut) repeat(7, 1fr); background: var(--surface-2); border-bottom: 1px solid var(--line); }
+  .days .d { padding: 8px 0 8px 10px; border-left: 1px solid var(--line); }
+  .days .d .w { font-size: 11px; font-weight: 700; letter-spacing: .07em; color: var(--text-3); text-transform: uppercase; }
+  .days .d .n { font-size: 21px; font-weight: 650; letter-spacing: -.02em; line-height: 26px; }
+  .days .d.today { background: var(--sel); box-shadow: inset 0 -3px 0 var(--blue); }
+  .days .d.today .w, .days .d.today .n { color: var(--blue-ink); }
+  .allday { display: grid; grid-template-columns: var(--gut) repeat(7, 1fr); border-bottom: 1px solid var(--line); min-height: 32px; align-items: center; }
+  .allday .lab { white-space: nowrap; font-size: 9.5px; font-weight: 700; color: var(--text-3); text-align: right; padding-right: 10px; letter-spacing: .05em; }
+  .ad { margin: 4px 3px; height: 23px; border-radius: 6px; padding: 0 8px; display: flex; align-items: center; font-size: 12.5px; font-weight: 650; white-space: nowrap; overflow: hidden; }
+  .body { position: relative; height: calc(var(--hh) * 11.5); }
+  .hline { position: absolute; left: var(--gut); right: 0; height: 1px; background: var(--line); }
+  .hlab { position: absolute; left: 0; width: calc(var(--gut) - 10px); text-align: right; font-size: 11px; font-weight: 600; color: var(--text-3); transform: translateY(-7px); }
+  .col { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--line); }
+  .col.wkend { background: var(--surface-2); }
+  .ev { position: absolute; border-radius: 6px; padding: 3px 7px 3px 9px; overflow: hidden; font-size: 12.5px; line-height: 16px; font-weight: 650; }
+  .ev::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c); }
+  .ev .tt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ev .tt.two { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .ev .w { font-weight: 500; font-size: 11.5px; opacity: .85; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ev.short { display: flex; align-items: center; padding-top: 0; padding-bottom: 0; }
+  .now { position: absolute; height: 2px; background: #E5484D; z-index: 3; }
+  .now::before { content: ""; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: #E5484D; }
+  .nowlab { position: absolute; left: 6px; width: 46px; text-align: center; font-size: 10.5px; font-weight: 700; color: #fff; background: #D23A33; border-radius: 5px; padding: 2px 0; transform: translateY(-50%); z-index: 3; }
+  .bottom .status { font-size: 12.5px; color: var(--bar-text-2); }
+</style>
+</head>
+<body class="tablet">
+  <header class="statusbar" data-app="Calendar"></header>
+  <main class="app">
+    <div class="toolbar">
+      <button class="btn sm">Today</button>
+      <div class="tbgroup"><button><i data-i="chevL"></i></button><button><i data-i="chevR"></i></button></div>
+      <span class="title" style="margin-left:6px">October 12 – 18, 2026</span><span class="sub">Week 42</span>
+      <span class="sp"></span>
+      <div class="radios"><button>Day</button><button class="on">Week</button><button>Month</button></div>
+      <button class="ibtn"><i data-i="search"></i></button>
+      <button class="btn sm blue"><i data-i="plus"></i>Event</button>
+    </div>
+    <div class="panels">
+      <aside class="side">
+        <div class="groupbox"><div class="cap">October 2026</div><div class="mm" id="mm"></div></div>
+        <div class="groupbox">
+          <div class="cap">Calendars</div>
+          <div class="item"><span class="check on"><i data-i="check"></i></span><span class="label">Work<small>Exchange</small></span><span class="dot" style="--c:var(--cal-work)"></span></div>
+          <div class="item"><span class="check on" style="--c1:#D26A2A;--c2:#B0500F"><i data-i="check"></i></span><span class="label">Personal<small>CalDAV</small></span><span class="dot" style="--c:var(--cal-home)"></span></div>
+          <div class="item"><span class="check"><i data-i="check"></i></span><span class="label" style="color:var(--text-2)">Holidays</span></div>
+        </div>
+        <div class="groupbox next">
+          <div class="cap">Up next<span class="r">in 1 h 19 min</span></div>
+          <div class="item"><span class="glyph" style="--g1:var(--blue-1);--g2:var(--blue-2)"><i data-i="people"></i></span><span class="label">1:1 Priya<small>11:00 – 11:45 AM · Work</small></span></div>
+        </div>
+        <div class="groupbox">
+          <div class="cap">Invitation</div>
+          <div class="item" style="flex-direction:column;align-items:stretch;gap:10px;padding:12px 14px">
+            <span class="label">Sprint 1 retro<small>Fri 16 · 4 PM · from Priya</small></span>
+            <div style="display:flex;gap:8px"><button class="btn sm green" style="flex:1;padding:0 8px"><i data-i="check"></i>Accept</button><button class="btn sm red" style="flex:1;padding:0 8px">Decline</button></div>
+          </div>
+        </div>
+      </aside>
+      <section class="main">
+        <div class="grid" id="grid"></div>
+        <div class="toolbar bottom" style="height:52px"><span class="grabber"><i></i><i></i><i></i></span><button class="ibtn" style="width:36px;height:36px"><i data-i="refresh" style="width:18px;height:18px"></i></button><span class="status">Synced 9:40 AM · 2 calendars</span></div>
+      </section>
+    </div>
+  </main>
+  <footer class="gesture"></footer>
+<script>
+  const D = PHX_DATA;
+  let mm = "";
+  "MTWTFSS".split("").forEach((d) => mm += `<span class="dn">${d}</span>`);
+  const cells = [28, 29, 30].map((d) => [d, "o"]);
+  for (let d = 1; d <= 31; d++) cells.push([d, ""]);
+  cells.push([1, "o"]);
+  cells.forEach(([d, c]) => {
+    const inWeek = !c && d >= 12 && d <= 18;
+    mm += `<span class="${[c, inWeek && d !== 14 ? "wk" : "", d === 12 && inWeek ? "first" : "", d === 18 && inWeek ? "last" : "", d === 14 && !c ? "td" : ""].join(" ")}">${d}</span>`;
+  });
+  document.getElementById("mm").innerHTML = mm;
+  let h = `<div class="days"><span></span>` + D.week.days.map((d, i) => { const [w, n] = d.split(" "); return `<div class="d ${i === D.week.today ? "today" : ""}"><div class="w">${w}</div><div class="n">${n}</div></div>`; }).join("") + `</div>`;
+  h += `<div class="allday"><span class="lab">ALL-DAY</span>` + D.allDay.map((e) => `<div class="ad" style="grid-row:1;grid-column:${e.day + 2} / span ${e.span};background:var(--cal-${e.cal}-fill);color:var(--cal-${e.cal}-ink);box-shadow:inset 3px 0 0 var(--cal-${e.cal})">${e.title}</div>`).join("") + `</div>`;
+  h += `<div class="body">`;
+  for (let i = 0; i < 7; i++) h += `<div class="col ${i >= 5 ? "wkend" : ""}" style="left:calc(var(--gut) + (100% - var(--gut)) * ${i} / 7);width:calc((100% - var(--gut)) / 7)"></div>`;
+  h += `<div class="hlab" style="top:2px;transform:none">8 AM</div>`;
+  for (let t = 9; t <= 19; t++) h += `<div class="hline" style="top:calc(var(--hh) * ${t - 8})"></div><div class="hlab" style="top:calc(var(--hh) * ${t - 8})">${((t + 11) % 12) + 1} ${t >= 12 ? "PM" : "AM"}</div>`;
+  const fmt = (t) => { const hh = Math.floor(t), m = Math.round((t - hh) * 60); return (((hh + 11) % 12) + 1) + (m ? ":" + String(m).padStart(2, "0") : "") + (hh >= 12 ? " PM" : " AM"); };
+  D.events.forEach((e) => {
+    const short = e.end - e.start <= 0.5;
+    h += `<div class="ev ${short ? "short" : ""}" style="--c:var(--cal-${e.cal});background:var(--cal-${e.cal}-fill);color:var(--cal-${e.cal}-ink);top:calc(var(--hh) * ${e.start - 8} + 1px);height:calc(var(--hh) * ${e.end - e.start} - 3px);left:calc(var(--gut) + (100% - var(--gut)) * ${e.day} / 7 + 3px);width:calc((100% - var(--gut)) / 7 - 6px)"><div class="tt ${e.end - e.start >= 1.5 ? "two" : ""}">${e.title}</div>${short ? "" : `<div class="w">${fmt(e.start)}${e.where ? " · " + e.where : ""}</div>`}</div>`;
+  });
+  const now = 9 + 41 / 60;
+  h += `<div class="now" style="top:calc(var(--hh) * ${now - 8});left:calc(var(--gut) + (100% - var(--gut)) * 2 / 7);width:calc((100% - var(--gut)) / 7)"></div><div class="nowlab" style="top:calc(var(--hh) * ${now - 8})">9:41</div>`;
+  document.getElementById("grid").innerHTML = h + `</div>`;
+  phxReady();
+</script>
+</body>
+</html>

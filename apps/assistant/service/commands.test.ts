@@ -72,7 +72,10 @@ function device(opts: { offline?: boolean; locationAllowed?: boolean | null; uni
                                             { id: "org.webosphoenix.settings", title: "Sounds & Ringtones", params: { page: "sounds" } }] });
             if (m === "com.palm.db/find") {
                 const kind = p.query.from;
-                return okr({ results: [...db.values()].filter((o) => o._kind === kind || (kind === "com.palm.email:1" && /email:1$/.test(o._kind))) });
+                // With the kinds that extend it, as db8 answers (an account's com.palm.task.todoist:1 is a com.palm.task:1).
+                const sub = kind.replace(/:\d+$/, ".");
+                return okr({ results: [...db.values()].filter((o) => o._kind === kind || (kind === "com.palm.email:1" && /email:1$/.test(o._kind)) ||
+                                                                (/^com\.palm\.task(list)?:1$/.test(kind) && o._kind.startsWith(sub) && o._kind.endsWith(":1"))) });
             }
             if (m === "com.palm.db/put") return okr({ results: p.objects.map((o: any) => ({ id: put(o), rev: 1 })) });
             if (m === "com.palm.db/merge") { p.objects.forEach((o: any) => db.set(o._id, { ...db.get(o._id), ...o })); return okr(); }
@@ -187,7 +190,7 @@ function device(opts: { offline?: boolean; locationAllowed?: boolean | null; uni
     }
     const of = (kind: string) => [...db.values()].filter((o) => o._kind === kind);
     const called = (part: string) => calls.filter((c) => c.uri.includes(part));
-    return { svc, db, of, calls, called, state, ask, confirm, choose, requests, setNow: (t: number) => { clock = t; } };
+    return { svc, db, put, of, calls, called, state, ask, confirm, choose, requests, setNow: (t: number) => { clock = t; } };
 }
 
 // The launch an answer made, without the flags every command's launch has
@@ -313,16 +316,30 @@ describe("alarms, timers, the stopwatch", () => {
 describe("tasks, memos, contacts", () => {
     it("adds to a named list, making it the first time", async () => {
         const d = device();
-        const m = await d.ask("add milk to my shopping list");
-        expect(m.text).toBe("Added “Milk” to your Shopping list (a new list).");
-        const list = d.of("com.palm.tasklist:1").find((l) => l.name === "Shopping");
-        expect(d.of("com.palm.task:1").find((t) => t.summary === "Milk" && t.listId === list._id)).toMatchObject({ completed: false });
-        expect((await d.ask("put eggs on the shopping list")).text).toBe("Added “Eggs” to your Shopping list.");
+        const m = await d.ask("add nails to my hardware list");
+        expect(m.text).toBe("Added “Nails” to your Hardware list (a new list).");
+        const list = d.of("com.palm.tasklist:1").find((l) => l.name === "Hardware");
+        expect(d.of("com.palm.task:1").find((t) => t.summary === "Nails" && t.listId === list._id)).toMatchObject({ completed: false });
+        expect((await d.ask("put screws on the hardware list")).text).toBe("Added “Screws” to your Hardware list.");
         expect(d.of("com.palm.tasklist:1")).toHaveLength(3);
+        // The shopping list, the grocery list: the Groceries list there is (as
+        // Siri's and Google's one shopping list), never a second one beside it.
+        expect((await d.ask("add milk to my shopping list")).text).toBe("Added “Milk” to your Groceries list.");
+        expect((await d.ask("put eggs on the grocery list")).text).toBe("Added “Eggs” to your Groceries list.");
+        expect(d.of("com.palm.tasklist:1")).toHaveLength(3);
+        // "My to do list": the default one.
+        expect((await d.ask("add stamps to my to do list")).text).toBe("Added “Stamps” to your tasks.");
         const t = await d.ask("create a task to call the bank tomorrow");
         expect(t.text).toBe("Added “Call the bank” to your tasks, due tomorrow at 9:00 AM.");
         expect(d.of("com.palm.task:1").find((x) => x.summary === "Call the bank")).toMatchObject({ listId: "list-inbox", due: at(8, 9) });
         expect(t.choices).toEqual([{ id: "open", label: "Open Tasks" }]);
+    });
+    it("adds to an account's list in the account's kind, for its connector to send on", async () => {
+        const d = device();
+        d.put({ _id: "list-todo", _kind: "com.palm.tasklist.todoist:1", name: "Errands", accountId: "acct-todoist", taskKind: "com.palm.task.todoist:1" });
+        expect((await d.ask("add stamps to my errands list")).text).toBe("Added “Stamps” to your Errands list.");
+        expect(d.of("com.palm.task.todoist:1")).toEqual([expect.objectContaining({ summary: "Stamps", listId: "list-todo", accountId: "acct-todoist" })]);
+        expect(d.of("com.palm.task:1").find((x) => x.summary === "Stamps")).toBeUndefined();
     });
     it("saves a memo first on the wall, as Memos places a new one", async () => {
         const d = device();
@@ -331,7 +348,7 @@ describe("tasks, memos, contacts", () => {
         // The colour after the first memo's (Memo.getNextMemoColor); a position before "m".
         expect(memo).toMatchObject({ title: "Buy flowers for Ada", color: "green", position: "g" });
         expect(memo.position < "m").toBe(true);
-        expect((await d.ask("find my notes about the cabin")).text).toBe("One memo about “the cabin”: “Wi-Fi at the cabin: network Lakeview”.");
+        expect((await d.ask("find my notes about the cabin")).text).toBe("One memo about “cabin”: “Wi-Fi at the cabin: network Lakeview”.");
     });
     it("adds a contact the next command can call", async () => {
         const d = device();

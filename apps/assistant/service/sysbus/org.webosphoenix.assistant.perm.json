@@ -30,14 +30,20 @@
         "marketplace.management",
         "phoenix.location.permissions",
         "phoenix.system.media",
+        "phoenix.system.notifications.read",
+        "phoenix.system.emergency",
         "filemanager.operation",
+        "index.search",
         "phoenix.accessories.query",
         "phoenix.accessories.management",
         "phoenix.appmanager.query",
         "phoenix.appmanager.launch",
         "devices.power.query",
         "vpn.management",
-        "phoenix.clipboard"
+        "phoenix.clipboard",
+        "account.cloud",
+        "phoenix.appservices.accounts",
+        "phoenix.connector.share"
     ],
     "org.webosphoenix.tts": []
 }

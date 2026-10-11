@@ -2,9 +2,32 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { useEffect, useRef, useState } from "react";
-import { contacts, personDisplayName, matchNumber, primaryCall, telephony, type Call, type CallStatus, type Person, type VoicemailStatus } from "@phoenix/luna";
-import { formatNumber } from "@phoenix/ui";
+import { contacts, personDisplayName, matchNumber, postNotification, primaryCall, removeNotificationGroup, telephony, type Call, type CallStatus,
+         type Person, type VoicemailStatus } from "@phoenix/luna";
+import { formatNumber, formatTime } from "@phoenix/ui";
 import { callLog, recordFor, type PhoneCall } from "./calllog";
+
+export const PHONE_APP_ID = "org.webosphoenix.phone";
+/**
+ * The missed calls' notifications: one stack (the shell's
+ * NotificationStacks.js), newest on top with the count, as an app's
+ * notifications of one kind were one dashboard of layers on webOS (Enyo's
+ * enyo.Dashboard; Calendar's reminders, ReminderManager.js:694-722). A tap
+ * opens the call log on the missed calls ({action: "missedcalls"}); seeing
+ * the log takes the stack away.
+ */
+export const MISSED_CALLS_GROUP = "missed-calls";
+
+/** A missed call's notification, on the missed calls' stack. */
+export function notifyMissedCall(name: string, at: number): void {
+    postNotification({ appId: PHONE_APP_ID, title: name, body: `Missed call, ${formatTime(at)}`,
+                       params: { action: "missedcalls" }, group: MISSED_CALLS_GROUP });
+}
+
+/** The missed calls' stack gone: the call log has been seen. */
+export function clearMissedCalls(): void {
+    removeNotificationGroup(PHONE_APP_ID, MISSED_CALLS_GROUP);
+}
 
 /** Calls, mute and speaker (com.palm.telephony/callStatusQuery). */
 export function useCallStatus(): CallStatus {
@@ -71,8 +94,9 @@ function banner(message: string) {
 /**
  * What the phone app does in the background as calls come and go: an
  * incoming-call banner (webOS showed a banner and dashboard next to the
- * incoming-call popup), a "missed call" banner, and the call log entry
- * when a call ends.
+ * incoming-call popup), a missed call's notification (its banner, and a
+ * layer on the missed calls' stack), and the call log entry when a call
+ * ends.
  */
 export function useCallBookkeeping(calls: readonly Call[], people: readonly Person[]) {
     const seen = useRef(new Map<number, string>());
@@ -90,7 +114,7 @@ export function useCallBookkeeping(calls: readonly Call[], people: readonly Pers
             if (c.state === "disconnected") {
                 const rec = recordFor(c, peopleRef.current);
                 callLog.add(rec).catch(() => { /* logged next time */ });
-                if (rec.type === "missed") banner(`Missed call: ${name}`);
+                if (rec.type === "missed") notifyMissedCall(name, rec.timestamp || Date.now());
             }
         }
     }, [calls]);

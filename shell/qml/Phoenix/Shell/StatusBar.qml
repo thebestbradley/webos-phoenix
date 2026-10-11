@@ -43,6 +43,28 @@ Item {
     readonly property real systemGroupWidth: indicators.width + indicators.anchors.rightMargin
         + (Theme.tablet && !lockScreen ? systemSeparator.width + Theme.px(6) : 0)
 
+    // The screen's shape where the bar is (Shell.displayCutouts,
+    // displayCornerRadius; device pixels): the camera cutouts at the top
+    // edge, and the corners' radius. A Phoenix addition: webOS's screens
+    // were square, without cutouts. As Phosh's top bar does
+    // (phosh/src/layout-manager.c: get_clock_pos, get_corner_shift): the
+    // centred clock moves beside a cutout that would cover it, to its left
+    // if that leaves it clear, else to its right; and the content at both
+    // ends keeps out of the rounded corners.
+    property var cutouts: []
+    property real cornerRadius: 0
+    // How far in from each end the corners push the bar's content: where
+    // the corner's arc is at the top of an icon filling 80% of the bar
+    // ("Icons usually don't fill the full height so assume 80%",
+    // get_corner_shift). 0 on a square screen, so the layout is the
+    // original's.
+    readonly property real cornerInset: {
+        var r = cornerRadius, top = height * 0.1;
+        if (!(r > 0) || top >= r)
+            return 0;
+        return Math.ceil(r - Math.sqrt(r * r - (r - top) * (r - top)));
+    }
+
     signal systemMenuRequested
     signal appMenuRequested
 
@@ -155,6 +177,7 @@ Item {
 
     Title {
         id: oldTitle
+        x: bar.cornerInset
         text: bar._oldTitle
         border: bar._oldBorder
         opacity: 1 - newTitle.opacity
@@ -163,6 +186,7 @@ Item {
     Title {
         id: newTitle
         objectName: "statusBarTitle"
+        x: bar.cornerInset
         text: bar._shownTitle
         border: bar._shownBorder
     }
@@ -179,7 +203,7 @@ Item {
         id: titleArrow
         objectName: "statusBarTitleArrow"
         visible: Theme.tablet && opacity > 0
-        x: newTitle.width + Theme.statusBarArrowSpacing
+        x: newTitle.x + newTitle.width + Theme.statusBarArrowSpacing
         anchors.verticalCenter: parent.verticalCenter
         width: Theme.artWidth(source)
         height: Theme.artHeight(source)
@@ -210,10 +234,36 @@ Item {
 
     // Tablets put the time at the right end of the system group instead
     // (StatusBar.cpp:98-104); their lock screen keeps the date centred.
+    // Where the clock goes: centred (anchors.centerIn's pixel,
+    // Theme.centred), unless a cutout covers that; then beside it, on the
+    // side where it covers less of the title or the indicators (the left
+    // when both are clear, as get_clock_pos tries it first).
+    readonly property real _clockGap: Theme.px(6)
+    function _overlap(x, w) {
+        var o = 0;
+        for (var i = 0; i < cutouts.length; ++i)
+            o = Math.max(o, Math.min(x + w, cutouts[i].x + cutouts[i].width) - Math.max(x, cutouts[i].x));
+        return o;
+    }
+    function _clockX(w) {
+        var centre = Theme.centred(bar.width, w);
+        if (_overlap(centre, w) <= 0)
+            return centre;
+        var first = cutouts[0].x, last = cutouts[0].x + cutouts[0].width;
+        for (var i = 1; i < cutouts.length; ++i) {
+            first = Math.min(first, cutouts[i].x);
+            last = Math.max(last, cutouts[i].x + cutouts[i].width);
+        }
+        var left = Math.round(first - _clockGap - w), right = Math.round(last + _clockGap);
+        var leftOverlap = Math.max(0, newTitle.x + newTitle.width + _clockGap - left) + Math.max(0, bar.cornerInset - left);
+        var rightOverlap = Math.max(0, right + w + _clockGap - indicators.x);
+        return leftOverlap <= rightOverlap ? left : right;
+    }
     Text {
         objectName: "centreClock"
         visible: !Theme.tablet || bar.lockScreen
-        anchors.centerIn: parent
+        anchors.verticalCenter: parent.verticalCenter
+        x: bar._clockX(width)
         text: bar.clockText
         color: Theme.text
         font.family: Theme.fontFamily
@@ -295,7 +345,7 @@ Item {
         id: systemArrow
         objectName: "systemGroupArrow"
         visible: bar._systemArrow && opacity > 0
-        x: bar.width - width - Theme.px(7)
+        x: bar.width - bar.cornerInset - width - Theme.px(7)
         anchors.verticalCenter: parent.verticalCenter
         width: Theme.artWidth(source)
         height: Theme.artHeight(source)
@@ -308,8 +358,8 @@ Item {
         anchors.right: parent.right
         // Tablets: left of the arrow and ARROW_SPACING on both its sides
         // (layoutRight, :479-487); without one, a few pixels' padding.
-        anchors.rightMargin: bar._systemArrow && bar._systemArrowProgress > 0
-                             ? systemArrow.width + 2 * Theme.px(7) : Theme.px(6)
+        anchors.rightMargin: bar.cornerInset + (bar._systemArrow && bar._systemArrowProgress > 0
+                             ? systemArrow.width + 2 * Theme.px(7) : Theme.px(6))
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.statusBarIconSpacing
 

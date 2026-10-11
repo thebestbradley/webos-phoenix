@@ -223,6 +223,26 @@ Item {
             post("com.palm.app.email", "notification", { tag: "t1", remove: true });
             compare(windows.notifications.count, before);
 
+            // Stacks (NotificationStacks.js, as the simulator's): one row
+            // per app and group, the newest layer on top; a pop shows the
+            // next; {group, remove} takes the stack.
+            post("com.palm.app.email", "notification", { title: "Ada", body: "One", group: "ada", params: { m: 1 } });
+            post("com.palm.app.email", "notification", { title: "Ben", body: "Hi", group: "ben" });
+            post("com.palm.app.email", "notification", { title: "Ada", body: "Two", group: "ada", params: { m: 2 } });
+            compare(windows.notifications.count, before + 2);
+            var ada = windows.notifications.get(before);
+            compare(ada.layerCount, 2);
+            compare(ada.body, "Two");
+            compare(JSON.parse(ada.params).m, 2);
+            windows.popNotificationLayer(before);
+            compare(windows.notifications.get(before).layerCount, 1);
+            compare(windows.notifications.get(before).body, "One");
+            post("com.palm.app.email", "notification", { group: "ada", remove: true });
+            compare(windows.notifications.count, before + 1);
+            compare(windows.notifications.get(before).title, "Ben");
+            windows.dismissNotification(before);
+            compare(windows.notifications.count, before);
+
             // The active-call banner is its app's alone.
             post("org.webosphoenix.phone", "activeCallBanner", { op: "add", message: "Ada", startTime: 5 });
             compare(windows.activeCallBanner.message, "Ada");
@@ -239,6 +259,50 @@ Item {
             compare(bannerSpy.count, 1);
             compare(bannerSpy.signalArguments[0][0], "com.webos.app.settings");
             compare(bannerSpy.signalArguments[0][3], "{\"page\":\"about\"}");
+        }
+
+        // The Sign In card's bar (services/oauth/signincard.js): drawn by the
+        // shell from the OAuth service's message only, over the card; the
+        // page goes under it; Cancel closes the card.
+        function test_signInCardBar() {
+            var card = wam("org.webosphoenix.signin");
+            card.width = 400;
+            card.height = 600;
+            var uid = windows._adopt(card);
+            var host = windows.windowFor(uid);
+            host.width = 400;
+            host.height = 600;
+            compare(host.signIn, null);
+            // A page cannot raise it, not even the card's own (the provider's page is in it).
+            post("org.webosphoenix.signin", "signInCard", { appId: "org.webosphoenix.signin", host: "accounts.example.com", secure: true });
+            post("com.example.app", "signInCard", { appId: "org.webosphoenix.signin", host: "accounts.example.com", secure: true });
+            compare(host.signIn, null);
+            post("org.webosphoenix.service.oauth", "signInCard", { appId: "org.webosphoenix.signin", session: "s1",
+                                                                   host: "mastodon.example", secure: true });
+            verify(host.signIn !== null);
+            var bar = findChild(host, "surfaceSignInBar");
+            verify(bar.height > 0);
+            compare(findChild(bar, "signInHost").text, "mastodon.example");
+            verify(findChild(bar, "signInLock").secure);
+            // The page under the bar, scaled to the room left, centred.
+            verify(card.scale < 1);
+            fuzzyCompare(card.height * card.scale, 600 - bar.height, 0.5);
+            verify(card.x > 0);
+            // Another app's card has no bar.
+            var other = wam("com.palm.app.email");
+            var otherHost = windows.windowFor(windows._adopt(other));
+            compare(otherHost.signIn, null);
+            // Cancel closes the card.
+            verify(findChild(bar, "signInCancel") !== null);
+            bar.cancel();
+            verify(card.closed);
+            // The sign-in over: the bar goes.
+            post("org.webosphoenix.service.oauth", "signInCard", { closed: true });
+            compare(host.signIn, null);
+            compare(bar.height, 0);
+            fuzzyCompare(card.scale, 1, 0.001);
+            windows.removeSurface(card);
+            windows.removeSurface(other);
         }
 
         function test_editPopupAndEventsGoToThePage() {

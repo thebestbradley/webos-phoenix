@@ -1,0 +1,15 @@
+{
+    "id": "org.webosphoenix.google.item:1",
+    "owner": "org.webosphoenix.service.google",
+    "sync": false,
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        }
+    ]
+}

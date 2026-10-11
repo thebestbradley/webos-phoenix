@@ -1,0 +1,232 @@
+/* Onyx Reborn: Phoenix 2.0 exploration.
+   Enyo 2's Onyx grown up: charcoal chrome (toolbars, popups, menus, the
+   app menu tab) around light content; pill buttons with Onyx's faint
+   top-lit gradient; groupboxes with a charcoal cap; the onyx blue accent;
+   Panels that slide over each other with a soft shadow; the grabber. */
+
+@font-face { font-family: "Inter"; src: url("../assets/Inter.ttf") format("truetype"); font-weight: 100 900; }
+
+:root {
+  --font: "Inter", "Open Sans", sans-serif;
+  --wp: url("../assets/silk.jpg");
+  --r-card: 22px; --r-group: 12px; --r-field: 10px;
+  /* Onyx's chrome is charcoal in both themes */
+  --bar-1: #3A3E44; --bar-2: #2B2E33;
+  --bar: linear-gradient(180deg, var(--bar-1), var(--bar-2));
+  --bar-edge: rgba(255, 255, 255, 0.08);
+  --bar-line: #1B1D20;
+  --bar-text: #F4F5F7; --bar-text-2: #B4BAC2;
+  --bar-btn-1: #50555C; --bar-btn-2: #42464C;
+  --bar-field: rgba(0, 0, 0, 0.22);
+  --pop: rgba(44, 47, 52, 0.94);
+  /* the onyx blue, darkened just enough for white text (4.7:1); the old
+     #35A8EE survives as the glow ("onyx sky") on focus and the gesture light */
+  --blue: #1477C2; --blue-1: #1979C5; --blue-2: #116DB4;
+  --sky: #35A8EE;
+  --red-1: #D23A33; --red-2: #B92A24;
+  --green-1: #2E7D4F; --green-2: #256A42;
+  --acct-sms: #1477C2; --acct-jabber: #2E7D4F;
+  --bub-sms-1: #1979C5; --bub-sms-2: #116DB4; --bub-jabber-1: #2E7D4F; --bub-jabber-2: #256A42;
+  --cal-work: #1477C2; --cal-home: #C2591A;
+  --acct-work: #1477C2; --acct-home: #C2591A;
+  --ease: cubic-bezier(.25, .8, .25, 1);
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --bg: #ECEEF1;
+  --surface: #FFFFFF;
+  --surface-2: #F5F6F8;
+  --line: #DADDE2;
+  --line-2: #C9CED5;
+  --text: #1C1F23; --text-2: #4A5058; --text-3: #5F666F;
+  --blue-ink: #0F6BB0;
+  --sel: #DCEBF9;
+  --field: #FFFFFF;
+  --btn-1: #F3F4F6; --btn-2: #E1E4E8; --btn-text: #24272B;
+  --shadow-1: 0 1px 2px rgba(20, 24, 30, .06), 0 2px 8px -2px rgba(20, 24, 30, .08);
+  --shadow-panel: -10px 0 28px -10px rgba(10, 14, 20, .28);
+  --bub-in: #FFFFFF; --bub-in-line: #DADDE2;
+  --cal-work-fill: #DCEBF9; --cal-home-fill: #FBE6D8;
+  --cal-work-ink: #0D5A96; --cal-home-ink: #8A3C0E;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121417;
+  --surface: #1C1F23;
+  --surface-2: #22262B;
+  --line: #2C3036;
+  --line-2: #393E45;
+  --text: #ECEFF2; --text-2: #AEB5BE; --text-3: #8F97A1;
+  --blue-ink: #5CB6F7;
+  --sel: #173A58;
+  --field: #16191C;
+  --btn-1: #3A3F46; --btn-2: #30343A; --btn-text: #ECEFF2;
+  --bar-1: #2C3035; --bar-2: #222529;
+  --bar-line: #08090A;
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .3);
+  --shadow-panel: -12px 0 30px -10px rgba(0, 0, 0, .7);
+  --bub-in: #23272C; --bub-in-line: #30353B;
+  --cal-work-fill: #15324C; --cal-home-fill: #3F2616;
+  --cal-work-ink: #9CCEF7; --cal-home-ink: #F6C3A0;
+  --acct-sms: #4AA6EE; --acct-jabber: #4CC07A; --acct-work: #4AA6EE; --acct-home: #EE8A4A;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { font-family: var(--font); color: var(--text); background: #000; -webkit-font-smoothing: antialiased; overflow: hidden; position: relative;
+  font-feature-settings: "cv11", "ss03"; letter-spacing: -0.006em; }
+body.phone { width: 446px; height: 994px; }
+body.tablet { width: 1280px; height: 800px; }
+button { font: inherit; color: inherit; border: 0; background: none; padding: 0; letter-spacing: inherit; }
+.ic { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.ic .f { fill: currentColor; stroke: none; }
+
+/* ---------- the webOS frame: black around a rounded card ---------- */
+.statusbar { position: absolute; top: 0; left: 0; right: 0; height: 36px; z-index: 20; display: flex; align-items: center; padding: 0 16px 0 14px; color: #fff; font-weight: 600; font-size: 14px; background: #000; }
+.tablet .statusbar { height: 28px; font-size: 13px; padding: 0 14px 0 10px; }
+/* the app menu tab hangs from the top edge, rounded below: webOS's tab */
+.apptab { align-self: flex-start; height: 31px; padding: 1px 10px 0 14px; border-radius: 0 0 14px 14px; display: flex; align-items: center; gap: 4px;
+  font-weight: 700; font-size: 13.5px; color: #fff; letter-spacing: 0;
+  background: linear-gradient(180deg, #4C5158, #33373C); box-shadow: inset 0 -1px 0 rgba(255,255,255,.1), inset 1px 0 0 rgba(255,255,255,.04), 0 2px 4px rgba(0,0,0,.5); }
+.tablet .apptab { height: 25px; font-size: 12.5px; border-radius: 0 0 12px 12px; padding: 0 9px 0 12px; }
+.apptab .ic { width: 15px; height: 15px; stroke-width: 2.4; opacity: .8; }
+.carrier { font-weight: 700; padding-left: 4px; }
+.clock { position: absolute; left: 50%; transform: translateX(-50%); font-weight: 700; }
+.sys { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.sys .ic { width: 17px; height: 17px; stroke-width: 2; }
+.sys .batt .ic { width: 23px; height: 23px; stroke-width: 1.6; }
+.tablet .sys .ic { width: 15px; height: 15px; } .tablet .sys .batt .ic { width: 21px; height: 21px; }
+.app { position: absolute; top: 36px; left: 0; right: 0; bottom: 28px; border-radius: var(--r-card); overflow: hidden; background: var(--bg); display: flex; flex-direction: column; isolation: isolate; }
+.tablet .app { top: 28px; bottom: 20px; border-radius: 18px; }
+.gesture { position: absolute; left: 0; right: 0; bottom: 0; height: 28px; display: grid; place-items: center; background: #000; z-index: 20; }
+.tablet .gesture { height: 20px; }
+.gesture .light { width: 118px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, rgba(53,168,238,0), #8FD0FA 30%, #fff 50%, #8FD0FA 70%, rgba(53,168,238,0)); box-shadow: 0 0 10px 1px rgba(53,168,238,.7); }
+.as-card body { width: 100vw; height: 100vh; }
+.as-card .statusbar, .as-card .gesture { display: none; }
+.as-card .app { top: 0; bottom: 0; border-radius: 0; }
+
+/* ---------- toolbars (onyx-toolbar) ---------- */
+.toolbar { flex: none; height: 58px; display: flex; align-items: center; gap: 10px; padding: 0 12px; color: var(--bar-text); position: relative; z-index: 3;
+  background: var(--bar); box-shadow: inset 0 1px 0 var(--bar-edge), 0 1px 0 var(--bar-line), 0 4px 10px -4px rgba(0,0,0,.35); }
+.toolbar.bottom { box-shadow: inset 0 1px 0 var(--bar-edge), 0 -1px 0 var(--bar-line), 0 -4px 10px -4px rgba(0,0,0,.25); }
+.toolbar.glass { background: linear-gradient(180deg, rgba(58,62,68,.9), rgba(43,46,51,.92)); backdrop-filter: blur(18px) saturate(140%); }
+html[data-theme="dark"] .toolbar.glass { background: linear-gradient(180deg, rgba(44,48,53,.88), rgba(34,37,41,.92)); }
+.toolbar .title { font-size: 18px; font-weight: 650; letter-spacing: -.012em; }
+.toolbar .sub { font-size: 12.5px; font-weight: 500; color: var(--bar-text-2); }
+.toolbar .sp { flex: 1; }
+
+/* ---------- buttons (onyx-button, grown up: pills) ---------- */
+.btn { height: 40px; padding: 0 20px; border-radius: 20px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap;
+  font-size: 15px; font-weight: 600; color: var(--btn-text);
+  background: linear-gradient(180deg, var(--btn-1), var(--btn-2));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 0 0 1px rgba(0,0,0,.09), 0 1px 2px rgba(0,0,0,.08); }
+html[data-theme="dark"] .btn { box-shadow: inset 0 1px 0 rgba(255,255,255,.09), 0 0 0 1px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.3); }
+.btn .ic { width: 18px; height: 18px; stroke-width: 2.1; }
+.btn.sm { height: 34px; padding: 0 15px; font-size: 14px; border-radius: 17px; }
+html .btn.blue { color: #fff; background: linear-gradient(180deg, var(--blue-1), var(--blue-2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 0 0 1px rgba(0,40,80,.35), 0 2px 6px -2px rgba(20,119,194,.6); }
+html .btn.red { color: #fff; background: linear-gradient(180deg, var(--red-1), var(--red-2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 0 0 1px rgba(80,0,0,.35), 0 2px 6px -2px rgba(185,42,36,.5); }
+html .btn.green { color: #fff; background: linear-gradient(180deg, var(--green-1), var(--green-2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 0 0 1px rgba(0,50,0,.35); }
+.btn.dark, .toolbar .btn:not(.blue):not(.red) { color: var(--bar-text); background: linear-gradient(180deg, var(--bar-btn-1), var(--bar-btn-2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 0 0 1px rgba(0,0,0,.45); }
+html .btn.flat { background: none; box-shadow: none; color: var(--blue-ink); padding: 0 8px; }
+.btn[disabled] { opacity: .4; }
+.ibtn { width: 40px; height: 40px; border-radius: 20px; display: inline-grid; place-items: center; color: var(--bar-text);
+  background: linear-gradient(180deg, var(--bar-btn-1), var(--bar-btn-2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 0 0 1px rgba(0,0,0,.45); }
+.ibtn .ic { width: 20px; height: 20px; }
+.ibtn.bare { background: none; box-shadow: none; }
+.ibtn.light { color: var(--btn-text); background: linear-gradient(180deg, var(--btn-1), var(--btn-2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 0 0 1px rgba(0,0,0,.09); }
+html[data-theme="dark"] .ibtn.light { box-shadow: inset 0 1px 0 rgba(255,255,255,.09), 0 0 0 1px rgba(0,0,0,.5); }
+
+/* radio group (onyx-radiobutton) as a joined pill */
+.radios { display: inline-flex; padding: 3px; border-radius: 20px; background: rgba(0,0,0,.28); box-shadow: inset 0 1px 2px rgba(0,0,0,.35), 0 1px 0 rgba(255,255,255,.07); }
+.radios button { height: 32px; padding: 0 16px; border-radius: 17px; font-size: 14px; font-weight: 600; color: var(--bar-text-2); display: inline-flex; align-items: center; gap: 7px; }
+.radios button.on { color: #fff; background: linear-gradient(180deg, var(--blue-1), var(--blue-2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 1px 3px rgba(0,0,0,.4); }
+.radios.light { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line), inset 0 1px 2px rgba(0,0,0,.06); }
+.radios.light button { color: var(--text-2); }
+.radios.light button.on { color: #fff; }
+
+/* toggle (onyx-toggle-button): the ON / OFF label stays */
+.toggle { width: 62px; height: 30px; border-radius: 15px; position: relative; flex: none; font-size: 10.5px; font-weight: 800; letter-spacing: .06em;
+  background: linear-gradient(180deg, #C6CBD2, #D5D9DE); box-shadow: inset 0 1px 3px rgba(0,0,0,.25); color: #3F454D; }
+html[data-theme="dark"] .toggle { background: linear-gradient(180deg, #2A2E33, #33373D); box-shadow: inset 0 1px 3px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04); color: #AEB5BE; }
+.toggle::before { content: "OFF"; position: absolute; right: 9px; top: 0; line-height: 30px; }
+.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%;
+  background: linear-gradient(180deg, #FFFFFF, #E9ECEF); box-shadow: 0 1px 3px rgba(0,0,0,.35), 0 0 0 .5px rgba(0,0,0,.12); }
+html .toggle.on { background: linear-gradient(180deg, var(--blue-2), var(--blue-1)); color: #fff; box-shadow: inset 0 1px 3px rgba(0,0,0,.3); }
+.toggle.on::before { content: "ON"; left: 11px; right: auto; }
+.toggle.on::after { left: 35px; }
+
+.check { width: 24px; height: 24px; border-radius: 7px; display: inline-grid; place-items: center; flex: none; color: transparent;
+  background: var(--field); box-shadow: inset 0 0 0 1.5px var(--line-2), inset 0 1px 2px rgba(0,0,0,.08); }
+.check .ic { width: 17px; height: 17px; stroke-width: 2.8; }
+.check.on { color: #fff; background: linear-gradient(180deg, var(--c1, var(--blue-1)), var(--c2, var(--blue-2))); box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 0 0 1px rgba(0,0,0,.15); }
+
+.field { height: 42px; border-radius: var(--r-field); display: flex; align-items: center; gap: 9px; padding: 0 12px; font-size: 15px; color: var(--text-3);
+  background: var(--field); box-shadow: inset 0 0 0 1px var(--line-2), inset 0 1px 2px rgba(0,0,0,.06); }
+.field .ic { width: 18px; height: 18px; }
+.field.focus { color: var(--text); box-shadow: inset 0 0 0 1.5px var(--blue), 0 0 0 4px rgba(53,168,238,.22); }
+.toolbar .field, .darkstrip .field { background: var(--bar-field); box-shadow: inset 0 1px 3px rgba(0,0,0,.35), 0 1px 0 rgba(255,255,255,.06); color: var(--bar-text-2); }
+.caret { display: inline-block; width: 2px; height: 19px; background: var(--blue); margin-left: 1px; vertical-align: middle; }
+
+.slider { position: relative; height: 26px; display: flex; align-items: center; }
+.slider .track { position: absolute; left: 0; right: 0; height: 6px; border-radius: 3px; background: var(--line-2); box-shadow: inset 0 1px 1px rgba(0,0,0,.12); }
+.slider .fill { position: absolute; left: 0; height: 6px; border-radius: 3px; background: linear-gradient(180deg, #3196E2, var(--blue)); }
+.slider .knob { position: absolute; width: 26px; height: 26px; margin-left: -13px; border-radius: 50%; background: linear-gradient(180deg, #fff, #E6E9ED);
+  box-shadow: 0 1px 4px rgba(0,0,0,.35), 0 0 0 .5px rgba(0,0,0,.15); }
+.slider .knob.active { box-shadow: 0 1px 4px rgba(0,0,0,.35), 0 0 0 5px rgba(53,168,238,.3); }
+
+/* groupbox (onyx-groupbox) with its charcoal header cap */
+.groupbox { border-radius: var(--r-group); background: var(--surface); box-shadow: 0 0 0 1px var(--line), var(--shadow-1); overflow: hidden; }
+.groupbox > .cap { height: 30px; display: flex; align-items: center; padding: 0 14px; font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: #E9ECEF; background: var(--bar); box-shadow: inset 0 1px 0 var(--bar-edge); }
+.groupbox > .cap .r { margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--bar-text-2); font-size: 12px; }
+.item { min-height: 52px; display: flex; align-items: center; gap: 13px; padding: 0 14px; font-size: 16px; font-weight: 500; position: relative; }
+.groupbox > .item + .item, .list > .item + .item { border-top: 1px solid var(--line); }
+.item .label { flex: 1; min-width: 0; }
+.item .label small { display: block; font-size: 13px; font-weight: 450; color: var(--text-3); margin-top: 1px; }
+.item .value { font-size: 15px; color: var(--text-2); white-space: nowrap; }
+.item .chev { width: 18px; height: 18px; color: var(--text-3); stroke-width: 2.2; }
+.item.sel { background: var(--sel); }
+.glyph { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: #fff; flex: none;
+  background: linear-gradient(180deg, var(--g1, #5B6168), var(--g2, #43484E)); box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 0 0 .5px rgba(0,0,0,.2); }
+.glyph .ic { width: 18px; height: 18px; stroke-width: 2; }
+
+.avatar { --h: 200; width: 46px; height: 46px; border-radius: 12px; flex: none; display: grid; place-items: center; position: relative;
+  font-weight: 700; font-size: 15.5px; letter-spacing: .01em;
+  color: hsl(var(--h) 55% 30%); background: linear-gradient(180deg, hsl(var(--h) 70% 90%), hsl(var(--h) 60% 82%)); box-shadow: inset 0 0 0 1px hsl(var(--h) 40% 70% / .5); }
+html[data-theme="dark"] .avatar { color: hsl(var(--h) 80% 85%); background: linear-gradient(180deg, hsl(var(--h) 35% 32%), hsl(var(--h) 35% 25%)); box-shadow: inset 0 0 0 1px hsl(var(--h) 40% 50% / .35); }
+.avatar .presence { position: absolute; right: -3px; bottom: -3px; width: 13px; height: 13px; border-radius: 50%; background: #3DBE5B; box-shadow: 0 0 0 2.5px var(--surface); }
+.avatar .presence.away { background: #E8A33A; }
+.badge { min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px; display: inline-grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff;
+  background: linear-gradient(180deg, var(--blue-1), var(--blue-2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.25); }
+.tag { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--blue)); flex: none; }
+
+/* the grabber: Enyo 2's handle for dragging panels */
+.grabber { width: 22px; height: 26px; display: inline-flex; align-items: center; justify-content: center; gap: 3px; flex: none; }
+.grabber i { width: 2px; height: 18px; border-radius: 1px; background: rgba(255,255,255,.32); box-shadow: 1px 0 0 rgba(0,0,0,.4); }
+
+/* popups and notifications: charcoal in both themes, like onyx-popup */
+.popup { background: var(--pop); color: #F2F3F5; border-radius: 18px; backdrop-filter: blur(20px) saturate(140%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 0 0 1px rgba(0,0,0,.5), 0 24px 50px -16px rgba(0,0,0,.6); }
+.banner { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 16px; color: #fff;
+  background: linear-gradient(180deg, rgba(52,56,62,.96), rgba(36,39,43,.97)); backdrop-filter: blur(16px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.1), 0 0 0 1px rgba(0,0,0,.5), 0 14px 30px -10px rgba(0,0,0,.55); }
+.banner .t1 { font-size: 14.5px; font-weight: 700; }
+.banner .t2 { font-size: 13px; color: #B9BFC7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.appicon { --c1: #4C9BFF; --c2: #2A5FD6; width: 56px; height: 56px; border-radius: 14px; display: grid; place-items: center; color: #fff; flex: none;
+  background: linear-gradient(180deg, var(--c1), var(--c2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.4), inset 0 0 0 1px rgba(255,255,255,.1), 0 4px 10px -4px rgba(0,0,0,.6); }
+.appicon .ic { width: 29px; height: 29px; stroke-width: 1.9; }
+.scrim { position: absolute; inset: 0; background: rgba(0,0,0,.45); }
+
+/* picker (onyx-picker-decorator + onyx-picker) */
+.pickbtn { height: 38px; padding: 0 10px 0 14px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 15px; font-weight: 600; color: var(--btn-text);
+  background: linear-gradient(180deg, var(--btn-1), var(--btn-2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 0 0 1px rgba(0,0,0,.1); }
+html[data-theme="dark"] .pickbtn { box-shadow: inset 0 1px 0 rgba(255,255,255,.09), 0 0 0 1px rgba(0,0,0,.5); }
+.pickbtn .ic { width: 15px; height: 15px; stroke-width: 2.4; color: var(--text-3); }
+.picklist { border-radius: 12px; overflow: hidden; background: var(--surface); box-shadow: 0 0 0 1px var(--line-2), 0 14px 30px -10px rgba(0,0,0,.35); }
+.picklist div { height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 14px; font-size: 15px; border-top: 1px solid var(--line); }
+.picklist div:first-child { border-top: 0; }
+.picklist div.on { background: var(--sel); color: var(--blue-ink); font-weight: 600; box-shadow: inset 3px 0 0 var(--blue); }
+.picklist .ic { width: 17px; height: 17px; margin-left: auto; }

@@ -99,7 +99,7 @@ fmt=""; for a in "$@"; do case "$a" in -f=*) fmt=${a#-f=} ;; -*) ;; *)
   else echo "dpkg-query: no packages found matching $a" >&2; fi ;; esac; done'
         mock node 'echo v22.11.0'
         mock whisper-cli 'true'
-        mock llama-server 'true'
+        mock llama-server 'echo "version: 0.6.0-dev (build 11552, commit 23b0202)"'
     else
         mock xcode-select 'exit 0'
         # Homebrew's prefix is where its brew is (not where a link to it
@@ -156,6 +156,15 @@ computer Linux
 QT_ASK=$QT
 phoenix build --dry-run
 check "build --dry-run is check" '[ $status = 0 ]' 'has "Nothing to install"' 'lacks "  install  "'
+
+# A llama-server older than EmbeddingGemma 2 needs (Search your phone): built again.
+computer Linux
+QT_ASK=$QT
+mock llama-server 'echo "version: 0.5.0-dev (build 11239, commit 66e665c)"'
+phoenix check
+check "Linux, an old llama-server: built again at the pinned commit" \
+    '[ $status = 0 ]' 'has "llama-server build 11239 is older than 11451"' 'has "install  llama-server"' \
+    'has "would run: git fetch --depth 1 https://github.com/ggml-org/llama.cpp.git 23b0202a189c44a54625aadcb37a946dd1d6278d"'
 
 # A computer with nothing of ours: every part would be installed.
 computer Linux
@@ -273,6 +282,12 @@ check "run --no-marketplace: goes to the simulator, which starts no catalog" \
 unmock php
 phoenix run --dry-run --no-assistant phone -- --help
 check "run phone -- ARGS" 'has "phoenix-sim --phone --help$"'
+# A device profile sets its own screen and layout: no mode is added.
+phoenix --dry-run --no-assistant run --device fairphone-fp6 --scene cards
+check "run --device ID: the device, no mode" '[ $status = 0 ]' 'has "would run: .*phoenix-sim --device fairphone-fp6 --scene cards$"' \
+    'has "Starting the simulator (device)"'
+phoenix --dry-run --no-assistant run tablet --device pinetab2
+check "run MODE --device: usage error" '[ $status = 2 ]' 'has "leave out tablet"'
 phoenix phone
 check "a mode without run: usage error" '[ $status = 2 ]' 'has "only ./phoenix run"'
 phoenix --bogus

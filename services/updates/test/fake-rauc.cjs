@@ -55,6 +55,9 @@ if (args[0] === "status" && args[1] === "--output-format=json") {
 } else if (args[0] === "status" && args[1] === "mark-active") {
     change(() => { st.primary = args[2] === "booted" ? st.booted : args[2] === "other" ? other() : args[2]; });
     process.stdout.write("rauc status: marked slot " + st.primary + " as active\n");
+} else if (args[0] === "status" && args[1] === "mark-good") {
+    change(() => { st.good = st.booted; });
+    process.stdout.write("rauc status: marked slot " + st.booted + " as good\n");
 } else if (args[0] === "info" && args[1] === "--output-format=json") {
     const m = manifest(args[2]);
     process.stdout.write(JSON.stringify({ compatible: m.compatible, version: m.version, description: "", build: m.build, hooks: [], images: [] }) + "\n");

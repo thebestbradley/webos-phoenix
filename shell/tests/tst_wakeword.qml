@@ -43,6 +43,7 @@ Item {
     QtObject {
         id: fake
         property var asks: []
+        property var chosen: []
         property var phrases: []
         property var messages: []
         property string tid: ""
@@ -52,6 +53,13 @@ Item {
             for (var i = messages.length - 1; i >= 0; --i)
                 if (messages[i].role === "assistant")
                     return messages[i].status === "pending" ? messages[i] : null;
+            return null;
+        }
+        // Buttons asked aloud, waiting (the service's data.asked).
+        function offered() {
+            for (var i = messages.length - 1; i >= 0; --i)
+                if (messages[i].role === "assistant")
+                    return messages[i].data && messages[i].data.asked && !messages[i].chosen ? messages[i] : null;
             return null;
         }
         function lunaCall(uri, params, cb) {
@@ -69,12 +77,21 @@ Item {
                     messages = [];
                 }
                 var added = [msg({ role: "user", text: params.text })];
-                var p = pending();
+                var p = pending(), o = offered();
                 if (params.voice && (/^i'm done/i.test(params.text) || (params.checkIn && /^no/i.test(params.text)))) {
                     added.push(msg({ role: "assistant", text: "Okay, bye for now!", status: "goodbye" }));
                 } else if (/^yes/i.test(params.text) && p) {
                     p.status = "done";
                     added.push(msg({ role: "assistant", text: "Sent to Sam.", command: "text", status: "done" }));
+                } else if (/^yes/i.test(params.text) && o) {
+                    // Yes to "Want me to search the web for that?": the search, the browser in front.
+                    o.chosen = "web";
+                    added.push(msg({ role: "assistant", text: "Searching the web for “who won the 1998 world series”.", command: "search", status: "done",
+                                     data: { opened: true } }));
+                } else if (/^who won/i.test(params.text)) {
+                    added.push(msg({ role: "assistant", text: "I can't answer that on my own yet. Want me to search the web for that?", kind: "fallback",
+                                     choices: [{ id: "web", label: "Search the web" }, { id: "connect", label: "Connect model" }],
+                                     data: params.voice ? { asked: true } : {} }));
                 } else if (/^text/i.test(params.text) && params.locked) {
                     added.push(msg({ role: "assistant", text: "Unlock your phone first, and I'll do that.", command: "text", status: "locked" }));
                 } else if (/^text/i.test(params.text)) {
@@ -86,6 +103,13 @@ Item {
                 messages = messages.concat(added);
                 reply.thread = { id: tid };
                 reply.messages = added;
+            } else if (method === "choose") {
+                // A button tapped in a spoken conversation: Sam Lee's read-back.
+                chosen.push(JSON.parse(JSON.stringify(params)));
+                var said2 = msg({ role: "assistant", text: "Send \"hi\" to Sam Lee?", command: "text", status: "pending", confirm: { command: "text", args: {} } });
+                messages = messages.concat([said2]);
+                reply.thread = { id: tid };
+                reply.messages = [said2];
             } else if (method === "sessionPhrase") {
                 phrases.push(params.kind);
                 var said = msg(params.kind === "goodbye" ? { role: "assistant", text: "Bye for now!", status: "goodbye" }
@@ -130,6 +154,7 @@ Item {
             shell.unlock();
             shell.closeAssistant();
             fake.asks = [];
+            fake.chosen = [];
             fake.phrases = [];
             fake.messages = [];
             fake.tid = "";
@@ -298,6 +323,90 @@ Item {
             compare(fake.asks[1].checkIn, true);
             tryCompare(overlay, "open", false, 3000);
             compare(fake.phrases.length, 1);
+        }
+
+        // Talk mode: "Search the web" asked aloud (docs/AI-AND-MCP.md
+        // "Every button, asked aloud"): the bird asks, the microphone
+        // listens; a spoken "yes" searches, and once that is said the view
+        // makes way for the browser.
+        function test_buttonsAskedAloudThenYesSearches() {
+            shell.dictationInputFiles = [root.recordings + "yes.wav", root.recordings + "quiet.wav"];
+            shell.assistantSettings = { enabled: true };
+            shell.openAssistant(false);
+            tryCompare(overlay, "open", true, 2000);
+            overlay.voice = true;
+            overlay.ask("who won the 1998 world series");
+            tryVerify(function () { return fake.asks.length === 1; }, 3000);
+            // Its question spoken, then the answer listened for.
+            fakeSpeech.speaking = true;
+            tryVerify(function () { return overlay.asking; }, 3000, "the bird asks");
+            wait(600);
+            compare(overlay.listening, false);
+            fakeSpeech.speaking = false;
+            tryCompare(overlay, "listening", true, 3000);
+            tryVerify(function () { return fake.asks.length === 2; }, 8000, "the spoken answer");
+            compare(fake.asks[1].text, "yes");
+            compare(fake.asks[1].voice, true);
+            compare(fake.messages[fake.messages.length - 1].command, "search");
+            // Said, then out of the browser's way.
+            fakeSpeech.speaking = true;
+            wait(600);
+            compare(overlay.open, true);
+            fakeSpeech.speaking = false;
+            tryCompare(overlay, "open", false, 3000);
+            compare(fake.phrases.length, 0);
+        }
+        // The same choice by touch, in a spoken conversation: asked as
+        // spoken (what comes next is asked aloud), and the session goes on
+        // listening for it.
+        function test_aTapGoesOnListening() {
+            shell.dictationInputFiles = [root.recordings + "quiet.wav"];
+            shell.assistantSettings = { enabled: true };
+            shell.openAssistant(false);
+            tryCompare(overlay, "open", true, 2000);
+            overlay.voice = true;
+            overlay.ask("who won the 1998 world series");
+            tryVerify(function () { return overlay.asking; }, 3000, "the question waits");
+            overlay.stopListening(true);
+            var which = fake.msg({ role: "assistant", text: "Which one: Sam Delgado or Sam Lee?", command: "text", status: "ask",
+                                   choices: [{ id: "pick:0", label: "Sam Delgado" }, { id: "pick:1", label: "Sam Lee" }],
+                                   data: { awaiting: { command: "text", field: "who", options: ["Sam Delgado", "Sam Lee"] } } });
+            fake.messages = fake.messages.concat([which]);
+            overlay.choose(which, which.choices[1]);
+            tryVerify(function () { return fake.chosen.length === 1; }, 3000);
+            compare(fake.chosen[0].voice, true);
+            tryCompare(overlay, "listening", true, 3000);
+            verify(overlay.open);
+        }
+        // Typed: the same search closes the view at once (as the button does).
+        function test_typedSearchMakesWayAtOnce() {
+            shell.assistantSettings = { enabled: true };
+            shell.openAssistant(false);
+            tryCompare(overlay, "open", true, 2000);
+            overlay.ask("who won the 1998 world series");
+            tryVerify(function () { return fake.asks.length === 1; }, 3000);
+            tryCompare(overlay, "busy", false, 3000);
+            verify(!overlay.asking);
+            fake.messages[fake.messages.length - 1].data = { asked: true };
+            overlay.ask("yes");
+            tryCompare(overlay, "open", false, 3000);
+        }
+        // A read-back unanswered: listened for only until the wait is over
+        // (it listened on for ever), then the check-in (where the service
+        // cancels it: assistant.js endChoice).
+        function test_readBackListensOnlyForTheWait() {
+            shell.dictationInputFiles = [root.recordings + "quiet.wav"];
+            shell.assistantSettings = { enabled: true };
+            shell.openAssistant(false);
+            tryCompare(overlay, "open", true, 2000);
+            overlay.voice = true;
+            overlay.ask("text sam hi");
+            tryVerify(function () { return fake.asks.length === 1; }, 3000);
+            tryCompare(overlay, "listening", true, 3000);
+            verify(overlay.asking);
+            tryVerify(function () { return fake.phrases.length === 1; }, 8000, "the check-in");
+            compare(fake.phrases[0], "checkIn");
+            compare(fake.asks.length, 1);
         }
 
         function test_typingKeepsItOpen() {

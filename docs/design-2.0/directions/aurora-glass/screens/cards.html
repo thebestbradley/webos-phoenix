@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Card view</title>
+<link rel="stylesheet" href="../css/aurora.css">
+<script src="../js/icons.js"></script>
+<script src="../js/frame.js"></script>
+<style>
+  .deck { position: absolute; top: 96px; left: 0; right: 0; height: 640px; }
+  .card { position: absolute; top: 34px; width: 286px; height: 607px; border-radius: 24px; overflow: hidden;
+    box-shadow: 0 34px 60px -22px rgba(0,0,0,.75), 0 0 0 1px rgba(255,255,255,.14), inset 0 1px 0 rgba(255,255,255,.3); background: #0b0f1a; }
+  .card iframe { width: 434px; height: 924px; border: 0; transform: scale(.659); transform-origin: 0 0; display: block; pointer-events: none; }
+  .card::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 1px 0 rgba(255,255,255,.35), inset 0 0 0 1px rgba(255,255,255,.12); pointer-events: none; }
+  .lab { position: absolute; top: 0; height: 24px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #fff; font-size: 13.5px; font-weight: 800; text-shadow: 0 1px 3px rgba(0,0,0,.5); }
+  .lab .appicon { width: 22px; height: 22px; border-radius: 7px; }
+  .lab .appicon .ic { width: 13px; height: 13px; stroke-width: 2.4; }
+  .side { opacity: .96; }
+  .hint { position: absolute; top: 58px; left: 0; right: 0; text-align: center; color: rgba(255,255,255,.7); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .dash { position: absolute; left: 14px; right: 14px; bottom: 132px; }
+  .dock { position: absolute; left: 14px; right: 14px; bottom: 40px; height: 84px; border-radius: 30px; display: flex; align-items: center; justify-content: space-around; padding: 0 10px;
+    background: rgba(14, 20, 34, .42); backdrop-filter: blur(26px) saturate(170%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.3), inset 0 0 0 1px rgba(255,255,255,.1), 0 20px 40px -16px rgba(0,0,0,.6); }
+  html[data-theme="light"] .dock { background: rgba(255,255,255,.34); box-shadow: inset 0 1px 0 rgba(255,255,255,.7), inset 0 0 0 1px rgba(255,255,255,.25), 0 20px 40px -16px rgba(0,0,0,.6); }
+  .dock .appicon { width: 58px; height: 58px; border-radius: 18px; }
+  .dock .launcher { width: 58px; height: 58px; border-radius: 29px; display: grid; place-items: center; color: #fff; background: rgba(255,255,255,.16); box-shadow: inset 0 1px 0 rgba(255,255,255,.45), inset 0 0 0 1px rgba(255,255,255,.18); }
+  .dock .launcher .ic { width: 26px; height: 26px; }
+  .cal-ic { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+  .cal-ic small { font-size: 9px; font-weight: 800; letter-spacing: .1em; opacity: .9; margin-top: 2px; }
+  .cal-ic b { font-size: 25px; font-weight: 800; margin-top: 1px; }
+</style>
+</head>
+<body class="phone">
+  <div class="wallpaper"></div>
+  <header class="statusbar" data-carrier="Phoenix"></header>
+  <div class="hint">3 cards · flick up to close</div>
+  <div class="deck">
+    <div class="card side" style="left:-209px"><iframe data-src="settings.html"></iframe></div>
+    <div class="lab" style="left:80px;width:286px"><span class="appicon" style="--c1:#46E8B2;--c2:#138E9C"><i data-i="chat"></i></span>Messaging</div>
+    <div class="card" style="left:80px"><iframe data-src="messaging-thread.html"></iframe></div>
+    <div class="card side" style="left:369px"><iframe data-src="music.html"></iframe></div>
+  </div>
+  <div class="dash banner">
+    <span class="appicon" style="width:40px;height:40px;border-radius:12px;--c1:#5AA9FF;--c2:#2A5FD6"><i data-i="mail" style="width:22px;height:22px"></i></span>
+    <div style="min-width:0;flex:1"><div class="t1">3 new emails</div><div class="t2">Lena Okafor: Card view: stacking and throw…</div></div>
+    <span style="font-size:11.5px;font-weight:700;color:rgba(255,255,255,.6);align-self:flex-start;margin-top:3px">9:41</span>
+  </div>
+  <div class="dock">
+    <span class="appicon" style="--c1:#5BE39A;--c2:#1FA463"><i data-i="phone"></i></span>
+    <span class="appicon" style="--c1:#5AA9FF;--c2:#2A5FD6"><i data-i="mail"></i></span>
+    <span class="appicon" style="--c1:#46E8B2;--c2:#138E9C"><i data-i="chat"></i></span>
+    <span class="appicon" style="--c1:#FF8A7A;--c2:#D9364A"><span class="cal-ic"><small>WED</small><b>14</b></span></span>
+    <span class="launcher"><i data-i="grid"></i></span>
+  </div>
+  <footer class="gesture"></footer>
+<script>
+  const theme = document.documentElement.dataset.theme;
+  const frames = Array.from(document.querySelectorAll("iframe"));
+  Promise.all(frames.map((f) => new Promise((r) => { f.onload = r; f.src = f.dataset.src + "?card=1&theme=" + theme; })))
+    .then(() => setTimeout(phxReady, 800));
+</script>
+</body>
+</html>

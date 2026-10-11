@@ -1,0 +1,19 @@
+{
+    "id": "org.webosphoenix.deltachat",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Delta Chat",
+    "icon": "icon.png",
+    "uiRevision": 2,
+    "phoenix": {
+        "//": "Not in the launcher: the app carries the Delta Chat account (accounts/signin.html, the template in public/accounts, the service). Chats are in Messaging; sharing to a person goes through Messaging's share target. The account needs Delta Chat's core (deltachat-rpc-server), which the image installs (meta-phoenix/recipes-connectors/deltachat-rpc-server).",
+        "hidden": true
+    },
+    "requiredPermissions": [
+        "accounts.transport",
+        "deltachat.account",
+        "phoenix.appmanager.launch"
+    ]
+}

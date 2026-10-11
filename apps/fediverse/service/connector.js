@@ -233,7 +233,7 @@ function syncMessages(ctx) {
                         stored++;
                         if (first) return null;
                         return ctx.notify({ title: name, body: text, appId: MESSAGING_APP,
-                                            params: { threadId: (r && r.threadids && r.threadids[0]) || "" } });
+                                            params: { threadId: (r && r.threadids && r.threadids[0]) || "" }, group: (r && r.threadids && r.threadids[0]) || "" });
                     });
                 });
             });
@@ -271,12 +271,16 @@ function syncNotifications(ctx) {
             var chain = Promise.resolve();
             shown.slice(-MAX_TOASTS).forEach(function (t) {
                 chain = chain.then(function () {
-                    return ctx.notify({ title: t.title, body: t.body, appId: APP, params: t.open ? { open: t.open } : {} });
+                    // One stack per account, as Email kept a dashboard per
+                    // account (enyo-1.0 palm/system/Dashboard.js:15-17).
+                    return ctx.notify({ title: t.title, body: t.body, appId: APP, params: t.open ? { open: t.open } : {},
+                                        group: "account:" + ctx.accountId });
                 });
             });
             if (shown.length > MAX_TOASTS) {
                 chain = chain.then(function () {
-                    return ctx.notify({ title: (shown.length - MAX_TOASTS) + " more on the Fediverse", appId: APP, params: { open: s.server + "/notifications" } });
+                    return ctx.notify({ title: (shown.length - MAX_TOASTS) + " more on the Fediverse", appId: APP, params: { open: s.server + "/notifications" },
+                                        group: "account:" + ctx.accountId });
                 });
             }
             return chain.then(function () {
@@ -450,7 +454,9 @@ function signIn(ctx, p) {
         found = f;
         return lunaOk(ctx, OAUTH + "redirectUri", {});
     }).then(function (r) {
-        var redirectUri = r.redirectUri;
+        // The fixed port: Mastodon (Doorkeeper) matches a loopback redirect
+        // on any port, but the other servers' OAuth may not (docs/DEVELOPER-APPS.md).
+        var redirectUri = r.fixedRedirectUri || r.redirectUri;
         var name = found.server + " " + redirectUri;
         // The app's registration with this server, once (SYNERGY-MODERN.md 4.4).
         return lunaOk(ctx, OAUTH + "client", { name: name }).then(function (c) {

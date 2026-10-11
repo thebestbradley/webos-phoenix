@@ -1,0 +1,17 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Phoenix on an SD card or eMMC for a bootloader that reads extlinux.conf
+# (U-Boot and Tow-Boot on the PINE64 devices, ROCKNIX's bootloader on the
+# Odin 2 Portal): a FAT boot partition with the kernel, the device trees
+# (IMAGE_BOOT_FILES) and the machine's extlinux.conf (PHOENIX_EXTLINUX_CONF,
+# beside this file; wic's bootimg-partition copies it as
+# extlinux/extlinux.conf), then the ext4 root. GPT, so the kernel finds the
+# root by its name (root=PARTLABEL=phoenix-root) without an initramfs.
+# Nothing is written before the first partition: the bootloader lives
+# elsewhere (SPI flash, the eMMC's boot partition, the device's own).
+
+part /boot --source bootimg-partition --sourceparams="loader=u-boot" --fstype=vfat --label PHXBOOT --part-name phoenix-boot --active --align 4096 --size 256M
+part / --source rootfs --fstype=ext4 --label phoenix-root --part-name phoenix-root --align 4096
+
+bootloader --ptable gpt --configfile="${PHOENIX_EXTLINUX_CONF}"

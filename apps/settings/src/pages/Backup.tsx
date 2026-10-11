@@ -13,7 +13,7 @@
 
 import { useEffect, useState } from "react";
 import {
-    backup, backupErrorCode, BACKUP_PARTS, LunaError,
+    backup, backupErrorCode, BACKUP_PARTS, LunaError, phoenixAccount, type AccountStatus,
     type BackupDestination, type BackupFile, type BackupHeader, type BackupStatus,
 } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
@@ -90,7 +90,7 @@ export function BackupPage() {
 
             <Group label="Settings">
                 <Row title="Back up to" chevron testId="backup-where" onClick={() => setWhere(true)}
-                     value={!dest ? "Not set" : dest.type === "usb" ? "USB drive" : "WebDAV server"}
+                     value={!dest ? "Not set" : dest.type === "usb" ? "USB drive" : dest.type === "phoenix" ? "Phoenix Cloud" : "WebDAV server"}
                      subtitle={dest?.type === "webdav" ? dest.url : dest?.type === "usb" ? "The backups folder" : undefined} />
                 <Row title="Passphrase" chevron testId="backup-passphrase" onClick={() => setPassphrase(true)}
                      value={status.hasPassphrase ? "Set" : "Not set"} />
@@ -124,7 +124,10 @@ export function BackupPage() {
 export function WhereDialog({ current, onClose, onSaved, title }: {
     current: BackupDestination | null; onClose: () => void; onSaved?: (d: BackupDestination) => void; title?: string;
 }) {
-    const [type, setType] = useState<"usb" | "webdav">(current?.type ?? "usb");
+    const [type, setType] = useState<"usb" | "webdav" | "phoenix">(current?.type ?? "usb");
+    // Phoenix Cloud is offered once the Phoenix Account is signed in.
+    const account = useLuna<AccountStatus>((cb, err) => phoenixAccount.watchStatus(cb, err), []).value;
+    const cloud = account?.state === "signedIn" && !!account.services?.backup;
     const [url, setUrl] = useState(current?.type === "webdav" ? current.url : "");
     const [user, setUser] = useState(current?.type === "webdav" ? current.username ?? "" : "");
     const [password, setPassword] = useState("");
@@ -135,7 +138,8 @@ export function WhereDialog({ current, onClose, onSaved, title }: {
     async function save() {
         setSaving(true);
         setError(null);
-        const destination: BackupDestination = type === "usb" ? { type: "usb" } : { type: "webdav", url: url.trim(), username: user.trim(), password };
+        const destination: BackupDestination = type === "usb" ? { type: "usb" } : type === "phoenix" ? { type: "phoenix" }
+            : { type: "webdav", url: url.trim(), username: user.trim(), password };
         try {
             await backup.configure({ destination });
             onSaved?.(destination);
@@ -150,9 +154,12 @@ export function WhereDialog({ current, onClose, onSaved, title }: {
 
     return (
         <Dialog open title={title ?? "Back up to"} onClose={saving ? undefined : onClose} testId="backup-where-dialog">
-            <ListSelector title="Place" value={type} testId="backup-type" onChange={(v) => setType(v as "usb" | "webdav")}
-                          options={[{ label: "USB drive", value: "usb" }, { label: "WebDAV server", value: "webdav" }]} />
-            {type === "usb"
+            <ListSelector title="Place" value={type} testId="backup-type" onChange={(v) => setType(v as "usb" | "webdav" | "phoenix")}
+                          options={[{ label: "USB drive", value: "usb" }, { label: "WebDAV server", value: "webdav" },
+                                    ...(cloud || type === "phoenix" ? [{ label: "Phoenix Cloud", value: "phoenix" }] : [])]} />
+            {type === "phoenix"
+                ? <Note>Backups go to your Phoenix Account's cloud storage, encrypted on this device with your passphrase: the server cannot read them, and nobody can restore them without it.</Note>
+                : type === "usb"
                 ? <Note>Backups go in the backups folder of the USB drive. Connect the device to a computer and copy them off it to keep them safe.</Note>
                 : <>
                     <TextField label="Folder address" value={url} onChange={setUrl} testId="backup-url"

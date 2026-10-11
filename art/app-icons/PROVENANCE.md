@@ -41,7 +41,7 @@ Every other object: `camera`, `podcasts`, `voicememos`, `weather`, `pdfview`,
 `passwords`, `authenticator`, `flashlight`, `scanner` (its code is a made-up
 pattern), `files`, `marketplace` (a bag with a star where the App Catalog's
 had HP's logo), the four `notes-*` notebooks, and the system objects
-`settings`, `firstuse`, `help`, `sharesheet`, `screenshot`, `printmanager`, `notificationlab`,
+`settings`, `firstuse`, `help`, `sharesheet`, `signin` (a globe behind a gold padlock: the Sign In card), `screenshot`, `printmanager`, `notificationlab`,
 `terminal`, `bluetooth`, `vpn`, `airplane`, `screen`, `sounds`, `datetime`,
 `language`, `textassist`, `justtype` (a magnifying glass), `certificates`
 (a certificate with a seal), `phoneprefs` (the `deviceinfo` phone with a
@@ -56,6 +56,12 @@ bands like a voice's sound waves; `assistantpane` is the same drawing,
 smaller, for Settings > Assistant) and `advancedpane` (Settings > Advanced:
 a brushed metal panel with three sliders) and `hardwarepane` (Settings > Hardware: a circuit board with a chip, standing on its gold edge connector).
 
+`drives` (the drives' connector, `apps/connectors/drives`: its icons and
+every drive template's `drive-32x32` / `drive-48x48`, Nextcloud's,
+Dropbox's and SFTP's alike) is a folder with a cloud and an arrow in front, drawn for
+Phoenix; no provider's logo is used, so no trademark or logo licence is
+involved.
+
 `fediverse` (the Fediverse account: its icons and the account template's
 `fediverse-32x32` / `fediverse-48x48`) is our own drawing of the Fediverse
 pentagram, a design by Eukombos dedicated to the public domain (CC0 1.0,
@@ -63,6 +69,18 @@ https://commons.wikimedia.org/wiki/File:Fediverse_logo_proposal.svg,
 checked 10 October 2026): five coloured nodes on a pentagon joined by a
 pentagram, drawn anew in `objects/fediverse.svg`, nothing copied from the
 file. Ours is Apache-2.0 like the rest.
+
+The connectors of providers (`apps/connectors/<name>`: each one's icons and
+its account template's `<name>-32x32` / `<name>-48x48`) are drawn for
+Phoenix after what each account does, never the provider's logo, so no
+trademark or logo licence is involved: `todoist` (a card of tasks, two
+ticked off), `bluesky` (a round window on a blue sky with a cloud and a
+speech balloon; not Bluesky's butterfly), `microsoft` (a calendar page
+with a letter in front; not Microsoft's or Outlook's logo), `google` (an
+address card beside a day of the calendar with a tick), `zoom` (a video
+camera before a calendar day), `slack` (two speech balloons, a channel's
+`#` on the front one; not Slack's logo), `linkedin` (a briefcase with a
+name badge).
 
 ## The originals' 512 px icons
 

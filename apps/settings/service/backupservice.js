@@ -32,9 +32,18 @@
 //   getStatus {subscribe?}   -> the status below; with subscribe, again on
 //                               every change
 //   configure {destination?: {type: "usb"} | {type: "webdav", url, username,
-//              password}, passphrase?, auto?}
+//              password} | {type: "phoenix"}, passphrase?, auto?}
 //                            a WebDAV folder is checked (and made) first; the
-//                            passphrase is kept only as a derived key
+//                            passphrase is kept only as a derived key.
+//                            "phoenix" is Phoenix Cloud Backup (PLATFORM.md
+//                            6.5.1): a WebDAV folder per device on the
+//                            platform, whose address and app password the
+//                            Phoenix Account service gives this service
+//                            (org.webosphoenix.service.account
+//                            backupCredentials; NOT_SET_UP without an
+//                            account server, SIGNED_OUT without a sign-in).
+//                            The files are the same encrypted .pbak: the
+//                            server stores ciphertext.
 //   backupNow {}             -> {name, size, parts}
 //   listBackups {}           -> {backups: [{name, size, created}]}, newest first
 //   inspect {name}           -> {header}: when, from which device, which parts
@@ -118,8 +127,8 @@ function createBackupService(deps) {
 
     function status() {
         var c = cfg();
-        var dest = c.destination ? (c.destination.type === "webdav"
-            ? { type: "webdav", url: c.destination.url, username: c.destination.username || "" }
+        var dest = c.destination ? (c.destination.type === "webdav" || c.destination.type === "phoenix"
+            ? { type: c.destination.type, url: c.destination.url, username: c.destination.username || "" }
             : { type: "usb", folder: USB_FOLDER }) : null;
         return { returnValue: true, state: state, configured: !!(dest && c.key), hasPassphrase: !!c.key, auto: c.auto,
                  destination: dest, last: c.last, lastSuccess: c.lastSuccess };
@@ -130,10 +139,21 @@ function createBackupService(deps) {
     }
     function setState(s) { state = s; changed(); }
 
+    // {type: "phoenix", deviceId}: that device's Phoenix Cloud folder, beside
+    // this device's (…/dav/backups/<deviceId>/), with this device's
+    // credentials; null for anything else.
+    function otherDevice(d) {
+        var c = cfg();
+        if (!d || d.type !== "phoenix" || !d.deviceId || !/^[A-Za-z0-9_-]{1,100}$/.test(d.deviceId)) return null;
+        if (!c.destination || c.destination.type !== "phoenix")
+            throw Object.assign(new Error("Set up Phoenix Cloud first"), { code: "NOT_CONFIGURED" });
+        return Object.assign({}, c.destination, { url: c.destination.url.replace(/[^\/]+\/?$/, encodeURIComponent(d.deviceId) + "/") });
+    }
+
     // The place backups go: {list, read, write, remove, prepare}.
     function storeFor(dest) {
         if (!dest) throw Object.assign(new Error("Choose where backups go first"), { code: "NOT_CONFIGURED" });
-        if (dest.type === "webdav") {
+        if (dest.type === "webdav" || dest.type === "phoenix") {
             var dav = webdav.createClient({ request: deps.request, url: dest.url, username: dest.username, password: dest.password });
             return { prepare: dav.ensureFolder, list: dav.list, read: dav.get, write: dav.put, remove: dav.remove };
         }
@@ -263,7 +283,7 @@ function createBackupService(deps) {
         var c = cfg(), tempDir, restored = [], skipped = [];
         setState("restoring");
         return Promise.resolve().then(function () {
-            return storeFor(p.destination || c.destination).read(p.name);
+            return storeFor(otherDevice(p.destination) || p.destination || c.destination).read(p.name);
         }).then(function (text) {
             return archive.open(text, p.passphrase);
         }).then(function (opened) {
@@ -309,7 +329,7 @@ function createBackupService(deps) {
 
     function schedule(on, dest) {
         if (!on) return deps.luna.call("luna://com.palm.activitymanager/cancel", { activityName: ACTIVITY });
-        var requirements = dest && dest.type === "webdav" ? { internet: true } : {};
+        var requirements = dest && (dest.type === "webdav" || dest.type === "phoenix") ? { internet: true } : {};
         return deps.luna.call("luna://com.palm.activitymanager/create", {
             start: true, replace: true,
             activity: {
@@ -326,9 +346,21 @@ function createBackupService(deps) {
         var steps = Promise.resolve();
         if (p.destination !== undefined) {
             var d = p.destination;
-            if (!d || (d.type !== "usb" && d.type !== "webdav"))
-                return Promise.resolve(fail("BAD_PARAMS", "destination.type: usb or webdav"));
-            if (d.type === "webdav") {
+            if (!d || (d.type !== "usb" && d.type !== "webdav" && d.type !== "phoenix"))
+                return Promise.resolve(fail("BAD_PARAMS", "destination.type: usb, webdav or phoenix"));
+            if (d.type === "phoenix") {
+                // Phoenix Cloud: this device's folder and app password from the account.
+                steps = steps.then(function () {
+                    return deps.luna.call("luna://org.webosphoenix.service.account/backupCredentials", {});
+                }).then(function (r) {
+                    if (!r || !r.returnValue) {
+                        throw Object.assign(new Error((r && r.errorText) || "Phoenix Cloud is not available"),
+                                            { code: (r && r.errorCode) || "NOT_SET_UP" });
+                    }
+                    dest = { type: "phoenix", url: r.url, username: r.username, password: r.password };
+                    return webdav.createClient({ request: deps.request, url: dest.url, username: dest.username, password: dest.password }).ensureFolder();
+                });
+            } else if (d.type === "webdav") {
                 var old = c.destination && c.destination.type === "webdav" ? c.destination : {};
                 // A blank password keeps the one already stored for that server and user.
                 var password = d.password !== undefined && d.password !== "" ? d.password
@@ -408,9 +440,13 @@ function createBackupService(deps) {
         },
         configure: function (p) { return configure(p || {}); },
         backupNow: function () { return backupNow(); },
-        listBackups: function () {
+        // {destination?: {type: "phoenix", deviceId}}: another device's
+        // Phoenix Cloud folder (restoring onto a new device), read with this
+        // device's credentials, which the platform lets read the account's
+        // other devices' folders (PLATFORM.md 6.5.1).
+        listBackups: function (p) {
             return Promise.resolve().then(function () {
-                return backupsIn(storeFor(cfg().destination));
+                return backupsIn(storeFor(otherDevice(p && p.destination) || cfg().destination));
             }).then(function (b) { return { returnValue: true, backups: b }; }, errorReply);
         },
         inspect: function (p) {

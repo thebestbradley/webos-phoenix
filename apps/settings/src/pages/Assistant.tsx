@@ -16,6 +16,9 @@
 //   Assistant        on or off (on by default), speak answers, its
 //                    personality (friendly by default: its tone, and its
 //                    words when a spoken conversation ends)
+//   Web search       search the web automatically (off by default) for
+//                    what nothing on the phone can answer, with Just
+//                    Type's default engine, which it names
 //   Voice            listen for "Hey Phoenix" (off by default), also with
 //                    the screen off or locked (off by default), voice
 //                    replies (on by default), how long a spoken
@@ -27,10 +30,18 @@
 //   On device        llama.cpp models to download, use or remove, with their
 //                    size and the memory they want (what fits is offered);
 //                    how to get llama-server when it is missing
+//   Search your      the index of the user's things by meaning (services/index):
+//   phone            on or off, its model, a switch per source, photos and
+//                    voice memos themselves, its size, Rebuild, Delete
+//                    (AssistantSearch.tsx)
 //   Cloud models     providers (Anthropic, OpenAI, Google Gemini, any
 //                    OpenAI-compatible server) with their model and key; add,
 //                    edit, test, remove; the one "Ask ..." offers
 //   Control          whether cloud models may run commands (off by default)
+//   Messages &       announce messages on headphones (off by default),
+//   Driving          driving mode (AssistantEveryday.tsx)
+//   Routines         several things on a phrase, a time, the charger or the
+//                    car (AssistantRoutines.tsx)
 //   Follow-up        questions after something is made (on by default),
 //   questions        their quiet hours, the ones waiting, and a switch per
 //                    topic (AssistantFollowUps.tsx)
@@ -44,16 +55,19 @@
 
 import { useEffect, useState } from "react";
 import {
-    apps, assistant, formatBytes, ASSISTANT_APP_ID, PERSONALITIES, VOICE_WAITS, type ConnectMode, type AssistantCommand, type AssistantProvider, type AssistantSettings, type LocalModel,
-    type LocalModelStatus, type LunaError, type ProviderType, type ProviderTypeInfo,
+    apps, assistant, formatBytes, universalSearch, ASSISTANT_APP_ID, PERSONALITIES, VOICE_WAITS, type ConnectMode, type AssistantCommand, type AssistantProvider, type AssistantSettings, type LocalModel,
+    type LocalModelStatus, type LunaError, type ProviderType, type ProviderTypeInfo, type SearchList,
 } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import { Button, Dialog, Group, ListSelector, Note, Page, PageHeader, PopupMenu, Row, Spinner, TextField, ToggleButton } from "@phoenix/ui";
 import { useBack } from "../nav";
 import { FollowUpQuestions } from "./AssistantFollowUps";
+import { HomeAndWork, MessagesAndDriving, NewsFeeds, SmartHome } from "./AssistantEveryday";
+import { RoutinesPage, RoutinesRow } from "./AssistantRoutines";
 import { VoiceMissing } from "./AssistantVoice";
 import { SpeakingVoice } from "./AssistantSpeech";
 import { AssistantPermissions } from "./AssistantPermissions";
+import { SearchYourPhone } from "./AssistantSearch";
 
 /** "45 seconds", "2 minutes". */
 export function waitLabel(seconds: number): string {
@@ -291,6 +305,40 @@ function ConnectModel({ c, set, prov, local, settings, onEdit }: {
     );
 }
 
+// ---- Web search ----------------------------------------------------------------------------------
+
+/** The search engine the Assistant's web searches use: Just Type's default (Settings > Just Type), by name. */
+export function searchEngineName(list: SearchList | undefined): string {
+    if (!list) return "";
+    const all = [...list.engines, ...list.optional];
+    return all.find((e) => e.id === list.defaultSearchEngine)?.displayName ?? list.engines[0]?.displayName ?? "";
+}
+
+// Search the web automatically (the owner, 11 October 2026; off by default,
+// since the words go to the search engine): what nothing on the phone can
+// answer is searched at once instead of offered. Never words about your own
+// things (the service's looksPrivate). The engine is Just Type's default,
+// the one the Assistant's "search the web for ..." opens.
+function WebSearch({ settings, set, off }: { settings: AssistantSettings; set: (c: Partial<AssistantSettings>) => void; off: boolean }) {
+    const list = useLuna<SearchList>((cb, err) => universalSearch.watchList(cb, err), []).value;
+    const name = searchEngineName(list);
+    const engine = name || "the search engine";
+    // A row is one line of title and one of subtitle (cut on a phone): the
+    // engine first in it, the rest in the note under it.
+    return (
+        <>
+            <Group label="Web search">
+                <Row title="Search automatically" testId="as-auto-search-row" disabled={off}
+                     subtitle={`${name ? name + ", w" : "W"}ithout asking`}>
+                    <ToggleButton value={settings.autoSearch} label="Search the web automatically" testId="as-auto-search" disabled={off}
+                                  onChange={(v) => set({ autoSearch: v })} />
+                </Row>
+            </Group>
+            <Note testId="as-auto-search-note">{`When nothing on the phone can answer, the Assistant searches ${engine} at once instead of offering to (off: it asks, aloud when you talk to it). What you asked goes to ${engine}; never words about your own messages, contacts or calendar. The engine is the default in Settings > Just Type.`}</Note>
+        </>
+    );
+}
+
 // ---- The page ------------------------------------------------------------------------------------
 
 export function AssistantPage() {
@@ -303,14 +351,18 @@ export function AssistantPage() {
     const [clearing, setClearing] = useState(false);
     const [done, setDone] = useState("");
     // "Connect model" (launch params {connect, threadId}): until closed, and again at each such launch.
-    const params = useLaunchParams<{ connect?: string; threadId?: string }>();
+    const params = useLaunchParams<{ connect?: string; threadId?: string; section?: string; routine?: string }>();
     const [connect, setConnect] = useState<Connecting | null>(null);
     if (params.connect && connect?.from !== params) {
         const mode = (["local", "cloud", "both"] as string[]).includes(params.connect) ? params.connect as ConnectMode : "choose";
         setConnect({ asked: mode, mode, threadId: params.threadId ?? "", from: params });
     }
+    // Routines (launch params {section: "routines"}: the Assistant's "make a routine").
+    const [routines, setRoutines] = useState<{ from: object; open: boolean } | null>(null);
+    if (params.section === "routines" && routines?.from !== params) setRoutines({ from: params, open: true });
 
     if (editing && prov) return <ProviderEditor editing={editing} types={prov.types} onDone={() => setEditing(null)} />;
+    if (routines?.open) return <RoutinesPage open={routines.from === params ? params.routine : undefined} onDone={() => setRoutines({ from: routines.from, open: false })} />;
     if (!s) return <Page><PageHeader title="Assistant" icon="icons/assistant.png" /></Page>;
     if (connect && !connect.closed)
         return <ConnectModel c={connect} set={setConnect} prov={prov} local={local} settings={s} onEdit={setEditing} />;
@@ -332,6 +384,8 @@ export function AssistantPage() {
                               options={[{ label: "Automatic", value: "auto" as const }, { label: "°C", value: "metric" as const }, { label: "°F", value: "imperial" as const }]}
                               onChange={(v) => set({ units: v })} />
             </Group>
+
+            <WebSearch settings={s} set={set} off={off} />
 
             {/* Two choices, not one: an answer to something typed is shown
                 (and spoken only if asked for); to something said, spoken and
@@ -362,9 +416,17 @@ export function AssistantPage() {
             <VoiceMissing />
             <Note testId="as-voice-privacy">{"Listening for \u201cHey Phoenix\u201d happens on this phone. The microphone goes only to the wake word spotter, which keeps the last few seconds in memory and nothing more; nothing is recorded, sent or saved until it hears the phrase, and what you say after it is turned into text on the phone too. A microphone in the status bar shows whenever it is open: faint while it waits for the phrase, orange while it listens to you."}</Note>
 
+            <MessagesAndDriving settings={s} set={set} off={off} />
+            <RoutinesRow off={off} onOpen={() => setRoutines({ from: params, open: true })} />
+            <HomeAndWork off={off} focus={params.section === "places"} />
+            <NewsFeeds off={off} focus={params.section === "news"} />
+            <SmartHome off={off} focus={params.section === "home"} />
+
             <FollowUpQuestions settings={s} set={set} off={off} />
 
             {local ? <LocalModels m={local} /> : <Group label="On-device model"><Row title={<Spinner />} /></Group>}
+
+            <SearchYourPhone off={off} />
 
             <Group label="Cloud models">
                 {prov && prov.providers.length === 0 && <Row title={<span className="as-none">None yet</span>} />}

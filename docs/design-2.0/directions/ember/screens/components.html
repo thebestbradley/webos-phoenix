@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ember, components</title>
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/icons.js"></script>
+<script src="../assets/app.js"></script>
+<style>
+  body { background: var(--bg-light), var(--bg); overflow: hidden; }
+  .sheet { padding: 28px 30px; display: grid; grid-template-columns: 1fr 1fr 372px; grid-template-rows: auto 1fr; gap: 20px 22px; height: 100vh; }
+  .hdr { grid-column: 1 / -1; display: flex; align-items: flex-end; gap: 28px; }
+  .hdr .ttl { flex: 1; }
+  .hdr .display { margin-top: 6px; }
+  .pal { display: flex; flex-direction: column; gap: 10px; align-items: flex-end; }
+  .pal .r { display: flex; gap: 8px; align-items: center; }
+  .sw { width: 30px; height: 30px; border-radius: 50%; box-shadow: inset 0 0 0 var(--hair) var(--line-2); }
+  .sw.emb { width: 120px; border-radius: 15px; background: var(--ember); box-shadow: 0 6px 16px -6px rgb(255 100 30 / .6); }
+  .pal .lab { font-size: 10.5px; color: var(--ink-3); margin-right: 4px; }
+  .col { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+  .blk { padding: 18px 20px 20px; }
+  .blk > .micro { color: var(--ink-3); margin-bottom: 14px; }
+  .r { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .r + .r { margin-top: 12px; }
+  .cap { font-size: 12px; color: var(--ink-3); font-weight: 600; }
+  .sel-grid { display: grid; grid-template-columns: auto auto 1fr; gap: 14px 22px; align-items: center; }
+  .tabs { display: flex; gap: 26px; margin-top: 16px; box-shadow: inset 0 calc(-1 * var(--hair)) 0 var(--line-2); }
+  .tabs > div { padding: 0 0 12px; font-size: 14.5px; font-weight: 600; color: var(--ink-3); position: relative; }
+  .tabs > div.sel { color: var(--ink); }
+  .tabs > div.sel::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; border-radius: 1px; background: var(--ember); box-shadow: 0 0 8px rgb(255 110 40 / .55); }
+  .toolbar { display: flex; align-items: center; gap: 6px; height: 54px; padding: 0 8px 0 10px; border-radius: 18px; box-shadow: inset 0 0 0 var(--hair) var(--line-2); }
+  .toolbar .t { flex: 1; font-size: 17px; font-weight: 600; margin-left: 6px; }
+  .sig { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; align-items: end; text-align: center; }
+  .sig > div { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .sig .big-grab { height: 46px; display: flex; align-items: center; }
+  .sig .big-grab .grabber { height: 30px; gap: 6px; }
+  .sig .big-grab .grabber i { width: 2px; }
+  .sig .gl { height: 46px; display: flex; align-items: center; }
+  .sig .gl .gesture-light { width: 64px; }
+  .lrows .row { padding: 10px 16px; min-height: 60px; }
+  .lrows .row + .row::before { left: 16px; }
+  .dialog { padding: 22px 22px 18px; }
+  .dialog .h { font-size: 22px; line-height: 28px; font-weight: 400; letter-spacing: -.4px; margin: 4px 0 8px; }
+  .dialog .acts { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+  /* the frame on the wallpaper: app menu and notification over it */
+  .stage { grid-row: 2; grid-column: 3; position: relative; border-radius: 30px; overflow: hidden; background: url(../assets/phoenix.jpg) center 40% / cover; color: var(--ink); }
+  .stage .statusbar { position: absolute; }
+  .stage .menu { position: absolute; top: 34px; left: 10px; width: 258px; z-index: 30; }
+  .stage .lbl { position: absolute; right: 14px; color: rgb(255 255 255 / .8); background: rgb(0 0 0 / .4); padding: 5px 10px; border-radius: 10px; }
+  .stage .banner { position: absolute; left: 12px; right: 12px; bottom: 74px; }
+  .banner .av { --pres-ring: transparent; }
+  .banner .txt { flex: 1; min-width: 0; }
+  .banner .t { font-size: 15px; font-weight: 650; }
+  .banner .s { font-size: 14px; line-height: 20px; color: var(--ink-2); margin-top: 1px; }
+  .banner .acts { display: flex; gap: 8px; margin-top: 12px; }
+  .banner .when { font-size: 12px; color: var(--ink-3); font-weight: 600; }
+  .dash { position: absolute; left: 0; right: 0; bottom: 22px; height: 40px; display: flex; align-items: center; gap: 16px; padding: 0 18px; color: rgb(255 255 255 / .9); font-size: 12px; font-weight: 600; }
+  .dash .ic { width: 18px; height: 18px; }
+  .dash .sp { flex: 1; }
+  .stage .gesture { position: absolute; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="hdr">
+    <div class="ttl"><div class="micro ember-text">Ember · components</div><div class="display">Space, light and a little fire</div></div>
+    <div class="pal">
+      <div class="r"><span class="micro lab">Neutrals</span><div class="sw" style="background:#f2f1ee"></div><div class="sw" style="background:#ffffff"></div><div class="sw" style="background:#8f8d94"></div><div class="sw" style="background:#5c5b61"></div><div class="sw" style="background:#141416"></div><div class="sw" style="background:#0b0b0d"></div></div>
+      <div class="r"><span class="micro lab">Accent · accounts</span><div class="sw emb"></div><div class="sw" style="background:var(--sms)"></div><div class="sw" style="background:var(--jabber)"></div><div class="sw" style="background:var(--work)"></div><div class="sw" style="background:var(--personal)"></div></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="blk plane">
+      <div class="micro">Pills</div>
+      <div class="r"><div class="pill ink"><i data-i="paper-plane-right"></i>Send</div><div class="pill">Reply</div><div class="pill ghost">Learn more</div></div>
+      <div class="r"><div class="pill danger">Delete</div><div class="pill danger solid">Delete</div><div class="pill focus">Focused</div></div>
+      <div class="r"><div class="ring-btn"><i data-i="phone"></i></div><div class="ring-btn"><i data-i="star"></i></div><div class="ring-btn"><i data-i="dots-three"></i></div><div class="pill sm">Small</div><div class="pill sm ink">Small</div></div>
+    </div>
+    <div class="blk plane">
+      <div class="micro">Segmented · tabs</div>
+      <div class="seg"><div>Day</div><div class="sel">Week</div><div>Month</div></div>
+      <div class="tabs"><div class="sel">Conversations</div><div>Buddies</div><div>Favourites</div></div>
+    </div>
+    <div class="blk plane">
+      <div class="micro">Header · toolbar (a panel's)</div>
+      <div class="toolbar"><div class="grabber"><i></i><i></i></div><div class="t">All inboxes</div><div class="ring-btn bare"><i data-i="magnifying-glass"></i></div><div class="ring-btn bare"><i data-i="dots-three"></i></div></div>
+    </div>
+    <div class="blk plane">
+      <div class="micro">Signatures</div>
+      <div class="sig">
+        <div><div class="big-grab"><div class="grabber"><i></i><i></i></div></div><span class="cap">Grabber</span></div>
+        <div><div class="gl"><div class="gesture-light"></div></div><span class="cap">Gesture light</span></div>
+        <div><div class="orb" style="width:46px;height:46px"></div><span class="cap">Assistant</span></div>
+        <div><div class="av" id="ringdemo">AP</div><span class="cap">Person</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="blk plane">
+      <div class="micro">Selection</div>
+      <div class="sel-grid">
+        <div class="toggle on"></div><div class="toggle"></div><span class="cap">Toggle</span>
+        <div class="check on"><i data-i="check"></i></div><div class="check"></div><span class="cap">Checkbox</span>
+        <div class="radio on"></div><div class="radio"></div><span class="cap">Radio</span>
+      </div>
+      <div class="r" style="margin-top:18px;flex-wrap:nowrap"><i data-i="speaker-high" style="color:var(--ink-3);width:18px;height:18px"></i><div class="slider" style="flex:1"><div class="track"></div><div class="fill" style="width:58%"></div><div class="knob" style="left:58%"></div></div></div>
+    </div>
+    <div class="blk plane">
+      <div class="micro">Text field</div>
+      <div class="field focus"><div class="lbl micro">Subject</div><div class="val">Launch party<span class="caret"></span></div></div>
+      <div class="search" style="margin-top:16px"><i data-i="magnifying-glass"></i><div class="ph">Just type…</div><div class="orb sm" style="margin-right:2px"></div></div>
+    </div>
+    <div class="plane lrows" style="padding:4px 0">
+      <div class="row"><div class="av sm" id="ringdemo2">AP</div><div class="txt"><div class="t">Ada Palmer</div><div class="s">Jabber · SMS · Work email</div></div><i data-i="caret-right" class="chev"></i></div>
+      <div class="row"><i data-i="wifi-high" class="glyph"></i><div class="txt"><div class="t">Wi-Fi</div><div class="s">Phoenix Home</div></div><div class="toggle on"></div></div>
+    </div>
+    <div class="dialog plane">
+      <div class="micro dimmer">Messaging</div>
+      <div class="h">Delete this conversation?</div>
+      <div class="small dim">Messages with Ada on SMS and Jabber will be removed from this phone.</div>
+      <div class="acts"><div class="pill sm">Cancel</div><div class="pill sm danger solid">Delete</div></div>
+    </div>
+  </div>
+
+  <div class="stage">
+    <header class="statusbar"><div class="appmenu-tab" style="background:rgb(255 255 255 / .16)"><span>Messaging</span><i data-i="caret-up"></i></div><div class="sb-clock">9:41</div><div class="sb-right"><i data-i="wifi-high"></i><span class="sb-batt"><span class="cell"><i style="width:82%"></i></span>82</span></div></header>
+    <div class="menu veil">
+      <div class="mi"><i data-i="pencil-simple"></i>New conversation</div>
+      <div class="mi sel"><i data-i="user"></i>Add an IM account</div>
+      <div class="mi"><i data-i="gear-six"></i>Preferences &amp; Accounts</div>
+      <hr>
+      <div class="mi"><i data-i="info"></i>Help</div>
+    </div>
+    <div class="lbl micro" style="top:296px">App menu · translucent</div>
+    <div class="lbl micro" style="bottom:240px">Notification</div>
+    <div class="banner veil">
+      <div class="av sm" id="ringdemo3">AP</div>
+      <div class="txt"><div class="t">Ada Palmer</div><div class="s">Running late, grab us a table by the window?</div>
+        <div class="acts"><div class="pill sm ink">Reply</div><div class="pill sm">Mark read</div></div></div>
+      <div class="when">now</div>
+    </div>
+    <div class="dash"><i data-i="chat-circle"></i><i data-i="envelope-simple"></i><i data-i="calendar-blank"></i><span class="sp"></span>3 notifications</div>
+    <footer class="gesture"><div class="gesture-light"></div></footer>
+  </div>
+</div>
+<script>
+  for (const id of ['ringdemo', 'ringdemo2', 'ringdemo3']) document.getElementById(id).insertAdjacentHTML('beforeend', ring(['jabber', 'sms', 'work']));
+</script>
+</body>
+</html>

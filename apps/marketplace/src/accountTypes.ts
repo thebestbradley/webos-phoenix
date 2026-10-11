@@ -107,8 +107,11 @@ export function signInText(t: AccountType): string {
 
 /** How new data arrives. */
 export function pushText(t: AccountType): string {
+    // A drive (DOCUMENTS only) syncs nothing: its files are read when they are opened.
+    if (t.capabilities.length && t.capabilities.every((c) => c.capability === "DOCUMENTS")) return "Nothing is copied ahead: files are fetched when you open them";
     if (t.push === "unifiedpush") return "New data arrives as it happens (UnifiedPush)";
     if (t.push === "relay") return "New data arrives as it happens, through Phoenix's push relay";
+    if (t.push === "connection") return "Stays connected while it is on: new messages arrive as they happen";
     return "Checks for new data every few minutes";
 }
 

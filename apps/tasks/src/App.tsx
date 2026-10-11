@@ -17,6 +17,7 @@
 //   back gesture goes back.
 //
 // Launch params (TasksLaunchParams): {taskId, fromReminder?} opens a task,
+// {listId} opens a list (the Assistant's "what's on my shopping list"),
 // {text} starts a new one (Just Type's "New Task"), {reminder: taskId} is
 // the reminder activity firing: the app posts a notification and stays
 // where it is.
@@ -162,6 +163,13 @@ function TasksApp() {
                 setSel({ kind: "list", listId: t.listId });
                 setScreen("tasks");
                 setEditing({ task: t, fromReminder });
+            });
+        } else if (launch.listId) {
+            const listId = launch.listId;
+            void tasks.lists().then((all) => {
+                if (!all.some((l) => l._id === listId)) { say("That list was deleted."); return; }
+                setSel({ kind: "list", listId });
+                setScreen("tasks");
             });
         } else if (typeof launch.text === "string") {
             const text = launchText(launch.text);

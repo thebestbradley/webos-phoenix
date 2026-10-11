@@ -26,6 +26,24 @@ module.exports = {
     noteAppend: "add the code to my wifi note", taskList: "what's on my shopping list", taskDone: "check off milk",
     nearby: "coffee near me", website: "open example.com", storage: "how much storage do I have", appStore: "install doom",
     help: "how do I close an app", copyText: "", findFiles: "find my file called budget", readEmail: "read my latest email",
+    // What is connected through Synergy (lib/commands-synergy.js).
+    post: "post to bluesky: hello", joinMeeting: "join my next meeting", inviteReply: "accept the invite from alex", emailMark: "flag the email from hannah",
+    emailDelete: "delete the email from hannah", saveToDrive: "upload the budget file to dropbox", eventCalendar: "move my dentist appointment to my google calendar",
+    accounts: "what accounts do I have", shareLocation: "share my location with Sam",
     emailReply: "reply to my last email saying thanks", travelTime: "how long will it take to drive to the airport", locationAccess: "",
     detail: "what time is my dentist appointment", edit: "rename my dentist appointment to Dentist checkup",
+    chat: "hello", checkDone: "did you add it", settingStatus: "is wifi on",
+    // The everyday features (lib/commands-everyday.js); replyTo: the answer to a message read aloud.
+    notifications: "what did I miss", drivingMode: "I'm driving", announceMessages: "announce my messages on my headphones", replyTo: "",
+    routine: "good night", routineList: "what routines do I have", routineManage: "turn on my good night routine",
+    camera: "take a selfie in 3 seconds", voiceMemo: "record a voice memo called groceries", stopRecording: "stop recording",
+    parking: "remember where I parked", findParking: "where did I park", placeReminder: "remind me to lock the door when I leave", setPlace: "this is my work",
+    musicMode: "turn on shuffle", favorites: "like this song", podcast: "resume my podcast",
+    define: "define ephemeral", spell: "how do you spell rhythm", coin: "flip a coin", dice: "roll two dice", randomNumber: "pick a random number between 1 and 10",
+    wikipedia: "look up Ada Lovelace on Wikipedia", news: "what's the news",
+    deviceSetting: "turn off keyboard clicks",
+    emergencyText: "text my location to my emergency contacts",
+    // With Home Assistant connected (test/home-assistant.cjs).
+    home: "turn off the kitchen light", homeScene: "activate movie night",
+    searchPhone: "what did Sam say about the party",
 };

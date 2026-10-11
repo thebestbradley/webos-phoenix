@@ -1,0 +1,15 @@
+{
+    "accounts.transport": [
+        "org.webosphoenix.service.slack/checkCredentials",
+        "org.webosphoenix.service.slack/onCreate",
+        "org.webosphoenix.service.slack/onEnabled",
+        "org.webosphoenix.service.slack/onCredentialsChanged",
+        "org.webosphoenix.service.slack/onDelete",
+        "org.webosphoenix.service.slack/sync",
+        "org.webosphoenix.service.slack/outbox"
+    ],
+    "slack.account": [
+        "org.webosphoenix.service.slack/providerInfo",
+        "org.webosphoenix.service.slack/signIn"
+    ]
+}

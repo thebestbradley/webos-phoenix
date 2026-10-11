@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Messaging: conversation</title>
+<link rel="stylesheet" href="../css/aurora.css">
+<script src="../js/icons.js"></script>
+<script src="../js/data.js"></script>
+<script src="../js/frame.js"></script>
+<style>
+  .thead { position: absolute; top: 0; left: 0; right: 0; z-index: 4; height: 76px; display: flex; align-items: center; gap: 12px; padding: 0 12px;
+    border-radius: var(--r-card) var(--r-card) 0 0; box-shadow: inset 0 -1px 0 var(--hair); }
+  .thead .avatar { width: 42px; height: 42px; font-size: 14.5px; }
+  .thead .who { flex: 1; min-width: 0; }
+  .thead .name { font-size: 17px; font-weight: 800; line-height: 22px; }
+  .thead .status { font-size: 12.5px; font-weight: 600; color: var(--text-2); display: flex; align-items: center; gap: 6px; }
+  .thead .status .dot { width: 7px; height: 7px; }
+  .msgs { position: absolute; top: 76px; left: 0; right: 0; bottom: 0; padding: 14px 14px 96px; display: flex; flex-direction: column; gap: 4px; }
+  .accounts { display: flex; gap: 8px; justify-content: center; margin: 2px 0 10px; }
+  .day { align-self: center; margin: 8px 0 6px; }
+  .b { max-width: 78%; padding: 10px 14px 10px; border-radius: 22px; font-size: 15.5px; line-height: 22px; font-weight: 500; position: relative; }
+  .b.in { align-self: flex-start; background: var(--panel-2); box-shadow: inset 0 1px 0 var(--edge), inset 0 0 0 1px var(--hair); border-bottom-left-radius: 8px; }
+  html[data-theme="light"] .b.in { background: rgba(255,255,255,.86); }
+  .b.out { align-self: flex-end; color: #fff; border-bottom-right-radius: 8px; box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 8px 18px -10px rgba(0,0,0,.45); }
+  .b.out.sms { background: var(--bub-sms); }
+  .b.out.jabber { background: var(--bub-jabber); }
+  .b + .b.same { margin-top: -1px; }
+  .b.in.same-prev { border-top-left-radius: 8px; }
+  .b.out.same-prev { border-top-right-radius: 8px; }
+  .meta { font-size: 11.5px; font-weight: 700; color: var(--text-3); display: flex; align-items: center; gap: 6px; margin: 3px 6px 10px; }
+  .meta.in { align-self: flex-start; } .meta.out { align-self: flex-end; }
+  .meta .dot { width: 7px; height: 7px; }
+  .switch { align-self: stretch; display: flex; align-items: center; gap: 10px; margin: 6px 4px 12px; font-size: 12px; font-weight: 700; color: var(--text-2); }
+  .switch::before, .switch::after { content: ""; flex: 1; height: 1px; background: var(--hair-2); }
+  .switch .ic { width: 15px; height: 15px; stroke-width: 2.3; color: var(--acct-sms); }
+  .compose { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 4; display: flex; align-items: center; gap: 8px; padding: 7px; border-radius: 28px; }
+  .transport { height: 42px; padding: 0 10px 0 12px; border-radius: 21px; display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 800;
+    background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--hair); }
+  .transport .ic { width: 15px; height: 15px; stroke-width: 2.4; color: var(--text-2); }
+  .compose .input { flex: 1; font-size: 15.5px; font-weight: 500; color: var(--text-3); padding-left: 4px; }
+  .send { width: 42px; height: 42px; border-radius: 21px; display: grid; place-items: center; color: var(--on-accent);
+    background: linear-gradient(180deg, rgba(255,255,255,.25), rgba(255,255,255,0) 60%), linear-gradient(140deg, var(--accent), var(--accent-2));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 6px 14px -6px var(--accent-glow); }
+  .send .ic { width: 22px; height: 22px; stroke-width: 2.4; }
+  .typing { align-self: flex-start; display: flex; gap: 5px; padding: 13px 16px; border-radius: 20px; border-bottom-left-radius: 8px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--hair); margin-top: 2px; }
+  .typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); }
+  .typing span:nth-child(2) { opacity: .7; } .typing span:nth-child(3) { opacity: .45; }
+</style>
+</head>
+<body class="phone">
+  <div class="wallpaper"></div>
+  <header class="statusbar" data-app="Messaging"></header>
+  <main class="sheet">
+    <div class="thead float">
+      <button class="iconbtn"><i data-i="chevL"></i></button>
+      <div class="avatar" style="--h:162">LO<span class="presence"></span></div>
+      <div class="who">
+        <div class="name">Lena Okafor</div>
+        <div class="status"><span class="dot" style="--c:var(--acct-sms)"></span>On SMS · Jabber idle since 9:05</div>
+      </div>
+      <button class="iconbtn"><i data-i="phone"></i></button>
+      <button class="iconbtn"><i data-i="video"></i></button>
+    </div>
+    <div class="msgs" id="msgs"></div>
+    <div class="compose float">
+      <button class="transport"><span class="dot" style="--c:var(--acct-sms)"></span>SMS<i data-i="chevD"></i></button>
+      <span class="input">Text message</span>
+      <button class="send"><i data-i="send"></i></button>
+    </div>
+  </main>
+  <footer class="gesture"></footer>
+<script>
+  const D = PHX_DATA, T = D.thread;
+  let h = `<div class="accounts"><span class="chip"><span class="dot" style="--c:var(--acct-jabber)"></span>Jabber · lena.okafor</span><span class="chip"><span class="dot" style="--c:var(--acct-sms)"></span>SMS · Mobile</span></div>`;
+  T.forEach((m, i) => {
+    if (m.kind === "day") { h += `<div class="day t-cap">Today · 9:02 AM</div>`; return; }
+    if (m.kind === "switch") { h += `<div class="switch"><i data-i="phone"></i>Lena moved to SMS · +1 (303) 555-0135</div>`; return; }
+    const prev = T[i - 1], next = T[i + 1];
+    const samePrev = prev && prev.from === m.from && prev.via === m.via;
+    const sameNext = next && next.from === m.from && next.via === m.via;
+    h += `<div class="b ${m.from} ${m.via} ${samePrev ? "same-prev same" : ""}">${m.text}</div>`;
+    if (!sameNext) h += `<div class="meta ${m.from}"><span class="dot" style="--c:var(--acct-${m.via})"></span>${D.accounts[m.via].name} · ${m.time}${m.from === "out" ? " · Delivered" : ""}</div>`;
+  });
+  h += `<div class="typing"><span></span><span></span><span></span></div>`;
+  document.getElementById("msgs").innerHTML = h;
+  phxReady();
+</script>
+</body>
+</html>

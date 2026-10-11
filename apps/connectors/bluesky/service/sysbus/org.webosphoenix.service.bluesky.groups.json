@@ -1,0 +1,14 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.service.bluesky"
+    ],
+    "accounts.transport": [
+        "oem"
+    ],
+    "bluesky.account": [
+        "oem"
+    ],
+    "phoenix.connector.share": [
+        "oem"
+    ]
+}

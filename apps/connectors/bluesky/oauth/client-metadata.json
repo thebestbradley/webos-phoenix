@@ -1,0 +1,12 @@
+{
+    "client_id": "https://webosphoenix.org/oauth/bluesky/client-metadata.json",
+    "client_name": "webOS Phoenix",
+    "client_uri": "https://webosphoenix.org/",
+    "application_type": "native",
+    "grant_types": ["authorization_code", "refresh_token"],
+    "response_types": ["code"],
+    "scope": "atproto transition:generic transition:chat.bsky",
+    "redirect_uris": ["org.webosphoenix:/oauth/bluesky"],
+    "token_endpoint_auth_method": "none",
+    "dpop_bound_access_tokens": true
+}

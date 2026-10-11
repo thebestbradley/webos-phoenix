@@ -49,6 +49,12 @@ export interface TaskList extends DbObject {
     sortOrder?: number;
     /** The default list; it cannot be deleted. */
     isDefault?: boolean;
+    /**
+     * The kind of its tasks when an account syncs it (the account's sub-kind
+     * of com.palm.task:1, as com.palm.task.todoist:1), so a task added or
+     * edited here is the connector's to send; com.palm.task:1 without one.
+     */
+    taskKind?: string;
 }
 
 export interface Task extends DbObject {
@@ -79,6 +85,8 @@ export interface TasksLaunchParams {
     taskId?: string;
     /** With taskId: it was opened from its reminder (offer Snooze and Done). */
     fromReminder?: boolean;
+    /** Open this list (the Assistant's "what's on my shopping list"). */
+    listId?: string;
     /** Start a new task with this summary (Just Type "New Task"). */
     text?: string;
     /** A reminder is due for this task (the activity's callback). */
@@ -171,9 +179,13 @@ export const tasks = {
      * cancelled otherwise. Resolves with the task's _id.
      */
     async save(input: TaskInput, now = Date.now()): Promise<string> {
+        // Its list decides its kind: an account's list keeps its tasks in the
+        // account's own sub-kind (TaskList.taskKind), which its connector syncs.
+        const [list] = input.listId ? await db.get<TaskList>([input.listId]) : [];
+        const kind = list && typeof list.taskKind === "string" && /^[\w.-]+:\d+$/.test(list.taskKind) ? list.taskKind : TASK_KIND;
         const task: Task = {
             ...input,
-            _kind: TASK_KIND,
+            _kind: kind,
             summary: input.summary.trim(),
             due: input.due ?? null,
             remind: input.remind ?? null,
@@ -249,7 +261,10 @@ export const tasks = {
         const task = await tasks.get(taskId);
         if (!task || task.completed) return null;
         const body = task.due ? `Due ${dueText(task)}` : task.notes?.split("\n")[0] || "Reminder";
-        postNotification({ appId: TASKS_APP_ID, title: task.summary, body, params: { taskId, fromReminder: true } });
+        // One stack for all the reminders, as Calendar kept its reminders
+        // in one dashboard (core-apps com.palm.app.calendar
+        // ReminderManager.js:694-722).
+        postNotification({ appId: TASKS_APP_ID, title: task.summary, body, params: { taskId, fromReminder: true }, group: "reminders" });
         return task;
     },
 };
@@ -274,17 +289,35 @@ export interface HostNotification {
     body?: string;
     /** Launch params for the app when the notification is tapped. */
     params?: Record<string, unknown>;
+    /**
+     * Stacks it with the app's notifications of this group (a conversation,
+     * the missed calls): one row, newest on top, as webOS's dashboards held
+     * their layers (the shell's NotificationStacks.js).
+     */
+    group?: string;
 }
+
+type HostGlobals = {
+    phoenixHost?: { postToHost(type: string, payload: object): void };
+    PalmSystem?: { addBannerMessage?: (msg: string, params: string, icon?: string) => void };
+};
 
 /**
  * Post a notification to the shell: phoenixHost's "notification" message
  * (phoenix-sim shows a banner and a dashboard item), else a legacy banner.
  */
 export function postNotification(n: HostNotification): void {
-    const g = globalThis as {
-        phoenixHost?: { postToHost(type: string, payload: object): void };
-        PalmSystem?: { addBannerMessage?: (msg: string, params: string, icon?: string) => void };
-    };
+    const g = globalThis as HostGlobals;
     if (g.phoenixHost) g.phoenixHost.postToHost("notification", n);
     else g.PalmSystem?.addBannerMessage?.(n.body ? `${n.title}: ${n.body}` : n.title, JSON.stringify(n.params ?? {}), "icon.png");
+}
+
+/**
+ * Take the app's stack of this group away from the notification area (the
+ * user has read them: a conversation opened, the call log seen), as the
+ * original apps emptied their dashboard's layers.
+ */
+export function removeNotificationGroup(appId: string, group: string): void {
+    if (!group) return;
+    (globalThis as HostGlobals).phoenixHost?.postToHost("notification", { appId, remove: true, group });
 }

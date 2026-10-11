@@ -1,0 +1,15 @@
+{
+    "accounts.transport": [
+        "org.webosphoenix.service.zoom/checkCredentials",
+        "org.webosphoenix.service.zoom/onCreate",
+        "org.webosphoenix.service.zoom/onEnabled",
+        "org.webosphoenix.service.zoom/onCredentialsChanged",
+        "org.webosphoenix.service.zoom/onDelete",
+        "org.webosphoenix.service.zoom/sync"
+    ],
+    "zoom.account": [
+        "org.webosphoenix.service.zoom/providerInfo",
+        "org.webosphoenix.service.zoom/signIn",
+        "org.webosphoenix.service.zoom/createMeeting"
+    ]
+}

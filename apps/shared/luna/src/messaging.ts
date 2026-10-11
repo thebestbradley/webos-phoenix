@@ -46,6 +46,19 @@
 
 import { call, type LunaError, type Subscription } from "./bridge";
 import { db, tempdb, type DbObject } from "./db8";
+import { removeNotificationGroup } from "./tasks";
+
+/** Messaging's app id: its notifications are a stack per conversation, grouped by the thread id. */
+export const MESSAGING_APP = "org.webosphoenix.messaging";
+
+/**
+ * A conversation's notifications taken away: the runtime and the IM
+ * connectors post each message's with the thread id as its group
+ * (phoenix-runtime.js simulateIncomingSms, the connectors' ctx.notify).
+ */
+export function clearConversationNotifications(threadId: string): void {
+    removeNotificationGroup(MESSAGING_APP, threadId);
+}
 
 export const MESSAGE_KIND = "com.palm.message:1";
 export const SMS_KIND = "com.palm.smsmessage:1";
@@ -57,9 +70,18 @@ export const IM_BUDDY_KIND = "com.palm.imbuddystatus:1";
 
 /** The IM transports' message kinds, by serviceName. */
 export const IM_MESSAGE_KINDS: Record<string, string> = {
+    // The Jabber (XMPP) account (apps/connectors/xmpp; docs/SYNERGY-CONNECTORS.md 7).
     type_jabber: "com.palm.immessage.xmpp:1",
     // The Fediverse account's direct mentions (apps/fediverse; docs/SYNERGY-CONNECTORS.md C2).
     type_fediverse: "com.palm.immessage.fediverse:1",
+    // Matrix (apps/connectors/matrix), Delta Chat (apps/connectors/deltachat), Unofficial Telegram (apps/telegram).
+    type_matrix: "com.palm.immessage.matrix:1",
+    type_deltachat: "com.palm.immessage.deltachat:1",
+    type_telegram: "com.palm.immessage.telegram:1",
+    // The Bluesky account's direct messages (apps/connectors/bluesky).
+    type_bluesky: "com.palm.immessage.bluesky:1",
+    // The Slack account's direct messages and channels (apps/connectors/slack).
+    type_slack: "com.palm.immessage.slack:1",
 };
 
 export const AVAILABILITY = { AVAILABLE: 0, MOBILE: 1, BUSY: 2, INVISIBLE: 3, OFFLINE: 4 } as const;
@@ -108,6 +130,12 @@ export interface Message extends DbObject {
     parts?: MessagePart[];
     /** An instant message's account (its address). */
     username?: string;
+    /**
+     * An outgoing instant message the other side has: "delivered", then
+     * "read" (a receipt, a chat marker; named as LuneOS's imlibpurpleservice
+     * names them, inc/IMMessage.h).
+     */
+    deliveryStatus?: "delivered" | "read";
 }
 
 export interface ChatThread extends DbObject {
@@ -145,9 +173,28 @@ export interface ImBuddy extends DbObject {
     availability: number;
     status?: string;
     group?: string;
+    /** "composing" while they type (a chat state, XEP-0085), "" otherwise. */
+    chatState?: string;
 }
 
 type OnError = (e: LunaError) => void;
+
+/** The Luna service of an IM transport ("org.webosphoenix.service.xmpp" for "type_jabber"). */
+export function transportService(serviceName: string | undefined): string | undefined {
+    return IM_SERVICES.find((s) => s.id === serviceName)?.service;
+}
+
+/** Whether pictures can be sent on a transport: SMS (as MMS) and the IM services that take them. */
+export function takesPictures(serviceName: string | undefined): boolean {
+    return !isImService(serviceName) || !!IM_SERVICES.find((s) => s.id === serviceName)?.pictures;
+}
+
+// The account an IM conversation is on: its login state's, by the account's address.
+async function imAccountOf(thread: ChatThread): Promise<string | undefined> {
+    if (!thread.username) return undefined;
+    const states = await db.find<ImLoginState>({ from: IM_LOGIN_KIND, where: [{ prop: "username", op: "=", val: thread.username }] }).catch(() => []);
+    return states.find((s) => s.serviceName === thread.replyService)?.accountId;
+}
 
 export const messaging = {
     /** Conversations, newest first. */
@@ -210,9 +257,12 @@ export const messaging = {
     },
     /**
      * Send an instant message from an IM account (its address, `username`)
-     * to a buddy; the account's transport sends it.
+     * to a buddy; the account's transport sends it, with its pictures
+     * where the service takes them (IM_SERVICES pictures: Jabber's HTTP
+     * upload, Matrix's media).
      */
-    async sendIm(service: string, username: string, to: MessageAddress, text: string, threadId?: string): Promise<string[]> {
+    async sendIm(service: string, username: string, to: MessageAddress, text: string, threadId?: string,
+                 parts?: MessagePart[]): Promise<string[]> {
         const kind = IM_MESSAGE_KINDS[service];
         if (!kind) throw new Error(`No IM transport for ${service}`);
         const now = Date.now();
@@ -223,6 +273,7 @@ export const messaging = {
             serviceName: service,
             username,
             messageText: text,
+            ...(parts && parts.length ? { parts } : {}),
             to: [to],
             localTimestamp: now,
             timestamp: now,
@@ -240,13 +291,32 @@ export const messaging = {
     watchBuddies(cb: (buddies: ImBuddy[]) => void, onError?: OnError): Subscription {
         return tempdb.watch<ImBuddy>({ from: IM_BUDDY_KIND }, cb, onError);
     },
-    /** Your own status on an IM account (Phoenix's simulated XMPP transport: setPresence). */
+    /**
+     * Your own status on an IM account: its transport's setPresence (the
+     * original transports watched imloginstate.availability, which the
+     * Messaging app wrote; imlibpurpleservice src/IMLoginState.cpp).
+     */
     async setPresence(accountId: string, availability: number, customMessage?: string): Promise<void> {
-        await call("luna://org.webosphoenix.service.xmpp/setPresence", { accountId, availability,
+        const [state] = await db.find<ImLoginState>({ from: IM_LOGIN_KIND, where: [{ prop: "accountId", op: "=", val: accountId }] });
+        const svc = transportService(state?.serviceName) ?? "org.webosphoenix.service.xmpp";
+        await call(`luna://${svc}/setPresence`, { accountId, availability,
             ...(customMessage !== undefined ? { customMessage } : {}) });
     },
-    /** Mark a conversation read: its inbox messages' flags.read and the thread's unreadCount. */
+    /** Typing in an IM conversation (XEP-0085 on Jabber): best effort. */
+    async chatState(thread: ChatThread, state: "composing" | "paused" | "active"): Promise<void> {
+        const svc = transportService(thread.replyService);
+        const accountId = svc ? await imAccountOf(thread) : undefined;
+        if (!svc || !accountId || !thread.replyAddress) return;
+        await call(`luna://${svc}/chatState`, { accountId, to: thread.replyAddress, state }).catch(() => undefined);
+    },
+    /**
+     * Mark a conversation read: its inbox messages' flags.read and the
+     * thread's unreadCount; its notifications (one stack, grouped by the
+     * thread) leave the notification area, as webOS's dashboards closed
+     * once their messages were read.
+     */
     async markRead(threadId: string): Promise<void> {
+        clearConversationNotifications(threadId);
         const unread = await db.find<Message>({
             from: MESSAGE_KIND,
             where: [{ prop: "conversations", op: "=", val: threadId }, { prop: "folder", op: "=", val: "inbox" }],
@@ -255,6 +325,14 @@ export const messaging = {
             .map((m) => ({ _id: m._id!, flags: { ...(m.flags ?? {}), read: true } }));
         if (changes.length) await db.merge(changes);
         await db.merge([{ _id: threadId, unreadCount: 0 }]);
+        // An IM conversation: its transport tells the other side it was read
+        // (a chat marker, a read receipt), where it can; best effort.
+        if (changes.length) {
+            const [thread] = await db.get<ChatThread>([threadId]).catch(() => [] as ChatThread[]);
+            const svc = transportService(thread?.replyService);
+            const accountId = svc && thread ? await imAccountOf(thread) : undefined;
+            if (svc && accountId) await call(`luna://${svc}/markRead`, { accountId, threadId }).catch(() => undefined);
+        }
     },
     /** Delete a conversation and its messages. */
     async deleteThread(threadId: string): Promise<void> {
@@ -265,15 +343,38 @@ export const messaging = {
 
 /**
  * IM services webOS Messaging knew, and which Phoenix has a transport for.
- * Jabber (XMPP) works in the simulator (a simulated server); the closed
+ * Jabber (XMPP), Matrix, Delta Chat and Telegram have transports (their
+ * connectors: apps/connectors, apps/telegram), as the Fediverse; the closed
  * networks webOS reached through libpurple are gone or closed.
  */
-export const IM_SERVICES: { id: string; label: string; available: boolean; presence?: boolean; notPrivate?: string }[] = [
-    { id: "type_jabber", label: "Jabber (XMPP)", available: true },
+export interface ImServiceInfo {
+    id: string;
+    label: string;
+    available: boolean;
+    presence?: boolean;
+    notPrivate?: string;
+    /** The transport's Luna service (setPresence, markRead, chatState). */
+    service?: string;
+    /** Pictures can be sent on it. */
+    pictures?: boolean;
+}
+
+export const IM_SERVICES: ImServiceInfo[] = [
+    { id: "type_jabber", label: "Jabber (XMPP)", available: true, service: "org.webosphoenix.service.xmpp", pictures: true },
+    { id: "type_matrix", label: "Matrix", available: true, presence: false, service: "org.webosphoenix.service.matrix", pictures: true },
+    { id: "type_deltachat", label: "Delta Chat", available: true, presence: false, service: "org.webosphoenix.service.deltachat", pictures: true },
+    { id: "type_telegram", label: "Unofficial Telegram", available: true, presence: false, service: "org.webosphoenix.service.telegram", pictures: true,
+      notPrivate: "Not end-to-end encrypted: Telegram's chats other than secret chats are kept on Telegram's servers, which can read them." },
     // Direct mentions: no presence, and no privacy from the servers' admins
     // (docs/SYNERGY-MODERN.md 3.1: shown "with a not private label").
     { id: "type_fediverse", label: "Fediverse", available: true, presence: false,
       notPrivate: "Not private: direct mentions are not encrypted, and the admins of both servers can read them." },
+    // Bluesky's direct messages: no presence; Bluesky's chat service can read them.
+    { id: "type_bluesky", label: "Bluesky", available: true, presence: false,
+      notPrivate: "Not end-to-end encrypted: Bluesky's chat service can read these messages." },
+    // Slack's direct messages and channels: no presence here; the workspace's admins can read them.
+    { id: "type_slack", label: "Slack", available: true, presence: false,
+      notPrivate: "Not end-to-end encrypted: Slack and your workspace's admins can read these messages." },
     { id: "type_aim", label: "AIM", available: false },
     { id: "type_gtalk", label: "Google Talk", available: false },
     { id: "type_yahoo", label: "Yahoo!", available: false },

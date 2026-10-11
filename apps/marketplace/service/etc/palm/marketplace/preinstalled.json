@@ -2,7 +2,87 @@
     "//": [
         "The connector packages Phoenix comes with (docs/SYNERGY-CONNECTORS.md 7, 'What comes with Phoenix'): installed in the image as apps the user may remove (/media/cryptofs/apps; tools/install-rootfs.py, phoenix-sim's and tools/serve-rootfs.py's installed apps, runtime/rootfs.json 'preinstalled'), counted by the Marketplace as installed from the catalog sourceId, and installed again from it without Developer Mode (packagesservice.js firstPartyEntry).",
         "from: where the package's app is in this checkout (for the tools that build the image and the simulator); service and templates: its connector service and account templates, for the simulator's runtime.",
-        "Google, Microsoft, Telegram and LoRa mesh join this list when they are built."
+        "Google, Microsoft and LoRa mesh join this list when they are built. Unofficial Telegram is here, and works in a build with Telegram's app id and TDLib (meta-phoenix phoenix-tdjson); elsewhere its sign-in page says it is not available in this build.",
+        "firstParty: Phoenix's own connector packages that do not come with it but are in its catalog (apps/connectors/: not apps of the image or the simulator; bin/serve.sh uploads them to a development catalog): installed by those who want them, from a Phoenix catalog the device ships with, without Developer Mode, as a pre-installed one is installed again (packagesservice.js firstPartyEntry). from, service and templates as above, for the simulator."
+    ],
+    "firstParty": [
+        {
+            "id": "org.webosphoenix.drives",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/drives",
+            "service": "org.webosphoenix.service.drives",
+            "templates": ["com.webosphoenix.drive.nextcloud", "com.webosphoenix.drive.owncloud", "com.webosphoenix.drive.webdav", "com.webosphoenix.drive.s3", "com.webosphoenix.drive.dropbox", "com.webosphoenix.drive.onedrive", "com.webosphoenix.drive.googledrive", "com.webosphoenix.drive.box", "com.webosphoenix.drive.sftp"]
+        },
+        {
+            "id": "org.webosphoenix.xmpp",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/xmpp",
+            "service": "org.webosphoenix.service.xmpp",
+            "templates": ["com.webosphoenix.xmpp"]
+        },
+        {
+            "id": "org.webosphoenix.matrix",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/matrix",
+            "service": "org.webosphoenix.service.matrix",
+            "templates": ["com.webosphoenix.matrix"]
+        },
+        {
+            "id": "org.webosphoenix.deltachat",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/deltachat",
+            "service": "org.webosphoenix.service.deltachat",
+            "templates": ["com.webosphoenix.deltachat"]
+        },
+        {
+            "id": "org.webosphoenix.todoist",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/todoist",
+            "service": "org.webosphoenix.service.todoist",
+            "templates": ["com.webosphoenix.todoist"]
+        },
+        {
+            "id": "org.webosphoenix.bluesky",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/bluesky",
+            "service": "org.webosphoenix.service.bluesky",
+            "templates": ["com.webosphoenix.bluesky"]
+        },
+        {
+            "id": "org.webosphoenix.microsoft",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/microsoft",
+            "service": "org.webosphoenix.service.microsoft",
+            "templates": ["com.webosphoenix.microsoft"]
+        },
+        {
+            "id": "org.webosphoenix.google",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/google",
+            "service": "org.webosphoenix.service.google",
+            "templates": ["com.webosphoenix.google"]
+        },
+        {
+            "id": "org.webosphoenix.zoom",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/zoom",
+            "service": "org.webosphoenix.service.zoom",
+            "templates": ["com.webosphoenix.zoom"]
+        },
+        {
+            "id": "org.webosphoenix.linkedin",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/linkedin",
+            "service": "org.webosphoenix.service.linkedin",
+            "templates": ["com.webosphoenix.linkedin"]
+        },
+        {
+            "id": "org.webosphoenix.slack",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/slack",
+            "service": "org.webosphoenix.service.slack",
+            "templates": ["com.webosphoenix.slack"]
+        }
     ],
     "packages": [
         {
@@ -11,6 +91,13 @@
             "from": "apps/fediverse",
             "service": "org.webosphoenix.service.fediverse",
             "templates": ["com.webosphoenix.fediverse"]
+        },
+        {
+            "id": "org.webosphoenix.telegram",
+            "sourceId": "phoenix",
+            "from": "apps/telegram",
+            "service": "org.webosphoenix.service.telegram",
+            "templates": ["com.webosphoenix.telegram"]
         }
     ]
 }

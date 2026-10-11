@@ -1,0 +1,11 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.service.google"
+    ],
+    "accounts.transport": [
+        "oem"
+    ],
+    "google.account": [
+        "oem"
+    ]
+}
