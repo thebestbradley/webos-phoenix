@@ -78,6 +78,9 @@
 {"id":"a-sw-54","cat":"messages","say":"email Mom the pictures from the trip","expect":{"answer":["fallback","clarify"]},"forbid":["text","email"]},
 {"id":"a-sw-55","cat":"notes","say":"add stamps to my to do list","note":"the phone's default list, not Microsoft To Do (the Synergy world has a Microsoft account)","expect":{"command":"task","args":{"text":"Stamps"}},"notText":"microsoft|signed in","effects":[{"kind":"com.palm.task:1","where":{"summary":"Stamps","listId":"list-inbox"},"count":1}]},
 {"id":"a-sw-56","cat":"media","say":"turn off the music","expect":{"command":"media","args":{"action":"pause"}}},
-{"id":"a-sw-57","cat":"timers","say":"switch the music off after an hour","expect":{"command":"timer","args":{"seconds":3600,"sleep":true}},"forbid":["media"]}
+{"id":"a-sw-57","cat":"timers","say":"switch the music off after an hour","expect":{"command":"timer","args":{"seconds":3600,"sleep":true}},"forbid":["media"]},
+{"id":"a-sw-58","cat":"timers","say":"add a timer for 5 minutes","expect":{"command":"timer","args":{"seconds":300,"label":""}}},
+{"id":"a-sw-59","cat":"notes","say":"add milk to my list","expect":{"command":"task","args":{"text":"Milk"}},"effects":[{"kind":"com.palm.task:1","where":{"summary":"Milk","listId":"list-inbox"},"count":1},{"kind":"com.palm.tasklist:1","where":{"name":{"$re":"^my$"}},"count":0}]},
+{"id":"a-sw-60","cat":"timers","say":"put 10 more minutes on the timer","expect":{"answer":"fallback"},"forbid":["timer"],"text":"add time"}
 ]
 }

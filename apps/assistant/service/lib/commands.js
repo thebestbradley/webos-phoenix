@@ -1389,8 +1389,9 @@ var MEMO_COLORS = ["blue", "yellow", "green", "pink", "salmon"];
 // sweep: "add batteries to the grocery list" made a second list beside
 // Groceries); "to do", "tasks", "reminders": the default list ("").
 function listKey(name) {
-    var n = words(name).replace(/^(?:my|the|our) /, "").replace(/ list$/, "").trim();
-    if (/^(?:to ?-?dos?|todos?|tasks?|reminders?|inbox)$/.test(n)) return "";
+    // "Add milk to my list": the default one (it made a list called "My").
+    var n = words(name).replace(/^(?:my|the|our)(?: |$)/, "").replace(/(?:^| )list$/, "").trim();
+    if (/^(?:|to ?-?dos?|todos?|tasks?|reminders?|inbox)$/.test(n)) return "";
     if (/^(?:grocery|groceries|shopping|grocery shopping|food shopping|supermarket)$/.test(n)) return "grocery";
     return n.replace(/ies$/, "y").replace(/([^s])s$/, "$1");
 }

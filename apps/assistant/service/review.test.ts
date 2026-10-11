@@ -127,6 +127,28 @@ describe("a time a model wrote", () => {
     });
 });
 
+describe("a sleep timer a model chose", () => {
+    it("is a plain timer where the words say nothing of the music", async () => {
+        // Qwen3 0.6B made "add 5 minutes to the timer" a sleep timer (the main set).
+        const llm = { status: () => Promise.resolve({ available: true, installed: [{ id: "qwen3-0.6b-q8_0" }] }), ensure: () => Promise.resolve({ baseUrl: "http://127.0.0.1:9/v1" }) };
+        const reply = (o: object) => ({ status: 200, body: JSON.stringify({ choices: [{ message: o }] }) });
+        const llmRequest = async (r: { body: string }) => {
+            const props = JSON.parse(r.body).response_format?.json_schema?.schema?.properties || {};
+            if (props.command) return reply({ content: JSON.stringify({ command: "timer" }) });
+            if (props.seconds) return reply({ content: JSON.stringify({ seconds: 300, sleep: true, label: "sleep" }) });
+            return reply({ content: "An answer." });
+        };
+        const d = device({ llm, llmRequest, settings: { followUps: false } });
+        const m = await d.ask("timer thingy five minutes ok");
+        expect(m).toMatchObject({ command: "timer", status: "done" });
+        expect(m.text).not.toMatch(/sleep|music/i);
+        expect([...d.state.activities.values()].at(-1).callback.params.params.timerDone).toBeTruthy();
+        // Where they do, it stays one.
+        const e = device({ llm, llmRequest, settings: { followUps: false } });
+        expect((await e.ask("timer thingy for the music five minutes ok")).text).toMatch(/^Sleep timer set/);
+    });
+});
+
 describe("a command switched off in Settings > Assistant", () => {
     it("is refused, every one of them, \"did you add it?\" too", async () => {
         // "Did you add it?" was answered by the router itself, past the

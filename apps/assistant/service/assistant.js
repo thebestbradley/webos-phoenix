@@ -1132,6 +1132,13 @@ function createAssistantService(deps) {
     // set, 11 October 2026).
     function timeFromWords(cmd, args, asked) {
         var key = { alarm: "time", reminder: "due", event: "start" }[cmd.id], l = lang();
+        // A sleep timer stops the music: only where the words speak of it
+        // (Qwen3 0.6B made "add 5 minutes to the timer" a sleep timer).
+        if (cmd.id === "timer" && args && (args.sleep || /^sleep$/i.test(String(args.label || ""))) && l.sleepSaid && !l.sleepSaid(asked)) {
+            args = Object.assign({}, args);
+            delete args.sleep;
+            if (/^sleep$/i.test(String(args.label || ""))) args.label = "";
+        }
         if (!key || !args || !(args[key] > 0) || !asked || !l.extract) return args;
         var info = l.extract(l.clean(asked), now());
         if (!info.clock && info.relative === undefined) return args;

@@ -688,7 +688,8 @@ function sleepTimer(t) {
 function timer(t) {
     var sleep = sleepTimer(t);
     if (sleep) return sleep;
-    var m = /^(?:set|start|create|make|put on|run)?\s*(?:a |an |the )?(?:timer|countdown)(?: for| of)? (.+?)(?: (?:for|called|named|labelled|labeled) (?:the )?(.+))?$/.exec(t)
+    // ("Add a timer for 5 minutes" was a timer called "add a".)
+    var m = /^(?:set|start|create|make|put on|run|add|give me|i need)?\s*(?:a |an |the )?(?:timer|countdown)(?: for| of)? (.+?)(?: (?:for|called|named|labelled|labeled) (?:the )?(.+))?$/.exec(t)
         // "put a timer on for 4 minutes", "set a timer going for ten minutes"
         || /^(?:put|set|get|start) (?:a |an |the )?timer (?:on|going|running)(?: for)? (.+?)(?: (?:for|called|named) (?:the )?(.+))?$/.exec(t)
         || /^(?:set |start )?(?:a |an )?(.+?) (?:timer|countdown)(?: (?:for|called) (?:the )?(.+))?$/.exec(t)
@@ -1315,7 +1316,10 @@ var NOT_HERE = [
      /^(?:send|share|text|email|e-mail|message|forward|mms|attach)\b/],
     ["podcast", /\b(?:podcasts?|(?:latest|new|next|last) episodes?|episodes? of)\b/, /^(?:play|resume|continue|start|put on|listen to|i want to (?:listen to|hear)|shuffle)\b/],
     ["screen", /\b(?:on|in|at) (?:my|the|this) screen\b|\b(?:my|the|this) screen (?:say|show|mean)s?\b|\bwhat am i (?:looking at|seeing|reading)\b|\b(?:read|describe|explain|summari[sz]e) (?:my|the|this) screen\b|\bwhat(?:'s| is) this (?:app|page)\b/,
-     /^(?:what|what's|read|describe|explain|summari[sz]e|tell me|can you see|do you see|look at|who|whats)\b/]
+     /^(?:what|what's|read|describe|explain|summari[sz]e|tell me|can you see|do you see|look at|who|whats)\b/],
+    // "Add 5 minutes to the timer": a running timer is not lengthened (the
+    // model's set: Qwen3 0.6B set a new one, once a sleep timer).
+    ["moreTime", /\b(?:to|on|onto) (?:the|my|this) (?:timer|countdown)$|^(?:extend|lengthen) (?:the|my|this) (?:timer|countdown)\b/, /^(?:add|put|give|extend|lengthen)\b/]
 ];
 function notHere(t) {
     for (var i = 0; i < NOT_HERE.length; ++i)
@@ -2736,7 +2740,8 @@ var say = {
                  post: "I can't post to social media for you yet.",
                  photo: "I can't send photos or videos yet.",
                  podcast: "I can't play podcasts myself yet.",
-                 screen: "I can't see what's on your screen yet." }[what] || "";
+                 screen: "I can't see what's on your screen yet.",
+                 moreTime: "I can't add time to a running timer yet, but I can set another one." }[what] || "";
     },
     // What only a model or the web can (beyond): which a model may still answer in words.
     beyondModel: function (what) { return what === "translate"; },
@@ -3288,6 +3293,8 @@ module.exports = {
     // The decision model's options for words the grammar did not take (lib/lang/en-candidates.js).
     candidates: require("./en-candidates")({ MENTIONS: MENTIONS, extract: extract, resolve: resolve, duration: duration }),
     // Words that take something away ("turn off", "delete", "I don't need"): a model's removing choice needs them.
+    // Words about the music stopping: a model's sleep timer needs them (assistant.js heldToWords).
+    sleepSaid: function (t) { return /\b(?:sleep|music|songs?|playing|playback|audio|podcasts?)\b/.test(String(t || "").toLowerCase()); },
     removing: function (t) { return /\b(?:off|delet\w*|remov\w*|cancel\w*|clear\w*|stop\w*|disabl\w*|kill|dismiss|drop|scrap|get rid|erase|forget|don't need|do not need|no longer|anymore|any more|not happening|isn't happening|won't happen|shut|silenc\w*|mute|quiet|skip)\b/.test(String(t || "").toLowerCase()); },
     answer: answer,
     // An answer to a question with choices (assistant.js answerChoice).
