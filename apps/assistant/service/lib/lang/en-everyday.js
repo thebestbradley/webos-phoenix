@@ -10,6 +10,7 @@
 //   en-places.js     where I parked, reminders at a place, home and work
 //   en-music.js      shuffle, repeat, favorite songs, the sleep timer, podcasts
 //   en-facts.js      define, spell, coins, dice, random numbers, Wikipedia, the news
+//   en-settings.js   the switches of Settings the toggle command does not have, dark mode
 //
 // Each area: (h) -> {rules: [[command, (t, ctx) -> args | null]] (tried
 // before the grammar's own, so each is held to its own words), late?:
@@ -23,7 +24,7 @@
 "use strict";
 
 var AREAS = [require("./en-notify"), require("./en-routines"), require("./en-capture"), require("./en-places"), require("./en-music"),
-             require("./en-facts")];
+             require("./en-facts"), require("./en-settings")];
 
 module.exports = function (h) {
     var areas = AREAS.map(function (make) { return make(h); });

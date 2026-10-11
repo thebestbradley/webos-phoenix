@@ -2294,6 +2294,9 @@ function undo(u, env) {
     if (u.kind === "merge") return lunaCall(env, DB + "merge", { objects: u.objects || [] });
     if (u.kind === "multi") return (u.steps || []).reduce(function (p, step) { return p.then(function () { return undo(step, env); }); }, Promise.resolve());
     if (u.kind === "put") return lunaCall(env, DB + "put", { objects: (u.objects || []).map(function (o) { var c = Object.assign({}, o); delete c._rev; delete c._del; return c; }) });
+    // A system preference as it was, or the Assistant's own setting (lib/commands-settings.js).
+    if (u.kind === "prefs") return lunaCall(env, SYSTEM_SERVICE + "setPreferences", u.prefs || {});
+    if (u.kind === "settings") return Promise.resolve(env.setSettings(u.settings || {}));
     return cancel(u.activities).then(function () { return lunaCall(env, DB + "del", { ids: u.ids || [] }); });
 }
 

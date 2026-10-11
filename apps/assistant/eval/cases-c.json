@@ -138,6 +138,16 @@
   { "id": "c-fact-08", "cat": "facts", "say": "what's the news", "expect": { "command": "news", "status": ["done", "failed"] } },
   { "id": "c-fact-09", "cat": "facts", "say": "what is the meaning of life", "forbid": ["define"], "expect": { "answer": ["chat", "knowledge", "fallback"] } },
   { "id": "c-fact-10", "cat": "facts", "say": "who was Ada Lovelace", "forbid": ["wikipedia", "define"], "expect": { "answer": "knowledge" } },
-  { "id": "c-fact-11", "cat": "facts", "say": "set a timer for 3 minutes", "expect": { "command": "timer" }, "forbid": ["dice", "randomNumber"] }
+  { "id": "c-fact-11", "cat": "facts", "say": "set a timer for 3 minutes", "expect": { "command": "timer" }, "forbid": ["dice", "randomNumber"] },
+  { "id": "c-set-01", "cat": "settings", "say": "turn on dark mode", "expect": { "command": "deviceSetting", "args": { "setting": "darkMode" } }, "text": "doesn't have a dark mode" },
+  { "id": "c-set-02", "cat": "settings", "say": "turn off keyboard clicks", "expect": { "command": "deviceSetting", "args": { "setting": "keyboardClicks", "state": "off" } }, "text": "Keyboard clicks are off" },
+  { "id": "c-set-03", "cat": "settings", "say": "hide previews on the lock screen", "expect": { "command": "deviceSetting", "args": { "setting": "previews", "state": "off" } } },
+  { "id": "c-set-04", "cat": "settings", "say": "show message previews on the lock screen", "expect": { "command": "deviceSetting", "status": "pending", "args": { "setting": "previews", "state": "on" } } },
+  { "id": "c-set-05", "cat": "settings", "say": "turn on high contrast", "expect": { "command": "deviceSetting", "args": { "setting": "highContrast", "state": "on" } } },
+  { "id": "c-set-06", "cat": "settings", "say": "set the screen timeout to 2 minutes", "expect": { "command": "deviceSetting", "args": { "setting": "screenTimeout", "seconds": 120 } }, "text": "2 minutes" },
+  { "id": "c-set-07", "cat": "settings", "say": "turn off the notification light", "expect": { "command": "deviceSetting", "args": { "setting": "blink", "state": "off" } } },
+  { "id": "c-set-08", "cat": "settings", "say": "stop listening for hey phoenix", "expect": { "command": "deviceSetting", "args": { "setting": "wakeWord", "state": "off" } } },
+  { "id": "c-set-09", "cat": "settings", "say": "turn on wifi", "expect": { "command": "toggle", "args": { "setting": "wifi" } }, "forbid": ["deviceSetting"] },
+  { "id": "c-set-10", "cat": "settings", "say": "is high contrast on", "expect": { "command": "deviceSetting", "args": { "setting": "highContrast", "state": "status" } }, "text": "^No" }
  ]
 }

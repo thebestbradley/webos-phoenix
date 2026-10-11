@@ -1619,6 +1619,22 @@ the user's feeds (RSS or Atom), each a card opening the story; the feeds
 are in Settings > Assistant > News (two public ones to start with, the
 owner's choice).
 
+**Settings by voice** (`deviceSetting`; `lib/commands-settings.js`). The
+switches of Settings the toggle command (Wi-Fi, Bluetooth, airplane mode,
+the flashlight, the ringer, Do Not Disturb, Location Services, rotation,
+the hotspot, VPN), volume and brightness did not have: previews and
+notifications on the lock screen, the notification light, system sounds,
+keyboard clicks, high contrast, reduce motion ("turn off animations"),
+captions, mono audio, DropShare, network time, Exhibition's night mode,
+"Hey Phoenix", answers aloud; and "set the screen timeout to 2 minutes"
+(Settings' nearest choice). Each is set in the system preference
+Settings reads (an object preference keeping its other fields), read back
+before it is said, and taken back by "undo"; "is high contrast on"
+answers with Turn It Off. Showing previews on the lock screen is read back
+first: it shows what messages say to whoever holds the phone. Phoenix has
+no dark mode (webOS's look had none; 2.0's design brings light and dark):
+"turn on dark mode" says so and offers high contrast (OPEN-QUESTIONS.md).
+
 ### The Assistant and Synergy (11 October 2026)
 
 The owner: "anything connected through the Synergy system should be

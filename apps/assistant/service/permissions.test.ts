@@ -111,6 +111,7 @@ function device() {
     const used: [string, string, string][] = [];
     // eslint-disable-next-line prefer-const
     let dev: { allowed: boolean | null; lose: string } = { allowed: true, lose: "" };
+    const prefs: Record<string, unknown> = {};
     const kindOf = (o: any) => o && (o._kind || db.get(o._id)?._kind);
     const ok = (o: object = {}) => Promise.resolve({ returnValue: true, ...o });
     const luna = {
@@ -146,6 +147,9 @@ function device() {
             if (m === "org.webosphoenix.filemanager/search") return ok({ entries: [{ name: "budget.ods", path: "/media/internal/Documents/budget.ods", type: "file", size: 100, mtime: NOW }] });
             if (m === "org.webosphoenix.service.packages/search") return ok({ apps: [{ id: "doom", sourceId: "s", title: "Doom" }] });
             if (m === "com.webos.service.wifi/getstatus") return ok({ status: "connected" });
+            // The system preferences, kept (what Settings reads, and the Assistant reads back: lib/commands-settings.js).
+            if (m === "com.webos.service.systemservice/getPreferences") return ok({ ...prefs });
+            if (m === "com.webos.service.systemservice/setPreferences") { Object.assign(prefs, p); return ok(); }
             return ok();
         },
     };

@@ -41,4 +41,5 @@ module.exports = {
     musicMode: "turn on shuffle", favorites: "like this song", sleepTimer: "stop the music in 30 minutes", podcast: "resume my podcast",
     define: "define ephemeral", spell: "how do you spell rhythm", coin: "flip a coin", dice: "roll two dice", randomNumber: "pick a random number between 1 and 10",
     wikipedia: "look up Ada Lovelace on Wikipedia", news: "what's the news",
+    deviceSetting: "turn off keyboard clicks",
 };
