@@ -89,6 +89,8 @@
 {"id":"h-syn-7","cat":"synergy","say":"skeet good morning everyone","expect":{"command":"post","status":"pending"},"text":"bluesky"},
 {"id":"h-syn-8","cat":"synergy","say":"say yes to the offsite","expect":{"command":"inviteReply","args":{"response":"accepted"},"status":"pending"}},
 {"id":"h-syn-9","cat":"synergy","say":"hop on the zoom call","expect":{"command":"joinMeeting"}},
-{"id":"h-syn-10","cat":"synergy","say":"which of my accounts can I post from","expect":{"anyOf":[{"command":"accounts"},{"command":"post","status":"ask"},{"answer":"fallback"}]},"forbid":["post"]}
+{"id":"h-syn-10","cat":"synergy","say":"which of my accounts can I post from","expect":{"anyOf":[{"command":"accounts"},{"command":"post","status":"ask"},{"answer":"fallback"}]},"forbid":["post"]},
+{"id":"h-syn-11","cat":"synergy","say":"let Noor see where I am","expect":{"command":"shareLocation","status":"pending"},"text":"telegram"},
+{"id":"h-syn-12","cat":"synergy","say":"message Sam on slack with my ETA to the airport","expect":{"command":"shareLocation","args":{"chat":{"service":"type_slack"}},"status":"pending"}}
 ]
 }

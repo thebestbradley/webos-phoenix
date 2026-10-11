@@ -2602,8 +2602,8 @@ var say = {
     // answered yet), "denied", "off", "unavailable"; purpose "weather" or
     // "distance".
     location: function (why, purpose) {
-        var need = purpose === "distance" ? "work out how far that is" : purpose === "places" ? "find places near you and the way there" : "check the weather where you are";
-        var instead = purpose === "distance" || purpose === "places" ? "" : " Or say a city, like \u201cweather in Paris\u201d.";
+        var need = purpose === "distance" ? "work out how far that is" : purpose === "share" ? "send where you are" : purpose === "places" ? "find places near you and the way there" : "check the weather where you are";
+        var instead = purpose === "distance" || purpose === "places" || purpose === "share" ? "" : " Or say a city, like \u201cweather in Paris\u201d.";
         if (why === "ask") return "To " + need + ", I need your location. Is it OK if I use it?";
         if (why === "denied") return "I'm not allowed to use your location. Allow it, here or in Settings > Location Services, and I'll " + need + "." + instead;
         if (why === "off") return "Location Services are off. Turn them on and I'll " + need + "." + instead;
@@ -2884,7 +2884,7 @@ say.done = function (text, checkIn) {
 // What is connected through Synergy (lib/lang/en-synergy.js): its rules
 // before the others (they hear an account named: "on Slack", "my work
 // calendar"), its words for a model's choice, and what it says.
-var synergyWords = require("./en-synergy")({ quote: quote, list: list, plural: plural, cap: cap, cased: cased, excerpt: excerpt, whenText: whenText,
+var synergyWords = require("./en-synergy")({ quote: quote, list: list, plural: plural, cap: cap, cased: cased, excerpt: excerpt, whenText: whenText, timeText: timeText,
                                              extract: extract, rules: function () { return rules; } });
 Array.prototype.splice.apply(rules, [rules.map(function (r) { return r[0]; }).indexOf("beyond"), 0].concat(synergyWords.RULES));
 Object.keys(synergyWords.MENTIONS).forEach(function (k) { MENTIONS[k] = synergyWords.MENTIONS[k]; });

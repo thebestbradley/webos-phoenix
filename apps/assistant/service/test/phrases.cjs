@@ -29,7 +29,7 @@ module.exports = {
     // What is connected through Synergy (lib/commands-synergy.js).
     post: "post to bluesky: hello", joinMeeting: "join my next meeting", inviteReply: "accept the invite from alex", emailMark: "flag the email from hannah",
     emailDelete: "delete the email from hannah", saveToDrive: "upload the budget file to dropbox", eventCalendar: "move my dentist appointment to my google calendar",
-    accounts: "what accounts do I have",
+    accounts: "what accounts do I have", shareLocation: "share my location with Sam",
     emailReply: "reply to my last email saying thanks", travelTime: "how long will it take to drive to the airport", locationAccess: "",
     detail: "what time is my dentist appointment", edit: "rename my dentist appointment to Dentist checkup",
     chat: "hello", checkDone: "did you add it", settingStatus: "is wifi on",

@@ -113,7 +113,16 @@
         { "id": "b-file-03", "cat": "synergy files", "say": "find the trip itinerary on google drive", "expect": { "command": "findFiles", "args": { "drive": "google drive" } }, "text": "trip itinerary" },
         { "id": "b-file-04", "cat": "synergy files", "say": "upload the budget file to box", "expect": { "answer": "fallback" }, "forbid": ["saveToDrive"], "text": "not signed in to box" },
 
-        { "id": "b-acct-01", "cat": "synergy accounts", "say": "what accounts do I have", "expect": { "command": "accounts" }, "text": "slack.*todoist.*dropbox" },
-        { "id": "b-acct-02", "cat": "synergy accounts", "say": "which accounts are connected", "expect": { "command": "accounts" } }
+        { "id": "b-acct-01", "cat": "synergy accounts", "say": "what accounts do I have", "expect": { "command": "accounts" }, "text": "dropbox.*slack.*todoist" },
+        { "id": "b-acct-02", "cat": "synergy accounts", "say": "which accounts are connected", "expect": { "command": "accounts" } },
+
+        { "id": "b-loc-01", "cat": "synergy location", "say": "share my location with Sam on Slack",
+          "expect": { "command": "shareLocation", "args": { "chat": { "service": "type_slack" } }, "status": "pending" }, "text": "^send your location to sam delgado on slack\\?$" },
+        { "id": "b-loc-02", "cat": "synergy location", "turns": [
+            { "say": "send Sam my ETA to the airport", "expect": { "command": "shareLocation", "status": "pending" }, "text": "^text sam delgado that you'll be at san jose airport around" },
+            { "say": "yes", "expect": { "command": "shareLocation", "status": "done" }, "text": "sent" } ] },
+        { "id": "b-loc-03", "cat": "synergy location", "say": "tell Kai where I am", "expect": { "command": "shareLocation", "status": "ask" }, "text": "on slack or jabber\\?" },
+        { "id": "b-loc-04", "cat": "synergy location", "say": "send my ETA to Sam", "expect": { "answer": "fallback" }, "forbid": ["text"], "text": "where are you going" },
+        { "id": "b-loc-05", "cat": "synergy location", "say": "let Priya know where I am on Signal", "expect": { "answer": "fallback" }, "forbid": ["text", "shareLocation"], "text": "can.t reach signal" }
     ]
 }

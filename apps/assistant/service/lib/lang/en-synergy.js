@@ -21,6 +21,8 @@
 //   saveToDrive   "save it to Google Drive", "upload the budget file to Dropbox" (read back)
 //   eventCalendar "add it to my Google calendar", "move the dentist to my work calendar"
 //   accounts      "what accounts do I have"
+//   shareLocation "share my location with Sam on Slack", "send my ETA to Sam",
+//                 "let Priya know when I'll be at the airport" (read back)
 //   and the commands that read or write an account's data, with the account
 //   said ("what's on my work calendar", "any new emails in my work account",
 //   "read my unread Slack messages", "find the budget file on Dropbox",
@@ -245,6 +247,37 @@ module.exports = function (h) {
         return r.args;
     }
 
+    // "share my location with sam", "send sam my location on slack", "tell
+    // priya where i am", "send my eta to sam", "let sam know when i'll be at
+    // the airport": who, by which account (as "text ... on slack"), and
+    // whether it is the ETA (where to, if said).
+    var WHERE_I_AM = "(?:my (?:current |exact |live |gps )?(?:location|position|whereabouts)|where i am|where i'm at|where i am right now)";
+    var MY_ETA = "(?:my (?:eta|e\\.t\\.a\\.?|arrival time|estimated (?:time of )?arrival))";
+    var WHEN_THERE = "when i(?:'ll| will| should) (?:be there|get there|arrive|be home|get home|be (?:at|in) (.+?)|get to (.+?)|arrive (?:at|in) (.+?))";
+    function shareLocation(t, ctx) {
+        var via = "(?:\\s+(?:on|over|via|through|by|using|in) (?:my |a )?(" + chatWords(ctx) + "|text|texts|sms|text message|imessage))?";
+        var who = "(?!(?:me|myself|us)\\b)(.+?)", m, place = "";
+        var out = function (w, v, eta, p) {
+            // "my mom": the contact is "mom" (as "text my mom ...").
+            return { who: cased(w.replace(/^my /, ""), ctx), via: v ? cased(v, ctx) : "", eta: !!eta, place: p ? String(p).replace(/^(?:the )?(home|work)$/, "$1") : "" };
+        };
+        // "share my location": to whom is asked for.
+        if ((m = new RegExp("^(?:share|send) (" + WHERE_I_AM + "|" + MY_ETA + ")$").exec(t))) return { who: "", via: "", eta: new RegExp("^" + MY_ETA + "$").test(m[1]), place: "" };
+        // "share my location with sam", "send my eta to sam on slack"
+        if ((m = new RegExp("^(?:share|send|text|message|give|show) (" + WHERE_I_AM + "|" + MY_ETA + ")(?: (?:to|for) (.+?))? (?:with|to) " + who + via + "$").exec(t)))
+            return out(m[3], m[4], new RegExp("^" + MY_ETA + "$").test(m[1]), m[2]);
+        // "send sam my location", "text sam my eta to the airport"
+        if ((m = new RegExp("^(?:send|text|message|give|show) " + who + " (" + WHERE_I_AM + "|" + MY_ETA + ")(?: (?:to|for) (.+?))?" + via + "$").exec(t)))
+            return out(m[1], m[4], new RegExp("^" + MY_ETA + "$").test(m[2]), m[3]);
+        // "tell sam where i am", "let priya know when i'll be at the airport"
+        if ((m = new RegExp("^(?:tell|let) " + who + "(?: know)? (" + WHERE_I_AM + "|" + WHEN_THERE + ")" + via + "$").exec(t))) {
+            var eta = /^when /.test(m[2]);
+            place = m[3] || m[4] || m[5] || (/\b(?:be|get) home$/.test(m[2]) ? "home" : "");
+            return out(m[1], m[6], eta, place);
+        }
+        return null;
+    }
+
     // ---- The account said, taken out, the rest read by the other rules (scoped) --------------------
 
     // Which argument each command takes the account in.
@@ -326,6 +359,7 @@ module.exports = function (h) {
 
     var RULES = [
         ["accounts", mark(accounts)],
+        ["shareLocation", mark(shareLocation)],
         ["post", mark(post)],
         ["joinMeeting", mark(joinMeeting)],
         ["inviteReply", mark(inviteReply)],
@@ -346,10 +380,17 @@ module.exports = function (h) {
         emailMark: /\b(archive|flag|mark|read|unread|star|unstar)\b/,
         emailDelete: /\b(delete|trash|remove|bin)\b/,
         saveToDrive: /\b(save|upload|copy|back ?up|drive|dropbox|box|nextcloud|owncloud|cloud)\b/,
-        eventCalendar: /\bcalendar\b/
+        eventCalendar: /\bcalendar\b/,
+        shareLocation: /\b(location|where i am|where i'm|eta|e\.t\.a|arriv\w*|when i'll|when i will|position|whereabouts)\b/
     };
 
     // ---- What is said ----------------------------------------------------------------------------
+    function about(seconds) {
+        var mins = Math.max(1, Math.round(seconds / 60));
+        if (mins < 60) return "about " + plural(mins, "minute");
+        var hrs = Math.floor(mins / 60), rest = Math.round((mins % 60) / 5) * 5;
+        return "about " + plural(hrs, "hour") + (rest ? " " + rest + " minutes" : "");
+    }
     var say = {
         // Accounts
         accountsList: function (items) {
@@ -386,6 +427,24 @@ module.exports = function (h) {
             if (!msgs.length) return unread ? "You have no new " + where + "messages." : "You have no " + where + "messages.";
             var first = msgs.slice(0, 3).map(function (m) { return m.from + (m.net && !label ? " on " + m.net : "") + ": " + quote(h.excerpt(m.text, 120)); });
             return (unread ? "You have " + plural(msgs.length, "new " + where + "message") + ". " : "") + first.join("; ") + (msgs.length > 3 ? "; and " + (msgs.length - 3) + " more" : "") + ".";
+        },
+        // Where you are, when you'll be there
+        shareWithWhom: function (eta) {
+            return eta ? "Who to? Say it with the name, like “send my ETA to Sam”." : "Who to? Say it with the name, like “share my location with Sam”.";
+        },
+        whereTo: function () { return "Where are you going? Say it with the place, like “send Sam my ETA to the airport”."; },
+        noPlaceSaved: function (place) {
+            return "I don't know where " + (place === "home" || place === "work" ? place : "that") + " is. Say the place, like “send Sam my ETA to the airport”.";
+        },
+        locationMessage: function (link) { return "I'm here: " + link; },
+        locationReady: function () { return "I can see where you are now. Ask me again to send it."; },
+        etaMessage: function (place, seconds, at) {
+            return "On my way to " + place + ", there around " + h.timeText(at) + " (" + about(seconds) + " from here).";
+        },
+        // Naming the account it goes on (or a text).
+        confirmShare: function (eta, who, net, place, at) {
+            if (eta) return (net ? "Tell " + who + " on " + net : "Text " + who) + " that you'll be at " + place + " around " + h.timeText(at) + "?";
+            return (net ? "Send your location to " + who + " on " + net : "Text your location to " + who) + "?";
         },
         // Calendars
         noCalendarCalled: function (said, names) {

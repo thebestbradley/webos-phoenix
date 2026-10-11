@@ -74,6 +74,12 @@ describe("the grammar hears accounts by their names", () => {
         ["mark all as read", "emailMark", { action: "read", all: true }],
         ["delete the email from alex", "emailDelete", { from: "alex" }],
         ["what accounts do I have", "accounts", {}],
+        ["share my location with Sam on Slack", "shareLocation", { who: "Sam", via: "Slack", eta: false }],
+        ["send my location to my mom", "shareLocation", { who: "mom", eta: false }],
+        ["tell Priya where I am", "shareLocation", { who: "Priya", eta: false }],
+        ["send my ETA to Sam", "shareLocation", { who: "Sam", eta: true, place: "" }],
+        ["text Kai my eta to the train station on acme chat", "shareLocation", { who: "Kai", via: "acme chat", eta: true, place: "the train station" }],
+        ["let Sam know when I'll be at the airport", "shareLocation", { who: "Sam", eta: true, place: "the airport" }],
     ];
     for (const [text, command, args] of cases) {
         it(`"${text}"`, () => {
@@ -289,6 +295,47 @@ describe("posting", () => {
     it("keeps to the service's length", async () => {
         const d = synergy();
         expect((await d.ask("post to bluesky: " + "a".repeat(301))).text).toBe("That's 301 characters, and Bluesky takes 300. Say it shorter?");
+    });
+});
+
+describe("where you are, sent on any account", () => {
+    const LINK = "https://www.openstreetmap.org/?mlat=37.370000&mlon=-122.040000#map=17/37.37000/-122.04000";
+    it("sends a map link on the account asked for, read back naming it", async () => {
+        const d = synergy();
+        const q = await d.ask("share my location with Sam on Slack");
+        expect(q).toMatchObject({ status: "pending", text: "Send your location to Sam Delgado on Slack?" });
+        expect(sentMessages(d)).toHaveLength(0);
+        expect((await d.confirm(q)).text).toBe("Sent to Sam Delgado on Slack.");
+        expect(sentMessages(d)[0]).toMatchObject({ _kind: "com.palm.immessage.slack:1", serviceName: "type_slack", messageText: "I'm here: " + LINK });
+    });
+    it("sends the ETA by the route, as Messaging would send to them (Sam's latest conversation is texts)", async () => {
+        const d = synergy();
+        const q = await d.ask("send Sam my ETA to the airport");
+        // The stand-in route: 18 minutes from 10:00.
+        expect(q.text).toBe("Text Sam Delgado that you'll be at San Jose Airport around 10:18 AM?");
+        await d.confirm(q);
+        expect(sentMessages(d)[0]).toMatchObject({ _kind: "com.palm.smsmessage:1",
+                                                   messageText: "On my way to San Jose Airport, there around 10:18 AM (about 18 minutes from here)." });
+    });
+    it("asks which account when several fit, and what is missing", async () => {
+        const d = synergy();
+        const q = await d.ask("tell Kai where I am");
+        expect(q).toMatchObject({ status: "ask", text: "On Slack or Jabber?" });
+        const r = await d.choose(q, "pick:1");
+        expect(r.messages.at(-1)).toMatchObject({ status: "pending", text: "Send your location to Kai Tanaka on Jabber?" });
+        expect((await d.ask("send my ETA to Sam")).text).toBe("Where are you going? Say it with the place, like “send Sam my ETA to the airport”.");
+        expect((await d.ask("let Sam know when I'll be home")).text).toBe("I don't know where home is. Say the place, like “send Sam my ETA to the airport”.");
+        expect((await d.ask("share my location with Sam on Signal")).text).toBe("I can't reach Signal: Signal has no way in for other apps.");
+        expect(sentMessages(d)).toHaveLength(0);
+    });
+    it("asks for the location first, then reads back", async () => {
+        const d = synergy(undefined, { locationAllowed: null });
+        const m = await d.ask("share my location with Sam");
+        expect(m.text).toBe("To send where you are, I need your location. Is it OK if I use it?");
+        expect(sentMessages(d)).toHaveLength(0);
+        const r = await d.choose(m, "do:0");
+        expect(r.messages.map((x) => x.text)).toEqual(["OK, I can use your location now.", "Text your location to Sam Delgado?"]);
+        expect(sentMessages(d)).toHaveLength(0);
     });
 });
 

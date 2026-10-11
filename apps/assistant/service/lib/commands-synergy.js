@@ -89,7 +89,13 @@ var COMMANDS = [
       parameters: { type: "object", properties: { query: STR, it: BOOL, calendar: { type: "string", description: "The calendar or account as said (\"Google\", \"work\")" } },
                     required: ["calendar"] } },
     { id: "accounts", title: "Your accounts", risk: "read", description: "Tell which accounts are connected through Synergy and what each does.",
-      parameters: { type: "object", properties: {} } }
+      parameters: { type: "object", properties: {} } },
+    { id: "shareLocation", title: "Sharing where you are", risk: "send",
+      description: "Send someone where the user is (a map link) or when they'll get somewhere (their ETA), by text or on any messaging account; read back first.",
+      parameters: { type: "object", properties: { who: { type: "string", description: "Who to send it to" },
+                                                  via: { type: "string", description: "The messaging account or network, as said (\"Slack\"); empty for the person's usual one" },
+                                                  eta: { type: "boolean", description: "When the user will arrive, rather than where they are" },
+                                                  place: { type: "string", description: "Where the user is going, for the ETA" } }, required: ["who"] } }
 ];
 // How people ask for each, in other words (as lib/examples.js has the others'): for a model choosing one.
 var EXAMPLES = {
@@ -100,7 +106,8 @@ var EXAMPLES = {
     emailDelete: ["throw away the email from Alex", "get rid of Priya's last email"],
     saveToDrive: ["put the budget file on my Dropbox", "back this up to Google Drive"],
     eventCalendar: ["put that on my work calendar instead", "switch the dentist appointment over to my Google calendar"],
-    accounts: ["which accounts have I added", "show the accounts on this phone"]
+    accounts: ["which accounts have I added", "show the accounts on this phone"],
+    shareLocation: ["let Sam see where I am", "message Priya my ETA to the station on Telegram"]
 };
 COMMANDS.forEach(function (c) { c.examples = EXAMPLES[c.id]; });
 // The account each existing command may be given (lib/commands.js BUILT_IN), for the models too.
@@ -115,9 +122,12 @@ var ACCOUNT_ARGS = {
     readEmail: { account: { type: "string", description: "The email account, as said; empty for all" } },
     findFiles: { drive: { type: "string", description: "A cloud drive, as said (\"Dropbox\", \"Google Drive\"); empty for this device" } }
 };
+// The text command (lib/commands.js BUILT_IN): what shareLocation sends by.
+var TEXT = null;
 function extend(builtIn) {
     builtIn.forEach(function (c) {
         if (c.id === "text") {
+            TEXT = c;
             c.description = "Send a text message (SMS) to a contact, or a message on any messaging account the user has (Slack, Jabber, Matrix, Telegram, Bluesky, the Fediverse, ...), to a person or a group conversation (\"#design\").";
             c.parameters.properties.via = { type: "string", description: "The messaging account or network, as said (\"Slack\", \"Telegram\"); empty for a text message or the person's usual one" };
         }
@@ -824,12 +834,71 @@ module.exports = function (h) {
     }
 
     // ---- Accounts -------------------------------------------------------------------------------
+    // ---- Where you are, or when you'll be there, sent as a message -----------------------------------
+    //
+    // The words made here (a map link, as Maps shares a place: apps/maps
+    // src/lib/launch.ts osmLink and shareText; or the time the route says),
+    // then sent as "text" sends them, on the account chosen as it chooses:
+    // the one said, else the person's usual one, else a text; asked when
+    // several fit. Read back naming the account.
+    function osmLink(lat, lon) {
+        return "https://www.openstreetmap.org/?mlat=" + lat.toFixed(6) + "&mlon=" + lon.toFixed(6) + "#map=17/" + lat.toFixed(5) + "/" + lon.toFixed(5);
+    }
+    var NO_PLACE_SAVED = /^(?:home|work|the office|my office|my house|my place)$/i;
+    function sharePrepare(env, args) {
+        var say = env.lang.say, place = String(args.place || "").trim();
+        args = Object.assign({}, args);
+        if (!String(args.who || "").trim())
+            return Promise.resolve({ args: args, reply: say.shareWithWhom(!!args.eta) });
+        if (args.eta && !place) return Promise.resolve({ args: args, reply: say.whereTo() });
+        if (args.eta && NO_PLACE_SAVED.test(place)) return Promise.resolve({ args: args, reply: say.noPlaceSaved(lower(place).replace(/^(?:the |my )/, "").replace(/^(?:office|house|place)$/, function (w) { return w === "office" ? "work" : "home"; })) });
+        return h.here(env, "share").then(function (me) {
+            if (!args.eta) return { message: say.locationMessage(osmLink(me.lat, me.lon)) };
+            return h.resolvePlace(env, place, me).then(function (list) {
+                var to = list[0];
+                return h.routeSummary(env, me, to, "drive").then(function (sum) {
+                    if (!sum) throw Object.assign(new Error("no route"), { said: say.noRoute(to.name) });
+                    var at = env.now() + sum.seconds * 1000;
+                    return { message: say.etaMessage(to.name, sum.seconds, at), to: to.name, at: at };
+                });
+            });
+        }).then(function (made) {
+            var sending = { who: args.who, via: args.via || "", message: made.message };
+            return prepare(TEXT, sending, env).then(function (p) { return p.pass ? h.prepareInner(TEXT, p.pass, env) : p; }).then(function (p) {
+                var ready = Object.assign({}, p.args || sending, { eta: !!args.eta, place: place, ready: true });
+                // Whom, or which account: asked as for a text, and the answer comes back here.
+                if (p.awaiting) return { args: ready, reply: p.reply, awaiting: Object.assign({}, p.awaiting, { command: "shareLocation", args: args }) };
+                if (p.reply) return { args: ready, reply: p.reply };
+                if (!String(ready.message || "").trim() || !(ready.chat || ready.number)) return { args: ready, reply: say.noSuchContact(args.who) };
+                var net = ready.chat ? ready.chat.label : "";
+                return { args: ready, confirm: say.confirmShare(!!args.eta, ready.name || (ready.chat && ready.chat.addr) || ready.number, net, made.to, made.at) };
+            });
+        }).catch(function (e) {
+            // No location yet (not allowed, off): said when it runs, with what to do (lib/commands.js blockedReply).
+            if (e && e.location) return { args: Object.assign({}, args, { ready: false }) };
+            if (e && e.said) return { args: args, reply: e.said };
+            throw e;
+        });
+    }
+    function shareRun(args, env) {
+        if (args.ready) return h.runInner(TEXT, args, env);
+        // Here only when the location could not be had: why, and the buttons that fix it, then this again.
+        var again = { who: args.who, via: args.via || "", eta: !!args.eta, place: args.place || "" };
+        return h.here(env, "share").then(function () {
+            return { text: env.lang.say.locationReady(), failed: true };
+        }, function (e) {
+            if (e && e.location) return h.blockedReply(e, { command: "shareLocation", args: again });
+            throw e;
+        });
+    }
+
     function accountsRun(args, env) {
         var say = env.lang.say;
         return S.accounts(env).then(function (list) {
             var shown = list.filter(function (a) { return a.templateId !== "com.palm.palmprofile" && a.templateId; }).map(function (a) {
                 return { label: a.label, does: say.capabilityWords(unique(a.caps.map(function (c) { return c.capability; }))), id: a.id, templateId: a.templateId };
-            });
+            // By name: the accounts service gives them in no set order.
+            }).sort(function (a, b) { return a.label.localeCompare(b.label); });
             var app = { appId: ACCOUNTS_APP, params: {}, title: "Accounts" };
             return { text: say.accountsList(shown), open: app,
                      attachments: h.cards(shown.map(function (a) { return { title: a.label, subtitle: a.does, open: app }; })) };
@@ -896,6 +965,8 @@ module.exports = function (h) {
             return findFilesPrepare(env, args);
         case "saveToDrive":
             return savePrepare(env, args);
+        case "shareLocation":
+            return sharePrepare(env, args);
         }
         return Promise.resolve({ pass: args });
     }
@@ -937,6 +1008,7 @@ module.exports = function (h) {
         case "findFiles": return findFilesRun(cmd, args, env);
         case "saveToDrive": return saveRun(args, env);
         case "accounts": return accountsRun(args, env);
+        case "shareLocation": return shareRun(args, env);
         }
         return null;
     }

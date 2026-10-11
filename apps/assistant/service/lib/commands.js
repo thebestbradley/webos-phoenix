@@ -274,6 +274,7 @@ var synergy = require("./commands-synergy")({ D: D, lunaCall: lunaCall, dbFind: 
                                              whenShown: whenShown, eventCard: eventCard, eventsIn: eventsIn, findEvent: findEvent, matches: matches, words: words,
                                              findPeople: findPeople, findPerson: findPerson, ambiguous: ambiguous, personName: personName, people: people,
                                              samePhone: samePhone, nameForPhone: nameForPhone, receivedEmails: receivedEmails, withConfirm: withConfirm,
+                                             here: here, resolvePlace: resolvePlace, routeSummary: routeSummary, blockedReply: blockedReply,
                                              prepareInner: function (c, a, e) { return prepareInner(c, a, e); }, runInner: function (c, a, e) { return runInner(c, a, e); } });
 Array.prototype.push.apply(BUILT_IN, synergy.COMMANDS);
 synergy.extend(BUILT_IN);
