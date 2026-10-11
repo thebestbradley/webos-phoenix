@@ -21,6 +21,14 @@ GET /__phoenix/proxy/progress?id=ID -> {received, total} (total -1 when
 the server did not say; {} once it is over or unknown), which the
 simulated download manager shows (phoenix-sim's proxy does the same).
 
+--extra-rootfs DIR (repeatable) adds a folder laid out like the device's
+root, for apps built outside this checkout (phoenix-default-apps' `npm
+run stage` writes one), as phoenix-sim's --extra-rootfs does
+(Rootfs::addExtraRootfs): each app in DIR/usr/palm/applications/ joins the
+built-in ones and replaces the one with its id (a rebuilt default app),
+without the compat overlay's files for that id; DIR's other files (shared
+frameworks in usr/palm/frameworks/) are served over the checkout's.
+
 POST /__phoenix/installer installs or removes an app for the simulated
 com.webos.appInstallService (runtime/phoenix-runtime.js, which unpacks the
 .ipk): {op: "install", appId, files: [{path, data (base64)}]} or {op:
@@ -126,6 +134,37 @@ def load_rootfs():
 
 MOUNTS, OVERLAYS, APPS, EXCLUDE = load_rootfs()
 BUILTIN_APPS = dict(APPS)
+EXTRA_ROOTFS = []   # --extra-rootfs folders, absolute, searched first
+EXTRA_APPS = set()  # the ids of their apps
+
+
+def add_extra_rootfs(folder):
+    """--extra-rootfs: its apps join the built-in ones, replacing those with
+    their ids (the first folder given wins); resolve() serves its files
+    first (phoenix-sim's Rootfs::addExtraRootfs)."""
+    folder = os.path.abspath(folder)
+    EXTRA_ROOTFS.append(folder)
+    base = os.path.join(folder, "usr", "palm", "applications")
+    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        app_dir = os.path.join(base, name)
+        if not os.path.isfile(os.path.join(app_dir, "appinfo.json")):
+            app_dir = os.path.join(app_dir, "dist")
+        info_path = os.path.join(app_dir, "appinfo.json")
+        if not os.path.isfile(info_path):
+            continue
+        try:
+            with open(info_path, encoding="utf-8-sig") as f:
+                info = json.load(f)
+        except ValueError as e:
+            print("warning: bad %s: %s" % (info_path, e), file=sys.stderr)
+            continue
+        app_id = info.get("id", name)
+        if app_id in EXTRA_APPS:
+            continue
+        EXTRA_APPS.add(app_id)
+        BUILTIN_APPS[app_id] = (app_dir, info)
+    APPS.clear()
+    APPS.update(BUILTIN_APPS)
 INSTALLED_DIR = None
 INSTALLED = set()
 APP_ID_RE = re.compile(r"^[A-Za-z0-9]+([._-][A-Za-z0-9]+)+$")
@@ -362,6 +401,16 @@ def resolve(path):
     path = re.sub(r"/{2,}", "/", path)
     if ".." in path.split("/") or path in EXCLUDE:
         return None
+    # An extra rootfs' files win over everything; an app it holds is served
+    # from its own folder alone (not the overlay's fixes for the original).
+    for extra in EXTRA_ROOTFS:
+        f = os.path.join(extra, path.lstrip("/"))
+        if os.path.isfile(f):
+            return f
+    if EXTRA_APPS and path.startswith("/usr/palm/applications/"):
+        app_id, _, sub = path[len("/usr/palm/applications/"):].partition("/")
+        if app_id in EXTRA_APPS:
+            return os.path.join(APPS[app_id][0], sub)
     for overlay in OVERLAYS:
         f = os.path.join(overlay, path.lstrip("/"))
         if os.path.isfile(f):
@@ -1112,7 +1161,14 @@ def main():
     ap.add_argument("--terminal-shell", metavar="PATH", help="run this program in the Terminal instead of the shell it asks for")
     ap.add_argument("--installed-dir", metavar="DIR", help="where installed apps go (default: a new temporary folder)")
     ap.add_argument("--no-tcp", action="store_true", help="no TCP relay for the pages' connectors (/__phoenix/tcp: the drives' SFTP)")
+    ap.add_argument("--extra-rootfs", action="append", default=[], metavar="DIR",
+                    help="another folder laid out like the device's root (repeatable): its apps replace the built-in ones "
+                         "with their ids, its other files are served over the checkout's")
     args = ap.parse_args()
+    for folder in args.extra_rootfs:
+        if not os.path.isdir(folder):
+            ap.error("--extra-rootfs %s: no such folder" % folder)
+        add_extra_rootfs(folder)
     global INSTALLED_DIR
     INSTALLED_DIR = args.installed_dir or tempfile.mkdtemp(prefix="phoenix-installed-")
     seed_preinstalled()

@@ -51,7 +51,11 @@ export function createFakeBus(): FakeBus {
         handle(uri, fn) { handlers.unshift({ match: uri, fn }); return bus; },
         callsTo(uri) { return calls.filter((c) => c.uri === uri); },
         emit(uri, reply) {
-            for (const f of subs.get(uri) ?? []) f({ returnValue: true, ...reply });
+            // The subscriptions open now: one that re-subscribes when it
+            // hears this (db8's watch: fired, then find again) gets its
+            // next reply from the next emit, not this one (iterating the
+            // live Set would visit it, and loop for ever).
+            for (const f of [...(subs.get(uri) ?? [])]) f({ returnValue: true, ...reply });
         },
         uninstall() { setTransport(null); setCapabilities({}); },
         send(uri, params, onReply) {

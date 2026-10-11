@@ -49,6 +49,32 @@ the Open webOS desktop build (`openwebos/build-desktop`):
   whose files win over everything else. Fixes and missing files for the
   original apps go here, so `third_party` stays pristine.
 
+### Apps built elsewhere: `--extra-rootfs`
+
+Phoenix 2.0's rebuilt default apps live in their own repository,
+[phoenix-default-apps](https://github.com/thebestbradley/phoenix-default-apps)
+(docs/design-2.0/BUILD-PLAN.md). `phoenix-sim --extra-rootfs DIR` and
+`tools/serve-rootfs.py --extra-rootfs DIR` (both repeatable) add a folder
+laid out like the device's root, which that repository's `npm run stage`
+writes (`build/rootfs/`):
+
+- each app in `DIR/usr/palm/applications/<id>/` joins the built-in apps and
+  **replaces** the one with its id: the rebuilt Memos is
+  `com.palm.app.notes`, the original's id and db8 kind, so it reads and
+  writes the same memos. The compat overlay's files for that id fix the
+  original, so the replacement is served without them; it cannot be
+  installed over or removed (it is built in);
+- `DIR`'s other files are served at their device paths over the
+  checkout's: the shared frameworks (`/usr/palm/frameworks/enact/5/`,
+  `/usr/palm/frameworks/ember-glass/1/`).
+
+```sh
+./phoenix run tablet --extra-rootfs ../phoenix-default-apps/build/rootfs --launch com.palm.app.notes
+```
+
+(phoenix-default-apps' `npm run sim` does this.) `build/siminstaller-test`
+checks it.
+
 ## phoenix-runtime.js
 
 Web apps expect the device's web runtime to provide `PalmSystem` (app and

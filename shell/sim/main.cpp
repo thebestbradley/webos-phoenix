@@ -191,6 +191,7 @@ int main(int argc, char *argv[])
     QCommandLineOption qmlOpt(QStringLiteral("qml-dir"), QStringLiteral("Directory containing sim.qml and the Phoenix modules."), QStringLiteral("dir"));
     QCommandLineOption repoOpt(QStringLiteral("repo-dir"), QStringLiteral("Checkout root holding runtime/rootfs.json and the web apps."), QStringLiteral("dir"));
     QCommandLineOption installedOpt(QStringLiteral("installed-dir"), QStringLiteral("Where apps the user installs go (default: the simulator's data folder, cryptofs/apps)."), QStringLiteral("dir"));
+    QCommandLineOption extraRootfsOpt(QStringLiteral("extra-rootfs"), QStringLiteral("Another folder laid out like the device's root, for apps built outside this checkout (repeatable; phoenix-default-apps' npm run stage writes one): each app in its usr/palm/applications/ is added, replacing the built-in app with its id (without the compat overlay's files for it), and its other files (shared frameworks in usr/palm/frameworks/) are served over the checkout's."), QStringLiteral("dir"));
     QCommandLineOption launchOpt(QStringLiteral("launch"), QStringLiteral("Launch this app id after start-up (repeatable)."), QStringLiteral("appId"));
     QCommandLineOption openOpt(QStringLiteral("open"), QStringLiteral("Open this web address in the browser after start-up."), QStringLiteral("url"));
     QCommandLineOption orientationOpt(QStringLiteral("orientation"), QStringLiteral("How the device is held at start-up: up (default), left (turned counter-clockwise), down or right. The window shows it as held; --size is the screen upright."), QStringLiteral("orientation"), QStringLiteral("up"));
@@ -225,7 +226,7 @@ int main(int argc, char *argv[])
     QCommandLineOption eraseOpt(QStringLiteral("erase-data"), QStringLiteral("Internal: once process PID is gone, erase the simulator's data and start into First Use."), QStringLiteral("pid"));
     updatingOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
-    parser.addOptions({ deviceOpt, zoomOpt, hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, adaptiveOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
+    parser.addOptions({ deviceOpt, zoomOpt, hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, adaptiveOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, extraRootfsOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
                         noHostShellOpt, noTcpOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, checkChromeOpt, updatingOpt, eraseOpt, microphoneFileOpt,
                         llamaServerOpt, speechCommandOpt, marketplaceOpt, noMarketplaceOpt, wakeModelOpt, voskLibraryOpt, wakeFileOpt });
     parser.process(app);
@@ -390,6 +391,15 @@ int main(int argc, char *argv[])
     // the simulator's data folder; read with the apps below.
     if (rootfs.isValid())
         rootfs.setDataDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
+    // Apps (and frameworks) built outside the checkout: Rootfs::addExtraRootfs.
+    if (rootfs.isValid()) {
+        for (const QString &dir : parser.values(extraRootfsOpt)) {
+            if (QFileInfo(dir).isDir())
+                rootfs.addExtraRootfs(dir);
+            else
+                qWarning("phoenix-sim: --extra-rootfs %s: no such folder", qPrintable(dir));
+        }
+    }
     if (rootfs.isValid())
         rootfs.setInstalledDir(parser.isSet(installedOpt) ? parser.value(installedOpt)
             : QDir(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)).filePath(QStringLiteral("cryptofs/apps")));
