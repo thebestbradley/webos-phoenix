@@ -23,16 +23,18 @@
 #                                    (no build; ./phoenix setup --tests); for
 #                                    a cloud environment's setup script
 #   ... --no-assistant               without what the assistant and dictation
-#                                    use (installed by default, about 280 MB
+#                                    use (installed by default, about 980 MB
 #                                    on disk; see below)
 #
 # The assistant (docs/AI-AND-MCP.md, "What's installed where"): espeak-ng
 # (apt), whisper.cpp's whisper-cli and llama.cpp's llama-server (built from
 # the commits ./phoenix pins into /usr/local/bin, a few minutes), whisper's
-# base.en model (148 MB) into build/whisper and the wake word (Vosk, 26 +
-# 71 MB) into build/wakeword, each checked by its SHA-256 or git commit.
-# Skipped when already there. The on-device language models are not
-# fetched here: Settings > Assistant downloads them.
+# base.en model (148 MB) into build/whisper, the wake word (Vosk, 26 +
+# 71 MB) into build/wakeword, the voice (Kitten TTS and ONNX Runtime, 57 MB
+# on disk) into build/kitten and the built-in language model (Qwen3 0.6B,
+# 639 MB) into build/models, each checked by its SHA-256 or git commit.
+# Skipped when already there. Settings > Assistant downloads the larger
+# models.
 #
 # Run it as a user with sudo, or as root (cloud containers).
 
@@ -46,7 +48,7 @@ while [ "$1" != --end ]; do
         --tests) set -- "$@" --tests ;;
         --no-assistant) set -- "$@" --no-assistant ;;
         --deps) command=setup; set -- "$@" --tests ;;
-        -h|--help) sed -n '5,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '5,37p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $1 (see --help)" >&2; exit 2 ;;
     esac
     shift

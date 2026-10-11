@@ -260,6 +260,9 @@ jobs:
       - name: Trademark overlays up to date
         run: python3 tools/debrand-overlays.py --check
 
+      - name: docs/COMMANDS.md matches tools/commands-doc.py
+        run: python3 tools/commands-doc.py --check
+
       - name: HiDPI art present and true to its 1x art
         run: |
           python3 -m pip install pillow numpy
@@ -407,6 +410,10 @@ jobs:
       # The menus over the screen, with the keyboard focus on the screen.
       - name: The simulator's menu bar
         run: xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --check-chrome --no-boot-animation --quiet
+
+      # Two simulators at once, each its own device (--instance).
+      - name: Two simulators at once
+        run: xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-instance-sim.cjs --out app-tests/instance-sim
 
       - name: Screenshots
         run: |

@@ -42,6 +42,7 @@
 #include <QQmlEngine>
 #include <QQuickView>
 #include <QScreen>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QScopeGuard>
 #include <QTimer>
@@ -185,7 +186,7 @@ int main(int argc, char *argv[])
         .arg([] { QStringList ids; for (const QVariant &e : SimDevices::menuEntries()) ids << e.toMap().value(QStringLiteral("id")).toString(); return ids.join(QStringLiteral(", ")); }()), QStringLiteral("id"));
     QCommandLineOption zoomOpt(QStringLiteral("zoom"), QStringLiteral("Show the screen at this size on the monitor, from 0.1 to 1 (default: 1; with --device, what fits the monitor, and 1 with --screenshot so it saves the panel's exact pixels). The device's pixels and layout do not change."), QStringLiteral("factor"));
     QCommandLineOption adaptiveOpt(QStringLiteral("adaptive"), QStringLiteral("A phone or a tablet by the window's size (the default without --phone or --tablet): resize the window, or pick View > Device Size, and the shell switches between the layouts live, the apps running on."));
-    QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene: locked, cards, stacks, reorder, maximized, heldcard, launcher, launcheredit, launchermenu, launchergroup, launchergroupopen, launchertabs, launcherinstall, wave, powermenu, pin, emergency, firstuse, lowbattery, banner, notified, dashboard, justtype, keyboard, clipstrip, assistant, systemmenu, modal, empty."), QStringLiteral("name"));
+    QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene (sim.qml's scenes): locked, cards, stacks, longstack, reorder, maximized, heldcard, launcher, launcheredit, launchermenu, launchergroup, launchergroupopen, launchertabs, launcherinstall, wave, powermenu, hot, pin, emergency, firstuse, lowbattery, banner, notified, dashboard, notifystacks, notifystacksbar, notifystackslocked, drawer, capture, capturepreview, justtype, keyboard, clipstrip, assistant, assistantbird, assistantbirds, assistantbirdmoves, wakeword, wakewordlocked, modal, systemmenu, empty; followup, followupanswer, followuplater, followupaction, followupchat; and assistant:<ask>|<ask>... to put those questions to the Assistant."), QStringLiteral("name"));
     QCommandLineOption firstUseOpt(QStringLiteral("first-use"), QStringLiteral("Start with First Use, as on a new device (without it, First Use runs until it has been done once, unless --scene or --launch is given)."));
     QCommandLineOption shotOpt(QStringLiteral("screenshot"), QStringLiteral("Save a screenshot to FILE and exit."), QStringLiteral("file"));
     QCommandLineOption delayOpt(QStringLiteral("delay"), QStringLiteral("Delay before the screenshot (default 1500 ms)."), QStringLiteral("ms"), QStringLiteral("1500"));
@@ -221,6 +222,7 @@ int main(int argc, char *argv[])
     QCommandLineOption bootAnimOpt(QStringLiteral("boot-animation"), QStringLiteral("Show the boot animation at start-up (it shows anyway unless --screenshot or an offscreen platform)."));
     QCommandLineOption noBootAnimOpt(QStringLiteral("no-boot-animation"), QStringLiteral("Start without the boot animation."));
     QCommandLineOption checkChromeOpt(QStringLiteral("check-chrome"), QStringLiteral("Check that the menu bar shows its menus with the keyboard focus on the screen (on a Mac: the menu bar at the top of the screen) and that the focus goes back to the screen from the window around it, print what it found, and exit: 0 if so (CI)."));
+    QCommandLineOption instanceOpt(QStringLiteral("instance"), QStringLiteral("Be another simulated device, NAME, with its own data, installed apps, web storage and settings (kept under phoenix-sim-NAME beside the usual phoenix-sim): two simulators can run at once, e.g. webOS Phoenix 1.0 and 2.0 side by side. Letters, digits, '.', '_' and '-'. Its restarts (an update, Full Erase) stay that device."), QStringLiteral("name"));
     QCommandLineOption noToolbarOpt(QStringLiteral("no-toolbar"), QStringLiteral("Start without the toolbar beside the screen (View > Show Toolbar shows it again)."));
     // Set by phoenix-sim itself when it restarts (SimProcess).
     QCommandLineOption updatingOpt(QStringLiteral("updating"), QStringLiteral("Boot as after a system update: \"Updating the system\" first."));
@@ -228,9 +230,28 @@ int main(int argc, char *argv[])
     updatingOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     parser.addOptions({ deviceOpt, zoomOpt, hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, adaptiveOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, extraRootfsOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
-                        noHostShellOpt, noTcpOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, checkChromeOpt, updatingOpt, eraseOpt, microphoneFileOpt,
+                        noHostShellOpt, noTcpOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, instanceOpt, checkChromeOpt, updatingOpt, eraseOpt, microphoneFileOpt,
                         llamaServerOpt, speechCommandOpt, marketplaceOpt, noMarketplaceOpt, wakeModelOpt, voskLibraryOpt, wakeFileOpt });
     parser.process(app);
+
+    // Another simulated device. Everything the simulator keeps lives under
+    // the application's name: its data folder (AppDataLocation: the device's
+    // data, installed apps, models), its cache, QtWebEngine's profiles
+    // (main.cpp's "phoenix-sim", simbrowser.cpp's "phoenix-web") and its
+    // settings (QSettings). Two simulators with the same name would share
+    // one device and one web storage, which Chromium does not support from
+    // two processes. So the name changes before anything opens them, the
+    // erase just below included.
+    if (parser.isSet(instanceOpt)) {
+        const QString name = parser.value(instanceOpt);
+        static const QRegularExpression valid(QStringLiteral("^[A-Za-z0-9._-]+$"));
+        if (!valid.match(name).hasMatch() || name.startsWith(QLatin1Char('.'))) {
+            std::fprintf(stderr, "phoenix-sim: --instance %s: use letters, digits, '.', '_' and '-' (not first '.')\n", qPrintable(name));
+            return 2;
+        }
+        app.setApplicationName(QStringLiteral("phoenix-sim-") + name);
+        QGuiApplication::setApplicationDisplayName(SimChrome::displayName() + QStringLiteral(" (") + name + QLatin1Char(')'));
+    }
 
     // A Full Erase or a security policy's wipe restarted the simulator:
     // its data goes before anything reads it.

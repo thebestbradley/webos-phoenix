@@ -1,0 +1,226 @@
+<title>webOS Phoenix Commands</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@600;800&family=Red+Hat+Text:wght@400;500;600&family=Red+Hat+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a sticky section index beside one long, searchable column of commands; the index becomes a scrolling chip row on phones. */
+:root {
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --ink: #18202c;
+  --muted: #5b6676;
+  --line: #dde2ea;
+  --ember: #b8470f;
+  --ember-soft: #fbe9de;
+  --term: #1d2430;
+  --term-ink: #e6ebf2;
+  --term-dim: #8d98aa;
+  --mac: #2f5fb3;
+  --linux: #2f7a4a;
+  --both: #6a5a9e;
+  --font-display: "Red Hat Display", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Red Hat Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Red Hat Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11151c; --surface: #181e27; --ink: #e4e8ef; --muted: #9aa5b5; --line: #2a323e;
+    --ember: #f08a4b; --ember-soft: #3a2418; --term: #0b0e13; --term-ink: #e6ebf2; --term-dim: #7f8a9c;
+    --mac: #8fb2f0; --linux: #7fcf9b; --both: #b9a8ee; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11151c; --surface: #181e27; --ink: #e4e8ef; --muted: #9aa5b5; --line: #2a323e;
+  --ember: #f08a4b; --ember-soft: #3a2418; --term: #0b0e13; --term-ink: #e6ebf2; --term-dim: #7f8a9c;
+  --mac: #8fb2f0; --linux: #7fcf9b; --both: #b9a8ee; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.55; margin: 0; padding-inline: 16px; padding-block: 0 64px; }
+.wrap { max-width: 1180px; margin-inline: auto; }
+header.top { padding-block: 32px 20px; display: grid; gap: 6px; }
+.eyebrow { font: 600 12px/1 var(--font-body); letter-spacing: .12em; text-transform: uppercase; color: var(--ember); }
+h1 { font: 800 clamp(28px, 4.5vw, 40px)/1.1 var(--font-display); margin: 0; text-wrap: balance; }
+.lede { color: var(--muted); max-width: 68ch; margin: 0; }
+.pins { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.pin { font: 500 12px/1 var(--font-mono); color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+.pin b { color: var(--ink); font-weight: 500; }
+
+.toolbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding-block: 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border-bottom: 1px solid var(--line); }
+.search { flex: 1 1 260px; min-width: 0; position: relative; }
+.search input { width: 100%; font: 400 15px/1 var(--font-body); color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 40px 10px 12px; }
+.search input:focus-visible { outline: 2px solid var(--ember); outline-offset: 1px; }
+.search kbd { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font: 500 12px/1 var(--font-mono); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; }
+.seg { display: inline-flex; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 3px; gap: 2px; }
+.seg button { font: 600 13px/1 var(--font-body); color: var(--muted); background: none; border: 0; border-radius: 6px; padding: 8px 12px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ember-soft); color: var(--ember); }
+.seg button:focus-visible { outline: 2px solid var(--ember); }
+.count { font: 500 13px/1 var(--font-body); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 32px; padding-top: 20px; }
+nav.index { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 72px); align-self: start; max-height: calc(100vh - 96px); overflow-y: auto; }
+nav.index ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+nav.index a { display: flex; justify-content: space-between; gap: 8px; text-decoration: none; color: var(--muted); font-weight: 500; font-size: 14px; padding: 6px 10px; border-radius: 6px; }
+nav.index a:hover { color: var(--ink); background: var(--surface); }
+nav.index a:focus-visible { outline: 2px solid var(--ember); }
+nav.index a.on { color: var(--ember); background: var(--ember-soft); }
+nav.index .n { font-variant-numeric: tabular-nums; font-size: 12px; }
+
+main { min-width: 0; display: grid; gap: 40px; }
+section.group { display: grid; gap: 14px; scroll-margin-top: 80px; }
+section.group > h2 { font: 800 22px/1.2 var(--font-display); margin: 0; text-wrap: balance; display: flex; align-items: baseline; gap: 10px; }
+section.group > h2 .n { font: 500 13px/1 var(--font-body); color: var(--muted); }
+section.group > p.note { margin: -6px 0 0; color: var(--muted); max-width: 72ch; }
+.cmd { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 14px 12px; display: grid; gap: 8px; min-width: 0; }
+.cmd h3 { font: 600 15.5px/1.3 var(--font-body); margin: 0; }
+.cmd p.desc { margin: 0; color: var(--muted); max-width: 75ch; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.os { font: 600 11px/1 var(--font-body); letter-spacing: .06em; text-transform: uppercase; padding: 4px 7px; border-radius: 4px; border: 1px solid currentColor; }
+.os.mac { color: var(--mac); } .os.linux { color: var(--linux); } .os.both { color: var(--both); }
+.meta code { font-family: var(--font-mono); font-size: 12px; }
+.src { overflow-wrap: anywhere; }
+.term { background: var(--term); color: var(--term-ink); border-radius: 8px; min-width: 0; padding-block: 4px; }
+.term .where { font: 400 12px/1 var(--font-mono); color: var(--term-dim); padding: 10px 12px 2px; overflow-wrap: anywhere; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: start; padding: 7px 8px 7px 12px; }
+.row + .row { border-top: 1px solid rgba(255,255,255,.06); }
+.row pre { margin: 0; overflow-x: auto; font: 400 13.5px/1.6 var(--font-mono); min-width: 0; }
+.row pre code { font: inherit; white-space: pre; }
+.row .rn { grid-column: 1; font: 400 12.5px/1.4 var(--font-body); color: var(--term-dim); }
+.row .ros.os-mac { color: #8fb2f0; } .row .ros.os-linux { color: #7fcf9b; }
+.row .ros { font: 600 10px/1 var(--font-body); letter-spacing: .06em; text-transform: uppercase; margin-right: 6px; }
+.term .ph { color: #ffb68a; border-bottom: 1px dotted #ffb68a; }
+.copy { grid-column: 2; grid-row: 1; font: 600 12px/1 var(--font-body); color: var(--term-ink); background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.18); border-radius: 6px; padding: 6px 10px; cursor: pointer; white-space: nowrap; }
+.copy:hover { background: rgba(255,255,255,.16); }
+.copy:focus-visible { outline: 2px solid var(--ember); outline-offset: 1px; }
+.copy.done { background: #2f7a4a; border-color: #2f7a4a; color: #fff; }
+.empty { color: var(--muted); padding: 24px 0; }
+.gaps { border-left: 3px solid var(--ember); padding-left: 14px; }
+.gaps ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; color: var(--muted); max-width: 80ch; }
+.gaps ul ul { margin-top: 6px; }
+.gaps code, .note code, .desc code { font-family: var(--font-mono); font-size: .92em; }
+
+@media (max-width: 820px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  nav.index { position: static; max-height: none; overflow-x: auto; overflow-y: hidden; }
+  nav.index ol { display: flex; gap: 6px; width: max-content; padding-bottom: 4px; }
+  nav.index a { background: var(--surface); border: 1px solid var(--line); white-space: nowrap; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="eyebrow">Command reference</div>
+    <h1>webOS Phoenix Commands</h1>
+    <p class="lede" id="lede"></p>
+    <div class="pins" id="pins"></div>
+  </header>
+
+  <div class="toolbar" role="search">
+    <div class="search">
+      <input id="q" type="search" placeholder="Search: simulator, screenshot, fairphone, vitest…" autocomplete="off" aria-label="Search commands">
+      <kbd>/</kbd>
+    </div>
+    <div class="seg" role="group" aria-label="Operating system">
+      <button type="button" id="os-all" data-os="all" aria-pressed="true">All</button>
+      <button type="button" id="os-mac" data-os="mac" aria-pressed="false">Mac</button>
+      <button type="button" id="os-linux" data-os="linux" aria-pressed="false">Linux</button>
+    </div>
+    <span class="count" id="count" aria-live="polite"></span>
+  </div>
+
+  <div class="layout">
+    <nav class="index" aria-label="Sections"><ol id="index"></ol></nav>
+    <main id="main"></main>
+  </div>
+</div>
+
+<script>
+const DATA = /*DATA*/null;
+
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+const inline = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+
+// <placeholders> stand out so they get replaced before running.
+const highlight = cmd => esc(cmd).replace(/&lt;([a-zA-Z][\w .|/-]*)&gt;/g, '<span class="ph">&lt;$1&gt;</span>');
+const osName = o => o === "mac" ? "Mac" : o === "linux" ? "Linux" : "Mac + Linux";
+
+$("#lede").innerHTML = inline(DATA.lede);
+$("#pins").innerHTML = DATA.pins.map(p => `<span class="pin">${esc(p[0])} <b>${esc(p[1])}</b></span>`).join("");
+
+let os = "all";
+try { os = localStorage.getItem("phoenix-cmd-os") || "all"; } catch (e) {}
+const osOk = o => os === "all" || o === "both" || o === os;
+
+function render() {
+  const words = $("#q").value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const has = hay => words.every(w => hay.toLowerCase().includes(w));
+  let total = 0;
+  const main = $("#main"), index = $("#index");
+  main.innerHTML = ""; index.innerHTML = "";
+  DATA.sections.forEach(sec => {
+    const id = slug(sec.title);
+    const items = [];
+    sec.items.forEach(it => {
+      if (!osOk(it.os)) return;
+      let rows = it.rows.filter(r => osOk(r.os || it.os));
+      if (words.length && !has([sec.title, it.title, it.desc, it.runIn].join(" ")))
+        rows = rows.filter(r => has(r.c + " " + r.n));
+      if (rows.length) items.push([it, rows]);
+    });
+    if (!items.length) return;
+    const n = items.reduce((a, [, rows]) => a + rows.length, 0);
+    total += n;
+    index.insertAdjacentHTML("beforeend", `<li><a href="#${id}">${esc(sec.title)} <span class="n">${n}</span></a></li>`);
+    const s = document.createElement("section");
+    s.className = "group"; s.id = id;
+    s.innerHTML = `<h2>${esc(sec.title)}</h2>` + (sec.note ? `<p class="note">${inline(sec.note)}</p>` : "") +
+      items.map(([it, rows]) => {
+        let where = null;
+        const body = rows.map(r => {
+          const w = r.r || it.runIn;
+          const head = w !== where ? `<div class="where">${esc(w)} $</div>` : "";
+          where = w;
+          const ro = r.os && r.os !== it.os ? `<span class="ros os-${r.os}">${osName(r.os)}</span>` : "";
+          return head + `<div class="row"><pre><code>${highlight(r.c)}</code></pre><button type="button" class="copy" aria-label="Copy: ${esc(r.c)}">Copy</button>${r.n || ro ? `<div class="rn">${ro}${esc(r.n)}</div>` : ""}</div>`;
+        }).join("");
+        return `<article class="cmd"><h3>${esc(it.title)}</h3>${it.desc ? `<p class="desc">${inline(it.desc)}</p>` : ""}
+          <div class="meta"><span class="os ${it.os}">${osName(it.os)}</span>${it.source ? `<span class="src">Source <code>${esc(it.source)}</code></span>` : ""}</div>
+          <div class="term">${body}</div></article>`;
+      }).join("");
+    main.appendChild(s);
+  });
+  if (!total) main.innerHTML = `<p class="empty">No command matches “${esc(words.join(" "))}”${os !== "all" ? " on " + (os === "mac" ? "the Mac" : "Linux") : ""}. Try fewer words, or set the filter to All.</p>`;
+  else if (!words.length) {
+    let html = "", open = false;
+    DATA.gotchas.forEach(g => {
+      if (g.startsWith("- ")) { html += (open ? "" : "<ul>") + `<li>${inline(g.slice(2))}</li>`; open = true; }
+      else { html += (open ? "</ul></li>" : html ? "</li>" : "") + `<li>${inline(g)}`; open = false; }
+    });
+    html += open ? "</ul></li>" : "</li>";
+    main.insertAdjacentHTML("beforeend", `<section class="group" id="gotchas"><h2>Gotchas</h2><div class="gaps"><ul>${html}</ul></div></section>`);
+    index.insertAdjacentHTML("beforeend", `<li><a href="#gotchas">Gotchas <span class="n">${DATA.gotchas.filter(g => !g.startsWith("- ")).length}</span></a></li>`);
+  }
+  $("#count").textContent = total + (total === 1 ? " command" : " commands");
+  document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.os === os)));
+}
+
+document.addEventListener("click", e => {
+  const seg = e.target.closest(".seg button");
+  if (seg) { os = seg.dataset.os; try { localStorage.setItem("phoenix-cmd-os", os); } catch (err) {} render(); return; }
+  const btn = e.target.closest(".copy");
+  if (!btn) return;
+  const code = btn.closest(".row").querySelector("code");
+  const text = code.textContent;
+  const done = () => { btn.textContent = "Copied"; btn.classList.add("done"); setTimeout(() => { btn.textContent = "Copy"; btn.classList.remove("done"); }, 1500); };
+  const select = () => { const r = document.createRange(); r.selectNodeContents(code); const s = getSelection(); s.removeAllRanges(); s.addRange(r); btn.textContent = "Press ⌘C"; setTimeout(() => { btn.textContent = "Copy"; }, 2500); };
+  try { navigator.clipboard.writeText(text).then(done, select); } catch (err) { select(); }
+});
+$("#q").addEventListener("input", render);
+document.addEventListener("keydown", e => {
+  if (e.key === "/" && document.activeElement !== $("#q")) { e.preventDefault(); $("#q").focus(); }
+  if (e.key === "Escape" && document.activeElement === $("#q")) { $("#q").value = ""; render(); }
+});
+render();
+</script>

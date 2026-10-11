@@ -43,7 +43,7 @@ plus the incremental build.
 | `--offline` | Download nothing; it fails only when something the build needs is missing |
 | `./phoenix run --marketplace` | Waits for the Marketplace's catalog on this computer (it starts with every run where PHP is), and opens the Marketplace |
 | `./phoenix run --no-marketplace` | Without the Marketplace's catalog this time |
-| `--tests` | Also the test tools (Playwright, Radicale, WsgiDAV, PHP's MySQL driver, xvfb) |
+| `--tests` | Also the test tools: Playwright, Radicale, WsgiDAV, Pillow and NumPy (on a Mac in `.venv`); on Linux also PHP's MySQL driver and xvfb |
 
 What it checks, and installs when missing (it prints each one's size first):
 
@@ -220,6 +220,20 @@ runs First Use again. Full Erase (hold F3 and F11, then Home) wipes the
 device's data the way a phone does. On Linux they are
 `~/.local/share/webos-phoenix/phoenix-sim/` and
 `~/.config/webos-phoenix/phoenix-sim.conf`.
+
+**Two simulators at once.** `--instance NAME` makes the simulator another
+device, with its own data, installed apps, web storage and settings
+(`phoenix-sim-NAME` in the same places). Without it, two simulators would
+share one device and one web storage, which Chromium does not support from
+two processes. To run 1.0 and 2.0 side by side, start each with its own name:
+
+```sh
+./build/phoenix-sim --tablet --instance v1
+../phoenix-ember-glass-ui/build/phoenix-sim --tablet --instance v2 -- --look ember-glass
+```
+
+A new name is also a new device, the Mac's way to a clean start
+(`--instance try1`); delete its `phoenix-sim-NAME` folder when done.
 
 **The Marketplace's catalog.** The Marketplace app reads the Phoenix
 catalog from a service on this computer for now (`server/marketplace`, PHP 8

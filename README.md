@@ -336,7 +336,8 @@ at 127.0.0.1:8088; or failed, with the reason and **Show Catalog Log**),
 and the Marketplace opens once it answers. Or tap **Start Local Catalog**
 on the Marketplace's "Can't reach" card, or start the simulator with
 `--marketplace` (`./phoenix run --marketplace`). **Services > Start Catalog
-with the Simulator** starts it every time (off by default), and **Open
+with the Simulator** starts it with every run where PHP is (on unless you
+turn it off; `--no-marketplace` for one run), and **Open
 Catalog in Browser** opens its review page. It stops with the simulator;
 one another simulator started is used as it is. It needs PHP 8 with sodium
 and pdo_sqlite, which `./phoenix` installs.
@@ -531,6 +532,13 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `node tools/test-back.cjs` | The back gesture: an app takes Back where it can go back (Enyo 1 and 2, Phoenix, Ionic) and leaves it at its top level, where the card minimizes |
 | `node tools/test-runtime-device.cjs` | The runtime on a device, in a stand-in for WebAppMgr's page (plain Node): the window properties the device shell reads (orientation, full screen, status bar colour, the caller to return to, a Back the page did not take), `{returnToCaller}` as `$caller`, copies sent to the clipboard service |
 | `python3 tools/test-sounds-pcm.py` | The system sounds' raw PCM twins for OSE's audiod (`tools/sounds-to-pcm.py`) |
+| `xvfb-run -a node tools/test-instance-sim.cjs` | Two simulators at once with `--instance`: both run, each keeps its own data and web storage |
+
+The table has the main ones. [docs/COMMANDS.md](docs/COMMANDS.md) lists every
+test (Chromium, C++, Python, shell and PHP), each as a command to copy. CMake
+registers no tests for `ctest`: run the C++ test programs by name after a
+build (`build/devices/devices-test` and `build/simfonts-test` are built on
+Linux only).
 
 ## Build a webOS OSE image (experimental)
 
@@ -550,6 +558,8 @@ Apple's `container` tool; see [docs/BUILDING-MAC.md](docs/BUILDING-MAC.md). See
 ## Documentation
 
 - [Getting started](docs/GETTING-STARTED.md): install on a Mac or Ubuntu, run, test, build images for devices, and set up Claude Code
+- [Commands](docs/COMMANDS.md): every build, run and test command across the Phoenix repos, each one to copy
+- [A local agent](docs/LOCAL-AGENT.md): a brief for a coding agent that builds and runs Phoenix on your own machines (1.0 and 2.0 side by side)
 - [Building an OS image on a Mac](docs/BUILDING-MAC.md)
 - [Architecture](docs/ARCHITECTURE.md): how Phoenix sits on top of webOS OSE
 - [Roadmap](docs/ROADMAP.md): milestones from simulator to phones
