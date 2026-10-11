@@ -1,0 +1,69 @@
+{
+    "templateId": "com.webosphoenix.slack",
+    "loc_name": "Slack",
+    "icon": {
+        "loc_32x32": "images/slack-32x32.png",
+        "loc_48x48": "images/slack-48x48.png"
+    },
+    "loc_usernameLabel": "USER",
+    "validator": {
+        "customUI": {
+            "appId": "org.webosphoenix.slack",
+            "name": "accounts/wizard.html"
+        },
+        "address": "palm://org.webosphoenix.service.slack/checkCredentials"
+    },
+    "readPermissions": [
+        "org.webosphoenix.service.slack",
+        "org.webosphoenix.slack"
+    ],
+    "writePermissions": [
+        "org.webosphoenix.slack",
+        "com.palm.app.contacts",
+        "org.webosphoenix.messaging"
+    ],
+    "capabilityProviders": [
+        {
+            "capability": "MESSAGING",
+            "capabilitySubtype": "IM",
+            "serviceName": "type_slack",
+            "id": "com.webosphoenix.slack.messaging",
+            "loc_name": "Messages and channels",
+            "icon": {
+                "loc_32x32": "images/slack-32x32.png",
+                "loc_48x48": "images/slack-48x48.png"
+            },
+            "dbkinds": {
+                "immessage": "com.palm.immessage.slack:1"
+            },
+            "implementation": "palm://org.webosphoenix.service.slack/",
+            "onCreate": "palm://org.webosphoenix.service.slack/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.slack/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.slack/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.slack/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.slack/sync"
+        },
+        {
+            "capability": "CONTACTS",
+            "id": "com.webosphoenix.slack.contacts",
+            "loc_name": "Workspace people",
+            "icon": {
+                "loc_32x32": "images/slack-32x32.png",
+                "loc_48x48": "images/slack-48x48.png"
+            },
+            "dbkinds": {
+                "contact": "com.palm.contact.slack:1"
+            },
+            "readOnlyData": true,
+            "implementation": "palm://org.webosphoenix.service.slack/",
+            "onCreate": "palm://org.webosphoenix.service.slack/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.slack/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.slack/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.slack/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.slack/sync"
+        }
+    ],
+    "signUp": {
+        "url": "https://slack.com/get-started"
+    }
+}

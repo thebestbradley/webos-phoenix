@@ -49,6 +49,27 @@
             "from": "apps/connectors/google",
             "service": "org.webosphoenix.service.google",
             "templates": ["com.webosphoenix.google"]
+        },
+        {
+            "id": "org.webosphoenix.zoom",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/zoom",
+            "service": "org.webosphoenix.service.zoom",
+            "templates": ["com.webosphoenix.zoom"]
+        },
+        {
+            "id": "org.webosphoenix.linkedin",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/linkedin",
+            "service": "org.webosphoenix.service.linkedin",
+            "templates": ["com.webosphoenix.linkedin"]
+        },
+        {
+            "id": "org.webosphoenix.slack",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/slack",
+            "service": "org.webosphoenix.service.slack",
+            "templates": ["com.webosphoenix.slack"]
         }
     ]
 }

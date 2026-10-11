@@ -1,0 +1,11 @@
+{
+    "name": "org.webosphoenix.service.zoom",
+    "version": "0.1.0",
+    "private": true,
+    "description": "webOS Phoenix's Zoom account (Synergy connector on @phoenix/connector-kit): upcoming Zoom meetings in Calendar with where to join, and meetings scheduled from the device",
+    "license": "Apache-2.0",
+    "main": "service.js",
+    "dependencies": {
+        "@phoenix/connector-kit": "*"
+    }
+}

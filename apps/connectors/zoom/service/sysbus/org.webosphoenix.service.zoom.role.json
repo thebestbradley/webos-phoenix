@@ -1,0 +1,21 @@
+{
+    "appId": "org.webosphoenix.service.zoom",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.service.zoom"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.zoom",
+            "outbound": [
+                "org.webosphoenix.service.zoom",
+                "com.palm.db",
+                "com.palm.tempdb",
+                "com.palm.activitymanager",
+                "com.palm.service.accounts",
+                "org.webosphoenix.service.oauth"
+            ]
+        }
+    ]
+}

@@ -1,0 +1,50 @@
+{
+    "templateId": "com.webosphoenix.zoom",
+    "loc_name": "Zoom",
+    "icon": {
+        "loc_32x32": "images/zoom-32x32.png",
+        "loc_48x48": "images/zoom-48x48.png"
+    },
+    "loc_usernameLabel": "EMAIL",
+    "validator": {
+        "customUI": {
+            "appId": "org.webosphoenix.zoom",
+            "name": "accounts/wizard.html"
+        },
+        "address": "palm://org.webosphoenix.service.zoom/checkCredentials"
+    },
+    "readPermissions": [
+        "org.webosphoenix.service.zoom",
+        "org.webosphoenix.zoom",
+        "com.palm.app.calendar"
+    ],
+    "writePermissions": [
+        "org.webosphoenix.zoom",
+        "com.palm.app.calendar"
+    ],
+    "capabilityProviders": [
+        {
+            "capability": "CALENDAR",
+            "id": "com.webosphoenix.zoom.calendar",
+            "loc_name": "Meetings",
+            "icon": {
+                "loc_32x32": "images/zoom-32x32.png",
+                "loc_48x48": "images/zoom-48x48.png"
+            },
+            "dbkinds": {
+                "calendar": "com.palm.calendar.zoom:1",
+                "calendarevent": "com.palm.calendarevent.zoom:1"
+            },
+            "readOnlyData": true,
+            "implementation": "palm://org.webosphoenix.service.zoom/",
+            "onCreate": "palm://org.webosphoenix.service.zoom/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.zoom/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.zoom/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.zoom/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.zoom/sync"
+        }
+    ],
+    "signUp": {
+        "url": "https://zoom.us/signup"
+    }
+}

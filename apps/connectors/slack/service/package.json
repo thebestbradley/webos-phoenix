@@ -1,0 +1,11 @@
+{
+    "name": "org.webosphoenix.service.slack",
+    "version": "0.1.0",
+    "private": true,
+    "description": "webOS Phoenix's Slack account (Synergy connector on @phoenix/connector-kit): direct messages and channels in Messaging, the workspace's people in Contacts, through Slack's Web API with the user's token (signed in through Phoenix's token relay)",
+    "license": "Apache-2.0",
+    "main": "service.js",
+    "dependencies": {
+        "@phoenix/connector-kit": "*"
+    }
+}

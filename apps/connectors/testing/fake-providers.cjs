@@ -21,7 +21,10 @@ const PROVIDERS = {
     todoist: { file: "todoist/clients.json", add: () => require("./todoist.cjs").addTodoist },
     bluesky: { file: "bluesky/clients.json", add: () => require("./bluesky.cjs").addBluesky },
     microsoft: { file: "microsoft/clients.json", add: () => require("./graph.cjs").addGraph },
-    google: { file: "google/clients.json", add: () => require("./google.cjs").addGoogle }
+    google: { file: "google/clients.json", add: () => require("./google.cjs").addGoogle },
+    zoom: { file: "zoom/clients.json", add: () => require("./zoom.cjs").addZoom },
+    linkedin: { file: "linkedin/clients.json", add: () => require("./linkedin.cjs").addLinkedin },
+    slack: { file: "slack/clients.json", add: () => require("./slack.cjs").addSlack }
 };
 
 function createFakeProviders(options) {

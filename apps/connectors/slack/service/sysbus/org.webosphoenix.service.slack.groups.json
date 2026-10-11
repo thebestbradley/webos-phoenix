@@ -1,0 +1,11 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.service.slack"
+    ],
+    "accounts.transport": [
+        "oem"
+    ],
+    "slack.account": [
+        "oem"
+    ]
+}

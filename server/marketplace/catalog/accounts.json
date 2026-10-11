@@ -331,6 +331,64 @@
             "status": "experimental",
             "package": { "id": "org.webosphoenix.google", "builtin": false },
             "signUp": "https://accounts.google.com/signup"
+        },
+        {
+            "templateId": "com.webosphoenix.zoom",
+            "title": "Zoom",
+            "provider": "Zoom",
+            "icon": "icons/accounts/com.webosphoenix.zoom.png",
+            "iconFrom": "apps/connectors/zoom/public/accounts/com.webosphoenix.zoom/images/zoom-48x48@2x.png",
+            "summary": "Your upcoming Zoom meetings in Calendar, each with where to join; meetings open in the browser. Sign in on Zoom's own page.",
+            "capabilities": [
+                { "capability": "CALENDAR", "direction": "read-only" }
+            ],
+            "protocols": ["zoom-api-v2"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Zoom", "e2ee": false, "phoenixServers": "token-relay" },
+            "push": "poll",
+            "status": "experimental",
+            "package": { "id": "org.webosphoenix.zoom", "builtin": false },
+            "signUp": "https://zoom.us/signup"
+        },
+        {
+            "templateId": "com.webosphoenix.linkedin",
+            "title": "LinkedIn",
+            "provider": "LinkedIn",
+            "icon": "icons/accounts/com.webosphoenix.linkedin.png",
+            "iconFrom": "apps/connectors/linkedin/public/accounts/com.webosphoenix.linkedin/images/linkedin-48x48@2x.png",
+            "summary": "Sign In with LinkedIn and share from the share sheet as you; your connections come to Contacts from your own data export (Connections.csv), imported, not live.",
+            "capabilities": [
+                { "capability": "CONTACTS", "direction": "read-only" }
+            ],
+            "protocols": ["openid-connect", "linkedin-posts-api"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "LinkedIn (what you share); your connections stay on this device", "e2ee": false, "phoenixServers": "token-relay" },
+            "push": "poll",
+            "status": "experimental",
+            "package": { "id": "org.webosphoenix.linkedin", "builtin": false },
+            "signUp": "https://www.linkedin.com/signup"
+        },
+        {
+            "templateId": "com.webosphoenix.slack",
+            "title": "Slack",
+            "provider": "Slack",
+            "icon": "icons/accounts/com.webosphoenix.slack.png",
+            "iconFrom": "apps/connectors/slack/public/accounts/com.webosphoenix.slack/images/slack-48x48@2x.png",
+            "summary": "Your Slack direct messages and channels in Messaging, and your workspace's people in Contacts. Slow until Phoenix's Slack app is in the Slack Marketplace: Slack lets it read one conversation a minute.",
+            "capabilities": [
+                { "capability": "MESSAGING", "direction": "two-way" },
+                { "capability": "CONTACTS", "direction": "read-only" }
+            ],
+            "protocols": ["slack-web-api"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Slack (and your workspace's admins)", "e2ee": false, "phoenixServers": "token-relay" },
+            "push": "poll",
+            "status": "experimental",
+            "package": { "id": "org.webosphoenix.slack", "builtin": false },
+            "signUp": "https://slack.com/get-started"
         }
     ]
 }

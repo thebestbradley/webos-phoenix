@@ -1,0 +1,15 @@
+{
+    "id": "org.webosphoenix.slack.item:1",
+    "owner": "org.webosphoenix.service.slack",
+    "sync": false,
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        }
+    ]
+}

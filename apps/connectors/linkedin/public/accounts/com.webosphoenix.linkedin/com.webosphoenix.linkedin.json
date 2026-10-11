@@ -1,0 +1,48 @@
+{
+    "templateId": "com.webosphoenix.linkedin",
+    "loc_name": "LinkedIn",
+    "icon": {
+        "loc_32x32": "images/linkedin-32x32.png",
+        "loc_48x48": "images/linkedin-48x48.png"
+    },
+    "loc_usernameLabel": "EMAIL",
+    "validator": {
+        "customUI": {
+            "appId": "org.webosphoenix.linkedin",
+            "name": "accounts/wizard.html"
+        },
+        "address": "palm://org.webosphoenix.service.linkedin/checkCredentials"
+    },
+    "readPermissions": [
+        "org.webosphoenix.service.linkedin",
+        "org.webosphoenix.linkedin"
+    ],
+    "writePermissions": [
+        "org.webosphoenix.linkedin",
+        "com.palm.app.contacts"
+    ],
+    "capabilityProviders": [
+        {
+            "capability": "CONTACTS",
+            "id": "com.webosphoenix.linkedin.contacts",
+            "loc_name": "Imported connections",
+            "icon": {
+                "loc_32x32": "images/linkedin-32x32.png",
+                "loc_48x48": "images/linkedin-48x48.png"
+            },
+            "dbkinds": {
+                "contact": "com.palm.contact.linkedin:1"
+            },
+            "readOnlyData": true,
+            "implementation": "palm://org.webosphoenix.service.linkedin/",
+            "onCreate": "palm://org.webosphoenix.service.linkedin/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.linkedin/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.linkedin/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.linkedin/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.linkedin/sync"
+        }
+    ],
+    "signUp": {
+        "url": "https://www.linkedin.com/signup"
+    }
+}

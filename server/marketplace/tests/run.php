@@ -108,7 +108,9 @@ $drives = ['com.webosphoenix.drive.nextcloud', 'com.webosphoenix.drive.owncloud'
            'com.webosphoenix.drive.dropbox', 'com.webosphoenix.drive.onedrive', 'com.webosphoenix.drive.googledrive', 'com.webosphoenix.drive.box'];
 // Phoenix's other connector packages from the catalog (docs/SYNERGY-CONNECTORS.md "Status of the connectors"): template => package.
 $ownPackages = ['com.webosphoenix.todoist' => 'org.webosphoenix.todoist', 'com.webosphoenix.bluesky' => 'org.webosphoenix.bluesky',
-                'com.webosphoenix.microsoft' => 'org.webosphoenix.microsoft', 'com.webosphoenix.google' => 'org.webosphoenix.google'];
+                'com.webosphoenix.microsoft' => 'org.webosphoenix.microsoft', 'com.webosphoenix.google' => 'org.webosphoenix.google',
+                'com.webosphoenix.zoom' => 'org.webosphoenix.zoom', 'com.webosphoenix.linkedin' => 'org.webosphoenix.linkedin',
+                'com.webosphoenix.slack' => 'org.webosphoenix.slack'];
 check(array_keys($types) === array_merge(['com.webosphoenix.dav', 'com.webosphoenix.fediverse', 'com.webosphoenix.webcal', 'com.palm.othermail', 'com.webosphoenix.xmpp'], $drives,
                                          array_keys($ownPackages))
       && $pub['accounts'] === 13 + count($ownPackages) && !isset($types['com.palm.palmprofile']),

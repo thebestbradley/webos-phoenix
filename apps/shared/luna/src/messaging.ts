@@ -62,6 +62,8 @@ export const IM_MESSAGE_KINDS: Record<string, string> = {
     type_fediverse: "com.palm.immessage.fediverse:1",
     // The Bluesky account's direct messages (apps/connectors/bluesky).
     type_bluesky: "com.palm.immessage.bluesky:1",
+    // The Slack account's direct messages and channels (apps/connectors/slack).
+    type_slack: "com.palm.immessage.slack:1",
 };
 
 export const AVAILABILITY = { AVAILABLE: 0, MOBILE: 1, BUSY: 2, INVISIBLE: 3, OFFLINE: 4 } as const;
@@ -279,6 +281,9 @@ export const IM_SERVICES: { id: string; label: string; available: boolean; prese
     // Bluesky's direct messages: no presence; Bluesky's chat service can read them.
     { id: "type_bluesky", label: "Bluesky", available: true, presence: false,
       notPrivate: "Not end-to-end encrypted: Bluesky's chat service can read these messages." },
+    // Slack's direct messages and channels: no presence here; the workspace's admins can read them.
+    { id: "type_slack", label: "Slack", available: true, presence: false,
+      notPrivate: "Not end-to-end encrypted: Slack and your workspace's admins can read these messages." },
     { id: "type_aim", label: "AIM", available: false },
     { id: "type_gtalk", label: "Google Talk", available: false },
     { id: "type_yahoo", label: "Yahoo!", available: false },

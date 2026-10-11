@@ -1359,6 +1359,30 @@
                 { "art": "google-32x32.png", "method": "downscale", "source": "apps/connectors/google/icon-512x512.png" },
                 { "art": "google-48x48.png", "method": "downscale", "source": "apps/connectors/google/icon-512x512.png" }
             ]
+        },
+        {
+            "name": "connector-zoom",
+            "art": "apps/connectors/zoom/public/accounts/com.webosphoenix.zoom/images",
+            "upscale": [
+                { "art": "zoom-32x32.png", "method": "downscale", "source": "apps/connectors/zoom/icon-512x512.png" },
+                { "art": "zoom-48x48.png", "method": "downscale", "source": "apps/connectors/zoom/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "connector-linkedin",
+            "art": "apps/connectors/linkedin/public/accounts/com.webosphoenix.linkedin/images",
+            "upscale": [
+                { "art": "linkedin-32x32.png", "method": "downscale", "source": "apps/connectors/linkedin/icon-512x512.png" },
+                { "art": "linkedin-48x48.png", "method": "downscale", "source": "apps/connectors/linkedin/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "connector-slack",
+            "art": "apps/connectors/slack/public/accounts/com.webosphoenix.slack/images",
+            "upscale": [
+                { "art": "slack-32x32.png", "method": "downscale", "source": "apps/connectors/slack/icon-512x512.png" },
+                { "art": "slack-48x48.png", "method": "downscale", "source": "apps/connectors/slack/icon-512x512.png" }
+            ]
         }
     ]
 }
