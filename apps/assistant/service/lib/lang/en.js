@@ -1130,6 +1130,33 @@ function undo(t) {
 
 // Things only a language model (or the web) can do: noted, then the router
 // goes on to the on-device model or offers a cloud model.
+// What no phone command does, whatever its words share with one: other
+// devices ("turn on the tv", "lock the front door", "set the thermostat"),
+// money, ordering, booking, making pictures, posting. Said so at once, with
+// a web search offered; no model is asked to choose (the evaluation: the
+// 0.6B model locked the screen for "lock the front door" and made "book a
+// flight to new york" an event).
+var NOT_HERE = [
+    ["home", /\b(?:tv|television|telly|lights?|lamps?|thermostat|heater|heating|air ?con(?:ditioning|ditioner)?|a\/c|fan|front door|back door|garage(?: door)?|door ?lock|the doors?|car|vacuum|roomba|oven|fridge|dishwasher|washing machine|dryer|kettle|sprinklers?|alarm system|security system|blinds|curtains)\b/,
+     /^(?:turn|switch|set|put|lock|unlock|open|close|start|stop|dim|brighten|raise|lower|run|warm up|cool down|heat up|preheat|arm|disarm)\b/],
+    ["money", /\b(?:money|dollars?|bucks|euros?|pounds?|\$\d+|payment|venmo|paypal|bill|invoice|rent)\b/, /^(?:send|transfer|pay|wire|give|venmo|split)\b/],
+    ["order", /\b(?:pizza|food|takeout|take-out|delivery|groceries|uber|lyft|taxi|cab|ride|tickets?|on amazon|online)\b/, /^(?:order|buy|get me|call me|book|purchase|reorder)\b/],
+    ["booking", /\b(?:flights?|hotel|room|table|restaurant|tickets?|trip|vacation|car rental|airbnb)\b/, /^(?:book|reserve|find me|buy)\b/],
+    ["image", /\b(?:images?|pictures?|drawings?|paintings?|art|logo|photo of)\b/, /^(?:generate|draw|create|make|paint|design|sketch)\b/],
+    ["post", /\b(?:twitter|x\.com|facebook|instagram|tiktok|linkedin|mastodon|social media)\b/, /^(?:post|tweet|share|upload|publish)\b/]
+];
+function notHere(t) {
+    for (var i = 0; i < NOT_HERE.length; ++i)
+        if (NOT_HERE[i][2].test(t) && NOT_HERE[i][1].test(t)) {
+            // The phone's own: the flashlight ("light" said so), its screen.
+            if (NOT_HERE[i][0] === "home" && /\b(?:flash ?light|torch|screen|phone|wi-?fi|bluetooth)\b/.test(t)) return null;
+            if (NOT_HERE[i][0] === "money" && /^(?:send|give)\b/.test(t) && !/\b(?:money|dollars?|bucks|euros?|pounds?|\$\d+|payment)\b/.test(t)) return null;
+            if (NOT_HERE[i][0] === "image" && /^(?:make|create)\b/.test(t) && !/\b(?:images?|drawings?|paintings?|art|logo)\b/.test(t)) return null;
+            if (NOT_HERE[i][0] === "booking" && /\b(?:appointment|meeting|calendar)\b/.test(t)) return null;
+            return { what: NOT_HERE[i][0] };
+        }
+    return null;
+}
 function beyond(t) {
     if (/^(?:translate|how do (?:you|i) say|what(?:'s| is) .+ in (?:french|spanish|german|italian|japanese|chinese|portuguese|korean|russian|arabic|dutch|greek)$)/.test(t)) return { what: "translate" };
     return null;
@@ -1724,6 +1751,7 @@ var rules = [
     ["help", help],
     ["undo", undo],
     ["chat", function (t) { return talk.chat(t); }],
+    ["beyond", notHere],
     ["checkDone", function (t) { return talk.didYouDo(t); }],
     ["time", function (t, ctx) { return talk.dateQuestion(t, ctx.now); }],
     ["worldTime", worldTime],
@@ -1836,7 +1864,7 @@ var MENTIONS = {
     volume: /\b(volume|loud|louder|quiet|quieter|mute|unmute|sound)\b/,
     brightness: /\b(bright|brightness|dim|dimmer|darker|screen)\b/,
     screenshot: /\b(screen ?shot|screen capture|capture|screen grab)\b/,
-    lock: /\b(lock|screen off)\b/,
+    lock: /^(?:lock|lock (?:it|up))$|\block(?: (?:the|my))? (?:screen|phone|device|tablet)\b|\bscreen off\b/,
     navigate: /\b(navigate|directions?|take me|drive|route|get to|way to|go to)\b/,
     call: /\b(call|phone|ring|dial)\b/,
     text: /\b(text|message|sms|tell|send|write)\b/
@@ -2464,7 +2492,17 @@ var say = {
         edit: function (what) { return "change " + what + " back"; },
         taskBack: function (t) { return "mark " + quote(t) + " as not done"; }
     },
-    beyond: function (what) { return what === "translate" ? "I can't translate without a language model yet, but I can search the web for it." : ""; },
+    beyond: function (what) {
+        return { translate: "I can't translate without a language model yet, but I can search the web for it.",
+                 home: "I can't control other devices, like lights, TVs, doors or cars, from here yet.",
+                 money: "I can't send or pay money from here.",
+                 order: "I can't order or buy things for you yet.",
+                 booking: "I can't book things for you yet.",
+                 image: "I can't make pictures yet.",
+                 post: "I can't post to social media for you yet." }[what] || "";
+    },
+    // What only a model or the web can (beyond): which a model may still answer in words.
+    beyondModel: function (what) { return what === "translate"; },
     // As before
     settingIs: function (setting, on, extra) {
         var name = SETTING_NAMES[setting] || setting, are = setting === "location" ? " are " : " is ";

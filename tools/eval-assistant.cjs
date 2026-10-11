@@ -201,7 +201,7 @@ function llmFor(url) {
 
 function runCase(c, opts) {
     var m = llmFor(opts.model);
-    var settings = Object.assign({ followUps: false }, opts.model ? {} : { localModel: "off" }, c.settings || {});
+    var settings = Object.assign({ followUps: false }, opts.model ? {} : { localModel: "off" }, opts.decider ? { decider: "on" } : {}, c.settings || {});
     var deps = {};
     if (opts.decider) deps.decider = opts.decider;
     var d = dev.device({ seed: seed, apps: APPS, llm: m.llm, llmRequest: m.llmRequest, settings: settings, deps: deps,
@@ -221,7 +221,7 @@ function runCase(c, opts) {
                 var unsafe = outs.filter(function (o) { return o.status === "done" && ((acts(o.command) && allowed.indexOf(o.command) < 0) || forbidden(o)); });
                 var wrongReadBack = outs.filter(function (o) { return o.status === "pending" && (allowed.indexOf(o.command) < 0 || forbidden(o)); });
                 var last = lastReply(msgs);
-                var pass = expectOk(e, msgs, outs, !!opts.model || !!opts.decider) && !unsafe.length &&
+                var pass = expectOk(e, msgs, outs, !!opts.model) && !unsafe.length &&
                     (!t.text || new RegExp(t.text, "i").test(last ? last.text : "")) &&
                     (!t.notText || !new RegExp(t.notText, "i").test(msgs.filter(function (x) { return x.role === "assistant"; }).map(function (x) { return x.text; }).join(" "))) && effectsOk(t.effects, d);
                 if (wrongReadBack.length && (!t.expect || !t.expect.command || !oneMatches(t.expect, outs) || wrongReadBack.some(forbidden))) pass = false;
@@ -334,6 +334,7 @@ if (require.main === module) {
             });
         }
         console.log(table(sum, opts.md));
+        if (opts.decider && opts.decider.stats) console.log("Decision model: " + JSON.stringify(opts.decider.stats()));
         if (opts.json) fs.writeFileSync(opts.json, JSON.stringify(sum, null, 1));
     }).catch(function (e) { console.error(e && e.stack || e); process.exit(1); });
 }

@@ -114,7 +114,8 @@ var DEFAULTS = {
     quietEnd: "08:00",
     followUpFirst: 60,          // ... a question left unanswered comes back this many minutes later
     followUpAgain: 240,         // ... and once more this many after that (0: not again)
-    followUpTopicsOff: []       // follow-up topics turned off (Settings, or "Stop asking"): lib/followups.js KINDS
+    followUpTopicsOff: [],      // follow-up topics turned off (Settings, or "Stop asking"): lib/followups.js KINDS
+    decider: "off"              // the decision model between the grammar and the general model (deps.decider): "on" | "off"
 };
 var HISTORY = 20;               // turns a model sees
 var CALL_TOKENS = 160;          // the most a call of a command may say (its arguments)
@@ -186,6 +187,7 @@ function createAssistantService(deps) {
         if (RATE_CHOICES.indexOf(out.speechRate) < 0) out.speechRate = DEFAULTS.speechRate;
         if (!PERSONALITIES[out.personality]) out.personality = DEFAULTS.personality;
         if (WAIT_CHOICES.indexOf(out.voiceWait) < 0) out.voiceWait = DEFAULTS.voiceWait;
+        if (out.decider !== "on") out.decider = "off";
         return out;
     }
     function lang() { return grammar.language(settings().language); }
@@ -400,6 +402,12 @@ function createAssistantService(deps) {
     // The words a model gave a command to work on, said by the user: a
     // task's, memo's, reminder's or event's text, a contact's name.
     function argsSaid(id, args, asked) {
+        // A time a model gave for an event, alarm or reminder: some time or day was said.
+        if (/^(?:event|alarm|reminder)$/.test(id) && args && (args.start || args.time || args.due) && lang().extract) {
+            var info = lang().extract(lang().clean(asked), now());
+            if (info.day === undefined && !info.clock && info.relative === undefined && !info.part && !info.week && !info.weekend && !info.repeat &&
+                !/\b(?:(?:mon|tues|wednes|thurs|fri|satur|sun)day|tomorrow|today|tonight|morning|afternoon|evening|noon|midnight|week|month|january|february|march|april|may|june|july|august|september|october|november|december)|\d/i.test(asked)) return false;
+        }
         var key = { task: "text", note: "text", reminder: "text", event: "title", contactAdd: "name", noteAppend: "text" }[id];
         if (!key || !args || !args[key]) return true;
         return grounded(args[key], asked);
@@ -1034,7 +1042,8 @@ function createAssistantService(deps) {
         if (e && e.deadline && s.localTimeout) return offer(thread, function (app) { return s.localTimeout(app); }, true, asked);
         return offer(thread, s.localFailed(e && e.message || "no answer"), false, asked);
     }
-    function askLocal(thread, model, cat) {
+    // hint (the decision model's, decide()): {words} answer in words, {command} fill its arguments.
+    function askLocal(thread, model, cat, hint) {
         return bounded(thread, function (left, stage) {
             return deps.llm.ensure(model).then(function (srv) {
                 stage("thinking");
@@ -1046,11 +1055,17 @@ function createAssistantService(deps) {
                 // made a memo (measured: docs/AI-AND-MCP.md).
                 var ctx = lang().say.context ? lang().say.context(lastAsked(thread)) : { question: false, smallTalk: false };
                 var pre = localPrefix(cat);
-                if (ctx.smallTalk) return callModel(p, "", thread, [], undefined, left(), pre);
+                if (ctx.smallTalk || (hint && hint.words)) return callModel(p, "", thread, [], undefined, left(), pre);
+                if (hint && hint.command) return callCommand(p, thread, hint.command, left(), pre);
                 return pickCommand(p, thread, cat, left()).then(function (c) {
                     if (c && ctx.question && c.risk !== "read") c = null;
                     if (!c) return callModel(p, "", thread, [], undefined, left(), pre);
-                    return callCommand(p, thread, c, left(), pre);
+                    return callCommand(p, thread, c, left(), pre).then(function (r) {
+                        // "But you can tell me how to make it": "tell" is no text to "you".
+                        var a = r.toolCalls[0] && r.toolCalls[0].args;
+                        if (a && /^(?:you|me|myself|yourself|us)$/i.test(String(a.who || "").trim())) return callModel(p, "", thread, [], undefined, left(), pre);
+                        return r;
+                    });
                 });
             });
         }).then(function (r) { return answer(thread, r, cat, "on-device", model.name, false, lastAsked(thread)); });
@@ -1265,6 +1280,11 @@ function createAssistantService(deps) {
     // Promise<{command, args, confidence, escalate} | null>. Its choice runs
     // as a model's does (read back unless the words name it), and only
     // when it is sure; "escalate" (or not sure) goes on to the general model.
+    // What it decided, for what comes after: {done: messages} it acted;
+    // {words: true} a question or chat (the general model answers in
+    // words, offered no command); {command} the general model fills that
+    // command's arguments (no choosing); {nothing: true} nothing here can
+    // (no model is asked: it would only pick something); null not sure.
     function decide(thread, text, cat) {
         var d = deps.decider;
         if (!d || !d.decide || settings().decider === "off") return Promise.resolve(null);
@@ -1273,12 +1293,15 @@ function createAssistantService(deps) {
         return Promise.resolve(d.decide({ text: text, history: fitted(history(thread), 1200), last: thread.last || null, now: now(),
                                           commands: usable.map(function (c) { return { id: c.id, title: c.title, description: c.description, examples: c.examples || [], parameters: c.parameters }; }) }))
             .then(function (r) {
-                noteStep(thread, "decide", t0, "", r ? { choice: r.escalate ? "escalate" : r.command || "none", confidence: r.confidence } : { choice: "none" });
-                if (!r || r.escalate || !r.command || !(r.confidence >= (d.threshold || 0.8))) return null;
-                if (r.command === "none") return null;
+                noteStep(thread, "decide", t0, "", r ? { choice: r.escalate ? "escalate:" + (r.kind || "") : r.command || "none", confidence: r.confidence } : { choice: "none" });
+                if (!r || !(r.confidence >= (d.threshold || 0.9))) return null;
+                if (r.escalate) return { words: true };
+                if (r.command === "none") return { nothing: true };
                 var cmd = commands.find(cat.all, r.command);
                 if (!cmd || !allowed(cmd)) return null;
-                return act(thread, cmd, commands.fromModel(cmd, r.args || {}, env()), "decider", d.name || "decision model", text);
+                if (r.needsArgs) return { command: cmd };
+                return act(thread, cmd, commands.fromModel(cmd, r.args || {}, env()), "decider", d.name || "decision model", text)
+                    .then(function (out) { return { done: out }; });
             }, function (e) { log("decision model failed: " + (e && e.message)); return null; });
     }
 
@@ -1318,8 +1341,10 @@ function createAssistantService(deps) {
         if (parsed && parsed.command === "multi") return actParts(thread, parsed.args.parts, cat, text);
         if (parsed && parsed.command === "chat") return chatAnswer(thread, parsed, cat);
         if (parsed && parsed.command === "checkDone") return checkDone(thread, parsed.args, cat);
-        // Only a model or the web can: noted, and on to them.
+        // Only a model or the web can: noted, and on to them; what nothing
+        // here does (another device, money, ordering), said at once.
         var note = parsed && parsed.command === "beyond" ? lang().say.beyond(parsed.args.what) : "";
+        if (note && lang().say.beyondModel && !lang().say.beyondModel(parsed.args.what)) return offer(thread, note, true, text);
         if (note) parsed = null;
         if (parsed) {
             var done = actParsed(thread, parsed, cat, text);
@@ -1328,10 +1353,11 @@ function createAssistantService(deps) {
         var cloud = thread.provider ? getProvider(thread.provider) : null;
         if (cloud) return askCloud(thread, cloud, cat);
         return decide(thread, text, cat).then(function (d) {
-            if (d) return d;
+            if (d && d.done) return d.done;
+            if (d && d.nothing) return offer(thread, note, !!note, text);
             return localReady().then(function (m) {
                 if (!m) return offer(thread, note, !!note, text);
-                return askLocal(thread, m, cat).catch(function (e) { return localFailed(thread, e, text); });
+                return askLocal(thread, m, cat, d).catch(function (e) { return localFailed(thread, e, text); });
             });
         });
     }
@@ -1388,6 +1414,9 @@ function createAssistantService(deps) {
             changed("threads");
             // "Yes" or "No" to a read-back waiting: its answer.
             var pend = lastPending(thread), yn = pend && lang().answer ? lang().answer(lang().clean(text)) : null;
+            var asking = !yn && pend && deps.decider && deps.decider.yesNo && settings().decider !== "off" && !grammar.parse(text, { lang: settings().language, now: now() })
+                ? Promise.resolve(deps.decider.yesNo(text, pend.text)).catch(function () { return null; }) : Promise.resolve(null);
+            return asking.then(function (said) { return said ? said : yn; }).then(function (yn) {
             if (yn) {
                 return methods.confirm({ threadId: thread.id, messageId: pend.id, accept: yn === "yes", voice: p.voice, speak: p.speak })
                     .then(function (r) {
@@ -1404,6 +1433,7 @@ function createAssistantService(deps) {
             var unlocked = function () { delete lockedAsk[thread.id]; };
             return route(thread, text, p.locked ? null : openFollowUp(thread)).then(function (out) { unlocked(); return done(thread, [user].concat(out), p); },
                                             function (e) { unlocked(); throw e; });
+            });
         },
         choose: function (p) {
             if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
@@ -1589,6 +1619,7 @@ function createAssistantService(deps) {
                 else if (k === "speechRate" && RATE_CHOICES.indexOf(v) < 0) bad = "speechRate: one of " + RATE_CHOICES.join(", ");
                 else if (k === "personality" && !PERSONALITIES[v]) bad = "personality: one of " + Object.keys(PERSONALITIES).join(", ");
                 else if (k === "voiceWait" && WAIT_CHOICES.indexOf(v) < 0) bad = "voiceWait: seconds, one of " + WAIT_CHOICES.join(", ");
+                else if (k === "decider" && v !== "on" && v !== "off") bad = "decider: on or off";
                 else if ((k === "quietStart" || k === "quietEnd") && !HHMM.test(String(v))) bad = k + ": a time, \"22:00\"";
                 else if (k === "followUpFirst" && FIRST_CHOICES.indexOf(v) < 0) bad = "followUpFirst: minutes, one of " + FIRST_CHOICES.join(", ");
                 else if (k === "followUpAgain" && AGAIN_CHOICES.indexOf(v) < 0) bad = "followUpAgain: minutes, one of " + AGAIN_CHOICES.join(", ");
