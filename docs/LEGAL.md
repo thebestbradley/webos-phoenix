@@ -215,8 +215,16 @@ data use "Phoenix Account".
   are kept in `art/icons-previous` (not installed). The wallpapers
   (`apps/settings/public/wallpapers`) are original, drawn from numbers
   alone by `tools/wallpapers/generate.py` (Apache-2.0; seeds and
-  descriptions in their `PROVENANCE.md`). Palm's preference-app icons,
-  wallpapers and ringtones were not open-sourced.
+  descriptions in their `PROVENANCE.md`). Eight more are photographs of
+  the kinds of subject Palm's were (stones under water, a clownfish, a
+  jellyfish, drops on a leaf, a dandelion, a gerbera, a wave, seashells),
+  chosen for compositions of their own, from Wikimedia Commons under CC0
+  or CC BY 2.0 / 4.0 (never BY-SA, NC or ND) and prepared by
+  `tools/wallpapers/photos.py`; each one's author, licence, source and
+  changes are in that `PROVENANCE.md`, and the credits CC BY asks for are
+  in `NOTICE` and Settings' licences page. Palm's preference-app icons,
+  wallpapers and ringtones were not open-sourced, and none is shipped,
+  traced or reproduced.
 - `apps/shared/phoenix-ui/assets/openwebos/fullscreen-play-button.png`
   is a copy of the Open webOS artwork above.
 - Demo media (`apps/media-samples/media`: seven photos, six songs, three album

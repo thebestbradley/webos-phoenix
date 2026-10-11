@@ -22,14 +22,17 @@ import { useBack } from "../nav";
 
 const APP_DIR = "/usr/palm/applications/org.webosphoenix.settings/";
 
-/** Bundled wallpapers, drawn by tools/wallpapers/generate.py (see
- *  public/wallpapers/PROVENANCE.md): a square master each, which the shell crops
- *  to the screen, and a 2:3 thumbnail for the picker. The first is the
- *  default (the system service's default wallpaper preference,
- *  runtime/phoenix-runtime.js), shown too while none is set. */
+/** Bundled wallpapers: the drawn ones (tools/wallpapers/generate.py), then
+ *  photographs under open licences (tools/wallpapers/photos.py; authors and
+ *  licences in public/wallpapers/PROVENANCE.md and the licences page). A
+ *  square master each, which the shell crops to the screen, and a 2:3
+ *  thumbnail for the picker. The first is the default (the system service's
+ *  default wallpaper preference, runtime/phoenix-runtime.js), shown too while
+ *  none is set. */
 export const WALLPAPERS: { name: string; file: string; thumb: string }[] = [
     "Northern Lights", "Phoenix", "Twilight", "Amber", "Garden", "Sea and Sky",
     "Dawn", "Silk", "Midnight", "Bloom", "Shallows", "Linen",
+    "River Stones", "Clownfish", "Jellyfish", "Raindrops", "Dandelion", "Gerbera", "Wave", "Seashells",
 ].map((name) => {
     const slug = name.toLowerCase().replace(/ /g, "-");
     return { name, file: `wallpapers/${slug}.jpg`, thumb: `wallpapers/thumbs/${slug}.jpg` };
