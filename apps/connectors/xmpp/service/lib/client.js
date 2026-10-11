@@ -129,13 +129,14 @@ function createClient(o) {
             var j = JSON.parse(r.body || "{}");
             var link = (j.links || []).filter(function (l) { return l.rel === REL && /^wss?:\/\//.test(l.href || ""); })[0];
             return link ? link.href : null;
-        }).catch(function () {
+        }).catch(function (e1) {
+            log("host-meta.json of " + dom + ": " + e1.message);
             return o.http.request({ method: "GET", url: base }).then(function (r) {
                 if (r.status !== 200) return null;
                 var m = new RegExp("<Link[^>]+rel=[\"']" + REL.replace(/[.:]/g, "\\$&") + "[\"'][^>]*href=[\"'](wss?://[^\"']+)").exec(r.body || "") ||
                         new RegExp("<Link[^>]+href=[\"'](wss?://[^\"']+)[\"'][^>]*rel=[\"']" + REL.replace(/[.:]/g, "\\$&")).exec(r.body || "");
                 return m ? m[1] : null;
-            }).catch(function () { return null; });
+            }).catch(function (e2) { log("host-meta of " + dom + ": " + e2.message); return null; });
         }).then(function (url) {
             // Only a WebSocket of the account's own domain (or its subdomain).
             if (!url) return null;

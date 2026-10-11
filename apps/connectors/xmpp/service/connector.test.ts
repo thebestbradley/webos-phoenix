@@ -18,8 +18,8 @@ import { createRequire } from "node:module";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import * as kit from "@phoenix/connector-kit";
-import { conformanceChecks } from "../../shared/connector-kit/src/conformance";
-import { loadCommonJs } from "../../shared/connector-kit/src/test-support";
+import { conformanceChecks } from "../../../shared/connector-kit/src/conformance";
+import { loadCommonJs } from "../../../shared/connector-kit/src/test-support";
 import * as memdb from "@phoenix/synckit/src/test/memdb.js";
 
 const require = createRequire(__filename);

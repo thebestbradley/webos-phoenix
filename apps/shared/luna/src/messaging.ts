@@ -57,7 +57,7 @@ export const IM_BUDDY_KIND = "com.palm.imbuddystatus:1";
 
 /** The IM transports' message kinds, by serviceName. */
 export const IM_MESSAGE_KINDS: Record<string, string> = {
-    // The Jabber (XMPP) account (apps/xmpp; docs/SYNERGY-CONNECTORS.md 7).
+    // The Jabber (XMPP) account (apps/connectors/xmpp; docs/SYNERGY-CONNECTORS.md 7).
     type_jabber: "com.palm.immessage.xmpp:1",
     // The Fediverse account's direct mentions (apps/fediverse; docs/SYNERGY-CONNECTORS.md C2).
     type_fediverse: "com.palm.immessage.fediverse:1",

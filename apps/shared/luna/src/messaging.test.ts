@@ -4,7 +4,7 @@
 // Picture messages (MMS) against runtime/phoenix-runtime.js: sending and
 // receiving, threads, unread counts, the shell's notifications; and what
 // Messaging asks of the IM transports (which are connectors with tests of
-// their own: apps/xmpp, apps/matrix, ...).
+// their own: apps/connectors/xmpp, apps/matrix, ...).
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -108,7 +108,7 @@ describe("picture messages (MMS)", () => {
     });
 });
 
-// The IM transports are connectors now, each with its own tests (apps/xmpp,
+// The IM transports are connectors now, each with its own tests (apps/connectors/xmpp,
 // apps/matrix, ...: their service/connector.test.ts); Messaging with them,
 // in Chromium: tools/test-xmpp.cjs. Here, what Messaging asks of them.
 describe("instant messaging transports", () => {

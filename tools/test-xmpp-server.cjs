@@ -5,7 +5,7 @@
 // The Jabber (XMPP) account against a real XMPP server: Prosody, started
 // here on this computer (ports 15222 and 15280, a throwaway data folder and
 // a certificate made for localhost), with the device's own code paths: the
-// connector (apps/xmpp/service/connector.js) on the kit as run-js-service
+// connector (apps/connectors/xmpp/service/connector.js) on the kit as run-js-service
 // runs it, Node's TCP, STARTTLS with the certificate checked, SASL SCRAM,
 // stream management; db8 and the accounts service in memory. It checks:
 //
@@ -103,10 +103,10 @@ async function run(dir) {
     const synckit = require(path.join(REPO, "apps/shared/synckit/src/index.js"));
     const memdb = require(path.join(REPO, "apps/shared/synckit/src/test/memdb.js"));
     const { loadCommonJs } = require(path.join(KIT, "tools/load.js"));
-    const xmpp = loadCommonJs(path.join(REPO, "apps/xmpp/service/connector.js"), { "@phoenix/connector-kit": kit, "@phoenix/synckit": synckit });
-    const C = require(path.join(REPO, "apps/xmpp/service/lib/client.js"));
-    const X = require(path.join(REPO, "apps/xmpp/service/lib/xml.js"));
-    const template = JSON.parse(fs.readFileSync(path.join(REPO, "apps/xmpp/public/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json"), "utf8"));
+    const xmpp = loadCommonJs(path.join(REPO, "apps/connectors/xmpp/service/connector.js"), { "@phoenix/connector-kit": kit, "@phoenix/synckit": synckit });
+    const C = require(path.join(REPO, "apps/connectors/xmpp/service/lib/client.js"));
+    const X = require(path.join(REPO, "apps/connectors/xmpp/service/lib/xml.js"));
+    const template = JSON.parse(fs.readFileSync(path.join(REPO, "apps/connectors/xmpp/public/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json"), "utf8"));
     const KINDS = { "com.palm.contact.xmpp:1": "com.palm.contact:1", "com.palm.immessage.xmpp:1": "com.palm.immessage:1",
                     "com.palm.immessage:1": "com.palm.message:1", "com.palm.imloginstate.xmpp:1": "com.palm.imloginstate:1",
                     "com.palm.imbuddystatus.xmpp:1": "com.palm.imbuddystatus:1" };

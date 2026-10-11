@@ -62,7 +62,7 @@ function createFakeXmpp(options) {
     var detached = {};               // sm id -> session awaiting resume
     var uploads = {};                // path -> {bytes, mimeType, put: bool}
     var pushRegistrations = [];
-    var connections = 0, refuse = false, slowDown = 0, archiveSeq = 0, idSeq = 0;
+    var connections = 0, refuse = false, slowDown = 0, archiveSeq = 0, idSeq = 0, lastUploadUrl = null;
     var mechanisms = options.mechanisms || ["SCRAM-SHA-256", "SCRAM-SHA-1", "PLAIN"];
     var log = options.log || function () {};
 
@@ -312,6 +312,7 @@ function createFakeXmpp(options) {
             var path = "/" + (++idSeq).toString(36) + Math.random().toString(36).slice(2, 8) + "/" + encodeURIComponent(child.attrs.filename || "file");
             uploads[path] = { size: size, mimeType: child.attrs["content-type"] || "application/octet-stream", bytes: null };
             var url = "https://" + uploadHost + path;
+            lastUploadUrl = url;
             return this.result(iq, X.el("slot", { xmlns: NS.upload },
                 X.el("put", { url: url }, X.el("header", { name: "Authorization" }, "Bearer slot-" + idSeq)),
                 X.el("get", { url: url })));
@@ -568,6 +569,8 @@ function createFakeXmpp(options) {
         buddies: function () { return buddies.map(function (b) { return { jid: b.jid, name: b.name }; }); },
         archive: function (user) { return (archives[bare(user)] || []).map(function (a) { return a.el.toString(); }); },
         upload: function (url) { var u = new URL(url); return uploads[u.pathname] || null; },
+        // The link of the last picture put on the upload host (one a buddy can send back).
+        lastUpload: function () { return lastUploadUrl && uploads[new URL(lastUploadUrl).pathname].bytes ? lastUploadUrl : null; },
         sessions: function () { return sessions.map(function (s) { return { user: s.user, resource: s.resource, available: s.available, carbons: s.carbons, sm: !!s.sm }; }); },
         // Drop the connection under a client (the network went), its stream kept for resumption.
         dropConnections: function () { sessions.slice().forEach(function (s) { s.end(new Error("network lost"), false); }); },

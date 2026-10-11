@@ -122,6 +122,9 @@ function nameOf(display, jid) {
 
 function createSession(ctx) {
     var own = bare(ctx.config.jid || ctx.account.username);
+    // The account's own server: its Jabber ID's domain (and the host given for it).
+    ctx.http.allowHost(C.domainOf(own));
+    ctx.net.allowHost(C.domainOf(own).replace(/:\d+$/, ""));
     var me = {
         closed: false, client: null, online: false, wanted: AVAILABLE, status: "", roster: [], rosterByJid: {},
         attempt: null, retryTimer: null, failures: 0, authFailed: null, upload: undefined, catchingUp: false,

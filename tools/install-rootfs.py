@@ -329,6 +329,11 @@ def build_plan():
         # catalog, server/drivers/sample) are not part of a device.
         if target.startswith("server/"):
             continue
+        # The simulator's demo servers (chat.example: the Jabber connector's
+        # fake server) and its connector settings (runtime/connector-settings:
+        # a device's come from the image's recipe, never from the tree).
+        if prefix.startswith("/usr/share/phoenix/demo/") or prefix == "/etc/phoenix/connectors/":
+            continue
         # The shared packages the simulator's service loader finds by name:
         # a device has a copy in each service that needs one (plan_service).
         if prefix.startswith("/usr/lib/phoenix/node_modules/"):

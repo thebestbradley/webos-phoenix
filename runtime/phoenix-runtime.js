@@ -3773,7 +3773,7 @@
             "/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json",
             "/usr/palm/public/accounts/com.webosphoenix.webcal/com.webosphoenix.webcal.json"
         ];
-        // (The simulated Jabber template that was here is the Jabber connector's now: apps/xmpp.)
+        // (The simulated Jabber template that was here is the Jabber connector's now: apps/connectors/xmpp.)
         var PACKAGED = "accountTemplateFiles";   // store: {appId: [paths in the app]}
         var ACCOUNT_KIND = "com.palm.account:1";
         var SIGNAL_KIND = "com.palm.signaling:1";
@@ -8304,10 +8304,10 @@
     // Instant messaging: the Jabber demo server (chat.example)
     // ================================================================================
     //
-    // Jabber (XMPP) is a real connector now (apps/xmpp, block "Synergy
+    // Jabber (XMPP) is a real connector now (apps/connectors/xmpp, block "Synergy
     // connectors on the kit"), which speaks XMPP to any server. The
     // simulator's demo is a server, not a pretend account: chat.example, the
-    // connector's fake XMPP server (apps/xmpp/service/test/fake-xmpp.cjs
+    // connector's fake XMPP server (apps/connectors/xmpp/service/test/fake-xmpp.cjs
     // demoServer), runs in the page that keeps the connection, and the
     // connector reaches it as it reaches any server over a WebSocket. Any
     // name on chat.example signs in with any password; its people are
@@ -11887,6 +11887,16 @@
         function readFile(path) {
             var type = MIME[String(path).replace(/^.*\./, "").toLowerCase()] || "application/octet-stream";
             var fromStore = runtime.mediaFiles ? runtime.mediaFiles.read(path) : Promise.resolve(null);
+            // A file the apps wrote (a picture picked in Files, one received): the file manager's store.
+            fromStore = fromStore.then(function (blob) {
+                if (blob) return blob;
+                return new Promise(function (resolve) {
+                    dispatch("luna://org.webosphoenix.filemanager/read", { path: path, encoding: "base64" }, function (r) {
+                        if (!r || !r.returnValue || typeof r.data !== "string") return resolve(null);
+                        resolve(new Blob([fromBase64(r.data)], { type: type }));
+                    }, { cancelled: function () { return false; }, onCancel: null });
+                });
+            });
             return fromStore.then(function (blob) {
                 // Not a stored file: one of the system's (the samples), from where it is served.
                 return blob || global.fetch(path).then(function (res) {
@@ -11941,19 +11951,31 @@
         var LIVE_FRESH_MS = 15000, LIVE_BEAT_MS = 4000, CALL_WAIT_MS = 45000;
         var liveHeld = {}, beatTimer = null, callSeq = 0;
         function beat() {
+            store.set("connector:alive:" + PAGE_ID, Date.now());
             Object.keys(liveHeld).forEach(function (svc) { store.set("connector:live:" + svc, { page: PAGE_ID, at: Date.now() }); });
+        }
+        function startBeat() {
+            beat();
+            if (!beatTimer) beatTimer = setInterval(beat, LIVE_BEAT_MS);
+        }
+        // A sync lock is held while its page runs (a page gone, its card
+        // closed mid-sync, leaves none behind) and for at most LOCK_MS.
+        function lockHeld(v) {
+            if (typeof v === "number") return Date.now() - v < LOCK_MS;
+            if (!v || Date.now() - (v.at || 0) >= LOCK_MS) return false;
+            return v.page === PAGE_ID || Date.now() - store.get("connector:alive:" + v.page, 0) < LIVE_FRESH_MS;
         }
         function claimLive(service) {
             if (liveHeld[service]) return true;
             var o = store.get("connector:live:" + service, null);
             if (o && o.page !== PAGE_ID && Date.now() - (o.at || 0) < LIVE_FRESH_MS) return false;
             liveHeld[service] = true;
-            beat();
-            if (!beatTimer) beatTimer = setInterval(beat, LIVE_BEAT_MS);
+            startBeat();
             return true;
         }
         try {
             global.addEventListener("pagehide", function () {
+                store.remove("connector:alive:" + PAGE_ID);
                 Object.keys(liveHeld).forEach(function (svc) {
                     var o = store.get("connector:live:" + svc, null);
                     if (o && o.page === PAGE_ID) store.remove("connector:live:" + svc);
@@ -12014,16 +12036,16 @@
         // A page has no TCP: a connector reaches its server by WebSocket
         // (XMPP's RFC 7395, found through the domain's host-meta). The
         // simulator's demo servers answer for their own domains (chat.example:
-        // the Jabber connector's fake server, apps/xmpp/service/test), in the
+        // the Jabber connector's fake server, apps/connectors/xmpp/service/test), in the
         // page that keeps the connection.
         var demos = {};
-        var DEMO_HOSTS = { "org.webosphoenix.service.xmpp": { hosts: ["chat.example", "upload.chat.example"], module: "test/fake-xmpp.cjs" } };
+        var DEMO_HOSTS = { "org.webosphoenix.service.xmpp": { hosts: ["chat.example", "upload.chat.example"], dir: "/usr/share/phoenix/demo/xmpp/", module: "test/fake-xmpp.cjs" } };
         function demoServer(service, host) {
             var d = DEMO_HOSTS[service];
             if (!d || d.hosts.indexOf(String(host).replace(/:\d+$/, "")) < 0 || !hosted[service]) return null;
             if (!demos[service]) {
                 try {
-                    var mod = nodeServiceLoader("/usr/palm/applications/" + hosted[service].appId + "/service/", service)(d.module);
+                    var mod = nodeServiceLoader(d.dir, service + " demo")(d.module);
                     demos[service] = mod.demoServer();
                 } catch (e) {
                     console.warn("[phoenix-runtime] no demo server for " + service + ": " + (e && e.message));
@@ -12069,7 +12091,10 @@
             if (p.op === "deliver") {
                 var user = (demo.sessions()[0] || {}).user;
                 if (!user) return Promise.resolve(fail("NOT_FOUND", "No account is signed in to the demo server"));
-                demo.deliver(p.from, user, p.text);
+                // {picture: true}: the last picture put on the server, sent back (its link, XEP-0066).
+                var link = p.picture ? demo.lastUpload && demo.lastUpload() : null;
+                if (p.picture && !link) return Promise.resolve(fail("NOT_FOUND", "No picture on the demo server yet"));
+                demo.deliver(p.from, user, link || p.text, link ? { oob: link } : undefined);
                 return Promise.resolve(ok({ to: user }));
             }
             if (p.op === "presence") return Promise.resolve(ok({ done: demo.setPresence(p.jid, p.show, p.status) }));
@@ -12077,7 +12102,18 @@
         }
         runtime.connectorDemo = function (service, p) {
             if (liveHeld[service] && demos[service]) return demoOp(service, p);
-            return forwardCall(service, "__demo", p);
+            var o = store.get("connector:live:" + service, null);
+            if (o && o.page !== PAGE_ID && Date.now() - (o.at || 0) < LIVE_FRESH_MS) return forwardCall(service, "__demo", p);
+            // No page keeps the connections: this one does, from now.
+            connectAll();
+            return new Promise(function (resolve) {
+                var tries = 0;
+                (function wait() {
+                    var d = demos[service];
+                    if ((d && d.sessions().length) || ++tries > 60) return resolve(demoOp(service, p));
+                    setTimeout(wait, 250);
+                })();
+            });
         };
 
         // Files a connector keeps (pictures received): the Files block's
@@ -12136,8 +12172,9 @@
                     var lock = name === "sync" && p.accountId ? "connector:syncLock:" + service + ":" + p.accountId : null;
                     if (lock) {
                         var held = store.get(lock, 0);
-                        if (held && Date.now() - held < LOCK_MS) return reply(ok({ alreadyRunning: true }));
-                        store.set(lock, Date.now());
+                        if (held && lockHeld(held)) return reply(ok({ alreadyRunning: true }));
+                        store.set(lock, { page: PAGE_ID, at: Date.now() });
+                        startBeat();
                     }
                     m.methods[name](p).then(function (r) {
                         if (lock) store.set(lock, 0);
@@ -12155,17 +12192,23 @@
 
         // The system UI's page opens the connections of the accounts of
         // connectors that keep one, as a device's services start with it.
+        // A connector's accounts (its templates', as the app has them).
+        function accountsOf(service, def) {
+            return Promise.all((def.templateIds || []).map(function (tid) {
+                return callP("luna://com.palm.service.accounts/listAccounts", { templateId: tid }).then(function (r) { return r.results || []; });
+            })).then(function (lists) { return [].concat.apply([], lists); });
+        }
         function connectAll() {
             Object.keys(hosted).forEach(function (service) {
                 var m;
                 try { m = hosted[service].load(); } catch (e) { return; }
-                if (!m.def.connection || !claimLive(service)) return;
-                templatesOf(service).forEach(function (t) {
-                    callP("luna://com.palm.service.accounts/listAccounts", { templateId: t.templateId }).then(function (r) {
-                        (r.results || []).forEach(function (a) {
-                            m.methods.connect({ accountId: a._id }).then(function (x) {
-                                if (x && x.returnValue === false) console.info("[" + service + "] " + a.username + ": " + (x.errorText || x.errorCode));
-                            });
+                if (!m.def.connection) return;
+                accountsOf(service, m.def).then(function (list) {
+                    if (!list.length || !claimLive(service)) return;
+                    list.forEach(function (a) {
+                        // A sync: the connection opened after it, and what came meanwhile filed.
+                        callP("luna://" + service + "/sync", { accountId: a._id }).then(function (x) {
+                            if (x && x.returnValue === false) console.info("[" + service + "] " + a.username + ": " + (x.errorText || x.errorCode));
                         });
                     });
                 });
@@ -12178,6 +12221,18 @@
         }
         setTimeout(function () { if (PalmSystem.appIdentifier === "com.palm.systemui") connectAll(); }, 2500);
         runtime.connectConnectors = connectAll;
+        // No page keeps them (the one that did went, its card closed, or the
+        // account was made in a page that closed before it connected): one
+        // takes over within a quarter of a minute, as a device's service
+        // would simply still run.
+        setInterval(function () {
+            var orphaned = Object.keys(hosted).some(function (service) {
+                if (liveHeld[service]) return false;
+                var o = store.get("connector:live:" + service, null);
+                return !o || Date.now() - (o.at || 0) >= LIVE_FRESH_MS;
+            });
+            if (orphaned) connectAll();
+        }, LIVE_FRESH_MS + Math.floor(Math.random() * 3000));
 
         // The templates of the connector's app (its public/accounts).
         function templatesOf(service) {
