@@ -921,6 +921,10 @@
     // ---- PalmSystem -----------------------------------------------------------------
 
     var launchParams = queryParam("launchParams") || "{}";
+    // When the page first read its launch params (PalmSystem.launchParams,
+    // as Mojo, Enyo and @phoenix/sdk's app.onLaunch read them): a relaunch
+    // waits for it (runtime.afterOwnLaunch, at runtime.relaunch).
+    var launchParamsReadAt = 0;
     var activated = true;
 
     var bannerSerial = 0;   // addBannerMessage ids, unique within the app
@@ -928,7 +932,11 @@
         identifier: appIdFromLocation() + " 1000",
         appIdentifier: appIdFromLocation(),
         activityId: 1000,
-        launchParams: launchParams,
+        get launchParams() {
+            if (!launchParamsReadAt) launchParamsReadAt = Date.now();
+            return launchParams;
+        },
+        set launchParams(v) { launchParams = v; },
         locale: store.get("prefs", {}).locale || "en_us",
         localeRegion: "us",
         phoneRegion: "us",
@@ -7660,20 +7668,63 @@
         // user opened the app again and wants its data fresh; Phoenix's
         // apps also hear "phoenixRefresh" (@phoenix/luna's Refreshed starts
         // the app's root again on it).
+        //
+        // A relaunch that comes while the page is starting waits until it has
+        // taken its own launch, as WebAppMgr held one that came while the
+        // page was still loading ("If the headless app is still loading,
+        // buffer this until our progress is complete": webappmanager
+        // Src/webbase/SysMgrWebBridge.cpp:133-139): the page loaded and its
+        // launch params read (PalmSystem.launchParams above), and a moment
+        // more (RELAUNCH_SETTLE_MS) for the handler that read them to set up
+        // its relaunch listener (React's useEffect comes after the render
+        // that read them). A page that never reads them gets it at most
+        // RELAUNCH_HOLD_MS after loading. Otherwise the relaunch rewrote the
+        // launch params before the app had read its own: Clock launched while
+        // one of its alarms was due opened only the alarm, not its card.
+        // Held ones go in order; later ones go at once.
+        var RELAUNCH_SETTLE_MS = 200, RELAUNCH_HOLD_MS = 5000;
+        var pageLoadedAt = 0, heldRelaunches = [], holdTimer = null;
+        if (global.document && global.document.readyState === "complete") pageLoadedAt = Date.now();
+        else if (global.addEventListener) global.addEventListener("load", function () { pageLoadedAt = Date.now(); });
+        function ownLaunchTaken() {
+            var doc = global.document;
+            if (doc && doc.readyState !== "complete") return false;
+            var now = Date.now();
+            if (!pageLoadedAt) pageLoadedAt = now;     // complete, its load event still to come
+            return (launchParamsReadAt && now - launchParamsReadAt >= RELAUNCH_SETTLE_MS) || now - pageLoadedAt >= RELAUNCH_HOLD_MS;
+        }
+        runtime.afterOwnLaunch = function (fn) {
+            if (!heldRelaunches.length && ownLaunchTaken()) {
+                fn();
+                return;
+            }
+            heldRelaunches.push(fn);
+            if (holdTimer) return;
+            holdTimer = setInterval(function () {
+                if (!ownLaunchTaken()) return;
+                clearInterval(holdTimer);
+                holdTimer = null;
+                var held = heldRelaunches;
+                heldRelaunches = [];
+                held.forEach(function (f) { f(); });
+            }, 50);
+        };
         runtime.relaunch = function (params, refresh) {
-            PalmSystem.launchParams = toJson(params || {});
-            var event = function (name, detail) {
-                var e;
-                try { e = new CustomEvent(name, { detail: detail }); }
-                catch (x) { e = global.document.createEvent("CustomEvent"); e.initCustomEvent(name, false, false, detail); }
-                global.document.dispatchEvent(e);
-            };
-            if (global.Mojo && typeof global.Mojo.relaunch === "function")
-                global.Mojo.relaunch();
-            else
-                event("webOSRelaunch", params || {});
-            if (refresh)
-                event("phoenixRefresh", params || {});
+            runtime.afterOwnLaunch(function () {
+                PalmSystem.launchParams = toJson(params || {});
+                var event = function (name, detail) {
+                    var e;
+                    try { e = new CustomEvent(name, { detail: detail }); }
+                    catch (x) { e = global.document.createEvent("CustomEvent"); e.initCustomEvent(name, false, false, detail); }
+                    global.document.dispatchEvent(e);
+                };
+                if (global.Mojo && typeof global.Mojo.relaunch === "function")
+                    global.Mojo.relaunch();
+                else
+                    event("webOSRelaunch", params || {});
+                if (refresh)
+                    event("phoenixRefresh", params || {});
+            });
             return true;
         };
 
@@ -11329,7 +11380,8 @@
                 due.push(a);
             }
             if (due.length) save(st);
-            due.sort(function (x, y) { return x.due - y.due; }).forEach(fire);
+            // (Not forEach(fire): its index would be fire's `triggered`.)
+            due.sort(function (x, y) { return x.due - y.due; }).forEach(function (a) { fire(a); });
             arm();
             return due.length;
         }
