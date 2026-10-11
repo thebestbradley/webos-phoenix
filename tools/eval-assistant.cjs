@@ -243,6 +243,21 @@ function runCase(c, opts) {
 function loadCases(file) {
     var all = JSON.parse(fs.readFileSync(file || CASES, "utf8"));
     var list = Array.isArray(all) ? all : all.cases;
+    // The main set is cases.json and every cases-<area>.json beside it (one
+    // file per area of work, so that work going on side by side does not
+    // edit the same file); an id appears once across them.
+    if (!file) {
+        var dir = path.dirname(CASES), seen = {};
+        list.forEach(function (c) { seen[c.id] = true; });
+        fs.readdirSync(dir).filter(function (f) { return /^cases-[a-z0-9-]+\.json$/.test(f); }).sort().forEach(function (f) {
+            var more = JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"));
+            (Array.isArray(more) ? more : more.cases).forEach(function (c) {
+                if (seen[c.id]) throw new Error(f + ": the case id " + c.id + " is already used");
+                seen[c.id] = true;
+                list.push(c);
+            });
+        });
+    }
     // The on-device model's set (apps/assistant/service/test/model-eval.json:
     // {text, command} the grammar did not take): its command, or no action for "none".
     if (list.length && list[0].text !== undefined && list[0].say === undefined) {
