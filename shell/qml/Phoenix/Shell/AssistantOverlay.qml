@@ -483,7 +483,8 @@ Item {
     // ---- The bird ----------------------------------------------------------------------
     // What a request's reply was, from its new messages (the service's
     // message status, apps/assistant/service/assistant.js): "done" (a
-    // command ran), "failed", "asking" (a read-back waits), "choices"
+    // command ran), "failed", "asking" (a read-back or a question waits: status
+    // "pending" or "ask"), "choices"
     // ("I can't do that" with Ask/Search), "cancelled", or "answer".
     function outcomeOf(list) {
         var last = null;
@@ -496,7 +497,7 @@ Item {
             return "answer";
         if (last.status === "failed")
             return "failed";
-        if (last.status === "pending" && last.confirm)
+        if ((last.status === "pending" && last.confirm) || last.status === "ask")
             return "asking";
         // (A command done may offer its app, "Open Calendar": still done.)
         if (last.status === "done" && last.command)

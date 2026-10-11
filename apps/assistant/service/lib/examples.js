@@ -70,5 +70,6 @@ module.exports = {
     emailReply: ["answer that email saying thanks", "write back to Alex saying sounds good", "reply to the last mail"],
     travelTime: ["how long to drive to work", "how far is the airport in time", "how long is the walk to the station"],
     detail: ["what time's my meeting with Sam", "where is it", "who's invited"],
-    edit: ["rename it to Coffee with Sam", "add Alex to it", "update Sam's email to sam@new.example.com"]
+    edit: ["rename it to Coffee with Sam", "add Alex to it", "update Sam's email to sam@new.example.com"],
+    settingStatus: ["is my bluetooth still on", "check whether airplane mode is enabled", "do I have location turned on"]
 };

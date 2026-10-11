@@ -356,6 +356,14 @@ function create(deps) {
     var changed = deps.changed || function () {};
     var notify = deps.notify || function () {};
     var seq = 0;
+    // This copy of the service. In the simulator every app page runs the
+    // runtime, and with it a copy of this service sharing the one store:
+    // when the computer woke, four of them sent the owner's three questions
+    // at once, and again four hours later (thirteen messages in a second,
+    // 10 October 2026). A question is claimed in the store before it is
+    // sent, and sent only by the copy whose claim stands.
+    var INSTANCE = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    var CLAIM_MS = 60000;
 
     function env() { return deps.env(); }
     function words2() { return env().lang.followUp; }
@@ -659,6 +667,7 @@ function create(deps) {
             r.attempts++;
             r.state = "delivered";
             r.deliveredAt = at;
+            delete r.claim;
             // The next try, or with none (the second follow-up off) when the
             // unanswered notification goes.
             r.nextAt = at + timing().againMs;
@@ -697,6 +706,12 @@ function create(deps) {
         function conditionsNow() { if (!conditions) conditions = busy(); return conditions; }
         return due.reduce(function (p, r) {
             return p.then(function () {
+                // Still due as this copy saw it, and nobody else's to send.
+                var cur = get(r.id);
+                if (!cur || cur.state !== r.state || cur.nextAt !== r.nextAt || cur.attempts !== r.attempts) return null;
+                if (cur.claim && cur.claim.by !== INSTANCE && Date.now() - cur.claim.at < CLAIM_MS) return null;
+                r.claim = { by: INSTANCE, at: Date.now() };
+                put(r);
                 if (!settings().followUps) { finish(r, "dropped", "off"); out.dropped++; return null; }
                 if (r.state === "delivered" && r.attempts >= timing().attempts) { finish(r, "dropped", "unanswered"); out.dropped++; return null; }
                 return check(r, t).then(function (c) {
@@ -705,6 +720,9 @@ function create(deps) {
                     if (quiet) { r.nextAt = quiet; put(r); out.postponed++; return null; }
                     return conditionsNow().then(function (b) {
                         if (b.dnd || b.call) { r.nextAt = t + (b.call ? RULES.callWaitMs : RULES.dndWaitMs); put(r); out.postponed++; return null; }
+                        // Another copy claimed it meanwhile (the last claim stands).
+                        var now2 = get(r.id);
+                        if (!now2 || !now2.claim || now2.claim.by !== INSTANCE || now2.attempts !== r.attempts) return null;
                         r.rec = c.rec;
                         out.delivered++;
                         return deliver(r, t);
