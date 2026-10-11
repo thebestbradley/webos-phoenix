@@ -33,7 +33,7 @@ launcher, and opens, only while Developer Mode is on
 | **Browser dev server** | `tools/serve-rootfs.py --terminal` | A WebSocket per session at `/__phoenix/pty` over Python's `pty`, with a random token (from `/usr/share/phoenix/host.json`) and an `Origin` check; off unless asked for. `--terminal-shell PATH` for tests |
 | **Simulated shell** | `runtime/phoenix-runtime.js`, block "Terminal" | Without a host shell: `echo`, `ls` and `cd` over the simulated filesystem, `pwd`, `clear`, `seq`, `printenv`, `history`, `exit`, with line editing and history. Deterministic, for tests and the Playwright runs |
 | **Client** | `apps/shared/luna/src/pty.ts` (`pty.open`, `PtySession`, `pty.shells`, `PTY_ERRORS`) | Queues writes until the shell is up; acks what xterm.js has drawn |
-| **Image** | `meta-phoenix`: `phoenix-pty` recipe (the service, the `user` account, uid 1000), `packagegroup-phoenix-terminal` (bash, zsh, coreutils, less, nano, vim-tiny, tmux, htop, procps, ssh, scp, curl, terminfo, DejaVu Sans Mono), both in `webos-phoenix-image`; the app itself comes with `phoenix-apps` | Written, **not built or booted yet** (no OSE build host here) |
+| **Image** | `meta-phoenix`: `phoenix-pty` recipe (the service, the `user` account, uid 1000), `packagegroup-phoenix-terminal` (bash, zsh, coreutils, less, nano, vim-tiny, tmux, htop, procps, ssh, scp, sftp, ssh-keygen, OpenSSH's sftp-server, curl, terminfo, DejaVu Sans Mono), both in `webos-phoenix-image`; the app itself comes with `phoenix-apps` | Written, **not built or booted yet** (no OSE build host here) |
 | **Tests** | `services/pty/tests/pty_test.cpp` (52 checks: UTF-8, JSON, sessions, flow control, SIGHUP, and every service method over a luna-service2 stand-in in `tests/ls2stub`), `apps/shared/luna/src/pty.test.ts`, `apps/terminal/src/keys.test.ts`, `tools/test-terminal.cjs` (simulated shell and a real `/bin/sh` through the dev server's WebSocket) | In CI |
 
 ### The service's methods
@@ -145,6 +145,36 @@ Preferences; and, from wTerm, a shell that is not root by default.
   for itself (gestures, demo events, turning the device); use the extras
   row's function keys there.
 - **fish** is not in the image; zsh has no Phoenix default configuration.
+- **Saved SSH hosts:** not built; the plan is below.
+
+### Saved SSH hosts (the plan)
+
+The drives' SFTP (SHARE-AND-FILES.md "Drives") already does what a saved
+host needs: an address, a user, a password or a key made on the device
+(its private half sealed in the OAuth service's key store, never a plain
+file), and the server's key pinned on first use, refused loudly when it
+changes. The Terminal's saved hosts would reuse those, not start again:
+
+- **Where they live:** a "Hosts" list in the app menu (New Card to a
+  host), each host a record in the Terminal's own db8 kind (name, host,
+  port, user, the key's id, the pinned host key and its fingerprint).
+  An SFTP account's host shows there too ("Open a Shell"), so one sign-in
+  serves both.
+- **Keys:** `ssh` in the PTY needs the private key as OpenSSH reads it.
+  Two ways, for the owner (OPEN-QUESTIONS Q111): an agent (the PTY service
+  runs a small `ssh-agent`-protocol socket per session that signs with the
+  sealed key, the key never written out), or a file made for the session
+  in a private tmpfs and removed when it ends. The agent is safer and is
+  what the plan assumes.
+- **Host keys:** the pinned key written as a one-line `known_hosts` for the
+  session (`-o UserKnownHostsFile=... -o StrictHostKeyChecking=yes`), so
+  `ssh` refuses a changed key as the drive does, with the same message.
+- **In the simulator:** phoenix-sim's host shell runs the host's `ssh`
+  with the same options; the browser dev server's too.
+- **Effort:** M (a week): the hosts list and its sheet, the agent in
+  `services/pty` (C++) and `SimPty`, the known-hosts file, a
+  `test-terminal.cjs` run against the OpenSSH server `tools/test-sftp.cjs`
+  starts. GAPS has the row.
 
 ## The plan
 
@@ -341,7 +371,7 @@ off, and only Developer Mode's key-only `user` login exists.
 | --- | --- |
 | `phoenix-pty` | The C++ service (`shell/pty/` or `services/pty/` in this repository, CMake), its systemd unit, and its luna-service2 role, API, group and service files (as `apps/files/service/sysbus`) |
 | `phoenix-apps` (existing) | Adds `apps/terminal/dist`, like the other Phoenix apps |
-| `packagegroup-phoenix-terminal` | `bash`, `coreutils`, `less`, `nano`, `vim-tiny`, `tmux`, `htop`, `openssh-client` (`ssh`, `scp`), `curl`, `git` (optional), `ncurses-terminfo-base`, the monospace font |
+| `packagegroup-phoenix-terminal` | `bash`, `coreutils`, `less`, `nano`, `vim-tiny`, `tmux`, `htop`, OpenSSH's client (`ssh`, `scp`, `sftp`, `ssh-keygen`) and `sftp-server` (the SFTP subsystem an SSH server starts), `curl`, `git` (optional), `ncurses-terminfo-base`, the monospace font |
 | `phoenix-devmode` | The `user` account, sudoers drop-in (Developer Mode only), PAM config, the SSH server unit (disabled until Developer Mode) |
 
 `webos-phoenix-image` adds `phoenix-pty` and `packagegroup-phoenix-terminal`.

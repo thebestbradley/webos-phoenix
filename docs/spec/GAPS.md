@@ -89,13 +89,24 @@ device, not yet run"):
   drives wait for Phoenix's registrations (docs/DEVELOPER-APPS.md,
   OPEN-QUESTIONS Q17, Q76-Q78) and providers that need a client secret
   for the token broker (Q49).
-- 🟡 **P2** Drives (docs/SHARE-AND-FILES.md "Drives"; built in the simulator):
-  SFTP (the kit has no socket API; `ssh2` needs Node's `net`); drives in the
-  original picker (SF1 lists the media indexer's kinds); the viewers' save
-  back and Photos' album source (SYNERGY-MODERN.md 3.3); keeping a drive's
-  files on the device on purpose (only the cache of what was opened); the
-  image's `/etc/palm/drives/clients.json` setting (OPEN-QUESTIONS Q76).
-  on hardware (docs/SYNERGY-CONNECTORS.md C2, C3).
+- 🟡 **P2** Drives (docs/SHARE-AND-FILES.md "Drives"; built in the simulator).
+  SFTP done 11 October 2026 (`com.webosphoenix.drive.sftp`: Phoenix's own
+  SSH-2 and SFTP v3 client on the audited @noble libraries, a password or a
+  key made on the device and sealed in the OAuth key store, the server's
+  key pinned on first use and a changed key refused loudly; through the
+  simulator's TCP relay; `tools/test-sftp.cjs` against OpenSSH). Left:
+  drives in the original picker (SF1 lists the media indexer's kinds); the
+  viewers' save back and Photos' album source (SYNERGY-MODERN.md 3.3);
+  keeping a drive's files on the device on purpose (only the cache of what
+  was opened); the image's `/etc/palm/drives/clients.json` setting
+  (OPEN-QUESTIONS Q76); SFTP keys with a passphrase (Q110), one-time codes,
+  certificates and jump hosts (Q113), search on an SFTP drive (SFTP has no
+  search; the drive answers `UNSUPPORTED`, as S3 does), and SFTP over a device's
+  own sockets (the kit's `nodeNet`, tested in Node only).
+- ⬜ **P2** The Terminal's saved SSH hosts (docs/TERMINAL.md "Saved SSH hosts
+  (the plan)"): a hosts list in the app menu sharing the SFTP drive's sealed
+  keys and pinned host keys, `ssh` given the key through an agent socket
+  (OPEN-QUESTIONS Q111). Not started; M.
 - 🟡 **P1** Messaging accounts (done 11 October 2026: Jabber, Matrix, Delta Chat,
   Unofficial Telegram as real transports, docs/SYNERGY-CONNECTORS.md 7). Left:
   end-to-end encryption on Jabber (OMEMO: no permissive library, OPEN-QUESTIONS
