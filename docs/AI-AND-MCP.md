@@ -1497,11 +1497,12 @@ the user's accounts (`test/accounts-world.cjs`: Slack, Bluesky, the
 Fediverse, Jabber, Unofficial Telegram, Google, Microsoft named "Work",
 Zoom, Todoist, Dropbox, Google Drive, LinkedIn, two email accounts),
 loaded with the main set. The grammar alone, before and after: the main
-set 494 of 551 right with 1 unsafe (the Synergy cases 4 of 61; "send my
-ETA to Sam" texted a contact) against 551 of 551, none unsafe and no wrong
-read-backs; held out (12 Synergy phrasings written after, not tuned for)
-6 of 12, and the rest of that set unchanged (76 of 89). The time per turn
-went from 1 to 4 ms on average (the accounts are read for each request).
+set 494 of 551 right with 1 unsafe (the Synergy cases 4 of 61; "send Sam
+my ETA to the airport" texted Sam the words "my ETA to the airport")
+against 551 of 551, none unsafe and no wrong read-backs; held out (12
+Synergy phrasings written after, not tuned for) 1 of 12 against 6 of 12,
+the rest of that set unchanged (76 of 89). The time per turn went from 1
+to 2-4 ms on average (the accounts are read for each request).
 With Qwen3 0.6B behind the grammar the Synergy cases stay 61 of 61 (the
 grammar answers them all). In phoenix-sim (`tools/test-assistant-synergy-sim.cjs`,
 the real connectors against their stand-ins and the Jabber demo server):
