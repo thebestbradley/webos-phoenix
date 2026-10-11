@@ -6,12 +6,14 @@
 // each of its functions (the contexts).
 
 import type { DbApi, DbObject, Http, Luna, RequestFn } from "@phoenix/synckit";
+import type { DriveProvider, LocalFiles } from "./files";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type Json = any;
 
 /** A Luna reply. */
-export interface Reply { returnValue: boolean; errorCode?: string; errorText?: string; [k: string]: Json }
+/** A Luna reply (errorCode: the accounts library's codes; a drive's file methods: the file manager's numbers). */
+export interface Reply { returnValue: boolean; errorCode?: string | number; errorText?: string; [k: string]: Json }
 
 /** One object on the server, as a connector's pull gives it. */
 export interface RemoteObject {
@@ -84,6 +86,15 @@ export interface CapabilityDefinition {
      * activity with a db8 trigger while the capability is on.
      */
     watch?: { query: Json; method: string };
+    /**
+     * A drive (the DOCUMENTS capability, docs/SYNERGY-SDK.md "Drives"): the
+     * account's provider, whose list, stat, download, upload, ... the kit
+     * makes into the service's listFiles, statFile, downloadFile, uploadFile,
+     * ... methods (files.ts). Its sync checks that the drive answers.
+     */
+    files?(ctx: AccountContext): DriveProvider | Promise<DriveProvider>;
+    /** Transfers in parts of this many bytes (default 8 MB). */
+    chunkSize?: number;
 }
 
 export interface ConnectorDefinition {
@@ -123,6 +134,12 @@ export interface ConnectorDefinition {
      * the account template by phoenix-connector pack.
      */
     signUp?: string | { url?: string; servers?: { name: string; url: string }[] };
+    /**
+     * A sign-up link of its own for some of the templates (a connector with
+     * several account types: the drives' Dropbox, Box, ...), by templateId;
+     * the others have signUp's.
+     */
+    signUpByTemplate?: Record<string, string | { url?: string; servers?: { name: string; url: string }[] }>;
 }
 
 /** What a connector can be given to post. */
@@ -224,6 +241,12 @@ export interface BaseContext {
     cachePhoto(key: string, url: string): Promise<string>;
     /** A file the user picked (sharing): its bytes and type. */
     readFile(path: string): Promise<{ bytes: Uint8Array; mimeType: string }>;
+    /**
+     * A setting of the system image, /etc/palm/<name> (JSON), or null: what
+     * the image was built with (a provider's OAuth client id, which is not in
+     * the source tree: docs/DEVELOPER-APPS.md).
+     */
+    systemConfig(name: string): Promise<Json | null>;
 }
 
 export interface ValidateContext extends BaseContext {
@@ -270,6 +293,10 @@ export interface Environment {
     readFile?(path: string): Promise<{ bytes: Uint8Array; mimeType: string }>;
     /** Longest Retry-After waited out within a sync (ms, default 30000). */
     maxWaitMs?: number;
+    /** The device's files, for the DOCUMENTS capability's downloads and uploads. */
+    files?: LocalFiles;
+    /** /etc/palm/<name> (JSON) of the system image, or null. */
+    systemConfig?(name: string): Promise<Json | null>;
 }
 
 export type ServiceMethods = Record<string, (params: Json) => Promise<Reply>>;

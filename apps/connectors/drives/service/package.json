@@ -1,0 +1,11 @@
+{
+    "name": "org.webosphoenix.service.drives",
+    "version": "0.1.0",
+    "private": true,
+    "description": "webOS Phoenix drives (Synergy connector on @phoenix/connector-kit, the DOCUMENTS capability): WebDAV with Nextcloud and ownCloud presets, S3-compatible storage, Dropbox, OneDrive, Google Drive and Box as places in Files and the pickers",
+    "license": "Apache-2.0",
+    "main": "service.js",
+    "dependencies": {
+        "@phoenix/connector-kit": "*"
+    }
+}

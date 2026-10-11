@@ -2,7 +2,8 @@
     "//": [
         "The connector packages Phoenix comes with (docs/SYNERGY-CONNECTORS.md 7, 'What comes with Phoenix'): installed in the image as apps the user may remove (/media/cryptofs/apps; tools/install-rootfs.py, phoenix-sim's and tools/serve-rootfs.py's installed apps, runtime/rootfs.json 'preinstalled'), counted by the Marketplace as installed from the catalog sourceId, and installed again from it without Developer Mode (packagesservice.js firstPartyEntry).",
         "from: where the package's app is in this checkout (for the tools that build the image and the simulator); service and templates: its connector service and account templates, for the simulator's runtime.",
-        "Google, Microsoft, Telegram and LoRa mesh join this list when they are built."
+        "Google, Microsoft, Telegram and LoRa mesh join this list when they are built.",
+        "catalog: Phoenix's own connector packages that are NOT pre-installed but installed from the catalog by those who want them (the drives, docs/SYNERGY-CONNECTORS.md 7): the device trusts them as Phoenix's own from a catalog it ships with (installed without Developer Mode, as the pre-installed ones are installed again); their folders (apps/connectors/) are not apps of the image or the simulator until installed."
     ],
     "packages": [
         {
@@ -11,6 +12,15 @@
             "from": "apps/fediverse",
             "service": "org.webosphoenix.service.fediverse",
             "templates": ["com.webosphoenix.fediverse"]
+        }
+    ],
+    "catalog": [
+        {
+            "id": "org.webosphoenix.drives",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/drives",
+            "service": "org.webosphoenix.service.drives",
+            "templates": ["com.webosphoenix.drive.nextcloud", "com.webosphoenix.drive.owncloud", "com.webosphoenix.drive.webdav", "com.webosphoenix.drive.s3", "com.webosphoenix.drive.dropbox", "com.webosphoenix.drive.onedrive", "com.webosphoenix.drive.googledrive", "com.webosphoenix.drive.box"]
         }
     ]
 }

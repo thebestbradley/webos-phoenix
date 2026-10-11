@@ -238,7 +238,12 @@ them, in the `org.webosphoenix` and `com.webosphoenix` namespaces.
 Devices install a connector only in Developer Mode (the owner's decision,
 until the connector trust tier, C5), except one Phoenix comes with
 (`/etc/palm/marketplace/preinstalled.json`) from a catalog the device ships
-with (`apps/marketplace/service/packagesservice.js`, `firstPartyEntry`).
+with (`apps/marketplace/service/packagesservice.js`, `firstPartyEntry`), and
+Phoenix's own that are only in the catalog, not pre-installed (that file's
+`catalog` list: the drives, `org.webosphoenix.drives`; their entries in
+`accounts.json` say `package: {id, builtin: false}` without `preinstalled`,
+which `Catalog.php` allows for the `org.webosphoenix` / `com.webosphoenix`
+ids only). `bin/serve.sh` puts those packages into a development catalog.
 
 ## Tests
 

@@ -120,9 +120,11 @@ export interface AccountType {
      * builtin: part of the system (the generic logins), never removed; else a
      * connector package (kind "connector") Connections installs and removes;
      * preinstalled: one Phoenix comes with (removable, installed again
-     * without Developer Mode).
+     * without Developer Mode); firstParty: Phoenix's own from the catalog
+     * the device ships with (the pre-installed ones, and the drives, which
+     * are installed from the catalog): no Developer Mode needed.
      */
-    package: { id: string; builtin: boolean; preinstalled?: boolean };
+    package: { id: string; builtin: boolean; preinstalled?: boolean; firstParty?: boolean };
     help: string;
     /** Where a person without an account gets one (https); "" when there is none. */
     signUp: string;

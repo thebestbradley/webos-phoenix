@@ -17,6 +17,7 @@
 //   items       item records with a base copy; merge3 (three-way merge)
 //   linker      com.palm.person:1 for synced contacts (the linker's rules)
 //   vcard, ical, datetime, contentline   vCard and iCalendar mappers
+//   xml         a namespace-aware XML reader for WebDAV bodies (from apps/dav)
 //   createRequest   request() on Node's http / https (device only:
 //                   required when called, as the simulator has no "http")
 
@@ -33,6 +34,7 @@ var vcard = require("./vcard");
 var ical = require("./ical");
 var datetime = require("./datetime");
 var contentline = require("./contentline");
+var xml = require("./xml");
 
 module.exports = {
     createLuna: luna.createLuna,
@@ -56,5 +58,6 @@ module.exports = {
     ical: ical,
     datetime: datetime,
     contentline: contentline,
+    xml: xml,
     createRequest: function (options) { return require("./node-http").createRequest(options); }
 };

@@ -619,7 +619,9 @@ ownCloud, any server; an app password), SFTP and S3-compatible storage
 (Backblaze B2, MinIO, Wasabi); then with the OAuth service (C3) Dropbox,
 OneDrive (Microsoft Graph) and Google Drive (its restricted scope needs
 Google's verification; the per-file scope avoids most of it). iCloud Drive:
-not planned.
+not planned. *Built in the simulator (11 October 2026) but SFTP:
+[SHARE-AND-FILES.md](SHARE-AND-FILES.md) "Drives"; the registrations each
+OAuth drive needs: [DEVELOPER-APPS.md](DEVELOPER-APPS.md).*
 
 **Telegram** (C3, after Bluesky): a Messaging and Contacts connector on
 TDLib (Telegram's own client library, Boost Software License), driven from

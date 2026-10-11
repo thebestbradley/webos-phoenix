@@ -13,7 +13,8 @@
 # Connections lists a third-party connector from the start, and so are the
 # connector packages Phoenix comes with (apps/marketplace/service/etc/palm/
 # marketplace/preinstalled.json: the Fediverse), as Phoenix's own, so the
-# simulator can install one again after removing it.
+# simulator can install one again after removing it, and Phoenix's own that
+# are installed from the catalog (that file's "catalog": the drives).
 #
 #   server/marketplace/bin/serve.sh [port]
 
@@ -51,7 +52,7 @@ if [ "$MARKETPLACE_DEV" = 1 ]; then
                 for ipk in "$DATA"/seed/example/*.ipk; do
                     php bin/marketplace.php upload "$ipk" || true
                 done
-                for from in $(php -r 'foreach (json_decode(file_get_contents("../../apps/marketplace/service/etc/palm/marketplace/preinstalled.json"), true)["packages"] as $p) echo $p["from"], "\n";'); do
+                for from in $(php -r 'foreach (json_decode(file_get_contents("../../apps/marketplace/service/etc/palm/marketplace/preinstalled.json"), true)["packages"] as $p) echo $p["from"], "\n"; foreach ((json_decode(file_get_contents("../../apps/marketplace/service/etc/palm/marketplace/preinstalled.json"), true)["catalog"] ?? []) as $p) echo $p["from"], "\n";'); do
                     node "$KIT/bin/phoenix-connector.cjs" pack "../../$from" --out "$DATA/seed/phoenix" \
                         --namespace org.webosphoenix --namespace com.webosphoenix >/dev/null || true
                 done

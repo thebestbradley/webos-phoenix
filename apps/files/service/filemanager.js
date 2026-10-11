@@ -20,6 +20,19 @@
 //       folders under path (default /media/internal) whose names have every
 //       word of query, newest first; hidden ones skipped, at most limit (50)
 //       of them, 20,000 entries looked at
+//   open {path}                               -> {path}: a file to read by
+//       path (a drive's: the device's copy, downloaded when it changed)
+//   quota {path}                              -> {used, total?}: a drive's
+//   transfers {}                              -> {transfers}: uploads and
+//       downloads of the drives under way
+//   cancel {transferId}                       -> {}
+//
+// Drives (docs/SHARE-AND-FILES.md "Drives"): every path under /media/drives
+// is an account with the DOCUMENTS capability, handed to the connector
+// kit's router (createDriveRouter, @phoenix/connector-kit/lib/drives.js;
+// options.drives makes it from this file manager's own methods), so a copy
+// between the device and a drive is an upload or a download. /media lists
+// "drives" while there is one.
 //
 // The service can see the whole filesystem but only changes files under
 // the writable roots (the user's storage and temporary folders); the rest
@@ -31,7 +44,8 @@ const fs = require("fs");
 const fsp = fs.promises;
 const path = require("path");
 
-const E = { BAD_PARAMS: -1, NOT_FOUND: 1, EXISTS: 2, PERMISSION: 3, NOT_DIR: 4, IS_DIR: 5, NOT_EMPTY: 6, TOO_LARGE: 7, INVALID: 8, IO: 9 };
+const E = { BAD_PARAMS: -1, NOT_FOUND: 1, EXISTS: 2, PERMISSION: 3, NOT_DIR: 4, IS_DIR: 5, NOT_EMPTY: 6, TOO_LARGE: 7, INVALID: 8, IO: 9,
+            OFFLINE: 10, AUTH: 11, QUOTA: 12, CANCELED: 13, NOT_AVAILABLE: 14, UNSUPPORTED: 15, RATE_LIMITED: 16 };
 const ERRNO = { ENOENT: E.NOT_FOUND, EEXIST: E.EXISTS, EACCES: E.PERMISSION, EPERM: E.PERMISSION, EROFS: E.PERMISSION,
                 ENOTDIR: E.NOT_DIR, EISDIR: E.IS_DIR, ENOTEMPTY: E.NOT_EMPTY, EINVAL: E.INVALID };
 const DEFAULT_WRITABLE = ["/media", "/home", "/tmp", "/var/tmp", "/mnt", "/run/media"];
@@ -260,12 +274,53 @@ function createFileManager(options) {
         },
     };
 
+    methods.open = async (p) => {
+        const file = absolute(p.path);
+        const s = await fsp.stat(file);
+        if (s.isDirectory()) throw new FileError(E.IS_DIR, "Is a folder: " + file);
+        return ok({ path: file });
+    };
+    methods.quota = async () => { throw new FileError(E.UNSUPPORTED, "quota: a drive's folder (/media/drives/...)"); };
+    methods.transfers = async () => ok({ transfers: [] });
+    methods.cancel = async () => { throw new FileError(E.NOT_FOUND, "No such transfer"); };
+
     // Every method resolves to a reply, never rejects.
-    const api = {};
+    const local = {};
     for (const name of Object.keys(methods)) {
-        api[name] = (payload) => methods[name](payload || {}).catch(failure);
+        local[name] = (payload) => methods[name](payload || {}).catch(failure);
     }
+    const drives = options && options.drives ? options.drives(local) : null;
+    if (!drives) return local;
+
+    // The drives' paths go to the router; a copy or move with one side on a drive too.
+    const api = {};
+    const onDrive = (p) => p && (drives.handles(p.path) || drives.handles(p.from) || drives.handles(p.to));
+    for (const name of Object.keys(local)) {
+        api[name] = (payload) => {
+            const p = payload || {};
+            if (name === "transfers" || name === "cancel" || name === "quota") return drives[name](p);
+            if (name === "search") return p.path && drives.handles(p.path) ? drives.search(p) : local.search(p);
+            return onDrive(p) ? drives[name](p) : local[name](p);
+        };
+    }
+    // /media shows the drives' folder while there is a drive account.
+    api.list = async (payload) => {
+        const p = payload || {};
+        if (drives.handles(p.path)) return drives.list(p);
+        const r = await local.list(p);
+        if (r.returnValue && absoluteOr(p.path) === "/media") {
+            const list = await drives.drives().catch(() => []);
+            if (list.length && !r.entries.some((e) => e.name === "drives"))
+                r.entries.push({ name: "drives", path: "/media/drives", type: "directory", size: 0, mtime: 0, mode: 0o555, readOnly: true });
+        }
+        return r;
+    };
     return api;
 }
 
-module.exports = { createFileManager, ERRORS: E, METHODS: ["list", "stat", "mkdir", "copy", "move", "remove", "read", "write", "search"] };
+function absoluteOr(p) {
+    try { return absolute(p); } catch (e) { return null; }
+}
+
+module.exports = { createFileManager, ERRORS: E,
+                   METHODS: ["list", "stat", "mkdir", "copy", "move", "remove", "read", "write", "search", "open", "quota", "transfers", "cancel"] };

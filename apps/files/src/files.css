@@ -145,6 +145,51 @@ body.pui-app { overflow: hidden; }
 }
 .fm-favorite.current { font-weight: bold; background: rgba(255, 255, 255, 0.45); }
 .fm-favorite:active { color: #fff; background: linear-gradient(#2c8ce0, #1a5fa8); }
+.fm-favorite + .fm-favorites-title { margin-top: 14px; }
+.fm-drive-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.fm-drive-text small { font-size: 12px; font-weight: normal; color: #5a5a58; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- Drives: an upload or download under way, a drive that cannot be reached ------------ */
+
+.fm-transfer {
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: 62px;
+    z-index: 20;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 10px;
+    align-items: center;
+    padding: 8px 12px;
+    font-size: 14px;
+    color: #fff;
+    background: rgba(30, 30, 30, 0.88);
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+.fm-transfer-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fm-transfer-bar { grid-column: 1; height: 5px; background: rgba(255, 255, 255, 0.25); border-radius: 3px; overflow: hidden; }
+.fm-transfer-bar > div { height: 100%; background: linear-gradient(#5fb0f0, #2a7ccb); transition: width 0.3s; }
+.fm-transfer-cancel {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    padding: 6px 12px;
+    font-size: 14px;
+    color: #fff;
+    background: linear-gradient(#6a6a6a, #3f3f3f);
+    border: 1px solid #222;
+    border-radius: 6px;
+}
+.fm-error-buttons { display: flex; justify-content: center; gap: 10px; margin-top: 14px; }
+.fm-retry {
+    padding: 8px 16px;
+    font-size: 15px;
+    color: #222;
+    background: linear-gradient(#fdfdfd, #d9d9d7);
+    border: 1px solid #8f8f8d;
+    border-radius: 6px;
+}
 
 /* ---- Image viewer ----------------------------------------------------------------------- */
 

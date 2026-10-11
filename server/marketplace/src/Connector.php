@@ -65,7 +65,7 @@ final class Connector
     /** The services a connector's service may call. */
     public const ALLOWED_OUTBOUND = ['com.palm.db', 'com.palm.tempdb', 'com.palm.activitymanager', 'com.palm.service.accounts',
                                      'org.webosphoenix.service.oauth', 'org.webosphoenix.service.keystore', 'org.webosphoenix.service.push',
-                                     'com.webos.notification', 'org.webosports.service.messaging'];
+                                     'com.webos.notification', 'org.webosports.service.messaging', 'org.webosphoenix.ongoing'];
 
     private const CALLBACKS = ['onCreate', 'onEnabled', 'onDelete', 'onCredentialsChanged', 'sync'];
     private const SYSBUS_REQUIRED = ['.service', '.role.json', '.api.json'];

@@ -2,7 +2,10 @@
   "name": "org.webosphoenix.filemanager",
   "version": "0.1.0",
   "private": true,
-  "description": "webOS Phoenix file manager service (Luna): list, stat, mkdir, copy, move, remove, read, write",
+  "description": "webOS Phoenix file manager service (Luna): list, stat, mkdir, copy, move, remove, read, write, search; the drives (Synergy accounts with the DOCUMENTS capability) under /media/drives",
   "license": "Apache-2.0",
-  "main": "service.js"
+  "main": "service.js",
+  "dependencies": {
+    "@phoenix/connector-kit": "*"
+  }
 }

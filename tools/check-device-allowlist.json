@@ -286,6 +286,14 @@
   "owner": "the app's or service's owner",
   "row": "C6"
  },
+ "luna:unknown-group:org.webosphoenix.filemanager:accounts.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.filemanager:drives.files": {
+  "owner": "the drives connector (apps/connectors/drives: installed from the catalog, its sysbus files come with it, not with the image)",
+  "row": "C6"
+ },
  "luna:unknown-group:org.webosphoenix.flashlight:torch.operation": {
   "owner": "the app's or service's owner",
   "row": "C6"

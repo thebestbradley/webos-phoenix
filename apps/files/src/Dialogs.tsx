@@ -80,15 +80,18 @@ export function DeleteDialog({ entries, onConfirm, onClose }: { entries: FileEnt
 
 // ---- Info ------------------------------------------------------------------------------
 
-export function InfoDialog({ entry, onClose }: { entry: FileEntry; onClose: () => void }) {
+export function InfoDialog({ entry, quota, onClose }: { entry: FileEntry; quota?: { used: number; total?: number }; onClose: () => void }) {
     const folder = entry.type === "directory";
     const type = folder ? "Folder" : `${kindLabel(entry)} (${mimeOf(entry.name)})`;
     const size = folder
         ? `${entry.count ?? 0} item${entry.count === 1 ? "" : "s"}`
         : `${formatSize(entry.size)}${entry.size >= 1024 ? ` (${entry.size.toLocaleString("en-US")} bytes)` : ""}`;
     return (
-        <Dialog open title={entry.name || "/"} onClose={onClose} testId="info-dialog">
+        <Dialog open title={entry.drive ? entry.drive.title : entry.name || "/"} onClose={onClose} testId="info-dialog">
             <Group className="fm-info">
+                {entry.drive && <Row title="Account" value={entry.drive.account} testId="info-account" />}
+                {quota && <Row title="Used" testId="info-quota"
+                               value={quota.total ? `${formatSize(quota.used)} of ${formatSize(quota.total)}` : formatSize(quota.used)} />}
                 <Row title="Type" value={type} testId="info-type" />
                 <Row title={folder ? "Contains" : "Size"} value={size} testId="info-size" />
                 <Row title="Modified" value={longDate(entry.mtime)} testId="info-modified" />

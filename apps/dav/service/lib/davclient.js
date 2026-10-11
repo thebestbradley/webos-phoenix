@@ -18,7 +18,7 @@
 
 "use strict";
 
-var X = require("./xml");
+var X = require("@phoenix/synckit").xml;
 
 var NS = {
     DAV: "DAV:",
