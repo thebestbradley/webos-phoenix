@@ -138,6 +138,16 @@ describe("talk mode: every button asked aloud", () => {
         expect((await make().ask(QUESTION)).text).toBe("I can't answer that on my own yet, but I can search the web for it.");
         expect((await d.ask("sure", voice)).command).toBe("search");
     });
+    it("names a cloud model's choice by its provider or its model, and asks which for a yes", async () => {
+        const d = make();
+        d.storage.set("assistant:provider:p1", { id: "p1", type: "anthropic", model: "claude-sonnet-5-5", keyEnc: {}, created: 1 });
+        const m = await d.ask(QUESTION, voice);
+        expect(m.text).toBe("I can't answer that on my own yet. Want me to ask Anthropic or search the web?");
+        expect((await d.ask("yes", voice)).text).toBe("Sorry, want me to ask Anthropic or search the web?");
+        await d.ask("ask Claude", voice);
+        expect(d.requests.some((u: string) => u.indexOf("api.anthropic.com") >= 0)).toBe(true);
+        expect(searched(d)).toEqual([]);
+    });
     it("asks the next step a command offers, but not the app it already did it in", async () => {
         const d = make();
         expect((await d.ask("check my voicemail", voice)).text).toBe("You have 2 new voicemails. Want me to call voicemail?");

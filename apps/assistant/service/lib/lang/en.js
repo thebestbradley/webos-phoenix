@@ -2715,6 +2715,7 @@ function choiceNamed(t, options, partial, places) {
         if ((o.kind === "cloud" || o.kind === "open") && name) {
             var first = name.split(" ")[0], verb = o.kind === "cloud" ? "ask" : "open";
             if (t === name || t === verb + " " + name || (first.length > 2 && (t === first || t === verb + " " + first))) return i;
+            if ((o.aliases || []).some(function (a) { return t === a || t === verb + " " + a; })) return i;
         }
         if (o.kind === "item" && t === name) return i;
     }

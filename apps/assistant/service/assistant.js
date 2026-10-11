@@ -570,6 +570,9 @@ function createAssistantService(deps) {
                 var prov = getProvider(c.id.slice(6));
                 o.kind = "cloud";
                 o.name = prov ? providers.displayName(prov).replace(/\s*\(.*\)$/, "") : String(c.label).replace(/^\S+\s+/, "");
+                // Named by its model too: "ask Claude" for Anthropic's, "ask ChatGPT" for OpenAI's.
+                var family = prov && /^[a-z]+/i.exec(String(prov.model || ""));
+                if (family) o.aliases = family[0].toLowerCase() === "gpt" ? ["gpt", "chatgpt", "chat gpt"] : [family[0].toLowerCase()];
             } else if (c.id === "open") {
                 o.kind = "open";
                 o.name = (m.data && m.data.open && m.data.open.title) || "";
