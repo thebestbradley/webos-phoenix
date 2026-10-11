@@ -3884,15 +3884,20 @@
         }
 
         // Account.annotate(): the account's own fields over the template's,
-        // each capability provider completed from the template's.
+        // each capability provider completed from the template's
+        // (app-services models/account-model.js:26-71: its serviceName,
+        // dbkinds, loc_name, implementation ...). The template's providers
+        // are taken before the account's fields go over it: the account's
+        // own list is only ids and capabilities.
         function annotate(account) {
             var template = templateFor(account.templateId);
             if (!template) return null;
+            var providers = template.capabilityProviders || [];
             var subset = account.capabilityProviders || [];
             var result = template;
             for (var k in account) result[k] = account[k];
             result.capabilityProviders = subset.map(function (c) {
-                var t = (template.capabilityProviders || []).filter(function (tc) { return tc.id === c.id; })[0] || {};
+                var t = providers.filter(function (tc) { return tc.id === c.id; })[0] || {};
                 var out = {};
                 for (var k in c) out[k] = c[k];
                 for (k in t) out[k] = t[k];
@@ -12245,7 +12250,24 @@
         var liveHeld = {}, beatTimer = null, callSeq = 0;
         function beat() {
             store.set("connector:alive:" + PAGE_ID, Date.now());
-            Object.keys(liveHeld).forEach(function (svc) { store.set("connector:live:" + svc, { page: PAGE_ID, at: Date.now() }); });
+            Object.keys(liveHeld).forEach(function (svc) {
+                // Two pages that took the connections at once (each found
+                // none kept: the store is shared between processes, and
+                // claiming waits on the accounts) would each keep their own
+                // for good, every message sent from both and the demo
+                // server's answers split between them: the page that
+                // started first (its id begins with the time) keeps them,
+                // the other lets go.
+                var o = store.get("connector:live:" + svc, null);
+                if (o && o.page !== PAGE_ID && o.page < PAGE_ID && Date.now() - (o.at || 0) < LIVE_FRESH_MS) return letGo(svc);
+                store.set("connector:live:" + svc, { page: PAGE_ID, at: Date.now() });
+            });
+        }
+        function letGo(service) {
+            delete liveHeld[service];
+            var m;
+            try { m = hosted[service] && hosted[service].load(); } catch (e) { m = null; }
+            if (m && m.methods.disconnect) Promise.resolve(m.methods.disconnect({})).catch(function () {});
         }
         function startBeat() {
             beat();
@@ -12781,14 +12803,16 @@
         function templateFor(id) { return templates().filter(function (t) { return t.templateId === id; })[0]; }
         function isDav(templateId) { return !!templateFor(templateId); }
 
-        // Account.annotate (app-services models/account-model.js), as the block above.
+        // Account.annotate (app-services models/account-model.js), as the block above:
+        // the template's providers taken before the account's fields go over it.
         function annotate(account) {
             var template = templateFor(account.templateId);
             if (!template) return null;
+            var providers = template.capabilityProviders || [];
             var result = template, subset = account.capabilityProviders || [];
             for (var k in account) result[k] = account[k];
             result.capabilityProviders = subset.map(function (c) {
-                var t = (template.capabilityProviders || []).filter(function (tc) { return tc.id === c.id; })[0] || {};
+                var t = providers.filter(function (tc) { return tc.id === c.id; })[0] || {};
                 var out = {};
                 for (var k2 in c) out[k2] = c[k2];
                 for (k2 in t) out[k2] = t[k2];
