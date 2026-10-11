@@ -22,6 +22,8 @@
 //   simHomeButton  the device has a hardware Home button instead of the
 //                  gesture bar (--home-button; the Home key presses it)
 //   simLaunch      app ids to launch (--launch)
+//   simLaunchParams  their launch params, in the same order ({} for none;
+//                  --launch 'appId:{json}', sim/simlaunch.h)
 //   simOpen        a web address to open in the browser (--open)
 //   simDisplayWidth, simDisplayHeight  the window's size at start-up, upright (--size);
 //                  after that the screen follows the window
@@ -1899,15 +1901,20 @@ Item {
             shell.keyboard.emojiPrefs = simSettings.value("keyboard/emoji");
             shell.keyboard.textAssistData = simSettings.value("keyboard/words");
         }
-        // --launch <appId>: open these apps, in card view, then stop.
+        // --launch <appId>: open these apps, in card view, then stop;
+        // --launch '<appId>:{json}' with those launch params (simLaunchParams,
+        // the same order; {} for none), as the application manager's
+        // launch {id, params}.
         // --open <url>: open a web page in the browser, as a link would.
         var opening = typeof simOpen !== "undefined" && simOpen !== "";
         if (opening || (typeof simLaunch !== "undefined" && simLaunch.length > 0)) {
             shell.unlock();
             // After the window source has built its app list.
             Qt.callLater(function() {
-                for (var j = 0; simLaunch && j < simLaunch.length; ++j)
-                    shell.launch(simLaunch[j]);
+                for (var j = 0; simLaunch && j < simLaunch.length; ++j) {
+                    var lp = typeof simLaunchParams !== "undefined" && simLaunchParams ? simLaunchParams[j] : null;
+                    shell.launch(simLaunch[j], lp && Object.keys(lp).length > 0 ? lp : null);
+                }
                 if (opening)
                     windows.openUrl(simOpen);
                 // --scene clipstrip with --launch: the strip over that app.

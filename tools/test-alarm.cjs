@@ -10,7 +10,10 @@
 //   2. the Clock is relaunched in place (Mojo.relaunch, as LunaSysMgr did)
 //      and rings: it opens its alarm popup alert (enyo.windows.openPopup),
 //      tagged for the shell with its type, height and window name;
-//   3. Dismiss closes the alert.
+//   3. Dismiss closes the alert;
+//   4. an alarm that came due while no page ran rings when the Clock is
+//      next opened, after the Clock's own launch has opened its card (the
+//      runtime holds a relaunch until the page has taken its launch).
 //
 // And the system sounds the alarm and the ringtone picker draw on: Open
 // webOS's /usr/palm/sounds are served, the ringtone list starts with them;
@@ -144,6 +147,43 @@ async function main() {
         const closed = popup.waitForEvent("close", { timeout: 10000 }).then(() => true, () => false);
         await popup.getByText("Dismiss", { exact: true }).click();
         check(await closed, "Dismiss closes the alert");
+
+        // 4. The alarm comes due while the Clock is not running (no page of
+        // it, nor any other, to fire it), and then the user opens the Clock:
+        // its page fires the alarm as it starts, as a relaunch after its own
+        // launch, which opens the Clock's card; then it rings. (The
+        // relaunch once rewrote the launch params before the Clock read its
+        // own: only the alarm opened.)
+        const soon = await page.evaluate((key) => new Promise((resolve) => {
+            const at = new Date(Date.now() + 2000);
+            const when = enyo.application.utilities.getActivityDateString(at);
+            __phoenixRuntime.dispatch("palm://com.palm.activitymanager/create", { start: true, replace: true, activity: {
+                name: key, description: "com.palm.app.clock alarm: Wake up", type: { foreground: true, persist: true },
+                callback: { method: "palm://com.palm.applicationManager/launch",
+                            params: { id: "com.palm.app.clock", params: { action: "ring", key, setTime: when } } },
+                schedule: { start: when, local: true } } }, () => resolve(at.getTime()), { cancelled: () => false });
+        }), KEY);
+        for (const p of context.pages()) await p.close();
+        await new Promise((r) => setTimeout(r, Math.max(0, soon - Date.now()) + 1500));
+        const opened = [];
+        context.on("page", (p) => opened.push(p));
+        const again = await context.newPage();
+        again.on("pageerror", (e) => errors.push(e.message));
+        await again.goto(clock);
+        const both = async () => opened.some((p) => /main\.html/.test(p.url())) && opened.some((p) => /dashAlarm\.html/.test(p.url()));
+        for (let t = 0; t < 15000 && !(await both()); t += 250) await new Promise((r) => setTimeout(r, 250));
+        check(opened.some((p) => /main\.html/.test(p.url())), "opened with an alarm due, the Clock opens its card (its own launch)");
+        const ring = opened.find((p) => /dashAlarm\.html/.test(p.url()));
+        check(!!ring, "... and rings the alarm that came due (a relaunch after it)");
+        const lp = await again.evaluate(() => JSON.parse(PalmSystem.launchParams));
+        check(lp.action === "ring" && lp.$activity && lp.$activity.name === KEY && !("trigger" in lp.$activity),
+              `the relaunch carried the activity, without a trigger's reply (${JSON.stringify(lp)})`);
+        if (ring) {
+            await ring.waitForFunction(() => /Wake up/.test(document.body.innerText), null, { timeout: 10000 }).catch(() => null);
+            const closedAgain = ring.waitForEvent("close", { timeout: 10000 }).then(() => true, () => false);
+            await ring.getByText("Dismiss", { exact: true }).click();
+            check(await closedAgain, "Dismiss closes it");
+        }
         check(errors.length === 0, "no page errors" + (errors.length ? ": " + errors.join("; ") : ""));
         await browser.close();
     } finally {

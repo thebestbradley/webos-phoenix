@@ -42,7 +42,7 @@ describe("the topics", () => {
             for (const m of t.body.matchAll(/\]\(topic:([^)]+)\)/g)) expect(ids.has(m[1]), `${t.id} -> ${m[1]}`).toBe(true);
         }
         // The shell's basics and each Phoenix app have one.
-        for (const id of ["gestures", "cards", "launcher", "notifications", "justtype", "lockscreen", "phone", "messaging",
+        for (const id of ["gestures", "cards", "launcher", "notifications", "justtype", "lockscreen", "phone", "messaging", "email", "clock", "calculator",
             "camera", "photos", "music", "files", "tasks", "voicememos", "emergency", "location"])
             expect(ids.has(id), id).toBe(true);
     });

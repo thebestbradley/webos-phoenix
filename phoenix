@@ -158,6 +158,18 @@ installing() {
 }
 die() { printf 'phoenix: %s\n' "$*" >&2; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
+# words ARG...: the arguments as one would type them, those with spaces,
+# quotes or braces in single quotes (a --launch 'appId:{json}').
+words() {
+    out=""
+    for w in "$@"; do
+        case "$w" in
+            ""|*[!A-Za-z0-9_./:=@%+,-]*) w="'$(printf '%s' "$w" | sed "s/'/'\\\\''/g")'" ;;
+        esac
+        out="${out:+$out }$w"
+    done
+    printf '%s' "$out"
+}
 # run CMD...: runs it, or in a dry run prints it.
 run() {
     if [ $DRY = 1 ]; then
@@ -637,7 +649,7 @@ if [ "$OS" = Linux ]; then
     fi
 fi
 if [ $DRY = 1 ]; then
-    printf '           would run: %s\n' "${SIM:+$SIM }$*"
+    printf '           would run: %s\n' "$(words ${SIM:+"$SIM"} "$@")"
     exit 0
 fi
 [ -z "$SIM" ] || [ -x "$SIM" ] || die "$SIM was not built."

@@ -61,6 +61,7 @@
 #include "simdevices.h"
 #include "simfonts.h"
 #include "siminstaller.h"
+#include "simlaunch.h"
 #include "simsnapshots.h"
 #include "simpty.h"
 #include "simsettings.h"
@@ -192,7 +193,7 @@ int main(int argc, char *argv[])
     QCommandLineOption repoOpt(QStringLiteral("repo-dir"), QStringLiteral("Checkout root holding runtime/rootfs.json and the web apps."), QStringLiteral("dir"));
     QCommandLineOption installedOpt(QStringLiteral("installed-dir"), QStringLiteral("Where apps the user installs go (default: the simulator's data folder, cryptofs/apps)."), QStringLiteral("dir"));
     QCommandLineOption extraRootfsOpt(QStringLiteral("extra-rootfs"), QStringLiteral("Another folder laid out like the device's root, for apps built outside this checkout (repeatable; phoenix-default-apps' npm run stage writes one): each app in its usr/palm/applications/ is added, replacing the built-in app with its id (without the compat overlay's files for it), and its other files (shared frameworks in usr/palm/frameworks/) are served over the checkout's."), QStringLiteral("dir"));
-    QCommandLineOption launchOpt(QStringLiteral("launch"), QStringLiteral("Launch this app id after start-up (repeatable)."), QStringLiteral("appId"));
+    QCommandLineOption launchOpt(QStringLiteral("launch"), QStringLiteral("Launch this app after start-up (repeatable): an app id, or an app id and the launch params to start it with, appId:{json} (as the application manager's launch {id, params}), e.g. --launch 'com.palm.app.clock:{\"action\": \"edit\"}'."), QStringLiteral("appId[:{json}]"));
     QCommandLineOption openOpt(QStringLiteral("open"), QStringLiteral("Open this web address in the browser after start-up."), QStringLiteral("url"));
     QCommandLineOption orientationOpt(QStringLiteral("orientation"), QStringLiteral("How the device is held at start-up: up (default), left (turned counter-clockwise), down or right. The window shows it as held; --size is the screen upright."), QStringLiteral("orientation"), QStringLiteral("up"));
     QCommandLineOption turnOpt(QStringLiteral("turn"), QStringLiteral("Turn the device to this orientation one second after start-up (the UI follows 200 ms later and turns for 300 ms)."), QStringLiteral("orientation"));
@@ -414,7 +415,19 @@ int main(int argc, char *argv[])
     // set to "0"), started without waiting, where PHP is (without it the
     // simulator runs without the catalog, and the menu says why when asked);
     // --no-marketplace: not this time.
-    QStringList launch = parser.values(launchOpt);
+    // --launch appId, or appId:{json} with its launch params (simlaunch.h).
+    QStringList launch;
+    QVariantList launchParams;
+    for (const QString &value : parser.values(launchOpt)) {
+        SimLaunch l;
+        QString error;
+        if (!parseSimLaunch(value, &l, &error)) {
+            qCritical("%s", qPrintable(error));
+            return 2;
+        }
+        launch << l.appId;
+        launchParams << l.params;
+    }
 #ifdef PHOENIX_HAVE_WEBENGINE
     auto marketplace = std::make_unique<SimMarketplace>(repoDir);
     if (!parser.isSet(marketplaceOpt) && !parser.isSet(noMarketplaceOpt)
@@ -432,8 +445,10 @@ int main(int argc, char *argv[])
                   marketplace->ownsServer() ? qPrintable(QStringLiteral(" (log: ") + marketplace->logFile() + QLatin1Char(')')) : " (already running)");
         else
             qWarning("phoenix-sim: --marketplace: %s", qPrintable(marketplace->error()));
-        if (!launch.contains(QStringLiteral("org.webosphoenix.marketplace")))
+        if (!launch.contains(QStringLiteral("org.webosphoenix.marketplace"))) {
             launch << QStringLiteral("org.webosphoenix.marketplace");
+            launchParams << QVariantMap();
+        }
     }
 #else
     if (parser.isSet(marketplaceOpt))
@@ -512,6 +527,7 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simWebEngine"), webEngine);
     view.rootContext()->setContextProperty(QStringLiteral("simWebApps"), webApps);
     view.rootContext()->setContextProperty(QStringLiteral("simLaunch"), launch);
+    view.rootContext()->setContextProperty(QStringLiteral("simLaunchParams"), launchParams);
     view.rootContext()->setContextProperty(QStringLiteral("simLowMemory"), parser.isSet(lowMemoryOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simTouchstone"), parser.isSet(touchstoneOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simHardwareKeyboard"), parser.isSet(hardwareKeyboardOpt));
