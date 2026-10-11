@@ -9,6 +9,7 @@
 //   commands-routines.js   routines: steps run on a phrase, a time, the charger or the car
 //   commands-capture.js    photos, selfies, videos and voice memos, and stopping them
 //   commands-places.js     where I parked, reminders at home, work or here, home and work
+//   commands-music.js      shuffle, repeat, favorite songs, the sleep timer, podcasts
 //
 // Each area: (h) -> {COMMANDS (as lib/commands.js BUILT_IN, with their
 // examples, and whenLocked: may run when asked over the lock screen),
@@ -18,7 +19,8 @@
 
 "use strict";
 
-var AREAS = [require("./commands-notify"), require("./commands-routines"), require("./commands-capture"), require("./commands-places")];
+var AREAS = [require("./commands-notify"), require("./commands-routines"), require("./commands-capture"), require("./commands-places"),
+             require("./commands-music")];
 
 module.exports = function (h) {
     var areas = AREAS.map(function (make) { return make(h); });

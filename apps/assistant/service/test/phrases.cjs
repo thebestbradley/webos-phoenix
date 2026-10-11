@@ -38,4 +38,5 @@ module.exports = {
     routine: "good night", routineList: "what routines do I have", routineManage: "turn on my good night routine",
     camera: "take a selfie in 3 seconds", voiceMemo: "record a voice memo called groceries", stopRecording: "stop recording",
     parking: "remember where I parked", findParking: "where did I park", placeReminder: "remind me to lock the door when I leave", setPlace: "this is my work",
+    musicMode: "turn on shuffle", favorites: "like this song", sleepTimer: "stop the music in 30 minutes", podcast: "resume my podcast",
 };

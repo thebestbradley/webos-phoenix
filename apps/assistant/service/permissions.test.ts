@@ -55,7 +55,7 @@ const GROUPS: [RegExp, string][] = [
     [/^org\.webosphoenix\.clipboard\/add$/, "phoenix.clipboard"],
     [/^com\.webos\.service\.vpn\//, "vpn.management"],                                                     // LuneOS's luneos-vpn-adapter
     [/^org\.webosphoenix\.service\.location\//, "phoenix.location.permissions"],
-    [/^org\.webosphoenix\.system\/mediaKey$/, "phoenix.system.media"],
+    [/^org\.webosphoenix\.system\/(?:mediaKey|getNowPlaying)$/, "phoenix.system.media"],
     [/^org\.webosphoenix\.system\/getNotifications$/, "phoenix.system.notifications.read"],               // services/shellhost
     [/^com\.webos\.service\.wifi\//, "wifi.management"],
     [/^com\.webos\.service\.connectionmanager\//, "networkconnection"],

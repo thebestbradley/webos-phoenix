@@ -25,7 +25,8 @@
         "org.webosphoenix.assistant/driving",
         "org.webosphoenix.assistant/routineEvent",
         "org.webosphoenix.assistant/routineWake",
-        "org.webosphoenix.assistant/placeWake"
+        "org.webosphoenix.assistant/placeWake",
+        "org.webosphoenix.assistant/sleepWake"
     ],
     "assistant.settings": [
         "org.webosphoenix.assistant/getSettings",

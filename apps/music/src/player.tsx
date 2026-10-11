@@ -174,13 +174,14 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         if (!current) return;
         const palm = (globalThis as { PalmSystem?: Palm }).PalmSystem;
-        postNowPlaying({ title: titleOf(current), artist: artistOf(current), album: current.album ?? "", playing: s.playing, appId: "org.webosphoenix.music" });
+        postNowPlaying({ title: titleOf(current), artist: artistOf(current), album: current.album ?? "", playing: s.playing, appId: "org.webosphoenix.music",
+                         uri: current.uri, shuffle: s.shuffle, repeat: s.repeat });
         if (s.playing && announced.current !== current.uri) {
             announced.current = current.uri;
             if (document.hidden || palm?.isActivated?.() === false)
                 palm?.addBannerMessage?.(`${titleOf(current)} – ${artistOf(current)}`, "{}", "icon.png");
         }
-    }, [current, s.playing]);
+    }, [current, s.playing, s.shuffle, s.repeat]);
 
     // The headset and media keys, for as long as the app runs; they reach
     // the player through refs. Keys can come faster than React renders (a

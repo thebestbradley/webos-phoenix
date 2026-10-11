@@ -1,0 +1,30 @@
+{
+    "id": "org.webosphoenix.music.favorite:1",
+    "owner": "org.webosphoenix.music",
+    "sync": true,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "uri": { "type": "string", "description": "The song's media indexer uri" },
+            "path": { "type": "string", "description": "The song's file" },
+            "title": { "type": "string" },
+            "artist": { "type": "string" },
+            "album": { "type": "string" },
+            "added": { "type": "integer", "description": "When it was made a favorite, ms" }
+        }
+    },
+    "indexes": [
+        {
+            "name": "added",
+            "props": [
+                { "name": "added" }
+            ]
+        },
+        {
+            "name": "uri",
+            "props": [
+                { "name": "uri" }
+            ]
+        }
+    ]
+}

@@ -114,6 +114,10 @@
 {"id":"h-syn-9","cat":"synergy","say":"hop on the zoom call","expect":{"command":"joinMeeting"}},
 {"id":"h-syn-10","cat":"synergy","say":"which of my accounts can I post from","expect":{"anyOf":[{"command":"accounts"},{"command":"post","status":"ask"},{"answer":"fallback"}]},"forbid":["post"]},
 {"id":"h-syn-11","cat":"synergy","say":"let Noor see where I am","expect":{"command":"shareLocation","status":"pending"},"text":"telegram"},
-{"id":"h-syn-12","cat":"synergy","say":"message Sam on slack with my ETA to the airport","expect":{"command":"shareLocation","args":{"chat":{"service":"type_slack"}},"status":"pending"}}
+{"id":"h-syn-12","cat":"synergy","say":"message Sam on slack with my ETA to the airport","expect":{"command":"shareLocation","args":{"chat":{"service":"type_slack"}},"status":"pending"}},
+{"id":"h-c-music-1","cat":"music","say":"mix up the songs","expect":{"command":"musicMode","args":{"mode":"shuffle","state":"on"}}},
+{"id":"h-c-music-2","cat":"music","say":"turn the music off in 45 minutes","expect":{"command":"sleepTimer","args":{"action":"set","minutes":45}}},
+{"id":"h-c-music-3","cat":"music","say":"save this track to my favourites","deviceState":{"nowPlaying":{"title":"Blue in Green","artist":"Miles Davis","playing":true,"appId":"org.webosphoenix.music","uri":"storage:///media/internal/music/blue.mp3"}},"expect":{"command":"favorites","args":{"action":"add"}}},
+{"id":"h-c-music-4","cat":"music","say":"put on the newest hard fork","db":[{"_id":"pod-fork","_kind":"org.webosphoenix.podcast:1","title":"Hard Fork","subscribed":true},{"_id":"ep-f1","_kind":"org.webosphoenix.podcast.episode:1","podcastId":"pod-fork","title":"AI and you","published":1791100000000,"position":0,"played":false}],"expect":{"command":"podcast"}}
 ]
 }

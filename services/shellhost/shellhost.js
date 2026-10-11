@@ -48,7 +48,7 @@
 // and org.webosphoenix.system (the runtime's, which the Assistant's service
 // calls on a device: "what's playing", "pause"):
 //
-//   setNowPlaying {title, artist?, album?, playing, appId?}, getNowPlaying
+//   setNowPlaying {title, artist?, album?, playing, appId?, uri?, shuffle?, repeat?}, getNowPlaying
 //                               -> {nowPlaying: {..., appId, time} | null}
 //   mediaKey {key}              a "mediaKey" message for the shell, which
 //                               presses it (com.palm.display/phoenix/report
@@ -240,6 +240,10 @@ function createShellHost(opts) {
             if (typeof p.title !== "string") return respond(fail(-1, "title is required"));
             nowPlaying = { title: p.title, artist: String(p.artist || ""), album: String(p.album || ""), playing: !!p.playing,
                            appId: String(p.appId || appIdOf(caller)), time: now() };
+            // Music's: the song (its media indexer uri), shuffled, repeating (the Assistant's "like this song", "is shuffle on").
+            if (typeof p.uri === "string") nowPlaying.uri = p.uri;
+            if (typeof p.shuffle === "boolean") nowPlaying.shuffle = p.shuffle;
+            if (p.repeat === "off" || p.repeat === "all" || p.repeat === "one") nowPlaying.repeat = p.repeat;
             respond(ok());
         },
         getNowPlaying: function (p, caller, respond) { respond(ok({ nowPlaying: nowPlaying })); },

@@ -1568,7 +1568,35 @@ checked with `--scene "assistant:this is my home|yes|@location:37.3437,-121.8907
 me to buy milk when I get home|@close|@location:37.3338,-121.8906|@wait:8000|@dashboard"`,
 Tasks' "buy milk / When you get home" in the dashboard. On a device the
 same calls go to OSE's activity manager and location service; not run on
-one yet.
+one yet. "Send Sam my ETA home" (the Synergy commands' `shareLocation`)
+uses the same saved Home and Work.
+
+**Music and podcasts** (`musicMode`, `favorites`, `sleepTimer`, `podcast`;
+`lib/commands-music.js`). "Shuffle my music" plays everything shuffled;
+"turn on shuffle", "turn shuffle off", "repeat this song", "repeat all",
+"stop repeating", "is shuffle on": Music behind the answer with
+`{shuffle}` or `{repeat: "off" | "all" | "one"}`, which its player takes
+as its own buttons set them (`apps/music` launchParams.ts); Music now says
+what plays with its uri, shuffle and repeat (`setNowPlaying`, which
+`services/shellhost` and the simulator keep). "Like this song", "add this
+to my favorites", "unlike this song": Music's favorites, new, in db8
+(`org.webosphoenix.music.favorite:1`, `apps/music` favorites.ts): the star
+on Now Playing, a Favorites tab (a star, so four tabs fit a phone), and
+"play my favorites" / "shuffle my favorites" (`{favorites: true}`); the
+Assistant writes the song Music says plays and checks it is there. "Stop
+the music in 30 minutes", "set a sleep timer for an hour", "how long is
+left on the sleep timer", "cancel the sleep timer": an activity at that
+time calls `sleepWake`, which presses pause (`org.webosphoenix.system
+mediaKey`), so whatever plays stops (Music, Podcasts, Videos); "set a
+timer for 30 minutes" is still the Clock's timer. Podcasts: "play the
+latest episode of The Daily", "play the Hard Fork podcast", "resume my
+podcast": the episode is chosen from Podcasts' own (the one left
+part-way, else the newest not played, else the newest; "latest": the
+newest) and Podcasts plays it from where it was left (`{playEpisode:
+id}`); a podcast not followed is said, with the ones that are. Shuffle
+and repeat are Music's: asked while a podcast plays, it says so. Checked
+in the simulator (`--scene 'assistant:@open:org.webosphoenix.music:{"play":""}|like
+this song|repeat this song'`: the star lit and repeat-one on Now Playing).
 
 ### The Assistant and Synergy (11 October 2026)
 

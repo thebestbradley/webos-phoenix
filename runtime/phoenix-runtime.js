@@ -3669,13 +3669,18 @@
         // key's com.palm.keys /media events, down then up, and the player
         // holding the audio focus acts (@phoenix/luna mediakeys.ts).
         // What plays, as the player last said (@phoenix/luna postNowPlaying:
-        // Music, Podcasts): setNowPlaying {title, artist?, album?, playing,
+        // Music, Podcasts): setNowPlaying {title, artist?, album?, playing, uri?, shuffle?, repeat?,
         // appId?}; getNowPlaying -> {nowPlaying: {..., appId, time} | null}.
         // The Assistant's "what's playing" reads it.
         "/setNowPlaying": function (p, reply) {
             if (typeof p.title !== "string") return reply(fail(-1, "title is required"));
-            store.set("media:nowPlaying", { title: p.title, artist: String(p.artist || ""), album: String(p.album || ""), playing: !!p.playing,
-                                            appId: String(p.appId || appIdFromLocation()), time: Date.now() });
+            var np = { title: p.title, artist: String(p.artist || ""), album: String(p.album || ""), playing: !!p.playing,
+                       appId: String(p.appId || appIdFromLocation()), time: Date.now() };
+            // Music's: the song (its media indexer uri), shuffled, repeating (services/shellhost the same).
+            if (typeof p.uri === "string") np.uri = p.uri;
+            if (typeof p.shuffle === "boolean") np.shuffle = p.shuffle;
+            if (p.repeat === "off" || p.repeat === "all" || p.repeat === "one") np.repeat = p.repeat;
+            store.set("media:nowPlaying", np);
             reply(ok());
         },
         "/getNowPlaying": function (p, reply) { reply(ok({ nowPlaying: store.get("media:nowPlaying", null) })); },
@@ -17395,7 +17400,7 @@
          "connect", "retry", "voice",
          // The everyday features' own (lib/commands-everyday.js; assistant.js METHODS).
          "announce", "driving", "routines", "setRoutine", "removeRoutine", "runRoutine", "routineWake", "routineEvent",
-         "places", "setPlace", "placeWake"].forEach(function (name) {
+         "places", "setPlace", "placeWake", "sleepWake"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
                 var m;
                 try { m = service(); } catch (e) { return reply(fail(-1, String(e.message || e))); }

@@ -101,6 +101,32 @@
     "effects": [ { "kind": "org.webosphoenix.maps.place:1", "where": { "name": "Home" }, "count": 1 } ] },
   { "id": "c-place-07", "cat": "places", "say": "remind me to buy flowers when I get to the market",
     "expect": { "command": "placeReminder", "args": { "when": "arrive" } }, "text": "don't know where .Market. is" },
-  { "id": "c-place-08", "cat": "places", "say": "navigate home", "expect": { "command": "navigate" }, "forbid": ["placeReminder", "setPlace"] }
+  { "id": "c-place-08", "cat": "places", "say": "navigate home", "expect": { "command": "navigate" }, "forbid": ["placeReminder", "setPlace"] },
+  { "id": "c-music-01", "cat": "music", "say": "shuffle my music", "expect": { "command": "musicMode", "args": { "mode": "shuffle", "state": "on" } }, "text": "Shuffling all" },
+  { "id": "c-music-02", "cat": "music", "say": "repeat this song",
+    "deviceState": { "nowPlaying": { "title": "Blue in Green", "artist": "Miles Davis", "playing": true, "appId": "org.webosphoenix.music", "uri": "storage:///media/internal/music/blue.mp3" } },
+    "expect": { "command": "musicMode", "args": { "mode": "repeat", "state": "one" } }, "text": "Repeating .Blue in Green." },
+  { "id": "c-music-03", "cat": "music", "say": "turn shuffle off", "expect": { "command": "musicMode", "args": { "mode": "shuffle", "state": "off" } } },
+  { "id": "c-music-04", "cat": "music", "say": "like this song",
+    "deviceState": { "nowPlaying": { "title": "Blue in Green", "artist": "Miles Davis", "playing": true, "appId": "org.webosphoenix.music", "uri": "storage:///media/internal/music/blue.mp3" } },
+    "expect": { "command": "favorites", "args": { "action": "add" } }, "text": "Added .Blue in Green. by Miles Davis",
+    "effects": [ { "kind": "org.webosphoenix.music.favorite:1", "where": { "title": "Blue in Green" }, "count": 1 } ] },
+  { "id": "c-music-05", "cat": "music", "say": "like this song", "expect": { "command": "favorites" }, "text": "Nothing's playing in Music",
+    "effects": [ { "kind": "org.webosphoenix.music.favorite:1", "where": {}, "count": 0 } ] },
+  { "id": "c-music-06", "cat": "music", "say": "play my favorites", "expect": { "command": "favorites", "args": { "action": "play" } } },
+  { "id": "c-music-07", "cat": "music", "say": "stop the music in 30 minutes", "expect": { "command": "sleepTimer", "args": { "action": "set", "minutes": 30 } }, "text": "stop the music in 30 minutes" },
+  { "id": "c-music-08", "cat": "music", "say": "set a timer for 30 minutes", "expect": { "command": "timer" }, "forbid": ["sleepTimer"] },
+  { "id": "c-music-09", "cat": "music", "turns": [
+    { "say": "set a sleep timer for 20 minutes", "expect": { "command": "sleepTimer", "args": { "action": "set" } } },
+    { "say": "cancel the sleep timer", "expect": { "command": "sleepTimer", "args": { "action": "cancel" } }, "text": "sleep timer is off" } ] },
+  { "id": "c-music-10", "cat": "music", "say": "play the latest episode of The Daily",
+    "db": [ { "_id": "pod-daily", "_kind": "org.webosphoenix.podcast:1", "title": "The Daily", "subscribed": true },
+            { "_id": "ep-d2", "_kind": "org.webosphoenix.podcast.episode:1", "podcastId": "pod-daily", "title": "Tuesday's news", "published": 1791273600000, "position": 0, "played": false } ],
+    "expect": { "command": "podcast", "args": { "action": "latest" } }, "text": "latest episode of The Daily: .Tuesday's news." },
+  { "id": "c-music-11", "cat": "music", "say": "resume my podcast", "expect": { "command": "podcast", "args": { "action": "resume" } }, "text": "don't follow any podcasts" },
+  { "id": "c-music-12", "cat": "music", "say": "play some jazz", "expect": { "command": "play" }, "forbid": ["musicMode", "podcast"] },
+  { "id": "c-music-13", "cat": "music", "say": "what's playing",
+    "deviceState": { "nowPlaying": { "title": "Blue in Green", "artist": "Miles Davis", "playing": true, "appId": "org.webosphoenix.music" } },
+    "expect": { "command": "media", "args": { "action": "status" } }, "text": "Blue in Green" }
  ]
 }

@@ -8,6 +8,7 @@
 //   en-routines.js   routines, their starters and the steps Settings offers
 //   en-capture.js    photos, selfies, videos, voice memos
 //   en-places.js     where I parked, reminders at a place, home and work
+//   en-music.js      shuffle, repeat, favorite songs, the sleep timer, podcasts
 //
 // Each area: (h) -> {rules: [[command, (t, ctx) -> args | null]] (tried
 // before the grammar's own, so each is held to its own words), late?:
@@ -20,7 +21,7 @@
 
 "use strict";
 
-var AREAS = [require("./en-notify"), require("./en-routines"), require("./en-capture"), require("./en-places")];
+var AREAS = [require("./en-notify"), require("./en-routines"), require("./en-capture"), require("./en-places"), require("./en-music")];
 
 module.exports = function (h) {
     var areas = AREAS.map(function (make) { return make(h); });
