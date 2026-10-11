@@ -242,7 +242,16 @@ function runCase(c, opts) {
 
 function loadCases(file) {
     var all = JSON.parse(fs.readFileSync(file || CASES, "utf8"));
-    return Array.isArray(all) ? all : all.cases;
+    var list = Array.isArray(all) ? all : all.cases;
+    // The on-device model's set (apps/assistant/service/test/model-eval.json:
+    // {text, command} the grammar did not take): its command, or no action for "none".
+    if (list.length && list[0].text !== undefined && list[0].say === undefined) {
+        return list.map(function (x, i) {
+            return { id: "model-" + (i + 1), cat: x.command === "none" ? "questions and chat" : "commands", say: x.text,
+                     expect: x.command === "none" ? { answer: ["chat", "knowledge", "fallback"] } : { command: x.command, status: ["done", "pending", "ask"] } };
+        });
+    }
+    return list;
 }
 
 function run(opts) {

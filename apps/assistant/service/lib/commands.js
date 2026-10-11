@@ -951,6 +951,9 @@ function locationBlocked(env, why, purpose) {
                                   { label: say.dontAllow(), run: { command: "locationAccess", args: { allow: false } } }];
     else if (why === "denied") actions = [{ label: say.allowLocation(), run: { command: "locationAccess", args: { allow: true } } }, settings];
     else if (why === "off") actions = [{ label: say.turnOnLocation(), run: { command: "toggle", args: { setting: "location", state: "on" } } }, settings];
+    // No fix yet: the setting at least, never a dead end (the owner's first
+    // "I don't know where you are" had no button at all).
+    else actions = [settings];
     return Object.assign(new Error("location " + why), { said: say.location(why, purpose), actions: actions, location: why });
 }
 function here(env, purpose) {

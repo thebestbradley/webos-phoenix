@@ -29,6 +29,8 @@
 
 // Kinds of request, each with what it covers (Laya reads these as the
 // options' descriptions) and its commands.
+// Ten at most: Laya's calibration (its temperatures) holds to ten options;
+// past that the checkpoint's own are out of range and clamped.
 var DOMAINS = {
     clock: { text: "alarms, waking up, snooze, timers, countdowns, the stopwatch",
              commands: ["alarm", "alarmList", "alarmManage", "timer", "timerStatus", "timerCancel", "stopwatch"] },
@@ -36,20 +38,19 @@ var DOMAINS = {
              commands: ["reminder", "task", "taskList", "taskDone", "note", "findNotes", "noteAppend"] },
     calendar: { text: "calendar events, meetings, appointments, what is on the schedule, being free or busy",
                 commands: ["event", "agenda", "eventMove", "eventCancel", "freeTime"] },
-    people: { text: "calling someone, text messages, email, voicemail, missed calls, contacts and their numbers",
-              commands: ["call", "text", "readMessages", "replyMessage", "email", "readEmail", "searchEmail", "emailReply", "callBack", "callLog", "voicemail", "contactAdd", "contactInfo"] },
+    calls: { text: "phone calls, calling someone back, missed calls, voicemail, contacts and their numbers",
+             commands: ["call", "callBack", "callLog", "voicemail", "contactAdd", "contactInfo"] },
+    messages: { text: "text messages and email: sending, reading, replying",
+                commands: ["text", "readMessages", "replyMessage", "email", "readEmail", "searchEmail", "emailReply"] },
     device: { text: "switching wifi, bluetooth, airplane mode, the flashlight, do not disturb, location or rotation lock on or off; the volume; the screen brightness; the battery; storage; locking the phone; screenshots",
               commands: ["toggle", "settingStatus", "volume", "brightness", "battery", "storage", "lock", "screenshot", "settings"] },
-    music: { text: "playing, pausing or skipping music, songs and albums", commands: ["play", "media"] },
-    weather: { text: "the weather, temperature, rain, snow, the forecast", commands: ["weather"] },
-    places: { text: "directions, navigation, places nearby, how far a place is, travel time", commands: ["navigate", "nearby", "distance", "travelTime"] },
-    sums: { text: "arithmetic, percentages, tips, converting units or currencies", commands: ["calculate", "convert"] },
-    time: { text: "what time or date it is, the time in another city", commands: ["time", "worldTime"] },
-    apps: { text: "opening an app, a website or a settings page, searching the web, finding files or photos, the app store",
-            commands: ["open", "search", "website", "appStore", "photos", "findFiles", "help"] },
-    question: { text: "a question about the world, general knowledge, a recipe, advice or an explanation", commands: [] },
-    chat: { text: "a greeting, thanks, small talk, a joke, chatting", commands: [] },
-    other: { text: "something a phone cannot do: smart home devices, payments, ordering food, booking travel, cars", commands: [] }
+    apps: { text: "playing or pausing music, opening an app or a website, searching the web, finding files or photos, the app store, help",
+            commands: ["play", "media", "open", "search", "website", "appStore", "photos", "findFiles", "help"] },
+    places: { text: "the weather, directions, navigation, places nearby, how far a place is, travel time",
+              commands: ["weather", "navigate", "nearby", "distance", "travelTime"] },
+    facts: { text: "what time or date it is, the time in another city, arithmetic, percentages, converting units or currencies",
+             commands: ["time", "worldTime", "calculate", "convert"] },
+    talk: { text: "a question about the world, a recipe, advice, chatting or small talk, or something a phone cannot do", commands: [] }
 };
 // Arguments that are a choice, per command: [argument, instructions, {value: description}].
 var CHOICES = {
@@ -71,7 +72,7 @@ var CHOICES = {
     timerCancel: [], alarmList: [], timerStatus: [], taskList: [], readMessages: [], readEmail: [], callLog: [], battery: [], storage: [],
     lock: [], screenshot: [], play: [], help: []
 };
-var CHAT_LIKE = { question: true, chat: true };
+var CHAT_LIKE = { talk: true };
 
 function sorted(probs) {
     return Object.keys(probs || {}).map(function (k) { return [k, probs[k]]; }).sort(function (a, b) { return b[1] - a[1]; });
@@ -102,7 +103,6 @@ function createLayaDecider(opts) {
                 var kind = choiceOf(r1.answers && r1.answers.kind);
                 if (!kind) return null;
                 if (CHAT_LIKE[kind.value]) return { command: "none", escalate: true, confidence: kind.p, kind: kind.value };
-                if (kind.value === "other") return { command: "none", escalate: false, confidence: kind.p, kind: kind.value };
                 var cmds = DOMAINS[kind.value].commands.filter(function (id) { return usable[id]; });
                 if (!cmds.length) return null;
                 // The command, and the arguments that are a choice for each
