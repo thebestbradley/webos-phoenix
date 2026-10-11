@@ -21,7 +21,11 @@
 //             meeting: ..."), so Calendar shows where to join
 //   TASKS     two-way: Microsoft To Do's lists (com.palm.tasklist.microsoft:1)
 //             and their tasks (com.palm.task.microsoft:1)
-//   MAIL      lib/mail.js (Outlook's folders and mail in Email)
+//
+// Not here yet: Outlook's mail in Email (SYNERGY.md 2.5: Graph's mail
+// folders, or Email's IMAP and SMTP with XOAUTH2, whose token is for
+// outlook.office.com rather than Graph). Until it is, the sign-in asks for
+// no mail scope.
 //
 // The server wins a field changed on both sides (SYNERGY.md 3.3).
 

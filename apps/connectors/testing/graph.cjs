@@ -62,7 +62,7 @@ function addGraph(base) {
     task(tasksList, { title: "Book the venue", status: "completed", completedDateTime: { dateTime: "2026-10-09T10:00:00.0000000", timeZone: "UTC" } });
     g.edit = (list, obj, fields) => Object.assign(stamp(obj), fields);
 
-    base.oauthProvider("microsoft", { pkce: true, scope: "offline_access User.Read Contacts.ReadWrite Calendars.ReadWrite Tasks.ReadWrite Mail.ReadWrite Mail.Send" });
+    base.oauthProvider("microsoft", { pkce: true, scope: "offline_access User.Read Contacts.ReadWrite Calendars.ReadWrite Tasks.ReadWrite" });
 
     const P = "/graph/v1.0";
     base.route("*", /^\/graph\/v1\.0\//, (req, res) => {

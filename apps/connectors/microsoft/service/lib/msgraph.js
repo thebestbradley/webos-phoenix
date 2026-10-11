@@ -27,7 +27,7 @@
 var kit = require("@phoenix/connector-kit");
 
 var GRAPH = "https://graph.microsoft.com/v1.0";
-var SCOPE = "offline_access openid profile User.Read Contacts.ReadWrite Calendars.ReadWrite Tasks.ReadWrite Mail.ReadWrite Mail.Send";
+var SCOPE = "offline_access openid profile User.Read Contacts.ReadWrite Calendars.ReadWrite Tasks.ReadWrite";
 var OAUTH = {
     authorizationEndpoint: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
     tokenEndpoint: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
