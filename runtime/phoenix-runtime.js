@@ -4283,10 +4283,27 @@
     // mojomail's SMTP service saves outgoing mail (SaveEmailCommand): parts
     // given as "content" are written to the file cache and replaced by a
     // "path", the body's text becomes the summary, and the email is merged
-    // into the account's Outbox (sendMail) or Drafts (saveDraft). There is
-    // no mail server here: a sent email moves to the Sent folder a moment
-    // later, and folder syncs find nothing new. The file cache lives in
-    // localStorage and PalmSystem.getResource (palmGetResource) reads it.
+    // into the account's Outbox (sendMail) or Drafts (saveDraft); it answers
+    // the email's {_id} (SaveEmailCommand.cpp:263-276, DatabaseAdapter.cpp:23),
+    // which Email's Composition._handleSuccess keeps for the next save of
+    // the draft (Composition.js:268-273), and here {emailId} too, as
+    // Phoenix's apps read it before. There is no mail server here: a sent
+    // email moves to the Sent folder a moment later, and folder syncs find
+    // nothing new. The file cache lives in localStorage and
+    // PalmSystem.getResource (palmGetResource) reads it.
+    //
+    // What the IMAP and POP transports do with the account's mail on the
+    // device, they do here (localChanges below): a message the app moved
+    // ({destFolderId}, hidden: facades/Email.js:235-241) goes to that
+    // folder and shows again, and one it deleted (db8 del, :244-270) goes to
+    // the account's Trash, or away from the Trash itself (IMAP
+    // SyncLocalChangesCommand.cpp:470-478, MoveEmailsCommand.cpp; POP
+    // MovePopEmailsCommand.cpp:130-165, DeleteServerEmailsCommand.cpp:70-90,
+    // MojoDatabase.cpp:510-525). A sync writes its state
+    // (com.palm.account.syncstate:1, in tempdb) while it runs, as the
+    // apps' "Updating…" reads it (mojomail BaseSyncSession.cpp:293-342,
+    // SyncStateUpdater.cpp:36-108). com.palm.pop/parseEmlMessage reads an
+    // .eml file for the viewer (ParseEmlHandler.cpp).
     (function emailTransports() {
         var FILE_CACHE = "/var/file-cache/email/phoenix/";
         var readFile = PalmSystem.getResource;
@@ -4337,7 +4354,7 @@
                 callNow("palm://com.palm.db/merge", { objects: [{ _id: id, folderId: account.sentFolderId,
                     sendStatus: { error: null, fatalError: false, retryCount: 0, sent: true } }] });
             }
-            reply(ok({ emailId: id }));
+            reply(ok({ _id: id, emailId: id }));
         }
 
         register(["com.palm.smtp"], {
@@ -4346,12 +4363,384 @@
             "*": function (p, reply) { reply(ok({})); }
         });
 
-        register(["com.palm.imap", "com.palm.pop"], {
-            "/downloadMessage": function (p, reply) { reply(fail(-1, "The mail server is not available in the Phoenix simulator")); },
-            "/downloadAttachment": function (p, reply) { reply(fail(-1, "The mail server is not available in the Phoenix simulator")); },
-            // syncFolder, syncAccount, accountCreated, ...: nothing to sync.
-            "*": function (p, reply) { reply(ok({})); }
-        });
+        // ---- The transports' accounts ----
+        // The mail account's kind says whose it is (mojomail's IMAP and POP
+        // transports keep com.palm.imap.account:1 and com.palm.pop.account:1).
+        var TRANSPORT_OF_KIND = { "com.palm.imap.account:1": "com.palm.imap", "com.palm.pop.account:1": "com.palm.pop" };
+        function getObject(id) {
+            return id ? (callNow("palm://com.palm.db/get", { ids: [id] }).results || [])[0] : undefined;
+        }
+        // The account an email (or folder) is in, if a simulated transport has it.
+        function transportAccount(folderId) {
+            var folder = getObject(folderId);
+            var account = folder && mailAccount(folder.accountId);
+            return account && TRANSPORT_OF_KIND[account._kind] ? account : null;
+        }
+
+        // ---- Sync state (com.palm.account.syncstate:1) ----
+        // SyncStateUpdater::UpdateSyncState: in one tempdb batch, the old
+        // state of the account's folder (collectionId; null: the account
+        // itself) goes and the new one comes; the transport's capability
+        // provider and bus address say whose it is (SyncSession.cpp:144-156).
+        var SYNC_STATE_KIND = "com.palm.account.syncstate:1";
+        function setSyncState(transport, accountId, collectionId, state) {
+            var where = [{ prop: "capabilityProvider", op: "=", val: transport + ".mail" },
+                         { prop: "accountId", op: "=", val: accountId },
+                         { prop: "collectionId", op: "=", val: collectionId }];
+            callNow("palm://com.palm.tempdb/batch", { operations: [
+                // (Purged at once: db8 purges deleted objects itself, later.)
+                { method: "del", params: { query: { from: SYNC_STATE_KIND, where: where }, purge: true } },
+                { method: "put", params: { objects: [{ _kind: SYNC_STATE_KIND, capabilityProvider: transport + ".mail",
+                    busAddress: transport, accountId: accountId, collectionId: collectionId, syncState: state,
+                    errorCode: "", errorText: "", metadata: null }] } }
+            ] });
+        }
+        // A sync of the account's folder (or, initial, the whole account):
+        // INITIAL_SYNC or INCREMENTAL_SYNC while it runs, IDLE when done
+        // (BaseSyncSession.cpp:285-342). No server answers here, so it runs
+        // as long as a short exchange with one would (SYNC_MS), and does the
+        // local changes (as SyncLocalChangesCommand runs in a folder's sync).
+        var SYNC_MS = 1000;
+        function sync(transport, accountId, folderId, initial) {
+            var state = initial ? "INITIAL_SYNC" : "INCREMENTAL_SYNC";
+            if (initial) setSyncState(transport, accountId, null, state);
+            if (folderId) setSyncState(transport, accountId, folderId, state);
+            localChanges();
+            setTimeout(function () {
+                if (folderId) setSyncState(transport, accountId, folderId, "IDLE");
+                if (initial) setSyncState(transport, accountId, null, "IDLE");
+            }, SYNC_MS);
+        }
+
+        // ---- Local changes: moves and deletes ----
+        // Every message of a simulated account counts as on its server, but
+        // for the Outbox's, which are not sent yet: IMAP puts drafts and sent
+        // mail there too (UpSyncDraftsCommand, UpSyncSentEmailsCommand), and
+        // POP moves a deleted message to Trash with or without a server's uid
+        // (DeleteServerEmailsCommand.cpp:52-58). A move to the folder a message is
+        // in already is none (SyncLocalChangesCommand.cpp:314-319: Undo of a
+        // move puts it back there); one to a folder that is gone is taken
+        // back (MoveEmailsCommand.cpp:80-90, UnmoveEmails :243-270).
+        function localChanges() {
+            var moved = callNow("palm://com.palm.db/find", { query: { from: "com.palm.email:1",
+                where: [{ prop: "destFolderId", op: "!=", val: null }] } }).results || [];
+            var deleted = callNow("palm://com.palm.db/find", { query: { from: "com.palm.email:1",
+                where: [{ prop: "_del", op: "=", val: true }], incDel: true } }).results || [];
+            var merges = [], purges = [];
+            moved.forEach(function (e) {
+                var account = transportAccount(e.folderId);
+                if (!account || !e.destFolderId || e.destFolderId === e.folderId || e.folderId === account.outboxFolderId) return;
+                var shown = Object.assign({}, e.flags || {}, { visible: true });
+                merges.push(getObject(e.destFolderId) ? { _id: e._id, folderId: e.destFolderId, destFolderId: null, flags: shown }
+                                                      : { _id: e._id, destFolderId: null, flags: shown });
+            });
+            deleted.forEach(function (e) {
+                var account = transportAccount(e.folderId);
+                if (!account || e.folderId === account.outboxFolderId) return;
+                var trash = account.trashFolderId;
+                if (!trash || e.folderId === trash) purges.push(e._id);
+                else merges.push({ _id: e._id, folderId: trash, _del: false, destFolderId: null });
+            });
+            if (merges.length) callNow("palm://com.palm.db/merge", { objects: merges });
+            if (purges.length) callNow("palm://com.palm.db/del", { ids: purges, purge: true });
+            return merges.length + purges.length;
+        }
+        // On the device each folder's watch activity runs a sync of its local
+        // changes as the app makes them (ImapActivityFactory's folder watch;
+        // POP's ActivityBuilderFactory.cpp:300-320, destFolderId != null, which
+        // calls moveEmail). Here the page hosting the activity manager (the
+        // system UI's, runtime.activities.hosts) does, a moment after a change.
+        var LOCAL_CHANGES_MS = 500;
+        var localTimer = null;
+        function watchLocalChanges() {
+            var first = true;
+            dispatch("palm://com.palm.db/find", { query: { from: "com.palm.email:1", limit: 1 }, watch: true }, function (r) {
+                if (first) { first = false; return; }
+                if (!r || !r.fired) return;
+                if (localTimer) clearTimeout(localTimer);
+                localTimer = setTimeout(function () {
+                    localTimer = null;
+                    if (runtime.activities && runtime.activities.hosts()) localChanges();
+                }, LOCAL_CHANGES_MS);
+                watchLocalChanges();
+            }, { cancelled: function () { return false; }, onCancel: null });
+        }
+        setTimeout(function () {
+            watchLocalChanges();
+            if (runtime.activities && runtime.activities.hosts()) localChanges();
+        }, 0);
+
+        // ---- A message file (RFC 5322 and MIME), as mojomail's AsyncEmailParser
+        // and EmailHeaderFieldParser read it ----
+        // raw: the file's bytes, one character each. The parts come flattened
+        // and typed as EmailPart::GetFlattenedParts types them (EmailPart.cpp:
+        // 118-190): a leaf is a body if it is text/html, text/plain or
+        // text/enriched, an inline picture if it has a Content-ID, else an
+        // attachment ("Content-Disposition: attachment" always); of a
+        // multipart/alternative's choices the last with a body gives the body,
+        // the others' bodies are alt text. A text part comes as text (its
+        // charset decoded), any other as base64.
+        function bytesOf(bin) {
+            var b = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; ++i) b[i] = bin.charCodeAt(i) & 255;
+            return b;
+        }
+        function decodeText(bin, charset) {
+            var cs = String(charset || "utf-8").trim().toLowerCase();
+            if (cs === "us-ascii" || cs === "ascii") cs = "utf-8";
+            try { return new TextDecoder(cs).decode(bytesOf(bin)); } catch (e) { return new TextDecoder("utf-8").decode(bytesOf(bin)); }
+        }
+        function unQuotedPrintable(s, underscores) {
+            if (underscores) s = s.replace(/_/g, " ");
+            return s.replace(/=\r?\n/g, "").replace(/=([0-9A-Fa-f]{2})/g, function (m, h) { return String.fromCharCode(parseInt(h, 16)); });
+        }
+        function unBase64(s) {
+            s = String(s).replace(/[^A-Za-z0-9+\/]/g, "");
+            if (s.length % 4 === 1) s = s.slice(0, -1);
+            while (s.length % 4) s += "=";
+            try { return atob(s); } catch (e) { return ""; }
+        }
+        // RFC 2047's encoded words (=?charset?B|Q?text?=), the space between two of them dropped.
+        function decodeWords(s) {
+            return String(s).replace(/=\?([^?\s]+)\?([BbQq])\?([^?\s]*)\?=(?:\s+(?==\?[^?\s]+\?[BbQq]\?))?/g, function (all, cs, enc, text) {
+                return decodeText(/b/i.test(enc) ? unBase64(text) : unQuotedPrintable(text, true), cs.replace(/\*.*$/, ""));
+            });
+        }
+        // Header fields, unfolded, the first of each name (lower case).
+        function headersOf(head) {
+            var h = {};
+            head.replace(/\r?\n[ \t]+/g, " ").split(/\r?\n/).forEach(function (line) {
+                var i = line.indexOf(":");
+                if (i <= 0) return;
+                var name = line.slice(0, i).trim().toLowerCase();
+                if (!Object.prototype.hasOwnProperty.call(h, name)) h[name] = decodeText(line.slice(i + 1).trim(), "utf-8");
+            });
+            return h;
+        }
+        // "text/html; charset=utf-8; name=\"a.txt\"" -> {value, params}, with
+        // RFC 2231's name*=utf-8''a%20b.txt and its numbered continuations.
+        function paramsOf(v) {
+            var parts = [], cur = "", q = false, i;
+            v = String(v || "");
+            for (i = 0; i < v.length; ++i) {
+                var c = v.charAt(i);
+                if (c === "\\" && q) { cur += c + v.charAt(++i); continue; }
+                if (c === '"') q = !q;
+                if (c === ";" && !q) { parts.push(cur); cur = ""; } else cur += c;
+            }
+            parts.push(cur);
+            var out = { value: parts[0].trim().toLowerCase(), params: {} }, pieces = {};
+            parts.slice(1).forEach(function (part) {
+                var eq = part.indexOf("=");
+                if (eq < 0) return;
+                var m = /^([^*]+)(?:\*(\d+))?(\*)?$/.exec(part.slice(0, eq).trim().toLowerCase());
+                if (!m) return;
+                var val = part.slice(eq + 1).trim();
+                if (val.charAt(0) === '"') val = val.slice(1, -1).replace(/\\(.)/g, "$1");
+                (pieces[m[1]] = pieces[m[1]] || []).push({ n: m[2] ? +m[2] : 0, val: val, ext: !!m[3] });
+            });
+            Object.keys(pieces).forEach(function (k) {
+                var list = pieces[k].sort(function (a, b) { return a.n - b.n; }), charset = "";
+                out.params[k] = list.map(function (piece, n) {
+                    if (!piece.ext) return piece.val;
+                    var val = piece.val;
+                    if (n === 0) {
+                        var m = /^([^']*)'[^']*'(.*)$/.exec(val);
+                        if (m) { charset = m[1]; val = m[2]; }
+                    }
+                    return decodeText(val.replace(/%([0-9A-Fa-f]{2})/g, function (x, h) { return String.fromCharCode(parseInt(h, 16)); }), charset);
+                }).join("");
+            });
+            return out;
+        }
+        // An address list (To, Cc, ...): [{type, addr, name}], the name the
+        // address itself when there is none (EmailAdapter.cpp:376-397).
+        function addressesOf(v, type) {
+            var list = [], cur = "", q = false, angle = 0;
+            v = String(v || "");
+            for (var i = 0; i < v.length; ++i) {
+                var c = v.charAt(i);
+                if (c === "\\" && q) { cur += c + v.charAt(++i); continue; }
+                if (c === '"') q = !q;
+                else if (!q && c === "<") angle++;
+                else if (!q && c === ">") angle = Math.max(0, angle - 1);
+                if ((c === "," || c === ";") && !q && !angle) { list.push(cur); cur = ""; } else cur += c;
+            }
+            list.push(cur);
+            return list.map(function (one) {
+                one = one.trim().replace(/^[^"<@]*:\s*/, "");     // a group's name ("Team: a@b, c@d;")
+                var m = /^(.*?)\s*<([^>]*)>\s*$/.exec(one), name = "", addr;
+                if (m) {
+                    name = m[1].trim().replace(/^"([\s\S]*)"$/, "$1").replace(/\\(.)/g, "$1");
+                    addr = m[2].trim();
+                } else {
+                    var c = /^(\S+)\s*\(([^)]*)\)$/.exec(one);     // addr (Name)
+                    addr = c ? c[1] : one;
+                    name = c ? c[2] : "";
+                }
+                if (!addr) return null;
+                name = decodeWords(name).trim();
+                return { type: type, addr: addr, name: name || addr };
+            }).filter(Boolean);
+        }
+        function splitMultipart(body, boundary) {
+            var dash = "--" + boundary, parts = [], cur = null;
+            var lines = body.split(/\r?\n/);
+            for (var i = 0; i < lines.length; ++i) {
+                var line = lines[i];
+                if (line.indexOf(dash) === 0 && /^(--)?\s*$/.test(line.slice(dash.length))) {
+                    if (cur) parts.push(cur.join("\r\n"));
+                    if (line.slice(dash.length, dash.length + 2) === "--") { cur = null; break; }
+                    cur = [];
+                } else if (cur) {
+                    cur.push(line);
+                }
+            }
+            if (cur) parts.push(cur.join("\r\n"));
+            return parts;
+        }
+        function walk(text, out, depth) {
+            var head = "", body = text, cut = /\r?\n\r?\n/.exec(text);
+            if (/^\r?\n/.test(text)) body = text.replace(/^\r?\n/, "");     // no headers
+            else if (cut) { head = text.slice(0, cut.index); body = text.slice(cut.index + cut[0].length); }
+            else { head = text; body = ""; }
+            var h = headersOf(head);
+            var ct = paramsOf(h["content-type"] || "text/plain");
+            if (ct.value.indexOf("/") < 0) ct.value = "text/plain";
+            if (/^multipart\//.test(ct.value) && ct.params.boundary && depth < 100) {
+                var subs = splitMultipart(body, ct.params.boundary).map(function (t) { var o = []; walk(t, o, depth + 1); return o; });
+                if (ct.value === "multipart/alternative") {
+                    var seen = false, chosen = [];
+                    for (var i = subs.length - 1; i >= 0; --i) {
+                        var hasBody = !seen && subs[i].some(function (p) { return p.type === "body"; });
+                        subs[i].forEach(function (p) {
+                            if (p.type === "body" && !hasBody) p.type = "altText";
+                            chosen.push(p);
+                        });
+                        if (hasBody) seen = true;
+                    }
+                    out.push.apply(out, chosen);
+                } else {
+                    subs.forEach(function (o) { out.push.apply(out, o); });
+                }
+                return h;
+            }
+            var disp = paramsOf(h["content-disposition"] || "");
+            var cid = String(h["content-id"] || "").trim();
+            var part = { type: disp.value === "attachment" ? "attachment" : "inline", mimeType: ct.value };
+            if (part.type === "inline") {
+                if (/^text\/(html|plain|enriched)$/.test(ct.value)) part.type = "body";
+                else if (!cid || !/^image\//.test(ct.value)) part.type = "attachment";
+            }
+            var name = disp.params.filename || ct.params.name;
+            if (name) part.name = decodeWords(name);
+            if (cid) part.contentId = cid;
+            var cte = String(h["content-transfer-encoding"] || "").trim().toLowerCase();
+            if (cte) part.encoding = cte;
+            if (ct.params.charset) part.charset = ct.params.charset;
+            var data = cte === "base64" ? unBase64(body) : cte === "quoted-printable" ? unQuotedPrintable(body) : body;
+            part.estimatedSize = data.length;
+            if (part.type === "body") part.text = decodeText(data, ct.params.charset);
+            else part.base64 = btoa(data);
+            out.push(part);
+            return h;
+        }
+        function parseEml(raw) {
+            var parts = [];
+            var h = walk(String(raw), parts, 0);
+            var email = { _kind: "com.palm.email:1", flags: { read: false, replied: false, flagged: false },
+                          subject: decodeWords(h.subject || "") };
+            var when = Date.parse(String(h.date || "").replace(/\s*\([^)]*\)\s*$/, ""));
+            email.timestamp = isNaN(when) ? 0 : when;
+            email.from = addressesOf(h.from, "from")[0] || {};
+            var replyTo = addressesOf(h["reply-to"], "replyTo")[0];
+            if (replyTo) email.replyTo = replyTo;
+            email.to = addressesOf(h.to, "to").concat(addressesOf(h.cc, "cc"), addressesOf(h.bcc, "bcc"));
+            email.parts = parts;
+            if (h["message-id"]) email.messageId = h["message-id"].trim();
+            if (h["in-reply-to"]) email.inReplyTo = h["in-reply-to"].trim();
+            // X-Priority 1-2 high, 4-5 low; Importance high or low.
+            var xp = parseInt(h["x-priority"], 10), imp = String(h.importance || h.priority || "").toLowerCase();
+            if (xp === 1 || xp === 2 || imp === "high" || imp === "urgent") email.priority = "high";
+            else if (xp === 4 || xp === 5 || imp === "low" || imp === "non-urgent") email.priority = "low";
+            return email;
+        }
+
+        // ---- parseEmlMessage {filePath} (POP; ParseEmlHandler.cpp) ----
+        // The file must be one any app may read: under /media/internal, or
+        // /tmp (:79-107). The email comes back as the transport would store
+        // it (EmailAdapter::SerializeToDatabaseObject, EmailAdapter.cpp:295-
+        // 371) with no folder, its bodies and attachments written to the
+        // file cache with their paths; every failure is "error parsing eml"
+        // (:204-241).
+        var emlCount = 0;
+        function parseEmlMessage(p, reply) {
+            if (typeof p.filePath !== "string" || !p.filePath) return reply(fail(-1986, "Invalid query string"));
+            var path = p.filePath.replace(/^file:\/\//, "");
+            var failed = function () { reply(fail(-1, "error parsing eml")); };
+            if (!/^\/(media\/internal|tmp)\//.test(path) || /(^|\/)\.\.(\/|$)/.test(path)) return failed();
+            dispatch("luna://org.webosphoenix.filemanager/read", { path: path, encoding: "base64" }, function (r) {
+                if (!r || r.returnValue === false || typeof r.data !== "string") return failed();
+                var email;
+                try { email = parseEml(atob(r.data)); } catch (e) { return failed(); }
+                var dir = FILE_CACHE + "eml-" + Date.now().toString(36) + "-" + (++emlCount) + "/";
+                var cache = store.get("fileCache", {});
+                var files = [];
+                email.parts.forEach(function (part, i) {
+                    var name = part.type === "attachment" ? (part.name || "attachment" + i) : "body" + (/html/.test(part.mimeType) ? ".html" : ".txt");
+                    part.path = dir + i + "-" + name.replace(/[\/\\]/g, "_");
+                    if (part.text !== undefined) cache[part.path] = part.text;
+                    else files.push({ path: part.path, data: part.base64 });
+                    if (part.type === "body" && email.summary === undefined) email.summary = part.mimeType === "text/html" ? previewText(part.text) : String(part.text).replace(/\s+/g, " ").trim().slice(0, 128);
+                    delete part.text;
+                    delete part.base64;
+                });
+                if (email.summary === undefined) email.summary = "";
+                store.set("fileCache", cache);
+                // Attachments and pictures: files of their own in the device's
+                // filesystem (the file manager's, as a system service writes
+                // one), which palmGetResource and the file manager read.
+                files.forEach(function (f) {
+                    if (!runtime.fileManager || !runtime.fileManager.store(f.path, f.data))
+                        console.warn("[phoenix-runtime] parseEmlMessage: no room for " + f.path);
+                });
+                reply(ok({ email: email }));
+            }, { cancelled: function () { return true; }, onCancel: null });
+        }
+
+        function transportMethods(transport) {
+            return {
+                "/downloadMessage": function (p, reply) { reply(fail(-1, "The mail server is not available in the Phoenix simulator")); },
+                "/downloadAttachment": function (p, reply) { reply(fail(-1, "The mail server is not available in the Phoenix simulator")); },
+                // A folder's sync (the app opening it, pull to refresh), the
+                // account's (its Inbox), and the first one after it is made.
+                "/syncFolder": function (p, reply) {
+                    reply(ok({}));
+                    if (p.accountId && p.folderId) sync(transport, p.accountId, p.folderId, false);
+                },
+                "/syncAccount": function (p, reply) {
+                    reply(ok({}));
+                    var account = p.accountId && mailAccount(p.accountId);
+                    if (account) sync(transport, p.accountId, account.inboxFolderId, false);
+                },
+                "/accountCreated": function (p, reply) {
+                    reply(ok({}));
+                    var account = p.accountId && mailAccount(p.accountId);
+                    if (account) sync(transport, p.accountId, account.inboxFolderId, true);
+                },
+                // accountEnabled, accountUpdated, credentialsChanged, ...: nothing to do.
+                "*": function (p, reply) { reply(ok({})); }
+            };
+        }
+        register(["com.palm.imap"], transportMethods("com.palm.imap"));
+        var pop = transportMethods("com.palm.pop");
+        pop["/parseEmlMessage"] = parseEmlMessage;
+        // The POP transport's own method for its moves (PopClient::MoveEmail),
+        // which its destFolderId activity calls.
+        pop["/moveEmail"] = function (p, reply) { localChanges(); reply(ok({})); };
+        register(["com.palm.pop"], pop);
+
+        runtime.mailTransports = { localChanges: localChanges, setSyncState: setSyncState, parseEml: parseEml, SYNC_MS: SYNC_MS };
     })();
 
     // ---- db8 kinds installed with the system -----------------------------------------
