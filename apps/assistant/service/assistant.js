@@ -749,6 +749,8 @@ function createAssistantService(deps) {
     // The commands whose argument names a thing that exists (a task, an
     // event, a memo), and whether a value has a word of what was said.
     var NAMED_ARG = { taskDone: "text", eventCancel: "query", eventMove: "query", noteAppend: "query" };
+    // Commands that take away, and the one that makes what they take (askLocal).
+    var REMOVES = { alarmManage: "alarm", timerCancel: "timer", eventCancel: "event" };
     function grounded(v, said) {
         var heard = " " + String(said).toLowerCase().replace(/[^a-z0-9']+/g, " ") + " ";
         return String(v || "").toLowerCase().split(/[^a-z0-9']+/).some(function (w) { return w.length > 2 && heard.indexOf(" " + w) >= 0; });
@@ -1056,9 +1058,18 @@ function createAssistantService(deps) {
                 var ctx = lang().say.context ? lang().say.context(lastAsked(thread)) : { question: false, smallTalk: false };
                 var pre = localPrefix(cat);
                 if (ctx.smallTalk || (hint && hint.words)) return callModel(p, "", thread, [], undefined, left(), pre);
+                if (hint && hint.command && REMOVES[hint.command.id] && lang().removing && !lang().removing(lang().clean(lastAsked(thread)))) hint = null;
                 if (hint && hint.command) return callCommand(p, thread, hint.command, left(), pre);
                 return pickCommand(p, thread, cat, left()).then(function (c) {
                     if (c && ctx.question && c.risk !== "read") c = null;
+                    // A choice that takes away, for words that say nothing of
+                    // taking away: the 0.6B model chose deleting every alarm
+                    // for "I want an alarm at 5:30 tomorrow morning". The
+                    // command that makes it, when the words name that; else none.
+                    if (c && REMOVES[c.id] && lang().removing && !lang().removing(lang().clean(lastAsked(thread)))) {
+                        var make = commands.find(cat.all, REMOVES[c.id]);
+                        c = make && lang().grounded(make.id, {}, lastAsked(thread)) ? make : null;
+                    }
                     if (!c) return callModel(p, "", thread, [], undefined, left(), pre);
                     return callCommand(p, thread, c, left(), pre).then(function (r) {
                         // "But you can tell me how to make it": "tell" is no text to "you".

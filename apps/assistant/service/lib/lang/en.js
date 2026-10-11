@@ -2891,6 +2891,8 @@ module.exports = {
     help: function (id) { return HELP.filter(function (h) { return h.id === id; })[0] || null; },
     eventWords: eventWords,
     grounded: grounded,
+    // Words that take something away ("turn off", "delete", "I don't need"): a model's removing choice needs them.
+    removing: function (t) { return /\b(?:off|delete|remove|cancel|clear|stop|disable|kill|dismiss|drop|scrap|get rid|erase|forget|don't need|do not need|no longer|call off|shut)\b/.test(String(t || "").toLowerCase()); },
     answer: answer,
     followUp: followUp
 };

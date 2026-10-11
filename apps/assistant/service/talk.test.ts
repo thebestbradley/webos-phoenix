@@ -234,6 +234,28 @@ describe("what a model is shown", () => {
             expect(said[said.length - 1].role).toBe("user");
         }
     });
+    it("never takes a model's choice to delete for words that say nothing of deleting", async () => {
+        // Qwen3 0.6B chose deleting every alarm for "I want an alarm at 5:30
+        // tomorrow morning" (the held-out set): the command that makes one instead.
+        const llm = { status: () => Promise.resolve({ available: true, installed: [{ id: "qwen3-0.6b-q8_0" }] }), ensure: () => Promise.resolve({ baseUrl: "http://127.0.0.1:9/v1" }) };
+        const reply = (o: object) => ({ status: 200, body: JSON.stringify({ choices: [{ message: o }] }) });
+        const called: string[] = [];
+        const llmRequest = async (r: any) => {
+            const b = JSON.parse(r.body);
+            const props = b.response_format?.json_schema?.schema?.properties || {};
+            if (props.command) {
+                const name = props.command.enum.find((n: string) => /alarm.?manage/i.test(n));
+                return reply({ content: JSON.stringify({ command: name }) });
+            }
+            if (props.action) { called.push("alarmManage"); return reply({ content: JSON.stringify({ action: "delete", all: true }) }); }
+            if (props.time) { called.push("alarm"); return reply({ content: JSON.stringify({ time: "5:30 am tomorrow" }) }); }
+            return reply({ content: "An answer." });
+        };
+        const d = device({ llm, llmRequest, settings: { followUps: false } });
+        const m = await d.ask("I want an alarm at 5:30 tomorrow morning");
+        expect(called).toEqual(["alarm"]);
+        expect(m.command).toBe("alarm");
+    });
     it("never offers the Assistant's own Quick Action as a command", async () => {
         const d = device({ settings: { followUps: false, localModel: "off" },
                            apps: [{ id: "org.webosphoenix.assistant", title: "Assistant", universalSearch: { action: { displayName: "Ask Assistant", url: "org.webosphoenix.assistant", launchParam: "text" } } } as any] });
