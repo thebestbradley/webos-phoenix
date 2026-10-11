@@ -36,8 +36,9 @@
 //   task         a task in a list of Tasks (com.palm.tasklist:1, made if new)
 //   note         a memo (com.palm.note:1), placed first on the Memos wall as
 //                the Memos app places a new one (com.palm.app.notes
-//                app/agents/GridAgent.js:91-97, app/models/Memo.js:98-180)
-//   findNotes    com.palm.note:1 by its words
+//                app/agents/GridAgent.js:91-97, app/models/Memo.js:98-180),
+//                its text HTML-escaped as Memos keeps it (lib/memotext.js)
+//   findNotes    com.palm.note:1 by its words (the words Memos shows)
 //   searchPhone  the user's things by what they mean (lib/commands-search.js:
 //                org.webosphoenix.service.index), and the same for findNotes,
 //                searchEmail, findFiles and photos when no item has the words
@@ -107,6 +108,7 @@ var units = require("./units");
 var places = require("./places");
 var nearbyLib = require("./nearby");
 var emergency = require("./emergency");
+var memoText = require("./memotext");
 
 var CLOCK_APP = "com.palm.app.clock";
 var CALENDAR_APP = "com.palm.app.calendar";
@@ -856,8 +858,10 @@ function prepareInner(cmd, args, env) {
     if (cmd.id === "noteAppend") {
         return dbFind(env, "com.palm.note:1").then(function (memos) {
             var q = String(args.query || "").trim();
-            var titleOf = function (n) { return (n.title || n.text || "").split("\n")[0]; };
-            var hit = memos.filter(function (n) { return q && matches(n.title || n.text, q); })[0] || memos.filter(function (n) { return q && matches(n.text, q); })[0];
+            // The words Memos shows (lib/memotext.js): "Fish & chips", not "Fish &amp; chips".
+            var titleOf = function (n) { return memoText.plain(n.title || n.text || "").split("\n")[0]; };
+            var textOf = function (n) { return memoText.plain(n.text); };
+            var hit = memos.filter(function (n) { return q && matches(memoText.plain(n.title || n.text), q); })[0] || memos.filter(function (n) { return q && matches(textOf(n), q); })[0];
             if (!hit && q) {
                 var named = namedIn(memos.filter(function (n) { return !n._del; }), titleOf, q);
                 if (named.ambiguous) return { args: args, reply: say.whichOne(named.ambiguous) };
@@ -865,7 +869,8 @@ function prepareInner(cmd, args, env) {
             }
             if (!hit) return { args: args, reply: say.noMemo(q) };
             if (!String(args.text || "").trim()) return { args: args, reply: say.failed("add what?") };
-            args.id = hit._id; args.oldText = hit.text || ""; args.title = (hit.text || "").split("\n")[0];
+            // oldText: the text as stored (what undo puts back); title: as shown.
+            args.id = hit._id; args.oldText = hit.text || ""; args.title = textOf(hit).split("\n")[0];
             return { args: args };
         });
     }
@@ -1776,8 +1781,11 @@ function runInner(cmd, args, env) {
         return dbFind(env, "com.palm.note:1").then(function (memos) {
             memos.sort(function (a, b) { return String(a.position || "") < String(b.position || "") ? -1 : 1; });
             var first = memos[0];
-            var text = String(args.text).trim();
-            var memo = { _kind: "com.palm.note:1", text: text, title: text.substring(0, 50),
+            // Escaped as Memos keeps a memo made from Just Type (com.palm.app.notes
+            // app/views/GridView.js:262), its title the stored text's first 50
+            // characters (app/models/Memo.js:76): lib/memotext.js.
+            var stored = memoText.escape(String(args.text).trim());
+            var memo = { _kind: "com.palm.note:1", text: stored, title: memoText.fields(stored).title,
                 color: first ? MEMO_COLORS[(MEMO_COLORS.indexOf(first.color) + 1) % MEMO_COLORS.length] : "yellow",
                 position: memoPosition("a", (first && first.position) || "z"), createdTimestamp: now, modifiedTimestamp: now };
             return dbPut(env, [memo]).then(function (ids) {
@@ -1790,7 +1798,9 @@ function runInner(cmd, args, env) {
     case "findNotes":
         return dbFind(env, "com.palm.note:1").then(function (memos) {
             var q = String(args.query || "").trim();
-            var hits = memos.filter(function (n) { return !q || matches(n.text || n.title, q); })
+            // Each by the words Memos shows (lib/memotext.js), matched, said and on its card.
+            var hits = memos.map(function (n) { return Object.assign({}, n, { text: memoText.plain(n.text), title: memoText.plain(n.title) }); })
+                .filter(function (n) { return !q || matches(n.text || n.title, q); })
                 .sort(function (a, b) { return (b.modifiedTimestamp || 0) - (a.modifiedTimestamp || 0); });
             return { text: say.notesFound(q, hits), open: { appId: MEMOS_APP, params: {}, title: "Memos" },
                      attachments: cards(hits.map(function (n) {
@@ -2186,11 +2196,13 @@ function runInner(cmd, args, env) {
         });
     }
     case "noteAppend": {
-        var text2 = String(args.oldText).replace(/\s+$/, "") + "\n" + String(args.text).trim();
-        return lunaCall(env, DB + "merge", { objects: [{ _id: args.id, text: text2, title: text2.substring(0, 50), modifiedTimestamp: now }] }).then(function () {
+        // The new line escaped as Memos keeps it, the old text as it is stored
+        // (lib/memotext.js kept); undo puts back the stored text it replaced.
+        var text2 = memoText.kept(args.oldText).replace(/\s+$/, "") + "\n" + memoText.escape(String(args.text).trim());
+        return lunaCall(env, DB + "merge", { objects: [Object.assign({ _id: args.id }, memoText.fields(text2), { modifiedTimestamp: now })] }).then(function () {
             var memo = { appId: MEMOS_APP, params: { memoId: args.id }, title: "Memos" };
             return { text: say.noteAppended(args.title), open: memo,
-                     attachments: cards([{ title: args.title, detail: text2.split("\n").slice(1).join("\n"), open: memo }]),
+                     attachments: cards([{ title: args.title, detail: memoText.plain(text2).split("\n").slice(1).join("\n"), open: memo }]),
                      undo: { kind: "merge", objects: [{ _id: args.id, text: args.oldText, title: String(args.oldText).substring(0, 50) }], what: say.undoWhat.memoBack() } };
         });
     }

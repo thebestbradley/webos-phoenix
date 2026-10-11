@@ -65,6 +65,31 @@ describe("one thing about the rest", () => {
         expect(m.data.attachments[0].items[0].open).toEqual({ appId: "com.palm.app.notes", params: { memoId: "memo-groc" }, title: "Memos" });
         expect((await d.ask("what does it say")).text).toBe("Your “Grocery” memo says: Milk\nEggs\nCoffee");
     });
+    // As Memos keeps a memo's text: the HTML it shows (its editor's: "&amp;",
+    // "&#39;", "&quot;"), read and changed by the words it shows (lib/memotext.js).
+    it("reads and changes a memo kept as Memos keeps it", async () => {
+        const STORED = "Salt &amp; pepper\nSea salt &amp; black pepper\nTom&#39;s &quot;special&quot; mix";
+        const d = device({ seed: (put) => { put({ _id: "memo-salt", _kind: "com.palm.note:1", text: STORED, title: STORED.substring(0, 50), color: "blue", position: "k" }); } });
+        const m = await d.ask("what did I write in my salt memo");
+        expect(m.text).toBe("Your “Salt & pepper” memo says: Sea salt & black pepper\nTom's \"special\" mix");
+        expect(m.data.attachments[0].items[0]).toMatchObject({ title: "Salt & pepper", detail: "Sea salt & black pepper\nTom's \"special\" mix" });
+        // A line taken out by its words; undo puts back exactly what was stored.
+        expect((await d.ask("remove sea salt & black pepper from it")).text).toBe("Took “sea salt & black pepper” out of your “Salt & pepper” memo.");
+        const left = "Salt &amp; pepper\nTom&#39;s &quot;special&quot; mix";
+        expect(d.db.get("memo-salt")).toMatchObject({ text: left, title: left.substring(0, 50) });
+        await d.confirm(await d.ask("undo"));
+        expect(d.db.get("memo-salt")).toMatchObject({ text: STORED, title: STORED.substring(0, 50) });
+        // Renamed and added to: what is said escaped, the rest as stored.
+        expect((await d.ask("rename my salt memo to Herbs & spices")).text).toBe("Renamed “Salt & pepper” to “Herbs & spices”.");
+        expect(d.db.get("memo-salt").text).toBe("Herbs &amp; spices\nSea salt &amp; black pepper\nTom&#39;s &quot;special&quot; mix");
+        const added = await d.ask("add fish & chips <2> to it");
+        expect(added.text).toBe("Added it to your “Herbs & spices” memo.");
+        expect(added.data.attachments[0].items[0]).toMatchObject({ title: "Herbs & spices", detail: "Sea salt & black pepper\nTom's \"special\" mix\nfish & chips <2>" });
+        expect(d.db.get("memo-salt").text).toBe("Herbs &amp; spices\nSea salt &amp; black pepper\nTom&#39;s &quot;special&quot; mix\nfish &amp; chips &lt;2&gt;");
+        expect((await d.ask("what does it say")).text).toBe("Your “Herbs & spices” memo says: Sea salt & black pepper\nTom's \"special\" mix\nfish & chips <2>");
+        await d.confirm(await d.ask("undo"));
+        expect(d.db.get("memo-salt").text).toBe("Herbs &amp; spices\nSea salt &amp; black pepper\nTom&#39;s &quot;special&quot; mix");
+    });
     it("tells a contact's birthday, and when someone called", async () => {
         const d = seeded();
         expect((await d.ask("when is Mom's birthday")).text).toBe("Mom's birthday is 1961-03-14.");

@@ -350,6 +350,54 @@ describe("tasks, memos, contacts", () => {
         expect(memo.position < "m").toBe(true);
         expect((await d.ask("find my notes about the cabin")).text).toBe("One memo about “cabin”: “Wi-Fi at the cabin: network Lakeview”.");
     });
+    // Memos keeps a memo's text as the HTML it shows (com.palm.app.notes
+    // app/models/Memo.js:25-31, app/views/GridView.js:262; lib/memotext.js).
+    it("keeps a memo's words as Memos keeps them, escaped, and reads them as Memos shows them", async () => {
+        const d = device();
+        expect((await d.ask("new note: fish & chips <2 people>")).text).toBe("Saved to Memos.");
+        const memo = d.of("com.palm.note:1").find((n) => /^Fish/.test(n.text));
+        expect(memo).toMatchObject({ text: "Fish &amp; chips &lt;2 people&gt;", title: "Fish &amp; chips &lt;2 people&gt;" });
+        const found = await d.ask("find my notes about fish");
+        expect(found.text).toBe("One memo about “fish”: “Fish & chips <2 people>”.");
+        expect(found.data.attachments[0].items[0]).toMatchObject({ title: "Fish & chips <2 people>", detail: "" });
+        // Added to: the new line escaped, the old text as stored; undo puts back exactly what was there.
+        const added = await d.ask("add peas & \"mushy\" to my fish note");
+        expect(added.text).toBe("Added it to your “Fish & chips <2 people>” memo.");
+        expect(added.data.attachments[0].items[0]).toMatchObject({ title: "Fish & chips <2 people>", detail: "peas & \"mushy\"" });
+        const two = "Fish &amp; chips &lt;2 people&gt;\npeas &amp; \"mushy\"";
+        // The title: the stored text's first 50 characters (Memo.js:76).
+        expect(d.db.get(memo._id)).toMatchObject({ text: two, title: two.substring(0, 50) });
+        await d.confirm(await d.ask("undo"));
+        expect(d.db.get(memo._id)).toMatchObject({ text: "Fish &amp; chips &lt;2 people&gt;", title: "Fish &amp; chips &lt;2 people&gt;" });
+        // Typed in Memos: "&" stored as "&amp;" (its editor's HTML), never read as "amp".
+        const SALT = "Salt &amp; pepper\nTom&#39;s &quot;special&quot; mix";
+        d.put({ _id: "memo-salt", _kind: "com.palm.note:1", text: SALT, title: SALT.substring(0, 50), color: "blue", position: "k", modifiedTimestamp: 5 });
+        expect((await d.ask("find my notes about amp")).text).toBe("I found no memos about “amp”.");
+        const salt = await d.ask("find my notes about salt");
+        expect(salt.text).toBe("One memo about “salt”: “Salt & pepper”.");
+        expect(salt.data.attachments[0].items[0]).toMatchObject({ title: "Salt & pepper", detail: "Tom's \"special\" mix" });
+        expect((await d.ask("add salt & vinegar to my salt & pepper note")).text).toBe("Added it to your “Salt & pepper” memo.");
+        expect(d.db.get("memo-salt").text).toBe(SALT + "\nsalt &amp; vinegar");
+        await d.confirm(await d.ask("undo"));
+        expect(d.db.get("memo-salt")).toMatchObject({ text: SALT, title: SALT.substring(0, 50) });
+    });
+    it("reads a memo written unescaped as before, and keeps it as Memos would when adding to it", async () => {
+        const d = device();
+        // Written raw by an older build: no entities, read as it is.
+        d.put({ _id: "memo-raw", _kind: "com.palm.note:1", text: "Tom & Jerry\nPopcorn", title: "Tom & Jerry\nPopcorn", color: "blue", position: "k", modifiedTimestamp: 5 });
+        expect((await d.ask("find my notes about jerry")).text).toBe("One memo about “jerry”: “Tom & Jerry”.");
+        expect((await d.ask("add crisps & dip to my tom and jerry note")).text).toBe("Added it to your “Tom & Jerry” memo.");
+        expect(d.db.get("memo-raw").text).toBe("Tom & Jerry\nPopcorn\ncrisps &amp; dip");
+        expect((await d.ask("find my notes about crisps")).data.attachments[0].items[0]).toMatchObject({ title: "Tom & Jerry", detail: "Popcorn\ncrisps & dip" });
+        // With a raw "<" or ">": Memos shows it as written (app/lib/DbApi.js:28-40) and saves
+        // it escaped; added to, the Assistant does the same, and undo puts back the raw text.
+        d.put({ _id: "memo-lt", _kind: "com.palm.note:1", text: "Movie night <Friday>", title: "Movie night <Friday>", color: "pink", position: "l", modifiedTimestamp: 6 });
+        expect((await d.ask("find my notes about movie night")).text).toBe("One memo about “movie night”: “Movie night <Friday>”.");
+        expect((await d.ask("add Tom & Jerry to my movie night note")).text).toBe("Added it to your “Movie night <Friday>” memo.");
+        expect(d.db.get("memo-lt").text).toBe("Movie night &lt;Friday&gt;\nTom &amp; Jerry");
+        await d.confirm(await d.ask("undo"));
+        expect(d.db.get("memo-lt")).toMatchObject({ text: "Movie night <Friday>", title: "Movie night <Friday>" });
+    });
     it("adds a contact the next command can call", async () => {
         const d = device();
         expect((await d.ask("add Robin Lee to my contacts with number 555 0111")).text).toBe("Added Robin Lee to your contacts.");
