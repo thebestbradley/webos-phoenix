@@ -18,6 +18,7 @@ var zlib = require("zlib");
 var Service = require("webos-service");
 var packages = require("./packagesservice");
 var http = require("./lib/node-http");
+var platformDevice = require("@phoenix/platform/src/device");
 
 var STATE = "/var/lib/phoenix/marketplace/state.json";
 var TEMP = "/tmp/phoenix-marketplace";
@@ -50,7 +51,8 @@ var methods = packages.createPackagesService({
     requestBytes: http.requestBytes,
     crypto: {
         sha256: function (b) { return Promise.resolve(new Uint8Array(crypto.createHash("sha256").update(Buffer.from(b)).digest())); },
-        sha512: function (b) { return Promise.resolve(new Uint8Array(crypto.createHash("sha512").update(Buffer.from(b)).digest())); }
+        sha512: function (b) { return Promise.resolve(new Uint8Array(crypto.createHash("sha512").update(Buffer.from(b)).digest())); },
+        randomBytes: function (n) { return new Uint8Array(crypto.randomBytes(n)); }
     },
     gzip: {
         gzip: function (b) { return Promise.resolve(new Uint8Array(zlib.gzipSync(Buffer.from(b)))); },
@@ -74,6 +76,12 @@ var methods = packages.createPackagesService({
         remove: function (file) { try { fs.unlinkSync(file); } catch (e) { /* gone */ } }
     },
     defaultSources: function () { return (readJson(SOURCES) || {}).sources || []; },
+    // The Phoenix catalog and the revocation list: /etc/palm/phoenix/servers.json.
+    servers: function () {
+        return platformDevice.servers(function (uri, params) {
+            return new Promise(function (resolve) { service.call(uri, params, function (m) { resolve(m.payload); }); });
+        }, function (m) { console.log("[marketplace] " + m); });
+    },
     preinstalled: function () {
         return ((readJson(PREINSTALLED) || {}).packages || []).map(function (p) {
             var info = readJson(INSTALLED_APPS + p.id + "/appinfo.json") || {};

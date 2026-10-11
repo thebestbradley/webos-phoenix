@@ -60,15 +60,36 @@
 //   scheduled {$activity}               the daily check (an activity)
 //
 // Errors: {returnValue: false, errorCode, errorText}: NOT_FOUND, UNTRUSTED,
-// BAD_SIGNATURE, EXPIRED, ROLLBACK, BAD_INDEX, BAD_SERVER, CONNECTION_FAILED,
-// DOWNLOAD_FAILED, BAD_PACKAGE, UNSUPPORTED, NEEDS_DEVMODE, NEEDS_MOJO, BAD_MANIFEST,
-// INSTALL_FAILED, BUSY, BAD_PARAMS.
+// BAD_SIGNATURE, NO_DELEGATION, REVOKED_KEY, EXPIRED, ROLLBACK, BAD_INDEX,
+// BAD_SERVER, CONNECTION_FAILED, DOWNLOAD_FAILED, BAD_PACKAGE, UNSUPPORTED,
+// NEEDS_DEVMODE, NEEDS_MOJO, BAD_MANIFEST, REVOKED, INSTALL_FAILED, BUSY,
+// BAD_PARAMS, NOT_SET_UP.
+//
+// The Phoenix catalog's address and keys (the built-in "phoenix" source)
+// and the revocation list's address come from /etc/palm/phoenix/servers.json
+// (deps.servers(), @phoenix/platform; docs/PLATFORM-CLIENT.md, "The app
+// catalog"): "catalog.key" pins the online key; "catalog.root" pins the
+// owner's offline root, which delegates to the online key in key.json
+// (scope "catalog", OPEN-QUESTIONS Q45); neither (a development catalog)
+// leaves it to the user to check the fingerprint (trustSource). A source
+// the user adds is always checked by its fingerprint.
+//
+// The signed revocation list (servers.json "revocations.url", checked with
+// the Phoenix catalog's keys; @phoenix/platform revocations.js; also an
+// index's "revoked") is read with every refresh: an installed app or
+// connector on it for malware or a security hole is removed and the user
+// told why; for another reason the user is warned and offered removal
+// (APP-STORE.md 3.9, Q56); none on it installs again. A release with
+// "rollout" {percent, seed} is offered as an update only to the devices in
+// its percentage (@phoenix/platform rollout.js); a first install takes the
+// version the index lists.
 //
 // Written against injected dependencies (createPackagesService), so it runs
 // unchanged on a device (service.js), in the simulator and in tests.
 
 "use strict";
 
+var platform = require("@phoenix/platform");
 var catalog = require("./lib/catalog");
 var ipkLib = require("./lib/ipk");
 var pwa = require("./lib/pwa");
@@ -110,6 +131,10 @@ function clone(o) { return JSON.parse(JSON.stringify(o)); }
 //   state.load() / state.save(obj)       the service's own settings and caches
 //   temp.write(name, bytes) -> path; temp.remove(path)
 //   defaultSources() -> [{id, name, kind, url, key?, enabled}]
+//   servers() (optional) -> Promise<the resolved servers.json>: its
+//            "catalog" {url, key, root} is the "phoenix" source's, its
+//            "revocations" {url} the revocation list
+//   crypto.randomBytes(n) (optional): the device's rollout id
 //   preinstalled() (optional) -> [{id, sourceId, version, title?}]: the
 //            connector packages the device came with
 //            (/etc/palm/marketplace/preinstalled.json), the version each
@@ -125,6 +150,36 @@ function createPackagesService(deps) {
     var now = deps.now || function () { return new Date(); };
     var ipk = ipkLib.createIpk({ gzip: deps.gzip });
     var busy = {};
+    var platformCfg = null;   // servers.json, as last read (syncServers)
+    var platformLoaded = false;
+
+    // ---- Servers ---------------------------------------------------------------------
+
+    function syncServers() {
+        if (!deps.servers) return Promise.resolve(null);
+        return Promise.resolve(deps.servers()).then(function (sv) {
+            platformCfg = sv || null;
+            platformLoaded = true;
+            return platformCfg;
+        }, function (e) { log("servers: " + e.message); return platformCfg; });
+    }
+    // The sources the device ships with, the Phoenix catalog's address and
+    // keys from servers.json (none there: the source is not set up).
+    function shippedSources() {
+        var list = deps.defaultSources() || [];
+        if (!deps.servers) return list;
+        // Not read yet (a call before the first syncServers): the Phoenix
+        // catalog is left as it is.
+        if (!platformLoaded) return list.filter(function (d) { return d.id !== "phoenix"; });
+        var c = platformCfg && platformCfg.catalog;
+        return list.map(function (d) {
+            if (d.kind !== "phoenix" || d.id !== "phoenix") return d;
+            if (!c) return Object.assign({}, d, { url: d.url || null, notSetUp: !d.url });
+            // A key the device's sources file gives (the simulator's local
+            // catalog) stands when servers.json pins none.
+            return Object.assign({}, d, { url: c.url, key: c.key || (d.url === c.url ? d.key : null) || null, root: c.root || null });
+        });
+    }
 
     // ---- State -----------------------------------------------------------------------
 
@@ -136,12 +191,12 @@ function createPackagesService(deps) {
         // Sources the device ships with join once, and stay as the user sets them.
         var known = {};
         s.sources.forEach(function (x) { known[x.id] = true; });
-        (deps.defaultSources() || []).forEach(function (d) {
-            if (known[d.id]) return adoptKey(sourceOf(s, d.id), d);
+        shippedSources().forEach(function (d) {
+            if (known[d.id]) return adoptKey(s, sourceOf(s, d.id), d);
             if ((s.removedDefaults || []).indexOf(d.id) >= 0) return;
-            s.sources.push({ id: d.id, name: d.name, kind: d.kind, url: d.url, key: d.key || null, enabled: !!d.enabled,
+            s.sources.push({ id: d.id, name: d.name, kind: d.kind, url: d.url, key: d.key || null, root: d.root || null, enabled: !!d.enabled,
                              builtin: true, lastBuild: null, refreshed: null, error: null, fingerprint: null,
-                             keyFromDevice: !!d.key });
+                             keyFromDevice: !!(d.key || d.root) });
         });
         // The connector packages the device came with: installed from their
         // catalog, once (removed, they stay removed).
@@ -160,8 +215,29 @@ function createPackagesService(deps) {
     // trusted without asking (the simulator gives its own local catalog's,
     // read from that catalog's data folder): taken when the user has not
     // trusted another, and followed when it changes.
-    function adoptKey(src, d) {
-        if (!src || !src.builtin || !d.key || src.url !== d.url || src.key === d.key) return;
+    // The Phoenix catalog's address and its pinned root move with
+    // servers.json (an image's update, Developer Mode's override): the
+    // source follows, and a key the user trusted for the old address is
+    // dropped with it.
+    function adoptKey(s, src, d) {
+        if (!src || !src.builtin) return;
+        if (d.url !== undefined && src.url !== d.url) {
+            src.url = d.url;
+            src.key = d.key || null;
+            src.root = d.root || null;
+            src.keyFromDevice = !!(d.key || d.root);
+            src.fingerprint = null;
+            src.lastBuild = null;
+            src.error = null;
+            delete s.indexes[src.id];
+            return;
+        }
+        if ((d.root || null) !== (src.root || null)) {
+            src.root = d.root || null;
+            src.lastBuild = null;
+            if (src.root) { src.key = null; src.keyFromDevice = true; src.fingerprint = null; }
+        }
+        if (!d.key || src.key === d.key) return;
         if (src.key && !src.keyFromDevice) return;
         src.key = d.key;
         src.keyFromDevice = true;
@@ -175,8 +251,13 @@ function createPackagesService(deps) {
     function isPreinstalled(id) { return preinstalledList().some(function (p) { return p.id === id; }); }
     function sourceOf(s, id) { return s.sources.filter(function (x) { return x.id === id; })[0] || null; }
     function publicSource(x) {
+        // insecure: read over plain HTTP from another computer, so anyone on
+        // the way can change what it offers (a Preware feed has only MD5
+        // sums; OPEN-QUESTIONS Q65). The Marketplace says so.
+        var insecure = /^http:\/\//i.test(String(x.url || "")) && !/^http:\/\/(localhost|127\.|\[::1\])/i.test(String(x.url));
         return { id: x.id, name: x.name, kind: x.kind, url: x.url, enabled: x.enabled, builtin: !!x.builtin,
-                 trusted: x.kind !== "phoenix" || !!x.key, fingerprint: x.fingerprint || null,
+                 trusted: x.kind !== "phoenix" || !!x.key || !!x.root, pinned: !!(x.builtin && x.keyFromDevice), insecure: insecure,
+                 notSetUp: !x.url, fingerprint: x.fingerprint || null,
                  refreshed: x.refreshed || null, error: x.error || null, count: x.count || 0 };
     }
 
@@ -231,13 +312,17 @@ function createPackagesService(deps) {
                 return { id: src.id, ok: true };
             });
         }
+        if (!src.url) return Promise.reject(err("NOT_SET_UP", "No Phoenix catalog is set up on this device (/etc/palm/phoenix/servers.json)"));
+        var revokedKeys = (s.revocations && s.revocations.keys) || [];
+        if (src.key && revokedKeys.indexOf(src.key) >= 0)
+            return Promise.reject(err("REVOKED_KEY", "This catalog's key was revoked; it is not used any more"));
         if (src.key && !src.fingerprint) {
             return catalog.fingerprint(b64.fromBase64(src.key), deps.crypto.sha256).then(function (fp) {
                 src.fingerprint = fp;
                 return refreshOne(s, src);
             });
         }
-        if (!src.key) {
+        if (!src.key && !src.root) {
             return keyInfo(src.url).then(function (k) {
                 src.error = { errorCode: "UNTRUSTED", errorText: "Check this catalog's key before using it" };
                 return { id: src.id, ok: false, errorCode: "UNTRUSTED", pending: k };
@@ -246,41 +331,162 @@ function createPackagesService(deps) {
         var base = src.url.replace(/\/*$/, "/");
         return Promise.all([
             Promise.resolve(deps.requestBytes({ method: "GET", url: base + "index.json", headers: {} })),
-            getText(base + "index.json.sig")
+            getText(base + "index.json.sig"),
+            catalogKeys(s, src)
         ]).then(function (r) {
             if (r[0].status !== 200) throw err("BAD_SERVER", "HTTP " + r[0].status + " from " + base + "index.json");
-            return catalog.verifyIndex(r[0].bytes, r[1], src.key, {
+            return platform.signed.verifyWithAny(r[0].bytes, r[1], r[2], deps.crypto.sha512, "catalog").then(function (k) {
+                return [r[0], r[1], k];
+            });
+        }).then(function (r) {
+            return catalog.verifyIndex(r[0].bytes, r[1], r[2], {
                 sha512: deps.crypto.sha512, now: now(), lastBuild: typeof src.lastBuild === "number" ? src.lastBuild : undefined,
                 sourceId: src.id, baseUrl: base + "index.json"
             });
         }, function (e) {
             throw e.code ? e : err("CONNECTION_FAILED", "Could not reach " + base + (e && e.message ? " (" + e.message + ")" : ""));
         }).then(function (idx) {
-            s.indexes[src.id] = idx;
-            src.lastBuild = idx.build;
-            src.count = idx.apps.length;
-            if (idx.name && src.name === src.url) src.name = idx.name;
-            src.refreshed = now().toISOString();
-            src.error = null;
-            return { id: src.id, ok: true, build: idx.build };
+            return markRollouts(s, idx).then(function () {
+                s.indexes[src.id] = idx;
+                src.lastBuild = idx.build;
+                src.count = idx.apps.length;
+                if (idx.name && src.name === src.url) src.name = idx.name;
+                src.refreshed = now().toISOString();
+                src.error = null;
+                return { id: src.id, ok: true, build: idx.build };
+            });
         });
     }
 
-    function refresh(p) {
-        var s = load();
-        var list = s.sources.filter(function (x) { return p && p.id ? x.id === p.id : x.enabled; });
-        if (p && p.id && !list.length) return Promise.resolve(fail("NOT_FOUND", "No such source"));
-        return list.reduce(function (chain, src) {
-            return chain.then(function (out) {
-                return refreshOne(s, src).then(null, function (e) {
-                    src.error = { errorCode: e.code || "UNKNOWN_ERROR", errorText: e.message };
-                    log("refresh " + src.id + ": " + e.message);
-                    return { id: src.id, ok: false, errorCode: e.code || "UNKNOWN_ERROR", errorText: e.message };
-                }).then(function (r) { out.push(r); return out; });
+    // The keys a Phoenix catalog's index may be signed with: the one the
+    // device pins or the user trusted, or the online keys the pinned root
+    // delegated to (its key.json), never a revoked one.
+    function catalogKeys(s, src) {
+        var revokedKeys = (s.revocations && s.revocations.keys) || [];
+        if (!src.root) return Promise.resolve([src.key]);
+        var base = src.url.replace(/\/*$/, "/");
+        return getText(base + "key.json").then(function (text) {
+            var kj;
+            try { kj = JSON.parse(text); } catch (e) { throw err("BAD_INDEX", "The catalog's key.json is not JSON"); }
+            return platform.signed.trustedKeys(kj, { root: src.root }, "catalog",
+                                               { sha512: deps.crypto.sha512, now: now(), revokedKeys: revokedKeys });
+        });
+    }
+
+    // A release with a staged rollout this device is not in yet:
+    // rolloutWaiting, so it is not offered as an update.
+    function rolloutId(s) {
+        if (!s.rolloutId) {
+            var rnd = deps.crypto.randomBytes ? deps.crypto.randomBytes(16) : null;
+            s.rolloutId = rnd ? b64.hex(rnd) : String(Math.random()).slice(2) + String(Date.now());
+        }
+        return s.rolloutId;
+    }
+    function markRollouts(s, idx) {
+        var staged = idx.apps.filter(function (e) { return e.release && e.release.rollout && e.release.rollout.percent < 100; });
+        return staged.reduce(function (chain, e) {
+            return chain.then(function () {
+                return platform.rollout.check(e.release.rollout, rolloutId(s), deps.crypto.sha256).then(function (r) {
+                    if (!r.eligible) e.rolloutWaiting = true;
+                });
             });
-        }, Promise.resolve([])).then(function (results) {
-            save(s);
-            return { returnValue: true, results: results, sources: s.sources.map(publicSource) };
+        }, Promise.resolve());
+    }
+
+    // ---- Revocations ----------------------------------------------------------------------
+
+    // The signed list (servers.json "revocations"), checked with the
+    // Phoenix catalog's keys; kept until a newer one comes.
+    function refreshRevocations(s) {
+        var cfg = platformCfg && platformCfg.revocations;
+        var src = sourceOf(s, "phoenix");
+        if (!cfg || !src || !src.url || (!src.key && !src.root)) return Promise.resolve(null);
+        return Promise.all([
+            Promise.resolve(deps.requestBytes({ method: "GET", url: cfg.url, headers: {} })),
+            Promise.resolve(deps.requestBytes({ method: "GET", url: cfg.url + ".sig", headers: {} })),
+            catalogKeys(s, src)
+        ]).then(function (r) {
+            if (r[0].status === 404) return null;   // none published yet
+            if (r[0].status !== 200 || r[1].status !== 200) throw err("BAD_SERVER", "HTTP " + r[0].status + " from " + cfg.url);
+            return platform.revocations.verify(r[0].bytes, b64.fromUtf8(r[1].bytes), r[2], {
+                sha512: deps.crypto.sha512, now: now(),
+                lastSequence: s.revocations && typeof s.revocations.sequence === "number" ? s.revocations.sequence : undefined
+            }).then(function (list) {
+                s.revocations = { sequence: list.sequence, expires: list.expires, apps: list.apps, keys: list.keys, fetched: now().toISOString() };
+                return list;
+            });
+        }).then(null, function (e) {
+            log("revocations: " + e.message);
+            s.revocationsError = { errorCode: e.code || "UNKNOWN_ERROR", errorText: e.message };
+            return null;
+        });
+    }
+    // Every revoked entry the device knows: the list's and the indexes'.
+    function revokedList(s) {
+        var out = {};
+        ((s.revocations && s.revocations.apps) || []).forEach(function (r) { out[r.id] = r; });
+        s.sources.forEach(function (src) {
+            var idx = s.indexes[src.id];
+            if (src.enabled && src.kind === "phoenix" && idx && idx.revoked) idx.revoked.forEach(function (r) { if (!out[r.id]) out[r.id] = r; });
+        });
+        return out;
+    }
+    function revokedFor(s, id, catalogId) {
+        var all = revokedList(s);
+        return all[id] || (catalogId && all[catalogId]) || null;
+    }
+    var REASON_TEXT = { malware: "it was found to be harmful", security: "it has a security hole", legal: "of a legal claim",
+                        developer: "its developer withdrew it" };
+    // Malware and security holes: removed, and the user told why. Other
+    // reasons: the user is told once and may remove it (APP-STORE.md 3.9).
+    function applyRevocations() {
+        var s = load();
+        var all = revokedList(s);
+        s.revokedSeen = s.revokedSeen || {};
+        var todo = Object.keys(s.installed).map(function (id) {
+            var rec = s.installed[id], r = all[id] || all[rec.catalogId];
+            return r && s.revokedSeen[id] !== r.reason + "|" + r.date ? { id: id, rec: rec, r: r } : null;
+        }).filter(Boolean);
+        todo.forEach(function (t) { s.revokedSeen[t.id] = t.r.reason + "|" + t.r.date; });
+        if (todo.length) save(s);
+        return todo.reduce(function (chain, t) {
+            return chain.then(function () {
+                var why = REASON_TEXT[t.r.reason] || "it was withdrawn";
+                var act = t.r.remove ? remove({ id: t.id }).then(function (res) {
+                    return res.returnValue ? t.rec.title + " was removed: " + why + "." : null;
+                }) : Promise.resolve(t.rec.title + " was withdrawn from the Marketplace because " + why + ". You can remove it in the Marketplace.");
+                return act.then(function (message) {
+                    if (!message) return null;
+                    return deps.luna.call("luna://com.webos.notification/createToast", {
+                        message: message, onclick: { appId: "org.webosphoenix.marketplace", params: { section: "updates" } }
+                    }).then(null, function () {});
+                });
+            });
+        }, Promise.resolve()).then(function () { return todo.length; });
+    }
+
+    function refresh(p) {
+        return syncServers().then(function () {
+            var s = load();
+            var list = s.sources.filter(function (x) { return p && p.id ? x.id === p.id : x.enabled; });
+            if (p && p.id && !list.length) return fail("NOT_FOUND", "No such source");
+            // The revocation list first: a key it names is not used for the catalogs.
+            return refreshRevocations(s).then(function () {
+                return list.reduce(function (chain, src) {
+                    return chain.then(function (out) {
+                        return refreshOne(s, src).then(null, function (e) {
+                            src.error = { errorCode: e.code || "UNKNOWN_ERROR", errorText: e.message };
+                            log("refresh " + src.id + ": " + e.message);
+                            return { id: src.id, ok: false, errorCode: e.code || "UNKNOWN_ERROR", errorText: e.message };
+                        }).then(function (r) { out.push(r); return out; });
+                    });
+                }, Promise.resolve([]));
+            }).then(function (results) {
+                save(s);
+                return applyRevocations().then(null, function (e) { log("revocations: " + e.message); }).then(function () {
+                    return { returnValue: true, results: results, sources: load().sources.map(publicSource) };
+                });
+            });
         });
     }
 
@@ -306,7 +512,13 @@ function createPackagesService(deps) {
         o.installed = inst ? { version: inst.version, sourceId: inst.sourceId } : null;
         if (found) o.appId = found.appId;
         if (found && ownIcons[found.appId]) o.ownIcon = ownIcons[found.appId];
-        o.update = inst && inst.sourceId === e.sourceId && e.version && version.compare(e.version, inst.version) > 0 ? e.version : null;
+        o.update = inst && inst.sourceId === e.sourceId && e.version && !e.rolloutWaiting && version.compare(e.version, inst.version) > 0 ? e.version : null;
+        var rv = revokedFor(s, e.id, found && found.appId);
+        if (rv) {
+            o.revoked = { reason: rv.reason, text: rv.text, date: rv.date };
+            o.update = null;
+            o.verdict = { ok: false, text: "Withdrawn from the Marketplace: " + (REASON_TEXT[rv.reason] || "withdrawn") + (rv.text ? " (" + rv.text + ")" : "") };
+        }
         if (e.kind === "preware" && e.architecture !== "all")
             o.verdict = { ok: false, text: "Not for this device yet: " + nativeText(e.architecture) };
         return o;
@@ -428,7 +640,7 @@ function createPackagesService(deps) {
     // SHA-256 in the index) is the catalog's.
     function firstPartyEntry(s, entry) {
         var src = sourceOf(s, entry.sourceId);
-        return entry.kind === "connector" && isPreinstalled(entry.id) && !!src && src.builtin && src.kind === "phoenix" && !!src.key;
+        return entry.kind === "connector" && isPreinstalled(entry.id) && !!src && src.builtin && src.kind === "phoenix" && !!(src.key || src.root);
     }
 
     // The package's bytes -> its app, or an error saying why it cannot be installed.
@@ -610,6 +822,8 @@ function createPackagesService(deps) {
         };
         return findApp(s, p.sourceId, p.id).then(function (e) {
             entry = e;
+            var rv = revokedFor(s, entry.id, entry.appId);
+            if (rv) throw err("REVOKED", "Withdrawn from the Marketplace: " + (REASON_TEXT[rv.reason] || "withdrawn") + (rv.text ? " (" + rv.text + ")" : ""));
             if (entry.verdict && !entry.verdict.ok) throw err("UNSUPPORTED", entry.verdict.text);
             if (entry.kind === "preware" && entry.architecture && entry.architecture !== "all")
                 throw err("UNSUPPORTED", "Not for this device yet: " + nativeText(entry.architecture));
@@ -727,7 +941,8 @@ function createPackagesService(deps) {
             var inst = s.installed[id];
             var idx = s.indexes[inst.sourceId];
             var e = idx && idx.apps.filter(function (a) { return a.id === (inst.catalogId || id); })[0];
-            if (e && e.version && version.compare(e.version, inst.version) > 0) out.push({ id: id, entry: e });
+            if (e && e.version && !e.rolloutWaiting && !revokedFor(s, id, inst.catalogId) && version.compare(e.version, inst.version) > 0)
+                out.push({ id: id, entry: e });
         });
         return out;
     }
@@ -739,9 +954,11 @@ function createPackagesService(deps) {
             updatesOf(s).forEach(function (u) { ups[u.id] = u.entry.version; });
             return { returnValue: true, apps: Object.keys(s.installed).sort().map(function (id) {
                 var i = s.installed[id];
+                var rv = revokedFor(s, id, i.catalogId);
                 return { id: id, catalogId: i.catalogId || id, title: i.title, icon: ownIcons[id] || i.icon || "", catalogIcon: i.icon || "",
                          version: i.version, sourceId: i.sourceId,
-                         kind: i.kind, installedAt: i.installedAt, update: ups[id] || null };
+                         kind: i.kind, installedAt: i.installedAt, update: ups[id] || null,
+                         revoked: rv ? { reason: rv.reason, text: rv.text, date: rv.date } : null };
             }) };
         });
     }
@@ -787,7 +1004,12 @@ function createPackagesService(deps) {
     return {
         getSources: function () {
             ensureSchedule();
-            return Promise.resolve({ returnValue: true, sources: load().sources.map(publicSource) });
+            return syncServers().then(function () {
+                var s = load();
+                return { returnValue: true, sources: s.sources.map(publicSource),
+                         revocations: s.revocations ? { sequence: s.revocations.sequence, fetched: s.revocations.fetched, count: s.revocations.apps.length }
+                             : null };
+            });
         },
         addSource: function (p) {
             var u = String((p && p.url) || "").trim();
