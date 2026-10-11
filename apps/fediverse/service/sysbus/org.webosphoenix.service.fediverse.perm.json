@@ -1,5 +1,5 @@
 {
-    "org.webosphoenix.service.fediverse": [
+    "org.webosphoenix.service.fediverse": ["phoenix.appservices.accounts", 
         "database.operation",
         "activity.operation",
         "accounts.operation",

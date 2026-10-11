@@ -124,8 +124,16 @@ def load_ose():
 def sysbus_files(root):
     """The repository's sysbus directories that the image installs: each
     Node service's (install-rootfs.py), the native services' (their CMake
-    installs them) and the shell's."""
+    installs them), Open webOS's app services' (OSE's bus files for them in
+    compat/app-services: install-rootfs.py APP_SERVICES_SYSBUS) and the
+    shell's."""
     dirs = []
+    app_services = os.path.join(root, "compat", "app-services")
+    if os.path.isdir(app_services):
+        for name in sorted(os.listdir(app_services)):
+            d = os.path.join(app_services, name, "sysbus")
+            if os.path.isdir(d):
+                dirs.append(d)
     for base in ("services", "apps"):
         b = os.path.join(root, base)
         if not os.path.isdir(b):
