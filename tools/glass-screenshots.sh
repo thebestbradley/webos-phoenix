@@ -14,6 +14,10 @@
 #   cards-light.png   the same, the light one in front (cards-light.jpg)
 #   cards-classic.png cards-dark in 1.0's look
 #   banner.png        a notification's banner over a maximized app
+#   dashboard.png     the dashboard open over it, three notifications
+#   stacks.png        the dashboard with two stacks of texts and a reminder
+#   drawer.png        the dashboard pulled to the whole screen, a download
+#                     on top
 #
 # Each run in a fresh home; the glass pages are installed for the run only.
 #
@@ -74,3 +78,6 @@ shot cards-classic --scene cardsnotified --launch org.webosphoenix.glasstest --l
     --launch org.webosphoenix.glasstest3
 # The banner shows for 6 s from the start (its slide and 5 s).
 DELAY=3500 shot banner --scene banner -- --look ember-glass
+DELAY=6000 shot dashboard --scene dashboard -- --look ember-glass
+DELAY=6000 shot stacks --scene notifystacks -- --look ember-glass
+DELAY=6000 shot drawer --scene drawer -- --look ember-glass

@@ -11,17 +11,21 @@ Rectangle {
     objectName: "drawerSelectMark"
     width: Theme.drawerCheckSize
     height: width
-    radius: width / 2
-    color: checked ? "#3a8de0" : "transparent"
-    border.width: Math.max(1, Theme.px(2))
-    border.color: checked ? "#3a8de0" : Qt.rgba(1, 1, 1, 0.7)
+    // Ember Glass: its checkbox (base.css .check: 22 px, 7 px corners, a
+    // 1.2 px ring of ink-3; checked, the inverse ink and a check).
+    radius: Theme.emberGlass ? Theme.px(EmberGlass.radiusCheck) : width / 2
+    color: checked ? (Theme.emberGlass ? Theme.eg.colorInverse : "#3a8de0") : "transparent"
+    border.width: Theme.emberGlass ? (checked ? 0 : Math.max(1, EmberGlass.sizeToggleBorder * Theme.u)) : Math.max(1, Theme.px(2))
+    border.color: Theme.emberGlass ? Theme.eg.colorInk3 : checked ? "#3a8de0" : Qt.rgba(1, 1, 1, 0.7)
     Canvas {
         anchors.fill: parent
         visible: mark.checked
+        readonly property color stroke: Theme.emberGlass ? Theme.eg.colorOnInverse : "#ffffff"
+        onStrokeChanged: requestPaint()
         onPaint: {
             var c = getContext("2d");
             c.reset();
-            c.strokeStyle = "#ffffff";
+            c.strokeStyle = String(stroke);
             c.lineWidth = Math.max(2, width / 9);
             c.lineCap = "round";
             c.lineJoin = "round";

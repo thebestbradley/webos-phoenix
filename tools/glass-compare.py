@@ -65,5 +65,12 @@ def bottom(ours, frac, name):
     B = load(ours, 760)
     B.crop((0, round(B.height * frac), 760, B.height)).save(os.path.join(out, name), quality=85, optimize=True)
 bottom(f'{shots}/banner.png', 0.80, 'banner.jpg')
+bottom(f'{shots}/dashboard.png', 0.55, 'dashboard.jpg')
+bottom(f'{shots}/stacks.png', 0.55, 'stacks.jpg')
+def alone(ours, name, w=380):
+    if not have(ours):
+        return
+    load(ours, w).save(os.path.join(out, name), quality=82, optimize=True)
+alone(f'{shots}/drawer.png', 'drawer.jpg')
 for f in sorted(os.listdir(out)):
     print(f, os.path.getsize(os.path.join(out, f)) // 1024, 'KB')

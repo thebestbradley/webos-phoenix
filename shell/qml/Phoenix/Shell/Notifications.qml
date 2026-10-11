@@ -623,7 +623,7 @@ Item {
 
         Rectangle {
             id: space
-            color: root.overlay ? Theme.statusBarFill : root.egBar && !root.dashboardOpen ? "transparent" : Theme.black
+            color: root.overlay ? Theme.statusBarFill : root.egBar ? "transparent" : Theme.black
             clip: true
             // Tablets: right of the centred clock.
             x: root.overlay ? root.width / 2 + Theme.px(40) : 0
@@ -917,6 +917,31 @@ Item {
                 // buttons, or under the rows of a drawer pulled to the whole
                 // screen, they never reach the cards or Just Type beneath.
                 MouseArea { anchors.fill: parent }
+                // Ember Glass: the dashboard is an L4 sheet rising from the
+                // gesture strip (its top corners the banner's 24 px), the
+                // rows one L2 plane in it (base.css .veil, .plane;
+                // docs/SYSTEM-UI-2.md, 8).
+                EgSheet {
+                    objectName: "emberDashboard"
+                    visible: root.egBar
+                    anchors.fill: parent
+                    backdrop: root.backdrop
+                    lifted: false
+                    topLeftRadius: Theme.px(EmberGlass.radiusBanner)
+                    topRightRadius: Theme.px(EmberGlass.radiusBanner)
+                    bottomLeftRadius: 0
+                    bottomRightRadius: 0
+                }
+                EgSheet {
+                    objectName: "emberDashboardPlane"
+                    visible: root.egBar && height > 0
+                    level: 2
+                    x: phoneDashboard.x
+                    y: phoneDashboard.y
+                    width: phoneDashboard.width
+                    height: phoneDashboard.item ? Math.min(phoneDashboard.height, phoneDashboard.item.contentHeight) : 0
+                    radius: Theme.px(EmberGlass.radiusPlane)
+                }
                 // Pull up for the whole screen (Phoenix).
                 DrawerHandle {
                     id: phoneHandle
@@ -945,6 +970,9 @@ Item {
                     id: phoneDashboard
                     anchors.fill: parent
                     anchors.topMargin: Theme.drawerHandleHeight + (root.drawerExpanded ? Theme.drawerHeaderHeight : 0) + Theme.dashboardTopPadding
+                    // Ember Glass: the plane 8 px in from the sheet's sides.
+                    anchors.leftMargin: root.egBar ? Theme.px(8) : 0
+                    anchors.rightMargin: root.egBar ? Theme.px(8) : 0
                     active: parent.visible
                     sourceComponent: dashboardList
                     // At the newest notification (the end), as the original;
@@ -953,7 +981,7 @@ Item {
                 }
                 Image {
                     objectName: "dashboardMaskTop"
-                    visible: phoneDashboard.item !== null && !phoneDashboard.item.atYBeginning
+                    visible: phoneDashboard.item !== null && !phoneDashboard.item.atYBeginning && !root.egBar
                     y: phoneDashboard.y - Theme.dashboardTopPadding
                     width: parent.width
                     height: Theme.artHeight(source)
@@ -962,7 +990,7 @@ Item {
                 }
                 Image {
                     objectName: "dashboardMaskBottom"
-                    visible: phoneDashboard.item !== null && !phoneDashboard.item.atYEnd
+                    visible: phoneDashboard.item !== null && !phoneDashboard.item.atYEnd && !root.egBar
                     y: parent.height - Theme.dashboardBottomMaskOffset
                     width: parent.width
                     height: Theme.artHeight(source)
@@ -1310,9 +1338,10 @@ Item {
                     visible: root.keyRow === item.index
                     anchors.fill: parent
                     anchors.margins: Theme.px(2)
-                    radius: Theme.px(6)
-                    color: "#302c8ce0"
-                    border.color: "#2c8ce0"
+                    // Ember Glass: the focus colour, a menu item's corners.
+                    radius: Theme.emberGlass ? Theme.px(EmberGlass.radiusMenuItem) : Theme.px(6)
+                    color: Theme.emberGlass ? Theme.egAlpha(Theme.eg.colorFocus, 0.14) : "#302c8ce0"
+                    border.color: Theme.emberGlass ? Theme.eg.colorFocus : "#2c8ce0"
                     border.width: Theme.px(2)
                     z: 3
                 }
@@ -1324,7 +1353,19 @@ Item {
                     x: Theme.px(8)
                     width: parent.width - 2 * x
                     height: Math.max(1, Theme.px(1))
-                    color: Theme.drawerRule
+                    color: Theme.emberGlass ? Theme.eg.colorLine2 : Theme.drawerRule
+                    z: 2
+                }
+                // Ember Glass: a hairline between rows, from the text on
+                // (base.css .row + .row::before).
+                Rectangle {
+                    objectName: "emberDashboardRule"
+                    visible: root.egBar && item.index > 0 && !(root.ongoingCount > 0 && item.index === root.ongoingCount)
+                    x: Theme.px(52)
+                    width: parent.width - x
+                    height: Math.max(1, EmberGlass.hairline * Theme.u)
+                    color: Theme.eg.colorLine2
+                    opacity: content.opacity
                     z: 2
                 }
 

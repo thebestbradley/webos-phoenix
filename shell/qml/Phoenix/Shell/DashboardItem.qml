@@ -21,6 +21,13 @@
 // once there are three or more (.layer-1, .layer-2). While the top layer is
 // swiped (layerX, set by the row) the one under it shows through where it
 // was (configureClipping, :201-205).
+//
+// Ember Glass (docs/SYSTEM-UI-2.md, 8) draws the same row on its glass: the
+// title in ink, 15 px semibold, the message in ink-2 (base.css .row .t,
+// .s); the count an ink badge (SPEC.md: "unread counts are ink badges");
+// the layers' edges hairlines; an activity's progress Ember's slider
+// (.slider: a hairline, the ember on the part done); the answers small
+// pills (.pill.sm).
 
 import QtQuick
 
@@ -100,6 +107,15 @@ Item {
 
     height: Theme.dashboardItemHeight
 
+    // Ember Glass's drawing, the theme's ink.
+    readonly property bool eg: Theme.emberGlass
+    readonly property color _ink: eg ? Theme.eg.colorInk : Theme.text
+    readonly property color _ink2: eg ? Theme.eg.colorInk2 : Theme.textDim
+    readonly property string _family: eg ? Theme.egFontFamily : Theme.fontFamily
+    readonly property int _titleSize: eg ? Math.round(15 * Theme.u) : Theme.px(16)
+    readonly property int _titleWeight: eg ? 600 : Font.Bold
+    readonly property int _bodySize: eg ? Math.round(13.5 * Theme.u) : Theme.px(14)
+
     // Show the app's dashboard window here.
     function claim() {
         var w = windowKey && source ? source.windowFor(windowKey) : null;
@@ -158,14 +174,27 @@ Item {
         objectName: "dashboardCount"
         visible: item._own && item.layerCount > 1
         z: 2
-        width: Math.max(Theme.px(24), countLabel.implicitWidth + Theme.px(16))
-        height: Theme.px(28)
+        width: item.eg ? Math.max(Theme.px(20), countLabel.implicitWidth + Theme.px(12))
+                       : Math.max(Theme.px(24), countLabel.implicitWidth + Theme.px(16))
+        height: item.eg ? Theme.px(20) : Theme.px(28)
         x: dIcon.x + dIcon.width + Theme.px(3) - width
-        y: dIcon.y - Theme.px(3)
-        scale: Theme.dashboardBadgeScale
+        y: dIcon.y - (item.eg ? Theme.px(5) : Theme.px(3))
+        scale: item.eg ? 1 : Theme.dashboardBadgeScale
         transformOrigin: Item.TopRight
         clip: true
+        // Ember Glass: an ink badge (radius.badge, type.badge), ringed in
+        // the glass's line so it stands off the icon.
+        Rectangle {
+            objectName: "emberDashboardCount"
+            visible: item.eg
+            anchors.fill: parent
+            radius: height / 2
+            color: Theme.eg.colorInverse
+            border.color: Theme.eg.colorLine2
+            border.width: Math.max(1, EmberGlass.hairline * Theme.u)
+        }
         ArtBorderImage {
+            visible: !item.eg
             width: parent.width
             height: 2 * parent.height
             source: Theme.asset("dashboard-newitem-badge.png")
@@ -175,11 +204,11 @@ Item {
             id: countLabel
             objectName: "dashboardCountLabel"
             anchors.horizontalCenter: parent.horizontalCenter
-            y: (Theme.px(24) - height) / 2
+            y: item.eg ? (parent.height - height) / 2 : (Theme.px(24) - height) / 2
             text: String(item.layerCount)
-            color: "#ffffff"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(16)
+            color: item.eg ? Theme.eg.colorOnInverse : "#ffffff"
+            font.family: item._family
+            font.pixelSize: item.eg ? Math.round(11.5 * Theme.u) : Theme.px(16)
             font.bold: true
         }
     }
@@ -199,11 +228,19 @@ Item {
         height: parent.height
         clip: true
         Image {
-            visible: item.layerCount >= 3
+            visible: item.layerCount >= 3 && !item.eg
             y: (parent.height - height) / 2
             width: Theme.artWidth(source)
             height: Theme.artHeight(source)
             source: Theme.asset("notification-divider.png")
+        }
+        // Ember Glass: the layer's edge, a hairline.
+        Rectangle {
+            visible: item.layerCount >= 3 && item.eg
+            y: Theme.px(8)
+            width: Math.max(1, Theme.u)
+            height: parent.height - 2 * y
+            color: Theme.eg.colorLine2
         }
         Column {
             x: item.layerCount >= 3 ? Theme.dashboardLayerTextInset : item._plainTextX - under.x
@@ -214,31 +251,41 @@ Item {
                 width: parent.width
                 elide: Text.ElideRight
                 text: item.underLayer ? item.underLayer.title : ""
-                color: Theme.text
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.px(16)
-                font.bold: true
+                color: item._ink
+                font.family: item._family
+                font.pixelSize: item._titleSize
+                font.weight: item._titleWeight
             }
             Text {
                 width: parent.width
                 elide: Text.ElideRight
                 text: item.underLayer ? item.underLayer.body : ""
-                color: Theme.textDim
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.px(14)
+                color: item._ink2
+                font.family: item._family
+                font.pixelSize: item._bodySize
             }
         }
     }
     // The top layer's own edge.
     Image {
         objectName: "dashboardTopDivider"
-        visible: item.stacked
+        visible: item.stacked && !item.eg
         x: item._topX
         y: (parent.height - height) / 2
         width: Theme.artWidth(source)
         height: Theme.artHeight(source)
         opacity: textColumn.opacity
         source: Theme.asset("notification-divider.png")
+    }
+    Rectangle {
+        objectName: "emberDashboardTopEdge"
+        visible: item.stacked && item.eg
+        x: item._topX
+        y: Theme.px(8)
+        width: Math.max(1, Theme.u)
+        height: parent.height - 2 * y
+        opacity: textColumn.opacity
+        color: Theme.eg.colorLine2
     }
 
     Column {
@@ -250,22 +297,24 @@ Item {
         opacity: item.stacked ? Math.max(0, 1 - item.layerX / Math.max(1, item.width - item.topEdge)) : 1
         anchors.verticalCenter: parent.verticalCenter
         Text {
+            objectName: "dashboardTitle"
             width: parent.width
             elide: Text.ElideRight
             text: item.title
-            color: Theme.text
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(16)
-            font.bold: true
+            color: item._ink
+            font.family: item._family
+            font.pixelSize: item._titleSize
+            font.weight: item._titleWeight
         }
         Text {
+            objectName: "dashboardBody"
             visible: item._actionItems.length === 0
             width: parent.width
             elide: Text.ElideRight
             text: item.body
-            color: Theme.textDim
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(14)
+            color: item._ink2
+            font.family: item._family
+            font.pixelSize: item._bodySize
         }
         // Room for the answers (actionRow, over the row's own tap area).
         Item {
@@ -281,12 +330,37 @@ Item {
             width: parent.width - Theme.px(10)
             height: Theme.px(4)
             radius: height / 2
-            color: Qt.rgba(1, 1, 1, 0.2)
+            color: item.eg ? "transparent" : Qt.rgba(1, 1, 1, 0.2)
             Rectangle {
+                visible: !item.eg
                 width: parent.width * Math.max(0, Math.min(100, item.progress)) / 100
                 height: parent.height
                 radius: parent.radius
                 color: Theme.text
+            }
+            // Ember Glass: a hairline in ink-3, the part done 2 px of
+            // ember (.slider .track, .fill).
+            Rectangle {
+                visible: item.eg
+                width: parent.width
+                y: (parent.height - height) / 2
+                height: Math.max(1, Theme.u)
+                color: Theme.eg.colorInk3
+                opacity: 0.8
+            }
+            Rectangle {
+                objectName: "emberDashboardProgressFill"
+                visible: item.eg
+                width: parent.width * Math.max(0, Math.min(100, item.progress)) / 100
+                y: (parent.height - height) / 2
+                height: Theme.px(2)
+                radius: height / 2
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0; color: EmberGlass.emberA }
+                    GradientStop { position: 0.45; color: EmberGlass.emberMid }
+                    GradientStop { position: 1; color: EmberGlass.emberB }
+                }
             }
         }
     }
@@ -312,16 +386,19 @@ Item {
                 height: Theme.px(22)
                 width: pillLabel.implicitWidth + Theme.px(18)
                 radius: height / 2
-                color: pillArea.pressed ? Qt.rgba(1, 1, 1, 0.32) : Qt.rgba(1, 1, 1, 0.12)
-                border.width: Math.max(1, Theme.px(1))
-                border.color: Qt.rgba(1, 1, 1, 0.35)
+                // Ember Glass: .pill.sm, the plane's tint and the line.
+                color: item.eg ? (pillArea.pressed ? Theme.eg.colorPlane2 : Theme.eg.colorSunk)
+                               : pillArea.pressed ? Qt.rgba(1, 1, 1, 0.32) : Qt.rgba(1, 1, 1, 0.12)
+                border.width: item.eg ? Math.max(1, EmberGlass.hairline * Theme.u) : Math.max(1, Theme.px(1))
+                border.color: item.eg ? Theme.eg.colorLine2 : Qt.rgba(1, 1, 1, 0.35)
                 Text {
                     id: pillLabel
                     anchors.centerIn: parent
                     text: pill.modelData.label
-                    color: Theme.text
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.px(13)
+                    color: item._ink
+                    font.family: item._family
+                    font.pixelSize: item.eg ? Math.round(12.5 * Theme.u) : Theme.px(13)
+                    font.weight: item.eg ? 600 : Font.Normal
                 }
                 MouseArea {
                     id: pillArea

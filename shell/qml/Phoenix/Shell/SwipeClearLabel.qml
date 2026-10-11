@@ -25,9 +25,10 @@ Text {
     readonly property real _inset: Math.max(Theme.px(12), (distance - width) / 2)
     x: fromRight ? rowWidth - _inset - width : _inset
     text: qsTr("Clear")
-    color: armed ? Theme.text : Theme.textDim
+    // Ember Glass: ink-3 until a release clears the row, then ink.
+    color: armed ? (Theme.emberGlass ? Theme.eg.colorInk : Theme.text) : (Theme.emberGlass ? Theme.eg.colorInk3 : Theme.textDim)
     opacity: Math.min(1, distance / (rowWidth * Theme.dashboardDismissRatio))
-    font.family: Theme.fontFamily
+    font.family: Theme.emberGlass ? Theme.egFontFamily : Theme.fontFamily
     font.pixelSize: Theme.px(15)
-    font.bold: armed
+    font.weight: armed ? (Theme.emberGlass ? 650 : Font.Bold) : Font.Normal
 }

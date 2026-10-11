@@ -209,6 +209,20 @@ tokens"), and how the shell draws it in QML:
     24 px corners in a 38 px sheet), the app's icon and the text in ink,
     one line as 1.0's; it slides up and fades as 1.0's. The phone's active
     call is the same sheet.
+  - *The dashboard* is an L4 sheet rising from the gesture strip (its top
+    corners the banner's 24 px), the rows one L2 plane in it, 8 px in, with
+    hairlines between them from the text on (`.plane`, `.row + .row`);
+    each row's title in ink (15 px semibold), its message in ink-2; a
+    stack's count an ink badge (SPEC.md: "unread counts are ink badges"),
+    its layers' edges hairlines; an activity's progress Ember's slider (a
+    hairline, the done part 2 px of ember); a notification's answers small
+    pills. 1.0's black, mask art and dividers are not drawn. Its height,
+    rows, swipes and stacks are 1.0's (the 52 px rows, at most 55% of the
+    screen).
+  - *The drawer* (pulled to the whole screen): the handle in ink-3, the
+    heading a group's (`.micro`: "NOTIFICATIONS"), Select and Clear All in
+    ink, Clear's confirmation in the danger colour, the select marks
+    Ember's checkbox (`.check`), the swipe's "Clear" in ink-3, then ink.
   - `EgSheet.qml` draws every glass sheet the shell owns (L2, L3, L4: the
     tint, the rim, the highlight, the live blur and its fallback,
     lift-high's shadow, a radius per corner); `EgHighlight.qml` the
@@ -329,7 +343,7 @@ second after (the adaptive simulator resizes in a stream of sizes).
 | 5 | The shell contract: `WallpaperBlur`, the window's place for each web app, the runtime's side; tests (QML, the runtime in Chromium, the simulator lining the blur up) | done |
 | 6 | Just Type's pill and the dock (phones; the tablet's dock is still 1.0's) | done |
 | 7 | The phone's notification bar under the dock, the banner, the active call; the dock 10 px over the bar | done |
-| 8 | The dashboard: its sheet, the rows, the stacks, the drawer | |
+| 8 | The dashboard: its sheet, the rows, the stacks, the drawer | done |
 | 9 | The system menu | |
 | 10 | The launcher | |
 | 11 | The tablet: the status bar's notification group, the drop-down, the dock | |
@@ -384,6 +398,7 @@ those screenshots and `tools/test-glass-sim.py`'s):
 | `glass-alignment.jpg` | The alignment check: the test page drawing only the blur the shell gave it, beside the sharp wallpaper |
 | `notification-bar.jpg` | The bottom of the card view, render above, Phoenix below: the notification bar and the dock over it |
 | `banner.jpg` | A banner over a maximized app (no render draws one on a phone) |
+| `dashboard.jpg`, `stacks.jpg`, `drawer.jpg` | The dashboard open over an app; with two stacks of texts (their counts, their layers' edges); pulled to the whole screen, a download on top |
 
 **Still unlike the renders:** the dock and the notification bar show the
 apps' own icons (owner question 10); the font is Open Sans where Manrope

@@ -35,8 +35,10 @@ Item {
         width: Theme.drawerHandleWidth
         height: Theme.drawerHandleThickness
         radius: height / 2
-        color: Theme.text
-        opacity: area.pressed ? 0.7 : 0.35
+        // Ember Glass: in ink-3, the glass's quiet ink (as Enyo 2's grabber:
+        // base.css .grabber).
+        color: Theme.emberGlass ? Theme.eg.colorInk3 : Theme.text
+        opacity: Theme.emberGlass ? (area.pressed ? 1 : 0.8) : area.pressed ? 0.7 : 0.35
         Behavior on opacity { NumberAnimation { duration: Theme.motion(120) } }
     }
 

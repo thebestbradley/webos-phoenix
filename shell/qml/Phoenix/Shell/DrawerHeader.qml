@@ -43,11 +43,13 @@ Item {
         signal triggered
         objectName: "drawer_" + name
         anchors.verticalCenter: parent.verticalCenter
-        color: available ? Theme.text : Theme.textDim
+        // Ember Glass: in ink, 14.5 px semibold (type.label, a ghost
+        // pill's: base.css .pill.ghost).
+        color: available ? (Theme.emberGlass ? Theme.eg.colorInk : Theme.text) : (Theme.emberGlass ? Theme.eg.colorInk3 : Theme.textDim)
         opacity: available ? (tap.pressed ? 0.6 : 1) : 0.5
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.drawerHeaderFontSize
-        font.bold: true
+        font.family: Theme.emberGlass ? Theme.egFontFamily : Theme.fontFamily
+        font.pixelSize: Theme.emberGlass ? Math.round(14.5 * Theme.u) : Theme.drawerHeaderFontSize
+        font.weight: Theme.emberGlass ? 600 : Font.Bold
         // A little past the text, well inside the header, so a tap meant
         // for the handle next to it, or for a row, never lands here.
         MouseArea {
@@ -62,15 +64,21 @@ Item {
         }
     }
 
+    // Ember Glass: a group's heading (base.css .micro in ink-3: 11 px
+    // bold capitals, 1.6 px apart).
     Text {
+        objectName: "drawerTitle"
         anchors.left: parent.left
-        anchors.leftMargin: Theme.px(12)
+        anchors.leftMargin: Theme.emberGlass ? Theme.px(18) : Theme.px(12)
         anchors.verticalCenter: parent.verticalCenter
         text: header.selecting ? (header.selectedCount > 0 ? qsTr("%1 selected").arg(header.selectedCount) : qsTr("Select notifications"))
                                : qsTr("Notifications")
-        color: Theme.textDim
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.drawerHeaderFontSize
+        color: Theme.emberGlass ? Theme.eg.colorInk3 : Theme.textDim
+        font.family: Theme.emberGlass ? Theme.egFontFamily : Theme.fontFamily
+        font.pixelSize: Theme.emberGlass ? Math.round(11 * Theme.u) : Theme.drawerHeaderFontSize
+        font.weight: Theme.emberGlass ? Font.Bold : Font.Normal
+        font.capitalization: Theme.emberGlass ? Font.AllUppercase : Font.MixedCase
+        font.letterSpacing: Theme.emberGlass ? 1.6 * Theme.u : 0
     }
 
     Row {
@@ -91,7 +99,9 @@ Item {
             visible: !header.selecting
             available: header.clearableCount > 0
             text: header.confirmingClearAll ? qsTr("Clear %1?").arg(header.clearableCount) : qsTr("Clear All")
-            color: header.confirmingClearAll ? Theme.drawerConfirmColor : (available ? Theme.text : Theme.textDim)
+            color: header.confirmingClearAll ? (Theme.emberGlass ? Theme.eg.colorDanger : Theme.drawerConfirmColor)
+                                             : available ? (Theme.emberGlass ? Theme.eg.colorInk : Theme.text)
+                                             : (Theme.emberGlass ? Theme.eg.colorInk3 : Theme.textDim)
             onTriggered: {
                 if (!header.confirmingClearAll) {
                     header.confirmingClearAll = true;
@@ -120,7 +130,7 @@ Item {
         anchors.bottom: parent.bottom
         x: Theme.px(8)
         width: parent.width - 2 * x
-        height: Math.max(1, Theme.px(1))
-        color: Theme.drawerRule
+        height: Theme.emberGlass ? Math.max(1, EmberGlass.hairline * Theme.u) : Math.max(1, Theme.px(1))
+        color: Theme.emberGlass ? Theme.eg.colorLine2 : Theme.drawerRule
     }
 }

@@ -143,6 +143,93 @@ Item {
             verify(!findChild(notes, "emberActiveCall").visible);
         }
 
+        // The dashboard: an L4 sheet rising from the gesture strip, the rows
+        // one L2 plane in it, in the theme's ink; 1.0's black and masks
+        // gone. What it does (its height, its rows) is 1.0's.
+        function test_dashboard() {
+            threeWaiting();
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            tryCompare(notes, "negativeSpace", notes.dashboardHeight, 2000);
+            verify(!findChild(notes, "emberDashboard").visible);
+            var classicHeight = notes.dashboardHeight;
+            shell.look = "ember-glass";
+            compare(notes.dashboardHeight, classicHeight);
+            var sheet = findChild(notes, "emberDashboard");
+            verify(sheet.visible);
+            compare(sheet.topLeftRadius, 24);
+            compare(sheet.bottomLeftRadius, 0);
+            var plane = findChild(notes, "emberDashboardPlane");
+            verify(plane.visible);
+            compare(plane.height, 3 * Theme.dashboardItemHeight);
+            compare(plane.x, 8);
+            verify(Qt.colorEqual(findChild(plane, "emberSheetGlass").color, EmberGlass.dark.glassL2Tint));
+            verify(!findChild(notes, "dashboardMaskTop").visible && !findChild(notes, "dashboardMaskBottom").visible);
+            var list = findChild(notes, "phoneDashboardList");
+            var title = findChild(list, "dashboardTitle");
+            verify(Qt.colorEqual(title.color, EmberGlass.dark.colorInk));
+            compare(title.font.weight, 600);
+            verify(Qt.colorEqual(findChild(list, "dashboardBody").color, EmberGlass.dark.colorInk2));
+            shell.look = "classic";
+            verify(Qt.colorEqual(title.color, Theme.text));
+            verify(title.font.bold);
+        }
+
+        // A stack's count is an ink badge; its layers' edges hairlines.
+        function test_stackBadge() {
+            var msg = windows.appIdByTitle("Messaging");
+            for (var i = 0; i < 3; ++i)
+                windows.notify(msg, "Ada Palmer", "Text " + i, { threadId: "ada" }, { group: "ada" });
+            compare(windows.notifications.count, 1);
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            shell.look = "ember-glass";
+            var list = findChild(notes, "phoneDashboardList");
+            tryVerify(function () { return findChild(list, "emberDashboardCount") !== null; }, 2000);
+            var badge = findChild(list, "emberDashboardCount");
+            verify(badge.visible);
+            verify(Qt.colorEqual(badge.color, EmberGlass.dark.colorInverse));
+            compare(findChild(list, "dashboardCountLabel").text, "3");
+            verify(Qt.colorEqual(findChild(list, "dashboardCountLabel").color, EmberGlass.dark.colorOnInverse));
+            verify(findChild(list, "emberDashboardTopEdge").visible);
+            verify(!findChild(list, "dashboardTopDivider").visible);
+            shell.look = "classic";
+            verify(!badge.visible);
+            verify(findChild(list, "dashboardTopDivider").visible);
+        }
+
+        // The drawer pulled to the whole screen: its heading a group's
+        // (.micro), its actions in ink, the select marks Ember's checkbox,
+        // an activity's progress Ember's slider.
+        function test_drawer() {
+            threeWaiting();
+            windows.setOngoing("org.webosphoenix.marketplace", { id: "t", title: "Downloading", body: "42%", progress: 42 });
+            notes.bannerActive = false;
+            notes.dashboardOpen = true;
+            shell.look = "ember-glass";
+            notes.setDrawerExpanded(true);
+            var header = findChild(notes, "drawerHeader");
+            tryCompare(header, "visible", true, 2000);
+            var title = findChild(header, "drawerTitle");
+            compare(title.font.capitalization, Font.AllUppercase);
+            verify(Qt.colorEqual(title.color, EmberGlass.dark.colorInk3));
+            verify(Qt.colorEqual(findChild(header, "drawer_select").color, EmberGlass.dark.colorInk));
+            var list = findChild(notes, "phoneDashboardList");
+            var fill = findChild(list, "emberDashboardProgressFill");
+            verify(fill.visible);
+            fuzzyCompare(fill.width, fill.parent.width * 0.42, 1);
+            notes.selecting = true;
+            // (Row 0 is the activity, which a selection leaves alone.)
+            tryVerify(function () { return list.itemAtIndex(1) !== null; }, 2000);
+            var mark = findChild(list.itemAtIndex(1), "drawerSelectMark");
+            tryCompare(mark, "visible", true, 2000);
+            compare(mark.radius, EmberGlass.radiusCheck);
+            shell.look = "classic";
+            compare(mark.radius, mark.width / 2);
+            notes.selecting = false;
+            windows.setOngoing("org.webosphoenix.marketplace", { id: "t", clear: true });
+        }
+
         // A glass surface blurs all of what is behind it: the blur's mask is
         // opaque and the surface's shape (the pill's tint is 38%, the dock's
         // 34%: as masks they let most of the scene through unblurred).
