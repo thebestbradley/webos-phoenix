@@ -286,7 +286,10 @@ describe("Search the web automatically (Settings > Assistant)", () => {
             const d = make({ autoSearch: true });
             const m = await d.ask(said);
             expect(m.command, said).not.toBe("search");
-            expect(m.choices!.some((c) => c.id === "web"), said).toBe(true);
+            // A question about the user's own messages goes to Search your phone
+            // (commands-search.js), which searches the device, not the web;
+            // the rest offer the web as a button only.
+            if (m.command !== "searchPhone") expect(m.choices!.some((c) => c.id === "web"), said).toBe(true);
             expect(searched(d), said).toEqual([]);
         }
         expect(en.personal("what's my blood type")).toBe(true);

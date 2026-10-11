@@ -1674,7 +1674,11 @@ function createAssistantService(deps) {
         if (parsed && parsed.command === "negated") return notThis(thread, parsed.args, cat);
         if (parsed && parsed.command === "multi") return actParts(thread, parsed.args.parts, cat, text);
         if (parsed && parsed.command === "chat") return chatAnswer(thread, parsed, cat);
-        if (parsed && parsed.command === "checkDone") return checkDone(thread, parsed.args, cat);
+        if (parsed && parsed.command === "checkDone") {
+            var cd = commands.find(cat.all, "checkDone");
+            if (cd && !allowed(cd)) return Promise.resolve([say(thread, lang().say.notAllowed(cd.title), { via: "commands", command: "checkDone", status: "failed" })]);
+            return checkDone(thread, parsed.args, cat);
+        }
         // Only a model or the web can: noted, and on to them; what nothing
         // here does (another device, money, ordering), said at once.
         var note = parsed && parsed.command === "beyond" ? lang().say.beyond(parsed.args.what) : "";
