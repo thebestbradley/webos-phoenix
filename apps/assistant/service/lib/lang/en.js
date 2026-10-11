@@ -672,7 +672,7 @@ function alarmManage(t, now) {
              all: !c && (/\ball\b/.test(t) || /alarms$/.test(t)) };
 }
 function alarmList(t) {
-    if (/^(?:what|which) alarms?(?: do i have| are set| have i set| are on| is set| have i got)?(?: set| on)?(?: for tomorrow| tomorrow)?$|^what time is my (?:next )?alarm(?: set)?(?: for)?(?: tomorrow| for tomorrow)?$|^(?:show|list|check|open)(?: me)? (?:my |the |all (?:my )?)?alarms$|^do i have (?:an |any )?alarms?(?: set| on)?(?: for tomorrow| tomorrow)?$|^(?:what(?:'s| is)|when(?:'s| is)) my (?:next )?alarm(?: set for)?$|^(?:my )?alarms$|^what time (?:is|'s) (?:my |the )?(?:next )?alarm(?: set)?(?: for)?$/.test(t))
+    if (/^(?:what|which) alarms?(?: do i have| are set| have i set| are on| is set| have i got)?(?: set| on)?(?: for tomorrow| tomorrow)?$|^what time is my (?:next )?alarm(?: set)?(?: for)?(?: tomorrow| for tomorrow)?$|^(?:show|list|check|open)(?: me)? (?:my |the |all (?:my )?)?alarms$|^do i have (?:an |any )?alarms?(?: set| on)?(?: for tomorrow| tomorrow)?$|^(?:what(?:'s| is)|when(?:'s| is)) my (?:next )?alarm(?: set for)?$|^(?:my )?alarms$|^what time (?:is|'s) (?:my |the )?(?:next )?alarm(?: set)?(?: for)?$|^(?:have|did) i (?:set|got) (?:an |any |my )?alarms?(?: set| on)?(?: for tomorrow| tomorrow| for the morning)?$|^is (?:there|my) (?:an |any )?alarm (?:set|on)(?: for tomorrow| tomorrow)?$|^are (?:there )?any alarms (?:set|on)(?: for tomorrow| tomorrow)?$/.test(t))
         return {};
     return null;
 }

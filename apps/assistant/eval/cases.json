@@ -78,6 +78,8 @@
 {"id":"cal-22","cat":"calendar","say":"do i have any meetings today","expect":{"command":"agenda"}},
 {"id":"cal-25","cat":"calendar","say":"my dentist appointment needs to be at 5 instead","expect":{"command":"eventMove"},"forbid":["event"]},
 {"id":"cal-26","cat":"calendar","say":"the team meeting is now on friday","expect":{"command":"eventMove"},"forbid":["event"]},
+{"id":"alarm-22","cat":"alarms","say":"have I set an alarm","expect":{"command":"alarmList"},"forbid":["alarm"]},
+{"id":"alarm-23","cat":"alarms","say":"is there an alarm set for tomorrow","expect":{"command":"alarmList"},"forbid":["alarm"]},
 {"id":"alarm-21","cat":"alarms","say":"alarm me for half past six","expect":{"command":"alarm"},"forbid":["alarmManage"]},
 {"id":"con-01","cat":"contacts","say":"Sam has a new email, sam@new.example.com","expect":{"command":"edit","args":{"kind":"contact","change":"email"}},"forbid":["email"]},
 {"id":"con-02","cat":"contacts","say":"Priya's new number is 415 555 0199","expect":{"command":"edit","args":{"kind":"contact","change":"phone"}},"forbid":["call","text"]},
