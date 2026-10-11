@@ -59,5 +59,10 @@ if (require.main === module) {
         });
         if (f.todoist) console.log("Todoist API token: " + f.todoist.token);
         if (f.bluesky) console.log("Bluesky: " + f.bluesky.handle + ", app password " + f.bluesky.appPassword);
+        // What reaches it, as it comes.
+        let shown = 0;
+        setInterval(() => {
+            for (; shown < f.requests.length; shown++) console.log(f.requests[shown].method + " " + f.requests[shown].path + f.requests[shown].query + (process.env.FAKE_SHOW_AUTH ? "  " + (f.requests[shown].headers.authorization || "") : ""));
+        }, 300);
     });
 }
