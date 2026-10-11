@@ -1,0 +1,75 @@
+{
+    "templateId": "com.webosphoenix.telegram",
+    "loc_name": "Unofficial Telegram",
+    "icon": {
+        "loc_32x32": "images/cloudchat-32x32.png",
+        "loc_48x48": "images/cloudchat-48x48.png"
+    },
+    "loc_usernameLabel": "PHONE NUMBER",
+    "loc_usernameExplainLabel": "+1 555 010 0100",
+    "loc_passwordLabel": "CODE",
+    "signUp": {
+        "url": "https://telegram.org/apps"
+    },
+    "validator": {
+        "customUI": {
+            "appId": "org.webosphoenix.telegram",
+            "name": "accounts/signin.html"
+        },
+        "address": "palm://org.webosphoenix.service.telegram/checkCredentials"
+    },
+    "readPermissions": [
+        "org.webosphoenix.service.telegram",
+        "org.webosphoenix.telegram",
+        "org.webosphoenix.messaging"
+    ],
+    "writePermissions": [
+        "org.webosphoenix.telegram",
+        "org.webosphoenix.messaging"
+    ],
+    "capabilityProviders": [
+        {
+            "capability": "CONTACTS",
+            "id": "com.webosphoenix.telegram.contacts",
+            "loc_name": "People you chat with",
+            "icon": {
+                "loc_32x32": "images/cloudchat-32x32.png",
+                "loc_48x48": "images/cloudchat-48x48.png"
+            },
+            "dbkinds": {
+                "contact": "com.palm.contact.telegram:1"
+            },
+            "readOnlyData": true,
+            "implementation": "palm://org.webosphoenix.service.telegram/",
+            "onCreate": "palm://org.webosphoenix.service.telegram/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.telegram/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.telegram/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.telegram/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.telegram/sync"
+        },
+        {
+            "capability": "MESSAGING",
+            "capabilitySubtype": "IM",
+            "id": "com.webosphoenix.telegram.im",
+            "serviceName": "type_telegram",
+            "loc_name": "Chats, groups and secret chats",
+            "loc_shortName": "Unofficial Telegram",
+            "chatWithNonBuddies": true,
+            "icon": {
+                "loc_32x32": "images/cloudchat-32x32.png",
+                "loc_48x48": "images/cloudchat-48x48.png",
+                "splitter": "images/cloudchat-32x32.png"
+            },
+            "dbkinds": {
+                "immessage": "com.palm.immessage.telegram:1",
+                "imloginstate": "com.palm.imloginstate.telegram:1"
+            },
+            "implementation": "palm://org.webosphoenix.service.telegram/",
+            "onCreate": "palm://org.webosphoenix.service.telegram/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.telegram/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.telegram/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.telegram/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.telegram/sync"
+        }
+    ]
+}

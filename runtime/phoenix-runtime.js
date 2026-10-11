@@ -12043,11 +12043,30 @@
             "org.webosphoenix.service.xmpp": { hosts: ["chat.example", "upload.chat.example"], dir: "/usr/share/phoenix/demo/xmpp/",
                                                module: "test/fake-xmpp.cjs", make: "demoServer" },
             "org.webosphoenix.service.matrix": { hosts: ["matrix.example"], dir: "/usr/share/phoenix/demo/matrix/",
-                                                 module: "test/fake-homeserver.cjs", make: "demoHomeserver" }
+                                                 module: "test/fake-homeserver.cjs", make: "demoHomeserver" },
+            // No server but a system helper: Delta Chat's core, faked (its
+            // test's fake deltachat-rpc-server), for addresses at
+            // chatmail.example only.
+            "org.webosphoenix.service.deltachat": { hosts: [], helper: "deltachat-rpc-server", dir: "/usr/share/phoenix/demo/deltachat/",
+                                                    module: "test/fake-rpc-server.cjs", make: "demoRpcServer" },
+            // TDLib, faked (its test's fake tdjson): reached only where the
+            // checkout has a Telegram app id for the simulator
+            // (runtime/connector-settings/, not in the repository); without
+            // one the account says it is not available in this build.
+            "org.webosphoenix.service.telegram": { hosts: [], helper: "phoenix-tdjson", dir: "/usr/share/phoenix/demo/telegram/",
+                                                   module: "test/fake-tdjson.cjs", make: "demoTdjson" }
         };
         function demoServer(service, host) {
             var d = DEMO_HOSTS[service];
             if (!d || d.hosts.indexOf(String(host).replace(/:\d+$/, "")) < 0 || !hosted[service]) return null;
+            return loadDemo(service);
+        }
+        function demoHelper(service, name) {
+            var d = DEMO_HOSTS[service];
+            return d && d.helper === name && hosted[service] ? loadDemo(service) : null;
+        }
+        function loadDemo(service) {
+            var d = DEMO_HOSTS[service];
             if (!demos[service]) {
                 try {
                     var mod = nodeServiceLoader(d.dir, service + " demo")(d.module);
@@ -12160,8 +12179,10 @@
                     writeFile: writeFile,
                     settings: settings,
                     helper: function (name, args) {
-                        if (!helpers[name]) return Promise.reject(Object.assign(new Error(name + " is not on this device"), { errorCode: "HELPER_NOT_AVAILABLE" }));
-                        return Promise.resolve(helpers[name](args || [], service));
+                        if (helpers[name]) return Promise.resolve(helpers[name](args || [], service));
+                        var demo = demoHelper(service, name);
+                        if (demo) return Promise.resolve(demo.process());
+                        return Promise.reject(Object.assign(new Error(name + " is not on this device"), { errorCode: "HELPER_NOT_AVAILABLE" }));
                     }
                 }) };
                 installKinds(appId, service, def);

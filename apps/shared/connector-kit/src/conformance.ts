@@ -75,6 +75,12 @@ export interface ConformanceFixture {
      * The server's unauthorized() and throttle() then concern those too.
      */
     environment?(server: FakeServer): Partial<Environment>;
+    /**
+     * The steps the sign-in page takes before the validator (a phone number,
+     * then the code sent to it): run with the service's methods, they give
+     * more of the validator's parameters (a finished session's key).
+     */
+    beforeValidate?(methods: ServiceMethods, server: FakeServer): Promise<Json>;
 }
 
 export interface ConformanceResult { name: string; ok: boolean; error?: string }
@@ -135,7 +141,8 @@ async function setup(def: ConnectorDefinition, fx: ConformanceFixture, periodic:
 }
 
 async function signIn(s: Setup, fx: ConformanceFixture): Promise<Json> {
-    const r = await s.methods.checkCredentials(Object.assign({ templateId: fx.template.templateId }, fx.validateParams));
+    const before = fx.beforeValidate ? await fx.beforeValidate(s.methods, s.server) : {};
+    const r = await s.methods.checkCredentials(Object.assign({ templateId: fx.template.templateId }, fx.validateParams, before));
     assert(r.returnValue, "checkCredentials failed: " + (r.errorCode || "") + " " + (r.errorText || ""));
     assert(r.credentials && typeof r.credentials === "object", "checkCredentials gave no credentials");
     // What com.palm.service.accounts does with the validator's answer (handlers/create.js).

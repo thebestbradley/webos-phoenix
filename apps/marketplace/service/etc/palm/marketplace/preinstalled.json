@@ -2,7 +2,7 @@
     "//": [
         "The connector packages Phoenix comes with (docs/SYNERGY-CONNECTORS.md 7, 'What comes with Phoenix'): installed in the image as apps the user may remove (/media/cryptofs/apps; tools/install-rootfs.py, phoenix-sim's and tools/serve-rootfs.py's installed apps, runtime/rootfs.json 'preinstalled'), counted by the Marketplace as installed from the catalog sourceId, and installed again from it without Developer Mode (packagesservice.js firstPartyEntry).",
         "from: where the package's app is in this checkout (for the tools that build the image and the simulator); service and templates: its connector service and account templates, for the simulator's runtime.",
-        "Google, Microsoft, Telegram and LoRa mesh join this list when they are built.",
+        "Google, Microsoft and LoRa mesh join this list when they are built. Unofficial Telegram is here, and works in a build with Telegram's app id and TDLib (meta-phoenix phoenix-tdjson); elsewhere its sign-in page says it is not available in this build.",
         "firstParty: Phoenix's own connector packages that do not come with it but are in its catalog (apps/connectors/: not apps of the image or the simulator; bin/serve.sh uploads them to a development catalog): installed by those who want them, from a Phoenix catalog the device ships with, without Developer Mode, as a pre-installed one is installed again (packagesservice.js firstPartyEntry). from, service and templates as above, for the simulator."
     ],
     "firstParty": [
@@ -35,6 +35,13 @@
             "from": "apps/fediverse",
             "service": "org.webosphoenix.service.fediverse",
             "templates": ["com.webosphoenix.fediverse"]
+        },
+        {
+            "id": "org.webosphoenix.telegram",
+            "sourceId": "phoenix",
+            "from": "apps/telegram",
+            "service": "org.webosphoenix.service.telegram",
+            "templates": ["com.webosphoenix.telegram"]
         }
     ]
 }

@@ -38,7 +38,8 @@ import { emptyStats, removeObjects, syncObjects, type CapabilityStats } from "./
 import { createNet } from "./net";
 import { checkShare, maxBytesOf } from "./share";
 import type {
-    AccountContext, BaseContext, ConnectorDefinition, Environment, Json, LiveConnection, MethodContext, Reply, ServiceMethods, ValidateContext
+    AccountContext, BaseContext, ConnectorDefinition, Environment, HelperProcess, Json, LiveConnection, MethodContext, Reply, ServiceMethods,
+    ValidateContext
 } from "./types";
 
 export const CALLBACKS = ["checkCredentials", "onCreate", "onEnabled", "onCredentialsChanged", "onDelete", "sync"];
@@ -73,6 +74,7 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
     };
 
     let settingsCache: Promise<Record<string, Json> | null> | null = null;
+    const helpers: Record<string, Promise<HelperProcess>> = {};
     function baseContext(hosts?: string[], backoff?: { retryAt: number }): BaseContext {
         return {
             luna: bus, db: bus.db, tempdb: bus.tempdb, log, now, service: def.service, oauth,
@@ -90,11 +92,26 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
                 const all = await settingsCache;
                 return all ? all[name] : undefined;
             },
-            helper: async (name: string, args?: string[]) => {
+            // One running helper per name and arguments, for all the service's
+            // accounts (Delta Chat's accounts manager and TDLib's clients are
+            // one process for many accounts); started again after it exits.
+            helper: (name: string, args?: string[]) => {
                 if ((def.helpers || []).indexOf(name) < 0)
-                    throw synckit.syncError(name + " is not one of " + def.service + "'s helpers", "PERMISSION_DENIED");
-                if (!env.helper) throw synckit.syncError(name + " is not on this device", "HELPER_NOT_AVAILABLE");
-                return env.helper(name, args);
+                    return Promise.reject(synckit.syncError(name + " is not one of " + def.service + "'s helpers", "PERMISSION_DENIED"));
+                const start = env.helper;
+                if (!start) return Promise.reject(synckit.syncError(name + " is not on this device", "HELPER_NOT_AVAILABLE"));
+                const key = name + "\n" + (args || []).join("\n");
+                if (!helpers[key]) {
+                    const started: Promise<HelperProcess> = Promise.resolve().then(() => start(name, args)).then((h) => {
+                        h.onExit(() => { if (helpers[key] === started) delete helpers[key]; });
+                        return h;
+                    }, (e: Json) => {
+                        delete helpers[key];
+                        throw synckit.syncError(String((e && e.message) || e), (e && e.errorCode) || "HELPER_NOT_AVAILABLE");
+                    });
+                    helpers[key] = started;
+                }
+                return helpers[key];
             },
             writeFile: async (name: string, bytes: Uint8Array, mimeType?: string) => {
                 if (!env.writeFile) throw synckit.syncError("cannot keep files here", "UNSUPPORTED");

@@ -60,6 +60,8 @@
         "/etc/phoenix/connectors/": "runtime/connector-settings/",
         "/usr/share/phoenix/demo/xmpp/": "apps/connectors/xmpp/service/",
         "/usr/share/phoenix/demo/matrix/": "apps/connectors/matrix/service/",
+        "/usr/share/phoenix/demo/deltachat/": "apps/connectors/deltachat/service/",
+        "/usr/share/phoenix/demo/telegram/": "apps/telegram/service/",
         "/etc/palm/backup/": "apps/settings/service/etc/palm/backup/",
         "/usr/lib/luna/system/luna-applauncher/": "third_party/luna-applauncher/",
         "/usr/lib/luna/system/luna-systemui/": "third_party/luna-systemui/",

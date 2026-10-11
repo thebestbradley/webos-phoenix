@@ -320,7 +320,8 @@ export const messaging = {
 
 /**
  * IM services webOS Messaging knew, and which Phoenix has a transport for.
- * Jabber (XMPP) works in the simulator (a simulated server); the closed
+ * Jabber (XMPP), Matrix, Delta Chat and Telegram have transports (their
+ * connectors: apps/connectors, apps/telegram), as the Fediverse; the closed
  * networks webOS reached through libpurple are gone or closed.
  */
 export interface ImServiceInfo {

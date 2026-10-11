@@ -62,7 +62,7 @@ export function deviceEnvironment(def: ConnectorDefinition, service: Json): Envi
             if (!fs.existsSync(file)) return null;
             return JSON.parse(fs.readFileSync(file, "utf8"));
         },
-        helper: async (name: string, args?: string[]) => nodeHelper(name, args || []),
+        helper: async (name: string, args?: string[]) => nodeHelper(def.service, name, args || []),
         // Pictures received, where Messaging can show them (as the MMS store keeps its own).
         writeFile: async (svc: string, name: string, bytes: Uint8Array) => {
             const dir = path.join(FILES_DIR, svc);
@@ -78,10 +78,16 @@ const SETTINGS_DIR = "/etc/phoenix/connectors";
 const FILES_DIR = "/media/internal/.phoenix/connector-files";
 // The helper programs a first-party connector may start: the image installs
 // them (meta-phoenix), a connector package cannot bring one (rule C12).
-const HELPERS: Record<string, string> = {
-    "phoenix-tdjson": "/usr/bin/phoenix-tdjson",
-    "deltachat-rpc-server": "/usr/bin/deltachat-rpc-server"
+// Each keeps what it stores in its service's own folder (HELPER_DATA/<service>/<helper>,
+// readable by root only): Delta Chat's accounts (DC_ACCOUNTS_PATH, as
+// deltachat-rpc-server's README names it), TDLib's databases (the bridge's
+// --dir, meta-phoenix/recipes-connectors/tdlib/files/phoenix-tdjson.c).
+interface Helper { file: string; env?: (dir: string) => Record<string, string>; args?: (dir: string) => string[] }
+const HELPERS: Record<string, Helper> = {
+    "phoenix-tdjson": { file: "/usr/bin/phoenix-tdjson", args: (dir) => ["--dir", dir] },
+    "deltachat-rpc-server": { file: "/usr/bin/deltachat-rpc-server", env: (dir) => ({ DC_ACCOUNTS_PATH: dir + "/accounts" }) }
 };
+const HELPER_DATA = "/var/lib/phoenix/connector-data";
 
 /** Node's net, tls and dns (and WebSocket where Node has it, 22 and later) as Environment.net. */
 export function nodeNet(): Json {
@@ -152,12 +158,15 @@ export function nodeNet(): Json {
     return env;
 }
 
-function nodeHelper(name: string, args: string[]): Json {
-    const file = HELPERS[name];
+function nodeHelper(service: string, name: string, args: string[]): Json {
+    const h = HELPERS[name];
     const fs = require("fs");
-    if (!file || !fs.existsSync(file))
+    if (!h || !fs.existsSync(h.file))
         throw Object.assign(new Error(name + " is not installed on this device"), { errorCode: "HELPER_NOT_AVAILABLE" });
-    const child = require("child_process").spawn(file, args, { stdio: ["pipe", "pipe", "inherit"] });
+    const dir = require("path").join(HELPER_DATA, service, name);
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const env = Object.assign({}, process.env, h.env ? h.env(dir) : {});
+    const child = require("child_process").spawn(h.file, (h.args ? h.args(dir) : []).concat(args), { stdio: ["pipe", "pipe", "inherit"], env });
     const lineFns: ((l: string) => void)[] = [], exitFns: ((c: number | null) => void)[] = [];
     let buf = "";
     child.stdout.setEncoding("utf8");
