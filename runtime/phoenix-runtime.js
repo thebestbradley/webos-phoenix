@@ -12364,7 +12364,13 @@
             // (runtime/connector-settings/, not in the repository); without
             // one the account says it is not available in this build.
             "org.webosphoenix.service.telegram": { hosts: [], helper: "phoenix-tdjson", dir: "/usr/share/phoenix/demo/telegram/",
-                                                   module: "test/fake-tdjson.cjs", make: "demoTdjson" }
+                                                   module: "test/fake-tdjson.cjs", make: "demoTdjson" },
+            // The drives' SFTP demo: files.example, an SSH server with SFTP
+            // over files in memory (the SFTP drive's test server), where any
+            // name signs in with any password. Real servers are reached
+            // through the host's TCP relay (tcpConnect, below).
+            "org.webosphoenix.service.drives": { hosts: ["files.example"], dir: "/usr/share/phoenix/demo/drives/",
+                                                 module: "test/fake-sftp.cjs", make: "demoServer" }
         };
         function demoServer(service, host) {
             var d = DEMO_HOSTS[service];
@@ -12411,6 +12417,133 @@
                 ws.onclose = function () { if (opened) closeFns.forEach(function (f) { f(); }); };
             });
         }
+        // ---- Binary TCP: the host's relay -------------------------------------------------------
+        //
+        // A page has no TCP, but the host does: a connector that speaks a
+        // protocol of its own over bytes (SSH, for the SFTP drive) gets a
+        // plain TCP connection through it, the kit's ctx.net.connect({binary:
+        // true}) as on a device (no TLS here, so text protocols keep to
+        // WebSocket: the kit's binaryOnly). Which relay, from
+        // /usr/share/phoenix/host.json:
+        //   {"tcp": "host"}        phoenix-sim (shell/sim/simtcp.cpp): "tcp" host
+        //                          messages {op: "open" | "write" | "close", id,
+        //                          host, port, data (Base64)}; events come back
+        //                          through __phoenixRuntime.tcpEvent({id, event:
+        //                          "connected" | "data" | "closed", data?, error?})
+        //   {"tcp": "websocket", "tcpUrl": "ws://.../__phoenix/tcp?token=..."}
+        //                          tools/serve-rootfs.py: a WebSocket per
+        //                          connection (&host=&port=), its first message
+        //                          {connected: true} or {error, message}, then
+        //                          binary frames both ways
+        // The demo servers' hosts (files.example) answer in the page.
+        var tcpSockets = {}, tcpNext = 1;
+        function tcpHost() {
+            var h;
+            try { h = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/host.json") || "{}") || {}; } catch (e) { h = {}; }
+            if (h.tcp === "host" && global.phoenixHost && typeof global.phoenixHost.postToHost === "function") return { mode: "host" };
+            if (h.tcp === "websocket" && h.tcpUrl && typeof global.WebSocket === "function") return { mode: "websocket", url: h.tcpUrl };
+            return null;
+        }
+        function bytesToB64(b) {
+            var s = "";
+            for (var i = 0; i < b.length; i += 8192) s += String.fromCharCode.apply(null, Array.prototype.slice.call(b.subarray(i, i + 8192)));
+            return btoa(s);
+        }
+        function b64ToBytes(t) {
+            var s = atob(t || ""), b = new Uint8Array(s.length);
+            for (var i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+            return b;
+        }
+        // A socket whose bytes wait for the connector's first listener (an
+        // SSH server speaks first), then its close.
+        function relaySocket(send, close) {
+            var byteFns = [], closeFns = [], early = [], ended = null, closed = false;
+            function release() {
+                setTimeout(function () {
+                    while (early.length && byteFns.length) { var b = early.shift(); byteFns.forEach(function (f) { f(b); }); }
+                    if (ended && !early.length && !closed) { closed = true; closeFns.forEach(function (f) { f(ended.error); }); }
+                }, 0);
+            }
+            var s = {
+                framing: "stream", secure: false,
+                write: function (t) { send(new TextEncoder().encode(String(t))); },
+                writeBytes: function (b) { if (!ended) send(b); },
+                onData: function () { /* a binary socket: onBytes */ },
+                onBytes: function (f) { byteFns.push(f); release(); },
+                onClose: function (f) { closeFns.push(f); },
+                close: function () { if (!ended) { ended = { error: undefined }; close(); release(); } }
+            };
+            s.received = function (b) {
+                if (early.length || !byteFns.length) { early.push(b); return; }
+                byteFns.forEach(function (f) { f(b); });
+            };
+            s.lost = function (error) { if (!ended) ended = { error: error }; release(); };
+            return s;
+        }
+        runtime.tcpEvent = function (m) {
+            var t = m && tcpSockets[m.id];
+            // phoenix-sim answers the card's top page; a connection opened in
+            // a frame of it (a connector's sign-in page in Accounts) is that
+            // frame's runtime's: handed down.
+            if (!t) {
+                var frames = global.document ? global.document.querySelectorAll("iframe") : [];
+                for (var i = 0; i < frames.length; i++) {
+                    try {
+                        var w = frames[i].contentWindow;
+                        if (w && w.__phoenixRuntime && w.__phoenixRuntime !== runtime && w.__phoenixRuntime.tcpEvent) w.__phoenixRuntime.tcpEvent(m);
+                    } catch (e) { /* another origin's frame */ }
+                }
+                return;
+            }
+            if (m.event === "connected") { t.opened(); return; }
+            if (m.event === "data") { t.sock.received(b64ToBytes(m.data)); return; }
+            delete tcpSockets[m.id];
+            var err = m.error ? Object.assign(new Error(m.message || m.error), { code: m.error }) : undefined;
+            if (t.pending) t.failed(err || Object.assign(new Error("Could not connect"), { code: "ECONNREFUSED" }));
+            else t.sock.lost(err);
+        };
+        function tcpConnect(service, o) {
+            var demo = demoServer(service, o.host);
+            if (demo && demo.socket) return Promise.resolve(demo.socket());
+            if (!o.binary || o.tls) return Promise.reject(Object.assign(new Error("Only binary TCP without TLS goes through the simulator's relay"), { errorCode: "UNSUPPORTED" }));
+            var h = tcpHost();
+            if (!h) return Promise.reject(Object.assign(new Error("This simulator cannot open TCP connections (run phoenix-sim, or tools/serve-rootfs.py)"),
+                                                        { errorCode: "UNSUPPORTED" }));
+            return new Promise(function (resolve, reject) {
+                if (h.mode === "host") {
+                    var id = PAGE_ID + "-" + (tcpNext++);
+                    var sock = relaySocket(function (b) { global.phoenixHost.postToHost("tcp", { op: "write", id: id, data: bytesToB64(b) }); },
+                                           function () { global.phoenixHost.postToHost("tcp", { op: "close", id: id }); delete tcpSockets[id]; });
+                    tcpSockets[id] = { sock: sock, pending: true,
+                                       opened: function () { this.pending = false; resolve(sock); },
+                                       failed: function (e) { this.pending = false; reject(e); } };
+                    global.phoenixHost.postToHost("tcp", { op: "open", id: id, host: String(o.host), port: Number(o.port) });
+                    return;
+                }
+                var url = h.url + (h.url.indexOf("?") < 0 ? "?" : "&") + "host=" + encodeURIComponent(o.host) + "&port=" + encodeURIComponent(o.port);
+                var ws;
+                try { ws = new global.WebSocket(url); } catch (e) { return reject(Object.assign(new Error(String(e.message || e)), { code: "ECONNREFUSED" })); }
+                ws.binaryType = "arraybuffer";
+                var pending = true;
+                var wsock = relaySocket(function (b) { try { ws.send(b); } catch (e) { /* closed */ } }, function () { try { ws.close(); } catch (e) { /* closed */ } });
+                ws.onmessage = function (m) {
+                    if (typeof m.data === "string") {
+                        var r = {};
+                        try { r = JSON.parse(m.data); } catch (e) { r = {}; }
+                        if (pending && r.connected) { pending = false; return resolve(wsock); }
+                        if (pending && r.error) { pending = false; return reject(Object.assign(new Error(r.message || r.error), { code: r.error })); }
+                        return;
+                    }
+                    wsock.received(new Uint8Array(m.data));
+                };
+                ws.onerror = function () { if (pending) { pending = false; reject(Object.assign(new Error("Could not connect to " + o.host), { code: "ECONNREFUSED" })); } };
+                ws.onclose = function () {
+                    if (pending) { pending = false; return reject(Object.assign(new Error("Could not connect to " + o.host), { code: "ECONNREFUSED" })); }
+                    wsock.lost();
+                };
+            });
+        }
+
         function requestFor(service) {
             return function (req) {
                 var demo = demoServer(service, hostOf(req.url));
@@ -12486,7 +12619,8 @@
                     systemConfig: systemConfig,
                     cachePhoto: function (key, url) { return cachePhoto(service, key, url); },
                     log: function (m) { console.info("[" + service + "] " + m); },
-                    net: { websocket: function (url, protocols) { return websocket(service, url, protocols); } },
+                    net: { websocket: function (url, protocols) { return websocket(service, url, protocols); },
+                           connect: function (o) { return tcpConnect(service, o); }, binaryOnly: true },
                     live: function () { return claimLive(service); },
                     writeFile: writeFile,
                     settings: settings,

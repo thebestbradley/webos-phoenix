@@ -140,6 +140,7 @@ the earlier pages.
 | Immich | REST | Key | none | SM 3.2, first photos source | P1 |
 | Nextcloud / WebDAV (files, photos) | WebDAV | PW / LF | none | SM 3.3 | P1 |
 | OneDrive, Dropbox, Google Drive (`drive.file`), Box, S3 | REST / S3 | OAuth / Key | per provider | SM 3.3 | P2 |
+| **new** SFTP (any SSH server: NAS, Raspberry Pi, VPS, a Phoenix device) | SSH-2 + SFTP v3 over `ctx.net` (binary TCP) | PW / Key (Ed25519 made on the device, or imported) | none | Host key trusted on first use and pinned; Phoenix's own SSH client on `@noble` (MIT); built (`apps/connectors/drives`, SHARE-AND-FILES.md "Drives") | P1 |
 | **new** PhotoPrism, Nextcloud Memories | REST / WebDAV | Key / PW | none | Same PHOTO provider shape as Immich | P3 |
 | **new** Flickr | Flickr API | OAuth 1.0a + API key | key | Non-commercial key terms *(check)*; a nod to webOS's photo accounts | P3 |
 | **new** Jellyfin, Navidrome / Subsonic, Plex | Jellyfin REST, Subsonic API, Plex API | PW / Key (Plex: account sign-in) | none (Plex: product id) | A new `MEDIA` capability so Music, Videos and Podcasts see the user's own library (APP-GAPS.md lists these). Plex terms *(check)* | P2 |
@@ -679,7 +680,8 @@ ownCloud, any server; an app password), SFTP and S3-compatible storage
 (Backblaze B2, MinIO, Wasabi); then with the OAuth service (C3) Dropbox,
 OneDrive (Microsoft Graph) and Google Drive (its restricted scope needs
 Google's verification; the per-file scope avoids most of it). iCloud Drive:
-not planned. *Built in the simulator (11 October 2026) but SFTP:
+not planned. *Built in the simulator (11 October 2026), SFTP too (its own
+SSH client over the kit's binary sockets, checked against OpenSSH):
 [SHARE-AND-FILES.md](SHARE-AND-FILES.md) "Drives"; the registrations each
 OAuth drive needs: [DEVELOPER-APPS.md](DEVELOPER-APPS.md).*
 

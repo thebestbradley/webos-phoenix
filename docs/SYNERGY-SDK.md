@@ -242,7 +242,7 @@ Dropbox, Microsoft Graph, Google Drive and Box behind that one interface.
 | `ctx.readFile(path)` | A file the user shares: `{bytes, mimeType}` |
 | `ctx.systemConfig(name)` | `/etc/palm/<name>` of the image, parsed (an OAuth client id kept out of the source tree: [DEVELOPER-APPS.md](DEVELOPER-APPS.md)); `null` when there is none |
 | `ctx.log(text)`, `ctx.now()` | Never log tokens, message text or addresses (3.2 rule 9) |
-| `ctx.net` | Sockets for a connection: `resolveSrv(name)`, `connect({host, port, tls, servername})` (with `startTls`), `websocket(url, protocols)`; the same hosts as `ctx.http` (and the targets of the user's server's SRV records), the same backoff. In a page (the simulator) only WebSocket |
+| `ctx.net` | Sockets for a connection: `resolveSrv(name)`, `connect({host, port, tls, servername, binary})` (with `startTls`; `binary: true` gives a socket of bytes, `writeBytes(Uint8Array)` and `onBytes(fn)`, for a protocol that is not text, as SSH), `websocket(url, protocols)`; the same hosts as `ctx.http` (and the targets of the user's server's SRV records), the same backoff. In a page (the simulator) WebSocket, and binary TCP through the simulator's relay (`binaryOnly`: phoenix-sim's own sockets, or `serve-rootfs.py`'s `/__phoenix/tcp`; `net.supports.binary`) |
 | `ctx.setting(name)` | A build-time setting (`settings`), or `undefined` in a build without it: say "not available in this build" before asking anything |
 | `ctx.helper(name, args?)` | A running system helper (`helpers`): lines in and out (`send`, `onLine`, `onExit`, `kill`); one process per name for all your accounts, started again after it exits; `HELPER_NOT_AVAILABLE` where the image has none |
 | `ctx.writeFile(name, bytes, mimeType?)` | Keeps a file received (a picture in a chat) where Messaging can show it -> its path |
@@ -610,7 +610,12 @@ starts with its rule:
 7), validates, then writes the `.ipk` the Marketplace takes: every
 file under `usr/palm/applications/<app id>/`, the kit and the sync layer in
 `service/node_modules/@phoenix/` (a device's `run-js-service` finds them
-there), tests and sources of a build left out.
+there), the service's own npm dependencies (its `package.json`'s
+`dependencies`, with theirs) in `service/node_modules/` too, tests and
+sources of a build left out. A dependency must be plain CommonJS
+JavaScript: one with native code fails C12, and its ES-module copies,
+source maps and type files are left out (the drives' SFTP carries
+`@noble/hashes`, `@noble/curves` and `@noble/ciphers` this way).
 
 ### Publishing
 
@@ -716,8 +721,9 @@ node tools/test-fediverse.cjs        # the Fediverse and the News Feed example, 
 ```
 
 **On a device.** `service.js` runs the kit's `runOnDevice(definition)` under
-`run-js-service`. Built-in connectors get the kit in their `node_modules` from
-`tools/install-rootfs.py`; a package carries it (`pack`).
+`run-js-service`. Built-in connectors get the kit (and their own npm
+dependencies) in their `node_modules` from `tools/install-rootfs.py`; a
+package carries them (`pack`).
 
 ## 11. The worked examples
 

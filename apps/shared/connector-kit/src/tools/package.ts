@@ -71,6 +71,61 @@ export function checkIpk(bytes: Uint8Array, options?: { namespaces?: string[] })
     return Object.assign(r, { errors: errors.concat(r.errors), control: pkg.control });
 }
 
+// A dependency's files that run: its CommonJS (main and what it requires),
+// its licence and package.json; not its sources (src/, *.ts), its ES
+// module copy (esm/, when main is not in it), source maps or type files.
+function runtimeFile(rel: string, mainDir: string): boolean {
+    if (/\.(map|ts|tsx|mts|cts)$/.test(rel) || /(^|\/)(README|CHANGELOG)[^/]*$/i.test(rel)) return false;
+    const top = rel.split("/")[0];
+    if (rel.indexOf("/") > 0 && (top === "src" || (top === "esm" && mainDir.split("/")[0] !== "esm"))) return false;
+    return true;
+}
+
+// Where Node would find a package from dir: dir/node_modules/name, then each folder up.
+function packageDir(name: string, from: string): string | null {
+    const p = path(), f = fs();
+    let dir = p.resolve(from);
+    for (;;) {
+        const cand = p.join(dir, "node_modules", name);
+        if (f.existsSync(p.join(cand, "package.json"))) return f.realpathSync(cand);
+        const up = p.dirname(dir);
+        if (up === dir) return null;
+        dir = up;
+    }
+}
+
+/**
+ * The npm packages the connector's service depends on itself
+ * (service/package.json "dependencies", other than Phoenix's own), and
+ * theirs, for service/node_modules: plain JavaScript only (rule C12: a
+ * package with native code, a binding.gyp or a .node file, is refused).
+ */
+export function dependencyFiles(dir: string): { rel: string; data: Uint8Array }[] {
+    const p = path(), f = fs();
+    const out: { rel: string; data: Uint8Array }[] = [];
+    const seen: Record<string, string> = {};
+    const svc = p.join(dir, "service");
+    function add(name: string, from: string) {
+        if (name.indexOf("@phoenix/") === 0 || seen[name]) return;
+        const root = packageDir(name, from);
+        if (!root) throw new Error("The service depends on " + name + ", which is not installed (npm install)");
+        seen[name] = root;
+        const pkg = JSON.parse(f.readFileSync(p.join(root, "package.json"), "utf8"));
+        const files = readFolder(root);
+        const native = Object.keys(files).filter((r) => /\.node$/.test(r) || /(^|\/)binding\.gyp$/.test(r));
+        if (pkg.gypfile || native.length) throw new Error("C12 the dependency " + name + " has native code (" + (native[0] || "gypfile") + ")");
+        const mainDir = p.posix.dirname(p.posix.normalize(String(pkg.main || "index.js")));
+        Object.keys(files).sort().forEach((r) => {
+            if (runtimeFile(r, mainDir)) out.push({ rel: "service/node_modules/" + name + "/" + r, data: files[r] });
+        });
+        Object.keys(pkg.dependencies || {}).forEach((d) => add(d, root));
+    }
+    if (!f.existsSync(p.join(svc, "package.json"))) return out;
+    const deps = JSON.parse(f.readFileSync(p.join(svc, "package.json"), "utf8")).dependencies || {};
+    Object.keys(deps).sort().forEach((name) => add(name, svc));
+    return out;
+}
+
 /** The kit's and the sync layer's files for service/node_modules. */
 export function vendoredFiles(): { rel: string; data: Uint8Array }[] {
     const p = path(), f = fs();
@@ -176,6 +231,7 @@ export function definitionProblems(dir: string): { errors: string[]; warnings: s
 export interface PackResult { file: string; size: number; check: CheckResult; written: string[] }
 
 // vendor: false leaves the kit out (tests; a package must carry it to run on a device).
+// The service's own npm dependencies always go in (service/node_modules).
 // writeAppinfo: false packs appinfo.json and the templates as they are (still checked, C14, C16).
 export function pack(dir: string, outDir: string, options?: { namespaces?: string[]; force?: boolean; vendor?: boolean; writeAppinfo?: boolean }): PackResult {
     const p = path(), f = fs();
@@ -185,7 +241,7 @@ export function pack(dir: string, outDir: string, options?: { namespaces?: strin
     const check = checkConnector(files, options);
     if (check.errors.length && !(options && options.force))
         throw Object.assign(new Error("The package does not pass the checks:\n  " + check.errors.join("\n  ")), { check });
-    const vendored = options && options.vendor === false ? [] : vendoredFiles();
+    const vendored = (options && options.vendor === false ? [] : vendoredFiles()).concat(dependencyFiles(dir));
     const info = JSON.parse(Buffer.from(files["appinfo.json"]).toString("utf8").replace(/^﻿/, ""));
     const prefix = "usr/palm/applications/" + info.id + "/";
     const list: IpkFile[] = Object.keys(files).sort().map((rel) => ({ path: prefix + rel, data: files[rel] }));

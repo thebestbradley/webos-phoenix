@@ -108,7 +108,8 @@ if(PHOENIX_BUILD_SIM)
         target_link_libraries(phoenix-sim PRIVATE Qt6::WebEngineQuick Qt6::Network)
         target_sources(phoenix-sim PRIVATE sim/simbrowser.cpp sim/simbrowser.h sim/contentfilter.h
                                            sim/simdropshare.cpp sim/simdropshare.h
-                                           sim/simmarketplace.cpp sim/simmarketplace.h)
+                                           sim/simmarketplace.cpp sim/simmarketplace.h
+                                           sim/simtcp.cpp sim/simtcp.h)
         target_compile_definitions(phoenix-sim PRIVATE PHOENIX_HAVE_WEBENGINE)
         message(STATUS "phoenix-sim: web apps enabled (Qt WebEngine found)")
     else()

@@ -23,7 +23,15 @@
 //   com.webosphoenix.drive.googledrive Google Drive (OAuth; the drive.file
 //       scope: the files Phoenix made or opened)
 //   com.webosphoenix.drive.box         Box (OAuth)
+//   com.webosphoenix.drive.sftp        any SSH server's files (SFTP; lib/sftp.js):
+//       the host, port and user name, a password or a key (Ed25519 made on
+//       the device, its public key shown to put in the server's
+//       authorized_keys, or a key imported); the server's host key shown
+//       as a fingerprint, trusted on first use and pinned in the account
 //
+// SFTP keys are kept sealed in the OAuth service's key store (its
+// `client` records, "sftp-key:<id>", readable by this service only); the
+// account's credentials name the key, never hold it.
 // The OAuth providers need Phoenix's app registered with them; the client
 // ids are not in the source tree but a setting of the image,
 // /etc/palm/drives/clients.json ({"dropbox": {"clientId": "..."}, ...};
@@ -41,6 +49,8 @@ var G = require("./lib/graph");
 var GD = require("./lib/gdrive");
 var BOX = require("./lib/box");
 var N = require("./lib/net");
+var SFTP = require("./lib/sftp");
+var SSHKEYS = require("./lib/ssh/keys");
 
 var SERVICE = "org.webosphoenix.service.drives";
 var OAUTH = "luna://org.webosphoenix.service.oauth/";
@@ -48,10 +58,10 @@ var CLIENTS = "drives/clients.json";
 var T = {
     nextcloud: "com.webosphoenix.drive.nextcloud", owncloud: "com.webosphoenix.drive.owncloud", webdav: "com.webosphoenix.drive.webdav",
     s3: "com.webosphoenix.drive.s3", dropbox: "com.webosphoenix.drive.dropbox", onedrive: "com.webosphoenix.drive.onedrive",
-    googledrive: "com.webosphoenix.drive.googledrive", box: "com.webosphoenix.drive.box"
+    googledrive: "com.webosphoenix.drive.googledrive", box: "com.webosphoenix.drive.box", sftp: "com.webosphoenix.drive.sftp"
 };
 var NAMES = { nextcloud: "Nextcloud", owncloud: "ownCloud", webdav: "WebDAV", s3: "S3 storage", dropbox: "Dropbox", onedrive: "OneDrive",
-              googledrive: "Google Drive", box: "Box" };
+              googledrive: "Google Drive", box: "Box", sftp: "SFTP" };
 // fixedRedirect: the provider matches the registered redirect exactly, its
 // port too, so the sign-in comes back to the OAuth service's fixed port
 // (redirectUri's fixedRedirectUri); the others take the RFC 8252 loopback
@@ -133,6 +143,7 @@ function driveFor(ctx) {
         return Promise.resolve(S3.createS3(ctx, { endpoint: c.endpoint, region: c.region, bucket: c.bucket, pathStyle: !!c.pathStyle, prefix: c.prefix,
                                                   accessKeyId: cred.accessKeyId, secretAccessKey: cred.secretAccessKey }));
     }
+    if (provider === "sftp") return sftpDrive(ctx, c, cred);
     return clientOf(ctx, provider).then(function (client) {
         if (!client) throw kit.fileError(kit.FILE_ERRORS.NOT_AVAILABLE, notAvailable(provider).message);
         var key = cred.oauthKey || c.oauthKey;
@@ -142,6 +153,198 @@ function driveFor(ctx) {
         if (provider === "onedrive") return G.createGraph(ctx, o);
         if (provider === "googledrive") return GD.createGdrive(ctx, o);
         return BOX.createBox(ctx, o);
+    });
+}
+
+// ---- SFTP: keys, host keys, the drive -----------------------------------------------------
+
+var KEY_PREFIX = "sftp-key:";
+var keyCache = {};     // keyId -> the parsed key (the store is read once a run)
+
+function keyRecord(ctx, keyId) {
+    return lunaOk(ctx, OAUTH + "client", { name: KEY_PREFIX + keyId }).then(function (r) { return r.value || null; });
+}
+function putKeyRecord(ctx, keyId, value) {
+    return lunaOk(ctx, OAUTH + "client", { name: KEY_PREFIX + keyId, value: value });
+}
+
+function loadKey(ctx, keyId) {
+    if (keyCache[keyId]) return Promise.resolve(keyCache[keyId]);
+    return keyRecord(ctx, keyId).then(function (rec) {
+        if (!rec || !rec.privateKey) throw kit.fileError(kit.FILE_ERRORS.AUTH, "The account's key is gone from this device: sign in again with a new key");
+        var key = SSHKEYS.parsePrivateKey(rec.privateKey);
+        keyCache[keyId] = key;
+        return key;
+    });
+}
+
+function newKeyId() {
+    var b = require("./lib/ssh/crypto").randomBytes(12), s = "";
+    for (var i = 0; i < b.length; i++) s += (b[i] < 16 ? "0" : "") + b[i].toString(16);
+    return s;
+}
+
+// A key kept in the store -> what the sign-in page shows of it.
+function keyAnswer(keyId, key) {
+    var blob = SSHKEYS.publicBlob(key);
+    return { keyId: keyId, publicKey: SSHKEYS.publicKeyLine(blob, key.comment || ""), fingerprint: SSHKEYS.fingerprint(blob),
+             description: SSHKEYS.describe(blob) };
+}
+
+function storeKey(ctx, key) {
+    var keyId = newKeyId();
+    return putKeyRecord(ctx, keyId, { privateKey: SSHKEYS.formatPrivateKey(key), publicKey: SSHKEYS.publicKeyLine(key), created: ctx.now() })
+        .then(function () { keyCache[keyId] = key; return keyAnswer(keyId, key); });
+}
+
+// "nas.local", "nas.local:2222", "[fd00::2]:22", "sftp://me@nas.local:2222/srv/files"
+// -> {host, port, user?, path?}.
+function sftpAddress(raw, port) {
+    var s = String(raw || "").trim();
+    if (!s) throw fail("The server's name or address is needed", "400_BAD_REQUEST");
+    var out = { host: "", port: 22 };
+    var m = /^(?:s(?:ftp|sh):\/\/)?(?:([^@/]+)@)?(\[[0-9a-fA-F:.]+\]|[^:/\s]+)(?::(\d+))?(\/.*)?$/.exec(s);
+    if (!m) throw fail("Not a server name or address: " + raw, "400_BAD_REQUEST");
+    out.host = m[2].replace(/^\[|\]$/g, "").toLowerCase();
+    if (m[1]) out.user = decodeURIComponent(m[1]);
+    if (m[4] && m[4] !== "/") out.path = decodeURIComponent(m[4]);
+    var p = Number(m[3] || port || 22);
+    if (!(p >= 1 && p <= 65535) || Math.floor(p) !== p) throw fail("Not a port number: " + (m[3] || port), "400_BAD_REQUEST");
+    out.port = p;
+    return out;
+}
+
+function hostLabel(a) { return (a.host.indexOf(":") >= 0 ? "[" + a.host + "]" : a.host) + (a.port !== 22 ? ":" + a.port : ""); }
+
+function sftpDrive(ctx, c, cred) {
+    if (!c.host || !c.hostKey) return Promise.reject(kit.fileError(kit.FILE_ERRORS.AUTH, "The account has no server key trusted: sign in again"));
+    ctx.net.allowHost(c.host);
+    var opts = { host: c.host, port: c.port || 22, user: cred.user || c.user, password: cred.password || undefined, hostKey: c.hostKey,
+                 root: c.root || "/", accountId: ctx.accountId };
+    var keyId = cred.sshKey || c.sshKey;
+    if (!keyId && !opts.password) return Promise.reject(kit.fileError(kit.FILE_ERRORS.AUTH, "The account has no password or key: sign in again"));
+    var drive = (keyId ? loadKey(ctx, keyId) : Promise.resolve(null)).then(function (key) {
+        opts.key = key || undefined;
+        return SFTP.createSftpDrive(ctx, opts);
+    });
+    // A changed host key is said loudly: a notification as well as the error.
+    return drive.then(function (d) {
+        var loud = {};
+        Object.keys(d).forEach(function (k) {
+            loud[k] = function () {
+                return d[k].apply(d, arguments).catch(function (e) {
+                    if (e && e.reason === "HOST_KEY_CHANGED" && ctx.notify && !(ctx.state && ctx.state.warnedKey === e.hostKey.fingerprint)) {
+                        if (ctx.state) ctx.state.warnedKey = e.hostKey.fingerprint;
+                        return ctx.notify({ title: "Server key changed: " + c.host, body: "Phoenix did not connect. Check the key with the server's owner.",
+                                            appId: "com.palm.app.accounts" }).catch(function () {}).then(function () { throw e; });
+                    }
+                    throw e;
+                });
+            };
+        });
+        return loud;
+    });
+}
+
+function sftpValidate(ctx, p) {
+    var c = p.config || {};
+    var a = sftpAddress(c.server || c.host, c.port);
+    var user = String(p.username || a.user || "").trim();
+    if (!user) return Promise.reject(fail("The user name is needed", "401_UNAUTHORIZED"));
+    var password = p.password || "";
+    var keyId = c.sshKey || "";
+    if (!password && !keyId) return Promise.reject(fail("A password or a key is needed", "401_UNAUTHORIZED"));
+    var hostKey = c.hostKey;
+    if (!hostKey || !hostKey.key || !hostKey.fingerprint) return Promise.reject(fail("The server's key was not trusted yet", "HOST_KEY_UNKNOWN"));
+    ctx.net.allowHost(a.host);
+    var folder = String(c.folder || a.path || "").trim();
+    return (keyId ? loadKey(ctx, keyId) : Promise.resolve(null)).then(function (key) {
+        var conn = { net: ctx.net, host: a.host, port: a.port, user: user, password: password || undefined, key: key || undefined,
+                     hostKey: { type: hostKey.type || SSHKEYS.keyTypeOf(hostKey.algorithm || ""), key: hostKey.key, fingerprint: hostKey.fingerprint },
+                     log: function (m) { ctx.log("sftp " + a.host + ": " + m); }, now: function () { return ctx.now(); }, timers: SFTP.timersOf(ctx) };
+        return SFTP.session(conn).then(function (s) {
+            // The drive's folder: the one given (from the home folder when
+            // relative), or the home folder itself.
+            return s.sftp.realpath(folder || ".").then(function (root) {
+                return s.sftp.stat(root).then(function (st) {
+                    if (!st.isDirectory) throw fail("Not a folder on the server: " + root, "400_BAD_REQUEST");
+                    s.client.close();
+                    var config = { provider: "sftp", host: a.host, port: a.port, user: user, root: root, folder: folder,
+                                   hostKey: conn.hostKey, auth: key ? "key" : "password" };
+                    if (key) { config.sshKey = keyId; config.publicKey = SSHKEYS.publicKeyLine(key); }
+                    var common = { user: user, settings: config };
+                    if (password && !key) common.password = password;
+                    if (key) common.sshKey = keyId;
+                    var result = { username: user + "@" + hostLabel(a) + (folder ? ":" + root : ""), credentials: { common: common }, config: config };
+                    // Signing in again with another key (or a password): the old key goes.
+                    if (!p.accountId) return result;
+                    return lunaOk(ctx, "luna://com.palm.service.accounts/readCredentials", { accountId: p.accountId, name: "common" })
+                        .then(function (r) {
+                            var old = r.credentials && r.credentials.sshKey;
+                            if (!old || old === keyId) return null;
+                            delete keyCache[old];
+                            return putKeyRecord(ctx, old, null);
+                        }).catch(function () {}).then(function () { SFTP.closeAccount(p.accountId); return result; });
+                });
+            }, function (e) {
+                s.client.close();
+                if (e.errorCode === "SFTP_STATUS" && e.status === 2) throw fail("There is no folder " + folder + " on the server", "400_BAD_REQUEST");
+                throw e;
+            });
+        });
+    }).catch(function (e) {
+        if (e.errorCode === "401_UNAUTHORIZED") {
+            throw fail(key401(e, password, keyId), "401_UNAUTHORIZED");
+        }
+        if (e.errorCode === "HOST_KEY_CHANGED") throw Object.assign(fail(e.message, "HOST_KEY_CHANGED"), { hostKey: e.hostKey });
+        if (e.errorCode === "SFTP_NOT_AVAILABLE") throw fail("The server signs you in but has no SFTP (its sftp subsystem is off)", "UNSUPPORTED_CAPABILITY");
+        if (e.errorCode === "503_SERVICE_UNAVAILABLE") throw fail(e.message, "503_SERVICE_UNAVAILABLE");
+        if (e.code && /^(ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT|ECONNRESET)$/.test(e.code)) throw fail("No SSH server answers at " + hostLabel(a), "CONNECTION_FAILED");
+        if (e.code === "ENOTFOUND" || e.code === "EAI_AGAIN") throw fail("There is no server called " + a.host, "HOST_NOT_FOUND");
+        if (e.errorCode === "CONNECTION_TIMEOUT") throw fail(e.message, "CONNECTION_TIMEOUT");
+        throw e;
+    });
+}
+
+function key401(e, password, keyId) {
+    if (e.prompt) return e.message;
+    if (keyId) return "The server did not take the key. Put its public key in ~/.ssh/authorized_keys on the server, then try again.";
+    return "The server did not accept the user name and password";
+}
+
+// The server's key, for the sign-in page to show (and, with accountId,
+// compared with the one the account trusts).
+function sftpHostKey(ctx, p) {
+    var a = sftpAddress(p.server || p.host, p.port);
+    ctx.net.allowHost(a.host);
+    var pinned = null;
+    var read = p.accountId ? lunaOk(ctx, "luna://com.palm.service.accounts/readCredentials", { accountId: p.accountId, name: "common" })
+        .then(function (r) { var s = (r.credentials && r.credentials.settings) || {}; pinned = s.host === a.host && s.port === a.port ? s.hostKey : null; })
+        .catch(function () {}) : Promise.resolve();
+    return read.then(function () { return SFTP.probeHostKey(ctx, { host: a.host, port: a.port, prefer: pinned }); }).then(function (k) {
+        var out = { host: a.host, port: a.port, hostKey: k };
+        if (pinned) {
+            out.known = pinned.key === k.key;
+            if (!out.known) { out.changed = true; out.previous = { fingerprint: pinned.fingerprint, type: pinned.type }; }
+        }
+        return out;
+    }, function (e) {
+        if (e.code && /^(ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT|ECONNRESET)$/.test(e.code)) throw fail("No SSH server answers at " + hostLabel(a), "CONNECTION_FAILED");
+        if (e.code === "ENOTFOUND" || e.code === "EAI_AGAIN") throw fail("There is no server called " + a.host, "HOST_NOT_FOUND");
+        if (e.errorCode === "SSH_PROTOCOL") throw fail("The server at " + hostLabel(a) + " does not speak SSH (" + e.message + ")", "UNSUPPORTED_CAPABILITY");
+        throw e;
+    });
+}
+
+// Keys a sign-in made but no account took (the page was left): which are
+// they? Those not named by an account of this service.
+function keysInUse(ctx) {
+    return lunaOk(ctx, "luna://com.palm.service.accounts/listAccounts", {}).then(function (r) {
+        var ids = (r.results || []).filter(function (a) { return a.templateId === T.sftp; }).map(function (a) { return a._id; });
+        return Promise.all(ids.map(function (id) {
+            return lunaOk(ctx, "luna://com.palm.service.accounts/readCredentials", { accountId: id, name: "common" })
+                .then(function (c) { return c.credentials && c.credentials.sshKey; }, function () { return null; });
+        }));
     });
 }
 
@@ -315,6 +518,7 @@ module.exports = kit.defineConnector({
         var provider = providerOf(p.templateId || ctx.templateId);
         if (provider === "nextcloud" || provider === "owncloud" || provider === "webdav") return davValidate(ctx, provider, p);
         if (provider === "s3") return s3Validate(ctx, p);
+        if (provider === "sftp") return sftpValidate(ctx, p);
         var c = p.config || {};
         if (!c.oauthKey) return Promise.reject(fail("Sign in with " + NAMES[provider] + " first", "401_UNAUTHORIZED"));
         return clientOf(ctx, provider).then(function (client) {
@@ -341,6 +545,14 @@ module.exports = kit.defineConnector({
             return revoke.then(function () { return ctx.oauth.forget(key); });
         }
         var settings = settingsOf(ctx);
+        if (provider === "sftp") {
+            // Its connections closed, its key gone from the key store.
+            SFTP.closeAccount(ctx.accountId);
+            var keyId = cred.sshKey || settings.sshKey;
+            if (!keyId) return Promise.resolve();
+            delete keyCache[keyId];
+            return putKeyRecord(ctx, keyId, null).catch(function (e) { ctx.log("the account's key was not removed: " + e.message); });
+        }
         if (provider === "nextcloud" && cred.password && settings.server) {
             // The app password Login Flow made is deleted on the server too
             // (https://docs.nextcloud.com/server/latest/developer_manual/client_apis/LoginFlow/index.html#deleting-an-app-password).
@@ -370,9 +582,44 @@ module.exports = kit.defineConnector({
         // {server} -> {loginUrl, pollEndpoint, pollToken, server}
         loginFlowStart: function (ctx, p) { return loginFlowStart(ctx, p); },
         // {server, pollEndpoint, pollToken} -> {done: false} or {done: true, username, credentials, config}
-        loginFlowPoll: function (ctx, p) { return loginFlowPoll(ctx, p); }
+        loginFlowPoll: function (ctx, p) { return loginFlowPoll(ctx, p); },
+
+        // SFTP. {server, port?, accountId?} -> {host, port, hostKey: {algorithm, type, key, fingerprint,
+        // description}, known?, changed?, previous?: {fingerprint}}: the server's key, to trust.
+        sftpHostKey: function (ctx, p) { return sftpHostKey(ctx, p); },
+        // {comment?} -> {keyId, publicKey, fingerprint, description}: a new Ed25519 key, kept sealed.
+        sftpMakeKey: function (ctx, p) {
+            var comment = String(p.comment || "").replace(/[^\w.@+-]/g, "").slice(0, 64) || "phoenix";
+            return storeKey(ctx, SSHKEYS.generateEd25519(comment));
+        },
+        // {privateKey} -> the same, for a key brought from elsewhere (OpenSSH, PKCS #1, PKCS #8, SEC 1;
+        // KEY_ENCRYPTED for one with a passphrase, KEY_UNSUPPORTED, KEY_INVALID).
+        sftpImportKey: function (ctx, p) {
+            var key;
+            try { key = SSHKEYS.parsePrivateKey(p.privateKey); } catch (e) { return Promise.reject(fail(e.message, e.errorCode || "KEY_INVALID")); }
+            if (!key.comment) key.comment = "imported";
+            return storeKey(ctx, key);
+        },
+        // {keyId} -> {}: a key the sign-in made that no account took (the page was left).
+        sftpForgetKey: function (ctx, p) {
+            var keyId = String(p.keyId || "");
+            if (!/^[0-9a-f]{24}$/.test(keyId)) return Promise.reject(fail("Not a key of this service", "400_BAD_REQUEST"));
+            return keysInUse(ctx).then(function (used) {
+                if (used.indexOf(keyId) >= 0) throw fail("An account uses this key", "PERMISSION_DENIED");
+                delete keyCache[keyId];
+                return putKeyRecord(ctx, keyId, null);
+            }).then(function () { return {}; });
+        },
+        // {accountId} -> {keyId, publicKey, fingerprint, description}: the account's key, to copy its
+        // public half again or sign in again with it.
+        sftpPublicKey: function (ctx) {
+            var keyId = (ctx.credentials || {}).sshKey;
+            if (!keyId) return Promise.reject(fail("The account signs in with a password", "NOT_FOUND"));
+            return loadKey(ctx, keyId).then(function (key) { return keyAnswer(keyId, key); });
+        }
     }
 });
 
 module.exports.TEMPLATES = T;
 module.exports.S3_PRESETS = S3_PRESETS;
+module.exports._sftpAddress = sftpAddress;

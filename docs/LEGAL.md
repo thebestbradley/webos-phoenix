@@ -700,6 +700,34 @@ its licence checked (11 October 2026):
 - The pictures of all four are drawn for Phoenix (each package's
   PROVENANCE.md); none is a network's logo.
 
+## The drives' SFTP
+
+The SFTP drive (`apps/connectors/drives/service/lib/ssh`, `lib/sftp.js`;
+SHARE-AND-FILES.md "Drives") is Phoenix's own SSH-2 and SFTP client,
+Apache-2.0, written from the RFCs (4251-4254, 4256, 5656, 8268, 8308,
+8332, 8709, 8731), the SFTP draft (draft-ietf-secsh-filexfer-02) and
+OpenSSH's protocol notes (`PROTOCOL`, `PROTOCOL.chacha20poly1305`,
+`PROTOCOL.key`), read as specifications; no code was taken from OpenSSH or
+any SSH library. Checked 11 October 2026:
+
+- Its cryptography is **@noble/hashes** 1.8.0, **@noble/curves** 1.9.7 and
+  **@noble/ciphers** 1.3.0 (MIT, Paul Miller; plain JavaScript, each
+  audited by a security firm; curves needs hashes, nothing else is
+  pulled in). They are the connector's npm dependencies, carried in its package's
+  `service/node_modules` with their `LICENSE` files (the connector comes
+  from the catalog, not the image, so the notices go with the package).
+- **ssh2** (MIT) was not taken: it needs Node's `crypto` (a page in the
+  simulator has none), brings an optional native addon (`cpu-features`)
+  that C12 refuses, and `asn1` and `bcrypt-pbkdf` with it.
+- **OpenSSH** (BSD-2-Clause, BSD-3-Clause, ISC and MIT parts) is a test
+  tool here: `tools/test-sftp.cjs` runs the test machine's `sshd` and
+  `sftp-server`, and the unit tests its `ssh-keygen`, as separate programs;
+  nothing of it is in the connector. The image already carried its client
+  (`ssh`, `scp`); `packagegroup-phoenix-terminal` now adds `sftp`,
+  `ssh-keygen` and `sftp-server` from OE-core's `openssh` recipe, the same
+  licences.
+- The SFTP account's pictures are the drives' own (`art/app-icons/PROVENANCE.md`).
+
 ## Fonts
 
 Legacy webOS used **Prelude**, which was made for Palm and is not openly

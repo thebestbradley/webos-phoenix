@@ -105,7 +105,8 @@ check($idx['version'] === 1 && $idx['build'] === $pub['build'] && count($idx['ap
 // ---- Account types (Connections): built in, from catalog/accounts.json ------------------------
 $types = array_column($idx['accounts'] ?? [], null, 'templateId');
 $drives = ['com.webosphoenix.drive.nextcloud', 'com.webosphoenix.drive.owncloud', 'com.webosphoenix.drive.webdav', 'com.webosphoenix.drive.s3',
-           'com.webosphoenix.drive.dropbox', 'com.webosphoenix.drive.onedrive', 'com.webosphoenix.drive.googledrive', 'com.webosphoenix.drive.box'];
+           'com.webosphoenix.drive.dropbox', 'com.webosphoenix.drive.onedrive', 'com.webosphoenix.drive.googledrive', 'com.webosphoenix.drive.box',
+           'com.webosphoenix.drive.sftp'];
 // Phoenix's other connector packages from the catalog (docs/SYNERGY-CONNECTORS.md "Status of the connectors"): template => package.
 $ownPackages = ['com.webosphoenix.todoist' => 'org.webosphoenix.todoist', 'com.webosphoenix.bluesky' => 'org.webosphoenix.bluesky',
                 'com.webosphoenix.microsoft' => 'org.webosphoenix.microsoft', 'com.webosphoenix.google' => 'org.webosphoenix.google',
@@ -113,7 +114,7 @@ $ownPackages = ['com.webosphoenix.todoist' => 'org.webosphoenix.todoist', 'com.w
                 'com.webosphoenix.slack' => 'org.webosphoenix.slack'];
 check(array_keys($types) === array_merge(['com.webosphoenix.dav', 'com.webosphoenix.fediverse', 'com.webosphoenix.webcal', 'com.palm.othermail'], $drives,
                                          array_keys($ownPackages))
-      && $pub['accounts'] === 12 + count($ownPackages) && !isset($types['com.palm.palmprofile']) && !isset($types['com.webosphoenix.xmpp']),
+      && $pub['accounts'] === 13 + count($ownPackages) && !isset($types['com.palm.palmprofile']) && !isset($types['com.webosphoenix.xmpp']),
       'the index lists the account types Phoenix connects to (not the HP webOS profile), the drives and Phoenix\'s other connectors among them; Jabber\'s comes from its package (catalog.json)');
 $shape = ['templateId', 'title', 'provider', 'icon', 'summary', 'capabilities', 'protocols', 'auth', 'server', 'privacy', 'push', 'status', 'package', 'featured'];
 // Built in, but for the connector packages Phoenix comes with (pre-installed, removable: the Fediverse).
