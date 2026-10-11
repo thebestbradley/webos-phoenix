@@ -1,0 +1,162 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The Phoenix platform as a device calls it: the contract both the device
+# (this repository) and the Laravel platform (docs/PLATFORM-BUILD-PROMPT.md)
+# follow. Bodies are in api.schema.json and feeds.schema.json beside this
+# file; docs/PLATFORM-CLIENT.md says which device code calls what, how it
+# verifies it and what it does when it fails. tools/test-platform-client.cjs
+# checks a server against it (docs/PLATFORM-CLIENT.md, "Conformance").
+#
+# Two hosts: the static feeds (any CDN or mirror; signatures, not hosts, are
+# trusted) and the API (Laravel). Paths below are relative to servers.json's
+# "feeds" and "api" (production: https://feeds.<domain>/ and
+# https://api.<domain>/).
+openapi: 3.1.0
+info:
+  title: Phoenix platform, device contract
+  version: "1"
+  license: { name: Apache-2.0, identifier: Apache-2.0 }
+servers:
+  - url: https://feeds.webosphoenix.org
+    description: feeds host (static; proposal, OPEN-QUESTIONS Q1)
+  - url: https://api.webosphoenix.org
+    description: API host (Laravel; proposal, OPEN-QUESTIONS Q1)
+tags:
+  - name: feeds
+    description: Static files on the feeds host, written by the publisher. Signed files have <file>.sig beside them, written before the file. Channel and index JSON Cache-Control no-cache; packages and bundles immutable, with Range support.
+  - name: account
+  - name: cloud
+  - name: conformance
+    description: Staging only (never production), behind a token; lets tools/test-platform-client.cjs publish test releases and approve sign-ins so it can run the device code end to end against a real server.
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, description: "A Passport access token for this device (scopes: account backup push reviews assistant)" }
+    davBasic: { type: http, scheme: basic, description: "WebDAV: the device id and the app password from POST /v1/backup/credentials" }
+    conformance: { type: http, scheme: bearer, description: "The staging server's conformance token" }
+  responses:
+    Error:
+      description: "PLATFORM.md 5: {error, code, details?} with the status; 429/503 with Retry-After"
+      content: { application/json: { schema: { $ref: "api.schema.json#/$defs/error" } } }
+paths:
+  # ---- Feeds host ---------------------------------------------------------------------------
+  /catalog/v1/key.json:
+    get: { tags: [feeds], summary: "The catalog's online key and the root's delegations", responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "feeds.schema.json#/$defs/keyFile" } } } } } }
+  /catalog/v1/index.json:
+    get: { tags: [feeds], summary: "The signed catalog index (apps, web apps, connectors, account types, revoked)", responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "feeds.schema.json#/$defs/catalogIndex" } } } } } }
+  /catalog/v1/index.json.sig:
+    get: { tags: [feeds], summary: "base64 Ed25519 signature of index.json's bytes, newline", responses: { "200": { description: ok, content: { text/plain: {} } } } }
+  /catalog/v1/packages/{file}:
+    get: { tags: [feeds], summary: "An approved package (.ipk), checked against release.size and sha256", parameters: [{ name: file, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok }, "206": { description: a range } } }
+  /updates/key.json:
+    get: { tags: [feeds], summary: "The update feed's online key and the root's delegations (scope updates)", responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "feeds.schema.json#/$defs/keyFile" } } } } } }
+  /updates/{compatible}/{channel}.json:
+    get:
+      tags: [feeds]
+      summary: "A device type's channel (stable, beta, dev); 404 when there is none yet"
+      parameters:
+        - { name: compatible, in: path, required: true, schema: { type: string } }
+        - { name: channel, in: path, required: true, schema: { enum: [stable, beta, dev] } }
+      responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "feeds.schema.json#/$defs/updateFeed" } } } }, "404": { description: nothing published } }
+  /updates/{compatible}/{channel}.json.sig:
+    get: { tags: [feeds], summary: "Format 2's detached signature", parameters: [{ name: compatible, in: path, required: true, schema: { type: string } }, { name: channel, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok, content: { text/plain: {} } } } }
+  /updates/{compatible}/{bundle}:
+    get: { tags: [feeds], summary: "A RAUC bundle; must answer Range requests (resumed downloads, RAUC's adaptive updates)", parameters: [{ name: compatible, in: path, required: true, schema: { type: string } }, { name: bundle, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok }, "206": { description: a range }, "416": { description: past the end } } }
+  /revocations/v1/revoked.json:
+    get: { tags: [feeds], summary: "The signed revocation list (and revoked.json.sig); 404 until one is published", responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "feeds.schema.json#/$defs/revocationList" } } } } } }
+  /drivers/v1/drivers.json:
+    get: { tags: [feeds], summary: "The driver catalog: docs/DRIVERS.md (format and hand-over unchanged; read by services/hardware/lib/drivers.js)", responses: { "200": { description: ok } } }
+  # ---- API host -----------------------------------------------------------------------------
+  /v1/servers.json:
+    get: { tags: [account], summary: "This platform's own servers.json, keys pinned (Developer Mode's 'Use These Servers', the conformance suite)", responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "servers.schema.json" } } } } } }
+  /.well-known/openid-configuration:
+    get: { tags: [account], summary: "OpenID Connect discovery at the issuer", responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/openidConfiguration" } } } } } }
+  /oauth/device/code:
+    post:
+      tags: [account]
+      summary: "RFC 8628 device authorization (client_id=phoenix-device)"
+      requestBody: { content: { application/x-www-form-urlencoded: { schema: { type: object, required: [client_id], properties: { client_id: { type: string }, scope: { type: string } } } } } }
+      responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/deviceCode" } } } } }
+  /oauth/token:
+    post:
+      tags: [account]
+      summary: "Tokens: grant_type urn:ietf:params:oauth:grant-type:device_code, refresh_token (rotates), authorization_code (PKCE S256)"
+      requestBody: { content: { application/x-www-form-urlencoded: { schema: { type: object, required: [grant_type, client_id] } } } }
+      responses:
+        "200": { description: ok, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/tokens" } } } }
+        "400": { description: "authorization_pending, slow_down, access_denied, expired_token, invalid_grant", content: { application/json: { schema: { $ref: "api.schema.json#/$defs/oauthError" } } } }
+  /oauth/authorize:
+    get: { tags: [account], summary: "The browser sign-in (authorization code + PKCE S256); redirects to redirect_uri with code and state", responses: { "302": { description: back to the device } } }
+  /oauth/revoke:
+    post: { tags: [account], summary: "RFC 7009 (the device revokes its refresh token on Sign Out)", responses: { "200": { description: ok } } }
+  /v1/key.json:
+    get: { tags: [account], summary: "The API's entitlements key", responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/apiKey" } } } } } }
+  /v1/me:
+    get: { tags: [account], security: [{ bearer: [account] }], responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/me" } } } }, "401": { $ref: "#/components/responses/Error" } } }
+    patch: { tags: [account], security: [{ bearer: [account] }], responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/me" } } } } } }
+  /v1/me/entitlements:
+    get:
+      tags: [account]
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: "Signed: X-Phoenix-Signature, base64 Ed25519 over the body's bytes"
+          headers: { X-Phoenix-Signature: { required: true, schema: { type: string } } }
+          content: { application/json: { schema: { $ref: "api.schema.json#/$defs/entitlements" } } }
+  /v1/devices:
+    post:
+      tags: [account]
+      security: [{ bearer: [account] }]
+      parameters: [{ name: Idempotency-Key, in: header, schema: { type: string } }]
+      requestBody: { content: { application/json: { schema: { $ref: "api.schema.json#/$defs/deviceRegistration" } } } }
+      responses: { "201": { description: created, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/deviceCreated" } } } }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/me/devices:
+    get: { tags: [account], security: [{ bearer: [account] }], responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/deviceList" } } } } } }
+  /v1/devices/{id}:
+    patch: { tags: [account], security: [{ bearer: [account] }], parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
+    delete: { tags: [account], security: [{ bearer: [account] }], summary: "Signs the device out: its tokens, WebDAV password and push channels go", parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "204": { description: gone } } }
+  /v1/backup/credentials:
+    post: { tags: [cloud], security: [{ bearer: [backup] }], responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/backupCredentials" } } } }, "409": { $ref: "#/components/responses/Error" } } }
+  /v1/backup/summary:
+    get: { tags: [cloud], security: [{ bearer: [backup] }], responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/backupSummary" } } } } } }
+  /dav/backups/{deviceId}/{file}:
+    summary: "WebDAV as apps/settings/service/lib/webdav.js speaks it: PROPFIND (Depth 0 and 1, 207), MKCOL (201, or 405 when it exists), PUT (201/204; 507 over quota), GET, DELETE"
+    parameters: [{ name: deviceId, in: path, required: true, schema: { type: string } }, { name: file, in: path, required: true, schema: { type: string } }]
+    put: { tags: [cloud], security: [{ davBasic: [] }], responses: { "201": { description: stored }, "507": { $ref: "#/components/responses/Error" } } }
+    get: { tags: [cloud], security: [{ davBasic: [] }], responses: { "200": { description: the .pbak } } }
+    delete: { tags: [cloud], security: [{ davBasic: [] }], responses: { "204": { description: gone } } }
+  /v1/push/channels:
+    post:
+      tags: [cloud]
+      security: [{ bearer: [push] }]
+      requestBody: { content: { application/json: { schema: { $ref: "api.schema.json#/$defs/pushChannelRequest" } } } }
+      responses: { "201": { description: created, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/pushChannel" } } } } }
+  /v1/push/channels/{id}/renew:
+    post: { tags: [cloud], security: [{ bearer: [push] }], parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/pushRenewed" } } } } } }
+  /v1/push/channels/{id}:
+    delete: { tags: [cloud], security: [{ bearer: [push] }], parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "204": { description: gone } } }
+  /v1/oauth-broker/{provider}/authorize:
+    get: { tags: [cloud], summary: "Starts the provider's sign-in with Phoenix's client id; comes back to redirect_uri with handle and state", parameters: [{ name: provider, in: path, required: true, schema: { type: string } }], responses: { "302": { description: to the provider, then back } } }
+  /v1/oauth-broker/{provider}/redeem:
+    post: { tags: [cloud], security: [{ bearer: [account] }], parameters: [{ name: provider, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/brokerTokens" } } } } } }
+  /v1/oauth-broker/{provider}/refresh:
+    post: { tags: [cloud], security: [{ bearer: [account] }], parameters: [{ name: provider, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/brokerTokens" } } } } } }
+  /v1/assistant/models:
+    get: { tags: [cloud], security: [{ bearer: [assistant] }], responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/models" } } } } } }
+  /v1/assistant/chat/completions:
+    post: { tags: [cloud], security: [{ bearer: [assistant] }], responses: { "200": { description: ok, content: { application/json: { schema: { $ref: "api.schema.json#/$defs/chatCompletion" } } } }, "429": { $ref: "#/components/responses/Error" } } }
+  /drivers/v1/report:
+    post: { tags: [cloud], requestBody: { content: { application/json: { schema: { $ref: "api.schema.json#/$defs/hardwareReport" } } } }, responses: { "201": { description: taken }, "400": { $ref: "#/components/responses/Error" } } }
+  # ---- Conformance controls (staging only) --------------------------------------------------
+  /v1/conformance/updates:
+    post: { tags: [conformance], security: [{ conformance: [] }], summary: "Publish a signed format 2 release: {compatible, channel, version, build, notes, bundleBase64, rollout?, revoked?, release: null to withdraw}", responses: { "200": { description: the feed written } } }
+  /v1/conformance/catalog:
+    post: { tags: [conformance], security: [{ conformance: [] }], summary: "Publish a signed index: {apps: [entry + package (base64 .ipk) + rollout?], accounts?, revoked?}", responses: { "200": { description: the index written } } }
+  /v1/conformance/revocations:
+    post: { tags: [conformance], security: [{ conformance: [] }], summary: "Publish a signed revocation list: {apps, keys}", responses: { "200": { description: the list written } } }
+  /v1/conformance/approve:
+    post: { tags: [conformance], security: [{ conformance: [] }], summary: "Approve a device code for the test account: {user_code}", responses: { "200": { description: approved }, "404": { description: no such code } } }
+  /v1/conformance/deny:
+    post: { tags: [conformance], security: [{ conformance: [] }], summary: "Turn a device code down: {user_code}", responses: { "200": { description: denied } } }
+  /v1/conformance/rotate:
+    post: { tags: [conformance], security: [{ conformance: [] }], summary: "A new online key for {scope: catalog | updates}, delegated by the staging root", responses: { "200": { description: "{key}" } } }

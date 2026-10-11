@@ -1,0 +1,121 @@
+<!doctype html>
+<!-- Copyright (c) 2026 webOS Phoenix contributors
+     SPDX-License-Identifier: Apache-2.0
+
+     The Jabber (XMPP) account's sign-in page (the template's
+     validator.customUI), in plain HTML as the kit's example's: the Accounts
+     app loads it in a frame (Enyo's CrossAppUI) with
+     ?enyoWindowParams={mode, template, account}, and takes the answer posted
+     to it as "enyoCrossAppResult=" + JSON (enyo CrossAppResult.js):
+       create: {returnValue: true, template, templateId, username, credentials, config}
+       modify: {returnValue: true, credentials, config}       (a new password)
+       cancel: {returnValue: false}
+     The validator is the connector's checkCredentials: it signs in once.
+     The page says what the account's privacy is (TLS to the server, not end
+     to end: docs/SYNERGY-CONNECTORS.md 7) and where to get an account. -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>Jabber (XMPP)</title>
+    <style>
+        body { margin: 0; font-family: Prelude, "Helvetica Neue", Arial, sans-serif; background: #e5e5e5; color: #333; }
+        header { display: flex; align-items: center; justify-content: center; gap: 8px; height: 50px; background: #f4f4f4; border-bottom: 1px solid #bbb; font-size: 18px; }
+        main { padding: 12px 16px 16px; max-width: 480px; margin: 0 auto; }
+        label { display: block; font-size: 13px; font-weight: bold; color: #555; margin: 12px 4px 6px; text-transform: uppercase; }
+        input { box-sizing: border-box; width: 100%; font-size: 17px; padding: 10px; border: 1px solid #aaa; border-radius: 8px; background: #fff; }
+        p { font-size: 14px; line-height: 1.4; margin: 4px; }
+        .note { margin-top: 12px; padding: 8px 10px; border-radius: 8px; background: #f6f1dc; border: 1px solid #d8cc9a; font-size: 13px; }
+        .error { color: #b00; min-height: 1.4em; }
+        .buttons { display: flex; gap: 10px; margin-top: 12px; }
+        button { flex: 1; font-size: 17px; padding: 10px; border-radius: 8px; border: 1px solid #888; background: #f8f8f8; }
+        button.primary { background: #4a4a4a; color: #fff; border-color: #333; }
+        button:disabled { opacity: 0.5; }
+        .signup { text-align: center; margin-top: 14px; font-size: 14px; }
+        .signup a { color: #1f5fa8; }
+    </style>
+</head>
+<body>
+    <header><img src="../public/accounts/com.webosphoenix.xmpp/images/xmpp-32x32.png" srcset="../public/accounts/com.webosphoenix.xmpp/images/xmpp-32x32@2x.png 2x, ../public/accounts/com.webosphoenix.xmpp/images/xmpp-32x32@3x.png 3x" width="32" height="32" alt=""> Jabber (XMPP)</header>
+    <main>
+        <label for="jid">Jabber ID</label>
+        <input id="jid" type="email" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="you@example.org">
+        <label for="password">Password</label>
+        <input id="password" type="password">
+        <p class="note" id="privacy">Messages are encrypted between this device and your server, and between servers, but not end to end: your server's admins (and the other person's) can read them.</p>
+        <p class="error" id="error" role="alert"></p>
+        <div class="buttons">
+            <button id="cancel">Cancel</button>
+            <button id="signin" class="primary" disabled>Sign In</button>
+        </div>
+        <p class="signup" id="signup">Don't have an account? <a href="https://providers.xmpp.net/" id="signupLink">Choose a server</a> or <a href="https://snikket.org/" id="snikketLink">run your own (Snikket)</a></p>
+    </main>
+    <script>
+        "use strict";
+        var params = {};
+        try { params = JSON.parse(new URLSearchParams(location.search).get("enyoWindowParams") || "{}") || {}; } catch (e) { params = {}; }
+        var jid = document.getElementById("jid"), password = document.getElementById("password");
+        var signin = document.getElementById("signin"), error = document.getElementById("error");
+        var modify = params.mode === "modify";
+
+        function answer(result) { window.parent.postMessage("enyoCrossAppResult=" + JSON.stringify(result), "*"); }
+        function call(uri, p) {
+            return new Promise(function (resolve) {
+                var bridge = new PalmServiceBridge();
+                bridge.onservicecallback = function (text) { resolve(JSON.parse(text)); };
+                bridge.call(uri, JSON.stringify(p));
+            });
+        }
+        // Sign-up pages open in the browser; nothing is sent to them (docs/SYNERGY-SDK.md "Sign-up link").
+        ["signupLink", "snikketLink"].forEach(function (id) {
+            document.getElementById(id).addEventListener("click", function (e) {
+                e.preventDefault();
+                call("palm://com.palm.applicationManager/open", { target: this.href });
+            });
+        });
+        if (modify && params.account) {
+            jid.value = params.account.username || "";
+            jid.disabled = true;
+            document.getElementById("signup").style.display = "none";
+        }
+        function update() { signin.disabled = !jid.value.trim() || !password.value; }
+        jid.addEventListener("input", update);
+        password.addEventListener("input", update);
+        password.addEventListener("keydown", function (e) { if (e.key === "Enter" && !signin.disabled) signin.click(); });
+        document.getElementById("cancel").addEventListener("click", function () { answer({ returnValue: false }); });
+
+        var MESSAGES = {
+            "401_UNAUTHORIZED": "The server did not accept that Jabber ID and password.",
+            "INVALID_USER": "Enter your Jabber ID, like you@example.org.",
+            "HOST_NOT_FOUND": "No Jabber server answers for that address.",
+            "CONNECTION_FAILED": "Could not reach the server.",
+            "CONNECTION_TIMEOUT": "The server did not answer in time.",
+            "SSL_CERT_UNTRUSTED": "The server's connection is not secure (its certificate, or no encryption): not signing in.",
+            "UNSUPPORTED": "The server does not offer a sign-in this device supports.",
+            "503_SERVICE_UNAVAILABLE": "The server asked to wait. Try again later."
+        };
+        signin.addEventListener("click", function () {
+            signin.disabled = true;
+            signin.textContent = "Signing in...";
+            error.textContent = "";
+            call("palm://org.webosphoenix.service.xmpp/checkCredentials", { templateId: "com.webosphoenix.xmpp", username: jid.value.trim(), password: password.value })
+                .then(function (r) {
+                    signin.textContent = "Sign In";
+                    update();
+                    if (!r.returnValue) {
+                        error.textContent = MESSAGES[r.errorCode] || ("Could not sign in (" + (r.errorText || r.errorCode) + ").");
+                        return;
+                    }
+                    var result = { returnValue: true, credentials: r.credentials, config: r.config };
+                    if (!modify) {
+                        result.template = params.template;
+                        result.templateId = "com.webosphoenix.xmpp";
+                        result.username = r.username;
+                    }
+                    answer(result);
+                });
+        });
+        (modify ? password : jid).focus();
+    </script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+    "id": "org.webosphoenix.xmpp",
+    "version": "0.2.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Jabber",
+    "icon": "icon.png",
+    "uiRevision": 2,
+    "phoenix": {
+        "//": "Not in the launcher: the app carries the Jabber (XMPP) account (accounts/signin.html, the template in public/accounts, the service). Chats are in Messaging, buddies in Contacts; sharing to a buddy goes through Messaging's share target.",
+        "hidden": true
+    },
+    "requiredPermissions": [
+        "accounts.transport",
+        "xmpp.account",
+        "phoenix.appmanager.launch"
+    ]
+}

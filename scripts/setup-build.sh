@@ -36,19 +36,42 @@ cd "$BUILD_DIR"
 git checkout -q "$BUILD_WEBOS_COMMIT"
 
 # mcf only resolves layer paths relative to the build directory, so link
-# this repository in and register meta-phoenix from there (empty URL means
-# "don't clone"). Priority 60 puts it above meta-webos and the BSP layers.
+# meta-phoenix in and register it from there (empty URL means "don't
+# clone"). Priority 60 puts it above meta-webos and the BSP layers. The link
+# is the layer itself, not this repository: mcf walks a layer's location for
+# <name>/conf/layer.conf and keeps the last match (mcf, traversedir), so
+# given the whole checkout it could pick another copy, such as a git
+# worktree's under .claude/worktrees. A build directory set up before this
+# registered 'webos-phoenix'; its entry is replaced.
 ln -sfn "$REPO_DIR" webos-phoenix
-if ! grep -q "'meta-phoenix'" weboslayers.py; then
+ln -sfn "$REPO_DIR/meta-phoenix" meta-phoenix
+if ! grep -q "'meta-phoenix',.*'meta-phoenix')" weboslayers.py; then
     python3 - <<'PY'
 path = "weboslayers.py"
-src = open(path).read()
-entry = "('meta-phoenix',              60, '', '', 'webos-phoenix'),\n"
+src = "".join(l for l in open(path).read().splitlines(True)
+              if "('meta-phoenix'," not in l)
+entry = "('meta-phoenix',              60, '', '', 'meta-phoenix'),\n"
 start = src.index("webos_layers = [")
 end = src.index("\n]", start)
 open(path, "w").write(src[:end + 1] + entry + src[end + 1:])
 PY
 fi
+
+# meta-phoenix's own machines (meta-phoenix/conf/machine: fairphone-fp6,
+# ayn-odin2portal, pinephonepro, pinetab2, and phoenix-vm-arm64, the ARM64
+# VM that runs as any of them; docs/HARDWARE.md, "First targets", "Device VMs"):
+# mcf refuses a MACHINE that weboslayers.py's Machines does not list.
+python3 - "$REPO_DIR/meta-phoenix/conf/machine" <<'PY'
+import os, re, sys
+path = "weboslayers.py"
+src = open(path).read()
+m = re.search(r"^Machines = \[(.*?)\]", src, re.M)
+have = re.findall(r"'([^']+)'", m.group(1))
+add = sorted(f[:-5] for f in os.listdir(sys.argv[1]) if f.endswith(".conf") and f[:-5] not in have)
+if add:
+    line = "Machines = [%s]" % ", ".join("'%s'" % x for x in have + add)
+    open(path, "w").write(src[:m.start()] + line + src[m.end():])
+PY
 
 ./mcf -p 0 -b 0 --command "${MCF_COMMAND:-update+configure}" "$MACHINE" "$@"
 echo

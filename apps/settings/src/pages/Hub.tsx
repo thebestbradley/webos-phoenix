@@ -16,7 +16,7 @@ export function Hub({ onOpen }: { onOpen: (id: PageId) => void }) {
         { label: "Connections", ids: ["wifi", "bluetooth", "vpn", "airplane", "phone", ...(tethering ? ["hotspot" as const] : []), "dropshare"] },
         { label: "Device", ids: ["screen", "battery", "usb", "gamepads", "hardware", "exhibition", "sounds", "datetime", "language", "textassist", "justtype", "clipboard", "assistant", "accessibility"] },
         { label: "Privacy & Safety", ids: ["location", "emergency", "certificates"] },
-        { label: "About", ids: ["deviceinfo", "backup", "updates"] },
+        { label: "About", ids: ["deviceinfo", "account", "backup", "updates"] },
         { label: "Advanced", ids: ["advanced", ...(devModeShown ? ["devmode" as const] : [])] },
     ];
     return (

@@ -1,0 +1,11 @@
+{
+    "name": "org.webosphoenix.service.deltachat",
+    "version": "0.1.0",
+    "private": true,
+    "description": "webOS Phoenix Delta Chat account (Synergy connector on @phoenix/connector-kit): chat over email through Delta Chat's core (deltachat-rpc-server, a system helper the image installs), chats and groups in Messaging, the people you chat with in Contacts, pictures, read receipts",
+    "license": "Apache-2.0",
+    "main": "service.js",
+    "dependencies": {
+        "@phoenix/connector-kit": "*"
+    }
+}

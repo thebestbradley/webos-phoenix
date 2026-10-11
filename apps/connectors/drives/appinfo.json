@@ -1,0 +1,22 @@
+{
+    "id": "org.webosphoenix.drives",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Drives",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "uiRevision": 2,
+    "phoenix": {
+        "//": "Not in the launcher: the app carries the drive accounts (Nextcloud, ownCloud, WebDAV, S3 storage, Dropbox, OneDrive, Google Drive, Box: their templates in public/accounts, the sign-in page accounts/wizard.html, the service). A connector package of Phoenix's own that is installed from the catalog's Connections, not pre-installed (docs/SYNERGY-CONNECTORS.md 7). The drives show as places in Files and the pickers.",
+        "hidden": true
+    },
+    "requiredPermissions": [
+        "accounts.transport",
+        "drives.account",
+        "application.launcher"
+    ]
+}

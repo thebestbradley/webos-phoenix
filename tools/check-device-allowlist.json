@@ -286,6 +286,14 @@
   "owner": "the app's or service's owner",
   "row": "C6"
  },
+ "luna:unknown-group:org.webosphoenix.filemanager:accounts.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.filemanager:drives.files": {
+  "owner": "the drives connector (apps/connectors/drives: installed from the catalog, its sysbus files come with it, not with the image)",
+  "row": "C6"
+ },
  "luna:unknown-group:org.webosphoenix.flashlight:torch.operation": {
   "owner": "the app's or service's owner",
   "row": "C6"
@@ -315,6 +323,14 @@
   "row": "C6"
  },
  "luna:unknown-group:org.webosphoenix.service.fediverse:messaging.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.telegram:accounts.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.telegram:messaging.operation": {
   "owner": "the app's or service's owner",
   "row": "C6"
  },
@@ -618,10 +634,6 @@
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C3"
  },
- "luna:unknown-service:org.webosphoenix.service.xmpp": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C3"
- },
  "luna:unknown-service:org.webosphoenix.share": {
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C3"
@@ -638,10 +650,6 @@
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C3"
  },
- "simrefs:host:127.0.0.1": {
-  "owner": "platform (PLATFORM.md 12: the feed and catalog URLs)",
-  "row": "Q1"
- },
  "simrefs:host:appcatalog.webosarchive.org": {
   "owner": "owner decision (Q65)",
   "row": "Q2"
@@ -657,10 +665,6 @@
  "simrefs:loopback:apps/assistant:localhost": {
   "owner": "intended: a server on the device itself (see the row)",
   "row": "N4"
- },
- "simrefs:loopback:apps/marketplace:127.0.0.1": {
-  "owner": "platform (PLATFORM.md 12: the feed and catalog URLs)",
-  "row": "Q1"
  },
  "simrefs:loopback:apps/shared:127.0.0.1": {
   "owner": "intended: phoenix-connector publish --local (connector-kit src/tools/publish.ts), a developer's command on a computer for the catalog the simulator runs there, never run on a device",
@@ -679,12 +683,12 @@
   "row": "N4"
  },
  "simrefs:loopback:services/oauth:127.0.0.1": {
-  "owner": "owner decision (Q29)",
+  "owner": "intended: the OAuth sign-in's loopback redirect (RFC 8252 7.3), listening on 127.0.0.1 only while a sign-in waits (services/oauth/loopback.js; see the row)",
   "row": "N4"
  },
- "simrefs:loopback:services/updates:127.0.0.1": {
-  "owner": "platform (PLATFORM.md 12: the feed and catalog URLs)",
-  "row": "Q1"
+ "simrefs:loopback:apps/signin:localhost": {
+  "owner": "intended: the Sign In card opens a plain-http sign-in page only on the device's own loopback (a developer's test provider; see the row)",
+  "row": "N4"
  },
  "simrefs:loopback:shell/native:127.0.0.1": {
   "owner": "intended: a server on the device itself (see the row)",
@@ -693,10 +697,6 @@
  "simrefs:sim-service:org.webosphoenix.simulator": {
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C3"
- },
- "image:missing-path:/etc/phoenix/device.json": {
-  "owner": "platform (per-device adaptation)",
-  "row": "H1"
  },
  "image:missing-path:/etc/phoenix/transcriber.json": {
   "owner": "optional configuration (defaults apply)",
@@ -729,5 +729,17 @@
  "licences:no-provenance:apps/settings/public/icons": {
   "owner": "Settings (record where the Time exhibition icon comes from)",
   "row": "L1"
+ },
+ "licences:recipe-licence:deltachat-rpc-server_2.63.0.bb:MPL-2.0": {
+  "owner": "the owner: may images ship Delta Chat's MPL-2.0 core? (docs/OPEN-QUESTIONS.md Q89; not installed until then, PHOENIX_DELTACHAT)",
+  "row": "L3"
+ },
+ "simrefs:loopback:apps/marketplace:localhost": {
+  "owner": "intended: packagesservice.js tells a catalog on this computer (the simulator's, a developer's) from a plain-HTTP one elsewhere (Q65); it names no server",
+  "row": "Q65"
+ },
+ "simrefs:loopback:services/account:127.0.0.1": {
+  "owner": "intended: the simulator's servers.json (this computer's servers); meta-phoenix writes an image's own over it (tools/servers-json.py, docs/PLATFORM-CLIENT.md)",
+  "row": "Q1"
  }
 }

@@ -1,0 +1,15 @@
+{
+    "id": "org.webosphoenix.deltachat.item:1",
+    "owner": "org.webosphoenix.service.deltachat",
+    "sync": false,
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        }
+    ]
+}

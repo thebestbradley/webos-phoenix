@@ -38,11 +38,19 @@ FocusScope {
         id: phoenix
         anchors.fill: parent
         focus: true
-        formFactor: "auto"
+        // The machine's /etc/phoenix/device.json (phoenix-device-config):
+        // "auto" and the panel's own density unless the device names them.
+        formFactor: DeviceConfig.formFactor
+        density: DeviceConfig.density
         hardwareHomeButton: DeviceConfig.hardwareHomeButton
         homeButtonOrientationAngle: DeviceConfig.homeButtonOrientationAngle
+        displayCornerRadius: DeviceConfig.displayCornerRadius
+        displayCutouts: DeviceConfig.displayCutouts
         source: LsmWindowSource { id: windows }
         system: LsmSystemStatus {}
+        // STATUS: the default wallpaper; the wallpaper preference is not
+        // read on a device yet.
+        wallpaper: "file://" + Theme.defaultWallpaperPath
         // OSE's own keyboard (Maliit through com.webos.service.ime, drawn in
         // the stock KeyboardView below) stays the device's IME for now; the
         // shell makes room for its panel as it did for its own keyboard

@@ -177,7 +177,8 @@ describe("timers, the stopwatch and alarms", () => {
         expect(args("turn off the alarm for 6:30")).toEqual({ action: "off", hour: 6, minute: 30, meridiem: "", all: false });
         expect(args("delete all alarms")).toEqual({ action: "delete", hour: null, minute: null, meridiem: "", all: true });
         expect(args("delete my alarms")).toMatchObject({ action: "delete", all: true });
-        expect(cmd("turn off the alarm system")).toBeNull();
+        // Another device: said at once that it cannot (lib/lang/en.js NOT_HERE).
+        expect(cmd("turn off the alarm system")).toBe("beyond");
     });
 });
 
@@ -287,7 +288,7 @@ describe("music, sound, the screen and the system", () => {
         expect(cmd("what's my battery")).toBe("battery");
         expect(cmd("how much battery do I have")).toBe("battery");
         expect(cmd("is my phone charging")).toBe("battery");
-        expect(cmd("lock the door")).toBeNull();
+        expect(cmd("lock the door")).toBe("beyond");
     });
     it("Settings pages, and apps", () => {
         expect(args("open Wi-Fi settings")).toEqual({ page: "wifi" });

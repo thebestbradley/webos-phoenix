@@ -14,7 +14,9 @@ const SERVICE = "luna://org.webosphoenix.service.backup/";
 
 export type BackupDestination =
     | { type: "usb"; folder?: string }
-    | { type: "webdav"; url: string; username?: string; password?: string };
+    | { type: "webdav"; url: string; username?: string; password?: string }
+    /** Phoenix Cloud: the Phoenix Account's WebDAV folder for this device (its address from the account). */
+    | { type: "phoenix"; url?: string; username?: string; deviceId?: string };
 
 export interface BackupResult {
     time: string;
@@ -83,8 +85,9 @@ export const backup = {
     backupNow(): Promise<{ name: string; size: number; parts: string[] }> {
         return call(SERVICE + "backupNow", {}) as unknown as Promise<{ name: string; size: number; parts: string[] }>;
     },
-    async list(): Promise<BackupFile[]> {
-        return ((await call(SERVICE + "listBackups", {})) as unknown as { backups: BackupFile[] }).backups;
+    /** The backups where backups go, or (First Use) another device's Phoenix Cloud folder. */
+    async list(destination?: { type: "phoenix"; deviceId: string }): Promise<BackupFile[]> {
+        return ((await call(SERVICE + "listBackups", destination ? { destination } : {})) as unknown as { backups: BackupFile[] }).backups;
     },
     async inspect(name: string): Promise<BackupHeader> {
         return ((await call(SERVICE + "inspect", { name })) as unknown as { header: BackupHeader }).header;

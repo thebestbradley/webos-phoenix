@@ -1,0 +1,15 @@
+{
+    "//": "Where this device finds the Phoenix platform and which keys it trusts: the one configuration of every service that talks to it (docs/PLATFORM-CLIENT.md; schema docs/platform-api/servers.schema.json). This file is the simulator's and a development image's: the servers on this computer (server/marketplace on 127.0.0.1:8088 for the catalog and the update feed, the sample driver catalog), no account server (the account, cloud backup, push and the assistant provider say \"not set up\"). A device image gets its own, written when it is built from the PHOENIX_* settings of meta-phoenix (tools/servers-json.py). With Developer Mode on, Settings > Developer Mode > Platform Servers lays an override over it (for a staging server or tools/platform-mock).",
+    "format": 1,
+    "name": "This computer (development)",
+    "feeds": "http://127.0.0.1:8088/",
+    "api": null,
+    "catalog": { "url": "v1/", "key": null, "root": null },
+    "updates": { "url": "updates/", "channel": "stable", "channels": ["stable", "beta", "dev"], "key": null, "root": null },
+    "revocations": { "url": "v1/revoked.json" },
+    "drivers": { "url": "file:///usr/share/phoenix/hardware/sample/v1/", "key": "KEAXsw9Dql00scrFTxAblCi4HsZnk7ApHyAA5jZ6WUo=", "reportUrl": "http://127.0.0.1:8090/v1/report" },
+    "account": { "issuer": null, "clientId": "phoenix-device", "scope": "openid account backup push reviews assistant", "key": null },
+    "push": { "server": null },
+    "assistant": { "url": null },
+    "connectivity": { "probe": null }
+}

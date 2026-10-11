@@ -84,6 +84,22 @@ fields, same signature bytes) or adds a new version beside the old one. All
 of it is served today by `server/marketplace` (PHP 8, no framework) and
 `server/drivers` on this computer.
 
+**Since 11 October 2026 the device side is ready for the platform:**
+[PLATFORM-CLIENT.md](PLATFORM-CLIENT.md) lists every request a device
+makes, how it verifies and caches it, and the mismatches with this page
+that were fixed (here and on the device). The contract both sides build
+to is [platform-api/](platform-api/) (OpenAPI and JSON Schemas), and
+`tools/test-platform-client.cjs` checks a server against it. Every address
+and key now comes from one file, `/etc/palm/phoenix/servers.json` (written
+from meta-phoenix's `PHOENIX_*` settings; the simulator's points at this
+computer): where 2.1-2.4 below say `sources.json`, `updates.json` or
+`catalog.json` gives a URL or key, read servers.json. Done on the device
+since: the catalog key's root delegation (7.1 step 2, Q45), the signed
+revocation list (6.7), the `dev` channel, staged rollout and a signed
+update feed (format 2, 6.9, Q56), app rollouts, the account service, First
+Use's account step, Phoenix Cloud backup, push channel registration, the
+token relay client and the assistant provider (12).
+
 ### 2.1 The Marketplace catalog (signed static index)
 
 Read by `org.webosphoenix.service.packages`
@@ -219,8 +235,8 @@ devices hard-code small.
 
 | Host | Serves | Kind | Devices name it in |
 | --- | --- | --- | --- |
-| `feeds.webosphoenix.org` | `/catalog/v1/` (2.1), `/updates/` (2.3), `/drivers/v1/` (2.4), `/revocations/v1/` (6.7) | Static files on object storage behind a CDN; written only by the platform's publisher | `sources.json`, `updates.json`, `catalog.json` |
-| `api.webosphoenix.org` | `/v1/...` the device and account API (5, 6), `POST /drivers/v1/report`, `/oauth/...` (Passport), `/relay/...` (provider webhooks), WebDAV for backups at `/dav/` | Laravel | the account service, backup preset, push service, OAuth broker, assistant provider, the hardware report URL |
+| `feeds.webosphoenix.org` | `/catalog/v1/` (2.1), `/updates/` (2.3), `/drivers/v1/` (2.4), `/revocations/v1/` (6.7) | Static files on object storage behind a CDN; written only by the platform's publisher | `/etc/palm/phoenix/servers.json` (`feeds`; [PLATFORM-CLIENT.md](PLATFORM-CLIENT.md)) |
+| `api.webosphoenix.org` | `/v1/...` the device and account API (5, 6), `POST /drivers/v1/report`, `/oauth/...` (Passport), `/relay/...` (provider webhooks), WebDAV for backups at `/dav/` | Laravel | `/etc/palm/phoenix/servers.json` (`api`, `account.issuer`): the account service, backup, push, OAuth broker, assistant provider, the hardware report |
 
 Everything else is for people and can move freely:
 
@@ -620,10 +636,16 @@ device token) ->
   },
   "validUntil": "2026-11-10T00:00:00Z",
   "graceDays": 7,
-  "issued": "2026-10-10T12:00:00Z",
-  "signature": "base64 Ed25519 over the JSON without this field, by the API key in key.json"
+  "issued": "2026-10-10T12:00:00Z"
 }
 ```
+
+Signed in the header `X-Phoenix-Signature`: base64 Ed25519 over the
+body's exact bytes, by the API key (`GET /v1/key.json`, pinned in the
+image as servers.json's `account.key`). *(This page first had a
+`signature` field "over the JSON without this field"; that needs a
+canonical JSON form PHP and JavaScript do not share, so the device checks
+the header instead: [PLATFORM-CLIENT.md](PLATFORM-CLIENT.md).)*
 
 The device caches it and keeps working through `graceDays` past
 `validUntil` when offline. The server enforces every limit itself (quota on
@@ -663,7 +685,10 @@ credentials are a WebDAV app password made for that device (scope
 `backup`, shown never again, revocable from Devices), so the existing
 `lib/webdav.js` works unchanged; the only device change is a preset
 ("Phoenix Cloud" in Settings > Backup and First Use > Restore, filled in
-from the signed-in account: 12).
+from the signed-in account: 12; done). A device's app password writes its
+own folder and reads (GET, PROPFIND) the account's other devices' folders,
+which is how First Use restores another device's backup onto a new one;
+`tools/platform-mock/server.cjs` enforces exactly that.
 
 What the server can see: the file names (date and time), sizes, upload
 times, and the `.pbak` header (when, which device, which parts, the key
@@ -736,7 +761,7 @@ Most providers Phoenix connects to accept **public clients with PKCE**:
 the device does everything, no server sees a token
 ([SYNERGY-MODERN.md](SYNERGY-MODERN.md) 4.4: Google (its desktop "secret"
 is not treated as secret), Microsoft (public client), Mastodon (per-device
-registration), Dropbox, Box, Spotify). Those need nothing from the
+registration), Dropbox, Spotify; Box, but for its secret: Q78). Those need nothing from the
 platform but the registration itself, whose **client id is public** and
 ships in the connector package.
 
@@ -785,7 +810,8 @@ redirect URLs registered.
 | --- | --- | --- | --- |
 | Google (Drive, Calendar; Gmail later) | Public client, PKCE | client id (and its non-secret desktop secret) | Relay for Calendar/Gmail push; domain verification; OAuth consent screen's homepage and privacy policy on the website |
 | Microsoft (Entra app) | Public client | client id | Relay for Graph webhooks |
-| Dropbox, Box, Spotify | PKCE | client id | nothing |
+| Dropbox, Spotify | PKCE | client id | nothing |
+| Box | PKCE, but its token exchange asks for the secret | client id (the secret: Q78) | the broker, if Q78 says so |
 | Slack, LinkedIn, Zoom, Yahoo | Confidential | client id | the broker holds the secret |
 | Telegram | `api_id` / `api_hash` for TDLib, not OAuth | both, as every open-source Telegram client does; Telegram asks each fork to register its own | nothing; kept out of the public tree as a build setting (SYNERGY-CONNECTORS.md 7), knowing it can be read from an image |
 | Bluesky (atproto OAuth) | Client id is a URL | the URL | the metadata JSON at a stable address (6.5.6) |
@@ -1019,14 +1045,20 @@ the packages and pictures on `feeds.<domain>/catalog/v1/`.
   `router.php:20-37` stays as a fallback route on the API host for a copy
   not made yet.
 - **Revocations**: `feeds.<domain>/revocations/v1/revoked.json`
-  `{"format": 1, "generated", "apps": [{"id", "reason": "malware" | "legal"
-  | "developer", "date"}], "signature"}` signed with the catalog key over
-  the app ids as the runtime's `revoke` expects (the ids joined, Ed25519);
-  plus the same list as an optional `revoked` field in the index. The
-  device fetching it is new work (12); APP-STORE.md 3.9 promises "no silent
-  remote uninstall", so the device warns and offers removal unless the
-  reason is malware, where it removes and says so (owner to confirm,
-  Q56).
+  `{"format": 1, "sequence", "generated", "expires", "apps": [{"id", "kind":
+  "app" | "connector", "reason": "malware" | "security" | "legal" |
+  "developer", "date", "text"?}], "keys": [revoked online keys]}` with a
+  detached `revoked.json.sig` by the catalog's key (or a key delegated for
+  scope `catalog`), over the whole file; plus the same entries as an
+  optional `revoked` field in the index. *(First written as a `signature`
+  field over the app ids joined, as the runtime's `com.palm.appinstaller/revoke`
+  takes them; that left the reason, which decides between removing and
+  warning, unsigned.)* The device reads it at every catalog refresh (done,
+  `packagesservice.js`): APP-STORE.md 3.9 promises "no silent remote
+  uninstall", so the device warns and offers removal unless the reason is
+  malware or a security hole, where it removes and says so (Q56's default);
+  a revoked app never installs again. Schema:
+  [platform-api/feeds.schema.json](platform-api/feeds.schema.json).
 - **Mirrors**: any HTTPS host may mirror `/catalog/v1/` byte for byte
   (APP-STORE.md 3.8); the platform offers an rsync endpoint or an S3 bucket
   listing for mirror operators, and the index may list `source.mirrors`
@@ -1058,26 +1090,38 @@ channel. **Users:** every device; the owner and release managers.
   (or on `downloads.` with absolute URLs: the device resolves `url`
   relative to the feed file with `new URL(rel.url, url)`,
   `updatesservice.js:263`, so an absolute URL works the same).
-- **Channels**: `stable` and `beta` today. A `dev` channel (nightlies)
-  needs `dev` added to `CHANNELS` on the device and in `UpdateFeed.php`
-  (12). Channel switching stays on the device (Settings > Updates).
-- **Staged rollout**: not in format 1. Add optional `"rollout":
-  {"percent": 0-100, "seed": "…"}` in `release`; new devices install only
-  when `hash(seed + device random) mod 100 < percent`; old devices ignore
-  it. Raising the percentage is a republish of the JSON. **Pausing** a
-  release is `percent: 0` (new) or withdrawing it (exists: `POST
+- **Channels**: `stable`, `beta` and `dev` (nightlies; done on the device
+  and in `UpdateFeed.php`, Q56); the ones an image offers are servers.json's
+  `updates.channels`. Channel switching stays on the device (Settings >
+  Updates).
+- **Staged rollout** (done): optional `"rollout": {"percent": 0-100,
+  "seed": "…"}` in `release`; a device takes the release when its bucket,
+  the first four bytes of SHA-256(seed + ":" + its own random rollout id)
+  as a big-endian number modulo 100, is below `percent`; older devices
+  ignore it. Raising the percentage is a republish of the JSON. **Pausing**
+  a release is `percent: 0` or withdrawing it (`POST
   /api/admin/updates/withdraw`, which sets `release: null`, so devices that
-  have not downloaded it stop seeing it).
+  have not downloaded it stop seeing it), and **revoking** a build after
+  release is `revoked: [build]` in format 2: devices that downloaded or
+  prepared it drop it.
+- **Format 2, signed** (done on the device, ahead of "later"): the same
+  file with `sequence` (never lower), `generated`, `expires` and `revoked`,
+  and `<channel>.json.sig` (detached Ed25519) by the updates key, or an
+  online key the offline root delegates to in `updates/key.json` (scope
+  `updates`). A device whose servers.json pins the key or root takes only
+  format 2; format 1 stays for development feeds. Schema:
+  [platform-api/feeds.schema.json](platform-api/feeds.schema.json).
 - **The device's checks** stay what they are: size and SHA-256 against the
   feed, RAUC's signature against the keyring in the running image,
-  `compatible`, a higher build. The feed is not signed, so a hostile mirror
-  can **withhold** updates (a freeze) but not install anything; a later
-  format 2 can add an Ed25519 signature and `expires` as the catalog has
-  (Q56 covers the device changes).
+  `compatible`, a higher build, plus format 2's signature, `expires` and
+  `sequence`: a hostile mirror can withhold a newer feed only until the one
+  the device has expires, and cannot replay an older one. After the restart
+  into a new system the device marks it good (`rauc status mark-good`) when
+  the System UI is up.
 - **Mirrors and CDN**: bundles are immutable files (`max-age=31536000,
   immutable`), ideal for a CDN; RAUC's adaptive updates (block hashes,
-  HTTP range requests) need a server that answers ranges, which every CDN
-  does.
+  HTTP range requests) and the device's resumed downloads (`Range: bytes=n-`)
+  need a server that answers ranges, which every CDN does.
 
 The release pipeline (CI, offline signing, approval) is in 7.3.
 
@@ -1269,9 +1313,14 @@ malicious package (it also holds the packages' SHA-256s). Two steps:
    the root; `key.json` carries the online key with a delegation signed by
    the root and an expiry (90 days); the owner renews the delegation
    quarterly from the USB key; a leaked online key is replaced at once by a
-   new delegation, and expires anyway. Needs a small change in
-   `lib/catalog.js` (12). Recommended (Q45). The driver catalog's hand-over
-   (`drivers.js:210-225`) is the precedent for key changes.
+   new delegation, and expires anyway. Recommended (Q45), and **done on
+   the device** for the catalog and the update feed: `key.json`'s
+   `delegations` and the exact text the root signs are in
+   [PLATFORM-CLIENT.md](PLATFORM-CLIENT.md#signatures-and-keys); devices pin
+   the roots in servers.json (`catalog.root`, `updates.root`), so the
+   platform can start with step 1's signer and only publish delegations.
+   The driver catalog's hand-over (`drivers.js:210-225`) is the precedent
+   for key changes.
 
 ### 7.2 RAUC keys
 
@@ -1639,23 +1688,20 @@ reverse: the simulator talks to the public catalog by default and the repo
 server becomes test-only.)
 
 **Running the platform against the simulator** (for its contract tests and
-by hand): start the platform on `127.0.0.1:8088`, where the simulator's
-default sources and update feed already point
-(`sources.json:4`, `updates.json`), with the catalog served at `/v1/` and
-updates at `/updates/` in its local configuration (the production layout
-`/catalog/v1/` is a configuration value); do not start the repo's catalog
-(Services > Marketplace Catalog off). Trust its key when the Marketplace
-shows the fingerprint, or add another catalog by address in the
-Marketplace's catalogs (`addSource` with its URL). For updates, the
-runtime's `"updates:config"` store key stands for an edited
-`/etc/palm/updates.json` (`runtime/phoenix-runtime.js` around 13777-13783,
-as `tools/test-updates.cjs` uses), so a test can point the feed elsewhere;
-for drivers, `"hardware:config"` likewise (APP-RUNTIME.md "Hardware and
-drivers"). Then `./phoenix run tablet --launch org.webosphoenix.marketplace
---screenshot out.png --delay 8000` and `NODE_PATH="$(npm root -g)" node
-tools/test-marketplace.cjs` (which starts the repo's server itself today:
-its server start would need an option to use an already running server at
-a given URL; a small change in `apps/marketplace/service/test/servers.cjs`).
+by hand): the platform publishes its own servers.json at `GET
+<api>/v1/servers.json`; in the simulator turn on Developer Mode and enter
+that address in Settings > Developer Mode > Platform Servers ("Use These
+Servers"): the catalog, the update feed, the revocation list, the account
+and the cloud services all follow, with the platform's roots pinned (no
+fingerprint step). The repo's catalog need not run. The automatic way is
+the conformance suite, `node tools/test-platform-client.cjs --api
+<api> --token <conformance token> --ui` ([PLATFORM-CLIENT.md](PLATFORM-CLIENT.md#conformance)),
+which drives the device's own services and the simulator's pages against
+the platform and checks every reply against
+[platform-api/](platform-api/). `tools/platform-mock/server.cjs` is the
+reference it is tested with. *(Before 11 October 2026 this said to run the
+platform on 127.0.0.1:8088 and edit `sources.json`, `updates.json` or the
+runtime's `"updates:config"`; servers.json replaced them.)*
 
 ---
 
@@ -1666,18 +1712,17 @@ so nothing is forgotten. Each is small unless said.
 
 | Change | Where | When |
 | --- | --- | --- |
-| Public catalog URL and the **pinned** production key | `apps/marketplace/service/etc/palm/marketplace/sources.json` | Before the first device image |
-| Update feed URL | `services/updates/etc/palm/updates.json` | Before the first device image |
-| Driver catalog URL, pinned key, report URL | `services/hardware/etc/palm/hardware/catalog.json` | Before the first device image |
-| Catalog key delegation (root + online key) or at least a hand-over like the drivers' | `apps/marketplace/service/lib/catalog.js`, `packagesservice.js` | Before 1.0 (Q45) |
-| Revocation list fetch and the warning/removal flow | packages service, runtime's `revoke` | 1.0 |
-| `dev` channel; `rollout` in releases; later a signed feed (format 2) | `updatesservice.js:81`, `UpdateFeed.php:25`, Settings > Updates | Before the first device image (dev, rollout); later (signing) (Q56) |
-| `release.rollout` for apps | `lib/catalog.js` | Later |
-| The account service, Settings > Pre Account, First Use's step | new `services/account` (or in `apps/settings/service`), `apps/firstuse/src/lib/flow.ts`, `apps/settings` | 1.0 |
-| "Phoenix Cloud" preset in Backup and Restore | `apps/settings/service` (backup), `Backup.tsx`, First Use | With the subscription (P3) |
-| Push service (C6), relay channel registration | `org.webosphoenix.service.push` (designed in SYNERGY-MODERN.md 4.8) | P3 |
-| OAuth broker option | `services/oauth/oauthservice.js` `authorize` | With the first confidential provider (Slack) |
-| "Phoenix" assistant provider type | `apps/assistant/service`, `Assistant.tsx` | P3 |
+| Public catalog URL and the **pinned** production root, update feed URL and root, driver catalog URL and key, report URL, account issuer, API key | One file, `/etc/palm/phoenix/servers.json`, from meta-phoenix's `PHOENIX_*` settings (`tools/servers-json.py`) | **Done** (11 Oct 2026); the owner sets the keys before the first device image |
+| Catalog key delegation (root + online key) | `@phoenix/platform` `signed.js`, `packagesservice.js` | **Done** (Q45) |
+| Revocation list fetch and the warning/removal flow | `packagesservice.js` `refreshRevocations`, `applyRevocations` | **Done** |
+| `dev` channel; `rollout` in releases; a signed feed (format 2) | `updatesservice.js`, `UpdateFeed.php`, Settings > Updates | **Done** (Q56) |
+| `release.rollout` for apps | `lib/catalog.js`, `packagesservice.js` | **Done** |
+| The account service, Settings > Phoenix Account, First Use's step | `services/account`, `apps/settings` `Account.tsx`, `apps/firstuse` | **Done** |
+| "Phoenix Cloud" preset in Backup and Restore | `apps/settings/service` (backup), `Backup.tsx`, First Use | **Done** |
+| Push service (C6), relay channel registration | registration: **done** (`services/account` `pushEndpoint`, `pushRegister`); the ntfy connection and decryption: `org.webosphoenix.service.push` (SYNERGY-MODERN.md 4.8) | P3 |
+| OAuth broker option | client: **done** (`services/account` `tokenRelay`); the option in `services/oauth/oauthservice.js` `authorize` | With the first confidential provider (Slack) |
+| "Phoenix" assistant provider type | `apps/assistant/service` | **Done** |
+| RAUC in the image (recipe, `system.conf`, keyring) and mark-good | meta-phoenix (mark-good: **done** in `com.palm.update`) | Before the first device image (7.2) |
 | Model download mirror | `apps/assistant/service/lib/models.js:45` | When GitHub releases stop being used |
 | Release simulator builds read the public catalog | `shell/sim` build setting, `sources.json` for release builds | With the first simulator download |
 | Connectivity probe and NTP vendor zone | `meta-phoenix` configuration | Before the first device image |

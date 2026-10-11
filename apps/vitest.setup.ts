@@ -10,6 +10,22 @@ import { afterEach } from "vitest";
 
 afterEach(cleanup);
 
+// The system's own services (../services/*) are plain CommonJS outside the
+// workspace; their require("@phoenix/platform") (a device has a copy in
+// each service's node_modules, tools/install-rootfs.py) finds the
+// workspace's package here, as Node would with NODE_PATH.
+if (typeof process !== "undefined" && process.versions && process.versions.node) {
+    const { createRequire } = await import("node:module");
+    const req = createRequire(import.meta.url);
+    const Module = req("node:module") as { _initPaths?: () => void };
+    const nodeModules = new URL("./node_modules", import.meta.url).pathname;
+    const paths = (process.env.NODE_PATH || "").split(":").filter(Boolean);
+    if (!paths.includes(nodeModules)) {
+        process.env.NODE_PATH = [nodeModules, ...paths].join(":");
+        Module._initPaths?.();
+    }
+}
+
 // Synchronous XMLHttpRequest to the page's own origin: the runtime reads
 // the device's files that way (PalmSystem.getResource: sample-data.js, the
 // services' scripts, apps.json, the media samples), and in the tests

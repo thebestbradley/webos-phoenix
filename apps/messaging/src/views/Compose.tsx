@@ -37,7 +37,7 @@ export function Compose({ people, buddies, accounts, onSent, initialTo, initialT
         if (!r) { setError("Choose who to send this to"); return; }
         setError(null);
         const addr = { addr: r.addr, name: r.name };
-        const sent = r.service && r.account ? messaging.sendIm(r.service, r.account, addr, text)
+        const sent = r.service && r.account ? messaging.sendIm(r.service, r.account, addr, text, undefined, parts)
             : parts.length ? messaging.sendMms(addr, text, parts)
             : messaging.sendSms(addr, text);
         sent.then((ids) => { if (ids[0]) onSent(ids[0]); }, (e) => setError(e.errorText ?? e.message ?? "Could not send"));

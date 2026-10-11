@@ -61,6 +61,8 @@ var manager = sm.createSystemManager({
     // erase, as the simulator's runtime asks it.
     wipe: function () {
         console.error("[systemmanager] the security policy's last try failed: erasing the device");
+        // The OAuth service's sealed tokens and their key first (services/oauth/keystore.js).
+        service.call("luna://org.webosphoenix.service.oauth/wipe", {}, function () {});
         service.call("luna://com.palm.storage/erase/Wipe", {}, function (m) {
             if (!m.payload || m.payload.returnValue !== true)
                 console.error("[systemmanager] com.palm.storage/erase/Wipe failed: " + JSON.stringify(m.payload));

@@ -29,10 +29,10 @@ kit**, and a few gaps found in today's code that block third-party connectors.
 | Piece | Today | Where |
 | --- | --- | --- |
 | Accounts app | The original Enyo app, unmodified, over the runtime's simulated `com.palm.service.accounts` | `third_party/core-apps/com.palm.app.accounts`, overlay in `compat/rootfs/usr/palm/applications/com.palm.app.accounts` |
-| Templates | HP profile, IMAP, POP, other mail; CardDAV & CalDAV; Subscribed Calendar (webcal); a simulated Jabber (XMPP) account | `compat/rootfs/usr/palm/public/accounts/`, `apps/dav/public/accounts/`, runtime block "Instant messaging" |
+| Templates | HP profile, IMAP, POP, other mail; CardDAV & CalDAV; Subscribed Calendar (webcal); the connector packages' own (the Fediverse, Unofficial Telegram; Jabber, Matrix, Delta Chat from the catalog) | `compat/rootfs/usr/palm/public/accounts/`, `apps/dav/public/accounts/`, each package's `public/accounts/` |
 | Reference connector | `apps/dav`: hidden app + wizard + template + db8 kinds and permissions + Node service with luna-service2 files | `apps/dav/` (layout in section 3.1) |
-| Marketplace | Index kinds `pwa`, `ipk` and (C4) `connector`: a package with a service only as a connector that passes the rules; third-party connectors need Developer Mode on the device, the pre-installed ones (the Fediverse) do not | `server/marketplace/src/Catalog.php` `publish()`, `src/Ipk.php` (header: "no services"), `apps/marketplace/service/packagesservice.js` lines 338-357 |
-| OAuth, key store, push, synckit | synckit built (C1); the OAuth service's sign-in with PKCE built for the Fediverse (C2), its sheet and key store in the simulator only; push planned. Simulator keeps credentials in localStorage | SYNERGY.md 2.3, 2.9; SYNERGY-MODERN.md 4.2, 4.8; `services/oauth` |
+| Marketplace | Index kinds `pwa`, `ipk` and (C4) `connector`: a package with a service only as a connector that passes the rules; third-party connectors need Developer Mode on the device, the pre-installed ones (the Fediverse, Unofficial Telegram) and Phoenix's own in its catalog (Jabber, Matrix, Delta Chat: `preinstalled.json` "firstParty", OPEN-QUESTIONS Q94) do not | `server/marketplace/src/Catalog.php` `publish()`, `src/Ipk.php` (header: "no services"), `apps/marketplace/service/packagesservice.js` lines 338-357 |
+| OAuth, key store, push, synckit | synckit built (C1); the OAuth service's sign-in with PKCE built for the Fediverse (C2), on a device through the Sign In card, the loopback redirect and a sealed key store (4.1, "As built"; written, not run on hardware); push planned. Simulator keeps credentials in localStorage | SYNERGY.md 2.3, 2.9; SYNERGY-MODERN.md 4.2, 4.8; `services/oauth` |
 
 **Gaps that matter for third-party connectors** (found while reading the code):
 
@@ -115,10 +115,10 @@ the earlier pages.
 
 | Account | Protocol / API | Auth | Reg | Terms / notes | P |
 | --- | --- | --- | --- | --- | --- |
-| Matrix (and bridged networks on the user's server) | Matrix client-server, sliding sync, E2EE | PW / SSO / OAuth (MAS) | none | SM 2.4; bridges documented, not shipped | P1 |
-| XMPP (Jabber) | XMPP + XEP-0198/0357, OMEMO | PW | none | Simulated today; a real connector added to the plan by the owner (10 October 2026, section 7); OMEMO library licence (SM 5, 6a) | P1 |
-| Telegram | TDLib | phone login | own `api_id` | SM 6b; "Unofficial" naming rule | P3 |
-| **new** Delta Chat (chat over email) | IMAP/SMTP + Autocrypt; core library `deltachat-core-rust` | PW | none | The library is MPL-2.0 *(check)*, which allows linking with per-file copyleft. Fits Synergy because the account is already a mail account | P3 |
+| Matrix (and bridged networks on the user's server) | Matrix client-server, sliding sync, E2EE | PW / SSO / OAuth (MAS) | none | SM 2.4; bridges documented, not shipped. **Built** (11 October 2026, `apps/connectors/matrix`): E2EE not yet (OPEN-QUESTIONS Q91) | P1 |
+| XMPP (Jabber) | XMPP + XEP-0198/0357, OMEMO | PW | none | **Built** (11 October 2026, `apps/connectors/xmpp`; section 7); OMEMO: no permissive library (OPEN-QUESTIONS Q90) | P1 |
+| Telegram | TDLib | phone login | own `api_id` | SM 6b; "Unofficial" naming rule. **Built** (11 October 2026, `apps/telegram`, "Unofficial Telegram"): works where the build has the app id (Q16) and TDLib | P3 |
+| **new** Delta Chat (chat over email) | IMAP/SMTP + Autocrypt; core library `deltachat-core-rust` | PW | none | The core is MPL-2.0 (checked: chatmail/core's LICENSE), run as its own program (`deltachat-rpc-server`), not linked. **Built** (11 October 2026, `apps/connectors/deltachat`); in images on the owner's decision (Q89) | P3 |
 | **new** LoRa mesh (Meshtastic, MeshCore): off-grid text through a paired radio | The radio's client protocol over Bluetooth LE, USB serial or TCP | none (a channel key) | none | Added by the owner (10 October 2026, section 7). Needs a radio; licences to check (Meshtastic GPL-3.0, MeshCore MIT) | P2 |
 | **new** IRC with a bouncer | IRCv3 (`chathistory`, `soju` / `ergo` bouncers) | PW / SASL | none | The user runs the bouncer; one thread per channel or person | P3 |
 | WhatsApp, Signal, iMessage, RCS | - | - | - | Positions in SYNERGY.md 2.12 and SM 6 stand | - |
@@ -475,7 +475,7 @@ They are not listed as connectors.
 | Template discovery | Scan both roots, reload on install or remove (gap 2) | Original behaviour; needed by anything installable |
 | Connector trust tier | A sandbox level between web apps and Developer Mode: JS service only, no native code, a fixed luna allow-list (3.2 rule 10), network limited to declared hosts or the user's server, a CPU/wake budget | The concrete form of APP-STORE.md A5 for connectors |
 | db8 permissions | Readers of a generic kind may read kinds that extend it; a connector may grant access only to its own kinds (gap 4) | Verify OSE db8 semantics first |
-| OAuth service | `org.webosphoenix.service.oauth`: PKCE, loopback redirect, device-code fallback (SYNERGY.md 2.3, SM 4.4), shown as a **system browser sheet** over the Accounts card. The address bar is visible and the page can't be read by the connector | Never an embedded web view; bring-your-own client id per connector |
+| OAuth service | `org.webosphoenix.service.oauth`: PKCE, loopback redirect, device-code fallback (SYNERGY.md 2.3, SM 4.4), shown as a **system browser sheet** over the Accounts card (on a device the **Sign In card**: "As built" below). The address bar is visible and the page can't be read by the connector | Never an embedded web view; bring-your-own client id per connector |
 | Key store | `org.webosphoenix.service.keystore` behind the legacy `com.palm.keymanager` API (SYNERGY.md 2.9). Also holds per-account keys for encrypted local stores (Matrix, Standard Notes, Bitwarden) | Exclude it from unencrypted backup (SM 4.5) |
 | Push | UnifiedPush distributor over Luna + optional relay (SM 4.8, 4.9); the kit's `push` option registers for the connector | Polling stays the fallback |
 | Rate limits | Per-account backoff in the kit; a per-connector budget enforced by the activity manager; show "paused: provider asked us to slow down" | |
@@ -484,6 +484,66 @@ They are not listed as connectors.
 | Per-account data permissions | In Accounts: what each account syncs (already capability switches) **and which apps may see it** (e.g. a work account's contacts hidden from Messaging), plus "Export my data" and "Remove data on sign-out" | New UI in an overlay; enforced by db8 queries per app |
 | Account health | One list of sync states, last sync, errors, data used, battery attributed per account | Builds on `lib/syncui` dashboards |
 | Webhooks | Only through the relay; the device creates subscriptions itself so the relay never holds tokens (SM 4.9) | |
+
+**As built: OAuth sign-ins on a device** (11 October 2026; the owner's
+design: a system card rather than a sheet, as WebAppMgr has no web view,
+OPEN-QUESTIONS Q38). Written against OSE's sources and tested in Node,
+Chromium and phoenix-sim; not yet run on hardware.
+
+- **The Sign In card** `org.webosphoenix.signin` (`apps/signin`): the OAuth
+  service launches it through SAM with `{session}` only; its page asks
+  `pending {session}` (group `oauth.card`, the card's only one) for the
+  address and replaces itself with the provider's real page, which
+  WebAppMgr loads in the card like any page (WAM has no navigation policy
+  for an app's main frame: `web_page_blink.cc:686-698` only logs it). The
+  original showed a connector's sign-in inside Accounts (the template's
+  `validator.customUI` page in a cross-app iframe, enyo-1.0
+  `lib/accounts/source/entry-add.js:55-56`, `cross-app.js:17-26`) with an
+  embedded browser view for a provider's site (`palm/controls/BasicWebView.js:92`),
+  which the connector's page could script; here no page of the connector
+  sees the provider's page or the tokens. The card is `trustLevel`
+  `default` (a trusted app's page may load local files,
+  `web_page_blink.cc:139-143`). Phoenix's runtime is not in the provider's
+  page (install-rootfs.py adds it to the app's own HTML only); WebAppMgr's
+  own `webOSSystem` and bridge are, as in every page it loads
+  (`web_page_blink.cc:957-960`), limited by the card's groups (Q95).
+- **The bar**: the shell draws it over the card (`Phoenix.Shell
+  SignInBar`: the provider's host, a lock for https, Cancel), from the
+  OAuth service's `signInCard` message through `org.webosphoenix.shellhost`,
+  which only that service's bus name can send; Cancel closes the card.
+  phoenix-sim's bar follows the page's address; a device's shows the host
+  the sign-in started at (Q95).
+- **The redirect**: RFC 8252 7.3 loopback, `services/oauth/loopback.js`:
+  127.0.0.1 only, only while a sign-in waits; an ephemeral port, or the
+  fixed 47613 for providers that match exactly (per provider:
+  DEVELOPER-APPS.md "The redirect on a device"). It answers only its
+  path with this sign-in's `state` (others get 404 or 400, so a program
+  guessing the port cannot end the sign-in), then stops; the code is
+  exchanged with the PKCE verifier, the card closed, the caller answered.
+  The card closed by the user (SAM's `getAppLifeEvents` "close"/"stop"):
+  `CANCELED`; nothing back in ten minutes: `TIMEOUT`; a second sign-in
+  replaces the first once its card has gone.
+- **The key store**: `services/oauth/keystore.js`, one AES-256-GCM sealed
+  file (`/var/lib/phoenix/oauth/keys.enc`, a fresh IV per write) under a
+  data key in `master.key` (0600 in a 0700 folder) until the key store
+  service (Q96); tokens, refresh tokens and client secrets (a Mastodon
+  server's) inside; the placeholder's plain `keys.json` is sealed in and
+  overwritten on first use. Tokens go only to the service that owns the
+  key (ACG group `oauth.signin`, oem; the owner check), never to a page;
+  a sign-out's `forget` revokes and deletes; `wipe` (the shell's Full
+  Erase, the system manager's Wipe; group `oauth.erase`) removes the store
+  and its key.
+- **Simulator**: the sheet stays the default; `__phoenixRuntime.oauthUseCard(true)`
+  switches the runtime's OAuth service to the card (`tools/test-signin-card-sim.cjs`;
+  `docs/screenshots/signin-card-phone.png`, `signin-card-tablet.png`: a
+  fake provider's page in the card, the bar's open grey lock for its plain
+  `http`).
+- **Tests**: `services/oauth/oauth.test.ts` (PKCE, state, the listener,
+  cancel, timeout, a second sign-in, refresh, revocation, sealing,
+  migration, wipe), the Fediverse's `connector.test.ts` on the device
+  path, `tools/test-signin-card.cjs` (the card's page in Chromium against a
+  fake provider and the fake Mastodon server), `shell/tests-device/tst_lsm.qml`
+  and `shell/tests/tst_signinbar.qml` (the bar).
 
 ### 4.2 Keep
 
@@ -553,8 +613,8 @@ with provider" flag.
   with PKCE in the system's browser sheet (the share sheet's page, kind
   `signin`: the server's page in a web view, its address above it); the
   token in the key store (in the simulator the runtime's credential storage;
-  on a device a placeholder file until the key store, and no sheet yet:
-  `services/oauth/service.js`); the account's credentials keep only the key.
+  on a device sealed with AES-256-GCM, and the sign-in in the Sign In card:
+  4.1, "As built"); the account's credentials keep only the key.
   Scopes: `read:accounts read:follows read:notifications read:statuses
   write:statuses write:media`.
 - **Contacts** (read only): the accounts you follow, as
@@ -583,8 +643,8 @@ with provider" flag.
   visibility chosen (public, unlisted, followers, mentioned only), through
   the kit's `share` method, with an `Idempotency-Key`.
 - **Not done**: Pixelfed albums in Photos (no PHOTO capability or kinds yet;
-  OPEN-QUESTIONS.md Q3), Bluesky, Web Push (C6), the sheet and key store on
-  a device (C3).
+  OPEN-QUESTIONS.md Q3), Bluesky, Web Push (C6). (The sign-in and key
+  store on a device: 4.1, "As built", 11 October 2026.)
 - **Tests**: a fake Mastodon server (`apps/fediverse/service/test/fake-mastodon.cjs`,
   following docs.joinmastodon.org page by page), the conformance suite and
   unit tests (`connector.test.ts`), and `tools/test-fediverse.cjs`, the whole
@@ -619,7 +679,9 @@ ownCloud, any server; an app password), SFTP and S3-compatible storage
 (Backblaze B2, MinIO, Wasabi); then with the OAuth service (C3) Dropbox,
 OneDrive (Microsoft Graph) and Google Drive (its restricted scope needs
 Google's verification; the per-file scope avoids most of it). iCloud Drive:
-not planned.
+not planned. *Built in the simulator (11 October 2026) but SFTP:
+[SHARE-AND-FILES.md](SHARE-AND-FILES.md) "Drives"; the registrations each
+OAuth drive needs: [DEVELOPER-APPS.md](DEVELOPER-APPS.md).*
 
 **Telegram** (C3, after Bluesky): a Messaging and Contacts connector on
 TDLib (Telegram's own client library, Boost Software License), driven from
@@ -664,9 +726,8 @@ in Messaging where Graph allows).
 **Box** (C3, with Dropbox, OneDrive and Google Drive): its content API with
 OAuth (Box dropped WebDAV), as a place in Files.
 
-**Jabber (XMPP), a real account** (the owner: "add both"): today's
-"Jabber (XMPP)" account in Connections is simulated (the runtime's
-"Instant messaging" block). It becomes a real connector on the kit: sign-in
+**Jabber (XMPP), a real account** (the owner: "add both"). *Built, 11
+October 2026: see "Messaging accounts, as built" below.* It becomes a real connector on the kit: sign-in
 with the Jabber ID and password (SASL SCRAM; the server found from the
 domain's SRV records), chats as Messaging conversations (`com.palm.immessage`
 as the original's IM transports wrote them), the roster as contacts linked
@@ -739,6 +800,36 @@ registered by the Phoenix project account (OPEN-QUESTIONS Q17) and listed
 in the Slack Marketplace (Slack's review); a workspace's admins can also
 refuse outside apps. Until it is listed it is built and tested with those
 limits.
+
+**Messaging accounts, as built** (11 October 2026). Four IM transports on
+the kit (docs/SYNERGY-SDK.md "Staying connected"), each a connector package
+with its template, db8 kinds (`com.palm.immessage.<x>:1`,
+`com.palm.imloginstate.<x>:1`, a contact kind, and Jabber's
+`com.palm.imbuddystatus.<x>:1` in tempdb) and messages written as the
+original IM transports wrote them (LuneOS's imlibpurpleservice:
+`src/IMMessage.cpp` createDBObject; `inc/IMMessage.h` for `chatType`,
+`channelName`, `channelDisplayName`, `serviceMessageId`, `deliveryStatus`;
+`BuddyListConsolidator.cpp` for the buddies and their contacts;
+`IMLoginState.cpp` for the login state Messaging's My Status writes):
+
+| Account | Package | How | Works today |
+| --- | --- | --- | --- |
+| Jabber (XMPP) | `apps/connectors/xmpp`, catalog | its own XMPP client (`service/lib`): SRV (`_xmpps-client`, `_xmpp-client`), STARTTLS or direct TLS, plain TCP refused but to the loopback, SASL SCRAM-SHA-256/1 (PLAIN only inside TLS), bind, stream management with resumption (XEP-0198), carbons (0280), archive catch-up (0313), HTTP upload (0363) and out-of-band links for pictures, receipts and markers (0184, 0333), chat states (0085), push hooks (0357, for C6), WebSocket (RFC 7395, found through host-meta XEP-0156) where there is no TCP | against Prosody 0.12 (`tools/test-xmpp-server.cjs`), its fake server (vitest, the conformance suite), and in the simulator's pages over WebSocket to the demo server chat.example (`tools/test-xmpp.cjs`). OMEMO: no permissive library (Q90); the sign-in page says the messages are encrypted to the server only |
+| Matrix | `apps/connectors/matrix`, catalog | client-server API: discovery (`.well-known`), simplified sliding sync (MSC4186) or `/v3/sync`, password or the homeserver's OAuth 2.0 (MAS: RFC 7591 registration, PKCE, the system's sign-in sheet), rooms as conversations (direct chats by the other person's Matrix ID, linked to contacts), authenticated media both ways, read receipts both ways, presence | against its fake homeserver (vitest, conformance) and the simulator's demo matrix.example (`tools/test-matrix.cjs`). Encrypted rooms: shown as encrypted, nothing sent into them (Q91) |
+| Delta Chat | `apps/connectors/deltachat`, catalog | Delta Chat's own core, `deltachat-rpc-server` (MPL-2.0, a separate program; JSON-RPC on its standard input and output; the kit starts it as a system helper with its accounts in the service's own folder): an address and password, or a new chatmail address (`dcaccount:`); chats and groups by Message-ID, pictures, delivered and read, read receipts sent; end-to-end encrypted by the core (Autocrypt) | against the real core 2.63 (method names, shapes and errors, offline) and a fake core (vitest, conformance, the simulator's chatmail.example, `tools/test-deltachat.cjs`). The image has the core only with `PHOENIX_DELTACHAT = "1"` (Q89) |
+| Unofficial Telegram | `apps/telegram`, comes with Phoenix | TDLib (BSL-1.0) through `phoenix-tdjson`, a small C bridge putting TDLib's JSON interface on standard input and output (`meta-phoenix/recipes-connectors/tdlib`); phone, code and two-step password; private chats, groups and secret chats (no channels: Q92), pictures, read receipts both ways; the app id a build-time setting (Q16) | against a fake tdjson (vitest, conformance, `tools/test-telegram.cjs` with a test app id); the bridge against a stub libtdjson. Without the app id or TDLib: "not available in this build". Named "Unofficial Telegram", with a picture of its own, as Telegram's terms ask |
+
+Each keeps one connection per account while a capability is on
+(`definition.connection`), signs out on the server when the account is
+deleted, notifies new messages (Messaging opens the conversation), and has a
+sign-up link. Messaging sends pictures where the network takes them, shows
+Delivered and Read, and says on Telegram's conversations what its servers
+can read. Sharing to a person on these networks goes through Messaging's
+share target (the person and network picked there). Just Type's chat
+action reaches them as the original did (`compose.ims`), and the Assistant
+sends on them ("message Priya on Telegram: ..."). The simulator's demos
+(`runtime/rootfs.json`: `/usr/share/phoenix/demo/`) answer only for their
+own domains.
 
 **More platforms** (the owner, 10 October 2026: "add them with the others
 as potentials or not likely"; catalog packages, none pre-installed):

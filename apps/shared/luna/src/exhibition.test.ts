@@ -101,10 +101,10 @@ describe("Settings > Exhibition preferences", () => {
         expect(lastStatus()).toMatchObject({
             exhibition: { enabled: false, startAfter: 30, nightMode: true, nightStart: "23:00", nightEnd: "07:00" },
         });
-        await system.setPreferences({ dockModeSoundPref: "mute", dockwallpaper: { wallpaperName: "Dusk", wallpaperFile: "/usr/palm/applications/org.webosphoenix.settings/wallpapers/dusk.jpg" } });
+        await system.setPreferences({ dockModeSoundPref: "mute", dockwallpaper: { wallpaperName: "Dawn", wallpaperFile: "/usr/palm/applications/org.webosphoenix.settings/wallpapers/dawn.jpg" } });
         expect(lastStatus()).toMatchObject({
             dockModeSound: "mute",
-            dockWallpaperFile: "/usr/palm/applications/org.webosphoenix.settings/wallpapers/dusk.jpg",
+            dockWallpaperFile: "/usr/palm/applications/org.webosphoenix.settings/wallpapers/dawn.jpg",
         });
         const p = await new Promise<Record<string, unknown>>((res) => {
             const sub = subscribe("luna://com.webos.service.systemservice/getPreferences", { keys: ["dockModeSoundPref"] }, (r) => { sub.cancel(); res(r); });

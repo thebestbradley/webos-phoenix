@@ -1,0 +1,11 @@
+{
+    "name": "org.webosphoenix.service.xmpp",
+    "version": "0.2.0",
+    "private": true,
+    "description": "webOS Phoenix Jabber (XMPP) account (Synergy connector on @phoenix/connector-kit): SRV, TLS, SASL SCRAM, stream management, the roster as contacts with presence, chats in Messaging, carbons, the message archive, HTTP upload for pictures",
+    "license": "Apache-2.0",
+    "main": "service.js",
+    "dependencies": {
+        "@phoenix/connector-kit": "*"
+    }
+}

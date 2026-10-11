@@ -1,0 +1,150 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://webosphoenix.org/platform-api/feeds.schema.json",
+    "title": "The Phoenix platform's static feeds (feeds host)",
+    "description": "What a device reads from the feeds host: the catalog index, the update feed, the revocation list, the key files with their delegations. Each signed file has a detached signature beside it (<file>.sig: base64 of the Ed25519 signature of the file's exact bytes, then a newline). The device code that reads them: apps/marketplace/service/lib/catalog.js, services/updates/updatesservice.js, apps/shared/platform/src/{signed,revocations,rollout}.js. New optional fields may be added inside a version; none may be removed or changed (PLATFORM.md 5).",
+    "$defs": {
+        "base64Key": { "type": "string", "pattern": "^[A-Za-z0-9+/]{43}=$", "description": "An Ed25519 public key: base64 of its 32 bytes" },
+        "base64Signature": { "type": "string", "pattern": "^[A-Za-z0-9+/]{86}==$", "description": "An Ed25519 signature: base64 of its 64 bytes" },
+        "dateTime": { "type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z$" },
+        "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "appId": { "type": "string", "pattern": "^[A-Za-z0-9]+([._-][A-Za-z0-9]+)+$" },
+        "rollout": {
+            "type": "object",
+            "description": "A staged rollout: a device takes the release when its bucket, the first four bytes of SHA-256(seed + \":\" + the device's own random rollout id) as a big-endian unsigned number modulo 100, is below percent. The platform only publishes percent and seed; raising percent adds devices, 0 pauses.",
+            "required": ["percent", "seed"],
+            "properties": {
+                "percent": { "type": "integer", "minimum": 0, "maximum": 100 },
+                "seed": { "type": "string", "minLength": 1, "maxLength": 100 }
+            }
+        },
+        "delegation": {
+            "type": "object",
+            "description": "The offline root key's delegation of an online key for one feed (OPEN-QUESTIONS Q45). signature: the root's Ed25519 signature, base64, of the UTF-8 bytes of \"phoenix-key-delegation:1\\n\" + scope + \"\\n\" + key + \"\\n\" + issued + \"\\n\" + expires + \"\\n\" (exactly these strings as they appear in this object).",
+            "required": ["scope", "key", "issued", "expires", "signature"],
+            "properties": {
+                "scope": { "enum": ["catalog", "updates", "drivers"] },
+                "key": { "$ref": "#/$defs/base64Key" },
+                "issued": { "$ref": "#/$defs/dateTime" },
+                "expires": { "$ref": "#/$defs/dateTime" },
+                "signature": { "$ref": "#/$defs/base64Signature" }
+            }
+        },
+        "keyFile": {
+            "type": "object",
+            "description": "<feed>/key.json (catalog/v1/key.json, updates/key.json). Devices that pin the root use delegations (up to four read; two while the online key changes); devices that pin nothing use key after the user checks its fingerprint (the catalog only).",
+            "required": ["key"],
+            "properties": {
+                "key": { "$ref": "#/$defs/base64Key" },
+                "name": { "type": "string" },
+                "fingerprint": { "type": "string", "pattern": "^([0-9A-F]{4} ){7}[0-9A-F]{4}$", "description": "First 16 bytes of SHA-256 of the key, hex upper case, groups of 4" },
+                "delegations": { "type": "array", "items": { "$ref": "#/$defs/delegation" }, "maxItems": 4 }
+            }
+        },
+        "release": {
+            "type": "object",
+            "required": ["version", "build", "url", "size", "sha256"],
+            "properties": {
+                "name": { "type": "string" },
+                "version": { "type": "string", "minLength": 1 },
+                "build": { "type": "integer", "minimum": 1 },
+                "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+                "notes": { "type": "array", "items": { "type": "string" } },
+                "url": { "type": "string", "minLength": 1, "description": "The RAUC bundle, relative to the feed file or absolute; served with ranges (resumed downloads)" },
+                "size": { "type": "integer", "minimum": 1 },
+                "sha256": { "$ref": "#/$defs/sha256" },
+                "rollout": { "$ref": "#/$defs/rollout" }
+            }
+        },
+        "updateFeed": {
+            "type": "object",
+            "description": "<updates>/<compatible>/<channel>.json; channel stable, beta or dev. Format 2 is signed (<channel>.json.sig) by the updates key or a key its root delegated (scope updates); a device that pins either takes only format 2. sequence never goes down for a compatible and channel; expires is at most 30 days on (the publisher republishes before).",
+            "required": ["format", "compatible", "channel", "release"],
+            "properties": {
+                "format": { "enum": [1, 2] },
+                "compatible": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$" },
+                "channel": { "enum": ["stable", "beta", "dev"] },
+                "sequence": { "type": "integer", "minimum": 1 },
+                "generated": { "$ref": "#/$defs/dateTime" },
+                "expires": { "$ref": "#/$defs/dateTime" },
+                "revoked": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "description": "Builds withdrawn after release: a device that downloaded or prepared one drops it" },
+                "release": { "oneOf": [{ "$ref": "#/$defs/release" }, { "type": "null" }] }
+            },
+            "if": { "properties": { "format": { "const": 2 } } },
+            "then": { "required": ["sequence", "expires"] }
+        },
+        "catalogEntry": {
+            "type": "object",
+            "required": ["id", "kind", "title"],
+            "properties": {
+                "id": { "$ref": "#/$defs/appId" },
+                "kind": { "enum": ["pwa", "ipk", "connector"] },
+                "title": { "type": "string" },
+                "developer": { "type": "object", "properties": { "name": { "type": "string" }, "url": { "type": "string" } } },
+                "summary": { "type": "string" },
+                "description": { "type": "string" },
+                "categories": { "type": "array", "items": { "type": "string" } },
+                "icon": { "type": "string" },
+                "screenshots": { "type": "array", "items": { "type": "string" } },
+                "license": { "type": "string" },
+                "homepage": { "type": "string" },
+                "donation": { "type": "string" },
+                "featured": { "type": "boolean" },
+                "rating": { "oneOf": [{ "type": "null" }, { "type": "object", "required": ["stars", "count"], "properties": { "stars": { "type": "number" }, "count": { "type": "integer" } } }] },
+                "version": { "type": "string" },
+                "pwa": { "type": "object", "required": ["manifest"], "properties": { "manifest": { "type": "string", "pattern": "^https?://" }, "origin": { "type": "string" } } },
+                "release": {
+                    "type": "object",
+                    "required": ["url", "size", "sha256"],
+                    "properties": {
+                        "url": { "type": "string", "pattern": "^https?://" },
+                        "size": { "type": "integer", "minimum": 1 },
+                        "sha256": { "$ref": "#/$defs/sha256" },
+                        "minPhoenix": { "type": "string" },
+                        "rollout": { "$ref": "#/$defs/rollout" }
+                    }
+                }
+            }
+        },
+        "revocationEntry": {
+            "type": "object",
+            "required": ["id", "reason"],
+            "properties": {
+                "id": { "$ref": "#/$defs/appId" },
+                "kind": { "enum": ["app", "connector"] },
+                "reason": { "enum": ["malware", "security", "legal", "developer"], "description": "malware and security: the device removes the app and says why; legal and developer: it warns once and offers removal; none installs again" },
+                "date": { "type": "string" },
+                "text": { "type": "string", "maxLength": 300 }
+            }
+        },
+        "catalogIndex": {
+            "type": "object",
+            "description": "catalog/v1/index.json, signed (index.json.sig) by the catalog key or a key its root delegated (scope catalog). build never goes down; expires 14 days on (republished every 7). Written byte for byte as server/marketplace Catalog::publish writes it.",
+            "required": ["version", "build", "expires", "apps"],
+            "properties": {
+                "version": { "const": 1 },
+                "build": { "type": "integer", "minimum": 1 },
+                "generated": { "$ref": "#/$defs/dateTime" },
+                "expires": { "$ref": "#/$defs/dateTime" },
+                "source": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" } } },
+                "categories": { "type": "array", "items": { "type": "string" } },
+                "apps": { "type": "array", "items": { "$ref": "#/$defs/catalogEntry" } },
+                "accounts": { "type": "array", "items": { "type": "object", "required": ["templateId"] }, "description": "Account types (Connections): server/marketplace README \"Account types\", apps/marketplace/service/lib/accounts.js" },
+                "revoked": { "type": "array", "items": { "$ref": "#/$defs/revocationEntry" } }
+            }
+        },
+        "revocationList": {
+            "type": "object",
+            "description": "revocations/v1/revoked.json, signed (revoked.json.sig) by the catalog's key (the same key, or a key delegated for scope catalog). sequence never goes down; expires 14 days on.",
+            "required": ["format", "sequence", "expires", "apps"],
+            "properties": {
+                "format": { "const": 1 },
+                "sequence": { "type": "integer", "minimum": 1 },
+                "generated": { "$ref": "#/$defs/dateTime" },
+                "expires": { "$ref": "#/$defs/dateTime" },
+                "apps": { "type": "array", "items": { "$ref": "#/$defs/revocationEntry" } },
+                "keys": { "type": "array", "items": { "$ref": "#/$defs/base64Key" }, "description": "Online keys never to trust again (a leak)" }
+            }
+        }
+    }
+}

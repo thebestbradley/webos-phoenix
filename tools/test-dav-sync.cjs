@@ -180,6 +180,9 @@ async function main() {
         await frame.getByText("Sign In", { exact: true }).click();
         const create = page.locator(".enyo-button:visible, .enyo-custom-button:visible", { hasText: "Create Account" }).first();
         await create.waitFor({ timeout: 10000 }).catch(() => {});
+        // The page fades in (Enyo's pane transition): wait for it, so the
+        // picture shows the layout, not a washed-out frame of the fade.
+        await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running"), null, { timeout: 5000 }).catch(() => {});
         await shot(page, "4-capabilities");
         check(await create.isVisible().catch(() => false), "the account validates; Accounts offers Create Account");
         await create.click();

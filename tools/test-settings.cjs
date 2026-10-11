@@ -221,9 +221,44 @@ async function main() {
         await page.waitForTimeout(200);
         check(last().advancedGestures === false, `Advanced gestures reaches the shell (${last().advancedGestures})`);
         await page.click("[data-testid='wallpaper']");
-        await page.click("[data-testid='wallpaper-Aurora']");
+        // Two albums, as webOS's picker listed them (luna-systemui
+        // FilePicker ImageAlbumList): Artistic (the drawn ones, Northern
+        // Lights first, the default and so the one named) and Nature (the
+        // photographs, Lily Pads among them); tapping one shows its pictures.
+        await page.waitForSelector("[data-testid='wallpaper-album-Nature']");
+        const albums = await page.$$eval("[data-testid^='wallpaper-album-']", (rs) => rs.map((r) => r.textContent));
+        check(albums.length === 2 && /^Artistic \(12\)Northern Lights/.test(albums[0]) && /^Nature \(9\)$/.test(albums[1]),
+              `two albums, Artistic (12, the default checked there) and Nature (9) (${JSON.stringify(albums)})`);
+        await shot("wallpaper-albums");
+        const thumbs = [];
+        const albumTiles = {};
+        for (const name of ["Artistic", "Nature"]) {
+            await page.click(`[data-testid='wallpaper-album-${name}']`);
+            await page.waitForSelector("[data-testid='wallpaper-album']");
+            albumTiles[name] = await page.$$eval(".wallpaper-tile", (ts) => ts.map((t) => t.getAttribute("data-testid").slice(10)));
+            thumbs.push(...await page.$$eval(".wallpaper-thumb", (ts) => ts.map((t) => getComputedStyle(t).backgroundImage.slice(5, -2))));
+            await shot(`wallpaper-${name.toLowerCase()}`);
+            await page.keyboard.press("Escape");
+            await page.waitForSelector("[data-testid='wallpaper-album-Nature']");
+        }
+        check(albumTiles.Artistic.length === 12 && albumTiles.Artistic[0] === "Northern Lights" && albumTiles.Artistic[11] === "Linen",
+              `Artistic: the twelve drawn ones, Northern Lights first (${albumTiles.Artistic})`);
+        check(albumTiles.Nature.length === 9 && albumTiles.Nature[0] === "Lily Pads" && albumTiles.Nature.includes("River Stones")
+              && albumTiles.Nature[8] === "Seashells", `Nature: the nine photographs, Lily Pads first (${albumTiles.Nature})`);
+        const loaded = await page.evaluate((urls) => Promise.all(urls.map((u) => fetch(u).then((r) => r.ok))), thumbs);
+        check(loaded.length === 21 && loaded.every(Boolean), `every one of the 21 wallpapers' thumbnails loads (${loaded.length})`);
+        const masters = await page.evaluate((urls) => Promise.all(urls.map((u) => fetch(u.replace("/thumbs/", "/")).then((r) => r.ok))), thumbs);
+        check(masters.every(Boolean), "every wallpaper's picture is in the app");
+        await page.click("[data-testid='wallpaper-album-Nature']");
+        await page.click("[data-testid='wallpaper-Lily Pads']");
         await page.waitForTimeout(200);
-        check(/aurora\.jpg$/.test(last().wallpaperFile || ""), "wallpaper choice reaches the shell");
+        check(/lily-pads\.jpg$/.test(last().wallpaperFile || ""), "a photograph's choice (Nature: Lily Pads) reaches the shell");
+        check(/Lily Pads/.test(await page.textContent("[data-testid='wallpaper']")), "Screen & Lock names the photograph chosen");
+        await page.click("[data-testid='wallpaper']");
+        await page.click("[data-testid='wallpaper-album-Artistic']");
+        await page.click("[data-testid='wallpaper-Phoenix']");
+        await page.waitForTimeout(200);
+        check(/phoenix\.jpg$/.test(last().wallpaperFile || ""), "a drawn one's choice (Artistic: Phoenix) reaches the shell");
         await shot("screen-lock");
 
         // ---- Developer Mode: warning and the PIN ---------------------------------
@@ -685,6 +720,14 @@ async function main() {
         await page.waitForSelector("[data-testid='hub-wifi']");
         await shot("hub");
         await page.click("[data-testid='hub-deviceinfo']");
+        await page.waitForSelector("[data-testid='licenses']");
+        // The wallpaper photographs' credits (CC BY asks for them).
+        await page.click("[data-testid='licenses']");
+        await page.waitForSelector(".license-text");
+        const credits = await page.textContent("body");
+        check(["Sharon Mollerus", "Eden, Janine and Jim", "kuhnmi", "Chris Kuga", "MacrofyStudio", "Donald Olszewski", "NotPavlychenko"]
+              .every((a) => credits.includes(a)), "the licences page credits the wallpaper photographs");
+        await page.keyboard.press("Escape");
         await page.waitForSelector("[data-testid='licenses']");
         await page.keyboard.press("Escape");
         await page.waitForSelector("[data-testid='hub-wifi']");

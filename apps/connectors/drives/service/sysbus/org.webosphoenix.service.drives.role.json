@@ -1,0 +1,22 @@
+{
+    "appId": "org.webosphoenix.service.drives",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.service.drives"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.drives",
+            "outbound": [
+                "org.webosphoenix.service.drives",
+                "com.palm.db",
+                "com.palm.tempdb",
+                "com.palm.activitymanager",
+                "com.palm.service.accounts",
+                "org.webosphoenix.service.oauth",
+                "org.webosphoenix.ongoing"
+            ]
+        }
+    ]
+}

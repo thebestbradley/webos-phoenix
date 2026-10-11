@@ -1,0 +1,19 @@
+{
+    "accounts.transport": [
+        "org.webosphoenix.service.telegram/checkCredentials",
+        "org.webosphoenix.service.telegram/onCreate",
+        "org.webosphoenix.service.telegram/onEnabled",
+        "org.webosphoenix.service.telegram/onCredentialsChanged",
+        "org.webosphoenix.service.telegram/onDelete",
+        "org.webosphoenix.service.telegram/sync",
+        "org.webosphoenix.service.telegram/connect",
+        "org.webosphoenix.service.telegram/disconnect",
+        "org.webosphoenix.service.telegram/outbox"
+    ],
+    "telegram.account": [
+        "org.webosphoenix.service.telegram/available",
+        "org.webosphoenix.service.telegram/signIn",
+        "org.webosphoenix.service.telegram/markRead",
+        "org.webosphoenix.service.telegram/setPresence"
+    ]
+}

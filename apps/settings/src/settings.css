@@ -46,9 +46,6 @@
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 .wallpaper-mini { width: 32px; height: 44px; margin-right: 4px; }
-.wallpaper-mini.default, .wallpaper-thumb.default {
-    background-image: linear-gradient(#0b1a33, #24477a 55%, #c0643c 85%, #e8a04c);
-}
 
 .wallpaper-grid {
     display: grid;
@@ -73,6 +70,33 @@
 .wallpaper-tile:active .wallpaper-thumb { filter: brightness(0.7); }
 .wallpaper-name { font-size: 14px; margin-top: 4px; }
 .wallpaper-tile .pui-check { position: absolute; top: 4px; right: 2px; }
+/* The picker's albums: a picture in a white frame over another, as the file
+   picker's album art (luna-systemui app/FilePicker/css/ImageAlbumList.css,
+   .icon-album-background / .icon-album-foreground), and "(count)" after the
+   name. */
+.wallpaper-album-art {
+    position: relative;
+    width: 44px;
+    height: 52px;
+    margin-right: 8px;
+}
+.wallpaper-album-art::before, .wallpaper-album-photo {
+    position: absolute;
+    top: 3px;
+    left: 6px;
+    width: 30px;
+    height: 42px;
+    box-sizing: content-box;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+}
+.wallpaper-album-art::before {
+    content: "";
+    background: #c8c8c8;
+    transform: rotate(8deg);
+}
+.wallpaper-album-photo { background: center / cover no-repeat; }
+.wallpaper-album-count { color: #6b6b6b; font-weight: normal; }
 
 /* Sounds ---------------------------------------------------------------------------- */
 
@@ -145,6 +169,15 @@ div.license-text { font-family: var(--pui-font); font-size: 13px; }
 .update-progress > div { height: 100%; background: #3a7bd5; transition: width 0.3s; }
 .update-notes { margin: 4px 16px 10px 32px; padding: 0; font-size: 15px; color: #333; }
 .update-notes li { margin: 2px 0; }
+.update-detail { padding: 0 16px 8px; font-size: 13px; color: var(--pui-text-dim); text-align: center; }
+
+/* Phoenix Account ---------------------------------------------------------------------- */
+
+.account-status { min-height: 40px; display: flex; align-items: center; justify-content: center; padding: 6px 16px; font-size: 16px; color: #333; text-align: center; }
+.account-code-steps { padding: 10px 16px 0; font-size: 15px; color: #333; text-align: center; }
+.account-code { padding: 8px 16px; font-size: 32px; font-weight: bold; letter-spacing: 3px; text-align: center; color: #222; }
+.account-qr { width: 160px; height: 160px; margin: 0 auto 8px; background: #fff; padding: 8px; }
+.account-qr svg { width: 100%; height: 100%; }
 
 .dim-row { color: var(--pui-text-dim); }
 

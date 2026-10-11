@@ -1,0 +1,22 @@
+{
+    "appId": "org.webosphoenix.service.deltachat",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.service.deltachat"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.deltachat",
+            "outbound": [
+                "org.webosphoenix.service.deltachat",
+                "com.palm.db",
+                "com.palm.tempdb",
+                "com.palm.activitymanager",
+                "com.palm.service.accounts",
+                "com.webos.notification",
+                "org.webosports.service.messaging"
+            ]
+        }
+    ]
+}

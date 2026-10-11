@@ -20,6 +20,8 @@
 //   compatible  Chat Completions: POST {base}/chat/completions, Bearer key if
 //               any; what Ollama, LM Studio, OpenRouter, vLLM and llama.cpp's
 //               llama-server share; choices[0].message (content, tool_calls)
+//   phoenix     the Phoenix platform's assistant proxy: Chat Completions with the
+//               Phoenix Account's token (assistant.js asks the account service)
 //   local       the on-device model: llama-server's Chat Completions on
 //               127.0.0.1 (lib/models.js), like "compatible" without a key
 //
@@ -42,7 +44,11 @@ var TYPES = {
               model: "gemini-2.5-flash", models: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"] },
     compatible: { label: "OpenAI-compatible", base: "http://localhost:11434/v1", needsKey: false,
                   model: "", models: [] },
-    local: { label: "On device", base: "", needsKey: false, model: "", models: [] }
+    local: { label: "On device", base: "", needsKey: false, model: "", models: [] },
+    // The Phoenix platform's assistant proxy (docs/PLATFORM.md 6.5.5): Chat
+    // Completions, its address and key (the Phoenix Account's token) from
+    // org.webosphoenix.service.account assistantProvider, not typed in.
+    phoenix: { label: "Phoenix", base: "", needsKey: false, model: "phoenix-assistant", models: ["phoenix-assistant"], account: true }
 };
 
 function trimSlash(s) { return String(s || "").replace(/\/+$/, ""); }
@@ -109,6 +115,7 @@ function chatRequest(p, req, key) {
         if (tools.length) body.tools = [{ functionDeclarations: tools.map(function (t) { return { name: t.name, description: t.description, parameters: geminiSchema(t.parameters) }; }) }];
         break;
     case "compatible":
+    case "phoenix":
     case "local":
         url = baseOf(p) + "/chat/completions";
         if (key) headers.Authorization = "Bearer " + key;

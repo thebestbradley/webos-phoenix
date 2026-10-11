@@ -1,4 +1,6 @@
 /build/
+# Images copied out of the build container (scripts/container-build.sh)
+/out/
 /shell/build/
 *.user
 .DS_Store

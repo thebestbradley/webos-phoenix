@@ -14,10 +14,20 @@
 // in-memory db8 of @phoenix/synckit's tests) are entries of their own.
 
 export { defineConnector } from "./define";
-export { createConnectorService, methodNames, CALLBACKS } from "./service";
+export { createConnectorService, methodNames, hasFiles, CALLBACKS } from "./service";
+export {
+    FILE_ERRORS, FILES_METHODS, createFilesMethods, fileError, fileFailure, httpError, drivePath, driveParent, driveName, driveJoin,
+    mimeOfName, downloadInRanges, forEachChunk
+} from "./files";
+export type {
+    DriveEntry, DriveProvider, DriveQuota, ByteSource, ByteSink, TransferOptions, CancelSignal, LocalFiles, FileError, TransferRecord
+} from "./files";
+export { createDriveRouter, DRIVES_ROOT } from "./drives";
+export type { DriveRouter, DriveRouterOptions, LocalFileManager } from "./drives";
 export { shareTarget, shareTypes, shareDeclaration, checkShare, accountLabel, SHARE_KINDS } from "./share";
 export { templateSignUp, signUpProblems } from "./signup";
 export type { SignUp } from "./signup";
 export { syncObjects, removeObjects, emptyStats } from "./engine";
+export { createNet } from "./net";
 export type { CapabilityStats } from "./engine";
 export * from "./types";

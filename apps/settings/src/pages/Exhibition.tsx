@@ -17,9 +17,9 @@
 import { useState } from "react";
 import { DOCK_MODE_MAX_APPS, dockMode, system, type DockModeLaunchPoint, type ExhibitionPrefs, type SystemPreferences } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
-import { CheckBox, Checkmark, Group, ListSelector, Note, Page, PageHeader, Row, ToggleButton } from "@phoenix/ui";
+import { CheckBox, Group, ListSelector, Note, Page, PageHeader, Row, ToggleButton } from "@phoenix/ui";
 import { useBack } from "../nav";
-import { WALLPAPERS } from "./Screen";
+import { WALLPAPERS, WallpaperPicker } from "../WallpaperPicker";
 
 const APP_DIR = "/usr/palm/applications/org.webosphoenix.settings/";
 
@@ -82,31 +82,16 @@ export function ExhibitionPage() {
         void dockMode.setEnabled(ids);
     };
 
-    const wallpaper = WALLPAPERS.find((w) => w.file && prefs.dockwallpaper?.wallpaperFile === APP_DIR + w.file) ?? null;
+    const wallpaper = WALLPAPERS.find((w) => prefs.dockwallpaper?.wallpaperFile === APP_DIR + w.file) ?? null;
 
     if (picking) {
         return (
-            <Page>
-                <PageHeader title="Exhibition Wallpaper" icon="icons/exhibition.png" />
-                <div className="wallpaper-grid">
-                    {[{ name: "None", file: "" }, ...WALLPAPERS.filter((w) => w.file)].map((w) => {
-                        const chosen = w.file ? wallpaper === w : !wallpaper;
-                        return (
-                            <button key={w.name} type="button" className={"wallpaper-tile" + (chosen ? " selected" : "")}
-                                    data-testid={`dock-wallpaper-${w.name}`}
-                                    onClick={() => {
-                                        void system.setPreferences({ dockwallpaper: { wallpaperName: w.file ? w.name : "", wallpaperFile: w.file ? APP_DIR + w.file : "" } });
-                                        setPicking(false);
-                                    }}>
-                                <span className={"wallpaper-thumb" + (w.file ? "" : " none")}
-                                      style={w.file ? { backgroundImage: `url(${w.file})` } : undefined} />
-                                <span className="wallpaper-name">{w.name}</span>
-                                {chosen && <Checkmark />}
-                            </button>
-                        );
-                    })}
-                </div>
-            </Page>
+            <WallpaperPicker title="Exhibition Wallpaper" icon="icons/exhibition.png" chosen={wallpaper} testPrefix="dock-wallpaper"
+                             none={{ chosen: !wallpaper }}
+                             onPick={(w) => {
+                                 void system.setPreferences({ dockwallpaper: { wallpaperName: w ? w.name : "", wallpaperFile: w ? APP_DIR + w.file : "" } });
+                                 setPicking(false);
+                             }} />
         );
     }
 
@@ -186,7 +171,7 @@ export function ExhibitionPage() {
                     <Group label="Wallpaper">
                         <Row title={wallpaper ? wallpaper.name : "None"} chevron onClick={() => setPicking(true)} testId="exhibition-wallpaper"
                              icon={<span className={"wallpaper-mini" + (wallpaper ? "" : " none")}
-                                         style={wallpaper ? { backgroundImage: `url(${wallpaper.file})` } : undefined} />} />
+                                         style={wallpaper ? { backgroundImage: `url(${wallpaper.thumb})` } : undefined} />} />
                     </Group>
                 </>
             )}

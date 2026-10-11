@@ -13,6 +13,11 @@
 #                                 phone or tablet by its size), phone, tablet.
 #                                 ARGS go to phoenix-sim (./phoenix run phone
 #                                 --scene cards; phoenix-sim --help lists them)
+#   ./phoenix run --device ID [ARGS]  as one of the first target devices:
+#                                 fairphone-fp6, ayn-odin2portal, pinephonepro,
+#                                 pinetab2, raspberrypi4-64 (its exact screen,
+#                                 density, layout, buttons, corners and
+#                                 camera cutout; View > Device)
 #                                 The Marketplace's catalog service (PHP 8)
 #                                 starts with it, on this computer, where
 #                                 PHP is: the simulator's Marketplace and
@@ -118,6 +123,16 @@ if [ $# -gt 0 ] && [ "$COMMAND" != run ]; then
     exit 2
 fi
 [ "$COMMAND" = check ] && DRY=1
+# ./phoenix run --device ID: one of the first targets (phoenix-sim
+# --device), which sets its own screen and layout: no MODE.
+case " $* " in
+    *" --device "*|*" --device="*)
+        if [ -n "$MODE" ]; then
+            echo "phoenix: --device sets the screen and the layout; leave out $MODE (./phoenix run --device ID)" >&2
+            exit 2
+        fi
+        MODE=device ;;
+esac
 MODE=${MODE:-adaptive}
 
 # ---- Output -------------------------------------------------------------------------
@@ -585,7 +600,7 @@ case " $* " in
     *) if have php; then step "Starting the simulator ($MODE), with the Marketplace's catalog"
        else step "Starting the simulator ($MODE)"; fi ;;
 esac
-set -- "--$MODE" "$@"
+[ "$MODE" = device ] || set -- "--$MODE" "$@"
 if [ "$OS" = Linux ]; then
     # Chromium refuses to run as root with its sandbox (cloud containers).
     [ "$(id -u)" -ne 0 ] || export QTWEBENGINE_DISABLE_SANDBOX=1

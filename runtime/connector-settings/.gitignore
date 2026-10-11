@@ -1,0 +1,2 @@
+# Build-time settings of the connectors: never in the repository.
+*.json

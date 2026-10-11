@@ -1,0 +1,26 @@
+{
+    "//": "What the Marketplace's Connections view says of this connector package (docs/SYNERGY-SDK.md 'Publishing'). A Phoenix package in the catalog; it works where the image has Delta Chat's core (deltachat-rpc-server), and its sign-in page says so where it has not.",
+    "accountTypes": [
+        {
+            "templateId": "com.webosphoenix.deltachat",
+            "title": "Delta Chat",
+            "provider": "Any email address, or a new one on a chatmail server",
+            "summary": "Chat over email, end-to-end encrypted by Delta Chat's own core: one-to-one chats and groups in Messaging, pictures included, read receipts both ways, and the people you chat with in Contacts. Needs Delta Chat's core in the system image.",
+            "capabilities": [
+                { "capability": "CONTACTS", "direction": "read-only" },
+                { "capability": "MESSAGING", "direction": "two-way" }
+            ],
+            "protocols": ["imap", "smtp", "autocrypt", "chatmail"],
+            "auth": { "type": "password", "registration": "none" },
+            "server": "discovered",
+            "privacy": {
+                "dataGoesTo": "your email provider (or the chatmail server), encrypted end to end between Delta Chat users",
+                "e2ee": true,
+                "phoenixServers": "none"
+            },
+            "push": "connection",
+            "status": "beta",
+            "signUp": "https://chatmail.at/relays"
+        }
+    ]
+}

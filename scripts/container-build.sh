@@ -6,9 +6,10 @@
 # sets up webOS OSE in /work and builds webos-phoenix-image, taking the
 # Phoenix shell from the mounted checkout so local edits are built.
 #
-# The checkout is never written to: it is synced into the build volume first
-# (externalsrc would otherwise write into the checkout's .git to track
-# changes).
+# The build never writes to the checkout: it is synced into the build
+# volume first (externalsrc would otherwise write into the checkout's .git
+# to track changes). Only the ARM64 VM's finished kernel and root image are
+# copied out, to out/phoenix-vm-arm64/ (ignored by git), for scripts/vm.sh.
 #
 #   container-build.sh [MACHINE] [TARGET]      defaults: qemux86-64 webos-phoenix-image
 #
@@ -60,11 +61,23 @@ set --
 set +u
 . ./oe-init-build-env
 set -u
+# The machine asked for, whatever the build directory was first set up
+# with (mcf writes that one into its configuration; oe-init-build-env lets
+# MACHINE through from the environment).
+export MACHINE
 # shellcheck disable=SC2086
 bitbake ${BITBAKE_ARGS:-} "$TARGET"
 echo
 if [ -z "${BITBAKE_ARGS:-}" ]; then
     echo "Done. Images: $BUILD_DIR/BUILD/deploy/images/$MACHINE/"
+    # The ARM64 VM runs on the Mac (scripts/vm.sh): its kernel and root
+    # image go to the checkout's out/phoenix-vm-arm64/, where vm.sh looks.
+    if [ "$MACHINE" = phoenix-vm-arm64 ] && [ "$TARGET" = webos-phoenix-image ]; then
+        deploy=$BUILD_DIR/BUILD/deploy/images/$MACHINE
+        mkdir -p "$SRC/out/$MACHINE"
+        cp -L "$deploy/Image" "$deploy/webos-phoenix-image-$MACHINE.rootfs.ext4" "$SRC/out/$MACHINE/"
+        echo "Copied for scripts/vm.sh: out/$MACHINE/ (Image, webos-phoenix-image-$MACHINE.rootfs.ext4)"
+    fi
 else
     echo "Done (bitbake ${BITBAKE_ARGS})."
 fi

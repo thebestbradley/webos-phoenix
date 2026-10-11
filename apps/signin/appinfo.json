@@ -1,0 +1,23 @@
+{
+    "id": "org.webosphoenix.signin",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Sign In",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "uiRevision": 2,
+    "trustLevel": "default",
+    "phoenix": {
+        "//": "The Sign In card: the provider's own sign-in page for an OAuth sign-in (org.webosphoenix.service.oauth authorize), launched by the OAuth service with {session}; its page asks the service for the address and goes there. The shell draws its bar (host, lock, Cancel). Never launched by itself; not in the launcher. trustLevel default, not trusted: the provider's page loads in this card, and WebAppMgr lets a trusted app's page load local files (wam src/platform/webengine/web_page_blink.cc:139-143). Its one group, oauth.card, asks for the pending sign-in's address and nothing else. docs/SYNERGY-CONNECTORS.md 4.1.",
+        "launchParams": ["session"],
+        "launcherTab": 0,
+        "hidden": true
+    },
+    "requiredPermissions": [
+        "oauth.card"
+    ]
+}

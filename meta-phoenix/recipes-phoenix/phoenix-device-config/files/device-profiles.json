@@ -1,0 +1,60 @@
+{
+    "about": "The first targets as the simulator (phoenix-sim --device ID) and the ARM64 VM (phoenix-vm-arm64, phoenix.device=ID; scripts/vm.sh ID) show them. What the shell needs on the device itself (form factor, density, buttons, the corners and the camera's cutout) is in each config's device.json (files/CONFIG/device.json), not here. panel: pixels, upright as the device is used (the tablets on their side). Sources for every number: docs/HARDWARE.md, \"Device profiles\".",
+    "profiles": [
+        {
+            "id": "fairphone-fp6",
+            "name": "Fairphone (Gen. 6)",
+            "config": "fairphone-fp6",
+            "panel": { "width": 1116, "height": 2484 },
+            "orientation": "portrait",
+            "diagonal": 6.31,
+            "cpus": 8,
+            "memoryMiB": 8192,
+            "buttons": ["power", "volumeUp", "volumeDown"]
+        },
+        {
+            "id": "ayn-odin2portal",
+            "name": "AYN Odin 2 Portal",
+            "config": "ayn-odin2portal",
+            "panel": { "width": 1920, "height": 1080 },
+            "orientation": "landscape",
+            "diagonal": 7.0,
+            "cpus": 8,
+            "memoryMiB": 8192,
+            "buttons": ["power", "volumeUp", "volumeDown"]
+        },
+        {
+            "id": "pinephonepro",
+            "name": "PINE64 PinePhone Pro",
+            "config": "pinephonepro",
+            "panel": { "width": 720, "height": 1440 },
+            "orientation": "portrait",
+            "diagonal": 6.0,
+            "cpus": 6,
+            "memoryMiB": 4096,
+            "buttons": ["power", "volumeUp", "volumeDown"]
+        },
+        {
+            "id": "pinetab2",
+            "name": "PINE64 PineTab2",
+            "config": "pinetab2",
+            "panel": { "width": 1280, "height": 800 },
+            "orientation": "landscape",
+            "diagonal": 10.1,
+            "cpus": 4,
+            "memoryMiB": 4096,
+            "buttons": ["power", "volumeUp", "volumeDown"]
+        },
+        {
+            "id": "raspberrypi4-64",
+            "name": "Raspberry Pi 4 with Touch Display 2 (7\")",
+            "config": "rpi-touch-display-2",
+            "panel": { "width": 1280, "height": 720 },
+            "orientation": "landscape",
+            "diagonal": 7.0,
+            "cpus": 4,
+            "memoryMiB": 4096,
+            "buttons": []
+        }
+    ]
+}

@@ -1,0 +1,26 @@
+{
+    "//": "What the Marketplace's Connections view says of this connector package (docs/SYNERGY-SDK.md 'Publishing'). A Phoenix package in the catalog, not pre-installed (docs/SYNERGY-CONNECTORS.md 7).",
+    "accountTypes": [
+        {
+            "templateId": "com.webosphoenix.matrix",
+            "title": "Matrix",
+            "provider": "Any Matrix homeserver (matrix.org, Element, your own Synapse or Conduit), with its bridges",
+            "summary": "Rooms and direct chats in Messaging, pictures included, read receipts both ways, and the people of your direct chats in Contacts. Encrypted rooms cannot be read here yet.",
+            "capabilities": [
+                { "capability": "CONTACTS", "direction": "read-only" },
+                { "capability": "MESSAGING", "direction": "two-way" }
+            ],
+            "protocols": ["matrix", "msc4186", "oauth2"],
+            "auth": { "type": "password", "registration": "none" },
+            "server": "discovered",
+            "privacy": {
+                "dataGoesTo": "your homeserver (and the homeservers of the people in your rooms)",
+                "e2ee": false,
+                "phoenixServers": "none"
+            },
+            "push": "connection",
+            "status": "beta",
+            "signUp": "https://matrix.org/ecosystem/hosting/"
+        }
+    ]
+}

@@ -1,0 +1,178 @@
+<!doctype html>
+<!-- Copyright (c) 2026 webOS Phoenix contributors
+     SPDX-License-Identifier: Apache-2.0
+
+     The Unofficial Telegram account's sign-in page (the template's
+     validator.customUI; the protocol of the kit's example page:
+     ?enyoWindowParams, and the answer posted as "enyoCrossAppResult=" +
+     JSON). The phone number, the code Telegram sends to the user's other
+     Telegram apps (or by SMS), the two-step password where there is one
+     (signIn, one step each); then checkCredentials with the finished
+     session. A build without Telegram's app id or TDLib says so first
+     (available). The page says what Telegram's servers can read. -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>Unofficial Telegram</title>
+    <style>
+        body { margin: 0; font-family: Prelude, "Helvetica Neue", Arial, sans-serif; background: #e5e5e5; color: #333; }
+        header { display: flex; align-items: center; justify-content: center; gap: 8px; height: 50px; background: #f4f4f4; border-bottom: 1px solid #bbb; font-size: 18px; }
+        main { padding: 12px 16px 16px; max-width: 480px; margin: 0 auto; }
+        label { display: block; font-size: 13px; font-weight: bold; color: #555; margin: 12px 4px 6px; text-transform: uppercase; }
+        input { box-sizing: border-box; width: 100%; font-size: 17px; padding: 10px; border: 1px solid #aaa; border-radius: 8px; background: #fff; }
+        p { font-size: 14px; line-height: 1.4; margin: 4px; }
+        .note { margin-top: 12px; padding: 8px 10px; border-radius: 8px; background: #f6f1dc; border: 1px solid #d8cc9a; font-size: 13px; }
+        .small { font-size: 12px; color: #666; text-align: center; margin-top: 10px; }
+        .error { color: #b00; min-height: 1.4em; }
+        .buttons { display: flex; gap: 10px; margin-top: 12px; }
+        .buttons button { flex: 1; font-size: 17px; padding: 10px; border-radius: 8px; border: 1px solid #888; background: #f8f8f8; }
+        button.primary { background: #4a4a4a; color: #fff; border-color: #333; }
+        button:disabled { opacity: 0.5; }
+        .hidden { display: none; }
+        .signup { text-align: center; margin-top: 14px; font-size: 14px; }
+        .signup a { color: #1f5fa8; }
+    </style>
+</head>
+<body>
+    <header><img src="../public/accounts/com.webosphoenix.telegram/images/cloudchat-32x32.png" srcset="../public/accounts/com.webosphoenix.telegram/images/cloudchat-32x32@2x.png 2x, ../public/accounts/com.webosphoenix.telegram/images/cloudchat-32x32@3x.png 3x" width="32" height="32" alt=""> Unofficial Telegram</header>
+    <main>
+        <p class="note hidden" id="unavailable" role="alert"></p>
+        <div id="form">
+            <div id="phoneBox">
+                <label for="phone">Phone number</label>
+                <input id="phone" type="tel" autocomplete="tel" placeholder="+1 555 010 0100">
+            </div>
+            <div id="codeBox" class="hidden">
+                <label for="code">Code</label>
+                <input id="code" type="tel" inputmode="numeric" autocomplete="one-time-code">
+                <p id="codeHint"></p>
+            </div>
+            <div id="passwordBox" class="hidden">
+                <label for="password">Two-step password</label>
+                <input id="password" type="password">
+                <p id="passwordHint"></p>
+            </div>
+            <p class="note" id="privacy">Not end-to-end encrypted, but in secret chats: Telegram's servers keep your other chats and can read them. Channels are not shown here.</p>
+            <p class="error" id="error" role="alert"></p>
+        </div>
+        <div class="buttons">
+            <button id="cancel">Cancel</button>
+            <button id="next" class="primary" disabled>Next</button>
+        </div>
+        <p class="signup" id="signup">No Telegram account? <a href="https://telegram.org/apps" id="signupLink">Sign up in a Telegram app</a></p>
+        <p class="small">An unofficial client made with Telegram's own library (TDLib); not made or endorsed by Telegram.</p>
+    </main>
+    <script>
+        "use strict";
+        var params = {};
+        try { params = JSON.parse(new URLSearchParams(location.search).get("enyoWindowParams") || "{}") || {}; } catch (e) { params = {}; }
+        var SERVICE = "palm://org.webosphoenix.service.telegram/";
+        var TEMPLATE = "com.webosphoenix.telegram";
+        var phone = document.getElementById("phone"), code = document.getElementById("code"), password = document.getElementById("password");
+        var next = document.getElementById("next"), error = document.getElementById("error");
+        var modify = params.mode === "modify";
+        var step = "phone", key = null, available = false;
+
+        function answer(result) { window.parent.postMessage("enyoCrossAppResult=" + JSON.stringify(result), "*"); }
+        function call(uri, p) {
+            return new Promise(function (resolve) {
+                var bridge = new PalmServiceBridge();
+                bridge.onservicecallback = function (text) { resolve(JSON.parse(text)); };
+                bridge.call(uri, JSON.stringify(p));
+            });
+        }
+        document.getElementById("signupLink").addEventListener("click", function (e) {
+            e.preventDefault();
+            call("palm://com.palm.applicationManager/open", { target: this.href });
+        });
+        if (modify && params.account) phone.value = params.account.username || "";
+        function show(s) {
+            step = s;
+            document.getElementById("phoneBox").className = s === "phone" ? "" : "hidden";
+            document.getElementById("codeBox").className = s === "code" ? "" : "hidden";
+            document.getElementById("passwordBox").className = s === "password" ? "" : "hidden";
+            next.textContent = s === "phone" ? "Next" : "Sign In";
+            update();
+            ({ phone: phone, code: code, password: password })[s].focus();
+        }
+        function update() {
+            var v = { phone: phone, code: code, password: password }[step].value.trim();
+            next.disabled = !available || !v;
+        }
+        [phone, code, password].forEach(function (i) {
+            i.addEventListener("input", function () { error.textContent = ""; update(); });
+            i.addEventListener("keydown", function (e) { if (e.key === "Enter" && !next.disabled) next.click(); });
+        });
+        document.getElementById("cancel").addEventListener("click", function () {
+            if (key) call(SERVICE + "signIn", { key: key, cancel: true });
+            answer({ returnValue: false });
+        });
+
+        var MESSAGES = {
+            "INVALID_USER": "Enter your phone number with its country code, like +1 555 010 0100.",
+            "WRONG_CODE": "That code is not right.",
+            "CODE_EXPIRED": "The code expired. Start again.",
+            "401_UNAUTHORIZED": "That is not your two-step password.",
+            "NO_ACCOUNT": "This number has no Telegram account: sign up in a Telegram app first.",
+            "HELPER_NOT_AVAILABLE": "Unofficial Telegram is not available in this build.",
+            "503_SERVICE_UNAVAILABLE": "Telegram asks to wait before trying again."
+        };
+        function problem(r) {
+            next.textContent = step === "phone" ? "Next" : "Sign In";
+            update();
+            error.textContent = MESSAGES[r.errorCode] || (r.errorText ? "Could not sign in: " + r.errorText.replace(/([^.])$/, "$1.") : "Could not sign in.");
+            if (r.errorCode === "CODE_EXPIRED") { key = null; show("phone"); }
+        }
+        function finish() {
+            next.textContent = "Signing in...";
+            call(SERVICE + "checkCredentials", { templateId: TEMPLATE, config: { key: key } }).then(function (r) {
+                if (!r.returnValue) return problem(r);
+                var result = { returnValue: true, credentials: r.credentials, config: r.config };
+                if (!modify) { result.template = params.template; result.templateId = TEMPLATE; result.username = r.username; }
+                answer(result);
+            });
+        }
+        function stepped(r) {
+            if (!r.returnValue) return problem(r);
+            key = r.key;
+            if (r.state === "code") {
+                document.getElementById("codeHint").textContent = r.sentBy === "app" ? "Telegram sent the code to your Telegram app on another device."
+                    : r.sentBy === "sms" ? "Telegram sent the code by SMS." : "Telegram sent you a code.";
+                return show("code");
+            }
+            if (r.state === "password") {
+                document.getElementById("passwordHint").textContent = r.hint ? "Hint: " + r.hint : "";
+                return show("password");
+            }
+            if (r.state === "ready") return finish();
+        }
+        next.addEventListener("click", function () {
+            next.disabled = true;
+            error.textContent = "";
+            next.textContent = step === "phone" ? "Sending code..." : "Signing in...";
+            var p = step === "phone" ? { phone: phone.value.trim() } : step === "code" ? { key: key, code: code.value.trim() } : { key: key, password: password.value };
+            call(SERVICE + "signIn", p).then(stepped);
+        });
+
+        // This build's Telegram: an app id and TDLib, which the system image brings.
+        call(SERVICE + "available", {}).then(function (r) {
+            available = !!(r && r.returnValue && r.available);
+            if (!available) {
+                var u = document.getElementById("unavailable");
+                u.textContent = (r && r.reason) || "Unofficial Telegram is not available in this build.";
+                u.className = "note";
+                document.getElementById("form").className = "hidden";
+                document.getElementById("signup").style.display = "none";
+                next.className = "primary hidden";
+            } else if (/fake|demo/.test(r.tdlib || "")) {
+                var d = document.getElementById("unavailable");
+                d.textContent = "Simulator demo: any phone number signs in, with the code 12345.";
+                d.className = "note";
+            }
+            update();
+            if (available) phone.focus();
+        });
+    </script>
+</body>
+</html>

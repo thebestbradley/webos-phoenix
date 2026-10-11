@@ -20,7 +20,7 @@ export const ASSISTANT_APP_ID = "org.webosphoenix.assistant";
 export const ASSISTANT_ERRORS = { BAD_PARAMS: -1, NOT_FOUND: -2, NOT_ALLOWED: -3, OFF: -4, FAILED: -5 } as const;
 
 /** Which layer answered: the grammar, the on-device model, or a cloud model. */
-export type AssistantVia = "commands" | "on-device" | "cloud";
+export type AssistantVia = "commands" | "on-device" | "cloud" | "decider";
 
 export interface AssistantChoice {
     /** "cloud:<provider id>", "web", "open", "connect" (no model yet: ask which kind, then connect()) or "settings" (older messages). */
@@ -43,7 +43,8 @@ export interface AssistantMessage {
     /** The command it ran or wants to run. */
     command?: string;
     /** "pending": waits for confirm (it sends, deletes or calls). */
-    status?: "pending" | "done" | "cancelled" | "failed";
+    /** "pending": waits for confirm (it sends, deletes or calls); "ask": a question back (which one, what to say). */
+    status?: "pending" | "done" | "cancelled" | "failed" | "ask";
     confirm?: { command: string; args: Record<string, unknown> };
     /** Nothing on the phone could answer: what the user may do next. */
     choices?: AssistantChoice[];
@@ -52,7 +53,20 @@ export interface AssistantMessage {
     data?: Record<string, unknown>;
     /** A follow-up question about what a command just made; its choices
      *  ("fu:<n>", "fu:skip") are the answers, and so are the next words. */
-    followUp?: { id: string; kind: FollowUpKind | "doubt" };
+    followUp?: { id: string; kind: FollowUpKind | "doubt"; attempt?: number };
+    /** What answered and how long it took (the service's trace; Export Conversation saves it). */
+    trace?: AssistantTrace;
+}
+
+/** Which path answered a request, the command and its arguments, and the time it took. */
+export interface AssistantTrace {
+    path: "grammar" | "on-device" | "cloud" | "decider" | "fallback" | "follow-up";
+    command?: string;
+    args?: Record<string, unknown>;
+    /** The models' steps: choosing, calling, answering, filling in, writing, deciding. */
+    steps?: { step: string; ms: number; tokens?: number; choice?: string; command?: string; confidence?: number }[];
+    /** Milliseconds from the words to this answer. */
+    ms: number;
 }
 
 /** What a follow-up question asks for. */
@@ -130,6 +144,8 @@ export interface AssistantSettings {
     followUpAgain: number;
     /** Follow-up topics turned off (Settings, or "Stop asking" when it asked whether they help). */
     followUpTopicsOff: FollowUpKind[];
+    /** The decision model between the grammar and the general model (Laya, docs/AI-AND-MCP.md): "on" or "off" (default). */
+    decider?: "on" | "off";
 }
 
 /** Settings > Assistant: the personalities, speeds and waits the service takes. */

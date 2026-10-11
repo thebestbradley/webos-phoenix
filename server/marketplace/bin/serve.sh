@@ -13,7 +13,9 @@
 # Connections lists a third-party connector from the start, and so are the
 # connector packages Phoenix comes with (apps/marketplace/service/etc/palm/
 # marketplace/preinstalled.json: the Fediverse), as Phoenix's own, so the
-# simulator can install one again after removing it.
+# simulator can install one again after removing it, and Phoenix's own that
+# are installed from the catalog (that file's "firstParty": the drives,
+# Jabber, Matrix, Delta Chat).
 #
 #   server/marketplace/bin/serve.sh [port]
 
@@ -63,6 +65,21 @@ if [ "$MARKETPLACE_DEV" = 1 ]; then
         else
             echo "The example connector is not published yet: the connector kit is not built (cd apps && npm run build -w @phoenix/connector-kit)"
         fi
+    fi
+    # Phoenix's own connectors in the catalog that it does not come with
+    # (preinstalled.json "firstParty": the drives, Jabber, Matrix, Delta Chat), once per
+    # catalog, as its admin; a catalog seeded before them gets them now.
+    if [ -f "$DATA/seed/done" ] && [ ! -f "$DATA/seed/catalog-connectors.done" ] && [ -f "$KIT/lib/tools/cli.js" ]; then
+        rm -rf "$DATA/seed/catalog"
+        mkdir -p "$DATA/seed/catalog"
+        for from in $(php -r 'foreach (json_decode(file_get_contents("../../apps/marketplace/service/etc/palm/marketplace/preinstalled.json"), true)["firstParty"] ?? [] as $p) echo $p["from"], "\n";'); do
+            [ -d "../../$from" ] && node "$KIT/bin/phoenix-connector.cjs" pack "../../$from" --out "$DATA/seed/catalog" \
+                --namespace org.webosphoenix --namespace com.webosphoenix >/dev/null || true
+        done
+        for ipk in "$DATA"/seed/catalog/*.ipk; do
+            [ -f "$ipk" ] && { php bin/marketplace.php upload --phoenix "$ipk" || true; }
+        done
+        touch "$DATA/seed/catalog-connectors.done"
     fi
 fi
 echo "Phoenix Marketplace at http://127.0.0.1:$PORT/ (catalog: /v1/, admin: /admin)"

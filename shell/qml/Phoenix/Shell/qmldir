@@ -74,3 +74,4 @@ SystemScreens 1.0 SystemScreens.qml
 DeviceServices 1.0 DeviceServices.qml
 ClipStrip 1.0 ClipStrip.qml
 KeyboardButton 1.0 KeyboardButton.qml
+SignInBar 1.0 SignInBar.qml

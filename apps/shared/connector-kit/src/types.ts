@@ -6,12 +6,14 @@
 // each of its functions (the contexts).
 
 import type { DbApi, DbObject, Http, Luna, RequestFn } from "@phoenix/synckit";
+import type { DriveProvider, LocalFiles } from "./files";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 export type Json = any;
 
 /** A Luna reply. */
-export interface Reply { returnValue: boolean; errorCode?: string; errorText?: string; [k: string]: Json }
+/** A Luna reply (errorCode: the accounts library's codes; a drive's file methods: the file manager's numbers). */
+export interface Reply { returnValue: boolean; errorCode?: string | number; errorText?: string; [k: string]: Json }
 
 /** One object on the server, as a connector's pull gives it. */
 export interface RemoteObject {
@@ -84,6 +86,15 @@ export interface CapabilityDefinition {
      * activity with a db8 trigger while the capability is on.
      */
     watch?: { query: Json; method: string };
+    /**
+     * A drive (the DOCUMENTS capability, docs/SYNERGY-SDK.md "Drives"): the
+     * account's provider, whose list, stat, download, upload, ... the kit
+     * makes into the service's listFiles, statFile, downloadFile, uploadFile,
+     * ... methods (files.ts). Its sync checks that the drive answers.
+     */
+    files?(ctx: AccountContext): DriveProvider | Promise<DriveProvider>;
+    /** Transfers in parts of this many bytes (default 8 MB). */
+    chunkSize?: number;
 }
 
 export interface ConnectorDefinition {
@@ -123,6 +134,84 @@ export interface ConnectorDefinition {
      * the account template by phoenix-connector pack.
      */
     signUp?: string | { url?: string; servers?: { name: string; url: string }[] };
+    /**
+     * A sign-up link of its own for some of the templates (a connector with
+     * several account types: the drives' Dropbox, Box, ...), by templateId;
+     * the others have signUp's.
+     */
+    signUpByTemplate?: Record<string, string | { url?: string; servers?: { name: string; url: string }[] }>;
+    /**
+     * A long-lived connection per account (an XMPP stream, a Matrix sync
+     * loop, a TDLib client): opened by the kit while the account has an
+     * enabled capability and the host keeps connections (Environment.live),
+     * after each sync when it is not open, and by ctx.connect(); closed when
+     * the last capability is turned off or the account is deleted
+     * (docs/SYNERGY-SDK.md "Staying connected").
+     */
+    connection?: { open(ctx: AccountContext): Promise<LiveConnection> };
+    /**
+     * Build-time settings the connector needs (an app id registered with the
+     * service): their names. A device keeps them in
+     * /etc/phoenix/connectors/<service>.json, never in the source tree; a
+     * build without them has ctx.setting give undefined.
+     */
+    settings?: string[];
+    /**
+     * System programs the connector runs (first-party connectors only: a
+     * library's JSON interface the image installs, such as TDLib's or Delta
+     * Chat's): their names, as Environment.helper knows them.
+     */
+    helpers?: string[];
+}
+
+/** An open long-lived connection (definition.connection). */
+export interface LiveConnection {
+    close(): Promise<void> | void;
+    /** True once it has ended (the server closed it, the network went): the kit opens a new one when asked. */
+    readonly closed?: boolean;
+    [k: string]: Json;
+}
+
+/** A socket of the host (Environment.net): text in and out. */
+export interface NetSocket {
+    /** "stream": TCP, text as it comes; "message": WebSocket, one message per frame. */
+    readonly framing: "stream" | "message";
+    /** Whether the connection is encrypted (TLS, wss:). */
+    readonly secure: boolean;
+    write(data: string): void;
+    /** STARTTLS on a stream socket: TLS on the same connection, the certificate checked for servername. */
+    startTls?(servername: string): Promise<void>;
+    onData(fn: (text: string) => void): void;
+    onClose(fn: (error?: Error) => void): void;
+    close(): void;
+}
+
+export interface SrvRecord { name: string; port: number; priority: number; weight: number }
+
+/** What the host gives for sockets (a device: Node's net, tls and dns; the simulator: WebSocket). */
+export interface NetEnvironment {
+    resolveSrv?(name: string): Promise<SrvRecord[]>;
+    /** A TCP connection, TLS from the start when tls (direct TLS, XEP-0368). */
+    connect?(options: { host: string; port: number; tls: boolean; servername?: string }): Promise<NetSocket>;
+    websocket?(url: string, protocols?: string[]): Promise<NetSocket>;
+}
+
+/** A system helper program (Environment.helper): lines of JSON in and out. */
+export interface HelperProcess {
+    send(line: string): void;
+    onLine(fn: (line: string) => void): void;
+    onExit(fn: (code: number | null) => void): void;
+    kill(): void;
+}
+
+/** The sockets a connector may open (ctx.net): to its user's server, the hosts it names, or their SRV targets. */
+export interface Net {
+    resolveSrv(name: string): Promise<SrvRecord[]>;
+    connect(options: { host: string; port: number; tls: boolean; servername?: string }): Promise<NetSocket>;
+    websocket(url: string, protocols?: string[]): Promise<NetSocket>;
+    /** What this host can do. */
+    readonly supports: { srv: boolean; tcp: boolean; websocket: boolean };
+    allowHost(host: string): void;
 }
 
 /** What a connector can be given to post. */
@@ -224,6 +313,23 @@ export interface BaseContext {
     cachePhoto(key: string, url: string): Promise<string>;
     /** A file the user picked (sharing): its bytes and type. */
     readFile(path: string): Promise<{ bytes: Uint8Array; mimeType: string }>;
+    /**
+     * A setting of the system image, /etc/palm/<name> (JSON), or null: what
+     * the image was built with (a provider's OAuth client id, which is not in
+     * the source tree: docs/DEVELOPER-APPS.md).
+     */
+    systemConfig(name: string): Promise<Json | null>;
+    /** Sockets (definition.connection's streams). */
+    net: Net;
+    /** A build-time setting (definition.settings), or undefined when this build has none. */
+    setting(name: string): Promise<Json>;
+    /** Start a system helper (definition.helpers); HELPER_NOT_AVAILABLE where this host has none. */
+    helper(name: string, args?: string[]): Promise<HelperProcess>;
+    /** Keep a file (a picture received) under the connector's own folder of the device -> its path. */
+    writeFile(name: string, bytes: Uint8Array, mimeType?: string): Promise<string>;
+    /** Timers the tests can drive. */
+    setTimeout(fn: () => void, ms: number): Json;
+    clearTimeout(handle: Json): void;
 }
 
 export interface ValidateContext extends BaseContext {
@@ -244,6 +350,14 @@ export interface AccountContext extends BaseContext {
     notify(n: { title: string; body?: string; appId?: string; params?: Json }): Promise<void>;
     /** A message into Messaging (org.webosports.service.messaging putMessage). */
     putMessage(message: Json): Promise<Json>;
+    /** The account's open connection (definition.connection), or null. */
+    live(): LiveConnection | null;
+    /** The account's connection, opened when it is not (NOT_LIVE_HERE where this host keeps none now). */
+    connect(): Promise<LiveConnection>;
+    /** Whether this host keeps the connections (false: a call that needs one answers NOT_LIVE_HERE and goes to the host that does). */
+    connectionsHere(): boolean;
+    /** Save ctx.state now (a long-lived connection's context; a call's is saved after it). */
+    saveState(): Promise<void>;
 }
 
 export type MethodContext = BaseContext & Partial<AccountContext>;
@@ -270,6 +384,23 @@ export interface Environment {
     readFile?(path: string): Promise<{ bytes: Uint8Array; mimeType: string }>;
     /** Longest Retry-After waited out within a sync (ms, default 30000). */
     maxWaitMs?: number;
+    /** The device's files, for the DOCUMENTS capability's downloads and uploads. */
+    files?: LocalFiles;
+    /** /etc/palm/<name> (JSON) of the system image, or null. */
+    systemConfig?(name: string): Promise<Json | null>;
+    /** Sockets (a device: TCP, TLS and SRV; the simulator: WebSocket only). */
+    net?: NetEnvironment;
+    /** Whether this host keeps long-lived connections now (default true; the simulator: one page at a time). */
+    live?(): boolean;
+    /** Build-time settings of the service ({name: value}), or null. */
+    settings?(service: string): Promise<Record<string, Json> | null>;
+    /** Start a system helper program by name. */
+    helper?(name: string, args?: string[]): Promise<HelperProcess>;
+    /** Keep a file under the connector's folder (pictures received) -> its path. */
+    writeFile?(service: string, name: string, bytes: Uint8Array, mimeType?: string): Promise<string>;
+    /** Timers (tests drive them; default setTimeout / clearTimeout). */
+    setTimeout?(fn: () => void, ms: number): Json;
+    clearTimeout?(handle: Json): void;
 }
 
 export type ServiceMethods = Record<string, (params: Json) => Promise<Reply>>;

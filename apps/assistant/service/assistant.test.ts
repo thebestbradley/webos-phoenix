@@ -31,6 +31,13 @@ const NOW = new Date(2026, 9, 7, 10, 0, 0).getTime();
 const PEOPLE = [
     { _id: "p1", name: { givenName: "Sam", familyName: "Jones" }, phoneNumbers: [{ value: "555-0100", type: "type_mobile" }] },
     { _id: "p2", name: { givenName: "Mary", familyName: "Spetzler" }, phoneNumbers: [{ value: "555-0199", type: "type_work" }] },
+    // Chat addresses only, as the Matrix and Telegram accounts' contacts give them.
+    { _id: "p3", name: { givenName: "Priya", familyName: "Nair" }, ims: [{ value: "@priya:matrix.example", type: "type_matrix" }, { value: "+15550102", type: "type_telegram" }] },
+];
+// The IM accounts signed in (their login states): Matrix and Telegram, not Delta Chat.
+const LOGINS = [
+    { _id: "l1", _kind: "com.palm.imloginstate.matrix:1", accountId: "a1", serviceName: "type_matrix", username: "@me:matrix.example", state: "online" },
+    { _id: "l2", _kind: "com.palm.imloginstate.telegram:1", accountId: "a2", serviceName: "type_telegram", username: "+15550100", state: "online" },
 ];
 const APPS = [{ id: "org.webosphoenix.maps", title: "Maps" }, { id: "org.webosphoenix.music", title: "Music" }];
 
@@ -47,7 +54,8 @@ function setup(opts: { llm?: object; voice?: () => unknown; deadlineMs?: number 
             calls.push({ uri, params });
             if (uri.endsWith("/listLaunchPoints")) return Promise.resolve({ returnValue: true, launchPoints: APPS });
             if (uri === "luna://com.palm.db/find")
-                return Promise.resolve({ returnValue: true, results: params.query.from === "com.palm.person:1" ? PEOPLE : [] });
+                return Promise.resolve({ returnValue: true, results: params.query.from === "com.palm.person:1" ? PEOPLE
+                    : params.query.from === "com.palm.imloginstate:1" ? LOGINS : [] });
             if (uri === "luna://com.palm.db/put")
                 return Promise.resolve({ returnValue: true, results: params.objects.map(() => ({ id: "db" + ++n, rev: 1 })) });
             if (uri.endsWith("/getUniversalSearchList"))
@@ -185,6 +193,30 @@ describe("confirmation for what sends or calls", () => {
             _kind: "com.palm.smsmessage:1", folder: "outbox", messageText: "I'm running late", to: [{ addr: "555-0100", name: "Sam Jones" }] });
         // Answered once.
         expect((await t.svc.confirm({ threadId: r.thread.id, messageId: m.id, accept: true })).returnValue).toBe(false);
+    });
+
+    it("sends a chat message on the network asked for, from the account on it", async () => {
+        const t = setup();
+        const r = await ask(t, "message Priya on Telegram: I'm on my way");
+        const m = last(r);
+        expect(m).toMatchObject({ status: "pending", text: "Send \"I'm on my way\" to Priya Nair on Telegram?" });
+        expect(t.called("messaging/putMessage")).toHaveLength(0);
+        const done = await t.svc.confirm({ threadId: r.thread.id, messageId: m.id, accept: true });
+        expect(last(done).text).toBe("Sent to Priya Nair on Telegram.");
+        expect(t.called("messaging/putMessage")[0].params.message).toMatchObject({
+            _kind: "com.palm.immessage.telegram:1", serviceName: "type_telegram", username: "+15550100", folder: "outbox", status: "pending",
+            messageText: "I'm on my way", to: [{ addr: "+15550102", name: "Priya Nair" }] });
+    });
+
+    it("texts someone with no number on a chat network they are on; says what is missing", async () => {
+        const t = setup();
+        const r = await ask(t, "text Priya see you at noon");
+        expect(last(r)).toMatchObject({ status: "pending", text: "Send \"see you at noon\" to Priya Nair on Matrix?" });
+        await t.svc.confirm({ threadId: r.thread.id, messageId: last(r).id, accept: true });
+        expect(t.called("messaging/putMessage")[0].params.message).toMatchObject({ _kind: "com.palm.immessage.matrix:1", username: "@me:matrix.example",
+                                                                                  to: [{ addr: "@priya:matrix.example" }] });
+        expect(last(await ask(t, "send a matrix message to Sam saying hi")).text).toBe("Sam Jones has no Matrix address in your contacts.");
+        expect(last(await ask(t, "message Priya on Delta Chat: hi")).text).toBe("You're not signed in to Delta Chat. Add the account in Accounts first.");
     });
 
     it("sends nothing on No", async () => {

@@ -47,7 +47,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-    apps, assistant, audio, dictation, postNotification, tts, ASSISTANT_APP_ID, ASSISTANT_ERRORS,
+    apps, assistant, audio, dictation, filePicker, postNotification, shareSheet, tts, ASSISTANT_APP_ID, ASSISTANT_ERRORS,
     type AssistantMessage, type AssistantSettings, type AssistantThread, type ConnectMode, type Listening, type LunaError,
 } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
@@ -58,6 +58,7 @@ import {
 import { Bird, moveMs, useBirdMotion } from "./bird/Bird";
 import { useBirdReactions } from "./bird/reactions";
 import type { BirdPose } from "./bird/birdData";
+import { base64, conversationText, exportConversation, exportName, type ExportedConversation } from "./exportConversation";
 import { beatsFor, birdPose, outcomeOf, type Beat } from "./bird/pose";
 import { EXAMPLES, examplesFrom } from "./examples";
 import { Avatar, QuickReplies, restingPose, waitingFollowUp, withoutFollowUps } from "./chat";
@@ -409,6 +410,51 @@ function useTimerDone(launch: Launch, settings: AssistantSettings | null) {
     }, [launch, settings]);
 }
 
+// ---- Export Conversation ---------------------------------------------------------------------------
+// The conversation as JSON or text (exportConversation.ts): shared with
+// the share sheet, or saved with the save picker. For the owner's test
+// sessions: what was asked, what answered it and how, and how long it took.
+function ExportDialog({ open, threadId, settings, onClose }: { open: boolean; threadId: string; settings: AssistantSettings | null; onClose: () => void }) {
+    const [status, setStatus] = useState("");
+    const [made, setMade] = useState<ExportedConversation | null>(null);
+    useEffect(() => {
+        if (!open) return;
+        setStatus("");
+        setMade(null);
+        let live = true;
+        assistant.thread(threadId || undefined).then((r) => {
+            if (live && r.thread) setMade(exportConversation(r.thread, r.messages, settings));
+            else if (live) setStatus("There's no conversation to export yet.");
+        }, () => { if (live) setStatus("Couldn't read the conversation."); });
+        return () => { live = false; };
+    }, [open, threadId, settings]);
+    const save = async (ext: "json" | "txt") => {
+        if (!made) return;
+        const text = ext === "json" ? JSON.stringify(made, null, 1) : conversationText(made);
+        try {
+            const r = await filePicker.save({ name: exportName(made, ext), data: base64(text), mimeType: ext === "json" ? "application/json" : "text/plain",
+                                              title: "Save Conversation" });
+            if ("path" in r) { setStatus(`Saved to ${r.path}`); onClose(); }
+        } catch { setStatus("Couldn't save it."); }
+    };
+    const share = async () => {
+        if (!made) return;
+        try {
+            const r = await shareSheet.open({ title: `Assistant: ${made.thread.title || "conversation"}`, text: conversationText(made) });
+            if (r.action !== "cancel") onClose();
+        } catch { setStatus("Couldn't share it."); }
+    };
+    return (
+        <Dialog open={open} onClose={onClose} testId="as-export" title="Export Conversation"
+                message={status || (made ? `${made.messages.length} messages, with what answered each and how long it took.` : "Reading the conversation...")}>
+            <Button data-testid="as-export-share" disabled={!made} onClick={() => { void share(); }}>Share</Button>
+            <Button data-testid="as-export-json" disabled={!made} onClick={() => { void save("json"); }}>Save as JSON</Button>
+            <Button data-testid="as-export-text" disabled={!made} onClick={() => { void save("txt"); }}>Save as Text</Button>
+            <Button onClick={onClose}>Cancel</Button>
+        </Dialog>
+    );
+}
+
 // ---- The app -------------------------------------------------------------------------------------
 
 function Main() {
@@ -425,6 +471,7 @@ function Main() {
     const [asked, setAsked] = useState<Launch | null>(null);
     const [retry, setRetry] = useState<Launch | null>(null);
     const [pose, setPose] = useState<BirdPose>("idle");
+    const [exporting, setExporting] = useState(false);
     const motion = useBirdMotion();
 
     useTimerDone(launch, settings ?? null);
@@ -492,8 +539,10 @@ function Main() {
             <AppMenu items={[
                 { label: "New Conversation", onSelect: fresh },
                 { label: "Conversations", onSelect: () => setView("list") },
+                { label: "Export Conversation", onSelect: () => setExporting(true) },
                 { label: "Preferences", onSelect: prefs },
             ]} />
+            <ExportDialog open={exporting} threadId={threadId} settings={settings ?? null} onClose={() => setExporting(false)} />
             <SlidingPanes testId="as-panes" multiView={multiView} selected={view} onSelect={setView}
                           list={<ConversationList threads={threads} selected={threadId} onOpen={open} onNew={fresh} />}
                           detail={detail} />

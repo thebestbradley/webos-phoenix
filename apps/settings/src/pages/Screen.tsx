@@ -16,21 +16,12 @@ import { useEffect, useState } from "react";
 import { deviceLock, LunaError, settings, system, systemStatus, type LockMode, type SystemPreferences, type SystemStatus } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
 import {
-    Button, Checkmark, Dialog, ErrorText, Group, ListSelector, Page, PageHeader, Row, Slider, TextField, ToggleButton,
+    Button, Dialog, ErrorText, Group, ListSelector, Page, PageHeader, Row, Slider, TextField, ToggleButton,
 } from "@phoenix/ui";
 import { useBack } from "../nav";
+import { WALLPAPERS, WallpaperPicker } from "../WallpaperPicker";
 
 const APP_DIR = "/usr/palm/applications/org.webosphoenix.settings/";
-
-/** Bundled wallpapers (generated, CC0; see public/wallpapers/README.md). */
-export const WALLPAPERS = [
-    { name: "Default", file: "" },
-    { name: "Dusk", file: "wallpapers/dusk.jpg" },
-    { name: "Aurora", file: "wallpapers/aurora.jpg" },
-    { name: "Ember", file: "wallpapers/ember.jpg" },
-    { name: "Tide", file: "wallpapers/tide.jpg" },
-    { name: "Slate", file: "wallpapers/slate.jpg" },
-];
 
 const TIMEOUTS = [
     { label: "30 seconds", value: 30 },
@@ -75,28 +66,17 @@ export function ScreenPage() {
     useBack(() => { setPicking(false); return true; }, picking);
 
     const setPref = (p: SystemPreferences) => void system.setPreferences(p);
-    const wallpaper = WALLPAPERS.find((w) => w.file && prefs.wallpaper?.wallpaperFile === APP_DIR + w.file) ?? WALLPAPERS[0];
+    // Another picture (one Photos set): no tile is checked.
+    const file = prefs.wallpaper?.wallpaperFile;
+    const wallpaper = file ? WALLPAPERS.find((w) => file === APP_DIR + w.file) ?? null : WALLPAPERS[0];
 
     if (picking) {
         return (
-            <Page>
-                <PageHeader title="Wallpaper" icon="icons/screen.png" />
-                <div className="wallpaper-grid">
-                    {WALLPAPERS.map((w) => (
-                        <button key={w.name} type="button" className={"wallpaper-tile" + (w === wallpaper ? " selected" : "")}
-                                data-testid={`wallpaper-${w.name}`}
-                                onClick={() => {
-                                    setPref({ wallpaper: { wallpaperName: w.name, wallpaperFile: w.file ? APP_DIR + w.file : "" } });
-                                    setPicking(false);
-                                }}>
-                            <span className={"wallpaper-thumb" + (w.file ? "" : " default")}
-                                  style={w.file ? { backgroundImage: `url(${w.file})` } : undefined} />
-                            <span className="wallpaper-name">{w.name}</span>
-                            {w === wallpaper && <Checkmark />}
-                        </button>
-                    ))}
-                </div>
-            </Page>
+            <WallpaperPicker title="Wallpaper" icon="icons/screen.png" chosen={wallpaper} testPrefix="wallpaper"
+                             onPick={(w) => {
+                                 if (w) setPref({ wallpaper: { wallpaperName: w.name, wallpaperFile: APP_DIR + w.file } });
+                                 setPicking(false);
+                             }} />
         );
     }
 
@@ -133,9 +113,10 @@ export function ScreenPage() {
             )}
 
             <Group label="Wallpaper">
-                <Row title={wallpaper.name} chevron onClick={() => setPicking(true)} testId="wallpaper"
-                     icon={<span className={"wallpaper-mini" + (wallpaper.file ? "" : " default")}
-                                 style={wallpaper.file ? { backgroundImage: `url(${wallpaper.file})` } : undefined} />} />
+                <Row title={wallpaper ? wallpaper.name : prefs.wallpaper?.wallpaperName || "Picture"} chevron
+                     onClick={() => setPicking(true)} testId="wallpaper"
+                     icon={<span className="wallpaper-mini"
+                                 style={wallpaper ? { backgroundImage: `url(${wallpaper.thumb})` } : undefined} />} />
             </Group>
 
             <Group label="Notifications">
