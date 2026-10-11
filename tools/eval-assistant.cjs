@@ -43,7 +43,7 @@
 //   effects: [{kind, where: {...}, count}]   what the device keeps after the turn
 // A case may start the device in a state of its own: deviceState (the
 // stand-in's switches, notifications ...), storage (what the assistant
-// keeps: {"assistant:routines": [...]}), settings.
+// keeps: {"assistant:routines": [...]}), db (db8 objects: [{_id, _kind, ...}]), settings.
 //   and, in expect, "anyOf": [expect, ...] when more than one outcome is right.
 // A case's or a turn's "voice": true asks it as spoken (talk mode: the
 // buttons' question asked aloud, an unclear answer asked again); a turn
@@ -217,6 +217,8 @@ function runCase(c, opts) {
     if (c.deviceState) Object.assign(d.state, c.deviceState);
     // What the assistant keeps that a case starts with ({"assistant:routines": [...]}).
     if (c.storage) Object.keys(c.storage).forEach(function (k) { d.storage.set(k, c.storage[k]); });
+    // db8 objects a case starts with ([{_id, _kind, ...}]: a place saved in Maps).
+    if (c.db) c.db.forEach(function (o) { d.db.set(o._id, JSON.parse(JSON.stringify(o))); });
     var turns = c.turns || [{ say: c.say, expect: c.expect, forbid: c.forbid, text: c.text, notText: c.notText, effects: c.effects }];
     var rows = [];
     // Talk mode (a turn's or the case's "voice": true): asked as spoken,

@@ -7,6 +7,7 @@
 //   en-notify.js     what did I miss, announcing messages, driving mode
 //   en-routines.js   routines, their starters and the steps Settings offers
 //   en-capture.js    photos, selfies, videos, voice memos
+//   en-places.js     where I parked, reminders at a place, home and work
 //
 // Each area: (h) -> {rules: [[command, (t, ctx) -> args | null]] (tried
 // before the grammar's own, so each is held to its own words), late?:
@@ -19,7 +20,7 @@
 
 "use strict";
 
-var AREAS = [require("./en-notify"), require("./en-routines"), require("./en-capture")];
+var AREAS = [require("./en-notify"), require("./en-routines"), require("./en-capture"), require("./en-places")];
 
 module.exports = function (h) {
     var areas = AREAS.map(function (make) { return make(h); });

@@ -11109,9 +11109,30 @@
     // called with $activity {activityId, name} added to its params; for
     // an application manager launch, inside the app's launch params (where
     // Calendar reads params.$activity.activityId). A fired activity stays
-    // until it is completed or replaced, and is not fired again. Activities
-    // without a schedule are kept but never fire here (they wait on
-    // triggers the simulator does not have).
+    // until it is completed or replaced, and is not fired again.
+    //
+    // Triggers, as OSE's activity manager has them ("Activities with
+    // Triggers do not become runnable until an event occurs on a subscribed
+    // method"): trigger {method, params, where?} subscribes to method
+    // (subscribe: true) when the activity starts (and its schedule, if it
+    // has one, is due); the first reply that matches where (a db8 where
+    // clause, or an array of them all to match: ops <, <=, =, >=, >, !=, %)
+    // fires it, as does an error reply (OSE: "if the trigger method returns
+    // an error, the Trigger fires immediately"). key {name} fires on a reply
+    // with that field, compare {key, value} on one where it differs, none of
+    // them on the first reply with more than returnValue and subscribed.
+    // {and: [trigger...]} fires when each has, {or: [...]} when any has.
+    // The callback has the reply as $activity.trigger (as
+    // com.palm.service.contacts reads it, contactsService.js:347-352). The
+    // subscription ends when it fires; complete {restart: true, trigger?,
+    // callback?, schedule?} subscribes again (contactsService.js:433-465).
+    // One page subscribes: the system UI's (always running in the shell),
+    // else, with no system UI, each page, the first to claim the activity in
+    // the store firing it. The subscription is the creator's (ctx.caller),
+    // so the location service asks for the creator's permission. db8 watch
+    // triggers (com.palm.db/watch) are not subscribed yet (syncTriggers):
+    // those activities wait, as before.
+    // Activities with neither a schedule nor a trigger run when started (below).
     // One requirement is honoured: requirements {charging: true} holds an
     // activity until the charger is connected (System Updates' "install at
     // next charge"); it fires then, or at once if it already is.
@@ -11159,12 +11180,14 @@
         }
 
         function details(a) {
-            return { activityId: a.activityId, name: a.name, description: a.description || "", type: a.type || {},
-                     schedule: a.schedule, callback: a.callback, creator: a.creator,
-                     state: a.fired ? "running" : a.due !== null ? "waiting" : "queued" };
+            var out = { activityId: a.activityId, name: a.name, description: a.description || "", type: a.type || {},
+                        schedule: a.schedule, callback: a.callback, creator: a.creator,
+                        state: a.fired ? "running" : a.due !== null || (a.trigger && a.started) ? "waiting" : "queued" };
+            if (a.trigger) out.trigger = a.trigger;
+            return out;
         }
 
-        function create(p, reply) {
+        function create(p, reply, ctx) {
             var a = p.activity;
             if (!a || !a.name) { reply(fail(-1, "activity.name is required")); return; }
             var st = load();
@@ -11174,9 +11197,14 @@
             if (a.schedule && a.schedule.start && due === null) { reply(fail(22, "Invalid schedule start: " + a.schedule.start)); return; }
             var entry = {
                 activityId: st.nextId++, name: a.name, description: a.description, type: a.type,
-                schedule: a.schedule || null, callback: a.callback || null, creator: PalmSystem.appIdentifier,
+                schedule: a.schedule || null, callback: a.callback || null, creator: (ctx && ctx.caller) || PalmSystem.appIdentifier,
                 due: p.start === false ? null : due, fired: false
             };
+            if (a.trigger) {
+                entry.trigger = a.trigger;
+                entry.started = p.start !== false;
+                entry.gen = 0;
+            }
             if (a.requirements && a.requirements.charging === true) entry.charging = true;
             // With no schedule or trigger, a started activity runs now: its
             // callback is called once, by the page that created it.
@@ -11196,6 +11224,11 @@
             if (p.restart) {
                 if (p.schedule) a.schedule = p.schedule;
                 if (p.callback) a.callback = p.callback;
+                if (p.trigger) a.trigger = p.trigger;
+                if (a.trigger) {
+                    a.started = true;
+                    a.gen = (a.gen || 0) + 1;     // a new subscription
+                }
                 a.due = a.schedule ? parseStart(a.schedule) : null;
                 a.fired = false;
             } else {
@@ -11231,9 +11264,10 @@
                 a.callback.params.id === PalmSystem.appIdentifier && !systemWindow();
         }
 
-        function fire(a) {
+        function fire(a, triggered) {
             if (!a.callback || !a.callback.method) return;
             var act = { activityId: a.activityId, name: a.name };
+            if (triggered !== undefined) act.trigger = triggered;
             var params = clone(a.callback.params || {});
             if (isAppLaunch(a.callback.method) && params.id) {
                 params.params = params.params || {};
@@ -11264,6 +11298,7 @@
                     continue;
                 }
                 if (a.charging && !plugged) continue;
+                if (a.trigger) continue;     // its trigger fires it (syncTriggers), once its schedule is due
                 if (a.fired || a.due === null || a.due === undefined || a.due > now) continue;
                 if (at === undefined && !forThisPage(a) && now < a.due + GRACE_MS) continue;
                 a.fired = true;
@@ -11282,11 +11317,107 @@
             for (var n in st.byName) {
                 var a = st.byName[n];
                 if (a.fired || a.due === null || a.due === undefined) continue;
-                next = Math.min(next, forThisPage(a) ? a.due : a.due + GRACE_MS);
+                if (a.trigger && a.due <= Date.now()) continue;     // subscribed already (syncTriggers)
+                next = Math.min(next, forThisPage(a) || a.trigger ? a.due : a.due + GRACE_MS);
             }
+            syncTriggers(st);
             if (next === Infinity) return;
             timer = setTimeout(function () { timer = null; check(); },
                                Math.max(0, Math.min(MAX_WAIT_MS, next - Date.now())));
+        }
+
+        // ---- Triggers (above) ----
+        var subs = {};     // activity name -> {key, cancel}: this page's subscriptions
+        function hostsTriggers() {
+            return PalmSystem.appIdentifier === "com.palm.systemui" || Date.now() - store.get("systemui:listening", 0) >= 30000;
+        }
+        function valueAt(o, path) {
+            return String(path || "").split(".").reduce(function (v, k) { return v === null || v === undefined ? undefined : v[k]; }, o);
+        }
+        function whereMatches(r, where) {
+            return (Array.isArray(where) ? where : [where]).every(function (c) {
+                if (!c || !c.prop) return false;
+                var v = valueAt(r, c.prop), vals = Array.isArray(c.val) ? c.val : [c.val];
+                if (v === undefined) return false;
+                switch (c.op) {
+                case "=": return vals.some(function (x) { return v === x; });
+                case "!=": return vals.every(function (x) { return v !== x; });
+                case "<": return v < c.val;
+                case "<=": return v <= c.val;
+                case ">": return v > c.val;
+                case ">=": return v >= c.val;
+                case "%": return typeof v === "string" && v.indexOf(String(c.val)) === 0;
+                default: return false;
+                }
+            });
+        }
+        function triggerMatches(t, r) {
+            if (!r || r.returnValue === false) return true;
+            if (t.where) return whereMatches(r, t.where);
+            if (t.key) return r[t.key] !== undefined;
+            if (t.compare) return r[t.compare.key] !== undefined && r[t.compare.key] !== t.compare.value;
+            return Object.keys(r).some(function (k) { return k !== "returnValue" && k !== "subscribed"; });
+        }
+        function subKey(a) { return a.activityId + ":" + (a.gen || 0); }
+        function subscribeTrigger(a) {
+            var key = subKey(a), stopped = false;
+            function stop() { stopped = true; }
+            function claim(reply) {
+                if (stopped) return;
+                var st = load(), cur = st.byName[a.name];
+                stop();
+                if (!cur || cur.fired || subKey(cur) !== key) return;
+                cur.fired = true;
+                cur.due = Date.now();
+                save(st);
+                fire(cur, reply);
+            }
+            function watch(t, onMatch) {
+                if (t.and || t.or) {
+                    var parts = t.and || t.or, seen = parts.map(function () { return false; });
+                    parts.forEach(function (part, i) {
+                        watch(part, function (r) {
+                            seen[i] = true;
+                            if (t.or || seen.every(Boolean)) onMatch(r);
+                        });
+                    });
+                    return;
+                }
+                var params = clone(t.params || {});
+                params.subscribe = true;
+                dispatch(t.method, params, function (r) {
+                    if (!stopped && triggerMatches(t, r)) setTimeout(function () { onMatch(r); }, 0);
+                }, { cancelled: function () { return stopped; }, onCancel: null, caller: a.creator });
+            }
+            watch(a.trigger, claim);
+            return { key: key, cancel: stop };
+        }
+        // Not yet: db8 watches (com.palm.db/watch, key "fired"), the
+        // Synergy connectors' (connector-kit startWatch) and the original
+        // services'. They wait as before (docs/SYNERGY-CONNECTORS.md "Known
+        // limits"): firing them changes when those sync here, a change of
+        // its own to make and check with them.
+        function dbWatch(t) {
+            if (!t) return false;
+            if (t.and || t.or) return (t.and || t.or).some(dbWatch);
+            return /^(?:palm|luna):\/\/com\.palm\.(?:temp)?db\/watch\/?$/.test(String(t.method || ""));
+        }
+        // This page's subscriptions, as the store has the activities now.
+        function syncTriggers(st) {
+            var want = {}, now = Date.now();
+            if (hostsTriggers()) {
+                for (var n in st.byName) {
+                    var a = st.byName[n];
+                    if (a.trigger && a.started && !a.fired && !dbWatch(a.trigger) && (!a.schedule || (a.due !== null && a.due <= now))) want[n] = a;
+                }
+            }
+            Object.keys(subs).forEach(function (n) {
+                if (!want[n] || subKey(want[n]) !== subs[n].key) {
+                    subs[n].cancel();
+                    delete subs[n];
+                }
+            });
+            Object.keys(want).forEach(function (n) { if (!subs[n]) subs[n] = subscribeTrigger(want[n]); });
         }
 
         register(["com.palm.activitymanager"], {
@@ -11331,6 +11462,7 @@
         global.addEventListener && global.addEventListener("storage", function (e) {
             if (e.key === "phoenix:" + KEY) arm();
             else if (e.key === "phoenix:power") check();   // the charger, for requirements.charging
+            else if (e.key === "phoenix:systemui:listening") syncTriggers(load());   // who subscribes to triggers
         });
         var setPower = runtime.setPower;
         runtime.setPower = function (changes) {
@@ -17104,7 +17236,8 @@
          "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps", "markRead",
          "connect", "retry", "voice",
          // The everyday features' own (lib/commands-everyday.js; assistant.js METHODS).
-         "announce", "driving", "routines", "setRoutine", "removeRoutine", "runRoutine", "routineWake", "routineEvent"].forEach(function (name) {
+         "announce", "driving", "routines", "setRoutine", "removeRoutine", "runRoutine", "routineWake", "routineEvent",
+         "places", "setPlace", "placeWake"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
                 var m;
                 try { m = service(); } catch (e) { return reply(fail(-1, String(e.message || e))); }

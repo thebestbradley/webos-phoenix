@@ -75,6 +75,32 @@
   { "id": "c-cam-08", "cat": "camera", "say": "take a note", "forbid": ["voiceMemo", "camera"], "expect": { "answer": ["clarify", "fallback", "chat"] } },
   { "id": "c-routine-07", "cat": "routines", "say": "good morning",
     "storage": { "assistant:routines": [ { "id": "r2", "name": "Good morning", "phrases": ["good morning"], "enabled": false, "steps": [ { "text": "turn off do not disturb" } ] } ] },
-    "expect": { "answer": "chat" }, "forbid": ["routine", "toggle"] }
+    "expect": { "answer": "chat" }, "forbid": ["routine", "toggle"] },
+  { "id": "c-park-01", "cat": "places", "say": "remember where I parked", "expect": { "command": "parking", "args": { "action": "save" } }, "text": "saved where you parked" },
+  { "id": "c-park-02", "cat": "places", "say": "I parked on level 3", "expect": { "command": "parking", "args": { "action": "save", "note": "on level 3" } } },
+  { "id": "c-park-03", "cat": "places", "turns": [
+    { "say": "I parked here", "expect": { "command": "parking", "args": { "action": "save" } } },
+    { "say": "where's my car", "expect": { "command": "findParking" }, "text": "Your car is right around here" } ] },
+  { "id": "c-park-04", "cat": "places", "say": "where did I park",
+    "storage": { "assistant:parking": { "lat": 37.373, "lon": -122.04, "at": 1791358200000, "note": "", "address": "" } },
+    "expect": { "command": "findParking" }, "text": "about 0\\.2 miles north of here" },
+  { "id": "c-park-05", "cat": "places", "say": "where did I park", "expect": { "command": "findParking" }, "text": "don't know where you parked" },
+  { "id": "c-park-06", "cat": "places", "say": "I've parked", "expect": { "command": "drivingMode", "args": { "state": "off" } } },
+  { "id": "c-place-01", "cat": "places", "say": "remind me to buy milk when I get home",
+    "db": [ { "_id": "pl-home", "_kind": "org.webosphoenix.maps.place:1", "name": "Home", "detail": "", "lat": 37.40, "lon": -122.08, "created": 1, "searchText": "home" } ],
+    "expect": { "command": "placeReminder", "args": { "text": "buy milk", "place": "home", "when": "arrive" } }, "text": "remind you to buy milk when you get home",
+    "effects": [ { "kind": "com.palm.task:1", "where": { "summary": { "$re": "buy milk" }, "notes": "When you get home" }, "count": 1 } ] },
+  { "id": "c-place-02", "cat": "places", "say": "when I leave work remind me to call Mom",
+    "db": [ { "_id": "pl-work", "_kind": "org.webosphoenix.maps.place:1", "name": "Work", "detail": "", "lat": 37.37, "lon": -122.04, "created": 1, "searchText": "work" } ],
+    "expect": { "command": "placeReminder", "args": { "place": "work", "when": "leave" } }, "text": "when you leave work" },
+  { "id": "c-place-03", "cat": "places", "say": "remind me to email Sam when I get to work",
+    "expect": { "command": "placeReminder", "args": { "place": "work", "when": "arrive" } }, "text": "don't know where your work is yet" },
+  { "id": "c-place-04", "cat": "places", "say": "remind me to take the trash out at 7", "expect": { "command": "reminder" }, "forbid": ["placeReminder"] },
+  { "id": "c-place-05", "cat": "places", "say": "remind me to lock the door when I leave", "expect": { "command": "placeReminder", "args": { "place": "here", "when": "leave" } } },
+  { "id": "c-place-06", "cat": "places", "say": "this is my home", "expect": { "command": "setPlace", "args": { "place": "home" } },
+    "effects": [ { "kind": "org.webosphoenix.maps.place:1", "where": { "name": "Home" }, "count": 1 } ] },
+  { "id": "c-place-07", "cat": "places", "say": "remind me to buy flowers when I get to the market",
+    "expect": { "command": "placeReminder", "args": { "when": "arrive" } }, "text": "don't know where .Market. is" },
+  { "id": "c-place-08", "cat": "places", "say": "navigate home", "expect": { "command": "navigate" }, "forbid": ["placeReminder", "setPlace"] }
  ]
 }

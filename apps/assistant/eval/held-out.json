@@ -98,6 +98,10 @@
 {"id":"h-c-routine-1","cat":"routines","say":"kick off my bedtime routine","storage":{"assistant:routines":[{"id":"r1","name":"Bedtime","phrases":["bedtime"],"enabled":true,"steps":[{"text":"turn on do not disturb"}]}]},"expect":{"command":"routine"}},
 {"id":"h-c-cam-1","cat":"camera","say":"snap a selfie with a five second countdown","expect":{"command":"camera","args":{"action":"photo","front":true,"delay":5}}},
 {"id":"h-c-cam-2","cat":"camera","say":"start filming","expect":{"command":"camera","args":{"action":"video"}}},
-{"id":"h-c-cam-3","cat":"camera","say":"make an audio recording of this lecture","expect":{"command":"voiceMemo"}}
+{"id":"h-c-cam-3","cat":"camera","say":"make an audio recording of this lecture","expect":{"command":"voiceMemo"}},
+{"id":"h-c-park-1","cat":"places","say":"can you save the spot where my car is","expect":{"command":"parking","args":{"action":"save"}}},
+{"id":"h-c-park-2","cat":"places","say":"which way is my car","storage":{"assistant:parking":{"lat":37.373,"lon":-122.04,"at":1791358200000,"note":"","address":""}},"expect":{"command":"findParking"}},
+{"id":"h-c-place-1","cat":"places","say":"once I'm home remind me to feed the cat","db":[{"_id":"pl-home","_kind":"org.webosphoenix.maps.place:1","name":"Home","detail":"","lat":37.4,"lon":-122.08,"created":1,"searchText":"home"}],"expect":{"command":"placeReminder","args":{"place":"home","when":"arrive"}}},
+{"id":"h-c-place-2","cat":"places","say":"remind me about the dry cleaning when I head out of the office","db":[{"_id":"pl-work","_kind":"org.webosphoenix.maps.place:1","name":"Work","detail":"","lat":37.37,"lon":-122.04,"created":1,"searchText":"work"}],"expect":{"command":"placeReminder","args":{"place":"work","when":"leave"}}}
 ]
 }

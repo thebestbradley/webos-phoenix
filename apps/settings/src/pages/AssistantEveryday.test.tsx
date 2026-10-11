@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
 import { assistant, call, type AssistantSettings } from "@phoenix/luna";
-import { MessagesAndDriving } from "./AssistantEveryday";
+import { HomeAndWork, MessagesAndDriving } from "./AssistantEveryday";
 
 type PS = { getResource(p: string): string | undefined; appIdentifier: string };
 type R = { returnValue: boolean; [k: string]: any };
@@ -63,4 +63,40 @@ describe("Settings > Assistant: Messages & Driving", () => {
         await call("luna://org.webosphoenix.assistant/ask", { text: "I'm done driving", newThread: true });
         expect((await assistant.driving()).on).toBe(false);
     });
+});
+
+describe("Settings > Assistant: Home & Work", () => {
+    it("sets home to where the phone is, as Maps' saved Home, which the Assistant's reminders use", async () => {
+        render(<HomeAndWork off={false} />);
+        const home = await screen.findByTestId("as-place-home");
+        await waitFor(() => expect(home.textContent).toContain("Not set"));
+        fireEvent.click(home);
+        fireEvent.click(await screen.findByRole("option", { name: "Set to Where I Am Now" }));
+        await waitFor(() => expect(screen.getByTestId("as-places-note").textContent).toMatch(/^OK, this is your home now/));
+        await waitFor(() => expect(screen.getByTestId("as-place-home").textContent).not.toContain("Not set"));
+        // A saved place in Maps called Home.
+        const saved = (await call("luna://com.palm.db/find", { query: { from: "org.webosphoenix.maps.place:1" } })) as unknown as R;
+        expect(saved.results.filter((p: { name: string }) => p.name === "Home")).toHaveLength(1);
+        const r = (await call("luna://org.webosphoenix.assistant/ask", { text: "remind me to water the plants when I get home", newThread: true })) as unknown as R;
+        expect(r.messages.at(-1).text).toBe("OK, I'll remind you to water the plants when you get home.");
+        // The simulated phone leaves home and comes back: the activity
+        // manager's trigger (getLocationUpdates inside the box, the runtime's)
+        // wakes the Assistant each time, and Tasks is launched to remind.
+        const rt = (window as unknown as { __phoenixRuntime: { location: { set(lat: number, lon: number): unknown }; activities: { list(): any[] } } }).__phoenixRuntime;
+        const launches: any[] = [];
+        const host = (window as unknown as { phoenixHost: { postToHost(kind: string, m: any): void } }).phoenixHost;
+        host.postToHost = (kind: string, m: any) => { if (kind === "launch") launches.push(m); };
+        const act = () => rt.activities.list().find((a) => /^assistant\.place\./.test(a.name));
+        expect(act()?.trigger.or).toHaveLength(4);      // made at home: first it waits to be away
+        const start = (await call("luna://com.webos.service.location/getLocationUpdates", {})) as unknown as R;
+        rt.location.set(start.latitude + 0.01, start.longitude);      // a kilometre north
+        await waitFor(() => expect(act()?.trigger.where).toHaveLength(4), { timeout: 5000 });
+        rt.location.set(start.latitude, start.longitude);
+        await waitFor(() => expect(launches.find((l) => l.id === "org.webosphoenix.tasks" && l.params.reminder)).toBeTruthy(), { timeout: 5000 });
+        expect(act()).toBeUndefined();
+        // Cleared.
+        fireEvent.click(screen.getByTestId("as-place-home"));
+        fireEvent.click(await screen.findByRole("option", { name: "Clear" }));
+        await waitFor(() => expect(screen.getByTestId("as-place-home").textContent).toContain("Not set"));
+    }, 20000);
 });

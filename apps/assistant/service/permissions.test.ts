@@ -36,7 +36,7 @@ const GROUPS: [RegExp, string][] = [
     [/^com\.palm\.activitymanager\/(?:create|cancel)$/, "activity.operation"],
     [/^com\.palm\.applicationManager\/(?:launch|open)$/, "phoenix.appmanager.launch"],                 // services/appmanager
     [/^com\.palm\.applicationManager\/listLaunchPoints$/, "phoenix.appmanager.query"],
-    [/^com\.webos\.service\.location\/(?:getLocationUpdates|getAllLocationHandlers)$/, "location.query"],
+    [/^com\.webos\.service\.location\/(?:getLocationUpdates|getAllLocationHandlers|getReverseLocation)$/, "location.query"],
     [/^com\.webos\.service\.location\/setState$/, "location.operation"],
     [/^com\.webos\.service\.audio\/(?:master\/getVolume|getInputVolume)$/, "audio.query"],
     [/^com\.webos\.service\.audio\/(?:master\/setVolume|master\/muteVolume|setInputVolume)$/, "audio.operation"],

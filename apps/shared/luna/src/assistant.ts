@@ -389,7 +389,19 @@ export const assistant = {
     async removeRoutine(id: string): Promise<void> { await c("removeRoutine", { id }); },
     /** Run it now: what it did, as it says it. */
     async runRoutine(id: string): Promise<string> { return (await c("runRoutine", { id })).text || ""; },
+    /** Home and work: the saved places in Maps called "Home" and "Work" (null: none yet). */
+    async places(): Promise<{ home: SavedPlaceInfo | null; work: SavedPlaceInfo | null }> {
+        const r = await c("places");
+        return { home: r.home || null, work: r.work || null };
+    },
+    /** Home or work set to where the device is now (what the assistant said), or cleared. */
+    async setPlace(place: "home" | "work", clear = false): Promise<string> {
+        return (await c("setPlace", clear ? { place, clear: true } : { place })).text || "";
+    },
 };
+
+/** A saved place in Maps (org.webosphoenix.maps.place:1), as Settings shows it. */
+export interface SavedPlaceInfo { id: string; name: string; detail: string; lat: number; lon: number }
 
 /** A routine (the service's lib/commands-routines.js): its steps are requests in words. */
 export interface Routine {

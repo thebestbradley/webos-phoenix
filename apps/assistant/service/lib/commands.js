@@ -2346,6 +2346,7 @@ function undo(u, env) {
 var everyday = require("./commands-everyday")({ D: D, lunaCall: lunaCall, dbFind: dbFind, cards: cards, whenShown: whenShown, launch: launch,
                                                 TOGGLE_RUN: TOGGLE_RUN, TOGGLE_STATE: TOGGLE_STATE, activityDate: activityDate, localDate: localDate,
                                                 personName: personName, findPerson: findPerson, people: people, here: here, getJson: getJson,
+                                                blockedReply: blockedReply, addTask: addTask,
                                                 prepare: prepare, run: run, find: find, needsConfirm: needsConfirm, BUILT_IN: BUILT_IN });
 Array.prototype.push.apply(BUILT_IN, everyday.COMMANDS);
 

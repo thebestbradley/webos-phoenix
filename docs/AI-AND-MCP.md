@@ -1469,7 +1469,7 @@ one conversation) is a notification of its own here, and one pushed on a
 stack is announced as a new one is. Checked in the simulator (`--scene
 "assistant:@notified|what did I miss"`, `"assistant:I'm driving|@sms|@wait:10000"`:
 the `assistant:` scene asks its own requests; `@notified`, `@sms`, `@lock`,
-`@starter:<id>`, `@open:<app>:<params>`, `@tap:<choice>`, `@close` and
+`@starter:<id>`, `@location:<lat>,<lon>`, `@dashboard`, `@open:<app>:<params>`, `@tap:<choice>`, `@close` and
 `@wait:<ms>` set the scene, `sim.qml`).
 
 **Routines** (`routine`, `routineList`, `routineManage`;
@@ -1523,6 +1523,51 @@ fake camera (`QTWEBENGINE_CHROMIUM_FLAGS="--use-fake-device-for-media-stream
 --use-fake-ui-for-media-stream"`): the countdown and Cancel over the
 viewfinder, the shot in the last-shot thumbnail, and Voice Memos
 recording "Groceries".
+
+**Places** (`parking`, `findParking`, `placeReminder`, `setPlace`;
+`lib/commands-places.js`). "Remember where I parked" ("I parked on level
+3": the note kept) saves where the phone is now; "where did I park" says
+how far and which way from here, when, and the note ("Your car is about
+390 meters southwest of here. You parked 20 minutes ago, on level 3."),
+with Maps behind it on the spot and Walking Directions; "take me back to
+my car" opens the walk; "forget where I parked". **Home and work** are
+the user's saved places in Maps called "Home" and "Work"
+(`org.webosphoenix.maps.place:1`, which Maps lists, renames and removes),
+one store for everything that needs them: "this is my home" or "set my
+work location to here" saves one where the phone is (taken back by
+"undo"), as Settings > Assistant > Home & Work does ("Set to Where I Am
+Now", "Clear"); an address is Maps' to find and save ("set my home address
+to 12 Main Street" looks it up there). **Reminders at a place**: "remind me
+to buy milk when I get home", "when I leave work remind me to call Mom",
+"remind me to lock the door when I leave" (here), "... when I get to the
+gym" (any saved place by its name). The reminder is a task in Tasks (its
+note "When you get home") and a geofence the device watches. OSE's
+location service has no geofences (its methods: `getLocationUpdates` and
+the rest), so it is an activity of the activity manager's whose trigger is
+`getLocationUpdates` (a fix a minute at most, or 50 m on) with db8 where
+clauses on the reply's latitude and longitude: inside a box 150 m each way
+about the place to arrive, outside one of 250 m (`{or: [...]}`, a side
+each) to leave, so a fix at the edge does not come and go. Nothing of the
+Assistant runs until a fix matches; then `placeWake` gets the fix as
+`$activity.trigger` (as com.palm.service.contacts reads its trigger,
+`contactsService.js:347-352`) and restarts the activity with the next
+trigger (`complete {restart, trigger}`, `contactsService.js:433-465`), or
+at the end launches Tasks with `{reminder: taskId}`, which posts the
+reminder as it does a timed one. Made at the place itself, "when I get
+home" first waits to be away (and "when I leave work", said elsewhere,
+first to get there). With no fix (location off) it tries again in 15
+minutes. With no Home yet it asks "Should I use where you are now?" (Set
+Home to Here, or Settings); a place Maps does not have still gets the task,
+and says how to have the reminder there. The simulator's activity manager
+has OSE's triggers for it (where clauses, `and`/`or`, an error firing
+it, `$activity.trigger`, `complete {restart: true, trigger}`; the system
+UI's page subscribes, `runtime/phoenix-runtime.js`), and its location
+moves with Simulate > Location or the scene step `@location:<lat>,<lon>`:
+checked with `--scene "assistant:this is my home|yes|@location:37.3437,-121.8907|remind
+me to buy milk when I get home|@close|@location:37.3338,-121.8906|@wait:8000|@dashboard"`,
+Tasks' "buy milk / When you get home" in the dashboard. On a device the
+same calls go to OSE's activity manager and location service; not run on
+one yet.
 
 ### Next: 2.0
 

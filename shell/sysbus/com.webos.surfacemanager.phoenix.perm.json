@@ -4,6 +4,7 @@
         "audio.query",
         "audio.operation",
         "audio.previlagequery",
+        "assistant.ask",
         "assistant.settings",
         "transcriber.operation",
         "boot.query",

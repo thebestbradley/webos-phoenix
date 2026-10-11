@@ -65,7 +65,9 @@ function device(opts) {
                   hotspot: false, hotspotPass: false, vpn: "", vpnProfiles: [],
                   wifi: true, bluetooth: false, airplane: false, flashlight: false, launched: [],
                   // The shell's notifications ({id, appId, app, title, body, time, ongoing}), the lock screen, its previews.
-                  notifications: [], deviceLocked: false, previews: true };
+                  notifications: [], deviceLocked: false, previews: true,
+                  // Where the device is (getLocationUpdates; tests move it).
+                  position: { latitude: 37.37, longitude: -122.04 } };
     function okr(o) { return Promise.resolve(Object.assign({ returnValue: true }, o || {})); }
     var luna = {
         call: function (uri, p) {
@@ -86,6 +88,13 @@ function device(opts) {
             if (m === "com.palm.db/reserveIds") return okr({ ids: Array.from({ length: p.count }, function () { return "res" + ++n; }) });
             if (m === "com.palm.activitymanager/create") { state.activities.set(p.activity.name, p.activity); return okr({ activityId: 1 }); }
             if (m === "com.palm.activitymanager/cancel") { state.activities.delete(p.activityName); return okr(); }
+            // complete: done (gone), or {restart: true} with its new trigger, callback or schedule.
+            if (m === "com.palm.activitymanager/complete") {
+                var act = state.activities.get(p.activityName);
+                if (act && p.restart) state.activities.set(p.activityName, Object.assign({}, act, p.trigger ? { trigger: p.trigger } : {}, p.callback ? { callback: p.callback } : {}, p.schedule ? { schedule: p.schedule } : {}));
+                else state.activities.delete(p.activityName);
+                return okr();
+            }
             if (m === "com.webos.service.audio/master/getVolume") return okr({ volumeStatus: { volume: state.volume, muted: state.muted } });
             if (m === "com.webos.service.audio/master/setVolume") { state.volume = p.volume; return okr(); }
             if (m === "com.webos.service.audio/master/muteVolume") { state.muted = p.mute; return okr(); }
@@ -104,7 +113,7 @@ function device(opts) {
             if (m === "com.webos.service.location/setState") { state[p.Handler] = p.state; return okr(); }
             if (m === "com.webos.service.location/getLocationUpdates") {
                 if (!state.gps && !state.network) return Promise.resolve({ returnValue: false, errorCode: 5, errorText: "Location services are off" });
-                return okr({ errorCode: 0, latitude: 37.37, longitude: -122.04, horizAccuracy: 8 });
+                return okr({ errorCode: 0, latitude: state.position.latitude, longitude: state.position.longitude, horizAccuracy: 8 });
             }
             // What OSE's service does not have (getCurrentPosition was the legacy com.palm.location's).
             if (m.indexOf("com.webos.service.location/") === 0) return Promise.resolve({ returnValue: false, errorCode: -1, errorText: "Unknown method" });

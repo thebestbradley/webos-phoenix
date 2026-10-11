@@ -2054,6 +2054,8 @@ Item {
     // "notified" scene's notifications in the dashboard first; "@sms" a
     // text received (as the toolbar's SMS button); "@lock" locks;
     // "@starter:<id>" adds one of the routines' starters ("goodnight");
+    // "@location:<lat>,<lon>" moves the simulated phone (Simulate > Location);
+    // "@dashboard" opens the notification dashboard;
     // "@open:<appId>:<params JSON>" opens an app, the view closed; "@close"
     // closes the view (what it opened behind it shows); "@tap:<choice>" taps
     // one of the last answer's buttons ("@tap:open");
@@ -2116,6 +2118,10 @@ Item {
                 } else if (step === "@close") {
                     // The view closed: what it opened behind it shows.
                     shell.assistantOverlay.open = false;
+                } else if (step === "@dashboard") {
+                    // The notification dashboard opened (what came in shows).
+                    shell.assistantOverlay.open = false;
+                    shell.notifications.dashboardOpen = true;
                 } else if (step.indexOf("@tap:") === 0) {
                     // One of the last answer's buttons, tapped ("@tap:open": Open Settings).
                     var ov = shell.assistantOverlay, choiceId = step.slice(5);
@@ -2132,6 +2138,12 @@ Item {
                         if (s)
                             windows.lunaCall("luna://org.webosphoenix.assistant/setRoutine", { routine: s }, function () {});
                     });
+                } else if (step.indexOf("@location:") === 0) {
+                    // The simulated phone moved ("@location:37.3337,-121.8907"), as Simulate > Location moves it.
+                    var ll = step.slice(10).split(",").map(Number);
+                    if (ll.length === 2 && !isNaN(ll[0]) && !isNaN(ll[1]))
+                        windows.lunaCall("luna://com.webos.service.location/mock/setLocation",
+                                         { name: "gps", location: { latitude: ll[0], longitude: ll[1] } }, function () {});
                 } else if (step.indexOf("@open:") === 0) {
                     // An app with launch params ("@open:org.webosphoenix.settings:{\"page\":\"assistant\"}").
                     var rest = step.slice(6), colon = rest.indexOf(":");

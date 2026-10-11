@@ -604,10 +604,6 @@
   "command": "navigate"
  },
  {
-  "text": "I want to take a picture",
-  "command": "open"
- },
- {
   "text": "open up the music app",
   "command": "open"
  },
