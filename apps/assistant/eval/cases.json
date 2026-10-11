@@ -76,6 +76,11 @@
 {"id":"cal-20","cat":"calendar","say":"add a meeting tomorrow","expect":{"anyOf":[{"command":"event","status":"ask"},{"answer":"clarify"}]}},
 {"id":"cal-21","cat":"calendar","say":"put a haircut on my calendar for saturday at 11","expect":{"command":"event","args":{"start":"2026-10-10T11:00"}}},
 {"id":"cal-22","cat":"calendar","say":"do i have any meetings today","expect":{"command":"agenda"}},
+{"id":"cal-25","cat":"calendar","say":"my dentist appointment needs to be at 5 instead","expect":{"command":"eventMove"},"forbid":["event"]},
+{"id":"cal-26","cat":"calendar","say":"the team meeting is now on friday","expect":{"command":"eventMove"},"forbid":["event"]},
+{"id":"alarm-21","cat":"alarms","say":"alarm me for half past six","expect":{"command":"alarm"},"forbid":["alarmManage"]},
+{"id":"con-01","cat":"contacts","say":"Sam has a new email, sam@new.example.com","expect":{"command":"edit","args":{"kind":"contact","change":"email"}},"forbid":["email"]},
+{"id":"con-02","cat":"contacts","say":"Priya's new number is 415 555 0199","expect":{"command":"edit","args":{"kind":"contact","change":"phone"}},"forbid":["call","text"]},
 
 {"id":"msg-01","cat":"messages","say":"text Sam I'm running late","expect":{"command":"text","args":{"who":"sam","message":"I'm running late"},"status":"pending"}},
 {"id":"msg-02","cat":"messages","say":"send a message to Priya saying see you at 5","expect":{"command":"text","args":{"who":"priya","message":"see you at 5"}}},

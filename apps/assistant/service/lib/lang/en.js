@@ -628,7 +628,8 @@ function stopwatch(t) {
 
 // Repeats as the Clock has them ("every weekday at 7", "7am weekdays").
 function alarm(t, now, ctx) {
-    var m = /^(?:set |create |make |add |put )?(?:me )?(?:an |the |my |a new )?alarm (?:clock )?(?:for |at |to |on )?(.+?)(?: (?:called|named|labelled|labeled|for) (?!\d)(.+))?$/.exec(t)
+    var m = /^alarm me (?:for |at )?(.+?)()$/.exec(t)
+        || /^(?:set |create |make |add |put )?(?:me )?(?:an |the |my |a new )?alarm (?:clock )?(?:for |at |to |on )?(.+?)(?: (?:called|named|labelled|labeled|for) (?!\d)(.+))?$/.exec(t)
         || /^wake me(?: up)?(?: at| by)? (.+?)()$/.exec(t);
     if (!m) return null;
     var wake = /^wake/.test(t);
@@ -1299,7 +1300,11 @@ function eventWords(said) {
 function eventMove(t, ctx) {
     var m = /^(?:move|reschedule|push(?: back)?|shift|bring forward|change|switch) (?:my |the |our |that )?(.+?) (?:to|until|till|for|over to) (.+)$/.exec(t)
         || /^(?:put|push|set) (?:my |the |our |that )?(.+?) back (?:to|until|till) (.+)$/.exec(t);
-    if (!m || /\b(?:alarms?|timers?|tasks?|reminders?|notes?|memos?|contacts?|lists?|volume|brightness)\b/.test(m[1])) return null;
+    // "my dentist appointment needs to be at 5 instead", "the team meeting
+    // is now on friday": an event's, moved (the 0.6B model made a second one).
+    var n = !m && /^(?:my |the |our |that )?(.+?) (?:needs to be|should be|has to be|must be|is now|has (?:been )?moved|got moved|was moved|moved) (?:to )?(.+?)(?: instead| now)?$/.exec(t);
+    if (n && eventish(n[1])) m = [n[0], n[1], /^\d/.test(n[2]) ? "at " + n[2] : n[2]];
+    if (!m ||/\b(?:alarms?|timers?|tasks?|reminders?|notes?|memos?|contacts?|lists?|volume|brightness)\b/.test(m[1])) return null;
     var info = extract(m[2], ctx.now);
     if (info.rest.replace(/\b(?:at|on|the)\b/g, "").trim()) return null;
     var r = resolve(info, ctx.now, "day");
@@ -1726,8 +1731,13 @@ function edit(t, ctx) {
         return { kind: target.kind, query: target.query, it: target.it, change: "remove", value: cased(m[1].replace(/^(?:the )/, ""), ctx) };
     if ((m = /^uninvite (.+)$/.exec(t))) return { kind: "event", query: "", it: true, change: "remove", value: cased(m[1], ctx) };
     // A contact's details: "change Sam's email to sam@new.com".
-    if ((m = /^(?:change|update|set|make|edit) (.+?)(?:'s|s') (e-?mail(?: address)?|(?:phone |mobile |cell |work |home )?number|phone|mobile|address|birthday) (?:to|as|is) (.+)$/.exec(t))
-        && !/^(?:my|your|its|it)$/.test(m[1])) {
+    // And "Sam has a new email, sam@new.com", "Priya's new number is 555 0199"
+    // (the 0.6B model emailed that address: the owner's address said alone
+    // was emailed the same way).
+    if (((m = /^(?:change|update|set|make|edit) (.+?)(?:'s|s') (e-?mail(?: address)?|(?:phone |mobile |cell |work |home )?number|phone|mobile|address|birthday) (?:to|as|is) (.+)$/.exec(t))
+         || ((m = /^(.+?)(?: has (?:got )?an?|(?:'s|s')) new (e-?mail(?: address)?|(?:phone |mobile |cell |work |home )?number|phone|mobile|address)(?: now)?(?: is|:|,| -)? (?:now )?(.+)$/.exec(t))
+             && m[1].split(" ").length <= 4 && (/mail/.test(m[2]) ? /@/.test(m[3]) : /address/.test(m[2]) || /\d{3}/.test(m[3]))))
+        && !/^(?:my|your|its|it|i|you|this|that|what|who|which)$/.test(m[1])) {
         var field = /mail/.test(m[2]) ? "email" : /address/.test(m[2]) ? "address" : /birthday/.test(m[2]) ? "birthday" : "phone";
         return { kind: "contact", query: m[1], it: false, change: field, value: field === "address" ? cased(m[3], ctx) : m[3].trim() };
     }
