@@ -61,8 +61,10 @@ Item {
         radius: ql.egDock ? Theme.px(12) : Theme.px(Theme.backdropBlurRadius)
     }
 
-    // ---- Ember Glass's dock (phones) ------------------------------------------------
-    readonly property bool egDock: Theme.emberGlass && !Theme.tablet
+    // ---- Ember Glass's dock ----------------------------------------------------------
+    // Phones and tablets alike (no render draws a tablet's: the phone's
+    // capsule, as tall as the tablet's icons need, 10 px round them).
+    readonly property bool egDock: Theme.emberGlass
     // The capsule's sides, and its 10 px padding: where the slots are.
     readonly property real egInset: egDock ? Theme.px(34 + 10) : 0
     // The app in front (Shell: the card view's), marked by the ember dot.
@@ -83,7 +85,7 @@ Item {
         visible: ql.egDock
         x: Theme.px(34)
         width: ql.width - 2 * Theme.px(34)
-        height: Theme.px(64)
+        height: Theme.tablet ? Theme.quickLaunchIconSize + Theme.px(2 * 10) : Theme.px(64)
         // At the top: the 10 px under it keep it off the notification bar
         // (Theme.quickLaunchHeight).
         y: 0
@@ -162,15 +164,15 @@ Item {
     // after each 128 px cell in it (rearrangeIcons, :671).
     readonly property real cellWidth: Theme.quickLaunchCellWidth
     readonly property real interSpace: pinned.length === 0 ? 0
-        : Math.max(0, Math.floor((width - cellWidth - pinned.length * cellWidth) / pinned.length))
+        : Math.max(0, Math.floor((width - 2 * egInset - cellWidth - pinned.length * cellWidth) / pinned.length))
 
     // Centre of item i's cell; i === pinned.length is the launcher button.
     function slotCentre(i) {
         if (!Theme.tablet)
             return egInset + slotWidth * i + slotWidth / 2;
         if (i >= pinned.length)
-            return width - cellWidth / 2;
-        return i * (cellWidth + interSpace) + cellWidth / 2;
+            return width - egInset - cellWidth / 2;
+        return egInset + i * (cellWidth + interSpace) + cellWidth / 2;
     }
 
     // Dock slot for a drop at x (0 .. pinned.length): the nearest centre.

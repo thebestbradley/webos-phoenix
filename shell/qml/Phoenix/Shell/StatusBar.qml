@@ -47,7 +47,7 @@ Item {
     // (StatusBarItemGroup::layoutRight). Tablet notification icons go just
     // left of it.
     readonly property real systemGroupWidth: indicators.width + indicators.anchors.rightMargin
-        + (Theme.tablet && !lockScreen ? systemSeparator.width + Theme.px(6) : 0)
+        + (_systemArrow ? systemSeparator.width + Theme.px(6) : 0)
 
     // The screen's shape where the bar is (Shell.displayCutouts,
     // displayCornerRadius; device pixels): the camera cutouts at the top
@@ -130,8 +130,9 @@ Item {
 
     // Phones draw the title on appname-background.png for an app, the
     // launcher and Just Type, not for the carrier; tablets never do
-    // (StatusBarTitle::setTitleString).
-    readonly property bool _border: !Theme.tablet && titleBorder
+    // (StatusBarTitle::setTitleString). Ember Glass draws its app menu tab
+    // on both (email.html's status bar: the tab, no arrow).
+    readonly property bool _border: (!Theme.tablet || Theme.emberGlass) && titleBorder
     readonly property font _titleFont: FontTools.withPercentageSpacing(Qt.font({
         family: Theme.fontFamily, pixelSize: Theme.statusBarFontSize, bold: true
     }), Theme.statusBarTitleSpacingPercent)
@@ -254,7 +255,7 @@ Item {
     Image {
         id: titleArrow
         objectName: "statusBarTitleArrow"
-        visible: Theme.tablet && opacity > 0
+        visible: Theme.tablet && !Theme.emberGlass && opacity > 0
         x: newTitle.x + newTitle.width + Theme.statusBarArrowSpacing
         anchors.verticalCenter: parent.verticalCenter
         width: Theme.artWidth(source)
@@ -264,7 +265,7 @@ Item {
     }
     Image {
         objectName: "statusBarTitleSeparator"
-        visible: Theme.tablet && opacity > 0
+        visible: Theme.tablet && !Theme.emberGlass && opacity > 0
         x: titleArrow.x + titleArrow.width + Theme.px(7)             // ARROW_SPACING, StatusBar.h:33
         anchors.verticalCenter: parent.verticalCenter
         width: Theme.artWidth(source)
@@ -313,7 +314,8 @@ Item {
     }
     Text {
         objectName: "centreClock"
-        visible: !Theme.tablet || bar.lockScreen
+        // (Ember Glass: in the middle on tablets too, as email.html has it.)
+        visible: !Theme.tablet || bar.lockScreen || Theme.emberGlass
         anchors.verticalCenter: parent.verticalCenter
         x: bar._clockX(width)
         text: bar.clockText
@@ -385,7 +387,8 @@ Item {
     // when m_arrowAnimProg > 0, :467-487). The lock screen's bar is another
     // bar (LockWindow's), so locking takes the arrow away at once and
     // unlocking shows it as it was.
-    readonly property bool _systemArrow: Theme.tablet && !lockScreen
+    // (Ember Glass: no arrow nor separator; the open menu's tab says it.)
+    readonly property bool _systemArrow: Theme.tablet && !lockScreen && !Theme.emberGlass
     property real _systemArrowFade: 0
     Behavior on _systemArrowFade { NumberAnimation { duration: Theme.statusBarArrowFadeDuration; easing.type: Easing.InOutQuad } }
     Connections {
@@ -655,7 +658,7 @@ Item {
         // Tablet: the clock, rightmost (the system group's first item).
         Text {
             objectName: "tabletClock"
-            visible: Theme.tablet && !bar.lockScreen
+            visible: Theme.tablet && !bar.lockScreen && !Theme.emberGlass
             anchors.verticalCenter: parent.verticalCenter
             text: bar.clockText
             color: Theme.text

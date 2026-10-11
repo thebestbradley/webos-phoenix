@@ -372,7 +372,8 @@ QtObject {
     // Ember Glass (phones): the 64 px capsule and 10 px under it, so it sits
     // 10 px over the notification bar (cards.html .dock: bottom 76, the
     // gesture strip's 22 and .notes' 44 under it).
-    readonly property int quickLaunchHeight: px(tablet ? 100 : emberGlass ? 64 + 10 : 68)
+    // Tablets: the 84 px capsule round the 64 px icons, and 10 under it.
+    readonly property int quickLaunchHeight: px(tablet ? (emberGlass ? 84 + 10 : 100) : emberGlass ? 64 + 10 : 68)
     readonly property int quickLaunchIconSize: px(tablet ? 64 : 48)
     readonly property int quickLaunchIconY: px(tablet ? 20 : 14)
     readonly property int quickLaunchMaxItems: 5                     // layoutsettings.cpp:87

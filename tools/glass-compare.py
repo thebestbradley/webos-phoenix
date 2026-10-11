@@ -89,5 +89,28 @@ corner(f'{shots}/systemmenu.png', f'{shots}/systemmenu-wifi.png', 'system-menu-w
 pair(f'{shots}/launcher-classic.png', f'{shots}/launcher.png', 'launcher.jpg')
 pair(f'{shots}/launcher-edit.png', f'{shots}/launcher-menu.png', 'launcher-edit-menu.jpg')
 alone(f'{shots}/launcher-group.png', 'launcher-group.jpg')
+# The tablet: the status bar beside the tablet renders' (email-dark.jpg),
+# 1.0's under both; the card view, the drop-down and a banner.
+def bars(render, ours, classic, name, frac=0.045, w=760):
+    if not have(render, ours, classic):
+        return
+    parts = []
+    for p in (render, ours, classic):
+        im = load(p, w)
+        parts.append(im.crop((0, 0, w, round(im.height * frac))))
+    out_im = Image.new('RGB', (w, sum(p.height for p in parts) + 12), (24, 24, 26))
+    y = 0
+    for p in parts:
+        out_im.paste(p, (0, y)); y += p.height + 6
+    out_im.save(os.path.join(out, name), quality=85, optimize=True)
+bars(f'{R}/email-dark.jpg', f'{shots}/tablet-notes.png', f'{shots}/tablet-notes-classic.png', 'tablet-statusbar.jpg')
+alone(f'{shots}/tablet-cards.png', 'tablet-cards.jpg', 760)
+alone(f'{shots}/tablet-dropdown.png', 'tablet-dropdown.jpg', 760)
+def top(ours, frac, name, w=760):
+    if not have(ours):
+        return
+    B = load(ours, w)
+    B.crop((0, 0, w, round(B.height * frac))).save(os.path.join(out, name), quality=85, optimize=True)
+top(f'{shots}/tablet-banner.png', 0.045, 'tablet-banner.jpg')
 for f in sorted(os.listdir(out)):
     print(f, os.path.getsize(os.path.join(out, f)) // 1024, 'KB')

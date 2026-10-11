@@ -623,7 +623,7 @@ Item {
 
         Rectangle {
             id: space
-            color: root.overlay ? Theme.statusBarFill : root.egBar ? "transparent" : Theme.black
+            color: Theme.emberGlass ? "transparent" : root.overlay ? Theme.statusBarFill : Theme.black
             clip: true
             // Tablets: right of the centred clock.
             x: root.overlay ? root.width / 2 + Theme.px(40) : 0
@@ -704,10 +704,50 @@ Item {
                     }
                 }
 
+                // Ember Glass, tablets: the banner in the status bar is the
+                // app menu tab's capsule (white 7%, a hairline at 38%), the
+                // icon and the text in white, sliding in from the right
+                // as 1.0's.
+                Rectangle {
+                    objectName: "emberTabletBanner"
+                    visible: root.overlay && Theme.emberGlass
+                    x: Theme.px(5) + (1 - root.bannerProgress) * banner.width
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: Theme.px(24)
+                    width: Math.min(banner.width - Theme.px(10), egTabletBannerRow.implicitWidth + Theme.px(24))
+                    radius: height / 2
+                    opacity: bannerContent.opacity
+                    color: Qt.rgba(1, 1, 1, 0.07)
+                    border.color: Qt.rgba(1, 1, 1, 0.38)
+                    border.width: Math.max(1, EmberGlass.hairline * Theme.u)
+                    Row {
+                        id: egTabletBannerRow
+                        x: Theme.px(8)
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: Theme.px(8)
+                        AppIcon {
+                            anchors.verticalCenter: parent.verticalCenter
+                            size: Theme.px(16)
+                            showLabel: false
+                            color: root.bannerColor
+                            glyph: root.bannerGlyph
+                            source: root.bannerIcon
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Math.min(implicitWidth, banner.width - Theme.px(10 + 24 + 16 + 8))
+                            elide: Text.ElideRight
+                            text: root.bannerText
+                            color: Qt.rgba(1, 1, 1, 0.92)
+                            font: Qt.font({ family: Theme.egFontFamily, pixelSize: Math.round(12.5 * Theme.u), weight: Font.DemiBold })
+                        }
+                    }
+                }
+
                 Row {
                     id: bannerContent
                     objectName: "bannerContent"
-                    visible: !root.egBar
+                    visible: !Theme.emberGlass
                     x: root.overlay ? Theme.px(5) + (1 - root.bannerProgress) * banner.width : Theme.px(5)
                     y: (banner.height - height) / 2 + (root.overlay ? 0 : (1 - root.bannerProgress) * banner.height)
                     spacing: Theme.px(5)
@@ -1088,15 +1128,31 @@ Item {
             y: -Theme.statusBarHeight
             width: tabletIcons.width + 2 * (Theme.statusBarTabCap + Theme.statusBarTabPadding)
             height: Theme.statusBarHeight
-            source: Theme.asset("statusBar/status-bar-menu-dropdown-tab.png")
+            source: Theme.emberGlass ? "" : Theme.asset("statusBar/status-bar-menu-dropdown-tab.png")
             border { left: Theme.artBorder(11, source); right: Theme.artBorder(11, source); top: 0; bottom: 0 }
+            opacity: root.dashboardOpen ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.statusBarMenuFadeDuration } }
+        }
+        // Ember Glass: the open drop-down's tab is the app menu tab's
+        // capsule, lit (white 16%), round the icons and the dot.
+        Rectangle {
+            objectName: "emberNotificationTab"
+            visible: tabletIcons.visible && Theme.emberGlass && opacity > 0
+            x: tabletIcons.x - Theme.px(8)
+            y: -Theme.statusBarHeight + (Theme.statusBarHeight - height) / 2
+            width: tabletIcons.width + egTabletDot.width + Theme.px(8) + Theme.px(16)
+            height: Theme.px(24)
+            radius: height / 2
+            color: Qt.rgba(1, 1, 1, 0.16)
+            border.color: Qt.rgba(1, 1, 1, 0.38)
+            border.width: Math.max(1, EmberGlass.hairline * Theme.u)
             opacity: root.dashboardOpen ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: Theme.statusBarMenuFadeDuration } }
         }
         Image {
             id: notifSeparator
             objectName: "notificationSeparator"
-            visible: tabletIcons.visible
+            visible: tabletIcons.visible && !Theme.emberGlass
             x: tabletIcons.x - Theme.px(5) - width
             y: -Theme.statusBarHeight + (Theme.statusBarHeight - height) / 2
             width: Theme.artWidth(source)
@@ -1113,7 +1169,9 @@ Item {
             visible: root.overlay && opacity > 0
             opacity: normalLayer.groupShown
             anchors.right: parent.right
-            anchors.rightMargin: root.statusBarRightInset + Theme.px(6)
+            // Ember Glass: the ember dot after the icons, 12 px before the
+            // system's (.sb-notes: 8 apart, margin-right 12).
+            anchors.rightMargin: root.statusBarRightInset + (Theme.emberGlass ? Theme.px(12) + egTabletDot.width + Theme.px(8) : Theme.px(6))
             y: -Theme.statusBarHeight + (Theme.statusBarHeight - height) / 2
             width: Math.min(tabletIconRow.width, Theme.px(10 * (24 + 5)))
             height: tabletIconRow.height
@@ -1121,12 +1179,12 @@ Item {
             Row {
                 id: tabletIconRow
                 anchors.right: parent.right
-                spacing: Theme.px(5)                                        // StatusBar.h:31-32
+                spacing: Theme.emberGlass ? Theme.px(8) : Theme.px(5)       // StatusBar.h:31-32
                 Repeater {
                     model: root.overlay ? root.model : null
                     delegate: AppIcon {
                         required property var model
-                        size: Theme.bannerHeight
+                        size: Theme.emberGlass ? Theme.px(16) : Theme.bannerHeight
                         showLabel: false
                         color: model.color
                         glyph: model.glyph
@@ -1137,11 +1195,38 @@ Item {
                 }
             }
         }
+        // Ember Glass: the ember dot after the tablet's notification icons
+        // (.sb-notes .dot: 5 px, glowing).
+        Rectangle {
+            id: egTabletDot
+            objectName: "emberNotificationGroupDot"
+            visible: tabletIcons.visible && Theme.emberGlass
+            opacity: tabletIcons.opacity
+            x: tabletIcons.x + tabletIcons.width + Theme.px(8)
+            y: -Theme.statusBarHeight + (Theme.statusBarHeight - height) / 2
+            width: Theme.px(5)
+            height: width
+            radius: width / 2
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0; color: EmberGlass.emberA }
+                GradientStop { position: 1; color: EmberGlass.emberB }
+            }
+            RectangularGlow {
+                z: -1
+                visible: GraphicsInfo.api !== GraphicsInfo.Software
+                anchors.fill: parent
+                glowRadius: Theme.px(3)
+                spread: 0.1
+                color: Theme.egAlpha(EmberGlass.emberA, 0.8)
+                cornerRadius: width / 2 + glowRadius
+            }
+        }
         MouseArea {
             visible: root.overlay && root.hasNotifications && !root.bannerActive
             x: tabletIcons.x - Theme.px(5)
             y: -Theme.statusBarHeight
-            width: tabletIcons.width + Theme.px(10)
+            width: tabletIcons.width + Theme.px(10) + (Theme.emberGlass ? egTabletDot.width + Theme.px(8) : 0)
             height: Theme.statusBarHeight
             onClicked: root.dashboardOpen = !root.dashboardOpen
         }

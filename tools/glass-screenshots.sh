@@ -25,6 +25,9 @@
 #   launcher-edit.png the launcher in edit mode
 #   launcher-menu.png an icon's menu
 #   launcher-group.png  a group open
+#   tablet-*.png      on a tablet (CSS 1280 x 800 at 2, the renders' frame):
+#                     the card view, the notification group in the status
+#                     bar (and in 1.0's look), the drop-down, a banner
 #
 # Each run in a fresh home; the glass pages are installed for the run only.
 #
@@ -64,10 +67,13 @@ shot() {
     case " ${SHOTS:-$name} " in *" $name "*) ;; *) return 0 ;; esac
     home=$work/home-$name
     mkdir -p "$home"
-    set -- "$sim" --qml-dir "$qml" --repo-dir "$repo" --size 1116x2484 --scale 2.5 --phone --no-marketplace \
+    # FORM=tablet: the tablet's screen.
+    if [ "${FORM:-phone}" = tablet ]; then form="--size 2560x1600 --scale 2 --tablet"; else form="--size 1116x2484 --scale 2.5 --phone"; fi
+    # shellcheck disable=SC2086
+    set -- "$sim" --qml-dir "$qml" --repo-dir "$repo" $form --no-marketplace \
         --installed-dir "$work/installed" --screenshot "$out/$name.png" --delay "${DELAY:-$delay}" "$@"
     if [ -z "${DISPLAY:-}" ] && command -v xvfb-run >/dev/null; then
-        set -- xvfb-run -a -s "-screen 0 1500x2700x24" "$@"
+        set -- xvfb-run -a -s "-screen 0 2700x2700x24" "$@"
     fi
     HOME=$home QTWEBENGINE_DISABLE_SANDBOX=1 "$@" >"$work/$name.log" 2>&1 || { tail -20 "$work/$name.log"; exit 1; }
     rm -rf "$home"
@@ -96,3 +102,8 @@ DELAY=6000 shot launcher-classic --scene launcher
 DELAY=6000 shot launcher-edit --scene launcheredit -- --look ember-glass
 DELAY=7000 shot launcher-menu --scene launchermenu -- --look ember-glass
 DELAY=7000 shot launcher-group --scene launchergroupopen -- --look ember-glass
+FORM=tablet DELAY=8000 shot tablet-cards --scene cards -- --look ember-glass
+FORM=tablet DELAY=8000 shot tablet-notes --scene notifystacksbar -- --look ember-glass
+FORM=tablet DELAY=8000 shot tablet-notes-classic --scene notifystacksbar
+FORM=tablet DELAY=8000 shot tablet-dropdown --scene dashboard -- --look ember-glass
+FORM=tablet DELAY=3500 shot tablet-banner --scene banner -- --look ember-glass

@@ -114,8 +114,12 @@ tokens"), and how the shell draws it in QML:
   semibold, a caret: `.appmenu-tab`); the clock centred, 13.5 px medium; on
   the right the signal and Wi-Fi as Phosphor glyphs (MIT, as the mock-ups'
   `icons.js`) and a 22 x 11 battery cell with the charge (`.sb-batt`); on
-  tablets, notification icons with the ember dot (`.sb-notes`: step 11, the
-  tablet's group is still 1.0's).
+  tablets, notification icons with the ember dot (`.sb-notes`).
+- **Built on tablets** (`email.html`'s bar): the app menu tab as on phones
+  (1.0's tablets drew the title bare with an arrow), the clock in the
+  middle (1.0's tablets: at the right end), no arrows or separators (the
+  open menu's lit tab says which group it belongs to). The renders put the
+  date beside the clock; Phoenix shows the time alone, as 1.0's bar did.
 - **Stays:** what it shows and when (the carrier or the app's name,
   StatusBarTitle; the clock; the lock screen's date; the tablet's notification
   group), its taps (the app menu, the system menu), the safe area around a
@@ -174,6 +178,10 @@ tokens"), and how the shell draws it in QML:
 - **Stays:** its items, the launcher button, dragging icons in and out, the
   wave launcher.
 - **QML:** `QuickLaunch.qml`.
+- **Built on tablets:** the same capsule round the 64 px icons (84 px tall,
+  10 px over the bottom: `Theme.quickLaunchHeight` 94), the cells spread
+  inside it as 1.0 spread them across the bar, the launcher button at its
+  right end. No render draws a tablet's dock.
 
 ### 7. The launcher
 - **Changes:** the page over the blurred wallpaper (L1 tint, the tone map),
@@ -236,11 +244,20 @@ tokens"), and how the shell draws it in QML:
     heading a group's (`.micro`: "NOTIFICATIONS"), Select and Clear All in
     ink, Clear's confirmation in the danger colour, the select marks
     Ember's checkbox (`.check`), the swipe's "Clear" in ink-3, then ink.
-  - `EgSheet.qml` draws every glass sheet the shell owns (L2, L3, L4: the
-    tint, the rim, the highlight, the live blur and its fallback,
-    lift-high's shadow, a radius per corner); `EgHighlight.qml` the
-    highlight inside a rounded top, which follows the corners (a straight
-    line stood out of the dock's and Just Type's ends).
+- **Built (tablets):** the notification group in the status bar is the
+  notifications' icons at 16 px, 8 apart, and the ember dot, 12 px before
+  the system's (`.sb-notes`), lit as a tab (white 16%) while the drop-down
+  is open; the banner is the app menu tab's capsule with the icon and the
+  text, sliding in from the right as 1.0's; the drop-down is an L4 sheet
+  (`.menu`, its corner under the bar 4 px) with the dashboard's rows,
+  hairlines between them, carets for the scroll hints. Its place, its 5
+  1/2 rows, its swipes and the drawer are 1.0's.
+- **Drawn with:** `EgSheet.qml`, every glass sheet the shell owns (L2, L3,
+  L4: the tint, the rim, the highlight, the live blur, or its 94% fallback
+  with live blur off or nothing behind to blur, lift-high's shadow, a
+  radius per corner); `EgHighlight.qml`, the highlight inside a rounded
+  top, which follows the corners (a straight line stood out of the dock's
+  and Just Type's ends).
 
 ### 9. The system menu
 - **Changes:** an L4 sheet (`.menu`: radius 4 at the corner it opens from,
@@ -376,7 +393,7 @@ second after (the adaptive simulator resizes in a stream of sizes).
 | 8 | The dashboard: its sheet, the rows, the stacks, the drawer | done |
 | 9 | The system menu | done |
 | 10 | The launcher | done |
-| 11 | The tablet: the status bar's notification group, the drop-down, the dock | |
+| 11 | The tablet: the status bar's notification group, the drop-down, the dock | done |
 | 12 | Light and dark for the shell's sheets, from a theme preference | |
 | 13 | The device: luna-surfacemanager's side of the contract (the file, the shellhost event), `LsmWindowSource` | needs C++ |
 
@@ -432,6 +449,8 @@ those screenshots and `tools/test-glass-sim.py`'s):
 | `system-menu-wifi.jpg` | Ember Glass's, closed and with its Wi-Fi drawer open |
 | `launcher.jpg` | The launcher, 1.0's on the left, Ember Glass's on the right |
 | `launcher-edit-menu.jpg`, `launcher-group.jpg` | Edit mode and an icon's menu; a group open |
+| `tablet-statusbar.jpg` | A tablet's status bar: the render (`email-dark.jpg`), Ember Glass's with two stacks and a reminder waiting, 1.0's |
+| `tablet-cards.jpg`, `tablet-dropdown.jpg`, `tablet-banner.jpg` | A tablet's card view and dock; the drop-down open over an app; a banner in the bar |
 | `dashboard.jpg`, `stacks.jpg`, `drawer.jpg` | The dashboard open over an app; with two stacks of texts (their counts, their layers' edges); pulled to the whole screen, a download on top |
 
 **Still unlike the renders:** the dock and the notification bar show the

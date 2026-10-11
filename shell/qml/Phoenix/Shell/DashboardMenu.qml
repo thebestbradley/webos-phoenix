@@ -51,6 +51,11 @@
 // the rows below close up meanwhile rather than after it. Grouped
 // notification windows that take their own horizontal drags
 // (isManualDragWindow, :194-222) are not known here.
+//
+// Ember Glass (docs/SYSTEM-UI-2.md, 8, 11) draws it as its menus: an L4
+// sheet (base.css .menu; its corner under the status bar 4 px), hairlines
+// between the rows (DashboardItem draws the rows), no shading art behind a
+// swiped row, carets for the scroll hints.
 
 import QtQuick
 
@@ -149,7 +154,7 @@ Item {
     component GapShade: ArtBorderImage {
         objectName: "dashboardMenuGapShade"
         width: Theme.dashboardMenuWidth
-        visible: height > 0
+        visible: height > 0 && !Theme.emberGlass
         source: Theme.asset("menu-dropdown-swipe-bg.png")
         border { left: Theme.artBorder(Theme.dashboardMenuSwipeCap, source); right: Theme.artBorder(Theme.dashboardMenuSwipeCap, source) }
     }
@@ -200,9 +205,9 @@ Item {
             y: Theme.px(2)
             width: row.width - Theme.px(4)
             height: menu.rowHeight - Theme.px(4)
-            radius: Theme.px(6)
-            color: "#302c8ce0"
-            border.color: "#2c8ce0"
+            radius: Theme.emberGlass ? Theme.px(EmberGlass.radiusMenuItem) : Theme.px(6)
+            color: Theme.emberGlass ? Theme.egAlpha(Theme.eg.colorFocus, 0.14) : "#302c8ce0"
+            border.color: Theme.emberGlass ? Theme.eg.colorFocus : "#2c8ce0"
             border.width: Theme.px(2)
             z: 10
         }
@@ -298,13 +303,23 @@ Item {
         readonly property bool divided: !isTop || y > 0
         Image {
             objectName: "dashboardMenuDivider"
-            visible: row.divided
+            visible: row.divided && !Theme.emberGlass
             x: content.x
             y: -menu.dividerHeight
             width: row.width
             height: menu.dividerHeight
             source: Theme.asset("menu-divider.png")
             fillMode: Image.Stretch
+        }
+        // Ember Glass: a hairline from the text on (base.css .row + .row).
+        Rectangle {
+            objectName: "emberDashboardMenuRule"
+            visible: row.divided && Theme.emberGlass && !row.firstNotification
+            x: content.x + Theme.px(52)
+            y: -menu.dividerHeight / 2
+            width: row.width - Theme.px(52)
+            height: Math.max(1, EmberGlass.hairline * Theme.u)
+            color: Theme.eg.colorLine2
         }
 
         // The faint rule between the live activities and the notifications
@@ -316,7 +331,7 @@ Item {
             y: -menu.dividerHeight - menu.groupGap / 2 - height / 2
             width: row.width - 2 * x
             height: Math.max(1, Theme.px(1))
-            color: Theme.drawerRule
+            color: Theme.emberGlass ? Theme.eg.colorLine2 : Theme.drawerRule
         }
 
         // Behind a window moved off its place, from the left edge up to it,
@@ -328,11 +343,12 @@ Item {
             y: row.divided ? -menu.dividerHeight : 0
             width: Math.min(content.x, row.width)
             height: row.height + (row.divided ? menu.dividerHeight : 0)
-            source: Theme.asset("menu-dropdown-swipe-bg.png")
+            source: Theme.emberGlass ? "" : Theme.asset("menu-dropdown-swipe-bg.png")
             border { left: Theme.artBorder(Theme.dashboardMenuSwipeCap, source); right: Theme.artBorder(Theme.dashboardMenuSwipeCap, source) }
             horizontalTileMode: BorderImage.Stretch
             verticalTileMode: BorderImage.Stretch
             Image {
+                visible: !Theme.emberGlass
                 x: parent.width - width
                 width: Theme.artWidth(source)
                 height: parent.height
@@ -554,16 +570,29 @@ Item {
         height: menu.expanded || tabletHandle.pull > 0 ? menu.height
                 : Math.max(Theme.px(40), Math.min(menu.height, menu.headerHeight + menu.containerHeight
                                                   + Theme.dashboardMenuBottomMargin + Theme.drawerHandleHeight))
-        source: Theme.asset("menu-dropdown-bg.png")
+        source: Theme.emberGlass ? "" : Theme.asset("menu-dropdown-bg.png")
         border { left: Theme.artBorder(30, source); top: Theme.artBorder(10, source); right: Theme.artBorder(30, source); bottom: Theme.artBorder(30, source) }
 
         MouseArea { anchors.fill: parent }  // taps on the menu stay in it
+
+        // Ember Glass: the L4 sheet where the art's panel is (inside its
+        // edges), its corner under the status bar 4 px.
+        EgSheet {
+            objectName: "emberDashboardMenu"
+            visible: Theme.emberGlass
+            x: Theme.dashboardMenuSideMargin - Theme.px(4)
+            width: parent.width - 2 * x
+            height: parent.height - Theme.dashboardMenuBottomMargin + Theme.px(6)
+            backdrop: menu.backdrop
+            radius: Theme.px(EmberGlass.radiusMenu)
+            topRightRadius: Theme.px(EmberGlass.radiusMenuCorner)
+        }
 
         // The scene behind, blurred faintly within the art's shape.
         BackdropBlur {
             anchors.fill: parent
             z: -1
-            source: menu.backdrop
+            source: Theme.emberGlass ? null : menu.backdrop
             mask: menuShape
         }
         ArtBorderImage {
@@ -700,15 +729,24 @@ Item {
         opacity: !flick.atYBeginning ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.systemMenuScrollFadeDuration } }
         ArtBorderImage {
+            visible: !Theme.emberGlass
             width: parent.width
             height: Theme.artHeight(source)
             source: Theme.asset("menu-dropdown-scrollfade-top.png")
             border { left: Theme.artBorder(20, source); right: Theme.artBorder(20, source) }
         }
         Image {
+            visible: !Theme.emberGlass
             x: (parent.width - width) / 2
             width: Theme.artWidth(source); height: Theme.artHeight(source)
             source: Theme.asset("menu-arrow-up.png")
+        }
+        EgIcon {
+            visible: Theme.emberGlass
+            x: (parent.width - width) / 2
+            width: Theme.px(14); height: width
+            name: "caret-up"
+            color: Theme.eg.colorInk2
         }
     }
     Item {
@@ -720,16 +758,26 @@ Item {
         opacity: !flick.atYEnd ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.systemMenuScrollFadeDuration } }
         ArtBorderImage {
+            visible: !Theme.emberGlass
             width: parent.width
             height: Theme.artHeight(source)
             source: Theme.asset("menu-dropdown-scrollfade-bottom.png")
             border { left: Theme.artBorder(20, source); right: Theme.artBorder(20, source) }
         }
         Image {
+            visible: !Theme.emberGlass
             x: (parent.width - width) / 2
             y: Theme.px(10)
             width: Theme.artWidth(source); height: Theme.artHeight(source)
             source: Theme.asset("menu-arrow-down.png")
+        }
+        EgIcon {
+            visible: Theme.emberGlass
+            x: (parent.width - width) / 2
+            y: Theme.px(12)
+            width: Theme.px(14); height: width
+            name: "caret-down"
+            color: Theme.eg.colorInk2
         }
     }
 
