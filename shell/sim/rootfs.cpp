@@ -109,6 +109,14 @@ void Rootfs::setInstalledDir(const QString &dir)
     rescan();
 }
 
+void Rootfs::addExtraRootfs(const QString &dir)
+{
+    const QString abs = QDir::cleanPath(QDir(dir).absolutePath());
+    if (!m_extraRootfs.contains(abs))
+        m_extraRootfs.append(abs);
+    rescan();
+}
+
 QString Rootfs::preinstalledMarker(const QString &appId, const QString &suffix) const
 {
     return QDir(m_installedDir).filePath(QStringLiteral("var/lib/phoenix/preinstalled/") + appId + suffix);
@@ -243,13 +251,14 @@ QString Rootfs::overlayLargestIcon(const QString &id, const QString &icon) const
 void Rootfs::rescan()
 {
     m_appDirs.clear();
+    m_extraApps.clear();
     m_apps.clear();
     m_launchPoints.clear();
     m_installed.clear();
     m_dynamic.clear();
     QHash<QString, QVariantMap> appEntries;   // app id -> its launcher entry
     // systemApps are always hidden from the launcher (Just Type, the system UI).
-    auto addApp =[&](QString appDir, const QString &name, bool system, bool installed) {
+    auto addApp =[&](QString appDir, const QString &name, bool system, bool installed, bool extra = false) {
         // Built apps (e.g. React) keep their installable output in dist/.
         if (!QFileInfo::exists(appDir + QStringLiteral("/appinfo.json")))
             appDir += QStringLiteral("/dist");
@@ -264,6 +273,8 @@ void Rootfs::rescan()
         if (m_appDirs.contains(id))
             return;
         m_appDirs.insert(id, appDir);
+        if (extra)
+            m_extraApps.append(id);
         const QString root = QString::fromLatin1(kAppsPrefix) + id + QLatin1Char('/');
         const QString mainFile = app.value(QStringLiteral("main")).toString(QStringLiteral("index.html"));
         // A hosted web app (an installed PWA) starts at its site's URL.
@@ -364,7 +375,8 @@ void Rootfs::rescan()
         // them; here the icon is read from the app's own folder, so the
         // biggest one the overlay adds is the large icon when it beats the
         // splashicon (the splashicon, beside the icon, is still found).
-        const QString overlayIcon = overlayLargestIcon(id, icon);
+        // (Not for an app from an extra rootfs: the overlay's are the original's.)
+        const QString overlayIcon = extra ? QString() : overlayLargestIcon(id, icon);
         if (!overlayIcon.isEmpty() && pngSide(overlayIcon) > (largeFile.isEmpty() ? 0 : pngSide(largeFile)))
             largeFile = overlayIcon;
         entry[QStringLiteral("largeIcon")] = largeFile.isEmpty() ? QString() : QUrl::fromLocalFile(largeFile).toString();
@@ -490,6 +502,14 @@ void Rootfs::rescan()
     QStringList preinstalledDirs;
     for (const QString &d : std::as_const(m_preinstalled))
         preinstalledDirs.append(d);
+    // The extra rootfs' apps first: an app there replaces the built-in one
+    // with its id (addExtraRootfs).
+    for (const QString &extra : std::as_const(m_extraRootfs)) {
+        QDir base(extra + QString::fromLatin1(kAppsPrefix));
+        const auto entries = base.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+        for (const QString &name : entries)
+            addApp(base.filePath(name), name, false, false, true);
+    }
     for (const QString &dir : m_applicationDirs) {
         QDir base(dir);
         const auto entries = base.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
@@ -596,7 +616,8 @@ QList<QPair<QString, QString>> Rootfs::twinDirectories() const
     // An app's own directory, served at /usr/palm/applications/<id>/: the
     // shell draws pictures it names (dashboard and banner icons) from there.
     for (auto it = m_appDirs.constBegin(); it != m_appDirs.constEnd(); ++it)
-        add(QString::fromLatin1(kAppsPrefix) + it.key(), it.value());
+        if (!m_extraApps.contains(it.key()))   // the overlay's are the original app's
+            add(QString::fromLatin1(kAppsPrefix) + it.key(), it.value());
     return pairs;
 }
 
@@ -610,6 +631,20 @@ QString Rootfs::resolve(const QString &devicePath) const
     const QString path = QDir::cleanPath(devicePath);
     if (path.split(QLatin1Char('/')).contains(QStringLiteral("..")) || m_excluded.contains(path))
         return {};
+    const QString appsPrefix = QString::fromLatin1(kAppsPrefix);
+    // An extra rootfs' files win over everything; an app it holds is served
+    // from its own folder alone (not the overlay's fixes for the original).
+    for (const QString &extra : m_extraRootfs) {
+        const QString f = extra + path;
+        if (QFileInfo(f).isFile())
+            return f;
+    }
+    if (path.startsWith(appsPrefix) && !m_extraApps.isEmpty()) {
+        const QString rest = path.mid(appsPrefix.size());
+        const QString id = rest.section(QLatin1Char('/'), 0, 0);
+        if (m_extraApps.contains(id))
+            return m_appDirs.value(id) + rest.mid(id.size());
+    }
     for (const QString &overlay : m_overlays) {
         const QString f = overlay + path;
         if (QFileInfo(f).isFile())
@@ -625,7 +660,6 @@ QString Rootfs::resolve(const QString &devicePath) const
     const QString data = dataPath(path);
     if (!data.isEmpty())
         return data;
-    const QString appsPrefix = QString::fromLatin1(kAppsPrefix);
     if (path.startsWith(appsPrefix)) {
         const QString rest = path.mid(appsPrefix.size());
         const QString id = rest.section(QLatin1Char('/'), 0, 0);
