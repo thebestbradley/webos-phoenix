@@ -347,5 +347,63 @@ Item {
             verify(pill.visible);
             compare(shell.searchPill.width, Math.min(Theme.px(588), shell.searchPill.parent.width - Theme.px(36)));
         }
+
+        // Over the stack in front, its card's title and how many cards it
+        // has; under its card, the floor light; both fade as it maximizes;
+        // none in 1.0's look.
+        function test_stackLabelAndFloorLight() {
+            var e = windows.launch("org.webosphoenix.email", "");
+            var m = windows.launch("org.webosphoenix.messaging", e);
+            windows.openChild(m);
+            wait(0);
+            var cv = shell.cardView;
+            cv.jumpTo(1);
+            tryCompare(cv, "maximizeProgress", 0, 3000);
+            var label = findChild(shell, "emberStackLabel"), floor = findChild(shell, "emberFloorLight");
+            verify(!label.visible && !floor.visible);
+            shell.look = "ember-glass";
+            verify(label.visible && floor.visible);
+            verify(label.text.indexOf(cv.currentTitle) === 0, label.text);
+            verify(label.text.indexOf("2 cards") > 0, label.text);
+            var top = cv._egFront.top;
+            verify(label.y < top && label.y > top - Theme.px(60), "just over the card: " + label.y + ", " + top);
+            compare(Math.round(floor.x + floor.width / 2), Math.round(cv._egFront.cx));
+            cv.jumpTo(0);
+            tryVerify(function() { return label.text.indexOf("cards") < 0; }, 3000);
+            cv.maximize(cv.currentUid);
+            tryVerify(function() { return shell.maximized; }, 3000);
+            verify(!label.visible && !floor.visible);
+        }
+
+        // The phone's dock in Ember Glass: the floating capsule 34 px in,
+        // its slots inside it (a tap still lands on the icon drawn there),
+        // the ember dot under the app in front.
+        function test_dock() {
+            var ql = findChild(shell, "quickLaunch");
+            var capsule = findChild(ql, "emberDock");
+            verify(!capsule.visible);
+            var centre0 = ql.slotCentre(0);
+            shell.look = "ember-glass";
+            verify(capsule.visible);
+            compare(capsule.x, Theme.px(34));
+            compare(capsule.height, Theme.px(64));
+            verify(ql.slotCentre(0) > centre0, "the first slot moves into the capsule");
+            for (var i = 0; i <= ql.pinned.length; ++i)
+                compare(ql.slotAt(ql.slotCentre(i)), i);
+            verify(ql.slotCentre(ql.pinned.length) < capsule.x + capsule.width);
+            verify(findChild(ql, "emberLauncherButton").visible);
+            verify(ql.pinned.length > 0);
+            var app = ql.pinned[0].appId;
+            var uid = windows.launch(app, "");
+            wait(0);
+            tryCompare(ql, "activeAppId", app, 2000);
+            var dot = findChild(ql, "emberDockDot");
+            verify(dot.visible);
+            compare(dot.slot, 0);
+            compare(dot.x + dot.width / 2, ql.slotCentre(0));
+            shell.look = "classic";
+            verify(!dot.visible && !capsule.visible);
+            compare(ql.slotCentre(0), centre0);
+        }
     }
 }

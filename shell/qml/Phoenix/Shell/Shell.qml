@@ -2873,6 +2873,12 @@ FocusScope {
                     apps: shell.source ? shell.source.apps : null
                     launcherOpen: launcher.open
                     backdrop: sceneBackdrop
+                    // Ember Glass marks the card in front's app.
+                    activeAppId: {
+                        cards.revision;
+                        var i = cards.indexOf(cards.currentUid);
+                        return i >= 0 ? shell.source.cards.get(i).appId : "";
+                    }
                     dock: shell.launcherLayout ? shell.launcherLayout.dock : []
                     draggedId: iconDrag.appId
                     onLaunchRequested: (appId) => shell.openApp(appId)

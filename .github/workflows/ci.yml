@@ -250,6 +250,9 @@ jobs:
       - name: App-to-app launches send what their apps read (docs/LAUNCH-CONTRACTS.md)
         run: node tools/check-launch-contracts.cjs
 
+      - name: Ember Glass's tokens in the shell up to date (docs/SYSTEM-UI-2.md)
+        run: node tools/gen-ember-glass-qml.cjs --check
+
       - name: Trademark overlays up to date
         run: python3 tools/debrand-overlays.py --check
 
@@ -372,6 +375,7 @@ jobs:
           t node tools/test-xmpp-server.cjs
           t node tools/test-sftp.cjs --out app-tests/sftp-phone
           t node tools/test-sftp.cjs --tablet --out app-tests/sftp-tablet
+          t node tools/test-glass.cjs --out app-tests/glass
           t node tools/test-orientation.cjs --out app-tests/orientation-phone
           t node tools/test-orientation.cjs --tablet --out app-tests/orientation-tablet
           t node tools/test-keyboard.cjs --out app-tests/keyboard-phone
@@ -408,6 +412,15 @@ jobs:
             xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --scene $s --orientation left --screenshot screenshots/phone-landscape/$s.png
             xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --tablet --scene $s --orientation right --screenshot screenshots/tablet-portrait/$s.png
           done
+
+      # Phoenix 2.0's look (docs/SYSTEM-UI-2.md): a page drawing its glass
+      # from what the shell gives it lines its blur up with the wallpaper;
+      # the Ember Glass screens beside 1.0's.
+      - name: Ember Glass in the simulator (the shell contract, screenshots)
+        run: |
+          python3 -m pip install pillow numpy
+          python3 tools/test-glass-sim.py --out app-tests/glass-sim
+          tools/glass-screenshots.sh screenshots/ember-glass
 
       # Also when a step fails: the app tests' screenshots show what went wrong.
       - uses: actions/upload-artifact@v4

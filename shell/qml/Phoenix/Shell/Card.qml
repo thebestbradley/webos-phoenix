@@ -216,11 +216,13 @@ Item {
 
     // Ember Glass: the glass shadow (theme.*.shadow.card, base.css
     // --glass-shadow: 0 30px 60px -24px), its sizes the screen's whatever the
-    // card's scale (cards.html's deck draws its cards' shadows so). A box
-    // shadow: the card's rectangle, inset by the spread and moved down,
-    // blurred (a Gaussian of half the blur); RectangularGlow's glow starts at
-    // its rectangle's edge, so its rectangle is the shadow's less half the
-    // blur, and the glow reaches the blur's length out.
+    // card's scale (cards.html's deck draws its cards' shadows so). CSS's box
+    // shadow is the card's rectangle inset by the spread, moved down, blurred
+    // by a Gaussian of half the blur, half dark at the rectangle's edge. Here
+    // an approximation: RectangularGlow fades from its rectangle's edge over
+    // glowRadius, so its rectangle is the shadow's inset by a quarter of the
+    // blur and its glow half the blur: the fade is centred on the shadow's
+    // edge, as the Gaussian's is.
     RectangularGlow {
         objectName: "emberCardShadow"
         readonly property var sh: Theme.eg.shadowCard

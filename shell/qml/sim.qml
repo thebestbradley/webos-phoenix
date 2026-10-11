@@ -680,6 +680,27 @@ Item {
         target: shell
         function onEffectiveLookChanged() { windows.pushSystemStatus({ look: shell.effectiveLook }); }
     }
+    // --scene cards with --launch: the launched apps' cards in the card view
+    // once they have all loaded, the middle one in front.
+    Timer {
+        id: launchedCards
+        interval: 500
+        repeat: true
+        onTriggered: {
+            var n = windows.cards.count;
+            for (var i = 0; i < n; ++i) {
+                var w = windows.windowFor(windows.cards.get(i).uid);
+                if (w && w.ready === false)
+                    return;
+            }
+            if (n < (typeof simLaunch !== "undefined" ? simLaunch.length : 0) || shell.cardView.animating)
+                return;
+            stop();
+            if (shell.maximized)
+                shell.cardView.minimize();
+            shell.cardView.jumpTo(Math.floor((shell.cardView.groupCount - 1) / 2));
+        }
+    }
     // How the UI and the device are turned, for the apps
     // (com.palm.systemmanager getSystemStatus).
     function pushOrientation() {
@@ -1839,6 +1860,12 @@ Item {
                 // --scene assistant with --launch: the assistant over that app.
                 if (typeof simScene !== "undefined" && simScene === "assistant")
                     root.assistantScene();
+                // --scene cards with --launch: those apps' cards in the card
+                // view, once they have loaded, the middle one in front
+                // (Ember Glass's card view with its test pages,
+                // tools/glass-screenshots.sh).
+                if (typeof simScene !== "undefined" && simScene === "cards")
+                    launchedCards.start();
                 root.startOnTouchstone();
             });
             return;

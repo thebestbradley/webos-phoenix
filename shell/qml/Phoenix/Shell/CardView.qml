@@ -16,6 +16,7 @@
 // so the growing card pushes everything else off-screen as in the original.
 
 import QtQuick
+import QtQuick.Shapes as Shapes
 import Qt5Compat.GraphicalEffects
 import "CardLayout.js" as CardLayout
 
@@ -1155,6 +1156,96 @@ Item {
             return;
         stackAnim.stop();
         _stackOwn = false;
+    }
+
+    // ---- Ember Glass: the stack's label and the light under its card --------------------
+    // (Phoenix 2.0; docs/SYSTEM-UI-2.md, 4; cards.html .label, .floor, .rim.)
+    // Over the stack in front, its card's title and, for a stack, how many
+    // cards it has ("Messaging · 2 cards": 13 px semibold white, the count at
+    // 55%); under its card, Ember's light on the floor and an ember rim. They
+    // follow the card in front and fade as it maximizes. luna-sysmgr's card
+    // view had neither (owner question 7).
+    readonly property var _egFront: {
+        revision;
+        var g = currentGroup >= 0 ? groups[currentGroup] : null;
+        var p = g ? layout.cards[currentUid] : null;
+        if (!g || !p)
+            return null;
+        return { title: currentTitle, count: g.uids.length, cx: p.cx, top: p.cy - windowHeight * p.scale / 2,
+                 bottom: p.cy + windowHeight * p.scale / 2, scale: p.scale };
+    }
+    readonly property real _egShown: Theme.emberGlass && _egFront !== null && modalUid === "" ? 1 - maximizeProgress : 0
+    Text {
+        objectName: "emberStackLabel"
+        visible: view._egShown > 0
+        opacity: view._egShown
+        z: 4000
+        width: view.width
+        horizontalAlignment: Text.AlignHCenter
+        y: view._egFront ? Math.round(view._egFront.top - Theme.px(38)) : 0
+        textFormat: Text.StyledText
+        text: !view._egFront ? "" : view._escape(view._egFront.title)
+              + (view._egFront.count > 1 ? " <font color=\"#8cffffff\">· " + qsTr("%1 cards").arg(view._egFront.count) + "</font>" : "")
+        color: "white"
+        font: Qt.font({ family: Theme.egFontFamily, pixelSize: Math.round(13 * Theme.u), weight: Font.DemiBold, letterSpacing: 0.3 * Theme.u })
+    }
+    function _escape(t) { return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+    // The floor: a 330 x 70 ellipse of ember light, its top 12 px over the
+    // card's foot (radial-gradient(closest-side, rgb(255 120 40 / .55),
+    // rgb(255 90 30 / .18) 55%, transparent)); under the cards.
+    Shapes.Shape {
+        objectName: "emberFloorLight"
+        visible: view._egShown > 0
+        opacity: view._egShown
+        z: -1
+        readonly property real rx: Theme.px(165)
+        width: 2 * rx
+        height: 2 * rx
+        x: view._egFront ? view._egFront.cx - rx : 0
+        y: view._egFront ? view._egFront.bottom - Theme.px(12) + Theme.px(35) - rx : 0
+        transform: Scale { origin.x: Theme.px(165); origin.y: Theme.px(165); yScale: 35 / 165 }
+        preferredRendererType: Shapes.Shape.CurveRenderer
+        Shapes.ShapePath {
+            strokeColor: "transparent"
+            fillGradient: Shapes.RadialGradient {
+                centerX: Theme.px(165); centerY: Theme.px(165); centerRadius: Theme.px(165)
+                focalX: centerX; focalY: centerY
+                GradientStop { position: 0; color: Qt.rgba(1, 120 / 255, 40 / 255, 0.55) }
+                GradientStop { position: 0.55; color: Qt.rgba(1, 90 / 255, 30 / 255, 0.18) }
+                GradientStop { position: 1; color: Qt.rgba(1, 90 / 255, 30 / 255, 0) }
+            }
+            PathAngleArc { centerX: Theme.px(165); centerY: Theme.px(165); radiusX: Theme.px(165); radiusY: Theme.px(165); startAngle: 0; sweepAngle: 360 }
+        }
+    }
+    // The rim: 150 x 2 of the ember gradient 7 px under the card's foot,
+    // glowing (box-shadow 0 0 14px 2px rgb(255 120 40 / .8)).
+    Item {
+        objectName: "emberFloorRim"
+        visible: view._egShown > 0
+        opacity: view._egShown
+        z: -1
+        width: Theme.px(150)
+        height: Math.max(1, Theme.px(2))
+        x: view._egFront ? view._egFront.cx - width / 2 : 0
+        y: view._egFront ? view._egFront.bottom + Theme.px(7) : 0
+        RectangularGlow {
+            anchors.fill: parent
+            visible: GraphicsInfo.api !== GraphicsInfo.Software
+            glowRadius: Theme.px(7)
+            spread: 0.2
+            color: Qt.rgba(1, 120 / 255, 40 / 255, 0.8)
+            cornerRadius: glowRadius + height / 2
+        }
+        Rectangle {
+            anchors.fill: parent
+            radius: height / 2
+            gradient: Gradient {
+                orientation: Gradient.Horizontal
+                GradientStop { position: 0; color: EmberGlass.emberA }
+                GradientStop { position: 0.45; color: EmberGlass.emberMid }
+                GradientStop { position: 1; color: EmberGlass.emberB }
+            }
+        }
     }
 
     // ---- Cards --------------------------------------------------------------------------

@@ -10,6 +10,12 @@
 // end, its top 20 px down; the apps spread over the rest, each in a 128 px
 // cell followed by an equal share of what is left. Phones (the 2.x dock is
 // not in the open source) share the width equally, the button last.
+//
+// In Ember Glass on phones (Phoenix 2.0; docs/SYSTEM-UI-2.md, 6) the shelf
+// is the mock-ups' floating dock (cards.html .dock): a 64 px glass capsule
+// 34 px in from each side, the apps spread inside it, the launcher button
+// Phosphor's four squares, an ember dot under the app in front. The apps
+// keep their own icons (owner question 10); what it does is the same.
 
 import QtQuick
 
@@ -45,6 +51,37 @@ Item {
     BackdropBlur {
         anchors.fill: parent
         source: ql.backdrop
+        // Ember Glass: inside the capsule, blur(12px) (.dock).
+        mask: ql.egDock ? egCapsule : null
+        radius: ql.egDock ? Theme.px(12) : Theme.px(Theme.backdropBlurRadius)
+    }
+
+    // ---- Ember Glass's dock (phones) ------------------------------------------------
+    readonly property bool egDock: Theme.emberGlass && !Theme.tablet
+    // The capsule's sides, and its 10 px padding: where the slots are.
+    readonly property real egInset: egDock ? Theme.px(34 + 10) : 0
+    // The app in front (Shell: the card view's), marked by the ember dot.
+    property string activeAppId: ""
+    Rectangle {
+        id: egCapsule
+        objectName: "emberDock"
+        visible: ql.egDock
+        x: Theme.px(34)
+        width: ql.width - 2 * Theme.px(34)
+        height: Theme.px(64)
+        y: Math.round((ql.height - height) / 2)
+        radius: height / 2
+        color: Qt.rgba(20 / 255, 18 / 255, 20 / 255, 0.34)
+        border.color: Qt.rgba(1, 1, 1, 0.28)
+        border.width: Math.max(1, EmberGlass.hairline * Theme.u)
+        layer.enabled: ql.egDock
+        Rectangle {
+            x: parent.radius / 2
+            width: parent.width - parent.radius
+            y: parent.border.width
+            height: Math.max(1, Theme.u)
+            color: Qt.rgba(1, 1, 1, 0.1)
+        }
     }
 
     // quicklaunch-bg.png (10 x 105) tiled from the bar's top left, cut at
@@ -59,6 +96,7 @@ Item {
     Item {
         anchors.fill: parent
         clip: true
+        visible: !ql.egDock
         ArtTiledImage {
             width: parent.width
             height: Theme.artHeight(source)
@@ -99,8 +137,10 @@ Item {
         return list;
     }
 
-    readonly property real slotWidth: width / (pinned.length + 1)
+    readonly property real slotWidth: (width - 2 * egInset) / (pinned.length + 1)
     readonly property int iconSize: Theme.quickLaunchIconSize
+    // The icons' top: 1.0's, or centred in Ember Glass's capsule.
+    readonly property real iconY: egDock ? Math.round((height - iconSize) / 2) : Theme.quickLaunchIconY
     // Tablets: the item area, left of the button's cell, and the space
     // after each 128 px cell in it (rearrangeIcons, :671).
     readonly property real cellWidth: Theme.quickLaunchCellWidth
@@ -110,7 +150,7 @@ Item {
     // Centre of item i's cell; i === pinned.length is the launcher button.
     function slotCentre(i) {
         if (!Theme.tablet)
-            return slotWidth * i + slotWidth / 2;
+            return egInset + slotWidth * i + slotWidth / 2;
         if (i >= pinned.length)
             return width - cellWidth / 2;
         return i * (cellWidth + interSpace) + cellWidth / 2;
@@ -119,7 +159,7 @@ Item {
     // Dock slot for a drop at x (0 .. pinned.length): the nearest centre.
     function slotAt(x) {
         if (!Theme.tablet)
-            return Math.max(0, Math.min(pinned.length, Math.floor(x / slotWidth)));
+            return Math.max(0, Math.min(pinned.length, Math.floor((x - egInset) / slotWidth)));
         var best = 0;
         for (var i = 1; i <= pinned.length; ++i)
             if (Math.abs(x - slotCentre(i)) < Math.abs(x - slotCentre(best)))
@@ -142,7 +182,7 @@ Item {
         objectName: "quickLaunchKeyFocus"
         visible: ql.keySlot >= 0 && ql.visible
         x: ql.slotCentre(Math.max(0, ql.keySlot)) - width / 2
-        y: Theme.quickLaunchIconY - Theme.px(6)
+        y: ql.iconY - Theme.px(6)
         width: ql.iconSize + Theme.px(12)
         height: ql.iconSize + Theme.px(12)
         radius: Theme.px(10)
@@ -157,7 +197,7 @@ Item {
             required property var modelData
             required property int index
             x: ql.slotCentre(index) - width / 2
-            y: Theme.quickLaunchIconY
+            y: ql.iconY
             size: ql.iconSize
             showLabel: false
             interactive: false
@@ -173,15 +213,48 @@ Item {
 
     // Launcher button. The art is a 64x128 sprite: top half normal, bottom
     // half active (quicklaunchbar.cpp:65-67).
+    // Ember Glass: the ember dot under the app in front (.dock .app.on::after).
+    Rectangle {
+        objectName: "emberDockDot"
+        readonly property int slot: {
+            for (var i = 0; i < ql.pinned.length; ++i)
+                if (ql.pinned[i].appId === ql.activeAppId)
+                    return i;
+            return -1;
+        }
+        visible: ql.egDock && slot >= 0
+        width: Theme.px(4)
+        height: width
+        radius: width / 2
+        x: ql.slotCentre(Math.max(0, slot)) - width / 2
+        y: ql.iconY + ql.iconSize + Theme.px(1)
+        gradient: Gradient {
+            orientation: Gradient.Horizontal
+            GradientStop { position: 0; color: EmberGlass.emberA }
+            GradientStop { position: 1; color: EmberGlass.emberB }
+        }
+    }
+
     Item {
         id: launcherButton
         x: ql.slotCentre(ql.pinned.length) - width / 2
-        y: Theme.quickLaunchIconY
+        y: ql.iconY
         width: ql.iconSize
         height: ql.iconSize
         clip: true
 
+        // Ember Glass: Phosphor's four squares, white (.dock .app .ic: 25 px).
+        EgIcon {
+            objectName: "emberLauncherButton"
+            visible: ql.egDock
+            anchors.centerIn: parent
+            width: Theme.px(25)
+            height: width
+            name: "squares-four"
+            opacity: (dockMouse.pressed && dockMouse.pressedSlot === ql.pinned.length) || ql.launcherOpen ? 0.6 : 1
+        }
         Image {
+            visible: !ql.egDock
             width: parent.width
             height: parent.height * 2
             y: ((dockMouse.pressed && dockMouse.pressedSlot === ql.pinned.length) || ql.launcherOpen) ? -parent.height : 0
@@ -196,7 +269,7 @@ Item {
     // (quicklaunchbar.cpp).
     signal menuRequested(string appId, string from, rect iconRect)
     function iconRect(i) {
-        return Qt.rect(slotCentre(i) - iconSize / 2, Theme.quickLaunchIconY, iconSize, iconSize);
+        return Qt.rect(slotCentre(i) - iconSize / 2, iconY, iconSize, iconSize);
     }
     MouseArea {
         id: dockMouse
