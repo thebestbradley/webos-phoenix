@@ -61,6 +61,8 @@ function seed(put) {
     // Sam's texts (test/device.cjs sms-1) are the latest with Sam: a text goes as a text.
     put({ _id: "t-sam", _kind: "com.palm.chatthread:1", displayName: "Sam Delgado", personId: "p-sam", replyService: "sms", replyAddress: "3035550135",
           timestamp: NOW - 10 * 60000, unreadCount: 1 });
+    put({ _id: "t-priya", _kind: "com.palm.chatthread:1", displayName: "Priya Nair", personId: "p-priya", replyService: "sms", replyAddress: "4155550123",
+          timestamp: NOW - 3600000, unreadCount: 0 });
     put({ _id: "th-sam-slack", _kind: "com.palm.chatthread:1", displayName: "Sam Delgado", personId: "p-sam", replyService: "type_slack", replyAddress: "sam@Northwind",
           timestamp: NOW - 50 * 60000, unreadCount: 1 });
     put({ _id: "th-design", _kind: "com.palm.chatthread:1", displayName: "#design", replyService: "type_slack", replyAddress: "#design@Northwind",

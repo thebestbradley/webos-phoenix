@@ -574,7 +574,6 @@ module.exports = function (h) {
             var l = found.list || inboxOf(found);
             if (!l) return { args: args, reply: env.lang.say.noListIn(args.list || "Inbox", found.account.name, []) };
             args.listId = l.list._id; args.list = l.list.name; args.accountName = found.account.name;
-            delete args.account;
             return { pass: args };
         });
     }

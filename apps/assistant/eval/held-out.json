@@ -79,6 +79,16 @@
 {"id":"h-fu-3","cat":"follow-ups","turns":[{"say":"turn off bluetooth","expect":{"command":"toggle"}},{"say":"turn it back on","expect":{"command":"toggle","args":{"setting":"bluetooth","state":"on"}}}]},
 {"id":"h-fu-4","cat":"follow-ups","turns":[{"say":"text Priya see you soon","expect":{"command":"text","status":"pending"}},{"say":"yes send it","expect":{"command":"text","status":"done"}}]},
 {"id":"h-corr-1","cat":"corrections","turns":[{"say":"remind me to call the bank at 4","expect":{"command":"reminder"}},{"say":"no, make it 5","expect":{"command":"reminder","args":{"due":"2026-10-07T17:00"}}}]},
-{"id":"h-corr-2","cat":"corrections","turns":[{"say":"what's the time in Paris","expect":{"command":"worldTime"}},{"say":"I meant Rome","expect":{"command":"worldTime","args":{"place":"rome"}}}]}
+{"id":"h-corr-2","cat":"corrections","turns":[{"say":"what's the time in Paris","expect":{"command":"worldTime"}},{"say":"I meant Rome","expect":{"command":"worldTime","args":{"place":"rome"}}}]},
+{"id":"h-syn-1","cat":"synergy","say":"shoot Sam a slack message saying I'm in the lobby","expect":{"command":"text","args":{"chat":{"service":"type_slack"}},"status":"pending"}},
+{"id":"h-syn-2","cat":"synergy","say":"anything new on slack","expect":{"command":"readMessages","args":{"via":"slack"}}},
+{"id":"h-syn-3","cat":"synergy","say":"what's on the work calendar on friday","expect":{"command":"agenda","args":{"calendar":"work"}}},
+{"id":"h-syn-4","cat":"synergy","say":"throw coffee filters on my todoist shopping list","expect":{"command":"task"},"effects":[{"kind":"com.palm.task.todoist:1","where":{"summary":"Coffee filters","listId":"tl-todo-shop"},"count":1}]},
+{"id":"h-syn-5","cat":"synergy","say":"anything in my work inbox","expect":{"command":"searchEmail","args":{"account":"work"}}},
+{"id":"h-syn-6","cat":"synergy","say":"put the trip itinerary on dropbox","expect":{"command":"saveToDrive","status":["pending","failed"]},"forbid":["saveToDrive"]},
+{"id":"h-syn-7","cat":"synergy","say":"skeet good morning everyone","expect":{"command":"post","status":"pending"},"text":"bluesky"},
+{"id":"h-syn-8","cat":"synergy","say":"say yes to the offsite","expect":{"command":"inviteReply","args":{"response":"accepted"},"status":"pending"}},
+{"id":"h-syn-9","cat":"synergy","say":"hop on the zoom call","expect":{"command":"joinMeeting"}},
+{"id":"h-syn-10","cat":"synergy","say":"which of my accounts can I post from","expect":{"anyOf":[{"command":"accounts"},{"command":"post","status":"ask"},{"answer":"fallback"}]},"forbid":["post"]}
 ]
 }
