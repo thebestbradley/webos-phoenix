@@ -57,8 +57,9 @@ open(path, "w").write(src[:end + 1] + entry + src[end + 1:])
 PY
 fi
 
-# meta-phoenix's own machines (meta-phoenix/conf/machine: the Fairphone 6,
-# the Odin 2 Portal, the PINE64 devices; docs/HARDWARE.md, "First targets"):
+# meta-phoenix's own machines (meta-phoenix/conf/machine: fairphone-fp6,
+# ayn-odin2portal, pinephonepro, pinetab2, and phoenix-vm-arm64, the ARM64
+# VM that runs as any of them; docs/HARDWARE.md, "First targets", "Device VMs"):
 # mcf refuses a MACHINE that weboslayers.py's Machines does not list.
 python3 - "$REPO_DIR/meta-phoenix/conf/machine" <<'PY'
 import os, re, sys

@@ -100,6 +100,7 @@ jobs:
         run: |
           python3 tools/test-devicecheck.py
           python3 tools/test-device-firmware.py
+          python3 tools/test-device-profiles.py
           tools/check-device.sh
 
       # The Enact demos are npm projects of their own (apps/enact-notes-*/
