@@ -92,10 +92,14 @@ describe("picture messages (MMS)", () => {
         expect(m).toMatchObject({ folder: "inbox", from: { addr: "(408) 555-0142" } });
         expect(m.parts![0].path.startsWith("/media/internal/.mms/")).toBe(true);
         const note = hostMessages.find((h) => h.type === "notification");
+        // Its conversation is its group: one stack of notifications per conversation.
         expect(note?.payload).toMatchObject({ appId: "org.webosphoenix.messaging", title: "Ada Palmer", body: "Picture: We made it",
-                                              params: { threadId } });
+                                              params: { threadId }, group: threadId });
         await messaging.markRead(threadId);
         expect((await threadOf(threadId)).unreadCount).toBe(0);
+        // Read: the conversation's stack leaves the notification area.
+        expect(hostMessages.filter((h) => h.type === "notification").at(-1)?.payload)
+            .toEqual({ appId: "org.webosphoenix.messaging", remove: true, group: threadId });
     });
 
     it("keeps the message's pictures out of Photos", async () => {
@@ -111,6 +115,35 @@ describe("picture messages (MMS)", () => {
 // The IM transports are connectors now, each with its own tests (apps/connectors/xmpp,
 // apps/matrix, ...: their service/connector.test.ts); Messaging with them,
 // in Chromium: tools/test-xmpp.cjs. Here, what Messaging asks of them.
+describe("a conversation's notifications, one stack", () => {
+    // Texts from two people: each one's group is its conversation, so the
+    // shell stacks them per conversation (NotificationStacks.js).
+    it("groups texts by conversation", async () => {
+        const rtx = rt as Rt & { simulateIncomingSms(o: object): string };
+        const ada1 = rtx.simulateIncomingSms({ from: "(408) 555-0142", text: "One" });
+        const marcus = rtx.simulateIncomingSms({ from: "(650) 555-0187", text: "Hi" });
+        const ada2 = rtx.simulateIncomingSms({ from: "(408) 555-0142", text: "Two" });
+        expect(ada1).toBe(ada2);
+        expect(marcus).not.toBe(ada1);
+        const notes = hostMessages.filter((h) => h.type === "notification").map((h) => h.payload);
+        expect(notes.map((n) => [n.title, n.body, n.group])).toEqual([["Ada Palmer", "One", ada1], ["Marcus Reyes", "Hi", marcus],
+                                                                      ["Ada Palmer", "Two", ada1]]);
+    });
+
+    // An IM connector's message (connector-kit ctx.notify: OSE's createToast
+    // {title, message} with Phoenix's {group}) is Messaging's notification,
+    // sender and text apart, on its conversation's stack.
+    it("takes a connector's toast for Messaging as a grouped notification", async () => {
+        await call("luna://com.webos.notification/createToast", {
+            title: "Lena Okafor", message: "Hi! Just landed.", sourceId: "org.webosphoenix.service.xmpp",
+            onclick: { appId: "org.webosphoenix.messaging", params: { threadId: "t-lena" } }, group: "t-lena",
+        });
+        expect(hostMessages.filter((h) => h.type === "notification").at(-1)?.payload).toEqual({
+            appId: "org.webosphoenix.messaging", title: "Lena Okafor", body: "Hi! Just landed.", params: { threadId: "t-lena" }, group: "t-lena",
+        });
+    });
+});
+
 describe("instant messaging transports", () => {
     it("names each service, its transport and whether it takes pictures", () => {
         expect(serviceLabel("type_jabber")).toBe("Jabber (XMPP)");

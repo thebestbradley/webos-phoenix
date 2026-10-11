@@ -385,6 +385,10 @@ await notifications.post({
 });
 notifications.remove("upload");                 // the row of that tag
 
+// A conversation's messages: one stack, the newest on top.
+await notifications.post({ title: "Ada Palmer", body: "Lunch?", params: { threadId }, group: threadId });
+notifications.removeGroup(threadId);            // read: the whole stack goes
+
 const win = notifications.dashboard("dashboard.html", { height: 104, persistent: true });
 notifications.sound("alerts");
 
@@ -401,7 +405,24 @@ on plain OSE `com.webos.notification/createToast`). A **notification** is a
 row in the notification area that opens the app with `params` when tapped;
 a `tag` replaces the app's earlier row of that tag, and `actions` are
 buttons that call the app's own service with `{action: id}` without
-opening it. A **dashboard** is a small window of the app's own in the
+opening it. A `group` (a conversation's id, an account, `"missed-calls"`)
+stacks the app's notifications of that group in one row, as webOS's
+dashboards held their layers (Enyo 1.0's `enyo.Dashboard`): the newest on
+top with the count in a badge over the icon, the next ones peeking out at
+its left. Each one still brings its banner. A swipe on the top one (right
+of the icon) takes it away and shows the next; a swipe on the icon, or on
+the last one, takes the row; a tap opens the app with the top one's
+`params` and clears the stack; Select and Clear All act on whole stacks;
+the phone's bar has one icon per stack; the lock screen shows the count
+(with previews off, "3 New Messages"). When the user has seen them (the
+conversation opened), take the stack away with `removeGroup(group)`. A
+`tag` still names one notification, inside its stack or not; without a
+`group` a notification is a row of its own. The host message is
+`{appId, title, body, params, group}`, and `{appId, remove: true, group}`
+(`phoenixHost.postToHost("notification", ...)`); `@phoenix/luna` has
+`postNotification({..., group})` and `removeNotificationGroup(appId,
+group)`, Flutter's `phoenix.notifications.post(title, group: ...)` and
+`removeGroup`, Capacitor's `removeNotification({group})`. A **dashboard** is a small window of the app's own in the
 notification area (a player's controls). An **ongoing activity** is a row
 with progress that cannot be swiped away (`org.webosphoenix.ongoing`). An
 **activity** launches the app later, running or not
@@ -510,7 +531,7 @@ to `com.palm.printmgr` (in the simulator, Save as PDF).
 | `has({capability})` | `has()` |
 | `stageReady()`, `keepAlive({enabled})`, `setOrientation({orientation})`, `setFullScreen({enabled})`, `keepScreenOn({enabled})`, `launch({appId, params})`, `open({target})` | `app.*` |
 | `share(content)`, `pickFiles(options)` (`{files, canceled}`), `saveFile(options)` (`{path, canceled}`) | `share.open`, `pickers.*` |
-| `showBanner({message, ...})`, `postNotification(...)`, `removeNotification({tag})`, `setOngoing(...)`, `clearOngoing({id})`, `scheduleActivity(...)`, `cancelActivity({name})` | `notifications`, `ongoing`, `activities` |
+| `showBanner({message, ...})`, `postNotification(...)`, `removeNotification({tag} or {group})`, `setOngoing(...)`, `clearOngoing({id})`, `scheduleActivity(...)`, `cancelActivity({name})` | `notifications`, `ongoing`, `activities` |
 | `listContacts({search})`, `calendarEvents({from, to})`, `listAccounts({capability})`, `composeEmail(...)`, `composeMessage(...)` | Synergy |
 | `getCurrentPosition()`, `copyText({text, sensitive})`, `request({uri, params})` | device, any Luna method |
 

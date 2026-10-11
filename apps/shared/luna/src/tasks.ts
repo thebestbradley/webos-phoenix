@@ -259,7 +259,10 @@ export const tasks = {
         const task = await tasks.get(taskId);
         if (!task || task.completed) return null;
         const body = task.due ? `Due ${dueText(task)}` : task.notes?.split("\n")[0] || "Reminder";
-        postNotification({ appId: TASKS_APP_ID, title: task.summary, body, params: { taskId, fromReminder: true } });
+        // One stack for all the reminders, as Calendar kept its reminders
+        // in one dashboard (core-apps com.palm.app.calendar
+        // ReminderManager.js:694-722).
+        postNotification({ appId: TASKS_APP_ID, title: task.summary, body, params: { taskId, fromReminder: true }, group: "reminders" });
         return task;
     },
 };
@@ -284,17 +287,35 @@ export interface HostNotification {
     body?: string;
     /** Launch params for the app when the notification is tapped. */
     params?: Record<string, unknown>;
+    /**
+     * Stacks it with the app's notifications of this group (a conversation,
+     * the missed calls): one row, newest on top, as webOS's dashboards held
+     * their layers (the shell's NotificationStacks.js).
+     */
+    group?: string;
 }
+
+type HostGlobals = {
+    phoenixHost?: { postToHost(type: string, payload: object): void };
+    PalmSystem?: { addBannerMessage?: (msg: string, params: string, icon?: string) => void };
+};
 
 /**
  * Post a notification to the shell: phoenixHost's "notification" message
  * (phoenix-sim shows a banner and a dashboard item), else a legacy banner.
  */
 export function postNotification(n: HostNotification): void {
-    const g = globalThis as {
-        phoenixHost?: { postToHost(type: string, payload: object): void };
-        PalmSystem?: { addBannerMessage?: (msg: string, params: string, icon?: string) => void };
-    };
+    const g = globalThis as HostGlobals;
     if (g.phoenixHost) g.phoenixHost.postToHost("notification", n);
     else g.PalmSystem?.addBannerMessage?.(n.body ? `${n.title}: ${n.body}` : n.title, JSON.stringify(n.params ?? {}), "icon.png");
+}
+
+/**
+ * Take the app's stack of this group away from the notification area (the
+ * user has read them: a conversation opened, the call log seen), as the
+ * original apps emptied their dashboard's layers.
+ */
+export function removeNotificationGroup(appId: string, group: string): void {
+    if (!group) return;
+    (globalThis as HostGlobals).phoenixHost?.postToHost("notification", { appId, remove: true, group });
 }

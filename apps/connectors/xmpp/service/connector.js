@@ -329,7 +329,7 @@ function createSession(ctx) {
                 return ctx.putMessage(msg).then(function (r) {
                     if (p.outgoing || how.read || how.quiet) return r;
                     return ctx.notify({ title: msg.from.name, body: part ? (text ? "Picture: " + text : "Picture") : text, appId: MESSAGING_APP,
-                                        params: { threadId: (r && r.threadids && r.threadids[0]) || "" } }).then(function () { return r; });
+                                        params: { threadId: (r && r.threadids && r.threadids[0]) || "" }, group: (r && r.threadids && r.threadids[0]) || "" }).then(function () { return r; });
                 });
             });
         });

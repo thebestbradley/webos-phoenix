@@ -1081,8 +1081,15 @@ Helpers for tests and the shell:
 - `__phoenixRuntime.simulateRemoteHangup()`
 - `__phoenixRuntime.simulateIncomingSms({from?, text?})` stores a received
   text and posts `phoenixHost.postToHost("notification", {appId, title,
-  body})` for Messaging, which `SimWindowSource` shows as a banner and
-  dashboard item for that app (phoenix-sim **F5**)
+  body, params: {threadId}, group: threadId})` for Messaging, which
+  `SimWindowSource` shows as a banner and a layer on that conversation's
+  stack in the notification area (`NotificationStacks.js`: one row per
+  conversation, the newest on top with the count; GAPS N9); reading the
+  conversation (`messaging.markRead`) posts `{appId, remove: true, group}`
+  and the stack goes (phoenix-sim **F5**). A service's
+  `com.webos.notification/createToast` for another app ({onclick: {appId}})
+  is that app's notification, `{title, message}` as its title and body
+  and Phoenix's `{group}` its stack (the IM connectors' messages)
 - `__phoenixRuntime.simulateIncomingMms({from?, text?, image?})` the same
   for a picture message (default: a sample photo from Ada; **Shift+F5**)
 - `__phoenixRuntime.simulateIncomingIm({from?, text?})` an instant message

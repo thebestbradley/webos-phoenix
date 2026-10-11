@@ -5,7 +5,8 @@
 //
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "longstack" | "reorder" | "maximized" | "heldcard" | "launcher" |
-//                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" | "drawer" | "capture" | "capturepreview" |
+//                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" |
+//                  "notifystacks" | "notifystacksbar" | "notifystackslocked" | "drawer" | "capture" | "capturepreview" |
 //                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistantbird" | "assistantbirds" | "assistantbirdmoves" |
 //                  "wakeword" | "wakewordlocked" | "modal" |
 //                  "systemmenu" | "empty"
@@ -1255,7 +1256,7 @@ Item {
     // The demo scenes (--scene; buildScene()).
     readonly property var scenes: ["locked", "cards", "stacks", "longstack", "reorder", "maximized", "heldcard",
                                    "launcher", "launcheredit", "launchermenu", "launchergroup", "launchergroupopen", "launchertabs", "launcherinstall", "wave", "powermenu", "hot", "pin", "emergency", "firstuse",
-                                   "lowbattery", "banner", "notified", "dashboard", "drawer", "capture",
+                                   "lowbattery", "banner", "notified", "dashboard", "notifystacks", "notifystacksbar", "notifystackslocked", "drawer", "capture",
                                    "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "assistantbird", "assistantbirds", "assistantbirdmoves",
                                    "wakeword", "wakewordlocked", "modal", "systemmenu", "empty"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
@@ -1862,7 +1863,7 @@ Item {
             return shell.unlock();
         if (scene === "firstuse")
             return shell.startFirstUse();
-        if (scene !== "locked" && scene !== "pin" && scene !== "emergency")
+        if (scene !== "locked" && scene !== "pin" && scene !== "emergency" && scene !== "notifystackslocked")
             shell.unlock();
         // Real apps where the simulator has them (Memos, Calculator), placeholders otherwise.
         var ids = ["Messaging", "Memos", "Calculator", "Web"].map(windows.appIdByTitle);
@@ -1976,6 +1977,24 @@ Item {
             windows.notify(windows.appIdByTitle("Email"), "3 new emails", "webOS Phoenix build passed");
             windows.notify(windows.appIdByTitle("Calendar"), "Launch party", "Tomorrow, 9:41 AM");
             if (scene === "dashboard")
+                shell.notifications.dashboardOpen = true;
+        } else if (scene === "notifystacks" || scene === "notifystacksbar" || scene === "notifystackslocked") {
+            // Texts from two people, a stack for each conversation
+            // (NotificationStacks.js): three from Ada, two from Marcus, and
+            // a reminder of its own. "notifystacks": the dashboard open;
+            // "notifystacksbar": the icons in the bar; "notifystackslocked":
+            // the lock screen's dashboard.
+            if (scene !== "notifystackslocked")
+                shell.cardView.maximizeProgress = 1;
+            var msgApp = windows.appIdByTitle("Messaging");
+            var texts = [["Ada Palmer", "Are you there?", "demo-ada"], ["Marcus Reyes", "Lunch at noon?", "demo-marcus"],
+                         ["Ada Palmer", "Call me when you can", "demo-ada"], ["Ada Palmer", "It's about Friday", "demo-ada"],
+                         ["Marcus Reyes", "Or 1 if that's easier", "demo-marcus"]];
+            for (var ti = 0; ti < texts.length; ++ti)
+                windows.notify(msgApp, texts[ti][0], texts[ti][1], { threadId: texts[ti][2] }, { group: texts[ti][2] });
+            windows.notify(windows.appIdByTitle("Calendar"), "Launch party", "Tomorrow, 9:41 AM");
+            shell.notifications.bannerActive = false;
+            if (scene === "notifystacks")
                 shell.notifications.dashboardOpen = true;
         } else if (scene === "pin" || scene === "emergency") {
             // The PIN panel as it asks for the passcode (nothing is set: the

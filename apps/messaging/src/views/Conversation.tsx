@@ -14,7 +14,8 @@
 // and says it is not private (docs/SYNERGY-MODERN.md 3.1).
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { db, hasPresence, isImService, linkedText, messaging, notPrivateNote, serviceLabel, shareSheet, type ChatThread, type ImBuddy, type Message,
+import { clearConversationNotifications, db, hasPresence, isImService, linkedText, messaging, notPrivateNote, serviceLabel, shareSheet,
+         type ChatThread, type ImBuddy, type Message,
          type MessagePart, type Person } from "@phoenix/luna";
 import { useFileUrl } from "@phoenix/luna/react";
 import { Avatar, Button, dayLabel, formatNumber, formatTime, useBack } from "@phoenix/ui";
@@ -83,10 +84,13 @@ export function Conversation({ threadId, people, buddies, header, initialText, i
         return () => { alive = false; };
     }, [threadId, messages]);
 
-    // Read while open.
+    // Read while open, and its notifications (the conversation's stack in
+    // the notification area) gone with it: markRead takes them, and so does
+    // opening it read.
     const unreadIn = messages?.some((m) => m.folder === "inbox" && !m.flags?.read) ?? false;
     useEffect(() => {
         if (unreadIn || (thread?.unreadCount ?? 0) > 0) messaging.markRead(threadId).catch(() => {});
+        else clearConversationNotifications(threadId);
     }, [threadId, unreadIn, thread?.unreadCount]);
 
     // The newest message in view; again when a picture has loaded and

@@ -269,10 +269,15 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
         const ctx: AccountContext = Object.assign(base, {
             accountId, account: account || { _id: accountId, capabilityProviders: [] }, credentials: credentials || {},
             config: state.config, state: state.data,
-            notify: async (n: { title: string; body?: string; appId?: string; params?: Json }) => {
-                const message = n.body ? n.title + ": " + n.body : n.title;
+            // {title, message} as OSE's createToast takes them (its banner
+            // reads "title: message"); {group}, Phoenix's, stacks a
+            // conversation's notifications in one row (OSE's notificationmgr
+            // passes on only what it knows).
+            notify: async (n: { title: string; body?: string; appId?: string; params?: Json; group?: string }) => {
                 await bus.call("luna://com.webos.notification/createToast", {
-                    message, onclick: n.appId ? { appId: n.appId, params: n.params || {} } : undefined, sourceId: def.service
+                    ...(n.body ? { title: n.title, message: n.body } : { message: n.title }),
+                    onclick: n.appId ? { appId: n.appId, params: n.params || {} } : undefined, sourceId: def.service,
+                    ...(n.group ? { group: n.group } : {})
                 }).catch((e: Error) => log("notification not shown: " + e.message));
             },
             putMessage: (message: Json) => bus.call("luna://org.webosports.service.messaging/putMessage", { message }),

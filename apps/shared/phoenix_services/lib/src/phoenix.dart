@@ -289,7 +289,11 @@ class PhoenixNotifications {
   void removeBanner(String id) => _p.host.palm('removeBannerMessage', [id]);
 
   /// A row in the notification area (Phoenix's shell), else a banner.
-  Future<void> post(String title, {String body = '', Json params = const {}, String? tag, NotificationActions? actions}) async {
+  /// [group] stacks it with the app's other notifications of that group (a
+  /// conversation, an account): one row, newest on top, as webOS's
+  /// dashboards held their layers.
+  Future<void> post(String title,
+      {String body = '', Json params = const {}, String? tag, String? group, NotificationActions? actions}) async {
     if (_p.host.shell) {
       _p.host.postToHost('notification', {
         'appId': _p.app.id,
@@ -297,6 +301,7 @@ class PhoenixNotifications {
         'body': body,
         'params': params,
         'tag': ?tag,
+        'group': ?group,
         if (actions != null) 'actions': actions.toJson(),
       });
       return;
@@ -305,6 +310,10 @@ class PhoenixNotifications {
   }
 
   void remove(String tag) => _p.host.postToHost('notification', {'appId': _p.app.id, 'remove': true, 'tag': tag});
+
+  /// The app's stack of this group, every layer of it (the user read them).
+  void removeGroup(String group) =>
+      _p.host.postToHost('notification', {'appId': _p.app.id, 'remove': true, 'group': group});
 
   /// A dashboard window (webOS): window.open with the dashboard attributes.
   void dashboard(String url, {String name = 'dashboard', int height = 52, bool persistent = false}) => _p.host.openWindow(
