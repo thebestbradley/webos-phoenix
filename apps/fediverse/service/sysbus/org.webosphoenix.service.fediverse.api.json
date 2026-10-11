@@ -11,5 +11,8 @@
     "fediverse.account": [
         "org.webosphoenix.service.fediverse/signIn",
         "org.webosphoenix.service.fediverse/share"
+    ],
+    "phoenix.connector.share": [
+        "org.webosphoenix.service.fediverse/share"
     ]
 }

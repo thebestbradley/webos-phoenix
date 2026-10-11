@@ -124,7 +124,7 @@ var DEFAULT_EXHIBITION_APPS = ["org.webosphoenix.photos"];
 // What of each app's appinfo.json the tables need (SAM keeps it whole:
 // AppDescription::getJson, src/base/AppDescription.cpp:240-265).
 var APP_PROPERTIES = ["id", "title", "icon", "version", "folderPath", "type", "noWindow", "mimeTypes", "siteScope",
-                      "exhibitionMode", "dockMode", "exhibitionModeTitle", "removable", "vendor", "visible"];
+                      "exhibitionMode", "dockMode", "exhibitionModeTitle", "removable", "vendor", "visible", "phoenix"];
 var APPS_TTL = 2000;
 
 function ok(extra) {

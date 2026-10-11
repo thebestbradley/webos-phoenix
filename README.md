@@ -494,6 +494,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `node tools/test-community.cjs` | The community's features (M6 F4): Settings > Advanced, repeat alerts and lock screen previews reaching the shell, Contacts' tones and a text's tone, Email's cycling dashboard |
 | `node tools/test-assistant.cjs` | The Assistant: the app's commands, read-backs and choices, Settings > Assistant with a stand-in cloud provider, the permission gate, conversations (the panes on a phone and a tablet, swipe to delete, Open in New Card with two cards) |
 | `node tools/test-assistant-followups.cjs` | The Assistant's follow-up questions: asked after an event, answered by a quick reply, sent later as a notification with buttons, unread in Conversations, the app opened from it |
+| `xvfb-run -a node tools/test-assistant-synergy-sim.cjs [--phone]` | The Assistant on accounts connected through Synergy, in phoenix-sim with the real Todoist, Bluesky and Jabber connectors (their stand-ins, the Jabber demo server): a task added to and read from a Todoist list, a Bluesky post read back naming the account and posted on Yes, a Jabber message read back and sent, the accounts listed; screenshots |
 | `node tools/test-terminal.cjs` | Terminal (simulated shell, then /bin/sh for real) |
 | `build/pty/pty-test` | The Terminal's PTY service |
 | `build/tts-test` | The Assistant's voice, phoenix-tts: numbers and words, the dictionary's phonemes, Kitten's symbols and voices; with the model (`tools/get-kitten.py`) speech, checked for length and loudness |

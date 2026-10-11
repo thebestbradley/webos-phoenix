@@ -89,6 +89,18 @@
 {"id":"h-talk-2","cat":"talk mode","voice":true,"turns":[{"say":"call daniel","expect":{"command":"call","status":"pending"}},{"say":"actually no","expect":{"answer":"chat"},"forbid":["call"]}]},
 {"id":"h-talk-3","cat":"talk mode","voice":true,"turns":[{"say":"call chris","expect":{"answer":"clarify"},"forbid":["call"]},{"say":"Chris Moore please","expect":{"command":"call","status":"pending","args":{"name":{"$re":"moore"}}}}]},
 {"id":"h-talk-4","cat":"talk mode","voice":true,"turns":[{"say":"why is the sky blue","expect":{"answer":"knowledge"}},{"say":"no thank you","expect":{"answer":"chat"},"forbid":["search"]}]},
-{"id":"h-talk-5","cat":"talk mode","voice":true,"turns":[{"say":"delete all my alarms","expect":{"command":"alarmManage","status":"pending"}},{"say":"uh I'm not sure","expect":{"command":"alarmManage","status":"pending"}},{"say":"no","expect":{"answer":"chat"},"forbid":["alarmManage"]}]}
+{"id":"h-talk-5","cat":"talk mode","voice":true,"turns":[{"say":"delete all my alarms","expect":{"command":"alarmManage","status":"pending"}},{"say":"uh I'm not sure","expect":{"command":"alarmManage","status":"pending"}},{"say":"no","expect":{"answer":"chat"},"forbid":["alarmManage"]}]},
+{"id":"h-syn-1","cat":"synergy","say":"shoot Sam a slack message saying I'm in the lobby","expect":{"command":"text","args":{"chat":{"service":"type_slack"}},"status":"pending"}},
+{"id":"h-syn-2","cat":"synergy","say":"anything new on slack","expect":{"command":"readMessages","args":{"via":"slack"}}},
+{"id":"h-syn-3","cat":"synergy","say":"what's on the work calendar on friday","expect":{"command":"agenda","args":{"calendar":"work"}}},
+{"id":"h-syn-4","cat":"synergy","say":"throw coffee filters on my todoist shopping list","expect":{"command":"task"},"effects":[{"kind":"com.palm.task.todoist:1","where":{"summary":"Coffee filters","listId":"tl-todo-shop"},"count":1}]},
+{"id":"h-syn-5","cat":"synergy","say":"anything in my work inbox","expect":{"command":"searchEmail","args":{"account":"work"}}},
+{"id":"h-syn-6","cat":"synergy","say":"put the trip itinerary on dropbox","expect":{"command":"saveToDrive","status":["pending","failed"]},"forbid":["saveToDrive"]},
+{"id":"h-syn-7","cat":"synergy","say":"skeet good morning everyone","expect":{"command":"post","status":"pending"},"text":"bluesky"},
+{"id":"h-syn-8","cat":"synergy","say":"say yes to the offsite","expect":{"command":"inviteReply","args":{"response":"accepted"},"status":"pending"}},
+{"id":"h-syn-9","cat":"synergy","say":"hop on the zoom call","expect":{"command":"joinMeeting"}},
+{"id":"h-syn-10","cat":"synergy","say":"which of my accounts can I post from","expect":{"anyOf":[{"command":"accounts"},{"command":"post","status":"ask"},{"answer":"fallback"}]},"forbid":["post"]},
+{"id":"h-syn-11","cat":"synergy","say":"let Noor see where I am","expect":{"command":"shareLocation","status":"pending"},"text":"telegram"},
+{"id":"h-syn-12","cat":"synergy","say":"message Sam on slack with my ETA to the airport","expect":{"command":"shareLocation","args":{"chat":{"service":"type_slack"}},"status":"pending"}}
 ]
 }

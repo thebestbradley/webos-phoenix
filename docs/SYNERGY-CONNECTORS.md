@@ -905,8 +905,21 @@ event moved in Calendar) reaches the provider at the account's next sync
 (every 15 minutes; Contacts' and Calendar's Sync Now sooner), not at once:
 the kit has no watch on local changes yet, as mojomail's IMAP transport had
 (`ImapActivityFactory.cpp` lines 174-184, a db8 watch on its `upsyncRev`),
-and the simulator's activity manager does not fire db8 triggers. The
-Assistant's new events still go to the device's own calendar.
+and the simulator's activity manager does not fire db8 triggers.
+
+**The Assistant** (11 October 2026; [AI-AND-MCP.md](AI-AND-MCP.md) "The
+Assistant and Synergy") reaches every account here as soon as it is signed
+in: it sends on Slack, Bluesky and the chat accounts, reads one account's
+messages, puts a new event in the account's calendar named ("add it to my
+Google calendar") in that account's event kind, adds to and reads Todoist,
+Google Tasks and Microsoft To Do lists, posts to Bluesky, the Fediverse
+and LinkedIn through their share targets, finds and uploads files on the
+drives, and joins a meeting from its Teams, Zoom or Meet address. An
+invitation answered on the device ("accept the invite from Alex") now
+reaches the organizer: Microsoft's connector sends Graph's `accept`,
+`decline` or `tentativelyAccept`, Google's the attendees with
+`sendUpdates=all`, CalDAV the attendee's `PARTSTAT` (the kit's
+`answerChanged`). Zoom's `createMeeting` is still called by nothing.
 
 Screenshots from phoenix-sim with the stand-ins:
 [Bluesky's sign-in](screenshots/connectors-bluesky-signin.png),

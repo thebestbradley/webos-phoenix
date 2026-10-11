@@ -144,6 +144,28 @@ describe("Google", () => {
             start: { dateTime: "2026-10-16T09:00:00.000Z", timeZone: "Europe/London" }, reminders: { useDefault: false, overrides: [] } });
     });
 
+    it("sends the user's answer to an invitation as their response, telling the organizer", async () => {
+        gg.events.push(gg.touch({ id: "ev-invite", calendarId: "anna.lee@gmail.example", status: "confirmed", kind: "calendar#event", summary: "Climbing",
+                                  start: { dateTime: "2026-10-17T10:00:00Z", timeZone: "UTC" }, end: { dateTime: "2026-10-17T12:00:00Z", timeZone: "UTC" },
+                                  organizer: { email: "chen@gmail.example", displayName: "Chen" },
+                                  attendees: [{ email: "chen@gmail.example", displayName: "Chen", organizer: true, responseStatus: "accepted" },
+                                              { email: "anna.lee@gmail.example", displayName: "Anna Lee", self: true, responseStatus: "needsAction" }] }));
+        const { w, id } = await signedIn();
+        await w.enable(id, P.calendar);
+        expect((await w.sync(id)).returnValue).toBe(true);
+        const ev = (await w.find(K.event)).find((e: any) => e.subject === "Climbing");
+        expect(ev.attendees.find((a: any) => a.email === "anna.lee@gmail.example").participationStatus).toBe("NEEDS-ACTION");
+        await w.db.merge([{ _id: ev._id, attendees: ev.attendees.map((a: any) => a.email === "anna.lee@gmail.example" ? { ...a, participationStatus: "ACCEPTED" } : a) }]);
+        const before = base.requests.length;
+        expect((await w.sync(id)).stats[P.calendar].pushed).toMatchObject({ updated: 1 });
+        const patch = base.requests.slice(before).find((q: any) => q.method === "PATCH");
+        expect(patch).toMatchObject({ path: "/google/calendar/v3/calendars/anna.lee%40gmail.example/events/ev-invite", query: "?sendUpdates=all" });
+        expect(gg.events.find((e: any) => e.id === "ev-invite").attendees).toEqual([
+            { email: "chen@gmail.example", displayName: "Chen", organizer: true, responseStatus: "accepted" },
+            { email: "anna.lee@gmail.example", displayName: "Anna Lee", responseStatus: "accepted" }]);
+        expect(gg.events.find((e: any) => e.id === "ev-invite").summary).toBe("Climbing");
+    });
+
     it("brings Google Tasks, both ways, a task moved to another list keeping its id", async () => {
         const { w, id } = await signedIn();
         await w.enable(id, P.tasks);
