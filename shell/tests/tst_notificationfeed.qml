@@ -97,6 +97,8 @@ Item {
             fakeSource.add({ id: "a", appId: "org.webosphoenix.messaging", title: "Sam", body: "Where are you?", time: 1000 });
             fakeSource.add({ id: "b", appId: "org.webosphoenix.files", title: "Downloading", body: "50%", ongoing: true, time: 1000 });
             fakeSource.add({ id: "c", appId: "org.webosphoenix.assistant", title: "Where is it?", body: "", time: 1000 });
+            tryVerify(function () { return fakeSource.calls.length > 0; }, 2000);
+            wait(200);
             compare(fakeSource.calls.length, 1);
             compare(fakeSource.calls[0].uri, "luna://org.webosphoenix.assistant/announce");
             compare(fakeSource.calls[0].params.title, "Sam");
@@ -105,6 +107,28 @@ Item {
             verify(fakeSource.calls[0].params.headphones);
             replies.wait(2000);
             compare(replies.signalArguments[0][0], "t1");
+        }
+
+        // A stack (NotificationStacks.js): each layer is a notification of
+        // its own in the list, and a layer pushed on it is announced.
+        function test_stackLayers() {
+            windows.notifications.clear();
+            var stackFeed = Qt.createQmlObject("import Phoenix.Shell; NotificationFeed {}", root);
+            var calls = [];
+            stackFeed.source = { notifications: windows.notifications, appInfo: windows.appInfo,
+                                 publishNotifications: function () {}, lunaCall: function (uri, p, cb) { calls.push(p); cb({ returnValue: true }); } };
+            wait(200);
+            windows.notify("org.webosphoenix.messaging", "Sam", "First", null, { group: "sam" });
+            tryVerify(function () { return calls.length === 1; }, 2000);
+            windows.notify("org.webosphoenix.messaging", "Sam", "Second", null, { group: "sam" });
+            tryVerify(function () { return calls.length === 2; }, 2000);
+            compare(calls[1].body, "Second");
+            compare(windows.notifications.count, 1);
+            var d = stackFeed.digest();
+            compare(d.length, 2);
+            compare(d.map(function (n) { return n.body; }).sort(), ["First", "Second"]);
+            verify(d[0].time >= d[1].time);
+            stackFeed.destroy();
         }
 
         function test_simulatorSourceKeepsTimeAndDashboardWords() {

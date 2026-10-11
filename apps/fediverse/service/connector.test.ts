@@ -131,7 +131,8 @@ async function world(opts: { device?: boolean } = {}) {
     let methods: any = {};
     const handlers: Record<string, any> = {
         "luna://org.webosphoenix.service.oauth/*": (p: any, uri: string) => (oauth as any)[uri.slice(uri.lastIndexOf("/") + 1)](p, SERVICE),
-        "luna://com.webos.notification/createToast": (p: any) => { toasts.push(p); return { returnValue: true }; },
+        // A toast as its banner reads it: "title: message".
+        "luna://com.webos.notification/createToast": (p: any) => { toasts.push({ ...p, message: p.title ? p.title + ": " + p.message : p.message }); return { returnValue: true }; },
         "luna://org.webosports.service.messaging/putMessage": async (p: any) => {
             messages.push(p.message);
             const r = await db.put([Object.assign({ conversations: ["thread-" + p.message.from.addr] }, p.message)]);

@@ -335,6 +335,13 @@ Item {
             tryVerify(function () { return bubbles().indexOf("The flashlight is on.") >= 0; }, 2000);
             compare(bubbles().indexOf("turn on the flashlight") >= 0, true);
             verify(fake.calls.indexOf("ask turn on the flashlight") >= 0);
+            // The speaker's lower corner nearly square, as in the Assistant
+            // app and Messaging (assistant.css:33-34): the user's lower
+            // right, the answer's lower left; the other corners round.
+            var mine = findChild(arrived("turn on the flashlight"), "assistantBubble");
+            var answer = findChild(arrived("The flashlight is on."), "assistantBubble");
+            verify(mine.bottomRightRadius < mine.radius / 2 && mine.bottomLeftRadius === mine.radius && mine.topLeftRadius === mine.radius);
+            verify(answer.bottomLeftRadius < answer.radius / 2 && answer.bottomRightRadius === answer.radius && answer.topRightRadius === answer.radius);
         }
 
         // With a microphone (as on a Mac, or --microphone-file here) it opens

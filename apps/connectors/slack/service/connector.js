@@ -198,7 +198,8 @@ function syncMessages(ctx) {
                                             var mention = me && String(m.text || "").indexOf("<@" + me + ">") >= 0;
                                             if (first || !(dm || mention)) return null;
                                             return ctx.notify({ title: dm ? who : who + " in #" + (c.name || ""), body: text, appId: MESSAGING_APP,
-                                                                params: { threadId: (r && r.threadids && r.threadids[0]) || "" } });
+                                                                params: { threadId: (r && r.threadids && r.threadids[0]) || "" },
+                                                                group: (r && r.threadids && r.threadids[0]) || "" });
                                         });
                                     });
                                 });

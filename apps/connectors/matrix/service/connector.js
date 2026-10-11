@@ -188,7 +188,7 @@ function createSession(ctx) {
                         if (outgoing || how.read || how.quiet) return r;
                         var body = part ? "Picture" : text;
                         return ctx.notify({ title: group ? name : msg.from.name, body: body, appId: MESSAGING_APP,
-                                            params: { threadId: (r && r.threadids && r.threadids[0]) || "" } });
+                                            params: { threadId: (r && r.threadids && r.threadids[0]) || "" }, group: (r && r.threadids && r.threadids[0]) || "" });
                     });
                 });
             });

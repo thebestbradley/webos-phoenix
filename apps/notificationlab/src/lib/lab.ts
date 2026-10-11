@@ -223,4 +223,7 @@ export interface TaskLaunch {
     scheduled?: number;
     $activity?: { activityId: number; name: string };
     from?: string;
+    /** A stack's top one, tapped ({from: "stack"}): whose and which. */
+    who?: string;
+    n?: number;
 }

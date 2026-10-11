@@ -91,6 +91,9 @@ describe("Slack", () => {
         msgs = await w.find(K.message);
         expect(msgs.length).toBe(4);
         expect(w.toasts.map((t: any) => t.message)).toEqual(["Raj Patel: Ping me when it's green", "Kim in #general: @anna can you review?"]);
+        // One stack per conversation (the DM, the channel).
+        expect(w.toasts.map((t: any) => t.group)).toEqual(w.toasts.map((t: any) => t.onclick.params.threadId));
+        expect(w.toasts.every((t: any) => !!t.group)).toBe(true);
         // A reply from Messaging.
         const [out] = await w.db.put([{ _kind: K.message, folder: "outbox", status: "pending", serviceName: "type_slack", username: "anna@Phoenix Makers",
                                         to: [{ addr: "raj@T0PHX" }], messageText: "Will do" }]);

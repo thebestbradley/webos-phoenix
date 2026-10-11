@@ -92,6 +92,7 @@ The original phone app is not in the open-source release either.
 | `{preferences: true}` (`launchType: "startNetworkSearch"`) | luna-systemui's "Phone Preferences" (`TelephonyAlerts.js:59-67`), Enyo's network alerts (`networkalerts/source/NetworkAlertsContent.js:278`) | Settings' Phone page (the runtime's `APP_ROUTES`); no network search to start |
 | `{number}` | the webOS SDK's documented launch ("the number on the dial pad") | On the dial pad |
 | `{number, dial: true}`, `{target: "tel:…"}`, `{emergency: true}` | Phoenix: Voice Dial, the Assistant, links, the lock screen | as before |
+| `{action: "missedcalls"}` | Phoenix: the missed calls' notification stack (`apps/phone/src/lib/hooks.ts` `notifyMissedCall`) | The call log on its missed calls |
 
 **Calling at once.** Contacts gives each number two controls: the row (the
 number) and the message icon beside it (`phoneActionIconClick`). The row is

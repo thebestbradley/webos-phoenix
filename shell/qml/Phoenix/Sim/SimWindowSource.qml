@@ -35,9 +35,14 @@
 //                            is the app's own dashboard, "" otherwise),
 //                            clickableWhenLocked (the dashboard takes taps
 //                            on the lock screen: its {clickableWhenLocked:
-//                            true} window attribute), time (ms, when it
-//                            came), dashboardTitle and dashboardBody (a
-//                            dashboard window's words, from its page)
+//                            true} window attribute), group, layerCount,
+//                            layers (a stack of the app's notifications of
+//                            one group, the top layer's fields the row's:
+//                            NotificationStacks.js), time (ms, when its top
+//                            layer came), dashboardTitle and dashboardBody
+//                            (a dashboard window's words, from its page)
+//   dismissNotification(index), popNotificationLayer(index)
+//                            the row (its whole stack) gone; its top layer gone
 //   publishNotifications(digest)  (optional) the list for the services
 //                            that read it (NotificationFeed.qml)
 //   alerts        ListModel  key, appId, height (legacy px), sound,
@@ -158,6 +163,7 @@ import QtQuick
 import Phoenix.Native
 import Phoenix.Shell
 import "../Shell/NotificationPolicy.js" as Policy
+import "../Shell/NotificationStacks.js" as Stacks
 import "Links.js" as Links
 
 Item {
@@ -835,16 +841,23 @@ Item {
             // tag starting with it: a deleted folder's captures); {actions: {uri, params,
             // items: [{id, label}]}} adds buttons (Notifications.qml
             // runAction), e.g. the Assistant's follow-up answers.
+            // {group}: the app's notifications of one group are one stack
+            // of layers, the newest on top (NotificationStacks.js, as
+            // Enyo's enyo.Dashboard); {group, remove: true} takes the
+            // stack away (the app read them).
             var target = payload.appId && appInfo(payload.appId) ? payload.appId : appId;
             if (payload.tag)
                 removeTagged(target, String(payload.tag));
             if (payload.remove) {
                 if (payload.tagPrefix)
                     removeTagged(target, String(payload.tagPrefix), true);
+                if (payload.group)
+                    removeGroup(target, String(payload.group));
                 return;
             }
             notify(target, payload.title || "", payload.body || "", payload.params,
-                   { tag: payload.tag ? String(payload.tag) : "", actions: payload.actions || null });
+                   { tag: payload.tag ? String(payload.tag) : "", actions: payload.actions || null,
+                     group: payload.group ? String(payload.group) : "" });
             if (payload.soundClass || payload.soundFile) {
                 var ns = _soundArgs(payload);
                 soundRequested(target, ns[0], ns[1], ns[2]);
@@ -1370,6 +1383,9 @@ Item {
                 params: "", windowKey: key,
                 clickableWhenLocked: _param(url, "phoenixClickableWhenLocked") === "1",
                 ongoing: false, progress: -1, tag: "", actions: "",
+                // Its page draws its own layers (enyo.Dashboard's
+                // DashboardContent): one layer to the shell.
+                group: "", layerCount: 1, layers: "",
                 // When it came, and its words as its page reports them
                 // (windowProperties {dashboardText}): NotificationFeed.qml.
                 time: Date.now(), dashboardTitle: "", dashboardBody: "",
@@ -2840,12 +2856,14 @@ Item {
     }
 
     // params: launch params for the app when the notification is tapped.
-    // extra: {tag, actions} (see the "notification" host message).
+    // extra: {tag, actions, group} (see the "notification" host message):
+    // with a group the app has a stack of, it goes on top of that stack.
+    property int _notificationSeq: 0
     function notify(appId, titleText, body, params, extra) {
         var info = appInfo(appId) || { color: "#666666", glyph: "!", icon: "" };
         var acts = extra && extra.actions && Array.isArray(extra.actions.items) && extra.actions.items.length ? extra.actions : null;
-        notifications.append({
-            id: "n" + Date.now() + "_" + notifications.count,
+        Stacks.push(notifications, {
+            id: "n" + Date.now() + "_" + (++_notificationSeq),
             appId: appId, title: titleText, body: body,
             color: info.color, glyph: info.glyph, icon: info.icon || "",
             params: params && typeof params === "object" ? JSON.stringify(params) : "",
@@ -2854,16 +2872,17 @@ Item {
             tag: extra && extra.tag ? extra.tag : "",
             actions: acts ? JSON.stringify(acts) : "",
             time: Date.now(), dashboardTitle: "", dashboardBody: ""
-        });
+        }, extra && extra.group ? String(extra.group) : "");
     }
     // The app's notification of that tag, gone (replaced or taken back);
-    // prefix: every one whose tag starts with it.
+    // prefix: every one whose tag starts with it. Out of its stack, which
+    // goes with its last layer.
     function removeTagged(appId, tag, prefix) {
-        for (var i = notifications.count - 1; i >= 0; --i) {
-            var n = notifications.get(i);
-            if (n.appId === appId && (prefix ? n.tag !== "" && n.tag.indexOf(tag) === 0 : n.tag === tag))
-                notifications.remove(i);
-        }
+        Stacks.removeTagged(notifications, appId, tag, prefix);
+    }
+    // The app's stack of this group, gone at once (the app read them).
+    function removeGroup(appId, group) {
+        Stacks.removeGroup(notifications, appId, group);
     }
 
     // An ongoing activity (a download, an install; org.webosphoenix.ongoing
@@ -2900,10 +2919,12 @@ Item {
             color: info.color, glyph: info.glyph, icon: p.icon ? _iconUrl(p.icon, target) : (info.icon || ""),
             params: params, windowKey: "", clickableWhenLocked: false,
             ongoing: true, progress: progress, tag: "", actions: "",
+            group: "", layerCount: 1, layers: "",
             time: Date.now(), dashboardTitle: "", dashboardBody: ""
         });
     }
 
+    // The row, its whole stack with it.
     function dismissNotification(index) {
         if (index < 0 || index >= notifications.count)
             return;
@@ -2912,6 +2933,16 @@ Item {
             _closeSystemWindow(key);
         else
             notifications.remove(index);
+    }
+    // Its top layer swiped away: the next one shows, and the last one
+    // takes the row (DashboardContent.layerSwiped, DashboardContent.js:51-64).
+    function popNotificationLayer(index) {
+        if (index < 0 || index >= notifications.count)
+            return;
+        if (notifications.get(index).windowKey)
+            dismissNotification(index);
+        else
+            Stacks.pop(notifications, index);
     }
 
     Component {

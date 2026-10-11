@@ -32,6 +32,12 @@
 // (DashboardItem, source.windowFor): taps on it are its own, as
 // handleTap (:1104-1146) passed them on.
 //
+// A stack of an app's notifications (NotificationStacks.js) is one row, its
+// layers drawn as Enyo's dashboard drew them (DashboardItem); right of the
+// icon a drag moves its top layer only, rightwards, and a drop past 35% of
+// the layer's width pops it (AnimatedSwipeableItem.js:13-37; Notifications.
+// qml). On the icon, the row is dragged as any other.
+//
 // Phoenix additions: live activities (ongoing) are pinned at the top, in the
 // order they began, with a faint rule between them and the notifications,
 // which stay newest first below; a handle at the foot pulls the drop-down
@@ -72,6 +78,8 @@ Item {
     // A notification's button (DashboardItem actions): row index, its id.
     signal actionRequested(int index, string actionId)
     signal dismissRequested(int index)
+    // A stack's top layer swiped away.
+    signal layerPopRequested(int index)
 
     readonly property int count: model ? model.count : 0
     // The gap for the rule between live activities and notifications.
@@ -124,7 +132,7 @@ Item {
         leavingRow.createObject(container, {
             y: r.y, width: r.width, height: r.height, source: null, windowKey: "",
             title: r.title, body: r.body, color: r.color, glyph: r.glyph, icon: r.icon,
-            progress: r.progress
+            progress: r.progress, layerCount: r.layerCount, layers: r.layers
         });
     }
     visible: shown
@@ -172,6 +180,10 @@ Item {
         // A dashboard window that takes its own drags (webosDragMode
         // "manual"; see the swipe MouseArea).
         readonly property bool manualDrag: windowKey !== "" && model.manualDrag === true
+        // A stack of layers (NotificationStacks.js).
+        readonly property int layerCount: model && model.layerCount > 1 ? model.layerCount : 1
+        readonly property string layers: model && model.layers ? model.layers : ""
+        readonly property bool stacked: windowKey === "" && layerCount > 1
 
         // Where the row goes back to: newest at the top (:541-560, 863-894),
         // under the live activities (Phoenix).
@@ -206,14 +218,54 @@ Item {
         // drag below, rightwards only, and its release (no flick).
         function wheelMove(x) {
             snap.stop();
-            if (!(menu.drawer && menu.drawer.selecting))
+            if (menu.drawer && menu.drawer.selecting)
+                return;
+            if (row.stacked) {
+                layerBack.stop();
+                content.layerX = Math.max(0, x);
+            } else {
                 content.x = Math.max(0, x);
+            }
         }
         function wheelRelease() {
+            if (row.stacked) {
+                row.releaseLayer();
+                return;
+            }
             if (!row.persistent && Math.abs(content.x) > content.width * Theme.dashboardDismissRatio)
                 remove.start();
             else if (content.x !== 0)
                 snap.start();
+        }
+        // Its top layer let go: on and popped past 35% of the layer's
+        // width, else back (AnimatedSwipeableItem.js:13-37, 51-55).
+        function releaseLayer() {
+            var w = content.width - content.topEdge;
+            if (content.layerX > w * Theme.dashboardLayerSwipeRatio) {
+                layerOut.to = w;
+                layerOut.duration = Theme.motion(Math.round((w - content.layerX) / (Theme.dashboardLayerExitSpeed * Theme.u)));
+                layerOut.start();
+            } else if (content.layerX > 0) {
+                layerBack.duration = Theme.motion(Math.round(content.layerX / (Theme.dashboardLayerResetSpeed * Theme.u)));
+                layerBack.start();
+            }
+        }
+        NumberAnimation {
+            id: layerOut
+            objectName: "dashboardLayerOut"
+            target: content
+            property: "layerX"
+            onFinished: {
+                menu.layerPopRequested(row.index);
+                content.layerX = 0;
+                content.shiftIn();
+            }
+        }
+        NumberAnimation {
+            id: layerBack
+            target: content
+            property: "layerX"
+            to: 0
         }
 
         // The next row down, whose top closes the gap under this one.
@@ -327,6 +379,8 @@ Item {
             icon: row.icon
             progress: row.progress
             actions: row.model.actions || ""
+            layerCount: row.layerCount
+            layers: row.layers
             onActionTapped: (actionId) => menu.actionRequested(row.index, actionId)
 
             Connections {
@@ -342,10 +396,13 @@ Item {
                 // and passes them on (below); under the answers' buttons
                 // otherwise.
                 z: row.windowKey !== "" ? 3 : 0
-                enabled: !remove.running
+                enabled: !remove.running && !layerOut.running
                 // 0: not yet past the tap radius, a tap; 1: sideways, the
                 // row follows; 2: up or down, the list's (:231-257).
                 property int mode: 0
+                // A stack pressed right of its icon: sideways, its top
+                // layer follows instead of the row.
+                property bool layering: false
                 property point start
                 property real lastX: 0
                 // The container had the touches on a dashboard window and
@@ -367,6 +424,9 @@ Item {
                                  && content.x === 0 && m.x > Theme.dashboardBadgeWidth;
                     if (forwarding)
                         content.pointer("down", m.x, m.y);
+                    layerBack.stop();
+                    layering = row.stacked && !(menu.drawer && menu.drawer.selecting)
+                               && content.x === 0 && m.x > Theme.dashboardBadgeWidth;
                 }
                 onPositionChanged: (m) => {
                     var p = mapToItem(menu, m.x, m.y);
@@ -392,6 +452,8 @@ Item {
                     }
                     if (forwarding)
                         content.pointer("move", m.x, m.y);
+                    else if (mode === 1 && layering)
+                        content.layerX = Math.max(0, p.x - start.x);
                     else if (mode === 1 && !(menu.drawer && menu.drawer.selecting))
                         content.x = Math.max(0, content.x + p.x - lastX);
                     lastX = p.x;
@@ -409,6 +471,12 @@ Item {
                         mode = 3;
                         return;
                     }
+                    if (layering) {
+                        layering = false;
+                        if (mode === 1)
+                            row.releaseLayer();
+                        return;
+                    }
                     if (mode === 1 && !row.persistent
                             && Math.abs(content.x) > content.width * Theme.dashboardDismissRatio)
                         remove.start();
@@ -419,6 +487,11 @@ Item {
                     if (forwarding)
                         content.pointer("cancel", lastX, start.y);
                     forwarding = false;
+                    if (layering) {
+                        layering = false;
+                        if (content.layerX > 0)
+                            row.releaseLayer();
+                    }
                     mode = 2;
                     preventStealing = false;
                     menu.dragging = false;
@@ -428,7 +501,7 @@ Item {
                 // A tap: its app, and the notification is done with; on a
                 // dashboard window, the window's.
                 onClicked: (m) => {
-                    if (mode !== 0 || content.x !== 0)
+                    if (mode !== 0 || content.x !== 0 || content.layerX !== 0)
                         return;
                     if (menu.drawer && menu.drawer.selecting) {
                         if (row.selectable)

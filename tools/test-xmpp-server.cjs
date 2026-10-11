@@ -115,7 +115,8 @@ async function run(dir) {
     const accounts = {}, credentials = {}, toasts = [];
     let methods = {};
     const bus = memdb.createFakeBus({ db, tempdb, accounts, credentials, handlers: {
-        "luna://com.webos.notification/createToast": (p) => { toasts.push(p); return { returnValue: true }; },
+        // A toast as its banner reads it: "title: message".
+        "luna://com.webos.notification/createToast": (p) => { toasts.push({ ...p, message: p.title ? p.title + ": " + p.message : p.message }); return { returnValue: true }; },
         "luna://org.webosports.service.messaging/putMessage": async (p) => {
             const addr = p.message.folder === "inbox" ? p.message.from.addr : p.message.to[0].addr;
             const r = await db.put([Object.assign({ conversations: ["thread-" + addr] }, p.message)]);

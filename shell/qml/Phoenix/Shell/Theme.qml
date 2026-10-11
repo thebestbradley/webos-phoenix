@@ -410,6 +410,35 @@ QtObject {
     readonly property real dashboardDeleteTravel: 1.5                // DashboardWindowContainer.cpp:702
     // Where the bottom scroll mask sits above the viewport's bottom (:106, 1317).
     readonly property int dashboardBottomMaskOffset: px(10)
+    // A stack of an app's notifications (NotificationStacks.js), drawn as
+    // Enyo 1.0's dashboard drew its layers (palm/system/dashboard-window/
+    // DashboardContent.js:8-23, dashboard.css): every layer but the bottom
+    // one has notification-divider.png at its left edge and its text 21 px
+    // in (.palm-dashboard-text-container > div, :44-47); the layer under
+    // the top one sits 12 px left of it (.layer-1 left 58, .layer-2 left
+    // 70, :54-63) and peeks out 15 px (DashboardLayer leftOffset, :16, 201-
+    // 204). The first layer's edge is 4 px right of the row's 32 px icon,
+    // as the original's (58) was of its 50 px icon box (6 + 50 + 2).
+    readonly property int dashboardLayerEdge: px(46)
+    readonly property int dashboardLayerStep: px(12)
+    readonly property int dashboardLayerTextInset: px(21)
+    readonly property int dashboardLayerPeek: px(15)
+    // A layer dragged more than this part of its width goes (SwipeableItem
+    // triggerRatio, SwipeableItem.js:49, 246-249); it slides on 40 px every
+    // 33 ms, or back 10 px every 33 ms (AnimatedSwipeableItem.js:22-31,
+    // 51-55): legacy px per ms.
+    readonly property real dashboardLayerSwipeRatio: 0.35
+    readonly property real dashboardLayerExitSpeed: 40 / 33
+    readonly property real dashboardLayerResetSpeed: 10 / 33
+    // After a pop the new top layer moves from the second layer's place to
+    // its own (layerSwiped, DashboardContent.js:55-63; .layer-2's
+    // "transition: left 0.2s ease", dashboard.css:59-63).
+    readonly property int dashboardLayerShiftDuration: motion(200)
+    // The count on a stack: dashboard-newitem-badge.png's top half (.dashboard-
+    // count, dashboard.css:82-104: 28 px high, 12 px caps, bold 16 px white,
+    // 3 px out from the icon box's top right corner), at the scale of the
+    // row's 32 px icon to the original's 48 px one.
+    readonly property real dashboardBadgeScale: 32 / 48
     // A flick: the whole gesture's average velocity, |vx| + |vy|, in legacy
     // px/ms (FlickGestureRecognizer.cpp:44-45, 95-104); sideways when
     // |vx| > |vy| (DashboardWindowContainer.cpp:430).

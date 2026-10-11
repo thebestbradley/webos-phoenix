@@ -146,6 +146,9 @@ export interface AssistantSettings {
     followUpTopicsOff: FollowUpKind[];
     /** The decision model between the grammar and the general model (Laya, docs/AI-AND-MCP.md): "on" or "off" (default). */
     decider?: "on" | "off";
+    /** What nothing on the phone can answer is searched on the web at once, with the default search engine,
+     *  rather than offered (off by default: the words go to the engine; only Settings may turn it on). */
+    autoSearch: boolean;
     /** Messages read aloud as they come while headphones are in (off by default). */
     announceMessages?: boolean;
 }
