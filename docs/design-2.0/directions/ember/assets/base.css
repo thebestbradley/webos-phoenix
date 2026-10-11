@@ -1,0 +1,207 @@
+/* Ember: space, light and hairlines; a phoenix accent used sparingly (focus, the active item,
+   the Assistant). webOS's cards and frame, Enyo 2's grabber, panels and pills.
+   Font: Manrope (SIL OFL 1.1). Icons: Phosphor, light and thin (MIT). */
+@font-face { font-family: Manrope; src: url(Manrope.woff2) format('woff2'); font-weight: 200 800; }
+
+:root {
+  --font: Manrope, "Open Sans", system-ui, sans-serif;
+  --ember: linear-gradient(120deg, #ff4f1a 0%, #ff7a2a 45%, #ffb547 100%);
+  /* filled controls carrying a white glyph: deeper, so the glyph keeps 3:1 or more */
+  --ember-fill: linear-gradient(135deg, #d63c08, #f0601a);
+  --ember-soft: linear-gradient(120deg, rgb(255 79 26 / .16), rgb(255 181 71 / .16));
+  --ember-a: #ff4f1a; --ember-b: #ffb547;
+  --hair: .5px;            /* one device pixel and a bit at 2.5x */
+  --r-card: 30px; --r-plane: 22px; --r-tile: 16px; --r-pill: 999px;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+}
+html[data-theme="light"] {
+  --bg: #f2f1ee;
+  --bg-light: radial-gradient(130% 70% at 15% -10%, #ffffff 0%, rgb(255 255 255 / 0) 62%);
+  --plane: rgb(255 255 255 / .72);
+  --plane-2: rgb(255 255 255 / .92);
+  --plane-solid: #f8f7f5;
+  --sunk: rgb(20 18 16 / .035);
+  --line: rgb(20 18 22 / .10);
+  --line-2: rgb(20 18 22 / .18);
+  --ink: #141416; --ink-2: #4c4b51; --ink-3: #6b6970;   /* 16.3, 7.6, 4.8 : 1 on --bg */
+  --inverse: #161618; --on-inverse: #f7f6f3;
+  --lift: inset 0 1px 0 rgb(255 255 255 / .95), 0 22px 44px -28px rgb(60 35 10 / .30), 0 2px 6px -3px rgb(60 35 10 / .10);
+  --lift-hi: inset 0 1px 0 rgb(255 255 255 / .95), 0 30px 60px -24px rgb(60 35 10 / .38), 0 4px 12px -4px rgb(60 35 10 / .14);
+  --ember-text: #b83c0a;
+  --focus: #d9480f;     /* 3.8:1 on --bg */
+  --sms: #2f5bd0; --jabber: #6a43d0; --work: #855800; --personal: #1d7a60; --family: #1d7a60; --danger: #c8321d; --online: #2fa36b;
+  --veil: rgb(250 249 247 / .80);
+}
+html[data-theme="dark"] {
+  --bg: #0b0b0d;
+  --bg-light: radial-gradient(120% 55% at 50% 112%, rgb(255 90 30 / .13) 0%, rgb(255 90 30 / 0) 60%), radial-gradient(90% 50% at 10% -8%, rgb(255 255 255 / .05), transparent 60%);
+  --plane: rgb(255 255 255 / .04);
+  --plane-2: rgb(255 255 255 / .075);
+  --plane-solid: #141416;
+  --sunk: rgb(255 255 255 / .03);
+  --line: rgb(255 255 255 / .085);
+  --line-2: rgb(255 255 255 / .16);
+  --ink: #f3f2ef; --ink-2: #a9a7ae; --ink-3: #8a8890;   /* 17.6, 8.3, 5.6 : 1 on --bg */
+  --inverse: #f3f2ef; --on-inverse: #121214;
+  --lift: inset 0 1px 0 rgb(255 255 255 / .07), 0 24px 48px -28px rgb(0 0 0 / .9);
+  --lift-hi: inset 0 1px 0 rgb(255 255 255 / .09), 0 30px 60px -20px rgb(0 0 0 / .95);
+  --ember-text: #ff8f4d;
+  --focus: #ff6a2a;     /* 6.9:1 on --bg */
+  --sms: #8aa6ff; --jabber: #b79dff; --work: #e7b65c; --personal: #6fd3b0; --family: #6fd3b0; --danger: #ff7a66; --online: #5fd394;
+  --veil: rgb(12 12 14 / .6);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { font-family: var(--font); color: var(--ink); background: #000; -webkit-font-smoothing: antialiased; overflow: hidden; font-feature-settings: "tnum" 1; }
+.ic { width: 22px; height: 22px; flex: none; display: block; }
+
+/* ---- Type: large and calm ---- */
+.display { font-size: 44px; line-height: 50px; font-weight: 250; letter-spacing: -1.4px; }
+.title-xl { font-size: 34px; line-height: 40px; font-weight: 300; letter-spacing: -1px; }
+.title-l { font-size: 26px; line-height: 32px; font-weight: 350; letter-spacing: -.6px; }
+.title { font-size: 18px; line-height: 24px; font-weight: 600; letter-spacing: -.2px; }
+.body { font-size: 15.5px; line-height: 23px; font-weight: 450; }
+.small { font-size: 13.5px; line-height: 19px; font-weight: 500; }
+.micro { font-size: 11px; line-height: 14px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; }
+.dim { color: var(--ink-2); } .dimmer { color: var(--ink-3); }
+.ember-text { background: var(--ember); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* ---- The webOS frame ---- */
+.device { position: relative; width: 100vw; height: 100vh; overflow: hidden; background: #000; }
+.device > .wall { position: absolute; inset: 0; background: radial-gradient(60% 3% at 50% 100%, rgb(255 110 40 / .28), transparent), #050506; }
+/* the card view shows the wallpaper itself */
+.device.spatial > .wall { background: url(../assets/phoenix.jpg) center / cover no-repeat; }
+.statusbar { position: absolute; z-index: 20; top: 0; left: 0; right: 0; height: 32px; display: flex; align-items: center; padding: 0 14px 0 10px; color: #fff; font-size: 13.5px; font-weight: 600; }
+.appmenu-tab { height: 24px; display: flex; align-items: center; gap: 4px; padding: 0 9px 0 12px; border-radius: 12px; background: rgb(255 255 255 / .07); box-shadow: inset 0 0 0 var(--hair) rgb(255 255 255 / .38); letter-spacing: .2px; font-size: 12.5px; }
+.appmenu-tab .ic { width: 12px; height: 12px; opacity: .75; }
+.sb-clock { position: absolute; left: 50%; transform: translateX(-50%); font-weight: 500; letter-spacing: .3px; display: flex; gap: 14px; }
+.sb-date { opacity: .65; font-weight: 400; }
+.sb-right { margin-left: auto; display: flex; align-items: center; gap: 7px; }
+.sb-right .ic { width: 15px; height: 15px; }
+.sb-batt { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; }
+.sb-batt .cell { width: 22px; height: 11px; border-radius: 3.5px; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .55); padding: 2px; display: block; }
+.sb-batt .cell i { display: block; height: 100%; border-radius: 1.5px; background: #fff; }
+.sb-notes { display: flex; gap: 8px; align-items: center; margin-right: 12px; opacity: .9; }
+.sb-notes .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--ember); box-shadow: 0 0 6px var(--ember-a); }
+.card {
+  position: absolute; z-index: 5; top: 32px; left: 0; right: 0; bottom: 22px; border-radius: var(--r-card); overflow: hidden;
+  background: var(--bg-light), var(--bg); isolation: isolate;
+}
+html[data-theme="dark"] .card { box-shadow: inset 0 0 0 var(--hair) rgb(255 255 255 / .14); }
+.gesture { position: absolute; z-index: 20; left: 0; right: 0; bottom: 0; height: 22px; display: grid; place-items: center; }
+.gesture-light { width: 58px; height: 3px; border-radius: 2px; background: var(--ember); box-shadow: 0 0 10px 1px rgb(255 110 40 / .75), 0 0 2px rgb(255 200 120 / .8); }
+html[data-embed] body { background: var(--bg); }
+html[data-embed] .card { inset: 0; border-radius: 0; box-shadow: none; }
+
+/* ---- Planes (surfaces), hairlines, groups ---- */
+.plane { background: var(--plane); border-radius: var(--r-plane); box-shadow: var(--lift), inset 0 0 0 var(--hair) var(--line-2); }
+.hair-b { box-shadow: inset 0 calc(-1 * var(--hair)) 0 var(--line-2); }
+.group-h { padding: 0 6px 10px; color: var(--ink-3); }
+.row { display: flex; align-items: center; gap: 16px; min-height: 66px; padding: 12px 18px; position: relative; }
+.row + .row::before { content: ""; position: absolute; top: 0; left: 58px; right: 0; height: var(--hair); background: var(--line-2); }
+.row.flush + .row.flush::before { left: 18px; }
+.row .txt { flex: 1; min-width: 0; }
+.row .t { font-size: 16px; line-height: 22px; font-weight: 550; letter-spacing: -.1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .s { font-size: 13.5px; line-height: 19px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .glyph { width: 24px; height: 24px; color: var(--ink); opacity: .82; }
+.chev { width: 16px; height: 16px; color: var(--ink-3); }
+
+/* ---- Pills (Onyx's buttons, reinterpreted) ---- */
+.pill {
+  height: 42px; padding: 0 22px; border-radius: var(--r-pill); display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font: 600 14.5px/1 var(--font); letter-spacing: .1px; white-space: nowrap; color: var(--ink);
+  background: linear-gradient(rgb(255 255 255 / .5), rgb(255 255 255 / 0)) , var(--plane);
+  box-shadow: inset 0 0 0 var(--hair) var(--line-2), inset 0 1px 0 rgb(255 255 255 / .6);
+}
+html[data-theme="dark"] .pill { background: linear-gradient(rgb(255 255 255 / .07), rgb(255 255 255 / 0)), var(--plane); box-shadow: inset 0 0 0 var(--hair) var(--line-2), inset 0 1px 0 rgb(255 255 255 / .08); }
+.pill .ic { width: 18px; height: 18px; margin-left: -4px; }
+.pill.ink, html[data-theme="dark"] .pill.ink { background: var(--inverse); color: var(--on-inverse); box-shadow: 0 8px 18px -10px rgb(0 0 0 / .6), inset 0 1px 0 rgb(255 255 255 / .18); }
+.pill.danger { color: var(--danger); }
+.pill.danger.solid, html[data-theme="dark"] .pill.danger.solid { background: var(--danger); color: #fff; box-shadow: none; }
+html[data-theme="dark"] .pill.danger.solid { color: #2a0b05; }
+.pill.ghost, html[data-theme="dark"] .pill.ghost { background: transparent; box-shadow: none; }
+.pill.sm { height: 34px; padding: 0 16px; font-size: 13px; }
+.pill.focus, html[data-theme="dark"] .pill.focus { outline: 2px solid transparent; box-shadow: inset 0 0 0 var(--hair) var(--line-2), 0 0 0 3px var(--bg), 0 0 0 4.5px var(--focus), 0 0 14px 2px rgb(255 120 40 / .35); }
+.ring-btn { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; color: var(--ink); box-shadow: inset 0 0 0 var(--hair) var(--line-2); flex: none; }
+.ring-btn .ic { width: 20px; height: 20px; }
+.ring-btn.bare { box-shadow: none; }
+
+/* ---- Segmented (Onyx RadioGroup / TabBar, as a hairline capsule) ---- */
+.seg { display: flex; padding: 3px; border-radius: var(--r-pill); box-shadow: inset 0 0 0 var(--hair) var(--line-2); background: var(--sunk); }
+.seg > div { flex: 1; height: 34px; padding: 0 16px; border-radius: var(--r-pill); display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 13.5px; font-weight: 600; color: var(--ink-2); white-space: nowrap; }
+.seg > div.sel { background: var(--plane-2); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .08), 0 6px 14px -8px rgb(0 0 0 / .35), inset 0 0 0 var(--hair) var(--line); }
+html[data-theme="dark"] .seg > div.sel { background: rgb(255 255 255 / .12); }
+.seg .n { font-weight: 500; color: var(--ink-3); }
+
+/* ---- Toggle (Onyx's ToggleButton: the knob carries an ember spark when on) ---- */
+.toggle { width: 46px; height: 28px; border-radius: 14px; position: relative; flex: none; box-shadow: inset 0 0 0 1.2px var(--ink-3); background: var(--sunk); }  /* 3:1+ boundary (WCAG 1.4.11) */
+.toggle::after { content: ""; position: absolute; top: 4px; left: 4px; width: 20px; height: 20px; border-radius: 50%; background: var(--plane-2); box-shadow: 0 1px 3px rgb(0 0 0 / .25), inset 0 0 0 var(--hair) var(--line-2); }
+html[data-theme="dark"] .toggle::after { background: #6c6a72; }
+.toggle.on { background: var(--inverse); box-shadow: none; }
+.toggle.on::after { left: 22px; background: var(--on-inverse); box-shadow: 0 1px 3px rgb(0 0 0 / .3); }
+.toggle.on::before { content: ""; position: absolute; z-index: 1; top: 12px; left: 30px; width: 4px; height: 4px; border-radius: 50%; background: var(--ember); box-shadow: 0 0 4px var(--ember-a); }
+.check { width: 22px; height: 22px; border-radius: 7px; box-shadow: inset 0 0 0 1.2px var(--ink-3); flex: none; display: grid; place-items: center; }
+.check.on { background: var(--inverse); color: var(--on-inverse); box-shadow: none; }
+.check .ic { width: 14px; height: 14px; }
+.radio { width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 1.2px var(--ink-3); position: relative; flex: none; }
+.radio.on { box-shadow: inset 0 0 0 1.2px var(--inverse); }
+.radio.on::after { content: ""; position: absolute; inset: 6px; border-radius: 50%; background: var(--inverse); }
+
+/* ---- Slider: a hairline, the ember on the part that is set ---- */
+.slider { position: relative; height: 28px; }
+.slider .track { position: absolute; left: 0; right: 0; top: 13.5px; height: 1px; background: var(--ink-3); opacity: .8; }
+.slider .fill { position: absolute; left: 0; top: 13px; height: 2px; border-radius: 1px; background: var(--ember); }
+.slider .knob { position: absolute; top: 4px; width: 20px; height: 20px; margin-left: -10px; border-radius: 50%; background: var(--plane-2); box-shadow: 0 2px 8px rgb(0 0 0 / .25), inset 0 0 0 var(--hair) var(--line-2); }
+html[data-theme="dark"] .slider .knob { background: #f3f2ef; }
+.slider .knob::after { content: ""; position: absolute; inset: 7px; border-radius: 50%; background: var(--ember); }
+
+/* ---- Fields ---- */
+.search { height: 46px; border-radius: var(--r-pill); display: flex; align-items: center; gap: 12px; padding: 0 8px 0 16px; color: var(--ink-2); background: var(--sunk); box-shadow: inset 0 0 0 var(--hair) var(--line-2); }
+.search .ph { flex: 1; font-size: 15px; font-weight: 500; }
+.search .ic { width: 19px; height: 19px; }
+.field { padding: 8px 0 10px; position: relative; }
+.field .lbl { color: var(--ink-3); }
+.field .val { font-size: 18px; line-height: 26px; font-weight: 450; margin-top: 4px; }
+.field::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: var(--ink-3); }
+.field.focus::after { height: 2px; background: var(--ember); box-shadow: 0 0 8px rgb(255 110 40 / .5); }
+.field.focus .lbl { color: var(--ember-text); }
+.caret { display: inline-block; width: 1.5px; height: 21px; background: var(--ember-a); vertical-align: -4px; margin-left: 1px; box-shadow: 0 0 4px var(--ember-a); }
+
+/* ---- People: the identity ring (one arc per linked account) ---- */
+.av { position: relative; width: 46px; height: 46px; border-radius: 50%; flex: none; display: grid; place-items: center; font: 600 15px/1 var(--font); letter-spacing: .4px; color: var(--ink); background: var(--plane-2); }
+.av.lg { width: 54px; height: 54px; font-size: 17px; }
+.av.sm { width: 38px; height: 38px; font-size: 13px; }
+.av.xs { width: 30px; height: 30px; font-size: 11px; }
+html[data-theme="light"] .av { background: linear-gradient(160deg, #fff, #ecebe7); box-shadow: inset 0 0 0 var(--hair) var(--line-2); }
+html[data-theme="dark"] .av { background: linear-gradient(160deg, #2a2a2f, #18181b); box-shadow: inset 0 0 0 var(--hair) var(--line-2); }
+.av svg.ring { position: absolute; inset: -5px; width: calc(100% + 10px); height: calc(100% + 10px); overflow: visible; }
+.av .pres { position: absolute; right: 0; bottom: 1px; width: 10px; height: 10px; border-radius: 50%; background: var(--online); box-shadow: 0 0 0 2.5px var(--pres-ring, var(--bg)); }
+.av .pres.away { background: #e0a33a; }
+
+/* ---- Ember accent: the active item ---- */
+.active-bar { position: absolute; left: 0; top: 14px; bottom: 14px; width: 2.5px; border-radius: 2px; background: var(--ember); box-shadow: 0 0 10px rgb(255 110 40 / .6); }
+.dot-ember { width: 8px; height: 8px; border-radius: 50%; background: var(--ember); box-shadow: 0 0 8px rgb(255 110 40 / .7); flex: none; }
+
+/* The Assistant: an ember orb */
+.orb { width: 34px; height: 34px; border-radius: 50%; flex: none; position: relative;
+  background: radial-gradient(circle at 34% 30%, #fff3d6 0%, #ffc56b 18%, #ff7a2a 48%, #c9320c 82%, #7a1a05 100%);
+  box-shadow: 0 0 18px 2px rgb(255 110 40 / .45), inset 0 -3px 6px rgb(120 20 0 / .45); }
+.orb::after { content: ""; position: absolute; inset: 3px 8px auto 7px; height: 9px; border-radius: 50%; background: linear-gradient(rgb(255 255 255 / .7), rgb(255 255 255 / 0)); }
+.orb.sm { width: 26px; height: 26px; } .orb.lg { width: 64px; height: 64px; }
+
+/* Enyo 2's grabber: two hairlines on a panel's edge */
+.grabber { width: 14px; height: 22px; display: flex; justify-content: center; gap: 4px; flex: none; }
+.grabber i { width: 1.5px; height: 100%; border-radius: 1px; background: var(--ink-3); opacity: .8; }
+
+/* Notifications and menus: soft translucency, small blur */
+.veil { background: var(--veil); -webkit-backdrop-filter: blur(14px) saturate(1.3); backdrop-filter: blur(14px) saturate(1.3); }
+.menu { border-radius: 4px 20px 20px 20px; padding: 6px; box-shadow: var(--lift-hi), inset 0 0 0 var(--hair) var(--line-2); min-width: 240px; }
+.menu .mi { height: 46px; display: flex; align-items: center; gap: 12px; padding: 0 14px; font-size: 15px; font-weight: 550; border-radius: 14px; position: relative; }
+.menu .mi .ic { width: 19px; height: 19px; color: var(--ink-2); }
+.menu .mi.sel { background: var(--sunk); }
+.menu .mi.sel::before { content: ""; position: absolute; left: 4px; top: 13px; bottom: 13px; width: 2.5px; border-radius: 2px; background: var(--ember); }
+.menu hr { border: 0; height: var(--hair); background: var(--line-2); margin: 5px 12px; }
+.banner { border-radius: 24px; padding: 14px 16px; display: flex; gap: 14px; align-items: flex-start; box-shadow: var(--lift-hi), inset 0 0 0 var(--hair) var(--line-2); }
+
+.fade-bottom { -webkit-mask-image: linear-gradient(#000 calc(100% - 70px), transparent); mask-image: linear-gradient(#000 calc(100% - 70px), transparent); }

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Card view</title>
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/icons.js"></script>
+<script src="../assets/app.js"></script>
+<style>
+  .device.spatial > .wall { background-position: center 62%; filter: saturate(1.05); }
+  .device.spatial::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(120% 70% at 50% 40%, transparent 30%, rgb(0 0 0 / .55)); }
+  .jt { position: absolute; z-index: 10; top: 46px; left: 18px; right: 18px; height: 50px; border-radius: 25px; display: flex; align-items: center; gap: 12px; padding: 0 8px 0 18px; color: rgb(255 255 255 / .7);
+        background: rgb(20 18 20 / .38); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: inset 0 0 0 var(--hair) rgb(255 255 255 / .3), inset 0 1px 0 rgb(255 255 255 / .12); }
+  .jt .ph { flex: 1; font-size: 15.5px; font-weight: 500; }
+  .jt .ic { width: 19px; height: 19px; }
+  .label { position: absolute; z-index: 6; top: 108px; left: 0; right: 0; text-align: center; color: #fff; font-size: 13px; font-weight: 600; letter-spacing: .3px; }
+  .label span { color: rgb(255 255 255 / .55); font-weight: 500; }
+  .deck { position: absolute; z-index: 5; top: 146px; left: 0; right: 0; height: 600px; perspective: 1100px; --s: .62; }
+  .cardv { position: absolute; top: 0; left: calc(50% - 446px * var(--s) / 2); width: calc(446px * var(--s)); height: calc(936px * var(--s)); border-radius: 20px; overflow: hidden; background: #000;
+           box-shadow: 0 30px 60px -20px rgb(0 0 0 / .8), 0 0 0 var(--hair) rgb(255 255 255 / .25); }
+  .cardv iframe { width: 446px; height: 936px; border: 0; transform: scale(var(--s)); transform-origin: 0 0; display: block; pointer-events: none; }
+  .c0 { transform: translateX(-262px) translateZ(-90px) rotateY(26deg); opacity: .8; }
+  .c2 { transform: translateX(262px) translateZ(-90px) rotateY(-26deg); opacity: .8; }
+  .c1b { transform: translateY(-26px) translateZ(-70px); filter: brightness(.55); }
+  .c1 { z-index: 3; }
+  /* light from the active card onto the floor */
+  .floor { position: absolute; z-index: 4; left: 50%; top: 714px; width: 330px; height: 70px; margin-left: -165px; border-radius: 50%; background: radial-gradient(closest-side, rgb(255 120 40 / .55), rgb(255 90 30 / .18) 55%, transparent); filter: blur(6px); }
+  .rim { position: absolute; z-index: 6; left: 50%; top: 733px; width: 150px; height: 2px; margin-left: -75px; border-radius: 1px; background: var(--ember); box-shadow: 0 0 14px 2px rgb(255 120 40 / .8); }
+  .dock { position: absolute; z-index: 10; left: 34px; right: 34px; bottom: 76px; height: 64px; border-radius: 32px; display: flex; align-items: center; justify-content: space-around; padding: 0 10px; color: #fff;
+          background: rgb(20 18 20 / .34); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); box-shadow: inset 0 0 0 var(--hair) rgb(255 255 255 / .28), inset 0 1px 0 rgb(255 255 255 / .1); }
+  .dock .app { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; }
+  .dock .app .ic { width: 25px; height: 25px; }
+  .dock .app.on { position: relative; }
+  .dock .app.on::after { content: ""; position: absolute; bottom: -3px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--ember); box-shadow: 0 0 6px var(--ember-a); }
+  .notes { position: absolute; z-index: 10; left: 0; right: 0; bottom: 22px; height: 44px; display: flex; align-items: center; gap: 16px; padding: 0 20px; color: rgb(255 255 255 / .9); font-size: 13px; font-weight: 550; }
+  .notes .ic { width: 18px; height: 18px; }
+  .notes .sp { flex: 1; }
+  .notes .first { display: flex; align-items: center; gap: 10px; }
+  .notes .dot-ember { width: 6px; height: 6px; }
+</style>
+<script>
+function build() {
+  const q = new URLSearchParams(location.search);
+  const p = `?embed=1&theme=${q.get('theme') || 'light'}`;
+  document.querySelectorAll('iframe[data-src]').forEach(f => f.src = f.dataset.src + p);
+}
+</script>
+</head>
+<body>
+<div class="device spatial" data-app="Phoenix">
+  <div class="jt"><i data-i="magnifying-glass"></i><div class="ph">Just type, or ask</div><div class="orb"></div></div>
+  <div class="label">Messaging <span>· 2 cards</span></div>
+  <div class="deck">
+    <div class="cardv c0"><iframe data-src="music.html"></iframe></div>
+    <div class="cardv c2"><iframe data-src="settings.html"></iframe></div>
+    <div class="cardv c1b"><iframe data-src="messaging-thread.html"></iframe></div>
+    <div class="cardv c1"><iframe data-src="messaging-list.html"></iframe></div>
+  </div>
+  <div class="floor"></div>
+  <div class="rim"></div>
+  <div class="dock">
+    <div class="app"><i data-i="phone"></i></div>
+    <div class="app"><i data-i="envelope-simple"></i></div>
+    <div class="app on"><i data-i="chat-circle"></i></div>
+    <div class="app"><i data-i="calendar-blank"></i></div>
+    <div class="app"><i data-i="squares-four"></i></div>
+  </div>
+  <div class="notes">
+    <div class="first"><span class="dot-ember"></span>Ada: Running late, grab us a table…</div>
+    <span class="sp"></span>
+    <i data-i="envelope-simple"></i><i data-i="calendar-blank"></i>
+  </div>
+</div>
+</body>
+</html>

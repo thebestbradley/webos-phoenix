@@ -95,6 +95,7 @@ or Connections, with a sign-up link:
 | ownCloud, WebDAV (any server) | app password / password | beta |
 | S3 Storage (Backblaze B2, Wasabi, MinIO, Amazon S3, any) | access key and secret; Signature V4 | beta |
 | Dropbox, OneDrive (Microsoft Graph), Google Drive, Box | OAuth with PKCE through `org.webosphoenix.service.oauth`; "not available in this build" without Phoenix's registration ([DEVELOPER-APPS.md](DEVELOPER-APPS.md)) | experimental |
+| SFTP (any SSH server: a NAS, a Raspberry Pi, a VPS, a Phoenix device) | a password, or a key: Ed25519 made on the device (its public key shown with Copy, for the server's `authorized_keys`) or one pasted in (OpenSSH, PKCS #1/#8, SEC 1; not one with a passphrase yet); the server's host key shown as a fingerprint and trusted on first use | beta |
 
 The package is Phoenix's own but **not pre-installed**: it is in the
 catalog (`server/marketplace/catalog/accounts.json`), and installing it
@@ -128,20 +129,63 @@ Errors are the kit's numbers (`FILE_ERRORS`: OFFLINE 10, AUTH 11, QUOTA
 12, CANCELED 13, NOT_AVAILABLE 14, UNSUPPORTED 15, RATE_LIMITED 16, after
 the file manager's own).
 
-**Not offered: SFTP.** The connectors' services reach the network only
-through the kit's `request()` (HTTP, by the runtime's proxy in the
-simulator and Node on a device): there are no raw sockets. The one
-permissively licensed SSH implementation in JavaScript, `ssh2` (MIT),
-needs Node's `net` and `crypto` (and optionally a native module), so it
-could only run on a device and not be tested in the simulator as every
-other provider is. SFTP waits for a socket API in the kit (GAPS.md).
+**SFTP** (11 October 2026, built and checked in Chromium and phoenix-sim
+against OpenSSH 9.6). The drive is a folder of an SSH server (the home
+folder, or one given), `com.webosphoenix.drive.sftp` in the same package.
+The connector speaks SSH itself (`service/lib/ssh`): pure JavaScript on
+the audited `@noble` libraries (MIT), so the same code runs on a device's
+Node and in the simulator's page, over the kit's sockets (`ctx.net.connect
+{binary: true}`; docs/SYNERGY-SDK.md "Staying connected"). `ssh2` (MIT)
+was not taken: it needs Node's `crypto`, which the simulator's page does
+not have, so it could not be tested there as every other drive is.
+
+- **Protocol:** SSH-2 with curve25519-sha256, ECDH (P-256, P-384) or DH
+  group 16/14 key exchange; Ed25519, ECDSA and RSA-SHA2 host keys;
+  chacha20-poly1305 or AES-CTR with HMAC-SHA2 (and its encrypt-then-MAC
+  form); strict key exchange (the "Terrapin" fix); keys exchanged again
+  after a gigabyte or when the server asks. Sign-in by key, password or
+  keyboard-interactive (the password prompt). SFTP version 3 with
+  OpenSSH's extensions: reads and writes pipelined 64 deep; downloads in
+  ranges of 8 MB (a picture opens through the device's cache as any
+  drive's); uploads in chunks into a hidden `.name.phoenix-part` beside
+  the file, renamed over it at the end (`posix-rename@openssh.com`), so a
+  cancelled or broken upload never leaves half a file; copies on the
+  server with `copy-data` (OpenSSH 9.0 and later), else through the
+  device; how full the disk is with `statvfs@openssh.com`. No search (SFTP
+  has none). One connection per account, kept a minute after the last call.
+- **Trust:** Sign In first shows the server's key (type and SHA256
+  fingerprint, as `ssh-keygen -l` prints it) to trust; it is pinned in the
+  account. A different key is refused loudly: Files shows the warning with
+  both fingerprints in red, a notification says so once, the account asks
+  to sign in again, and the sign-in page shows the old key and the new in
+  red before anything is trusted.
+- **Keys:** kept sealed in the OAuth service's key store (its `client`
+  records, readable by the drives' service only); the account's credentials
+  name the key, never hold it; removing the account removes its key, and a
+  key made on the sign-in page that no account took is removed when the
+  page is left.
+- **Simulator:** a page has no TCP, so its host relays it: phoenix-sim's
+  `SimTcp` (`shell/sim/simtcp.cpp`, "tcp" host messages; `--no-tcp-relay`)
+  and `tools/serve-rootfs.py`'s `/__phoenix/tcp` WebSocket (token and
+  origin checked; `--no-tcp`). The demo server `files.example` answers in
+  the page (any name, any password or key; the drive's test server).
+- **Server side:** a Phoenix device is an SFTP server wherever an SSH
+  server runs: the image has OpenSSH's `sftp-server`
+  (`packagegroup-phoenix-terminal`), which a development image's Dropbear
+  runs for `sftp`, and the Developer Mode SSH server will (TERMINAL.md T4).
+- **Tests:** `apps/connectors/drives/service/sftp.test.ts` (the drive
+  conformance suite and the protocol, against `service/test/fake-sftp.cjs`:
+  the same transport in its server role) and `tools/test-sftp.cjs` (the
+  demo server, then a real OpenSSH `sshd` with its `sftp-server`, in
+  Chromium; skipped without `openssh-server`).
 
 **Not yet:** the original picker (SF1) lists what the media indexer has,
 so drives are not in it (the Files kind of SF2 has them); no offline
 "keep on this device" pinning beyond the cache; device OAuth sign-in waits
 for the browser sheet on devices (`services/oauth/service.js`:
-`UNSUPPORTED` there), so on a device only the WebDAV and S3 drives sign
-in today.
+`UNSUPPORTED` there), so on a device only the WebDAV, S3 and SFTP drives
+sign in today. SFTP: no key with a passphrase (bcrypt-pbkdf), no
+certificates, no jump hosts, no search.
 
 ### The original picker (SF1)
 

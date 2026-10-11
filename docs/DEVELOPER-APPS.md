@@ -155,8 +155,9 @@ picked with it, not the whole Drive: its sign-in page says so.
 
 WebDAV (Nextcloud with Login Flow v2, ownCloud, any server) and
 S3-compatible storage (Backblaze B2, MinIO, Wasabi, any) sign in with the
-user's own app password or keys: nothing to register. SFTP is not offered
-(SHARE-AND-FILES.md "Drives").
+user's own app password or keys: nothing to register. Nor does SFTP (any
+SSH server, a password or a key made on the device; SHARE-AND-FILES.md
+"Drives").
 
 ## The accounts
 

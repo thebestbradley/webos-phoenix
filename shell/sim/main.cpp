@@ -67,6 +67,7 @@
 #include "simprocess.h"
 #ifdef PHOENIX_HAVE_WEBENGINE
 #include "simmarketplace.h"
+#include "simtcp.h"
 #endif
 
 #ifdef PHOENIX_HAVE_WEBENGINE
@@ -201,6 +202,7 @@ int main(int argc, char *argv[])
     QCommandLineOption stayAwakeOpt(QStringLiteral("stay-awake"), QStringLiteral("The screen never dims or turns off by itself (always so with --screenshot)."));
     QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
     QCommandLineOption noHostShellOpt(QStringLiteral("no-host-shell"), QStringLiteral("Do not give the Terminal app a real shell on this computer (it gets the runtime's simulated shell)."));
+    QCommandLineOption noTcpOpt(QStringLiteral("no-tcp-relay"), QStringLiteral("Do not open TCP connections for the pages' connectors (the drives' SFTP reaches only the demo server, files.example)."));
     QCommandLineOption llamaServerOpt(QStringLiteral("llama-server"), QStringLiteral("llama.cpp's llama-server program for the Assistant's on-device model (default: llama-server on the PATH)."), QStringLiteral("path"));
     QCommandLineOption noMarketplaceOpt(QStringLiteral("no-marketplace"), QStringLiteral("Do not start the Marketplace's catalog service with the simulator this time (it starts with every run where PHP is, unless Services > Start Catalog with the Simulator is off)."));
     QCommandLineOption marketplaceOpt(QStringLiteral("marketplace"), QStringLiteral("Start the Marketplace's catalog service on this computer (server/marketplace/bin/serve.sh: PHP 8; set up the first time) where the simulator's Marketplace reads it, http://127.0.0.1:8088/, and open the Marketplace. It stops with the simulator; one already running is used. The Services menu starts and stops it too."));
@@ -224,7 +226,7 @@ int main(int argc, char *argv[])
     updatingOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     parser.addOptions({ deviceOpt, zoomOpt, hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, adaptiveOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
-                        noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, checkChromeOpt, updatingOpt, eraseOpt, microphoneFileOpt,
+                        noHostShellOpt, noTcpOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, checkChromeOpt, updatingOpt, eraseOpt, microphoneFileOpt,
                         llamaServerOpt, speechCommandOpt, marketplaceOpt, noMarketplaceOpt, wakeModelOpt, voskLibraryOpt, wakeFileOpt });
     parser.process(app);
 
@@ -444,6 +446,15 @@ int main(int argc, char *argv[])
         simPty->setShellOverride(parser.value(hostShellOpt));
         hostInfo.insert(QStringLiteral("pty"), QStringLiteral("host"));
     }
+    // The connectors' binary TCP (the drives' SFTP): this computer's network,
+    // as the pages' HTTP proxy is (shell/sim/simtcp.h).
+    QObject *simTcp = nullptr;
+#ifdef PHOENIX_HAVE_WEBENGINE
+    if (!parser.isSet(noTcpOpt)) {
+        simTcp = new SimTcp(&app);
+        hostInfo.insert(QStringLiteral("tcp"), QStringLiteral("host"));
+    }
+#endif
 
     QQuickView view;
     view.engine()->addImportPath(qmlDir);
@@ -632,6 +643,7 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simMarketplace"), nullptr);
 #endif
     view.rootContext()->setContextProperty(QStringLiteral("simPty"), simPty);
+    view.rootContext()->setContextProperty(QStringLiteral("simTcp"), simTcp);
     view.rootContext()->setContextProperty(QStringLiteral("simInstaller"), rootfs.isValid() ? &installer : nullptr);
     view.rootContext()->setContextProperty(QStringLiteral("simSnapshots"), rootfs.isValid() ? &snapshots : nullptr);
     view.rootContext()->setContextProperty(QStringLiteral("simScene"), parser.value(sceneOpt));

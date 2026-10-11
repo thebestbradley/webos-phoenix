@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Messaging: conversations</title>
+<link rel="stylesheet" href="../css/onyx.css">
+<script src="../js/icons.js"></script>
+<script src="../js/data.js"></script>
+<script src="../js/frame.js"></script>
+<style>
+  .toolbar.top { height: 62px; justify-content: center; }
+  .toolbar.top .radios { width: 100%; }
+  .toolbar.top .radios button { flex: 1; justify-content: center; }
+  .searchrow { padding: 12px 12px 10px; }
+  .list { flex: 1; overflow: hidden; background: var(--surface); box-shadow: 0 -1px 0 var(--line); }
+  .conv { display: grid; grid-template-columns: 46px 1fr auto; gap: 0 13px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--line); }
+  .conv:first-child { border-top: 0; }
+  .conv .name { font-size: 16px; line-height: 21px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv .pre { font-size: 14px; line-height: 19px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .conv .meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; align-self: start; padding-top: 2px; }
+  .conv .time { font-size: 12.5px; font-weight: 500; color: var(--text-3); }
+  .conv.unread .name { font-weight: 750; }
+  .conv.unread .pre { color: var(--text); }
+  .conv.unread .time { color: var(--blue-ink); font-weight: 650; }
+  .grp { background: linear-gradient(180deg, hsl(262 60% 90%), hsl(262 50% 82%)); }
+  .grp .ic { width: 22px; height: 22px; stroke-width: 2; }
+  .avail { display: inline-flex; align-items: center; gap: 8px; }
+  .avail .dot { --c: #3DBE5B; box-shadow: 0 0 6px rgba(61,190,91,.8); }
+</style>
+</head>
+<body class="phone">
+  <header class="statusbar" data-app="Messaging"></header>
+  <main class="app">
+    <div class="toolbar top">
+      <div class="radios"><button class="on">Conversations <span class="badge" style="height:20px;min-width:20px;font-size:11.5px;background:rgba(255,255,255,.25);box-shadow:none">3</span></button><button>Buddies</button></div>
+    </div>
+    <div class="searchrow"><div class="field"><i data-i="search"></i>Search or start a conversation</div></div>
+    <div class="list" id="list"></div>
+    <div class="toolbar bottom">
+      <button class="btn sm avail"><span class="dot"></span>Available<i data-i="chevD" style="width:15px;height:15px;stroke-width:2.4;opacity:.8"></i></button>
+      <span class="sp"></span>
+      <button class="ibtn"><i data-i="people"></i></button>
+      <button class="btn sm blue"><i data-i="compose"></i>New</button>
+    </div>
+  </main>
+  <footer class="gesture"></footer>
+<script>
+  const D = PHX_DATA;
+  document.getElementById("list").innerHTML = D.conversations.map((c) => `
+    <div class="conv ${c.unread ? "unread" : ""}">
+      <div class="avatar ${c.group ? "grp" : ""}" style="--h:${c.hue}">${c.group ? '<i data-i="people"></i>' : c.initials}${c.presence ? `<span class="presence ${c.presence === "away" ? "away" : ""}"></span>` : ""}</div>
+      <div style="min-width:0"><div class="name">${c.name}</div><div class="pre">${c.preview}</div></div>
+      <div class="meta"><span class="time">${c.time}</span>${c.unread ? `<span class="badge">${c.unread}</span>` : `<span class="tag"><span class="dot" style="--c:var(--acct-${c.via});width:7px;height:7px"></span>${D.accounts[c.via].name}</span>`}</div>
+    </div>`).join("");
+  phxReady();
+</script>
+</body>
+</html>

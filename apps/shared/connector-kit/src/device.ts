@@ -125,22 +125,52 @@ export function nodeNet(): Json {
     const net = require("net");
     const tls = require("tls");
     const dns = require("dns");
-    function wrap(sock: Json, framing: "stream", secure: boolean): Json {
+    // binary: bytes in (onBytes) and out (writeBytes), never decoded as text.
+    // What arrives before the connector listens (an SSH server speaks
+    // first) is kept for its first listener, then the close, in order.
+    function wrap(sock: Json, framing: "stream", secure: boolean, binary?: boolean): Json {
         let current = sock;
         const dataFns: ((t: string) => void)[] = [];
+        const byteFns: ((b: Uint8Array) => void)[] = [];
         const closeFns: ((e?: Error) => void)[] = [];
+        const early: Json[] = [];
         let closed = false;
+        let closeHeld: { e?: Error } | null = null;
+        const listening = () => (binary ? byteFns.length : dataFns.length) > 0;
+        function emit(d: Json): void {
+            if (binary) { const b = new Uint8Array(d.buffer, d.byteOffset, d.length); byteFns.forEach((f) => f(b)); }
+            else dataFns.forEach((f) => f(d));
+        }
+        function ended(e?: Error): void {
+            if (closed) return;
+            if (early.length) { closeHeld = { e }; return; }
+            closed = true;
+            closeFns.forEach((f) => f(e));
+        }
+        function release(): void {
+            // Later, not inside the listener's own registration.
+            Promise.resolve().then(() => {
+                while (early.length && listening()) emit(early.shift());
+                if (!early.length && closeHeld) { const h = closeHeld; closeHeld = null; ended(h.e); }
+            });
+        }
         function attach(s: Json): void {
-            s.setEncoding("utf8");
-            s.on("data", (t: string) => { if (s === current) dataFns.forEach((f) => f(t)); });
-            s.on("error", (e: Error) => { if (s === current && !closed) { closed = true; closeFns.forEach((f) => f(e)); } });
-            s.on("close", () => { if (s === current && !closed) { closed = true; closeFns.forEach((f) => f()); } });
+            if (!binary) s.setEncoding("utf8");
+            s.on("data", (d: Json) => {
+                if (s !== current) return;
+                if (!listening() || early.length) { early.push(d); return; }
+                emit(d);
+            });
+            s.on("error", (e: Error) => { if (s === current) ended(e); });
+            s.on("close", () => { if (s === current) ended(); });
         }
         attach(sock);
         const out: Json = {
             framing, secure,
             write: (d: string) => current.write(d),
-            onData: (f: (t: string) => void) => { dataFns.push(f); },
+            writeBytes: (b: Uint8Array) => current.write(Buffer.from(b.buffer, b.byteOffset, b.length)),
+            onData: (f: (t: string) => void) => { dataFns.push(f); if (!binary) release(); },
+            onBytes: (f: (b: Uint8Array) => void) => { byteFns.push(f); if (binary) release(); },
             onClose: (f: (e?: Error) => void) => { closeFns.push(f); },
             close: () => current.end(),
             // STARTTLS: the same socket wrapped in TLS, the certificate checked for servername.
@@ -167,7 +197,7 @@ export function nodeNet(): Json {
                             : net.connect({ host: o.host, port: o.port });
             const ready = o.tls ? "secureConnect" : "connect";
             s.setTimeout(30000, () => s.destroy(Object.assign(new Error("timed out"), { code: "ETIMEDOUT" })));
-            s.once(ready, () => { s.setTimeout(0); resolve(wrap(s, "stream", !!o.tls)); });
+            s.once(ready, () => { s.setTimeout(0); resolve(wrap(s, "stream", !!o.tls, !!o.binary)); });
             s.once("error", reject);
         })
     };

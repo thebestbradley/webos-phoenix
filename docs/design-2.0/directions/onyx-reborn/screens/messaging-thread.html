@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Messaging: conversation</title>
+<link rel="stylesheet" href="../css/onyx.css">
+<script src="../js/icons.js"></script>
+<script src="../js/data.js"></script>
+<script src="../js/frame.js"></script>
+<style>
+  .toolbar.top { height: 66px; gap: 11px; }
+  .toolbar.top .avatar { width: 40px; height: 40px; border-radius: 11px; font-size: 14px; }
+  .toolbar.top .avatar .presence { box-shadow: 0 0 0 2.5px #33373C; }
+  .who { flex: 1; min-width: 0; }
+  .who .title { font-size: 17px; line-height: 21px; }
+  .who .sub { display: flex; align-items: center; gap: 6px; margin-top: 1px; }
+  .accts { flex: none; display: flex; align-items: center; gap: 8px; padding: 9px 14px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .accts .pill { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 13px; font-size: 12.5px; font-weight: 600; color: var(--text-2); background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line); }
+  .accts .pill.on { color: var(--blue-ink); background: var(--sel); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 35%, transparent); }
+  .msgs { flex: 1; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+  .day { align-self: center; margin: 4px 0 8px; }
+  .b { max-width: 78%; padding: 10px 14px; border-radius: 18px; font-size: 15.5px; line-height: 22px; }
+  .b.in { align-self: flex-start; background: var(--bub-in); box-shadow: 0 0 0 1px var(--bub-in-line), var(--shadow-1); border-bottom-left-radius: 6px; }
+  .b.out { align-self: flex-end; color: #fff; border-bottom-right-radius: 6px; box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 1px 3px rgba(0,0,0,.18); }
+  .b.out.sms { background: linear-gradient(180deg, var(--bub-sms-1), var(--bub-sms-2)); }
+  .b.out.jabber { background: linear-gradient(180deg, var(--bub-jabber-1), var(--bub-jabber-2)); }
+  .b.in.same-prev { border-top-left-radius: 6px; } .b.out.same-prev { border-top-right-radius: 6px; }
+  .meta { margin: 3px 4px 10px; }
+  .meta.in { align-self: flex-start; } .meta.out { align-self: flex-end; }
+  .switch { align-self: center; margin: 6px 0 12px; display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; border-radius: 14px;
+    font-size: 12px; font-weight: 600; color: var(--text-2); background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+  .switch .ic { width: 14px; height: 14px; stroke-width: 2.3; color: var(--acct-sms); }
+  .typing { align-self: flex-start; display: flex; gap: 5px; padding: 13px 15px; border-radius: 18px; border-bottom-left-radius: 6px; background: var(--bub-in); box-shadow: 0 0 0 1px var(--bub-in-line); }
+  .typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); }
+  .typing span:nth-child(2) { opacity: .7; } .typing span:nth-child(3) { opacity: .45; }
+  .compose { height: 64px; gap: 8px; padding: 0 10px; }
+  .compose .field { flex: 1; height: 42px; border-radius: 21px; font-size: 15.5px; }
+  .send { width: 42px; height: 42px; border-radius: 21px; display: grid; place-items: center; color: #fff; background: linear-gradient(180deg, var(--blue-1), var(--blue-2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 0 0 1px rgba(0,0,0,.4); }
+  .send .ic { width: 21px; height: 21px; stroke-width: 2.4; }
+  .picker { height: 42px; padding: 0 10px 0 13px !important; border-radius: 21px !important; font-size: 14px; }
+  .picker .ic { width: 15px; height: 15px; stroke-width: 2.4; opacity: .8; }
+</style>
+</head>
+<body class="phone">
+  <header class="statusbar" data-app="Messaging"></header>
+  <main class="app">
+    <div class="toolbar top">
+      <button class="ibtn"><i data-i="chevL"></i></button>
+      <div class="avatar" style="--h:162">LO<span class="presence"></span></div>
+      <div class="who"><div class="title">Lena Okafor</div><div class="sub"><span class="dot" style="--c:#4AA6EE;width:7px;height:7px"></span>On SMS · Jabber idle since 9:05</div></div>
+      <button class="ibtn"><i data-i="phone"></i></button>
+      <button class="ibtn"><i data-i="moreV"></i></button>
+    </div>
+    <div class="accts"><span class="tag">Reply via</span><span class="pill on"><span class="dot" style="--c:var(--acct-sms);width:7px;height:7px"></span>SMS · Mobile</span><span class="pill"><span class="dot" style="--c:var(--acct-jabber);width:7px;height:7px"></span>Jabber · lena.okafor</span></div>
+    <div class="msgs" id="msgs"></div>
+    <div class="toolbar bottom compose">
+      <button class="btn sm picker"><span class="dot" style="--c:#4AA6EE;width:7px;height:7px"></span>SMS<i data-i="chevD"></i></button>
+      <div class="field">Text message</div>
+      <button class="send"><i data-i="send"></i></button>
+    </div>
+  </main>
+  <footer class="gesture"></footer>
+<script>
+  const D = PHX_DATA, T = D.thread;
+  let h = "";
+  T.forEach((m, i) => {
+    if (m.kind === "day") { h += `<div class="day tag">Today · 9:02 AM</div>`; return; }
+    if (m.kind === "switch") { h += `<div class="switch"><i data-i="phone"></i>Lena moved to SMS · +1 (303) 555-0135</div>`; return; }
+    const prev = T[i - 1], next = T[i + 1];
+    const samePrev = prev && prev.from === m.from && prev.via === m.via;
+    const sameNext = next && next.from === m.from && next.via === m.via;
+    h += `<div class="b ${m.from} ${m.via} ${samePrev ? "same-prev" : ""}">${m.text}</div>`;
+    if (!sameNext) h += `<div class="meta tag ${m.from}"><span class="dot" style="--c:var(--acct-${m.via});width:7px;height:7px"></span>${D.accounts[m.via].name} · ${m.time}${m.from === "out" ? " · Delivered" : ""}</div>`;
+  });
+  h += `<div class="typing"><span></span><span></span><span></span></div>`;
+  document.getElementById("msgs").innerHTML = h;
+  phxReady();
+</script>
+</body>
+</html>

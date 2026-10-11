@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Aurora Glass: components</title>
+<link rel="stylesheet" href="../css/aurora.css">
+<script src="../js/icons.js"></script>
+<script src="../js/frame.js"></script>
+<style>
+  body.board { width: 1280px; height: 900px; }
+  .wallpaper { background-position: center 30%; }
+  .boardhead { position: absolute; top: 0; left: 0; right: 0; height: 64px; display: flex; align-items: center; gap: 14px; padding: 0 28px; color: #fff; z-index: 2;
+    background: linear-gradient(180deg, rgba(0,0,0,.45), rgba(0,0,0,0)); }
+  .boardhead h1 { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -.01em; }
+  .boardhead .sub { font-size: 13.5px; font-weight: 600; color: rgba(255,255,255,.75); }
+  .boardhead .mode { margin-left: auto; font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; padding: 6px 12px; border-radius: 14px; background: rgba(255,255,255,.14); box-shadow: inset 0 1px 0 rgba(255,255,255,.3); }
+  .cols { position: absolute; top: 64px; left: 20px; right: 20px; bottom: 20px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+  .col { display: flex; flex-direction: column; gap: 16px; min-height: 0; }
+  .card { position: relative; border-radius: 24px; padding: 16px 18px 18px; background: var(--sheet); backdrop-filter: var(--sheet-filter); box-shadow: var(--shadow-card), inset 0 1px 0 var(--edge), inset 0 0 0 1px var(--hair-2); overflow: hidden; }
+  .card::before { content: ""; position: absolute; inset: 0; background: var(--sheen); pointer-events: none; }
+  .card > * { position: relative; }
+  .card h2 { margin: 0 0 12px; font-size: 11.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
+  .line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .line + .line { margin-top: 12px; }
+  .bgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .bgrid .btn { padding: 0 12px; }
+  .lbl { font-size: 12.5px; font-weight: 600; color: var(--text-3); }
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+  .rows .row { min-height: 50px; padding: 0 14px; }
+  .rows { --inset: 56px; }
+  .tb { display: flex; align-items: center; gap: 10px; height: 56px; padding: 0 10px; border-radius: 20px; }
+  .tb .t { flex: 1; font-size: 16px; font-weight: 800; }
+  .tb .iconbtn { width: 38px; height: 38px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--hair); }
+  .tabs span { padding: 8px 10px 10px; font-size: 14px; font-weight: 700; color: var(--text-3); position: relative; }
+  .tabs span.on { color: var(--text); }
+  .tabs span.on::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: var(--accent); }
+  /* dialog demo */
+  .scene { position: relative; height: 230px; border-radius: 18px; overflow: hidden; margin: -2px -4px 0; }
+  .scene .wp { position: absolute; inset: 0; background: var(--wp) center 40% / cover; }
+  .scene .sh { position: absolute; inset: 10px; border-radius: 16px; background: var(--sheet); backdrop-filter: var(--sheet-filter); padding: 12px; }
+  .scene .sh .ghost { height: 12px; border-radius: 6px; background: var(--panel-3); margin: 6px 0 12px; width: 70%; }
+  .scene .sh .ghost.s { width: 45%; }
+  .dialog { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 252px; padding: 18px 18px 14px; border-radius: 24px; text-align: center;
+    background: var(--float); backdrop-filter: blur(30px) saturate(180%); box-shadow: inset 0 1px 0 var(--edge), inset 0 0 0 1px var(--hair-2), 0 30px 60px -20px rgba(0,0,0,.6); }
+  .dialog .t { font-size: 16.5px; font-weight: 800; }
+  .dialog .m { font-size: 13.5px; line-height: 19px; font-weight: 500; color: var(--text-2); margin: 6px 0 14px; }
+  .dialog .acts { display: flex; gap: 8px; }
+  .dialog .acts .btn { flex: 1; height: 40px; font-size: 14.5px; }
+  /* app menu demo */
+  .menuscene { position: relative; height: 262px; margin: -2px -4px 0; border-radius: 18px; overflow: hidden; }
+  .menuscene .wp { position: absolute; inset: 0; background: var(--wp) 20% 10% / 300%; }
+  .menuscene .apptab { position: absolute; top: 8px; left: 8px; }
+  .menu { position: absolute; top: 42px; left: 8px; width: 252px; padding: 6px; border-radius: 6px 20px 20px 20px;
+    background: var(--float); backdrop-filter: blur(30px) saturate(180%); box-shadow: inset 0 1px 0 var(--edge), inset 0 0 0 1px var(--hair-2), 0 24px 48px -16px rgba(0,0,0,.6); }
+  .menu .mi { height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 14px; font-size: 14.5px; font-weight: 600; }
+  .menu .mi .ic { width: 19px; height: 19px; color: var(--text-2); }
+  .menu .mi .r { margin-left: auto; color: var(--text-3); width: 16px; height: 16px; }
+  .menu .mi.hl { background: var(--accent-soft); color: var(--accent-ink); }
+  .menu .mi.hl .ic { color: var(--accent-ink); }
+  .menu .sep { height: 1px; background: var(--hair); margin: 4px 10px; }
+  .menu .mi.off { color: var(--text-3); }
+  /* notifications */
+  .notibar { display: flex; align-items: center; gap: 10px; height: 36px; padding: 0 12px; border-radius: 18px; background: rgba(14,18,30,.74); backdrop-filter: blur(26px); color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,.2); }
+  .notibar .ic { width: 18px; height: 18px; }
+  .notibar .n { font-size: 12.5px; font-weight: 800; color: rgba(255,255,255,.8); margin-left: auto; }
+  .banner .appicon { width: 40px; height: 40px; border-radius: 12px; }
+  .banner .appicon .ic { width: 22px; height: 22px; }
+  /* tokens */
+  .levels { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .lv { height: 58px; border-radius: 14px; position: relative; overflow: hidden; display: flex; align-items: flex-end; padding: 6px 8px; font-size: 10.5px; font-weight: 800; }
+  .lv .bg { position: absolute; inset: 0; background: var(--wp) 30% 30% / 600%; }
+  .lv span { position: relative; }
+  .types div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; white-space: nowrap; }
+  .types div + div { margin-top: 6px; }
+  .types .lbl { font-size: 11px; }
+  .prog { height: 6px; border-radius: 3px; background: var(--panel-3); overflow: hidden; }
+  .prog i { display: block; height: 100%; width: 64%; border-radius: 3px; background: linear-gradient(90deg, var(--accent-2), var(--accent)); }
+  .spin { width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--panel-3); border-top-color: var(--accent); }
+  .accents { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
+  .acc { border-radius: 14px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--hair); }
+  .acc .im { height: 40px; background-size: cover; background-position: center; }
+  .acc .sw { height: 22px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 800; letter-spacing: .04em; }
+</style>
+</head>
+<body class="board">
+  <div class="wallpaper"></div>
+  <div class="boardhead"><h1>Aurora Glass</h1><span class="sub">Components · one heavy blur per stack, tint above it, floats for bars, scrim for overlays</span><span class="mode" id="mode">Dark</span></div>
+  <div class="cols">
+    <div class="col">
+      <div class="card">
+        <h2>Buttons</h2>
+        <div class="bgrid">
+          <button class="btn primary">Send</button><button class="btn glass">Cancel</button>
+          <button class="btn danger">Delete</button><button class="btn danger solid"><i data-i="trash"></i>Delete all</button>
+          <button class="btn text">Learn more</button><button class="btn primary" disabled>Saving…</button>
+        </div>
+        <div class="line" style="margin-top:14px;justify-content:space-between"><button class="iconbtn"><i data-i="reply"></i></button><button class="iconbtn"><i data-i="flag"></i></button><button class="iconbtn"><i data-i="search"></i></button><button class="iconbtn"><i data-i="more"></i></button>
+          <button class="iconbtn" style="width:48px;height:48px;border-radius:18px;background:linear-gradient(140deg,var(--accent),var(--accent-2));color:var(--on-accent);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 8px 18px -8px var(--accent-glow)"><i data-i="compose"></i></button></div>
+      </div>
+      <div class="card">
+        <h2>Selection</h2>
+        <div class="line"><span class="toggle on"></span><span class="toggle"></span><span class="check on"><i data-i="check"></i></span><span class="check"><i data-i="check"></i></span><span class="radio on"></span><span class="radio"></span></div>
+        <div class="line"><div class="segmented" style="flex:1"><button>Day</button><button class="on">Week</button><button>Month</button></div></div>
+        <div class="line"><div class="tabs" style="flex:1"><span class="on">Conversations</span><span>Buddies</span><span>Groups</span></div></div>
+      </div>
+      <div class="card">
+        <h2>Inputs</h2>
+        <div class="stack">
+          <div class="field"><i data-i="search"></i>Just type…</div>
+          <div class="field focus"><span style="color:var(--text)">Lena Ok</span><span class="caret"></span><span style="margin-left:auto" class="lbl">To</span></div>
+          <div>
+            <div class="line" style="justify-content:space-between"><span class="lbl">Brightness</span><span class="lbl" style="color:var(--text)">68%</span></div>
+            <div class="slider" style="margin-top:6px"><span class="track"></span><span class="fill" style="width:68%"></span><span class="knob" style="left:68%"></span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card" style="padding-bottom:10px">
+        <h2>List rows</h2>
+        <div class="panel rows" style="margin:0 -4px">
+          <div class="row"><span class="tile" style="--c1:#4AA3FF;--c2:#2463E0"><i data-i="wifi"></i></span><span class="label">Wi-Fi<span style="display:block;font-size:12px;color:var(--text-3);font-weight:600">Phoenix 5G</span></span><span class="toggle on"></span></div>
+          <div class="row"><span class="tile" style="--c1:#FF7AA8;--c2:#D9407A"><i data-i="image"></i></span><span class="label">Wallpaper</span><span class="value">Aurora</span><i data-i="chevR" class="chev"></i></div>
+          <div class="row"><span class="avatar" style="--h:28;width:30px;height:30px;font-size:11px">MR</span><span class="label">Marcus Reyes</span><span class="badge">2</span></div>
+          <div class="row" style="background:var(--accent-soft)"><span class="tile" style="--c1:#46E8B2;--c2:#138E9C"><i data-i="check"></i></span><span class="label" style="color:var(--accent-ink)">Selected row</span><i data-i="check" class="chev" style="color:var(--accent-ink)"></i></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Header and toolbar</h2>
+        <div class="stack">
+          <div class="tb float"><button class="iconbtn"><i data-i="chevL"></i></button><span class="t">Wi-Fi</span><button class="iconbtn"><i data-i="refresh"></i></button></div>
+          <div class="tb float" style="justify-content:space-around"><button class="iconbtn bare"><i data-i="reply"></i></button><button class="iconbtn bare"><i data-i="forward"></i></button><button class="iconbtn bare"><i data-i="archive"></i></button><button class="iconbtn bare"><i data-i="trash"></i></button></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Glass levels</h2>
+        <div class="levels" id="levels"></div>
+        <div class="lbl" style="margin-top:8px">Blur 40 · tint only · blur 22 · blur 30 + scrim</div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <h2>Dialog</h2>
+        <div class="scene">
+          <div class="wp"></div>
+          <div class="sh"><div class="ghost"></div><div class="ghost s"></div><div class="ghost"></div><div class="ghost s"></div><div class="ghost"></div></div>
+          <div class="scrim"></div>
+          <div class="dialog">
+            <div class="t">Delete conversation?</div>
+            <div class="m">Messages with Lena on SMS and Jabber are removed from this device.</div>
+            <div class="acts"><button class="btn glass">Cancel</button><button class="btn danger solid">Delete</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="card types">
+        <h2>Type · Manrope (OFL)</h2>
+        <div><span class="t-large" style="font-size:28px">Large 30</span><span class="lbl">800 · titles</span></div>
+        <div><span class="t-title">Title 20</span><span class="lbl">800 · headers</span></div>
+        <div><span class="t-head">Headline 16</span><span class="lbl">700 · names</span></div>
+        <div><span class="t-body">Body 15 · reads well on glass</span></div>
+        <div><span class="t-sub">Secondary 13.5</span><span class="t-over">Overline 11.5</span></div>
+      </div>
+      <div class="card">
+        <h2>Accent from the wallpaper</h2>
+        <div class="accents">
+          <div class="acc"><div class="im" style="background-image:url(../assets/northern-lights.jpg)"></div><div class="sw" style="background:#46E8B2;color:#032419">#46E8B2</div></div>
+          <div class="acc"><div class="im" style="background-image:url(../assets/twilight.jpg)"></div><div class="sw" style="background:#8FA8FF;color:#0B1440">#8FA8FF</div></div>
+          <div class="acc"><div class="im" style="background-image:url(../assets/silk.jpg)"></div><div class="sw" style="background:#5CC8FF;color:#03263A">#5CC8FF</div></div>
+          <div class="acc"><div class="im" style="background-image:url(../assets/album.svg)"></div><div class="sw" style="background:#FF8FB0;color:#2A0716">#FF8FB0</div></div>
+        </div>
+        <div class="lbl" style="margin-top:8px">Dark-mode fills shown; light mode darkens each to 4.5:1 on white.</div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <h2>App menu</h2>
+        <div class="menuscene">
+          <div class="wp"></div>
+          <button class="apptab">Messaging<i data-i="chevD" class="tab-chev"></i></button>
+          <div class="menu">
+            <div class="mi"><i data-i="type"></i>Edit<i data-i="chevR" class="r"></i></div>
+            <div class="mi off"><i data-i="forward"></i>Share</div>
+            <div class="sep"></div>
+            <div class="mi hl"><i data-i="people"></i>Preferences &amp; Accounts</div>
+            <div class="mi"><i data-i="bell"></i>Notifications</div>
+            <div class="mi"><i data-i="sparkle"></i>Help</div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Notifications · at the bottom</h2>
+        <div class="stack">
+          <div class="banner">
+            <span class="appicon" style="--c1:#46E8B2;--c2:#138E9C"><i data-i="chat"></i></span>
+            <div style="min-width:0;flex:1"><div class="t1">Lena Okafor</div><div class="t2">Pushed the card-stacking fix. Can you…</div></div>
+            <span style="font-size:11.5px;font-weight:700;color:rgba(255,255,255,.6);align-self:flex-start;margin-top:3px">now</span>
+          </div>
+          <div class="banner">
+            <span class="appicon" style="--c1:#FF8A7A;--c2:#D9364A"><i data-i="calendar"></i></span>
+            <div style="min-width:0;flex:1"><div class="t1">1:1 Priya</div><div class="t2">11:00 · in 15 min</div></div>
+            <button class="btn sm glass" style="color:#fff;background:rgba(255,255,255,.14);box-shadow:inset 0 1px 0 rgba(255,255,255,.3)">Snooze</button>
+          </div>
+          <div class="notibar"><i data-i="chat"></i><i data-i="mail"></i><i data-i="calendar"></i><i data-i="download"></i><span class="n">4 waiting · swipe up</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Chips, badges, progress</h2>
+        <div class="line"><span class="chip"><span class="dot" style="--c:var(--acct-sms)"></span>SMS</span><span class="chip"><span class="dot" style="--c:var(--acct-jabber)"></span>Jabber</span><span class="chip" style="background:var(--accent-soft);color:var(--accent-ink)"><i data-i="check" style="width:14px;height:14px;stroke-width:2.6"></i>Work</span></div>
+        <div class="line" style="margin-top:14px"><div style="flex:1"><div class="line" style="justify-content:space-between;margin-bottom:6px"><span class="lbl">Downloading 2.0.1</span><span class="lbl" style="color:var(--text)">64%</span></div><div class="prog"><i></i></div></div><span class="spin"></span></div>
+      </div>
+    </div>
+  </div>
+<script>
+  document.getElementById("mode").textContent = document.documentElement.dataset.theme === "light" ? "Light" : "Dark";
+  const L = [["Sheet", "background:var(--sheet);backdrop-filter:var(--sheet-filter)"], ["Panel", "background:var(--sheet);backdrop-filter:var(--sheet-filter);box-shadow:inset 0 0 0 100px var(--panel-2)"], ["Float", "background:var(--float);backdrop-filter:var(--float-filter);box-shadow:inset 0 1px 0 var(--edge)"], ["Overlay", "background:var(--scrim)"]];
+  document.getElementById("levels").innerHTML = L.map(([n, s]) => `<div class="lv"><div class="bg"></div><div style="position:absolute;inset:0;${s}"></div><span>${n}</span></div>`).join("");
+  phxReady();
+</script>
+</body>
+</html>

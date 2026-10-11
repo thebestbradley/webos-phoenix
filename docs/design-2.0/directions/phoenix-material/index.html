@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phoenix Material</title>
+<style>
+  @font-face { font-family: Figtree; src: url(assets/Figtree.woff2) format('woff2'); font-weight: 300 900; }
+  :root { color-scheme: light dark; --bg: #f0f5ee; --fg: #171d19; --dim: #404942; --card: #fff; --line: #c0c9c0; --acc: #296a48; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #0f1511; --fg: #dfe4dd; --dim: #c0c9c0; --card: #1b211d; --line: #404942; --acc: #92d5ab; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 Figtree, "Open Sans", sans-serif; }
+  main { max-width: 1180px; margin: 0 auto; padding: 40px 16px 64px; }
+  h1 { font-size: 44px; line-height: 1.1; margin: 0; letter-spacing: -.5px; }
+  .lede { color: var(--dim); max-width: 760px; margin: 10px 0 28px; font-size: 18px; }
+  h2 { font-size: 13px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--acc); margin: 34px 0 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; }
+  .item { background: var(--card); border-radius: 24px; padding: 14px; box-shadow: 0 0 0 1px var(--line); }
+  .item img { width: 100%; border-radius: 14px; display: block; background: #000; }
+  .item b { display: block; margin: 10px 2px 2px; }
+  .item a { color: var(--acc); font-weight: 600; text-decoration: none; margin-right: 12px; font-size: 14px; }
+  .item span { color: var(--dim); font-size: 13px; }
+  p.files a { color: var(--acc); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Phoenix Material</h1>
+  <p class="lede">Material 3 thinking made webOS: tonal surfaces whose colour is drawn from the wallpaper, expressive shapes and type, cards as the unit of everything, Synergy's merged people, and glass only where webOS had it (status bar, app menu, notifications).</p>
+  <p class="files">Read the <a href="SPEC.md">spec</a>, see every screen on the <a href="contact-sheet.png">contact sheet</a>, or open a screen's source below (each takes <code>?theme=light|dark</code> and <code>&amp;wall=northern-lights|lily-pads</code>).</p>
+  <div id="g"></div>
+</main>
+<script>
+const S = [
+  ['Phone', [['messaging-list', 'Messaging: conversations'], ['messaging-thread', 'Messaging: a conversation over SMS and Jabber'], ['settings', 'Settings'], ['music', 'Music: now playing'], ['cards', 'Card view']]],
+  ['Tablet', [['email', 'Email: folders, list, message'], ['calendar', 'Calendar: week']]],
+  ['Sheet', [['components', 'Components']]],
+  ['Dynamic colour: the same screens from Lily Pads', [['messaging-list', 'Messaging', 'lily-pads'], ['messaging-thread', 'Conversation', 'lily-pads'], ['settings', 'Settings', 'lily-pads']]],
+];
+document.getElementById('g').innerHTML = S.map(([h, items]) => `<h2>${h}</h2><div class="grid">${items.map(([id, name, wall]) => {
+  const w = wall || 'northern-lights', suffix = wall ? '-lilypads' : '';
+  return `<div class="item"><img src="renders/${id}${suffix}-light.png" alt="${name}, light" loading="lazy"><b>${name}</b>
+    <a href="screens/${id}.html?theme=light&wall=${w}">Light</a><a href="screens/${id}.html?theme=dark&wall=${w}">Dark</a><a href="renders/${id}${suffix}-dark.png">Dark render</a></div>`;
+}).join('')}</div>`).join('');
+</script>
+</body>
+</html>

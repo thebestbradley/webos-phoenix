@@ -25,6 +25,11 @@
         "org.webosphoenix.service.drives/providerInfo",
         "org.webosphoenix.service.drives/signIn",
         "org.webosphoenix.service.drives/loginFlowStart",
-        "org.webosphoenix.service.drives/loginFlowPoll"
+        "org.webosphoenix.service.drives/loginFlowPoll",
+        "org.webosphoenix.service.drives/sftpHostKey",
+        "org.webosphoenix.service.drives/sftpMakeKey",
+        "org.webosphoenix.service.drives/sftpImportKey",
+        "org.webosphoenix.service.drives/sftpForgetKey",
+        "org.webosphoenix.service.drives/sftpPublicKey"
     ]
 }
