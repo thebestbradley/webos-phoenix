@@ -11,8 +11,9 @@ These are mock-ups drawn in HTML and CSS, not the shipping apps. Every
 direction draws the same screens with the same content, on a Fairphone 6
 sized phone (1116 × 2484) and a 1280 × 800 tablet, in light and dark.
 
-**The owner has not picked yet** (OPEN-QUESTIONS Q119). Mixing directions
-is expected.
+**The owner chose Ember Glass** (11 October 2026; OPEN-QUESTIONS Q119).
+[BUILD-PLAN.md](BUILD-PLAN.md) says how it becomes the UI layer for Enact,
+Ionic and Flutter, in its own repository, `phoenix-ui`.
 
 ## Look at them
 
@@ -36,7 +37,6 @@ component sheet.
 
 ## Open choices
 
-- Which direction, or which mix (Q119).
 - Ember Glass: a slider on the first column too (the original Email had none on its accounts pane; the owner
   asked for every column), the active column's slider lit or every slider
   at rest, and a tint the shell raises automatically over a brighter
