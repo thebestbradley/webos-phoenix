@@ -36,9 +36,10 @@ Item {
     // The scene behind the pill, blurred faintly within its shape.
     property Item backdrop: null
     BackdropBlur {
+        objectName: "searchPillBlur"
         anchors.fill: parent
         source: pill.backdrop
-        mask: Theme.emberGlass ? egShape : pillShape
+        mask: Theme.emberGlass ? egMask : pillShape
         // Ember Glass: blur(12px) (.jt).
         radius: Theme.emberGlass ? Theme.px(12) : Theme.px(Theme.backdropBlurRadius)
     }
@@ -60,6 +61,15 @@ Item {
     }
 
     // ---- Ember Glass (cards.html .jt) ------------------------------------------
+    // The blur keeps to the capsule, all of it (the mask's alpha is the
+    // blur's; the capsule's own tint is 38%).
+    Rectangle {
+        id: egMask
+        visible: false
+        anchors.fill: parent
+        radius: height / 2
+        color: "white"
+    }
     // The capsule: rgb(20 18 20 / .38) over the blur, a white hairline at
     // 30%, a 1 px highlight at 12% inside its top.
     Rectangle {
@@ -72,12 +82,11 @@ Item {
         color: Theme.egLiveBlur ? Qt.rgba(20 / 255, 18 / 255, 20 / 255, 0.38) : EmberGlass.dark.glassFallback
         border.color: Qt.rgba(1, 1, 1, 0.3)
         border.width: Math.max(1, EmberGlass.hairline * Theme.u)
-        layer.enabled: Theme.emberGlass
-        Rectangle {
-            x: parent.radius / 2
-            width: parent.width - parent.radius
-            y: parent.border.width
-            height: Math.max(1, Theme.u)
+        EgHighlight {
+            width: parent.width
+            topLeftRadius: parent.radius
+            topRightRadius: parent.radius
+            inset: parent.border.width
             color: Qt.rgba(1, 1, 1, 0.12)
         }
     }

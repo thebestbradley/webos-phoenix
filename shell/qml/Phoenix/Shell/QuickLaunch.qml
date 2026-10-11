@@ -49,10 +49,15 @@ Item {
     property Item backdrop: null
 
     BackdropBlur {
-        anchors.fill: parent
+        objectName: "quickLaunchBlur"
+        // Ember Glass: inside the capsule, blur(12px) (.dock). (Over the
+        // capsule's own rect: the mask is stretched over the blur's.)
+        x: ql.egDock ? egCapsule.x : 0
+        y: ql.egDock ? egCapsule.y : 0
+        width: ql.egDock ? egCapsule.width : ql.width
+        height: ql.egDock ? egCapsule.height : ql.height
         source: ql.backdrop
-        // Ember Glass: inside the capsule, blur(12px) (.dock).
-        mask: ql.egDock ? egCapsule : null
+        mask: ql.egDock ? egMask : null
         radius: ql.egDock ? Theme.px(12) : Theme.px(Theme.backdropBlurRadius)
     }
 
@@ -62,6 +67,16 @@ Item {
     readonly property real egInset: egDock ? Theme.px(34 + 10) : 0
     // The app in front (Shell: the card view's), marked by the ember dot.
     property string activeAppId: ""
+    // The blur keeps to the capsule, all of it (the mask's alpha is the
+    // blur's; the capsule's own tint is 34%).
+    Rectangle {
+        id: egMask
+        visible: false
+        width: egCapsule.width
+        height: egCapsule.height
+        radius: egCapsule.radius
+        color: "white"
+    }
     Rectangle {
         id: egCapsule
         objectName: "emberDock"
@@ -69,18 +84,19 @@ Item {
         x: Theme.px(34)
         width: ql.width - 2 * Theme.px(34)
         height: Theme.px(64)
-        y: Math.round((ql.height - height) / 2)
+        // At the top: the 10 px under it keep it off the notification bar
+        // (Theme.quickLaunchHeight).
+        y: 0
         radius: height / 2
         // Without live blur, the dark theme's 94% tint (glass.fallback).
         color: Theme.egLiveBlur ? Qt.rgba(20 / 255, 18 / 255, 20 / 255, 0.34) : EmberGlass.dark.glassFallback
         border.color: Qt.rgba(1, 1, 1, 0.28)
         border.width: Math.max(1, EmberGlass.hairline * Theme.u)
-        layer.enabled: ql.egDock
-        Rectangle {
-            x: parent.radius / 2
-            width: parent.width - parent.radius
-            y: parent.border.width
-            height: Math.max(1, Theme.u)
+        EgHighlight {
+            width: parent.width
+            topLeftRadius: parent.radius
+            topRightRadius: parent.radius
+            inset: parent.border.width
             color: Qt.rgba(1, 1, 1, 0.1)
         }
     }
@@ -141,7 +157,7 @@ Item {
     readonly property real slotWidth: (width - 2 * egInset) / (pinned.length + 1)
     readonly property int iconSize: Theme.quickLaunchIconSize
     // The icons' top: 1.0's, or centred in Ember Glass's capsule.
-    readonly property real iconY: egDock ? Math.round((height - iconSize) / 2) : Theme.quickLaunchIconY
+    readonly property real iconY: egDock ? Math.round(egCapsule.y + (egCapsule.height - iconSize) / 2) : Theme.quickLaunchIconY
     // Tablets: the item area, left of the button's cell, and the space
     // after each 128 px cell in it (rearrangeIcons, :671).
     readonly property real cellWidth: Theme.quickLaunchCellWidth

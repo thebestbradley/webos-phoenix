@@ -9,16 +9,19 @@
 #   app-dark.png      a glass page (tools/fixtures/glass-app) maximized, dark
 #   app-light.png     the same, light
 #   cards-dark.png    three glass pages' cards in the card view, a dark one in
-#                     front (cards-dark.jpg)
+#                     front, three notifications waiting under the dock
+#                     (cards-dark.jpg)
 #   cards-light.png   the same, the light one in front (cards-light.jpg)
 #   cards-classic.png cards-dark in 1.0's look
+#   banner.png        a notification's banner over a maximized app
 #
 # Each run in a fresh home; the glass pages are installed for the run only.
 #
 #   tools/glass-screenshots.sh OUT_DIR [phoenix-sim] [qml dir] [repo dir]
 #
 # Without a display it runs under xvfb-run. PHOENIX_SHOT_DELAY (ms, default
-# 40000): how long the apps get to load before each screenshot.
+# 40000): how long the apps get to load before each screenshot. SHOTS="a b":
+# only those screenshots.
 
 set -eu
 here=$(cd "$(dirname "$0")/.." && pwd)
@@ -46,10 +49,12 @@ page org.webosphoenix.glasstest3 "Glass three" "title=Music"
 
 shot() {
     name=$1; shift
+    # SHOTS="a b": only those.
+    case " ${SHOTS:-$name} " in *" $name "*) ;; *) return 0 ;; esac
     home=$work/home-$name
     mkdir -p "$home"
     set -- "$sim" --qml-dir "$qml" --repo-dir "$repo" --size 1116x2484 --scale 2.5 --phone --no-marketplace \
-        --installed-dir "$work/installed" --screenshot "$out/$name.png" --delay "$delay" "$@"
+        --installed-dir "$work/installed" --screenshot "$out/$name.png" --delay "${DELAY:-$delay}" "$@"
     if [ -z "${DISPLAY:-}" ] && command -v xvfb-run >/dev/null; then
         set -- xvfb-run -a -s "-screen 0 1500x2700x24" "$@"
     fi
@@ -60,10 +65,12 @@ shot() {
 
 shot app-dark --launch org.webosphoenix.glasstest -- --look ember-glass
 shot app-light --launch org.webosphoenix.glasstest.light -- --look ember-glass
-shot cards-dark --scene cards --launch org.webosphoenix.glasstest --launch org.webosphoenix.glasstest2 \
+shot cards-dark --scene cardsnotified --launch org.webosphoenix.glasstest --launch org.webosphoenix.glasstest2 \
     --launch org.webosphoenix.glasstest3 -- --look ember-glass
 # (In this launch order the light page's card is the middle one.)
-shot cards-light --scene cards --launch org.webosphoenix.glasstest --launch org.webosphoenix.glasstest3 \
+shot cards-light --scene cardsnotified --launch org.webosphoenix.glasstest --launch org.webosphoenix.glasstest3 \
     --launch org.webosphoenix.glasstest2 -- --look ember-glass
-shot cards-classic --scene cards --launch org.webosphoenix.glasstest --launch org.webosphoenix.glasstest2 \
+shot cards-classic --scene cardsnotified --launch org.webosphoenix.glasstest --launch org.webosphoenix.glasstest2 \
     --launch org.webosphoenix.glasstest3
+# The banner shows for 6 s from the start (its slide and 5 s).
+DELAY=3500 shot banner --scene banner -- --look ember-glass

@@ -40,6 +40,7 @@
 // DashboardManager.js:647-661). One icon per stack in the bar.
 
 import QtQuick
+import Qt5Compat.GraphicalEffects
 import "NotificationPolicy.js" as Policy
 
 Item {
@@ -154,6 +155,14 @@ Item {
     }
 
     readonly property bool overlay: Theme.tablet
+    // Phones: the bar the notifications take (Theme.notificationBarHeight:
+    // 1.0's 28 px, Ember Glass's 44).
+    readonly property real barHeight: Theme.notificationBarHeight
+    // Ember Glass's bar (phones; docs/SYSTEM-UI-2.md, 8): over the
+    // wallpaper, not black; the waiting notification's text and the
+    // others' icons; the banner an L4 sheet in it (cards.html .notes,
+    // base.css .banner).
+    readonly property bool egBar: Theme.emberGlass && !overlay
     readonly property bool hasNotifications: model && model.count > 0
     property bool bannerActive: false
     // The time for a swipe's speed (a test sets its own, so how busy the
@@ -217,7 +226,7 @@ Item {
     // past its own height the drawer stays under the finger (and its
     // handle sees the release that closes it) rather than vanishing.
     readonly property real phoneSpaceHeight: Math.max(0, Math.min(drawerFullHeight,
-        dashboardOpen ? Math.max(Theme.bannerHeight, Math.max(negativeSpace, drawerLift) + drawerPull)
+        dashboardOpen ? Math.max(barHeight, Math.max(negativeSpace, drawerLift) + drawerPull)
                       : Math.max(negativeSpace, drawerLift)))
     NumberAnimation {
         id: liftAnim
@@ -333,7 +342,7 @@ Item {
         : keyboardHeight > 0 ? keyboardHeight
         : overlay || fullScreen ? 0
         : dashboardOpen ? dashboardHeight
-        : hasContent ? Theme.bannerHeight : 0
+        : hasContent ? barHeight : 0
     // What the notification area covers now, as rects in this item's
     // coordinates, for what floats over the screen to keep clear of (the
     // keyboard button, KeyboardButton.keepOut): phones, the space at the
@@ -363,7 +372,7 @@ Item {
         : alertShown && !overlay ? alertHeight + alertTopPadding
         : overlay || fullScreen ? 0
         : dashboardOpen ? dashboardHeight
-        : hasContent ? Theme.bannerHeight : 0
+        : hasContent ? barHeight : 0
     Behavior on negativeSpace {
         enabled: !root.spaceImmediate
         NumberAnimation { duration: Theme.positiveSpaceDuration; easing.type: Easing.OutCubic }
@@ -614,7 +623,7 @@ Item {
 
         Rectangle {
             id: space
-            color: root.overlay ? Theme.statusBarFill : Theme.black
+            color: root.overlay ? Theme.statusBarFill : root.egBar && !root.dashboardOpen ? "transparent" : Theme.black
             clip: true
             // Tablets: right of the centred clock.
             x: root.overlay ? root.width / 2 + Theme.px(40) : 0
@@ -623,13 +632,26 @@ Item {
             height: root.overlay ? Theme.statusBarHeight : root.phoneSpaceHeight
             visible: root.overlay ? root.bannerActive : height > 0
 
+            // Ember Glass: a soft scrim under the bar's text and icons, down
+            // to the gesture strip's (base.css .gesture: black 25% at its
+            // top), so a bright wallpaper never competes with them.
+            Rectangle {
+                objectName: "emberNotificationScrim"
+                visible: root.egBar && !root.dashboardOpen
+                anchors.fill: parent
+                gradient: Gradient {
+                    GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0) }
+                    GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.25) }
+                }
+            }
+
             // The banner, in the bar's top 28 px while the space opens under it.
             Item {
                 id: banner
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                height: Math.min(Theme.bannerHeight, parent.height)
+                height: Math.min(root.overlay ? Theme.bannerHeight : root.barHeight, parent.height)
                 clip: true
                 visible: root.bannerActive && !root.dashboardOpen && !root.activeCallShown
 
@@ -637,12 +659,55 @@ Item {
                     anchors.fill: parent
                     source: Theme.asset("overlay-banner-bg.png")
                     fillMode: Image.Stretch
-                    visible: !root.overlay
+                    visible: !root.overlay && !root.egBar
+                }
+
+                // Ember Glass: the banner is an L4 sheet in the bar
+                // (base.css .banner: the highlight, the rim, the L4 tint
+                // over a 30 px blur; its 24 px corners, a capsule in a bar
+                // this low), the app's icon and the text in ink; it slides
+                // up and fades as 1.0's does (the progress, and
+                // bannerContent's opacity, which it follows).
+                EgSheet {
+                    id: egBanner
+                    objectName: "emberBanner"
+                    visible: root.egBar
+                    lifted: false
+                    backdrop: root.backdrop
+                    x: Theme.px(10)
+                    width: banner.width - 2 * x
+                    height: banner.height - 2 * Theme.px(3)
+                    y: Theme.px(3) + (1 - root.bannerProgress) * banner.height
+                    radius: Math.min(Theme.px(EmberGlass.radiusBanner), height / 2)
+                    opacity: bannerContent.opacity
+                    AppIcon {
+                        id: egBannerIcon
+                        x: Theme.px(9)
+                        anchors.verticalCenter: parent.verticalCenter
+                        size: Theme.px(24)
+                        showLabel: false
+                        color: root.bannerColor
+                        glyph: root.bannerGlyph
+                        source: root.bannerIcon
+                    }
+                    Text {
+                        objectName: "emberBannerText"
+                        anchors.left: egBannerIcon.right
+                        anchors.leftMargin: Theme.px(10)
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.px(14)
+                        anchors.verticalCenter: parent.verticalCenter
+                        elide: Text.ElideRight
+                        text: root.bannerText
+                        color: Theme.eg.colorInk
+                        font: Qt.font({ family: Theme.egFontFamily, pixelSize: Math.round(14 * Theme.u), weight: 550 })
+                    }
                 }
 
                 Row {
                     id: bannerContent
                     objectName: "bannerContent"
+                    visible: !root.egBar
                     x: root.overlay ? Theme.px(5) + (1 - root.bannerProgress) * banner.width : Theme.px(5)
                     y: (banner.height - height) / 2 + (root.overlay ? 0 : (1 - root.bannerProgress) * banner.height)
                     spacing: Theme.px(5)
@@ -675,8 +740,8 @@ Item {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                height: Math.min(Theme.bannerHeight, parent.height)
-                color: Theme.black
+                height: Math.min(root.barHeight, parent.height)
+                color: root.egBar ? "transparent" : Theme.black
                 visible: root.activeCallShown && !root.dashboardOpen
                 property real now: Date.now()
                 Timer {
@@ -687,11 +752,26 @@ Item {
                     onTriggered: activeCallRow.now = Date.now()
                 }
                 readonly property string elapsed: root.activeCall ? root.callTime(root.activeCall.startTime, now) : ""
+                // Ember Glass: the call as the banner's sheet, the ember
+                // dot for the call going on.
+                EgSheet {
+                    objectName: "emberActiveCall"
+                    visible: root.egBar
+                    z: -1
+                    lifted: false
+                    backdrop: root.backdrop
+                    x: Theme.px(10)
+                    width: parent.width - 2 * x
+                    y: Theme.px(3)
+                    height: parent.height - 2 * y
+                    radius: Math.min(Theme.px(EmberGlass.radiusBanner), height / 2)
+                }
                 AppIcon {
                     id: activeCallIcon
-                    x: Theme.px(2)
+                    x: root.egBar ? Theme.px(19) : Theme.px(2)
                     y: Theme.px(2)
-                    size: parent.height - Theme.px(4)
+                    size: root.egBar ? Theme.px(24) : parent.height - Theme.px(4)
+                    anchors.verticalCenter: root.egBar ? parent.verticalCenter : undefined
                     showLabel: false
                     source: root.activeCall ? root.activeCall.icon : ""
                 }
@@ -699,15 +779,15 @@ Item {
                     id: activeCallText
                     objectName: "activeCallText"
                     anchors.left: activeCallIcon.right
-                    anchors.leftMargin: Theme.px(4)
+                    anchors.leftMargin: root.egBar ? Theme.px(10) : Theme.px(4)
                     anchors.right: parent.right
-                    anchors.rightMargin: Theme.px(2)
+                    anchors.rightMargin: root.egBar ? Theme.px(24) : Theme.px(2)
                     anchors.verticalCenter: parent.verticalCenter
                     text: (root.activeCall ? root.activeCall.message : "") + " " + activeCallRow.elapsed
-                    color: Theme.text
+                    color: root.egBar ? Theme.eg.colorInk : Theme.text
                     elide: Text.ElideMiddle
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.px(16)
+                    font: root.egBar ? Qt.font({ family: Theme.egFontFamily, pixelSize: Math.round(14 * Theme.u), weight: 550 })
+                                     : Qt.font({ family: Theme.fontFamily, pixelSize: Theme.px(16) })
                 }
             }
 
@@ -719,9 +799,9 @@ Item {
                 id: phoneIcons
                 objectName: "phoneNotificationIcons"
                 anchors.right: parent.right
-                y: (Theme.bannerHeight - height) / 2
+                y: (root.barHeight - height) / 2
                 spacing: 0
-                visible: !root.overlay && !root.bannerActive && !root.dashboardOpen && !root.activeCallShown
+                visible: !root.overlay && !root.egBar && !root.bannerActive && !root.dashboardOpen && !root.activeCallShown
                 Repeater {
                     model: root.overlay ? null : root.model
                     delegate: AppIcon {
@@ -735,12 +815,93 @@ Item {
                 }
             }
 
+            // Ember Glass: the newest notification's text after the ember
+            // dot, where 1.0 had its icon at the right; the others' icons at
+            // the right, side by side, the newest last, as 1.0's
+            // (cards.html .notes: 20 px in, 16 apart, 18 px icons, 13 px
+            // text at white 90%; the dot 6 px).
+            Item {
+                id: egNotes
+                objectName: "emberNotificationBar"
+                readonly property int newest: root.model ? root.model.count - 1 : -1
+                readonly property var newestRow: {
+                    root.model ? root.model.count : 0;
+                    egNotesRevision;
+                    return newest >= 0 ? root.model.get(newest) : null;
+                }
+                property int egNotesRevision: 0
+                Connections {
+                    target: root.model
+                    function onDataChanged() { ++egNotes.egNotesRevision; }
+                }
+                visible: root.egBar && !root.bannerActive && !root.dashboardOpen && !root.activeCallShown && newest >= 0
+                x: Theme.px(20)
+                width: parent.width - 2 * x
+                height: root.barHeight
+                Rectangle {
+                    id: egDot
+                    objectName: "emberNotificationDot"
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Theme.px(6)
+                    height: width
+                    radius: width / 2
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: EmberGlass.emberA }
+                        GradientStop { position: 0.45; color: EmberGlass.emberMid }
+                        GradientStop { position: 1; color: EmberGlass.emberB }
+                    }
+                    // Its glow (.dot-ember: 0 0 8px rgb(255 110 40 / .7)).
+                    RectangularGlow {
+                        z: -1
+                        visible: GraphicsInfo.api !== GraphicsInfo.Software
+                        anchors.fill: parent
+                        glowRadius: Theme.px(4)
+                        spread: 0.1
+                        color: Theme.egAlpha(EmberGlass.emberGlow, 0.7)
+                        cornerRadius: width / 2 + glowRadius
+                    }
+                }
+                Text {
+                    objectName: "emberNotificationText"
+                    anchors.left: egDot.right
+                    anchors.leftMargin: Theme.px(10)
+                    anchors.right: egIcons.left
+                    anchors.rightMargin: egIcons.width > 0 ? Theme.px(16) : 0
+                    anchors.verticalCenter: parent.verticalCenter
+                    elide: Text.ElideRight
+                    text: egNotes.newestRow ? egNotes.newestRow.title + (egNotes.newestRow.body ? ": " + egNotes.newestRow.body : "") : ""
+                    color: Qt.rgba(1, 1, 1, 0.9)
+                    font: Qt.font({ family: Theme.egFontFamily, pixelSize: Math.round(13 * Theme.u), weight: 550 })
+                }
+                Row {
+                    id: egIcons
+                    objectName: "emberNotificationIcons"
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: Theme.px(16)
+                    Repeater {
+                        model: root.egBar ? root.model : null
+                        delegate: AppIcon {
+                            required property var model
+                            required property int index
+                            visible: index !== egNotes.newest
+                            size: Theme.px(18)
+                            showLabel: false
+                            color: model.color
+                            glyph: model.glyph
+                            source: model.icon || ""
+                        }
+                    }
+                }
+            }
+
             MouseArea {
                 objectName: "bannerTap"
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                height: Theme.bannerHeight
+                height: root.overlay ? Theme.bannerHeight : root.barHeight
                 visible: (root.hasNotifications || root.bannerActive || root.activeCallShown) && !root.dashboardOpen
                 onClicked: root.tapBanner()
             }

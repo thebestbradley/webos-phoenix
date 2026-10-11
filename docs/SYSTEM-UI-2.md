@@ -114,7 +114,7 @@ tokens"), and how the shell draws it in QML:
   semibold, a caret: `.appmenu-tab`); the clock centred, 13.5 px medium; on
   the right the signal and Wi-Fi as Phosphor glyphs (MIT, as the mock-ups'
   `icons.js`) and a 22 x 11 battery cell with the charge (`.sb-batt`); on
-  tablets, notification icons with the ember dot (`.sb-notes`: step 10, the
+  tablets, notification icons with the ember dot (`.sb-notes`: step 11, the
   tablet's group is still 1.0's).
 - **Stays:** what it shows and when (the carrier or the app's name,
   StatusBarTitle; the clock; the lock screen's date; the tablet's notification
@@ -194,6 +194,26 @@ tokens"), and how the shell draws it in QML:
   dismiss, the drawer, the tablet's drop-down and its 5 1/2 rows.
 - **QML:** `Notifications.qml`, `DashboardItem.qml`, `DashboardMenu.qml`,
   `DrawerHeader.qml`, `DrawerHandle.qml`.
+- **Built (phones):**
+  - *The bar* is 44 px (`Theme.notificationBarHeight`; 1.0's 28): the
+    negative space a notification takes while any wait, as 1.0's, over the
+    wallpaper instead of black, with a soft scrim down to the gesture
+    strip's. The newest notification's text follows the ember dot (where
+    1.0 showed its icon at the right: the banner collapses into it), the
+    others' icons sit at the right, newest last, as 1.0's (`.notes`: 20 px
+    in, 16 apart, 18 px icons, 13 px text). The dock sits 10 px over it
+    (`Theme.quickLaunchHeight`: the 64 px capsule and 10 under it), so
+    `.dock`'s `bottom: 76` holds; with nothing waiting it is 10 px over the
+    gesture strip.
+  - *The banner* is an L4 sheet in the bar (`EgSheet`): a capsule (its
+    24 px corners in a 38 px sheet), the app's icon and the text in ink,
+    one line as 1.0's; it slides up and fades as 1.0's. The phone's active
+    call is the same sheet.
+  - `EgSheet.qml` draws every glass sheet the shell owns (L2, L3, L4: the
+    tint, the rim, the highlight, the live blur and its fallback,
+    lift-high's shadow, a radius per corner); `EgHighlight.qml` the
+    highlight inside a rounded top, which follows the corners (a straight
+    line stood out of the dock's and Just Type's ends).
 
 ### 9. The system menu
 - **Changes:** an L4 sheet (`.menu`: radius 4 at the corner it opens from,
@@ -308,12 +328,13 @@ second after (the adaptive simulator resizes in a stream of sizes).
 | 4 | The wallpaper under the whole screen, the card view's cards (corners, shadow, rim, the loading card's glass), the stack's label, the floor light, the status bar (phones; the tablet's notification group is still 1.0's) | done |
 | 5 | The shell contract: `WallpaperBlur`, the window's place for each web app, the runtime's side; tests (QML, the runtime in Chromium, the simulator lining the blur up) | done |
 | 6 | Just Type's pill and the dock (phones; the tablet's dock is still 1.0's) | done |
-| 7 | Notifications (the banner, the dashboard, the card view's notification bar, the tablet's drop-down) | |
-| 8 | The system menu | |
-| 9 | The launcher | |
-| 10 | The tablet: the status bar's notification group, the drop-down | |
-| 11 | Light and dark for the shell's sheets, from a theme preference | |
-| 12 | The device: luna-surfacemanager's side of the contract (the file, the shellhost event), `LsmWindowSource` | needs C++ |
+| 7 | The phone's notification bar under the dock, the banner, the active call; the dock 10 px over the bar | done |
+| 8 | The dashboard: its sheet, the rows, the stacks, the drawer | |
+| 9 | The system menu | |
+| 10 | The launcher | |
+| 11 | The tablet: the status bar's notification group, the drop-down, the dock | |
+| 12 | Light and dark for the shell's sheets, from a theme preference | |
+| 13 | The device: luna-surfacemanager's side of the contract (the file, the shellhost event), `LsmWindowSource` | needs C++ |
 
 ### Later, with C++ (not in this branch's first night)
 - **`phoenix-sim --look NAME`.** The simulator's command line is
@@ -356,15 +377,16 @@ those screenshots and `tools/test-glass-sim.py`'s):
 
 | File | What |
 | --- | --- |
-| `cards-dark.jpg`, `cards-light.jpg` | The card view, render on the left: glass cards over the phoenix, the blur moving with each card, the stack's label, the floor light and rim, Just Type's bar, the dock, the status bar, the gesture light (dim, as in card view) |
+| `cards-dark.jpg`, `cards-light.jpg` | The card view, render on the left: glass cards over the phoenix, the blur moving with each card, the stack's label, the floor light and rim, Just Type's bar, the dock, three notifications waiting in the bar under it, the status bar, the gesture light (dim, as in card view) |
 | `app-dark.jpg`, `app-light.jpg` | A glass page maximized (the test page), beside Messaging's render: the rounded card over the wallpaper, the status bar's tab, the lit gesture light |
 | `cards-classic.jpg` | The same card view in 1.0's look: unchanged; the test pages get nothing and draw the tint-only fallback |
 | `statusbar.jpg`, `gesture-light.jpg` | The status bar and the gesture light, render above, Phoenix below |
 | `glass-alignment.jpg` | The alignment check: the test page drawing only the blur the shell gave it, beside the sharp wallpaper |
+| `notification-bar.jpg` | The bottom of the card view, render above, Phoenix below: the notification bar and the dock over it |
+| `banner.jpg` | A banner over a maximized app (no render draws one on a phone) |
 
-**Still unlike the renders:** the card view's notification bar is 1.0's
-(step 7), so the dock sits at 1.0's place, lower than drawn; the dock shows
-the apps' own icons (owner question 10); the font is Open Sans where Manrope
+**Still unlike the renders:** the dock and the notification bar show the
+apps' own icons (owner question 10); the font is Open Sans where Manrope
 is not installed (owner question 4); the side cards lie flat (owner question
 1); the stack's label is the card's title (the renders: the app's name); the
 gesture light is dim in the card view (owner question 2); in the card view

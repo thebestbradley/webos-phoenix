@@ -2887,7 +2887,7 @@ FocusScope {
                     onAssistantRequested: {
                         // The view grows out of the held button.
                         assistantView.origin = quickLaunch.mapToItem(assistantView, quickLaunch.slotCentre(quickLaunch.pinned.length),
-                                                                     Theme.quickLaunchIconY + quickLaunch.iconSize / 2);
+                                                                     quickLaunch.iconY + quickLaunch.iconSize / 2);
                         shell.openAssistant(false);
                     }
                     onDragStarted: (appId, from, x, y) => iconDrag.start(appId, from, quickLaunch.mapToItem(ui, x, y))

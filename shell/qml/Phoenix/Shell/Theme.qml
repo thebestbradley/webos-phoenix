@@ -369,7 +369,10 @@ QtObject {
 
     // Tablet: layoutsettings.cpp:82-84, QuicklaunchLayout.cpp:46-49. The 2.x
     // phone dock is not in the Open webOS source; phone values are inferred.
-    readonly property int quickLaunchHeight: px(tablet ? 100 : 68)
+    // Ember Glass (phones): the 64 px capsule and 10 px under it, so it sits
+    // 10 px over the notification bar (cards.html .dock: bottom 76, the
+    // gesture strip's 22 and .notes' 44 under it).
+    readonly property int quickLaunchHeight: px(tablet ? 100 : emberGlass ? 64 + 10 : 68)
     readonly property int quickLaunchIconSize: px(tablet ? 64 : 48)
     readonly property int quickLaunchIconY: px(tablet ? 20 : 14)
     readonly property int quickLaunchMaxItems: 5                     // layoutsettings.cpp:87
@@ -414,6 +417,11 @@ QtObject {
     // ---- Notifications -------------------------------------------------------
 
     readonly property int bannerHeight: positiveSpaceBottomPadding   // BannerMessageHandler.cpp:201
+    // Phones: the bar the notifications take at the bottom of the screen
+    // (the negative space while there are any, and the banner's strip).
+    // 1.0: the banner's 28 px; Ember Glass: 44, the waiting notification's
+    // text and the others' icons (cards.html .notes).
+    readonly property int notificationBarHeight: emberGlass && !tablet ? px(44) : bannerHeight
     readonly property int bannerFontSize: px(16)                     // BannerMessageHandler.cpp:67
     readonly property int bannerSlideDuration: motion(1000)                  // BannerMessageHandler.cpp:122-130
     readonly property int bannerShowTime: 5000                       // BannerMessageHandler.cpp:69

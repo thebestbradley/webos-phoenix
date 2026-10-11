@@ -9,7 +9,8 @@
 //                  "notifystacks" | "notifystacksbar" | "notifystackslocked" | "drawer" | "capture" | "capturepreview" |
 //                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistantbird" | "assistantbirds" | "assistantbirdmoves" |
 //                  "wakeword" | "wakewordlocked" | "modal" |
-//                  "systemmenu" | "empty"
+//                  "systemmenu" | "empty" | "cardsnotified" (with --launch: those apps' cards and three
+//                  notifications under them; "cards", "banner", "notified" and "dashboard" also take --launch)
 //   simFirstUse    start with First Use (--first-use); without it First Use
 //                  runs at start-up until it has been done once
 //                  (simSettings "firstuse/done", set when the app reports the
@@ -699,7 +700,47 @@ Item {
             if (shell.maximized)
                 shell.cardView.minimize();
             shell.cardView.jumpTo(Math.floor((shell.cardView.groupCount - 1) / 2));
+            // "cardsnotified": three notifications waiting under the dock.
+            if (simScene === "cardsnotified") {
+                root.notifyDemo(false);
+                shell.notifications.bannerActive = false;
+            }
         }
+    }
+    // --scene banner, notified or dashboard with --launch: once the
+    // launched apps have loaded, a notification's banner over them
+    // ("banner"), three waiting ("notified"), or those in the open
+    // dashboard ("dashboard").
+    Timer {
+        id: launchedNotified
+        interval: 500
+        repeat: true
+        onTriggered: {
+            var n = windows.cards.count;
+            for (var i = 0; i < n; ++i) {
+                var w = windows.windowFor(windows.cards.get(i).uid);
+                if (w && w.ready === false)
+                    return;
+            }
+            if (n < (typeof simLaunch !== "undefined" ? simLaunch.length : 0) || shell.cardView.animating)
+                return;
+            stop();
+            root.notifyDemo(simScene === "banner");
+            if (simScene !== "banner")
+                shell.notifications.bannerActive = false;
+            if (simScene === "dashboard")
+                shell.notifications.dashboardOpen = true;
+        }
+    }
+    // The scenes' notifications, as Ember Glass's mock-ups show them
+    // (cards.html .notes): a calendar reminder, mail, and the newest, a
+    // text; one, the text, for a banner.
+    function notifyDemo(one) {
+        if (!one) {
+            windows.notify(windows.appIdByTitle("Calendar"), "Launch party", "Tomorrow, 9:41 AM");
+            windows.notify(windows.appIdByTitle("Email"), "3 new emails", "webOS Phoenix build passed");
+        }
+        windows.notify(windows.appIdByTitle("Messaging"), "Ada", "Running late, grab us a table by the window?");
     }
     // How the UI and the device are turned, for the apps
     // (com.palm.systemmanager getSystemStatus).
@@ -1864,8 +1905,12 @@ Item {
                 // view, once they have loaded, the middle one in front
                 // (Ember Glass's card view with its test pages,
                 // tools/glass-screenshots.sh).
-                if (typeof simScene !== "undefined" && simScene === "cards")
+                if (typeof simScene !== "undefined" && (simScene === "cards" || simScene === "cardsnotified"))
                     launchedCards.start();
+                // --scene banner, notified or dashboard with --launch: those
+                // notifications over that app, once it has loaded.
+                if (typeof simScene !== "undefined" && ["banner", "notified", "dashboard"].indexOf(simScene) >= 0)
+                    launchedNotified.start();
                 root.startOnTouchstone();
             });
             return;
