@@ -275,7 +275,16 @@ function sftpValidate(ctx, p) {
                     var common = { user: user, settings: config };
                     if (password && !key) common.password = password;
                     if (key) common.sshKey = keyId;
-                    return { username: user + "@" + hostLabel(a) + (folder ? ":" + root : ""), credentials: { common: common }, config: config };
+                    var result = { username: user + "@" + hostLabel(a) + (folder ? ":" + root : ""), credentials: { common: common }, config: config };
+                    // Signing in again with another key (or a password): the old key goes.
+                    if (!p.accountId) return result;
+                    return lunaOk(ctx, "luna://com.palm.service.accounts/readCredentials", { accountId: p.accountId, name: "common" })
+                        .then(function (r) {
+                            var old = r.credentials && r.credentials.sshKey;
+                            if (!old || old === keyId) return null;
+                            delete keyCache[old];
+                            return putKeyRecord(ctx, old, null);
+                        }).catch(function () {}).then(function () { SFTP.closeAccount(p.accountId); return result; });
                 });
             }, function (e) {
                 s.client.close();
@@ -601,11 +610,12 @@ module.exports = kit.defineConnector({
                 return putKeyRecord(ctx, keyId, null);
             }).then(function () { return {}; });
         },
-        // {accountId} -> {publicKey, fingerprint, description}: the account's public key, to copy again.
+        // {accountId} -> {keyId, publicKey, fingerprint, description}: the account's key, to copy its
+        // public half again or sign in again with it.
         sftpPublicKey: function (ctx) {
             var keyId = (ctx.credentials || {}).sshKey;
             if (!keyId) return Promise.reject(fail("The account signs in with a password", "NOT_FOUND"));
-            return loadKey(ctx, keyId).then(function (key) { var a = keyAnswer(keyId, key); delete a.keyId; return a; });
+            return loadKey(ctx, keyId).then(function (key) { return keyAnswer(keyId, key); });
         }
     }
 });

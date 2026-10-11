@@ -40,7 +40,7 @@ import { useLaunchParams } from "@phoenix/luna/react";
 import {
     AppMenu, BackProvider, CheckBox, cx, FileIcon, Glyph, IconToolButton, PageHeader, PopupMenu, Spinner, Toolbar, ToolSpacer, useBack, type Option,
 } from "@phoenix/ui";
-import { crumbs, driveNames, folderTitle, HOME, loadPrefs, planPaste, savePrefs, shortDate, type Clipboard, type Prefs } from "./browse";
+import { crumbs, driveNames, folderProblem, folderTitle, HOME, loadPrefs, planPaste, savePrefs, shortDate, type Clipboard, type Prefs } from "./browse";
 import { DeleteDialog, InfoDialog, InstallDialog, NameDialog, OpenWithDialog } from "./Dialogs";
 import { ImageViewer, TextEditor } from "./Viewers";
 
@@ -61,6 +61,7 @@ const HOLD_MS = 500;
 
 const errorText = (e: unknown) => (e instanceof LunaError ? e.errorText : e instanceof Error ? e.message : String(e));
 const errorCode = (e: unknown) => (e instanceof LunaError ? e.errorCode : undefined);
+const errorReason = (e: unknown) => (e instanceof LunaError ? (e.reply as { reason?: string }).reason : undefined);
 const percent = (t: Transfer) => (t.total > 0 ? Math.min(100, Math.floor(t.done * 100 / t.total)) : 0);
 
 function useWide(): boolean {
@@ -162,6 +163,7 @@ function Browser() {
     const [drives, setDrives] = useState<FileEntry[]>([]);
     const [transfers, setTransfers] = useState<Transfer[]>([]);
     const [errorKind, setErrorKind] = useState<number | undefined>(undefined);
+    const [errorWhy, setErrorWhy] = useState<string | undefined>(undefined);
     const wide = useWide();
     const driveLabels = useMemo(() => driveNames(drives), [drives]);
     const title = (p: string) => folderTitle(p, driveLabels);
@@ -181,10 +183,12 @@ function Browser() {
             setEntries(list);
             setError("");
             setErrorKind(undefined);
+            setErrorWhy(undefined);
         } catch (e) {
             setEntries([]);
             setError(errorText(e));
             setErrorKind(errorCode(e));
+            setErrorWhy(errorReason(e));
         }
         if (p === DRIVES_ROOT || p === "/media" || p === HOME) fileManager.drives().then(setDrives);
     }, [path]);
@@ -421,22 +425,23 @@ function Browser() {
                 </div>
                 <div className="fm-scroll" data-testid="file-list">
                     {entries === null && <div className="fm-loading"><Spinner large /></div>}
-                    {error && (
-                        <div className="fm-empty" role="alert" data-testid="folder-error">
-                            {errorKind === FILE_ERRORS.OFFLINE ? `${title(driveRootOf(path) ?? path)} can't be reached. Check your connection; nothing was lost.`
-                                : errorKind === FILE_ERRORS.AUTH ? `${title(driveRootOf(path) ?? path)} did not accept the sign-in. Sign in again in Accounts.`
-                                : error}
+                    {error && (() => {
+                        const problem = folderProblem(errorKind, errorWhy, error, title(driveRootOf(path) ?? path));
+                        return (
+                        <div className={cx("fm-empty", problem.warning && "fm-warning")} role="alert" data-testid="folder-error">
+                            {problem.message}
                             {isDrivePath(path) && (
                                 <div className="fm-error-buttons">
                                     <button type="button" className="fm-retry" data-testid="retry" onClick={() => { setEntries(null); void reload(); }}>Try Again</button>
-                                    {errorKind === FILE_ERRORS.AUTH && (
+                                    {problem.accounts && (
                                         <button type="button" className="fm-retry" data-testid="open-accounts"
                                                 onClick={() => { void openWith.launchApp("com.palm.app.accounts"); }}>Accounts</button>
                                     )}
                                 </div>
                             )}
                         </div>
-                    )}
+                        );
+                    })()}
                     {entries !== null && !error && shown.length === 0 && (
                         <div className="fm-empty" data-testid="empty">
                             {entries.length ? "Only hidden files here. Show them from the menu." : "This folder is empty."}

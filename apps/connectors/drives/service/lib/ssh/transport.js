@@ -143,7 +143,8 @@ function createTransport(o) {
     var socket = o.socket;
     var role = o.role || "client";
     var log = o.log || function () {};
-    var timers = o.timers || { setTimeout: setTimeout, clearTimeout: clearTimeout };
+    // (Called as themselves: a page's setTimeout refuses another `this`.)
+    var timers = o.timers || { setTimeout: function (f, ms) { return setTimeout(f, ms); }, clearTimeout: function (h) { clearTimeout(h); } };
     var now = o.now || function () { return Date.now(); };
     var ident = o.ident || IDENT;
 

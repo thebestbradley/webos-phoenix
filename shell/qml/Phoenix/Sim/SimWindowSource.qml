@@ -113,6 +113,11 @@
 //                            this computer; "pty" host messages go to it and
 //                            its replies back to the window (runtime block
 //                            "Terminal"); null with --no-host-shell
+//   simTcp (context property, C++ SimTcp): TCP connections for the pages'
+//                            connectors (the drives' SFTP); "tcp" host
+//                            messages go to it and its events back to the
+//                            window (runtime: "Binary TCP: the host's
+//                            relay"); null with --no-tcp-relay
 //   dictation                the shell's Dictation (Shell.dictation; null
 //                            when it cannot record): "dictation" host
 //                            messages ({op: start | stop | cancel, prompt,
@@ -226,6 +231,8 @@ Item {
         Qt.callLater(_bootSystemApps);
         if (_simPty())
             _simPty().event.connect(_ptyEvent);
+        if (_simTcp())
+            _simTcp().event.connect(_tcpEvent);
     }
 
     // A launcher entry for a web app (Rootfs::apps()). Launch points
@@ -516,6 +523,18 @@ Item {
         var w = _windows[uid];
         if (w && w.runScript)
             w.runScript("window.__phoenixRuntime && __phoenixRuntime.ptyEvent && __phoenixRuntime.ptyEvent(" + json + ")");
+    }
+
+    // ---- The connectors' TCP (phoenix-sim's SimTcp) ---------------------------------
+
+    function _simTcp() {
+        return typeof simTcp !== "undefined" && simTcp ? simTcp : null;
+    }
+
+    function _tcpEvent(uid, json) {
+        var w = _windows[uid];
+        if (w && w.runScript)
+            w.runScript("window.__phoenixRuntime && __phoenixRuntime.tcpEvent && __phoenixRuntime.tcpEvent(" + json + ")");
     }
 
     function appIdByTitle(titleText) {
@@ -888,6 +907,10 @@ Item {
             // shell's record of the window, not the page's say-so.
             if (_simPty() && uid !== "")
                 _simPty().request(uid, appId, payload);
+        } else if (type === "tcp") {
+            // A connector's TCP connection (the drives' SFTP), in the window it runs in.
+            if (_simTcp() && uid !== "")
+                _simTcp().request(uid, payload || {});
         } else if (type === "dictation") {
             if (uid !== "")
                 _dictationRequest(uid, payload || {});
@@ -2778,9 +2801,12 @@ Item {
             _park(uid, card);
             return;
         }
-        // Throwing a Terminal card away hangs its shell up (SIGHUP).
+        // Throwing a Terminal card away hangs its shell up (SIGHUP);
+        // any card's connectors' connections close with it.
         if (_simPty())
             _simPty().closeWindow(uid);
+        if (_simTcp())
+            _simTcp().closeWindow(uid);
         var win = _windows[uid];
         delete _windows[uid];
         if (_keepAliveAsked[uid]) {
