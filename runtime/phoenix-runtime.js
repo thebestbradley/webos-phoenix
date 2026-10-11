@@ -4918,25 +4918,33 @@
         // POP's ActivityBuilderFactory.cpp:300-320, destFolderId != null, which
         // calls moveEmail). Here the page hosting the activity manager (the
         // system UI's, runtime.activities.hosts) does, a moment after a change.
+        // Only that page watches (a watch reads the whole store again on
+        // each change); the others look once a minute whether they host now.
         var LOCAL_CHANGES_MS = 500;
-        var localTimer = null;
+        var localTimer = null, watching = false;
+        function hosting() { return !!(runtime.activities && runtime.activities.hosts()); }
         function watchLocalChanges() {
             var first = true;
+            watching = true;
             dispatch("palm://com.palm.db/find", { query: { from: "com.palm.email:1", limit: 1 }, watch: true }, function (r) {
                 if (first) { first = false; return; }
                 if (!r || !r.fired) return;
                 if (localTimer) clearTimeout(localTimer);
                 localTimer = setTimeout(function () {
                     localTimer = null;
-                    if (runtime.activities && runtime.activities.hosts()) localChanges();
+                    if (hosting()) localChanges();
                 }, LOCAL_CHANGES_MS);
-                watchLocalChanges();
+                if (hosting()) watchLocalChanges();
+                else watching = false;
             }, { cancelled: function () { return false; }, onCancel: null });
         }
-        setTimeout(function () {
+        function startLocalChanges() {
+            if (watching || !hosting()) return;
             watchLocalChanges();
-            if (runtime.activities && runtime.activities.hosts()) localChanges();
-        }, 0);
+            localChanges();
+        }
+        setTimeout(startLocalChanges, 0);
+        setInterval(startLocalChanges, 60000);
 
         // ---- A message file (RFC 5322 and MIME), as mojomail's AsyncEmailParser
         // and EmailHeaderFieldParser read it ----
@@ -8535,18 +8543,21 @@
         // more (RELAUNCH_SETTLE_MS) for the handler that read them to set up
         // its relaunch listener (React's useEffect comes after the render
         // that read them). A page that never reads them gets it at most
-        // RELAUNCH_HOLD_MS after loading. Otherwise the relaunch rewrote the
+        // RELAUNCH_HOLD_MS after loading (RELAUNCH_MAX_HOLD_MS after it
+        // started, loaded or not). Otherwise the relaunch rewrote the
         // launch params before the app had read its own: Clock launched while
         // one of its alarms was due opened only the alarm, not its card.
         // Held ones go in order; later ones go at once.
-        var RELAUNCH_SETTLE_MS = 200, RELAUNCH_HOLD_MS = 5000;
-        var pageLoadedAt = 0, heldRelaunches = [], holdTimer = null;
+        var RELAUNCH_SETTLE_MS = 200, RELAUNCH_HOLD_MS = 5000, RELAUNCH_MAX_HOLD_MS = 15000;
+        var pageStartedAt = Date.now(), pageLoadedAt = 0, heldRelaunches = [], holdTimer = null;
         if (global.document && global.document.readyState === "complete") pageLoadedAt = Date.now();
         else if (global.addEventListener) global.addEventListener("load", function () { pageLoadedAt = Date.now(); });
         function ownLaunchTaken() {
-            var doc = global.document;
+            var doc = global.document, now = Date.now();
+            // A page still loading after RELAUNCH_MAX_HOLD_MS (a frame that
+            // never finishes) gets it all the same.
+            if (now - pageStartedAt >= RELAUNCH_MAX_HOLD_MS) return true;
             if (doc && doc.readyState !== "complete") return false;
-            var now = Date.now();
             if (!pageLoadedAt) pageLoadedAt = now;     // complete, its load event still to come
             return (launchParamsReadAt && now - launchParamsReadAt >= RELAUNCH_SETTLE_MS) || now - pageLoadedAt >= RELAUNCH_HOLD_MS;
         }
