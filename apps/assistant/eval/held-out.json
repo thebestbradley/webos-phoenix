@@ -94,6 +94,10 @@
 {"id":"h-c-notif-2","cat":"notifications","say":"read out my alerts","expect":{"command":"notifications"}},
 {"id":"h-c-drive-1","cat":"driving","say":"put my phone in driving mode","expect":{"command":"drivingMode","args":{"state":"on"}}},
 {"id":"h-c-drive-2","cat":"driving","say":"we've arrived, you can stop driving mode","expect":{"command":"drivingMode","args":{"state":"off"}}},
-{"id":"h-c-announce-1","cat":"driving","say":"read incoming texts out loud in my earbuds","expect":{"command":"announceMessages","args":{"state":"on"}}}
+{"id":"h-c-announce-1","cat":"driving","say":"read incoming texts out loud in my earbuds","expect":{"command":"announceMessages","args":{"state":"on"}}},
+{"id":"h-c-routine-1","cat":"routines","say":"kick off my bedtime routine","storage":{"assistant:routines":[{"id":"r1","name":"Bedtime","phrases":["bedtime"],"enabled":true,"steps":[{"text":"turn on do not disturb"}]}]},"expect":{"command":"routine"}},
+{"id":"h-c-cam-1","cat":"camera","say":"snap a selfie with a five second countdown","expect":{"command":"camera","args":{"action":"photo","front":true,"delay":5}}},
+{"id":"h-c-cam-2","cat":"camera","say":"start filming","expect":{"command":"camera","args":{"action":"video"}}},
+{"id":"h-c-cam-3","cat":"camera","say":"make an audio recording of this lecture","expect":{"command":"voiceMemo"}}
 ]
 }

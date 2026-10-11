@@ -1504,6 +1504,26 @@ Decided on the owner's behalf: a routine's steps are words rather than
 commands with typed arguments (the grammar reads them; the editor fills
 in a template's words), and routines may not send, call or delete.
 
+**The camera and voice memos** (`camera`, `voiceMemo`, `stopRecording`;
+`lib/commands-capture.js`). "Take a photo", "take a selfie in 3 seconds",
+"take a picture with a 10 second timer", "record a (selfie) video",
+"record a voice memo called groceries", "stop recording". The Camera
+comes to the front (the answer's `data.opened`: the Assistant's view
+makes way, unlike the apps other answers open behind it) with launch
+params `{capture: "photo" | "video" | "stop", facing: "user" |
+"environment", timer}`: it opens that camera (a selfie: the front one, by
+`facingMode`), counts down over the viewfinder with Cancel, then presses
+its own shutter, so the picture or video is saved and indexed as one
+taken by hand (`apps/camera` App.tsx, `capture.ts` captureOrder). Voice
+Memos takes its Just Type action's `{newMemo: title}` and starts
+recording, and `{stopRecording: true}` stops and saves it; "stop
+recording" stops whichever the Assistant last started. Over the lock
+screen they wait for the unlock. Checked in the simulator with Chromium's
+fake camera (`QTWEBENGINE_CHROMIUM_FLAGS="--use-fake-device-for-media-stream
+--use-fake-ui-for-media-stream"`): the countdown and Cancel over the
+viewfinder, the shot in the last-shot thumbnail, and Voice Memos
+recording "Groceries".
+
 ### Next: 2.0
 
 **In 2.0** the same assistant grows into the agent this document plans:

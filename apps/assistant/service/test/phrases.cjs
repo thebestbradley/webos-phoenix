@@ -32,4 +32,5 @@ module.exports = {
     // The everyday features (lib/commands-everyday.js); replyTo: the answer to a message read aloud.
     notifications: "what did I miss", drivingMode: "I'm driving", announceMessages: "announce my messages on my headphones", replyTo: "",
     routine: "good night", routineList: "what routines do I have", routineManage: "turn on my good night routine",
+    camera: "take a selfie in 3 seconds", voiceMemo: "record a voice memo called groceries", stopRecording: "stop recording",
 };

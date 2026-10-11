@@ -63,6 +63,16 @@
     "expect": { "command": "routineManage", "status": "pending", "args": { "action": "delete" } } },
   { "id": "c-routine-06", "cat": "routines", "say": "make a new routine",
     "expect": { "command": "routineList", "args": { "create": true } } },
+  { "id": "c-cam-01", "cat": "camera", "say": "take a photo", "expect": { "command": "camera", "args": { "action": "photo", "front": false } } },
+  { "id": "c-cam-02", "cat": "camera", "say": "take a selfie in 3 seconds", "expect": { "command": "camera", "args": { "action": "photo", "front": true, "delay": 3 } }, "text": "in 3 seconds" },
+  { "id": "c-cam-03", "cat": "camera", "say": "take a picture with a 10 second timer", "expect": { "command": "camera", "args": { "action": "photo", "delay": 10 } } },
+  { "id": "c-cam-04", "cat": "camera", "say": "record a video", "expect": { "command": "camera", "args": { "action": "video" } } },
+  { "id": "c-cam-05", "cat": "camera", "say": "take a screenshot", "expect": { "command": "screenshot" }, "forbid": ["camera"] },
+  { "id": "c-cam-06", "cat": "camera", "say": "record a voice memo called groceries", "expect": { "command": "voiceMemo", "args": { "title": "Groceries" } } },
+  { "id": "c-cam-07", "cat": "camera", "turns": [
+    { "say": "record a video", "expect": { "command": "camera", "args": { "action": "video" } } },
+    { "say": "stop recording", "expect": { "command": "stopRecording" }, "text": "video" } ] },
+  { "id": "c-cam-08", "cat": "camera", "say": "take a note", "forbid": ["voiceMemo", "camera"], "expect": { "answer": ["clarify", "fallback", "chat"] } },
   { "id": "c-routine-07", "cat": "routines", "say": "good morning",
     "storage": { "assistant:routines": [ { "id": "r2", "name": "Good morning", "phrases": ["good morning"], "enabled": false, "steps": [ { "text": "turn off do not disturb" } ] } ] },
     "expect": { "answer": "chat" }, "forbid": ["routine", "toggle"] }
