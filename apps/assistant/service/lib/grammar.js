@@ -8,7 +8,9 @@
 //
 //   parse(text, ctx) -> {command, args} | null
 //     ctx: {lang ("en"), now (ms), apps: [{id, title, keywords}],
-//           names: [contact names], appCommands: compiled (below)}
+//           names: [contact names], appCommands: compiled (below),
+//           accounts: [{phrases, caps}]: what the accounts connected
+//           through Synergy are called (lib/synergy.js vocabulary)}
 //   compileAppCommands(apps, lang) -> [{key, appId, title, url, launchParam,
 //           risk, quickAction, phrases}]
 //
@@ -95,7 +97,8 @@ function parse(text, ctx) {
     var lang = language(ctx.lang);
     var t = lang.clean(text);
     if (!t) return null;
-    var c = { now: ctx.now || Date.now(), original: String(ctx.original || text), apps: ctx.apps || [], names: ctx.names || [], appCommands: ctx.appCommands || [] };
+    var c = { now: ctx.now || Date.now(), original: String(ctx.original || text), apps: ctx.apps || [], names: ctx.names || [], appCommands: ctx.appCommands || [],
+              accounts: ctx.accounts || [] };
     var found = attempt(lang, t, c, 0);
     if (found || !lang.normalize) return found;
     var fixed = lang.normalize(t, c.names);

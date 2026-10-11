@@ -560,10 +560,11 @@ function nameAtStart(rest, ctx) {
 }
 
 // The chat network a message is to go by ("message sam on telegram: hi",
-// "send a matrix message to sam saying hi"): {t: the words without it, via}.
-var CHAT_NET = "(jabber|xmpp|matrix|delta ?chat|telegram)";
-function chatNetwork(t) {
-    var via = "", m;
+// "send a matrix message to sam saying hi", "text sam on slack: hi"):
+// {t: the words without it, via}. The networks: the services people name
+// and the device's own messaging accounts (lib/lang/en-synergy.js chatWords).
+function chatNetwork(t, ctx) {
+    var via = "", m, CHAT_NET = "(" + synergyWords.chatWords(ctx) + ")";
     function net(w) { return /^(?:jabber|xmpp)$/.test(w) ? "jabber" : /^delta ?chat$/.test(w) ? "deltachat" : w; }
     if ((m = new RegExp("^(send (?:a |an )?)" + CHAT_NET + " (?:message|text|chat|msg) to ").exec(t))) {
         via = net(m[2]);
@@ -581,7 +582,7 @@ function chatNetwork(t) {
 // "text sam i'm late", "send a message to sam saying hi", "tell sam that ...",
 // "message sam on telegram: hi" (via: the chat network)
 function textMessage(t, ctx) {
-    var cn = chatNetwork(t);
+    var cn = chatNetwork(t, ctx);
     var r = textMessageWords(cn.t, ctx);
     if (r && cn.via) r.via = cn.via;
     return r;
@@ -2310,8 +2311,8 @@ var say = {
     },
     // Calendar
     eventWhen: function () { return "When is it? Say a day and a time, like \"tomorrow at 3\"."; },
-    eventAdded: function (title, start, end, allDay, now, location, repeat) {
-        return "Added " + quote(title) + " to your calendar, " + whenText(start, end, allDay, now) + (repeat ? ", " + repeatText(repeat) : "") +
+    eventAdded: function (title, start, end, allDay, now, location, repeat, calendar) {
+        return "Added " + quote(title) + " to your " + (calendar ? calendar + " " : "") + "calendar, " + whenText(start, end, allDay, now) + (repeat ? ", " + repeatText(repeat) : "") +
             (location ? ", at " + location : "") + ".";
     },
     noCalendar: function () { return "There's no calendar to add it to. Open Calendar to set one up."; },
@@ -2880,9 +2881,20 @@ say.done = function (text, checkIn) {
     return DONE.test(t) || (!!checkIn && NO_MORE.test(t));
 };
 
+// What is connected through Synergy (lib/lang/en-synergy.js): its rules
+// before the others (they hear an account named: "on Slack", "my work
+// calendar"), its words for a model's choice, and what it says.
+var synergyWords = require("./en-synergy")({ quote: quote, list: list, plural: plural, cap: cap, cased: cased, excerpt: excerpt, whenText: whenText,
+                                             extract: extract, rules: function () { return rules; } });
+Array.prototype.splice.apply(rules, [rules.map(function (r) { return r[0]; }).indexOf("beyond"), 0].concat(synergyWords.RULES));
+Object.keys(synergyWords.MENTIONS).forEach(function (k) { MENTIONS[k] = synergyWords.MENTIONS[k]; });
+Object.keys(synergyWords.say).forEach(function (k) { say[k] = synergyWords.say[k]; });
+
 module.exports = {
     id: "en",
     name: "English",
+    // The services people name, for lib/commands-synergy.js (canon: "gmail" -> "google").
+    synergy: { serviceOf: synergyWords.serviceOf, canon: synergyWords.canon },
     clean: clean,
     rules: rules,
     casual: casual,

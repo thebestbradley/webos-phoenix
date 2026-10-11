@@ -13,8 +13,71 @@
 var path = require("path");
 var createAssistantService = require(path.join(__dirname, "..", "assistant.js")).createAssistantService;
 
+var fs = require("fs");
+
 var NOW = new Date(2026, 9, 7, 10, 0, 0).getTime();
 function at(d, h, m) { return new Date(2026, 9, d, h, m || 0, 0).getTime(); }
+
+// ---- Synergy, as the device has it ----------------------------------------------------------------
+// The kinds that extend others, as db8 answers a query "from" a parent
+// kind with its sub-kinds' objects too: the system's (runtime/phoenix-runtime.js
+// installSystemKinds, the messaging service's) and every connector's in
+// this tree (configuration/db/kinds), read as they are.
+var APPS_DIR = path.join(__dirname, "..", "..", "..");
+var EXTENDS = { "com.palm.smsmessage:1": "com.palm.message:1", "com.palm.mmsmessage:1": "com.palm.message:1", "com.palm.immessage:1": "com.palm.message:1",
+                "com.palm.contact.palmprofile:1": "com.palm.contact:1", "com.palm.imap.account:1": "com.palm.mail.account:1",
+                "com.palm.pop.account:1": "com.palm.mail.account:1", "com.palm.imap.folder:1": "com.palm.folder:1", "com.palm.pop.folder:1": "com.palm.folder:1",
+                "com.palm.imap.email:1": "com.palm.email:1", "com.palm.pop.email:1": "com.palm.email:1" };
+// The account templates (the connectors' public/accounts, the Phoenix
+// Account's compat overlay, and mojomail's IMAP one), and the apps' share
+// targets (appinfo.json "phoenix".shareTargets).
+var TEMPLATES = {}, SHARE_APPS = [];
+(function readTree() {
+    function each(dir, depth, fn) {
+        var names;
+        try { names = fs.readdirSync(dir); } catch (e) { return; }
+        names.forEach(function (n) {
+            if (n === "node_modules" || n.charAt(0) === ".") return;
+            var p = path.join(dir, n), st;
+            try { st = fs.statSync(p); } catch (e) { return; }
+            if (st.isDirectory() && depth > 0) each(p, depth - 1, fn);
+            else if (st.isFile()) fn(p);
+        });
+    }
+    function json(p) { try { return JSON.parse(fs.readFileSync(p, "utf8")); } catch (e) { return null; } }
+    each(APPS_DIR, 6, function (p) {
+        if (/[\/\\]configuration[\/\\]db[\/\\]kinds[\/\\][^\/\\]+$/.test(p)) {
+            var k = json(p);
+            if (k && k.id && k.extends && k.extends[0]) EXTENDS[k.id] = k.extends[0];
+        } else if (/[\/\\]public[\/\\]accounts[\/\\][^\/\\]+[\/\\][^\/\\]+\.json$/.test(p)) {
+            [].concat(json(p) || []).forEach(function (t) { if (t && t.templateId) TEMPLATES[t.templateId] = t; });
+        } else if (/[\/\\]appinfo\.json$/.test(p)) {
+            var a = json(p);
+            if (a && a.id && a.phoenix && Array.isArray(a.phoenix.shareTargets)) SHARE_APPS.push({ id: a.id, title: a.title, shareTargets: a.phoenix.shareTargets });
+        }
+    });
+    var profile = json(path.join(APPS_DIR, "..", "compat", "rootfs", "usr", "palm", "public", "accounts", "com.palm.palmprofile", "com.palm.palmprofile.json"));
+    if (profile) TEMPLATES[profile.templateId] = profile;
+    // app-services mojomail imap/files/usr/palm/public/accounts/com.palm.imap/com.palm.imap.json (the parts read here).
+    TEMPLATES["com.palm.imap"] = { templateId: "com.palm.imap", loc_name: "IMAP", capabilityProviders: [{ capability: "MAIL", id: "com.palm.imap.mail",
+        implementation: "palm://com.palm.imap/", subKind: "com.palm.imap.email:1" }] };
+})();
+function isa(kind, want, more) {
+    for (var k = kind, i = 0; k && i < 8; k = (more && more[k]) || EXTENDS[k], ++i) if (k === want) return true;
+    return false;
+}
+// listAccounts: the accounts annotated with their templates (Account.annotate).
+function annotate(a, more) {
+    var t = (more && more[a.templateId]) || TEMPLATES[a.templateId];
+    if (!t) return null;
+    var out = JSON.parse(JSON.stringify(t));
+    Object.keys(a).forEach(function (k) { out[k] = a[k]; });
+    out.capabilityProviders = (a.capabilityProviders || (t.capabilityProviders || []).map(function (c) { return { id: c.id, capability: c.capability }; })).map(function (c) {
+        var full = (t.capabilityProviders || []).filter(function (x) { return x.id === c.id; })[0] || {};
+        return Object.assign({}, c, full);
+    });
+    return out;
+}
 
 // opts: {offline, locationAllowed (true | false | null: not asked yet),
 //   seed(put), llm (the on-device model runner), llmRequest (its HTTP:
@@ -63,7 +126,8 @@ function device(opts) {
                   gps: true, network: true, locationAllowed: opts.locationAllowed === undefined ? true : opts.locationAllowed,
                   prefs: { rotationLock: false }, nowPlaying: null,
                   hotspot: false, hotspotPass: false, vpn: "", vpnProfiles: [],
-                  wifi: true, bluetooth: false, airplane: false, flashlight: false, launched: [] };
+                  wifi: true, bluetooth: false, airplane: false, flashlight: false, launched: [],
+                  shared: [], copied: [], driveFiles: opts.driveFiles || {} };
     function okr(o) { return Promise.resolve(Object.assign({ returnValue: true }, o || {})); }
     var luna = {
         call: function (uri, p) {
@@ -74,9 +138,24 @@ function device(opts) {
                                             { id: "org.webosphoenix.settings", title: "Sounds & Ringtones", params: { page: "sounds" } }].concat(opts.apps || []) });
             if (m === "com.palm.applicationManager/launch" || m === "com.palm.applicationManager/open") { state.launched.push(p); return okr(); }
             if (m === "com.palm.db/find") {
-                var kind = p.query.from;
-                return okr({ results: Array.from(db.values()).filter(function (o) { return o._kind === kind || (kind === "com.palm.email:1" && /email:1$/.test(o._kind)); }) });
+                var kind = p.query.from, where = p.query.where || [];
+                return okr({ results: Array.from(db.values()).filter(function (o) {
+                    if (!(isa(o._kind, kind, opts.kinds) || (kind === "com.palm.email:1" && /email:1$/.test(o._kind)))) return false;
+                    return where.every(function (w) { return w.op !== "=" || o[w.prop] === w.val; });
+                }) });
             }
+            // Synergy: the accounts, the apps that take a post, a connector's share, the drives.
+            if (m === "com.palm.service.accounts/listAccounts") {
+                return okr({ results: Array.from(db.values()).filter(function (o) {
+                    return o._kind === "com.palm.account:1" && !o.beingDeleted && (!p.templateId || o.templateId === p.templateId);
+                }).map(function (a) { return annotate(a, opts.templates); }).filter(Boolean) });
+            }
+            if (m === "com.palm.applicationManager/listApps") return okr({ apps: (opts.apps || []).concat(opts.shareApps === false ? [] : SHARE_APPS) });
+            if (/^[\w.]+\/share$/.test(m)) {
+                state.shared.push({ service: m.replace(/\/share$/, ""), params: p });
+                return okr({ posted: { url: "https://posts.example/" + state.shared.length } });
+            }
+            if (m === "org.webosphoenix.filemanager/copy") { state.copied.push(p); return okr({ path: p.to }); }
             if (m === "com.palm.db/put") return okr({ results: p.objects.map(function (o) { return { id: put(o), rev: 1 }; }) });
             if (m === "com.palm.db/merge") { p.objects.forEach(function (o) { db.set(o._id, Object.assign({}, db.get(o._id), o)); }); return okr(); }
             if (m === "com.palm.db/del") { p.ids.forEach(function (id) { db.delete(id); }); return okr(); }
@@ -106,8 +185,14 @@ function device(opts) {
             }
             // What OSE's service does not have (getCurrentPosition was the legacy com.palm.location's).
             if (m.indexOf("com.webos.service.location/") === 0) return Promise.resolve({ returnValue: false, errorCode: -1, errorText: "Unknown method" });
-            if (m === "org.webosphoenix.filemanager/search")
+            if (m === "org.webosphoenix.filemanager/search") {
+                // A drive's files (/media/drives/<accountId>): state.driveFiles[accountId].
+                var drive = /^\/media\/drives\/([^\/]+)/.exec(p.path || "");
+                if (drive) return okr({ entries: (state.driveFiles[drive[1]] || []).filter(function (e) {
+                    return String(p.query).toLowerCase().split(/\s+/).every(function (w) { return e.name.toLowerCase().indexOf(w) >= 0; });
+                }) });
                 return okr({ entries: p.query === "budget" ? [{ name: "Budget 2026.pdf", path: "/media/internal/Documents/Budget 2026.pdf", type: "file", size: 52000, mtime: at(6, 12) }] : [] });
+            }
             if (m === "org.webosphoenix.tethering/setWifi") {
                 if (p.enabled && !state.hotspotPass) return Promise.resolve({ returnValue: false, errorCode: -1, errorText: "The password has 8 to 63 characters" });
                 state.hotspot = p.enabled; return okr();
@@ -186,9 +271,10 @@ function device(opts) {
     function choose(m, choice) { return svc.choose({ threadId: thread, messageId: m.id, choice: choice }).then(check); }
     function of(kind) { return Array.from(db.values()).filter(function (o) { return o._kind === kind; }); }
     function called(part) { return calls.filter(function (c) { return c.uri.indexOf(part) >= 0; }); }
-    return { svc: svc, db: db, luna: luna, of: of, calls: calls, called: called, state: state, ask: ask, askAll: askAll, confirm: confirm, choose: choose,
+    return { svc: svc, db: db, put: put, luna: luna, of: of, calls: calls, called: called, state: state, ask: ask, askAll: askAll, confirm: confirm, choose: choose,
              requests: requests, storage: storage, thread: function () { return thread; }, newThread: function () { thread = ""; },
              setNow: function (t) { clock = t; } };
 }
 
-module.exports = { device: device, NOW: NOW, at: at };
+// For the tests with stand-ins of their own (permissions.test.ts): what Synergy is here.
+module.exports = { device: device, NOW: NOW, at: at, isa: isa, annotate: annotate, SHARE_APPS: SHARE_APPS };

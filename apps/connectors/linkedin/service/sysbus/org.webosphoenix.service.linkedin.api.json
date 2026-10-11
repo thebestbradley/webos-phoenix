@@ -12,5 +12,8 @@
         "org.webosphoenix.service.linkedin/signIn",
         "org.webosphoenix.service.linkedin/share",
         "org.webosphoenix.service.linkedin/importConnections"
+    ],
+    "phoenix.connector.share": [
+        "org.webosphoenix.service.linkedin/share"
     ]
 }

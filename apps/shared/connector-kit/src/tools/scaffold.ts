@@ -15,6 +15,8 @@ import { shareTarget } from "../share";
 import type { ShareAccepts } from "../types";
 
 const HEADER = "// SPDX-License-Identifier: Apache-2.0\n";
+/** The system's group for posting to a connector: the Assistant posts through it (docs/SYNERGY-SDK.md "Sharing to your service"). */
+export const SYSTEM_SHARE_GROUP = "phoenix.connector.share";
 
 export interface Scaffold { files: Record<string, string>; service: string; templateId: string }
 
@@ -82,9 +84,11 @@ export function scaffold(appId: string, capability: string, options?: { share?: 
     files["configuration/db/kinds/" + dataKind.replace(/:\d+$/, "")] = kind(dataKind, generic);
     files["configuration/db/kinds/" + stateKind.replace(/:\d+$/, "")] = kind(stateKind);
     files["configuration/db/kinds/" + itemKind.replace(/:\d+$/, "")] = kind(itemKind);
+    // The accounts service keeps it; the Assistant reads it (docs/AI-AND-MCP.md "The Assistant and Synergy").
     files["configuration/db/permissions/" + dataKind.replace(/:\d+$/, "")] = js([{
         type: "db.kind", object: dataKind, caller: "com.palm.service.accounts",
-        operations: { read: "allow", create: "allow", delete: "allow", update: "allow" } }]);
+        operations: { read: "allow", create: "allow", delete: "allow", update: "allow" } },
+        { type: "db.kind", object: dataKind, caller: "org.webosphoenix.assistant", operations: { read: "allow" } }]);
     files["service/package.json"] = js({ name: service, version: "0.1.0", private: true, main: "service.js", license: "Apache-2.0",
                                          dependencies: { "@phoenix/connector-kit": "*" } });
     files["service/service.js"] = HEADER + "// " + service + " on a device (run-js-service).\n\"use strict\";\n" +
@@ -139,9 +143,9 @@ export function scaffold(appId: string, capability: string, options?: { share?: 
     files[sysbus + ".role.json"] = js({ appId: service, type: "regular", allowedNames: [service],
         permissions: [{ service, outbound: [service, "com.palm.db", "com.palm.tempdb", "com.palm.activitymanager", "com.palm.service.accounts"] }] });
     files[sysbus + ".api.json"] = js(Object.assign({ "accounts.transport": ["checkCredentials", "onCreate", "onEnabled", "onCredentialsChanged", "onDelete", "sync"]
-        .map((m) => service + "/" + m) }, share ? { [shareGroup]: [service + "/share"] } : {}));
+        .map((m) => service + "/" + m) }, share ? { [shareGroup]: [service + "/share"], [SYSTEM_SHARE_GROUP]: [service + "/share"] } : {}));
     files[sysbus + ".perm.json"] = js({ [service]: ["database.operation", "activity.operation", "accounts.operation", "accounts.transport"] });
-    files[sysbus + ".groups.json"] = js(Object.assign({ allowedNames: [service], "accounts.transport": ["oem"] }, share ? { [shareGroup]: ["oem"] } : {}));
+    files[sysbus + ".groups.json"] = js(Object.assign({ allowedNames: [service], "accounts.transport": ["oem"] }, share ? { [shareGroup]: ["oem"], [SYSTEM_SHARE_GROUP]: ["oem"] } : {}));
     files[sysbus + ".manifest.json"] = js({ id: service, version: "0.1.0",
         roleFiles: ["/usr/share/luna-service2/roles.d/" + service + ".role.json"],
         serviceFiles: ["/usr/share/luna-service2/services.d/" + service + ".service"],
