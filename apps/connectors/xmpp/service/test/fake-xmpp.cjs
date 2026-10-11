@@ -532,11 +532,20 @@ function createFakeXmpp(options) {
             return reply(404, "");
         },
         addUser: function (name, password) { users[name] = password; },
+        // The user signed in now (the first stream), or null.
+        signedIn: function () { var s = sessions.filter(function (x) { return x.user; })[0]; return s ? s.user : null; },
         // Any stanza for a user, as a remote server would route it.
         deliverRaw: function (user, el) { return deliverTo(bare(user), el); },
         // A message to user from anyone (a buddy, or a user of another server); opts: {oob, id, type}.
         deliver: function (from, user, text, opts) {
             opts = opts || {};
+            // {picture: true}: the last picture put on the upload host, sent back as its link.
+            if (opts.picture) {
+                var last = server.lastUpload();
+                if (!last) return null;
+                text = last;
+                opts = Object.assign({}, opts, { oob: last });
+            }
             var el = X.el("message", { from: from.indexOf("/") < 0 ? from + "/phone" : from, type: opts.type || "chat", id: opts.id || "m" + (++idSeq) },
                           text ? X.el("body", {}, text) : null, opts.oob ? X.el("x", { xmlns: NS.oob }, X.el("url", {}, opts.oob)) : null,
                           X.el("markable", { xmlns: NS.markers }), X.el("request", { xmlns: NS.receipts }));

@@ -12039,14 +12039,19 @@
         // the Jabber connector's fake server, apps/connectors/xmpp/service/test), in the
         // page that keeps the connection.
         var demos = {};
-        var DEMO_HOSTS = { "org.webosphoenix.service.xmpp": { hosts: ["chat.example", "upload.chat.example"], dir: "/usr/share/phoenix/demo/xmpp/", module: "test/fake-xmpp.cjs" } };
+        var DEMO_HOSTS = {
+            "org.webosphoenix.service.xmpp": { hosts: ["chat.example", "upload.chat.example"], dir: "/usr/share/phoenix/demo/xmpp/",
+                                               module: "test/fake-xmpp.cjs", make: "demoServer" },
+            "org.webosphoenix.service.matrix": { hosts: ["matrix.example"], dir: "/usr/share/phoenix/demo/matrix/",
+                                                 module: "test/fake-homeserver.cjs", make: "demoHomeserver" }
+        };
         function demoServer(service, host) {
             var d = DEMO_HOSTS[service];
             if (!d || d.hosts.indexOf(String(host).replace(/:\d+$/, "")) < 0 || !hosted[service]) return null;
             if (!demos[service]) {
                 try {
                     var mod = nodeServiceLoader(d.dir, service + " demo")(d.module);
-                    demos[service] = mod.demoServer();
+                    demos[service] = mod[d.make]();
                 } catch (e) {
                     console.warn("[phoenix-runtime] no demo server for " + service + ": " + (e && e.message));
                     demos[service] = false;
@@ -12089,15 +12094,14 @@
             var demo = demos[service];
             if (!demo) return Promise.resolve(fail("NOT_FOUND", "No demo server runs here"));
             if (p.op === "deliver") {
-                var user = (demo.sessions()[0] || {}).user;
+                var user = demo.signedIn();
                 if (!user) return Promise.resolve(fail("NOT_FOUND", "No account is signed in to the demo server"));
-                // {picture: true}: the last picture put on the server, sent back (its link, XEP-0066).
-                var link = p.picture ? demo.lastUpload && demo.lastUpload() : null;
-                if (p.picture && !link) return Promise.resolve(fail("NOT_FOUND", "No picture on the demo server yet"));
-                demo.deliver(p.from, user, link || p.text, link ? { oob: link } : undefined);
+                // {picture: true}: the last picture put on the server, sent back.
+                if (!demo.deliver(p.from, user, p.text, { picture: !!p.picture }))
+                    return Promise.resolve(fail("NOT_FOUND", "Nothing to send back yet"));
                 return Promise.resolve(ok({ to: user }));
             }
-            if (p.op === "presence") return Promise.resolve(ok({ done: demo.setPresence(p.jid, p.show, p.status) }));
+            if (p.op === "presence" && demo.setPresence) return Promise.resolve(ok({ done: demo.setPresence(p.jid, p.show, p.status) }));
             return Promise.resolve(fail(-1, "No demo op " + p.op));
         }
         runtime.connectorDemo = function (service, p) {
@@ -12110,7 +12114,7 @@
                 var tries = 0;
                 (function wait() {
                     var d = demos[service];
-                    if ((d && d.sessions().length) || ++tries > 60) return resolve(demoOp(service, p));
+                    if ((d && d.signedIn()) || ++tries > 60) return resolve(demoOp(service, p));
                     setTimeout(wait, 250);
                 })();
             });

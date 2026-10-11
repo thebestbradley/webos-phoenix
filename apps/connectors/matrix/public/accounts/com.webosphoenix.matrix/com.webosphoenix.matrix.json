@@ -1,0 +1,75 @@
+{
+    "templateId": "com.webosphoenix.matrix",
+    "loc_name": "Matrix",
+    "icon": {
+        "loc_32x32": "images/matrix-32x32.png",
+        "loc_48x48": "images/matrix-48x48.png"
+    },
+    "loc_usernameLabel": "MATRIX ID",
+    "loc_usernameExplainLabel": "@you:matrix.org",
+    "loc_passwordLabel": "PASSWORD",
+    "signUp": {
+        "url": "https://matrix.org/ecosystem/hosting/"
+    },
+    "validator": {
+        "customUI": {
+            "appId": "org.webosphoenix.matrix",
+            "name": "accounts/signin.html"
+        },
+        "address": "palm://org.webosphoenix.service.matrix/checkCredentials"
+    },
+    "readPermissions": [
+        "org.webosphoenix.service.matrix",
+        "org.webosphoenix.matrix",
+        "org.webosphoenix.messaging"
+    ],
+    "writePermissions": [
+        "org.webosphoenix.matrix",
+        "org.webosphoenix.messaging"
+    ],
+    "capabilityProviders": [
+        {
+            "capability": "CONTACTS",
+            "id": "com.webosphoenix.matrix.contacts",
+            "loc_name": "People of your direct chats",
+            "icon": {
+                "loc_32x32": "images/matrix-32x32.png",
+                "loc_48x48": "images/matrix-48x48.png"
+            },
+            "dbkinds": {
+                "contact": "com.palm.contact.matrix:1"
+            },
+            "readOnlyData": true,
+            "implementation": "palm://org.webosphoenix.service.matrix/",
+            "onCreate": "palm://org.webosphoenix.service.matrix/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.matrix/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.matrix/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.matrix/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.matrix/sync"
+        },
+        {
+            "capability": "MESSAGING",
+            "capabilitySubtype": "IM",
+            "id": "com.webosphoenix.matrix.im",
+            "serviceName": "type_matrix",
+            "loc_name": "Rooms and direct chats",
+            "loc_shortName": "Matrix",
+            "chatWithNonBuddies": true,
+            "icon": {
+                "loc_32x32": "images/matrix-32x32.png",
+                "loc_48x48": "images/matrix-48x48.png",
+                "splitter": "images/matrix-32x32.png"
+            },
+            "dbkinds": {
+                "immessage": "com.palm.immessage.matrix:1",
+                "imloginstate": "com.palm.imloginstate.matrix:1"
+            },
+            "implementation": "palm://org.webosphoenix.service.matrix/",
+            "onCreate": "palm://org.webosphoenix.service.matrix/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.matrix/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.matrix/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.matrix/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.matrix/sync"
+        }
+    ]
+}

@@ -129,7 +129,7 @@ export function Conversation({ threadId, people, buddies, header, initialText, i
                             </div>
                         ) : im ? (
                             <div className="msg-header-sub" data-testid="thread-service">
-                                {thread?.replyAddress && thread.displayName !== thread.replyAddress ? "@" + thread.replyAddress + " · " : ""}
+                                {thread?.replyAddress && thread.displayName !== thread.replyAddress ? (thread.replyAddress.startsWith("@") ? "" : "@") + thread.replyAddress + " · " : ""}
                                 {serviceLabel(thread?.replyService)}
                             </div>
                         ) : thread?.replyAddress && thread.displayName !== thread.replyAddress &&
