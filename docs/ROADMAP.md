@@ -72,6 +72,7 @@ Phoenix UI, PixiOS with Bennu UI, an XR bird) are in [BRANDING.md](BRANDING.md).
 | [LUNEOS.md](LUNEOS.md), [WEBOS-FAMILY.md](WEBOS-FAMILY.md) | LuneOS, webOS Community Edition, OSE and Phoenix compared; which LuneOS layers to build on | M1, M3 |
 | [LEGAL.md](LEGAL.md), [BRANDING.md](BRANDING.md) | Licences, artwork and sounds, names and trademarks | all |
 | [PLATFORM.md](PLATFORM.md), [PLATFORM-BUILD-PROMPT.md](PLATFORM-BUILD-PROMPT.md) | The servers: website, account, developer portal, the signed feeds (catalog, updates, drivers), downloads, cloud services; the prompt for building them in Laravel | 1.0 |
+| [DEV-EXTENSION-PROMPT.md](DEV-EXTENSION-PROMPT.md) | The brief for a later VS Code and Cursor extension for developers (its own repository) | later |
 
 ## Decisions so far
 
@@ -499,6 +500,12 @@ supported alongside it.
       for pages without a bundler; the four Notes demos use it
       ([APP-SDK.md](APP-SDK.md)). Next: publishing it (OPEN-QUESTIONS.md
       Q62), a full Enact theme (Q63)
+- [ ] Later, when there are people for it: a developer extension for VS
+      Code and Cursor, in its own repository (the owner, 11 October 2026):
+      installs and updates the simulator, new projects in each supported
+      framework, run on the device profiles, connector tests, the catalog's
+      checks, publishing. The brief for the agent that builds it:
+      [DEV-EXTENSION-PROMPT.md](DEV-EXTENSION-PROMPT.md)
 - [ ] Screenshots on a par with iOS and Android: preview, markup, full
       page, recording, text in screenshots, Ask and circle to look up
       ([SCREENSHOTS.md](SCREENSHOTS.md) SC3-SC8)
