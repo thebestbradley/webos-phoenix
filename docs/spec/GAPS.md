@@ -68,6 +68,17 @@ device, not yet run"):
   `signin`) and the key store behind it (`services/oauth/service.js` keeps
   tokens in a file meanwhile); the Fediverse account needs both to sign in
   on hardware (docs/SYNERGY-CONNECTORS.md C2, C3).
+- 🟡 **P1** Messaging accounts (done 11 October 2026: Jabber, Matrix, Delta Chat,
+  Unofficial Telegram as real transports, docs/SYNERGY-CONNECTORS.md 7). Left:
+  end-to-end encryption on Jabber (OMEMO: no permissive library, OPEN-QUESTIONS
+  Q81) and Matrix (matrix-sdk-crypto, Q82; encrypted rooms say they can't be read
+  here); Delta Chat's core in the image (MPL-2.0, the owner's decision, Q80) and
+  its QR invitations and contact requests; Telegram's app id (Q16), a TDLib build
+  on hardware (meta-phoenix `tdlib`, never built yet), channels (sponsored
+  messages, Q83) and starting secret chats; Jabber's push (XEP-0357 needs an app
+  server), SCRAM's channel binding and a page for subscription requests (Q84);
+  all of it run on a device. In the simulator, pictures kept from a chat are up
+  to 1 MB (its file store).
 
 **Keyboard and input:**
 

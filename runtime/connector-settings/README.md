@@ -21,3 +21,8 @@ definition, docs/SYNERGY-SDK.md); the kit gives them through
 
 Without its file, a connector that needs one says so: the account type shows
 "not available in this build".
+
+The simulator has no TDLib: with any app id here, the Unofficial Telegram
+account reaches the demo stand-in (`apps/telegram/service/test/fake-tdjson.cjs`:
+any phone number, the code 12345), as `tools/test-telegram.cjs` does with a
+test id it writes and removes.

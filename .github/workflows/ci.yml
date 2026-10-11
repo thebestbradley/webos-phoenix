@@ -358,6 +358,11 @@ jobs:
           t node tools/test-docs.cjs --tablet --out app-tests/docs-tablet
           t node tools/test-dav-sync.cjs --out app-tests/dav-phone
           t node tools/test-dav-sync.cjs --tablet --out app-tests/dav-tablet
+          t node tools/test-xmpp.cjs --out app-tests/xmpp-phone
+          t node tools/test-matrix.cjs --out app-tests/matrix-phone
+          t node tools/test-deltachat.cjs --out app-tests/deltachat-phone
+          t node tools/test-telegram.cjs --out app-tests/telegram-phone
+          t node tools/test-xmpp-server.cjs
           t node tools/test-orientation.cjs --out app-tests/orientation-phone
           t node tools/test-orientation.cjs --tablet --out app-tests/orientation-tablet
           t node tools/test-keyboard.cjs --out app-tests/keyboard-phone

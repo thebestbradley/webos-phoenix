@@ -283,6 +283,11 @@ WhatsApp message into the right person's thread (2.5).
 | **Email as a message** | Mail transports (IMAP/JMAP) | Device | – | – | Not merged into Messaging by default (2.6) |
 | **Google Messages, iMessage, Instagram, Facebook Messenger, LinkedIn, X** | Only reverse-engineered bridges (mautrix-gmessages, -meta, -twitter, -linkedin) or none (iMessage, SYNERGY.md 2.12) | Server | Varies | Against the networks' terms | Only as Matrix rooms, at the user's risk |
 
+*Built (11 October 2026):* Matrix, XMPP, Telegram ("Unofficial Telegram") and Delta
+Chat, as Phoenix transports (SYNERGY-CONNECTORS.md 7, "Messaging accounts, as
+built"); end-to-end encryption on Matrix and XMPP is still to come
+(OPEN-QUESTIONS Q81, Q82).
+
 ### 2.2b RCS
 
 RCS is a requirement: it is what Android's and iPhone's own messaging apps
@@ -343,7 +348,7 @@ transport on the phone and signs in the user directly.
 
 | Group | Networks | How |
 | --- | --- | --- |
-| **Native: open or officially allowed** | SMS/MMS; Matrix; XMPP; Telegram (own `api_id`, TDLib) [T1]; Fediverse direct messages and Bluesky DMs (3.1); Delta Chat and other chat-over-email (IMAP) *(not yet researched in detail)*; IRC | Phoenix transports, no server needed beyond the network's own |
+| **Native: open or officially allowed** | SMS/MMS; Matrix; XMPP; Telegram (own `api_id`, TDLib) [T1]; Fediverse direct messages and Bluesky DMs (3.1); Delta Chat (its own core, MPL-2.0, run as a separate program) and other chat-over-email (IMAP); IRC | Phoenix transports, no server needed beyond the network's own |
 | **Native through an official work API** *(each needs checking before code)* | Slack (official Web API with a user token; the workspace may have to approve the app); Microsoft Teams chats (Microsoft Graph, the same Entra app as 1.3); Google Chat (Chat API with user sign-in; Workspace accounts); Zulip, Mattermost, Rocket.Chat (open REST APIs) | Phoenix transports, one app registration per service |
 | **Official, but only for a messaging provider in the EU** | WhatsApp, through Meta's DMA interoperability offer [W1][W2]; Messenger is also covered by the DMA *(whether Meta has opened it is unverified)* | Not a phone client: the provider runs a service. See 2.2 and open question 11 |
 | **Only through the user's own bridge (against the network's terms)** | WhatsApp, Signal, Discord, Messenger, Instagram, Google Messages, LinkedIn, X | A Matrix bridge the user runs or pays for; Phoenix shows it as a Matrix room with the network's label |
