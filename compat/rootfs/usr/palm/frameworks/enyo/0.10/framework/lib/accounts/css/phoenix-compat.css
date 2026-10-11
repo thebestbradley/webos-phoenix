@@ -16,8 +16,12 @@
 		width: auto;
 	}
 
-	/* Account rows: icon, name and address in a box styled width:420px. */
-	.accounts-list-item > .enyo-hflexbox {
+	/* Account rows: icon, name and address in a box styled width:420px
+	   (source/accounts-list.js:43). Only that box: Account Settings' rows
+	   (source/modify.js:35-38) are the same .accounts-list-item with a
+	   ToggleButton, also an .enyo-hflexbox, which must keep its own width
+	   so the label (flex 1) pushes it to the right edge. */
+	.accounts-list-item > .enyo-hflexbox[style*="420px"] {
 		width: auto !important;
 		-webkit-box-flex: 1;
 		min-width: 0;
