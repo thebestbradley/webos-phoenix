@@ -1,6 +1,6 @@
 # Synergy accounts, a connector catalog and a developer kit (draft)
 
-*Draft, 10 October 2026, with what is built since: phases C0, C1 (the kit) and C2 (the Fediverse account), each in an "As built" note; since, sharing in the kit (a connector's accounts in the share sheet, SYNERGY-SDK.md section 7). The Marketplace view this page calls the Accounts view is named **Connections** (the owner, section 5). Developers: [SYNERGY-SDK.md](SYNERGY-SDK.md).*
+*Draft, 10 October 2026, with what is built since: phases C0, C1 (the kit) and C2 (the Fediverse account), each in an "As built" note; since, sharing in the kit (a connector's accounts in the share sheet, SYNERGY-SDK.md section 7); and the provider accounts built ahead of their registrations, Todoist and Bluesky working fully without any (section 8, 11 October 2026). The Marketplace view this page calls the Accounts view is named **Connections** (the owner, section 5). Developers: [SYNERGY-SDK.md](SYNERGY-SDK.md).*
 
 The owner asked: which accounts fit our Accounts app and fill Synergy with a
 modern twist; a feed for accounts in the catalog with its own Synergy view;
@@ -96,8 +96,8 @@ the earlier pages.
 | Any CardDAV/CalDAV server | CardDAV, CalDAV | PW | none | Built (`com.webosphoenix.dav`) | done |
 | iCloud, Fastmail, Nextcloud, Yahoo presets | DAV with fixed hosts | PW, LF | none | Presets planned (SM 4.1) | P1 |
 | Subscribed calendars (webcal) | HTTPS `.ics` | none | none | Built (`com.webosphoenix.webcal`) | done |
-| Microsoft 365 / Outlook.com | Graph | OAuth | Entra app | SM 1.3; EWS ends 2026-27 | P1 |
-| Google | People + Calendar API | OAuth | Cloud project + verification | SM 1.2 | P2 |
+| Microsoft 365 / Outlook.com | Graph | OAuth | Entra app | SM 1.3; EWS ends 2026-27. *Built (section 8), waiting on the registration* | P1 |
+| Google | People + Calendar API | OAuth | Cloud project + verification | SM 1.2. *Built (section 8), waiting on the registration* | P2 |
 | **new** Holidays, sports, school calendars as a curated list | `.ics` feeds through the webcal account | none | none | A "calendar directory" in the Accounts view (section 2); check each feed's terms | P2 |
 | **new** Company directory | LDAP / CardDAV directory search (REMOTECONTACTS) | PW | none | Just Type remote contacts (SM 4.1 `REMOTECONTACTS`) | P3 |
 
@@ -129,7 +129,7 @@ the earlier pages.
 | Account | Protocol / API | Auth | Reg | Terms / notes | P |
 | --- | --- | --- | --- | --- | --- |
 | **Fediverse** (Mastodon, Pixelfed, GoToSocial, Akkoma, Friendica, ...): **the flagship connector** (the owner, 10 October 2026) | Mastodon client API, NodeInfo | OAuth per server, the app registering itself with each server | none | SM 3.1: contact enrichment, notifications, DMs, sharing; phase C2 | **P0** |
-| Bluesky | AT Protocol | OAuth (atproto) | static client-metadata file | SM 3.1 | P2 |
+| Bluesky | AT Protocol | OAuth (atproto), or an app password | static client-metadata file | SM 3.1. *Built (section 8): works with an app password; OAuth waits on hosting the file* | P2 |
 | **new** RSS reader sync: FreshRSS, Miniflux, Nextcloud News, Inoreader, Feedly | Google Reader API (FreshRSS, Inoreader), Miniflux REST, Fever, Nextcloud News API | Key / PW (Inoreader and Feedly: OAuth + registration) | none for self-hosted | A new `FEEDS` capability: subscriptions and read state, for a reader app or a "Feeds" exhibition/Just Type. Plain RSS needs no account at all | P2 |
 | **new** "Follow" on the open web | RSS/Atom, WebSub, h-feed | none | none | Subscriptions saved locally; a FEEDS account only syncs them | P3 |
 
@@ -149,8 +149,8 @@ the earlier pages.
 | Account | Protocol / API | Auth | Reg | Terms / notes | P |
 | --- | --- | --- | --- | --- | --- |
 | CalDAV tasks (VTODO) | CalDAV | PW | none | Fills the Tasks app's missing sync (`com.palm.task:1`); the DAV engine already keeps VTODO | P1 |
-| Microsoft To Do, Google Tasks | Graph, Tasks API | OAuth | as above | SYNERGY.md phase 4 | P2 |
-| **new** Todoist, Vikunja | REST | Key (Todoist: OAuth or personal token) | Todoist app *(optional)* | Todoist's API terms *(check)*; Vikunja is self-hosted (AGPL server, separate program) | P3 |
+| Microsoft To Do, Google Tasks | Graph, Tasks API | OAuth | as above | SYNERGY.md phase 4. *Built with the Microsoft and Google accounts (section 8)* | P2 |
+| **new** Todoist, Vikunja | REST | Key (Todoist: OAuth or personal token) | Todoist app *(optional)* | Todoist's API terms *(check)*; Vikunja is self-hosted (AGPL server, separate program). *Todoist built (section 8), working with the personal token* | P3 |
 | **new** Notes: Nextcloud Notes, Joplin (WebDAV/Joplin Server), Standard Notes | REST, WebDAV, E2EE API | PW / Key | none | `MEMOS` (legacy name; Notes uses `com.palm.note:1`). Standard Notes is end-to-end encrypted: keys stay on the device (section 4) | P2 |
 | **new** Bookmarks: Nextcloud Bookmarks, Floccus (WebDAV/Git file), xBrowserSync | REST, WebDAV | PW / LF | none | A new `BOOKMARKS` capability for the browser | P3 |
 | **new** Podcasts: gpodder.net, Nextcloud gPodder Sync | gpodder API v2 | PW | none | A new `PODCASTS` capability: subscriptions and episode progress for `apps/podcasts`, which already reads OPML | P2 |
@@ -765,3 +765,65 @@ Not likely, and why:
 | Instagram | Its API is only for business and creator accounts; no direct messages for personal ones | Its web app |
 | Threads | Its API posts and reads the user's own posts only | The Fediverse account reaches Threads profiles that share to the fediverse |
 | YouTube as an account | Little an account adds | Channel subscriptions as RSS feeds through the feeds connector |
+
+## 8. Provider connectors, built ahead of their registrations (11 October 2026)
+
+The accounts that need a provider's registration or keys, written against
+each provider's documented API on the kit and tested against local
+stand-ins of those APIs (`apps/connectors/testing/`: their sign-in pages,
+token endpoints and APIs, one server for all of them in
+`fake-providers.cjs`). Each is a package in `apps/connectors/<name>/` (a
+hidden app with the sign-in page, the account template, db8 kinds and
+permissions, the Node service and its bus files), listed in the catalog's
+Connections with `status: "experimental"` and a sign-up link, and in the
+device's pre-installed list as a catalog entry (installed by those who want
+it). Without its registration an account type stays listed and its sign-in
+page says "&lt;Provider&gt; is not available in this build"; Todoist and
+Bluesky have sign-ins that need none and work fully today. What each
+provider asks of Phoenix: [DEVELOPER-APPS.md](DEVELOPER-APPS.md) "The
+accounts".
+
+| Connector | Built | Tested against | Waiting on |
+| --- | --- | --- | --- |
+| **Todoist** | Tasks both ways: projects as lists, open tasks and those done in the last 14 days (due dates, priorities, notes); "Add to Todoist" in the share sheet; sign-in with the personal API token, or Todoist's OAuth | Todoist API v1 and OAuth stand-in (13 tests with the kit's conformance suite); Chromium end to end (Connections, sign-in, Tasks both ways, sharing); phoenix-sim | Nothing with the token. Sign In with Todoist: Phoenix's Todoist app and where its secret lives (Q100) |
+| **Bluesky** | People followed as contacts; direct messages in Messaging both ways (labelled not end-to-end encrypted); likes, reposts, follows, mentions, replies and quotes as notifications; posting from the share sheet (link facets, up to four pictures with alt text, one post per share); sign-in with an app password, or AT Protocol OAuth (PAR, PKCE, DPoP) | A PDS, PLC directory and authorization server stand-in that checks DPoP proofs and nonces (17 tests); Chromium end to end; phoenix-sim (sign-in, contacts, a reply sent from Messaging) | Nothing with an app password. Sign In with Bluesky: the client metadata hosted (Q97) and the OAuth service lending its sheet (Q98) |
+| **Microsoft** (Outlook.com, Microsoft 365) | Graph: contacts, calendars and events (repeats both ways, reminders, attendees, a Teams meeting's join address on the event), Microsoft To Do lists and tasks, all both ways; one sign-in (public client, PKCE) | Graph and Microsoft identity platform stand-in (12 tests) | Phoenix's Entra app (the OneDrive one, Q17) with the scopes added. Outlook mail in Email: not built (Q101) |
+| **Google** | Calendar (sync tokens, a 410 starting over), contacts through the People API, Google Tasks (a task moved between lists keeps its id), all both ways; Meet addresses on events | Calendar, People, Tasks and OAuth stand-in (10 tests) | Phoenix's Google project (the Drive one) with the three APIs on, and Google's verification of the sensitive scopes before more than 100 users |
+| **Zoom** | Upcoming meetings in a read-only "Zoom" calendar with where to join (a recurring meeting's occurrences one by one); a `createMeeting` method that schedules one (neither Calendar nor the Assistant calls it yet) | Zoom API v2 and OAuth stand-in (7 tests) | Phoenix's Zoom app, and the token relay with the OAuth service's broker (Q49, Q99) |
+| **LinkedIn** | Sign In with LinkedIn (OpenID Connect); sharing as the user (Posts API); connections on contact cards from the user's own `Connections.csv`, imported from a file | OpenID Connect, Posts API and OAuth stand-in (11 tests, the CSV reader among them) | Phoenix's LinkedIn app (its Page verified), and the token relay |
+| **Slack** | Direct messages and channels in Messaging both ways (one conversation's history per sync outside the Slack Marketplace, all of them once listed), the workspace's people as contacts, direct messages and mentions as notifications | Slack Web API stand-in with Slack's 2025 limits (8 tests) | Phoenix's Slack app, the token relay with the broker, and the Slack Marketplace listing (Q17) |
+
+Shared pieces in the kit for these: `registeredClient`, `notAvailable`,
+`viaRelay`, `oauthSignIn` and `restApi` (`src/registered.ts`), calendar and
+task helpers (`src/pim.ts`: containers, repeat rules through synckit's
+iCalendar reader, reminders, all-day spans, plain text from HTML notes,
+meeting addresses), and an account's syncs and methods taking turns with
+its state (`inTurn`, which an import racing a sync showed was needed).
+Around them: Tasks puts a new task in the kind of its list's account
+(`@phoenix/luna` tasks.ts), as the Assistant now does; the accounts
+library's Tasks switch shows (a compat overlay of `modify.js`, which hid
+TASKS "until there is a tasks app"); Messaging knows `type_bluesky` and
+`type_slack`.
+
+**Not done in this round** (the brief's "if time"): the iCloud presets,
+CalDAV tasks, Immich, Jellyfin and Navidrome (`MEDIA`), FreshRSS and
+Miniflux (`FEEDS`). None needs a registration.
+
+**Known limits.** An edit made on the device (a task ticked in Tasks, an
+event moved in Calendar) reaches the provider at the account's next sync
+(every 15 minutes; Contacts' and Calendar's Sync Now sooner), not at once:
+the kit has no watch on local changes yet, as mojomail's IMAP transport had
+(`ImapActivityFactory.cpp` lines 174-184, a db8 watch on its `upsyncRev`),
+and the simulator's activity manager does not fire db8 triggers. The
+Assistant's new events still go to the device's own calendar.
+
+Screenshots from phoenix-sim with the stand-ins:
+[Bluesky's sign-in](screenshots/connectors-bluesky-signin.png),
+[Todoist's projects in Tasks](screenshots/connectors-todoist-tasks.png),
+[a Bluesky conversation in Messaging](screenshots/connectors-bluesky-messaging.png).
+
+```sh
+cd apps && npx vitest run connectors shared/connector-kit
+NODE_PATH="$(npm root -g)" node tools/test-connectors.cjs   # Todoist and Bluesky in Chromium
+node apps/connectors/testing/fake-providers.cjs 8098       # the stand-ins, for the simulator
+```

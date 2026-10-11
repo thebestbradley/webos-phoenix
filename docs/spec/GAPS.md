@@ -76,6 +76,17 @@ device, not yet run"):
   back and Photos' album source (SYNERGY-MODERN.md 3.3); keeping a drive's
   files on the device on purpose (only the cache of what was opened); the
   image's `/etc/palm/drives/clients.json` setting (OPEN-QUESTIONS Q76).
+- 🟡 **P2** Provider accounts (docs/SYNERGY-CONNECTORS.md 8; built and tested
+  against stand-ins, `status: "experimental"`): Todoist (personal token) and
+  Bluesky (app password) work fully; Microsoft, Google, Zoom, LinkedIn and
+  Slack, and Sign In with Todoist and with Bluesky, wait on Phoenix's
+  registrations (docs/DEVELOPER-APPS.md "The accounts", OPEN-QUESTIONS Q17,
+  Q97, Q100), the token relay with the OAuth service's broker (Q49, Q99) and
+  its sheet for the AT Protocol (Q98). Still to do: Outlook mail (Q101); an
+  edit made on the device goes up at the next sync, as the kit has no watch
+  on local changes (mojomail's IMAP had one); Zoom's `createMeeting` from
+  Calendar and the Assistant; the iCloud presets, CalDAV tasks, Immich,
+  Jellyfin and Navidrome (`MEDIA`), FreshRSS and Miniflux (`FEEDS`).
 
 **Keyboard and input:**
 

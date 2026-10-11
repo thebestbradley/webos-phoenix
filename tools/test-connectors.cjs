@@ -2,8 +2,8 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The provider connectors end to end (docs/SYNERGY-CONNECTORS.md "Status of
-// the connectors"), without the internet, in headless Chromium with
+// The provider connectors end to end (docs/SYNERGY-CONNECTORS.md 8, "Provider
+// connectors"), without the internet, in headless Chromium with
 // runtime/phoenix-runtime.js against the stand-ins of
 // apps/connectors/testing/fake-providers.cjs and the real Marketplace
 // catalog (server/marketplace, PHP). This build has no provider

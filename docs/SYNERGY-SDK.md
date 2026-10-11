@@ -300,6 +300,33 @@ NodeInfo find the server, the app registers itself with it once, then
 `authorize`. On a device the sheet and the key store are placeholders until
 C3 (`services/oauth/service.js`).
 
+**A provider with one registration** (Microsoft, Google, Todoist, ...: an
+app Phoenix registers once, [DEVELOPER-APPS.md](DEVELOPER-APPS.md)) has the
+kit's helpers (`src/registered.ts`):
+
+| | |
+| --- | --- |
+| `kit.registeredClient(ctx, "<name>/clients.json", "<provider>", defaults)` | The registration from the image's setting `/etc/palm/<name>/clients.json` over your defaults (endpoints, scope, `params`), or `null` when the build has none; a test server's addresses in it may be reached |
+| `kit.notAvailable(name, what?)` | The error a sign-in page shows instead of its Sign In: "&lt;what&gt; is not available in this build", `NOT_AVAILABLE` |
+| `kit.viaRelay(ctx, client)` | For a provider whose token exchange needs the client secret: the registration through Phoenix's token relay (PLATFORM.md 6.5.4), or `null` while the OAuth service has no broker |
+| `kit.oauthSignIn(ctx, client, {accountId?, scope?})` | `authorize` with the registration -> the key; `kit.forgetOldKey(ctx, accountId, key)` forgets the account's previous one |
+| `kit.restApi(ctx, {base, token, headers?, describe?})` | `get`, `post`, `patch`, `put`, `del` and `send` of JSON (or a form) with the Bearer token; an answer of 400 or more throws with its status and the provider's explanation (`401_UNAUTHORIZED`, `PERMISSION_DENIED`, `NOT_FOUND`) |
+
+Calendars and task lists (`src/pim.ts`): `kit.syncContainers(ctx, kind,
+[{remoteId, fields}])` keeps an account's calendars or lists and answers
+their ids, for the events' `calendarId` or the tasks' `listId`;
+`kit.rruleOf(rule, {dtstart, tzId, allDay})` reads an iCalendar `RRULE` into
+the Calendar app's form and `kit.rruleText` writes one back;
+`kit.alarmBefore(minutes)` and `kit.alarmMinutes(alarm)`, reminders;
+`kit.allDaySpan` and `kit.allDayDates`, the Calendar's all-day times;
+`kit.plainText(html)`, a note from HTML; `kit.joinUrlOf(...texts)` and
+`kit.meetingNote(note, url, provider)`, a Teams, Zoom, Meet, Webex or Jitsi
+address found and put first in the note.
+
+An account's syncs and its methods with `accountId` (an import, a share)
+**take turns**: each loads the account's state, changes it and saves it
+whole, so two at once would lose one's changes.
+
 ## 7. Sharing to your service
 
 A connector whose service takes posts (a social network, a photo site, a
@@ -675,6 +702,16 @@ extra methods (`signIn`, `outbox`), and sharing: its `share` declaration
 (text, a link, four pictures with alt text, Mastodon's visibilities) with
 its own compose page in place of the kit's.
 
+**`apps/connectors/`** has the provider accounts (SYNERGY-CONNECTORS.md 8):
+`todoist` is the smallest two-way one (a TASKS capability with its own
+sub-kinds, `pull` and `push`, two sign-ins, a share target); `microsoft` and
+`google` have contacts, calendars and tasks both ways on the helpers above;
+`bluesky` runs a sign-in the OAuth service cannot (the AT Protocol's,
+`lib/oauth.js`); `linkedin` imports a file the user picks; `slack` keeps
+within a provider's rate limits. `testing/` has their stand-ins and
+`world.ts`, a device in memory with the real OAuth service, for tests like
+theirs.
+
 ## 12. Not yet
 
 - The trust tier and the db8 permission rule for generic kinds (C5); until
@@ -682,6 +719,9 @@ its own compose page in place of the kit's.
   connector's first release on a public catalog, and the privacy and terms
   fields for reviewers (C4's admin side).
 - Push (UnifiedPush) registration (C6); connectors poll meanwhile.
+- A watch on local changes: an edit made on the device reaches the server at
+  the next sync (or Sync Now), not at once, as mojomail's IMAP transport did
+  with a db8 watch on its `upsyncRev`.
 - The OAuth sheet and the key store on a device (C3; placeholders).
 - Generic kinds for FEEDS, SOCIAL, PHOTO, MEDIA, PODCASTS and BOOKMARKS
   (OPEN-QUESTIONS.md Q3).
