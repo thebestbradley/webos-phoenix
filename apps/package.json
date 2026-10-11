@@ -11,6 +11,7 @@
     "shared/notes-core",
     "shared/synckit",
     "shared/connector-kit",
+    "shared/platform",
     "shared/sdk",
     "shared/react",
     "shared/capacitor",

@@ -13196,6 +13196,112 @@
         });
     })();
 
+    // ================================================================================
+    // Platform servers and the Phoenix Account (org.webosphoenix.service.account;
+    // services/account, @phoenix/platform)
+    // ================================================================================
+    //
+    // docs/PLATFORM-CLIENT.md. Where the platform is and which keys the
+    // device trusts: /etc/palm/phoenix/servers.json (this checkout's
+    // services/account/etc/palm/phoenix/servers.json: the servers on this
+    // computer, no account server), with Developer Mode's override in the
+    // shared store ("platform:servers", what /var/lib/phoenix/
+    // servers.override.json is on a device), used only while Developer Mode
+    // is on. runtime.platformServers() gives every service here the same
+    // resolved configuration (com.palm.update, the Marketplace, Hardware).
+    //
+    // The account service is the device's own (accountservice.js), its key
+    // store the shared store ("account:keys"), the device's Ed25519 key a
+    // random stand-in (the simulator signs nothing with it).
+    (function platformAccount() {
+        var SERVICE = "org.webosphoenix.service.account";
+        var OVERRIDE = "platform:servers";
+        var KEYS = "account:keys";
+        var loadModule = nodeServiceLoader("/usr/palm/services/" + SERVICE + "/", "Account service");
+        var subtle = global.crypto && global.crypto.subtle;
+        function digest(alg) {
+            return function (bytes) { return subtle.digest(alg, bytes).then(function (h) { return new Uint8Array(h); }); };
+        }
+        var platform = null;
+        function lib() {
+            if (!platform) platform = loadModule("@phoenix/platform");
+            return platform;
+        }
+        runtime.platformServers = function () {
+            var p;
+            try { p = lib(); } catch (e) { return Promise.resolve(null); }   // no rootfs behind the page
+            return p.load({
+                image: function () { return PalmSystem.getResource("/etc/palm/phoenix/servers.json") || null; },
+                override: function () { return store.get(OVERRIDE, null); },
+                devMode: function () { return !!store.get("devMode", false); },
+                log: function (m) { console.warn("[platform] " + m); }
+            });
+        };
+
+        var methods = null, statusSubs = [];
+        function service() {
+            if (methods) return methods;
+            var keystore = {
+                get: function (id) { return Promise.resolve(store.get(KEYS, {})[id]); },
+                put: function (id, v) { var all = store.get(KEYS, {}); all[id] = v; store.set(KEYS, all); return Promise.resolve(); },
+                del: function (id) { var all = store.get(KEYS, {}); delete all[id]; store.set(KEYS, all); return Promise.resolve(); }
+            };
+            methods = loadModule("accountservice.js").createAccountService({
+                request: proxiedRequest,
+                requestBytes: proxiedRequestBytes,
+                luna: nodeServiceLuna(SERVICE),
+                keystore: keystore,
+                state: { load: function () { return store.get("account:state", null); }, save: function (o) { store.set("account:state", o); } },
+                servers: runtime.platformServers,
+                override: {
+                    read: function () { return store.get(OVERRIDE, null); },
+                    write: function (o) { if (o === null) store.remove(OVERRIDE); else store.set(OVERRIDE, o); }
+                },
+                crypto: {
+                    sha256: digest("SHA-256"), sha512: digest("SHA-512"),
+                    randomBytes: function (n) { return global.crypto.getRandomValues(new Uint8Array(n)); },
+                    deviceKey: function () {
+                        return keystore.get("device:key").then(function (k) {
+                            if (k && k.publicKey) return k.publicKey;
+                            var pub = lib().b64.toBase64(global.crypto.getRandomValues(new Uint8Array(32)));
+                            return keystore.put("device:key", { publicKey: pub }).then(function () { return pub; });
+                        });
+                    }
+                },
+                device: function () {
+                    var slots = runtime.updateSlots ? runtime.updateSlots.get() : null;
+                    var booted = slots && slots.slots[slots.booted];
+                    return Promise.resolve({ name: "Phoenix Simulator", model: "phoenix-sim", compatible: (slots && slots.compatible) || "phoenix-sim",
+                                             osVersion: (booted && booted.version) || "", build: (booted && booted.build) || 0 });
+                },
+                log: function (m) { console.info("[account] " + m); }
+            });
+            methods.watch(function (st) { statusSubs.forEach(function (w) { w(st); }); });
+            return methods;
+        }
+        var names;
+        try { names = loadModule("accountservice.js").METHODS; }
+        catch (e) { return; }   // no rootfs behind the page (the runtime's unit tests)
+        var serviceMethods = {};
+        names.forEach(function (name) {
+            serviceMethods["/" + name] = function (p, reply, ctx) {
+                var m;
+                try { m = service(); } catch (e) { return reply(fail("UNKNOWN_ERROR", String(e.message || e))); }
+                m[name](p, (ctx && ctx.caller) || PalmSystem.appIdentifier).then(function (r) {
+                    if (name === "getStatus" && p.subscribe && r.returnValue) {
+                        r.subscribed = true;
+                        var w = function (x) {
+                            if (ctx.cancelled()) { statusSubs.splice(statusSubs.indexOf(w), 1); return; }
+                            reply(x);
+                        };
+                        statusSubs.push(w);
+                    }
+                    reply(r);
+                });
+            };
+        });
+        register([SERVICE], serviceMethods);
+    })();
 
     // ================================================================================
     // Marketplace (org.webosphoenix.service.packages; apps/marketplace/service)
@@ -13216,7 +13322,7 @@
         function digest(alg) {
             return function (bytes) { return subtle.digest(alg, bytes).then(function (h) { return new Uint8Array(h); }); };
         }
-        var methods = null, shippedSources = null, preinstalledInfo = null;
+        var methods = null, shippedSources = null, preinstalledInfo = null, platformCatalog = null;
         function service() {
             if (!methods) {
                 // Its installs reach the installer as this service's (ctx.caller),
@@ -13231,8 +13337,14 @@
                     },
                     request: proxiedRequest,
                     requestBytes: proxiedRequestBytes,
-                    crypto: { sha256: digest("SHA-256"), sha512: digest("SHA-512") },
+                    crypto: { sha256: digest("SHA-256"), sha512: digest("SHA-512"),
+                              randomBytes: function (n) { return global.crypto.getRandomValues(new Uint8Array(n)); } },
                     gzip: runtime.browserGzip,
+                    // The Phoenix catalog's address and keys, the revocation
+                    // list: /etc/palm/phoenix/servers.json ("Platform servers").
+                    servers: function () {
+                        return runtime.platformServers().then(function (sv) { platformCatalog = sv && sv.catalog; return sv; });
+                    },
                     state: {
                         load: function () { return store.get("marketplace:state", null); },
                         save: function (o) { store.set("marketplace:state", o); }
@@ -13260,8 +13372,10 @@
                         var list = shippedSources;
                         var sim = runtime.simulatorCatalog ? runtime.simulatorCatalog() : null;
                         return list.map(function (src) {
-                            return sim && src.kind === "phoenix" && !src.key && String(src.url).replace(/\/*$/, "/") === sim.url
-                                ? Object.assign({}, src, { key: sim.key }) : src;
+                            // The Phoenix catalog's address is servers.json's.
+                            var url = src.id === "phoenix" && platformCatalog ? platformCatalog.url : src.url;
+                            return sim && src.kind === "phoenix" && !src.key && url && String(url).replace(/\/*$/, "/") === sim.url
+                                ? Object.assign({}, src, { url: url, key: sim.key }) : src;
                         });
                     },
                     // The connector packages the simulator came with (seeded
@@ -13525,6 +13639,9 @@
                     var c;
                     try { c = JSON.parse(PalmSystem.getResource(SAMPLE + "catalog-sim.json") || "{}"); }
                     catch (e) { c = {}; }
+                    // servers.json's "drivers" over it, as on a device; "hardware:config"
+                    // (a test's edited catalog.json) over both.
+                    if (platformLib && lastServers) c = platformLib.driverConfig(c, lastServers);
                     return Object.assign(c, store.get("hardware:config", {}));
                 },
                 // /usr/share/phoenix/firmware/licences.json and the licence files.
@@ -13546,28 +13663,36 @@
         try { names = loadModule("hardwareservice.js").METHODS; }
         catch (e) { return; }   // no rootfs behind the page (the runtime's unit tests)
         var serviceMethods = {};
+        var platformLib = null, lastServers = null;
+        try { platformLib = loadModule("@phoenix/platform"); } catch (e) { platformLib = null; }
         names.forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
-                var m;
-                try { m = service(); } catch (e) { return reply(fail("UNKNOWN_ERROR", String(e.message || e))); }
-                if (name === "install" && p.subscribe) {
-                    reply(ok({ subscribed: true, driverId: p.driverId, state: "queued" }));
-                    m.install(p, function (st) { if (!ctx.cancelled()) reply(st); });
-                    return;
-                }
-                m[name](p).then(function (r) {
-                    if (name === "list" && p.subscribe && r.returnValue) {
-                        r.subscribed = true;
-                        var w = function (x) {
-                            if (ctx.cancelled()) { watchers.splice(watchers.indexOf(w), 1); return; }
-                            reply(x);
-                        };
-                        watchers.push(w);
-                    }
-                    reply(r);
-                }, function (e) { reply(fail("UNKNOWN_ERROR", String(e && e.message || e))); });
+                (runtime.platformServers ? runtime.platformServers() : Promise.resolve(null)).then(function (sv) {
+                    lastServers = sv;
+                }, function () {}).then(function () { call(name, p, reply, ctx); });
             };
         });
+        // A call, once servers.json is read (the driver catalog's address and key).
+        function call(name, p, reply, ctx) {
+            var m;
+            try { m = service(); } catch (e) { return reply(fail("UNKNOWN_ERROR", String(e.message || e))); }
+            if (name === "install" && p.subscribe) {
+                reply(ok({ subscribed: true, driverId: p.driverId, state: "queued" }));
+                m.install(p, function (st) { if (!ctx.cancelled()) reply(st); });
+                return;
+            }
+            m[name](p).then(function (r) {
+                if (name === "list" && p.subscribe && r.returnValue) {
+                    r.subscribed = true;
+                    var w = function (x) {
+                        if (ctx.cancelled()) { watchers.splice(watchers.indexOf(w), 1); return; }
+                        reply(x);
+                    };
+                    watchers.push(w);
+                }
+                reply(r);
+            }, function (e) { reply(fail("UNKNOWN_ERROR", String(e && e.message || e))); });
+        }
         register([SERVICE], serviceMethods);
     })();
 
@@ -14173,7 +14298,7 @@
     // ("[update]" compatible=phoenix-sim, version=, build=;
     // server/updates/bin/updates.php simulator makes one, or the catalog
     // server's admin API: POST /api/admin/updates?compatible=phoenix-sim).
-    // The feed is the catalog server's (/etc/palm/updates.json:
+    // The feed is the catalog server's (/etc/palm/phoenix/servers.json "updates":
     // http://127.0.0.1:8088/updates/, server/marketplace). Installing writes
     // the version to the other slot; com.palm.power/shutdown/machineReboot
     // then starts the primary slot (phoenix-sim restarts itself; a browser
@@ -14251,6 +14376,13 @@
                 st.primary = slot === "booted" ? st.booted : slot === "other" ? otherOf(st) : slot;
                 store.set(SLOTS, st);
                 return Promise.resolve();
+            },
+            // rauc status mark-good: the running slot started well.
+            markGood: function () {
+                var st = slots();
+                st.good = st.booted;
+                store.set(SLOTS, st);
+                return Promise.resolve();
             }
         };
 
@@ -14286,14 +14418,16 @@
                     return Promise.resolve({ percent: p.percent, charging: p.charger !== "none" });
                 },
                 luna: nodeServiceLuna(),
-                // /etc/palm/updates.json; "updates:config" in the store
-                // stands for an edited one (tools/test-updates.cjs).
-                config: function () {
-                    var c;
-                    try { c = JSON.parse(PalmSystem.getResource(DIR + "etc/palm/updates.json") || "{}"); }
-                    catch (e) { c = {}; }
-                    return Object.assign(c, store.get("updates:config", {}));
+                requestBytes: proxiedRequestBytes,
+                crypto: {
+                    sha256: function (b) { return subtle.digest("SHA-256", b).then(function (h) { return new Uint8Array(h); }); },
+                    sha512: function (b) { return subtle.digest("SHA-512", b).then(function (h) { return new Uint8Array(h); }); },
+                    randomBytes: function (n) { return global.crypto.getRandomValues(new Uint8Array(n)); }
                 },
+                // The feed, its channels and keys: /etc/palm/phoenix/servers.json
+                // ("Platform servers"; tools/test-updates.cjs points it at its
+                // own feed with Developer Mode's override).
+                servers: runtime.platformServers,
                 state: {
                     load: function () { return store.get("updates:state", null); },
                     save: function (o) { store.set("updates:state", o); }

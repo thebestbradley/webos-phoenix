@@ -15,6 +15,8 @@ export default defineConfig({
         alias: [
             { find: /^@phoenix\/synckit$/, replacement: here("./shared/synckit/src/index.js") },
             { find: /^@phoenix\/synckit\/(.*)$/, replacement: here("./shared/synckit/") + "$1" },
+            { find: /^@phoenix\/platform$/, replacement: here("./shared/platform/src/index.js") },
+            { find: /^@phoenix\/platform\/(.*)$/, replacement: here("./shared/platform/") + "$1" },
             { find: /^@phoenix\/connector-kit$/, replacement: here("./shared/connector-kit/src/index.ts") },
             // The app SDK and its bindings (built to dist/ only for publishing
             // and the Enact apps), and Enact's LS2Request, which the Enact
@@ -33,7 +35,7 @@ export default defineConfig({
         include: ["shared/*/src/**/*.test.{ts,tsx}", "settings/src/**/*.test.{ts,tsx}",
                   "{phone,messaging,camera,photos,music,files,tasks,voicememos,flashlight,scanner,weather,maps,passwords,authenticator,terminal,videos,podcasts,pdfview,docview,help,firstuse,screenshot,notificationlab,agenda,printmanager,voicedial,clipboard,assistant,dropshare,marketplace}/src/**/*.test.{ts,tsx}",
                   "{files,voicememos,dav,fediverse,settings,marketplace,assistant}/service/**/*.test.ts",
-                  "../services/updates/**/*.test.ts", "../services/hardware/**/*.test.ts",
+                  "../services/updates/**/*.test.ts", "../services/hardware/**/*.test.ts", "../services/account/**/*.test.ts",
                   "../services/systemmanager/**/*.test.ts", "../services/clipboard/**/*.test.ts",
                   "../services/{shellhost,appmanager,accessories,dropshare}/**/*.test.ts"],
     },
