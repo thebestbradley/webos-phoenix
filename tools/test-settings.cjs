@@ -221,9 +221,9 @@ async function main() {
         await page.waitForTimeout(200);
         check(last().advancedGestures === false, `Advanced gestures reaches the shell (${last().advancedGestures})`);
         await page.click("[data-testid='wallpaper']");
-        await page.click("[data-testid='wallpaper-Aurora']");
+        await page.click("[data-testid='wallpaper-Phoenix']");
         await page.waitForTimeout(200);
-        check(/aurora\.jpg$/.test(last().wallpaperFile || ""), "wallpaper choice reaches the shell");
+        check(/phoenix\.jpg$/.test(last().wallpaperFile || ""), "wallpaper choice reaches the shell");
         await shot("screen-lock");
 
         // ---- Developer Mode: warning and the PIN ---------------------------------

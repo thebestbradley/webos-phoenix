@@ -107,6 +107,15 @@ QtObject {
     // font (assets/fonts/noto-color-emoji/50-phoenix-emoji.conf).
     readonly property string emojiFontFamily: Qt.platform.os === "osx" ? "Apple Color Emoji" : "Noto Color Emoji"
 
+    // ---- Wallpaper
+
+    // The default wallpaper, on the device: Settings' Northern Lights
+    // (apps/settings/public/wallpapers, drawn by tools/wallpapers/generate.py),
+    // as luna-sysmgr's default was a file its conf/defaultPreferences.txt
+    // named. The system service's default wallpaper preference
+    // (runtime/phoenix-runtime.js) is the same file.
+    readonly property string defaultWallpaperPath: "/usr/palm/applications/org.webosphoenix.settings/wallpapers/northern-lights.jpg"
+
     // ---- Status bar (luna-sysmgr/images/statusBar/status-bar-background.png is 28px tall)
 
     readonly property int statusBarHeight: px(28)

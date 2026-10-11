@@ -92,11 +92,11 @@ describe("Settings > Exhibition", () => {
         await waitFor(() => expect(screen.getByTestId("exhibition-wallpaper")).toBeTruthy());
         expect(screen.getByTestId("exhibition-wallpaper").textContent).toContain("None");
         fireEvent.click(screen.getByTestId("exhibition-wallpaper"));
-        fireEvent.click(await screen.findByTestId("dock-wallpaper-Dusk"));
-        await waitFor(() => expect(lastStatus()?.dockWallpaperFile).toBe("/usr/palm/applications/org.webosphoenix.settings/wallpapers/dusk.jpg"));
+        fireEvent.click(await screen.findByTestId("dock-wallpaper-Dawn"));
+        await waitFor(() => expect(lastStatus()?.dockWallpaperFile).toBe("/usr/palm/applications/org.webosphoenix.settings/wallpapers/dawn.jpg"));
         // The main wallpaper is not touched.
-        expect(lastStatus()?.wallpaperFile).toBe("");
-        await waitFor(() => expect(screen.getByTestId("exhibition-wallpaper").textContent).toContain("Dusk"));
+        expect(lastStatus()?.wallpaperFile).toBe("/usr/palm/applications/org.webosphoenix.settings/wallpapers/northern-lights.jpg");
+        await waitFor(() => expect(screen.getByTestId("exhibition-wallpaper").textContent).toContain("Dawn"));
     });
 
     it("hides the rest while exhibitions are off", async () => {
