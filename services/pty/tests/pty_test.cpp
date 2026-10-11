@@ -13,6 +13,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <sys/select.h>
 #include <unistd.h>
 #include <vector>
 
@@ -37,6 +38,22 @@ static int checks = 0;
         }                                                                            \
     } while (0)
 
+// Wait until the PTY has something to read (or ms pass), as the hosts do: the
+// service's GLib fd watch, phoenix-sim's QSocketNotifier. Never a fixed sleep
+// between reads: a macOS PTY holds 1 KB of output (XNU's tty output queue is
+// a TTYCLSIZE clist, and the shell's write waits until it is read), so a
+// reader that sleeps gets 1 KB per sleep. On the macOS runner, where a 1 ms
+// sleep took about 10, the 340 KB after the pause took longer than drain's
+// 5 s. select() works on a PTY on every platform.
+static void waitReadable(const Session &s, int ms)
+{
+    fd_set r;
+    FD_ZERO(&r);
+    FD_SET(s.fd(), &r);
+    struct timeval tv = { ms / 1000, (ms % 1000) * 1000 };
+    ::select(s.fd() + 1, &r, nullptr, nullptr, &tv);
+}
+
 // All output of a session until the shell is gone (or ms pass).
 static std::string drain(Session &s, int ms = 5000, bool ackAll = true, bool *sawLatin1 = nullptr)
 {
@@ -56,7 +73,10 @@ static std::string drain(Session &s, int ms = 5000, bool ackAll = true, bool *sa
         }
         if (s.eof() && !s.hasOutput())
             break;
-        g_usleep(2000);
+        if (s.wantsRead())
+            waitReadable(s, 20);
+        else
+            g_usleep(2000);
     }
     return out;
 }
@@ -150,8 +170,10 @@ static void testSessions()
         const gint64 until = g_get_monotonic_time() + 5 * G_USEC_PER_SEC;
         while (g_get_monotonic_time() < until && !s.paused()) {
             if (s.wantsRead()) s.readAvailable();
-            got += s.takeChunk().bytes;
-            g_usleep(1000);
+            const size_t n = s.takeChunk().bytes;
+            got += n;
+            if (!n && s.wantsRead())
+                waitReadable(s, 20);
         }
         CHECK(s.paused() && !s.wantsRead() && got >= kHighWater && got < kHighWater + kMaxChunk,
               "flow control: reading stops above the high-water mark");
