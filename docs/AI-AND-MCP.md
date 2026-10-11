@@ -184,7 +184,9 @@ and installed (it answers free-form requests and picks commands as
 tools); then the choice. Decided on the owner's behalf: the grammar still
 answers first once a model is installed (it is instant and exact; the
 model handles what it does not match), and one tool call per turn (the
-multi-step agent is 2.0). A model's choice runs only when the words name
+multi-step agent is 2.0). Since 11 October 2026 nothing the grammar
+answers waits for the model, and the model starts as the Assistant opens
+("Speed and correctness", below). A model's choice runs only when the words name
 that kind of thing and, for a switch, the way it goes (`grounded()` in the
 language file); otherwise it is read back ("Did you mean: turn the
 flashlight off?"). Checked against the real Qwen2.5 0.5B with llama.cpp
@@ -1416,6 +1418,207 @@ does not hold, and 1.7 GB is more than the image should carry for it.
 Whether to fine-tune it and ship it is the owner's decision
 (OPEN-QUESTIONS.md Q88). The candidates are worth having without Laya
 too: they are the "Did you mean" list a fallback could offer.
+
+### Speed and correctness (11 October 2026)
+
+The owner: "if the language model is installed ... some of the commands
+now are taking a long time because the language model is doing it;
+shouldn't it go through our tool first so it's done quicker before the
+language model". The grammar did answer first; but some of what it
+matched still waited for the model afterwards. Measured with Qwen3 0.6B
+(Q8_0) in llama-server, every request of the main set and the held-out
+set, and each turn's trace (which steps ran, how long): of the turns the
+grammar answers alone, these waited for the model (the times on this
+4-core computer under load, 1 to 25 s per step):
+
+| Request | What waited | Time |
+|---|---|---|
+| "create me a draft email announcing the new webos version" | the model writing the email (asked for) | 28.6 s |
+| "tell me a joke" | the model's joke (`chatAnswer`) | 17.0 s |
+| "make me a note about the newest and greatest features ..." | the model writing the memo (asked for) | 6.1 s |
+| "Talk to me." (twice), "What do you want to talk about?" | the model's words | 4.1 s, 3.7 s, 1.2 s |
+| "add an event called dentist" | the model reading a time the words do not say (`fillArgs`), then "When is it?" anyway | 1.7 s |
+| "make a note about the newest features in webos" | the model writing a memo nobody asked to have written | 1.0 s |
+
+And outside what the evaluation sees (its stand-in starts no server):
+llama-server loads the model when the first request needs it (1.5 s
+here for Qwen3 0.6B, and it stops after five idle minutes), so the first
+such request after a pause also waited for that.
+
+**The rule now** (`assistant.js` actParsed, chatAnswer, warm):
+
+- What the grammar can do runs at once. A command missing something it
+  can ask for ("When is it?", "What should I say to Sam?") asks at once
+  (`asksItself`: the command's own `prepare` says whether it asks); the
+  model fills in an argument only where the grammar could not read it
+  and the command cannot ask for it (no English rule leaves one so today).
+- Small talk is the grammar's, jokes and "talk to me" included
+  (OPEN-QUESTIONS Q130); what follows that the grammar does not take is
+  the model's.
+- The model writes a memo or an email only when the words ask for
+  writing: "write me a memo about", "make me a note explaining", "draft
+  an email announcing" (`args.write`); "take a note about the parking
+  spot" asks what it should say, "email Sam I'm late" sends those words
+  (Q135).
+- The model runs only when the grammar (and the decision model's
+  complete candidates, when it is on) cannot; the view shows the dots at
+  once and the thread's stage ("Starting the on-device model", "Thinking
+  it over") from the first moment of its work (`bounded`).
+- `warm`: the Assistant app and the system's view call it as they open,
+  and the model's server starts in the background where the model fits
+  the device's memory (`models.forDevice`); nothing waits for it (Q134).
+  Checked in phoenix-sim: the app opening started llama-server.
+- A question about the world alone ("who wrote Pride and Prejudice": no
+  "my", no contact's name, nothing the commands keep or measure:
+  `say.context` world) is answered in words without the choice among
+  commands first, which could only have picked a command that reads the
+  phone's things. On the main set the choice those questions skip took
+  6.6 s on average (1.2 to 22 s; 27% of their time); on the model's set
+  it is skipped for 12 of the 25 questions and none of the 138 requests
+  to act.
+- A time a model writes for an alarm, a reminder or an event is the
+  grammar's reading of the words where it reads one (Qwen3 0.6B set "I
+  want an alarm at 5:30 tomorrow morning" for 6:30).
+- A sleep timer a model chooses (it stops the music) holds only where the
+  words speak of the music, sleep or playing (`lib/lang/en.js` sleepSaid; Qwen3 0.6B
+  made "add 5 minutes to the timer" one); "add 5 minutes to the timer"
+  is said at once to be out of reach (a running timer is not lengthened
+  yet), as "put 10 more minutes on the timer".
+
+`speed.test.ts` asks every request of the main and held-out sets the
+grammar answers alone again with a model installed: none may make a
+request of it but the writing asked for (the six above failed it).
+
+**Measured after** (Qwen3 0.6B Q8_0 in llama-server on this computer,
+other work running beside it; `tools/eval-assistant.cjs --model`, each
+turn's steps from its trace):
+
+| | Before | After |
+|---|---|---|
+| The main set's original 434, with the model | 432 right, 0 unsafe | 433 right, 0 unsafe |
+| The held-out set's original 79, with the model | 76 right, 0 unsafe | 78 right, 0 unsafe |
+| Turns the grammar answers that waited for the model (main, held out) | 7, 0 | 2, 0: the two that ask for writing |
+| The model's requests in the turns that need it (main, held out) | 44 (21 of them a choice among commands), 26 (13) | 30 (9), 16 (7) |
+| The 40 cases that reached the model in either, asked of both one right after the other (which first alternating; the code as of the first merge) | 77 requests (34 choices); per case: median 2.9 s, 90th percentile 67.6 s | 50 requests (17 choices); median 2.2 s, 90th percentile 6.9 s |
+| One request of a kind, in the same pairs (median) | a choice 1.3 s, a call 1.5 s, an answer 5.2 s | 1.4 s, 1.8 s, 3.7 s |
+
+The slow end before is the machine's load as much as the model ("open
+spotify": the same two requests took 189 s one time and 3.6 s the next),
+so the measure is the requests no longer made; each costs about what it
+did (the choice reads a longer list of commands now, Synergy's among
+them).
+
+The whole sets now (talk mode's, Synergy's, Search your phone's and
+these cases too): the grammar alone, main 646 of 646 (0 unsafe, 0 wrong
+read-backs), held out 97 of 115 (0 unsafe; 1 wrong read-back, talk
+mode's "actually no" after "call daniel", as on the base). With the
+model: main 639 of 646 (0 unsafe, 1 wrong read-back), held out 102 of
+115 (0 unsafe, the same 1). The model's misses on the main set: "how
+many kilometers is a marathon" (as before), and six of talk mode's
+web-search cases, written for no model: with one, the question is
+answered, so the "yes" to an offer never made goes to the model, and
+"translate good morning into spanish" was read back as a reply to Sam
+(the wrong read-back). The base branch with the model misses five of
+those six too, and searches the web unasked three times ("search the
+web", "look it up") where this branch asks what to search for.
+
+**The review's bugs** (the lead's 42 requests, 11 October 2026; each with
+cases in `eval/cases-a.json` and `review.test.ts`):
+
+| Said | Was | Now |
+|---|---|---|
+| "send my ETA to Sam" | a text to a contact called "my" | `shareLocation` ("The Assistant and Synergy", below), which reads it first; no word like "my", "the", "this" is taken for a name; "send happy birthday to Mom" texts Mom; "send the photo to Sam" is not a text |
+| "remind me to buy milk when I get home" | a plain task "buy milk when I get home" | there is no reminder by place yet: "I can't remind you when you get home yet, only at a time. When should I remind you to buy milk?", and the time said next makes it ("when I leave work", "next time I'm at the store", "before I leave home"; "when I wake up" stays a reminder's words) |
+| "set a sleep timer for 30 minutes" | a timer ringing over the music | a timer whose activity presses pause (`org.webosphoenix.system` mediaKey, as "pause" does) and rings nothing; "stop the music in 20 minutes", "turn off the music after an hour" |
+| "play my podcast" | Music searched for "podcast" | "I can't play podcasts myself yet.", with Open Podcasts where it is installed |
+| "call 911" | "Call 911?" like any number | `lib/emergency.js` (the Phone's lists: 3GPP TS 22.101's numbers and the national ones): "Calling 911 in 5 seconds. Cancel to stop." with Call Now and Cancel and the seconds counting down; the service places it when they run out (also with the app closed); "no", "cancel" or Cancel stop it; asked over the lock screen too. "Call the police", "call an ambulance": the region's number (999 for en-GB). A model's choice of one is read back as any call (Q133) |
+| "what's on my screen" | "Did you mean set brightness to 50%?" | "I can't see what's on your screen yet."; the brightness suggestion needs brightness words |
+
+**A sweep of everyday phrasings.** Some 200 requests as people say them
+to Siri, Google Assistant and Alexa, across the commands (fillers,
+corrections mid-sentence, several at once, numbers as words, contacts
+named Will, Rose and Mark), asked of the grammar; each misreading fixed
+where it came from (cases a-sw-*, with a case's own contacts: `put`):
+
+- A correction mid-sentence is the sentence as meant
+  (`lib/lang/en-corrections.js`, tried before the words as said): "set
+  an alarm for seven no wait eight", "remind me at 3 to call the dentist
+  actually make it 4" (the evening kept for 4), "set a timer for 5
+  minutes no 10", "text Sam wait no text Priya that I'm outside", "call
+  Sam no Priya". Only a whole request, a time, number or day, or a
+  contact can be the correction, so "text Sam no worries" and "text Sam I
+  actually liked the movie" stay texts.
+- Fillers and politeness: "hey can you ...", "at like six thirty",
+  "would you mind turning off the wifi", "do me a favor and ...", "you
+  know what, ...", "I need an alarm for 6", "I'd like a timer for 20
+  minutes", "put a timer on for 4 minutes", "snooze for five more
+  minutes", "in a couple of hours", "set the volume to seventy percent",
+  "what's 20 percent of 45 dollars", "friday-ish".
+- Lists: "the grocery list", "groceries" and "the shopping list" are one
+  list (it made a Grocery list beside Groceries; Q132), "my to do list"
+  is the default one ("You don't have a list called to do").
+- Several at once: "text Will, Rose and Mark that dinner is at 7" texts
+  each (it texted Will "Rose and Mark that dinner is at 7"); "remind me
+  tomorrow at 9 to call Will and text Rose" is one reminder (it texted
+  Rose); "what's the weather tomorrow and do I have any meetings" asks
+  about tomorrow's; "set an alarm for 6:15 and another for 6:30"; "one
+  for five minutes and one for twelve" (minutes).
+- "Put lunch with Will on my calendar for Thursday at noon" was titled
+  "Lunch with will for"; "what's the weather on Saturday" read the
+  calendar; "is it going to snow this week", "what's the high today",
+  "what am I doing tomorrow night", "did anyone call me", "when's my next
+  alarm" and "how long until my alarm goes off" (the next one and how
+  long, not the list), "play it again" (it searched Music for "it
+  again"), "play Will Smith" (said back as "will smith"), "put the phone
+  on do not disturb", "text my sister I'm running late" ("I couldn't find
+  sister", not "my"), "email my boss ...", "set an alarm for 6 30" (a
+  transcript's time), "how much longer on the timer", "what meetings do I
+  have today", "call mom on speaker", "turn up the volume all the way",
+  "open the photos app" (it searched photos for "app"), "launch messages"
+  (what people call the apps: Messaging), "will I need a jacket tonight"
+  (the cold, not the rain), "send Mark a message" (it read back a text
+  saying "a message"; now it asks what to say).
+- "Send the photo to Sam", "email Mom the pictures from the trip": "I
+  can't send photos or videos yet." (the model's set: Qwen3 0.6B offered
+  a screenshot); "text Rose I got the pictures" stays a text.
+- "Add a timer for 5 minutes" was a timer called "add a"; "add milk to my
+  list" made a list called "My" (now the default list), and with
+  Synergy's accounts "add stamps to my to do list" went to Microsoft's To
+  Do ("To Do" is as generic a name as "Tasks" now, `lib/synergy.js`).
+
+And one found by the talk-mode work (tools/test-assistant.cjs): "did you
+add it?" went on being answered with its switch off in Settings >
+Assistant > Commands, the router answering it past `act()`'s check; the
+switch is checked there now, and `review.test.ts` asks every command's
+phrase with its switch off.
+
+Left from the sweep, for others or the owner: adding several items in
+one ("eggs, milk and bread": one task, Q131), a group text as one
+message, "turn off the lights and lock the screen" (smart home with a
+phone request), video calls, "open youtube" (no such app: the web could
+be offered), "where am I", contacts' addresses for "navigate to Rose's
+house" (Synergy), "turn off my alarm for tomorrow" (the Clock has no
+skipping one day of a repeating alarm), sunrise and sunset, "how many
+days until my birthday" (the owner's own card), "next Thursday" said on a
+Wednesday (the coming one, as decided; many mean the week after), and the
+features the parity work adds (reminders by place,
+podcasts, dark mode).
+
+**Held out.** Ten requests written after these fixes and not tuned for
+were added to the end of `held-out.json` (h-a-1 to h-a-10): eight
+answered right by the grammar, the original service one. Of the original
+79, four more are now answered by the grammar alone (69 to 73): "I want
+an alarm at 5:30 tomorrow morning", "put a timer on for 4 minutes", "did
+anyone text me" and "is it going to rain this weekend". The sweep had
+the same or like phrasings, written after its author had seen the
+held-out set's misses, so these four are not a clean measure. Nor is
+h-a-4 now: with Qwen3 0.6B behind the grammar, "turn the music off in 45
+minutes" paused the music at once (the evaluation's one unsafe action),
+so the grammar reads it as the sleep timer it is, with "turn off the
+music" (which went to the model) and "switch the music off after an
+hour" (a-sw-56, a-sw-57). And h-a-6 ("put toothpaste on the shopping
+list") may go to a list called Shopping where an account has one (the
+Synergy world's Todoist), never to a new list.
 
 ### The Assistant and Synergy (11 October 2026)
 

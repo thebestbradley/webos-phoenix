@@ -46,7 +46,9 @@ var SERVICES = [
     { name: "Delta Chat", words: ["delta chat", "deltachat"], caps: ["MESSAGING", "CONTACTS"] },
     { name: "Telegram", words: ["telegram"], caps: ["MESSAGING", "CONTACTS"] },
     { name: "Google", words: ["google", "gmail", "google mail", "google calendar", "google tasks", "google contacts"], caps: ["CALENDAR", "TASKS", "CONTACTS", "MAIL"] },
-    { name: "Microsoft", words: ["microsoft", "outlook", "hotmail", "office 365", "microsoft 365", "exchange", "microsoft to do", "ms to do", "to do", "outlook calendar"],
+    // Not "to do" alone: "my to do list" is the phone's own default list
+    // (lib/commands.js listKey), which "to do" made Microsoft's.
+    { name: "Microsoft", words: ["microsoft", "outlook", "hotmail", "office 365", "microsoft 365", "exchange", "microsoft to do", "ms to do", "outlook calendar"],
       caps: ["CALENDAR", "TASKS", "CONTACTS", "MAIL"] },
     { name: "Todoist", words: ["todoist"], caps: ["TASKS"] },
     { name: "Zoom", words: ["zoom"], caps: ["CALENDAR"] },

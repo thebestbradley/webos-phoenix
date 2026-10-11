@@ -106,6 +106,7 @@ var D = require("./dates");
 var units = require("./units");
 var places = require("./places");
 var nearbyLib = require("./nearby");
+var emergency = require("./emergency");
 
 var CLOCK_APP = "com.palm.app.clock";
 var CALENDAR_APP = "com.palm.app.calendar";
@@ -149,8 +150,9 @@ var BUILT_IN = [
     { id: "agenda", title: "Calendar agenda", risk: "read", description: "Tell what is on the calendar: a day, a week, the next event, or when an event is.",
       parameters: { type: "object", properties: { range: { type: "string", enum: ["today", "tomorrow", "day", "this week", "next week", "next", "find"] },
         day: { type: "string", description: "For range day: the day, as said or ISO 8601" }, query: { type: "string", description: "For range find: the event's name" } } } },
-    { id: "timer", title: "Timers", risk: "change", description: "Start a countdown timer.",
-      parameters: { type: "object", properties: { seconds: { type: "integer", minimum: 1, description: "How long, in seconds" }, label: S }, required: ["seconds"] } },
+    { id: "timer", title: "Timers", risk: "change", description: "Start a countdown timer, or a sleep timer that stops the music.",
+      parameters: { type: "object", properties: { seconds: { type: "integer", minimum: 1, description: "How long, in seconds" }, label: S,
+        sleep: { type: "boolean", description: "A sleep timer: the music stops when it ends, nothing rings" } }, required: ["seconds"] } },
     { id: "timerStatus", title: "Time left on timers", risk: "read", description: "Tell how much time is left on the running timers.",
       parameters: { type: "object", properties: {} } },
     { id: "timerCancel", title: "Cancelling timers", risk: "change", description: "Cancel a running timer (by its label) or all of them.",
@@ -160,7 +162,8 @@ var BUILT_IN = [
     { id: "alarm", title: "Alarms", risk: "change", description: "Set an alarm in the Clock app, once or repeating.",
       parameters: { type: "object", properties: { time: { type: "string", description: "When, as said: \"7:30 am\", \"tomorrow at 6\", or ISO 8601 local time" }, label: S,
         repeat: { type: "string", enum: ["once", "daily", "weekdays", "weekends"] } }, required: ["time"] } },
-    { id: "alarmList", title: "Listing alarms", risk: "read", description: "Tell which alarms are set.", parameters: { type: "object", properties: {} } },
+    { id: "alarmList", title: "Listing alarms", risk: "read", description: "Tell which alarms are set, or when the next one rings.",
+      parameters: { type: "object", properties: { next: { type: "boolean", description: "Only the next alarm to ring, and how long until it does" } } } },
     { id: "alarmManage", title: "Turning off and deleting alarms", risk: "change", description: "Turn off or delete an alarm (by its time) or all alarms.",
       parameters: { type: "object", properties: { action: { type: "string", enum: ["off", "delete"] }, time: { type: "string", description: "The alarm's time, \"7am\"" }, all: B }, required: ["action"] } },
     { id: "reminder", title: "Reminders", risk: "change", description: "Add a task to Tasks, with a reminder when a time is given.",
@@ -269,7 +272,7 @@ var BUILT_IN = [
 // One thing about one item, and the item a conversation is about (lib/details.js).
 var details = require("./details")({ D: D, lunaCall: lunaCall, dbFind: dbFind, findEvent: findEvent, matches: matches, words: words,
                                      whenShown: whenShown, cards: cards, findPerson: findPerson, personName: personName, emailOf: emailOf,
-                                     addTask: addTask, scheduleAlarm: scheduleAlarm, nextRing: nextRing });
+                                     addTask: addTask, scheduleAlarm: scheduleAlarm, nextRing: nextRing, listNamed: listNamed });
 Array.prototype.push.apply(BUILT_IN, details.COMMANDS);
 // What is connected through Synergy (lib/commands-synergy.js): its commands,
 // and the account each of these may be given ("on Slack", "my work calendar").
@@ -622,6 +625,16 @@ function prepareInner(cmd, args, env) {
     var say = env.lang.say;
     args = Object.assign({}, args || {});
     function reply(text) { return Promise.resolve({ args: args, reply: text }); }
+    // An emergency number ("call 911", "call the police"): never refused
+    // and never held for a yes; placed after a short countdown the user can
+    // cancel (countdown, lib/emergency.js), as Siri and Google Assistant do.
+    // The review's "call 911" asked "Call 911?" like any number.
+    if (cmd.id === "call" && (args.emergency || emergency.isEmergency(args.number || args.who, env.country))) {
+        var sos = args.emergency && !args.number ? emergency.primary(env.country) : String(args.number || args.who).replace(/[^\d+]/g, "");
+        args = Object.assign({}, args, { number: sos, name: "", emergency: true });
+        delete args.who;
+        return Promise.resolve({ args: args, confirm: say.emergencyCall(sos, emergency.COUNTDOWN_S), countdown: emergency.COUNTDOWN_S });
+    }
     if (cmd.id === "call" || cmd.id === "text") {
         var who = String(args.who || "").trim();
         var raw = args.number || (/^[+\d][\d\s().-]{2,}$/.test(who) ? who : "");
@@ -687,6 +700,17 @@ function prepareInner(cmd, args, env) {
     if (cmd.id === "timer" && !(args.seconds > 0)) return reply(say.failed("how long?"));
     if (cmd.id === "alarm" && !(args.time > env.now())) return reply(say.failed("that time has passed"));
     if (cmd.id === "reminder" && !String(args.text || "").trim()) return reply(say.failed("remind you of what?"));
+    // A reminder for a place ("when I get home"): there is no reminder by
+    // place on the device yet, so a time is asked for (the next words are
+    // it), never a plain task with the place left out (the review's "remind
+    // me to buy milk when I get home", 11 October 2026).
+    if (cmd.id === "reminder" && args.place && !args.due) {
+        var timed = Object.assign({}, args);
+        delete timed.place;
+        delete timed.leaving;
+        return Promise.resolve({ args: args, reply: say.placeReminder(args.text, args.place, !!args.leaving),
+                                 awaiting: { command: "reminder", args: timed, field: "due" } });
+    }
     if (cmd.id === "task" && !String(args.text || "").trim()) return reply(say.failed("add what?"));
     if (cmd.id === "note" && !String(args.text || "").trim()) {
         if (args.topic) return Promise.resolve({ args: args, reply: say.memoWhat(args.topic), awaiting: { command: "note", args: args, field: "text" } });
@@ -1028,15 +1052,19 @@ function weather(args, env) {
     var say = env.lang.say;
     var imperial = env.units === "imperial";
     var week = args.day === "this week" || args.day === "this weekend";
+    // A day of the week ("the weather on Saturday"): its forecast, up to a week ahead.
+    var wd = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"].indexOf(String(args.day || "").replace(/^(?:on|this|next) /, ""));
+    var ahead = wd >= 0 ? (wd - new Date(env.now()).getDay() + 7) % 7 : args.day === "tomorrow" ? 1 : 0;
     var where = args.place ? geocode(env, args.place) : here(env, "weather");
     return where.then(function (pl) {
         var url = "https://api.open-meteo.com/v1/forecast?latitude=" + pl.lat + "&longitude=" + pl.lon +
             "&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max" +
             (typeof args.hour === "number" ? "&hourly=temperature_2m,weather_code,precipitation_probability" : "") +
-            "&forecast_days=" + (week ? 7 : 2) + "&timezone=auto" + (imperial ? "&temperature_unit=fahrenheit" : "");
+            "&forecast_days=" + (week ? 7 : Math.max(2, ahead + 1)) + "&timezone=auto" + (imperial ? "&temperature_unit=fahrenheit" : "");
         return getJson(env, url).then(function (f) {
             var unit = imperial ? "F" : "C";
-            var i = args.day === "tomorrow" ? 1 : 0, daily = f.daily || {};
+            var i = ahead, daily = f.daily || {};
+            if (wd >= 0 && (!daily.temperature_2m_max || daily.temperature_2m_max[i] === undefined)) throw new Error("no forecast for " + args.day);
             var open = { appId: "org.webosphoenix.weather", params: {}, title: "Weather" };
             if (week) {
                 var now = env.now(), days = (daily.time || (daily.temperature_2m_max || []).map(function (x, k) { return D.addDays(D.startOfDay(now), k); }))
@@ -1058,7 +1086,7 @@ function weather(args, env) {
                                                  (f.hourly.precipitation_probability || [])[k], args.about, env.now()), open: open };
             }
             var hi = daily.temperature_2m_max ? daily.temperature_2m_max[i] : null, lo = daily.temperature_2m_min ? daily.temperature_2m_min[i] : null;
-            var code = i === 1 ? (daily.weather_code || [])[1] : f.current && f.current.weather_code;
+            var code = i >= 1 ? (daily.weather_code || [])[i] : f.current && f.current.weather_code;
             if (args.about) {
                 var chance = (daily.precipitation_probability_max || [])[i];
                 return { text: say.weatherWill(args.about, pl.name, args.day || "today", chance, WMO[(daily.weather_code || [])[i]] || "", hi, lo, unit), open: open };
@@ -1356,15 +1384,30 @@ var MEMO_COLORS = ["blue", "yellow", "green", "pink", "salmon"];
 
 // ---- Tasks ---------------------------------------------------------------------------------------
 
+// A list's name as people say it: "grocery", "groceries" and "the shopping
+// list" are one list, as Siri's and Google Assistant's shopping list is (the
+// sweep: "add batteries to the grocery list" made a second list beside
+// Groceries); "to do", "tasks", "reminders": the default list ("").
+function listKey(name) {
+    // "Add milk to my list": the default one (it made a list called "My").
+    var n = words(name).replace(/^(?:my|the|our)(?: |$)/, "").replace(/(?:^| )list$/, "").trim();
+    if (/^(?:|to ?-?dos?|todos?|tasks?|reminders?|inbox)$/.test(n)) return "";
+    if (/^(?:grocery|groceries|shopping|grocery shopping|food shopping|supermarket)$/.test(n)) return "grocery";
+    return n.replace(/ies$/, "y").replace(/([^s])s$/, "$1");
+}
+function listNamed(lists, name) {
+    var key = listKey(name), n = words(name);
+    if (!key) return lists.filter(function (l) { return l.isDefault; })[0] || null;
+    return lists.filter(function (l) { return words(l.name) === n; })[0]
+        || lists.filter(function (l) { return listKey(l.name) === key; })[0]
+        || lists.filter(function (l) { return words(l.name).indexOf(n) === 0; })[0] || null;
+}
 function taskList(env, name) {
     // One list by its id (an account's: lib/commands-synergy.js).
     if (name && name.id) return dbGet(env, name.id).then(function (l) { return l ? listOf(l, l.name) : taskList(env, ""); });
     return dbFind(env, "com.palm.tasklist:1").then(function (lists) {
-        if (name) {
-            var n = words(name);
-            var hit = lists.filter(function (l) { return words(l.name) === n; })[0]
-                || lists.filter(function (l) { return words(l.name).replace(/ list$/, "") === n.replace(/ list$/, ""); })[0]
-                || lists.filter(function (l) { return words(l.name).indexOf(n) === 0; })[0];
+        if (name && listKey(name)) {
+            var hit = listNamed(lists, name);
             if (hit) return listOf(hit, hit.name);
             return dbPut(env, [{ _kind: "com.palm.tasklist:1", name: name, accountId: "", sortOrder: lists.length }])
                 .then(function (ids) { return { id: ids[0], name: name, made: true }; });
@@ -1620,15 +1663,22 @@ function runInner(cmd, args, env) {
     case "timer": {
         var id = "assistant.timer." + now.toString(36) + Math.random().toString(36).slice(2, 6);
         var label = String(args.label || "");
+        // A sleep timer pauses whatever plays when it ends, and rings
+        // nothing: the media key the player with the audio focus acts on
+        // (as "pause" does), straight from the activity.
+        var sleep = !!args.sleep || /^sleep$/i.test(label);
+        if (sleep) label = "sleep";
+        var callback = sleep ? { method: "luna://org.webosphoenix.system/mediaKey", params: { key: "pause" } }
+            : { method: "palm://com.palm.applicationManager/launch",
+                params: { id: ASSISTANT_APP, params: { timerDone: { id: id, label: label, seconds: args.seconds } } } };
         return lunaCall(env, AM + "create", { start: true, replace: true, activity: {
-            name: id, description: "Assistant timer" + (label ? ": " + label : ""),
+            name: id, description: (sleep ? "Assistant sleep timer" : "Assistant timer" + (label ? ": " + label : "")),
             type: { foreground: true, persist: true },
             schedule: { start: activityDate(now + args.seconds * 1000) },
-            callback: { method: "palm://com.palm.applicationManager/launch",
-                        params: { id: ASSISTANT_APP, params: { timerDone: { id: id, label: label, seconds: args.seconds } } } } } })
+            callback: callback } })
             .then(function () {
-                env.storage.set("assistant:timer:" + id, { id: id, label: label, seconds: args.seconds, ends: now + args.seconds * 1000 });
-                return { text: say.timerSet(args.seconds, label), data: { timer: id, ends: now + args.seconds * 1000 },
+                env.storage.set("assistant:timer:" + id, { id: id, label: label, seconds: args.seconds, ends: now + args.seconds * 1000, sleep: sleep });
+                return { text: sleep ? say.sleepTimerSet(args.seconds) : say.timerSet(args.seconds, label), data: { timer: id, ends: now + args.seconds * 1000 },
                          undo: { kind: "timer", ids: [id], what: say.undoWhat.timer() } };
             });
     }
@@ -1674,6 +1724,12 @@ function runInner(cmd, args, env) {
     case "alarmList":
         return dbFind(env, "com.palm.clock.alarm:1").then(function (all) {
             all.sort(function (a, b) { return (a.hour * 60 + a.minute) - (b.hour * 60 + b.minute); });
+            // "When's my next alarm", "how long until my alarm goes off": the one to ring first, when.
+            if (args.next) {
+                var rings = all.filter(function (a) { return a.enabled !== false && !a._del; })
+                    .map(function (a) { return nextRing(a, now); }).filter(function (t) { return t; }).sort(function (a, b) { return a - b; });
+                return { text: say.nextAlarm(rings.length ? rings[0] : null, now), open: { appId: CLOCK_APP, params: {}, title: "Clock" } };
+            }
             return { text: say.alarmsList(all), open: { appId: CLOCK_APP, params: {}, title: "Clock" } };
         });
     case "alarmManage": {
@@ -2125,9 +2181,9 @@ function runInner(cmd, args, env) {
     }
     case "taskList":
         return dbFind(env, "com.palm.tasklist:1").then(function (lists) {
-            var name = String(args.list || ""), n = words(name).replace(/ list$/, "");
-            var l = name ? lists.filter(function (x) { return words(x.name).replace(/ list$/, "") === n; })[0] || lists.filter(function (x) { return words(x.name).indexOf(n) === 0; })[0]
-                         : lists.filter(function (x) { return x.isDefault; })[0];
+            var name = String(args.list || "");
+            if (!listKey(name)) name = "";
+            var l = name ? listNamed(lists, name) : lists.filter(function (x) { return x.isDefault; })[0];
             if (name && !l) return { text: say.noList(name), open: { appId: TASKS_APP, params: {}, title: "Tasks" } };
             return dbFind(env, "com.palm.task:1").then(function (tasks) {
                 // "for today": what is due by the end of that day (or of the week).

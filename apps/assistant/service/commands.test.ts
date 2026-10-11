@@ -316,12 +316,19 @@ describe("alarms, timers, the stopwatch", () => {
 describe("tasks, memos, contacts", () => {
     it("adds to a named list, making it the first time", async () => {
         const d = device();
-        const m = await d.ask("add milk to my shopping list");
-        expect(m.text).toBe("Added “Milk” to your Shopping list (a new list).");
-        const list = d.of("com.palm.tasklist:1").find((l) => l.name === "Shopping");
-        expect(d.of("com.palm.task:1").find((t) => t.summary === "Milk" && t.listId === list._id)).toMatchObject({ completed: false });
-        expect((await d.ask("put eggs on the shopping list")).text).toBe("Added “Eggs” to your Shopping list.");
+        const m = await d.ask("add nails to my hardware list");
+        expect(m.text).toBe("Added “Nails” to your Hardware list (a new list).");
+        const list = d.of("com.palm.tasklist:1").find((l) => l.name === "Hardware");
+        expect(d.of("com.palm.task:1").find((t) => t.summary === "Nails" && t.listId === list._id)).toMatchObject({ completed: false });
+        expect((await d.ask("put screws on the hardware list")).text).toBe("Added “Screws” to your Hardware list.");
         expect(d.of("com.palm.tasklist:1")).toHaveLength(3);
+        // The shopping list, the grocery list: the Groceries list there is (as
+        // Siri's and Google's one shopping list), never a second one beside it.
+        expect((await d.ask("add milk to my shopping list")).text).toBe("Added “Milk” to your Groceries list.");
+        expect((await d.ask("put eggs on the grocery list")).text).toBe("Added “Eggs” to your Groceries list.");
+        expect(d.of("com.palm.tasklist:1")).toHaveLength(3);
+        // "My to do list": the default one.
+        expect((await d.ask("add stamps to my to do list")).text).toBe("Added “Stamps” to your tasks.");
         const t = await d.ask("create a task to call the bank tomorrow");
         expect(t.text).toBe("Added “Call the bank” to your tasks, due tomorrow at 9:00 AM.");
         expect(d.of("com.palm.task:1").find((x) => x.summary === "Call the bank")).toMatchObject({ listId: "list-inbox", due: at(8, 9) });

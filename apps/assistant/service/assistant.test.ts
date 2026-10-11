@@ -392,9 +392,14 @@ describe("never a dead end (the owner's banana pudding, 9 October 2026)", () => 
         t.as("org.webosphoenix.settings");
         await t.svc.selectModel({ id: MODEL });
         t.as("org.webosphoenix.assistant");
-        const r = await ask(t, "tell me a joke");
+        // A joke is the grammar's, at once: the model is not waited for.
+        const before = mock.requests.length;
+        const joke = await ask(t, "tell me a joke");
+        expect(last(joke)).toMatchObject({ via: "commands", command: "chat" });
+        expect(mock.requests.length).toBe(before);
+        const r = await ask(t, "you're great at this");
         expect(r.messages).toHaveLength(2);
-        expect(last(r)).toMatchObject({ via: "on-device", text: "chat says: tell me a joke" });
+        expect(last(r)).toMatchObject({ via: "on-device", text: "chat says: you're great at this" });
         expect(last(r).choices).toBeUndefined();
         const q = await ask(t, "who wrote the odyssey");
         expect(last(q).choices).toEqual([{ id: "web", label: "Search the web" }]);
@@ -563,9 +568,14 @@ describe("the on-device model", () => {
         t.as("com.palm.systemui");
         const from = mock.requests.length;
         await ask(t, "it's dark, put the flashlight on for me");
-        await ask(t, "why is the sky blue");
+        // (A question of the owner's goes through the choice; "why is the sky
+        // blue", about the world alone, is answered without it: below.)
+        await ask(t, "why is my sky blue");
         const sent = mock.requests.slice(from).map((r) => r.body);
         const [pick, call, pick2, chat] = sent;
+        const before = mock.requests.length;
+        await ask(t, "why is the sky blue");
+        expect(mock.requests.slice(before).map((r) => !!r.body.response_format)).toEqual([false]);
         expect(pick.response_format).toBeDefined();
         expect(call.tools).toBeUndefined();
         expect(Object.keys(call.response_format.json_schema.schema.properties)).toContain("setting");
@@ -809,7 +819,7 @@ describe("the on-device model", () => {
     });
 });
 
-describe("the grammar knew the command, not all it needs: the model fills it in", () => {
+describe("the grammar knew the command, not all it needs: the command asks", () => {
     const BUILT_IN = "qwen3-0.6b-q8_0";
     const withModel = () => ({
         status: () => Promise.resolve({ available: true, installed: [{ id: BUILT_IN, builtIn: true }], ramBytes: 2 * 2 ** 30 }),
@@ -817,31 +827,31 @@ describe("the grammar knew the command, not all it needs: the model fills it in"
         download: () => Promise.resolve(), cancel: () => Promise.resolve(), remove: () => Promise.resolve(),
     });
 
-    it("a time the grammar could not read, held to the command's parameters", async () => {
+    // What a command asks for itself ("When is it?") it asks at once: the
+    // model is not waited for (the owner, 11 October 2026; speed.test.ts).
+    // "Friday-ish" is the grammar's Friday now; the model filled it before.
+    it("a day said roughly is the grammar's, with no model asked", async () => {
         const t = setup({ llm: withModel() });
         const before = mock.requests.length;
         const r = await ask(t, "add an event called dentist friday-ish");
-        expect(mock.requests.length).toBe(before + 1);
-        const fill = mock.requests.at(-1)!.body;
-        expect(Object.keys(fill.response_format.json_schema.schema.properties)).toContain("start");
-        expect(fill.response_format.json_schema.schema.required).toEqual([]);
-        expect(fill.temperature).toBe(0);
-        // The model's Friday 9 AM is the start: the event is made (this test has
-        // no calendar to make it in), not asked "When is it?".
-        expect(last(r)).toMatchObject({ via: "on-device", source: "Qwen3 0.6B", command: "event" });
+        expect(mock.requests.length).toBe(before);
+        // Made on Friday (this test has no calendar to make it in), not asked "When is it?".
+        expect(last(r)).toMatchObject({ via: "commands", command: "event" });
         expect(last(r).data?.awaiting).toBeUndefined();
         expect(last(r).text).toMatch(/no calendar/);
     });
 
-    it("what the words never said is dropped, and asked for as before", async () => {
+    it("what the words never said is asked for at once, without the model", async () => {
         const t = setup({ llm: withModel() });
+        const before = mock.requests.length;
         const r = await ask(t, "add an event called dentist");
         expect(last(r)).toMatchObject({ via: "commands", command: "event", data: { awaiting: { command: "event" } } });
+        expect(mock.requests.length).toBe(before);
     });
 
     it("without an on-device model, the grammar asks as before", async () => {
         const t = setup();
-        const r = await ask(t, "add an event called dentist friday-ish");
+        const r = await ask(t, "add an event called dentist");
         expect(last(r)).toMatchObject({ via: "commands", data: { awaiting: { command: "event" } } });
     });
 });

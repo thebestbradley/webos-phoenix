@@ -98,6 +98,15 @@ export function Working({ w }: { w: NonNullable<AssistantThread["working"]> }) {
     );
 }
 
+// An emergency call's countdown (the service places it when it ends,
+// unless Cancel): the seconds left, said as they pass.
+export function Countdown({ m }: { m: AssistantMessage }) {
+    const [, tick] = useState(0);
+    useEffect(() => { const t = window.setInterval(() => tick((n) => n + 1), 250); return () => window.clearInterval(t); }, []);
+    const left = Math.max(0, Math.ceil(((m.time ?? 0) + (m.confirm?.countdown ?? 0) * 1000 - Date.now()) / 1000));
+    return <div className="as-countdown" data-testid="as-countdown" role="timer" aria-live="assertive">{left > 0 ? `Calling in ${left}…` : "Calling…"}</div>;
+}
+
 function Bubble({ m, busy, onChoose, onConfirm, onSuggest, avatar, onMenu }: {
     m: AssistantMessage; busy: boolean;
     onChoose: (m: AssistantMessage, id: string) => void; onConfirm: (m: AssistantMessage, yes: boolean) => void;
@@ -113,7 +122,8 @@ function Bubble({ m, busy, onChoose, onConfirm, onSuggest, avatar, onMenu }: {
     const choices = m.choices && !m.chosen ? m.choices : [];
     // Requests close to words it did not understand ("Did you mean ...?").
     const suggest = choices.length && Array.isArray(m.data?.suggest) ? (m.data!.suggest as string[]) : [];
-    const yes = m.command === "text" ? "Send" : m.command === "call" ? "Call" : "Yes";
+    const counting = asking && !!m.confirm?.countdown;
+    const yes = counting ? "Call Now" : m.command === "text" ? "Send" : m.command === "call" ? "Call" : "Yes";
     return (
         <div className={cx("as-row", mine ? "out" : "in", !!avatar && "with-avatar")} data-testid={`as-msg-${m.id}`}>
             <div className="as-line">
@@ -123,6 +133,7 @@ function Bubble({ m, busy, onChoose, onConfirm, onSuggest, avatar, onMenu }: {
                     {m.text}
                 </div>
             </div>
+            {counting && <Countdown m={m} />}
             <Attachments m={m} onShow={(i) => onChoose(m, `show:${i}`)} onSuggest={onSuggest} />
             {m.followUp && choices.length > 0 && <QuickReplies m={m} busy={busy} onChoose={onChoose} />}
             {!mine && (m.source || m.via) && (
@@ -475,6 +486,10 @@ function Main() {
     const motion = useBirdMotion();
 
     useTimerDone(launch, settings ?? null);
+    // Opened: the on-device model started meanwhile, so the first question
+    // that needs it does not wait for it to load (the service's warm; the
+    // grammar's answers never wait for it).
+    useEffect(() => { void assistant.warm().catch(() => undefined); }, []);
     // Across the pivot (the card resized, rotated): side by side both
     // show; one at a time, the conversation. In the same render, so the
     // panes snap to the new layout rather than slide.
