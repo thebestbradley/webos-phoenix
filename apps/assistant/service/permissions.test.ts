@@ -54,6 +54,7 @@ const GROUPS: [RegExp, string][] = [
     [/^com\.webos\.service\.vpn\//, "vpn.management"],                                                     // LuneOS's luneos-vpn-adapter
     [/^org\.webosphoenix\.service\.location\//, "phoenix.location.permissions"],
     [/^org\.webosphoenix\.system\/mediaKey$/, "phoenix.system.media"],
+    [/^org\.webosphoenix\.system\/getNotifications$/, "phoenix.system.notifications.read"],               // services/shellhost
     [/^com\.webos\.service\.wifi\//, "wifi.management"],
     [/^com\.webos\.service\.connectionmanager\//, "networkconnection"],
     [/^org\.webosports\.service\.torch\//, "torch.operation"],
@@ -193,6 +194,18 @@ describe("what each command may do on a device", () => {
                 expect(m).toMatchObject({ status: "failed", text: "I couldn't save it to Memos: it isn't there when I check." });
                 const r = await d.svc.choose({ threadId: thread, messageId: m.id, choice: "do:0" });
                 expect(r.messages.at(-1)).toMatchObject({ command: "copyText", text: "Copied. You can paste it anywhere." });
+            } else if (c.id === "replyTo") {
+                // The answer to a message read aloud in driving mode: "yes", then the words.
+                await ask("I'm driving");
+                const a = await d.svc.announce({ appId: "org.webosphoenix.messaging", app: "Messaging", title: "Sam", body: "Where are you?" });
+                expect(a).toMatchObject({ spoken: true, listen: true });
+                thread = a.threadId;
+                m = await ask("yes");
+                expect(m).toMatchObject({ command: "replyTo", status: "ask" });
+                m = await ask("almost there");
+                expect(m).toMatchObject({ command: "replyMessage", status: "pending" });
+                m = (await d.svc.confirm({ threadId: thread, messageId: m.id, accept: true })).messages.at(-1);
+                expect(m.status, m.text).toBe("done");
             } else {
                 m = await ask(PHRASES[c.id]);
                 expect(m.command, `"${PHRASES[c.id]}" runs ${c.id}`).toBe(c.id);

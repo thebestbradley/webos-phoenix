@@ -3,7 +3,8 @@
     "com.webos.surfacemanager": [
         "phoenix.shellhost.app",
         "phoenix.shellhost.shell",
-        "phoenix.ongoing"
+        "phoenix.ongoing",
+        "phoenix.system.notifications.publish"
     ],
     "org.webosphoenix.ongoing": [],
     "org.webosphoenix.system": []

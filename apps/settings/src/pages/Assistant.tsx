@@ -31,6 +31,8 @@
 //                    OpenAI-compatible server) with their model and key; add,
 //                    edit, test, remove; the one "Ask ..." offers
 //   Control          whether cloud models may run commands (off by default)
+//   Messages &       announce messages on headphones (off by default),
+//   Driving          driving mode (AssistantEveryday.tsx)
 //   Follow-up        questions after something is made (on by default),
 //   questions        their quiet hours, the ones waiting, and a switch per
 //                    topic (AssistantFollowUps.tsx)
@@ -51,6 +53,7 @@ import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import { Button, Dialog, Group, ListSelector, Note, Page, PageHeader, PopupMenu, Row, Spinner, TextField, ToggleButton } from "@phoenix/ui";
 import { useBack } from "../nav";
 import { FollowUpQuestions } from "./AssistantFollowUps";
+import { MessagesAndDriving } from "./AssistantEveryday";
 import { VoiceMissing } from "./AssistantVoice";
 import { SpeakingVoice } from "./AssistantSpeech";
 import { AssistantPermissions } from "./AssistantPermissions";
@@ -361,6 +364,8 @@ export function AssistantPage() {
             <Note testId="as-voice-wait-note">{"After answering something you said, it keeps listening this long, so you can go on talking; then it asks if there is anything else, and says goodbye if not. Say \u201cI\u2019m done\u201d to end it sooner."}</Note>
             <VoiceMissing />
             <Note testId="as-voice-privacy">{"Listening for \u201cHey Phoenix\u201d happens on this phone. The microphone goes only to the wake word spotter, which keeps the last few seconds in memory and nothing more; nothing is recorded, sent or saved until it hears the phrase, and what you say after it is turned into text on the phone too. A microphone in the status bar shows whenever it is open: faint while it waits for the phrase, orange while it listens to you."}</Note>
+
+            <MessagesAndDriving settings={s} set={set} off={off} />
 
             <FollowUpQuestions settings={s} set={set} off={off} />
 

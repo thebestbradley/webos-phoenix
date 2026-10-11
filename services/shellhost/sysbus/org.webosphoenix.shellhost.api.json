@@ -18,5 +18,11 @@
     ],
     "phoenix.system.restart": [
         "org.webosphoenix.system/restartUi"
+    ],
+    "phoenix.system.notifications.publish": [
+        "org.webosphoenix.system/setNotifications"
+    ],
+    "phoenix.system.notifications.read": [
+        "org.webosphoenix.system/getNotifications"
     ]
 }

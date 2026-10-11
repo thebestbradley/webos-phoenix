@@ -653,6 +653,33 @@ Item {
         _wakeUntil = Date.now() + wakeWaitMs;
         listen();
     }
+    // A message read aloud in driving mode ("Sam says: ... Want to reply?",
+    // the service's announce; NotificationFeed.qml): its conversation, and
+    // listening for the answer once it has been said.
+    property int _replyWait: 0
+    function replyByVoice(id) {
+        if (String(id || "") !== "")
+            threadId = String(id);
+        voice = true;
+        handsFree = true;
+        _asked = true;
+        refresh();
+        _replyWait = 3;
+        replyTimer.restart();
+    }
+    Timer {
+        id: replyTimer
+        interval: 250
+        repeat: true
+        onTriggered: {
+            // Speech starts a moment after the announcement: a little grace.
+            if (!ov.open) { stop(); return; }
+            if (ov.speaking || ov.busy || ov.listening || ov._replyWait-- > 0)
+                return;
+            stop();
+            ov.listen();
+        }
+    }
     // Asked again by voice (after the unlock).
     function askByVoice(text) {
         voice = true;

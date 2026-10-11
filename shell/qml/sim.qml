@@ -6,7 +6,8 @@
 // Context properties set by phoenix-sim:
 //   simScene       "locked" | "cards" | "stacks" | "longstack" | "reorder" | "maximized" | "heldcard" | "launcher" |
 //                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" | "drawer" | "capture" | "capturepreview" |
-//                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistantbird" | "assistantbirds" | "assistantbirdmoves" |
+//                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistant:<request>|<request>|..." |
+//                  "assistantbird" | "assistantbirds" | "assistantbirdmoves" |
 //                  "wakeword" | "wakewordlocked" | "modal" |
 //                  "systemmenu" | "empty"
 //   simFirstUse    start with First Use (--first-use); without it First Use
@@ -1805,7 +1806,7 @@ Item {
                 if (typeof simScene !== "undefined" && simScene === "clipstrip")
                     root.clipStripScene();
                 // --scene assistant with --launch: the assistant over that app.
-                if (typeof simScene !== "undefined" && simScene === "assistant")
+                if (typeof simScene !== "undefined" && (simScene === "assistant" || simScene.indexOf("assistant:") === 0))
                     root.assistantScene();
                 root.startOnTouchstone();
             });
@@ -1993,7 +1994,7 @@ Item {
         } else if (scene === "clipstrip") {
             shell.startJustType("");
             clipStripScene();
-        } else if (scene === "assistant") {
+        } else if (scene === "assistant" || scene.indexOf("assistant:") === 0) {
             assistantScene();
         } else if (scene === "wakeword" || scene === "wakewordlocked") {
             wakeWordScene.locked = scene === "wakewordlocked";
@@ -2029,8 +2030,14 @@ Item {
     // its own; with --launch org.webosphoenix.assistant the app has it
     // instead. Each request waits for an answer; one made before a page
     // with the runtime was up is made again.
+    // "assistant:<request>|<request>|...": these requests instead, in turn
+    // (each in the same conversation). A step "@notified" puts the
+    // "notified" scene's notifications in the dashboard first; "@message:
+    // <who>: <words>" a text received (as the toolbar's SMS button);
+    // "@wait:<ms>" waits. For checking the Assistant's features by hand.
     function assistantScene() {
-        assistantSceneSteps.asks = ["What's 15% of 80?", "Set a timer for 10 minutes", "Who wrote the Odyssey?"];
+        var custom = scene.indexOf("assistant:") === 0 ? scene.slice(10).split("|").filter(function (s) { return s.trim() !== ""; }) : [];
+        assistantSceneSteps.asks = custom.length ? custom : ["What's 15% of 80?", "Set a timer for 10 minutes", "Who wrote the Odyssey?"];
         assistantSceneSteps.inApp = shell.cardView.maximized && shell._appIdOf(shell.cardView.currentUid) === "org.webosphoenix.assistant";
         assistantSceneSteps.up = false;
         assistantSceneSteps.next();
@@ -2070,6 +2077,26 @@ Item {
                 stop();
                 return;
             }
+            // A step of the scene's own ("assistant:@notified|what did I miss").
+            var step = String(asks[0]).trim();
+            console.info("phoenix-sim: assistant scene: " + step);
+            if (step.charAt(0) === "@") {
+                assistantSceneSteps.asks = assistantSceneSteps.asks.slice(1);
+                if (step === "@notified") {
+                    windows.notify(windows.appIdByTitle("Messaging"), "Palm Pre", "It's good to be back.");
+                    windows.notify(windows.appIdByTitle("Email"), "3 new emails", "webOS Phoenix build passed");
+                    windows.notify(windows.appIdByTitle("Calendar"), "Launch party", "Tomorrow, 9:41 AM");
+                } else if (step === "@sms") {
+                    windows.simulateIncomingSms();
+                } else if (step === "@lock") {
+                    shell.lock();
+                }
+                var pause = /^@wait:(\d+)$/.exec(step);
+                assistantSceneSteps.interval = pause ? Number(pause[1]) : 1500;
+                assistantSceneSteps.restart();
+                return;
+            }
+            assistantSceneSteps.interval = 3000;
             var answered = function (r) {
                 if (mine !== assistantSceneSteps.serial)
                     return;

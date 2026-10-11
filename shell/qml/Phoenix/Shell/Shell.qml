@@ -2268,6 +2268,32 @@ FocusScope {
         target: dictationEngine
         function onWakeHeard(heard) { shell.wakeAssistant(); }
     }
+    // The notification list for the services that read it, and each new
+    // notification for the Assistant to announce (driving mode; headphones
+    // in with Announce Messages on): NotificationFeed.qml.
+    NotificationFeed {
+        id: notificationFeed
+        source: shell.source
+        locked: shell.locked
+        previews: !shell.system || shell.system.lockScreenPreviews !== false
+        headphones: !!shell.system && ((shell.system.headset !== undefined && shell.system.headset !== "none")
+                                       || /head(?:set|phone)|ear ?(?:bud|phone)|airpods/i.test(String(shell.system.bluetoothDevice || "")))
+        onReplyByVoice: (threadId) => shell.listenForReply(threadId)
+    }
+    // Driving mode: a message read aloud asks "Want to reply?", and the
+    // Assistant listens for the answer in that conversation (over the lock
+    // screen too, as a spoken request may be).
+    function listenForReply(threadId) {
+        if (firstUse || dockMode)
+            return;
+        justType.open = false;
+        iconMenu.open = false;
+        assistantView.listenOnOpen = false;
+        assistantView.origin = Qt.point(assistantView.width / 2, assistantView.height);
+        if (!assistantView.open)
+            assistantView.open = true;
+        assistantView.replyByVoice(threadId);
+    }
     function wakeAssistant() {
         if (!wakeWordListening)
             return;

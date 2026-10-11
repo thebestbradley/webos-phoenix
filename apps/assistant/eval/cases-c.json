@@ -1,0 +1,48 @@
+{
+ "about": "The everyday features (docs/AI-AND-MCP.md \"Everyday features\"; lib/commands-everyday.js): what did I miss, driving mode, announcing messages, routines, the camera and voice memos, places, music, quick facts, settings by voice, emergency calls, the home. Ids start with c- (tools/eval-assistant.cjs reads every cases-*.json beside cases.json).",
+ "cases": [
+  { "id": "c-notif-01", "cat": "notifications", "say": "what did I miss",
+    "deviceState": { "notifications": [
+      { "id": "n1", "appId": "org.webosphoenix.messaging", "app": "Messaging", "title": "Sam Delgado", "body": "Running 5 min late", "time": 1791360000000 },
+      { "id": "n2", "appId": "com.palm.app.email", "app": "Email", "title": "Alex Rivera", "body": "Invoice 2231", "time": 1791356400000 } ] },
+    "expect": { "command": "notifications", "args": { "app": "" } }, "text": "From Messaging: Sam Delgado.*From Email: Alex Rivera" },
+  { "id": "c-notif-02", "cat": "notifications", "say": "read my notifications",
+    "deviceState": { "notifications": [ { "id": "n1", "appId": "org.webosphoenix.messaging", "app": "Messaging", "title": "Priya Nair", "body": "Lunch at noon?", "time": 1791360000000 } ] },
+    "expect": { "command": "notifications" }, "text": "Priya Nair, .Lunch at noon" },
+  { "id": "c-notif-03", "cat": "notifications", "say": "any new notifications from email",
+    "deviceState": { "notifications": [
+      { "id": "n1", "appId": "org.webosphoenix.messaging", "app": "Messaging", "title": "Sam Delgado", "body": "Running late", "time": 1791360000000 },
+      { "id": "n2", "appId": "com.palm.app.email", "app": "Email", "title": "Alex Rivera", "body": "Invoice 2231", "time": 1791356400000 } ] },
+    "expect": { "command": "notifications", "args": { "app": "email" } }, "text": "Alex Rivera", "notText": "Sam Delgado" },
+  { "id": "c-notif-04", "cat": "notifications", "say": "do I have any notifications",
+    "expect": { "command": "notifications" }, "text": "caught up" },
+  { "id": "c-notif-05", "cat": "notifications", "say": "what did I miss",
+    "deviceState": { "deviceLocked": true, "previews": false, "notifications": [
+      { "id": "n1", "appId": "org.webosphoenix.messaging", "app": "Messaging", "title": "Sam Delgado", "body": "Running 5 min late", "time": 1791360000000 } ] },
+    "expect": { "command": "notifications" }, "text": "1 from Messaging.*Unlock", "notText": "Sam|Running" },
+  { "id": "c-notif-06", "cat": "notifications", "say": "catch me up",
+    "expect": { "command": "notifications" } },
+  { "id": "c-notif-07", "cat": "notifications", "say": "did I miss any calls",
+    "expect": { "command": "callLog", "args": { "missed": true } } },
+  { "id": "c-notif-08", "cat": "notifications", "say": "check my notifications please",
+    "expect": { "command": "notifications" } },
+  { "id": "c-drive-01", "cat": "driving", "say": "I'm driving",
+    "expect": { "command": "drivingMode", "args": { "state": "on" } }, "text": "Driving mode is on" },
+  { "id": "c-drive-02", "cat": "driving", "say": "turn on driving mode",
+    "expect": { "command": "drivingMode", "args": { "state": "on" } } },
+  { "id": "c-drive-03", "cat": "driving", "turns": [
+    { "say": "I'm in the car", "expect": { "command": "drivingMode", "args": { "state": "on" } } },
+    { "say": "is driving mode on", "expect": { "command": "drivingMode", "args": { "state": "status" } }, "text": "^Yes" },
+    { "say": "I'm done driving", "expect": { "command": "drivingMode", "args": { "state": "off" } }, "text": "Driving mode is off" } ] },
+  { "id": "c-drive-04", "cat": "driving", "say": "don't turn on driving mode",
+    "expect": { "answer": "chat" }, "forbid": ["drivingMode"] },
+  { "id": "c-drive-05", "cat": "driving", "say": "driving mode off",
+    "expect": { "command": "drivingMode", "args": { "state": "off" } }, "text": "already off" },
+  { "id": "c-announce-01", "cat": "driving", "say": "announce my messages on my headphones",
+    "expect": { "command": "announceMessages", "args": { "state": "on" } } },
+  { "id": "c-announce-02", "cat": "driving", "say": "stop announcing messages",
+    "expect": { "command": "announceMessages", "args": { "state": "off" } } },
+  { "id": "c-announce-03", "cat": "driving", "say": "read my texts aloud when they come in",
+    "expect": { "command": "announceMessages", "args": { "state": "on" } } }
+ ]
+}

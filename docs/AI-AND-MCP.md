@@ -1279,6 +1279,59 @@ Whether to fine-tune it and ship it is the owner's decision
 (OPEN-QUESTIONS.md Q88). The candidates are worth having without Laya
 too: they are the "Did you mean" list a fallback could offer.
 
+### Everyday features (11 October 2026)
+
+What other assistants do every day and the grammar did not, built without
+a model (the owner: "making our assistant on par with everyone else's").
+Each area is a file of commands (`apps/assistant/service/lib/commands-<area>.js`,
+registered by `lib/commands-everyday.js`) and a file of English
+(`lib/lang/en-<area>.js`, by `lib/lang/en-everyday.js`), with its tests
+(`everyday-<area>.test.ts`) and evaluation cases (`apps/assistant/eval/cases-c.json`).
+The service's own methods for them (the shell's, Settings') are added the
+same way (`METHODS`). A command may run over the lock screen when it keeps
+to what the lock screen shows (`whenLocked`).
+
+**What did I miss** (`notifications`; `lib/commands-notify.js`). "What did
+I miss", "read my notifications (from Messaging)", "any new notifications",
+"catch me up": the shell's notification list, grouped by app, the app
+with the newest first and each app's newest first, six said by name at
+most ("and 3 more"), each a card opening its app. The list is the
+shell's (the dashboard): `NotificationFeed.qml` gives it, newest first,
+with the lock screen's state, to the window source's `publishNotifications`;
+in the simulator the pages keep it from the shell's status and answer
+`org.webosphoenix.system getNotifications`, on a device the shell gives it
+to `services/shellhost` (`setNotifications`), which answers it; only the
+Assistant and the system UI may read it (`phoenix.system.notifications.read`).
+A dashboard window's words come from its page (`.dashboard-title`,
+`.palm-dashboard-text`: enyo-1.0 `DashboardContent.js:183-185`). With the
+lock screen up and **Show previews** off (Settings > Screen & Lock), it
+says how many from which app and "Unlock your phone to hear what they
+say", never who or what, as the lock screen itself shows them
+(`LockScreen.qml` privatePreviews); it may be asked over the lock screen.
+Missed calls are in it only when the Phone app has put a notification
+there (it does not yet: GAPS E6); "did I miss any calls" is still the
+call log.
+
+**Announcing messages and driving mode** (`announceMessages`,
+`drivingMode`). Settings > Assistant > Messages & Driving. With **Announce
+Messages** on (off by default; "announce my messages on my headphones"),
+a message that comes while headphones are in (a wired headset, or a
+Bluetooth headset connected) is said aloud: "Sam Delgado says: Where are
+you?". **Driving mode** ("I'm driving", "I'm done driving", "am I in
+driving mode", or its switch) says every message as it comes, then "Want
+to reply?", and listens: "yes" asks what to say, the words are read back
+("Send "Almost there" to Sam Delgado?") and sent on a "yes", as any
+spoken read-back is; "no" lets it go; "reply on my way" does it at once.
+The rest stays quiet: Do Not Disturb (the ringer off, as webOS's mute
+switch) while it is on, as it was before when it ends. The shell offers
+each notification to the service (`announce {appId, app, title, body,
+headphones}`), which decides; `{listen: true}` opens the Assistant's view
+on that conversation and listens once the announcement has been said.
+Messages are Messaging's and the chat apps'; other notifications are
+never said. Checked in the simulator (`--scene "assistant:@notified|what
+did I miss"`, `"assistant:I'm driving|@sms|@wait:10000"`: the `assistant:`
+scene asks its own requests, `@notified`, `@sms` and `@lock` set the scene).
+
 ### Next: 2.0
 
 **In 2.0** the same assistant grows into the agent this document plans:

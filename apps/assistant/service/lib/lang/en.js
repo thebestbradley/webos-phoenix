@@ -2880,7 +2880,22 @@ say.done = function (text, checkIn) {
     return DONE.test(t) || (!!checkIn && NO_MORE.test(t));
 };
 
+// The everyday features' words (lib/lang/en-everyday.js): their rules
+// first, after help and undo (each held to its own words), the late ones
+// before "open an app".
+var everyday = require("./en-everyday")({ D: D, extract: extract, resolve: resolve, clock: clock, duration: duration, number: number, digits: digits,
+                                          capital: capital, cased: cased, plural: plural, list: list, timeText: timeText, dayText: dayText,
+                                          whenText: whenText, durationText: durationText, clean: clean, toggleTarget: toggleTarget });
+Array.prototype.splice.apply(rules, [2, 0].concat(everyday.rules));
+Array.prototype.splice.apply(rules, [rules.length - 1, 0].concat(everyday.late));
+Object.keys(everyday.say).forEach(function (k) { if (!(k in say)) say[k] = everyday.say[k]; });
+Object.keys(everyday.MENTIONS).forEach(function (k) { if (!(k in MENTIONS)) MENTIONS[k] = everyday.MENTIONS[k]; });
+var describeCommand = say.describe;
+say.describe = function (command, args, title) { return everyday.describe(command, args, title) || describeCommand(command, args, title); };
+
 module.exports = {
+    // Help's examples for the everyday features ([{title, examples}]).
+    everydayHelp: everyday.help,
     id: "en",
     name: "English",
     clean: clean,

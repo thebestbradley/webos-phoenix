@@ -63,7 +63,9 @@ function device(opts) {
                   gps: true, network: true, locationAllowed: opts.locationAllowed === undefined ? true : opts.locationAllowed,
                   prefs: { rotationLock: false }, nowPlaying: null,
                   hotspot: false, hotspotPass: false, vpn: "", vpnProfiles: [],
-                  wifi: true, bluetooth: false, airplane: false, flashlight: false, launched: [] };
+                  wifi: true, bluetooth: false, airplane: false, flashlight: false, launched: [],
+                  // The shell's notifications ({id, appId, app, title, body, time, ongoing}), the lock screen, its previews.
+                  notifications: [], deviceLocked: false, previews: true };
     function okr(o) { return Promise.resolve(Object.assign({ returnValue: true }, o || {})); }
     var luna = {
         call: function (uri, p) {
@@ -116,6 +118,14 @@ function device(opts) {
             if (m === "com.webos.service.vpn/connect") { state.vpn = p.vpnProfileName; return okr(); }
             if (m === "com.webos.service.vpn/disconnect") { state.vpn = ""; return okr(); }
             if (m === "org.webosphoenix.system/getNowPlaying") return okr({ nowPlaying: state.nowPlaying });
+            // The shell's notification list (services/shellhost notificationsAnswer, as the runtime answers it).
+            if (m === "org.webosphoenix.system/getNotifications") {
+                var hidden = state.deviceLocked && !state.previews;
+                var nl = state.notifications.slice().sort(function (a, b) { return b.time - a.time; }).map(function (x) {
+                    return hidden ? { id: x.id, appId: x.appId, app: x.app, title: "", body: "", time: x.time, ongoing: !!x.ongoing } : x;
+                });
+                return okr({ notifications: nl, locked: state.deviceLocked, previews: state.previews, private: hidden });
+            }
             if (m === "com.palm.telephony/voicemailQuery") return okr({ number: "(408) 555-0100", waiting: true, count: 2 });
             if (m === "com.webos.service.systemservice/deviceInfo/query") return okr({ storage_free: "5.8 GB", storage_size: "8 GB" });
             if (m === "org.webosphoenix.service.packages/search")

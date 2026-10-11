@@ -79,6 +79,11 @@
 {"id":"h-fu-3","cat":"follow-ups","turns":[{"say":"turn off bluetooth","expect":{"command":"toggle"}},{"say":"turn it back on","expect":{"command":"toggle","args":{"setting":"bluetooth","state":"on"}}}]},
 {"id":"h-fu-4","cat":"follow-ups","turns":[{"say":"text Priya see you soon","expect":{"command":"text","status":"pending"}},{"say":"yes send it","expect":{"command":"text","status":"done"}}]},
 {"id":"h-corr-1","cat":"corrections","turns":[{"say":"remind me to call the bank at 4","expect":{"command":"reminder"}},{"say":"no, make it 5","expect":{"command":"reminder","args":{"due":"2026-10-07T17:00"}}}]},
-{"id":"h-corr-2","cat":"corrections","turns":[{"say":"what's the time in Paris","expect":{"command":"worldTime"}},{"say":"I meant Rome","expect":{"command":"worldTime","args":{"place":"rome"}}}]}
+{"id":"h-corr-2","cat":"corrections","turns":[{"say":"what's the time in Paris","expect":{"command":"worldTime"}},{"say":"I meant Rome","expect":{"command":"worldTime","args":{"place":"rome"}}}]},
+{"id":"h-c-notif-1","cat":"notifications","say":"anything come in while I was away","expect":{"command":"notifications"}},
+{"id":"h-c-notif-2","cat":"notifications","say":"read out my alerts","expect":{"command":"notifications"}},
+{"id":"h-c-drive-1","cat":"driving","say":"put my phone in driving mode","expect":{"command":"drivingMode","args":{"state":"on"}}},
+{"id":"h-c-drive-2","cat":"driving","say":"we've arrived, you can stop driving mode","expect":{"command":"drivingMode","args":{"state":"off"}}},
+{"id":"h-c-announce-1","cat":"driving","say":"read incoming texts out loud in my earbuds","expect":{"command":"announceMessages","args":{"state":"on"}}}
 ]
 }

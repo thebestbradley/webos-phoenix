@@ -1236,6 +1236,41 @@
             return nativeOpen.call(global, url, name, features);
         };
     }
+    // A dashboard window's words, for the services that read the
+    // notification list (the Assistant's "what did I miss"): the shell
+    // shows the window itself, so its page says what it shows, as it
+    // changes: {dashboardText: {title, body}} (SimWindowSource
+    // _systemWindowProperties, NotificationFeed.qml). Enyo's dashboard puts
+    // them in .dashboard-title and .palm-dashboard-text (enyo-1.0
+    // DashboardContent.js:183-185), Mojo's in .dashboard-title and
+    // .dashboard-text; another page's first line and the rest.
+    (function dashboardWords() {
+        var doc = global.document;
+        if (!doc || typeof global.MutationObserver !== "function" ||
+            !/[#&]phoenixWindow=dashboard(?:&|$)/.test(String(global.location && global.location.hash || ""))) return;
+        var last = "", timer = null;
+        function clean(s) { return String(s || "").replace(/\s+/g, " ").trim(); }
+        function text(sel) { var e = doc.querySelector(sel); return e ? clean(e.textContent) : ""; }
+        function report() {
+            timer = null;
+            var title = text(".dashboard-title"), body = text(".palm-dashboard-text, .dashboard-text");
+            if (!title && !body) {
+                var lines = String(doc.body && doc.body.innerText || "").split("\n").map(clean).filter(Boolean);
+                title = lines[0] || "";
+                body = lines.slice(1).join(" ");
+            }
+            if (title + "\n" + body === last) return;
+            last = title + "\n" + body;
+            host.postToHost("windowProperties", { appId: PalmSystem.appIdentifier, dashboardText: { title: title.slice(0, 300), body: body.slice(0, 1000) } });
+        }
+        function later() { if (!timer) timer = setTimeout(report, 200); }
+        function start() {
+            new global.MutationObserver(later).observe(doc.body || doc.documentElement, { childList: true, subtree: true, characterData: true });
+            later();
+        }
+        if (doc.readyState === "loading") doc.addEventListener("DOMContentLoaded", start);
+        else start();
+    })();
     global.palmGetResource = function (path, flags) { return PalmSystem.getResource(path, flags); };
 
     // ---- Service bus -------------------------------------------------------------------
@@ -3630,6 +3665,26 @@
             reply(ok());
         },
         "/getNowPlaying": function (p, reply) { reply(ok({ nowPlaying: store.get("media:nowPlaying", null) })); },
+        // The notification list, as the shell last said it (NotificationFeed.qml
+        // through systemStatus {notifications}): getNotifications -> {notifications:
+        // [{id, appId, app, title, body, time, ongoing}] newest first, locked,
+        // previews, private}, for the Assistant's "what did I miss" and the
+        // system UI only. Locked with Show previews off (Settings > Screen &
+        // Lock), which app and when, never who or what (services/shellhost's
+        // notificationsAnswer, the same on a device).
+        "/getNotifications": function (p, reply, ctx) {
+            var who = (ctx && ctx.caller) || PalmSystem.appIdentifier;
+            if (["org.webosphoenix.assistant", "com.palm.systemui"].indexOf(who) < 0)
+                return reply(fail(-1, "Not allowed to read the notifications"));
+            var st = store.get("shell:notifications", null) || { notifications: [] };
+            var locked = !!store.get("deviceLocked", false), previews = prefs().lockScreenPreviews !== false && st.previews !== false;
+            var hidden = locked && !previews;
+            var list = (Array.isArray(st.notifications) ? st.notifications : []).slice().sort(function (a, b) { return (b.time || 0) - (a.time || 0); })
+                .map(function (n) {
+                    return hidden ? { id: n.id, appId: n.appId, app: n.app, title: "", body: "", time: n.time, ongoing: !!n.ongoing } : n;
+                });
+            reply(ok({ notifications: list, locked: locked, previews: previews, private: hidden }));
+        },
         "/mediaKey": function (p, reply) {
             if (["play", "pause", "togglePausePlay", "stop", "next", "prev"].indexOf(p.key) < 0)
                 return reply(fail(-1, "key: play, pause, togglePausePlay, stop, next or prev"));
@@ -7380,6 +7435,9 @@
                 if ("volume" in st) s.audio.volume = Math.max(0, Math.min(100, Math.round(st.volume)));
                 vpnFromShell(s, st);
             }
+            // The notification list (NotificationFeed.qml): org.webosphoenix.system getNotifications.
+            if (writer && st.notifications && typeof st.notifications === "object" && toJson(st.notifications) !== toJson(store.get("shell:notifications", null)))
+                store.set("shell:notifications", st.notifications);
             // The shell's lock screen (com.palm.systemmanager getLockStatus).
             if ("deviceLocked" in st && !!st.deviceLocked !== !!store.get("deviceLocked", false)) {
                 store.set("deviceLocked", !!st.deviceLocked);
@@ -17027,7 +17085,9 @@
          "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
          "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "sessionPhrase", "vocabulary",
          "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps", "markRead",
-         "connect", "retry", "voice"].forEach(function (name) {
+         "connect", "retry", "voice",
+         // The everyday features' own (lib/commands-everyday.js; assistant.js METHODS).
+         "announce", "driving"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
                 var m;
                 try { m = service(); } catch (e) { return reply(fail(-1, String(e.message || e))); }

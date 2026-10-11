@@ -862,7 +862,16 @@ Item {
                                color: info.color || "#666666", glyph: info.glyph || "!", icon: info.icon || "",
                                params: params && typeof params === "object" ? JSON.stringify(params) : (typeof params === "string" ? params : ""),
                                windowKey: "", clickableWhenLocked: false, ongoing: false, progress: -1,
-                               tag: extra && extra.tag ? extra.tag : "", actions: acts ? JSON.stringify(acts) : "" });
+                               tag: extra && extra.tag ? extra.tag : "", actions: acts ? JSON.stringify(acts) : "",
+                               time: Date.now(), dashboardTitle: "", dashboardBody: "" });
+    }
+
+    // The list as NotificationFeed.qml reads it ({notifications, locked,
+    // previews}): to org.webosphoenix.system (services/shellhost), which
+    // answers getNotifications (the Assistant's "what did I miss").
+    // STATUS: written against shellhost.test.ts; not yet run on a device.
+    function publishNotifications(digest) {
+        lunaCall("luna://org.webosphoenix.system/setNotifications", digest, function() {});
     }
 
     function removeTagged(appId, tag, prefix) {
@@ -902,7 +911,8 @@ Item {
         notifications.insert(Policy.ongoingInsertIndex(flags), {
             id: key, appId: target, title: p.title || "", body: p.body || "",
             color: info.color || "#666666", glyph: info.glyph || "!", icon: p.icon ? _iconUrl(p.icon, target) : (info.icon || ""),
-            params: params, windowKey: "", clickableWhenLocked: false, ongoing: true, progress: progress, tag: "", actions: ""
+            params: params, windowKey: "", clickableWhenLocked: false, ongoing: true, progress: progress, tag: "", actions: "",
+            time: Date.now(), dashboardTitle: "", dashboardBody: ""
         });
     }
 

@@ -146,6 +146,8 @@ export interface AssistantSettings {
     followUpTopicsOff: FollowUpKind[];
     /** The decision model between the grammar and the general model (Laya, docs/AI-AND-MCP.md): "on" or "off" (default). */
     decider?: "on" | "off";
+    /** Messages read aloud as they come while headphones are in (off by default). */
+    announceMessages?: boolean;
 }
 
 /** Settings > Assistant: the personalities, speeds and waits the service takes. */
@@ -364,6 +366,13 @@ export const assistant = {
     async cancelDownload(id: string): Promise<void> { await c("cancelDownload", { id }); },
     async removeModel(id: string): Promise<void> { await c("removeModel", { id }); },
     async selectModel(id: string): Promise<void> { await c("selectModel", { id }); },
+
+    // ---- The everyday features (the service's lib/commands-everyday.js) ----
+    /** Driving mode: as it is, or turned on or off (messages read aloud, replies by voice, the rest quiet). */
+    async driving(on?: boolean): Promise<{ on: boolean; since: number }> {
+        const r = await c("driving", on === undefined ? {} : { on });
+        return { on: !!r.on, since: r.since || 0 };
+    },
 };
 
 export const tts = {

@@ -29,4 +29,6 @@ module.exports = {
     emailReply: "reply to my last email saying thanks", travelTime: "how long will it take to drive to the airport", locationAccess: "",
     detail: "what time is my dentist appointment", edit: "rename my dentist appointment to Dentist checkup",
     chat: "hello", checkDone: "did you add it", settingStatus: "is wifi on",
+    // The everyday features (lib/commands-everyday.js); replyTo: the answer to a message read aloud.
+    notifications: "what did I miss", drivingMode: "I'm driving", announceMessages: "announce my messages on my headphones", replyTo: "",
 };

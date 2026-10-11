@@ -658,6 +658,8 @@ function prepareInner(cmd, args, env) {
     var say = env.lang.say;
     args = Object.assign({}, args || {});
     function reply(text) { return Promise.resolve({ args: args, reply: text }); }
+    var own = everyday.prepare(cmd, args, env);
+    if (own) return own;
     if (cmd.id === "text" && args.via && args.via !== "sms") return chatTarget(env, cmd, args, CHAT_NETS[args.via]);
     if (cmd.id === "call" || cmd.id === "text") {
         var who = String(args.who || "").trim();
@@ -1560,7 +1562,7 @@ function helpNow(env) {
 
 function runInner(cmd, args, env) {
     var say = env.lang.say, now = env.now();
-    var detailed = details.run(cmd, args, env);
+    var detailed = details.run(cmd, args, env) || everyday.run(cmd, args, env);
     if (detailed) return detailed;
     switch (cmd.id) {
     case "call":
@@ -2204,7 +2206,7 @@ function runInner(cmd, args, env) {
         }
         return helpNow(env).then(function (nowList) {
             var groups = [{ type: "examples", title: say.rightNow(), items: nowList.map(function (x) { return { text: x }; }) }]
-                .concat(HELP_GROUPS.map(function (g) { return { type: "examples", title: g.title, items: g.examples.map(function (x) { return { text: x }; }) }; }));
+                .concat(HELP_GROUPS.concat(env.lang.everydayHelp || []).map(function (g) { return { type: "examples", title: g.title, items: g.examples.map(function (x) { return { text: x }; }) }; }));
             return { text: say.helpOverview(), attachments: groups, open: { appId: HELP_APP, params: {}, title: "Help" } };
         });
     }
@@ -2325,7 +2327,15 @@ function undo(u, env) {
     return cancel(u.activities).then(function () { return lunaCall(env, DB + "del", { ids: u.ids || [] }); });
 }
 
+// The everyday features (lib/commands-everyday.js: each area's own file).
+var everyday = require("./commands-everyday")({ D: D, lunaCall: lunaCall, dbFind: dbFind, cards: cards, whenShown: whenShown, launch: launch,
+                                                TOGGLE_RUN: TOGGLE_RUN, TOGGLE_STATE: TOGGLE_STATE, activityDate: activityDate, localDate: localDate,
+                                                personName: personName, findPerson: findPerson, people: people, here: here, getJson: getJson,
+                                                prepare: prepare, run: run, find: find, needsConfirm: needsConfirm, BUILT_IN: BUILT_IN });
+Array.prototype.push.apply(BUILT_IN, everyday.COMMANDS);
+
 module.exports = {
+    everyday: everyday,
     findPeople: findPeople,
     personName: personName,
     dbGet: dbGet,

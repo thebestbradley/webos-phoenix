@@ -116,6 +116,7 @@ var DEFAULTS = {
     followUpFirst: 60,          // ... a question left unanswered comes back this many minutes later
     followUpAgain: 240,         // ... and once more this many after that (0: not again)
     followUpTopicsOff: [],      // follow-up topics turned off (Settings, or "Stop asking"): lib/followups.js KINDS
+    announceMessages: false,    // messages said aloud as they come while headphones are in (lib/commands-notify.js)
     decider: "off"              // the decision model between the grammar and the general model (deps.decider): "on" | "off"
 };
 var HISTORY = 20;               // turns a model sees
@@ -177,7 +178,7 @@ function createAssistantService(deps) {
     function settings() {
         var s = storage.get("assistant:settings") || {}, out = {};
         for (var k in DEFAULTS) out[k] = k in s ? s[k] : DEFAULTS[k];
-        ["enabled", "speak", "allowCloudControl", "voiceReplies", "wakeWord", "wakeWhenLocked", "followUps"].forEach(function (b) { out[b] = !!out[b]; });
+        ["enabled", "speak", "allowCloudControl", "voiceReplies", "wakeWord", "wakeWhenLocked", "followUps", "announceMessages"].forEach(function (b) { out[b] = !!out[b]; });
         if (!HHMM.test(out.quietStart)) out.quietStart = DEFAULTS.quietStart;
         if (!HHMM.test(out.quietEnd)) out.quietEnd = DEFAULTS.quietEnd;
         if (FIRST_CHOICES.indexOf(out.followUpFirst) < 0) out.followUpFirst = DEFAULTS.followUpFirst;
@@ -357,7 +358,7 @@ function createAssistantService(deps) {
     function allowed(cmd) { return settings().disabledCommands.indexOf(cmd.id) < 0; }
     function env() {
         return { luna: deps.luna, request: deps.request, now: now, lang: lang(), units: units(), storage: storage,
-                 apps: apps };
+                 apps: apps, settings: settings(), setSettings: function (c) { return methods.setSettings(c); } };
     }
     var followUps = followups.create({ storage: storage, now: now, env: env, settings: settings, log: log, changed: changed,
                                        notify: deps.notify || function () {},
@@ -437,9 +438,11 @@ function createAssistantService(deps) {
         var e = env(), s = lang().say;
         // "it": the item the conversation is about (lib/details.js).
         e.focus = thread.focus || null;
+        e.locked = !!lockedAsk[thread.id];
         // Asked by voice over the lock screen: only what shows nothing
-        // private and sends nothing; the rest waits for the unlock.
-        if (lockedAsk[thread.id] && LOCKED_COMMANDS.indexOf(cmd.id) < 0)
+        // private and sends nothing (or keeps to what the lock screen shows:
+        // whenLocked); the rest waits for the unlock.
+        if (lockedAsk[thread.id] && LOCKED_COMMANDS.indexOf(cmd.id) < 0 && !cmd.whenLocked)
             return Promise.resolve([say(thread, s.unlockFirst(), { via: layer, source: source, command: cmd.id, status: "locked" })]);
         if (!allowed(cmd)) return Promise.resolve([say(thread, s.notAllowed(cmd.title), { via: layer, source: source, command: cmd.id, status: "failed" })]);
         noteArgs(thread, cmd.id, args);
@@ -628,7 +631,14 @@ function createAssistantService(deps) {
         // Free words (what to say, what the memo says): taken unless they are a request of their own.
         if (w.field === "message" || w.field === "text") {
             if (parsed && l.startsCommand && l.startsCommand(t)) return null;
-            if (!t || (l.negation && l.negation(t)) || (l.answer && l.answer(t) === "no")) return null;
+            // "No" to "What should I say?" (or to "Want to reply?" after a
+            // message read aloud): the question is let go.
+            if (t && l.answer && l.answer(t) === "no") {
+                a.message.chosen = "no";
+                putMessage(a.message);
+                return Promise.resolve([say(thread, l.say.cancelled(), { via: "commands", command: w.command, status: "cancelled" })]);
+            }
+            if (!t || (l.negation && l.negation(t))) return null;
             var words = String(text).trim().replace(/[.!]+$/, "");
             var filled = {};
             filled[w.field] = w.command === "note" && w.args.topic ? w.args.topic + "\n" + words : words.charAt(0).toUpperCase() + words.slice(1);
@@ -1654,7 +1664,7 @@ function createAssistantService(deps) {
             Object.keys(p).forEach(function (k) {
                 if (!(k in DEFAULTS)) return;
                 var v = p[k];
-                if (/^(enabled|speak|allowCloudControl|voiceReplies|wakeWord|wakeWhenLocked|followUps)$/.test(k) && typeof v !== "boolean") bad = k + ": true or false";
+                if (/^(enabled|speak|allowCloudControl|voiceReplies|wakeWord|wakeWhenLocked|followUps|announceMessages)$/.test(k) && typeof v !== "boolean") bad = k + ": true or false";
                 else if (k === "speechRate" && RATE_CHOICES.indexOf(v) < 0) bad = "speechRate: one of " + RATE_CHOICES.join(", ");
                 else if (k === "personality" && !PERSONALITIES[v]) bad = "personality: one of " + Object.keys(PERSONALITIES).join(", ");
                 else if (k === "voiceWait" && WAIT_CHOICES.indexOf(v) < 0) bad = "voiceWait: seconds, one of " + WAIT_CHOICES.join(", ");
@@ -1942,6 +1952,25 @@ function createAssistantService(deps) {
         });
     }
 
+    // The everyday features' own methods (lib/commands-everyday.js: announce,
+    // driving, ...): what they say goes in the current conversation.
+    Object.assign(methods, commands.everyday.service({
+        privileged: privileged, settings: settings, env: env, now: now, log: log, changed: changed,
+        speak: function (text) { speakLast([{ role: "assistant", text: text }], { voice: true }); },
+        // A message from the assistant itself, in the current conversation;
+        // last: what "reply", "turn it off" ... lean on (keepLast); data:
+        // the message's ({awaiting}: what the next words fill).
+        conversation: function (text, last, data) {
+            var thread = currentThread() || createThread();
+            say(thread, text, Object.assign({ via: "commands", command: last && last.command || undefined, status: "done" }, data ? { data: data } : {}));
+            if (last) keepLast(thread, last);
+            thread = getThread(thread.id);
+            if (thread) { thread.unread = (thread.unread || 0) + 1; putThread(thread); }
+            changed("threads");
+            return thread ? thread.id : "";
+        }
+    }));
+
     // Every method answers, whatever goes wrong inside.
     var safe = {};
     Object.keys(methods).forEach(function (name) {
@@ -1970,6 +1999,7 @@ var METHODS = ["ask", "choose", "confirm", "threads", "thread", "newThread", "se
                "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
                "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "sessionPhrase", "vocabulary", "voice",
                "connect", "retry",
-               "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps", "markRead"];
+               "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps", "markRead"]
+               .concat(commands.everyday.METHODS);
 
 module.exports = { createAssistantService: createAssistantService, METHODS: METHODS, ERRORS: ERRORS, SERVICE: SERVICE, DEFAULTS: DEFAULTS };

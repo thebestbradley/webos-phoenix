@@ -35,7 +35,11 @@
 //                            is the app's own dashboard, "" otherwise),
 //                            clickableWhenLocked (the dashboard takes taps
 //                            on the lock screen: its {clickableWhenLocked:
-//                            true} window attribute)
+//                            true} window attribute), time (ms, when it
+//                            came), dashboardTitle and dashboardBody (a
+//                            dashboard window's words, from its page)
+//   publishNotifications(digest)  (optional) the list for the services
+//                            that read it (NotificationFeed.qml)
 //   alerts        ListModel  key, appId, height (legacy px), sound,
 //                            soundClass (the window's sound attributes):
 //                            popup alert windows (windowFor(key)), front first
@@ -1366,6 +1370,9 @@ Item {
                 params: "", windowKey: key,
                 clickableWhenLocked: _param(url, "phoenixClickableWhenLocked") === "1",
                 ongoing: false, progress: -1, tag: "", actions: "",
+                // When it came, and its words as its page reports them
+                // (windowProperties {dashboardText}): NotificationFeed.qml.
+                time: Date.now(), dashboardTitle: "", dashboardBody: "",
                 // Its window attributes {persistent: true} (no swipe or flick
                 // dismisses it: DashboardWindow::persistent; luna-systemui's
                 // update dashboard, SysUpdateService.js:184-188) and
@@ -1388,6 +1395,16 @@ Item {
     // persistent flag has no such way: WebAppMgr sends it once, from the
     // window's attributes (DashboardWebApp::attach, DashboardWebApp.cpp:86-96).
     function _systemWindowProperties(key, payload) {
+        // A dashboard's words (the runtime reads them from its page), for
+        // the services that read the list (NotificationFeed.qml).
+        if (payload.dashboardText && typeof payload.dashboardText === "object") {
+            for (var d = 0; d < notifications.count; ++d) {
+                if (notifications.get(d).windowKey === key) {
+                    notifications.setProperty(d, "dashboardTitle", String(payload.dashboardText.title || ""));
+                    notifications.setProperty(d, "dashboardBody", String(payload.dashboardText.body || ""));
+                }
+            }
+        }
         if (payload.webosDragMode === undefined)
             return;
         for (var i = 0; i < notifications.count; ++i) {
@@ -1961,7 +1978,7 @@ Item {
     // not the pages' to overrule.
     readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout", "gestureArea", "dockMode",
                                         "debugOverlays", "usbHost", "gamepads", "usbDrives", "formFactor", "screen",
-                                        "marketplaceCatalog", "learnedWords"]
+                                        "marketplaceCatalog", "learnedWords", "notifications"]
     property var _shellStatus: ({})
 
     function pushSystemStatus(changes) {
@@ -1997,6 +2014,12 @@ Item {
         var writer = _writerPage();
         for (var i = 0; i < pages.length; ++i)
             pages[i].runScript(_statusScript(changes, pages[i] === writer));
+    }
+
+    // The notification list as NotificationFeed.qml reads it ({notifications,
+    // locked, previews}): the pages' org.webosphoenix.system getNotifications.
+    function publishNotifications(digest) {
+        pushSystemStatus({ notifications: digest });
     }
 
     // A screen capture for the runtime to save (runtime.saveScreenshot:
@@ -2829,7 +2852,8 @@ Item {
             windowKey: "", clickableWhenLocked: false,
             ongoing: false, progress: -1,
             tag: extra && extra.tag ? extra.tag : "",
-            actions: acts ? JSON.stringify(acts) : ""
+            actions: acts ? JSON.stringify(acts) : "",
+            time: Date.now(), dashboardTitle: "", dashboardBody: ""
         });
     }
     // The app's notification of that tag, gone (replaced or taken back);
@@ -2875,7 +2899,8 @@ Item {
             id: key, appId: target, title: p.title || "", body: p.body || "",
             color: info.color, glyph: info.glyph, icon: p.icon ? _iconUrl(p.icon, target) : (info.icon || ""),
             params: params, windowKey: "", clickableWhenLocked: false,
-            ongoing: true, progress: progress, tag: "", actions: ""
+            ongoing: true, progress: progress, tag: "", actions: "",
+            time: Date.now(), dashboardTitle: "", dashboardBody: ""
         });
     }
 

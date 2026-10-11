@@ -55,6 +55,15 @@
 //                               {mediaKey}: phoenix-devices' /media events)
 //   restartUi {}                not on a device yet (Luna Restart restarts
 //                               luna-surfacemanager: OPEN-QUESTIONS)
+//   setNotifications {notifications, locked, previews}
+//                               the shell only: the notification list as
+//                               it is (NotificationFeed.qml)
+//   getNotifications            -> {notifications: [{id, appId, app, title,
+//                               body, time, ongoing}] newest first, locked,
+//                               previews, private}: the Assistant ("what did
+//                               I miss") and the system UI only; private
+//                               (locked with Show previews off): no titles
+//                               or words
 //
 // createShellHost({isShell(caller), now()}) -> {post, listen, events, send,
 // ongoing: {set, clear}, system: {...}}
@@ -88,6 +97,30 @@ function appIdOf(caller) {
     var s = String(caller || "").trim();
     s = s.split(" ")[0];
     return s;
+}
+
+// Who may read the notification list (getNotifications): the Assistant's
+// service ("what did I miss") and the system UI. Its luna-service2 group is
+// notifications.read (sysbus), granted to them alone.
+var NOTIFICATION_READERS = ["org.webosphoenix.assistant", "com.palm.systemui"];
+var MAX_NOTIFICATIONS = 100;
+function notificationOf(n) {
+    n = n && typeof n === "object" ? n : {};
+    var s = function (v, max) { return String(v === undefined || v === null ? "" : v).slice(0, max); };
+    return { id: s(n.id, 200), appId: s(n.appId, 200), app: s(n.app, 200), title: s(n.title, 500), body: s(n.body, 2000),
+             time: Number(n.time) || 0, ongoing: n.ongoing === true };
+}
+// What getNotifications answers: newest first; with the lock screen up and
+// its previews off (Settings > Screen & Lock > Show previews), what came
+// and from which app, never who sent it or what it says (as the lock
+// screen shows them: LockScreen.qml privatePreviews). The simulator's
+// pages answer the same (runtime/phoenix-runtime.js, org.webosphoenix.system).
+function notificationsAnswer(st) {
+    var hidden = !!st.locked && st.previews === false;
+    var list = (st.list || []).slice().sort(function (a, b) { return b.time - a.time; }).map(function (n) {
+        return hidden ? { id: n.id, appId: n.appId, app: n.app, title: "", body: "", time: n.time, ongoing: n.ongoing } : n;
+    });
+    return { notifications: list, locked: !!st.locked, previews: st.previews !== false, private: hidden };
 }
 
 function sizeOf(v) {
@@ -200,6 +233,7 @@ function createShellHost(opts) {
     };
 
     var nowPlaying = null;
+    var notifications = { list: [], locked: false, previews: true };
     var MEDIA_KEYS = ["play", "pause", "togglePausePlay", "stop", "next", "prev"];
     var system = {
         setNowPlaying: function (p, caller, respond) {
@@ -215,6 +249,20 @@ function createShellHost(opts) {
         },
         restartUi: function (p, caller, respond) {
             respond(fail(-1, "Restarting the system UI is not available on this device yet"));
+        },
+        // The notification list, as the shell last said it
+        // (NotificationFeed.qml: {notifications, locked, previews}).
+        setNotifications: function (p, caller, respond) {
+            if (!isShell(caller)) return respond(fail(-1, "Only the shell says what the notifications are"));
+            if (!Array.isArray(p.notifications)) return respond(fail(-1, "notifications: a list"));
+            notifications = { list: p.notifications.slice(0, MAX_NOTIFICATIONS).map(notificationOf), locked: p.locked === true,
+                              previews: p.previews !== false };
+            respond(ok());
+        },
+        getNotifications: function (p, caller, respond) {
+            if (NOTIFICATION_READERS.indexOf(appIdOf(caller)) < 0 && !isShell(caller))
+                return respond(fail(-1, "Not allowed to read the notifications"));
+            respond(ok(notificationsAnswer(notifications)));
         }
     };
 
@@ -225,8 +273,9 @@ var METHODS = ["post", "listen", "events", "send"];
 var ONGOING = "org.webosphoenix.ongoing";
 var ONGOING_METHODS = ["set", "clear"];
 var SYSTEM = "org.webosphoenix.system";
-var SYSTEM_METHODS = ["setNowPlaying", "getNowPlaying", "mediaKey", "restartUi"];
+var SYSTEM_METHODS = ["setNowPlaying", "getNowPlaying", "mediaKey", "restartUi", "setNotifications", "getNotifications"];
 
 module.exports = { createShellHost: createShellHost, appIdOf: appIdOf, METHODS: METHODS, SERVICE: SERVICE,
+                   notificationsAnswer: notificationsAnswer, NOTIFICATION_READERS: NOTIFICATION_READERS,
                    ONGOING: ONGOING, ONGOING_METHODS: ONGOING_METHODS, SYSTEM: SYSTEM, SYSTEM_METHODS: SYSTEM_METHODS,
                    SHELL_NAMES: SHELL_NAMES, KEEP: KEEP, KEEP_MS: KEEP_MS };
