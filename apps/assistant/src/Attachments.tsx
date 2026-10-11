@@ -5,7 +5,8 @@
 // apps/assistant/service/assistant.js outcome; the shell's view draws the
 // same in AssistantAttachments.qml):
 //   {type: "images", total, items: [{path, open}]}  thumbnails, "+N more"
-//   {type: "cards", items: [{title, subtitle?, detail?, open?}]}  a card each
+//   {type: "cards", items: [{title, subtitle?, detail?, icon?, open?}]}  a card each
+//       (icon: the app it opens, a device path: Search your phone's results)
 //   {type: "examples", title, items: [{text}]}  things to ask (help), by app
 // A tap shows it in its app (choose "show:<index>", index across every
 // attachment's items); an example goes to the field (onSuggest), to change
@@ -15,7 +16,7 @@ import type { AssistantMessage } from "@phoenix/luna";
 import { useMediaUrl } from "@phoenix/luna/react";
 import "./attachments.css";
 
-export interface ShownItem { path?: string; title?: string; subtitle?: string; detail?: string; text?: string; open?: { appId: string } }
+export interface ShownItem { path?: string; title?: string; subtitle?: string; detail?: string; text?: string; icon?: string; source?: string; open?: { appId: string } }
 export interface Attachment { type: "images" | "cards" | "examples"; title?: string; total?: number; items: ShownItem[] }
 
 export function attachmentsOf(m: AssistantMessage): Attachment[] {
@@ -67,11 +68,14 @@ export function Attachments({ m, onShow, onSuggest }: { m: AssistantMessage; onS
                 return (
                     <div key={k} className="as-cards">
                         {a.items.map((it, i) => (
-                            <button type="button" key={i} className="as-card" data-testid={`as-card-${first + i}`} disabled={!it.open}
+                            <button type="button" key={i} className={`as-card${it.icon ? " with-icon" : ""}`} data-testid={`as-card-${first + i}`} disabled={!it.open}
                                     onClick={() => onShow(first + i)}>
-                                <span className="as-card-title">{it.title}</span>
-                                {it.subtitle && <span className="as-card-sub">{it.subtitle}</span>}
-                                {it.detail && <span className="as-card-detail">{it.detail}</span>}
+                                {it.icon && <img className="as-card-icon" src={it.icon} alt={it.source ?? ""} />}
+                                <span className="as-card-text">
+                                    <span className="as-card-title">{it.title}</span>
+                                    {it.subtitle && <span className="as-card-sub">{it.subtitle}</span>}
+                                    {it.detail && <span className="as-card-detail">{it.detail}</span>}
+                                </span>
                             </button>
                         ))}
                     </div>

@@ -126,7 +126,9 @@ function getOnce(url) {
 // options: {modelsDir, builtInDirs: where the image keeps the models it
 // ships (default /usr/share/phoenix/models: Qwen3 0.6B, meta-phoenix's
 // qwen3-0.6b-gguf; lib/models.js BUILT_IN), server: path or names to look
-// for, args: extra arguments, idleMs, ramBytes, log, pidFile: where the
+// for, args: extra arguments (after these, so they win; or a function of
+// the model ensure() was given -> them: services/index's embedding model,
+// with its --mmproj when asked), idleMs, ramBytes, log, pidFile: where the
 // running server's pid is kept (default beside the models), pdeath: the
 // program to start it through (default phoenix-pdeath, else setpriv), or
 // false for none (the tests)}
@@ -280,7 +282,7 @@ function llamaServer(options) {
                 // request given up on (the assistant's deadline) ends soon;
                 // as the simulator's shell/native/localmodels.cpp, which says why.
                 var args = ["-m", file, "--host", "127.0.0.1", "--port", String(port), "--jinja", "-c", "4096", "-np", "1",
-                            "-fa", "on", "-b", "512"].concat(options.args || []);
+                            "-fa", "on", "-b", "512"].concat(typeof options.args === "function" ? options.args(m) : options.args || []);
                 log("starting " + bin + " " + args.join(" "));
                 var child = childProcess.spawn.apply(childProcess, throughPdeath(bin, args).concat([{ stdio: ["ignore", "ignore", "pipe"] }]));
                 running.push(child);

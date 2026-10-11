@@ -1,0 +1,13 @@
+{
+    "appId": "org.webosphoenix.service.index",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": ["org.webosphoenix.service.index"],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.index",
+            "outbound": ["com.palm.db", "com.palm.activitymanager", "com.webos.service.applicationmanager", "com.palm.applicationManager",
+                         "org.webosphoenix.filemanager", "com.palm.power", "com.palm.display", "com.webos.service.systemservice"]
+        }
+    ]
+}

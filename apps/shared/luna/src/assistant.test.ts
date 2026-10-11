@@ -88,12 +88,15 @@ describe("simulated org.webosphoenix.assistant", () => {
 
     it("lists the on-device models without the shell, and says how to get llama-server", async () => {
         const m = await assistant.models();
-        expect(m.models.map((x) => x.id)).toEqual(["qwen3-0.6b-q8_0", "qwen3.5-2b-q8_0", "qwen3.5-4b-q4_k_m", "qwen3.5-9b-q4_k_m", "qwen3-14b-q4_k_m", "qwen3-30b-a3b-q4_k_m"]);
+        expect(m.models.map((x) => x.id)).toEqual(["qwen3-0.6b-q8_0", "qwen3.5-2b-q8_0", "gemma-4-e2b-it-qat-q4_0", "qwen3.5-4b-q4_k_m", "gemma-4-e4b-it-qat-q4_0",
+                                                   "qwen3.5-9b-q4_k_m", "qwen3-14b-q4_k_m", "qwen3-30b-a3b-q4_k_m"]);
         expect(m.models[0]).toMatchObject({ builtIn: true, installed: false });
         expect(m.status.available).toBe(false);
         expect(m.status.howToInstall).toMatch(/llama-server/);
         expect(formatBytes(m.models[0].size)).toBe("639 MB");
-        expect(formatBytes(m.models[5].size)).toBe("18.6 GB");
+        expect(formatBytes(m.models[7].size)).toBe("18.6 GB");
+        // Gemma 4 is offered, never recommended until measured (lib/models.js).
+        expect(m.models.find((x) => x.id === "gemma-4-e2b-it-qat-q4_0")).toMatchObject({ licence: "Apache-2.0" });
     });
 
     it("has no speech without the shell or page voices", async () => {

@@ -55,6 +55,7 @@
         "/usr/palm/services/org.webosphoenix.service.packages/": "apps/marketplace/service/",
         "/usr/palm/services/com.palm.update/": "services/updates/",
         "/usr/palm/services/org.webosphoenix.service.oauth/": "services/oauth/",
+        "/usr/palm/services/org.webosphoenix.service.index/": "services/index/",
         "/usr/palm/services/org.webosphoenix.service.account/": "services/account/",
         "/etc/palm/phoenix/": "services/account/etc/palm/phoenix/",
         "/usr/palm/services/org.webosphoenix.hardware/": "services/hardware/",

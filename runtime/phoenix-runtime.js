@@ -17093,6 +17093,263 @@
     })();
 
     // ================================================================================
+    // Search your phone (org.webosphoenix.service.index; services/index)
+    // ================================================================================
+    //
+    // The device's own service code (services/index/indexservice.js, loaded
+    // from /usr/palm/services/org.webosphoenix.service.index/ as "Node.js
+    // device services in the page" above), given what a page has:
+    //
+    //   - the model: the shell's, when /usr/share/phoenix/host.json says
+    //     {"assistant": true}: phoenix-sim keeps a second LocalModels
+    //     (shell/native/localmodels.cpp) for it, in the models folder's
+    //     index/, whose llama-server runs with --embedding (and --mmproj for
+    //     pictures and recordings); "index" host messages ({op, requestId,
+    //     ...}) go out and come back through __phoenixRuntime.indexHostEvent.
+    //     That server reads 512 tokens at a time (the shell's fixed -b 512),
+    //     so a recording's first 18 seconds are embedded here, 5 minutes on
+    //     a device;
+    //   - files: the index files in the shared store ("index:file:<name>",
+    //     base64), settings and progress beside them ("index:..."); the
+    //     simulator's data is small;
+    //   - the conditions: the simulated charger and battery (com.palm.power)
+    //     and the screen (com.palm.display);
+    //   - words of files: the file manager's read (/media), else the
+    //     virtual rootfs (an email's body in /usr/share/phoenix/runtime/sample-mail);
+    //     PDFs inflated with the page's DecompressionStream.
+    //
+    // A device runs one copy of the service; the simulator one per page.
+    // One page indexes: the one holding "index:worker" in the store (every
+    // few seconds it says it is still there; the system UI's page takes it
+    // as it starts, and any page takes it over from one gone quiet for 15 s).
+    // Another page's calls that change the index (setSettings, sync,
+    // rebuild, deleteIndex, the model's download, wipe) are handed to it
+    // through the store ("index:call:<id>", answered in "index:reply:<id>");
+    // searches run where they are asked, on the shared files. The simulator's
+    // activity manager has no db8 triggers, so the indexing page looks for
+    // changes every 30 seconds while the index is on (a device's db8 watch
+    // wakes the service instead: services/index/service.js).
+    //
+    // __phoenixRuntime.index: service() (the methods), for tests.
+    (function indexService() {
+        var SERVICE = "org.webosphoenix.service.index";
+        var DIR = "/usr/palm/services/" + SERVICE + "/";
+        var loadModule = nodeServiceLoader(DIR, "Index service");
+        var WORKER = "index:worker", BEAT_MS = 4000, FRESH_MS = 15000, POLL_MS = 30000, CALL_WAIT_MS = 30000;
+        var PAGE = "i" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        var CHANGERS = { setSettings: 1, sync: 1, rebuild: 1, deleteIndex: 1, downloadModel: 1, cancelDownload: 1, removeModel: 1, wipe: 1 };
+        var NO_LLM = "Install llama.cpp's llama-server (b11451 or newer: ./phoenix builds it) and start phoenix-sim with it on the PATH, or with --llama-server <path>.";
+
+        function hostHas() { return !!(runtime.assistant && runtime.assistant.hostHas()); }
+        var pending = {}, nextRequest = 1;
+        function hostAsk(op, payload, timeoutMs) {
+            return new Promise(function (resolve, reject) {
+                var id = "x" + (nextRequest++) + "-" + Date.now().toString(36);
+                var timer = setTimeout(function () { delete pending[id]; reject(new Error("the shell did not answer")); }, timeoutMs || 5000);
+                pending[id] = function (ev) {
+                    clearTimeout(timer);
+                    delete pending[id];
+                    if (ev.error) reject(new Error(ev.error)); else resolve(ev);
+                };
+                host.postToHost("index", Object.assign({ op: op, requestId: id }, payload || {}));
+            });
+        }
+        runtime.indexHostEvent = function (ev) {
+            if (!ev) return;
+            if (ev.requestId && pending[ev.requestId]) pending[ev.requestId](ev);
+            if (ev.changed) changed();
+        };
+        var models = {
+            status: function () {
+                if (!hostHas()) return Promise.resolve({ available: false, installed: [], howToInstall: NO_LLM });
+                return hostAsk("status", {}).then(function (st) {
+                    if (!st.available) st.howToInstall = NO_LLM;
+                    return st;
+                }, function () { return { available: false, installed: [], howToInstall: NO_LLM }; });
+            },
+            download: function (m) {
+                if (!hostHas()) return Promise.reject(new Error("Models can only be downloaded in the Phoenix shell."));
+                return hostAsk("download", { id: m.id, sources: m.sources });
+            },
+            cancel: function (id) { return hostHas() ? hostAsk("cancel", { id: id }) : Promise.resolve(); },
+            remove: function (m) { return hostHas() ? hostAsk("remove", { id: m.id }) : Promise.resolve(); },
+            ensure: function (m, media) {
+                if (!hostHas()) return Promise.reject(new Error("no on-device model here"));
+                return hostAsk("ensure", { id: m.id, media: !!media, mediaId: m.mediaFile ? m.mediaFile.id : "" }, 180000)
+                    .then(function (ev) { return { baseUrl: ev.baseUrl }; });
+            }
+        };
+
+        function b64ToBytes(s) {
+            var bin = atob(s || ""), out = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+            return out;
+        }
+        function bytesToB64(b) {
+            var s = "";
+            for (var i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+            return btoa(s);
+        }
+        var files = {
+            read: function (name) { var v = store.get("index:file:" + name, null); return Promise.resolve(v ? b64ToBytes(v) : null); },
+            write: function (name, bytes) { store.set("index:file:" + name, bytesToB64(bytes)); return Promise.resolve(); },
+            remove: function (name) { store.remove("index:file:" + name); return Promise.resolve(); }
+        };
+        var luna = nodeServiceLuna(SERVICE);
+        function readFile(path, max, enc) {
+            if (/^\/media\//.test(path)) {
+                return luna.call("luna://org.webosphoenix.filemanager/read", { path: path, encoding: enc, maxBytes: max }).then(function (r) {
+                    return r && r.returnValue !== false ? r.data : null;
+                });
+            }
+            var text = PalmSystem.getResource(path);
+            if (!text) return Promise.resolve(null);
+            return Promise.resolve(enc === "base64" ? btoa(unescape(encodeURIComponent(text))) : text);
+        }
+        function inflate(bytes) {
+            if (!global.DecompressionStream) return Promise.reject(new Error("no DecompressionStream"));
+            var ds = new global.DecompressionStream("deflate");
+            var out = new global.Response(new global.Blob([bytes]).stream().pipeThrough(ds));
+            return out.arrayBuffer().then(function (b) { return new Uint8Array(b); });
+        }
+
+        // ---- The page that indexes ----------------------------------------------------------
+        var mine = false, beatTimer = null, pollTimer = null;
+        function worker() { return store.get(WORKER, null); }
+        function fresh(w) { return !!w && Date.now() - (w.at || 0) < FRESH_MS; }
+        function claim() {
+            var w = worker();
+            if (w && w.page !== PAGE && fresh(w)) return false;
+            mine = true;
+            store.set(WORKER, { page: PAGE, app: PalmSystem.appIdentifier, at: Date.now() });
+            if (!beatTimer) beatTimer = setInterval(function () {
+                var now = worker();
+                if (now && now.page !== PAGE && fresh(now)) { mine = false; return; }
+                store.set(WORKER, { page: PAGE, app: PalmSystem.appIdentifier, at: Date.now() });
+            }, BEAT_MS);
+            if (!pollTimer) pollTimer = setInterval(function () { if (mine) service().pass({}); }, POLL_MS);
+            return true;
+        }
+        try {
+            global.addEventListener("pagehide", function () {
+                var w = worker();
+                if (w && w.page === PAGE) store.remove(WORKER);
+            });
+        } catch (e) { /* no window events */ }
+
+        var watchers = [], notifyTimer = null;
+        function changed() {
+            if (notifyTimer) return;
+            notifyTimer = setTimeout(function () {
+                notifyTimer = null;
+                watchers = watchers.filter(function (w) { return !w.ctx.cancelled(); });
+                watchers.forEach(function (w) { w.send(); });
+            }, 0);
+        }
+
+        var svc = null;
+        function service() {
+            if (!svc) {
+                svc = loadModule("indexservice.js").createIndexService({
+                    luna: luna, request: proxiedRequest, files: files, models: models,
+                    storage: {
+                        get: function (k) { return store.get(k, null); },
+                        set: function (k, v) { store.set(k, v); },
+                        remove: function (k) { store.remove(k); }
+                    },
+                    conditions: function () {
+                        return Promise.all([luna.call("luna://com.palm.power/com/palm/power/chargerStatusQuery", {}),
+                                            luna.call("luna://com.palm.power/com/palm/power/batteryStatusQuery", {}),
+                                            luna.call("luna://com.palm.display/control/status", {})]).then(function (r) {
+                            return { charging: !!(r[0] && r[0].Charging), battery: r[1] && typeof r[1].percent === "number" ? r[1].percent : 100,
+                                     idle: !!(r[2] && r[2].state === "off"), saver: false };
+                        });
+                    },
+                    readText: function (path, max) { return readFile(path, max, "utf8"); },
+                    readBytes: function (path, max) { return readFile(path, max, "base64").then(function (s) { return s ? b64ToBytes(s) : null; }); },
+                    inflate: inflate,
+                    maxAudioSeconds: 18,
+                    mayIndex: function () { return mine; },
+                    caller: function () { return PalmSystem.appIdentifier; },
+                    changed: changed,
+                    log: function (m) { console.info("[index] " + m); }
+                });
+            }
+            return svc;
+        }
+
+        // A change for the indexing page, through the store.
+        var callSeq = 0;
+        function forward(name, params, caller) {
+            var id = PAGE + "-" + (++callSeq);
+            return new Promise(function (resolve) {
+                var done = false, poll = null, timer = null;
+                function finish(r) {
+                    if (done) return;
+                    done = true;
+                    clearInterval(poll);
+                    clearTimeout(timer);
+                    store.remove("index:call:" + id);
+                    store.remove("index:reply:" + id);
+                    resolve(r);
+                }
+                poll = setInterval(function () { var r = store.get("index:reply:" + id, null); if (r) finish(r); }, 200);
+                timer = setTimeout(function () { finish(fail(-1, "The page that keeps the index did not answer")); }, CALL_WAIT_MS);
+                store.set("index:call:" + id, { name: name, params: params, caller: caller, at: Date.now() });
+            });
+        }
+        function answerCall(key) {
+            var c = store.get(key, null);
+            if (!c || !mine) return;
+            store.remove(key);
+            var id = key.slice("index:call:".length);
+            service().methods[c.name](c.params || {}, c.caller).then(function (r) { store.set("index:reply:" + id, r || ok()); },
+                function (e) { store.set("index:reply:" + id, fail(-1, String(e && e.message || e))); });
+        }
+        try {
+            global.addEventListener("storage", function (e) {
+                var k = String(e.key || "");
+                if (k.indexOf("phoenix:index:call:") === 0 && e.newValue) answerCall(k.slice(8));
+                else if (k.indexOf("phoenix:index:") === 0 && k.indexOf("phoenix:index:file:") !== 0 && k.indexOf("phoenix:index:reply:") !== 0) changed();
+            });
+        } catch (e) { /* no window events */ }
+        // The system UI's page indexes, as long as the simulator runs.
+        setTimeout(function () {
+            if (PalmSystem.appIdentifier === "com.palm.systemui" && claim()) service().pass({});
+        }, 3000);
+
+        // indexservice.js METHODS (its code is loaded at the first call).
+        var serviceMethods = {};
+        ["getStatus", "setSettings", "search", "sync", "rebuild", "deleteIndex", "downloadModel", "cancelDownload", "removeModel", "wipe"].forEach(function (name) {
+            serviceMethods["/" + name] = function (p, reply, ctx) {
+                var params = clone(p || {}), watch = name === "getStatus" && !!params.subscribe;
+                delete params.subscribe;
+                var caller = (ctx && ctx.caller) || PalmSystem.appIdentifier;
+                var answer = function (first) {
+                    var run;
+                    try {
+                        if (CHANGERS[name] && !mine && fresh(worker()) && first) run = forward(name, params, caller);
+                        else {
+                            if (CHANGERS[name] && !mine) claim();
+                            run = service().methods[name](params, caller);
+                        }
+                    } catch (e) { return Promise.resolve(reply(fail(-1, String(e && e.message || e)))); }
+                    return Promise.resolve(run).then(function (r) {
+                        if (watch && first && r && r.returnValue !== false) r.subscribed = true;
+                        if (!ctx.cancelled()) reply(r);
+                        return r;
+                    }, function (e) { reply(fail(-1, String(e && e.message || e))); });
+                };
+                answer(true).then(function (r) {
+                    if (watch && r && r.returnValue !== false) watchers.push({ ctx: ctx, send: function () { answer(false); } });
+                });
+            };
+        });
+        register([SERVICE], serviceMethods);
+        runtime.index = { service: service, claim: claim, worker: function () { return mine; } };
+    })();
+
+    // ================================================================================
     // LunaSysMgr's device services: com.palm.display, com.palm.keys,
     // com.palm.vibrate, com.palm.ambientLightSensor
     // ================================================================================

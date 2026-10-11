@@ -893,6 +893,8 @@ Item {
                 _dictationRequest(uid, payload || {});
         } else if (type === "assistant") {
             _assistantRequest(appId, uid, payload || {});
+        } else if (type === "index") {
+            _indexRequest(appId, uid, payload || {});
         } else if (type === "simulator") {
             // What the simulator does on this computer for a page (the
             // runtime's org.webosphoenix.simulator): sim.qml's, by the
@@ -2675,8 +2677,13 @@ Item {
     // requestId -> {appId, uid} of an ensure under way.
     property var _assistantWaiting: ({})
 
+    // The page that asked: a card's, a headless app's, or Just Type's (no
+    // card, uid ""; its "From your phone" group asks the index's model for
+    // the query's embedding).
     function _assistantPage(appId, uid) {
-        return uid !== "" ? _windows[uid] : (_headless[appId] || null);
+        if (uid !== "")
+            return _windows[uid];
+        return _headless[appId] || (appId === justTypeAppId ? _justType : null);
     }
     function _assistantEvent(page, ev) {
         if (page && page.runScript)
@@ -2756,6 +2763,84 @@ Item {
             var pages = source._webPages();
             for (var i = 0; i < pages.length; ++i)
                 source._assistantEvent(pages[i], { changed: true });
+        }
+    }
+
+    // ---- Search your phone's model ("index" host messages; services/index) ---------------
+    // The runtime's org.webosphoenix.service.index asks for its model as the
+    // Assistant does (above), of the shell's second LocalModels
+    // (Shell.indexModels): status, download {id, sources}, cancel, remove,
+    // ensure {id, media, mediaId}: the server, with the vision and audio
+    // encoders (--mmproj) when media; a server of the other kind is stopped
+    // first. Answers through __phoenixRuntime.indexHostEvent.
+    property var indexModels: null
+    property var _indexWaiting: ({})
+    function _indexEvent(page, ev) {
+        if (page && page.runScript)
+            page.runScript("window.__phoenixRuntime && __phoenixRuntime.indexHostEvent && __phoenixRuntime.indexHostEvent("
+                           + JSON.stringify(ev) + ")");
+    }
+    function _indexRequest(appId, uid, p) {
+        var page = _assistantPage(appId, uid);
+        var answer = function (o) { o.requestId = p.requestId; _indexEvent(page, o); };
+        var lm = indexModels;
+        if (!lm) { answer(p.op === "status" ? { available: false, installed: [] } : { error: qsTr("No on-device models here.") }); return; }
+        switch (p.op) {
+        case "status":
+            answer(lm.status());
+            break;
+        case "download":
+            lm.downloadFrom(String(p.id), p.sources || []);
+            answer(lm.error && lm.status().downloading === null ? { error: lm.error } : {});
+            break;
+        case "cancel":
+            lm.cancel(String(p.id));
+            answer({});
+            break;
+        case "remove":
+            lm.remove(String(p.id));
+            answer({});
+            break;
+        case "ensure": {
+            var mmproj = p.media && p.mediaId ? lm.modelsDir + "/" + String(p.mediaId).replace(/[^A-Za-z0-9._-]/g, "_") + ".gguf" : "";
+            if (mmproj !== lm.mmproj) {
+                lm.stop();
+                lm.mmproj = mmproj;
+            }
+            var w = _indexWaiting;
+            w[p.requestId] = { appId: appId, uid: uid };
+            _indexWaiting = w;
+            lm.ensure(String(p.id), String(p.requestId));
+            break;
+        }
+        default:
+            answer({ error: "unknown op " + p.op });
+        }
+    }
+    function _indexSettle(requestId, ev) {
+        var who = _indexWaiting[requestId];
+        if (!who)
+            return;
+        var w = _indexWaiting;
+        delete w[requestId];
+        _indexWaiting = w;
+        ev.requestId = requestId;
+        _indexEvent(_assistantPage(who.appId, who.uid), ev);
+    }
+    Connections {
+        target: source.indexModels
+        ignoreUnknownSignals: true
+        function onReady(requestId, baseUrl) { source._indexSettle(requestId, { baseUrl: baseUrl }); }
+        function onFailed(requestId, error) { source._indexSettle(requestId, { error: error }); }
+        function onChanged() { if (!indexChangedTimer.running) indexChangedTimer.start(); }
+    }
+    Timer {
+        id: indexChangedTimer
+        interval: 500
+        onTriggered: {
+            var pages = source._webPages();
+            for (var i = 0; i < pages.length; ++i)
+                source._indexEvent(pages[i], { changed: true });
         }
     }
 

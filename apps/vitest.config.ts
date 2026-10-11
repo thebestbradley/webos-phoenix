@@ -37,6 +37,6 @@ export default defineConfig({
                   "{files,voicememos,dav,fediverse,telegram,settings,marketplace,assistant}/service/**/*.test.ts", "connectors/*/service/**/*.test.ts",
                   "../services/updates/**/*.test.ts", "../services/hardware/**/*.test.ts", "../services/account/**/*.test.ts",
                   "../services/systemmanager/**/*.test.ts", "../services/clipboard/**/*.test.ts",
-                  "../services/{shellhost,appmanager,accessories,dropshare,oauth}/**/*.test.ts"],
+                  "../services/{shellhost,appmanager,accessories,dropshare,oauth,index}/**/*.test.ts"],
     },
 });

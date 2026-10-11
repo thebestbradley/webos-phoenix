@@ -86,6 +86,7 @@ var commands = require("./lib/commands");
 var providers = require("./lib/providers");
 var models = require("./lib/models");
 var followups = require("./lib/followups");
+var phoneSearch = require("./lib/commands-search");
 
 var SERVICE = "org.webosphoenix.assistant";
 var SETTINGS_APP = "org.webosphoenix.settings";
@@ -741,18 +742,44 @@ function createAssistantService(deps) {
     // prefix: the on-device model's shared prefix (localPrefix): the
     // system prompt, the rest after it.
     function callModel(provider, key, thread, tools, toolChoice, timeoutMs, prefix) {
-        var system = prefix ? prefix.text : systemPrompt(tools.length > 0);
-        // After the choice's examples in the shared prompt, the model must
-        // be told this is not a choice ("None." was its whole answer).
-        var tail = promptTail(tools.length > 0) + (tools.length ? "" : " Now answer the user in words, as yourself: never with a command's name or \"none\".");
-        var msgs = prefix ? [{ role: "system", text: tail }].concat(fitted(history(thread), LOCAL_HISTORY_CHARS)) : history(thread);
-        var req = providers.chatRequest(provider, { system: system, messages: msgs, tools: tools, toolChoice: toolChoice }, key);
-        if (timeoutMs) req.timeoutMs = timeoutMs;
-        var t0 = Date.now();
-        return deps.request(req).then(function (r) {
-            noteStep(thread, "answer", t0, r.body, tools.length ? { tools: tools.length } : undefined);
-            return providers.parseChat(provider.type, r.status, r.body);
+        return phoneContext(thread).then(function (found) {
+            // What the user's own phone has for the question: their data, which
+            // may hold anyone's words, so no tools this time (docs/AI-AND-MCP.md
+            // Safety, the taint rule): the model answers in words.
+            if (found) tools = [];
+            var system = prefix ? prefix.text : systemPrompt(tools.length > 0) + (found ? "\n\n" + found.text : "");
+            // After the choice's examples in the shared prompt, the model must
+            // be told this is not a choice ("None." was its whole answer).
+            var tail = promptTail(tools.length > 0) + (tools.length ? "" : " Now answer the user in words, as yourself: never with a command's name or \"none\".") +
+                (found && prefix ? "\n\n" + found.text : "");
+            var msgs = prefix ? [{ role: "system", text: tail }].concat(fitted(history(thread), LOCAL_HISTORY_CHARS)) : history(thread);
+            var req = providers.chatRequest(provider, { system: system, messages: msgs, tools: tools, toolChoice: toolChoice }, key);
+            if (timeoutMs) req.timeoutMs = timeoutMs;
+            var t0 = Date.now();
+            return deps.request(req).then(function (r) {
+                noteStep(thread, "answer", t0, r.body, tools.length ? { tools: tools.length } : undefined);
+                return providers.parseChat(provider.type, r.status, r.body);
+            });
         });
+    }
+    // A question about the user's own things ("what's the wifi password at
+    // the cabin?"): what Search your phone finds for it (lib/commands-search.js
+    // contextFor: only with the index on and "Use in answers"), once a turn;
+    // it goes to the model this thread is already talking to, nowhere else.
+    function phoneContext(thread) {
+        var t = turnOf(thread);
+        if (t && t.found !== undefined) return Promise.resolve(t.found);
+        return phoneSearch.contextFor(lastAsked(thread), env(), lang().personal).then(function (f) {
+            if (t) t.found = f;
+            return f;
+        }, function () { return null; });
+    }
+    // Where what the model was given came from, under its answer.
+    function withSources(thread, extra) {
+        var t = turnOf(thread), f = t && t.found;
+        if (!f || !f.results || !f.results.length) return extra;
+        var data = Object.assign({}, extra.data || {}, { attachments: commands.phoneShown(env(), f.results), fromPhone: true });
+        return Object.assign({}, extra, { data: data });
     }
     // The on-device model calls the command it chose: its arguments as JSON
     // held to the command's parameters (response_format: llama-server
@@ -817,7 +844,7 @@ function createAssistantService(deps) {
             return act(thread, cmd, args, layer, source, asked);
         }
         return withNext(asked, result.text || s.done()).then(function (next) {
-            return [say(thread, result.text || s.done(), Object.assign({ via: layer, source: source }, next))];
+            return [say(thread, result.text || s.done(), withSources(thread, Object.assign({ via: layer, source: source }, next)))];
         });
     }
     // What to offer after a model's answer to words: a web search for a
@@ -1296,7 +1323,7 @@ function createAssistantService(deps) {
                     return callModel({ type: "local", baseUrl: srv.baseUrl, model: model.id }, "", thread, [], undefined, left(), localPrefix(cat));
                 });
             });
-        }).then(function (r) { return [say(thread, r.text || lang().say.done(), { via: "on-device", source: model.name })]; });
+        }).then(function (r) { return [say(thread, r.text || lang().say.done(), withSources(thread, { via: "on-device", source: model.name }))]; });
     }
     // The decision model's slot (docs/AI-AND-MCP.md "A decision model"): a
     // choice among complete requests. The language says which requests the

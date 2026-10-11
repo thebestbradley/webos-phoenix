@@ -4,7 +4,9 @@
 # llama.cpp's llama-server, the runner of the Assistant's on-device model
 # (docs/AI-AND-MCP.md, "On-device models"; apps/assistant/service/lib/
 # node-device.js llamaServer finds it on the PATH and starts it on
-# 127.0.0.1 with the model the user chose, stopping it when idle).
+# 127.0.0.1 with the model the user chose, stopping it when idle), and of
+# Search your phone's EmbeddingGemma 2 (services/index: a second one, with
+# --embedding, only while the index works or is searched).
 # packagegroup-phoenix-assistant installs llama-cpp-server.
 #
 # The models are not in the image: Settings > Assistant downloads one
@@ -28,10 +30,13 @@ SECTION = "libs"
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=223b26b3c1143120c87e2b13111d3e99"
 
-# Release b11239 (2026-09-28), the build scripts/linux-setup.sh makes.
+# Release b11552 (2026-10-10), the build ./phoenix makes: EmbeddingGemma 2
+# (Search your phone, services/index: "gemma-embedding2", from b11451) and
+# its vision and audio encoders (tools/mtmd) for /v1/embeddings, Gemma 4's
+# chat template and tool calls.
 SRC_URI = "git://github.com/ggml-org/llama.cpp.git;protocol=https;branch=master"
-SRCREV = "66e665c4276ee46f3ec9872dd7e5a496842bc44f"
-LLAMA_BUILD_NUMBER = "11239"
+SRCREV = "23b0202a189c44a54625aadcb37a946dd1d6278d"
+LLAMA_BUILD_NUMBER = "11552"
 
 S = "${WORKDIR}/git"
 

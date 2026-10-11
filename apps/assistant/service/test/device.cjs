@@ -16,6 +16,7 @@ var createAssistantService = require(path.join(__dirname, "..", "assistant.js"))
 var NOW = new Date(2026, 9, 7, 10, 0, 0).getTime();
 function at(d, h, m) { return new Date(2026, 9, d, h, m || 0, 0).getTime(); }
 
+// state.index {on, answers}: Search your phone turned on (services/index/test/standin.cjs).
 // opts: {offline, locationAllowed (true | false | null: not asked yet),
 //   seed(put), llm (the on-device model runner), llmRequest (its HTTP:
 //   a real llama-server), apps: more launch points, settings: the
@@ -65,6 +66,7 @@ function device(opts) {
                   hotspot: false, hotspotPass: false, vpn: "", vpnProfiles: [],
                   wifi: true, bluetooth: false, airplane: false, flashlight: false, launched: [] };
     function okr(o) { return Promise.resolve(Object.assign({ returnValue: true }, o || {})); }
+    var index = null;
     var luna = {
         call: function (uri, p) {
             calls.push({ uri: uri, params: p });
@@ -75,9 +77,16 @@ function device(opts) {
             if (m === "com.palm.applicationManager/launch" || m === "com.palm.applicationManager/open") { state.launched.push(p); return okr(); }
             if (m === "com.palm.db/find") {
                 var kind = p.query.from;
-                return okr({ results: Array.from(db.values()).filter(function (o) { return o._kind === kind || (kind === "com.palm.email:1" && /email:1$/.test(o._kind)); }) });
+                return okr({ results: Array.from(db.values()).filter(function (o) {
+                    return o._kind === kind || (kind === "com.palm.email:1" && /email:1$/.test(o._kind)) || (kind === "com.palm.message:1" && /message:1$/.test(o._kind));
+                }) });
             }
             if (m === "com.palm.db/put") return okr({ results: p.objects.map(function (o) { return { id: put(o), rev: 1 }; }) });
+            // Search your phone (services/index), off unless state.index says {on: true}.
+            if (m.indexOf("org.webosphoenix.service.index/") === 0) {
+                if (!index) index = require(path.join(__dirname, "..", "..", "..", "..", "services", "index", "test", "standin.cjs")).standIn(luna, state.index || {});
+                return index.call(m.slice("org.webosphoenix.service.index/".length), p);
+            }
             if (m === "com.palm.db/merge") { p.objects.forEach(function (o) { db.set(o._id, Object.assign({}, db.get(o._id), o)); }); return okr(); }
             if (m === "com.palm.db/del") { p.ids.forEach(function (id) { db.delete(id); }); return okr(); }
             if (m === "com.palm.db/get") return okr({ results: p.ids.map(function (id) { return db.get(id); }).filter(Boolean) });
