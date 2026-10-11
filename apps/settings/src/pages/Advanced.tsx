@@ -42,6 +42,9 @@
 //                            (docs/SYSTEM-UI-2.md; unset, the shell's default)
 //   glassBlur                Ember Glass's live blur: on (live) or off (none,
 //                            plain tints, for a low-end device)
+//   glassTheme               the theme of Ember Glass's sheets (the system
+//                            menu, the dashboard, the launcher): Dark (the
+//                            default) or Light
 //   appRelaunch              opening an app that already has a card (its
 //                            icon, Just Type, a link, the assistant):
 //                            Bring to front (the default, its card as it
@@ -56,7 +59,7 @@ import { Group, ListSelector, Note, Page, PageHeader, Row, ToggleButton } from "
 const KEYS: (keyof SystemPreferences)[] = ["launcherGridDensity", "infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges",
     "sysUiEnableWaveLauncher", "animationSpeed", "gestureSensitivity", "showReticleAnimation", "hapticFeedback",
     "showBatteryPercent", "emailDashboardCycling", "sysUiEnableNextPrevGestures", "appRelaunch", "startupAnimation",
-    "look", "glassBlur"];
+    "look", "glassBlur", "glassTheme"];
 
 export function AdvancedPage() {
     const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(KEYS, cb, err), []).value;
@@ -122,6 +125,9 @@ export function AdvancedPage() {
                     <ToggleButton value={prefs ? prefs.glassBlur !== "none" : true} disabled={!prefs} label="Live blur"
                                   testId="adv-glassBlur" onChange={(v) => set({ glassBlur: v ? "live" : "none" })} />
                 </Row>
+                <ListSelector title="Menus and sheets" value={prefs?.glassTheme ?? "dark"} testId="adv-glassTheme"
+                              options={[{ label: "Dark", value: "dark" as const }, { label: "Light", value: "light" as const }]}
+                              onChange={(v) => set({ glassTheme: v })} />
             </Group>
             <Group label="Start-up">
                 <ListSelector title="Start-up animation" value={prefs?.startupAnimation ?? "phoenix"} testId="adv-startupAnimation"

@@ -93,8 +93,9 @@ QtObject {
     property string look: "classic"
     readonly property bool emberGlass: look === "ember-glass"
     // The theme of Ember Glass's sheets (the system menu, the dashboard,
-    // dialogs): "light" or "dark". Dark until the system has a theme
-    // preference (docs/SYSTEM-UI-2.md, owner question 8). eg is its tokens
+    // the launcher, dialogs): "light" or "dark". Set by Shell.qml from the
+    // system preference "glassTheme" (Settings > Advanced; dark by default:
+    // docs/SYSTEM-UI-2.md, owner question 8). eg is its tokens
     // (EmberGlass.light or .dark).
     property string egTheme: "dark"
     readonly property QtObject eg: egTheme === "light" ? EmberGlass.light : EmberGlass.dark

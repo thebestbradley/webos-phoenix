@@ -218,6 +218,7 @@ Item {
             // LunaSysMgr (WebAppMgrProxy.cpp:117).
             source: SimWindowSource { id: windows; bootAppsEnabled: true }
             look: root.lookOption
+            glassTheme: root.argumentAfterDashes("--glass-theme")
             // The default wallpaper from the first frame, until the system
             // service tells the shell the one chosen (below).
             wallpaper: windows.resolveDevicePath(Theme.defaultWallpaperPath)
@@ -641,6 +642,19 @@ Item {
                 return a[i + 1];
             if (a[i].indexOf("--look=") === 0)
                 return a[i].substring(7);
+        }
+        return "";
+    }
+
+    // An option given after "--" (as --look is): its value, or "".
+    //   phoenix-sim --phone -- --look ember-glass --glass-theme light
+    function argumentAfterDashes(name) {
+        var a = Qt.application.arguments, i = a.indexOf("--");
+        for (i = i < 0 ? a.length : i + 1; i < a.length; ++i) {
+            if (a[i] === name && i + 1 < a.length)
+                return a[i + 1];
+            if (a[i].indexOf(name + "=") === 0)
+                return a[i].substring(name.length + 1);
         }
         return "";
     }

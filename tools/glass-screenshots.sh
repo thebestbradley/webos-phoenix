@@ -25,6 +25,8 @@
 #   launcher-edit.png the launcher in edit mode
 #   launcher-menu.png an icon's menu
 #   launcher-group.png  a group open
+#   *-light.png       the system menu, the dashboard with stacks and the
+#                     launcher with its icon menu, the sheets light
 #   tablet-*.png      on a tablet (CSS 1280 x 800 at 2, the renders' frame):
 #                     the card view, the notification group in the status
 #                     bar (and in 1.0's look), the drop-down, a banner
@@ -102,6 +104,9 @@ DELAY=6000 shot launcher-classic --scene launcher
 DELAY=6000 shot launcher-edit --scene launcheredit -- --look ember-glass
 DELAY=7000 shot launcher-menu --scene launchermenu -- --look ember-glass
 DELAY=7000 shot launcher-group --scene launchergroupopen -- --look ember-glass
+DELAY=6000 shot systemmenu-light --scene systemmenu -- --look ember-glass --glass-theme light
+DELAY=6000 shot stacks-light --scene notifystacks -- --look ember-glass --glass-theme light
+DELAY=7000 shot launcher-menu-light --scene launchermenu -- --look ember-glass --glass-theme light
 FORM=tablet DELAY=8000 shot tablet-cards --scene cards -- --look ember-glass
 FORM=tablet DELAY=8000 shot tablet-notes --scene notifystacksbar -- --look ember-glass
 FORM=tablet DELAY=8000 shot tablet-notes-classic --scene notifystacksbar

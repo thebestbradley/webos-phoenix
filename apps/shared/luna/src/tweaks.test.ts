@@ -39,7 +39,7 @@ describe("Settings > Advanced", () => {
             gestureSensitivity: "normal", haptics: false, gridDensity: "dense", batteryPercent: false, numberRow: false,
             keyboardStyle: "auto", startupAnimation: "phoenix",
             keyboardButton: true, keyboardButtonSide: "right", keyboardButtonY: 1,
-            keyboardButtonHintShown: false, glassBlur: "live",
+            keyboardButtonHintShown: false, glassBlur: "live", glassTheme: "dark",
         });
         await call("luna://com.webos.service.systemservice/setPreferences", { showReticleAnimation: false, animationSpeed: "warp" });
         const t = last("systemStatus")?.tweaks as Record<string, unknown>;
@@ -51,14 +51,19 @@ describe("Settings > Advanced", () => {
         expect((last("systemStatus")?.tweaks as Record<string, unknown>).startupAnimation).toBe("phoenix");
     });
     // Phoenix 2.0 (docs/SYSTEM-UI-2.md): the shell's look, only once chosen
-    // (the shell's own default otherwise), and Ember Glass's live blur.
-    it("the look and live blur reach the shell; a look that is none is left out", async () => {
+    // (the shell's own default otherwise), Ember Glass's live blur and the
+    // theme of its sheets.
+    it("the look, live blur and sheets' theme reach the shell; a look that is none is left out", async () => {
         await call("luna://com.webos.service.systemservice/setPreferences", { look: "ember-glass", glassBlur: "none" });
         expect(last("systemStatus")?.tweaks).toMatchObject({ look: "ember-glass", glassBlur: "none" });
         await call("luna://com.webos.service.systemservice/setPreferences", { look: "aurora", glassBlur: "sometimes" });
         const t = last("systemStatus")?.tweaks as Record<string, unknown>;
         expect(t.look).toBeUndefined();
         expect(t.glassBlur).toBe("live");
+        await call("luna://com.webos.service.systemservice/setPreferences", { glassTheme: "light" });
+        expect((last("systemStatus")?.tweaks as Record<string, unknown>).glassTheme).toBe("light");
+        await call("luna://com.webos.service.systemservice/setPreferences", { glassTheme: "sepia" });
+        expect((last("systemStatus")?.tweaks as Record<string, unknown>).glassTheme).toBe("dark");
     });
     it("the shell's look gives Ember Glass's default wallpaper while none is chosen", async () => {
         const wallpaper = async () => ((await call("luna://com.webos.service.systemservice/getPreferences", { keys: ["wallpaper"] })) as

@@ -2124,9 +2124,12 @@
             // Phoenix 2.0 (docs/SYSTEM-UI-2.md): the shell's look, "classic"
             // or "ember-glass", only once chosen (the shell's own default
             // otherwise: Shell.tweakDefaults, one place to flip it); Ember
-            // Glass's live blur, "live" or "none".
+            // Glass's live blur, "live" or "none"; the theme of its sheets
+            // (the system menu, the dashboard, the launcher), "dark" or
+            // "light" (owner question 8).
             look: pick(p.look, ["classic", "ember-glass"], undefined),
-            glassBlur: pick(p.glassBlur, ["live", "none"], "live")
+            glassBlur: pick(p.glassBlur, ["live", "none"], "live"),
+            glassTheme: pick(p.glassTheme, ["dark", "light"], "dark")
         };
     }
     // The page views' settings and the system proxy, as the shell takes
@@ -2147,7 +2150,7 @@
                       "animationSpeed", "gestureSensitivity", "hapticFeedback", "launcherGridDensity", "showBatteryPercent",
                       "keyboardNumberRow", "keyboardStyle", "startupAnimation",
                       "keyboardButton", "keyboardButtonSide", "keyboardButtonY",
-                      "keyboardButtonHintShown", "look", "glassBlur"];
+                      "keyboardButtonHintShown", "look", "glassBlur", "glassTheme"];
 
     // Settings > Accessibility's keyboard options, as the shell takes them.
     function keyboardAccess(a) {

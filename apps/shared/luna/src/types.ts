@@ -233,6 +233,8 @@ export interface SystemPreferences {
     look?: "classic" | "ember-glass";
     /** Phoenix 2.0: Ember Glass's floats and overlays blur live, or are plain tints ("none", for a low-end device). */
     glassBlur?: "live" | "none";
+    /** Phoenix 2.0: the theme of Ember Glass's sheets (the system menu, the dashboard, the launcher); default "dark". */
+    glassTheme?: "dark" | "light";
     /** Phoenix: with a hardware keyboard, the button that brings up the on-screen keyboard (default on). */
     keyboardButton?: boolean;
     /** Phoenix: the edge the keyboard button was dragged to. */

@@ -42,6 +42,9 @@ TestCase {
         compare(LsmStatus.tweaks({ look: "ember-glass", glassBlur: "none" }).glassBlur, "none");
         compare(LsmStatus.tweaks({ look: "aero", glassBlur: "maybe" }).look, undefined);
         compare(LsmStatus.tweaks({ look: "aero", glassBlur: "maybe" }).glassBlur, "live");
+        compare(d.glassTheme, "dark");
+        compare(LsmStatus.tweaks({ glassTheme: "light" }).glassTheme, "light");
+        compare(LsmStatus.tweaks({ glassTheme: "sepia" }).glassTheme, "dark");
         // Every tweak the shell has a default for is read (Shell.tweakDefaults).
         compare(Object.keys(d).length, LsmStatus.tweakKeys.length);
     }

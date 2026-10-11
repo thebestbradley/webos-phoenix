@@ -55,11 +55,17 @@ measurement, and `phoenix-sim --size 1116x2484 --scale 2.5 --phone` shows
 the renders' exact frame.
 
 **Light and dark.** The shell's own surfaces over the wallpaper (status
-bar, gesture strip, card labels, Just Type, the dock) are drawn the same in
-both, as in the renders; the glass of the shell's sheets (system menu,
-dashboard, dialogs) follows the system's theme. 1.0 has no light theme for
-the shell: `Theme.egTheme` is `"dark"` until a system preference for the
-theme exists (owner question 8).
+bar, gesture strip, card labels, Just Type, the dock, the phone's
+notification bar) are drawn the same in both, as in the renders; the
+shell's sheets (the system menu, the dashboard and drop-down, banners, the
+launcher and its menus and dialogs, the loading card) follow the theme of
+the sheets, `Theme.egTheme`: the system preference `glassTheme` ("dark" or
+"light"; Settings > Advanced > Look > Menus and sheets; the runtime's
+tweaks, on a device `LsmStatus.js` and the start-up file), or this run's
+`phoenix-sim ... -- --glass-theme light`. Dark by default
+(`Shell.tweakDefaults.glassTheme`): 1.0 had no light theme for the shell,
+and where the theme is chosen is owner question 8. The lock screen's
+dashboard rows stay dark on its ground.
 
 **Glass in the shell.** Which level each surface is (SPEC.md, "Glass
 tokens"), and how the shell draws it in QML:
@@ -394,7 +400,7 @@ second after (the adaptive simulator resizes in a stream of sizes).
 | 9 | The system menu | done |
 | 10 | The launcher | done |
 | 11 | The tablet: the status bar's notification group, the drop-down, the dock | done |
-| 12 | Light and dark for the shell's sheets, from a theme preference | |
+| 12 | Light and dark for the shell's sheets, from a theme preference | done |
 | 13 | The device: luna-surfacemanager's side of the contract (the file, the shellhost event), `LsmWindowSource` | needs C++ |
 
 ### Later, with C++ (not in this branch's first night)
@@ -449,12 +455,15 @@ those screenshots and `tools/test-glass-sim.py`'s):
 | `system-menu-wifi.jpg` | Ember Glass's, closed and with its Wi-Fi drawer open |
 | `launcher.jpg` | The launcher, 1.0's on the left, Ember Glass's on the right |
 | `launcher-edit-menu.jpg`, `launcher-group.jpg` | Edit mode and an icon's menu; a group open |
+| `system-menu-light.jpg`, `stacks-light.jpg`, `launcher-light.jpg` | The sheets dark (left) and light (right): the system menu, the dashboard with stacks, the launcher with an icon's menu |
 | `tablet-statusbar.jpg` | A tablet's status bar: the render (`email-dark.jpg`), Ember Glass's with two stacks and a reminder waiting, 1.0's |
 | `tablet-cards.jpg`, `tablet-dropdown.jpg`, `tablet-banner.jpg` | A tablet's card view and dock; the drop-down open over an app; a banner in the bar |
 | `dashboard.jpg`, `stacks.jpg`, `drawer.jpg` | The dashboard open over an app; with two stacks of texts (their counts, their layers' edges); pulled to the whole screen, a download on top |
 
-**Still unlike the renders:** the dock and the notification bar show the
-apps' own icons (owner question 10); the font is Open Sans where Manrope
+**Still unlike the renders:** the light sheets' live blur does not
+tone-map what it blurs (base.css `--veil-filter`: contrast .5, brightness
+1.9), so a light sheet over a dark scene is a little grey; the dock and the
+notification bar show the apps' own icons (owner question 10); the font is Open Sans where Manrope
 is not installed (owner question 4); the side cards lie flat (owner question
 1); the stack's label is the card's title (the renders: the app's name); the
 gesture light is dim in the card view (owner question 2); in the card view
@@ -481,7 +490,9 @@ a tab). The test pages are not the renders' apps: their content differs.
 7. **Labels over the card stack** ("Messaging · 2 cards"): luna-sysmgr had
    none. Meanwhile: shown in Ember Glass.
 8. **A light theme for the shell's sheets**, and where the theme is chosen
-   (Settings > Screen & Lock, or follow the time of day). Meanwhile: dark.
+   (Settings > Screen & Lock, or follow the time of day). Meanwhile: dark;
+   the light theme is built and chosen in Settings > Advanced > Look >
+   Menus and sheets while 2.0 is a preview (as the look is, question 11).
 9. **Shell values in the tokens:** the status bar's and gesture strip's
    scrims, the card labels, the Just Type pill and the dock are not in
    `ember-glass.tokens.json`; add them there (a `shell` group)?

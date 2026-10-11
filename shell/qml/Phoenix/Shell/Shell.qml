@@ -142,8 +142,9 @@ FocusScope {
                                             // Phoenix 2.0 (docs/SYSTEM-UI-2.md): the look,
                                             // "classic" (1.0's) or "ember-glass", and whether
                                             // Ember Glass's floats and overlays blur live
-                                            // ("live") or are plain tints ("none").
-                                            look: "classic", glassBlur: "live" })
+                                            // ("live") or are plain tints ("none"), and the
+                                            // theme of its sheets, "dark" or "light".
+                                            look: "classic", glassBlur: "live", glassTheme: "dark" })
     function tweak(name) { return tweaks[name] !== undefined ? tweaks[name] : tweakDefaults[name]; }
     // Changes tweaks the shell itself makes (the keyboard button's place):
     // at once in the system's tweaks, and saved as the system preferences
@@ -188,6 +189,14 @@ FocusScope {
         : looks.indexOf(tweak("look")) >= 0 ? tweak("look") : tweakDefaults.look
     onLookChanged: if (look !== "" && looks.indexOf(look) < 0) console.warn("phoenix: no look named \"" + look + "\" (" + looks.join(", ") + ")")
     Binding { target: Theme; property: "look"; value: shell.effectiveLook }
+    // The theme of Ember Glass's sheets (the system menu, the dashboard,
+    // the launcher; docs/SYSTEM-UI-2.md, owner question 8): this run's
+    // (phoenix-sim's --glass-theme), else the system preference
+    // "glassTheme", else the default above.
+    property string glassTheme: ""
+    readonly property string effectiveGlassTheme: glassTheme === "dark" || glassTheme === "light" ? glassTheme
+        : tweak("glassTheme") === "light" ? "light" : tweakDefaults.glassTheme
+    Binding { target: Theme; property: "egTheme"; value: shell.effectiveGlassTheme }
     Binding { target: Theme; property: "gestureSensitivity"; value: shell.tweak("gestureSensitivity") }
     // Tell the window source which card is in front (apps it launches join
     // its stack).

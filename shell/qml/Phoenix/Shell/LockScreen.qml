@@ -569,6 +569,9 @@ Item {
                             objectName: "lockDashboardItem"
                             width: parent.width
                             source: lock.source
+                            // (Ember Glass: dark on the lock screen's ground,
+                            // whatever the sheets' theme.)
+                            egColors: EmberGlass.dark
                             // Private: the app's name and "New Message"; not
                             // its window (which shows what it says).
                             windowKey: lock.privatePreviews ? "" : row.entry.windowKey

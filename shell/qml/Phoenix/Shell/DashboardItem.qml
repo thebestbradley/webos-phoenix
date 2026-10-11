@@ -107,10 +107,13 @@ Item {
 
     height: Theme.dashboardItemHeight
 
-    // Ember Glass's drawing, the theme's ink.
+    // Ember Glass's drawing, the theme's ink: the shell's sheets' theme
+    // (Theme.eg), or the one its place asks for (the lock screen's
+    // dashboard is dark whatever the sheets are).
     readonly property bool eg: Theme.emberGlass
-    readonly property color _ink: eg ? Theme.eg.colorInk : Theme.text
-    readonly property color _ink2: eg ? Theme.eg.colorInk2 : Theme.textDim
+    property QtObject egColors: Theme.eg
+    readonly property color _ink: eg ? item.egColors.colorInk : Theme.text
+    readonly property color _ink2: eg ? item.egColors.colorInk2 : Theme.textDim
     readonly property string _family: eg ? Theme.egFontFamily : Theme.fontFamily
     readonly property int _titleSize: eg ? Math.round(15 * Theme.u) : Theme.px(16)
     readonly property int _titleWeight: eg ? 600 : Font.Bold
@@ -189,8 +192,8 @@ Item {
             visible: item.eg
             anchors.fill: parent
             radius: height / 2
-            color: Theme.eg.colorInverse
-            border.color: Theme.eg.colorLine2
+            color: item.egColors.colorInverse
+            border.color: item.egColors.colorLine2
             border.width: Math.max(1, EmberGlass.hairline * Theme.u)
         }
         ArtBorderImage {
@@ -206,7 +209,7 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             y: item.eg ? (parent.height - height) / 2 : (Theme.px(24) - height) / 2
             text: String(item.layerCount)
-            color: item.eg ? Theme.eg.colorOnInverse : "#ffffff"
+            color: item.eg ? item.egColors.colorOnInverse : "#ffffff"
             font.family: item._family
             font.pixelSize: item.eg ? Math.round(11.5 * Theme.u) : Theme.px(16)
             font.bold: true
@@ -240,7 +243,7 @@ Item {
             y: Theme.px(8)
             width: Math.max(1, Theme.u)
             height: parent.height - 2 * y
-            color: Theme.eg.colorLine2
+            color: item.egColors.colorLine2
         }
         Column {
             x: item.layerCount >= 3 ? Theme.dashboardLayerTextInset : item._plainTextX - under.x
@@ -285,7 +288,7 @@ Item {
         width: Math.max(1, Theme.u)
         height: parent.height - 2 * y
         opacity: textColumn.opacity
-        color: Theme.eg.colorLine2
+        color: item.egColors.colorLine2
     }
 
     Column {
@@ -345,7 +348,7 @@ Item {
                 width: parent.width
                 y: (parent.height - height) / 2
                 height: Math.max(1, Theme.u)
-                color: Theme.eg.colorInk3
+                color: item.egColors.colorInk3
                 opacity: 0.8
             }
             Rectangle {
@@ -387,10 +390,10 @@ Item {
                 width: pillLabel.implicitWidth + Theme.px(18)
                 radius: height / 2
                 // Ember Glass: .pill.sm, the plane's tint and the line.
-                color: item.eg ? (pillArea.pressed ? Theme.eg.colorPlane2 : Theme.eg.colorSunk)
+                color: item.eg ? (pillArea.pressed ? item.egColors.colorPlane2 : item.egColors.colorSunk)
                                : pillArea.pressed ? Qt.rgba(1, 1, 1, 0.32) : Qt.rgba(1, 1, 1, 0.12)
                 border.width: item.eg ? Math.max(1, EmberGlass.hairline * Theme.u) : Math.max(1, Theme.px(1))
-                border.color: item.eg ? Theme.eg.colorLine2 : Qt.rgba(1, 1, 1, 0.35)
+                border.color: item.eg ? item.egColors.colorLine2 : Qt.rgba(1, 1, 1, 0.35)
                 Text {
                     id: pillLabel
                     anchors.centerIn: parent

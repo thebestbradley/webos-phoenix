@@ -125,7 +125,8 @@ async function main() {
                                                ["adv-animationSpeed", "Fast", "animationSpeed", "fast"],
                                                ["adv-startupAnimation", "Classic", "startupAnimation", "classic"],
                                                // Phoenix 2.0's look (docs/SYSTEM-UI-2.md).
-                                               ["adv-look", "Ember Glass (2.0 preview)", "look", "ember-glass"]]) {
+                                               ["adv-look", "Ember Glass (2.0 preview)", "look", "ember-glass"],
+                                               ["adv-glassTheme", "Light", "glassTheme", "light"]]) {
             await st.click(`[data-testid='${id}']`);
             await st.click(`role=option[name='${option}']`);
             await until(() => tweaks()[key] === want, `Advanced: ${key} ${want} reaches the shell`);

@@ -89,6 +89,18 @@ corner(f'{shots}/systemmenu.png', f'{shots}/systemmenu-wifi.png', 'system-menu-w
 pair(f'{shots}/launcher-classic.png', f'{shots}/launcher.png', 'launcher.jpg')
 pair(f'{shots}/launcher-edit.png', f'{shots}/launcher-menu.png', 'launcher-edit-menu.jpg')
 alone(f'{shots}/launcher-group.png', 'launcher-group.jpg')
+# The sheets, dark and light.
+corner(f'{shots}/systemmenu.png', f'{shots}/systemmenu-light.png', 'system-menu-light.jpg')
+pair(f'{shots}/launcher-menu.png', f'{shots}/launcher-menu-light.png', 'launcher-light.jpg')
+def bottoms(a, b, frac, name, w=380, gap=8):
+    if not have(a, b):
+        return
+    A, B = load(a, w), load(b, w)
+    A = A.crop((0, round(A.height * frac), w, A.height)); B = B.crop((0, round(B.height * frac), w, B.height))
+    im = Image.new('RGB', (2 * w + gap, max(A.height, B.height)), (24, 24, 26))
+    im.paste(A, (0, 0)); im.paste(B, (w + gap, 0))
+    im.save(os.path.join(out, name), quality=82, optimize=True)
+bottoms(f'{shots}/stacks.png', f'{shots}/stacks-light.png', 0.7, 'stacks-light.jpg')
 # The tablet: the status bar beside the tablet renders' (email-dark.jpg),
 # 1.0's under both; the card view, the drop-down and a banner.
 def bars(render, ours, classic, name, frac=0.045, w=760):
