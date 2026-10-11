@@ -1504,7 +1504,9 @@ Synergy phrasings written after, not tuned for) 1 of 12 against 6 of 12,
 the rest of that set unchanged (76 of 89). The time per turn went from 1
 to 2-4 ms on average (the accounts are read for each request).
 With Qwen3 0.6B behind the grammar the Synergy cases stay 61 of 61 (the
-grammar answers them all). In phoenix-sim (`tools/test-assistant-synergy-sim.cjs`,
+grammar answers them all) and the held-out ones 6 of 12, none unsafe: for
+"anything new on Slack" the model chose reading messages but named no
+account (it said "None", taken now as none, not an account called None). In phoenix-sim (`tools/test-assistant-synergy-sim.cjs`,
 the real connectors against their stand-ins and the Jabber demo server):
 "add oat milk to my todoist groceries list" puts it in Todoist's kind and,
 after a sync, on Todoist; "what's on my todoist groceries list" reads it;
