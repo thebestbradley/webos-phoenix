@@ -1464,9 +1464,45 @@ each notification to the service (`announce {appId, app, title, body,
 headphones}`), which decides; `{listen: true}` opens the Assistant's view
 on that conversation and listens once the announcement has been said.
 Messages are Messaging's and the chat apps'; other notifications are
-never said. Checked in the simulator (`--scene "assistant:@notified|what
-did I miss"`, `"assistant:I'm driving|@sms|@wait:10000"`: the `assistant:`
-scene asks its own requests, `@notified`, `@sms` and `@lock` set the scene).
+never said. Each layer of a notification stack (an app's notifications of
+one conversation) is a notification of its own here, and one pushed on a
+stack is announced as a new one is. Checked in the simulator (`--scene
+"assistant:@notified|what did I miss"`, `"assistant:I'm driving|@sms|@wait:10000"`:
+the `assistant:` scene asks its own requests; `@notified`, `@sms`, `@lock`,
+`@starter:<id>`, `@open:<app>:<params>`, `@tap:<choice>`, `@close` and
+`@wait:<ms>` set the scene, `sim.qml`).
+
+**Routines** (`routine`, `routineList`, `routineManage`;
+`lib/commands-routines.js`). Settings > Assistant > Routines: a routine
+is a name, the words that start it ("good night", "bedtime"), its steps
+in turn, and optionally a time and days, "when put on charge" and "when
+connected to a car". A step is a request in words, picked from a list
+with what it needs filled in ("Set an alarm for {7am}", "Set the
+brightness to {30}%", "The weather", "My calendar tomorrow", "What I
+missed", "Lock the screen", or anything else one would ask); it is read
+by the grammar when the routine runs, so "7am" is the next 7 AM then.
+Saying its words runs each step in turn and says what each did ("Good
+night. Do Not Disturb is on: the ringer and alerts are silent. You have 2
+alarms: ... Tomorrow you have 1 event: ... Locked."); a step's buttons
+(the location's Allow) stay on the answer. A routine never sends, calls
+or deletes: each step is read and prepared when it is saved, and one that
+would ask first is refused with the reason, as is one that needs more
+("set an alarm" without a time) or runs a routine. "Good night" (Do Not
+Disturb, the alarms, tomorrow's calendar, lock) and "Good morning" (Do Not
+Disturb off, the weather, today's calendar, what I missed) are offered as
+starters, off until added. Its time is an activity (the activity manager,
+as the Clock's alarms) that calls `routineWake {id, at}` then, which runs
+it (only when it is due: a minute's grace), says it, puts it in the
+conversation, leaves a notification and sets the next; the charger and
+the car come from the shell (`AssistantMoments.qml`: the charger going
+from none to any, and a Bluetooth device connecting whose class of
+device is car audio, major 0x04 minor 0x08, or whose name says so),
+`routineEvent {event}`. By voice: "what routines do I have", "make a
+routine" (Settings), "turn off / turn on / delete (read back first) /
+change my good night routine" (change opens its editor in Settings).
+Decided on the owner's behalf: a routine's steps are words rather than
+commands with typed arguments (the grammar reads them; the editor fills
+in a template's words), and routines may not send, call or delete.
 
 ### Next: 2.0
 
