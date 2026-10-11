@@ -97,6 +97,24 @@ FocusScope {
     // Touch to Share glow comes from that edge (TouchToShareGlow.cpp:39-64).
     // Anything else counts as 0, and -90 as 270 (Settings.cpp:662-672).
     property int homeButtonOrientationAngle: 0
+    // The screen's shape (device.json displayCornerRadius, displayCutouts;
+    // phoenix-sim --device): its rounded corners' radius and the camera's
+    // holes, in device pixels on the screen upright. webOS's own devices
+    // had square screens and no cutouts; a modern phone's front camera
+    // sits in the screen. While the UI is upright, a cutout at the top
+    // edge makes the status bar tall enough to hold it (Theme.safeAreaTop)
+    // and moves the clock beside it (StatusBar); the corners keep the bar's
+    // content in from the edges at any turn.
+    property real displayCornerRadius: 0
+    property var displayCutouts: []
+    // The cutouts the status bar can meet: those that start within the
+    // Pre's 28 px bar.
+    readonly property var topCutouts: (displayCutouts || []).filter(function (c) { return c.y < Theme.px(28); })
+    Binding {
+        target: Theme
+        property: "safeAreaTop"
+        value: shell._barAngle !== 0 ? 0 : Math.ceil(shell.topCutouts.reduce(function (m, c) { return Math.max(m, c.y + c.height); }, 0))
+    }
     readonly property int homeButtonAngle: {
         var a = homeButtonOrientationAngle;
         if (a >= 360)
@@ -3479,6 +3497,8 @@ FocusScope {
                          : _mode === "app" && cards.currentStatusBarColor !== "" ? cards.currentStatusBarColor
                          : Theme.statusBarFill
                 systemMenuOpen: systemMenu.open
+                cutouts: shell._barAngle === 0 ? shell.topCutouts : []
+                cornerRadius: shell.displayCornerRadius
                 lockScreen: shell.locked && !shell.dockMode && !shell._dockTransition
                 filled: cards.maximized || launcher.open || justType.open || shell.dockMode || shell._dockTransition
                 onSystemMenuRequested: {

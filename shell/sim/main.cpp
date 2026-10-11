@@ -5,7 +5,7 @@
 // desktop window with mock apps, under menus (Device, Simulate, View, Help)
 // and beside a toolbar with every key below (SimChrome; sim.qml simActions).
 //
-//   phoenix-sim [--size WxH] [--scale N] [--adaptive|--tablet|--phone] [--scene NAME]
+//   phoenix-sim [--size WxH] [--scale N] [--adaptive|--tablet|--phone] [--device ID [--zoom N]] [--scene NAME]
 //               [--orientation up|left|down|right] [--turn ORIENTATION]
 //               [--home-button] [--first-use] [--screenshot FILE [--delay MS]] [--stay-awake] [--low-memory] [--hardware-keyboard] [--touchstone] [--no-host-shell]
 //               [--host-shell PATH] [--security-policy SPEC] [--usb] [--usb-busy] [--touch-to-share]
@@ -41,10 +41,13 @@
 #include <QQmlContext>
 #include <QQmlEngine>
 #include <QQuickView>
+#include <QScreen>
 #include <QStandardPaths>
 #include <QScopeGuard>
 #include <QTimer>
 #include <QVersionNumber>
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 
 #include <memory>
@@ -55,6 +58,7 @@
 
 #include "rootfs.h"
 #include "simchrome.h"
+#include "simdevices.h"
 #include "simfonts.h"
 #include "siminstaller.h"
 #include "simsnapshots.h"
@@ -153,6 +157,9 @@ int main(int argc, char *argv[])
     QCommandLineOption scaleOpt(QStringLiteral("scale"), QStringLiteral("Device pixels per legacy pixel, like a denser screen (default 1; the Pre 3 was 1.5 at 480x800)."), QStringLiteral("N"), QStringLiteral("1"));
     QCommandLineOption tabletOpt(QStringLiteral("tablet"), QStringLiteral("Use the tablet (TouchPad) layout."));
     QCommandLineOption phoneOpt(QStringLiteral("phone"), QStringLiteral("Force the phone layout."));
+    QCommandLineOption deviceOpt(QStringLiteral("device"), QStringLiteral("Be one of Phoenix's first target devices, as its image configures it: %1. Sets the screen's exact pixels, density, layout, buttons, rounded corners and camera cutout (drawn over the screen), in place of --size, --scale, --phone, --tablet and --home-button (View > Device).")
+        .arg([] { QStringList ids; for (const QVariant &e : SimDevices::menuEntries()) ids << e.toMap().value(QStringLiteral("id")).toString(); return ids.join(QStringLiteral(", ")); }()), QStringLiteral("id"));
+    QCommandLineOption zoomOpt(QStringLiteral("zoom"), QStringLiteral("Show the screen at this size on the monitor, from 0.1 to 1 (default: 1; with --device, what fits the monitor, and 1 with --screenshot so it saves the panel's exact pixels). The device's pixels and layout do not change."), QStringLiteral("factor"));
     QCommandLineOption adaptiveOpt(QStringLiteral("adaptive"), QStringLiteral("A phone or a tablet by the window's size (the default without --phone or --tablet): resize the window, or pick View > Device Size, and the shell switches between the layouts live, the apps running on."));
     QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene: locked, cards, stacks, reorder, maximized, heldcard, launcher, launcheredit, launchermenu, launchergroup, launchergroupopen, launchertabs, launcherinstall, wave, powermenu, pin, emergency, firstuse, lowbattery, banner, notified, dashboard, justtype, keyboard, clipstrip, assistant, systemmenu, modal, empty."), QStringLiteral("name"));
     QCommandLineOption firstUseOpt(QStringLiteral("first-use"), QStringLiteral("Start with First Use, as on a new device (without it, First Use runs until it has been done once, unless --scene or --launch is given)."));
@@ -194,7 +201,7 @@ int main(int argc, char *argv[])
     QCommandLineOption eraseOpt(QStringLiteral("erase-data"), QStringLiteral("Internal: once process PID is gone, erase the simulator's data and start into First Use."), QStringLiteral("pid"));
     updatingOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
-    parser.addOptions({ hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, adaptiveOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
+    parser.addOptions({ deviceOpt, zoomOpt, hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, adaptiveOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
                         noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, checkChromeOpt, updatingOpt, eraseOpt, microphoneFileOpt,
                         llamaServerOpt, speechCommandOpt, marketplaceOpt, noMarketplaceOpt, wakeModelOpt, voskLibraryOpt, wakeFileOpt });
     parser.process(app);
@@ -253,8 +260,33 @@ int main(int argc, char *argv[])
         qCritical("--adaptive, --phone and --tablet: one of them");
         return 2;
     }
-    const bool tablet = parser.isSet(tabletOpt);
+    // --device: a profile in place of the size, density, layout and Home
+    // button (SimDevices; the device.json its image installs, which the
+    // shell's DeviceConfig then reads as on the device).
+    QJsonObject device;
+    if (parser.isSet(deviceOpt)) {
+        for (const QCommandLineOption *o : { &sizeOpt, &scaleOpt, &tabletOpt, &phoneOpt, &adaptiveOpt, &homeButtonOpt }) {
+            if (parser.isSet(*o)) {
+                qCritical("--device sets the screen, density, layout and buttons; leave out --%s", qPrintable(o->names().constFirst()));
+                return 2;
+            }
+        }
+        QString error;
+        device = SimDevices::profile(parser.value(deviceOpt), &error);
+        if (device.isEmpty()) {
+            qCritical("--device: %s", qPrintable(error));
+            return 2;
+        }
+        qputenv("PHOENIX_DEVICE_CONFIG", QFile::encodeName(SimDevices::configPath(device)));
+    }
+    const QJsonObject deviceConfig = device.value(QStringLiteral("deviceConfig")).toObject();
+    const QString deviceFormFactor = deviceConfig.value(QStringLiteral("formFactor")).toString(QStringLiteral("auto"));
+    const bool tablet = parser.isSet(tabletOpt) || deviceFormFactor == QLatin1String("tablet");
     QSize size = tablet ? QSize(1024, 768) : QSize(320, 480);
+    if (!device.isEmpty()) {
+        const QJsonObject panel = device.value(QStringLiteral("panel")).toObject();
+        size = QSize(panel.value(QStringLiteral("width")).toInt(), panel.value(QStringLiteral("height")).toInt());
+    }
     if (parser.isSet(sizeOpt)) {
         const QStringList wh = parser.value(sizeOpt).split(QLatin1Char('x'));
         if (wh.size() != 2 || wh[0].toInt() <= 0 || wh[1].toInt() <= 0) {
@@ -271,11 +303,39 @@ int main(int argc, char *argv[])
     // A desktop window is 1.0: Qt already scales it for the monitor
     // (Retina), so the shell draws legacy pixels at the monitor's density.
     bool scaleOk = false;
-    const double scale = parser.value(scaleOpt).toDouble(&scaleOk);
+    double scale = parser.value(scaleOpt).toDouble(&scaleOk);
     if (!scaleOk || scale < 0.5 || scale > 6) {
         qCritical("--scale must be a number from 0.5 to 6");
         return 2;
     }
+    // A device without a density of its own: as the shell derives it on
+    // the device, from the panel's ppi (Theme.densityFor: 180 legacy pixels
+    // an inch, in quarters, never below 1).
+    if (!device.isEmpty()) {
+        scale = deviceConfig.value(QStringLiteral("density")).toDouble(0);
+        if (scale <= 0) {
+            const double ppi = std::hypot(size.width(), size.height()) / device.value(QStringLiteral("diagonal")).toDouble(1);
+            scale = std::max(1.0, std::round(ppi / 180 * 4) / 4);
+        }
+    }
+    // --zoom: the screen at a fraction of its size on the monitor (sim.qml
+    // scales the device; the shell lays out at the device's pixels).
+    double zoom = 1;
+    if (parser.isSet(zoomOpt)) {
+        bool zoomOk = false;
+        zoom = parser.value(zoomOpt).toDouble(&zoomOk);
+        if (!zoomOk || zoom < 0.1 || zoom > 1) {
+            qCritical("--zoom must be a number from 0.1 to 1");
+            return 2;
+        }
+    } else if (!device.isEmpty() && !parser.isSet(shotOpt) && QGuiApplication::primaryScreen()) {
+        // A phone's panel is taller than most monitors: what fits, with
+        // room for the menus and the toolbar, in steps of 5%.
+        const QSize room = QGuiApplication::primaryScreen()->availableSize() * 0.85;
+        zoom = std::min({ 1.0, double(room.width()) / size.width(), double(room.height()) / size.height() });
+        zoom = std::max(0.1, std::floor(zoom * 20) / 20);
+    }
+    size = QSize(qRound(size.width() * zoom), qRound(size.height() * zoom));
 
     QString qmlDir = parser.value(qmlOpt);
     if (qmlDir.isEmpty())
@@ -556,7 +616,13 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simFirstUse"), parser.isSet(firstUseOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simStayAwake"), parser.isSet(stayAwakeOpt) || parser.isSet(shotOpt));
     view.rootContext()->setContextProperty(QStringLiteral("simDensity"), scale);
-    view.rootContext()->setContextProperty(QStringLiteral("simHomeButton"), parser.isSet(homeButtonOpt));
+    view.rootContext()->setContextProperty(QStringLiteral("simHomeButton"),
+        parser.isSet(homeButtonOpt) || deviceConfig.value(QStringLiteral("hardwareHomeButton")).toBool(false));
+    // --device: the profile (device-profiles.json's entry, its device.json
+    // under deviceConfig), or empty; and every profile for View > Device.
+    view.rootContext()->setContextProperty(QStringLiteral("simDevice"), device.toVariantMap());
+    view.rootContext()->setContextProperty(QStringLiteral("simDevices"), SimDevices::menuEntries());
+    view.rootContext()->setContextProperty(QStringLiteral("simZoom"), zoom);
     view.rootContext()->setContextProperty(QStringLiteral("simDisplayWidth"), display.width());
     view.rootContext()->setContextProperty(QStringLiteral("simDisplayHeight"), display.height());
     view.rootContext()->setContextProperty(QStringLiteral("simOrientation"), orientation);
@@ -576,7 +642,7 @@ int main(int argc, char *argv[])
     // Qt.quit() (after the shutdown sound).
     QObject::connect(view.engine(), &QQmlEngine::quit, &app, &QCoreApplication::quit, Qt::QueuedConnection);
     view.rootContext()->setContextProperty(QStringLiteral("simFormFactor"),
-        tablet ? QStringLiteral("tablet") : parser.isSet(phoneOpt) ? QStringLiteral("phone") : QStringLiteral("auto"));
+        tablet ? QStringLiteral("tablet") : parser.isSet(phoneOpt) || deviceFormFactor == QLatin1String("phone") ? QStringLiteral("phone") : QStringLiteral("auto"));
     view.setResizeMode(QQuickView::SizeRootObjectToView);
     view.resize(size);
     view.setTitle(SimChrome::displayName());
