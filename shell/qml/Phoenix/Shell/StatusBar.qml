@@ -169,31 +169,6 @@ Item {
         width: Theme.emberGlass ? (border ? egTab.width : Theme.px(10) + label.width)
              : border ? Theme.px(Theme.statusBarTitleCapLeft) + label.width + Theme.px(Theme.statusBarTitleCapRight)
                       : Theme.statusBarTitlePadding + label.width
-        // Ember Glass: the app menu's tab (base.css .appmenu-tab): a 24 px
-        // capsule of white at 7% with a white hairline at 38%, 10 px in
-        // from the bar's edge, the name in 12.5 px semibold and a caret.
-        Rectangle {
-            id: egTab
-            objectName: "emberAppMenuTab"
-            visible: Theme.emberGlass && t.border
-            x: Theme.px(10)
-            anchors.verticalCenter: parent.verticalCenter
-            height: Theme.px(24)
-            width: Theme.px(12) + label.width + Theme.px(4) + caret.width + Theme.px(9)
-            radius: height / 2
-            color: Qt.rgba(1, 1, 1, 0.07)
-            border.color: Qt.rgba(1, 1, 1, 0.38)
-            border.width: Math.max(1, EmberGlass.hairline * Theme.u)
-            EgIcon {
-                id: caret
-                name: "caret-down"
-                x: parent.width - Theme.px(9) - width
-                anchors.verticalCenter: parent.verticalCenter
-                width: Theme.px(12)
-                height: width
-                opacity: 0.75
-            }
-        }
         ArtBorderImage {
             visible: t.border && !Theme.emberGlass
             anchors.verticalCenter: parent.verticalCenter
@@ -217,6 +192,33 @@ Item {
             text: t.text
             color: Theme.text
             font: Theme.emberGlass ? (t.border ? bar._egTabFont : bar._egFont) : bar._titleFont
+        }
+        // Ember Glass: the app menu's tab (base.css .appmenu-tab): a 24 px
+        // capsule of white at 7% with a white hairline at 38%, 10 px in
+        // from the bar's edge, the name in 12.5 px semibold and a caret.
+        // Under the name (z), after 1.0's art and name among the children.
+        Rectangle {
+            id: egTab
+            objectName: "emberAppMenuTab"
+            z: -1
+            visible: Theme.emberGlass && t.border
+            x: Theme.px(10)
+            anchors.verticalCenter: parent.verticalCenter
+            height: Theme.px(24)
+            width: Theme.px(12) + label.width + Theme.px(4) + caret.width + Theme.px(9)
+            radius: height / 2
+            color: Qt.rgba(1, 1, 1, 0.07)
+            border.color: Qt.rgba(1, 1, 1, 0.38)
+            border.width: Math.max(1, EmberGlass.hairline * Theme.u)
+            EgIcon {
+                id: caret
+                name: "caret-down"
+                x: parent.width - Theme.px(9) - width
+                anchors.verticalCenter: parent.verticalCenter
+                width: Theme.px(12)
+                height: width
+                opacity: 0.75
+            }
         }
     }
     // Ember Glass's type in the bar: 13.5 px semibold (.statusbar), the
