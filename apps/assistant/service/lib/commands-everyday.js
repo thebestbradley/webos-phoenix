@@ -6,6 +6,7 @@
 // with lib/commands.js's helpers (require("./commands-everyday")(h)):
 //
 //   commands-notify.js     what did I miss, announcing messages, driving mode
+//   commands-routines.js   routines: steps run on a phrase, a time, the charger or the car
 //
 // Each area: (h) -> {COMMANDS (as lib/commands.js BUILT_IN, with their
 // examples, and whenLocked: may run when asked over the lock screen),
@@ -15,7 +16,7 @@
 
 "use strict";
 
-var AREAS = [require("./commands-notify")];
+var AREAS = [require("./commands-notify"), require("./commands-routines")];
 
 module.exports = function (h) {
     var areas = AREAS.map(function (make) { return make(h); });
@@ -35,6 +36,13 @@ module.exports = function (h) {
         run: function (cmd, args, env) {
             var a = owner[cmd.id];
             return a ? a.run(cmd, args, env) : null;
+        },
+        // What the grammar needs from the device for these (lib/grammar.js
+        // parse ctx): {routines: the phrases of the routines that are on}.
+        parseContext: function (env) {
+            var out = {};
+            areas.forEach(function (a) { if (a.phrases) out.routines = a.phrases(env); });
+            return out;
         },
         // The service's own methods, each (params) -> Promise<reply>.
         service: function (s) {

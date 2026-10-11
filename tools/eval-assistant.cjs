@@ -41,6 +41,9 @@
 //   text: "regexp"                the last reply must match (case-insensitive)
 //   notText: "regexp"             ... and must not match
 //   effects: [{kind, where: {...}, count}]   what the device keeps after the turn
+// A case may start the device in a state of its own: deviceState (the
+// stand-in's switches, notifications ...), storage (what the assistant
+// keeps: {"assistant:routines": [...]}), settings.
 //   and, in expect, "anyOf": [expect, ...] when more than one outcome is right.
 
 "use strict";
@@ -207,6 +210,8 @@ function runCase(c, opts) {
     var d = dev.device({ seed: seed, apps: APPS, llm: m.llm, llmRequest: m.llmRequest, settings: settings, deps: deps,
                          locationAllowed: c.locationAllowed === undefined ? true : c.locationAllowed });
     if (c.deviceState) Object.assign(d.state, c.deviceState);
+    // What the assistant keeps that a case starts with ({"assistant:routines": [...]}).
+    if (c.storage) Object.keys(c.storage).forEach(function (k) { d.storage.set(k, c.storage[k]); });
     var turns = c.turns || [{ say: c.say, expect: c.expect, forbid: c.forbid, text: c.text, notText: c.notText, effects: c.effects }];
     var rows = [];
     return turns.reduce(function (p, t, i) {

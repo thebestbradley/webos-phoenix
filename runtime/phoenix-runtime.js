@@ -17087,7 +17087,7 @@
          "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps", "markRead",
          "connect", "retry", "voice",
          // The everyday features' own (lib/commands-everyday.js; assistant.js METHODS).
-         "announce", "driving"].forEach(function (name) {
+         "announce", "driving", "routines", "setRoutine", "removeRoutine", "runRoutine", "routineWake", "routineEvent"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
                 var m;
                 try { m = service(); } catch (e) { return reply(fail(-1, String(e.message || e))); }

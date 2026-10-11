@@ -1358,7 +1358,8 @@ function createAssistantService(deps) {
         return Promise.all([catalogue(), commands.contactNames(env())]).then(function (got) {
             var cat = got[0];
             cat.names = got[1];
-            var parsed = grammar.parse(text, { lang: settings().language, now: now(), apps: cat.apps, names: got[1], appCommands: cat.compiled });
+            var parsed = grammar.parse(text, Object.assign({ lang: settings().language, now: now(), apps: cat.apps, names: got[1], appCommands: cat.compiled },
+                                                           commands.everyday.parseContext(env())));
             // A question waits: the words answer it, or it waits for later.
             if (fq) {
                 var said = lang().followUp ? lang().followUp.answer(fq.followUp.kind, text, now()) : null;
@@ -1955,7 +1956,7 @@ function createAssistantService(deps) {
     // The everyday features' own methods (lib/commands-everyday.js: announce,
     // driving, ...): what they say goes in the current conversation.
     Object.assign(methods, commands.everyday.service({
-        privileged: privileged, settings: settings, env: env, now: now, log: log, changed: changed,
+        privileged: privileged, settings: settings, env: env, now: now, log: log, changed: changed, notify: deps.notify,
         speak: function (text) { speakLast([{ role: "assistant", text: text }], { voice: true }); },
         // A message from the assistant itself, in the current conversation;
         // last: what "reply", "turn it off" ... lean on (keepLast); data:

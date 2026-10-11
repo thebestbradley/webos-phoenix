@@ -33,6 +33,8 @@
 //   Control          whether cloud models may run commands (off by default)
 //   Messages &       announce messages on headphones (off by default),
 //   Driving          driving mode (AssistantEveryday.tsx)
+//   Routines         several things on a phrase, a time, the charger or the
+//                    car (AssistantRoutines.tsx)
 //   Follow-up        questions after something is made (on by default),
 //   questions        their quiet hours, the ones waiting, and a switch per
 //                    topic (AssistantFollowUps.tsx)
@@ -54,6 +56,7 @@ import { Button, Dialog, Group, ListSelector, Note, Page, PageHeader, PopupMenu,
 import { useBack } from "../nav";
 import { FollowUpQuestions } from "./AssistantFollowUps";
 import { MessagesAndDriving } from "./AssistantEveryday";
+import { RoutinesPage, RoutinesRow } from "./AssistantRoutines";
 import { VoiceMissing } from "./AssistantVoice";
 import { SpeakingVoice } from "./AssistantSpeech";
 import { AssistantPermissions } from "./AssistantPermissions";
@@ -306,14 +309,18 @@ export function AssistantPage() {
     const [clearing, setClearing] = useState(false);
     const [done, setDone] = useState("");
     // "Connect model" (launch params {connect, threadId}): until closed, and again at each such launch.
-    const params = useLaunchParams<{ connect?: string; threadId?: string }>();
+    const params = useLaunchParams<{ connect?: string; threadId?: string; section?: string; routine?: string }>();
     const [connect, setConnect] = useState<Connecting | null>(null);
     if (params.connect && connect?.from !== params) {
         const mode = (["local", "cloud", "both"] as string[]).includes(params.connect) ? params.connect as ConnectMode : "choose";
         setConnect({ asked: mode, mode, threadId: params.threadId ?? "", from: params });
     }
+    // Routines (launch params {section: "routines"}: the Assistant's "make a routine").
+    const [routines, setRoutines] = useState<{ from: object; open: boolean } | null>(null);
+    if (params.section === "routines" && routines?.from !== params) setRoutines({ from: params, open: true });
 
     if (editing && prov) return <ProviderEditor editing={editing} types={prov.types} onDone={() => setEditing(null)} />;
+    if (routines?.open) return <RoutinesPage open={routines.from === params ? params.routine : undefined} onDone={() => setRoutines({ from: routines.from, open: false })} />;
     if (!s) return <Page><PageHeader title="Assistant" icon="icons/assistant.png" /></Page>;
     if (connect && !connect.closed)
         return <ConnectModel c={connect} set={setConnect} prov={prov} local={local} settings={s} onEdit={setEditing} />;
@@ -366,6 +373,7 @@ export function AssistantPage() {
             <Note testId="as-voice-privacy">{"Listening for \u201cHey Phoenix\u201d happens on this phone. The microphone goes only to the wake word spotter, which keeps the last few seconds in memory and nothing more; nothing is recorded, sent or saved until it hears the phrase, and what you say after it is turned into text on the phone too. A microphone in the status bar shows whenever it is open: faint while it waits for the phrase, orange while it listens to you."}</Note>
 
             <MessagesAndDriving settings={s} set={set} off={off} />
+            <RoutinesRow off={off} onOpen={() => setRoutines({ from: params, open: true })} />
 
             <FollowUpQuestions settings={s} set={set} off={off} />
 

@@ -334,6 +334,8 @@ async function main() {
         // Assistant is refused, and on again.
         const PHRASES = require(path.join(REPO, "apps/assistant/service/test/phrases.cjs"));
         const currentBefore = (await svc(app, A + "threads", {})).current, made = new Set();
+        // A routine for the routine commands' requests ("good night"), removed after.
+        const routine = (await svc(app, A + "setRoutine", { routine: { name: "Good night", steps: [{ text: "turn on do not disturb" }] } })).routine;
         const broken = [];
         for (const [id, text] of Object.entries(PHRASES)) {
             if (!text || id === "lock") continue;   // locking the page's screen: test-device-services.cjs
@@ -358,6 +360,7 @@ async function main() {
             if (!/is turned off in Settings > Assistant\.$/.test(m.text)) notOff.push(`${id}: ${m.text}`);
         }
         await svc(app, A + "setSettings", { disabledCommands: [] });
+        if (routine) await svc(app, A + "removeRoutine", { id: routine.id });
         for (const id of made) await svc(app, A + "deleteThread", { id });
         await svc(app, A + "setCurrent", { id: currentBefore });
         check(notOff.length === 0, "each command turned off in Settings is refused" + (notOff.length ? ": " + notOff.join(" | ") : ""));

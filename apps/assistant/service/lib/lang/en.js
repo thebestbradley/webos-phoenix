@@ -2943,3 +2943,5 @@ module.exports = {
     answer: answer,
     followUp: followUp
 };
+// The everyday features' own (routineStarters(), routineTemplates(), ...).
+Object.keys(everyday.lang).forEach(function (k) { if (!(k in module.exports)) module.exports[k] = everyday.lang[k]; });

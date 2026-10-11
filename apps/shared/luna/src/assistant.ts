@@ -373,7 +373,39 @@ export const assistant = {
         const r = await c("driving", on === undefined ? {} : { on });
         return { on: !!r.on, since: r.since || 0 };
     },
+    /** The routines, the starters offered (off until added) and the steps the editor offers. */
+    async routines(): Promise<{ routines: Routine[]; starters: Routine[]; templates: RoutineTemplate[] }> {
+        const r = await c("routines");
+        return { routines: r.routines || [], starters: r.starters || [], templates: r.templates || [] };
+    },
+    /** Make (no id) or change a routine; every step is checked (an error says which cannot be one). */
+    async setRoutine(routine: Partial<Routine>): Promise<{ routine: Routine; nextAt: number }> {
+        const r = await c("setRoutine", { routine });
+        return { routine: r.routine, nextAt: r.nextAt || 0 };
+    },
+    async removeRoutine(id: string): Promise<void> { await c("removeRoutine", { id }); },
+    /** Run it now: what it did, as it says it. */
+    async runRoutine(id: string): Promise<string> { return (await c("runRoutine", { id })).text || ""; },
 };
+
+/** A routine (the service's lib/commands-routines.js): its steps are requests in words. */
+export interface Routine {
+    id: string;
+    name: string;
+    /** What starts it when said ("good night"); the name when none. */
+    phrases: string[];
+    steps: { text: string; command?: string }[];
+    /** "HH:MM" it runs at ("" none), on these days (0 Sunday .. 6; none: every day). */
+    time: string;
+    days: number[];
+    /** And when the device is put on charge, or connects to a car. */
+    events: ("charging" | "car")[];
+    enabled: boolean;
+    /** The starter it came from ("goodnight", "goodmorning"). */
+    starter?: string;
+}
+/** A step the editor offers: {field} in text filled in, from fields' defaults. */
+export interface RoutineTemplate { label: string; text: string; fields?: Record<string, string> }
 
 export const tts = {
     /** Say it with the device's voice (org.webosphoenix.tts). */

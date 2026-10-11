@@ -2280,6 +2280,12 @@ FocusScope {
                                        || /head(?:set|phone)|ear ?(?:bud|phone)|airpods/i.test(String(shell.system.bluetoothDevice || "")))
         onReplyByVoice: (threadId) => shell.listenForReply(threadId)
     }
+    // Put on charge, connected to the car: the Assistant's routines that
+    // wait for them (AssistantMoments.qml).
+    AssistantMoments {
+        source: shell.source
+        system: shell.system
+    }
     // Driving mode: a message read aloud asks "Want to reply?", and the
     // Assistant listens for the answer in that conversation (over the lock
     // screen too, as a spoken request may be).

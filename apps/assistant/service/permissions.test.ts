@@ -179,6 +179,9 @@ describe("what each command may do on a device", () => {
                 return r.messages.at(-1);
             };
             if (c.id === "undo") await ask("new note: something");
+            // A routine of the user's to run, list or turn off, with its time (the activity manager).
+            if (/^routine/.test(c.id))
+                expect((await d.svc.setRoutine({ routine: { name: "Good night", steps: [{ text: "turn on do not disturb" }], time: "22:00" } })).returnValue).toBe(true);
             let m: any;
             if (c.id === "locationAccess") {
                 // Run as its button: the Assistant asks before it uses the location; Allow.

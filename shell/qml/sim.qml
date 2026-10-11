@@ -2032,8 +2032,12 @@ Item {
     // with the runtime was up is made again.
     // "assistant:<request>|<request>|...": these requests instead, in turn
     // (each in the same conversation). A step "@notified" puts the
-    // "notified" scene's notifications in the dashboard first; "@message:
-    // <who>: <words>" a text received (as the toolbar's SMS button);
+    // "notified" scene's notifications in the dashboard first; "@sms" a
+    // text received (as the toolbar's SMS button); "@lock" locks;
+    // "@starter:<id>" adds one of the routines' starters ("goodnight");
+    // "@open:<appId>:<params JSON>" opens an app, the view closed; "@close"
+    // closes the view (what it opened behind it shows); "@tap:<choice>" taps
+    // one of the last answer's buttons ("@tap:open");
     // "@wait:<ms>" waits. For checking the Assistant's features by hand.
     function assistantScene() {
         var custom = scene.indexOf("assistant:") === 0 ? scene.slice(10).split("|").filter(function (s) { return s.trim() !== ""; }) : [];
@@ -2090,6 +2094,32 @@ Item {
                     windows.simulateIncomingSms();
                 } else if (step === "@lock") {
                     shell.lock();
+                } else if (step === "@close") {
+                    // The view closed: what it opened behind it shows.
+                    shell.assistantOverlay.open = false;
+                } else if (step.indexOf("@tap:") === 0) {
+                    // One of the last answer's buttons, tapped ("@tap:open": Open Settings).
+                    var ov = shell.assistantOverlay, choiceId = step.slice(5);
+                    for (var mi = ov.messages.length - 1; mi >= 0; --mi) {
+                        var cs = ov.messages[mi].choices || [];
+                        var hit = cs.filter(function (c) { return c.id === choiceId; })[0];
+                        if (hit) { ov.choose(ov.messages[mi], hit); break; }
+                    }
+                } else if (step.indexOf("@starter:") === 0) {
+                    // One of the routines' starters, added ("@starter:goodnight").
+                    var which = step.slice(9);
+                    windows.lunaCall("luna://org.webosphoenix.assistant/routines", {}, function (r) {
+                        var s = ((r && r.starters) || []).filter(function (x) { return x.starter === which; })[0];
+                        if (s)
+                            windows.lunaCall("luna://org.webosphoenix.assistant/setRoutine", { routine: s }, function () {});
+                    });
+                } else if (step.indexOf("@open:") === 0) {
+                    // An app with launch params ("@open:org.webosphoenix.settings:{\"page\":\"assistant\"}").
+                    var rest = step.slice(6), colon = rest.indexOf(":");
+                    var params = null;
+                    try { params = colon > 0 ? JSON.parse(rest.slice(colon + 1)) : null; } catch (e) { params = null; }
+                    shell.assistantOverlay.open = false;
+                    shell.launch(colon > 0 ? rest.slice(0, colon) : rest, params);
                 }
                 var pause = /^@wait:(\d+)$/.exec(step);
                 assistantSceneSteps.interval = pause ? Number(pause[1]) : 1500;
