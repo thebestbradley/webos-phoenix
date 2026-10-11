@@ -224,7 +224,8 @@ function createFakeSftp(options) {
         var name = r.text();
         r.string();
         var method = W.latin1(r.string());
-        var u = users[name] || (options.acceptAny && method === "password" ? (users[name] = { password: null, keys: [], any: true }) : null);
+        // The demo: any name, with any password or any key (its signature still checked).
+        var u = users[name] || (options.acceptAny && (method === "password" || method === "publickey") ? (users[name] = { password: null, keys: [], any: true }) : null);
         if (u && u.any) fs.mkdirs("/home/" + name);
         if (method === "password") {
             r.bool();
@@ -240,7 +241,7 @@ function createFakeSftp(options) {
             var signed = r.bool();
             var alg = W.latin1(r.string());
             var blob = r.string().slice();
-            var known = u.keys.some(function (line) { try { return W.equal(K.parsePublicKeyLine(line).blob, blob); } catch (e) { return false; } });
+            var known = u.any || u.keys.some(function (line) { try { return W.equal(K.parsePublicKeyLine(line).blob, blob); } catch (e) { return false; } });
             if (!known || refuse) return this.authFailure();
             if (!signed) return this.send(new W.Writer().byte(M.USERAUTH_PK_OK).string(alg).string(blob).bytes());
             var sig = r.string().slice();

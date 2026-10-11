@@ -12465,7 +12465,19 @@
         }
         runtime.tcpEvent = function (m) {
             var t = m && tcpSockets[m.id];
-            if (!t) return;
+            // phoenix-sim answers the card's top page; a connection opened in
+            // a frame of it (a connector's sign-in page in Accounts) is that
+            // frame's runtime's: handed down.
+            if (!t) {
+                var frames = global.document ? global.document.querySelectorAll("iframe") : [];
+                for (var i = 0; i < frames.length; i++) {
+                    try {
+                        var w = frames[i].contentWindow;
+                        if (w && w.__phoenixRuntime && w.__phoenixRuntime !== runtime && w.__phoenixRuntime.tcpEvent) w.__phoenixRuntime.tcpEvent(m);
+                    } catch (e) { /* another origin's frame */ }
+                }
+                return;
+            }
             if (m.event === "connected") { t.opened(); return; }
             if (m.event === "data") { t.sock.received(b64ToBytes(m.data)); return; }
             delete tcpSockets[m.id];

@@ -109,7 +109,7 @@ enyo.kind({
                 ]},
                 {kind: "RowGroup", name: "importGroup", caption: "PRIVATE KEY", className: "accounts-group", showing: false, components: [
                     {kind: "RichText", name: "privateKey", richContent: false, className: "drives-private-key",
-                     hint: "Paste the key: -----BEGIN OPENSSH PRIVATE KEY----- ...", spellcheck: false, autocorrect: false,
+                     hint: "Paste the private key (the file without .pub)", spellcheck: false, autocorrect: false,
                      changeOnInput: true, onchange: "fieldChanged"}
                 ]},
                 {kind: "RowGroup", name: "folderGroup", caption: "FOLDER (OPTIONAL)", className: "accounts-group", showing: false, components: [
@@ -507,6 +507,8 @@ enyo.kind({
             if (text) {
                 this.$.errorMessage.setContent(text);
                 this.$.errorBox.show();
+                // Below a long form (SFTP's): brought into view.
+                this.$.scroller.scrollToBottom();
             }
             return;
         }

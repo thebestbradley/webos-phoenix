@@ -105,9 +105,10 @@ check($idx['version'] === 1 && $idx['build'] === $pub['build'] && count($idx['ap
 // ---- Account types (Connections): built in, from catalog/accounts.json ------------------------
 $types = array_column($idx['accounts'] ?? [], null, 'templateId');
 $drives = ['com.webosphoenix.drive.nextcloud', 'com.webosphoenix.drive.owncloud', 'com.webosphoenix.drive.webdav', 'com.webosphoenix.drive.s3',
-           'com.webosphoenix.drive.dropbox', 'com.webosphoenix.drive.onedrive', 'com.webosphoenix.drive.googledrive', 'com.webosphoenix.drive.box'];
+           'com.webosphoenix.drive.dropbox', 'com.webosphoenix.drive.onedrive', 'com.webosphoenix.drive.googledrive', 'com.webosphoenix.drive.box',
+           'com.webosphoenix.drive.sftp'];
 check(array_keys($types) === array_merge(['com.webosphoenix.dav', 'com.webosphoenix.fediverse', 'com.webosphoenix.webcal', 'com.palm.othermail'], $drives)
-      && $pub['accounts'] === 12 && !isset($types['com.palm.palmprofile']) && !isset($types['com.webosphoenix.xmpp']),
+      && $pub['accounts'] === 13 && !isset($types['com.palm.palmprofile']) && !isset($types['com.webosphoenix.xmpp']),
       'the index lists the account types Phoenix connects to (not the HP webOS profile), the drives among them; Jabber\'s comes from its package (catalog.json)');
 $shape = ['templateId', 'title', 'provider', 'icon', 'summary', 'capabilities', 'protocols', 'auth', 'server', 'privacy', 'push', 'status', 'package', 'featured'];
 // Built in, but for the connector packages Phoenix comes with (pre-installed, removable: the Fediverse).

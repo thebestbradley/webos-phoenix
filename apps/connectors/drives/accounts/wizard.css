@@ -57,13 +57,19 @@
     user-select: text;
 }
 
+/* The pasted key: its own scrolling box inside the field (the field's
+   padding stays, so the first column is not cut off). */
 .drives-wizard .drives-private-key {
     font-family: "DejaVu Sans Mono", Menlo, Consolas, monospace;
     font-size: 12px;
+}
+.drives-wizard .drives-private-key [contenteditable] {
     min-height: 80px;
     max-height: 160px;
-    overflow: auto;
+    overflow-y: auto;
+    overflow-x: hidden;
     word-break: break-all;
+    white-space: pre-wrap;
 }
 
 .drives-wizard .drives-trust {

@@ -246,6 +246,35 @@ async function main() {
         const demoCreds = demo && await luna(accounts, "luna://com.palm.service.accounts/readCredentials", { accountId: demo._id, name: "common" });
         check(demoCreds && demoCreds.credentials && demoCreds.credentials.settings.hostKey.fingerprint === demoFp, "its server's key is pinned in the account");
 
+        // ---- 1b. A key of one's own, pasted in: one with a passphrase is refused, with what to do -------------
+        const { generateKeyPairSync } = require("crypto");
+        const locked = generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem", cipher: "aes-256-cbc", passphrase: "secret" });
+        const plainKey = generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" });
+        w = await wizard();
+        await field(w, "server").fill("files.example");
+        await field(w, "username").fill("bob");
+        await w.locator("#drivesWizard_auth").click();
+        await accounts.waitForTimeout(400);
+        await w.getByText("A key of my own", { exact: true }).click();
+        const keyBox = w.locator("#drivesWizard_privateKey [contenteditable], #drivesWizard_privateKey[contenteditable]").first();
+        await keyBox.click();
+        await keyBox.fill(String(locked));
+        await w.getByText("Sign In", { exact: true }).click();
+        await w.waitForSelector(".error-box", { state: "visible", timeout: 15000 });
+        check(/passphrase/.test(await w.locator(".error-box").textContent()), "a pasted key with a passphrase is refused, saying how to make a copy without one");
+        await shot(accounts, "2b-key-passphrase");
+        await keyBox.fill(String(plainKey));
+        await w.getByText("Sign In", { exact: true }).click();
+        await trustShown(w, "2b-key");
+        await w.getByText("Trust and Sign In", { exact: true }).click();
+        await create().waitFor({ timeout: 20000 }).catch(async () => { await shot(accounts, "2b-key-failed"); });
+        await create().click();
+        const bob = await until(async () => (await luna(accounts, "luna://com.palm.service.accounts/listAccounts", { templateId: TEMPLATE })).results
+            .find((a) => a.username === "bob@files.example"), 10000);
+        const bobCreds = bob && await luna(accounts, "luna://com.palm.service.accounts/readCredentials", { accountId: bob._id, name: "common" });
+        check(!!bobCreds && !!bobCreds.credentials.sshKey && !bobCreds.credentials.password, "the account signs in with the pasted key, kept in the key store");
+        await luna(accounts, "luna://com.palm.service.accounts/deleteAccount", { accountId: bob._id });
+
         let real = null;
         if (sshd) {
             // ---- 2. OpenSSH: a key made on the device ------------------------------------------------------

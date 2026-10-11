@@ -146,6 +146,8 @@ body.pui-app { overflow: hidden; }
 .fm-favorite.current { font-weight: bold; background: rgba(255, 255, 255, 0.45); }
 .fm-favorite:active { color: #fff; background: linear-gradient(#2c8ce0, #1a5fa8); }
 .fm-favorite + .fm-favorites-title { margin-top: 14px; }
+/* The icon keeps its size beside a long account name (an SFTP drive: user@host:port:/folder). */
+.fm-drive > .pui-file-icon { flex-shrink: 0; }
 .fm-drive-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
 .fm-drive-text small { font-size: 12px; font-weight: normal; color: #5a5a58; overflow: hidden; text-overflow: ellipsis; }
 
