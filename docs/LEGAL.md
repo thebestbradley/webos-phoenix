@@ -664,6 +664,33 @@ pinned revision. "Jev" (TypeSafe), which Laya compares itself with, is a
 hosted, closed service: not used. The typed-decisions checkpoint was not
 used (it was tuned on its benchmark's test split, its card says).
 
+## The Assistant's dictionary, Wikipedia and news
+
+- **The dictionary** (`apps/assistant/service/data/dictionary.json`,
+  about 6 MB: "define ephemeral") is made from **Princeton WordNet 3.0**
+  by `tools/make-dictionary.py` (the download's SHA-256 is in it):
+  66,603 single words, each with up to two definitions, and 4,096
+  irregular forms; people's and places' names, the taxonomy's Latin
+  names and the rarer plants are left out. WordNet 3.0's licence is
+  permissive (use, copy, modify and distribute, for any purpose, with its
+  copyright notice and licence on every copy; Princeton's name not used to
+  promote), so its text ships beside the data
+  (`apps/assistant/service/data/WORDNET-LICENSE`): "WordNet 3.0
+  Copyright 2006 by Princeton University. All rights reserved." Checked
+  11 October 2026 against the LICENSE file in WordNet-3.0.tar.gz.
+- **Wikipedia** ("look up Ada Lovelace on Wikipedia"): the Assistant
+  asks Wikipedia's REST API (`/api/rest_v1/page/summary/`) when asked, and
+  says the summary with where it is from ("From Wikipedia, ..."), the
+  answer's card naming Wikipedia and its licence (CC BY-SA 4.0) and
+  opening the article. Nothing of Wikipedia is in this repository or on
+  the image; the text is shown, attributed, as Wikipedia's terms ask of
+  reusers (attribution and the licence, by a link).
+- **News feeds** ("what's the news"): headlines of the RSS or Atom feeds
+  the user keeps in Settings > Assistant > News, read when asked and shown
+  with their source, each opening the story on its own site, as a feed
+  reader does. A new phone starts with two public feeds (BBC News, NPR
+  News); which ones, if any, is the owner's choice (OPEN-QUESTIONS.md).
+
 ## Messaging accounts (Jabber, Matrix, Delta Chat, Unofficial Telegram)
 
 The four connectors (`apps/connectors/xmpp`, `matrix`, `deltachat`,

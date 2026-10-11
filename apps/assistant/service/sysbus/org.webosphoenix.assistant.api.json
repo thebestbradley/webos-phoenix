@@ -49,7 +49,9 @@
         "org.webosphoenix.assistant/removeRoutine",
         "org.webosphoenix.assistant/runRoutine",
         "org.webosphoenix.assistant/places",
-        "org.webosphoenix.assistant/setPlace"
+        "org.webosphoenix.assistant/setPlace",
+        "org.webosphoenix.assistant/newsFeeds",
+        "org.webosphoenix.assistant/setNewsFeeds"
     ],
     "tts.speak": [
         "org.webosphoenix.tts/speak",

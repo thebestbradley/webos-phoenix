@@ -361,6 +361,9 @@ div.license-text { font-family: var(--pui-font); font-size: 13px; }
 .rt-step { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid #fff; border-bottom: 1px solid silver; }
 .rt-step:first-child { border-top: 0; }
 .rt-step:last-child { border-bottom: 0; }
+/* Settings > Assistant > News: an address to add under the feeds. */
+.as-feed-add { padding: 8px 12px; border-top: 1px solid #fff; }
+.as-feed-add .pui-button { margin-top: 8px; }
 .rt-step-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .rt-step-buttons { display: flex; gap: 4px; flex-shrink: 0; }
 .rt-step-buttons .pui-button { min-width: 34px; height: 34px; margin: 0; padding: 0 6px; }

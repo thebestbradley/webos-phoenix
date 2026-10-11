@@ -241,6 +241,9 @@ function device(opts) {
         if (opts.llmRequest && /^http:\/\/127\.0\.0\.1[:/]/.test(r.url)) return opts.llmRequest(r);
         requests.push(r.url);
         if (opts.offline) return Promise.reject(new Error("offline"));
+        // A test's own web: opts.http(url) -> {status, body} | null.
+        var own = opts.http ? opts.http(r.url) : null;
+        if (own) return Promise.resolve(own);
         if (r.url.indexOf("frankfurter") >= 0) return Promise.resolve({ status: 200, body: JSON.stringify({ amount: 20, base: "USD", date: "2026-10-07", rates: { EUR: 17.3 } }) });
         if (r.url.indexOf("api.open-meteo.com/v1/forecast") >= 0 && r.url.indexOf("hourly=") < 0)
             return Promise.resolve({ status: 200, body: JSON.stringify({ current: { temperature_2m: 64.4, weather_code: 2 },

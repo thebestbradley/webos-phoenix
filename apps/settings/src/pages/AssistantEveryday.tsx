@@ -20,10 +20,14 @@
 // "Work" (the service's lib/commands-places.js: places, setPlace). Each
 // row: set to where the phone is now, or cleared; Maps saves one from an
 // address, renames and removes them.
+//
+// And News (NewsFeeds): the feeds "what's the news" reads headlines from
+// (RSS or Atom; lib/commands-facts.js: newsFeeds, setNewsFeeds): each with
+// Remove, and an address to add.
 
 import { useEffect, useRef, useState } from "react";
-import { assistant, type AssistantSettings, type SavedPlaceInfo } from "@phoenix/luna";
-import { Group, Note, PopupMenu, Row, Spinner, ToggleButton } from "@phoenix/ui";
+import { assistant, type AssistantSettings, type NewsFeed, type SavedPlaceInfo } from "@phoenix/luna";
+import { Button, Group, Note, PopupMenu, Row, Spinner, TextField, ToggleButton } from "@phoenix/ui";
 
 export function MessagesAndDriving({ settings: s, set, off }: { settings: AssistantSettings; set: (c: Partial<AssistantSettings>) => void; off: boolean }) {
     const [driving, setDriving] = useState<boolean | null>(null);
@@ -99,6 +103,47 @@ export function HomeAndWork({ off, focus }: { off: boolean; focus?: boolean }) {
                            options={[{ label: "Set to Where I Am Now", value: "here" as const },
                                      ...(places?.[menu.which] ? [{ label: "Clear", value: "clear" as const }] : [])]} />
             )}
+        </>
+    );
+}
+
+// focus: opened on it (launch params {section: "news"}: the Assistant's "add one in Settings").
+export function NewsFeeds({ off, focus }: { off: boolean; focus?: boolean }) {
+    const [feeds, setFeeds] = useState<NewsFeed[] | null>(null);
+    const [url, setUrl] = useState("");
+    const [error, setError] = useState("");
+    useEffect(() => { void assistant.newsFeeds().then((r) => setFeeds(r.feeds), () => setFeeds([])); }, []);
+    const top = useRef<HTMLDivElement | null>(null), shown = useRef(false);
+    useEffect(() => {
+        if (!focus || !feeds || shown.current) return;
+        shown.current = true;
+        top.current?.scrollIntoView?.({ block: "start" });
+    }, [focus, feeds]);
+    const save = (next: NewsFeed[]) => assistant.setNewsFeeds(next).then(setFeeds, (e: Error) => setError(e.message));
+    const add = () => {
+        const u = url.trim();
+        if (!/^https?:\/\/\S+$/i.test(u)) { setError("Enter a feed's address, starting with https://"); return; }
+        setError("");
+        setUrl("");
+        void save([...(feeds ?? []), { title: u.replace(/^https?:\/\/(?:www\.)?/i, "").replace(/\/.*$/, ""), url: u }]);
+    };
+    return (
+        <>
+            <div ref={top} />
+            <Group label="News">
+                {(feeds ?? []).map((f, i) => (
+                    <Row key={f.url} title={f.title || f.url} subtitle={f.url} disabled={off} testId={`as-feed-${i}`}>
+                        <Button variant="dark" className="hw-small-button" disabled={off} data-testid={`as-feed-remove-${i}`}
+                                onClick={() => void save((feeds ?? []).filter((x) => x.url !== f.url))}>Remove</Button>
+                    </Row>
+                ))}
+                {feeds && feeds.length === 0 && <Row title="No feeds" subtitle={"“What’s the news” has nothing to read"} disabled testId="as-feeds-none" />}
+                <div className="as-feed-add">
+                    <TextField value={url} onChange={setUrl} onSubmit={add} label="Add a feed (RSS or Atom)" placeholder="https://" testId="as-feed-url" />
+                    <Button variant="dark" disabled={off || !url.trim()} onClick={add} data-testid="as-feed-add">Add Feed</Button>
+                </div>
+            </Group>
+            <Note testId="as-feeds-note">{error || "“What’s the news” reads the newest headlines from these."}</Note>
         </>
     );
 }

@@ -12010,6 +12010,13 @@
             var m = /^((?:@[^\/]+\/)?[^\/]+\/)/.exec(path.slice(NODE_MODULES.length));
             return NODE_MODULES + (m ? m[1] : "");
         }
+        function loadJson(path) {
+            if (modules[path]) return modules[path].exports;
+            var text = PalmSystem.getResource(path);
+            if (!text) throw new Error(label + " file not found: " + path);
+            modules[path] = { exports: JSON.parse(text) };
+            return modules[path].exports;
+        }
         function loadAbsolute(path) {
             if (modules[path]) return modules[path].exports;
             var text = PalmSystem.getResource(path);
@@ -12018,6 +12025,8 @@
             modules[path] = module;
             var dir = path.slice(0, path.lastIndexOf("/") + 1);
             function req(name) {
+                // A data file, as Node's require reads one (the Assistant's dictionary).
+                if (name.charAt(0) === "." && /\.json$/.test(name)) return loadJson(nodeNormPath(dir + name));
                 if (name.charAt(0) === ".") return loadAbsolute(nodeNormPath(dir + name + (/\.js$/.test(name) ? "" : ".js")));
                 var found = nodeResolveBare(name, dir, topOf(path));
                 if (!found) throw new Error(label + ": no module " + name + " in the simulator");
@@ -17400,7 +17409,7 @@
          "connect", "retry", "voice",
          // The everyday features' own (lib/commands-everyday.js; assistant.js METHODS).
          "announce", "driving", "routines", "setRoutine", "removeRoutine", "runRoutine", "routineWake", "routineEvent",
-         "places", "setPlace", "placeWake", "sleepWake"].forEach(function (name) {
+         "places", "setPlace", "placeWake", "sleepWake", "newsFeeds", "setNewsFeeds"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
                 var m;
                 try { m = service(); } catch (e) { return reply(fail(-1, String(e.message || e))); }

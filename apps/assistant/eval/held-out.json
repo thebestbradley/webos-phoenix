@@ -118,6 +118,10 @@
 {"id":"h-c-music-1","cat":"music","say":"mix up the songs","expect":{"command":"musicMode","args":{"mode":"shuffle","state":"on"}}},
 {"id":"h-c-music-2","cat":"music","say":"turn the music off in 45 minutes","expect":{"command":"sleepTimer","args":{"action":"set","minutes":45}}},
 {"id":"h-c-music-3","cat":"music","say":"save this track to my favourites","deviceState":{"nowPlaying":{"title":"Blue in Green","artist":"Miles Davis","playing":true,"appId":"org.webosphoenix.music","uri":"storage:///media/internal/music/blue.mp3"}},"expect":{"command":"favorites","args":{"action":"add"}}},
-{"id":"h-c-music-4","cat":"music","say":"put on the newest hard fork","db":[{"_id":"pod-fork","_kind":"org.webosphoenix.podcast:1","title":"Hard Fork","subscribed":true},{"_id":"ep-f1","_kind":"org.webosphoenix.podcast.episode:1","podcastId":"pod-fork","title":"AI and you","published":1791100000000,"position":0,"played":false}],"expect":{"command":"podcast"}}
+{"id":"h-c-music-4","cat":"music","say":"put on the newest hard fork","db":[{"_id":"pod-fork","_kind":"org.webosphoenix.podcast:1","title":"Hard Fork","subscribed":true},{"_id":"ep-f1","_kind":"org.webosphoenix.podcast.episode:1","podcastId":"pod-fork","title":"AI and you","published":1791100000000,"position":0,"played":false}],"expect":{"command":"podcast"}},
+{"id":"h-c-fact-1","cat":"facts","say":"what's the definition of melancholy","expect":{"command":"define"}},
+{"id":"h-c-fact-2","cat":"facts","say":"toss a coin","expect":{"command":"coin"}},
+{"id":"h-c-fact-3","cat":"facts","say":"roll a six sided die","expect":{"command":"dice"}},
+{"id":"h-c-fact-4","cat":"facts","say":"give me today's headlines","expect":{"command":"news","status":["done","failed"]}}
 ]
 }

@@ -12,7 +12,7 @@ import { useEffect, useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
 import { assistant, call, type AssistantSettings } from "@phoenix/luna";
-import { HomeAndWork, MessagesAndDriving } from "./AssistantEveryday";
+import { HomeAndWork, MessagesAndDriving, NewsFeeds } from "./AssistantEveryday";
 
 type PS = { getResource(p: string): string | undefined; appIdentifier: string };
 type R = { returnValue: boolean; [k: string]: any };
@@ -99,4 +99,24 @@ describe("Settings > Assistant: Home & Work", () => {
         fireEvent.click(await screen.findByRole("option", { name: "Clear" }));
         await waitFor(() => expect(screen.getByTestId("as-place-home").textContent).toContain("Not set"));
     }, 20000);
+});
+
+describe("Settings > Assistant: News", () => {
+    it("lists the feeds the news is read from, adds one and removes one", async () => {
+        render(<NewsFeeds off={false} />);
+        await waitFor(() => expect(screen.getByTestId("as-feed-0").textContent).toContain("BBC News"));
+        fireEvent.change(screen.getByTestId("as-feed-url"), { target: { value: "https://news.example/rss.xml" } });
+        fireEvent.click(screen.getByTestId("as-feed-add"));
+        await waitFor(async () => expect((await assistant.newsFeeds()).feeds.map((f) => f.url)).toContain("https://news.example/rss.xml"));
+        await waitFor(() => expect(screen.getByTestId("as-feed-2").textContent).toContain("news.example"));
+        fireEvent.click(screen.getByTestId("as-feed-remove-0"));
+        await waitFor(async () => expect((await assistant.newsFeeds()).feeds.map((f) => f.title)).toEqual(["NPR News", "news.example"]));
+    });
+});
+
+describe("the Assistant in the page, with its data files", () => {
+    it("reads the dictionary as Node would require it (the runtime's loader)", async () => {
+        const r = (await call("luna://org.webosphoenix.assistant/ask", { text: "define ephemeral", newThread: true })) as unknown as R;
+        expect(r.messages.at(-1).text).toMatch(/^Ephemeral, adjective: lasting a very short time\./);
+    });
 });

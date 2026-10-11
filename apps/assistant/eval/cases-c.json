@@ -127,6 +127,17 @@
   { "id": "c-music-12", "cat": "music", "say": "play some jazz", "expect": { "command": "play" }, "forbid": ["musicMode", "podcast"] },
   { "id": "c-music-13", "cat": "music", "say": "what's playing",
     "deviceState": { "nowPlaying": { "title": "Blue in Green", "artist": "Miles Davis", "playing": true, "appId": "org.webosphoenix.music" } },
-    "expect": { "command": "media", "args": { "action": "status" } }, "text": "Blue in Green" }
+    "expect": { "command": "media", "args": { "action": "status" } }, "text": "Blue in Green" },
+  { "id": "c-fact-01", "cat": "facts", "say": "define ephemeral", "expect": { "command": "define", "args": { "word": "ephemeral" } }, "text": "lasting a very short time" },
+  { "id": "c-fact-02", "cat": "facts", "say": "what does serendipity mean", "expect": { "command": "define" }, "text": "^Serendipity, noun" },
+  { "id": "c-fact-03", "cat": "facts", "say": "how do you spell necessary", "expect": { "command": "spell" }, "text": "N-E-C-E-S-S-A-R-Y" },
+  { "id": "c-fact-04", "cat": "facts", "say": "flip a coin", "expect": { "command": "coin" }, "text": "^(Heads|Tails)\\.$" },
+  { "id": "c-fact-05", "cat": "facts", "say": "roll two dice", "expect": { "command": "dice", "args": { "count": 2, "sides": 6 } }, "text": "in all" },
+  { "id": "c-fact-06", "cat": "facts", "say": "pick a random number between 1 and 10", "expect": { "command": "randomNumber", "args": { "min": 1, "max": 10 } } },
+  { "id": "c-fact-07", "cat": "facts", "say": "look up Alan Turing on Wikipedia", "expect": { "command": "wikipedia", "args": { "topic": "Alan Turing" }, "status": ["done", "failed"] } },
+  { "id": "c-fact-08", "cat": "facts", "say": "what's the news", "expect": { "command": "news", "status": ["done", "failed"] } },
+  { "id": "c-fact-09", "cat": "facts", "say": "what is the meaning of life", "forbid": ["define"], "expect": { "answer": ["chat", "knowledge", "fallback"] } },
+  { "id": "c-fact-10", "cat": "facts", "say": "who was Ada Lovelace", "forbid": ["wikipedia", "define"], "expect": { "answer": "knowledge" } },
+  { "id": "c-fact-11", "cat": "facts", "say": "set a timer for 3 minutes", "expect": { "command": "timer" }, "forbid": ["dice", "randomNumber"] }
  ]
 }

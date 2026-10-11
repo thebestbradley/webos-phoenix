@@ -394,6 +394,12 @@ export const assistant = {
         const r = await c("places");
         return { home: r.home || null, work: r.work || null };
     },
+    /** The news feeds "what's the news" reads (RSS or Atom), and the ones a new phone starts with. */
+    async newsFeeds(): Promise<{ feeds: NewsFeed[]; defaults: NewsFeed[] }> {
+        const r = await c("newsFeeds");
+        return { feeds: r.feeds || [], defaults: r.defaults || [] };
+    },
+    async setNewsFeeds(feeds: NewsFeed[]): Promise<NewsFeed[]> { return (await c("setNewsFeeds", { feeds })).feeds || []; },
     /** Home or work set to where the device is now (what the assistant said), or cleared. */
     async setPlace(place: "home" | "work", clear = false): Promise<string> {
         return (await c("setPlace", clear ? { place, clear: true } : { place })).text || "";
@@ -402,6 +408,8 @@ export const assistant = {
 
 /** A saved place in Maps (org.webosphoenix.maps.place:1), as Settings shows it. */
 export interface SavedPlaceInfo { id: string; name: string; detail: string; lat: number; lon: number }
+/** A news feed (the service's lib/commands-facts.js): its name and its address. */
+export interface NewsFeed { title: string; url: string }
 
 /** A routine (the service's lib/commands-routines.js): its steps are requests in words. */
 export interface Routine {

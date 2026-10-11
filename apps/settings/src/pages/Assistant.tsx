@@ -58,7 +58,7 @@ import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import { Button, Dialog, Group, ListSelector, Note, Page, PageHeader, PopupMenu, Row, Spinner, TextField, ToggleButton } from "@phoenix/ui";
 import { useBack } from "../nav";
 import { FollowUpQuestions } from "./AssistantFollowUps";
-import { HomeAndWork, MessagesAndDriving } from "./AssistantEveryday";
+import { HomeAndWork, MessagesAndDriving, NewsFeeds } from "./AssistantEveryday";
 import { RoutinesPage, RoutinesRow } from "./AssistantRoutines";
 import { VoiceMissing } from "./AssistantVoice";
 import { SpeakingVoice } from "./AssistantSpeech";
@@ -414,6 +414,7 @@ export function AssistantPage() {
             <MessagesAndDriving settings={s} set={set} off={off} />
             <RoutinesRow off={off} onOpen={() => setRoutines({ from: params, open: true })} />
             <HomeAndWork off={off} focus={params.section === "places"} />
+            <NewsFeeds off={off} focus={params.section === "news"} />
 
             <FollowUpQuestions settings={s} set={set} off={off} />
 

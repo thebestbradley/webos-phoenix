@@ -39,4 +39,6 @@ module.exports = {
     camera: "take a selfie in 3 seconds", voiceMemo: "record a voice memo called groceries", stopRecording: "stop recording",
     parking: "remember where I parked", findParking: "where did I park", placeReminder: "remind me to lock the door when I leave", setPlace: "this is my work",
     musicMode: "turn on shuffle", favorites: "like this song", sleepTimer: "stop the music in 30 minutes", podcast: "resume my podcast",
+    define: "define ephemeral", spell: "how do you spell rhythm", coin: "flip a coin", dice: "roll two dice", randomNumber: "pick a random number between 1 and 10",
+    wikipedia: "look up Ada Lovelace on Wikipedia", news: "what's the news",
 };

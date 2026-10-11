@@ -158,6 +158,9 @@ function device() {
     };
     const request = (r: { url: string }) => Promise.resolve(r.url.includes("geocoding")
         ? { status: 200, body: JSON.stringify({ results: [{ name: "Paris", latitude: 48.85, longitude: 2.35, timezone: "Europe/Paris" }] }) }
+        // Wikipedia's summary, a news feed (lib/commands-facts.js).
+        : r.url.includes("wikipedia.org") ? { status: 200, body: JSON.stringify({ type: "standard", title: "Ada Lovelace", extract: "An English mathematician." }) }
+        : /\/rss|rss\.xml/.test(r.url) ? { status: 200, body: "<rss><channel><item><title>Headline</title><link>https://x.example/1</link></item></channel></rss>" }
         : { status: 200, body: JSON.stringify({ current: { temperature_2m: 20, weather_code: 0 }, daily: { temperature_2m_max: [22], temperature_2m_min: [12] } }) });
     const svc = createAssistantService({ luna, storage, request, now: () => NOW, caller: () => "com.palm.systemui", locale: () => "en-US",
                                          secrets: { seal: () => Promise.resolve({}), unseal: () => Promise.resolve("") } });

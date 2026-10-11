@@ -1598,6 +1598,27 @@ and repeat are Music's: asked while a podcast plays, it says so. Checked
 in the simulator (`--scene 'assistant:@open:org.webosphoenix.music:{"play":""}|like
 this song|repeat this song'`: the star lit and repeat-one on Now Playing).
 
+**Quick facts** (`define`, `spell`, `coin`, `dice`, `randomNumber`,
+`wikipedia`, `news`; `lib/commands-facts.js`). "Define ephemeral", "what
+does serendipity mean": the dictionary on the phone, offline
+(`data/dictionary.json`, 66,603 words from Princeton WordNet 3.0 by
+`tools/make-dictionary.py`, its licence beside it: LEGAL.md), the commonest
+part of speech first, a second sense after ("Ephemeral, adjective: lasting
+a very short time. Also, as a noun: ..."); "ran" is found as "run", "cats"
+as "cat" (WordNet's own forms and suffix rules); a word it does not have
+offers the web. "How do you spell rhythm": letter by letter. "Flip a coin",
+"roll two dice", "roll a d20", "pick a random number between 1 and 50".
+"Look up Ada Lovelace on Wikipedia", "what does Wikipedia say about the
+Eiffel Tower": the article's summary from Wikipedia's REST API, said as
+"From Wikipedia, ...", with a card naming Wikipedia and its licence and
+opening the article. Open questions ("who was Ada Lovelace") stay the
+model's or the web's, as before; whether they should try Wikipedia first
+when no model is connected is the owner's to say (OPEN-QUESTIONS.md).
+"What's the news", "read me the headlines": the five newest headlines of
+the user's feeds (RSS or Atom), each a card opening the story; the feeds
+are in Settings > Assistant > News (two public ones to start with, the
+owner's choice).
+
 ### The Assistant and Synergy (11 October 2026)
 
 The owner: "anything connected through the Synergy system should be
