@@ -185,6 +185,22 @@ static void testSessions()
         CHECK(got + rest.size() == 600000, "flow control: nothing is lost");
     }
     {
+        // The card goes while the shell is still printing and nobody has read
+        // its output (or flow control paused reading). On macOS the shell's
+        // exit waits until that output is read or the PTY closed (~Session in
+        // ptycore.cpp): a destructor that waited for it first never returned.
+        pid_t pid = -1;
+        {
+            Session s;
+            std::string err;
+            s.spawn(sh({ "-c", "head -c 600000 /dev/zero | tr '\\000' a" }), &err);
+            pid = s.pid();
+            waitReadable(s, 5000);
+            g_usleep(50000);   // ...and the writer is blocked on the full PTY
+        }
+        CHECK(pid > 0 && ::kill(pid, 0) != 0, "session: a shell whose output nobody read is still collected (the card went)");
+    }
+    {
         Session s;
         std::string err;
         s.spawn(sh({ "-c", "sleep 30" }), &err);
