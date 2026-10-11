@@ -28,6 +28,15 @@ PACKAGECONFIG_MEDIA:pn-webruntime = ""
 PACKAGECONFIG_WEBOS_CODEC:pn-webruntime = ""
 PACKAGECONFIG_MEDIA:pn-webruntime-clang = ""
 PACKAGECONFIG_WEBOS_CODEC:pn-webruntime-clang = ""
+# The same calculator is needed by the camera pipeline (g-camera-pipeline.bb:25),
+# which the webos-camera distro feature adds to every image
+# (webos_image.bbclass:49, packagegroup-webos-camera.bb:13), and by the media
+# recorder that packagegroup-webos-media brings (packagegroup-webos-media.bb:20,
+# com.webos.service.mediarecorder.bb:12). Neither is in these images until
+# the devices have a resource table; their cameras are a hardware item
+# (docs/HARDWARE.md). Found by CI's parse job (11 October 2026).
+DISTRO_FEATURES:remove = "webos-camera"
+VIRTUAL-RUNTIME_mediarecorder:pn-packagegroup-webos-media = ""
 
 # webos-graphics-drm: luna-surfacemanager on KMS/DRM, as the Pi
 # (webos-rpi.inc) and the emulator (webos.inc, :qemuall) have it.
