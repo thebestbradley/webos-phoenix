@@ -123,6 +123,27 @@ static void useBundledEmojiFont(int argc, char *argv[])
 #endif
 }
 
+#ifdef PHOENIX_HAVE_WEBENGINE
+// The apps' pages run what a device runs as services (the connectors'
+// connections and their demo servers, runtime/phoenix-runtime.js), and a
+// card out of sight must keep running as a service does. Chromium slows a
+// hidden page's timers to about once a second, and after five minutes to
+// about once a minute: a Jabber message sent from the Assistant waited up
+// to a minute in the outbox for the page keeping the connection. Measured
+// in phoenix-sim: a hidden page ran 4 of 12 one-second ticks after six
+// minutes hidden, all 12 with these. Added to any flags already given.
+static void keepHiddenPagesRunning()
+{
+    QByteArray flags = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS");
+    for (const char *flag : {"--disable-background-timer-throttling", "--disable-renderer-backgrounding",
+                             "--disable-backgrounding-occluded-windows"}) {
+        if (!flags.contains(flag))
+            flags += (flags.isEmpty() ? "" : " ") + QByteArray(flag);
+    }
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS", flags);
+}
+#endif
+
 int main(int argc, char *argv[])
 {
     // Built against Qt 6.8 or newer (CMakeLists.txt), and run with it: an
@@ -134,7 +155,8 @@ int main(int argc, char *argv[])
     }
     useBundledEmojiFont(argc, argv);
 #ifdef PHOENIX_HAVE_WEBENGINE
-    // Both must happen before the application object exists.
+    // These must happen before the application object exists.
+    keepHiddenPagesRunning();
     RootfsSchemeHandler::registerScheme();
     QtWebEngineQuick::initialize();
 #endif
