@@ -16,6 +16,7 @@ import WebOS.Global 1.0
 import Phoenix.Native
 import "LsmCards.js" as LsmCards
 import "../Shell/NotificationPolicy.js" as Policy
+import "../Shell/NotificationStacks.js" as Stacks
 
 Item {
     id: source
@@ -378,9 +379,15 @@ Item {
             lunaCall("luna://org.webosphoenix.battery/phoenix/usageTick", changes.usageTick, function() {});
     }
 
+    // The row, its whole stack with it.
     function dismissNotification(index) {
         if (index >= 0 && index < notifications.count)
             notifications.remove(index);
+    }
+    // Its top layer swiped away; the last takes the row (SimWindowSource's).
+    function popNotificationLayer(index) {
+        if (index >= 0 && index < notifications.count)
+            Stacks.pop(notifications, index);
     }
 
     // ---- System sounds (SystemSounds.qml decides; audiod plays) ------------------------
@@ -652,17 +659,22 @@ Item {
         } else if (type === "notification") {
             // A notification for this app or one it names (a text the
             // telephony service received for Messaging); {tag} replaces,
-            // {tag, remove} takes back (tagPrefix: all starting with it).
+            // {tag, remove} takes back (tagPrefix: all starting with it);
+            // {group} stacks it on the app's notifications of that group,
+            // {group, remove} takes the stack away (SimWindowSource's).
             var target = payload.appId && appInfo(payload.appId) ? payload.appId : appId;
             if (payload.tag)
                 removeTagged(target, String(payload.tag));
             if (payload.remove) {
                 if (payload.tagPrefix)
                     removeTagged(target, String(payload.tagPrefix), true);
+                if (payload.group)
+                    removeGroup(target, String(payload.group));
                 return;
             }
             notify(target, payload.title || "", payload.body || "", payload.params,
-                   { tag: payload.tag ? String(payload.tag) : "", actions: payload.actions || null });
+                   { tag: payload.tag ? String(payload.tag) : "", actions: payload.actions || null,
+                     group: payload.group ? String(payload.group) : "" });
             if (payload.soundClass || payload.soundFile) {
                 var ns = _soundArgs(payload);
                 soundRequested(target, ns[0], ns[1], ns[2]);
@@ -854,23 +866,25 @@ Item {
     }
 
     // ---- Notifications ------------------------------------------------------------------
-    // params: the app's launch params when it is tapped; extra: {tag, actions}.
+    // params: the app's launch params when it is tapped; extra: {tag,
+    // actions, group}: with a group the app has a stack of, on top of it.
+    property int _notificationSeq: 0
     function notify(appId, title, body, params, extra) {
         var info = appInfo(appId) || { color: "#666666", glyph: "!", icon: "" };
         var acts = extra && extra.actions && Array.isArray(extra.actions.items) && extra.actions.items.length ? extra.actions : null;
-        notifications.append({ id: "n" + Date.now() + "_" + notifications.count, appId: appId, title: title, body: body || "",
-                               color: info.color || "#666666", glyph: info.glyph || "!", icon: info.icon || "",
-                               params: params && typeof params === "object" ? JSON.stringify(params) : (typeof params === "string" ? params : ""),
-                               windowKey: "", clickableWhenLocked: false, ongoing: false, progress: -1,
-                               tag: extra && extra.tag ? extra.tag : "", actions: acts ? JSON.stringify(acts) : "" });
+        Stacks.push(notifications, { id: "n" + Date.now() + "_" + (++_notificationSeq), appId: appId, title: title, body: body || "",
+                                     color: info.color || "#666666", glyph: info.glyph || "!", icon: info.icon || "",
+                                     params: params && typeof params === "object" ? JSON.stringify(params) : (typeof params === "string" ? params : ""),
+                                     windowKey: "", clickableWhenLocked: false, ongoing: false, progress: -1,
+                                     tag: extra && extra.tag ? extra.tag : "", actions: acts ? JSON.stringify(acts) : "" },
+                    extra && extra.group ? String(extra.group) : "");
     }
 
     function removeTagged(appId, tag, prefix) {
-        for (var i = notifications.count - 1; i >= 0; --i) {
-            var n = notifications.get(i);
-            if (n.appId === appId && (prefix ? n.tag !== "" && n.tag.indexOf(tag) === 0 : n.tag === tag))
-                notifications.remove(i);
-        }
+        Stacks.removeTagged(notifications, appId, tag, prefix);
+    }
+    function removeGroup(appId, group) {
+        Stacks.removeGroup(notifications, appId, group);
     }
 
     // An ongoing activity: {id, title, body, icon?, progress, params?} or
@@ -902,7 +916,8 @@ Item {
         notifications.insert(Policy.ongoingInsertIndex(flags), {
             id: key, appId: target, title: p.title || "", body: p.body || "",
             color: info.color || "#666666", glyph: info.glyph || "!", icon: p.icon ? _iconUrl(p.icon, target) : (info.icon || ""),
-            params: params, windowKey: "", clickableWhenLocked: false, ongoing: true, progress: progress, tag: "", actions: ""
+            params: params, windowKey: "", clickableWhenLocked: false, ongoing: true, progress: progress, tag: "", actions: "",
+            group: "", layerCount: 1, layers: ""
         });
     }
 

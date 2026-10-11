@@ -223,6 +223,26 @@ Item {
             post("com.palm.app.email", "notification", { tag: "t1", remove: true });
             compare(windows.notifications.count, before);
 
+            // Stacks (NotificationStacks.js, as the simulator's): one row
+            // per app and group, the newest layer on top; a pop shows the
+            // next; {group, remove} takes the stack.
+            post("com.palm.app.email", "notification", { title: "Ada", body: "One", group: "ada", params: { m: 1 } });
+            post("com.palm.app.email", "notification", { title: "Ben", body: "Hi", group: "ben" });
+            post("com.palm.app.email", "notification", { title: "Ada", body: "Two", group: "ada", params: { m: 2 } });
+            compare(windows.notifications.count, before + 2);
+            var ada = windows.notifications.get(before);
+            compare(ada.layerCount, 2);
+            compare(ada.body, "Two");
+            compare(JSON.parse(ada.params).m, 2);
+            windows.popNotificationLayer(before);
+            compare(windows.notifications.get(before).layerCount, 1);
+            compare(windows.notifications.get(before).body, "One");
+            post("com.palm.app.email", "notification", { group: "ada", remove: true });
+            compare(windows.notifications.count, before + 1);
+            compare(windows.notifications.get(before).title, "Ben");
+            windows.dismissNotification(before);
+            compare(windows.notifications.count, before);
+
             // The active-call banner is its app's alone.
             post("org.webosphoenix.phone", "activeCallBanner", { op: "add", message: "Ada", startTime: 5 });
             compare(windows.activeCallBanner.message, "Ada");

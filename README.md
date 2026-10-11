@@ -467,6 +467,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | --- | --- |
 | `node tools/test-apps.cjs && node tools/test-settings.cjs` | Needs Playwright |
 | `node tools/test-phone-messaging.cjs` | Calls, texts, MMS, Buddies without an account |
+| `node tools/test-notification-stacks.cjs` | Notifications stacked per conversation and the missed calls' stack, through the shell's `NotificationStacks.js`; reading clears them |
 | `node tools/test-xmpp.cjs`, `test-matrix.cjs`, `test-deltachat.cjs`, `test-telegram.cjs` | The messaging accounts with Messaging, against the simulator's demo servers |
 | `node tools/test-xmpp-server.cjs` | The Jabber account against a real Prosody it starts (ports 15222, 15280; skipped without `prosody`: apt install prosody) |
 | `node tools/test-voicedial.cjs` | Voice Dial |

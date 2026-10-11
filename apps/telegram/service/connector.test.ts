@@ -63,7 +63,8 @@ async function world(o?: { settings?: any; noHelper?: boolean }) {
     const credentials: Record<string, any> = {};
     let methods: any = {};
     const handlers: Record<string, any> = {
-        "luna://com.webos.notification/createToast": (p: any) => { toasts.push(p); return { returnValue: true }; },
+        // A toast as its banner reads it: "title: message".
+        "luna://com.webos.notification/createToast": (p: any) => { toasts.push({ ...p, message: p.title ? p.title + ": " + p.message : p.message }); return { returnValue: true }; },
         "luna://org.webosports.service.messaging/putMessage": async (p: any) => {
             const addr = p.message.folder === "inbox" ? p.message.from.addr : p.message.to[0].addr;
             const r = await db.put([Object.assign({ conversations: ["thread-" + addr] }, p.message)]);

@@ -447,7 +447,8 @@ async function main() {
         const launched = host.slice(sent).find((m) => m.type === "launch");
         check(!!launched && launched.payload.id === "org.webosphoenix.messaging" && launched.payload.newCard === true &&
               launched.payload.params.threadId === firstId, "Open in New Card: another card of Messaging on it: " + JSON.stringify(launched && launched.payload));
-        const notified = host.find((m) => m.type === "notification" && m.payload.appId === "org.webosphoenix.messaging");
+        // A message's notification, not a stack taken away ({remove: true}, a conversation read).
+        const notified = host.find((m) => m.type === "notification" && m.payload.appId === "org.webosphoenix.messaging" && !m.payload.remove);
         check(!!notified && Object.keys(notified.payload.params).join() === "threadId", "the same launch param as a message's notification ({threadId})");
         // The new card (a cold launch with those params).
         const card = await context.newPage();

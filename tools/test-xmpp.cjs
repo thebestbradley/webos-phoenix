@@ -195,6 +195,10 @@ async function main() {
         await page.click("[data-testid='msg-tabs'] [data-value='conversations']");
         const threadId = await page.evaluate(() => __phoenixRuntime.simulateIncomingIm({ from: "lena.okafor@chat.example", text: "Hi! Just landed." }));
         check(!!threadId, "the demo server delivers a message from Lena");
+        const lenaNote = await until(() => host.find((m) => m.type === "notification" && m.payload.title === "Lena Okafor"), 5000);
+        check(!!lenaNote && lenaNote.payload.body === "Hi! Just landed." && lenaNote.payload.group === threadId,
+              "its notification, sender and text apart, its conversation its group (one stack per conversation): "
+              + JSON.stringify(lenaNote && lenaNote.payload));
         await page.waitForFunction(() => /Hi! Just landed\./.test(document.querySelector("[data-testid='thread-row']")?.textContent || ""), null, { timeout: 8000 });
         check((await page.textContent("[data-testid='thread-row'] .thread-unread")) === "1", "listed, unread");
         await shot(page, "5-conversations");

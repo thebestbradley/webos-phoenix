@@ -127,6 +127,8 @@ describe("Bluesky", () => {
         bs.notify("reply", bs.people[0], "Nice photo!");
         await w.sync(id);
         expect(w.toasts.map((t: any) => t.message)).toEqual(["Carla followed you: @carla.test", "Bob Marsh replied to you: Nice photo!"]);
+        // One stack per account, as the Fediverse's (and Email's dashboards).
+        expect(w.toasts.map((t: any) => t.group)).toEqual(["account:" + id, "account:" + id]);
         expect(w.toasts[1].onclick).toMatchObject({ appId: "org.webosphoenix.bluesky", params: { open: expect.stringMatching(/^https:\/\/bsky\.app\/profile\/bob\.test\/post\//) } });
         await w.sync(id);
         expect(w.toasts.length).toBe(2);
@@ -147,6 +149,9 @@ describe("Bluesky", () => {
         msgs = await w.find(MESSAGE);
         expect(msgs.map((m: any) => m.messageText)).toEqual(["Hi Anna!", "Are you coming on Saturday?"]);
         expect(w.toasts.map((t: any) => t.message)).toEqual(["Bob Marsh: Are you coming on Saturday?"]);
+        // Sender and text apart, the conversation its group: one stack per conversation.
+        expect(w.toasts[0]).toMatchObject({ title: "Bob Marsh", group: w.toasts[0].onclick.params.threadId });
+        expect(w.toasts[0].group).toBeTruthy();
         // A reply written in Messaging.
         const [out] = await w.db.put([{ _kind: MESSAGE, folder: "outbox", status: "pending", serviceName: "type_bluesky", username: "anna.test",
                                         to: [{ addr: "bob.test" }], messageText: "Yes, see you there" }]);

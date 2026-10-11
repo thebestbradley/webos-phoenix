@@ -3,13 +3,14 @@
 //
 // Call log: all calls or just the missed ones, by day, newest first. A tap
 // calls the number back. Voicemail sits at the top (a stub for now: it
-// dials the voicemail number, as the webOS voicemail key did).
+// dials the voicemail number, as the webOS voicemail key did). Seen (shown
+// with the card in front), it takes the missed calls' notifications away.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { matchNumber, personDisplayName, phoneTypeLabel, type Person, type VoicemailStatus } from "@phoenix/luna";
 import { RadioToolGroup, dayLabel, formatDuration, formatNumber, shortWhen } from "@phoenix/ui";
 import { groupByDay, isMissed, otherParty, type PhoneCall } from "../lib/calllog";
-import { useCallLog } from "../lib/hooks";
+import { clearMissedCalls, useCallLog } from "../lib/hooks";
 import { Incoming, Missed, Outgoing, Voicemail } from "../icons";
 
 export interface CallLogProps {
@@ -17,6 +18,27 @@ export interface CallLogProps {
     voicemail: VoicemailStatus | null;
     onCall: (number: string) => void;
     onVoicemail: () => void;
+    /** Which calls it opens on ("missed": from the missed calls' notification). */
+    initialFilter?: "all" | "missed";
+}
+
+/**
+ * The missed calls' stack gone once the log is seen: as it opens, and as
+ * its card comes to the front while it shows (the runtime's
+ * "phoenixcardactivation"; a hidden page waits for "visibilitychange").
+ */
+function useMissedCallsSeen(): void {
+    useEffect(() => {
+        const seen = () => { if (typeof document === "undefined" || document.visibilityState !== "hidden") clearMissedCalls(); };
+        const activated = (e: Event) => { if ((e as CustomEvent<{ active?: boolean }>).detail?.active) seen(); };
+        seen();
+        window.addEventListener("phoenixcardactivation", activated);
+        document.addEventListener("visibilitychange", seen);
+        return () => {
+            window.removeEventListener("phoenixcardactivation", activated);
+            document.removeEventListener("visibilitychange", seen);
+        };
+    }, []);
 }
 
 function Row({ r, people, onCall }: { r: PhoneCall; people: readonly Person[]; onCall: (n: string) => void }) {
@@ -45,9 +67,10 @@ function Row({ r, people, onCall }: { r: PhoneCall; people: readonly Person[]; o
     );
 }
 
-export function CallLog({ people, voicemail, onCall, onVoicemail }: CallLogProps) {
-    const [filter, setFilter] = useState<"all" | "missed">("all");
+export function CallLog({ people, voicemail, onCall, onVoicemail, initialFilter = "all" }: CallLogProps) {
+    const [filter, setFilter] = useState<"all" | "missed">(initialFilter);
     const calls = useCallLog(filter === "missed");
+    useMissedCallsSeen();
     return (
         <div className="phone-list-view">
             <div className="phone-header">

@@ -201,7 +201,8 @@ function syncMessages(ctx) {
                                     stored++;
                                     if (first) return null;
                                     return ctx.notify({ title: name, body: String(x.text || ""), appId: MESSAGING_APP,
-                                                        params: { threadId: (res && res.threadids && res.threadids[0]) || "" } });
+                                                        params: { threadId: (res && res.threadids && res.threadids[0]) || "" },
+                                                        group: (res && res.threadids && res.threadids[0]) || "" });
                                 });
                             });
                         });
@@ -310,11 +311,15 @@ function syncNotifications(ctx) {
             var shown = first ? [] : newer.map(function (n) { return notificationText(n, s.who.handle); }).filter(Boolean);
             var chain = Promise.resolve();
             shown.slice(-MAX_TOASTS).forEach(function (t) {
-                chain = chain.then(function () { return ctx.notify({ title: t.title, body: t.body, appId: APP, params: t.open ? { open: t.open } : {} }); });
+                // One stack per account, as Email kept a dashboard per
+                // account (enyo-1.0 palm/system/Dashboard.js:15-17).
+                chain = chain.then(function () { return ctx.notify({ title: t.title, body: t.body, appId: APP, params: t.open ? { open: t.open } : {},
+                                                                     group: "account:" + ctx.accountId }); });
             });
             if (shown.length > MAX_TOASTS) {
                 chain = chain.then(function () {
-                    return ctx.notify({ title: (shown.length - MAX_TOASTS) + " more on Bluesky", appId: APP, params: { open: "https://bsky.app/notifications" } });
+                    return ctx.notify({ title: (shown.length - MAX_TOASTS) + " more on Bluesky", appId: APP, params: { open: "https://bsky.app/notifications" },
+                                        group: "account:" + ctx.accountId });
                 });
             }
             return chain.then(function () {

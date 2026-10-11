@@ -253,12 +253,20 @@ export function poiAt(clientX: number, clientY: number, r = 14): (DrawnPoi & { c
     return best;
 }
 
-/** Does this runtime have WebGL 2 (what MapLibre GL 6 needs)? */
+let webgl2: boolean | undefined;
+
+/** Does this runtime have WebGL 2 (what MapLibre GL 6 needs)? Asked once,
+ *  and the probe's context let go: MapView asks on every render, and each
+ *  probe was a context of its own. Chromium keeps 16 and loses the oldest
+ *  past that ("Too many active WebGL contexts"), which became the map's. */
 export function hasWebGL2(): boolean {
+    if (webgl2 !== undefined) return webgl2;
     try {
-        const c = document.createElement("canvas");
-        return !!c.getContext("webgl2");
+        const gl = document.createElement("canvas").getContext("webgl2");
+        webgl2 = !!gl;
+        gl?.getExtension("WEBGL_lose_context")?.loseContext();
     } catch {
-        return false;
+        webgl2 = false;
     }
+    return webgl2;
 }
