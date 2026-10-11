@@ -1,0 +1,15 @@
+{
+    "id": "org.webosphoenix.glasstest",
+    "version": "1.0.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Glass",
+    "phoenix": {
+        "//": "A test page for Ember Glass's shell contract (docs/SYSTEM-UI-2.md; tools/test-glass-sim.py installs it in the simulator's installed apps): it draws the card's glass, L1, from what the shell gives it, as Ember Glass UI's .eg-window does. Its launch points: light, and raw (the blurred wallpaper alone, for the alignment check).",
+        "launchPoints": [
+            { "id": "org.webosphoenix.glasstest.light", "title": "Glass (light)", "params": { "theme": "light" } },
+            { "id": "org.webosphoenix.glasstest.raw", "title": "Glass (raw)", "params": { "raw": true } }
+        ]
+    }
+}

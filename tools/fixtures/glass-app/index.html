@@ -1,0 +1,125 @@
+<!doctype html>
+<!-- Copyright (c) 2026 webOS Phoenix contributors
+     SPDX-License-Identifier: Apache-2.0
+
+     A page drawn from Ember Glass's shell contract (docs/SYSTEM-UI-2.md, "The
+     shell contract"; Ember Glass UI's docs/SHELL-CONTRACT.md): its card's glass,
+     L1, is the blurred wallpaper the shell gives it, sized to the screen and
+     offset by the window's place, under the theme's tone map and tint, as Ember
+     Glass UI's .eg-window draws it (packages/css/src/glass.css; the values are
+     its tokens', docs/design-2.0/directions/ember-glass/assets/base.css). Its
+     rows say what the shell gave.
+
+     Launch params, or the same in its address's query: {theme: "light"} (dark
+     otherwise); {title}: its heading; {raw: true}: the blurred wallpaper alone,
+     no tone map, tint or content, for tools/test-glass-sim.py to compare with
+     the sharp wallpaper. -->
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Glass</title>
+<style>
+  html[data-theme="dark"] {
+    --eg-color-bg: #0b0b0d;
+    --eg-color-ink: #f3f2ef; --eg-color-ink-2: #a9a7ae; --eg-color-ink-3: #9a98a0;
+    --eg-color-line-2: rgb(255 255 255 / .16);
+    --eg-plane: rgb(6 5 7 / .26);
+    --eg-sunk: rgb(255 255 255 / .03);
+    --eg-glass-l1-filter: saturate(1.5) brightness(.8);
+    --eg-glass-l1-tint: rgb(12 11 13 / .68);
+    --eg-ambient: radial-gradient(120% 55% at 50% 112%, rgb(255 90 30 / .13) 0%, rgb(255 90 30 / 0) 60%), radial-gradient(90% 50% at 10% -8%, rgb(255 255 255 / .05), transparent 60%);
+    --eg-glass-highlight: rgb(255 255 255 / .17);
+    --eg-glass-rim: rgb(255 255 255 / .12);
+    --eg-lift: inset 0 1px 0 rgb(255 255 255 / .07), 0 24px 48px -28px rgb(0 0 0 / .9);
+  }
+  html[data-theme="light"] {
+    --eg-color-bg: #f2f1ee;
+    --eg-color-ink: #141416; --eg-color-ink-2: #4c4b51; --eg-color-ink-3: #605e65;
+    --eg-color-line-2: rgb(20 18 22 / .18);
+    --eg-plane: rgb(255 255 255 / .56);
+    --eg-sunk: rgb(20 18 16 / .035);
+    --eg-glass-l1-filter: saturate(1.3) contrast(.42) brightness(2.2);
+    --eg-glass-l1-tint: rgb(247 245 241 / .78);
+    --eg-ambient: radial-gradient(130% 70% at 15% -10%, #ffffff 0%, rgb(255 255 255 / 0) 62%);
+    --eg-glass-highlight: rgb(255 255 255 / .95);
+    --eg-glass-rim: rgb(20 18 22 / .12);
+    --eg-lift: inset 0 1px 0 rgb(255 255 255 / .95), 0 22px 44px -28px rgb(60 35 10 / .30), 0 2px 6px -3px rgb(60 35 10 / .10);
+  }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body { font-family: Manrope, "Open Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; overflow: hidden; }
+
+  /* L1 (glass.css .eg-window) */
+  .eg-window { position: relative; isolation: isolate; min-height: 100vh; box-sizing: border-box; color: var(--eg-color-ink);
+               background-color: var(--eg-color-bg); padding: 30px 18px 0; }
+  .eg-window::before, .eg-window::after { content: ""; position: fixed; inset: 0; pointer-events: none; }
+  .eg-window::before { z-index: -2;
+    background-image: var(--eg-wallpaper-blurred, none);
+    background-size: var(--eg-screen-w, 100vw) var(--eg-screen-h, 100vh);
+    background-position: calc(-1 * var(--eg-window-x, 0px)) calc(-1 * var(--eg-window-y, 0px));
+    background-repeat: no-repeat;
+    filter: var(--eg-glass-l1-filter); }
+  .eg-window::after { z-index: -1; border-radius: var(--eg-window-radius, 0);
+    background: var(--eg-ambient), var(--eg-glass-l1-tint);
+    box-shadow: inset 0 1px 0 var(--eg-glass-highlight), inset 0 0 0 .5px var(--eg-glass-rim); }
+  /* raw: the blurred wallpaper alone, over black */
+  html[data-raw] .eg-window { background-color: #000; }
+  html[data-raw] .eg-window::before { filter: none; }
+  html[data-raw] .eg-window::after, html[data-raw] .content { display: none; }
+
+  h1 { margin: 0; font-size: 44px; line-height: 50px; font-weight: 250; letter-spacing: -1.4px; }
+  .sub { margin-top: 4px; font-size: 13.5px; line-height: 19px; font-weight: 500; color: var(--eg-color-ink-2); }
+  .search { margin-top: 20px; height: 46px; border-radius: 999px; display: flex; align-items: center; padding: 0 16px; color: var(--eg-color-ink-2);
+            background: var(--eg-sunk); box-shadow: inset 0 0 0 .5px var(--eg-color-line-2); font-size: 15px; font-weight: 500; }
+  .group-h { margin: 24px 6px 10px; font-size: 11px; line-height: 14px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase; color: var(--eg-color-ink-3); }
+  .plane { background: var(--eg-plane); border-radius: 22px; box-shadow: var(--eg-lift), inset 0 0 0 .5px var(--eg-color-line-2); }
+  .row { display: flex; align-items: center; min-height: 58px; padding: 10px 18px; position: relative; box-sizing: border-box; }
+  .row + .row::before { content: ""; position: absolute; top: 0; left: 18px; right: 0; height: .5px; background: var(--eg-color-line-2); }
+  .row .t { flex: 1; font-size: 16px; line-height: 22px; font-weight: 550; letter-spacing: -.1px; }
+  .row .v { font-size: 13.5px; line-height: 19px; color: var(--eg-color-ink-2); font-variant-numeric: tabular-nums; }
+  .dot { display: inline-block; width: 8px; height: 8px; margin-right: 10px; border-radius: 50%;
+         background: linear-gradient(120deg, #ff4f1a, #ff7a2a 45%, #ffb547); box-shadow: 0 0 8px rgb(255 110 40 / .7); }
+</style>
+</head>
+<body>
+<div class="eg-window">
+  <div class="content">
+    <h1>Glass</h1>
+    <div class="sub">This card's glass comes from the shell</div>
+    <div class="search">Just type a name or number</div>
+    <div class="group-h">What the shell gives</div>
+    <div class="plane">
+      <div class="row"><span class="t"><span class="dot"></span>Blurred wallpaper</span><span class="v" id="wallpaper">none</span></div>
+      <div class="row"><span class="t">Window</span><span class="v" id="window">–</span></div>
+      <div class="row"><span class="t">Screen</span><span class="v" id="screen">–</span></div>
+      <div class="row"><span class="t">Corners</span><span class="v" id="radius">–</span></div>
+      <div class="row"><span class="t">Live blur</span><span class="v" id="blur">–</span></div>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    var params = {};
+    try { params = JSON.parse((window.PalmSystem && PalmSystem.launchParams) || "{}") || {}; } catch (e) { params = {}; }
+    new URLSearchParams(location.search).forEach(function (v, k) { if (k !== "launchParams" && !(k in params)) params[k] = v; });
+    var root = document.documentElement;
+    if (params.theme === "light") root.dataset.theme = "light";
+    if (params.raw) root.dataset.raw = "1";
+    if (params.title) document.querySelector("h1").textContent = document.title = params.title;
+    function show(d) {
+      var set = function (id, text) { document.getElementById(id).textContent = text; };
+      if (!d) {
+        set("wallpaper", "none"); set("window", "–"); set("screen", "–"); set("radius", "–"); set("blur", "–");
+        return;
+      }
+      set("wallpaper", d.wallpaperBlurred ? Math.round(d.wallpaperBlurred.length / 1024) + " KB PNG" : "none");
+      set("window", d.window.x + ", " + d.window.y + " · " + d.window.width + " × " + d.window.height);
+      set("screen", d.screen.width + " × " + d.screen.height);
+      set("radius", d.windowRadius + " px");
+      set("blur", d.blur === "none" ? "off" : "on");
+    }
+    document.addEventListener("phoenixGlass", function (e) { show(e.detail); });
+    try { show(JSON.parse((window.PalmSystem && PalmSystem.glass) || "null")); } catch (e) { show(null); }
+  })();
+</script>
+</body>
+</html>

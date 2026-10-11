@@ -2683,6 +2683,22 @@ FocusScope {
         });
     }
 
+    // ---- Ember Glass: the wallpaper blurred once (docs/SYSTEM-UI-2.md) -------------
+    // For the cards' glass (Card.glass, which each web app gets) and the
+    // shell's own (the loading card). Made again when the wallpaper or the
+    // screen changes; nothing in 1.0's look.
+    WallpaperBlur {
+        id: wallpaperBlur
+        objectName: "wallpaperBlur"
+        wallpaper: wallpaperItem
+        sourceKey: String(shell.wallpaper) + "|" + wallpaperItem.status
+    }
+    readonly property alias wallpaperBlur: wallpaperBlur
+    // Ember Glass's floats and overlays blur live, or are tints (blur
+    // "none"): Settings > Advanced > Live blur off, or no GPU (the low end;
+    // SPEC.md, "GPU cost and fallback").
+    readonly property string glassBlur: tweak("glassBlur") === "none" || GraphicsInfo.api === GraphicsInfo.Software ? "none" : "live"
+
     // ---- Layers, bottom to top ----------------------------------------------------
     // Behind everything: what shows around the turning snapshots.
     Rectangle {
@@ -2755,6 +2771,12 @@ FocusScope {
                         // The angry card's stretch, upside down.
                         onFeedbackSound: (name) => shell.sounds.feedback(name)
                         topInset: shell.fullScreen ? 0 : Theme.statusBarHeight
+                        // Ember Glass's L1 (docs/SYSTEM-UI-2.md): the
+                        // wallpaper blurred, the screen it covers.
+                        glassWallpaper: wallpaperBlur.url
+                        glassWallpaperToned: wallpaperBlur.tonedUrl
+                        glassScreen: Qt.size(wallpaperItem.width, wallpaperItem.height)
+                        glassBlur: shell.glassBlur
                         // The app's positive space ends where the notifications' negative space begins,
                         // resized when the original resized it (cardBottomInset).
                         bottomInset: shell.cardBottomInset

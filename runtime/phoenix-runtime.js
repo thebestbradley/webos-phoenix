@@ -5836,6 +5836,9 @@
                 browser: browserSettings(p),
                 proxy: networkProxy(p.networkProxy),
                 wallpaperFile: (p.wallpaper && p.wallpaper.wallpaperFile) || "",
+                // The user has chosen none: the default is the shell's, by
+                // its look (Ember Glass's is the phoenix: docs/SYSTEM-UI-2.md).
+                wallpaperDefault: !("wallpaper" in store.get("prefs", {})),
                 // Dock mode (Settings > Exhibition): its wallpaper, the
                 // exhibitions that are on (after the built-in Time), its
                 // sounds and when it starts; night mode.

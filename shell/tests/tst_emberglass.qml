@@ -4,7 +4,9 @@
 // Phoenix 2.0's look, Ember Glass, beside 1.0's (docs/SYSTEM-UI-2.md):
 // the switch (the system preference "look", the simulator's --look, 1.0's
 // look by default), the tokens it is drawn with (EmberGlass, generated from
-// Ember Glass UI's), and the gesture light.
+// Ember Glass UI's), the gesture light, the cards, and the shell's side of
+// Ember Glass's shell contract: the wallpaper blurred once (WallpaperBlur)
+// and what each card's window gets (Card.glass).
 // Run: qmltestrunner -import qml -input tests
 
 import QtQuick
@@ -24,7 +26,29 @@ Item {
         density: 1
         source: SimWindowSource { id: windows }
         system: SimSystemStatus { id: sys }
+        wallpaper: Qt.resolvedUrl("../../apps/settings/public/wallpapers/phoenix.jpg")
     }
+
+    // A wallpaper black on its left half and white on its right, blurred
+    // on its own (the Gaussian's profile across the edge).
+    Item {
+        id: halves
+        width: 446
+        height: 994
+        visible: false
+        Rectangle { width: parent.width / 2; height: parent.height; color: "black" }
+        Rectangle { x: parent.width / 2; width: parent.width / 2; height: parent.height; color: "white" }
+    }
+    WallpaperBlur {
+        id: edgeBlur
+        wallpaper: halves
+        scale: 1
+        active: false
+        toneMap: ({ saturate: 1, contrast: 0.42, brightness: 2.2 })
+    }
+    // (Shown only while grabImage reads them.)
+    Image { id: edgeRaw; z: 10000; visible: false; source: edgeBlur.url }
+    Image { id: edgeToned; z: 10000; visible: false; source: edgeBlur.tonedUrl }
 
     TestCase {
         name: "EmberGlass"
@@ -165,6 +189,117 @@ Item {
             tryVerify(function() { return light.breath < 0.8; }, 2000);
             mouseRelease(m, m.width / 2, m.height / 2);
             tryCompare(light, "breath", 1, 2000);
+        }
+
+        // The wallpaper blurred as CSS's blur(40px) blurs it, at a quarter
+        // of the screen's CSS pixels (deviation 10 there): across a black
+        // and white edge the profile is the Gaussian's (within the three
+        // boxes' approximation, as Chromium's), and towards the screen's
+        // edges the mock-up's #140604 padding darkens it.
+        function test_wallpaperBlurIsCssBlur() {
+            halves.visible = true;
+            edgeBlur.active = true;
+            edgeBlur.make();
+            tryVerify(function() { return edgeBlur.url !== ""; }, 10000);
+            compare(edgeBlur.pictureSize, Qt.size(112, 249));
+            compare(edgeBlur.screenSize, Qt.size(446, 994));
+            verify(edgeBlur.url.indexOf("data:image/png;base64,") === 0);
+            tryCompare(edgeRaw, "status", Image.Ready, 5000);
+            tryCompare(edgeToned, "status", Image.Ready, 5000);
+            edgeRaw.visible = true;
+            var img = grabImage(edgeRaw);
+            edgeRaw.visible = false;
+            var worst = 0;
+            for (var x = 30; x < 82; ++x) {
+                var want = 255 * 0.5 * (1 + erf((x + 0.5 - 56) / (10 * Math.SQRT2)));
+                worst = Math.max(worst, Math.abs(img.red(x, 124) - want));
+            }
+            verify(worst <= 4, "the blur's profile is the Gaussian's (worst " + worst + " levels)");
+            // The white side's top edge: towards #140604 and a little transparent.
+            verify(img.red(100, 0) < img.red(100, 30) - 60, "darker at the screen's edge: " + img.red(100, 0) + " < " + img.red(100, 30));
+            // Toned (contrast .42, brightness 2.2): the black side lifted.
+            edgeToned.visible = true;
+            var toned = grabImage(edgeToned);
+            edgeToned.visible = false;
+            verify(toned.red(10, 124) > 100, "the tone map lifts the dark side: " + toned.red(10, 124));
+            halves.visible = false;
+            edgeBlur.active = false;
+        }
+        function erf(x) {
+            // Abramowitz and Stegun 7.1.26.
+            var s = x < 0 ? -1 : 1;
+            x = Math.abs(x);
+            var t = 1 / (1 + 0.3275911 * x);
+            var y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+            return s * y;
+        }
+
+        // The shell blurs its wallpaper in Ember Glass only; the card view
+        // has it for every card.
+        function test_shellBlursItsWallpaper() {
+            var blur = shell.wallpaperBlur;
+            // (Cleared a moment after the test before went back to 1.0.)
+            tryCompare(blur, "url", "", 2000);
+            shell.look = "ember-glass";
+            tryVerify(function() { return blur.url !== "" && blur.screenSize.height === 994; }, 10000);
+            compare(blur.screenSize, Qt.size(446, 994));
+            verify(blur.tonedUrl !== "" && blur.tonedUrl !== blur.url);
+            compare(shell.cardView.glassWallpaper, blur.url);
+            compare(shell.cardView.glassScreen, Qt.size(446, 994));
+            shell.look = "classic";
+            tryCompare(blur, "url", "", 2000);
+        }
+
+        // What a card's window gets (Card.glass, in CSS px): the blurred
+        // wallpaper, where the window lies when the card is maximized (under
+        // the 32 px status bar, above the 22 px strip), the whole screen,
+        // the card's corners and live blur; the same in the card view (the
+        // blur is the card's and moves with it); nothing in 1.0's look.
+        function test_cardGlass() {
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize(uid);
+            tryVerify(function() { return shell.maximized; }, 2000);
+            var card = shell.cardView.cardItem(uid);
+            compare(card.glass, null);
+            shell.look = "ember-glass";
+            tryVerify(function() { return shell.wallpaperBlur.url !== ""; }, 10000);
+            var g = card.glass;
+            compare(g.wallpaperBlurred, shell.wallpaperBlur.url);
+            compare(g.window.x, 0);
+            compare(g.window.y, 32);
+            compare(g.window.width, 446);
+            compare(g.window.height, 940);
+            compare(g.screen.width, 446);
+            compare(g.screen.height, 994);
+            compare(g.windowRadius, 30);
+            // Live, unless there is no GPU (the offscreen platform's tests).
+            compare(g.blur, GraphicsInfo.api === GraphicsInfo.Software ? "none" : "live");
+            verify(card._rounded, "a maximized card keeps its corners");
+            shell.gestureUp();
+            tryVerify(function() { return !shell.maximized && shell.cardView.maximizeProgress === 0; }, 3000);
+            compare(card.glass.window.y, 32);
+            verify(card.cardScale < 1);
+            verify(findChild(card, "emberCardRim").visible, "in the card view, the hairline round the card");
+            sys.tweaks = { glassBlur: "none" };
+            compare(card.glass.blur, "none");
+            shell.look = "classic";
+            compare(card.glass, null);
+            verify(!findChild(card, "emberCardRim").visible);
+        }
+
+        // The loading card is the shell's own glass: the toned blur where
+        // the window lies, under the tint.
+        function test_loadingCardGlass() {
+            shell.look = "ember-glass";
+            tryVerify(function() { return shell.wallpaperBlur.tonedUrl !== ""; }, 10000);
+            var uid = windows.launch("org.webosphoenix.email", "");
+            var card = shell.cardView.cardItem(uid);
+            var glass = findChild(card, "emberLoadingGlass");
+            verify(glass !== null);
+            var picture = findChild(card, "emberLoadingWallpaper");
+            compare(String(picture.source), shell.wallpaperBlur.tonedUrl);
+            compare(picture.y, -32);
+            compare(picture.height, 994);
         }
     }
 }

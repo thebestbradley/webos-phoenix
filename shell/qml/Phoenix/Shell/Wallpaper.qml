@@ -17,6 +17,9 @@ import QtQuick.Window
 Item {
     id: wallpaper
     property url source: ""
+    // The picture's loading status (WallpaperBlur makes the glass again
+    // once it is ready).
+    readonly property alias status: picture.status
 
     Rectangle {
         anchors.fill: parent

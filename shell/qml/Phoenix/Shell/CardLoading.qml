@@ -28,6 +28,13 @@ Item {
     property url splashBackground: ""
     // Window pixels per point (AppIcon.pixelRatio).
     property real pixelRatio: Screen.devicePixelRatio
+    // Ember Glass (docs/SYSTEM-UI-2.md, 4): the loading card is the shell's
+    // own glass, L1: the blurred wallpaper under the shell's theme's tone
+    // map (WallpaperBlur.tonedUrl), as it lies under the window (glassPlace,
+    // in the screen glassScreen), under the tint and the top highlight.
+    property string glassWallpaper: ""
+    property rect glassPlace: Qt.rect(0, 0, width, height)
+    property size glassScreen: Qt.size(width, height)
 
     // Shown at once; cross-fades away (CardLoading::finish).
     visible: opacity > 0
@@ -51,8 +58,41 @@ Item {
 
     Image {
         anchors.fill: parent
-        visible: !splashBg.visible
+        visible: !splashBg.visible && !Theme.emberGlass
         source: Theme.asset("loading-bg.png")
+    }
+    Item {
+        objectName: "emberLoadingGlass"
+        anchors.fill: parent
+        visible: Theme.emberGlass && !splashBg.visible
+        clip: true
+        // Without the picture (not made yet): the theme's ground.
+        Rectangle {
+            anchors.fill: parent
+            color: Theme.eg.colorBg
+        }
+        Image {
+            objectName: "emberLoadingWallpaper"
+            x: -loading.glassPlace.x
+            y: -loading.glassPlace.y
+            width: loading.glassScreen.width
+            height: loading.glassScreen.height
+            source: loading.glassWallpaper
+            visible: source != ""
+            smooth: true
+            cache: false
+        }
+        Rectangle {
+            anchors.fill: parent
+            color: Theme.eg.glassL1Tint
+        }
+        // The top highlight.
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: Math.max(1, Theme.px(1))
+            color: Theme.eg.glassHighlight
+        }
     }
     // The pixmap as a brush from the card's top left, at its own size
     // (CardLoading::paint, fillPath with the background).

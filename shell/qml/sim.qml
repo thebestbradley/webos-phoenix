@@ -675,6 +675,11 @@ Item {
         status.rotationLocked = v !== "";
     }
 
+    // The look, for the apps (Settings' wallpaper: the runtime's prefs()).
+    Connections {
+        target: shell
+        function onEffectiveLookChanged() { windows.pushSystemStatus({ look: shell.effectiveLook }); }
+    }
     // How the UI and the device are turned, for the apps
     // (com.palm.systemmanager getSystemStatus).
     function pushOrientation() {
@@ -693,8 +698,11 @@ Item {
         target: windows
         function onSystemStatusReported(s) {
             status.applyAppStatus(s);
+            // None chosen: the look's default (Theme.defaultWallpaperPath),
+            // which the shell knows before any page does.
             if (s.wallpaperUrl !== undefined)
-                shell.wallpaper = s.wallpaperUrl;
+                shell.wallpaper = s.wallpaperDefault === true
+                    ? Qt.binding(function() { return windows.resolveDevicePath(Theme.defaultWallpaperPath); }) : s.wallpaperUrl;
             // The exhibitions that are on, kept for the next start, as
             // LunaSysMgr read them at boot (user-exhibition-apps.json).
             if (s.exhibitionApps && typeof simSettings !== "undefined")
@@ -1773,6 +1781,9 @@ Item {
                 HiDpi.addTwinDirectory(twins[t][0], twins[t][1]);
         }
         windows.pushSystemStatus({ deviceLocked: shell.locked });
+        // The look (docs/SYSTEM-UI-2.md), for the apps: Settings shows
+        // Ember Glass's default wallpaper (the runtime's prefs()).
+        windows.pushSystemStatus({ look: shell.effectiveLook });
         // The USB cable (the pages wait for it before answering
         // hostIsConnected) and the debugging overlays, off at boot.
         windows.pushSystemStatus({ usbHost: false, debugOverlays: shell.systemScreens.debugOverlays });

@@ -44,7 +44,26 @@ Item {
     Component.onDestruction: gone()
     // Until then the card shows the loading card (CardLoading).
     property bool ready: false
-    onLoaded: { ready = true; _sendOrientation(); }
+    onLoaded: { ready = true; _sendOrientation(); _glassSent = ""; _sendGlass(); }
+
+    // Ember Glass (Phoenix 2.0; docs/SYSTEM-UI-2.md, "The shell contract"):
+    // what the page's glass needs (Card.glass: the blurred wallpaper, the
+    // window's place, the screen, its corners, live blur), given to the
+    // runtime (__phoenixRuntime.glassChanged) once the page has loaded and
+    // whenever it changes; null (1.0's look) takes it away. Not a site's
+    // page: it has no runtime.
+    property var glass: null
+    property string _glassSent: ""
+    onGlassChanged: _sendGlass()
+    function _sendGlass() {
+        if (site || !ready)
+            return;
+        var json = JSON.stringify(glass ? glass : null);
+        if (json === _glassSent || (_glassSent === "" && json === "null"))
+            return;
+        _glassSent = json;
+        view.runJavaScript("window.__phoenixRuntime && __phoenixRuntime.glassChanged && __phoenixRuntime.glassChanged(" + json + ")");
+    }
 
     readonly property alias view: view
 

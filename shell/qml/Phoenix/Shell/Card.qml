@@ -47,6 +47,40 @@ Item {
     // CardWindow.cpp:1593-1599).
     property bool modalShade: false
 
+    // ---- Ember Glass (Phoenix 2.0; docs/SYSTEM-UI-2.md, 4 and "The shell
+    // contract") ------------------------------------------------------------
+    // The card has Ember Glass's corners (radius.card), maximized too, and
+    // its glass shadow, and its window gets what Ember Glass's L1 needs
+    // (glass): the wallpaper blurred once (WallpaperBlur; the toned one for
+    // the shell's own glass, the loading card), where the window lies on the
+    // screen when the card is maximized (windowPlace, in the card view's
+    // pixels), the screen it lies on (screenSize), its corners and whether
+    // the device blurs live. In the card view the window's place stays where
+    // it is when maximized: the card is the window scaled, so the blur is the
+    // card's own and scales and moves with it, as the mock-ups draw it
+    // (base.css html[data-embed] .device > .wall).
+    property string wallpaperBlurred: ""
+    property string wallpaperToned: ""
+    property rect windowPlace: Qt.rect(0, 0, width, height)
+    property size screenSize: Qt.size(width, height)
+    property string glassBlur: "live"
+    // In CSS px (the page's, Theme.u to the pixel); null in 1.0's look.
+    readonly property var glass: {
+        if (!Theme.emberGlass)
+            return null;
+        var u = Theme.u > 0 ? Theme.u : 1;
+        var css = function (v) { return Math.round(v / u * 100) / 100; };
+        return {
+            wallpaperBlurred: wallpaperBlurred,
+            window: { x: css(windowPlace.x), y: css(windowPlace.y), width: css(width), height: css(height) },
+            screen: { width: css(screenSize.width), height: css(screenSize.height) },
+            windowRadius: EmberGlass.radiusCard,
+            blur: glassBlur === "none" ? "none" : "live"
+        };
+    }
+    // Rounded now: in the card view; in Ember Glass always.
+    readonly property bool _rounded: rounded || Theme.emberGlass
+
     // The orientation the app asked for (PalmSystem.setWindowOrientation):
     // "free", "up", "down", "left", "right", "landscape" or "portrait";
     // and how the UI is turned (UiRotation).
@@ -167,7 +201,7 @@ Item {
     // BorderImage draws borders at source-pixel size; scale by Theme.u.
     BorderImage {
         id: shadow
-        visible: card.rounded && !card.reordering
+        visible: card.rounded && !card.reordering && !Theme.emberGlass
         width: (card.width + 2 * Theme.cardShadowOutset) / Theme.u
         height: (card.height + 2 * Theme.cardShadowOutset) / Theme.u
         x: -Theme.cardShadowOutset
@@ -178,6 +212,29 @@ Item {
         border { left: Theme.artBorder(43, source); top: Theme.artBorder(43, source); right: Theme.artBorder(43, source); bottom: Theme.artBorder(43, source) }
         horizontalTileMode: BorderImage.Stretch
         verticalTileMode: BorderImage.Stretch
+    }
+
+    // Ember Glass: the glass shadow (theme.*.shadow.card, base.css
+    // --glass-shadow: 0 30px 60px -24px), its sizes the screen's whatever the
+    // card's scale (cards.html's deck draws its cards' shadows so). A box
+    // shadow: the card's rectangle, inset by the spread and moved down,
+    // blurred (a Gaussian of half the blur); RectangularGlow's glow starts at
+    // its rectangle's edge, so its rectangle is the shadow's less half the
+    // blur, and the glow reaches the blur's length out.
+    RectangularGlow {
+        objectName: "emberCardShadow"
+        readonly property var sh: Theme.eg.shadowCard
+        // This item's pixels per CSS px on the screen.
+        readonly property real k: Theme.u / Math.max(0.05, card.cardScale)
+        visible: Theme.emberGlass && !card.reordering && GraphicsInfo.api !== GraphicsInfo.Software
+        x: (-sh.spread + sh.blur / 4) * k
+        y: (-sh.spread + sh.blur / 4 + sh.offsetY) * k
+        width: card.width - 2 * (-sh.spread + sh.blur / 4) * k
+        height: card.height - 2 * (-sh.spread + sh.blur / 4) * k
+        glowRadius: sh.blur / 2 * k
+        spread: 0.15
+        color: sh.color
+        cornerRadius: Theme.px(EmberGlass.radiusCard) + glowRadius
     }
 
     Item {
@@ -223,6 +280,10 @@ Item {
                 anchors.fill: parent
                 z: 1
                 active: card.loading && card.prepared
+                // Ember Glass: the shell's own glass under the icon.
+                glassWallpaper: card.wallpaperToned
+                glassPlace: card.windowPlace
+                glassScreen: card.screenSize
                 icon: card.icon
                 largeIcon: card.largeIcon
                 splashIcon: card.splashIcon
@@ -249,11 +310,37 @@ Item {
             Behavior on opacity { NumberAnimation { duration: Theme.cardDimmingDuration; easing.type: Easing.OutCubic } }
         }
 
-        layer.enabled: card.rounded && GraphicsInfo.api !== GraphicsInfo.Software
+        layer.enabled: card._rounded && GraphicsInfo.api !== GraphicsInfo.Software
         layer.smooth: true
         layer.effect: OpacityMask {
-            maskSource: cornerMask
+            maskSource: Theme.emberGlass ? egCorners : cornerMask
         }
+    }
+
+    // Ember Glass: in the card view a hairline of white at 25 % round the
+    // card, one CSS px half wide on the screen (cards.html .cardv).
+    Rectangle {
+        objectName: "emberCardRim"
+        anchors.fill: parent
+        z: 4
+        visible: Theme.emberGlass && card.rounded && !card.reordering
+        radius: Theme.px(EmberGlass.radiusCard)
+        color: "transparent"
+        border.color: Qt.rgba(1, 1, 1, 0.25)
+        border.width: Math.max(1, EmberGlass.hairline * Theme.u) / Math.max(0.05, card.cardScale)
+        antialiasing: true
+    }
+    // Ember Glass's corners (radius.card, in the window's pixels: they
+    // scale with the card), the mask for the card above.
+    Rectangle {
+        id: egCorners
+        objectName: "emberCardCorners"
+        anchors.fill: parent
+        visible: false
+        layer.enabled: Theme.emberGlass
+        radius: Theme.px(EmberGlass.radiusCard)
+        color: "white"
+        antialiasing: true
     }
 
     // The corners (CardCornerMask: the devices' corner shader); rendered
@@ -412,6 +499,9 @@ Item {
         // Windows that want to know how they are turned (web app windows).
         if ("orientation" in window)
             window.orientation = Qt.binding(function() { return card.pageOrientation; });
+        // ... and what their glass needs (web app windows; Ember Glass).
+        if ("glass" in window)
+            window.glass = Qt.binding(function() { return card.glass; });
         window.visible = true;
     }
 }

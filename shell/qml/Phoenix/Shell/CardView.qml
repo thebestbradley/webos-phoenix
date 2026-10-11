@@ -87,6 +87,16 @@ Item {
         return o === undefined || o === null || o === "" ? "free" : o;
     }
 
+    // Ember Glass (docs/SYSTEM-UI-2.md, "The shell contract"): the
+    // wallpaper blurred once (WallpaperBlur: for the apps, and toned for the
+    // shell's own glass), the screen it covers in this view's pixels (from
+    // this view's top left), and whether the device blurs live; each card
+    // gives its window them with its place (Card.glass).
+    property string glassWallpaper: ""
+    property string glassWallpaperToned: ""
+    property size glassScreen: Qt.size(width, height)
+    property string glassBlur: "live"
+
     // Area a maximized window occupies.
     property real topInset: Theme.statusBarHeight
     property real bottomInset: Theme.gestureAreaHeight
@@ -1193,6 +1203,14 @@ Item {
             rotation: modalCard || rising || lifted || !place ? 0 : place.rot
             rounded: modalCard || view.maximizeProgress < 1
             modalShade: modalParent
+            // Where the window lies when maximized (a modal card: where it
+            // shows over its parent), for its glass.
+            wallpaperBlurred: view.glassWallpaper
+            wallpaperToned: view.glassWallpaperToned
+            windowPlace: modalCard ? Qt.rect((view.width - width) / 2, view.modalCenterY - height / 2, width, height)
+                                   : Qt.rect(0, view.topInset, width, height)
+            screenSize: view.glassScreen
+            glassBlur: view.glassBlur
             appOrientation: model.orientation !== undefined && model.orientation !== "" ? model.orientation : "free"
             uiOrientation: view.uiOrientation
             uiPortrait: view.uiPortrait
