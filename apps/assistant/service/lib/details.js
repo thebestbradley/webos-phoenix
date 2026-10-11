@@ -14,6 +14,8 @@
 
 "use strict";
 
+var memoText = require("./memotext");
+
 var CALENDAR_APP = "com.palm.app.calendar";
 var MEMOS_APP = "com.palm.app.notes";
 var CONTACTS_APP = "com.palm.app.contacts";
@@ -90,8 +92,9 @@ module.exports = function (h) {
         return h.dbFind(env, "com.palm.note:1").then(function (memos) {
             var q = String(args.query || "").trim();
             var live = memos.filter(function (n) { return !n._del; });
-            return live.filter(function (n) { return q && h.matches((n.text || "").split("\n")[0], q); })[0]
-                || live.filter(function (n) { return q && h.matches(n.text || "", q); })[0] || null;
+            // By the words Memos shows (lib/memotext.js); the record as stored.
+            return live.filter(function (n) { return q && h.matches(memoText.plain(n.text).split("\n")[0], q); })[0]
+                || live.filter(function (n) { return q && h.matches(memoText.plain(n.text), q); })[0] || null;
         });
     }
 
@@ -117,7 +120,7 @@ module.exports = function (h) {
         var say = env.lang.say;
         return theMemo(env, args).then(function (n) {
             if (!n) return { text: args.it ? say.nothingInFocus() : say.noMemo(String(args.query || "")) };
-            var lines = String(n.text || "").split("\n"), title = lines[0] || "", rest = lines.slice(1).join("\n").trim();
+            var lines = memoText.plain(n.text).split("\n"), title = lines[0] || "", rest = lines.slice(1).join("\n").trim();
             var memo = { appId: MEMOS_APP, params: { memoId: n._id }, title: "Memos" };
             return { text: say.memoSays(title, rest || title), open: memo, attachments: h.cards([{ title: title, detail: rest, open: memo }]) };
         });
@@ -181,19 +184,23 @@ module.exports = function (h) {
         var say = env.lang.say, now = env.now();
         return theMemo(env, args).then(function (n) {
             if (!n) return { text: args.it ? say.whatToChange() : say.noMemo(String(args.query || "")) };
-            var old = String(n.text || ""), lines = old.split("\n"), title = lines[0] || "", value = String(args.value || "").trim(), text;
-            if (args.change === "title") text = [value].concat(lines.slice(1)).join("\n");
-            else if (args.change === "add") text = old.replace(/\s+$/, "") + "\n" + value;
+            // As Memos keeps it (lib/memotext.js): the stored lines kept as they
+            // are, what is said escaped; each matched and said by the words it
+            // shows (the same lines: escaping keeps the new lines).
+            var old = String(n.text || ""), stored = memoText.kept(old), lines = stored.split("\n"), shown = memoText.plain(old).split("\n");
+            var title = shown[0] || "", value = String(args.value || "").trim(), text;
+            if (args.change === "title") text = [memoText.escape(value)].concat(lines.slice(1)).join("\n");
+            else if (args.change === "add") text = stored.replace(/\s+$/, "") + "\n" + memoText.escape(value);
             else if (args.change === "remove") {
-                var rest = lines.slice(1).filter(function (l) { return !sameName(l, value); });
+                var rest = lines.filter(function (l, i) { return i > 0 && !sameName(shown[i], value); });
                 if (rest.length === lines.length - 1) return { text: say.noTask(value) };
-                text = [title].concat(rest).join("\n");
+                text = [lines[0]].concat(rest).join("\n");
             } else return { text: say.cantEdit("memo") };
             var memo = { appId: MEMOS_APP, params: { memoId: n._id }, title: "Memos" };
-            var newTitle = text.split("\n")[0];
-            return merged(env, { _id: n._id, text: text, title: text.substring(0, 50), modifiedTimestamp: now }).then(function () {
+            var after = memoText.plain(text).split("\n"), newTitle = after[0];
+            return merged(env, Object.assign({ _id: n._id }, memoText.fields(text), { modifiedTimestamp: now })).then(function () {
                 var said = args.change === "title" ? say.renamed(title, newTitle) : args.change === "add" ? say.noteAppended(title) : say.lineRemoved(value, title);
-                return { text: said, open: memo, attachments: h.cards([{ title: newTitle, detail: text.split("\n").slice(1).join("\n"), open: memo }]),
+                return { text: said, open: memo, attachments: h.cards([{ title: newTitle, detail: after.slice(1).join("\n"), open: memo }]),
                          undo: { kind: "merge", objects: [{ _id: n._id, text: old, title: old.substring(0, 50) }], what: say.undoWhat.memoBack() } };
             });
         });
@@ -326,7 +333,7 @@ module.exports = function (h) {
         if (!key || !said(key)) return Promise.resolve(args);
         // Its words as they are now (a card's title may be shortened, or missing).
         return get(env, f.id).then(function (o) {
-            var words = o ? (f.kind === "event" ? o.subject : f.kind === "memo" ? String(o.text || "").split("\n")[0] : o.summary) : f.title;
+            var words = o ? (f.kind === "event" ? o.subject : f.kind === "memo" ? memoText.plain(o.text).split("\n")[0] : o.summary) : f.title;
             if (words) args[key] = words;
             return args;
         });

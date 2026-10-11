@@ -335,4 +335,25 @@ describe("sources", () => {
         expect(sources.normAddr("Sam@Example.com")).toBe("sam@example.com");
         expect(sources.dayWords(new Date(2026, 9, 9, 14).getTime())).toBe("Friday 9 October 2026");
     });
+    // Memos keeps a memo's text as the HTML it shows (com.palm.app.notes
+    // app/models/Memo.js:25-31, app/views/GridView.js:262); text with a raw
+    // "<" or ">" it shows as written (app/lib/DbApi.js:28-40).
+    it("reads a memo's words as Memos shows them", async () => {
+        const stored = "Fish &amp; chips &lt;2 people&gt;\nTom&#39;s &quot;special&quot;&nbsp;mix";
+        const memo = { _id: "memo-fish", _kind: MEMO, text: stored, title: stored.substring(0, 50) };
+        expect(await sources.documentOf("memos", memo, {})).toEqual({ title: "", text: "Fish & chips <2 people>\nTom's \"special\" mix" });
+        expect((await sources.passagesOf("memos", memo, {}))[0].plain).toBe("Fish & chips <2 people> Tom's \"special\" mix");
+        expect(sources.show("memos", memo, {}).title).toBe("Fish & chips <2 people>");
+        // Written unescaped (an older build): as it was written.
+        expect(sources.show("memos", { _id: "r", _kind: MEMO, text: "Tom & Jerry" }, {}).title).toBe("Tom & Jerry");
+        expect(sources.show("memos", { _id: "r", _kind: MEMO, text: "Movie night <Friday> &amp; popcorn" }, {}).title).toBe("Movie night <Friday> &amp; popcorn");
+        expect(sources.skip("memos", { _id: "e", _kind: MEMO, text: "&nbsp;" })).toBe(true);
+        // Found, with its title and snippet in the words Memos shows.
+        const w = world();
+        w.put({ _id: "memo-fish", _kind: MEMO, text: "Dinner on Friday: fish &amp; chips &lt;2 people&gt;", modifiedTimestamp: 3 });
+        await on(w);
+        const r = await w.m.search({ query: "what's for dinner", sources: ["memos"] });
+        expect(r.results[0]).toMatchObject({ source: "memos", id: "memo-fish", title: "Dinner on Friday: fish & chips <2 people>" });
+        expect(r.results[0].snippet).not.toMatch(/&amp;|&lt;|&gt;/);
+    });
 });

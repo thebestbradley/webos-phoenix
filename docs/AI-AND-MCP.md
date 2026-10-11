@@ -134,7 +134,7 @@ in the task rule (`m` stayed null); it is a task now.
 | `stopwatch` | "start a stopwatch", "how long has the stopwatch been running", "stop the stopwatch" | A stopwatch in the assistant (webOS's Clock had none) | |
 | `reminder` | "remind me to call mom at 6", "remind me in 2 hours to check the oven", "remind me tomorrow morning to call the bank" | A task with a reminder | |
 | `task` | "add milk to my shopping list", "create a task pay rent", "add a task to call the bank tomorrow" | A task, in a named list (made if new) or the default one | |
-| `note`, `findNotes` | "new note: buy flowers for Ada", "take a note that ...", "find my notes about Wi-Fi" | A memo, first on the wall; memos found by their words | |
+| `note`, `findNotes` | "new note: buy flowers for Ada", "take a note that ...", "find my notes about Wi-Fi" | A memo, first on the wall; memos found by their words. Its text is kept as Memos keeps it, HTML-escaped ("&" as `&amp;`), and read, said and matched as Memos shows it (`lib/memotext.js`) | |
 | `contactAdd`, `contactInfo` | "add Sam to contacts with number 555 0100", "new contact Jo March email jo@example.com", "what's Sam's number" | A contact; a contact's number, email, address or birthday | |
 | `call` | "call mom", "call Sam on his mobile", "dial 555 123 4567" | Phone dials | Yes (Call) |
 | `text`, `readMessages` | "text Sam I'm running late", "read my last message", "what did Priya say" | Sends an SMS (the words as typed); reads the last one received | Yes (Send) |
@@ -2055,7 +2055,7 @@ like the other services; the simulator runs the same code in the page):
 
 | Source | db8 | Opens |
 | --- | --- | --- |
-| Memos | `com.palm.note:1` | Memos `{memoId}` |
+| Memos | `com.palm.note:1`: its words as Memos shows them (the text unescaped) | Memos `{memoId}` |
 | Tasks | `com.palm.task:1` | Tasks `{taskId}` |
 | Calendar | `com.palm.calendarevent:1` | Calendar `{showEventDetail}` |
 | Contacts | `com.palm.person:1` | Contacts `{id}` |

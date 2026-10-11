@@ -51,6 +51,17 @@ describe("Search your phone", () => {
         expect((await d.ask("what does it say")).text).toContain("Lakeview");
     });
 
+    // A memo's text kept as Memos keeps it, HTML-escaped (lib/memotext.js;
+    // services/index/lib/sources.js memoText): found by meaning, its words as Memos shows them.
+    it("shows a memo found by meaning in the words Memos shows", async () => {
+        const d = device({ seed: (put) => { put({ _id: "memo-meal", _kind: "com.palm.note:1", text: "Meal plan: fish &amp; chips &lt;2 people&gt;", color: "blue", position: "k" }); } });
+        d.state.index = { on: true };
+        const m = await d.ask("find my notes about dinner");
+        expect(m.text).toMatch(/“Meal plan: fish & chips <2 people>”\.$/);
+        expect(m.data.attachments[0].items[0]).toMatchObject({ title: "Meal plan: fish & chips <2 people>", open: { params: { memoId: "memo-meal" } } });
+        expect(JSON.stringify(m.data.attachments)).not.toMatch(/&amp;|&lt;|&gt;/);
+    });
+
     it("answers for the commands that look for words, when none has them", async () => {
         const d = withIndex();
         const m = await d.ask("find the email about the boiler");

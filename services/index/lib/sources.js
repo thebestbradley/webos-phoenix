@@ -98,6 +98,17 @@ function namesOf(people) {
 }
 
 function firstLine(s) { return chunk.clean(s).split("\n")[0].slice(0, 80); }
+// A memo's words as Memos shows them. Memos keeps its text as the HTML it
+// shows ("&" as "&amp;": com.palm.app.notes app/models/Memo.js:25-31,
+// app/views/GridView.js:262), except text written unescaped, with a raw
+// "<" or ">", which it shows as written (app/lib/DbApi.js:28-40); the
+// Assistant's lib/memotext.js plain(), the same few lines (a raw memo with
+// a literal "&amp;" and no "<" or ">" reads as "&", as Memos shows it).
+function memoText(s) {
+    s = String(s === undefined || s === null ? "" : s);
+    if (/<|>/.test(s)) return s;
+    return s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/gi, " ").replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+}
 function bodyOf(email, ctx) {
     var parts = (email.parts || []).filter(function (p) { return !p.type || p.type === "body"; });
     var inline = parts.filter(function (p) { return typeof p.content === "string" && p.content; })[0];
@@ -118,7 +129,7 @@ function skip(source, r) {
     if (source === "email") return !!(r.flags && r.flags.visible === false);
     if (source === "messages") return !!(r.flags && r.flags.visible === false) || !String(r.messageText || "").trim();
     if (source === "tasks") return !String(r.summary || "").trim();
-    if (source === "memos") return !String(r.text || r.title || "").trim();
+    if (source === "memos") return !memoText(r.text || r.title).trim();
     return false;
 }
 
@@ -156,7 +167,7 @@ function fileTitle(path) { return String(path || "").replace(/^.*\//, "").replac
 function documentOf(source, r, ctx) {
     var when = dayWords(timeOf(source, r));
     switch (source) {
-    case "memos": return Promise.resolve({ title: "", text: r.text || r.title || "" });
+    case "memos": return Promise.resolve({ title: "", text: memoText(r.text || r.title) });
     case "tasks": return Promise.resolve({ title: r.summary, text: [r.summary, r.notes, r.due ? "Due " + dayWords(r.due) : "", r.completed ? "Done" : ""].filter(Boolean).join(". ") });
     case "events": return Promise.resolve({ title: r.subject || "", text: [r.subject, when, r.allDay ? "all day" : "", r.location ? "At " + r.location : "", r.note].filter(Boolean).join(". ") });
     case "contacts": {
@@ -220,7 +231,7 @@ function mediaOf(source, r) {
 function show(source, r, ctx) {
     var t = timeOf(source, r);
     switch (source) {
-    case "memos": return { title: firstLine(r.text || r.title), time: t, params: { memoId: r._id } };
+    case "memos": return { title: firstLine(memoText(r.text || r.title)), time: t, params: { memoId: r._id } };
     case "tasks": return { title: r.summary || "", time: r.due || t, allDay: !!r.allDay, params: { taskId: r._id } };
     case "events": return { title: r.subject || "", time: r.dtstart, allDay: !!r.allDay, place: r.location || "", params: { showEventDetail: r._id } };
     case "contacts": {
@@ -240,4 +251,4 @@ function show(source, r, ctx) {
 }
 
 module.exports = { SOURCES: SOURCES, find: find, skip: skip, author: author, timeOf: timeOf, passagesOf: passagesOf, documentOf: documentOf, headerOf: headerOf,
-                   mediaOf: mediaOf, show: show, namesOf: namesOf, normAddr: normAddr, dayWords: dayWords, TEXT_FILES: TEXT_FILES, PDF: PDF };
+                   mediaOf: mediaOf, show: show, namesOf: namesOf, normAddr: normAddr, dayWords: dayWords, memoText: memoText, TEXT_FILES: TEXT_FILES, PDF: PDF };

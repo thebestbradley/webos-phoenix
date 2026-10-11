@@ -12,6 +12,9 @@
 //     words it does not understand get close commands ("Did you mean
 //     ...?"); a question nothing on the phone answers offers "Search the
 //     web" and "Connect model", which asks which kind;
+//   - a memo with an "&" and a "<" kept as the original Memos keeps it
+//     (HTML-escaped), its card in Memos showing its words, and one typed in
+//     Memos read back by the Assistant as Memos shows it;
 //   - an event made asks a follow-up question after it (as conversation,
 //     with quick replies): Skip leaves it and the next comes, a tap answers
 //     it (the whole flow: test-assistant-followups.cjs);
@@ -283,9 +286,41 @@ async function main() {
         check(/^Alarm set for 7:00 AM on weekdays/.test(await ask("Set an alarm for 7am weekdays")), "a repeating alarm");
         const alarms = (await svc(app, "luna://com.palm.db/find", { query: { from: "com.palm.clock.alarm:1" } })).results;
         check(alarms.some((a) => a.hour === 7 && a.minute === 0 && a.occurs === "weekdays" && a.enabled), "the Clock's alarm repeats on weekdays");
-        check(await ask("New note: parking on level 3") === "Saved to Memos.", "a memo saved");
-        const memoIds = () => svc(app, "luna://com.palm.db/find", { query: { from: "com.palm.note:1" } }).then((r) => r.results.filter((n) => /parking/i.test(n.text)).length);
+        // With an "&" and a "<": kept as the original Memos keeps a memo, HTML-escaped
+        // (com.palm.app.notes app/views/GridView.js:262; apps/assistant/service/lib/memotext.js),
+        // so Memos' card shows its words, and the Assistant reads them back.
+        check(await ask("New note: parking on level 3 & 4 <by the lift>") === "Saved to Memos.", "a memo saved");
+        const parking = () => svc(app, "luna://com.palm.db/find", { query: { from: "com.palm.note:1" } }).then((r) => r.results.filter((n) => /parking/i.test(n.text)));
+        const memoIds = () => parking().then((l) => l.length);
         check(await memoIds() === 1, "the memo is in db8");
+        const kept = ((await parking())[0] || {}).text;
+        check(kept === "Parking on level 3 &amp; 4 &lt;by the lift&gt;", "its text escaped, as Memos keeps it: " + JSON.stringify(kept));
+        const memosApp = await context.newPage();
+        watch(memosApp, "memos");
+        await memosApp.goto(`${root}/com.palm.app.notes/index.html`);
+        const onWall = await memosApp.waitForFunction(() => {
+            const card = [...document.querySelectorAll(".memo-preview-content")].find((e) => /^Parking/.test(e.textContent));
+            return card ? card.textContent.trim() : null;
+        }, null, { timeout: 15000 }).then((h) => h.jsonValue(), () => null);
+        check(onWall === "Parking on level 3 & 4 <by the lift>", "the original Memos' card shows its words: " + JSON.stringify(onWall));
+        await shot(memosApp, "memo-on-wall");
+        // One typed in Memos: its editor's HTML, "&" as "&amp;" (app/models/Memo.js:25-31), read as it shows.
+        await memosApp.locator(".new-memo").first().click();
+        await memosApp.waitForSelector(".edit-view", { state: "visible", timeout: 10000 });
+        await memosApp.waitForTimeout(800);
+        await memosApp.keyboard.type("Salt & pepper grinder");
+        await memosApp.waitForTimeout(300);
+        await memosApp.locator(".back-button:visible").first().click();
+        let typed = null;
+        for (let i = 0; i < 50 && !typed; ++i) {
+            typed = (await svc(app, "luna://com.palm.db/find", { query: { from: "com.palm.note:1" } })).results.find((n) => /^Salt/.test(n.text)) || null;
+            if (!typed) await app.waitForTimeout(100);
+        }
+        check(!!typed && typed.text === "Salt &amp; pepper grinder", "a memo typed in Memos is kept escaped: " + JSON.stringify(typed && typed.text));
+        await memosApp.close();
+        check(await ask("Find my notes about parking") === "One memo about “parking”: “Parking on level 3 & 4 <by the lift>”.", "and the Assistant reads them back as Memos shows them");
+        check(await ask("Find my notes about salt") === "One memo about “salt”: “Salt & pepper grinder”.", "and reads one typed in Memos as it shows");
+        if (typed) await svc(app, "luna://com.palm.db/del", { ids: [typed._id] });
         check(/^Undo: delete that memo\?$/.test(await ask("Undo")), "undo reads back what it takes back");
         await app.click("[data-testid='as-confirm-yes']");
         await app.waitForFunction(() => /^Undone\.$/.test(document.querySelectorAll(".as-row.in .as-bubble")[document.querySelectorAll(".as-row.in .as-bubble").length - 1]?.textContent || ""));
