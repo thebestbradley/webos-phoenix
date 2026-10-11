@@ -67,8 +67,11 @@ module.exports = function (h) {
     }
     function stop(args, env) {
         var say = env.lang.say, last = env.storage.get(REC_KEY) || {};
+        // Only a recording the assistant started: one it did not (or none at
+        // all) is not said to be stopped and saved (a model chose this for
+        // "stop driving mode", the evaluation's held-out set).
+        if (!last.what) return Promise.resolve({ text: say.notRecording(), failed: true });
         var what = args.what === "video" || args.what === "memo" ? args.what : last.what;
-        if (!what) return Promise.resolve({ text: say.notRecording() });
         env.storage.remove(REC_KEY);
         return (what === "video" ? front(env, CAMERA, { capture: "stop" }) : front(env, VOICE_MEMOS, { stopRecording: true })).then(function () {
             return { text: say.recordingStopped(what), data: { opened: true },

@@ -60,7 +60,13 @@ describe("the apps", () => {
         expect(d.state.launched.at(-1)).toMatchObject({ id: "org.webosphoenix.camera", params: { capture: "video", facing: "environment", timer: 0 } });
         expect((await d.ask("stop recording")).text).toBe("Stopped recording. The video is in Photos.");
         expect(d.state.launched.at(-1)).toMatchObject({ id: "org.webosphoenix.camera", params: { capture: "stop" } });
-        expect((await d.ask("stop recording")).text).toBe("I'm not recording anything.");
+        expect((await d.ask("stop recording")).text).toBe("I'm not recording anything. One started in the Camera or Voice Memos stops there.");
+    });
+    it("never says a recording it did not start was stopped and saved", async () => {
+        const d = device();
+        const launched = d.state.launched.length;
+        expect((await d.ask("stop filming")).text).toBe("I'm not recording anything. One started in the Camera or Voice Memos stops there.");
+        expect(d.state.launched.length).toBe(launched);
     });
     it("records a voice memo with its title, and stops it", async () => {
         const d = device();

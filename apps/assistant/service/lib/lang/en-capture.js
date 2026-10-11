@@ -56,7 +56,7 @@ module.exports = function (h) {
             return (title ? "Recording a voice memo, “" + title + "”." : "Recording a voice memo.") + " Say “stop recording” when you're done.";
         },
         recordingStopped: function (what) { return what === "video" ? "Stopped recording. The video is in Photos." : "Stopped recording. The memo is in Voice Memos."; },
-        notRecording: function () { return "I'm not recording anything."; }
+        notRecording: function () { return "I'm not recording anything. One started in the Camera or Voice Memos stops there."; }
     };
 
     return {
@@ -66,7 +66,8 @@ module.exports = function (h) {
         MENTIONS: {
             camera: /\b(photo|picture|pic|selfie|snap|snapshot|shot|video|movie|clip|film|record\w*|camera|cheese)\b/,
             voiceMemo: /\b(voice|audio|memo|record\w*|recording)\b/,
-            stopRecording: /\b(stop|end|finish|cut|done|save)\b/
+            // Words to stop and words for a recording, both ("stop driving mode" is no recording, "start filming" no stop).
+            stopRecording: /^(?=.*\b(?:stop|end|finish|cut|done|save|enough|wrap)\b)(?=.*\b(?:record\w*|video|memo|film\w*|cut|clip)\b)/
         },
         describe: function (command, args) {
             if (command === "camera") return args.action === "video" ? "record a video" : args.front ? "take a selfie" : "take a photo";
