@@ -2437,7 +2437,9 @@
         return APP_ROUTES[id] ? APP_ROUTES[id](params || {}) : null;
     }
     var HELP_TOPICS = { universalsearch: "justtype", accountsmgr: "accounts", phone: "phone", messaging: "messaging",
-                        camera: "camera", photos: "photos", music: "music", launcher: "launcher", notifications: "notifications" };
+                        camera: "camera", photos: "photos", music: "music", launcher: "launcher", notifications: "notifications",
+                        // Email's MailApp.js:586, Clock's main.js:50, Calculator.js:49.
+                        email: "email", clock: "clock", calculator: "calculator" };
     function appId(id, params) {
         var r = routed(id, params);
         if (r) return r.id;

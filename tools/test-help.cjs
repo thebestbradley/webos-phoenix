@@ -141,6 +141,18 @@ async function main() {
         await page.evaluate(() => window.__phoenixRuntime.relaunch({ search: "passcode" }));
         await page.waitForTimeout(300);
         check(await page.inputValue("[data-testid=help-search]") === "passcode", "relaunched with {search} searches");
+        // The original apps' Help menus (enyo.HelpMenu: com.palm.app.help {target}):
+        // Email's, Clock's and Calculator's open their topics.
+        for (const [area, words] of [["email", /Move to Folder/], ["clock", /New Alarm/], ["calculator", /M\+/]]) {
+            host.length = 0;
+            await page.evaluate((a) => new Promise((r) => window.__phoenixRuntime.dispatch("palm://com.palm.applicationManager/launch",
+                { id: "com.palm.app.help", params: { target: `http://help.palm.com/${a}/index.html` } }, r, { cancelled: () => false })), area);
+            const l = launches().find((x) => x.id === APP);
+            check(l && l.params && l.params.topic === area, `${area}'s Help menu opens Help on its topic (${JSON.stringify(l && l.params)})`);
+            await page.goto(appUrl(APP, { topic: area }));
+            await page.waitForSelector("[data-testid=topic]");
+            check(await shownTopic() === area && words.test(await text()), `the ${area} topic shows`);
+        }
 
         // ---- Just Type -------------------------------------------------------------
         const jt = await context.newPage();
