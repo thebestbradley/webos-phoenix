@@ -1276,7 +1276,7 @@ the best on the held-out set (77). But on the model's set the general
 model alone still does more (105 against 77), it is not fine-tuned, int8
 does not hold, and 1.7 GB is more than the image should carry for it.
 Whether to fine-tune it and ship it is the owner's decision
-(OPEN-QUESTIONS.md Q76). The candidates are worth having without Laya
+(OPEN-QUESTIONS.md Q88). The candidates are worth having without Laya
 too: they are the "Did you mean" list a fallback could offer.
 
 ### Next: 2.0
