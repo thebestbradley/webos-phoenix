@@ -8538,14 +8538,15 @@
         // taken its own launch, as WebAppMgr held one that came while the
         // page was still loading ("If the headless app is still loading,
         // buffer this until our progress is complete": webappmanager
-        // Src/webbase/SysMgrWebBridge.cpp:133-139): the page loaded and its
-        // launch params read (PalmSystem.launchParams above), and its
-        // relaunch listener set up: a "webOSRelaunch" listener added since
-        // (@phoenix/sdk's onLaunch, React's useEffect after the render that
-        // read them), else a moment more (RELAUNCH_SETTLE_MS: Mojo.relaunch's
-        // apps, such as the original Clock, which reads its params as it
-        // starts and acts on them once its prefs are read). A page that
-        // never reads them gets it at most RELAUNCH_HOLD_MS after loading
+        // Src/webbase/SysMgrWebBridge.cpp:133-139): the page loaded, and
+        // listening for relaunches (a "webOSRelaunch" listener added, after
+        // it read its launch params if it has: @phoenix/sdk's onLaunch,
+        // React's useEffect after the render that read them), or its launch
+        // params read (PalmSystem.launchParams above) and a moment more
+        // (RELAUNCH_SETTLE_MS: Mojo.relaunch's apps, such as the original
+        // Clock, which reads its params as it starts and acts on them once
+        // its prefs are read). A page that never reads them gets it at most
+        // RELAUNCH_HOLD_MS after loading
         // (RELAUNCH_MAX_HOLD_MS after it started, loaded or not). Otherwise
         // the relaunch rewrote the launch params before the app had read its
         // own: Clock launched while one of its alarms was due opened only the
@@ -8569,7 +8570,9 @@
             if (now - pageStartedAt >= RELAUNCH_MAX_HOLD_MS) return true;
             if (doc && doc.readyState !== "complete") return false;
             if (!pageLoadedAt) pageLoadedAt = now;     // complete, its load event still to come
-            if (launchParamsReadAt && (relaunchListenerAt >= launchParamsReadAt || now - launchParamsReadAt >= RELAUNCH_SETTLE_MS)) return true;
+            // Listening for relaunches (since it read its launch params, if it has).
+            if (relaunchListenerAt && relaunchListenerAt >= launchParamsReadAt) return true;
+            if (launchParamsReadAt && now - launchParamsReadAt >= RELAUNCH_SETTLE_MS) return true;
             return now - pageLoadedAt >= RELAUNCH_HOLD_MS;
         }
         runtime.afterOwnLaunch = function (fn) {
