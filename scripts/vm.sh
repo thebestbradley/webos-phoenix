@@ -53,7 +53,7 @@ set -eu
 REPO_DIR=$(cd "$(dirname "$0")/.." && pwd)
 PROFILES="$REPO_DIR/meta-phoenix/recipes-phoenix/phoenix-device-config/files/device-profiles.py"
 QEMU=${PHOENIX_VM_QEMU:-qemu-system-aarch64}
-# For the tests (tools/test-vm-script.sh): the host to plan for.
+# For the tests (tools/test-device-profiles.py): the host to plan for.
 HOST_OS=${PHOENIX_VM_HOST_OS:-$(uname -s)}
 HOST_ARCH=${PHOENIX_VM_HOST_ARCH:-$(uname -m)}
 

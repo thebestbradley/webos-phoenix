@@ -257,6 +257,9 @@ jobs:
       - name: Trademark overlays up to date
         run: python3 tools/debrand-overlays.py --check
 
+      - name: docs/COMMANDS.md matches tools/commands-doc.py
+        run: python3 tools/commands-doc.py --check
+
       - name: HiDPI art present and true to its 1x art
         run: |
           python3 -m pip install pillow numpy
