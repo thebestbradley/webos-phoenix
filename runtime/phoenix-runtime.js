@@ -2112,14 +2112,19 @@
     // messages of one conversation; OSE's notificationmgr passes on only
     // the fields it knows, so on a device it is a toast of its own.
     register(["com.webos.notification"], {
-        "/createToast": function (p, reply) {
+        "/createToast": function (p, reply, ctx) {
             var click = p.onclick || {};
             if (!p.message) return reply(fail(-1, "message is required"));
             if (click.target) return reply(fail(-1, "onclick.target is not supported in the Phoenix simulator"));
             var title = p.title ? String(p.title) : "";
             // For another app (a service's toast: "Updated to ...", opening
             // Settings): its notification, which a tap launches with the params.
-            if (click.appId && appId(click.appId, click.params) !== PalmSystem.appIdentifier) {
+            // The caller is who asks, not the page: a service run in an app's
+            // page calls as itself (ctx.caller, nodeServiceLuna), so a
+            // connector's message toast for Messaging, from inside Messaging,
+            // is still Messaging's notification, with its group.
+            var caller = (ctx && ctx.caller) || PalmSystem.appIdentifier;
+            if (click.appId && appId(click.appId, click.params) !== caller) {
                 host.postToHost("notification", { appId: appId(click.appId, click.params), title: title || String(p.message),
                                                   body: title ? String(p.message) : "",
                                                   params: aliasParams(click.appId, click.params),
