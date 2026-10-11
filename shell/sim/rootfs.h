@@ -50,6 +50,20 @@ public:
     void setInstalledDir(const QString &dir);
     QString installedDir() const { return m_installedDir; }
 
+    // Another root filesystem, laid out like the device's (--extra-rootfs;
+    // phoenix-default-apps' `npm run stage` writes one): apps built outside
+    // this checkout. Each app in its usr/palm/applications/ joins the
+    // built-in ones and replaces the one with its id (a rebuilt default
+    // app: Memos as com.palm.app.notes), without the compat overlays'
+    // files for that id, which fix the original. Its other files (shared
+    // frameworks under usr/palm/frameworks/) are served at their device
+    // paths over the checkout's. Several may be added; the first one added
+    // wins. Rescans.
+    void addExtraRootfs(const QString &dir);
+    QStringList extraRootfs() const { return m_extraRootfs; }
+    // Whether the app with this id comes from an extra rootfs.
+    bool isExtraApp(const QString &appId) const { return m_extraApps.contains(appId); }
+
     // The connector packages Phoenix comes with (rootfs.json "preinstalled":
     // apps/marketplace/service/etc/palm/marketplace/preinstalled.json, each
     // package's "from" folder in the checkout): not built-in apps but
@@ -118,6 +132,8 @@ private:
     QStringList m_excluded;                    // never served
     QList<QPair<QString, QString>> m_mounts;   // longest prefix first
     QHash<QString, QString> m_appDirs;         // app id -> directory
+    QStringList m_extraRootfs;                 // addExtraRootfs, absolute, searched first
+    QStringList m_extraApps;                   // ids of the apps they hold
     QStringList m_applicationDirs;             // rootfs.json applicationDirs, absolute
     QStringList m_systemApps;                  // rootfs.json systemApps, absolute
     QHash<QString, QString> m_preinstalled;    // pre-installed package id -> its folder, absolute

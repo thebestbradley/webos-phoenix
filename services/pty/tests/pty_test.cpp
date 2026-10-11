@@ -11,7 +11,9 @@
 
 #include <csignal>
 #include <cstdio>
+#include <cstring>
 #include <string>
+#include <unistd.h>
 #include <vector>
 
 #include <glib.h>
@@ -297,8 +299,22 @@ static void testService()
     LSUnregister(h, &err);
 }
 
+// A check that never ends would hold CI until the step's timeout with
+// nothing printed (stdout to a pipe is buffered). Each line goes out as it
+// is printed, and after three minutes the test stops itself and fails,
+// the last line above saying where it was.
+static void watchdog(int)
+{
+    static const char msg[] = "FAIL pty-test: still running after 180 s, stopped (the check after the last line above did not end)\n";
+    (void)::write(STDOUT_FILENO, msg, sizeof msg - 1);
+    ::_exit(2);
+}
+
 int main()
 {
+    std::setvbuf(stdout, nullptr, _IOLBF, 0);
+    std::signal(SIGALRM, watchdog);
+    ::alarm(180);
     std::signal(SIGPIPE, SIG_IGN);
     testUtf8();
     testJson();

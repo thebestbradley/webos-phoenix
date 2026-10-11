@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "dictation.h"
+#include "childprocess.h"
 
 #include <QDir>
 #include <QFile>
@@ -97,6 +98,7 @@ void Dictation::transcribePartial()
     QStringList args = commandLine(m_command, path, m_language, m_prompt);
     const QString program = args.takeFirst();
     QProcess *proc = new QProcess(this);
+    endWithShell(proc, program);
     m_partialProcess = proc;
     const auto done = [this, proc, path](const QString &text) {
         QFile::remove(path);
@@ -255,6 +257,7 @@ void Dictation::startSpotter()
 {
     m_spotter = new QProcess(this);
     QProcess *proc = m_spotter;
+    endWithShell(proc, m_wakeCommand.value(0));
     m_spotterLine.clear();
     m_spotterFed = 0;
     m_ring.clear();
@@ -687,6 +690,7 @@ void Dictation::runTranscriber(const QString &file, bool removeAfter)
     const QString program = args.takeFirst();
     m_process = new QProcess(this);
     QProcess *proc = m_process;
+    endWithShell(proc, program);
     connect(proc, &QProcess::finished, this, [this, proc, file, removeAfter](int exitCode, QProcess::ExitStatus) {
         const auto reply = parseReply(proc->readAllStandardOutput(), exitCode);
         if (removeAfter)

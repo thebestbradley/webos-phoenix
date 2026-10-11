@@ -49,6 +49,32 @@ the Open webOS desktop build (`openwebos/build-desktop`):
   whose files win over everything else. Fixes and missing files for the
   original apps go here, so `third_party` stays pristine.
 
+### Apps built elsewhere: `--extra-rootfs`
+
+Phoenix 2.0's rebuilt default apps live in their own repository,
+[phoenix-default-apps](https://github.com/thebestbradley/phoenix-default-apps)
+(docs/design-2.0/BUILD-PLAN.md). `phoenix-sim --extra-rootfs DIR` and
+`tools/serve-rootfs.py --extra-rootfs DIR` (both repeatable) add a folder
+laid out like the device's root, which that repository's `npm run stage`
+writes (`build/rootfs/`):
+
+- each app in `DIR/usr/palm/applications/<id>/` joins the built-in apps and
+  **replaces** the one with its id: the rebuilt Memos is
+  `com.palm.app.notes`, the original's id and db8 kind, so it reads and
+  writes the same memos. The compat overlay's files for that id fix the
+  original, so the replacement is served without them; it cannot be
+  installed over or removed (it is built in);
+- `DIR`'s other files are served at their device paths over the
+  checkout's: the shared frameworks (`/usr/palm/frameworks/enact/5/`,
+  `/usr/palm/frameworks/ember-glass/1/`).
+
+```sh
+./phoenix run tablet --extra-rootfs ../phoenix-default-apps/build/rootfs --launch com.palm.app.notes
+```
+
+(phoenix-default-apps' `npm run sim` does this.) `build/siminstaller-test`
+checks it.
+
 ## phoenix-runtime.js
 
 Web apps expect the device's web runtime to provide `PalmSystem` (app and
@@ -2093,7 +2119,7 @@ show the result at once:
 | `alarm`, `alarmList`, `alarmManage` | the Clock's `com.palm.clock.alarm:1` (`occurs` once, daily, weekdays, weekends) and the activity the Clock schedules (`{action: "ring"}`); turned off: `enabled: false` and the activity cancelled; deleted: `db8 del` (read back first) |
 | `timer`, `timerStatus`, `timerCancel`, `stopwatch` | an activity that opens the Assistant app with `{timerDone}`; the assistant keeps the running ones (`assistant:timer:<id>`) and its stopwatch (`assistant:stopwatch`) in its store |
 | `reminder`, `task` | a `com.palm.task:1` in the default list or a named one (`com.palm.tasklist:1`, made if new), with the reminder activity when there is a time. Tasks `{taskId}` |
-| `note`, `findNotes` | a `com.palm.note:1` first on the wall (`Memo.getMemoPosition('a', first)`, the next colour), as Memos makes one; found by its words |
+| `note`, `findNotes` | a `com.palm.note:1` first on the wall (`Memo.getMemoPosition('a', first)`, the next colour), as Memos makes one; found by its words. Its text is HTML-escaped as Memos keeps it (`enyo.string.escapeHtml`, `GridView.js:262`; the title its first 50 characters, `Memo.js:76`), and read, matched and said as Memos shows it; a line added or a new name is escaped and the rest kept as stored (`lib/memotext.js`) |
 | `contactAdd`, `contactInfo` | a `com.palm.contact.palmprofile:1` and its `com.palm.person:1`, as the linker stores them; Contacts `{launchType: "showPerson", id}` |
 | `text`, `readMessages` | `org.webosports.service.messaging/putMessage` (read back first; Messaging's compose without words); the last `com.palm.smsmessage:1` received, named from Contacts |
 | `email`, `searchEmail` | `com.palm.smtp/sendMail {accountId, email}` (read back first); without a body Email's compose `{recipients, summary}`; `com.palm.email:1` by words, sender or unread |

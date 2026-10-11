@@ -403,7 +403,20 @@ Item {
     Timer {
         id: countdownRefresh
         repeat: false
-        onTriggered: ov.refresh()
+        onTriggered: ov._countdownOver()
+    }
+    // Read again as the countdown ends: placed, Phone's emergency window is
+    // up over everything (the reply's data.opened), and the view makes way.
+    function _countdownOver() {
+        if (threadId === "")
+            return;
+        _call("thread", { id: threadId }, function (r) {
+            if (!r || r.returnValue === false)
+                return;
+            ov.messages = r.messages || [];
+            if (ov._opened(r.messages))
+                ov.closeRequested();
+        });
     }
 
     // done (optional) hears the reply, after the view has.
@@ -506,7 +519,11 @@ Item {
             p.voice = true;
         _call("confirm", p, function (r) {
             _settled(r);
-            ov._afterReply();
+            // As for a request (ask): what it brought up in front, out of its way.
+            if (!ov.voice && !ov.handsFree && ov._opened(r && r.messages))
+                ov.closeRequested();
+            else
+                ov._afterReply();
         });
     }
     // New: a fresh conversation here. The one before is kept (it has
@@ -705,6 +722,33 @@ Item {
         handsFree = true;
         _wakeUntil = Date.now() + wakeWaitMs;
         listen();
+    }
+    // A message read aloud in driving mode ("Sam says: ... Want to reply?",
+    // the service's announce; NotificationFeed.qml): its conversation, and
+    // listening for the answer once it has been said.
+    property int _replyWait: 0
+    function replyByVoice(id) {
+        if (String(id || "") !== "")
+            threadId = String(id);
+        voice = true;
+        handsFree = true;
+        _asked = true;
+        refresh();
+        _replyWait = 3;
+        replyTimer.restart();
+    }
+    Timer {
+        id: replyTimer
+        interval: 250
+        repeat: true
+        onTriggered: {
+            // Speech starts a moment after the announcement: a little grace.
+            if (!ov.open) { stop(); return; }
+            if (ov.speaking || ov.busy || ov.listening || ov._replyWait-- > 0)
+                return;
+            stop();
+            ov.listen();
+        }
     }
     // Asked again by voice (after the unlock).
     function askByVoice(text) {

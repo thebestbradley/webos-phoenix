@@ -22,7 +22,9 @@
 //       to Files, DropShare and any app that takes audio
 //
 // Launch params: {memoId} opens that memo (Just Type's content search),
-// {newMemo: "title"} starts recording one (Just Type's "New Voice Memo").
+// {newMemo: "title"} starts recording one (Just Type's "New Voice Memo", the
+// Assistant's "record a voice memo"), {stopRecording: true} stops and saves
+// the one recording (the Assistant's "stop recording").
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -60,11 +62,13 @@ function Mic({ size = 24 }: { size?: number }) {
 
 const METER_BARS = 20;
 
-function RecordSheet({ title, language, onSaved, onClose }: {
+function RecordSheet({ title, language, onSaved, onClose, stopAsked = 0 }: {
     title: string;
     language: string;
     onSaved: (recorded: Blob, liveText: string) => Promise<void>;
     onClose: () => void;
+    /** Counts up each time the launch params ask it to stop (the Assistant's "stop recording"). */
+    stopAsked?: number;
 }) {
     const rec = useRef<VoiceRecorder | null>(null);
     const live = useRef<{ sub: Subscription | null; text: string[] }>({ sub: null, text: [] });
@@ -148,6 +152,11 @@ function RecordSheet({ title, language, onSaved, onClose }: {
             setState("stopped");
         }
     };
+
+    // Asked to stop from outside: as Stop.
+    const stopRef = useRef(stop);
+    stopRef.current = stop;
+    useEffect(() => { if (stopAsked > 0) void stopRef.current(); }, [stopAsked]);
 
     const discard = () => {
         unlisten();
@@ -395,7 +404,8 @@ function VoiceMemos() {
     const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
     const [seeding, setSeeding] = useState(true);
     const audio = useMemo(() => new Audio(), []);
-    const params = useLaunchParams<{ memoId?: string; newMemo?: string }>();
+    const params = useLaunchParams<{ memoId?: string; newMemo?: string; stopRecording?: boolean }>();
+    const [stopAsked, setStopAsked] = useState(0);
     const memosRef = useRef(memos);
     memosRef.current = memos;
 
@@ -405,7 +415,8 @@ function VoiceMemos() {
     // Just Type: open a memo, or record a new one.
     useEffect(() => {
         if (params.memoId) { setQuery(""); setOpenId(params.memoId); }
-        if (typeof params.newMemo === "string") setRecording({ title: params.newMemo.trim() || nextTitle(memosRef.current) });
+        if (typeof params.newMemo === "string") { setStopAsked(0); setRecording({ title: params.newMemo.trim() || nextTitle(memosRef.current) }); }
+        if (params.stopRecording === true) setStopAsked((n) => n + 1);
     }, [params]);
     useEffect(() => {
         if (openId) document.querySelector(`[data-memo-id="${CSS.escape(openId)}"]`)?.scrollIntoView?.({ block: "nearest" });
@@ -523,7 +534,7 @@ function VoiceMemos() {
             </Toolbar>
 
             {recording && (
-                <RecordSheet title={recording.title} language={prefs.language} onClose={() => setRecording(null)}
+                <RecordSheet title={recording.title} language={prefs.language} onClose={() => setRecording(null)} stopAsked={stopAsked}
                              onSaved={(blob, liveText) => save(recording.title, blob, liveText)} />
             )}
             {menu?.kind === "app" && (

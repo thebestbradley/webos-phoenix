@@ -132,7 +132,9 @@ async function simulated(chromium) {
         await page.goto(appUrl);
         check(await waitText(/Phoenix simulated shell[\s\S]*user@phoenix:~\$\s*$/), "start: the simulated shell's prompt");
         const hostJson = await (await fetch(`${origin}/usr/share/phoenix/host.json`)).json();
-        check(JSON.stringify(hostJson) === "{}", "start: no host shell without --terminal");
+        // host.json may offer other host services (the TCP relay, "tcp"); only "pty" and its
+        // "url" are the shell's (tools/serve-rootfs.py, Handler.do_GET).
+        check(!("pty" in hostJson) && !("url" in hostJson), "start: no host shell without --terminal");
 
         await type("echo hello   terminal\n");
         check(await waitText(/^hello terminal$/m), "type: a command runs and prints");

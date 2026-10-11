@@ -30,6 +30,8 @@
         "marketplace.management",
         "phoenix.location.permissions",
         "phoenix.system.media",
+        "phoenix.system.notifications.read",
+        "phoenix.system.emergency",
         "filemanager.operation",
         "index.search",
         "phoenix.accessories.query",

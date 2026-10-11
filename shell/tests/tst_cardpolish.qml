@@ -169,8 +169,11 @@ Item {
             verify(mc.centerY > upY);
             wait(Theme.modalCardMoveDuration / 2);
             verify(mc.centerY < restY && mc.centerY > upY, "on its way: " + mc.centerY);
-            tryCompare(mc, "centerY", upY, 2000);
-            verify(!cv.modalMoving);
+            // The move's end, then where it ended: a number within 0.00001
+            // compares equal (TestCase.qml), which OutCubic reaches in its
+            // last 2.5 ms, the move still running.
+            tryCompare(cv, "modalMoving", false, 2000);
+            compare(mc.centerY, upY, "it ends in the middle of the space left");
             // The parent keeps its place under it.
             compare(cv.cardItem(p).centerY, cv.maximizedCenterY);
             // The keyboard goes: back where it was, as tall as before.

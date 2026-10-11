@@ -426,7 +426,10 @@ Item {
             var yes = findChild(arrived("Calling 911 in 1 seconds. Cancel to stop."), "assistantConfirmYes");
             compare(yes.caption, "Call Now");
             var reads = fake.calls.filter(function (c) { return c === "thread"; }).length;
+            // Placed meanwhile: Phone's emergency window is up (data.opened), and the view makes way.
+            fake.messages = fake.messages.concat([fake.msg({ role: "assistant", text: "Calling 911.", command: "call", status: "done", data: { opened: true } })]);
             tryVerify(function () { return fake.calls.filter(function (c) { return c === "thread"; }).length > reads; }, 4000, "read again after the countdown");
+            tryVerify(function () { return !overlay.open; }, 2000, "out of the emergency window's way");
         }
 
         // Opened, it starts the on-device model meanwhile (the service's warm).

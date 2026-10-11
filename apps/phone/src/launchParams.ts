@@ -9,7 +9,9 @@
 //   {number}                 on the dial pad
 //   {number, dial: true}     called at once (Voice Dial after "yes", the Assistant)
 //   {target: "tel:..."}      a tel: link (@phoenix/luna links.ts): on the dial pad
-//   {emergency: true}        the lock screen's emergency calls (views/Emergency)
+//   {emergency: true}        the lock screen's emergency calls (views/Emergency);
+//                            with {number, countdown}: the Assistant's "call 911",
+//                            counted down with Cancel, then called
 //   {action: "missedcalls"}  the missed calls' notification (lib/hooks.ts
 //                            notifyMissedCall): the call log, its missed calls
 //
@@ -36,7 +38,7 @@
 import { telTarget } from "@phoenix/luna";
 
 /** The keys read here: appinfo.json "phoenix.launchParams" must list the same. */
-export const LAUNCH_PARAMS = ["number", "dial", "target", "emergency",
+export const LAUNCH_PARAMS = ["number", "dial", "target", "emergency", "countdown",
                               "address", "transport", "video", "personId", "label", "service", "action", "preferences"] as const;
 
 export interface PhoneLaunchParams {
@@ -44,6 +46,8 @@ export interface PhoneLaunchParams {
     dial?: boolean;
     target?: string;
     emergency?: boolean;
+    /** With emergency and number: seconds to count down before calling (the Assistant's SOS). */
+    countdown?: number;
     address?: string;
     transport?: string;
     video?: boolean;

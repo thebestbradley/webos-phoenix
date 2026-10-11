@@ -120,6 +120,42 @@ describe("org.webosphoenix.shellhost", () => {
         expect(r.pop().returnValue).toBe(false);
     });
 
+    it("passes the Assistant's emergency call to the shell, from it and the system UI only", () => {
+        const w = world();
+        const shell = w.call("listen", { subscribe: true }, "com.webos.surfacemanager");
+        const r: Any[] = [];
+        w.host.system.emergencyCall({ number: "9-1-1", countdown: 50 }, "org.webosphoenix.assistant", (x: Any) => r.push(x));
+        expect(shell.replies[1].message).toMatchObject({ type: "emergencyCall", payload: { number: "911", countdown: 10 } });
+        w.host.system.emergencyCall({ number: "911", countdown: 5 }, "com.example.app", (x: Any) => r.push(x));
+        expect(r.pop().returnValue).toBe(false);
+        w.host.system.emergencyCall({ number: "call me", countdown: 5 }, "org.webosphoenix.assistant", (x: Any) => r.push(x));
+        expect(r.pop().returnValue).toBe(false);
+    });
+
+    it("serves the notification list the shell says, to the Assistant and the system UI only", () => {
+        const w = world();
+        const r: Any[] = [];
+        const list = [
+            { id: "a", appId: "org.webosphoenix.messaging", app: "Messaging", title: "Sam", body: "Late", time: 100 },
+            { id: "b", appId: "com.palm.app.email", app: "Email", title: "Alex", body: "Invoice", time: 300 },
+        ];
+        w.host.system.setNotifications({ notifications: list, locked: false, previews: true }, "com.palm.app.email", (x: Any) => r.push(x));
+        expect(r.pop().returnValue).toBe(false);
+        w.host.system.setNotifications({ notifications: list, locked: false, previews: true }, "com.webos.surfacemanager", (x: Any) => r.push(x));
+        expect(r.pop().returnValue).toBe(true);
+        w.host.system.getNotifications({}, "org.webosphoenix.assistant", (x: Any) => r.push(x));
+        expect(r.pop()).toMatchObject({ returnValue: true, private: false, notifications: [{ id: "b", title: "Alex" }, { id: "a", body: "Late" }] });
+        w.host.system.getNotifications({}, "com.example.app", (x: Any) => r.push(x));
+        expect(r.pop().returnValue).toBe(false);
+        // The lock screen up with its previews off: which app and when, nothing more.
+        w.host.system.setNotifications({ notifications: list, locked: true, previews: false }, "com.webos.surfacemanager", () => undefined);
+        w.host.system.getNotifications({}, "org.webosphoenix.assistant", (x: Any) => r.push(x));
+        const hidden = r.pop();
+        expect(hidden).toMatchObject({ private: true, locked: true, previews: false });
+        expect(hidden.notifications).toEqual([{ id: "b", appId: "com.palm.app.email", app: "Email", title: "", body: "", time: 300, ongoing: false },
+                                              { id: "a", appId: "org.webosphoenix.messaging", app: "Messaging", title: "", body: "", time: 100, ongoing: false }]);
+    });
+
     it("has luna-service2 files for every method, apps and shell apart", () => {
         const api = JSON.parse(fs.readFileSync(path.join(HERE, "sysbus/org.webosphoenix.shellhost.api.json"), "utf8"));
         const all = [...api["phoenix.shellhost.app"], ...api["phoenix.shellhost.shell"]].map((m: string) => m.split("/")[1]).sort();
@@ -130,6 +166,12 @@ describe("org.webosphoenix.shellhost", () => {
         expect(api["phoenix.system.media"]).not.toContain("org.webosphoenix.system/restartUi");
         const perm = JSON.parse(fs.readFileSync(path.join(HERE, "sysbus/org.webosphoenix.shellhost.perm.json"), "utf8"));
         expect(perm["com.webos.surfacemanager"]).toContain("phoenix.shellhost.shell");
+        // The notification list: the shell says it, the Assistant reads it.
+        expect(api["phoenix.system.notifications.publish"]).toEqual(["org.webosphoenix.system/setNotifications"]);
+        expect(api["phoenix.system.notifications.read"]).toEqual(["org.webosphoenix.system/getNotifications"]);
+        expect(perm["com.webos.surfacemanager"]).toContain("phoenix.system.notifications.publish");
+        const assistantPerm = JSON.parse(fs.readFileSync(path.join(HERE, "../../apps/assistant/service/sysbus/org.webosphoenix.assistant.perm.json"), "utf8"));
+        expect(assistantPerm["org.webosphoenix.assistant"]).toContain("phoenix.system.notifications.read");
         expect(fs.readFileSync(path.join(HERE, "sysbus/org.webosphoenix.shellhost.service"), "utf8"))
             .toContain("/usr/palm/services/org.webosphoenix.shellhost");
     });

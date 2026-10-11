@@ -11,7 +11,8 @@
 //       or an OPML file (Preferences menu; or "Open with" in Files).
 //   Launch params: {target: "...opml"} imports that file; {refresh: true}
 //       (the background refresh activity, store.ts) looks for new episodes;
-//       {newEpisodes: true} (its notification) opens the app.
+//       {newEpisodes: true} (its notification) opens the app; {playEpisode:
+//       id} plays that episode (the Assistant's "play the latest episode of ...").
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { db, fileManager, findFiles, openTarget, readTargetText, type OpenParams } from "@phoenix/luna";
@@ -241,7 +242,7 @@ function PodcastsApp() {
     const [url, setUrl] = useState("");
     const [error, setError] = useState("");
     const player = usePlayer();
-    const params = useLaunchParams<OpenParams & { refresh?: boolean }>();
+    const params = useLaunchParams<OpenParams & { refresh?: boolean; playEpisode?: string }>();
 
     const all = useMemo(() => list.value ?? [], [list.value]);
     const byPodcast = useMemo(() => {
@@ -264,6 +265,20 @@ function PodcastsApp() {
         if (t && /\.(opml|xml)$/i.test(t)) void importOpml(t);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [params]);
+    // {playEpisode: id}: the Assistant's "play the latest episode of ...",
+    // "resume my podcast" (which episode is its choice: apps/assistant/service
+    // lib/commands-music.js); played from where it was left, Now Playing shown.
+    const playedFor = useRef<object | null>(null);
+    useEffect(() => {
+        const id = typeof params.playEpisode === "string" ? params.playEpisode : "";
+        if (!id || playedFor.current === params || !list.value || !eps.value) return;
+        const e = eps.value.find((x) => x._id === id);
+        const p = e && list.value.find((x) => x._id === e.podcastId);
+        if (!e || !p) return;
+        playedFor.current = params;
+        player.play(e, p);
+        setView({ kind: "playing" });
+    }, [params, list.value, eps.value, player]);
 
     useBack(() => { setView({ kind: "list" }); return true; }, view.kind !== "list");
 

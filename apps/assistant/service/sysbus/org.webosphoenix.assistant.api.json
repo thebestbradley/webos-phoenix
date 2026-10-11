@@ -21,7 +21,12 @@
         "org.webosphoenix.assistant/vocabulary",
         "org.webosphoenix.assistant/speak",
         "org.webosphoenix.assistant/stopSpeaking",
-        "org.webosphoenix.assistant/sessionPhrase"
+        "org.webosphoenix.assistant/sessionPhrase",
+        "org.webosphoenix.assistant/announce",
+        "org.webosphoenix.assistant/driving",
+        "org.webosphoenix.assistant/routineEvent",
+        "org.webosphoenix.assistant/routineWake",
+        "org.webosphoenix.assistant/placeWake"
     ],
     "assistant.settings": [
         "org.webosphoenix.assistant/getSettings",
@@ -38,7 +43,18 @@
         "org.webosphoenix.assistant/cancelDownload",
         "org.webosphoenix.assistant/removeModel",
         "org.webosphoenix.assistant/selectModel",
-        "org.webosphoenix.assistant/resetFollowUps"
+        "org.webosphoenix.assistant/resetFollowUps",
+        "org.webosphoenix.assistant/routines",
+        "org.webosphoenix.assistant/setRoutine",
+        "org.webosphoenix.assistant/removeRoutine",
+        "org.webosphoenix.assistant/runRoutine",
+        "org.webosphoenix.assistant/places",
+        "org.webosphoenix.assistant/setPlace",
+        "org.webosphoenix.assistant/newsFeeds",
+        "org.webosphoenix.assistant/setNewsFeeds",
+        "org.webosphoenix.assistant/homeAssistant",
+        "org.webosphoenix.assistant/setHomeAssistant",
+        "org.webosphoenix.assistant/removeHomeAssistant"
     ],
     "tts.speak": [
         "org.webosphoenix.tts/speak",

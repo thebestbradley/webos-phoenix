@@ -32,6 +32,8 @@ UiRotation 1.0 UiRotation.qml
 UnlockPanel 1.0 UnlockPanel.qml
 VolumeIndicator 1.0 VolumeIndicator.qml
 Notifications 1.0 Notifications.qml
+NotificationFeed 1.0 NotificationFeed.qml
+AssistantMoments 1.0 AssistantMoments.qml
 QuickLaunch 1.0 QuickLaunch.qml
 SearchPill 1.0 SearchPill.qml
 StatusBar 1.0 StatusBar.qml

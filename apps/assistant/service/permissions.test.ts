@@ -33,12 +33,12 @@ const { BUILT_IN } = req("./lib/commands.js") as { BUILT_IN: { id: string; inter
 // device, groups not yet checked against a device) as perm.json names them.
 const GROUPS: [RegExp, string][] = [
     [/^com\.palm\.db\//, "database.operation"],
-    [/^com\.palm\.activitymanager\/(?:create|cancel)$/, "activity.operation"],
+    [/^com\.palm\.activitymanager\/(?:create|cancel|complete)$/, "activity.operation"],
     [/^com\.palm\.applicationManager\/(?:launch|open)$/, "phoenix.appmanager.launch"],                 // services/appmanager
     [/^com\.palm\.applicationManager\/(?:listLaunchPoints|listApps)$/, "phoenix.appmanager.query"],
     [/^com\.palm\.service\.accounts\/listAccounts$/, "phoenix.appservices.accounts"],                    // compat/app-services/com.palm.service.accounts
     [/^[\w.]+\.service\.[\w.]+\/share$/, "phoenix.connector.share"],                                    // every connector's share (connector-kit scaffold.ts)
-    [/^com\.webos\.service\.location\/(?:getLocationUpdates|getAllLocationHandlers)$/, "location.query"],
+    [/^com\.webos\.service\.location\/(?:getLocationUpdates|getAllLocationHandlers|getReverseLocation)$/, "location.query"],
     [/^com\.webos\.service\.location\/setState$/, "location.operation"],
     [/^com\.webos\.service\.audio\/(?:master\/getVolume|getInputVolume)$/, "audio.query"],
     [/^com\.webos\.service\.audio\/(?:master\/setVolume|master\/muteVolume|setInputVolume)$/, "audio.operation"],
@@ -55,7 +55,9 @@ const GROUPS: [RegExp, string][] = [
     [/^org\.webosphoenix\.clipboard\/add$/, "phoenix.clipboard"],
     [/^com\.webos\.service\.vpn\//, "vpn.management"],                                                     // LuneOS's luneos-vpn-adapter
     [/^org\.webosphoenix\.service\.location\//, "phoenix.location.permissions"],
-    [/^org\.webosphoenix\.system\/mediaKey$/, "phoenix.system.media"],
+    [/^org\.webosphoenix\.system\/(?:mediaKey|getNowPlaying)$/, "phoenix.system.media"],
+    [/^org\.webosphoenix\.system\/getNotifications$/, "phoenix.system.notifications.read"],               // services/shellhost
+    [/^org\.webosphoenix\.system\/emergencyCall$/, "phoenix.system.emergency"],                          // services/shellhost
     [/^com\.webos\.service\.wifi\//, "wifi.management"],
     [/^com\.webos\.service\.connectionmanager\//, "networkconnection"],
     [/^org\.webosports\.service\.torch\//, "torch.operation"],
@@ -77,6 +79,8 @@ const DB_PERMS = (JSON.parse(readFileSync(resolve(__dirname, "../public/configur
 // The accounts connected through Synergy, as the other tests' device has them (test/device.cjs, test/accounts-world.cjs).
 const synergy = req("./test/device.cjs") as { isa(kind: string, want: string): boolean; annotate(a: object): object | null; SHARE_APPS: object[] };
 const world = req("./test/accounts-world.cjs") as { seed(put: (o: any) => string): void };
+// A Home Assistant for the home's commands (lib/commands-home.js: HTTP only, no Luna).
+const HA = req("./test/home-assistant.cjs") as { create(): { URL: string; request(r: object): Promise<object>; connect(s: object): void } };
 
 // A request for each command (test/phrases.cjs); confirm: accept the read-back.
 const PHRASES = req("./test/phrases.cjs") as Record<string, string>;
@@ -111,6 +115,8 @@ function device() {
     const used: [string, string, string][] = [];
     // eslint-disable-next-line prefer-const
     let dev: { allowed: boolean | null; lose: string } = { allowed: true, lose: "" };
+    // (An emergency contact: lib/commands-sos.js texts them.)
+    const prefs: Record<string, unknown> = { emergencyInfo: { contacts: [{ name: "Mom", number: "5550101" }] } };
     const kindOf = (o: any) => o && (o._kind || db.get(o._id)?._kind);
     const ok = (o: object = {}) => Promise.resolve({ returnValue: true, ...o });
     const luna = {
@@ -146,6 +152,9 @@ function device() {
             if (m === "org.webosphoenix.filemanager/search") return ok({ entries: [{ name: "budget.ods", path: "/media/internal/Documents/budget.ods", type: "file", size: 100, mtime: NOW }] });
             if (m === "org.webosphoenix.service.packages/search") return ok({ apps: [{ id: "doom", sourceId: "s", title: "Doom" }] });
             if (m === "com.webos.service.wifi/getstatus") return ok({ status: "connected" });
+            // The system preferences, kept (what Settings reads, and the Assistant reads back: lib/commands-settings.js).
+            if (m === "com.webos.service.systemservice/getPreferences") return ok({ ...prefs });
+            if (m === "com.webos.service.systemservice/setPreferences") { Object.assign(prefs, p); return ok(); }
             return ok();
         },
     };
@@ -156,12 +165,16 @@ function device() {
         remove: (k: string) => { data.delete(k); },
         keys: (prefix: string) => [...data.keys()].filter((k) => k.startsWith(prefix)),
     };
-    const request = (r: { url: string }) => Promise.resolve(r.url.includes("geocoding")
+    const house = HA.create();
+    const request = (r: { url: string }) => r.url.startsWith(house.URL) ? house.request(r) : Promise.resolve(r.url.includes("geocoding")
         ? { status: 200, body: JSON.stringify({ results: [{ name: "Paris", latitude: 48.85, longitude: 2.35, timezone: "Europe/Paris" }] }) }
+        // Wikipedia's summary, a news feed (lib/commands-facts.js).
+        : r.url.includes("wikipedia.org") ? { status: 200, body: JSON.stringify({ type: "standard", title: "Ada Lovelace", extract: "An English mathematician." }) }
+        : /\/rss|rss\.xml/.test(r.url) ? { status: 200, body: "<rss><channel><item><title>Headline</title><link>https://x.example/1</link></item></channel></rss>" }
         : { status: 200, body: JSON.stringify({ current: { temperature_2m: 20, weather_code: 0 }, daily: { temperature_2m_max: [22], temperature_2m_min: [12] } }) });
     const svc = createAssistantService({ luna, storage, request, now: () => NOW, caller: () => "com.palm.systemui", locale: () => "en-US",
-                                         secrets: { seal: () => Promise.resolve({}), unseal: () => Promise.resolve("") } });
-    return Object.assign(dev, { svc, used });
+                                         secrets: { seal: (v: string) => Promise.resolve({ sealed: v }), unseal: (e: { sealed?: string }) => Promise.resolve(e?.sealed || "") } });
+    return Object.assign(dev, { svc, used, connectHome: () => house.connect(storage) });
 }
 
 describe("what each command may do on a device", () => {
@@ -194,6 +207,13 @@ describe("what each command may do on a device", () => {
                 return r.messages.at(-1);
             };
             if (c.id === "undo") await ask("new note: something");
+            // A routine of the user's to run, list or turn off, with its time (the activity manager).
+            if (/^routine/.test(c.id))
+                expect((await d.svc.setRoutine({ routine: { name: "Good night", steps: [{ text: "turn on do not disturb" }], time: "22:00" } })).returnValue).toBe(true);
+            // The user's Home Assistant, connected.
+            if (/^home/.test(c.id)) d.connectHome();
+            // Something the assistant started recording, to stop.
+            if (c.id === "stopRecording") await ask("record a video");
             let m: any;
             if (c.id === "locationAccess") {
                 // Run as its button: the Assistant asks before it uses the location; Allow.
@@ -209,6 +229,18 @@ describe("what each command may do on a device", () => {
                 expect(m).toMatchObject({ status: "failed", text: "I couldn't save it to Memos: it isn't there when I check." });
                 const r = await d.svc.choose({ threadId: thread, messageId: m.id, choice: "do:0" });
                 expect(r.messages.at(-1)).toMatchObject({ command: "copyText", text: "Copied. You can paste it anywhere." });
+            } else if (c.id === "replyTo") {
+                // The answer to a message read aloud in driving mode: "yes", then the words.
+                await ask("I'm driving");
+                const a = await d.svc.announce({ appId: "org.webosphoenix.messaging", app: "Messaging", title: "Sam", body: "Where are you?" });
+                expect(a).toMatchObject({ spoken: true, listen: true });
+                thread = a.threadId;
+                m = await ask("yes");
+                expect(m).toMatchObject({ command: "replyTo", status: "ask" });
+                m = await ask("almost there");
+                expect(m).toMatchObject({ command: "replyMessage", status: "pending" });
+                m = (await d.svc.confirm({ threadId: thread, messageId: m.id, accept: true })).messages.at(-1);
+                expect(m.status, m.text).toBe("done");
             } else {
                 m = await ask(PHRASES[c.id]);
                 expect(m.command, `"${PHRASES[c.id]}" runs ${c.id}`).toBe(c.id);

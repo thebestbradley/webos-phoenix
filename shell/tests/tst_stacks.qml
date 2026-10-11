@@ -329,20 +329,41 @@ Item {
             // A maximize that takes over a minimize carries the stack on
             // from where it is (no jump back to the slide's progress).
             // (The moment is caught on the frame it comes, not by polling:
-            // the window is about 100 ms, which a slow machine's polls miss.)
-            cv.maximize(s.c1);
-            tryVerify(function () { return shell.maximized; }, 2000);
-            var startCx = NaN, jump = NaN;
-            root.onProgress = function () {
-                if (!isNaN(startCx) || !(cv.stackProgress < 0.5 && cv.maximizeProgress > 0.1))
-                    return;
-                startCx = cv.layout.cards[s.c1].cx;
+            // the window is about 90 ms, from the stack past its half at
+            // ~41 ms to the slide under 0.1 at ~131 ms, which a slow
+            // machine's polls miss.) Qt's animations follow the wall clock,
+            // so a main thread that stalls longer than the window (a garbage
+            // collection on a loaded CI machine) jumps over it with no frame
+            // in it; that is seen (a frame past it before one in it) and the
+            // minimize is made again, up to five times. Whether the stack
+            // runs on its own clock is checked above.
+            var jump = NaN, stalls = 0;
+            for (var attempt = 0; attempt < 5 && isNaN(jump); attempt++) {
                 cv.maximize(s.c1);
-                jump = Math.abs(cv.layout.cards[s.c1].cx - startCx);
-            };
-            cv.minimize();
-            tryVerify(function () { return !isNaN(jump); }, 2000, "the minimize reached the stack's half while the slide went on");
-            root.onProgress = null;
+                tryVerify(function () { return shell.maximized; }, 2000);
+                var startCx = NaN, past = false;
+                root.onProgress = function () {
+                    if (!isNaN(startCx) || past)
+                        return;
+                    if (!(cv.stackProgress < 0.5 && cv.maximizeProgress > 0.1)) {
+                        past = cv.maximizeProgress <= 0.1;
+                        return;
+                    }
+                    startCx = cv.layout.cards[s.c1].cx;
+                    cv.maximize(s.c1);
+                    jump = Math.abs(cv.layout.cards[s.c1].cx - startCx);
+                };
+                cv.minimize();
+                tryVerify(function () { return !isNaN(jump) || past; }, 2000, "the minimize reached the stack's half while the slide went on");
+                root.onProgress = null;
+                if (isNaN(jump)) {
+                    stalls++;
+                    console.log("tst_stacks: a stall jumped over the minimize's middle; again (" + stalls + ")");
+                    tryVerify(function () { return cv.maximizeProgress === 0; }, 2000);
+                    tryCompare(cv, "_stackOwn", false, 1000);
+                }
+            }
+            verify(!isNaN(jump), "a frame in the minimize's middle (" + stalls + " stalls jumped over it)");
             verify(jump < 1, "the card carries on from where it is (" + jump + ")");
             tryVerify(function () { return shell.maximized; }, 2000);
             fuzzyCompare(cv.layout.cards[s.c1].scale, 1, 0.0001);

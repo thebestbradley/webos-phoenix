@@ -7,7 +7,8 @@
 //   simScene       "locked" | "cards" | "stacks" | "longstack" | "reorder" | "maximized" | "heldcard" | "launcher" |
 //                  "launcheredit" | "pin" | "emergency" | "firstuse" | "lowbattery" | "banner" | "notified" | "dashboard" |
 //                  "notifystacks" | "notifystacksbar" | "notifystackslocked" | "drawer" | "capture" | "capturepreview" |
-//                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistantbird" | "assistantbirds" | "assistantbirdmoves" |
+//                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistant:<request>|<request>|..." |
+//                  "assistantbird" | "assistantbirds" | "assistantbirdmoves" |
 //                  "wakeword" | "wakewordlocked" | "modal" |
 //                  "systemmenu" | "systemmenuwifi" | "empty" | "cardsnotified" (with --launch: those apps' cards and three
 //                  notifications under them; "cards", "banner", "notified" and "dashboard" also take --launch)
@@ -1913,7 +1914,7 @@ Item {
                 if (typeof simScene !== "undefined" && simScene === "clipstrip")
                     root.clipStripScene();
                 // --scene assistant with --launch: the assistant over that app.
-                if (typeof simScene !== "undefined" && simScene === "assistant")
+                if (typeof simScene !== "undefined" && (simScene === "assistant" || simScene.indexOf("assistant:") === 0))
                     root.assistantScene();
                 // --scene cards with --launch: those apps' cards in the card
                 // view, once they have loaded, the middle one in front
@@ -2132,7 +2133,7 @@ Item {
         } else if (scene === "clipstrip") {
             shell.startJustType("");
             clipStripScene();
-        } else if (scene === "assistant") {
+        } else if (scene === "assistant" || scene.indexOf("assistant:") === 0) {
             assistantScene();
         } else if (scene === "wakeword" || scene === "wakewordlocked") {
             wakeWordScene.locked = scene === "wakewordlocked";
@@ -2168,8 +2169,21 @@ Item {
     // its own; with --launch org.webosphoenix.assistant the app has it
     // instead. Each request waits for an answer; one made before a page
     // with the runtime was up is made again.
+    // "assistant:<request>|<request>|...": these requests instead, in turn
+    // (each in the same conversation). A step "@notified" puts the
+    // "notified" scene's notifications in the dashboard first; "@sms" a
+    // text received (as the toolbar's SMS button); "@lock" locks;
+    // "@starter:<id>" adds one of the routines' starters ("goodnight");
+    // "@location:<lat>,<lon>" moves the simulated phone (Simulate > Location);
+    // "@homeassistant:<url>,<token>" connects a Home Assistant (Settings > Assistant > Smart Home);
+    // "@dashboard" opens the notification dashboard;
+    // "@open:<appId>:<params JSON>" opens an app, the view closed; "@close"
+    // closes the view (what it opened behind it shows); "@tap:<choice>" taps
+    // one of the last answer's buttons ("@tap:open");
+    // "@wait:<ms>" waits. For checking the Assistant's features by hand.
     function assistantScene() {
-        assistantSceneSteps.asks = ["What's 15% of 80?", "Set a timer for 10 minutes", "Who wrote the Odyssey?"];
+        var custom = scene.indexOf("assistant:") === 0 ? scene.slice(10).split("|").filter(function (s) { return s.trim() !== ""; }) : [];
+        assistantSceneSteps.asks = custom.length ? custom : ["What's 15% of 80?", "Set a timer for 10 minutes", "Who wrote the Odyssey?"];
         assistantSceneSteps.inApp = shell.cardView.maximized && shell._appIdOf(shell.cardView.currentUid) === "org.webosphoenix.assistant";
         assistantSceneSteps.up = false;
         assistantSceneSteps.next();
@@ -2209,6 +2223,70 @@ Item {
                 stop();
                 return;
             }
+            // A step of the scene's own ("assistant:@notified|what did I miss").
+            var step = String(asks[0]).trim();
+            console.info("phoenix-sim: assistant scene: " + step);
+            if (step.charAt(0) === "@") {
+                assistantSceneSteps.asks = assistantSceneSteps.asks.slice(1);
+                if (step === "@notified") {
+                    windows.notify(windows.appIdByTitle("Messaging"), "Palm Pre", "It's good to be back.");
+                    windows.notify(windows.appIdByTitle("Email"), "3 new emails", "webOS Phoenix build passed");
+                    windows.notify(windows.appIdByTitle("Calendar"), "Launch party", "Tomorrow, 9:41 AM");
+                } else if (step === "@sms") {
+                    windows.simulateIncomingSms();
+                } else if (step === "@lock") {
+                    shell.lock();
+                } else if (step === "@close") {
+                    // The view closed: what it opened behind it shows.
+                    shell.assistantOverlay.open = false;
+                } else if (step === "@dashboard") {
+                    // The notification dashboard opened (what came in shows).
+                    shell.assistantOverlay.open = false;
+                    shell.notifications.dashboardOpen = true;
+                } else if (step.indexOf("@tap:") === 0) {
+                    // One of the last answer's buttons, tapped ("@tap:open": Open Settings).
+                    var ov = shell.assistantOverlay, choiceId = step.slice(5);
+                    for (var mi = ov.messages.length - 1; mi >= 0; --mi) {
+                        var cs = ov.messages[mi].choices || [];
+                        var hit = cs.filter(function (c) { return c.id === choiceId; })[0];
+                        if (hit) { ov.choose(ov.messages[mi], hit); break; }
+                    }
+                } else if (step.indexOf("@starter:") === 0) {
+                    // One of the routines' starters, added ("@starter:goodnight").
+                    var which = step.slice(9);
+                    windows.lunaCall("luna://org.webosphoenix.assistant/routines", {}, function (r) {
+                        var s = ((r && r.starters) || []).filter(function (x) { return x.starter === which; })[0];
+                        if (s)
+                            windows.lunaCall("luna://org.webosphoenix.assistant/setRoutine", { routine: s }, function () {});
+                    });
+                } else if (step.indexOf("@location:") === 0) {
+                    // The simulated phone moved ("@location:37.3337,-121.8907"), as Simulate > Location moves it.
+                    var ll = step.slice(10).split(",").map(Number);
+                    if (ll.length === 2 && !isNaN(ll[0]) && !isNaN(ll[1]))
+                        windows.lunaCall("luna://com.webos.service.location/mock/setLocation",
+                                         { name: "gps", location: { latitude: ll[0], longitude: ll[1] } }, function () {});
+                } else if (step.indexOf("@homeassistant:") === 0) {
+                    // The user's Home Assistant connected ("@homeassistant:http://127.0.0.1:8123,<token>"),
+                    // as Settings > Assistant > Smart Home connects it.
+                    var ha = step.slice(15), comma = ha.lastIndexOf(",");
+                    windows.lunaCall("luna://org.webosphoenix.assistant/setHomeAssistant",
+                                     { url: ha.slice(0, comma), token: ha.slice(comma + 1) }, function (r) {
+                        console.info("phoenix-sim: Home Assistant: " + JSON.stringify(r));
+                    });
+                } else if (step.indexOf("@open:") === 0) {
+                    // An app with launch params ("@open:org.webosphoenix.settings:{\"page\":\"assistant\"}").
+                    var rest = step.slice(6), colon = rest.indexOf(":");
+                    var params = null;
+                    try { params = colon > 0 ? JSON.parse(rest.slice(colon + 1)) : null; } catch (e) { params = null; }
+                    shell.assistantOverlay.open = false;
+                    shell.launch(colon > 0 ? rest.slice(0, colon) : rest, params);
+                }
+                var pause = /^@wait:(\d+)$/.exec(step);
+                assistantSceneSteps.interval = pause ? Number(pause[1]) : 1500;
+                assistantSceneSteps.restart();
+                return;
+            }
+            assistantSceneSteps.interval = 3000;
             var answered = function (r) {
                 if (mine !== assistantSceneSteps.serial)
                     return;
