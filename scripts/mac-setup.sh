@@ -19,11 +19,12 @@
 #                                   (./phoenix check)
 #
 # The assistant (docs/AI-AND-MCP.md, "What's installed where"): whisper.cpp
-# (whisper-cpp) and llama.cpp (llama.cpp) from Homebrew, whisper's base.en
-# model (148 MB) into build/whisper and the wake word (Vosk, 13 + 71 MB)
-# into build/wakeword, checked by their SHA-256; the Mac's own `say`
-# speaks. The on-device language models are not fetched here: Settings >
-# Assistant downloads them.
+# (whisper-cpp), llama.cpp (llama.cpp) and ONNX Runtime from Homebrew,
+# whisper's base.en model (148 MB) into build/whisper, the wake word (Vosk,
+# 13 + 71 MB) into build/wakeword, the voice (Kitten TTS, about 28 MB) into
+# build/kitten and the built-in language model (Qwen3 0.6B, 639 MB) into
+# build/models, each checked by its SHA-256. Settings > Assistant downloads
+# the larger models.
 
 set -eu
 
@@ -36,7 +37,7 @@ while [ "$1" != --end ]; do
         --voice) ;;     # the assistant's voice is installed by default now
         --no-assistant) set -- "$@" --no-assistant ;;
         --check) command=check ;;
-        -h|--help) sed -n '5,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '5,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown option: $1 (see --help)" >&2; exit 2 ;;
     esac
     shift
