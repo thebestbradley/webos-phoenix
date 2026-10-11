@@ -42,8 +42,8 @@ for a feed apart from the catalog.
 
 ```sh
 php server/updates/bin/updates.php publish phoenix.raucb \
-    --compatible phoenix-pinephone --version 1.1.0 --build 110 [--channel beta] --note "..."
-php server/updates/bin/updates.php withdraw --compatible phoenix-pinephone [--channel beta]
+    --compatible phoenix-pinephonepro --version 1.1.0 --build 110 [--channel beta] --note "..."
+php server/updates/bin/updates.php withdraw --compatible phoenix-pinephonepro [--channel beta]
 php server/updates/bin/updates.php show
 ```
 

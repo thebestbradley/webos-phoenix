@@ -600,14 +600,14 @@ check($s === 200 && $fediApp && $fediApp['kind'] === 'connector' && count($fediT
 
 // ---- The system update feed (served at /updates/, published by the admin API) ----------------
 $bundle = str_repeat("\x00\x01raucb", 64);
-$q = ['compatible' => 'phoenix-pinephone', 'version' => '1.1.0', 'build' => '110', 'notes' => ['Faster cards', 'Share everywhere']];
+$q = ['compatible' => 'phoenix-pinephonepro', 'version' => '1.1.0', 'build' => '110', 'notes' => ['Faster cards', 'Share everywhere']];
 [$s] = $api->handle('POST', '/api/admin/updates', $bundle, "Bearer {$dev['token']}", $q);
 check($s === 403, 'updates: only an admin publishes one');
 [$s, $r] = $api->handle('POST', '/api/admin/updates', $bundle, "Bearer $admin", $q);
-check($s === 200 && $r['feed']['format'] === 1 && $r['feed']['compatible'] === 'phoenix-pinephone' && $r['feed']['channel'] === 'stable'
+check($s === 200 && $r['feed']['format'] === 1 && $r['feed']['compatible'] === 'phoenix-pinephonepro' && $r['feed']['channel'] === 'stable'
       && $r['feed']['release']['version'] === '1.1.0' && $r['feed']['release']['build'] === 110
       && $r['feed']['release']['notes'] === ['Faster cards', 'Share everywhere'], 'updates: a release on the stable channel');
-$feedFile = getenv('MARKETPLACE_DATA') . '/updates/phoenix-pinephone/stable.json';
+$feedFile = getenv('MARKETPLACE_DATA') . '/updates/phoenix-pinephonepro/stable.json';
 $onDisk = json_decode((string) @file_get_contents($feedFile), true);
 check(is_array($onDisk) && $onDisk['release']['sha256'] === hash('sha256', $bundle) && $onDisk['release']['size'] === strlen($bundle)
       && hash_file('sha256', dirname($feedFile) . '/' . $onDisk['release']['url']) === hash('sha256', $bundle),
@@ -619,9 +619,9 @@ check($s === 400, 'updates: device types are names, not paths');
 [$s, $r] = $api->handle('POST', '/api/admin/updates', '', "Bearer $admin", ['compatible' => 'phoenix-sim', 'version' => '0.2.0', 'build' => '2', 'channel' => 'beta']);
 check($s === 200 && $r['feed']['release']['url'] === 'phoenix-sim-0.2.0-2.raucb', "updates: the simulator's stand-in bundle when none is sent");
 [$s, $r] = $call('GET', '/api/updates');
-check($s === 200 && array_map(fn ($f) => $f['compatible'] . '/' . $f['channel'], $r['feeds']) === ['phoenix-pinephone/stable', 'phoenix-sim/beta'],
+check($s === 200 && array_map(fn ($f) => $f['compatible'] . '/' . $f['channel'], $r['feeds']) === ['phoenix-pinephonepro/stable', 'phoenix-sim/beta'],
       'updates: GET /api/updates lists every channel');
-[$s, $r] = $call('POST', '/api/admin/updates/withdraw', ['compatible' => 'phoenix-pinephone', 'channel' => 'stable'], $admin);
+[$s, $r] = $call('POST', '/api/admin/updates/withdraw', ['compatible' => 'phoenix-pinephonepro', 'channel' => 'stable'], $admin);
 check($s === 200 && $r['feed']['release'] === null && $r['feed']['withdrawn']['build'] === 110, 'updates: withdrawn');
 
 // The router serves it (PHP's built-in server, as bin/serve.sh runs it).

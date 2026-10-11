@@ -34,30 +34,30 @@ function feedOf(string $compatible, string $channel = 'stable'): ?array
 $bundle = "$feed-bundle.raucb";
 file_put_contents($bundle, str_repeat("\x00\x01bundle", 100));
 
-run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinephone --version 1.1.0 --build 110 --note 'Faster cards' --note 'New Marketplace' --date 2026-10-01", $code);
-$f = feedOf('phoenix-pinephone');
+run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinephonepro --version 1.1.0 --build 110 --note 'Faster cards' --note 'New Marketplace' --date 2026-10-01", $code);
+$f = feedOf('phoenix-pinephonepro');
 check('publish writes the channel', $code === 0 && $f !== null);
-check('the release', $f['format'] === 1 && $f['compatible'] === 'phoenix-pinephone' && $f['channel'] === 'stable'
+check('the release', $f['format'] === 1 && $f['compatible'] === 'phoenix-pinephonepro' && $f['channel'] === 'stable'
     && $f['release']['version'] === '1.1.0' && $f['release']['build'] === 110 && $f['release']['date'] === '2026-10-01'
     && $f['release']['notes'] === ['Faster cards', 'New Marketplace'] && $f['release']['name'] === 'webOS Phoenix');
 check('the bundle, its size and SHA-256', $f['release']['url'] === 'phoenix-1.1.0-110.raucb'
     && $f['release']['size'] === 800 && $f['release']['sha256'] === hash_file('sha256', $bundle)
-    && hash_file('sha256', "$feed/phoenix-pinephone/phoenix-1.1.0-110.raucb") === hash_file('sha256', $bundle));
+    && hash_file('sha256', "$feed/phoenix-pinephonepro/phoenix-1.1.0-110.raucb") === hash_file('sha256', $bundle));
 
-$out = run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinephone --version 1.0.9 --build 109", $code);
+$out = run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinephonepro --version 1.0.9 --build 109", $code);
 check('an older build is refused', $code !== 0 && str_contains($out, 'higher build number'));
 $out = run("publish " . escapeshellarg($bundle) . " --compatible 'bad/../name' --version 1 --build 1", $code);
 check('names are checked', $code !== 0);
-$out = run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinephone --version 1.2.0 --build 12x", $code);
+$out = run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinephonepro --version 1.2.0 --build 12x", $code);
 check('builds are whole numbers', $code !== 0 && str_contains($out, 'whole number'));
-run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinephone --version 1.2.0-beta1 --build 115 --channel beta", $code);
-check('channels are separate', $code === 0 && feedOf('phoenix-pinephone', 'beta')['release']['build'] === 115
-    && feedOf('phoenix-pinephone')['release']['build'] === 110);
+run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinephonepro --version 1.2.0-beta1 --build 115 --channel beta", $code);
+check('channels are separate', $code === 0 && feedOf('phoenix-pinephonepro', 'beta')['release']['build'] === 115
+    && feedOf('phoenix-pinephonepro')['release']['build'] === 110);
 
-run('withdraw --compatible phoenix-pinephone', $code);
-$f = feedOf('phoenix-pinephone');
+run('withdraw --compatible phoenix-pinephonepro', $code);
+$f = feedOf('phoenix-pinephonepro');
 check('withdraw leaves no release', $code === 0 && $f['release'] === null && $f['withdrawn']['build'] === 110);
-$out = run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinephone --version 1.1.0 --build 110", $code);
+$out = run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinephonepro --version 1.1.0 --build 110", $code);
 check('a withdrawn build is not published again', $code !== 0);
 
 run('simulator --version 0.2.0 --build 2 --note Hello', $code);

@@ -65,7 +65,7 @@ elsewhere), written by `server/updates/src/UpdateFeed.php`. An admin
 publishes a release with the bundle as the request body:
 
     curl -X POST -H "Authorization: Bearer $TOKEN" --data-binary @phoenix.raucb \
-        "https://…/api/admin/updates?compatible=phoenix-pinephone&version=1.1.0&build=110&channel=stable&note=…"
+        "https://…/api/admin/updates?compatible=phoenix-pinephonepro&version=1.1.0&build=110&channel=stable&note=…"
 
 (`note=` repeats, one line each; for `compatible=phoenix-sim` with no body,
 the simulator's stand-in bundle.) `POST /api/admin/updates/withdraw
