@@ -13,17 +13,19 @@
 //   commands-music.js      shuffle, repeat, favorite songs, the sleep timer, podcasts
 //   commands-facts.js      define, spell, coins, dice, random numbers, Wikipedia, the news
 //   commands-settings.js   the switches of Settings the toggle command does not have, dark mode
+//   commands-home.js       lights, switches, the thermostat, locks and scenes, through Home Assistant
 //
 // Each area: (h) -> {COMMANDS (as lib/commands.js BUILT_IN, with their
 // examples, and whenLocked: may run when asked over the lock screen),
 // prepare?(cmd, args, env) -> Promise | null, run(cmd, args, env) ->
-// Promise | null, METHODS?, service?(s) -> the service's own methods
+// Promise | null, undo?(u, env) -> Promise | null (its result's undo taken
+// back), METHODS?, service?(s) -> the service's own methods
 // (assistant.js adds them)}. Their words are in lib/lang/en-everyday.js.
 
 "use strict";
 
 var AREAS = [require("./commands-sos"), require("./commands-notify"), require("./commands-routines"), require("./commands-capture"), require("./commands-places"),
-             require("./commands-music"), require("./commands-facts"), require("./commands-settings")];
+             require("./commands-music"), require("./commands-facts"), require("./commands-settings"), require("./commands-home")];
 
 module.exports = function (h) {
     var areas = AREAS.map(function (make) { return make(h); });
@@ -56,6 +58,14 @@ module.exports = function (h) {
         savedPlace: function (env, which) {
             for (var i = 0; i < areas.length; ++i) if (areas[i].savedPlace) return areas[i].savedPlace(env, which);
             return Promise.resolve(null);
+        },
+        // Takes back what one of these did (its result's undo): Promise | null (not theirs).
+        undo: function (u, env) {
+            for (var i = 0; i < areas.length; ++i) {
+                var p = areas[i].undo ? areas[i].undo(u, env) : null;
+                if (p) return p;
+            }
+            return null;
         },
         // The service's own methods, each (params) -> Promise<reply>.
         service: function (s) {

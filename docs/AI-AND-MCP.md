@@ -1613,11 +1613,11 @@ Eiffel Tower": the article's summary from Wikipedia's REST API, said as
 "From Wikipedia, ...", with a card naming Wikipedia and its licence and
 opening the article. Open questions ("who was Ada Lovelace") stay the
 model's or the web's, as before; whether they should try Wikipedia first
-when no model is connected is the owner's to say (OPEN-QUESTIONS.md).
+when no model is connected is the owner's to say (OPEN-QUESTIONS.md Q154).
 "What's the news", "read me the headlines": the five newest headlines of
 the user's feeds (RSS or Atom), each a card opening the story; the feeds
 are in Settings > Assistant > News (two public ones to start with, the
-owner's choice).
+owner's choice: OPEN-QUESTIONS.md Q153).
 
 **Settings by voice** (`deviceSetting`; `lib/commands-settings.js`). The
 switches of Settings the toggle command (Wi-Fi, Bluetooth, airplane mode,
@@ -1633,7 +1633,7 @@ before it is said, and taken back by "undo"; "is high contrast on"
 answers with Turn It Off. Showing previews on the lock screen is read back
 first: it shows what messages say to whoever holds the phone. Phoenix has
 no dark mode (webOS's look had none; 2.0's design brings light and dark):
-"turn on dark mode" says so and offers high contrast (OPEN-QUESTIONS.md).
+"turn on dark mode" says so and offers high contrast (OPEN-QUESTIONS.md Q155).
 
 **Emergency calls** (`emergency`, `emergencyCancel`, `emergencyText`;
 `lib/commands-sos.js`). "Call 911", "call 112", "emergency", "SOS", "call
@@ -1660,6 +1660,42 @@ the simulator, over the lock screen too (`--scene
 'assistant:@lock|call 911'`: the countdown, then the simulated call); the
 tests never place a call (the simulator's telephony, and a test device
 that records).
+
+**The smart home, through Home Assistant** (`home`, `homeScene`;
+`lib/commands-home.js`). Settings > Assistant > Smart Home keeps the
+user's Home Assistant: its address and a long-lived access token (made in
+Home Assistant under the user's profile, Security), both checked against
+its REST API (`GET /api/`) before they are kept, the token sealed as the
+model providers' keys are and never shown again (`homeAssistant`,
+`setHomeAssistant`, `removeHomeAssistant`, Settings' and the system UI's
+only). The Assistant then reads the house (`GET /api/states`: lights,
+switches, fans, input booleans, thermostats, locks, covers and scenes, by
+their friendly names) and calls its services (`POST
+/api/services/<domain>/<service>`). "Turn off the living room lamp", "turn
+on all the lights", "kitchen lights off", "dim the bedroom light to 30%",
+"start the coffee maker", "set the thermostat to 70", "turn up the heat"
+(two degrees Fahrenheit, one Celsius), "make it warmer", "lock the front
+door", "close the garage door", "is the front door locked", "what's the
+temperature inside", "activate movie night" (a scene by its name). A
+device is the one whose name has all the words said, or every one of the
+kind said ("the lights", "the thermostat"). Each change is read back from
+Home Assistant (`GET /api/states/<id>`, once more 1.5 s later for a slow
+device) before it is said: "Turned off the Living Room Lamp", or "I asked
+Home Assistant to ..., but it doesn't say it did"; a lock still locking or
+a door still closing is said so ("Locking the Front Door."). Unlocking a
+lock and opening a garage door or blinds are read back first, by Home
+Assistant's names ("Unlock the Front Door?"), a model's choice too. "Undo"
+puts lights, switches, fans and the thermostat back as they were, never a
+lock or a door. The words wait for Home Assistant to be connected (the
+grammar's context: the entities' names and kinds); until then "turn off the
+lights" is still "I can't control other devices ... by myself. With Home
+Assistant, I can: connect it in Settings > Assistant > Smart Home", and the
+phone's own words stay the phone's ("turn on the flashlight", "lock the
+screen", "turn off the alarm", "set the volume to 50"). Words for a device
+it cannot act on ("preheat the oven") say what it can do. Tested against a
+stand-in Home Assistant (`test/home-assistant.cjs`: its REST API on a small
+house, served over HTTP for the simulator's checks). The owner's questions on
+these features: OPEN-QUESTIONS.md Q150-Q157.
 
 ### The Assistant and Synergy (11 October 2026)
 

@@ -51,7 +51,10 @@
         "org.webosphoenix.assistant/places",
         "org.webosphoenix.assistant/setPlace",
         "org.webosphoenix.assistant/newsFeeds",
-        "org.webosphoenix.assistant/setNewsFeeds"
+        "org.webosphoenix.assistant/setNewsFeeds",
+        "org.webosphoenix.assistant/homeAssistant",
+        "org.webosphoenix.assistant/setHomeAssistant",
+        "org.webosphoenix.assistant/removeHomeAssistant"
     ],
     "tts.speak": [
         "org.webosphoenix.tts/speak",

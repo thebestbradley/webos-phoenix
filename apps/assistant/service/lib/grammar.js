@@ -102,7 +102,9 @@ function parse(text, ctx) {
               // The user's routines that are on, [{id, name, phrases}] (lib/commands-routines.js).
               routines: ctx.routines || [],
               // An emergency call counting down (lib/commands-sos.js): "cancel" stops it.
-              sos: !!ctx.sos };
+              sos: !!ctx.sos,
+              // Home Assistant, once connected: {entities: [{name, domain}]} (lib/commands-home.js).
+              home: ctx.home || null };
     var found = attempt(lang, t, c, 0);
     if (found || !lang.normalize) return found;
     var fixed = lang.normalize(t, c.names);

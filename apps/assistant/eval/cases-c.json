@@ -161,6 +161,25 @@
   { "id": "c-sos-06", "cat": "emergency", "say": "text my location to my emergency contacts",
     "deviceState": { "prefs": { "rotationLock": false, "emergencyInfo": { "contacts": [ { "name": "Mom", "number": "(303) 555-0101" } ] } } },
     "expect": { "command": "emergencyText", "status": "pending" }, "text": "^Text Mom: .I need help\\. I'm here: https://www\\.openstreetmap\\.org" },
-  { "id": "c-sos-07", "cat": "emergency", "say": "don't call 911", "forbid": ["emergency"], "expect": { "command": "emergencyCancel" } }
+  { "id": "c-sos-07", "cat": "emergency", "say": "don't call 911", "forbid": ["emergency"], "expect": { "command": "emergencyCancel" } },
+  { "id": "c-home-01", "cat": "smart home", "home": true, "say": "turn off the living room lamp", "expect": { "command": "home", "status": "done", "args": { "action": "off" } }, "text": "^Turned off the Living Room Lamp\\.$" },
+  { "id": "c-home-02", "cat": "smart home", "home": true, "say": "turn on all the lights", "expect": { "command": "home", "status": "done", "args": { "action": "on" } }, "text": "Kitchen Light, the Living Room Lamp and the Bedroom Light" },
+  { "id": "c-home-03", "cat": "smart home", "home": true, "say": "set the thermostat to 68", "expect": { "command": "home", "args": { "action": "set", "value": 68 } }, "text": "68°" },
+  { "id": "c-home-04", "cat": "smart home", "home": true, "say": "unlock the front door", "expect": { "command": "home", "status": "pending", "args": { "action": "unlock" } }, "text": "Unlock the Front Door\\?" },
+  { "id": "c-home-05", "cat": "smart home", "home": true, "say": "is the garage door closed", "expect": { "command": "home", "args": { "action": "status" } }, "text": "Garage Door is closed" },
+  { "id": "c-home-06", "cat": "smart home", "home": true, "say": "activate movie night", "expect": { "command": "homeScene", "status": "done" }, "text": "Movie Night scene" },
+  { "id": "c-home-07", "cat": "smart home", "home": true, "say": "turn on the flashlight", "expect": { "command": "toggle", "args": { "setting": "flashlight" } }, "forbid": ["home"] },
+  { "id": "c-home-08", "cat": "smart home", "home": true, "say": "lock the screen", "expect": { "command": "lock" }, "forbid": ["home"] },
+  { "id": "c-home-09", "cat": "smart home", "say": "turn off the lights", "forbid": ["home"], "expect": { "answer": "fallback" }, "text": "Settings > Assistant > Smart Home" },
+  { "id": "c-home-10", "cat": "smart home", "home": true, "say": "turn on the tv", "expect": { "command": "home" }, "text": "couldn't find" },
+  { "id": "c-home-11", "cat": "smart home", "home": true, "turns": [
+    { "say": "turn off the kitchen light", "expect": { "command": "home", "status": "done" } },
+    { "say": "undo that", "expect": { "command": "undo" } } ] },
+  { "id": "c-home-12", "cat": "smart home", "home": true, "say": "make it warmer", "expect": { "command": "home", "args": { "action": "up" } }, "text": "70°" },
+  { "id": "c-home-13", "cat": "smart home", "home": true, "voice": true, "turns": [
+    { "say": "open the garage", "expect": { "command": "home", "status": "pending", "args": { "action": "open" } } },
+    { "say": "no", "expect": { "answer": ["chat", "fallback", "clarify"] }, "forbid": ["home"] } ] },
+  { "id": "c-home-14", "cat": "smart home", "home": true, "say": "turn off the alarm", "expect": { "command": "alarmManage" }, "forbid": ["home"] },
+  { "id": "c-home-15", "cat": "smart home", "home": true, "say": "preheat the oven", "forbid": ["home"], "expect": { "answer": "fallback" }, "text": "but not that" }
  ]
 }

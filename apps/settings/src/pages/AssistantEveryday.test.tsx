@@ -7,12 +7,13 @@
 // Mode the same mode "I'm driving" turns on (Do Not Disturb with it).
 
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { useEffect, useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
 import { assistant, call, type AssistantSettings } from "@phoenix/luna";
-import { HomeAndWork, MessagesAndDriving, NewsFeeds } from "./AssistantEveryday";
+import { HomeAndWork, MessagesAndDriving, NewsFeeds, SmartHome } from "./AssistantEveryday";
 
 type PS = { getResource(p: string): string | undefined; appIdentifier: string };
 type R = { returnValue: boolean; [k: string]: any };
@@ -112,6 +113,42 @@ describe("Settings > Assistant: News", () => {
         fireEvent.click(screen.getByTestId("as-feed-remove-0"));
         await waitFor(async () => expect((await assistant.newsFeeds()).feeds.map((f) => f.title)).toEqual(["NPR News", "news.example"]));
     });
+});
+
+describe("Settings > Assistant: Smart Home", () => {
+    it("connects Home Assistant with its address and token, checked first, and disconnects it", async () => {
+        // The Assistant's stand-in Home Assistant, reached through the page's fetch (the runtime's request).
+        const ha = createRequire(import.meta.url)(resolve(REPO, "apps/assistant/service/test/home-assistant.cjs")).create();
+        const real = globalThis.fetch;
+        globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+            const proxied = String(input) === "/__phoenix/proxy";
+            const req = proxied ? JSON.parse(String(init?.body)) : { url: String(input), method: init?.method, headers: init?.headers, body: init?.body };
+            if (!String(req.url).startsWith(ha.URL)) return real(input, init);
+            const r = await ha.request(req);
+            return { status: r.status, json: async () => r, text: async () => r.body, headers: new Headers() } as unknown as Response;
+        }) as typeof fetch;
+        try {
+            render(<SmartHome off={false} />);
+            await waitFor(() => expect(screen.getByTestId("as-home-url")).toBeTruthy());
+            fireEvent.change(screen.getByTestId("as-home-url"), { target: { value: ha.URL } });
+            fireEvent.change(screen.getByTestId("as-home-token"), { target: { value: "not-the-token" } });
+            fireEvent.click(screen.getByTestId("as-home-connect"));
+            await waitFor(() => expect(screen.getByTestId("as-home-note").textContent).toMatch(/didn't take the access token/));
+            fireEvent.change(screen.getByTestId("as-home-token"), { target: { value: ha.TOKEN } });
+            fireEvent.click(screen.getByTestId("as-home-connect"));
+            await waitFor(() => expect(screen.getByTestId("as-home-connected").textContent).toContain("10 devices"));
+            expect((await assistant.homeAssistant()).connected).toBe(true);
+            // What it connected to is what the Assistant's words reach.
+            const r = (await call("luna://org.webosphoenix.assistant/ask", { text: "turn off the kitchen light", newThread: true })) as unknown as R;
+            expect(r.messages.at(-1).text).toBe("Turned off the Kitchen Light.");
+            expect(ha.find("light.kitchen").state).toBe("off");
+            fireEvent.click(screen.getByTestId("as-home-remove"));
+            await waitFor(async () => expect((await assistant.homeAssistant()).connected).toBe(false));
+            await waitFor(() => expect(screen.getByTestId("as-home-token")).toBeTruthy());
+        } finally {
+            globalThis.fetch = real;
+        }
+    }, 20000);
 });
 
 describe("the Assistant in the page, with its data files", () => {

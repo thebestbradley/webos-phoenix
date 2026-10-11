@@ -78,6 +78,8 @@ const DB_PERMS = (JSON.parse(readFileSync(resolve(__dirname, "../public/configur
 // The accounts connected through Synergy, as the other tests' device has them (test/device.cjs, test/accounts-world.cjs).
 const synergy = req("./test/device.cjs") as { isa(kind: string, want: string): boolean; annotate(a: object): object | null; SHARE_APPS: object[] };
 const world = req("./test/accounts-world.cjs") as { seed(put: (o: any) => string): void };
+// A Home Assistant for the home's commands (lib/commands-home.js: HTTP only, no Luna).
+const HA = req("./test/home-assistant.cjs") as { create(): { URL: string; request(r: object): Promise<object>; connect(s: object): void } };
 
 // A request for each command (test/phrases.cjs); confirm: accept the read-back.
 const PHRASES = req("./test/phrases.cjs") as Record<string, string>;
@@ -162,15 +164,16 @@ function device() {
         remove: (k: string) => { data.delete(k); },
         keys: (prefix: string) => [...data.keys()].filter((k) => k.startsWith(prefix)),
     };
-    const request = (r: { url: string }) => Promise.resolve(r.url.includes("geocoding")
+    const house = HA.create();
+    const request = (r: { url: string }) => r.url.startsWith(house.URL) ? house.request(r) : Promise.resolve(r.url.includes("geocoding")
         ? { status: 200, body: JSON.stringify({ results: [{ name: "Paris", latitude: 48.85, longitude: 2.35, timezone: "Europe/Paris" }] }) }
         // Wikipedia's summary, a news feed (lib/commands-facts.js).
         : r.url.includes("wikipedia.org") ? { status: 200, body: JSON.stringify({ type: "standard", title: "Ada Lovelace", extract: "An English mathematician." }) }
         : /\/rss|rss\.xml/.test(r.url) ? { status: 200, body: "<rss><channel><item><title>Headline</title><link>https://x.example/1</link></item></channel></rss>" }
         : { status: 200, body: JSON.stringify({ current: { temperature_2m: 20, weather_code: 0 }, daily: { temperature_2m_max: [22], temperature_2m_min: [12] } }) });
     const svc = createAssistantService({ luna, storage, request, now: () => NOW, caller: () => "com.palm.systemui", locale: () => "en-US",
-                                         secrets: { seal: () => Promise.resolve({}), unseal: () => Promise.resolve("") } });
-    return Object.assign(dev, { svc, used });
+                                         secrets: { seal: (v: string) => Promise.resolve({ sealed: v }), unseal: (e: { sealed?: string }) => Promise.resolve(e?.sealed || "") } });
+    return Object.assign(dev, { svc, used, connectHome: () => house.connect(storage) });
 }
 
 describe("what each command may do on a device", () => {
@@ -206,6 +209,8 @@ describe("what each command may do on a device", () => {
             // A routine of the user's to run, list or turn off, with its time (the activity manager).
             if (/^routine/.test(c.id))
                 expect((await d.svc.setRoutine({ routine: { name: "Good night", steps: [{ text: "turn on do not disturb" }], time: "22:00" } })).returnValue).toBe(true);
+            // The user's Home Assistant, connected.
+            if (/^home/.test(c.id)) d.connectHome();
             let m: any;
             if (c.id === "locationAccess") {
                 // Run as its button: the Assistant asks before it uses the location; Allow.

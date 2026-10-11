@@ -12,6 +12,7 @@
 //   en-music.js      shuffle, repeat, favorite songs, the sleep timer, podcasts
 //   en-facts.js      define, spell, coins, dice, random numbers, Wikipedia, the news
 //   en-settings.js   the switches of Settings the toggle command does not have, dark mode
+//   en-home.js       lights, switches, the thermostat, locks and scenes (Home Assistant)
 //
 // Each area: (h) -> {first?: rules tried before every other (before help and
 // undo: an emergency call's "cancel"), rules: [[command, (t, ctx) -> args | null]] (tried
@@ -26,7 +27,7 @@
 "use strict";
 
 var AREAS = [require("./en-sos"), require("./en-notify"), require("./en-routines"), require("./en-capture"), require("./en-places"), require("./en-music"),
-             require("./en-facts"), require("./en-settings")];
+             require("./en-facts"), require("./en-settings"), require("./en-home")];
 
 module.exports = function (h) {
     var areas = AREAS.map(function (make) { return make(h); });

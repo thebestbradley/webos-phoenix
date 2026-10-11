@@ -361,6 +361,8 @@ function createAssistantService(deps) {
     function env() {
         return { luna: deps.luna, request: deps.request, now: now, lang: lang(), units: units(), storage: storage,
                  apps: apps, settings: settings(), setSettings: function (c) { return methods.setSettings(c); },
+                 // Sealed secrets (the Home Assistant token: lib/commands-home.js).
+                 secrets: deps.secrets,
                  // The region (the emergency number: lib/commands-sos.js).
                  locale: deps.locale ? deps.locale() : "" };
     }

@@ -400,6 +400,17 @@ export const assistant = {
         return { feeds: r.feeds || [], defaults: r.defaults || [] };
     },
     async setNewsFeeds(feeds: NewsFeed[]): Promise<NewsFeed[]> { return (await c("setNewsFeeds", { feeds })).feeds || []; },
+    /** The user's Home Assistant (lib/commands-home.js): its address, and how many devices it has. */
+    async homeAssistant(): Promise<HomeAssistantInfo> {
+        const r = await c("homeAssistant");
+        return { url: r.url || "", connected: !!r.connected, entities: r.entities || 0 };
+    },
+    /** Connect it: the address and a long-lived access token, checked first (an error says what is wrong). */
+    async setHomeAssistant(url: string, token: string): Promise<HomeAssistantInfo> {
+        const r = await c("setHomeAssistant", { url, token });
+        return { url: r.url || url, connected: !!r.connected, entities: r.entities || 0 };
+    },
+    async removeHomeAssistant(): Promise<void> { await c("removeHomeAssistant"); },
     /** Home or work set to where the device is now (what the assistant said), or cleared. */
     async setPlace(place: "home" | "work", clear = false): Promise<string> {
         return (await c("setPlace", clear ? { place, clear: true } : { place })).text || "";
@@ -410,6 +421,8 @@ export const assistant = {
 export interface SavedPlaceInfo { id: string; name: string; detail: string; lat: number; lon: number }
 /** A news feed (the service's lib/commands-facts.js): its name and its address. */
 export interface NewsFeed { title: string; url: string }
+/** The user's Home Assistant, as Settings shows it (the token never leaves the service). */
+export interface HomeAssistantInfo { url: string; connected: boolean; entities: number }
 
 /** A routine (the service's lib/commands-routines.js): its steps are requests in words. */
 export interface Routine {

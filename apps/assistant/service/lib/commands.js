@@ -2297,6 +2297,9 @@ function undo(u, env) {
     // A system preference as it was, or the Assistant's own setting (lib/commands-settings.js).
     if (u.kind === "prefs") return lunaCall(env, SYSTEM_SERVICE + "setPreferences", u.prefs || {});
     if (u.kind === "settings") return Promise.resolve(env.setSettings(u.settings || {}));
+    // The everyday features' own (lib/commands-everyday.js: the home's devices as they were).
+    var own = everyday.undo(u, env);
+    if (own) return own;
     return cancel(u.activities).then(function () { return lunaCall(env, DB + "del", { ids: u.ids || [] }); });
 }
 

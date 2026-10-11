@@ -237,6 +237,7 @@ function device(opts) {
         keys: function (prefix) { return Array.from(data.keys()).filter(function (k) { return k.indexOf(prefix) === 0; }); }
     };
     var requests = [];
+    var homeAssistant = require("./home-assistant.cjs").create();
     function request(r) {
         if (opts.llmRequest && /^http:\/\/127\.0\.0\.1[:/]/.test(r.url)) return opts.llmRequest(r);
         requests.push(r.url);
@@ -244,6 +245,8 @@ function device(opts) {
         // A test's own web: opts.http(url) -> {status, body} | null.
         var own = opts.http ? opts.http(r.url) : null;
         if (own) return Promise.resolve(own);
+        // The user's Home Assistant (test/home-assistant.cjs).
+        if (r.url.indexOf(homeAssistant.URL) === 0) return homeAssistant.request(r);
         if (r.url.indexOf("frankfurter") >= 0) return Promise.resolve({ status: 200, body: JSON.stringify({ amount: 20, base: "USD", date: "2026-10-07", rates: { EUR: 17.3 } }) });
         if (r.url.indexOf("api.open-meteo.com/v1/forecast") >= 0 && r.url.indexOf("hourly=") < 0)
             return Promise.resolve({ status: 200, body: JSON.stringify({ current: { temperature_2m: 64.4, weather_code: 2 },
@@ -271,7 +274,8 @@ function device(opts) {
     data.set("assistant:settings", opts.settings || { followUps: false });
     var svc = createAssistantService(Object.assign({ luna: luna, storage: storage, request: request, now: function () { return clock; }, caller: function () { return "com.palm.systemui"; },
                                                      llm: opts.llm, localDeadlineMs: opts.llm ? 600000 : undefined,
-                                                     secrets: { seal: function () { return Promise.resolve({}); }, unseal: function () { return Promise.resolve(""); } },
+                                                     // Sealed as {sealed}: what a test keeps sealed comes back (the Home Assistant token).
+                                                     secrets: { seal: function (v) { return Promise.resolve({ sealed: v }); }, unseal: function (e) { return Promise.resolve(e && e.sealed || ""); } },
                                                      locale: function () { return "en-US"; } }, opts.deps || {}));
     var thread = "";
     // The last message of each answer (all of them: askAll).
@@ -294,7 +298,9 @@ function device(opts) {
     function of(kind) { return Array.from(db.values()).filter(function (o) { return o._kind === kind; }); }
     function called(part) { return calls.filter(function (c) { return c.uri.indexOf(part) >= 0; }); }
     return { svc: svc, db: db, put: put, luna: luna, of: of, calls: calls, called: called, state: state, ask: ask, askAll: askAll, confirm: confirm, choose: choose,
-             requests: requests, storage: storage, thread: function () { return thread; }, newThread: function () { thread = ""; },
+             requests: requests, storage: storage,
+             // The stand-in Home Assistant, and connecting the Assistant to it.
+             homeAssistant: homeAssistant, connectHome: function () { homeAssistant.connect(storage); }, thread: function () { return thread; }, newThread: function () { thread = ""; },
              setNow: function (t) { clock = t; } };
 }
 

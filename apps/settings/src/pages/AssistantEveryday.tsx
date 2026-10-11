@@ -24,9 +24,16 @@
 // And News (NewsFeeds): the feeds "what's the news" reads headlines from
 // (RSS or Atom; lib/commands-facts.js: newsFeeds, setNewsFeeds): each with
 // Remove, and an address to add.
+//
+// And Smart Home (SmartHome): the user's Home Assistant, which "turn off the
+// lights", "set the thermostat to 70" and "lock the front door" go to
+// (lib/commands-home.js: homeAssistant, setHomeAssistant,
+// removeHomeAssistant): its address and a long-lived access token (made in
+// Home Assistant under the user's profile, Security), checked before they
+// are kept; the token sealed by the service and never shown again.
 
 import { useEffect, useRef, useState } from "react";
-import { assistant, type AssistantSettings, type NewsFeed, type SavedPlaceInfo } from "@phoenix/luna";
+import { assistant, type AssistantSettings, type HomeAssistantInfo, type NewsFeed, type SavedPlaceInfo } from "@phoenix/luna";
 import { Button, Group, Note, PopupMenu, Row, Spinner, TextField, ToggleButton } from "@phoenix/ui";
 
 export function MessagesAndDriving({ settings: s, set, off }: { settings: AssistantSettings; set: (c: Partial<AssistantSettings>) => void; off: boolean }) {
@@ -144,6 +151,56 @@ export function NewsFeeds({ off, focus }: { off: boolean; focus?: boolean }) {
                 </div>
             </Group>
             <Note testId="as-feeds-note">{error || "“What’s the news” reads the newest headlines from these."}</Note>
+        </>
+    );
+}
+
+// focus: opened on it (launch params {section: "home"}: the Assistant's "connect it in Settings").
+export function SmartHome({ off, focus }: { off: boolean; focus?: boolean }) {
+    const [info, setInfo] = useState<HomeAssistantInfo | null>(null);
+    const [url, setUrl] = useState("");
+    const [token, setToken] = useState("");
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState("");
+    useEffect(() => {
+        void assistant.homeAssistant().then((r) => { setInfo(r); if (r.url) setUrl(r.url); }, () => setInfo({ url: "", connected: false, entities: 0 }));
+    }, []);
+    const top = useRef<HTMLDivElement | null>(null), shown = useRef(false);
+    useEffect(() => {
+        if (!focus || !info || shown.current) return;
+        shown.current = true;
+        top.current?.scrollIntoView?.({ block: "start" });
+    }, [focus, info]);
+    const connect = () => {
+        setBusy(true);
+        setError("");
+        assistant.setHomeAssistant(url.trim(), token.trim()).then((r) => { setInfo(r); setToken(""); }, (e: Error) => setError(e.message))
+            .finally(() => setBusy(false));
+    };
+    const disconnect = () => { void assistant.removeHomeAssistant().then(() => setInfo({ url: info?.url ?? "", connected: false, entities: 0 })); };
+    return (
+        <>
+            <div ref={top} />
+            <Group label="Smart Home">
+                {info?.connected ? (
+                    <>
+                        <Row title="Home Assistant" subtitle={`${info.url}${info.entities ? ` · ${info.entities} device${info.entities === 1 ? "" : "s"} and scenes` : ""}`}
+                             disabled={off} testId="as-home-connected" />
+                        <div className="as-feed-add">
+                            <Button variant="dark" disabled={off} onClick={disconnect} data-testid="as-home-remove">Disconnect</Button>
+                        </div>
+                    </>
+                ) : (
+                    <div className="as-feed-add">
+                        <TextField value={url} onChange={setUrl} label="Home Assistant address" placeholder="http://homeassistant.local:8123" testId="as-home-url" />
+                        <TextField type="password" value={token} onChange={setToken} onSubmit={connect} label="Long-lived access token" placeholder="token" testId="as-home-token" />
+                        <Button variant="dark" busy={busy} disabled={off || !url.trim() || !token.trim()} onClick={connect} data-testid="as-home-connect">Connect</Button>
+                    </div>
+                )}
+            </Group>
+            <Note testId="as-home-note">{error || (info?.connected
+                ? "“Turn off the lights”, “set the thermostat to 70”, “is the front door locked?” and your scenes by name. Unlocking and opening are asked first."
+                : "Lights, switches, the thermostat, locks and scenes, through your Home Assistant. Make a token in Home Assistant: your profile, Security, Long-lived access tokens.")}</Note>
         </>
     );
 }

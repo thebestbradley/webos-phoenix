@@ -17424,7 +17424,7 @@
          "connect", "retry", "voice",
          // The everyday features' own (lib/commands-everyday.js; assistant.js METHODS).
          "announce", "driving", "routines", "setRoutine", "removeRoutine", "runRoutine", "routineWake", "routineEvent",
-         "places", "setPlace", "placeWake", "sleepWake", "newsFeeds", "setNewsFeeds"].forEach(function (name) {
+         "places", "setPlace", "placeWake", "sleepWake", "newsFeeds", "setNewsFeeds", "homeAssistant", "setHomeAssistant", "removeHomeAssistant"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
                 var m;
                 try { m = service(); } catch (e) { return reply(fail(-1, String(e.message || e))); }

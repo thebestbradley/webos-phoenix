@@ -2538,7 +2538,9 @@ var say = {
     },
     beyond: function (what) {
         return { translate: "I can't translate without a language model yet, but I can search the web for it.",
-                 home: "I can't control other devices, like lights, TVs, doors or cars, from here yet.",
+                 home: "I can't control other devices, like lights, TVs, doors or cars, by myself. With Home Assistant, I can: connect it in Settings > Assistant > Smart Home.",
+                 // Home Assistant connected, the words none of its (lib/lang/en-home.js).
+                 homeOther: "I can turn things in your Home Assistant on and off, set lights, fans and the thermostat, lock and unlock doors, open and close garage doors and blinds, and turn on scenes, but not that.",
                  money: "I can't send or pay money from here.",
                  order: "I can't order or buy things for you yet.",
                  booking: "I can't book things for you yet.",

@@ -43,4 +43,6 @@ module.exports = {
     wikipedia: "look up Ada Lovelace on Wikipedia", news: "what's the news",
     deviceSetting: "turn off keyboard clicks",
     emergency: "call 911", emergencyCancel: "cancel the emergency call", emergencyText: "text my location to my emergency contacts",
+    // With Home Assistant connected (test/home-assistant.cjs).
+    home: "turn off the kitchen light", homeScene: "activate movie night",
 };

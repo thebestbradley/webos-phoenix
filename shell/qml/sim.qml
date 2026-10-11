@@ -2055,6 +2055,7 @@ Item {
     // text received (as the toolbar's SMS button); "@lock" locks;
     // "@starter:<id>" adds one of the routines' starters ("goodnight");
     // "@location:<lat>,<lon>" moves the simulated phone (Simulate > Location);
+    // "@homeassistant:<url>,<token>" connects a Home Assistant (Settings > Assistant > Smart Home);
     // "@dashboard" opens the notification dashboard;
     // "@open:<appId>:<params JSON>" opens an app, the view closed; "@close"
     // closes the view (what it opened behind it shows); "@tap:<choice>" taps
@@ -2144,6 +2145,14 @@ Item {
                     if (ll.length === 2 && !isNaN(ll[0]) && !isNaN(ll[1]))
                         windows.lunaCall("luna://com.webos.service.location/mock/setLocation",
                                          { name: "gps", location: { latitude: ll[0], longitude: ll[1] } }, function () {});
+                } else if (step.indexOf("@homeassistant:") === 0) {
+                    // The user's Home Assistant connected ("@homeassistant:http://127.0.0.1:8123,<token>"),
+                    // as Settings > Assistant > Smart Home connects it.
+                    var ha = step.slice(15), comma = ha.lastIndexOf(",");
+                    windows.lunaCall("luna://org.webosphoenix.assistant/setHomeAssistant",
+                                     { url: ha.slice(0, comma), token: ha.slice(comma + 1) }, function (r) {
+                        console.info("phoenix-sim: Home Assistant: " + JSON.stringify(r));
+                    });
                 } else if (step.indexOf("@open:") === 0) {
                     // An app with launch params ("@open:org.webosphoenix.settings:{\"page\":\"assistant\"}").
                     var rest = step.slice(6), colon = rest.indexOf(":");
