@@ -392,9 +392,9 @@ second after (the adaptive simulator resizes in a stream of sizes).
 | 1 | This plan | done |
 | 2 | The switch: `Theme.look`, the `look` preference, the simulator's `--look`; `EmberGlass.qml` from the tokens | done |
 | 3 | The gesture light and the gesture strip | done |
-| 4 | The wallpaper under the whole screen, the card view's cards (corners, shadow, rim, the loading card's glass), the stack's label, the floor light, the status bar (phones; the tablet's notification group is still 1.0's) | done |
+| 4 | The wallpaper under the whole screen, the card view's cards (corners, shadow, rim, the loading card's glass), the stack's label, the floor light, the status bar (phones; tablets: step 11) | done |
 | 5 | The shell contract: `WallpaperBlur`, the window's place for each web app, the runtime's side; tests (QML, the runtime in Chromium, the simulator lining the blur up) | done |
-| 6 | Just Type's pill and the dock (phones; the tablet's dock is still 1.0's) | done |
+| 6 | Just Type's pill and the dock (phones; tablets: step 11) | done |
 | 7 | The phone's notification bar under the dock, the banner, the active call; the dock 10 px over the bar | done |
 | 8 | The dashboard: its sheet, the rows, the stacks, the drawer | done |
 | 9 | The system menu | done |
@@ -468,7 +468,9 @@ is not installed (owner question 4); the side cards lie flat (owner question
 1); the stack's label is the card's title (the renders: the app's name); the
 gesture light is dim in the card view (owner question 2); in the card view
 the status bar shows the carrier without the tab (1.0 does; the renders draw
-a tab). The test pages are not the renders' apps: their content differs.
+a tab); a tablet's status bar shows the time without the date (1.0's did);
+the system menu's rows keep 1.0's labels and have no toggles. The test
+pages are not the renders' apps: their content differs.
 
 ## Questions for the owner
 1. **The card view's 3D deck.** `cards.html` turns the side cards 26° in
