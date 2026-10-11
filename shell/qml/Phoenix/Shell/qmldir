@@ -77,3 +77,4 @@ ClipStrip 1.0 ClipStrip.qml
 KeyboardButton 1.0 KeyboardButton.qml
 SignInBar 1.0 SignInBar.qml
 WallpaperBlur 1.0 WallpaperBlur.qml
+EgIcon 1.0 EgIcon.qml

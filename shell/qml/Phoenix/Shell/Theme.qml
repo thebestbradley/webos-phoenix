@@ -320,7 +320,8 @@ QtObject {
     readonly property real nonActiveCardRatio: tablet ? 0.50 : 0.61  // conf/luna-topaz.conf / Settings.cpp:211
     readonly property real minimumCardScale: 0.26                    // CardWindowManager.cpp:60
     readonly property int searchPillAllowance: px(48)                // CardWindowManager.cpp:780-786
-    readonly property int searchPillTopOffset: px(9)                 // layoutsettings.cpp:93, below the status bar
+    // Ember Glass: 14, the Just Type bar's top at 46 (cards.html .jt).
+    readonly property int searchPillTopOffset: px(emberGlass ? 14 : 9)  // layoutsettings.cpp:93, below the status bar
     readonly property real cardOriginRatio: 0.40                     // CardWindowManager.cpp:56 kWindowOriginRatio
     readonly property int gapBetweenCards: px(tablet ? 30 : 10)       // Settings.cpp:214 / luna-topaz.conf
     // Card stacks (CardGroup.cpp:699-771): how far apart fanned cards sit

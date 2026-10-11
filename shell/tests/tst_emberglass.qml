@@ -301,5 +301,51 @@ Item {
             compare(picture.y, -32);
             compare(picture.height, 994);
         }
+
+        // The status bar in Ember Glass (base.css .statusbar): the scrim,
+        // the signal and Wi-Fi as Phosphor's glyphs, the battery as a cell
+        // with its charge, the app's name in the app menu's tab; 1.0's
+        // drawing in 1.0's look.
+        function test_statusBar() {
+            var scrim = findChild(shell, "emberStatusScrim");
+            verify(!scrim.visible);
+            verify(findChild(shell, "statusBarFill").visible);
+            shell.look = "ember-glass";
+            verify(scrim.visible);
+            verify(!findChild(shell, "statusBarFill").visible);
+            var signal = findChild(shell, "emberSignalIcon"), wifi = findChild(shell, "emberWifiIcon");
+            verify(signal.visible && wifi.visible);
+            sys.signalBars = 5;
+            compare(signal.name, "cell-signal-full");
+            sys.signalBars = 3;
+            compare(signal.name, "cell-signal-medium");
+            sys.wifiBars = 2;
+            compare(wifi.name, "wifi-medium");
+            verify(signal.glyph !== null && wifi.glyph !== null, "the glyphs are there");
+            verify(!findChild(shell, "rssiIcon").shown && !findChild(shell, "wifiIcon").shown);
+            sys.batteryPercent = 50;
+            var fill = findChild(shell, "emberBatteryFill");
+            verify(findChild(shell, "emberBattery").visible);
+            compare(fill.width, Math.round((Theme.px(22) - 2 * Theme.px(2)) * 0.5));
+            verify(!findChild(shell, "battery").visible);
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize(uid);
+            tryVerify(function() { return shell.maximized; }, 2000);
+            tryVerify(function() { return findChild(findChild(shell, "statusBarTitle"), "emberAppMenuTab").visible; }, 2000);
+            shell.look = "classic";
+            verify(!scrim.visible && !signal.visible && !findChild(shell, "emberBattery").visible);
+            verify(findChild(shell, "battery").visible);
+            sys.signalBars = 5;
+            sys.wifiBars = 3;
+        }
+
+        // Just Type's pill: the mock-ups' glass capsule in Ember Glass.
+        function test_searchPill() {
+            var pill = findChild(shell, "emberSearchPill");
+            verify(!pill.visible);
+            shell.look = "ember-glass";
+            verify(pill.visible);
+            compare(shell.searchPill.width, Math.min(Theme.px(588), shell.searchPill.parent.width - Theme.px(36)));
+        }
     }
 }

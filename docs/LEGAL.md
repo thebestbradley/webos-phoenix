@@ -166,6 +166,17 @@ Italic, Medium, Bold), Apache-2.0, copied from the Flutter SDK's
 under the Bitstream Vera license, from Debian's `fonts-dejavu-core`. Each
 folder keeps its license text.
 
+## Phoenix 2.0's look: Ember Glass (`shell/design/`)
+
+The shell's Ember Glass look (docs/SYSTEM-UI-2.md) takes its values from Ember
+Glass UI's design tokens (github.com/thebestbradley/ember-glass-ui,
+Apache-2.0), copied with their commit in `shell/design/`, and draws a few
+Phosphor glyphs (github.com/phosphor-icons/core, MIT; the licence text is
+`shell/design/LICENSE-phosphor`) as path data. Its font, Manrope (SIL OFL
+1.1), is not shipped: the shell uses it where it is installed, else Open Sans
+(owner question 4 in SYSTEM-UI-2.md). `shell/design/PROVENANCE.md` has the
+details.
+
 ## Original apps and frameworks (`third_party/`)
 
 Git submodules of the Open webOS repositories (`openwebos/core-apps`,

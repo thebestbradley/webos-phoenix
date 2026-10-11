@@ -6,6 +6,12 @@
 // system menu, tapping the app name opens the app menu. On the lock screen
 // it is LockWindow's own bar (StatusBar::TypeLockScreen): the date in the
 // centre instead of the time, and neither menu.
+//
+// In Ember Glass (Phoenix 2.0; docs/SYSTEM-UI-2.md, 3) the same bar is drawn
+// as the mock-ups draw it (base.css .statusbar, app.js frame()): 32 px, a
+// scrim over the wallpaper, the app's name in the app menu's tab, the clock
+// in Ember Glass's type, the signal and Wi-Fi as Phosphor glyphs and the
+// battery as a cell with its charge. What it shows, and when, is the same.
 
 import QtQuick
 import Phoenix.Native
@@ -92,8 +98,20 @@ Item {
     // Phones: solid black. Tablets: #515558 under the tiled art, faded in
     // over 300 ms while an app, the launcher or Just Type is up
     // (lunaAnimations.conf statusBarFade*), the wallpaper through it otherwise.
+    // Ember Glass: a scrim over the wallpaper, black 50% to 25% (base.css
+    // .statusbar), on phones and tablets.
+    Rectangle {
+        objectName: "emberStatusScrim"
+        anchors.fill: parent
+        visible: Theme.emberGlass
+        gradient: Gradient {
+            GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.5) }
+            GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.25) }
+        }
+    }
     Rectangle {
         objectName: "statusBarFill"
+        visible: !Theme.emberGlass
         anchors.fill: parent
         color: Theme.tablet ? bar.fillColor : Theme.statusBarFill
         Behavior on color { ColorAnimation { duration: Theme.statusBarColorChangeDuration } }
@@ -103,7 +121,7 @@ Item {
     // Tablet only: tiled bar art over the fill (StatusBar.cpp:227,240-262).
     ArtTiledImage {
         anchors.fill: parent
-        visible: Theme.tablet
+        visible: Theme.tablet && !Theme.emberGlass
         source: Theme.asset("statusBar/status-bar-background.png")
         fillMode: Image.TileHorizontally
     }
@@ -148,10 +166,36 @@ Item {
         property string text
         property bool border
         height: bar.height
-        width: border ? Theme.px(Theme.statusBarTitleCapLeft) + label.width + Theme.px(Theme.statusBarTitleCapRight)
+        width: Theme.emberGlass ? (border ? egTab.width : Theme.px(10) + label.width)
+             : border ? Theme.px(Theme.statusBarTitleCapLeft) + label.width + Theme.px(Theme.statusBarTitleCapRight)
                       : Theme.statusBarTitlePadding + label.width
+        // Ember Glass: the app menu's tab (base.css .appmenu-tab): a 24 px
+        // capsule of white at 7% with a white hairline at 38%, 10 px in
+        // from the bar's edge, the name in 12.5 px semibold and a caret.
+        Rectangle {
+            id: egTab
+            objectName: "emberAppMenuTab"
+            visible: Theme.emberGlass && t.border
+            x: Theme.px(10)
+            anchors.verticalCenter: parent.verticalCenter
+            height: Theme.px(24)
+            width: Theme.px(12) + label.width + Theme.px(4) + caret.width + Theme.px(9)
+            radius: height / 2
+            color: Qt.rgba(1, 1, 1, 0.07)
+            border.color: Qt.rgba(1, 1, 1, 0.38)
+            border.width: Math.max(1, EmberGlass.hairline * Theme.u)
+            EgIcon {
+                id: caret
+                name: "caret-down"
+                x: parent.width - Theme.px(9) - width
+                anchors.verticalCenter: parent.verticalCenter
+                width: Theme.px(12)
+                height: width
+                opacity: 0.75
+            }
+        }
         ArtBorderImage {
-            visible: t.border
+            visible: t.border && !Theme.emberGlass
             anchors.verticalCenter: parent.verticalCenter
             width: parent.width
             height: Theme.px(26)
@@ -160,9 +204,10 @@ Item {
         }
         Text {
             id: label
-            x: t.border ? Theme.statusBarTitleBorderPadding : Theme.statusBarTitlePadding
+            x: Theme.emberGlass ? (t.border ? egTab.x + Theme.px(12) : Theme.px(10))
+               : t.border ? Theme.statusBarTitleBorderPadding : Theme.statusBarTitlePadding
             anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: Theme.statusBarTitleBaselineOffset
+            anchors.verticalCenterOffset: Theme.emberGlass ? 0 : Theme.statusBarTitleBaselineOffset
             // Elided to the 140 px title less its caps or padding
             // (setTitleString, :131-135).
             width: Math.min(implicitWidth, Theme.statusBarTitleMaxWidth
@@ -171,9 +216,14 @@ Item {
             elide: Text.ElideRight
             text: t.text
             color: Theme.text
-            font: bar._titleFont
+            font: Theme.emberGlass ? (t.border ? bar._egTabFont : bar._egFont) : bar._titleFont
         }
     }
+    // Ember Glass's type in the bar: 13.5 px semibold (.statusbar), the
+    // tab's 12.5 px, letters .2 px apart (.appmenu-tab).
+    readonly property font _egFont: Qt.font({ family: Theme.egFontFamily, pixelSize: Math.round(Theme.u * 13.5), weight: Font.DemiBold })
+    readonly property font _egTabFont: Qt.font({ family: Theme.egFontFamily, pixelSize: Math.round(Theme.u * 12.5), weight: Font.DemiBold,
+                                                 letterSpacing: 0.2 * Theme.u })
 
     Title {
         id: oldTitle
@@ -266,9 +316,11 @@ Item {
         x: bar._clockX(width)
         text: bar.clockText
         color: Theme.text
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.statusBarClockFontSize
+        font: Theme.emberGlass ? bar._egClockFont : Qt.font({ family: Theme.fontFamily, pixelSize: Theme.statusBarClockFontSize })
     }
+    // Ember Glass's clock: 13.5 px medium, letters .3 px apart (.sb-clock).
+    readonly property font _egClockFont: Qt.font({ family: Theme.egFontFamily, pixelSize: Math.round(Theme.u * 13.5), weight: Font.Medium,
+                                                   letterSpacing: 0.3 * Theme.u })
 
     // ---- Right: indicators ----------------------------------------------------------
 
@@ -358,10 +410,11 @@ Item {
         anchors.right: parent.right
         // Tablets: left of the arrow and ARROW_SPACING on both its sides
         // (layoutRight, :479-487); without one, a few pixels' padding.
+        // Ember Glass: 14 px (.statusbar's padding).
         anchors.rightMargin: bar.cornerInset + (bar._systemArrow && bar._systemArrowProgress > 0
-                             ? systemArrow.width + 2 * Theme.px(7) : Theme.px(6))
+                             ? systemArrow.width + 2 * Theme.px(7) : Theme.px(Theme.emberGlass ? 14 : 6))
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Theme.statusBarIconSpacing
+        spacing: Theme.emberGlass ? Theme.px(7) : Theme.statusBarIconSpacing
 
         // StatusBarInfo paints right to left from the battery: RSSI, WAN,
         // Bluetooth, Wi-Fi, TTY, HAC, call forward, roaming, VPN, rotation
@@ -450,7 +503,7 @@ Item {
             objectName: "wifiIcon"
             readonly property bool connecting: !!bar.system && bar.system.wifiBars === 0 && !!bar.system.wifiNetworks
                                                && bar.system.wifiNetworks.some(function(n) { return n.state === "connecting"; })
-            shown: !!bar.system && !bar.system.airplaneMode && bar.system.wifiBars >= 0
+            shown: !!bar.system && !bar.system.airplaneMode && bar.system.wifiBars >= 0 && !Theme.emberGlass
             source: !bar.system ? "" : connecting ? Theme.asset("statusBar/wifi-connecting.png")
                     : Theme.asset("statusBar/wifi-" + Math.max(0, bar.system.wifiBars) + ".png")
         }
@@ -489,8 +542,28 @@ Item {
         // updateRSSIIcon(false, RSSI_FLIGHT_MODE)); it showed a second plane.
         Indicator {
             objectName: "rssiIcon"
-            shown: !!bar.system && !bar.system.airplaneMode && bar.system.signalBars >= 0
+            shown: !!bar.system && !bar.system.airplaneMode && bar.system.signalBars >= 0 && !Theme.emberGlass
             source: !bar.system ? "" : Theme.asset("statusBar/rssi-" + Math.max(0, bar.system.signalBars) + ".png")
+        }
+        // Ember Glass: the signal and Wi-Fi as Phosphor's glyphs, 15 px
+        // (.sb-right .ic), 7 px apart (the mock-up's order: signal, Wi-Fi,
+        // battery).
+        EgIcon {
+            objectName: "emberSignalIcon"
+            visible: Theme.emberGlass && !!bar.system && !bar.system.airplaneMode && bar.system.signalBars >= 0
+            anchors.verticalCenter: parent.verticalCenter
+            width: Theme.px(15)
+            height: width
+            name: !bar.system ? "" : ["cell-signal-none", "cell-signal-low", "cell-signal-low", "cell-signal-medium",
+                                      "cell-signal-high", "cell-signal-full"][Math.max(0, Math.min(5, bar.system.signalBars))]
+        }
+        EgIcon {
+            objectName: "emberWifiIcon"
+            visible: Theme.emberGlass && !!bar.system && !bar.system.airplaneMode && bar.system.wifiBars >= 0
+            anchors.verticalCenter: parent.verticalCenter
+            width: Theme.px(15)
+            height: width
+            name: !bar.system ? "" : ["wifi-none", "wifi-low", "wifi-medium", "wifi-high"][Math.max(0, Math.min(3, bar.system.wifiBars))]
         }
         // The charge, in the bar's 14 px bold beside the icon, coloured as
         // the patches did: red when low (the battery's own red states, at
@@ -498,7 +571,7 @@ Item {
         Text {
             objectName: "batteryPercent"
             readonly property int pct: bar.system ? bar.system.batteryPercent : -1
-            visible: bar.batteryPercent && pct >= 0
+            visible: bar.batteryPercent && pct >= 0 && !Theme.emberGlass
             anchors.verticalCenter: parent.verticalCenter
             text: pct + "%"
             color: bar.system && bar.system.charging ? "#8CE05A" : pct <= Theme.batteryChargeLevels[0] ? "#FF4D40"
@@ -507,8 +580,46 @@ Item {
             font.pixelSize: Theme.statusBarFontSize
             font.bold: true
         }
+        // Ember Glass: the battery as a cell (.sb-batt: 22 x 11, 3.5 px
+        // corners, a white 55% edge, filled to the charge 2 px in), then the
+        // charge, 12 px semibold. Red when low (the battery's own red states,
+        // 12% and under), green while charging, as 1.0's percentage.
+        Row {
+            objectName: "emberBattery"
+            visible: Theme.emberGlass && !!bar.system
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Theme.px(5)
+            readonly property int pct: bar.system ? bar.system.batteryPercent : -1
+            readonly property color tone: bar.system && bar.system.charging ? "#8CE05A" : pct >= 0 && pct <= Theme.batteryChargeLevels[0] ? "#FF7A66" : "white"
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: Theme.px(22)
+                height: Theme.px(11)
+                radius: 3.5 * Theme.u
+                color: "transparent"
+                border.color: Qt.rgba(1, 1, 1, 0.55)
+                border.width: Math.max(1, Theme.u)
+                Rectangle {
+                    objectName: "emberBatteryFill"
+                    x: Theme.px(2)
+                    y: Theme.px(2)
+                    height: parent.height - 2 * Theme.px(2)
+                    width: Math.round((parent.width - 2 * Theme.px(2)) * Math.max(0, Math.min(100, parent.parent.pct)) / 100)
+                    radius: 1.5 * Theme.u
+                    color: parent.parent.tone
+                }
+            }
+            Text {
+                visible: parent.pct >= 0
+                anchors.verticalCenter: parent.verticalCenter
+                text: parent.pct
+                color: "white"
+                font: Qt.font({ family: Theme.egFontFamily, pixelSize: Math.round(Theme.u * 12), weight: Font.DemiBold })
+            }
+        }
         Image {
             objectName: "battery"
+            visible: !Theme.emberGlass
             readonly property int step: bar.system ? Theme.batteryState(bar.system.batteryPercent) : 0
             // States 0-11 are battery-N; the full one reuses battery-11, or
             // battery-charged while charging (StatusBarBattery.cpp:150-172).
