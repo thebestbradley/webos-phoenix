@@ -80,6 +80,38 @@ QtObject {
         return Math.min(width, height) / density >= tabletMinSide;
     }
 
+    // ---- Look (Phoenix 2.0) -----------------------------------------------
+
+    // Phoenix 2.0's Ember Glass beside 1.0's look (docs/SYSTEM-UI-2.md):
+    // "classic" (1.0's, the default) or "ember-glass". Set by Shell.qml
+    // from the system preference "look" or phoenix-sim's --look. Each part
+    // of the shell keeps its 1.0 drawing and draws Ember Glass's beside it
+    // when emberGlass is true; what it does stays the same. Ember Glass's
+    // values are EmberGlass's (generated from Ember Glass UI's tokens,
+    // tools/gen-ember-glass-qml.cjs), in CSS px: one legacy pixel each, so
+    // through px() like every length here.
+    property string look: "classic"
+    readonly property bool emberGlass: look === "ember-glass"
+    // The theme of Ember Glass's sheets (the system menu, the dashboard,
+    // dialogs): "light" or "dark". Dark until the system has a theme
+    // preference (docs/SYSTEM-UI-2.md, owner question 8). eg is its tokens
+    // (EmberGlass.light or .dark).
+    property string egTheme: "dark"
+    readonly property QtObject eg: egTheme === "light" ? EmberGlass.light : EmberGlass.dark
+    // Ember Glass's type: the first of its families that is installed
+    // (Manrope, SIL OFL, is not shipped: owner question 4), else Open Sans,
+    // which Phoenix ships.
+    readonly property string egFontFamily: {
+        var have = Qt.fontFamilies(), want = EmberGlass.fontFamilySans;
+        for (var i = 0; i < want.length; ++i)
+            if (have.indexOf(want[i]) >= 0)
+                return want[i];
+        return "Open Sans";
+    }
+    // A colour token with its alpha scaled (a glow fading out, a light
+    // breathing).
+    function egAlpha(c, a) { return Qt.rgba(c.r, c.g, c.b, c.a * a) }
+
     // ---- Typography -------------------------------------------------------
 
     // Legacy webOS used Prelude (conf/luna.conf [Fonts]), which is not
@@ -114,7 +146,12 @@ QtObject {
     // as luna-sysmgr's default was a file its conf/defaultPreferences.txt
     // named. The system service's default wallpaper preference
     // (runtime/phoenix-runtime.js) is the same file.
-    readonly property string defaultWallpaperPath: "/usr/palm/applications/org.webosphoenix.settings/wallpapers/northern-lights.jpg"
+    // Ember Glass is drawn over the phoenix (Settings' phoenix.jpg; SPEC.md,
+    // "Licences"): its default while the user has chosen none
+    // (docs/SYSTEM-UI-2.md, owner question 3), in the runtime too.
+    readonly property string defaultWallpaperPath: emberGlass
+        ? "/usr/palm/applications/org.webosphoenix.settings/wallpapers/phoenix.jpg"
+        : "/usr/palm/applications/org.webosphoenix.settings/wallpapers/northern-lights.jpg"
 
     // ---- Status bar (luna-sysmgr/images/statusBar/status-bar-background.png is 28px tall)
 
@@ -127,7 +164,8 @@ QtObject {
     // cutouts", LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT). The original's
     // phones had no cutout: 0 there, and the bar is the Pre's 28 px.
     property int safeAreaTop: 0
-    readonly property int statusBarHeight: Math.max(px(28), safeAreaTop)
+    // Ember Glass: 32 (size.statusbar), a scrim over the wallpaper.
+    readonly property int statusBarHeight: Math.max(px(emberGlass ? EmberGlass.sizeStatusbar : 28), safeAreaTop)
     readonly property int statusBarTitleMaxWidth: px(140)   // Src/base/settings/Settings.cpp:179
     readonly property int statusBarFadeDuration: motion(300)                 // conf/lunaAnimations.conf:112-113 (linear)
     readonly property int statusBarIconSpacing: px(5)                // StatusBarIcon.h:35 ICON_SPACING
@@ -258,7 +296,8 @@ QtObject {
     // Only a device whose maker uses a hardware Home button in its place
     // (Shell.hardwareHomeButton, DeviceConfig) goes without the strip.
     property bool hardwareHomeButton: false
-    readonly property int gestureAreaHeight: hardwareHomeButton ? 0 : px(20)
+    // Ember Glass: 22 (size.gesture-strip), a scrim over the wallpaper.
+    readonly property int gestureAreaHeight: hardwareHomeButton ? 0 : px(emberGlass ? EmberGlass.sizeGestureStrip : 20)
     // Tablet bottom-edge flick (G1): where it starts, and how far it goes.
     readonly property int bezelEdgeHeight: px(8)                     // Phoenix: stands in for the bezel
     readonly property int bezelFlickMinimum: Math.round(30 * gestureScale)          // Phoenix: as GestureArea's swipe

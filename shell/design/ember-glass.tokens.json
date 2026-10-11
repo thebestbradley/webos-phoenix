@@ -1,0 +1,982 @@
+{
+  "$description": "Ember Glass, the look of the Phoenix UI layer for webOS Phoenix 2.0. Read off the mock-ups: docs/design-2.0/directions/ember-glass/assets/base.css and SPEC.md in webos-phoenix. Format: W3C Design Tokens (DTCG 2025.10). Themed tokens live under theme.light and theme.dark, which have the same shape.",
+  "font": {
+    "family": {
+      "sans": {
+        "$type": "fontFamily",
+        "$value": ["Manrope Variable", "Manrope", "Open Sans", "system-ui", "sans-serif"],
+        "$description": "Manrope (SIL OFL 1.1), variable 200-800; Open Sans as the fallback. The font is an open owner question (Q119): docs/ARCHITECTURE.md."
+      }
+    }
+  },
+  "type": {
+    "display": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": {"value": 44, "unit": "px"},
+        "fontWeight": 250,
+        "letterSpacing": {"value": -1.4, "unit": "px"},
+        "lineHeight": 1.1364
+      },
+      "$description": "Screen titles (\"Settings\")"
+    },
+    "title-xl": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 34, "unit": "px"}, "fontWeight": 300, "letterSpacing": {"value": -1, "unit": "px"}, "lineHeight": 1.1765}
+    },
+    "title-l": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": {"value": 26, "unit": "px"},
+        "fontWeight": 350,
+        "letterSpacing": {"value": -0.6, "unit": "px"},
+        "lineHeight": 1.2308
+      }
+    },
+    "title": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": {"value": 18, "unit": "px"},
+        "fontWeight": 600,
+        "letterSpacing": {"value": -0.2, "unit": "px"},
+        "lineHeight": 1.3333
+      }
+    },
+    "body": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": {"value": 15.5, "unit": "px"},
+        "fontWeight": 450,
+        "letterSpacing": {"value": 0, "unit": "px"},
+        "lineHeight": 1.4839
+      }
+    },
+    "small": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": {"value": 13.5, "unit": "px"},
+        "fontWeight": 500,
+        "letterSpacing": {"value": 0, "unit": "px"},
+        "lineHeight": 1.4074
+      }
+    },
+    "micro": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": {"value": 11, "unit": "px"},
+        "fontWeight": 700,
+        "letterSpacing": {"value": 1.6, "unit": "px"},
+        "lineHeight": 1.2727
+      },
+      "$description": "Group headers and labels; uppercase",
+      "$extensions": {"org.webosphoenix.ember-glass": {"textTransform": "uppercase"}}
+    },
+    "row-title": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": {"value": 16, "unit": "px"},
+        "fontWeight": 550,
+        "letterSpacing": {"value": -0.1, "unit": "px"},
+        "lineHeight": 1.375
+      },
+      "$description": "A list row's title"
+    },
+    "row-subtitle": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": {"value": 13.5, "unit": "px"},
+        "fontWeight": 400,
+        "letterSpacing": {"value": 0, "unit": "px"},
+        "lineHeight": 1.4074
+      },
+      "$description": "A list row's second line"
+    },
+    "numeral": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": {"value": 56, "unit": "px"},
+        "fontWeight": 200,
+        "letterSpacing": {"value": -2.5, "unit": "px"},
+        "lineHeight": 1.0357
+      },
+      "$description": "Big numbers (the storage card's 82)"
+    },
+    "numeral-unit": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": {"value": 26, "unit": "px"},
+        "fontWeight": 200,
+        "letterSpacing": {"value": -0.5, "unit": "px"},
+        "lineHeight": 2.2308
+      },
+      "$description": "The unit after a big number (%)"
+    },
+    "label": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 14.5, "unit": "px"}, "fontWeight": 600, "letterSpacing": {"value": 0.1, "unit": "px"}, "lineHeight": 1},
+      "$description": "Pills (buttons)"
+    },
+    "label-small": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 13, "unit": "px"}, "fontWeight": 600, "letterSpacing": {"value": 0.1, "unit": "px"}, "lineHeight": 1},
+      "$description": "Small pills"
+    },
+    "field": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 18, "unit": "px"}, "fontWeight": 450, "letterSpacing": {"value": 0, "unit": "px"}, "lineHeight": 1.4444},
+      "$description": "A text field's value"
+    },
+    "search": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 15, "unit": "px"}, "fontWeight": 500, "letterSpacing": {"value": 0, "unit": "px"}, "lineHeight": 1.2},
+      "$description": "The search capsule's text"
+    },
+    "menu-item": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 15, "unit": "px"}, "fontWeight": 550, "letterSpacing": {"value": 0, "unit": "px"}, "lineHeight": 1.2},
+      "$description": "App menu items"
+    },
+    "segment": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 13.5, "unit": "px"}, "fontWeight": 600, "letterSpacing": {"value": 0, "unit": "px"}, "lineHeight": 1.2},
+      "$description": "Segmented control labels"
+    },
+    "toolbar-title": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 17, "unit": "px"}, "fontWeight": 600, "letterSpacing": {"value": 0, "unit": "px"}, "lineHeight": 1.2},
+      "$description": "A toolbar's title"
+    },
+    "tab": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 14.5, "unit": "px"}, "fontWeight": 600, "letterSpacing": {"value": 0, "unit": "px"}, "lineHeight": 1.3103},
+      "$description": "Tabs (components.html .tabs > div; Manrope's normal line height, 19 px)"
+    },
+    "dialog-title": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 22, "unit": "px"}, "fontWeight": 400, "letterSpacing": {"value": -0.4, "unit": "px"}, "lineHeight": 1.2727},
+      "$description": "A dialog's question (components.html .dialog .h)"
+    },
+    "banner-title": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 15, "unit": "px"}, "fontWeight": 650, "letterSpacing": {"value": 0, "unit": "px"}, "lineHeight": 1.4},
+      "$description": "A notification's sender (components.html .banner .t; 21 px, the normal line height)"
+    },
+    "banner-text": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 14, "unit": "px"}, "fontWeight": 400, "letterSpacing": {"value": 0, "unit": "px"}, "lineHeight": 1.4286},
+      "$description": "A notification's text (components.html .banner .s)"
+    },
+    "caption": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 12, "unit": "px"}, "fontWeight": 600, "letterSpacing": {"value": 0, "unit": "px"}, "lineHeight": 1.4167},
+      "$description": "Captions and times (components.html .cap, .banner .when; 17 px)"
+    },
+    "avatar": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 15, "unit": "px"}, "fontWeight": 600, "letterSpacing": {"value": 0.4, "unit": "px"}, "lineHeight": 1},
+      "$description": "A person's initials (base.css .av)"
+    },
+    "avatar-large": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 17, "unit": "px"}, "fontWeight": 600, "letterSpacing": {"value": 0.4, "unit": "px"}, "lineHeight": 1}
+    },
+    "avatar-small": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 13, "unit": "px"}, "fontWeight": 600, "letterSpacing": {"value": 0.4, "unit": "px"}, "lineHeight": 1}
+    },
+    "avatar-xsmall": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 11, "unit": "px"}, "fontWeight": 600, "letterSpacing": {"value": 0.4, "unit": "px"}, "lineHeight": 1}
+    },
+    "badge": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 11.5, "unit": "px"}, "fontWeight": 700, "letterSpacing": {"value": 0, "unit": "px"}, "lineHeight": 1.3043},
+      "$description": "An unread count (messaging-list.html .conv .n; the normal line height, 15 px, centred in its pill)"
+    },
+    "chip": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 13, "unit": "px"}, "fontWeight": 600, "letterSpacing": {"value": 0, "unit": "px"}, "lineHeight": 1},
+      "$description": "A chip: one of a person's accounts (messaging-thread.html .idp)"
+    },
+    "tag": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 11, "unit": "px"}, "fontWeight": 700, "letterSpacing": {"value": 1.2, "unit": "px"}, "lineHeight": 1},
+      "$description": "A tag (email.html .tag); uppercase",
+      "$extensions": {"org.webosphoenix.ember-glass": {"textTransform": "uppercase"}}
+    },
+    "compose": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 16, "unit": "px"}, "fontWeight": 400, "letterSpacing": {"value": 0, "unit": "px"}, "lineHeight": 1.375},
+      "$description": "The compose bar's text (messaging-thread.html .compose .text)"
+    },
+    "transport": {
+      "$type": "typography",
+      "$value": {"fontFamily": "{font.family.sans}", "fontSize": {"value": 13, "unit": "px"}, "fontWeight": 650, "letterSpacing": {"value": 0, "unit": "px"}, "lineHeight": 1},
+      "$description": "The compose bar's account picker (messaging-thread.html .xport)"
+    }
+  },
+  "space": {
+    "2": {"$type": "dimension", "$value": {"value": 2, "unit": "px"}},
+    "3": {"$type": "dimension", "$value": {"value": 3, "unit": "px"}},
+    "4": {"$type": "dimension", "$value": {"value": 4, "unit": "px"}},
+    "6": {"$type": "dimension", "$value": {"value": 6, "unit": "px"}},
+    "8": {"$type": "dimension", "$value": {"value": 8, "unit": "px"}},
+    "10": {"$type": "dimension", "$value": {"value": 10, "unit": "px"}},
+    "12": {"$type": "dimension", "$value": {"value": 12, "unit": "px"}},
+    "14": {"$type": "dimension", "$value": {"value": 14, "unit": "px"}},
+    "16": {"$type": "dimension", "$value": {"value": 16, "unit": "px"}},
+    "18": {"$type": "dimension", "$value": {"value": 18, "unit": "px"}},
+    "20": {"$type": "dimension", "$value": {"value": 20, "unit": "px"}},
+    "22": {"$type": "dimension", "$value": {"value": 22, "unit": "px"}},
+    "24": {"$type": "dimension", "$value": {"value": 24, "unit": "px"}},
+    "26": {"$type": "dimension", "$value": {"value": 26, "unit": "px"}},
+    "28": {"$type": "dimension", "$value": {"value": 28, "unit": "px"}},
+    "30": {"$type": "dimension", "$value": {"value": 30, "unit": "px"}},
+    "32": {"$type": "dimension", "$value": {"value": 32, "unit": "px"}},
+    "40": {"$type": "dimension", "$value": {"value": 40, "unit": "px"}},
+    "44": {"$type": "dimension", "$value": {"value": 44, "unit": "px"}}
+  },
+  "layout": {
+    "$description": "Screen layout (phone)",
+    "screen-padding-top": {"$type": "dimension", "$value": {"value": 30, "unit": "px"}, "$description": "Space above a screen's title"},
+    "screen-padding-x": {"$type": "dimension", "$value": {"value": 18, "unit": "px"}, "$description": "A screen's side margin to its planes"},
+    "section-gap": {"$type": "dimension", "$value": {"value": 24, "unit": "px"}, "$description": "Between groups"},
+    "search-gap": {"$type": "dimension", "$value": {"value": 20, "unit": "px"}, "$description": "Header to search"},
+    "card-gap": {"$type": "dimension", "$value": {"value": 18, "unit": "px"}, "$description": "Search to the first card"},
+    "fade-bottom": {"$type": "dimension", "$value": {"value": 70, "unit": "px"}, "$description": "A scrolling screen fades out over its last 70 px"}
+  },
+  "radius": {
+    "card": {"$type": "dimension", "$value": {"value": 30, "unit": "px"}, "$description": "The card (the app's window in the card view)"},
+    "column": {"$type": "dimension", "$value": {"value": 26, "unit": "px"}, "$description": "A tablet column (panel)"},
+    "plane": {"$type": "dimension", "$value": {"value": 22, "unit": "px"}},
+    "tile": {"$type": "dimension", "$value": {"value": 16, "unit": "px"}},
+    "banner": {"$type": "dimension", "$value": {"value": 24, "unit": "px"}},
+    "menu": {"$type": "dimension", "$value": {"value": 20, "unit": "px"}},
+    "menu-corner": {"$type": "dimension", "$value": {"value": 4, "unit": "px"}, "$description": "The app menu's square-ish corner under the tab"},
+    "menu-item": {"$type": "dimension", "$value": {"value": 14, "unit": "px"}},
+    "toolbar": {"$type": "dimension", "$value": {"value": 18, "unit": "px"}},
+    "check": {"$type": "dimension", "$value": {"value": 7, "unit": "px"}},
+    "thumb": {"$type": "dimension", "$value": {"value": 8, "unit": "px"}},
+    "check-small": {"$type": "dimension", "$value": {"value": 6, "unit": "px"}},
+    "chip": {"$type": "dimension", "$value": {"value": 16, "unit": "px"}},
+    "tag": {"$type": "dimension", "$value": {"value": 12, "unit": "px"}},
+    "badge": {"$type": "dimension", "$value": {"value": 10, "unit": "px"}},
+    "compose": {"$type": "dimension", "$value": {"value": 30, "unit": "px"}},
+    "transport": {"$type": "dimension", "$value": {"value": 22, "unit": "px"}},
+    "attachment": {"$type": "dimension", "$value": {"value": 16, "unit": "px"}, "$description": "An attachment tile (email.html .att)"},
+    "pill": {"$type": "dimension", "$value": {"value": 999, "unit": "px"}}
+  },
+  "hairline": {"$type": "dimension", "$value": {"value": 0.5, "unit": "px"}, "$description": "One device pixel and a bit at 2.5x; drawn as an inset box-shadow"},
+  "ember": {
+    "a": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 0.3098, 0.102], "hex": "#ff4f1a"}, "$description": "The ember's red end"},
+    "mid": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 0.4784, 0.1647], "hex": "#ff7a2a"}},
+    "b": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 0.7098, 0.2784], "hex": "#ffb547"}, "$description": "The ember's gold end"},
+    "glow": {
+      "$type": "color",
+      "$value": {"colorSpace": "srgb", "components": [1, 0.4314, 0.1569], "hex": "#ff6e28"},
+      "$description": "The ember's light; glows use it at .35 to .8"
+    },
+    "gradient": {
+      "$type": "gradient",
+      "$value": [
+        {"color": {"colorSpace": "srgb", "components": [1, 0.3098, 0.102], "hex": "#ff4f1a"}, "position": 0},
+        {"color": {"colorSpace": "srgb", "components": [1, 0.4784, 0.1647], "hex": "#ff7a2a"}, "position": 0.45},
+        {"color": {"colorSpace": "srgb", "components": [1, 0.7098, 0.2784], "hex": "#ffb547"}, "position": 1}
+      ],
+      "$description": "The ember: focus, the active item, the Assistant",
+      "$extensions": {"org.webosphoenix.ember-glass": {"angle": 120}}
+    },
+    "fill": {
+      "$type": "gradient",
+      "$value": [
+        {"color": {"colorSpace": "srgb", "components": [0.8392, 0.2353, 0.0314], "hex": "#d63c08"}, "position": 0},
+        {"color": {"colorSpace": "srgb", "components": [0.9412, 0.3765, 0.102], "hex": "#f0601a"}, "position": 1}
+      ],
+      "$description": "Filled controls carrying a white glyph (3:1 or more)",
+      "$extensions": {"org.webosphoenix.ember-glass": {"angle": 135}}
+    },
+    "soft": {
+      "$type": "gradient",
+      "$value": [
+        {"color": {"colorSpace": "srgb", "components": [1, 0.3098, 0.102], "alpha": 0.16, "hex": "#ff4f1a"}, "position": 0},
+        {"color": {"colorSpace": "srgb", "components": [1, 0.7098, 0.2784], "alpha": 0.16, "hex": "#ffb547"}, "position": 1}
+      ],
+      "$description": "A pressed slider's fill",
+      "$extensions": {"org.webosphoenix.ember-glass": {"angle": 120}}
+    },
+    "glow-shadow": {
+      "$type": "shadow",
+      "$value": {
+        "color": {"colorSpace": "srgb", "components": [1, 0.4314, 0.1569], "alpha": 0.6, "hex": "#ff6e28"},
+        "offsetX": {"value": 0, "unit": "px"},
+        "offsetY": {"value": 0, "unit": "px"},
+        "blur": {"value": 10, "unit": "px"},
+        "spread": {"value": 0, "unit": "px"}
+      },
+      "$description": "The active bar's glow"
+    },
+    "orb": {
+      "$type": "gradient",
+      "$value": [
+        {"color": {"colorSpace": "srgb", "components": [1, 0.9529, 0.8392], "hex": "#fff3d6"}, "position": 0},
+        {"color": {"colorSpace": "srgb", "components": [1, 0.7725, 0.4196], "hex": "#ffc56b"}, "position": 0.18},
+        {"color": "{ember.mid}", "position": 0.48},
+        {"color": {"colorSpace": "srgb", "components": [0.7882, 0.1961, 0.0471], "hex": "#c9320c"}, "position": 0.82},
+        {"color": {"colorSpace": "srgb", "components": [0.4784, 0.102, 0.0196], "hex": "#7a1a05"}, "position": 1}
+      ],
+      "$description": "The Assistant's orb: a lit ember sphere",
+      "$extensions": {"org.webosphoenix.ember-glass": {"radial": {"size": ["circle"], "at": ["34%", "30%"]}}}
+    }
+  },
+  "glass": {
+    "$description": "The four glass levels (SPEC.md, \"Glass tokens\"). Blur radii here; tints and tone maps per theme.",
+    "l1": {
+      "blur": {"$type": "dimension", "$value": {"value": 40, "unit": "px"}, "$description": "L1, the card: the shell blurs the wallpaper once (docs/SHELL-CONTRACT.md)"}
+    },
+    "l3": {"blur": {"$type": "dimension", "$value": {"value": 22, "unit": "px"}, "$description": "L3, floats (toolbars, the compose bar): live backdrop blur"}},
+    "l4": {"blur": {"$type": "dimension", "$value": {"value": 30, "unit": "px"}, "$description": "L4, overlays (menus, banners, dialogs): live backdrop blur"}}
+  },
+  "shadow": {
+    "toggle-knob": {
+      "$type": "shadow",
+      "$value": [
+        {
+          "color": {"colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.25, "hex": "#000000"},
+          "offsetX": {"value": 0, "unit": "px"},
+          "offsetY": {"value": 1, "unit": "px"},
+          "blur": {"value": 3, "unit": "px"},
+          "spread": {"value": 0, "unit": "px"}
+        }
+      ]
+    },
+    "toggle-knob-on": {
+      "$type": "shadow",
+      "$value": [
+        {
+          "color": {"colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.3, "hex": "#000000"},
+          "offsetX": {"value": 0, "unit": "px"},
+          "offsetY": {"value": 1, "unit": "px"},
+          "blur": {"value": 3, "unit": "px"},
+          "spread": {"value": 0, "unit": "px"}
+        }
+      ]
+    },
+    "segment-selected": {
+      "$type": "shadow",
+      "$value": [
+        {
+          "color": {"colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.08, "hex": "#000000"},
+          "offsetX": {"value": 0, "unit": "px"},
+          "offsetY": {"value": 1, "unit": "px"},
+          "blur": {"value": 2, "unit": "px"},
+          "spread": {"value": 0, "unit": "px"}
+        },
+        {
+          "color": {"colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.35, "hex": "#000000"},
+          "offsetX": {"value": 0, "unit": "px"},
+          "offsetY": {"value": 6, "unit": "px"},
+          "blur": {"value": 14, "unit": "px"},
+          "spread": {"value": -8, "unit": "px"}
+        }
+      ]
+    },
+    "pill-ink": {
+      "$type": "shadow",
+      "$value": [
+        {
+          "color": {"colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.6, "hex": "#000000"},
+          "offsetX": {"value": 0, "unit": "px"},
+          "offsetY": {"value": 8, "unit": "px"},
+          "blur": {"value": 18, "unit": "px"},
+          "spread": {"value": -10, "unit": "px"}
+        },
+        {
+          "color": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.18, "hex": "#ffffff"},
+          "offsetX": {"value": 0, "unit": "px"},
+          "offsetY": {"value": 1, "unit": "px"},
+          "blur": {"value": 0, "unit": "px"},
+          "spread": {"value": 0, "unit": "px"},
+          "inset": true
+        }
+      ]
+    },
+    "range-knob": {
+      "$type": "shadow",
+      "$value": [
+        {
+          "color": {"colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.25, "hex": "#000000"},
+          "offsetX": {"value": 0, "unit": "px"},
+          "offsetY": {"value": 2, "unit": "px"},
+          "blur": {"value": 8, "unit": "px"},
+          "spread": {"value": 0, "unit": "px"}
+        }
+      ]
+    },
+    "focus-glow": {
+      "$type": "shadow",
+      "$value": {
+        "color": {"colorSpace": "srgb", "components": [1, 0.4706, 0.1569], "alpha": 0.35, "hex": "#ff7828"},
+        "offsetX": {"value": 0, "unit": "px"},
+        "offsetY": {"value": 0, "unit": "px"},
+        "blur": {"value": 14, "unit": "px"},
+        "spread": {"value": 2, "unit": "px"}
+      },
+      "$description": "Around the focus ring"
+    },
+    "range-head": {
+      "$type": "shadow",
+      "$value": [{"color": {"colorSpace": "srgb", "components": [1, 0.4706, 0.1569], "alpha": 0.35, "hex": "#ff7828"}, "offsetX": {"value": 0, "unit": "px"}, "offsetY": {"value": 0, "unit": "px"}, "blur": {"value": 0, "unit": "px"}, "spread": {"value": 3, "unit": "px"}}, {"color": {"colorSpace": "srgb", "components": [1, 0.4706, 0.1569], "alpha": 0.6, "hex": "#ff7828"}, "offsetX": {"value": 0, "unit": "px"}, "offsetY": {"value": 0, "unit": "px"}, "blur": {"value": 14, "unit": "px"}, "spread": {"value": 3, "unit": "px"}}],
+      "$description": "The playback head's ring and glow (music.html .prog .head)"
+    },
+    "send": {
+      "$type": "shadow",
+      "$value": [{"color": {"colorSpace": "srgb", "components": [1, 0.3922, 0.1176], "alpha": 0.65, "hex": "#ff641e"}, "offsetX": {"value": 0, "unit": "px"}, "offsetY": {"value": 6, "unit": "px"}, "blur": {"value": 18, "unit": "px"}, "spread": {"value": -4, "unit": "px"}}, {"color": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.35, "hex": "#ffffff"}, "offsetX": {"value": 0, "unit": "px"}, "offsetY": {"value": 1, "unit": "px"}, "blur": {"value": 0, "unit": "px"}, "spread": {"value": 0, "unit": "px"}, "inset": true}],
+      "$description": "The send button (messaging-thread.html .send)"
+    },
+    "field-focus": {
+      "$type": "shadow",
+      "$value": {"color": {"colorSpace": "srgb", "components": [1, 0.4314, 0.1569], "alpha": 0.5, "hex": "#ff6e28"}, "offsetX": {"value": 0, "unit": "px"}, "offsetY": {"value": 0, "unit": "px"}, "blur": {"value": 8, "unit": "px"}, "spread": {"value": 0, "unit": "px"}},
+      "$description": "A focused field's ember line (base.css .field.focus::after)"
+    },
+    "tab-glow": {
+      "$type": "shadow",
+      "$value": {"color": {"colorSpace": "srgb", "components": [1, 0.4314, 0.1569], "alpha": 0.55, "hex": "#ff6e28"}, "offsetX": {"value": 0, "unit": "px"}, "offsetY": {"value": 0, "unit": "px"}, "blur": {"value": 8, "unit": "px"}, "spread": {"value": 0, "unit": "px"}},
+      "$description": "The selected tab's line (components.html .tabs > div.sel::after)"
+    },
+    "caret": {
+      "$type": "shadow",
+      "$value": {"color": {"colorSpace": "srgb", "components": [1, 0.3098, 0.102], "alpha": 1, "hex": "#ff4f1a"}, "offsetX": {"value": 0, "unit": "px"}, "offsetY": {"value": 0, "unit": "px"}, "blur": {"value": 4, "unit": "px"}, "spread": {"value": 0, "unit": "px"}},
+      "$description": "The caret's glow (base.css .caret)"
+    },
+    "dot-glow": {
+      "$type": "shadow",
+      "$value": {"color": {"colorSpace": "srgb", "components": [1, 0.4314, 0.1569], "alpha": 0.7, "hex": "#ff6e28"}, "offsetX": {"value": 0, "unit": "px"}, "offsetY": {"value": 0, "unit": "px"}, "blur": {"value": 8, "unit": "px"}, "spread": {"value": 0, "unit": "px"}},
+      "$description": "The ember dot (base.css .dot-ember)"
+    },
+    "now-glow": {
+      "$type": "shadow",
+      "$value": {"color": {"colorSpace": "srgb", "components": [1, 0.4314, 0.1569], "alpha": 0.7, "hex": "#ff6e28"}, "offsetX": {"value": 0, "unit": "px"}, "offsetY": {"value": 0, "unit": "px"}, "blur": {"value": 10, "unit": "px"}, "spread": {"value": 0, "unit": "px"}},
+      "$description": "Calendar's now line (calendar.html .now)"
+    }
+  },
+  "motion": {
+    "ease": {"$type": "cubicBezier", "$value": [0.2, 0.8, 0.2, 1], "$description": "The one calm curve"},
+    "fade": {"$type": "duration", "$value": {"value": 240, "unit": "ms"}, "$description": "Fades and lifts"},
+    "slide": {"$type": "duration", "$value": {"value": 380, "unit": "ms"}, "$description": "Panel slides (ColumnPanels, the slider)"},
+    "carousel": {"$type": "duration", "$value": {"value": 420, "unit": "ms"}, "$description": "The card view's carousel"},
+    "glow": {"$type": "duration", "$value": {"value": 160, "unit": "ms"}, "$description": "Ember glows fade in"},
+    "breathe": {"$type": "duration", "$value": {"value": 1600, "unit": "ms"}, "$description": "The gesture light breathes while you gesture"}
+  },
+  "size": {
+    "icon": {"$type": "dimension", "$value": {"value": 22, "unit": "px"}},
+    "row-min-height": {"$type": "dimension", "$value": {"value": 66, "unit": "px"}},
+    "row-padding-y": {"$type": "dimension", "$value": {"value": 12, "unit": "px"}},
+    "row-padding-x": {"$type": "dimension", "$value": {"value": 18, "unit": "px"}},
+    "row-gap": {"$type": "dimension", "$value": {"value": 16, "unit": "px"}},
+    "row-inset": {"$type": "dimension", "$value": {"value": 58, "unit": "px"}, "$description": "Where a row's separator starts (under the text)"},
+    "row-glyph": {"$type": "dimension", "$value": {"value": 23, "unit": "px"}},
+    "chevron": {"$type": "dimension", "$value": {"value": 16, "unit": "px"}},
+    "ring-button": {"$type": "dimension", "$value": {"value": 42, "unit": "px"}},
+    "ring-button-icon": {"$type": "dimension", "$value": {"value": 20, "unit": "px"}},
+    "pill": {"$type": "dimension", "$value": {"value": 42, "unit": "px"}},
+    "pill-padding-x": {"$type": "dimension", "$value": {"value": 22, "unit": "px"}},
+    "pill-small": {"$type": "dimension", "$value": {"value": 34, "unit": "px"}},
+    "pill-small-padding-x": {"$type": "dimension", "$value": {"value": 16, "unit": "px"}},
+    "pill-icon": {"$type": "dimension", "$value": {"value": 18, "unit": "px"}},
+    "search": {"$type": "dimension", "$value": {"value": 46, "unit": "px"}},
+    "search-icon": {"$type": "dimension", "$value": {"value": 19, "unit": "px"}},
+    "toggle-width": {"$type": "dimension", "$value": {"value": 46, "unit": "px"}},
+    "toggle-height": {"$type": "dimension", "$value": {"value": 28, "unit": "px"}},
+    "toggle-knob": {"$type": "dimension", "$value": {"value": 20, "unit": "px"}},
+    "toggle-inset": {"$type": "dimension", "$value": {"value": 4, "unit": "px"}},
+    "toggle-spark": {"$type": "dimension", "$value": {"value": 4, "unit": "px"}},
+    "toggle-border": {"$type": "dimension", "$value": {"value": 1.2, "unit": "px"}, "$description": "The off toggle's boundary (ink-3, 3:1 or more)"},
+    "check": {"$type": "dimension", "$value": {"value": 22, "unit": "px"}},
+    "segment": {"$type": "dimension", "$value": {"value": 34, "unit": "px"}},
+    "segment-padding": {"$type": "dimension", "$value": {"value": 3, "unit": "px"}},
+    "toolbar": {"$type": "dimension", "$value": {"value": 54, "unit": "px"}},
+    "column-toolbar": {"$type": "dimension", "$value": {"value": 60, "unit": "px"}},
+    "gauge": {"$type": "dimension", "$value": {"value": 96, "unit": "px"}},
+    "gauge-icon": {"$type": "dimension", "$value": {"value": 26, "unit": "px"}},
+    "gauge-track": {"$type": "dimension", "$value": {"value": 1.2, "unit": "px"}, "$description": "In the gauge's 100-unit viewBox"},
+    "gauge-arc": {"$type": "dimension", "$value": {"value": 2.4, "unit": "px"}, "$description": "In the gauge's 100-unit viewBox"},
+    "thumb": {"$type": "dimension", "$value": {"value": 34, "unit": "px"}},
+    "thumb-height": {"$type": "dimension", "$value": {"value": 46, "unit": "px"}},
+    "orb": {"$type": "dimension", "$value": {"value": 34, "unit": "px"}},
+    "orb-small": {"$type": "dimension", "$value": {"value": 26, "unit": "px"}},
+    "statusbar": {"$type": "dimension", "$value": {"value": 32, "unit": "px"}, "$description": "The shell's status bar"},
+    "gesture-strip": {"$type": "dimension", "$value": {"value": 22, "unit": "px"}, "$description": "The shell's gesture strip under the card"},
+    "check-icon": {"$type": "dimension", "$value": {"value": 14, "unit": "px"}, "$description": "The tick in a checked box"},
+    "check-small": {"$type": "dimension", "$value": {"value": 20, "unit": "px"}, "$description": "A small check box (calendar.html .cal .check)"},
+    "radio-dot-inset": {"$type": "dimension", "$value": {"value": 6, "unit": "px"}, "$description": "The checked radio's dot: the box less this all round"},
+    "tab-gap": {"$type": "dimension", "$value": {"value": 26, "unit": "px"}},
+    "tab-padding-bottom": {"$type": "dimension", "$value": {"value": 12, "unit": "px"}},
+    "tab-underline": {"$type": "dimension", "$value": {"value": 2, "unit": "px"}, "$description": "The selected tab's ember line"},
+    "menu-padding": {"$type": "dimension", "$value": {"value": 6, "unit": "px"}},
+    "menu-min-width": {"$type": "dimension", "$value": {"value": 240, "unit": "px"}},
+    "menu-item": {"$type": "dimension", "$value": {"value": 46, "unit": "px"}, "$description": "A menu item's height"},
+    "menu-item-padding-x": {"$type": "dimension", "$value": {"value": 14, "unit": "px"}},
+    "menu-icon": {"$type": "dimension", "$value": {"value": 19, "unit": "px"}},
+    "menu-divider-inset": {"$type": "dimension", "$value": {"value": 12, "unit": "px"}},
+    "menu-divider-gap": {"$type": "dimension", "$value": {"value": 5, "unit": "px"}},
+    "app-menu-width": {"$type": "dimension", "$value": {"value": 258, "unit": "px"}, "$description": "The app menu (components.html .stage .menu)"},
+    "active-bar": {"$type": "dimension", "$value": {"value": 2.5, "unit": "px"}, "$description": "The ember bar beside the active item (base.css .active-bar)"},
+    "dot": {"$type": "dimension", "$value": {"value": 8, "unit": "px"}, "$description": "The ember dot (base.css .dot-ember)"},
+    "dialog-padding": {"$type": "dimension", "$value": {"value": 22, "unit": "px"}},
+    "dialog-padding-bottom": {"$type": "dimension", "$value": {"value": 18, "unit": "px"}},
+    "banner-padding-y": {"$type": "dimension", "$value": {"value": 14, "unit": "px"}},
+    "banner-padding-x": {"$type": "dimension", "$value": {"value": 16, "unit": "px"}},
+    "banner-gap": {"$type": "dimension", "$value": {"value": 14, "unit": "px"}},
+    "avatar": {"$type": "dimension", "$value": {"value": 46, "unit": "px"}, "$description": "A person (base.css .av)"},
+    "avatar-large": {"$type": "dimension", "$value": {"value": 54, "unit": "px"}},
+    "avatar-small": {"$type": "dimension", "$value": {"value": 38, "unit": "px"}},
+    "avatar-xsmall": {"$type": "dimension", "$value": {"value": 30, "unit": "px"}},
+    "presence": {"$type": "dimension", "$value": {"value": 10, "unit": "px"}, "$description": "The presence dot on an avatar"},
+    "presence-ring": {"$type": "dimension", "$value": {"value": 2.5, "unit": "px"}, "$description": "The gap drawn around it, in the colour under the avatar"},
+    "badge": {"$type": "dimension", "$value": {"value": 20, "unit": "px"}, "$description": "An unread count's pill"},
+    "badge-padding-x": {"$type": "dimension", "$value": {"value": 6, "unit": "px"}},
+    "chip": {"$type": "dimension", "$value": {"value": 32, "unit": "px"}},
+    "tag": {"$type": "dimension", "$value": {"value": 24, "unit": "px"}},
+    "compose": {"$type": "dimension", "$value": {"value": 60, "unit": "px"}, "$description": "The compose bar (messaging-thread.html .compose)"},
+    "send": {"$type": "dimension", "$value": {"value": 46, "unit": "px"}},
+    "send-icon": {"$type": "dimension", "$value": {"value": 20, "unit": "px"}},
+    "transport": {"$type": "dimension", "$value": {"value": 44, "unit": "px"}},
+    "field-padding-top": {"$type": "dimension", "$value": {"value": 8, "unit": "px"}},
+    "field-padding-bottom": {"$type": "dimension", "$value": {"value": 10, "unit": "px"}},
+    "field-gap": {"$type": "dimension", "$value": {"value": 4, "unit": "px"}, "$description": "Label to value"},
+    "field-line": {"$type": "dimension", "$value": {"value": 1, "unit": "px"}},
+    "field-line-focus": {"$type": "dimension", "$value": {"value": 2, "unit": "px"}},
+    "caret-width": {"$type": "dimension", "$value": {"value": 1.5, "unit": "px"}},
+    "caret-height": {"$type": "dimension", "$value": {"value": 21, "unit": "px"}}
+  },
+  "gesture-light": {
+    "$description": "Onyx Reborn's long, fading bar lit gold to ember (SPEC.md, \"The gesture light\"; Onyx Reborn onyx.css:105)",
+    "width": {"$type": "dimension", "$value": {"value": 118, "unit": "px"}},
+    "height": {"$type": "dimension", "$value": {"value": 4, "unit": "px"}},
+    "radius": {"$type": "dimension", "$value": {"value": 2, "unit": "px"}},
+    "gradient": {
+      "$type": "gradient",
+      "$value": [
+        {"color": {"colorSpace": "srgb", "components": [0.7882, 0.1961, 0.0471], "alpha": 0, "hex": "#c9320c"}, "position": 0},
+        {"color": {"colorSpace": "srgb", "components": [0.8392, 0.2353, 0.0314], "alpha": 0.28, "hex": "#d63c08"}, "position": 0.13},
+        {"color": {"colorSpace": "srgb", "components": [0.9412, 0.3137, 0.0784], "alpha": 0.75, "hex": "#f05014"}, "position": 0.25},
+        {"color": {"colorSpace": "srgb", "components": [1, 0.4784, 0.1647], "hex": "#ff7a2a"}, "position": 0.35},
+        {"color": {"colorSpace": "srgb", "components": [1, 0.7098, 0.2784], "hex": "#ffb547"}, "position": 0.44},
+        {"color": {"colorSpace": "srgb", "components": [1, 0.9529, 0.8627], "hex": "#fff3dc"}, "position": 0.5},
+        {"color": {"colorSpace": "srgb", "components": [1, 0.7098, 0.2784], "hex": "#ffb547"}, "position": 0.56},
+        {"color": {"colorSpace": "srgb", "components": [1, 0.4784, 0.1647], "hex": "#ff7a2a"}, "position": 0.65},
+        {"color": {"colorSpace": "srgb", "components": [0.9412, 0.3137, 0.0784], "alpha": 0.75, "hex": "#f05014"}, "position": 0.75},
+        {"color": {"colorSpace": "srgb", "components": [0.8392, 0.2353, 0.0314], "alpha": 0.28, "hex": "#d63c08"}, "position": 0.87},
+        {"color": {"colorSpace": "srgb", "components": [0.7882, 0.1961, 0.0471], "alpha": 0, "hex": "#c9320c"}, "position": 1}
+      ],
+      "$description": "Gold-white at the centre, through gold and ember to nothing at both ends",
+      "$extensions": {"org.webosphoenix.ember-glass": {"angle": 90}}
+    },
+    "glow": {
+      "$type": "shadow",
+      "$value": {
+        "color": {"colorSpace": "srgb", "components": [1, 0.4314, 0.1569], "alpha": 0.7, "hex": "#ff6e28"},
+        "offsetX": {"value": 0, "unit": "px"},
+        "offsetY": {"value": 0, "unit": "px"},
+        "blur": {"value": 4, "unit": "px"},
+        "spread": {"value": 0, "unit": "px"}
+      },
+      "$description": "A drop shadow that follows the gradient's alpha (CSS filter: drop-shadow)"
+    }
+  },
+  "slider": {
+    "$description": "Enyo 2's slider (onyx.Grabber) at the bottom left of each tablet column, redrawn: three hairline bars (SPEC.md, \"The slider\")",
+    "hit": {"$type": "dimension", "$value": {"value": 44, "unit": "px"}},
+    "bar-width": {"$type": "dimension", "$value": {"value": 1.5, "unit": "px"}},
+    "bar-height": {"$type": "dimension", "$value": {"value": 18, "unit": "px"}},
+    "bar-gap": {"$type": "dimension", "$value": {"value": 4.5, "unit": "px"}},
+    "divider-height": {"$type": "dimension", "$value": {"value": 24, "unit": "px"}},
+    "active-glow": {"$type": "dimension", "$value": {"value": 6, "unit": "px"}},
+    "pressed-glow": {"$type": "dimension", "$value": {"value": 16, "unit": "px"}}
+  },
+  "range": {
+    "$description": "The value slider: a hairline, the ember on the part that is set",
+    "height": {"$type": "dimension", "$value": {"value": 28, "unit": "px"}},
+    "track": {"$type": "dimension", "$value": {"value": 1, "unit": "px"}},
+    "fill": {"$type": "dimension", "$value": {"value": 2, "unit": "px"}},
+    "knob": {"$type": "dimension", "$value": {"value": 20, "unit": "px"}},
+    "knob-dot-inset": {"$type": "dimension", "$value": {"value": 7, "unit": "px"}},
+    "track-opacity": {"$type": "number", "$value": 0.8, "$description": "The hairline track (ink-3) at 80%"},
+    "head": {"$type": "dimension", "$value": {"value": 12, "unit": "px"}, "$description": "A playback position's head, without a knob (music.html .prog .head)"},
+    "progress-height": {"$type": "dimension", "$value": {"value": 22, "unit": "px"}, "$description": "A playback position's height (music.html .prog .slider)"}
+  },
+  "avatar": {
+    "$description": "Synergy's merged person: one arc per linked account around the avatar (app.js ring())",
+    "ring-inset": {"$type": "dimension", "$value": {"value": 5, "unit": "px"}, "$description": "The ring lies this far outside the avatar"},
+    "ring-radius": {"$type": "number", "$value": 47, "$description": "In a 100-unit box over the avatar and its inset"},
+    "ring-width": {"$type": "number", "$value": 3.2, "$description": "In the same 100-unit box"},
+    "ring-gap": {"$type": "number", "$value": 14, "$description": "Degrees between two accounts' arcs"},
+    "ring-start": {"$type": "number", "$value": 20, "$description": "Degrees clockwise from the top where the first arc starts (after half a gap)"}
+  },
+  "columns": {
+    "$description": "ColumnPanels: the TouchPad's sliding columns (Enyo 2 layout/panels CollapsingArranger) on a tablet, one at a time on a phone",
+    "narrow-width": {"$type": "dimension", "$value": {"value": 720, "unit": "px"}, "$description": "Below this a window is laid out as a phone's: one column at a time"},
+    "toolbar-inset": {"$type": "dimension", "$value": {"value": 10, "unit": "px"}, "$description": "A bare column's toolbar starts this far in (email.html .coltb.bare)"},
+    "drag-threshold": {"$type": "number", "$value": 0.5, "$description": "A drag that ends past this share of the way slides on; less slides back"},
+    "fling-velocity": {"$type": "number", "$value": 0.3, "$description": "px per ms: a faster release slides on in its direction, however far it went"}
+  },
+  "theme": {
+    "$description": "Light (\"porcelain\") and dark (\"graphite\"). Both groups have the same tokens.",
+    "light": {
+      "color": {
+        "bg": {
+          "$type": "color",
+          "$value": {"colorSpace": "srgb", "components": [0.949, 0.9451, 0.9333], "hex": "#f2f1ee"},
+          "$description": "Under the glass when the shell gives no wallpaper"
+        },
+        "plane": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.56, "hex": "#ffffff"}, "$description": "L2: white 56% (Ember 72%)"},
+        "plane-2": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.88, "hex": "#ffffff"}},
+        "plane-solid": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.9725, 0.9686, 0.9608], "hex": "#f8f7f5"}},
+        "sunk": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.0784, 0.0706, 0.0627], "alpha": 0.035, "hex": "#141210"}},
+        "line": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.0784, 0.0706, 0.0863], "alpha": 0.1, "hex": "#141216"}},
+        "line-2": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.0784, 0.0706, 0.0863], "alpha": 0.18, "hex": "#141216"}},
+        "ink": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.0784, 0.0784, 0.0863], "hex": "#141416"}},
+        "ink-2": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.298, 0.2941, 0.3176], "hex": "#4c4b51"}},
+        "ink-3": {
+          "$type": "color",
+          "$value": {"colorSpace": "srgb", "components": [0.3765, 0.3686, 0.3961], "hex": "#605e65"},
+          "$description": "One step stronger than Ember's, to keep 4.5:1 on the glass"
+        },
+        "inverse": {
+          "$type": "color",
+          "$value": {"colorSpace": "srgb", "components": [0.0863, 0.0863, 0.0941], "hex": "#161618"},
+          "$description": "The primary fill (ink pills, the on toggle)"
+        },
+        "on-inverse": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.9686, 0.9647, 0.9529], "hex": "#f7f6f3"}},
+        "ember-text": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.7216, 0.2353, 0.0392], "hex": "#b83c0a"}},
+        "focus": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.851, 0.2824, 0.0588], "hex": "#d9480f"}},
+        "sms": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.1843, 0.3569, 0.8157], "hex": "#2f5bd0"}},
+        "jabber": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.4157, 0.2627, 0.8157], "hex": "#6a43d0"}},
+        "work": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.5216, 0.3451, 0], "hex": "#855800"}},
+        "personal": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.1137, 0.4784, 0.3765], "hex": "#1d7a60"}},
+        "family": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.1137, 0.4784, 0.3765], "hex": "#1d7a60"}},
+        "danger": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.7843, 0.1961, 0.1137], "hex": "#c8321d"}},
+        "on-danger": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "hex": "#ffffff"}, "$description": "Text on a solid danger pill"},
+        "online": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.1843, 0.6392, 0.4196], "hex": "#2fa36b"}},
+        "away": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.8784, 0.6392, 0.2275], "hex": "#e0a33a"}}
+      },
+      "ambient": {
+        "$description": "Ember's light on the L1 tint: white from the top left (light); the ember glow from below (dark)",
+        "key": {
+          "$type": "gradient",
+          "$value": [
+            {"color": {"colorSpace": "srgb", "components": [1, 1, 1], "hex": "#ffffff"}, "position": 0},
+            {"color": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0, "hex": "#ffffff"}, "position": 0.62}
+          ],
+          "$extensions": {"org.webosphoenix.ember-glass": {"radial": {"size": ["130%", "70%"], "at": ["15%", "-10%"]}}}
+        },
+        "fill": {
+          "$type": "gradient",
+          "$value": [
+            {"color": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0, "hex": "#ffffff"}, "position": 0},
+            {"color": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0, "hex": "#ffffff"}, "position": 1}
+          ],
+          "$extensions": {"org.webosphoenix.ember-glass": {"radial": {"size": ["100%", "100%"], "at": ["50%", "50%"]}}}
+        }
+      },
+      "glass": {
+        "l1": {
+          "tint": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.9686, 0.9608, 0.9451], "alpha": 0.78, "hex": "#f7f5f1"}, "$description": "Porcelain"},
+          "saturate": {"$type": "number", "$value": 1.3, "$description": "The tone map applied to the blurred wallpaper"},
+          "contrast": {"$type": "number", "$value": 0.42, "$description": "Light glass over a dark wallpaper needs contrast down and brightness up, or it reads grey"},
+          "brightness": {"$type": "number", "$value": 2.2}
+        },
+        "l2": {
+          "tint": {"$type": "color", "$value": "{theme.light.color.plane}", "$description": "Planes: tint only, no second blur"},
+          "tint-strong": {"$type": "color", "$value": "{theme.light.color.plane-2}"}
+        },
+        "l3": {
+          "tint": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.9804, 0.9765, 0.9686], "alpha": 0.66, "hex": "#faf9f7"}},
+          "reading": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.8, "hex": "#ffffff"}, "$description": "The reading pane"},
+          "saturate": {"$type": "number", "$value": 1.6},
+          "contrast": {"$type": "number", "$value": 1},
+          "brightness": {"$type": "number", "$value": 1}
+        },
+        "l4": {
+          "tint": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.9804, 0.9765, 0.9686], "alpha": 0.8, "hex": "#faf9f7"}},
+          "saturate": {"$type": "number", "$value": 1.3},
+          "contrast": {"$type": "number", "$value": 0.5, "$description": "Light overlays tone-map a dark backdrop too"},
+          "brightness": {"$type": "number", "$value": 1.9}
+        },
+        "highlight": {
+          "$type": "color",
+          "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.95, "hex": "#ffffff"},
+          "$description": "The 1 px top highlight on every glass surface"
+        },
+        "rim": {
+          "$type": "color",
+          "$value": {"colorSpace": "srgb", "components": [0.0784, 0.0706, 0.0863], "alpha": 0.12, "hex": "#141216"},
+          "$description": "The hairline around the card"
+        },
+        "fallback": {
+          "$type": "color",
+          "$value": {"colorSpace": "srgb", "components": [0.9686, 0.9647, 0.9529], "alpha": 0.94, "hex": "#f7f6f3"},
+          "$description": "L3 and L4 with no live blur (low end, prefers-reduced-transparency, blur none)"
+        }
+      },
+      "shadow": {
+        "lift": {
+          "$type": "shadow",
+          "$value": [
+            {
+              "color": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.95, "hex": "#ffffff"},
+              "offsetX": {"value": 0, "unit": "px"},
+              "offsetY": {"value": 1, "unit": "px"},
+              "blur": {"value": 0, "unit": "px"},
+              "spread": {"value": 0, "unit": "px"},
+              "inset": true
+            },
+            {
+              "color": {"colorSpace": "srgb", "components": [0.2353, 0.1373, 0.0392], "alpha": 0.3, "hex": "#3c230a"},
+              "offsetX": {"value": 0, "unit": "px"},
+              "offsetY": {"value": 22, "unit": "px"},
+              "blur": {"value": 44, "unit": "px"},
+              "spread": {"value": -28, "unit": "px"}
+            },
+            {
+              "color": {"colorSpace": "srgb", "components": [0.2353, 0.1373, 0.0392], "alpha": 0.1, "hex": "#3c230a"},
+              "offsetX": {"value": 0, "unit": "px"},
+              "offsetY": {"value": 2, "unit": "px"},
+              "blur": {"value": 6, "unit": "px"},
+              "spread": {"value": -3, "unit": "px"}
+            }
+          ],
+          "$description": "A plane: the top highlight and a long warm shadow"
+        },
+        "lift-high": {
+          "$type": "shadow",
+          "$value": [
+            {
+              "color": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.95, "hex": "#ffffff"},
+              "offsetX": {"value": 0, "unit": "px"},
+              "offsetY": {"value": 1, "unit": "px"},
+              "blur": {"value": 0, "unit": "px"},
+              "spread": {"value": 0, "unit": "px"},
+              "inset": true
+            },
+            {
+              "color": {"colorSpace": "srgb", "components": [0.2353, 0.1373, 0.0392], "alpha": 0.38, "hex": "#3c230a"},
+              "offsetX": {"value": 0, "unit": "px"},
+              "offsetY": {"value": 30, "unit": "px"},
+              "blur": {"value": 60, "unit": "px"},
+              "spread": {"value": -24, "unit": "px"}
+            },
+            {
+              "color": {"colorSpace": "srgb", "components": [0.2353, 0.1373, 0.0392], "alpha": 0.14, "hex": "#3c230a"},
+              "offsetX": {"value": 0, "unit": "px"},
+              "offsetY": {"value": 4, "unit": "px"},
+              "blur": {"value": 12, "unit": "px"},
+              "spread": {"value": -4, "unit": "px"}
+            }
+          ],
+          "$description": "Menus, banners, dialogs"
+        },
+        "card": {
+          "$type": "shadow",
+          "$value": {
+            "color": {"colorSpace": "srgb", "components": [0.1569, 0.0471, 0], "alpha": 0.55, "hex": "#280c00"},
+            "offsetX": {"value": 0, "unit": "px"},
+            "offsetY": {"value": 30, "unit": "px"},
+            "blur": {"value": 60, "unit": "px"},
+            "spread": {"value": -24, "unit": "px"}
+          },
+          "$description": "The card over the wallpaper (the shell draws it)"
+        }
+      },
+      "component": {
+        "pill-sheen": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.5, "hex": "#ffffff"}, "$description": "The top of a pill's vertical sheen"},
+        "pill-highlight": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.6, "hex": "#ffffff"}},
+        "toggle-knob-off": {"$type": "color", "$value": "{theme.light.color.plane-2}"},
+        "toggle-knob-on": {"$type": "color", "$value": "{theme.light.color.on-inverse}"},
+        "segment-selected": {"$type": "color", "$value": "{theme.light.color.plane-2}"},
+        "range-knob": {"$type": "color", "$value": "{theme.light.color.plane-2}"},
+        "avatar-from": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "hex": "#ffffff"}},
+        "avatar-to": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.9255, 0.9216, 0.9059], "hex": "#ecebe7"}},
+        "chip-selected": {"$type": "color", "$value": "{theme.light.component.segment-selected}", "$description": "A chosen chip (messaging-thread.html .idp.on)"}
+      }
+    },
+    "dark": {
+      "color": {
+        "bg": {
+          "$type": "color",
+          "$value": {"colorSpace": "srgb", "components": [0.0431, 0.0431, 0.051], "hex": "#0b0b0d"},
+          "$description": "Under the glass when the shell gives no wallpaper"
+        },
+        "plane": {
+          "$type": "color",
+          "$value": {"colorSpace": "srgb", "components": [0.0235, 0.0196, 0.0275], "alpha": 0.26, "hex": "#060507"},
+          "$description": "L2: dark planes darken the glass, so text keeps AA over the ember glow"
+        },
+        "plane-2": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.085, "hex": "#ffffff"}},
+        "plane-solid": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.0784, 0.0784, 0.0863], "hex": "#141416"}},
+        "sunk": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.03, "hex": "#ffffff"}},
+        "line": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.085, "hex": "#ffffff"}},
+        "line-2": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.16, "hex": "#ffffff"}},
+        "ink": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.9529, 0.949, 0.9373], "hex": "#f3f2ef"}},
+        "ink-2": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.6627, 0.6549, 0.6824], "hex": "#a9a7ae"}},
+        "ink-3": {
+          "$type": "color",
+          "$value": {"colorSpace": "srgb", "components": [0.6039, 0.5961, 0.6275], "hex": "#9a98a0"},
+          "$description": "One step stronger than Ember's, to keep 4.5:1 on the glass"
+        },
+        "inverse": {
+          "$type": "color",
+          "$value": {"colorSpace": "srgb", "components": [0.9529, 0.949, 0.9373], "hex": "#f3f2ef"},
+          "$description": "The primary fill (ink pills, the on toggle)"
+        },
+        "on-inverse": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.0706, 0.0706, 0.0784], "hex": "#121214"}},
+        "ember-text": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 0.5608, 0.302], "hex": "#ff8f4d"}},
+        "focus": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 0.4157, 0.1647], "hex": "#ff6a2a"}},
+        "sms": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.5412, 0.651, 1], "hex": "#8aa6ff"}},
+        "jabber": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.7176, 0.6157, 1], "hex": "#b79dff"}},
+        "work": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.9059, 0.7137, 0.3608], "hex": "#e7b65c"}},
+        "personal": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.4353, 0.8275, 0.6902], "hex": "#6fd3b0"}},
+        "family": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.4353, 0.8275, 0.6902], "hex": "#6fd3b0"}},
+        "danger": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 0.4784, 0.4], "hex": "#ff7a66"}},
+        "on-danger": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.1647, 0.0431, 0.0196], "hex": "#2a0b05"}, "$description": "Text on a solid danger pill"},
+        "online": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.3725, 0.8275, 0.5804], "hex": "#5fd394"}},
+        "away": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.8784, 0.6392, 0.2275], "hex": "#e0a33a"}}
+      },
+      "ambient": {
+        "$description": "Ember's light on the L1 tint: white from the top left (light); the ember glow from below (dark)",
+        "key": {
+          "$type": "gradient",
+          "$value": [
+            {"color": {"colorSpace": "srgb", "components": [1, 0.3529, 0.1176], "alpha": 0.13, "hex": "#ff5a1e"}, "position": 0},
+            {"color": {"colorSpace": "srgb", "components": [1, 0.3529, 0.1176], "alpha": 0, "hex": "#ff5a1e"}, "position": 0.6}
+          ],
+          "$extensions": {"org.webosphoenix.ember-glass": {"radial": {"size": ["120%", "55%"], "at": ["50%", "112%"]}}}
+        },
+        "fill": {
+          "$type": "gradient",
+          "$value": [
+            {"color": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.05, "hex": "#ffffff"}, "position": 0},
+            {"color": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0, "hex": "#ffffff"}, "position": 0.6}
+          ],
+          "$extensions": {"org.webosphoenix.ember-glass": {"radial": {"size": ["90%", "50%"], "at": ["10%", "-8%"]}}}
+        }
+      },
+      "glass": {
+        "l1": {
+          "tint": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.0471, 0.0431, 0.051], "alpha": 0.68, "hex": "#0c0b0d"}, "$description": "Graphite"},
+          "saturate": {"$type": "number", "$value": 1.5, "$description": "The tone map applied to the blurred wallpaper"},
+          "contrast": {"$type": "number", "$value": 1},
+          "brightness": {"$type": "number", "$value": 0.8}
+        },
+        "l2": {
+          "tint": {"$type": "color", "$value": "{theme.dark.color.plane}", "$description": "Planes: tint only, no second blur"},
+          "tint-strong": {"$type": "color", "$value": "{theme.dark.color.plane-2}"}
+        },
+        "l3": {
+          "tint": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.0784, 0.0745, 0.0863], "alpha": 0.62, "hex": "#141316"}},
+          "reading": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.0627, 0.0588, 0.0706], "alpha": 0.7, "hex": "#100f12"}, "$description": "The reading pane"},
+          "saturate": {"$type": "number", "$value": 1.6},
+          "contrast": {"$type": "number", "$value": 1},
+          "brightness": {"$type": "number", "$value": 1}
+        },
+        "l4": {
+          "tint": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.0471, 0.0471, 0.0549], "alpha": 0.6, "hex": "#0c0c0e"}},
+          "saturate": {"$type": "number", "$value": 1.4},
+          "contrast": {"$type": "number", "$value": 1},
+          "brightness": {"$type": "number", "$value": 1}
+        },
+        "highlight": {
+          "$type": "color",
+          "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.17, "hex": "#ffffff"},
+          "$description": "The 1 px top highlight on every glass surface"
+        },
+        "rim": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.12, "hex": "#ffffff"}, "$description": "The hairline around the card"},
+        "fallback": {
+          "$type": "color",
+          "$value": {"colorSpace": "srgb", "components": [0.0784, 0.0745, 0.0863], "alpha": 0.94, "hex": "#141316"},
+          "$description": "L3 and L4 with no live blur (low end, prefers-reduced-transparency, blur none)"
+        }
+      },
+      "shadow": {
+        "lift": {
+          "$type": "shadow",
+          "$value": [
+            {
+              "color": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.07, "hex": "#ffffff"},
+              "offsetX": {"value": 0, "unit": "px"},
+              "offsetY": {"value": 1, "unit": "px"},
+              "blur": {"value": 0, "unit": "px"},
+              "spread": {"value": 0, "unit": "px"},
+              "inset": true
+            },
+            {
+              "color": {"colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.9, "hex": "#000000"},
+              "offsetX": {"value": 0, "unit": "px"},
+              "offsetY": {"value": 24, "unit": "px"},
+              "blur": {"value": 48, "unit": "px"},
+              "spread": {"value": -28, "unit": "px"}
+            }
+          ],
+          "$description": "A plane: the top highlight and a long warm shadow"
+        },
+        "lift-high": {
+          "$type": "shadow",
+          "$value": [
+            {
+              "color": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.09, "hex": "#ffffff"},
+              "offsetX": {"value": 0, "unit": "px"},
+              "offsetY": {"value": 1, "unit": "px"},
+              "blur": {"value": 0, "unit": "px"},
+              "spread": {"value": 0, "unit": "px"},
+              "inset": true
+            },
+            {
+              "color": {"colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.95, "hex": "#000000"},
+              "offsetX": {"value": 0, "unit": "px"},
+              "offsetY": {"value": 30, "unit": "px"},
+              "blur": {"value": 60, "unit": "px"},
+              "spread": {"value": -20, "unit": "px"}
+            }
+          ],
+          "$description": "Menus, banners, dialogs"
+        },
+        "card": {
+          "$type": "shadow",
+          "$value": {
+            "color": {"colorSpace": "srgb", "components": [0, 0, 0], "alpha": 0.8, "hex": "#000000"},
+            "offsetX": {"value": 0, "unit": "px"},
+            "offsetY": {"value": 30, "unit": "px"},
+            "blur": {"value": 60, "unit": "px"},
+            "spread": {"value": -24, "unit": "px"}
+          },
+          "$description": "The card over the wallpaper (the shell draws it)"
+        }
+      },
+      "component": {
+        "pill-sheen": {
+          "$type": "color",
+          "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.07, "hex": "#ffffff"},
+          "$description": "The top of a pill's vertical sheen"
+        },
+        "pill-highlight": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.08, "hex": "#ffffff"}},
+        "toggle-knob-off": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.4235, 0.4157, 0.4471], "hex": "#6c6a72"}},
+        "toggle-knob-on": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.4235, 0.4157, 0.4471], "hex": "#6c6a72"}, "$description": "As the mock-up's render draws it: its dark knob rule (base.css html[data-theme=dark] .toggle::after) outranks .toggle.on::after, so the knob stays grey when on"},
+        "segment-selected": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [1, 1, 1], "alpha": 0.12, "hex": "#ffffff"}},
+        "range-knob": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.9529, 0.949, 0.9373], "hex": "#f3f2ef"}},
+        "avatar-from": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.1647, 0.1647, 0.1843], "hex": "#2a2a2f"}},
+        "avatar-to": {"$type": "color", "$value": {"colorSpace": "srgb", "components": [0.0941, 0.0941, 0.1059], "hex": "#18181b"}},
+        "chip-selected": {"$type": "color", "$value": "{theme.dark.component.segment-selected}", "$description": "A chosen chip (messaging-thread.html .idp.on)"}
+      }
+    }
+  }
+}

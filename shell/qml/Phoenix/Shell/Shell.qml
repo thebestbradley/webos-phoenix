@@ -138,7 +138,12 @@ FocusScope {
                                             gridDensity: "normal", batteryPercent: false, numberRow: false,
                                             keyboardStyle: "auto", startupAnimation: "phoenix",
                                             keyboardButton: true, keyboardButtonSide: "right",
-                                            keyboardButtonY: 1, keyboardButtonHintShown: false })
+                                            keyboardButtonY: 1, keyboardButtonHintShown: false,
+                                            // Phoenix 2.0 (docs/SYSTEM-UI-2.md): the look,
+                                            // "classic" (1.0's) or "ember-glass", and whether
+                                            // Ember Glass's floats and overlays blur live
+                                            // ("live") or are plain tints ("none").
+                                            look: "classic", glassBlur: "live" })
     function tweak(name) { return tweaks[name] !== undefined ? tweaks[name] : tweakDefaults[name]; }
     // Changes tweaks the shell itself makes (the keyboard button's place):
     // at once in the system's tweaks, and saved as the system preferences
@@ -174,6 +179,15 @@ FocusScope {
                          a ? a.color : "#666666", a ? a.glyph : "", settingsId, JSON.stringify({ page: "textassist" }), "keyboardButton");
     }
     Binding { target: Theme; property: "animationSpeed"; value: shell.tweak("animationSpeed") }
+    // The look (docs/SYSTEM-UI-2.md): this run's (phoenix-sim's --look),
+    // else the system preference "look" (the runtime's tweaks), else the
+    // default above.
+    property string look: ""
+    readonly property var looks: ["classic", "ember-glass"]
+    readonly property string effectiveLook: looks.indexOf(look) >= 0 ? look
+        : looks.indexOf(tweak("look")) >= 0 ? tweak("look") : tweakDefaults.look
+    onLookChanged: if (look !== "" && looks.indexOf(look) < 0) console.warn("phoenix: no look named \"" + look + "\" (" + looks.join(", ") + ")")
+    Binding { target: Theme; property: "look"; value: shell.effectiveLook }
     Binding { target: Theme; property: "gestureSensitivity"; value: shell.tweak("gestureSensitivity") }
     // Tell the window source which card is in front (apps it launches join
     // its stack).

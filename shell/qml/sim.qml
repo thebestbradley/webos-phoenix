@@ -216,6 +216,7 @@ Item {
             // The launch-at-boot apps start with the simulator, as with
             // LunaSysMgr (WebAppMgrProxy.cpp:117).
             source: SimWindowSource { id: windows; bootAppsEnabled: true }
+            look: root.lookOption
             // The default wallpaper from the first frame, until the system
             // service tells the shell the one chosen (below).
             wallpaper: windows.resolveDevicePath(Theme.defaultWallpaperPath)
@@ -622,6 +623,25 @@ Item {
             if (root.scene === "launchergroupopen")
                 shell.openLauncherGroup(shell.launcherLayout.pages[0][1]);
         }
+    }
+
+    // The look for this run (docs/SYSTEM-UI-2.md): phoenix-sim's --look
+    // ("classic" or "ember-glass"). Its command line refuses options it does
+    // not declare, so until main.cpp declares --look (and passes simLook, as
+    // simScene) it is given after "--", which Qt's parser leaves alone:
+    //   phoenix-sim --phone -- --look ember-glass
+    // "" leaves it to the system preference "look".
+    readonly property string lookOption: {
+        if (typeof simLook !== "undefined" && simLook)
+            return simLook;
+        var a = Qt.application.arguments, i = a.indexOf("--");
+        for (i = i < 0 ? a.length : i + 1; i < a.length; ++i) {
+            if (a[i] === "--look" && i + 1 < a.length)
+                return a[i + 1];
+            if (a[i].indexOf("--look=") === 0)
+                return a[i].substring(7);
+        }
+        return "";
     }
 
     // Settings > Advanced as last reported (system/tweaks), or {} (the defaults).

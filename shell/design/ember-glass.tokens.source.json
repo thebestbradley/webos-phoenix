@@ -1,0 +1,10 @@
+{
+    "//": "Where shell/design/ember-glass.tokens.json came from (tools/gen-ember-glass-qml.cjs --from). Apache-2.0, as ember-glass-ui.",
+    "repository": "github.com/thebestbradley/ember-glass-ui",
+    "path": "tokens/ember-glass.tokens.json",
+    "commit": "cdc18d5c954efed50b0fea775f6b2503c9557036",
+    "committed": "2026-10-11T10:45:00+00:00",
+    "package": "@ember-glass/tokens",
+    "version": "0.1.0",
+    "sha256": "f9ccd6b2a4c2f269ea808c665a3297657c2d06f164fc228d39a5ac36f9dc9647"
+}

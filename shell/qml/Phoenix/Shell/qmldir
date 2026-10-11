@@ -1,5 +1,6 @@
 module Phoenix.Shell
 singleton Theme 1.0 Theme.qml
+singleton EmberGlass 1.0 EmberGlass.qml
 Shell 1.0 Shell.qml
 ActionButton 1.0 ActionButton.qml
 MemoryAlert 1.0 MemoryAlert.qml

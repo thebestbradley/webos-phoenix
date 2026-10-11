@@ -2009,7 +2009,13 @@
             keyboardButton: p.keyboardButton !== false,
             keyboardButtonSide: pick(p.keyboardButtonSide, ["left", "right"], "right"),
             keyboardButtonY: typeof p.keyboardButtonY === "number" && p.keyboardButtonY >= 0 && p.keyboardButtonY <= 1 ? p.keyboardButtonY : 1,
-            keyboardButtonHintShown: !!p.keyboardButtonHintShown
+            keyboardButtonHintShown: !!p.keyboardButtonHintShown,
+            // Phoenix 2.0 (docs/SYSTEM-UI-2.md): the shell's look, "classic"
+            // or "ember-glass", only once chosen (the shell's own default
+            // otherwise: Shell.tweakDefaults, one place to flip it); Ember
+            // Glass's live blur, "live" or "none".
+            look: pick(p.look, ["classic", "ember-glass"], undefined),
+            glassBlur: pick(p.glassBlur, ["live", "none"], "live")
         };
     }
     // The page views' settings and the system proxy, as the shell takes
@@ -2030,7 +2036,7 @@
                       "animationSpeed", "gestureSensitivity", "hapticFeedback", "launcherGridDensity", "showBatteryPercent",
                       "keyboardNumberRow", "keyboardStyle", "startupAnimation",
                       "keyboardButton", "keyboardButtonSide", "keyboardButtonY",
-                      "keyboardButtonHintShown"];
+                      "keyboardButtonHintShown", "look", "glassBlur"];
 
     // Settings > Accessibility's keyboard options, as the shell takes them.
     function keyboardAccess(a) {
