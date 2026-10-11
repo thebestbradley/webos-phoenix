@@ -632,6 +632,23 @@ Cloud providers (Anthropic, OpenAI, Google, OpenAI-compatible servers) are
 used only with the user's own key, under the provider's terms; nothing of
 theirs is in the repository.
 
+**The decision model, Laya** (11 October 2026; docs/AI-AND-MCP.md "A
+decision model: Laya"), evaluated, not shipped. Checked at the primary
+sources: the model repository huggingface.co/convaiinnovations/laya
+(revision 7b928d828b7b0e022f929d9bd2e44165aa270148), publisher Convai
+Innovations, its model card's metadata `license: apache-2.0` and its
+README's "Weights: Apache 2.0"; the code, the PyPI package `laya` 0.4.2
+(`License: Apache-2.0`) and its repository github.com/NandhaKishorM/laya
+(LICENSE: the Apache License 2.0 text). The English checkpoint used is the
+repository root's (`model.safetensors`, 843 MB, ModernBERT-large, 421M
+parameters); its encoder is Answer.AI's ModernBERT-large, Apache-2.0. The
+model repository has no LICENSE file of its own (as Kitten's), so an image
+that ships it would carry the Apache-2.0 text. Nothing of it is in this
+repository: `tools/export-laya-onnx.py` makes the ONNX file from the
+pinned revision. "Jev" (TypeSafe), which Laya compares itself with, is a
+hosted, closed service: not used. The typed-decisions checkpoint was not
+used (it was tuned on its benchmark's test split, its card says).
+
 ## Fonts
 
 Legacy webOS used **Prelude**, which was made for Palm and is not openly
