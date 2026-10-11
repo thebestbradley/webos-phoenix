@@ -15,6 +15,7 @@
 
 #include <QObject>
 #include <QQuickItem>
+#include <QVariantMap>
 #include <QtQml/qqmlregistration.h>
 
 class KeyInjector : public QObject
@@ -47,6 +48,15 @@ public:
     // Text being composed at the cursor (KeyboardHost.setPreedit), as an
     // input method's preedit: shown in the field, not yet in it; "" ends it.
     Q_INVOKABLE bool setPreedit(QQuickItem *client, const QString &text);
+
+    // The text around the cursor (KeyboardHost.surroundingText), {text,
+    // cursor}, asked as an input method asks a field: Qt::ImSurroundingText
+    // and Qt::ImCursorPosition of whatever has the keyboard focus in the
+    // window of `client`, when that is `client` or inside it (a web view's
+    // page answers through Chromium). Asking moves no focus. Empty when
+    // nothing there has the focus or it does not answer. QML cannot ask
+    // itself: QInputMethod::queryFocusObject is not invokable.
+    Q_INVOKABLE QVariantMap surroundingText(QQuickItem *client) const;
 
     // A wheel event at (x, y) in `item`, delivered through its window as
     // the platform delivers one: a trackpad's has a pixel delta, a scroll

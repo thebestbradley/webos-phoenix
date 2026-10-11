@@ -3897,7 +3897,8 @@ FocusScope {
     // (GAPS V3), as an input method asks a field (ImSurroundingText,
     // ImCursorPosition): a text field of the shell's tells its text and
     // cursor; a web page's field answers Qt's input method query while its
-    // view has the focus (Chromium reports the text around the selection).
+    // view has the focus (Chromium reports the text around the selection;
+    // KeyInjector asks: QML cannot call QInputMethod::queryFocusObject).
     function _imeSurroundingText() {
         var c = imeClient;
         if (!c)
@@ -3906,14 +3907,8 @@ FocusScope {
             return c.item.text !== undefined && c.item.cursorPosition !== undefined
                 ? { text: String(c.item.text), cursor: c.item.cursorPosition } : null;
         var t = _imeTarget();
-        for (var i = _focusItem; i && t; i = i.parent) {
-            if (i === t) {
-                var text = Qt.inputMethod.queryFocusObject(Qt.ImSurroundingText, undefined);
-                var pos = Qt.inputMethod.queryFocusObject(Qt.ImCursorPosition, undefined);
-                return typeof text === "string" && typeof pos === "number" ? { text: text, cursor: pos } : null;
-            }
-        }
-        return null;
+        var s = t ? KeyInjector.surroundingText(t) : null;
+        return s && typeof s.text === "string" && typeof s.cursor === "number" ? s : null;
     }
 
     // What the keyboard's keys go to: the focused text field, or the web

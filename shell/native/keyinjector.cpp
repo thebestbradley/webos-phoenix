@@ -6,6 +6,7 @@
 
 #include <QCoreApplication>
 #include <QInputMethodEvent>
+#include <QInputMethodQueryEvent>
 #include <QKeyEvent>
 #include <QQuickWindow>
 #include <QWheelEvent>
@@ -72,6 +73,22 @@ bool KeyInjector::setPreedit(QQuickItem *client, const QString &text)
     QInputMethodEvent event(text, attributes);
     QCoreApplication::sendEvent(target, &event);
     return event.isAccepted();
+}
+
+QVariantMap KeyInjector::surroundingText(QQuickItem *client) const
+{
+    if (!client || !client->window())
+        return {};
+    QQuickItem *focus = client->window()->activeFocusItem();
+    if (!focus || (focus != client && !client->isAncestorOf(focus)))
+        return {};
+    QInputMethodQueryEvent query(Qt::ImSurroundingText | Qt::ImCursorPosition);
+    QCoreApplication::sendEvent(focus, &query);
+    const QVariant text = query.value(Qt::ImSurroundingText);
+    const QVariant cursor = query.value(Qt::ImCursorPosition);
+    if (text.typeId() != QMetaType::QString || !cursor.canConvert<int>())
+        return {};
+    return { { QStringLiteral("text"), text }, { QStringLiteral("cursor"), cursor.toInt() } };
 }
 
 bool KeyInjector::sendWheel(QQuickItem *item, qreal x, qreal y, const QPoint &pixelDelta,

@@ -58,6 +58,25 @@ Item {
         }
     }
 
+    // A web page's view with its field (test_webFieldSurroundingText). The
+    // field is read-only, so the shell does not take it for a text field of
+    // its own (a page's is none); an input method's queries it answers all
+    // the same.
+    Component {
+        id: webPage
+        FocusScope {
+            property alias field: pageField
+            width: 200
+            height: 20
+            TextInput {
+                id: pageField
+                anchors.fill: parent
+                focus: true
+                readOnly: true
+            }
+        }
+    }
+
     TestCase {
         name: "PhoneKeyboard"
         when: windowShown
@@ -829,6 +848,37 @@ Item {
             tryCompare(shell, "keyboardOpen", false, 1000);
         }
 
+        // The text around the cursor in a web page's field (GAPS V3): the
+        // shell asks whatever has the focus inside the page's view, as an
+        // input method does (KeyInjector.surroundingText), and the keyboard
+        // predicts from the page's words.
+        function test_webFieldSurroundingText() {
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize();
+            tryVerify(function() { return shell.maximized; }, 2000);
+            var real = windows._windows[uid];
+            var page = createTemporaryObject(webPage, root);
+            windows._windows[uid] = page;
+            page.field.text = "Hello. Good wor";
+            page.field.cursorPosition = page.field.text.length;
+            page.field.forceActiveFocus();
+            windows.inputFocusChanged(uid, true, { type: 0 });
+            tryCompare(shell, "keyboardOpen", true, 1000);
+            compare(shell.imeClient.kind, "web");
+            var s = kb.host.surroundingText();
+            verify(s !== null && s !== undefined, "the page's field answers");
+            compare(s.text, "Hello. Good wor");
+            compare(s.cursor, 15);
+            tryCompare(kb, "_word", "wor", 1000);
+            compare(kb._prevWord, "Good");
+            // The focus elsewhere than in the page: it cannot tell.
+            shell.forceActiveFocus();
+            compare(kb.host.surroundingText(), null);
+            windows.inputFocusChanged(uid, false, null);
+            tryCompare(shell, "keyboardOpen", false, 1000);
+            windows._windows[uid] = real;
+        }
+
         // The emoticon keys show pictures (TabletKeyboard.cpp:1571-1597):
         // the colour emoji font's faces, as /usr/palm/emoticons was never
         // released; they still type the original's text.
@@ -883,9 +933,10 @@ Item {
             for (var i = 0; i < windows.cards.count; ++i)
                 if (windows.cards.get(i).uid === uid)
                     windows.cards.setProperty(i, "allowResize", false);
-            // The page (a stand-in): what the shell runs in it.
+            // The page (a stand-in, an item as a page's window is: the keyboard
+            // asks it the text around the cursor): what the shell runs in it.
             var real = windows._windows[uid];
-            var spy = Qt.createQmlObject("import QtQuick; QtObject { property var calls: []; function runScript(js) { "
+            var spy = Qt.createQmlObject("import QtQuick; Item { property var calls: []; function runScript(js) { "
                 + "var m = /positiveSpaceChanged\\((\\d+),(\\d+)\\)$/.exec(js); if (m) calls = calls.concat([[+m[1], +m[2]]]); } }", root);
             windows._windows[uid] = spy;
             windows.inputFocusChanged(uid, true, { type: 0 });
