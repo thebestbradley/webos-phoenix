@@ -217,15 +217,16 @@ async function main() {
         // Sign In ends the form, inside its scroller: on a tablet's sign-in
         // page the SFTP form is longer than the page, and the button lies under
         // the toolbar (Cancel) until the scroller moves. Playwright's scroll into
-        // view does not move Enyo 1.0's scroller, and on a busy machine the
-        // scroller learns its size late; so scroll it as the page does
-        // (BasicScroller.scrollIntoView) and tap once the button is what is
-        // under the finger.
+        // view does not move Enyo 1.0's scroller, and BasicScroller's
+        // scrollIntoView moves only for a point below its frame, which the
+        // button's top is not (it is inside the frame, under the toolbar); so
+        // scroll to the end as the page itself does (scrollToBottom) and tap
+        // once the button is what is under the finger.
         const tapSignIn = async (w) => {
             const ready = await until(() => w.evaluate(() => {
                 const d = enyo.$.drivesWizard, n = d && d.$.signInButton.hasNode();
                 if (!n) return false;
-                d.$.scroller.scrollIntoView(n.offsetTop, 0);
+                d.$.scroller.scrollToBottom();
                 const r = n.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
                 return !!hit && n.contains(hit);
             }), 15000, 200);
