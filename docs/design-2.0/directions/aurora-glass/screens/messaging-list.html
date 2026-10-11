@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Messaging: conversations</title>
+<link rel="stylesheet" href="../css/aurora.css">
+<script src="../js/icons.js"></script>
+<script src="../js/data.js"></script>
+<script src="../js/frame.js"></script>
+<style>
+  .head { padding: 18px 16px 6px; display: flex; flex-direction: column; gap: 12px; }
+  .titlebar { display: flex; align-items: center; gap: 10px; padding: 0 2px; }
+  .titlebar .t-large { flex: 1; }
+  .avail { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px 0 10px; border-radius: 16px;
+    background: var(--panel); box-shadow: inset 0 0 0 1px var(--hair); font-size: 13px; font-weight: 700; color: var(--text-2); }
+  .avail .ic { width: 15px; height: 15px; stroke-width: 2.4; }
+  .conv { display: grid; grid-template-columns: 48px 1fr auto; gap: 0 13px; align-items: center; padding: 11px 16px; position: relative; }
+  .conv + .conv::before { content: ""; position: absolute; top: 0; left: 77px; right: 16px; height: 1px; background: var(--hair); }
+  .conv .name { font-size: 16px; line-height: 21px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conv .pre { font-size: 14px; line-height: 19px; font-weight: 500; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; margin-top: 2px; }
+  .conv .meta { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; align-self: start; padding-top: 3px; }
+  .conv .time { font-size: 12.5px; font-weight: 600; color: var(--text-3); }
+  .conv.unread .name { font-weight: 800; }
+  .conv.unread .pre { color: var(--text); }
+  .conv.unread .time { color: var(--accent-ink); font-weight: 800; }
+  .via { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 700; color: var(--text-3); }
+  .via .dot { width: 7px; height: 7px; }
+  .conv.sel { background: linear-gradient(90deg, var(--accent-soft), transparent 85%); }
+  .conv.sel::after { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+  .fab { position: absolute; right: 18px; bottom: 18px; width: 60px; height: 60px; border-radius: 22px; display: grid; place-items: center; z-index: 5;
+    background: linear-gradient(180deg, rgba(255,255,255,.25), rgba(255,255,255,0) 60%), linear-gradient(140deg, var(--accent), var(--accent-2));
+    color: var(--on-accent); box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 14px 28px -10px var(--accent-glow), 0 6px 14px -6px rgba(0,0,0,.45); }
+  .fab .ic { width: 26px; height: 26px; stroke-width: 2.1; }
+  .section { padding: 14px 18px 6px; display: flex; align-items: center; justify-content: space-between; }
+  .group-av { background: linear-gradient(140deg, hsl(262 60% 60%), hsl(296 52% 44%)); }
+  .group-av .ic { width: 22px; height: 22px; stroke-width: 2; }
+</style>
+</head>
+<body class="phone">
+  <div class="wallpaper"></div>
+  <header class="statusbar" data-app="Messaging"></header>
+  <main class="sheet">
+    <div class="head">
+      <div class="titlebar">
+        <div class="t-large">Messaging</div>
+        <span class="avail"><span class="dot" style="--c:#3EE6AE"></span>Available<i data-i="chevD"></i></span>
+      </div>
+      <div class="segmented">
+        <button class="on">Conversations <span class="badge">3</span></button>
+        <button>Buddies</button>
+      </div>
+      <div class="field"><i data-i="search"></i>Search or start a conversation</div>
+    </div>
+    <div class="section"><span class="t-over">Recent</span><span class="t-cap">SMS · Jabber · 2 accounts</span></div>
+    <div id="list"></div>
+    <button class="fab"><i data-i="compose"></i></button>
+  </main>
+  <footer class="gesture"></footer>
+<script>
+  const D = PHX_DATA;
+  document.getElementById("list").innerHTML = D.conversations.map((c, i) => `
+    <div class="conv ${c.unread ? "unread" : ""} ">
+      <div class="avatar ${c.group ? "group-av" : ""}" style="--h:${c.hue}">${c.group ? '<i data-i="people"></i>' : c.initials}${c.presence ? `<span class="presence ${c.presence === "away" ? "away" : ""}"></span>` : ""}</div>
+      <div style="min-width:0">
+        <div class="name">${c.name}</div>
+        <div class="pre">${c.preview}</div>
+      </div>
+      <div class="meta">
+        <span class="time">${c.time}</span>
+        ${c.unread ? `<span class="badge">${c.unread}</span>` : `<span class="via"><span class="dot" style="--c:var(--acct-${c.via})"></span>${D.accounts[c.via].name}</span>`}
+      </div>
+    </div>`).join("");
+  phxReady();
+</script>
+</body>
+</html>

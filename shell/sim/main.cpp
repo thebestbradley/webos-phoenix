@@ -67,6 +67,7 @@
 #include "simprocess.h"
 #ifdef PHOENIX_HAVE_WEBENGINE
 #include "simmarketplace.h"
+#include "simtcp.h"
 #endif
 
 #ifdef PHOENIX_HAVE_WEBENGINE
@@ -123,6 +124,27 @@ static void useBundledEmojiFont(int argc, char *argv[])
 #endif
 }
 
+#ifdef PHOENIX_HAVE_WEBENGINE
+// The apps' pages run what a device runs as services (the connectors'
+// connections and their demo servers, runtime/phoenix-runtime.js), and a
+// card out of sight must keep running as a service does. Chromium slows a
+// hidden page's timers to about once a second, and after five minutes to
+// about once a minute: a Jabber message sent from the Assistant waited up
+// to a minute in the outbox for the page keeping the connection. Measured
+// in phoenix-sim: a hidden page ran 4 of 12 one-second ticks after six
+// minutes hidden, all 12 with these. Added to any flags already given.
+static void keepHiddenPagesRunning()
+{
+    QByteArray flags = qgetenv("QTWEBENGINE_CHROMIUM_FLAGS");
+    for (const char *flag : {"--disable-background-timer-throttling", "--disable-renderer-backgrounding",
+                             "--disable-backgrounding-occluded-windows"}) {
+        if (!flags.contains(flag))
+            flags += (flags.isEmpty() ? "" : " ") + QByteArray(flag);
+    }
+    qputenv("QTWEBENGINE_CHROMIUM_FLAGS", flags);
+}
+#endif
+
 int main(int argc, char *argv[])
 {
     // Built against Qt 6.8 or newer (CMakeLists.txt), and run with it: an
@@ -134,7 +156,8 @@ int main(int argc, char *argv[])
     }
     useBundledEmojiFont(argc, argv);
 #ifdef PHOENIX_HAVE_WEBENGINE
-    // Both must happen before the application object exists.
+    // These must happen before the application object exists.
+    keepHiddenPagesRunning();
     RootfsSchemeHandler::registerScheme();
     QtWebEngineQuick::initialize();
 #endif
@@ -179,6 +202,7 @@ int main(int argc, char *argv[])
     QCommandLineOption stayAwakeOpt(QStringLiteral("stay-awake"), QStringLiteral("The screen never dims or turns off by itself (always so with --screenshot)."));
     QCommandLineOption quietOpt(QStringLiteral("quiet"), QStringLiteral("No boot and shutdown sounds (they are off anyway with --screenshot and the offscreen platform)."));
     QCommandLineOption noHostShellOpt(QStringLiteral("no-host-shell"), QStringLiteral("Do not give the Terminal app a real shell on this computer (it gets the runtime's simulated shell)."));
+    QCommandLineOption noTcpOpt(QStringLiteral("no-tcp-relay"), QStringLiteral("Do not open TCP connections for the pages' connectors (the drives' SFTP reaches only the demo server, files.example)."));
     QCommandLineOption llamaServerOpt(QStringLiteral("llama-server"), QStringLiteral("llama.cpp's llama-server program for the Assistant's on-device model (default: llama-server on the PATH)."), QStringLiteral("path"));
     QCommandLineOption noMarketplaceOpt(QStringLiteral("no-marketplace"), QStringLiteral("Do not start the Marketplace's catalog service with the simulator this time (it starts with every run where PHP is, unless Services > Start Catalog with the Simulator is off)."));
     QCommandLineOption marketplaceOpt(QStringLiteral("marketplace"), QStringLiteral("Start the Marketplace's catalog service on this computer (server/marketplace/bin/serve.sh: PHP 8; set up the first time) where the simulator's Marketplace reads it, http://127.0.0.1:8088/, and open the Marketplace. It stops with the simulator; one already running is used. The Services menu starts and stops it too."));
@@ -202,7 +226,7 @@ int main(int argc, char *argv[])
     updatingOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     parser.addOptions({ deviceOpt, zoomOpt, hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, adaptiveOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
-                        noHostShellOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, checkChromeOpt, updatingOpt, eraseOpt, microphoneFileOpt,
+                        noHostShellOpt, noTcpOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, checkChromeOpt, updatingOpt, eraseOpt, microphoneFileOpt,
                         llamaServerOpt, speechCommandOpt, marketplaceOpt, noMarketplaceOpt, wakeModelOpt, voskLibraryOpt, wakeFileOpt });
     parser.process(app);
 
@@ -422,6 +446,15 @@ int main(int argc, char *argv[])
         simPty->setShellOverride(parser.value(hostShellOpt));
         hostInfo.insert(QStringLiteral("pty"), QStringLiteral("host"));
     }
+    // The connectors' binary TCP (the drives' SFTP): this computer's network,
+    // as the pages' HTTP proxy is (shell/sim/simtcp.h).
+    QObject *simTcp = nullptr;
+#ifdef PHOENIX_HAVE_WEBENGINE
+    if (!parser.isSet(noTcpOpt)) {
+        simTcp = new SimTcp(&app);
+        hostInfo.insert(QStringLiteral("tcp"), QStringLiteral("host"));
+    }
+#endif
 
     QQuickView view;
     view.engine()->addImportPath(qmlDir);
@@ -610,6 +643,7 @@ int main(int argc, char *argv[])
     view.rootContext()->setContextProperty(QStringLiteral("simMarketplace"), nullptr);
 #endif
     view.rootContext()->setContextProperty(QStringLiteral("simPty"), simPty);
+    view.rootContext()->setContextProperty(QStringLiteral("simTcp"), simTcp);
     view.rootContext()->setContextProperty(QStringLiteral("simInstaller"), rootfs.isValid() ? &installer : nullptr);
     view.rootContext()->setContextProperty(QStringLiteral("simSnapshots"), rootfs.isValid() ? &snapshots : nullptr);
     view.rootContext()->setContextProperty(QStringLiteral("simScene"), parser.value(sceneOpt));

@@ -576,14 +576,15 @@ caches what is opened and uploads saves back.
 > drives' connector (`apps/connectors/drives`, in the catalog, not
 > pre-installed) has the six: WebDAV (Nextcloud with Login Flow v2,
 > ownCloud, any server), S3-compatible (B2, Wasabi, MinIO, any), Dropbox,
-> OneDrive, Google Drive (`drive.file`; the full scope behind a setting) and
-> Box, each a `DOCUMENTS` account; places in Files, the file picker and
+> OneDrive, Google Drive (`drive.file`; the full scope behind a setting),
+> Box and SFTP (any SSH server; Phoenix's own SSH client over the kit's
+> binary sockets), each a `DOCUMENTS` account; places in Files, the file picker and
 > Save to Files ([SHARE-AND-FILES.md](SHARE-AND-FILES.md) "Drives"); the
 > kit's provider interface ([SYNERGY-SDK.md](SYNERGY-SDK.md) section 3).
 > The OAuth ones wait for Phoenix's registrations
 > ([DEVELOPER-APPS.md](DEVELOPER-APPS.md)); Box needs its secret (Q78,
 > correcting "secret optional" above). Not yet: the viewers' "save back",
-> Photos' album source, SFTP (no socket API in the kit).
+> Photos' album source.
 
 **A Phoenix cloud.** If the project later offers its own paid cloud, like
 iCloud (see the decisions in [AI-AND-MCP.md](AI-AND-MCP.md)), it should be

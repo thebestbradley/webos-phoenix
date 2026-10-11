@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aurora Glass</title>
+<style>
+  @font-face { font-family: "Manrope"; src: url("assets/Manrope.ttf"); font-weight: 100 900; }
+  :root { --bg: #0B0F18; --fg: #EEF1F5; --dim: #AEB6C2; --acc: #46E8B2; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 "Manrope", "Open Sans", sans-serif; }
+  header { padding: 40px 32px 16px; max-width: 1400px; margin: 0 auto; }
+  h1 { margin: 0; font-size: 34px; letter-spacing: -.01em; border-left: 6px solid var(--acc); padding-left: 16px; }
+  header p { color: var(--dim); max-width: 760px; margin: 12px 0 0 22px; }
+  header nav { margin: 16px 0 0 22px; display: flex; gap: 16px; flex-wrap: wrap; }
+  a { color: var(--acc); }
+  main { max-width: 1400px; margin: 0 auto; padding: 16px 32px 64px; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 28px; }
+  figure { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-content: start; }
+  figure.tablet, figure.board { grid-column: span 2; }
+  figure img { width: 100%; display: block; border-radius: 12px; box-shadow: 0 10px 30px -12px rgba(0,0,0,.6); }
+  figcaption { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 2px; }
+  figcaption span { color: var(--dim); font-size: 13px; }
+  @media (max-width: 700px) { figure.tablet, figure.board { grid-column: auto; } main { padding: 16px; } header { padding: 24px 16px 8px; } }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Aurora Glass</h1>
+    <p>The wallpaper is always present; every app is a sheet of frosted glass that takes its colour from it, with tint-only panels and lightly blurred bars on top.</p>
+    <nav><a href="SPEC.md">SPEC.md</a><a href="contact-sheet.png">Contact sheet</a><span style="color:var(--dim)">Re-render: <code>NODE_PATH="$(npm root -g)" node render.cjs</code></span></nav>
+  </header>
+  <main>
+    <figure class="phone">
+      <a href="renders/messaging-list-light.png"><img src="renders/messaging-list-light.png" alt="Messaging · conversation list, light"></a>
+      <a href="renders/messaging-list-dark.png"><img src="renders/messaging-list-dark.png" alt="Messaging · conversation list, dark"></a>
+      <figcaption><b>Messaging · conversation list</b><span><a href="screens/messaging-list.html?theme=light">source, light</a> · <a href="screens/messaging-list.html?theme=dark">dark</a></span></figcaption>
+    </figure>
+    <figure class="phone">
+      <a href="renders/messaging-thread-light.png"><img src="renders/messaging-thread-light.png" alt="Messaging · conversation (SMS + Jabber), light"></a>
+      <a href="renders/messaging-thread-dark.png"><img src="renders/messaging-thread-dark.png" alt="Messaging · conversation (SMS + Jabber), dark"></a>
+      <figcaption><b>Messaging · conversation (SMS + Jabber)</b><span><a href="screens/messaging-thread.html?theme=light">source, light</a> · <a href="screens/messaging-thread.html?theme=dark">dark</a></span></figcaption>
+    </figure>
+    <figure class="phone">
+      <a href="renders/settings-light.png"><img src="renders/settings-light.png" alt="Settings · main list, light"></a>
+      <a href="renders/settings-dark.png"><img src="renders/settings-dark.png" alt="Settings · main list, dark"></a>
+      <figcaption><b>Settings · main list</b><span><a href="screens/settings.html?theme=light">source, light</a> · <a href="screens/settings.html?theme=dark">dark</a></span></figcaption>
+    </figure>
+    <figure class="phone">
+      <a href="renders/music-light.png"><img src="renders/music-light.png" alt="Music · now playing, light"></a>
+      <a href="renders/music-dark.png"><img src="renders/music-dark.png" alt="Music · now playing, dark"></a>
+      <figcaption><b>Music · now playing</b><span><a href="screens/music.html?theme=light">source, light</a> · <a href="screens/music.html?theme=dark">dark</a></span></figcaption>
+    </figure>
+    <figure class="tablet">
+      <a href="renders/email-light.png"><img src="renders/email-light.png" alt="Email · three panes, light"></a>
+      <a href="renders/email-dark.png"><img src="renders/email-dark.png" alt="Email · three panes, dark"></a>
+      <figcaption><b>Email · three panes</b><span><a href="screens/email.html?theme=light">source, light</a> · <a href="screens/email.html?theme=dark">dark</a></span></figcaption>
+    </figure>
+    <figure class="tablet">
+      <a href="renders/calendar-light.png"><img src="renders/calendar-light.png" alt="Calendar · week, light"></a>
+      <a href="renders/calendar-dark.png"><img src="renders/calendar-dark.png" alt="Calendar · week, dark"></a>
+      <figcaption><b>Calendar · week</b><span><a href="screens/calendar.html?theme=light">source, light</a> · <a href="screens/calendar.html?theme=dark">dark</a></span></figcaption>
+    </figure>
+    <figure class="board">
+      <a href="renders/components-light.png"><img src="renders/components-light.png" alt="Component sheet, light"></a>
+      <a href="renders/components-dark.png"><img src="renders/components-dark.png" alt="Component sheet, dark"></a>
+      <figcaption><b>Component sheet</b><span><a href="screens/components.html?theme=light">source, light</a> · <a href="screens/components.html?theme=dark">dark</a></span></figcaption>
+    </figure>
+    <figure class="phone">
+      <a href="renders/cards-light.png"><img src="renders/cards-light.png" alt="Card view, light"></a>
+      <a href="renders/cards-dark.png"><img src="renders/cards-dark.png" alt="Card view, dark"></a>
+      <figcaption><b>Card view</b><span><a href="screens/cards.html?theme=light">source, light</a> · <a href="screens/cards.html?theme=dark">dark</a></span></figcaption>
+    </figure>
+  </main>
+</body>
+</html>

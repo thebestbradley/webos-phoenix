@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Music: now playing</title>
+<link rel="stylesheet" href="../css/onyx.css">
+<script src="../js/icons.js"></script>
+<script src="../js/frame.js"></script>
+<style>
+  .toolbar.top { height: 60px; }
+  .toolbar.top .mid { flex: 1; text-align: center; }
+  .toolbar.top .title { font-size: 16px; }
+  .stage { flex: 1; display: flex; flex-direction: column; align-items: center; padding-top: 22px; position: relative; overflow: hidden; }
+  html[data-theme="light"] .stage { background: radial-gradient(120% 60% at 50% 0%, #FFFFFF, var(--bg) 70%); }
+  html[data-theme="dark"] .stage { background: radial-gradient(120% 60% at 50% 0%, #2A2140, var(--bg) 70%); }
+  .art { width: 324px; height: 324px; border-radius: 14px; overflow: hidden; position: relative;
+    box-shadow: 0 0 0 1px rgba(0,0,0,.12), 0 18px 34px -14px rgba(20, 10, 60, .55);
+    -webkit-box-reflect: below 2px linear-gradient(transparent 88%, rgba(255,255,255,.13)); }
+  .art img { width: 100%; height: 100%; display: block; }
+  .art .cap { position: absolute; left: 0; right: 0; bottom: 16px; text-align: center; color: #F3F0FF; }
+  .art .cap b { display: block; font-size: 15px; font-weight: 800; letter-spacing: .3em; }
+  .art .cap span { display: block; font-size: 8.5px; font-weight: 700; letter-spacing: .3em; color: #B9AEE8; margin-top: 4px; }
+  .meta { margin-top: 34px; text-align: center; }
+  .meta .t { font-size: 23px; font-weight: 700; letter-spacing: -.018em; }
+  .meta .a { font-size: 15px; color: var(--text-2); margin-top: 3px; }
+  .prog { width: 100%; padding: 18px 26px 0; }
+  .prog .bar { height: 8px; border-radius: 4px; background: var(--line-2); box-shadow: inset 0 1px 2px rgba(0,0,0,.15); position: relative; }
+  .prog .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 43%; border-radius: 4px; background: linear-gradient(180deg, #3196E2, var(--blue)); }
+  .prog .bar b { position: absolute; left: 43%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: linear-gradient(180deg, #fff, #E6E9ED); box-shadow: 0 1px 4px rgba(0,0,0,.35), 0 0 0 5px rgba(53,168,238,.25); }
+  .prog .times { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 500; color: var(--text-3); margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .vol { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 26px 0; color: var(--text-3); }
+  .vol .slider { flex: 1; } .vol .ic { width: 20px; height: 20px; }
+  .upnext { width: calc(100% - 24px); margin-top: 20px; }
+  .upnext .mini { width: 38px; height: 38px; border-radius: 8px; background: url("../assets/album.svg") 50% 30% / 160%; filter: hue-rotate(60deg); box-shadow: 0 0 0 1px rgba(0,0,0,.15); }
+  .deck { height: 92px; justify-content: space-between; padding: 0 18px; }
+  .deck .ibtn { width: 48px; height: 48px; border-radius: 24px; }
+  .deck .ibtn .ic { width: 22px; height: 22px; }
+  .deck .ibtn.on { color: #8FD0FA; }
+  .deck .seek { display: inline-flex; border-radius: 26px; box-shadow: 0 0 0 1px rgba(0,0,0,.45); overflow: hidden; }
+  .deck .seek button { width: 58px; height: 52px; display: grid; place-items: center; color: var(--bar-text); background: linear-gradient(180deg, var(--bar-btn-1), var(--bar-btn-2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.12); }
+  .deck .seek button + button { border-left: 1px solid rgba(0,0,0,.4); }
+  .deck .seek .ic { width: 24px; height: 24px; }
+  .deck .seek .play { width: 74px; color: #fff; background: linear-gradient(180deg, var(--blue-1), var(--blue-2)); box-shadow: inset 0 1px 0 rgba(255,255,255,.25); }
+  .deck .seek .play .ic { width: 28px; height: 28px; }
+</style>
+</head>
+<body class="phone">
+  <header class="statusbar" data-app="Music"></header>
+  <main class="app">
+    <div class="toolbar top">
+      <button class="ibtn"><i data-i="chevD"></i></button>
+      <div class="mid"><div class="title">Now Playing</div><div class="sub">Night Transit · track 4 of 11</div></div>
+      <button class="ibtn"><i data-i="queue"></i></button>
+    </div>
+    <div class="stage">
+      <div class="art"><img src="../assets/album.svg" alt=""><div class="cap"><b>NIGHT TRANSIT</b><span>THE LUMEN PILOTS</span></div></div>
+      <div class="meta"><div class="t">Northern Static</div><div class="a">The Lumen Pilots</div></div>
+      <div class="prog"><div class="bar"><i></i><b></b></div><div class="times"><span>1:42</span><span>-2:16</span></div></div>
+      <div class="vol"><i data-i="speaker"></i><div class="slider"><span class="track"></span><span class="fill" style="width:62%"></span><span class="knob" style="left:62%"></span></div></div>
+      <div class="groupbox upnext">
+        <div class="cap">Up next<span class="r">7 more in queue</span></div>
+        <div class="item" style="min-height:58px"><span class="mini"></span><span class="label">Glass Harbour<small>The Lumen Pilots · 4:12</small></span><i data-i="heart" class="chev" style="width:20px;height:20px"></i></div>
+        <div class="item" style="min-height:58px"><span class="mini" style="filter:hue-rotate(150deg)"></span><span class="label">Signal Fires<small>The Lumen Pilots · 3:47</small></span><i data-i="heart" class="chev" style="width:20px;height:20px"></i></div>
+      </div>
+    </div>
+    <div class="toolbar bottom deck">
+      <button class="ibtn bare on"><i data-i="shuffle"></i></button>
+      <div class="seek"><button><i data-i="prev"></i></button><button class="play"><i data-i="pause"></i></button><button><i data-i="next"></i></button></div>
+      <button class="ibtn bare"><i data-i="repeat"></i></button>
+    </div>
+  </main>
+  <footer class="gesture"></footer>
+<script>phxReady();</script>
+</body>
+</html>

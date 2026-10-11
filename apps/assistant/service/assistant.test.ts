@@ -208,9 +208,12 @@ describe("confirmation for what sends or calls", () => {
             messageText: "I'm on my way", to: [{ addr: "+15550102", name: "Priya Nair" }] });
     });
 
-    it("texts someone with no number on a chat network they are on; says what is missing", async () => {
+    it("texts someone with no number on a chat network they are on, asking which of two; says what is missing", async () => {
         const t = setup();
-        const r = await ask(t, "text Priya see you at noon");
+        // On two networks, neither asked for nor talked on lately: which (never a guess for what is sent).
+        const q = await ask(t, "text Priya see you at noon");
+        expect(last(q)).toMatchObject({ status: "ask", text: "On Matrix or Telegram?", choices: [{ id: "pick:0", label: "Matrix" }, { id: "pick:1", label: "Telegram" }] });
+        const r = await t.svc.choose({ threadId: q.thread.id, messageId: last(q).id, choice: "pick:0" });
         expect(last(r)).toMatchObject({ status: "pending", text: "Send \"see you at noon\" to Priya Nair on Matrix?" });
         await t.svc.confirm({ threadId: r.thread.id, messageId: last(r).id, accept: true });
         expect(t.called("messaging/putMessage")[0].params.message).toMatchObject({ _kind: "com.palm.immessage.matrix:1", username: "@me:matrix.example",

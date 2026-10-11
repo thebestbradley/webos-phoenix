@@ -596,10 +596,11 @@ function nameAtStart(rest, ctx) {
 }
 
 // The chat network a message is to go by ("message sam on telegram: hi",
-// "send a matrix message to sam saying hi"): {t: the words without it, via}.
-var CHAT_NET = "(jabber|xmpp|matrix|delta ?chat|telegram)";
-function chatNetwork(t) {
-    var via = "", m;
+// "send a matrix message to sam saying hi", "text sam on slack: hi"):
+// {t: the words without it, via}. The networks: the services people name
+// and the device's own messaging accounts (lib/lang/en-synergy.js chatWords).
+function chatNetwork(t, ctx) {
+    var via = "", m, CHAT_NET = "(" + synergyWords.chatWords(ctx) + ")";
     function net(w) { return /^(?:jabber|xmpp)$/.test(w) ? "jabber" : /^delta ?chat$/.test(w) ? "deltachat" : w; }
     if ((m = new RegExp("^(send (?:a |an )?)" + CHAT_NET + " (?:message|text|chat|msg) to ").exec(t))) {
         via = net(m[2]);
@@ -617,7 +618,7 @@ function chatNetwork(t) {
 // "text sam i'm late", "send a message to sam saying hi", "tell sam that ...",
 // "message sam on telegram: hi" (via: the chat network)
 function textMessage(t, ctx) {
-    var cn = chatNetwork(t);
+    var cn = chatNetwork(t, ctx);
     var r = textMessageWords(cn.t, ctx);
     if (r && cn.via) r.via = cn.via;
     return r;
@@ -1297,12 +1298,10 @@ var NOT_HERE = [
     ["image", /\b(?:images?|pictures?|drawings?|paintings?|art|logo|photo of)\b/, /^(?:generate|draw|create|make|paint|design|sketch)\b/],
     ["post", /\b(?:twitter|x\.com|facebook|instagram|tiktok|linkedin|mastodon|social media)\b/, /^(?:post|tweet|share|upload|publish)\b/],
     // Found by the review (11 October 2026), each taken as something else:
-    // "send my ETA to Sam" texted a contact called "my"; "play my podcast"
-    // searched Music for "podcast"; "what's on my screen" offered the
-    // brightness. Where my location goes or a podcast plays is another
-    // command's (none yet); what is on the screen needs a model that sees.
-    ["share", /\b(?:my (?:eta|e\.t\.a|location|current location|whereabouts|position|arrival time|live location)|where i am|where i'm at|when i(?:'ll| will) (?:be there|be home|arrive|get there|get home))\b/,
-     /^(?:send|share|text|tell|give|message|let|show|email)\b/],
+    // "play my podcast" searched Music for "podcast"; "what's on my screen"
+    // offered the brightness. Where a podcast plays is another command's
+    // (none yet); what is on the screen needs a model that sees. ("Send my
+    // ETA to Sam", which texted a contact called "my", is shareLocation.)
     // "Send the photo to Sam": no command attaches a picture (the model's
     // set: Qwen3 0.6B offered a screenshot).
     // The picture is what is sent: right after the verb, or after one or two
@@ -1322,10 +1321,9 @@ function notHere(t) {
             if (NOT_HERE[i][0] === "money" && /^(?:send|give)\b/.test(t) && !/\b(?:money|dollars?|bucks|euros?|pounds?|\$\d+|payment)\b/.test(t)) return null;
             if (NOT_HERE[i][0] === "image" && /^(?:make|create)\b/.test(t) && !/\b(?:images?|drawings?|paintings?|art|logo)\b/.test(t)) return null;
             if (NOT_HERE[i][0] === "booking" && /\b(?:appointment|meeting|calendar)\b/.test(t)) return null;
-            // "Tell me where I am" asks where; "the brightness on my screen" is the brightness.
-            if (NOT_HERE[i][0] === "share" && /^(?:tell|show|give) me\b/.test(t)) return null;
             // "Text Sam saying I love the photo": words about a picture, not one.
             if (NOT_HERE[i][0] === "photo" && /\b(?:saying|says|say|that reads|telling|tell (?:him|her|them)|about|that (?:i|we|you|he|she|they|it)|i'll|i will|i've|i have)\b/.test(t)) return null;
+            // "The brightness on my screen" is the brightness.
             if (NOT_HERE[i][0] === "screen" && /\b(?:bright|brightness|dim|dimmer|wallpaper|rotat\w*|lock)\b/.test(t)) return null;
             return { what: NOT_HERE[i][0] };
         }
@@ -2495,8 +2493,8 @@ var say = {
     },
     // Calendar
     eventWhen: function () { return "When is it? Say a day and a time, like \"tomorrow at 3\"."; },
-    eventAdded: function (title, start, end, allDay, now, location, repeat) {
-        return "Added " + quote(title) + " to your calendar, " + whenText(start, end, allDay, now) + (repeat ? ", " + repeatText(repeat) : "") +
+    eventAdded: function (title, start, end, allDay, now, location, repeat, calendar) {
+        return "Added " + quote(title) + " to your " + (calendar ? calendar + " " : "") + "calendar, " + whenText(start, end, allDay, now) + (repeat ? ", " + repeatText(repeat) : "") +
             (location ? ", at " + location : "") + ".";
     },
     noCalendar: function () { return "There's no calendar to add it to. Open Calendar to set one up."; },
@@ -2727,7 +2725,6 @@ var say = {
                  booking: "I can't book things for you yet.",
                  image: "I can't make pictures yet.",
                  post: "I can't post to social media for you yet.",
-                 share: "I can't share your location or arrival time yet.",
                  photo: "I can't send photos or videos yet.",
                  podcast: "I can't play podcasts myself yet.",
                  screen: "I can't see what's on your screen yet." }[what] || "";
@@ -2802,8 +2799,8 @@ var say = {
     // answered yet), "denied", "off", "unavailable"; purpose "weather" or
     // "distance".
     location: function (why, purpose) {
-        var need = purpose === "distance" ? "work out how far that is" : purpose === "places" ? "find places near you and the way there" : "check the weather where you are";
-        var instead = purpose === "distance" || purpose === "places" ? "" : " Or say a city, like \u201cweather in Paris\u201d.";
+        var need = purpose === "distance" ? "work out how far that is" : purpose === "share" ? "send where you are" : purpose === "places" ? "find places near you and the way there" : "check the weather where you are";
+        var instead = purpose === "distance" || purpose === "places" || purpose === "share" ? "" : " Or say a city, like \u201cweather in Paris\u201d.";
         if (why === "ask") return "To " + need + ", I need your location. Is it OK if I use it?";
         if (why === "denied") return "I'm not allowed to use your location. Allow it, here or in Settings > Location Services, and I'll " + need + "." + instead;
         if (why === "off") return "Location Services are off. Turn them on and I'll " + need + "." + instead;
@@ -2940,7 +2937,8 @@ function choiceAnswer(text, options, partial, places) {
 var CHOICE_PHRASES = { "Pause": "pause it", "Play": "play it", "Next": "skip to the next one", "Save as Memo": "save it as a memo",
                        "Show in Maps": "show it in Maps", "Allow": "use your location", "Don't Allow": "leave your location alone",
                        "Allow Location": "use your location", "Copy It Instead": "copy it instead", "Location Settings": "open Location Settings",
-                       "Start Navigation": "start navigation", "Call Voicemail": "call voicemail" };
+                       "Start Navigation": "start navigation", "Call Voicemail": "call voicemail",
+                       "Join Now": "join it now", "Open Post": "open the post" };
 function choicePhrase(o) {
     if (o.kind === "web") return "search the web";
     if (o.kind === "cloud") return "ask " + o.name;
@@ -3217,9 +3215,20 @@ say.searchWhat = function () { return "What should I search the web for?"; };
 // "Connect a model", said: Settings opens on it.
 say.connecting = function () { return "I've opened Settings > Assistant to connect a model."; };
 
+// What is connected through Synergy (lib/lang/en-synergy.js): its rules
+// before the others (they hear an account named: "on Slack", "my work
+// calendar"), its words for a model's choice, and what it says.
+var synergyWords = require("./en-synergy")({ quote: quote, list: list, plural: plural, cap: cap, cased: cased, excerpt: excerpt, whenText: whenText, timeText: timeText,
+                                             extract: extract, rules: function () { return rules; } });
+Array.prototype.splice.apply(rules, [rules.map(function (r) { return r[0]; }).indexOf("beyond"), 0].concat(synergyWords.RULES));
+Object.keys(synergyWords.MENTIONS).forEach(function (k) { MENTIONS[k] = synergyWords.MENTIONS[k]; });
+Object.keys(synergyWords.say).forEach(function (k) { say[k] = synergyWords.say[k]; });
+
 module.exports = {
     id: "en",
     name: "English",
+    // The services people name, for lib/commands-synergy.js (canon: "gmail" -> "google").
+    synergy: { serviceOf: synergyWords.serviceOf, canon: synergyWords.canon },
     clean: clean,
     rules: rules,
     casual: casual,

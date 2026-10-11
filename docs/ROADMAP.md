@@ -63,12 +63,14 @@ Phoenix UI, PixiOS with Bennu UI, an XR bird) are in [BRANDING.md](BRANDING.md).
 | [APP-STORE.md](APP-STORE.md) | Web apps as webOS apps, the Phoenix Catalog, App Museum II and Preware, streaming apps and DRM | 1.0, 2.0 |
 | [ANDROID.md](ANDROID.md) | Android apps through Waydroid, as webOS cards | 1.0 |
 | [AI-AND-MCP.md](AI-AND-MCP.md) | The voice assistant (1.0), the MCP layer and the AI agent (2.0) | 1.0, 2.0 |
+| [ASSISTANT-PARITY.md](ASSISTANT-PARITY.md) | The Assistant measured against the others (11 October 2026): the review's bugs, the everyday features, what needs a model | 1.0, 2.0 |
 | [TERMINAL.md](TERMINAL.md) | The Terminal app and Developer Mode | M5 |
 | [SCREENSHOTS.md](SCREENSHOTS.md) | Screenshots as the original took them (1.x), and preview, markup, recording, text and AI look-up (2.0) | 1.0, 2.0 |
 | [GESTURE-BAR.md](GESTURE-BAR.md) | The original's light bar animations (1.x), buttons at the ends of the gesture area, and the animated 2.0 bar | 1.0, 2.0 |
 | [COMMUNITY-FEATURES.md](COMMUNITY-FEATURES.md) | What the community added after HP (webOS CE 3.1.0, LunaCE, Preware patches, webOS Archive), ranked, with 1.x and 2.0 targets | 1.0, 2.0 |
 | [SECURITY-APPS.md](SECURITY-APPS.md) | Passwords and Authenticator threat model | M4 |
 | [CONVERGENCE.md](CONVERGENCE.md) | 2.0: desktop mode, TV mode, wireless display | 2.0 |
+| [design-2.0/](design-2.0/README.md) | 2.0's UI layer: five design directions drawn on the same screens (Aurora Glass, Onyx Reborn, Phoenix Material, Ember, Ember Glass), with their specs, sources and a gallery | 2.0 |
 | [LUNEOS.md](LUNEOS.md), [WEBOS-FAMILY.md](WEBOS-FAMILY.md) | LuneOS, webOS Community Edition, OSE and Phoenix compared; which LuneOS layers to build on | M1, M3 |
 | [LEGAL.md](LEGAL.md), [BRANDING.md](BRANDING.md) | Licences, artwork and sounds, names and trademarks | all |
 | [PLATFORM.md](PLATFORM.md), [PLATFORM-BUILD-PROMPT.md](PLATFORM-BUILD-PROMPT.md) | The servers: website, account, developer portal, the signed feeds (catalog, updates, drivers), downloads, cloud services; the prompt for building them in Laravel | 1.0 |

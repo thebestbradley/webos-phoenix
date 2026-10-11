@@ -361,6 +361,20 @@ function writeEvent(ev, baseComp, uid, localTz, options) {
         // Attendees are written only for new events; the server's list stays otherwise.
         if (isNew && (p.name === "ATTENDEE" || p.name === "ORGANIZER")) return false;
         return p.name !== "UID";
+    }).map(function (p) {
+        // ... but a guest's answer changed on the device (Calendar or the
+        // Assistant: "accept the invite") is theirs to write: its PARTSTAT,
+        // which a scheduling server turns into a reply to the organizer
+        // (RFC 6638 3.2.2.1, RFC 5545 3.2.12).
+        if (isNew || p.name !== "ATTENDEE") return p;
+        var email = CL.textOf(p).replace(/^mailto:/i, "").trim().toLowerCase();
+        var a = (ev.attendees || []).filter(function (x) { return x && !x.organizer && String(x.email || "").toLowerCase() === email; })[0];
+        var now = a && a.participationStatus;
+        if (!now || now === param(p, "PARTSTAT")) return p;
+        var params = {};
+        Object.keys(p.params).forEach(function (k) { if (k !== "RSVP") params[k] = p.params[k]; });
+        params.PARTSTAT = [now];
+        return CL.prop(p.name, p.value, params, p.group);
     });
     // Keep non-alarm subcomponents of the base.
     if (baseComp) comp.components = (baseComp.components || []).filter(function (c) { return c.name !== "VALARM"; });

@@ -75,6 +75,7 @@
 {"id":"a-sw-51","cat":"messages","put":[{"_id":"p-mark","_kind":"com.palm.person:1","name":{"givenName":"Mark","familyName":"Jones"},"phoneNumbers":[{"value":"(303) 555-0170","type":"type_mobile"}],"emails":[]}],"say":"send Mark a message","expect":{"command":"text","status":"ask","args":{"message":""}},"notText":"a message"},
 {"id":"a-sw-52","cat":"messages","say":"send Mom a text","expect":{"command":"text","status":"ask","args":{"message":""}},"notText":"a text"},
 {"id":"a-sw-53","cat":"messages","put":[{"_id":"p-rose","_kind":"com.palm.person:1","name":{"givenName":"Rose","familyName":"Tyler"},"phoneNumbers":[{"value":"(303) 555-0160","type":"type_mobile"}],"emails":[]}],"say":"text Rose I got the pictures","expect":{"command":"text","status":"pending","args":{"message":{"$re":"^I got the pictures$"}}}},
-{"id":"a-sw-54","cat":"messages","say":"email Mom the pictures from the trip","expect":{"answer":["fallback","clarify"]},"forbid":["text","email"]}
+{"id":"a-sw-54","cat":"messages","say":"email Mom the pictures from the trip","expect":{"answer":["fallback","clarify"]},"forbid":["text","email"]},
+{"id":"a-sw-55","cat":"notes","say":"add stamps to my to do list","note":"the phone's default list, not Microsoft To Do (the Synergy world has a Microsoft account)","expect":{"command":"task","args":{"text":"Stamps"}},"notText":"microsoft|signed in","effects":[{"kind":"com.palm.task:1","where":{"summary":"Stamps","listId":"list-inbox"},"count":1}]}
 ]
 }

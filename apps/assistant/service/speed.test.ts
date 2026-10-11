@@ -17,6 +17,8 @@ import { device, NOW } from "./test/device";
 
 const req = createRequire(import.meta.url);
 const grammar = req("./lib/grammar.js") as { parse(t: string, ctx: object): { command: string } | null };
+// The accounts' drives, as the evaluation gives them (tools/eval-assistant.cjs runCase).
+const world = req("./test/accounts-world.cjs") as { DRIVE_FILES: Record<string, object[]> };
 type Turn = { say: string; replies: { path: string }[] };
 type Case = { id: string; say?: string; turns?: { say: string; silence?: boolean; voice?: boolean }[]; settings?: object; deviceState?: object; locationAllowed?: boolean | null; put?: object[]; voice?: boolean };
 const harness = req("../../../tools/eval-assistant.cjs") as {
@@ -56,6 +58,7 @@ describe("what the grammar does never waits for the model", () => {
             const alone = await harness.runCase(c, {});
             const m = model();
             const d = device({ seed: (put) => { harness.seed(put); for (const o of c.put ?? []) put(JSON.parse(JSON.stringify(o))); }, apps: harness.APPS, llm: m.llm, llmRequest: m.llmRequest,
+                               driveFiles: world.DRIVE_FILES,
                                settings: { followUps: false, ...(c.settings ?? {}) },
                                locationAllowed: c.locationAllowed === undefined ? true : c.locationAllowed });
             if (c.deviceState) Object.assign(d.state, c.deviceState);

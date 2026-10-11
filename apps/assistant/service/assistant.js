@@ -89,6 +89,7 @@ var providers = require("./lib/providers");
 var models = require("./lib/models");
 var followups = require("./lib/followups");
 var emergency = require("./lib/emergency");
+var synergy = require("./lib/synergy");
 
 var SERVICE = "org.webosphoenix.assistant";
 var SETTINGS_APP = "org.webosphoenix.settings";
@@ -1599,7 +1600,8 @@ function createAssistantService(deps) {
         }
         return before.then(function () {
             if (fo.sentence) {
-                var again = grammar.parse(fo.sentence, { lang: settings().language, now: now(), apps: cat.apps, names: cat.names || [], appCommands: cat.compiled, original: text });
+                var again = grammar.parse(fo.sentence, { lang: settings().language, now: now(), apps: cat.apps, names: cat.names || [], appCommands: cat.compiled, original: text,
+                                                         accounts: cat.accounts || [] });
                 if (!again) return null;
                 if (again.command === "multi") return actParts(thread, again.args.parts, cat, text);
                 return actParsed(thread, again, cat, text);
@@ -1651,7 +1653,8 @@ function createAssistantService(deps) {
     function decisionOptions(thread, text, cat) {
         return decision.world(env(), commands.dbFind, cat, now()).then(function (w) {
             return decision.options({ lang: lang(), grammar: grammar, text: text, world: w, last: thread.last, now: now(),
-                                      parseCtx: { lang: settings().language, now: now(), apps: cat.apps, names: cat.names || [], appCommands: cat.compiled },
+                                      parseCtx: { lang: settings().language, now: now(), apps: cat.apps, names: cat.names || [], appCommands: cat.compiled,
+                                                  accounts: cat.accounts || [] },
                                       commands: function (id) { var c = commands.find(cat.all, id); return !!c && allowed(c); } });
         });
     }
@@ -1681,10 +1684,12 @@ function createAssistantService(deps) {
     }
 
     function route(thread, text, fq) {
-        return Promise.all([catalogue(), commands.contactNames(env())]).then(function (got) {
+        // The accounts connected through Synergy, by what they are called (lib/synergy.js): "on Slack", "my work calendar".
+        return Promise.all([catalogue(), commands.contactNames(env()), synergy.vocabulary(env())]).then(function (got) {
             var cat = got[0];
             cat.names = got[1];
-            var parsed = grammar.parse(text, { lang: settings().language, now: now(), apps: cat.apps, names: got[1], appCommands: cat.compiled });
+            cat.accounts = got[2];
+            var parsed = grammar.parse(text, { lang: settings().language, now: now(), apps: cat.apps, names: got[1], appCommands: cat.compiled, accounts: got[2] });
             // A question waits: the words answer it, or it waits for later.
             if (fq) {
                 var said = lang().followUp ? lang().followUp.answer(fq.followUp.kind, text, now()) : null;

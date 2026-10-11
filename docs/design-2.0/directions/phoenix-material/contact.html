@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Phoenix Material, contact sheet</title>
+<style>
+  @font-face { font-family: Figtree; src: url(assets/Figtree.woff2) format('woff2'); font-weight: 300 900; }
+  body { margin: 0; background: #e9efe9; font-family: Figtree, sans-serif; color: #17201a; }
+  .wrap { padding: 44px 48px 48px; width: max-content; }
+  h1 { margin: 0; font-size: 44px; font-weight: 750; letter-spacing: -.5px; }
+  .lede { font-size: 19px; color: #4a564e; margin: 6px 0 26px; max-width: 1500px; line-height: 27px; }
+  h2 { font-size: 15px; font-weight: 750; letter-spacing: 1.2px; text-transform: uppercase; color: #2a6a49; margin: 28px 0 12px; }
+  .row { display: flex; gap: 18px; align-items: flex-start; }
+  figure { margin: 0; }
+  figure img { display: block; height: var(--h, 520px); border-radius: 14px; box-shadow: 0 4px 16px rgb(0 0 0 / .14); }
+  figcaption { font-size: 14px; font-weight: 600; color: #4a564e; margin-top: 8px; }
+</style>
+<script>
+const R = (n, c) => `<figure><img src="renders/${n}.png"><figcaption>${c}</figcaption></figure>`;
+const phones = ['messaging-list', 'messaging-thread', 'settings', 'music', 'cards'];
+const names = { 'messaging-list': 'Messaging', 'messaging-thread': 'Conversation', settings: 'Settings', music: 'Music', cards: 'Card view', email: 'Email (tablet)', calendar: 'Calendar (tablet)', components: 'Components' };
+window.addEventListener('DOMContentLoaded', () => {
+  const m = document.getElementById('m');
+  m.innerHTML =
+    `<h2>Phone · light and dark · colour from Northern Lights</h2><div class="row">${phones.map(p => R(p + '-light', names[p] + ' · light')).join('')}${phones.map(p => R(p + '-dark', names[p] + ' · dark')).join('')}</div>` +
+    `<h2>Tablet and components · light</h2><div class="row">${['email', 'calendar', 'components'].map(p => R(p + '-light', names[p])).join('')}</div>` +
+    `<h2>Tablet and components · dark</h2><div class="row">${['email', 'calendar', 'components'].map(p => R(p + '-dark', names[p])).join('')}</div>` +
+    `<h2>The same screens, colour from Lily Pads</h2><div class="row">${['messaging-list', 'messaging-thread', 'settings'].flatMap(p => [R(p + '-lilypads-light', names[p] + ' · light'), R(p + '-lilypads-dark', names[p] + ' · dark')]).join('')}</div>`;
+  Promise.all([...document.images].map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; }))).then(() => { window.__ready = true; });
+});
+</script>
+</head>
+<body>
+<div class="wrap">
+  <h1>Phoenix Material</h1>
+  <div class="lede">Material 3 thinking made webOS: tonal surfaces whose colour comes from the wallpaper, expressive shapes and type, cards as the unit of everything, Synergy's merged people, and glass only where webOS had it (status bar, app menu, notifications).</div>
+  <div id="m"></div>
+</div>
+</body>
+</html>

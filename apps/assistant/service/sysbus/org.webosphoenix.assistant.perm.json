@@ -38,7 +38,9 @@
         "devices.power.query",
         "vpn.management",
         "phoenix.clipboard",
-        "account.cloud"
+        "account.cloud",
+        "phoenix.appservices.accounts",
+        "phoenix.connector.share"
     ],
     "org.webosphoenix.tts": []
 }

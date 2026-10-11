@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phoenix 2.0 Directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: a working board, not a brochure. Compare one screen across the
+   five directions first; each direction's case below; tap to enlarge. */
+:root {
+  --bg: #eef0f3;
+  --panel: #ffffff;
+  --ink: #15181d;
+  --muted: #5a6270;
+  --line: #d5d9e0;
+  --accent: #2c63c7;
+  --accent-ink: #ffffff;
+  --pick: #c7841a;
+  --shade: rgba(15, 18, 24, 0.86);
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111317; --panel: #1a1d23; --ink: #e9ecf1; --muted: #9aa3b2; --line: #2c313a;
+    --accent: #6f9cf0; --accent-ink: #0d1320; --pick: #e6a43a; --shade: rgba(4, 5, 8, 0.92);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111317; --panel: #1a1d23; --ink: #e9ecf1; --muted: #9aa3b2; --line: #2c313a;
+  --accent: #6f9cf0; --accent-ink: #0d1320; --pick: #e6a43a; --shade: rgba(4, 5, 8, 0.92);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5;
+  padding-inline: 16px; padding-block: 24px 48px;
+}
+.wrap { max-width: 1320px; margin: 0 auto; display: grid; gap: 40px; }
+header { display: grid; gap: 10px; }
+.eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+h1 { font-family: var(--display); font-weight: 700; font-size: clamp(30px, 5vw, 48px); line-height: 1.05; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--display); font-weight: 700; font-size: 24px; margin: 0; text-wrap: balance; }
+h3 { font-family: var(--display); font-weight: 700; font-size: 20px; margin: 0; }
+.lede { max-width: 68ch; color: var(--muted); margin: 0; }
+section { display: grid; gap: 16px; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.chip {
+  font: 500 14px var(--body); color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 999px; padding: 6px 14px; cursor: pointer;
+}
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.chip:focus-visible, .shot:focus-visible, .pick:focus-visible, .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.spacer { flex: 1; }
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.grid.wide { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 900px) { .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .grid.wide { grid-template-columns: minmax(0, 1fr); } }
+figure { margin: 0; display: grid; gap: 8px; align-content: start; min-width: 0; }
+figcaption { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; font-weight: 600; }
+figcaption small { font-weight: 400; color: var(--muted); font-size: 13px; }
+.shot { display: block; width: 100%; padding: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--panel); cursor: zoom-in; }
+.shot img { display: block; width: 100%; height: auto; }
+.cases { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 900px) { .cases { grid-template-columns: minmax(0, 1fr); } }
+.case { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.case header { display: flex; gap: 12px; align-items: center; justify-content: space-between; }
+.case p { margin: 0; }
+.case dl { margin: 0; display: grid; gap: 10px; }
+.case dt { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.case dd { margin: 0; }
+.case ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.pick { font: 600 13px var(--body); border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 999px; padding: 6px 12px; cursor: pointer; white-space: nowrap; }
+.pick[aria-pressed="true"] { border-color: var(--pick); color: var(--pick); }
+.btn { font: 600 14px var(--body); border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); border-radius: 10px; padding: 8px 14px; cursor: pointer; }
+.note { color: var(--muted); font-size: 13px; margin: 0; }
+.picks { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 20px; display: grid; gap: 10px; }
+.picks textarea { width: 100%; min-height: 72px; font: 14px var(--body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; resize: vertical; }
+dialog { border: 0; padding: 0; background: transparent; max-width: 100vw; max-height: 100vh; }
+dialog::backdrop { background: var(--shade); }
+.zoom { display: grid; gap: 10px; justify-items: center; padding: 16px; }
+.zoom img { max-width: min(96vw, 1600px); max-height: 82vh; width: auto; height: auto; border-radius: 10px; }
+.zoom p { color: #e9ecf1; margin: 0; font-weight: 600; }
+.zoom .btn { background: #e9ecf1; color: #15181d; border-color: #e9ecf1; }
+@media (prefers-reduced-motion: no-preference) { .shot img { transition: transform 0.2s ease; } .shot:hover img { transform: scale(1.01); } }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">webOS Phoenix 2.0 · the Phoenix UI layer · 11 October 2026</span>
+    <h1>Phoenix 2.0 Directions</h1>
+    <p class="lede">Five looks for the UI layer the built-in apps will be rebuilt on, in Enact, Ionic and Flutter. Every direction draws the same screens with the same content, on a Fairphone 6 sized phone (1116 × 2484) and a 1280 × 800 tablet, in light and dark. These are mock-ups made from HTML and CSS, not the shipping apps. Tap any picture to see it full size.</p>
+  </header>
+
+  <section aria-labelledby="compare-h">
+    <h2 id="compare-h">Compare a screen</h2>
+    <div class="bar" role="group" aria-label="Screen" id="screens"></div>
+    <div class="bar">
+      <div class="bar" role="group" aria-label="Theme" id="themes"></div>
+      <span class="spacer"></span>
+      <p class="note" id="device-note"></p>
+    </div>
+    <div class="grid" id="compare"></div>
+    <p class="note" id="extra-note" hidden>Phoenix Material takes its colours from the wallpaper. Here it is again with the Lily Pads wallpaper in place of Northern Lights:</p>
+    <div class="grid" id="extra"></div>
+  </section>
+
+  <section aria-labelledby="cases-h">
+    <h2 id="cases-h">The five directions</h2>
+    <p class="lede">What each one is, what it takes from Enyo 2's Onyx and from webOS, and the designers' own view of its strengths and weaknesses. Mark the ones you like; mixing is fine.</p>
+    <div class="cases" id="cases"></div>
+  </section>
+
+  <section aria-labelledby="picks-h">
+    <h2 id="picks-h">Your picks</h2>
+    <div class="picks">
+      <p class="note">Your marks stay in this browser only. Copy them into the chat to send them on.</p>
+      <label for="pick-text" class="eyebrow">Picks and notes</label>
+      <textarea id="pick-text" placeholder="Mark directions above, and add notes here (for example: Ember's type with Aurora's glass)."></textarea>
+      <div class="bar"><button type="button" class="btn" id="copy">Copy picks</button><span class="note" id="copied" aria-live="polite"></span></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="sheets-h">
+    <h2 id="sheets-h">Every screen at once</h2>
+    <div class="grid wide" id="sheets"></div>
+  </section>
+</div>
+
+<dialog id="zoom" aria-label="Full size">
+  <div class="zoom">
+    <img id="zoom-img" alt="">
+    <p id="zoom-cap"></p>
+    <button type="button" class="btn" id="zoom-close">Close</button>
+  </div>
+</dialog>
+
+<script>
+const DIRS = [
+  { id: "aurora-glass", name: "Aurora Glass", by: "frosted glass over the wallpaper",
+    idea: "The wallpaper is always there, and every app is a sheet of frosted glass over it, with the accent colour sampled from the wallpaper. One heavy blur per stack; panels above it only tint; bars blur lightly as content scrolls under them.",
+    heritage: "webOS's curved-glass status bar as a highlight along the top edge of every pane; cards, the app menu tab, bottom notifications.",
+    good: ["The most futuristic and personal look; dark mode is the standout.", "Music takes its accent from the album cover.", "SMS and Jabber bubbles in their own colours make Synergy visible."],
+    bad: ["Depends on the wallpaper: a bright, busy photo needs the shell to raise the glass's opacity.", "Light mode over a dark wallpaper reads as grey, not white.", "The closest to Apple's glass; little Onyx in it.", "Needs the shell to draw a cached blurred wallpaper under apps."],
+    gpu: "Low once the shell caches the blurred wallpaper; a pre-blurred fallback for the Raspberry Pi." },
+  { id: "onyx-reborn", name: "Onyx Reborn", by: "Enyo 2's Onyx, redrawn",
+    idea: "Charcoal toolbars, popups, menus and app menu tab around light content; pill buttons, groupboxes with a charcoal header, the onyx blue, ON/OFF toggles, pickers, swipe-to-delete, the grabber and sliding panels, with the old gloss cut to a trace.",
+    heritage: "Most of Onyx: its toolbar, groupbox, buttons, toggles and pickers, and the TouchPad's panels with the grabber.",
+    good: ["The strongest TouchPad identity: Email's sliding panels are unmistakable.", "Crisp, dense and very legible.", "Cheapest on the GPU, and the same in Enact, Ionic and Flutter."],
+    bad: ["Less futuristic.", "The charcoal chrome can feel heavy on long light pages.", "The wallpaper only shows in card view.", "The toggle, groupbox and pickers are custom in every framework."],
+    gpu: "No live blur; runs as designed on a Raspberry Pi." },
+  { id: "phoenix-material", name: "Phoenix Material", by: "Material 3's colour, made webOS",
+    idea: "Every colour is generated from the wallpaper with Material's own colour library, on solid surfaces with bold shapes and type. Glass only where webOS had it: status bar, app menu, notifications.",
+    heritage: "Cards, the app menu tab, the gesture light, bottom notifications; Synergy's merged people with one badge per account on the avatar; Onyx's segmented control.",
+    good: ["The colour really comes from the wallpaper and from the album cover.", "Very buildable: Flutter has this colour model built in, and the library exists for JavaScript.", "Clear hierarchy; the friendliest of the four."],
+    bad: ["Reads as Android with webOS features more than a new identity.", "Denser and busier than Ember.", "Fixed account colours can clash with some wallpapers."],
+    gpu: "Low: solid surfaces, glass only in the frame." },
+  { id: "ember", name: "Ember", by: "calm, spatial, an ember accent",
+    idea: "Generous space, hairlines, large light type, and depth from light (highlights, long shadows, a glow from below) more than blur. The phoenix shows only as an ember accent: focus, the active item, Send, the Assistant and the gesture light.",
+    heritage: "Email's message panel sliding over the list with its grabber; pill buttons whose gradient becomes a 1 px highlight; a segmented capsule; small uppercase group headers; Synergy as a ring of arcs around a person's avatar.",
+    good: ["The most distinctive, flagship look; striking in dark.", "The ember is rare enough to mean something.", "Cheap on the GPU: mostly plain transparency."],
+    bad: ["Mostly monochrome: can feel austere in light mode, with no colour of your own.", "Hairlines and light type need care on low-resolution screens.", "The 3D card view would be the riskiest thing to build in the shell."],
+    gpu: "Low: little blur." },
+  { id: "ember-glass", name: "Ember Glass", by: "Ember, made of glass",
+    idea: "Ember's layout, type, hairlines and ember accent, with every surface frosted glass over the phoenix wallpaper as in Aurora Glass, so the phoenix glows through the apps. Each tablet column ends in a toolbar with Enyo 2's slider at its bottom left, and the gesture light is Onyx Reborn's longer bar with fading ends, lit gold to ember.",
+    heritage: "Enyo 2's grabber and the TouchPad Email's grab button, back at the bottom left of every column where they were, sliding the panels; Ember's pills, segmented capsule and group headers; webOS cards, the app menu tab, bottom notifications, the gesture light and Synergy's rings.",
+    good: ["Everything liked in Ember, with the warmth of the wallpaper behind it; dark mode glows.", "The slider makes the TouchPad's sliding panels obvious again on every tablet column.", "A longer gesture light that is easier to see and still unmistakably Ember."],
+    bad: ["Leans on the wallpaper even more than Ember: light mode needs a tone map over a dark wallpaper, and a bright, busy one needs a denser tint.", "Every tablet column gives 60 px to its toolbar, so a little less content shows.", "Ember's dimmest text had to be one step stronger to keep AA on glass.", "Needs the shell to draw a cached blurred wallpaper under apps, as Aurora Glass does."],
+    gpu: "Medium: the card's blur is the shell's cached texture; live blur only on toolbars, the compose bar, menus and notifications. Pre-blurred wallpaper and opaque bars on a Raspberry Pi." }
+];
+const SCREENS = [
+  { id: "messaging-list", name: "Messaging", device: "phone" },
+  { id: "messaging-thread", name: "Conversation", device: "phone" },
+  { id: "settings", name: "Settings", device: "phone" },
+  { id: "music", name: "Music", device: "phone" },
+  { id: "cards", name: "Card view", device: "phone" },
+  { id: "email", name: "Email", device: "tablet" },
+  { id: "calendar", name: "Calendar", device: "tablet" },
+  { id: "components", name: "Components", device: "sheet" }
+];
+const LILYPADS = ["messaging-list", "messaging-thread", "settings"];
+const state = { screen: "messaging-list", theme: "dark" };
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("p2d:" + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("p2d:" + k, JSON.stringify(v)); } catch (e) { /* storage off */ } }
+};
+let picks = store.get("picks", {});
+const $ = (id) => document.getElementById(id);
+const src = (dir, screen, theme) => "img/" + dir + "/" + screen + "-" + theme + ".jpg";
+
+function chip(label, pressed, onClick) {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "chip"; b.textContent = label;
+  b.setAttribute("aria-pressed", pressed ? "true" : "false");
+  b.addEventListener("click", onClick);
+  return b;
+}
+function shot(url, alt, caption) {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "shot"; b.setAttribute("aria-label", "Enlarge: " + alt);
+  const img = document.createElement("img");
+  img.src = url; img.alt = alt; img.loading = "lazy";
+  b.appendChild(img);
+  b.addEventListener("click", () => openZoom(url, caption || alt));
+  return b;
+}
+function figure(title, sub, el) {
+  const f = document.createElement("figure");
+  const c = document.createElement("figcaption");
+  const t = document.createElement("span"); t.textContent = title;
+  const s = document.createElement("small"); s.textContent = sub;
+  c.append(t, s); f.append(c, el);
+  return f;
+}
+function renderControls() {
+  const sc = $("screens"); sc.replaceChildren();
+  SCREENS.forEach((s) => sc.appendChild(chip(s.name, s.id === state.screen, () => { state.screen = s.id; store.set("screen", s.id); render(); })));
+  const th = $("themes"); th.replaceChildren();
+  [["light", "Light"], ["dark", "Dark"]].forEach(([id, label]) => th.appendChild(chip(label, id === state.theme, () => { state.theme = id; store.set("theme", id); render(); })));
+}
+function render() {
+  renderControls();
+  const s = SCREENS.find((x) => x.id === state.screen);
+  $("device-note").textContent = s.device === "phone" ? "Phone, 1116 × 2484" : s.device === "tablet" ? "Tablet, 1280 × 800" : "Component sheet";
+  const grid = $("compare"); grid.replaceChildren();
+  grid.className = s.device === "phone" ? "grid" : "grid wide";
+  DIRS.forEach((d) => {
+    const alt = d.name + ": " + s.name + ", " + state.theme;
+    grid.appendChild(figure(d.name, d.by, shot(src(d.id, s.id, state.theme), alt)));
+  });
+  const extra = $("extra"); extra.replaceChildren();
+  const lily = LILYPADS.indexOf(s.id) >= 0;
+  $("extra-note").hidden = !lily;
+  if (lily) {
+    extra.appendChild(figure("Phoenix Material", "Northern Lights", shot(src("phoenix-material", s.id, state.theme), "Phoenix Material with Northern Lights")));
+    extra.appendChild(figure("Phoenix Material", "Lily Pads", shot(src("phoenix-material", s.id + "-lilypads", state.theme), "Phoenix Material with Lily Pads")));
+  }
+}
+function renderCases() {
+  const box = $("cases"); box.replaceChildren();
+  DIRS.forEach((d) => {
+    const a = document.createElement("article"); a.className = "case";
+    const h = document.createElement("header");
+    const t = document.createElement("h3"); t.textContent = d.name;
+    const p = document.createElement("button"); p.type = "button"; p.className = "pick";
+    const sync = () => { p.setAttribute("aria-pressed", picks[d.id] ? "true" : "false"); p.textContent = picks[d.id] ? "★ Picked" : "☆ Pick"; };
+    p.addEventListener("click", () => { picks[d.id] = !picks[d.id]; store.set("picks", picks); sync(); });
+    sync(); h.append(t, p);
+    const idea = document.createElement("p"); idea.textContent = d.idea;
+    const dl = document.createElement("dl");
+    const add = (term, node) => { const dt = document.createElement("dt"); dt.textContent = term; const dd = document.createElement("dd"); dd.append(node); dl.append(dt, dd); };
+    const list = (items) => { const ul = document.createElement("ul"); items.forEach((i) => { const li = document.createElement("li"); li.textContent = i; ul.append(li); }); return ul; };
+    add("From Onyx and webOS", document.createTextNode(d.heritage));
+    add("Strengths", list(d.good));
+    add("Weaknesses", list(d.bad));
+    add("Graphics cost", document.createTextNode(d.gpu));
+    a.append(h, idea, dl);
+    box.appendChild(a);
+  });
+}
+function renderSheets() {
+  const box = $("sheets"); box.replaceChildren();
+  DIRS.forEach((d) => box.appendChild(figure(d.name, "every screen, light and dark", shot("img/" + d.id + "/contact-sheet.jpg", d.name + ": every screen"))));
+}
+function openZoom(url, caption) {
+  const dlg = $("zoom");
+  $("zoom-img").src = url; $("zoom-img").alt = caption; $("zoom-cap").textContent = caption;
+  if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+}
+$("zoom-close").addEventListener("click", () => $("zoom").close());
+$("zoom").addEventListener("click", (e) => { if (e.target === $("zoom") || e.target.classList.contains("zoom")) $("zoom").close(); });
+$("pick-text").value = store.get("notes", "");
+$("pick-text").addEventListener("input", (e) => store.set("notes", e.target.value));
+$("copy").addEventListener("click", () => {
+  const chosen = DIRS.filter((d) => picks[d.id]).map((d) => d.name);
+  const text = "Phoenix 2.0 picks: " + (chosen.length ? chosen.join(", ") : "none marked") + ($("pick-text").value.trim() ? "\nNotes: " + $("pick-text").value.trim() : "");
+  const done = (msg) => { $("copied").textContent = msg; };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => done("Copied."), () => { $("pick-text").value = text; $("pick-text").select(); done("Selected: copy it with your keyboard or menu."); });
+  } else { $("pick-text").value = text; $("pick-text").select(); done("Selected: copy it with your keyboard or menu."); }
+});
+state.screen = store.get("screen", state.screen);
+if (!SCREENS.some((s) => s.id === state.screen)) state.screen = "messaging-list";
+state.theme = store.get("theme", state.theme) === "light" ? "light" : "dark";
+render(); renderCases(); renderSheets();
+</script>

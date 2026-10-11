@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Messaging, a conversation</title>
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/icons.js"></script>
+<script src="../assets/app.js"></script>
+<style>
+  .card { display: flex; flex-direction: column; }
+  .head { padding: 24px 16px 16px 24px; position: relative; }
+  .head::after { content: ""; position: absolute; left: 24px; right: 24px; bottom: 0; height: var(--hair); background: var(--line-2); }
+  .who { display: flex; align-items: center; gap: 18px; --pres-ring: var(--bg); }
+  .who .txt { flex: 1; min-width: 0; }
+  .who .st { display: flex; align-items: center; gap: 7px; margin-top: 2px; }
+  .who .st i { width: 7px; height: 7px; border-radius: 50%; background: var(--online); display: block; }
+  .who .acts { display: flex; gap: 8px; }
+  .ids-cap { margin: 18px 0 8px; }
+  .ids { display: flex; gap: 8px; }
+  .idp { height: 32px; padding: 0 14px 0 10px; border-radius: 16px; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ink-2); box-shadow: inset 0 0 0 var(--hair) var(--line-2); }
+  .idp i { width: 7px; height: 7px; border-radius: 50%; display: block; }
+  html[data-theme="dark"] .idp.on { background: rgb(255 255 255 / .12); }
+  .idp.on { color: var(--ink); background: var(--plane-2); box-shadow: inset 0 0 0 var(--hair) var(--line-2), 0 6px 14px -8px rgb(0 0 0 / .35); }
+  .stream { flex: 1; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 18px 10px;
+    -webkit-mask-image: linear-gradient(transparent, #000 36px); mask-image: linear-gradient(transparent, #000 36px); }
+  .stream > * { flex-shrink: 0; }
+  .sep { display: flex; align-items: center; gap: 12px; margin: 16px 6px 12px; color: var(--ink-3); }
+  .sep::before, .sep::after { content: ""; flex: 1; height: var(--hair); background: var(--line-2); }
+  .msg { max-width: 76%; padding: 11px 16px; font-size: 16px; line-height: 23px; font-weight: 450; border-radius: 20px; margin-top: 4px; }
+  .in { align-self: flex-start; background: var(--plane); border-top-left-radius: 6px; border-bottom-left-radius: 6px; box-shadow: inset 0 0 0 var(--hair) var(--acc-line), 0 10px 22px -18px rgb(0 0 0 / .35); }
+  .in.first { border-top-left-radius: 20px; } .in.last { border-bottom-left-radius: 20px; }
+  .in.sms { --acc-line: color-mix(in oklab, var(--sms) 55%, transparent); }
+  .in.jab { --acc-line: color-mix(in oklab, var(--jabber) 60%, transparent); }
+  .out { align-self: flex-end; background: var(--inverse); color: var(--on-inverse); border-top-right-radius: 6px; border-bottom-right-radius: 6px; }
+  .out.first { border-top-right-radius: 20px; } .out.last { border-bottom-right-radius: 20px; }
+  .meta { margin: 7px 4px 10px; color: var(--ink-3); font-size: 10.5px; }
+  .meta.r { align-self: flex-end; }
+  .meta b { font-weight: 800; }
+  .meta .sms { color: var(--sms); } .meta .jab { color: var(--jabber); }
+  .place { align-self: flex-start; width: 74%; border-radius: 20px 20px 20px 6px; overflow: hidden; margin-top: 4px; background: var(--plane); box-shadow: inset 0 0 0 var(--hair) color-mix(in oklab, var(--sms) 55%, transparent); }
+  .place svg { display: block; width: 100%; height: 104px; }
+  .place .pt { padding: 10px 16px 12px; }
+  .place .pt b { display: block; font-size: 15px; font-weight: 650; }
+  .typing { align-self: flex-start; display: flex; gap: 5px; padding: 15px 16px; border-radius: 20px 20px 20px 6px; background: var(--plane); box-shadow: inset 0 0 0 var(--hair) color-mix(in oklab, var(--jabber) 60%, transparent); margin-top: 4px; }
+  .typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-2); opacity: .35; }
+  .typing span:nth-child(2) { opacity: .6; } .typing span:nth-child(3) { opacity: .9; }
+  .compose { margin: 6px 14px 14px; height: 60px; border-radius: 30px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 8px; }
+  .xport { height: 44px; padding: 0 10px 0 12px; border-radius: 22px; display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 650; box-shadow: inset 0 0 0 var(--hair) var(--line-2); }
+  .xport i.d { width: 7px; height: 7px; border-radius: 50%; background: var(--jabber); display: block; }
+  .xport .ic { width: 12px; height: 12px; color: var(--ink-3); }
+  .compose .text { flex: 1; font-size: 16px; padding-left: 8px; white-space: nowrap; overflow: hidden; }
+  .send { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; background: var(--ember-fill); color: #fff; box-shadow: 0 6px 18px -4px rgb(255 100 30 / .65), inset 0 1px 0 rgb(255 255 255 / .35); flex: none; }
+  .send .ic { width: 20px; height: 20px; }
+</style>
+</head>
+<body>
+<div class="device" data-app="Messaging">
+  <main class="card">
+    <header class="head">
+      <div class="who">
+        <div class="av lg" id="ada">AP<span class="pres"></span></div>
+        <div class="txt">
+          <div class="title-l">Ada Palmer</div>
+          <div class="st small dim"><i></i>Online on Jabber</div>
+        </div>
+        <div class="acts"><div class="ring-btn"><i data-i="phone"></i></div><div class="ring-btn"><i data-i="dots-three"></i></div></div>
+      </div>
+      <div class="ids-cap micro dimmer">One person · three accounts</div>
+      <div class="ids">
+        <div class="idp on"><i style="background:var(--jabber)"></i>Jabber</div>
+        <div class="idp"><i style="background:var(--sms)"></i>SMS · Mobile</div>
+        <div class="idp"><i style="background:var(--work)"></i>Work email</div>
+      </div>
+    </header>
+
+    <section class="stream">
+      <div class="sep micro">Yesterday</div>
+      <div class="msg in sms first">Have you tried the new place on Pine Street?</div>
+      <div class="place">
+        <svg viewBox="0 0 300 104" preserveAspectRatio="xMidYMid slice">
+          <g stroke="var(--line-2)" stroke-width="1" fill="none">
+            <path d="M-10 70 L320 40"/><path d="M-10 20 L320 88"/><path d="M90 -10 L120 120"/><path d="M210 -10 L180 120"/><path d="M-10 96 Q150 60 320 70" stroke-dasharray="3 4"/>
+          </g>
+          <circle cx="166" cy="56" r="20" fill="var(--sunk)" stroke="var(--line-2)"/>
+          <circle cx="166" cy="56" r="4.5" fill="var(--ink)"/>
+        </svg>
+        <div class="pt"><b>Marlow’s</b><span class="small dim">Bistro · 214 Pine Street · until 10 PM</span></div>
+      </div>
+      <div class="meta micro"><b class="sms">SMS</b> · 7:12 PM</div>
+      <div class="sep micro">Today</div>
+      <div class="msg in sms first last">Morning! Still on for lunch today?</div>
+      <div class="meta micro"><b class="sms">SMS</b> · 8:58</div>
+      <div class="msg out first last">Yes! 12:30 at Marlow’s?</div>
+      <div class="meta micro r">SMS · 9:02 · Delivered</div>
+      <div class="msg in sms first last">Perfect, I’ll book it</div>
+      <div class="meta micro"><b class="sms">SMS</b> · 9:03</div>
+      <div class="sep micro"><span class="jab-n" style="color:var(--jabber)">●</span>&nbsp;Ada is online on Jabber</div>
+      <div class="msg in jab first">Leaving the office now</div>
+      <div class="msg in jab last">Running late, grab us a table by the window?</div>
+      <div class="meta micro"><b class="jab">Jabber</b> · 9:39</div>
+      <div class="msg out first last">On it. I’ll order the bread you like</div>
+      <div class="meta micro r">Jabber · 9:41 · Read</div>
+      <div class="typing"><span></span><span></span><span></span></div>
+    </section>
+
+    <footer class="compose float">
+      <div class="xport"><i class="d"></i>Jabber<i data-i="caret-down"></i></div>
+      <div class="text">Got the window seat<span class="caret"></span></div>
+      <div class="ring-btn bare"><i data-i="paperclip"></i></div>
+      <div class="send"><i data-i="paper-plane-right-fill"></i></div>
+    </footer>
+  </main>
+</div>
+<script>document.getElementById('ada').insertAdjacentHTML('beforeend', ring(['jabber', 'sms', 'work']));</script>
+</body>
+</html>

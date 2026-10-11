@@ -61,6 +61,9 @@ var CASES = path.join(ROOT, "apps", "assistant", "eval", "cases.json");
 var serviceArg = process.argv.indexOf("--service");
 if (serviceArg > 0) SERVICE = path.resolve(process.argv[serviceArg + 1]);
 var dev = require(path.join(SERVICE, "test", "device.cjs"));
+// The accounts connected through Synergy (Slack, Bluesky, Google, Microsoft, Todoist, the drives, ...):
+// the service's own stand-in world of them, where the service has one (a baseline may not).
+var accountsWorld = (function () { try { return require(path.join(SERVICE, "test", "accounts-world.cjs")); } catch (e) { return null; } })();
 var commands = require(path.join(SERVICE, "lib", "commands.js"));
 
 var RISK = {};
@@ -68,8 +71,10 @@ commands.BUILT_IN.forEach(function (c) { RISK[c.id] = c.risk; });
 function acts(id) { var r = RISK[id]; return r === "change" || r === "send" || r === "delete" || r === "call"; }
 
 // More of the user's world than the unit tests' device: family, a
-// nickname, two people with one first name, an email to read.
+// nickname, two people with one first name, an email to read; and the
+// accounts connected through Synergy (test/accounts-world.cjs).
 function seed(put) {
+    if (accountsWorld) accountsWorld.seed(put);
     var NOW = dev.NOW;
     put({ _id: "p-mom", _kind: "com.palm.person:1", name: { givenName: "Mom" }, phoneNumbers: [{ value: "(303) 555-0101", type: "type_mobile" }], emails: [{ value: "mom@example.com", type: "type_home" }] });
     put({ _id: "p-alex", _kind: "com.palm.person:1", name: { givenName: "Alex", familyName: "Rivera" }, phoneNumbers: [{ value: "(303) 555-0177", type: "type_mobile" }],
@@ -214,6 +219,7 @@ function runCase(c, opts) {
     // contact whose name is also a word: Will, Rose, Mark).
     var withCase = function (put) { seed(put); (c.put || []).forEach(function (o) { put(JSON.parse(JSON.stringify(o))); }); };
     var d = dev.device({ seed: withCase, apps: APPS, llm: m.llm, llmRequest: m.llmRequest, settings: settings, deps: deps,
+                         driveFiles: accountsWorld ? accountsWorld.DRIVE_FILES : {},
                          locationAllowed: c.locationAllowed === undefined ? true : c.locationAllowed });
     if (c.deviceState) Object.assign(d.state, c.deviceState);
     var turns = c.turns || [{ say: c.say, expect: c.expect, forbid: c.forbid, text: c.text, notText: c.notText, effects: c.effects }];

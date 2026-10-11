@@ -172,27 +172,45 @@ export interface LiveConnection {
     [k: string]: Json;
 }
 
-/** A socket of the host (Environment.net): text in and out. */
+/**
+ * A socket of the host (Environment.net): text in and out, or, opened with
+ * {binary: true}, bytes (a protocol with its own framing and encryption:
+ * SSH, for the SFTP drive).
+ */
 export interface NetSocket {
     /** "stream": TCP, text as it comes; "message": WebSocket, one message per frame. */
     readonly framing: "stream" | "message";
     /** Whether the connection is encrypted (TLS, wss:). */
     readonly secure: boolean;
     write(data: string): void;
+    /** A binary socket: bytes out. */
+    writeBytes?(data: Uint8Array): void;
     /** STARTTLS on a stream socket: TLS on the same connection, the certificate checked for servername. */
     startTls?(servername: string): Promise<void>;
+    /** Text as it comes (not called on a binary socket). */
     onData(fn: (text: string) => void): void;
+    /** A binary socket: bytes as they come. */
+    onBytes?(fn: (bytes: Uint8Array) => void): void;
     onClose(fn: (error?: Error) => void): void;
     close(): void;
 }
 
+/** Where a TCP connection goes: TLS from the start when tls (direct TLS, XEP-0368); binary: bytes, not text. */
+export interface ConnectOptions { host: string; port: number; tls: boolean; servername?: string; binary?: boolean }
+
 export interface SrvRecord { name: string; port: number; priority: number; weight: number }
 
-/** What the host gives for sockets (a device: Node's net, tls and dns; the simulator: WebSocket). */
+/**
+ * What the host gives for sockets (a device: Node's net, tls and dns; the
+ * simulator: WebSocket, and binary TCP through its host's relay where it
+ * has one: binaryOnly).
+ */
 export interface NetEnvironment {
     resolveSrv?(name: string): Promise<SrvRecord[]>;
-    /** A TCP connection, TLS from the start when tls (direct TLS, XEP-0368). */
-    connect?(options: { host: string; port: number; tls: boolean; servername?: string }): Promise<NetSocket>;
+    /** A TCP connection. */
+    connect?(options: ConnectOptions): Promise<NetSocket>;
+    /** connect opens binary connections without TLS only (the simulator's relay: a page has no TLS of its own). */
+    binaryOnly?: boolean;
     websocket?(url: string, protocols?: string[]): Promise<NetSocket>;
 }
 
@@ -207,10 +225,10 @@ export interface HelperProcess {
 /** The sockets a connector may open (ctx.net): to its user's server, the hosts it names, or their SRV targets. */
 export interface Net {
     resolveSrv(name: string): Promise<SrvRecord[]>;
-    connect(options: { host: string; port: number; tls: boolean; servername?: string }): Promise<NetSocket>;
+    connect(options: ConnectOptions): Promise<NetSocket>;
     websocket(url: string, protocols?: string[]): Promise<NetSocket>;
-    /** What this host can do. */
-    readonly supports: { srv: boolean; tcp: boolean; websocket: boolean };
+    /** What this host can do: tcp (text, TLS, STARTTLS), binary (bytes over plain TCP), websocket, SRV lookups. */
+    readonly supports: { srv: boolean; tcp: boolean; websocket: boolean; binary: boolean };
     allowHost(host: string): void;
 }
 

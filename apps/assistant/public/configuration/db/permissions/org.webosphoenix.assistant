@@ -56,7 +56,9 @@
         "object": "com.palm.email:1",
         "caller": "org.webosphoenix.assistant",
         "operations": {
-            "read": "allow"
+            "read": "allow",
+            "update": "allow",
+            "delete": "allow"
         }
     },
     {
@@ -125,6 +127,58 @@
     {
         "type": "db.kind",
         "object": "com.palm.media.image.file:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "read": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.imap.email:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "read": "allow",
+            "update": "allow",
+            "delete": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.pop.email:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "read": "allow",
+            "update": "allow",
+            "delete": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.folder:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "read": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.immessage:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "read": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.chatthread:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "read": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.imloginstate:1",
         "caller": "org.webosphoenix.assistant",
         "operations": {
             "read": "allow"

@@ -266,6 +266,20 @@ describe("event -> iCalendar", () => {
         expect(text).not.toContain("SUMMARY:Old");
         expect(text.match(/BEGIN:VEVENT/g)).toHaveLength(1);
     });
+
+    it("writes the user's own answer to an invitation on their attendee line, nothing else of the list", () => {
+        const server = cal("BEGIN:VEVENT", "UID:srv-2", "DTSTART:20261009T150000Z", "SUMMARY:Planning", "ORGANIZER;CN=Boss:mailto:boss@example.com",
+            "ATTENDEE;CN=Me;PARTSTAT=NEEDS-ACTION;RSVP=TRUE;ROLE=REQ-PARTICIPANT:mailto:me@example.com",
+            "ATTENDEE;CN=Kim;PARTSTAT=ACCEPTED:mailto:kim@example.com", "END:VEVENT");
+        const ev = ical.toEvents(server, { localTz: tz }).master;
+        // Accepted on the device (Calendar, or the Assistant's "accept the invite").
+        ev.attendees = ev.attendees.map((a: Any) => (a.email === "me@example.com" ? { ...a, participationStatus: "ACCEPTED" } : a));
+        const text = ical.fromEvents(ev, [], server, { localTz: tz }).replace(/\r\n /g, "");
+        expect(text).toContain("ATTENDEE;CN=Me;PARTSTAT=ACCEPTED;ROLE=REQ-PARTICIPANT:mailto:me@example.com");
+        expect(text).toContain("ATTENDEE;CN=Kim;PARTSTAT=ACCEPTED:mailto:kim@example.com");
+        expect(text).toContain("ORGANIZER;CN=Boss:mailto:boss@example.com");
+        expect(text).not.toContain("RSVP");
+    });
 });
 
 describe("building blocks", () => {

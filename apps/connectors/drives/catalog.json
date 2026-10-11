@@ -120,6 +120,21 @@
             "privacy": { "dataGoesTo": "Box", "e2ee": false, "phoenixServers": "none" },
             "push": "poll",
             "status": "experimental"
+        },
+        {
+            "templateId": "com.webosphoenix.drive.sftp",
+            "title": "SFTP",
+            "provider": "Any SSH server (a NAS, a Raspberry Pi, your own server)",
+            "summary": "A folder of any SSH server as a place in Files, the file pickers and Save to Files, over SFTP. Sign in with a password or a key made on the device; the server's key is checked on first use and refused if it changes.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["ssh-2", "sftp-3"],
+            "auth": { "type": "password", "registration": "none" },
+            "server": "user",
+            "privacy": { "dataGoesTo": "the SSH server you enter", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "beta"
         }
     ]
 }

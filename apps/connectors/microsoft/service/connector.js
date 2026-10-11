@@ -124,12 +124,31 @@ function pullEvents(ctx) {
     });
 }
 
+// The user's answer to an invitation (their attendee entry, as Calendar or
+// the Assistant sets it) goes as Graph's reply, which tells the organizer:
+// POST /me/events/{id}/accept | decline | tentativelyAccept
+// (https://learn.microsoft.com/graph/api/event-accept); a guest does not
+// PATCH the organizer's event, so with nothing else changed that is all.
+var ANSWER = { ACCEPTED: "accept", DECLINED: "decline", TENTATIVE: "tentativelyAccept" };
+function sameBesidesGuests(a, b) {
+    var x = Object.assign({}, a, { attendees: null }), y = Object.assign({}, b, { attendees: null });
+    return JSON.stringify(x) === JSON.stringify(y);
+}
+
 function pushEvent(ctx, ch) {
     var tz = localTz();
     return session(ctx).then(function (a) {
         if (ch.op === "delete") return a.del("/me/events/" + encodeURIComponent(ch.remoteId)).catch(gone).then(function () { return { remoteId: ch.remoteId }; });
         var f = ch.fields || {};
         var body = G.graphEvent(f, tz);
+        var answer = kit.answerChanged(ch, ctx.account && ctx.account.username);
+        if (answer) {
+            var path = "/me/events/" + encodeURIComponent(ch.remoteId);
+            return a.post(path + "/" + ANSWER[answer], { sendResponse: true }).then(function () {
+                if (!sameBesidesGuests(body, G.graphEvent(ch.base, tz))) return a.patch(path, body);
+                return a.get(path, { $select: "id,changeKey" });
+            }).then(function (e) { return { remoteId: ch.remoteId, etag: (e && (e.changeKey || e["@odata.etag"])) || ch.etag }; });
+        }
         if (ch.op === "create") {
             return kit.containerRemoteIds(ctx, K.calendar).then(function (cals) {
                 var cal = cals[f.calendarId];

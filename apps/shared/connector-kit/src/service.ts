@@ -629,6 +629,12 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
                 try {
                     const provider = await (cap.files as NonNullable<typeof cap.files>)(ctx);
                     return await fn(provider, ctx, cap.chunkSize || DEFAULT_CHUNK);
+                } catch (e) {
+                    // A wait the drive was told of other than by HTTP (an SSH
+                    // server with too many connections): kept as the backoff, as a sync keeps it.
+                    const wait = (e as { retryAt?: number }).retryAt;
+                    if (wait && wait > (rec.retryAt || 0)) rec.retryAt = wait;
+                    throw e;
                 } finally {
                     if (snapshot(rec) !== before) await saveState(rec, before).catch((e: Error) => log("state not saved: " + e.message));
                 }

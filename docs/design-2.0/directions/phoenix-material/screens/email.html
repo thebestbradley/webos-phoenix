@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email, tablet</title>
+<link rel="stylesheet" href="../assets/base.css">
+<script src="../assets/icons.js"></script>
+<script src="../assets/app.js"></script>
+<style>
+  .card { background: var(--md-surface-container); display: flex; padding: 12px 12px 12px 0; }
+  html[data-theme="dark"] .card { background: var(--md-surface-container-lowest); }
+  /* Accounts and folders */
+  .nav { width: 252px; flex: none; padding: 6px 12px 0; display: flex; flex-direction: column; }
+  .nav .fab { align-self: flex-start; margin: 4px 0 18px 4px; box-shadow: var(--e1); height: 56px; }
+  .ni { height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 16px 0 14px; border-radius: 22px; font-size: 14.5px; font-weight: 600; color: var(--md-on-surface-variant); }
+  .ni .ic { width: 22px; height: 22px; }
+  .ni .n { margin-left: auto; font-size: 13px; font-weight: 700; }
+  .ni.sel { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
+  .nsec { display: flex; align-items: center; gap: 10px; padding: 18px 14px 6px; font-size: 13px; font-weight: 700; color: var(--md-on-surface); }
+  .nsec .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .nsec .addr { font-weight: 500; color: var(--md-on-surface-variant); font-size: 12px; margin-left: auto; }
+  .nav .foot { margin-top: auto; }
+  /* Panes */
+  .pane { border-radius: var(--r-xl); background: var(--md-surface); overflow: hidden; display: flex; flex-direction: column; position: relative; }
+  html[data-theme="dark"] .pane { background: var(--md-surface-container); --av-ring: var(--md-surface-container); }
+  html[data-theme="dark"] .mi { --av-ring: var(--md-surface-container); }
+  .list { width: 384px; flex: none; }
+  .handle { width: 16px; flex: none; display: grid; place-items: center; }
+  .handle i { width: 4px; height: 48px; border-radius: 2px; background: var(--md-outline); display: block; }
+  .detail { flex: 1; background: var(--md-surface-container-lowest); }
+  html[data-theme="dark"] .detail { background: var(--md-surface-container-low); }
+  .lh { padding: 18px 12px 0 22px; display: flex; align-items: center; }
+  .lh .t { flex: 1; }
+  .lh .t .headline-s { font-weight: 700; }
+  .chips { display: flex; gap: 8px; padding: 12px 18px 10px; }
+  .mi { display: flex; gap: 14px; padding: 12px 16px 12px 14px; margin: 0 8px; border-radius: var(--r-lgi); position: relative; --av-ring: var(--md-surface); }
+  .mi .txt { flex: 1; min-width: 0; }
+  .mi .l1 { display: flex; align-items: baseline; gap: 8px; }
+  .mi .from { flex: 1; font-size: 15px; line-height: 20px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mi .when { font-size: 12px; font-weight: 600; color: var(--md-on-surface-variant); }
+  .mi .sub { font-size: 14px; line-height: 20px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+  .mi .sn { font-size: 13.5px; line-height: 19px; color: var(--md-on-surface-variant); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+  .mi.unread .from, .mi.unread .sub { font-weight: 750; }
+  .mi.unread .when { color: var(--md-primary); }
+  .mi.sel { background: var(--md-secondary-container); --av-ring: var(--md-secondary-container); }
+  .mi.sel .sn, .mi.sel .when { color: var(--md-on-secondary-container); }
+  .mi .marks { display: flex; gap: 2px; align-items: center; align-self: center; color: var(--md-on-surface-variant); }
+  .mi .marks .ic { width: 16px; height: 16px; }
+  .mi .marks .flag { color: var(--md-error); }
+  .acdot { position: absolute; right: -2px; bottom: -2px; width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 2.5px var(--av-ring); }
+  .sepday { padding: 10px 24px 4px; }
+  /* Reading pane */
+  .tb { display: flex; align-items: center; gap: 2px; padding: 12px 14px 0 16px; }
+  .tb .sp { flex: 1; }
+  .rd { padding: 10px 40px 0 36px; flex: 1; overflow: hidden; }
+  .subj { display: flex; align-items: center; gap: 12px; }
+  .subj .headline-m { flex: 1; font-size: 27px; }
+  .lbl { height: 26px; padding: 0 10px; border-radius: 8px; display: inline-flex; align-items: center; font-size: 12px; font-weight: 700; }
+  .lbl.work { background: var(--acc-work-container); color: var(--acc-work-on-container); }
+  .sender { display: flex; align-items: center; gap: 14px; margin: 20px 0 0; --av-ring: var(--md-surface-container-lowest); }
+  html[data-theme="dark"] .sender { --av-ring: var(--md-surface-container-low); }
+  .sender .txt { flex: 1; }
+  .sender .nm { font-size: 16px; line-height: 22px; font-weight: 700; }
+  .sender .nm span { font-weight: 450; color: var(--md-on-surface-variant); font-size: 13.5px; margin-left: 6px; }
+  .sender .to { font-size: 13.5px; line-height: 20px; color: var(--md-on-surface-variant); }
+  .sender .chat { height: 36px; padding: 0 14px 0 10px; border-radius: 18px; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 650; background: var(--acc-jabber-container); color: var(--acc-jabber-on-container); }
+  .sender .chat .ic { width: 18px; height: 18px; }
+  .sender .chat .d { width: 8px; height: 8px; border-radius: 50%; background: #2fbf71; }
+  .body { font-size: 15.5px; line-height: 25px; margin-top: 22px; max-width: 620px; }
+  .body p { margin: 0 0 12px; }
+  .atts { display: flex; gap: 12px; margin-top: 18px; }
+  .att { display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 10px; border-radius: var(--r-lg); background: var(--md-surface-container); min-width: 220px; }
+  .att .g { width: 40px; height: 40px; border-radius: var(--r-md); display: grid; place-items: center; }
+  .att .g.pdf { background: var(--md-error-container); color: var(--md-on-error-container); }
+  .att .g.xls { background: var(--md-tertiary-container); color: var(--md-on-tertiary-container); }
+  .att b { display: block; font-size: 14px; line-height: 20px; font-weight: 650; }
+  .att span { font-size: 12.5px; color: var(--md-on-surface-variant); }
+  .replybar { display: flex; gap: 8px; padding: 14px 36px 20px; }
+</style>
+<script>
+const mails = [
+  { f: 'Ada Palmer', i: 'AP', c: 'c4', acc: 'work', when: '9:20', s: 'Launch party: final details', sn: 'Here’s where we landed for Thursday. Doors at 6:30, demos at 7…', att: 1, sel: 1 },
+  { f: 'Lena Ortiz', i: 'LO', c: 'c1', acc: 'work', when: '8:47', s: 'Stand-up moves to 10:00', sn: 'Quick heads-up: the design review ran long, so we’ll start…', unread: 1 },
+  { f: 'Northwind Builds', i: 'NB', c: 'c7', acc: 'work', when: '8:02', s: 'Nightly 2.0.0-alpha.14 passed', sn: 'All 1,284 tests passed in 11 min 32 s on the reference tablet…' },
+  { day: 'Yesterday' },
+  { f: 'Marcus Chen', i: 'MC', c: 'c3', acc: 'personal', when: '6:14 PM', s: 'Saturday photos', sn: 'The good ones are in the shared album; the blurry ones are…', att: 1, unread: 1 },
+  { f: 'Priya Raman', i: 'PR', c: 'c2', acc: 'personal', when: '4:02 PM', s: 'Book club: chapter nine', sn: 'Who’s hosting next week? I can bring the cardamom buns again…' },
+  { day: 'Earlier' },
+  { f: 'City Library', i: 'CL', c: 'c5', acc: 'personal', when: 'Sun', s: 'Your hold is ready to collect', sn: '“The Left Hand of Darkness” is waiting at the front desk until…' },
+  { f: 'Jonas Weber', i: 'JW', c: 'c6', acc: 'work', when: 'Sat', s: 'Re: Card view animations', sn: 'I tried the spring values from your branch and the throw…', flag: 1 },
+];
+function build() {
+  document.getElementById('mails').innerHTML = mails.map(m => m.day ? `<div class="sepday label-m dim">${m.day}</div>` : `
+    <div class="mi ${m.unread ? 'unread' : ''} ${m.sel ? 'sel' : ''}">
+      <div class="av sm ${m.c}">${m.i}<span class="acdot a-${m.acc}"></span></div>
+      <div class="txt">
+        <div class="l1"><div class="from">${m.f}</div>${m.att || m.flag ? `<div class="marks">${m.att ? '<i data-i="attach_file"></i>' : ''}${m.flag ? '<i data-i="flag-fill" class="flag"></i>' : ''}</div>` : ''}<div class="when">${m.when}</div></div>
+        <div class="sub">${m.s}</div>
+        <div class="sn">${m.sn}</div>
+      </div>
+    </div>`).join('');
+}
+</script>
+</head>
+<body>
+<div class="device tablet" data-app="Email">
+  <main class="card">
+    <nav class="nav">
+      <div class="fab"><i data-i="edit-fill"></i>Compose</div>
+      <div class="ni sel"><i data-i="inbox-fill"></i>All inboxes<span class="n">14</span></div>
+      <div class="ni"><i data-i="flag"></i>Flagged<span class="n">3</span></div>
+      <div class="ni"><i data-i="schedule"></i>Snoozed</div>
+      <div class="nsec"><span class="dot a-work"></span>Work<span class="addr">northwind</span></div>
+      <div class="ni"><i data-i="inbox"></i>Inbox<span class="n">9</span></div>
+      <div class="ni"><i data-i="draft"></i>Drafts<span class="n">2</span></div>
+      <div class="ni"><i data-i="send"></i>Sent</div>
+      <div class="ni"><i data-i="archive"></i>Archive</div>
+      <div class="nsec"><span class="dot a-personal"></span>Personal<span class="addr">mail.example</span></div>
+      <div class="ni"><i data-i="inbox"></i>Inbox<span class="n">5</span></div>
+      <div class="ni"><i data-i="label"></i>Receipts</div>
+      <div class="ni foot"><i data-i="settings"></i>Accounts &amp; settings</div>
+    </nav>
+
+    <section class="pane list">
+      <div class="lh">
+        <div class="t"><div class="headline-s">All inboxes</div><div class="body-m dim">14 unread · 2 accounts</div></div>
+        <div class="icon-btn"><i data-i="search"></i></div>
+        <div class="icon-btn"><i data-i="more_vert"></i></div>
+      </div>
+      <div class="chips">
+        <div class="chip sel"><i data-i="check"></i>All</div>
+        <div class="chip">Unread</div>
+        <div class="chip"><i data-i="attach_file"></i>Files</div>
+        <div class="chip"><i data-i="flag"></i>Flagged</div>
+      </div>
+      <div id="mails" class="fade-bottom" style="flex:1;overflow:hidden"></div>
+    </section>
+    <div class="handle"><i></i></div>
+
+    <section class="pane detail">
+      <div class="tb">
+        <div class="icon-btn"><i data-i="archive"></i></div>
+        <div class="icon-btn"><i data-i="delete"></i></div>
+        <div class="icon-btn"><i data-i="mark_email_unread"></i></div>
+        <div class="icon-btn"><i data-i="folder"></i></div>
+        <div class="icon-btn"><i data-i="flag"></i></div>
+        <div class="sp"></div>
+        <div class="icon-btn"><i data-i="more_vert"></i></div>
+      </div>
+      <div class="rd">
+        <div class="subj"><div class="headline-m">Launch party: final details</div><span class="lbl work">Work</span></div>
+        <div class="sender">
+          <div class="av c4">AP<div class="accs"><span class="a-work"><i data-i="mail-fill"></i></span><span class="a-jabber"><i data-i="chat-fill"></i></span></div></div>
+          <div class="txt">
+            <div class="nm">Ada Palmer<span>ada.palmer@northwind.example</span></div>
+            <div class="to">to me, Lena Ortiz · Today 9:20 AM</div>
+          </div>
+          <div class="chat"><span class="d"></span>Chat on Jabber</div>
+        </div>
+        <div class="body">
+          <p>Hi Jordan,</p>
+          <p>Here’s where we landed for Thursday’s launch party. Doors open at 6:30 and demos start at 7. Marlow’s has the back room until 10, and they’re doing the small plates we tasted last week.</p>
+          <p>Could you bring the two demo phones and the old tablet for the retro corner? Lena has the playlist covered (no Card Shuffle on repeat this time).</p>
+          <p>The floor plan and the guest list are attached. RSVPs close Wednesday at noon.</p>
+          <p>Thanks!<br>Ada</p>
+        </div>
+        <div class="atts">
+          <div class="att"><div class="g pdf"><i data-i="picture_as_pdf-fill"></i></div><div><b>floor-plan.pdf</b><span>PDF · 1.2 MB</span></div></div>
+          <div class="att"><div class="g xls"><i data-i="table_chart-fill"></i></div><div><b>guest-list.ods</b><span>Spreadsheet · 48 KB</span></div></div>
+        </div>
+      </div>
+      <div class="replybar">
+        <div class="btn"><i data-i="reply"></i>Reply</div>
+        <div class="btn tonal"><i data-i="reply_all"></i>Reply all</div>
+        <div class="btn outlined"><i data-i="forward"></i>Forward</div>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

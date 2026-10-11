@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Email: three panes</title>
+<link rel="stylesheet" href="../css/aurora.css">
+<script src="../js/icons.js"></script>
+<script src="../js/data.js"></script>
+<script src="../js/frame.js"></script>
+<style>
+  .panes { position: absolute; inset: 0; display: grid; grid-template-columns: 236px 392px 1fr; gap: 10px; padding: 10px; }
+  /* opacity rises with reading density: nav on the sheet, list on a panel, the message on reading glass */
+  .nav { padding: 8px 4px 0 6px; display: flex; flex-direction: column; min-height: 0; }
+  .nav .top { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px 10px 8px; }
+  .nav .over { padding: 14px 10px 6px; display: flex; align-items: center; gap: 7px; }
+  .nav .over .addr { text-transform: none; letter-spacing: 0; font-weight: 600; margin-left: auto; font-size: 11px; }
+  .fold { height: 38px; display: flex; align-items: center; gap: 11px; padding: 0 10px; border-radius: 12px; font-size: 14.5px; font-weight: 600; color: var(--text); }
+  .fold .ic { width: 19px; height: 19px; color: var(--text-2); }
+  .fold .n { margin-left: auto; font-size: 12.5px; font-weight: 800; color: var(--text-3); }
+  .fold.sel { background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent); }
+  .fold.sel .ic, .fold.sel .n { color: var(--accent-ink); }
+  .nav .foot { margin-top: auto; padding: 8px 0 10px; }
+  .list { display: flex; flex-direction: column; overflow: hidden; }
+  .list .hd { padding: 16px 16px 10px; display: flex; flex-direction: column; gap: 12px; }
+  .list .hd .row1 { display: flex; align-items: baseline; justify-content: space-between; }
+  .mail { padding: 12px 16px 13px 16px; position: relative; }
+  .mail + .mail::before { content: ""; position: absolute; top: 0; left: 16px; right: 16px; height: 1px; background: var(--hair); }
+  .mail .l1 { display: flex; align-items: center; gap: 8px; }
+  .mail .from { font-size: 15px; font-weight: 700; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mail .time { font-size: 12.5px; font-weight: 600; color: var(--text-3); }
+  .mail .subj { font-size: 14px; font-weight: 700; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
+  .mail .subj .ic { width: 15px; height: 15px; color: var(--text-3); flex: none; }
+  .mail .subj .flag { color: #FF8A3D; }
+  .mail .pre { font-size: 13px; line-height: 18px; font-weight: 500; color: var(--text-2); margin-top: 3px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .mail.unread .from { font-weight: 800; }
+  .mail .ud { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+  .mail.unread .time { color: var(--accent-ink); font-weight: 800; }
+  .mail .acct { width: 4px; height: 15px; border-radius: 2px; flex: none; }
+  .mail.sel { background: var(--accent-soft); border-radius: 14px; margin: 0 6px; padding-left: 10px; padding-right: 10px; }
+  .mail.sel::before, .mail.sel + .mail::before { display: none; }
+  .read { background: var(--reading); border-radius: var(--r-group); box-shadow: inset 0 1px 0 var(--edge), inset 0 0 0 1px var(--hair); position: relative; overflow: hidden; }
+  .read .tb { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--hair); }
+  .read .tb .sp { flex: 1; }
+  .read .tb .iconbtn { width: 38px; height: 38px; }
+  .read .tb .iconbtn .ic { width: 19px; height: 19px; }
+  .read .body { padding: 20px 28px 0; }
+  .read h1 { font-size: 23px; line-height: 30px; font-weight: 800; letter-spacing: -.01em; margin: 0; }
+  .read .tags { display: flex; gap: 8px; margin-top: 10px; }
+  .sender { display: flex; align-items: center; gap: 12px; margin-top: 18px; padding-bottom: 16px; border-bottom: 1px solid var(--hair); }
+  .sender .avatar { width: 44px; height: 44px; font-size: 15px; }
+  .sender .nm { font-size: 15px; font-weight: 800; }
+  .sender .to { font-size: 13px; font-weight: 500; color: var(--text-3); margin-top: 1px; }
+  .sender .when { margin-left: auto; text-align: right; font-size: 13px; font-weight: 600; color: var(--text-3); }
+  .text { font-size: 15px; line-height: 23px; font-weight: 500; color: var(--text); padding-top: 16px; max-width: 600px; }
+  .text p { margin: 0 0 12px; }
+  .text ul { margin: 0 0 12px; padding-left: 20px; }
+  .text li { margin-bottom: 4px; }
+  .text li::marker { color: var(--accent-ink); }
+  .att { display: flex; gap: 10px; margin-top: 4px; }
+  .file { display: flex; align-items: center; gap: 10px; padding: 9px 14px 9px 9px; border-radius: 14px; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--hair); }
+  .file .fi { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: #fff; background: linear-gradient(150deg, #FF7A7A, #D9364A); }
+  .file .fi .ic { width: 19px; height: 19px; }
+  .file b { display: block; font-size: 13.5px; font-weight: 800; }
+  .file span { font-size: 12px; font-weight: 600; color: var(--text-3); }
+  .quick { position: absolute; left: 14px; right: 14px; bottom: 14px; display: flex; align-items: center; gap: 10px; padding: 6px 6px 6px 16px; border-radius: 24px; }
+  .quick .ph { flex: 1; font-size: 14.5px; color: var(--text-3); font-weight: 500; }
+</style>
+</head>
+<body class="tablet">
+  <div class="wallpaper"></div>
+  <header class="statusbar" data-app="Email"></header>
+  <main class="sheet">
+    <div class="panes">
+      <nav class="nav" id="nav"></nav>
+      <section class="list panel">
+        <div class="hd">
+          <div class="row1"><span class="t-title">All Inboxes</span><span class="t-cap">12 unread · 2 accounts</span></div>
+          <div class="field" style="height:40px"><i data-i="search"></i>Search all mail</div>
+          <div class="segmented sm"><button class="on">All</button><button>Unread</button><button>Flagged</button><button>Attachments</button></div>
+        </div>
+        <div id="mails"></div>
+      </section>
+      <section class="read">
+        <div class="tb">
+          <button class="iconbtn"><i data-i="reply"></i></button>
+          <button class="iconbtn"><i data-i="replyAll"></i></button>
+          <button class="iconbtn"><i data-i="forward"></i></button>
+          <span class="sp"></span>
+          <button class="iconbtn"><i data-i="flag"></i></button>
+          <button class="iconbtn"><i data-i="archive"></i></button>
+          <button class="iconbtn"><i data-i="trash"></i></button>
+          <button class="iconbtn"><i data-i="more"></i></button>
+        </div>
+        <div class="body">
+          <h1>Card view: stacking and throw-to-close notes</h1>
+          <div class="tags"><span class="chip"><span class="dot" style="--c:var(--acct-work)"></span>Work · Inbox</span><span class="chip"><i data-i="clip" style="width:14px;height:14px"></i>2 attachments</span></div>
+          <div class="sender">
+            <div class="avatar" style="--h:162">LO</div>
+            <div><div class="nm">Lena Okafor</div><div class="to">to Jordan Lee, cc Marcus Reyes</div></div>
+            <div class="when">Today<br>9:41 AM</div>
+          </div>
+          <div class="text">
+            <p>Hi Jordan,</p>
+            <p>Attached are the timing curves I pulled from luna-sysmgr's card view. Throw-to-close feels right at 280 ms with the original ease-out, but a card landing in a stack wants a little more overshoot.</p>
+            <p>Three things I'd like to keep from the original:</p>
+            <ul>
+              <li>Cards keep their rounded corners while they scale, even mid-gesture.</li>
+              <li>A flick past half the screen height always closes, whatever the speed.</li>
+              <li>Stacks fan out by 24 px, not a percentage, so phones and tablets match.</li>
+            </ul>
+            <p>I'll bring the TouchPad to Thursday's meetup if you want to compare side by side.</p>
+            <p>Lena</p>
+          </div>
+          <div class="att">
+            <div class="file"><span class="fi"><i data-i="doc"></i></span><div><b>card-timings.pdf</b><span>214 KB</span></div></div>
+            <div class="file"><span class="fi" style="background:linear-gradient(150deg,#46E8B2,#138E9C)"><i data-i="image"></i></span><div><b>stack-fan.png</b><span>1.2 MB</span></div></div>
+          </div>
+        </div>
+        <div class="quick float"><span class="ph">Reply to Lena…</span><button class="btn sm primary"><i data-i="plane"></i>Send</button></div>
+      </section>
+    </div>
+  </main>
+  <footer class="gesture"></footer>
+<script>
+  const D = PHX_DATA;
+  let n = `<div class="top"><span class="t-title">Email</span><button class="iconbtn"><i data-i="compose"></i></button></div>`;
+  D.mailFolders.forEach((g) => {
+    n += `<div class="over t-over">${g.account ? `<span class="dot" style="--c:var(--acct-${g.account})"></span>` : ""}${g.group}</div>`;
+    g.items.forEach((f) => { n += `<div class="fold ${f.sel ? "sel" : ""}"><i data-i="${f.icon}"></i>${f.name}${f.count ? `<span class="n">${f.count}</span>` : ""}</div>`; });
+  });
+  n += `<div class="foot"><div class="fold"><i data-i="gear"></i>Accounts &amp; settings</div></div>`;
+  document.getElementById("nav").innerHTML = n;
+  document.getElementById("mails").innerHTML = D.mails.map((m) => `
+    <div class="mail ${m.unread ? "unread" : ""} ${m.sel ? "sel" : ""}">
+      <div class="l1"><span class="acct" style="background:var(--acct-${m.acct})"></span><span class="from">${m.from}</span>${m.unread ? '<span class="ud"></span>' : ""}<span class="time">${m.time}</span></div>
+      <div class="subj">${m.subject}${m.clip ? '<i data-i="clip"></i>' : ""}${m.flag ? '<i data-i="flagF" class="flag"></i>' : ""}</div>
+      <div class="pre">${m.preview}</div>
+    </div>`).join("");
+  phxReady();
+</script>
+</body>
+</html>
