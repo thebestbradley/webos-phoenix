@@ -483,6 +483,24 @@ device's resolution, the shell lays out with the device's density, form
 factor and cutout, the web apps run in WebAppMgr's Chromium, the touch
 gestures arrive as touches, sound plays, and the network works.
 
+### Keyboard phones (looked at, not targets)
+
+A phone with a hardware keyboard is the closest thing to a Palm Pre. Checked
+on 11 October 2026 (OPEN-QUESTIONS Q101; the owner: the Pro1 X is a
+tentative future target, the KEY2 is skipped unless it unlocks properly):
+
+| Phone | Can it boot Phoenix? | Linux today | Status |
+| --- | --- | --- | --- |
+| F(x)tec Pro1 X (QX1050): Snapdragon 662, 8 GB, 5.99" 1080x2160 AMOLED, slide-out QWERTY | Yes: `fastboot flashing unlock`, official ([LineageOS install](https://wiki.lineageos.org/devices/pro1x/install/)) | Device tree in mainline (`arch/arm64/boot/dts/qcom/sm6115-fxtec-pro1x.dts`: panel, GPU, touch, modem, Wi-Fi, USB); no keyboard node. postmarketOS (now Nura): display, 3D, Wi-Fi, USB work; touch unreliable on mainline; keyboard, modem and audio untested ([wiki](https://wiki.postmarketos.org/wiki/F(x)tec_Pro1X_(fxtec-qx1050))). Ubuntu Touch and LineageOS 24 support it | **Tentative future target.** Fxtec no longer sells phones (fxtec.com is a B2B studio; the Pro1 X page is gone): used units only, some reported not to power on after storage |
+| F(x)tec Pro1 (QX1000): Snapdragon 835, same keyboard | Yes, the same way | Mainline device tree without display or GPU nodes; postmarketOS boots it unpackaged | Not pursued (no mainline display) |
+| BlackBerry KEY2 / KEY2 LE: Snapdragon 660 / 636, 6 / 4 GB, 4.5" 1620x1080, keyboard | Only by a community exploit (Kibo, with the Blackberry_Key2_Unlocker loaders) on firmware ACQ160 / ACI448 (KEY2) or ACT575 (LE), with a brick risk and no recovery ([postmarketOS wiki](https://wiki.postmarketos.org/wiki/BlackBerry_KEY2_Generic_(blackberry-key2-generic))) | Mainline 6.19: display, touch, keyboard, Wi-Fi, Bluetooth, battery work; the GPU hangs it; no audio, calls, SMS, data, camera or GPS | **Skipped** (no proper unlock) |
+| BlackBerry KEYone | No public unlock | None | Out |
+| BlackBerry Passport | No: BlackBerry 10 (QNX), signed boot | None | Out |
+
+Whatever the hardware, the simulator's `--device` profiles can model a
+keyboard phone's screen (a 4.5" 3:2 or 1:1 panel) with the hardware
+keyboard support (GAPS V8), so Phoenix's layouts are ready for one.
+
 ## Summary
 
 - **Start where OSE already works.** webOS OSE supports two machines out of
