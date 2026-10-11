@@ -221,6 +221,19 @@ async function main() {
         await page.waitForTimeout(200);
         check(last().advancedGestures === false, `Advanced gestures reaches the shell (${last().advancedGestures})`);
         await page.click("[data-testid='wallpaper']");
+        // The photographs follow the drawn ones; each thumbnail is there.
+        await page.waitForSelector("[data-testid='wallpaper-River Stones']");
+        const tiles = await page.$$eval(".wallpaper-tile", (ts) => ts.map((t) => t.getAttribute("data-testid")));
+        check(tiles.length === 20 && tiles[0] === "wallpaper-Northern Lights" && tiles[12] === "wallpaper-River Stones"
+              && tiles[19] === "wallpaper-Seashells", `twenty wallpapers, the photographs last (${tiles.length})`);
+        const thumbs = await page.$$eval(".wallpaper-thumb", (ts) => ts.map((t) => getComputedStyle(t).backgroundImage.slice(5, -2)));
+        const loaded = await page.evaluate((urls) => Promise.all(urls.map((u) => fetch(u).then((r) => r.ok))), thumbs);
+        check(loaded.length === 20 && loaded.every(Boolean), "every wallpaper's thumbnail loads");
+        await shot("wallpaper-picker");
+        await page.click("[data-testid='wallpaper-River Stones']");
+        await page.waitForTimeout(200);
+        check(/river-stones\.jpg$/.test(last().wallpaperFile || ""), "a photograph's choice reaches the shell");
+        await page.click("[data-testid='wallpaper']");
         await page.click("[data-testid='wallpaper-Phoenix']");
         await page.waitForTimeout(200);
         check(/phoenix\.jpg$/.test(last().wallpaperFile || ""), "wallpaper choice reaches the shell");
@@ -685,6 +698,14 @@ async function main() {
         await page.waitForSelector("[data-testid='hub-wifi']");
         await shot("hub");
         await page.click("[data-testid='hub-deviceinfo']");
+        await page.waitForSelector("[data-testid='licenses']");
+        // The wallpaper photographs' credits (CC BY asks for them).
+        await page.click("[data-testid='licenses']");
+        await page.waitForSelector(".license-text");
+        const credits = await page.textContent("body");
+        check(["Sharon Mollerus", "Eden, Janine and Jim", "kuhnmi", "Chris Kuga", "MacrofyStudio", "Donald Olszewski"]
+              .every((a) => credits.includes(a)), "the licences page credits the wallpaper photographs");
+        await page.keyboard.press("Escape");
         await page.waitForSelector("[data-testid='licenses']");
         await page.keyboard.press("Escape");
         await page.waitForSelector("[data-testid='hub-wifi']");

@@ -23,7 +23,26 @@ export const LICENSES = [
     },
     {
         name: "Wallpapers",
-        text: "The bundled wallpapers are original to webOS Phoenix, drawn by tools/wallpapers/generate.py, "
+        text: "The drawn wallpapers are original to webOS Phoenix, drawn by tools/wallpapers/generate.py, "
             + "and licensed under the Apache License, Version 2.0.",
+    },
+    {
+        // CC BY asks for the credit where the work is shown: here and in NOTICE
+        // (apps/settings/public/wallpapers/PROVENANCE.md has the details).
+        name: "Wallpaper photographs",
+        text: "Photographs, cropped, scaled, graded and darkened at the top and bottom for webOS Phoenix. "
+            + "River Stones: \"Smooth Stones\" by Sharon Mollerus, CC BY 2.0 (creativecommons.org/licenses/by/2.0), "
+            + "flickr.com/photos/clairity/2071301568. "
+            + "Clownfish: \"Clownfish in Anemone\" by Eden, Janine and Jim, CC BY 2.0, "
+            + "flickr.com/photos/edenpictures/34637539442. "
+            + "Raindrops: \"Water Drops\" by kuhnmi, CC BY 2.0, flickr.com/photos/31176607@N05/29076462192. "
+            + "Wave: \"crispy curls\" by Chris Kuga, CC BY 2.0, flickr.com/photos/126928999@N04/16086023438. "
+            + "Dandelion: \"White dandelion seed head pappus macro fluffy texture\" by MacrofyStudio, "
+            + "CC BY 4.0 (creativecommons.org/licenses/by/4.0), Wikimedia Commons. "
+            + "Gerbera: \"Gerber Daisy - Pennsylvania\" by Donald Olszewski, CC BY 4.0, "
+            + "flickr.com/photos/186499581@N05/54959532398. "
+            + "Jellyfish: \"Lion's mane jellyfish in Gullmarn fjord at Sämstad 8\" by W.carter, CC0 1.0, "
+            + "Wikimedia Commons. "
+            + "Seashells: \"Shell beach.\" by Bernard Spragg. NZ, CC0 1.0, flickr.com/photos/volvob12b/20745959392.",
     },
 ];

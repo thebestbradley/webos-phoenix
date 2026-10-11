@@ -935,7 +935,9 @@ Device Info, Backup, Updates, VPN, Developer Mode.
 Launched without a page it lists them all. The launcher icons are drawn in
 `art/app-icons` (on the grey diamond, as Palm's preference apps were) and the
 wallpapers by `tools/wallpapers/generate.py` (twelve, Northern Lights the
-default; `public/wallpapers/PROVENANCE.md`); Palm's were never open-sourced.
+default) and eight photographs under CC0 or CC BY prepared by
+`tools/wallpapers/photos.py` (authors and licences in
+`public/wallpapers/PROVENANCE.md`); Palm's were never open-sourced.
 
 ### Services
 
