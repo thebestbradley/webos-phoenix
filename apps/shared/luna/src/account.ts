@@ -107,6 +107,11 @@ export const phoenixAccount = {
     setServers(servers: Record<string, unknown> | null): Promise<{ servers: PlatformServers }> {
         return call(SERVICE + "setServers", { servers }) as unknown as Promise<{ servers: PlatformServers }>;
     },
+    /** The account's cloud backups, every device's (First Use's restore). */
+    backupSummary(): Promise<{ usedBytes: number; quotaBytes: number; devices: { deviceId: string; name: string; files: { name: string; size: number; modified: string }[] }[] }> {
+        return call(SERVICE + "backupSummary", {}) as unknown as Promise<{ usedBytes: number; quotaBytes: number;
+            devices: { deviceId: string; name: string; files: { name: string; size: number; modified: string }[] }[] }>;
+    },
     /** Developer Mode only: a platform's own servers.json (<api>/v1/servers.json). */
     useServersAt(url: string): Promise<{ servers: PlatformServers }> {
         return call(SERVICE + "setServers", { url }) as unknown as Promise<{ servers: PlatformServers }>;

@@ -463,8 +463,15 @@ function start(opts) {
     function dav(req, res, deviceId, name, raw) {
         const m = /^Basic (.+)$/.exec(req.headers.authorization || "");
         const cred = m ? Buffer.from(m[1], "base64").toString("utf8").split(":") : [];
-        if (!m || cred[0] !== deviceId || st.davPasswords.get(deviceId) !== cred.slice(1).join(":"))
+        if (!m || !st.davPasswords.has(cred[0]) || st.davPasswords.get(cred[0]) !== cred.slice(1).join(":"))
             return send(res, 401, "", { "WWW-Authenticate": 'Basic realm="Phoenix Cloud"', "Content-Type": "text/plain" });
+        // A device writes its own folder; it may read the account's other
+        // devices' folders (restoring onto a new device, PLATFORM.md 6.5.1).
+        if (cred[0] !== deviceId) {
+            const mine = st.devices.get(cred[0]), theirs = st.devices.get(deviceId);
+            if (!mine || !theirs || mine.user !== theirs.user) return send(res, 403, "", { "Content-Type": "text/plain" });
+            if (["GET", "PROPFIND", "OPTIONS"].indexOf(req.method) < 0) return send(res, 403, "", { "Content-Type": "text/plain" });
+        }
         const key = deviceId + "/" + name;
         if (req.method === "OPTIONS") return send(res, 200, "", { DAV: "1", Allow: "OPTIONS, PROPFIND, MKCOL, GET, PUT, DELETE" });
         if (req.method === "MKCOL") return send(res, name ? 403 : 405, "", { "Content-Type": "text/plain" });   // the folder exists

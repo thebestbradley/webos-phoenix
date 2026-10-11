@@ -139,6 +139,17 @@ function createBackupService(deps) {
     }
     function setState(s) { state = s; changed(); }
 
+    // {type: "phoenix", deviceId}: that device's Phoenix Cloud folder, beside
+    // this device's (…/dav/backups/<deviceId>/), with this device's
+    // credentials; null for anything else.
+    function otherDevice(d) {
+        var c = cfg();
+        if (!d || d.type !== "phoenix" || !d.deviceId || !/^[A-Za-z0-9_-]{1,100}$/.test(d.deviceId)) return null;
+        if (!c.destination || c.destination.type !== "phoenix")
+            throw Object.assign(new Error("Set up Phoenix Cloud first"), { code: "NOT_CONFIGURED" });
+        return Object.assign({}, c.destination, { url: c.destination.url.replace(/[^\/]+\/?$/, encodeURIComponent(d.deviceId) + "/") });
+    }
+
     // The place backups go: {list, read, write, remove, prepare}.
     function storeFor(dest) {
         if (!dest) throw Object.assign(new Error("Choose where backups go first"), { code: "NOT_CONFIGURED" });
@@ -272,7 +283,7 @@ function createBackupService(deps) {
         var c = cfg(), tempDir, restored = [], skipped = [];
         setState("restoring");
         return Promise.resolve().then(function () {
-            return storeFor(p.destination || c.destination).read(p.name);
+            return storeFor(otherDevice(p.destination) || p.destination || c.destination).read(p.name);
         }).then(function (text) {
             return archive.open(text, p.passphrase);
         }).then(function (opened) {
@@ -429,9 +440,13 @@ function createBackupService(deps) {
         },
         configure: function (p) { return configure(p || {}); },
         backupNow: function () { return backupNow(); },
-        listBackups: function () {
+        // {destination?: {type: "phoenix", deviceId}}: another device's
+        // Phoenix Cloud folder (restoring onto a new device), read with this
+        // device's credentials, which the platform lets read the account's
+        // other devices' folders (PLATFORM.md 6.5.1).
+        listBackups: function (p) {
             return Promise.resolve().then(function () {
-                return backupsIn(storeFor(cfg().destination));
+                return backupsIn(storeFor(otherDevice(p && p.destination) || cfg().destination));
             }).then(function (b) { return { returnValue: true, backups: b }; }, errorReply);
         },
         inspect: function (p) {

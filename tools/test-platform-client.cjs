@@ -502,6 +502,16 @@ async function ui(P, control, servers) {
         check(/127\.0\.0\.1/.test(await page.textContent("[data-testid=devmode-servers-api]")) || !!arg("--api"), "Developer Mode shows the servers in use");
         await page.locator("[data-testid=devmode-servers-use]").scrollIntoViewIfNeeded();
         await shot("8-devmode-servers");
+        // A backup to Phoenix Cloud from this (signed-in) device, for the new one below.
+        const luna = (uri, params) => page.evaluate(([u, p]) => new Promise((res) => {
+            const bb = new PalmServiceBridge();
+            bb.onservicecallback = (x) => res(JSON.parse(x));
+            bb.call(u, JSON.stringify(p || {}));
+        }), [uri, params]);
+        const cfg = await luna("luna://org.webosphoenix.service.backup/configure", { destination: { type: "phoenix" }, passphrase: "correct horse battery" });
+        const made = await luna("luna://org.webosphoenix.service.backup/backupNow", {});
+        check(cfg.returnValue && made.returnValue, "Settings > Backup: Phoenix Cloud, a backup made", JSON.stringify(cfg.returnValue ? made : cfg));
+        if (made.returnValue) await firstUseUi(browser, origin, control, servers, errors, made.name);
         check(errors.length === 0, "no page errors", errors.join("; "));
         await marketplaceUi(browser, origin, control, servers, errors);
     } finally {
@@ -509,6 +519,51 @@ async function ui(P, control, servers) {
         rootfs.kill();
         fs.rmSync(installedDir, { recursive: true, force: true });
     }
+}
+
+// First Use on a new device (its own browser context: an empty store) whose
+// image's servers.json is the platform under test: the Phoenix Account step
+// signs in with the code, and Restore lists the account's cloud backups and
+// restores the other device's.
+async function firstUseUi(browser, origin, control, servers, errors, backupName) {
+    console.log("== ui: First Use");
+    const ctx = await browser.newContext({ viewport: tablet ? { width: 1024, height: 740 } : { width: 320, height: 520 } });
+    await ctx.route("**/etc/palm/phoenix/servers.json", (rt) => rt.fulfill({ contentType: "application/json", body: JSON.stringify(servers) }));
+    const page = await ctx.newPage();
+    page.on("pageerror", (e) => errors.push(e.message));
+    const shot = async (name) => { await page.waitForTimeout(400); await page.screenshot({ path: path.join(outDir, name + ".png") }); };
+    const url = `${origin}/usr/palm/applications/org.webosphoenix.firstuse/index.html`;
+    await page.goto(url);
+    await page.evaluate(() => localStorage.clear());
+    await page.goto(url);
+    await page.click("[data-testid=next]");
+    await page.waitForSelector("[data-testid=step-wifi]");
+    await page.click("[data-testid=skip]");
+    await page.waitForSelector("[data-testid=step-hardware], [data-testid=step-account]");
+    if (await page.locator("[data-testid=step-hardware]").count()) await page.click("[data-testid=skip]");
+    await page.waitForSelector("[data-testid=step-account]");
+    await page.click("[data-testid=account-sign-in]");
+    await page.waitForSelector("[data-testid=account-code]", { timeout: 15000 });
+    await page.waitForSelector("[data-testid=account-qr] svg", { timeout: 15000 }).catch(() => null);
+    check(await page.locator("[data-testid=account-qr] svg").count() === 1, "First Use: the Phoenix Account step shows the code and its QR code");
+    await shot("14-firstuse-account");
+    await control("approve", { user_code: (await page.textContent("[data-testid=account-code]")).trim() });
+    await page.waitForFunction(() => /Signed in as/.test(document.body.innerText), null, { timeout: 20000 });
+    await page.click("[data-testid=next]");
+    await page.waitForSelector("[data-testid=restore-start]");
+    await page.click("[data-testid=restore-start]");
+    check(/Phoenix Cloud/.test(await page.textContent("[data-testid=restore-type]")), "Restore offers Phoenix Cloud first");
+    await page.click("[data-testid=next]");
+    const row = `[data-testid='restore-file-${backupName}']`;
+    await page.waitForSelector(row, { timeout: 20000 });
+    await shot("15-firstuse-cloud-backups");
+    await page.click(row);
+    await page.fill("[data-testid=restore-pass]", "correct horse battery");
+    await page.click("[data-testid=restore-confirm]");
+    await page.waitForFunction(() => /Restored/.test(document.body.innerText), null, { timeout: 30000 });
+    check(true, "the other device's cloud backup restores on the new one");
+    await shot("16-firstuse-restored");
+    await ctx.close();
 }
 
 // The Marketplace and Connections with the platform's catalog as the

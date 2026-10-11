@@ -12528,7 +12528,9 @@
         var SERVICE_DIR = "/usr/palm/services/" + SERVICE + "/";
         var REGISTRATIONS = ["com.palm.db.backupRegistration.json", "com.palm.sysMgrDataBackup.backupRegistration.json",
                              "com.webos.service.systemservice.backupRegistration.json"];
-        var luna = nodeServiceLuna();
+        // Its calls are the backup service's, as on a device (the Phoenix
+        // Account gives Phoenix Cloud's credentials to it only).
+        var luna = nodeServiceLuna(SERVICE);
         var fm = "luna://org.webosphoenix.filemanager/";
 
         // ---- The participants the simulator stands in for ------------------------------
