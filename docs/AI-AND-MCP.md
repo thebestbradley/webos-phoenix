@@ -1495,11 +1495,11 @@ turn's steps from its trace):
 
 | | Before | After |
 |---|---|---|
-| The main set's original 434, with the model | 432 right, 0 unsafe | 432 right, 0 unsafe |
+| The main set's original 434, with the model | 432 right, 0 unsafe | 433 right, 0 unsafe |
 | The held-out set's original 79, with the model | 76 right, 0 unsafe | 78 right, 0 unsafe |
 | Turns the grammar answers that waited for the model (main, held out) | 7, 0 | 2, 0: the two that ask for writing |
-| The model's requests in the turns that need it (main, held out) | 44 (21 of them a choice among commands), 26 (13) | 32 (10), 16 (7) |
-| The 40 cases that reached the model in either, asked of both one right after the other (which first alternating) | 77 requests (34 choices); per case: median 2.9 s, 90th percentile 67.6 s | 50 requests (17 choices); median 2.2 s, 90th percentile 6.9 s |
+| The model's requests in the turns that need it (main, held out) | 44 (21 of them a choice among commands), 26 (13) | 30 (9), 16 (7) |
+| The 40 cases that reached the model in either, asked of both one right after the other (which first alternating; the code as of the first merge) | 77 requests (34 choices); per case: median 2.9 s, 90th percentile 67.6 s | 50 requests (17 choices); median 2.2 s, 90th percentile 6.9 s |
 | One request of a kind, in the same pairs (median) | a choice 1.3 s, a call 1.5 s, an answer 5.2 s | 1.4 s, 1.8 s, 3.7 s |
 
 The slow end before is the machine's load as much as the model ("open
@@ -1508,13 +1508,13 @@ so the measure is the requests no longer made; each costs about what it
 did (the choice reads a longer list of commands now, Synergy's among
 them).
 
-The whole sets now (talk mode's, Synergy's and these cases too): the
-grammar alone, main 629 of 629 (0 unsafe, 0 wrong read-backs), held out
-95 of 111 (0 unsafe; 1 wrong read-back, talk mode's "actually no" after
-"call daniel", as on the base). With the model: main 619 of 627 (0
-unsafe, 1 wrong read-back), held out 99 of 111 (0 unsafe, the same 1).
-The model's misses on the main set: "add 5 minutes to the timer" and
-"how many kilometers is a marathon" (as before), and six of talk mode's
+The whole sets now (talk mode's, Synergy's, Search your phone's and
+these cases too): the grammar alone, main 646 of 646 (0 unsafe, 0 wrong
+read-backs), held out 97 of 115 (0 unsafe; 1 wrong read-back, talk
+mode's "actually no" after "call daniel", as on the base). With the
+model: main 639 of 646 (0 unsafe, 1 wrong read-back), held out 102 of
+115 (0 unsafe, the same 1). The model's misses on the main set: "how
+many kilometers is a marathon" (as before), and six of talk mode's
 web-search cases, written for no model: with one, the question is
 answered, so the "yes" to an offer never made goes to the model, and
 "translate good morning into spanish" was read back as a reply to Sam
