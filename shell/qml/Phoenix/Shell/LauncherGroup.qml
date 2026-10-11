@@ -99,14 +99,22 @@ Item {
         x: (overlay.width - width) / 2
         y: Math.max(Theme.px(16), Math.min((overlay.height - height) / 2 - Theme.px(40), Theme.px(Theme.tablet ? 70 : 40)))
         radius: Theme.px(10)
-        color: "#E61A1C1F"
-        border.color: "#8A8F96"
+        // Ember Glass: an L4 sheet (a dialog's: radius.plane), drawn below.
+        color: Theme.emberGlass ? "transparent" : "#E61A1C1F"
+        border.color: Theme.emberGlass ? "transparent" : "#8A8F96"
         border.width: Math.max(1, Theme.px(1))
         opacity: overlay.open && !overlay.carrying ? 1 : 0
         scale: overlay.open ? 1 : 0.9
         Behavior on opacity { NumberAnimation { duration: Theme.motion(200) } }
         Behavior on scale { NumberAnimation { duration: Theme.motion(200); easing.type: Easing.OutCubic } }
         MouseArea { anchors.fill: parent; onPressed: if (overlay.editing) overlay.finishRename() }
+        EgSheet {
+            objectName: "emberLauncherGroup"
+            visible: Theme.emberGlass
+            z: -1
+            anchors.fill: parent
+            radius: Theme.px(EmberGlass.radiusPlane)
+        }
 
         // The name: a tap makes it a field.
         Rectangle {
@@ -116,9 +124,24 @@ Item {
             width: panel.width - 2 * x
             height: Theme.px(Theme.tablet ? 38 : 34)
             radius: Theme.px(6)
-            color: overlay.editing ? "#000000" : "transparent"
-            border.color: overlay.editing ? "#7FA6E8" : "transparent"
+            color: overlay.editing && !Theme.emberGlass ? "#000000" : "transparent"
+            border.color: overlay.editing && !Theme.emberGlass ? "#7FA6E8" : "transparent"
             border.width: Theme.px(2)
+            // Ember Glass: a field being typed in is underlined in ember
+            // (base.css .field.focus).
+            Rectangle {
+                visible: Theme.emberGlass && overlay.editing
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: Theme.px(2)
+                radius: height / 2
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0; color: EmberGlass.emberA }
+                    GradientStop { position: 0.45; color: EmberGlass.emberMid }
+                    GradientStop { position: 1; color: EmberGlass.emberB }
+                }
+            }
             Text {
                 objectName: "launcherGroupTitle"
                 anchors.fill: parent
@@ -127,10 +150,11 @@ Item {
                 verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
                 text: overlay.title
-                color: "#FFFFFF"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.px(Theme.tablet ? 22 : 19)
-                font.bold: true
+                // Ember Glass: type.title in ink.
+                color: Theme.emberGlass ? Theme.eg.colorInk : "#FFFFFF"
+                font.family: Theme.emberGlass ? Theme.egFontFamily : Theme.fontFamily
+                font.pixelSize: Theme.emberGlass ? Math.round(18 * Theme.u) : Theme.px(Theme.tablet ? 22 : 19)
+                font.weight: Theme.emberGlass ? 600 : Font.Bold
             }
             MouseArea {
                 objectName: "launcherGroupTitleArea"
@@ -147,11 +171,11 @@ Item {
                 visible: overlay.editing
                 verticalAlignment: TextInput.AlignVCenter
                 horizontalAlignment: TextInput.AlignHCenter
-                color: "#FFFFFF"
-                selectionColor: "#2C8CE0"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.px(Theme.tablet ? 22 : 19)
-                font.bold: true
+                color: Theme.emberGlass ? Theme.eg.colorInk : "#FFFFFF"
+                selectionColor: Theme.emberGlass ? Theme.egAlpha(EmberGlass.emberA, 0.45) : "#2C8CE0"
+                font.family: Theme.emberGlass ? Theme.egFontFamily : Theme.fontFamily
+                font.pixelSize: Theme.emberGlass ? Math.round(18 * Theme.u) : Theme.px(Theme.tablet ? 22 : 19)
+                font.weight: Theme.emberGlass ? 600 : Font.Bold
                 maximumLength: 24
                 clip: true
                 inputMethodHints: Qt.ImhNoPredictiveText

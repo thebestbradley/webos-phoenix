@@ -182,6 +182,19 @@ tokens"), and how the shell draws it in QML:
 - **Stays:** pages and tabs, the grid (launcher3's metrics), editing,
   groups, the icon menu, Remove Application?.
 - **QML:** `Launcher.qml`, `LauncherGroup.qml`, `IconMenu.qml`.
+- **Built:** the page on the shell's own L1 (`EgL1.qml`: the blurred,
+  tone-mapped wallpaper placed where the wallpaper lies under the launcher,
+  so it stays put as the launcher slides, then the L1 tint and Ember's
+  light); the tabs Ember's segmented capsule 18 px in (`.seg`: 3 px
+  inside, the sunk tint, the selected tab's plane-2 pill), titles in
+  13.5 px semibold, ink-2 and ink; the "+" a ring button, Done an ink pill
+  (`.pill.sm.ink`); edit mode's icons on L2 tiles (`radius.tile`) and the
+  delete badge an ink disc with an x; the empty page's hint in ink-2; the
+  labels in ink, flat (`AppIcon`, everywhere it labels an icon); the icon
+  menu an L4 sheet with the system menu's rows; the open group and the
+  tab name dialog L4 sheets (`radius.plane`) with Ember's field (an ember
+  underline). 1.0's art (the tiled ground, tab art, shadows, scroll fades,
+  the empty page's picture) is not drawn.
 
 ### 8. Notifications
 - **Changes:** the banner as an L4 sheet (`.banner`: 24 px radius, the
@@ -362,7 +375,7 @@ second after (the adaptive simulator resizes in a stream of sizes).
 | 7 | The phone's notification bar under the dock, the banner, the active call; the dock 10 px over the bar | done |
 | 8 | The dashboard: its sheet, the rows, the stacks, the drawer | done |
 | 9 | The system menu | done |
-| 10 | The launcher | |
+| 10 | The launcher | done |
 | 11 | The tablet: the status bar's notification group, the drop-down, the dock | |
 | 12 | Light and dark for the shell's sheets, from a theme preference | |
 | 13 | The device: luna-surfacemanager's side of the contract (the file, the shellhost event), `LsmWindowSource` | needs C++ |
@@ -417,6 +430,8 @@ those screenshots and `tools/test-glass-sim.py`'s):
 | `banner.jpg` | A banner over a maximized app (no render draws one on a phone) |
 | `system-menu.jpg` | The system menu, 1.0's on the left, Ember Glass's on the right |
 | `system-menu-wifi.jpg` | Ember Glass's, closed and with its Wi-Fi drawer open |
+| `launcher.jpg` | The launcher, 1.0's on the left, Ember Glass's on the right |
+| `launcher-edit-menu.jpg`, `launcher-group.jpg` | Edit mode and an icon's menu; a group open |
 | `dashboard.jpg`, `stacks.jpg`, `drawer.jpg` | The dashboard open over an app; with two stacks of texts (their counts, their layers' edges); pulled to the whole screen, a download on top |
 
 **Still unlike the renders:** the dock and the notification bar show the

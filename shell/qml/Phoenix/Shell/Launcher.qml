@@ -10,6 +10,12 @@
 // (OverlayWindowManager.cpp:102-104 Z_LAUNCHER_WIN 0 < Z_DOCK_WIN 20;
 // :1451-1485, :1919-1955), over 350 ms with curve 15 = InOutQuint
 // (conf/lunaAnimations.conf:83-84). The dock stays where it is, on top.
+//
+// Ember Glass (docs/SYSTEM-UI-2.md, 7) draws it on the shell's own L1
+// glass (EgL1: the blurred wallpaper where it lies, the theme's tint), the
+// tabs as Ember's segmented capsule (base.css .seg), the "+" a ring button,
+// Done an ink pill, edit mode's tiles and badges Ember's, the labels in the
+// theme's ink. The pages, the grid, the gestures and edit mode are 1.0's.
 
 import QtQuick
 import "LauncherLayout.js" as LauncherLayout
@@ -269,6 +275,12 @@ Item {
     // Room left at the bottom for the dock, which sits on top of the launcher.
     property real dockHeight: 0
 
+    // Ember Glass's L1 under the pages: the blurred, tone-mapped wallpaper
+    // (WallpaperBlur.tonedUrl) and the screen it covers.
+    property url glassPicture: ""
+    property size glassScreen: Qt.size(0, 0)
+    readonly property bool eg: Theme.emberGlass
+
     // 0 = shown, 1 = below the screen.
     property real hidden: open ? 0 : 1
     Behavior on hidden { NumberAnimation { duration: Theme.launcherDuration; easing.type: Easing.InOutQuint } }
@@ -281,9 +293,21 @@ Item {
 
     // Opaque tiled background (dimensionslauncher.cpp:1290, 1592).
     ArtTiledImage {
+        visible: !launcher.eg
         anchors.fill: parent
         source: Theme.asset("launcher3/launcher-bg.png")
         fillMode: Image.Tile
+    }
+    // Ember Glass: the shell's L1 glass, the blurred wallpaper where it
+    // lies on the screen as the launcher slides (it starts under the
+    // status bar).
+    EgL1 {
+        objectName: "emberLauncherGlass"
+        visible: launcher.eg
+        anchors.fill: parent
+        picture: launcher.glassPicture
+        screen: launcher.glassScreen
+        place: Qt.point(0, Theme.statusBarHeight + launcher.hidden * (launcher.height + Theme.statusBarHeight))
     }
 
     // Swallow touches so they don't reach the cards underneath.
@@ -295,12 +319,28 @@ Item {
         id: tabBar
         width: parent.width
         height: Theme.launcherTabHeight
-        source: Theme.asset("launcher3/tab-bg.png")
+        source: launcher.eg ? "" : Theme.asset("launcher3/tab-bg.png")
         border { left: Theme.artBorder(4, source); right: Theme.artBorder(4, source); top: Theme.artBorder(4, source); bottom: Theme.artBorder(4, source) }
         horizontalTileMode: BorderImage.Stretch
 
+        // Ember Glass: the segmented capsule round the tabs (.seg: 3 px in,
+        // the sunk tint, a hairline of line-2), 18 px in from the side.
+        Rectangle {
+            objectName: "emberLauncherTabs"
+            visible: launcher.eg
+            x: launcher.tabsX - Theme.px(EmberGlass.sizeSegmentPadding)
+            width: launcher.tabWidth * launcher.tabs.length + 2 * Theme.px(EmberGlass.sizeSegmentPadding)
+            height: Theme.px(EmberGlass.sizeSegment + 2 * EmberGlass.sizeSegmentPadding)
+            anchors.verticalCenter: parent.verticalCenter
+            radius: height / 2
+            color: Theme.eg.colorSunk
+            border.color: Theme.eg.colorLine2
+            border.width: Math.max(1, EmberGlass.hairline * Theme.u)
+        }
         Row {
-            anchors.fill: parent
+            x: launcher.tabsX
+            width: parent.width - x
+            height: parent.height
             Repeater {
                 model: launcher.tabs
                 delegate: Item {
@@ -309,9 +349,21 @@ Item {
                     width: launcher.tabWidth
                     height: tabBar.height
 
+                    // Ember Glass: the selected tab (.seg > div.sel).
+                    Rectangle {
+                        objectName: "emberLauncherTabSelected"
+                        visible: launcher.eg && pages.currentIndex === index
+                        width: parent.width
+                        height: Theme.px(EmberGlass.sizeSegment)
+                        anchors.verticalCenter: parent.verticalCenter
+                        radius: height / 2
+                        color: Theme.eg.componentSegmentSelected
+                        border.color: Theme.eg.colorLine
+                        border.width: Math.max(1, EmberGlass.hairline * Theme.u)
+                    }
                     ArtBorderImage {
                         anchors.fill: parent
-                        visible: pages.currentIndex === index
+                        visible: pages.currentIndex === index && !launcher.eg
                         source: Theme.asset("launcher3/tab-selected-bg.png")
                         border { left: Theme.artBorder(4, source); right: Theme.artBorder(4, source); top: Theme.artBorder(4, source); bottom: Theme.artBorder(4, source) }
                     }
@@ -321,20 +373,23 @@ Item {
                         horizontalAlignment: Text.AlignHCenter
                         elide: Text.ElideRight
                         text: modelData
-                        color: pages.currentIndex === index ? Theme.launcherTabSelectedColor : Theme.launcherTabColor
-                        font.family: Theme.fontFamily
+                        color: launcher.eg ? (pages.currentIndex === index ? Theme.eg.colorInk : Theme.eg.colorInk2)
+                             : pages.currentIndex === index ? Theme.launcherTabSelectedColor : Theme.launcherTabColor
+                        font.family: launcher.eg ? Theme.egFontFamily : Theme.fontFamily
                         // Phones in edit mode: smaller, to leave Done its room
                         // (the phone launcher is not in the open source);
                         // and on phones a title that does not fit its quarter
                         // of the bar ("Downloads") is made smaller to fit,
-                        // down to 12 px (9 px beside Done).
-                        font.pixelSize: !Theme.tablet && launcher.editMode ? Theme.px(12) : Theme.launcherTabFontSize
+                        // down to 12 px (9 px beside Done). Ember Glass:
+                        // type.segment, 13.5 px semibold.
+                        font.pixelSize: launcher.eg ? Math.round(13.5 * Theme.u)
+                                      : !Theme.tablet && launcher.editMode ? Theme.px(12) : Theme.launcherTabFontSize
                         fontSizeMode: Theme.tablet ? Text.FixedSize : Text.HorizontalFit
                         minimumPixelSize: launcher.editMode ? Theme.px(9) : Theme.px(12)
-                        font.bold: true
+                        font.weight: launcher.eg ? 600 : Font.Bold
                     }
                     Image {
-                        visible: index > 0
+                        visible: index > 0 && !launcher.eg
                         anchors.left: parent.left
                         width: Theme.artWidth(source)
                         height: parent.height
@@ -359,20 +414,41 @@ Item {
                 width: launcher.addTabWidth
                 height: tabBar.height
                 Image {
+                    visible: !launcher.eg
                     anchors.left: parent.left
                     width: Theme.artWidth(source)
                     height: parent.height
                     source: Theme.asset("launcher3/tab-divider.png")
                 }
                 Rectangle {
+                    visible: !launcher.eg
                     anchors.centerIn: parent
                     width: Theme.px(22); height: Theme.px(4); radius: height / 2
                     color: addMouse.pressed ? Theme.launcherTabSelectedColor : Theme.launcherTabColor
                 }
                 Rectangle {
+                    visible: !launcher.eg
                     anchors.centerIn: parent
                     width: Theme.px(4); height: Theme.px(22); radius: width / 2
                     color: addMouse.pressed ? Theme.launcherTabSelectedColor : Theme.launcherTabColor
+                }
+                // Ember Glass: a ring button (.ring-btn) with a plus.
+                Rectangle {
+                    objectName: "emberLauncherAddTab"
+                    visible: launcher.eg
+                    anchors.centerIn: parent
+                    width: Theme.px(EmberGlass.sizeSegment)
+                    height: width
+                    radius: width / 2
+                    color: addMouse.pressed ? Theme.eg.colorPlane2 : "transparent"
+                    border.color: Theme.eg.colorLine2
+                    border.width: Math.max(1, EmberGlass.hairline * Theme.u)
+                    EgIcon {
+                        anchors.centerIn: parent
+                        width: Theme.px(18); height: width
+                        name: "plus"
+                        color: Theme.eg.colorInk
+                    }
                 }
                 MouseArea {
                     id: addMouse
@@ -384,7 +460,7 @@ Item {
         // Press and hold on the strip past the tabs: the "+".
         MouseArea {
             objectName: "launcherTabStripEmpty"
-            x: launcher.tabWidth * launcher.tabs.length + launcher.addTabWidth
+            x: launcher.tabsX + launcher.tabWidth * launcher.tabs.length + launcher.addTabWidth
             width: Math.max(0, parent.width - x)
             height: parent.height
             enabled: !launcher.editMode
@@ -400,13 +476,23 @@ Item {
         id: doneButton
         visible: launcher.editMode
         anchors.right: tabBar.right
-        anchors.rightMargin: Theme.px(6)
+        anchors.rightMargin: launcher.eg ? Theme.px(18) : Theme.px(6)
         anchors.verticalCenter: tabBar.verticalCenter
-        width: Theme.px(98)
+        width: launcher.eg ? doneLabel.implicitWidth + 2 * Theme.px(EmberGlass.sizePillSmallPaddingX) : Theme.px(98)
         height: Theme.px(34)
         z: 2
         clip: true
+        // Ember Glass: an ink pill (.pill.sm.ink).
+        Rectangle {
+            objectName: "emberLauncherDone"
+            visible: launcher.eg
+            anchors.fill: parent
+            radius: height / 2
+            color: Theme.eg.colorInverse
+            opacity: doneMouse.pressed ? 0.8 : 1
+        }
         Image {
+            visible: !launcher.eg
             x: -Theme.px(1)
             y: doneMouse.pressed ? -Theme.px(42) : -Theme.px(2)
             width: Theme.px(100)
@@ -414,12 +500,13 @@ Item {
             source: Theme.asset("launcher3/edit-button-done.png")
         }
         Text {
+            id: doneLabel
             anchors.centerIn: parent
             text: qsTr("Done")
-            color: Theme.text
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(16)
-            font.bold: true
+            color: launcher.eg ? Theme.eg.colorOnInverse : Theme.text
+            font.family: launcher.eg ? Theme.egFontFamily : Theme.fontFamily
+            font.pixelSize: launcher.eg ? Math.round(13 * Theme.u) : Theme.px(16)
+            font.weight: launcher.eg ? 600 : Font.Bold
         }
         MouseArea {
             id: doneMouse
@@ -429,6 +516,7 @@ Item {
     }
 
     Image {
+        visible: !launcher.eg
         anchors.top: tabBar.bottom
         width: parent.width
         height: Theme.artHeight(source)
@@ -605,14 +693,17 @@ Item {
     // Tabs share the bar from its left, each at most 150 px
     // (PageTabBar::newTabMaxSize, pagetabbar.cpp:85, 631-642); in edit mode
     // they leave room for Done.
+    // Where the first tab starts: Ember Glass's capsule is 18 px in, the
+    // tabs 3 inside it (.seg).
+    readonly property real tabsX: eg ? Theme.px(18 + EmberGlass.sizeSegmentPadding) : 0
     readonly property real tabWidth: Math.min(Theme.launcherTabMaxWidth,
-        (tabBar.width - (editMode ? doneButton.width + Theme.px(12) : 0) - addTabWidth) / tabs.length)
+        (tabBar.width - 2 * tabsX - (editMode ? doneButton.width + Theme.px(12) : 0) - addTabWidth) / tabs.length)
 
     // Tab under a point (launcher coordinates), or -1.
     function tabAt(lx, ly) {
-        if (ly < 0 || ly > tabBar.height || lx >= tabWidth * tabs.length)
+        if (ly < 0 || ly > tabBar.height || lx < tabsX || lx >= tabsX + tabWidth * tabs.length)
             return -1;
-        return Math.max(0, Math.min(tabs.length - 1, Math.floor(lx / tabWidth)));
+        return Math.max(0, Math.min(tabs.length - 1, Math.floor((lx - tabsX) / tabWidth)));
     }
     // The page area, in launcher coordinates.
     function inPages(lx, ly) {
@@ -881,6 +972,7 @@ Item {
                 width: page.width
                 height: page.height
                 Image {
+                    visible: !launcher.eg
                     source: Theme.asset("launcher3/launcher-empty-page.png")
                     width: Theme.artWidth(source)
                     height: Theme.artHeight(source)
@@ -894,10 +986,11 @@ Item {
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.WordWrap
                     text: qsTr("Tap and hold any app to drag it to this page.")
-                    color: "#FFFFFF"
-                    font.family: Theme.fontFamily
-                    font.pixelSize: Theme.px(24)
-                    font.bold: true
+                    // Ember Glass: a title in ink-2 (type.title).
+                    color: launcher.eg ? Theme.eg.colorInk2 : "#FFFFFF"
+                    font.family: launcher.eg ? Theme.egFontFamily : Theme.fontFamily
+                    font.pixelSize: launcher.eg ? Math.round(18 * Theme.u) : Theme.px(24)
+                    font.weight: launcher.eg ? 600 : Font.Bold
                 }
             }
 
@@ -940,9 +1033,9 @@ Item {
                         y: iconItem.y - Theme.px(6)
                         width: Math.min(parent.width - Theme.px(4), Theme.launcherIconSize + Theme.px(36))
                         height: iconItem.height + Theme.px(10)
-                        radius: Theme.px(10)
-                        color: "#302c8ce0"
-                        border.color: "#2c8ce0"
+                        radius: launcher.eg ? Theme.px(EmberGlass.radiusTile) : Theme.px(10)
+                        color: launcher.eg ? Theme.egAlpha(Theme.eg.colorFocus, 0.14) : "#302c8ce0"
+                        border.color: launcher.eg ? Theme.eg.colorFocus : "#2c8ce0"
                         border.width: Theme.px(2)
                     }
 
@@ -959,12 +1052,25 @@ Item {
                     }
                     // Edit mode: the icon sits on the edit tile (edit-icon-bg.png).
                     Image {
-                        visible: launcher.editMode
+                        visible: launcher.editMode && !launcher.eg
                         anchors.horizontalCenter: iconItem.horizontalCenter
                         y: iconItem.y + (Theme.launcherIconSize - height) / 2
                         width: Theme.launcherIconSize * 1.5
                         height: width
                         source: Theme.asset("launcher3/edit-icon-bg.png")
+                    }
+                    // Ember Glass: an L2 tile (.plane at radius.tile).
+                    Rectangle {
+                        objectName: "emberLauncherEditTile"
+                        visible: launcher.editMode && launcher.eg
+                        anchors.horizontalCenter: iconItem.horizontalCenter
+                        y: iconItem.y + (Theme.launcherIconSize - height) / 2
+                        width: Theme.launcherIconSize + Theme.px(20)
+                        height: width
+                        radius: Theme.px(EmberGlass.radiusTile)
+                        color: Theme.eg.colorPlane2
+                        border.color: Theme.eg.colorLine2
+                        border.width: Math.max(1, EmberGlass.hairline * Theme.u)
                     }
                     AppIcon {
                         id: iconItem
@@ -996,9 +1102,29 @@ Item {
                         height: width
                         clip: true
                         Image {
+                            visible: !launcher.eg
                             width: parent.width
                             height: parent.height * 2
                             source: Theme.asset(cell.shortcut ? "launcher3/edit-button-remove.png" : "launcher3/edit-button-delete.png")
+                        }
+                        // Ember Glass: an ink disc with an x (a shortcut's
+                        // and an app's alike; the hold's menu says which).
+                        Rectangle {
+                            objectName: "emberLauncherDelete"
+                            visible: launcher.eg
+                            anchors.centerIn: parent
+                            width: Theme.px(24)
+                            height: width
+                            radius: width / 2
+                            color: Theme.eg.colorInverse
+                            border.color: Theme.eg.colorLine2
+                            border.width: Math.max(1, EmberGlass.hairline * Theme.u)
+                            EgIcon {
+                                anchors.centerIn: parent
+                                width: Theme.px(14); height: width
+                                name: "x"
+                                color: Theme.eg.colorOnInverse
+                            }
                         }
                     }
                     // The install status decorator, 32 x 32 (iconheap.cpp:44-51;
@@ -1169,7 +1295,7 @@ Item {
         anchors.top: tabBar.bottom
         width: parent.width
         height: Theme.artHeight(source)
-        visible: launcher.scrollShadowsShown
+        visible: launcher.scrollShadowsShown && !launcher.eg
         source: Theme.asset("launcher3/launcher-scrollfade-top.png")
         fillMode: Image.Stretch
     }
@@ -1179,7 +1305,7 @@ Item {
         anchors.bottomMargin: launcher.dockHeight
         width: parent.width
         height: Theme.artHeight(source)
-        visible: launcher.scrollShadowsShown
+        visible: launcher.scrollShadowsShown && !launcher.eg
         source: Theme.asset("launcher3/launcher-scrollfade-bottom.png")
         fillMode: Image.Stretch
     }

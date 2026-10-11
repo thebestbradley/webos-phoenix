@@ -198,6 +198,7 @@ Item {
 
     Text {
         id: label
+        objectName: "appIconLabel"
         visible: icon.showLabel
         anchors.top: tile.bottom
         anchors.topMargin: Theme.launcherLabelSpacing
@@ -208,11 +209,13 @@ Item {
         maximumLineCount: 2
         wrapMode: Text.WordWrap
         text: icon.title
-        color: Theme.text
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.launcherLabelFontSize
-        font.bold: Theme.launcherLabelBold
-        style: Text.Raised
+        // Ember Glass: the theme's ink on the glass, flat (base.css: no
+        // raised text), medium weight.
+        color: Theme.emberGlass ? Theme.eg.colorInk : Theme.text
+        font.family: Theme.emberGlass ? Theme.egFontFamily : Theme.fontFamily
+        font.pixelSize: Theme.emberGlass ? Math.round(12.5 * Theme.u) : Theme.launcherLabelFontSize
+        font.weight: Theme.emberGlass ? Font.Medium : Theme.launcherLabelBold ? Font.Bold : Font.Normal
+        style: Theme.emberGlass ? Text.Normal : Text.Raised
         styleColor: "#000000"
     }
 

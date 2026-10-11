@@ -33,10 +33,13 @@ Item {
     property real bottomRightRadius: radius
     // lift-high's shadow (an overlay's), or none.
     property bool lifted: level === 4
-    // The tint, the rim and the highlight: the theme's.
-    readonly property bool liveBlur: level >= 3 && Theme.egLiveBlur
+    // The tint, the rim and the highlight: the theme's. With nothing to
+    // blur (live blur off, or no scene behind given) a float or an
+    // overlay is its 94% tint.
+    readonly property bool liveBlur: level >= 3 && Theme.egLiveBlur && backdrop !== null
+                                     && GraphicsInfo.api !== GraphicsInfo.Software
     readonly property color tint: level === 2 ? Theme.eg.glassL2Tint
-        : !Theme.egLiveBlur ? Theme.eg.glassFallback
+        : !liveBlur ? Theme.eg.glassFallback
         : level === 3 ? Theme.eg.glassL3Tint : Theme.eg.glassL4Tint
     default property alias content: contentItem.data
 
@@ -73,7 +76,7 @@ Item {
     BackdropBlur {
         objectName: "emberSheetBlur"
         anchors.fill: parent
-        visible: sheet.liveBlur && source !== null && GraphicsInfo.api !== GraphicsInfo.Software
+        visible: sheet.liveBlur
         source: sheet.backdrop
         mask: mask
         radius: Theme.px(sheet.level === 3 ? EmberGlass.glassL3Blur : EmberGlass.glassL4Blur)

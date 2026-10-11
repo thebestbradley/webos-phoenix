@@ -2820,6 +2820,9 @@ FocusScope {
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: notes.negativeSpace
                         dockHeight: quickLaunch.height
+                        // Ember Glass's L1 (docs/SYSTEM-UI-2.md, 7).
+                        glassPicture: wallpaperBlur.tonedUrl
+                        glassScreen: Qt.size(wallpaperItem.width, wallpaperItem.height)
                         apps: shell.source ? shell.source.apps : null
                         layout: shell.launcherLayout
                         draggedId: iconDrag.appId
@@ -2909,6 +2912,7 @@ FocusScope {
                     id: iconMenu
                     anchors.fill: parent
                     z: 999
+                    backdrop: sceneBackdrop
                     onTriggered: (name) => shell.iconMenuAction(iconMenu.appId, iconMenu.from, name)
                     onCloseRequested: iconMenu.open = false
                 }

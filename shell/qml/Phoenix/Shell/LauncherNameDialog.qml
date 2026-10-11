@@ -70,10 +70,18 @@ Item {
         x: (dialog.width - width) / 2
         y: Theme.px(Theme.tablet ? 104 : 24)
         radius: Theme.px(10)
-        color: "#E6141618"
-        border.color: "#6E737A"
+        // Ember Glass: a dialog, an L4 sheet (base.css .dialog), drawn below.
+        color: Theme.emberGlass ? "transparent" : "#E6141618"
+        border.color: Theme.emberGlass ? "transparent" : "#6E737A"
         border.width: Math.max(1, Theme.px(1))
         MouseArea { anchors.fill: parent }   // taps on the panel stay here
+        EgSheet {
+            objectName: "emberLauncherNameDialog"
+            visible: Theme.emberGlass
+            z: -1
+            anchors.fill: parent
+            radius: Theme.px(EmberGlass.radiusPlane)
+        }
 
         Text {
             id: headingText
@@ -81,9 +89,10 @@ Item {
             anchors.horizontalCenter: parent.horizontalCenter
             y: Theme.px(10)
             text: dialog.heading
-            color: "#C8C8C8"
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.px(17)
+            // Ember Glass: a dialog's title (.dialog .h: 22 px, ink).
+            color: Theme.emberGlass ? Theme.eg.colorInk : "#C8C8C8"
+            font.family: Theme.emberGlass ? Theme.egFontFamily : Theme.fontFamily
+            font.pixelSize: Theme.emberGlass ? Math.round(EmberGlass.typeDialogTitle.fontSize * Theme.u) : Theme.px(17)
         }
 
         // The trash can, at the heading's right (a tab the user added).
@@ -97,10 +106,19 @@ Item {
             anchors.rightMargin: Theme.px(10)
             anchors.verticalCenter: headingText.verticalCenter
             opacity: trashMouse.pressed ? 0.6 : 1
+            // Ember Glass: Phosphor's trash in the danger colour.
+            EgIcon {
+                visible: Theme.emberGlass
+                anchors.centerIn: parent
+                width: Theme.px(22); height: width
+                name: "trash"
+                color: Theme.eg.colorDanger
+            }
             // Drawn: a lid with its handle, a can with three ribs.
-            Rectangle { x: parent.width * 0.40; y: parent.height * 0.14; width: parent.width * 0.20; height: parent.height * 0.08; color: "#E8E8E8"; radius: height / 3 }
-            Rectangle { x: parent.width * 0.20; y: parent.height * 0.22; width: parent.width * 0.60; height: parent.height * 0.09; color: "#E8E8E8"; radius: height / 3 }
+            Rectangle { visible: !Theme.emberGlass; x: parent.width * 0.40; y: parent.height * 0.14; width: parent.width * 0.20; height: parent.height * 0.08; color: "#E8E8E8"; radius: height / 3 }
+            Rectangle { visible: !Theme.emberGlass; x: parent.width * 0.20; y: parent.height * 0.22; width: parent.width * 0.60; height: parent.height * 0.09; color: "#E8E8E8"; radius: height / 3 }
             Rectangle {
+                visible: !Theme.emberGlass
                 x: parent.width * 0.27; y: parent.height * 0.35; width: parent.width * 0.46; height: parent.height * 0.52
                 color: "#E8E8E8"; radius: Theme.px(3)
                 Row {
@@ -131,9 +149,24 @@ Item {
             width: panel.width - 2 * x
             height: Theme.px(Theme.tablet ? 70 : 48)
             radius: Theme.px(6)
-            color: "#000000"
-            border.color: "#7FA6E8"
+            color: Theme.emberGlass ? "transparent" : "#000000"
+            border.color: Theme.emberGlass ? "transparent" : "#7FA6E8"
             border.width: Theme.px(2)
+            // Ember Glass: the field underlined in ember while typed in
+            // (base.css .field.focus).
+            Rectangle {
+                visible: Theme.emberGlass
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: Theme.px(2)
+                radius: height / 2
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0; color: EmberGlass.emberA }
+                    GradientStop { position: 0.45; color: EmberGlass.emberMid }
+                    GradientStop { position: 1; color: EmberGlass.emberB }
+                }
+            }
             TextInput {
                 id: field
                 objectName: "launcherNameField"
@@ -142,11 +175,11 @@ Item {
                 anchors.rightMargin: Theme.px(10)
                 verticalAlignment: TextInput.AlignVCenter
                 horizontalAlignment: TextInput.AlignHCenter
-                color: "#FFFFFF"
-                selectionColor: "#2C8CE0"
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.px(Theme.tablet ? 24 : 20)
-                font.bold: true
+                color: Theme.emberGlass ? Theme.eg.colorInk : "#FFFFFF"
+                selectionColor: Theme.emberGlass ? Theme.egAlpha(EmberGlass.emberA, 0.45) : "#2C8CE0"
+                font.family: Theme.emberGlass ? Theme.egFontFamily : Theme.fontFamily
+                font.pixelSize: Theme.emberGlass ? Math.round(EmberGlass.typeField.fontSize * Theme.u) : Theme.px(Theme.tablet ? 24 : 20)
+                font.weight: Theme.emberGlass ? 450 : Font.Bold
                 maximumLength: 24
                 clip: true
                 inputMethodHints: Qt.ImhNoPredictiveText

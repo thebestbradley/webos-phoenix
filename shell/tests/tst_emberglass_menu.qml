@@ -112,7 +112,7 @@ Item {
             tryCompare(check, "visible", true, 3000);
             verify(Qt.colorEqual(check.color, EmberGlass.dark.colorEmberText));
             compare(menu.subX, menu.textX);
-            wifi.close(true);
+            wifi.close();
         }
 
         // Ember's slider: the ember up to the knob, which sits where 1.0's

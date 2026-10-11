@@ -21,6 +21,10 @@
 #   systemmenu.png    the system menu over the card view
 #   systemmenu-wifi.png  its Wi-Fi drawer open
 #   systemmenu-classic.png  the system menu in 1.0's look
+#   launcher.png, launcher-classic.png  the launcher in both looks
+#   launcher-edit.png the launcher in edit mode
+#   launcher-menu.png an icon's menu
+#   launcher-group.png  a group open
 #
 # Each run in a fresh home; the glass pages are installed for the run only.
 #
@@ -87,3 +91,8 @@ DELAY=6000 shot drawer --scene drawer -- --look ember-glass
 DELAY=6000 shot systemmenu --scene systemmenu -- --look ember-glass
 DELAY=8000 shot systemmenu-wifi --scene systemmenuwifi -- --look ember-glass
 DELAY=6000 shot systemmenu-classic --scene systemmenu
+DELAY=6000 shot launcher --scene launcher -- --look ember-glass
+DELAY=6000 shot launcher-classic --scene launcher
+DELAY=6000 shot launcher-edit --scene launcheredit -- --look ember-glass
+DELAY=7000 shot launcher-menu --scene launchermenu -- --look ember-glass
+DELAY=7000 shot launcher-group --scene launchergroupopen -- --look ember-glass

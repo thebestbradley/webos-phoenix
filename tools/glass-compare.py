@@ -86,5 +86,8 @@ def corner(a, b, name, box=(0.25, 0, 1, 0.55), w=380, gap=8):
     im.save(os.path.join(out, name), quality=82, optimize=True)
 corner(f'{shots}/systemmenu-classic.png', f'{shots}/systemmenu.png', 'system-menu.jpg')
 corner(f'{shots}/systemmenu.png', f'{shots}/systemmenu-wifi.png', 'system-menu-wifi.jpg')
+pair(f'{shots}/launcher-classic.png', f'{shots}/launcher.png', 'launcher.jpg')
+pair(f'{shots}/launcher-edit.png', f'{shots}/launcher-menu.png', 'launcher-edit-menu.jpg')
+alone(f'{shots}/launcher-group.png', 'launcher-group.jpg')
 for f in sorted(os.listdir(out)):
     print(f, os.path.getsize(os.path.join(out, f)) // 1024, 'KB')

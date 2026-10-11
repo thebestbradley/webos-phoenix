@@ -13,6 +13,10 @@
 // coordinates; items [{name, text, available?}]. A row emits
 // triggered(name) and the menu closes; a tap outside, Back or Esc
 // closes it (closeRequested).
+//
+// Ember Glass (docs/SYSTEM-UI-2.md, 7) draws it as its menus (base.css
+// .menu): an L4 sheet, 20 px corners, 46 px rows, hairlines between them,
+// the pressed or focused row the sunk tint and the ember bar.
 
 import QtQuick
 
@@ -37,6 +41,8 @@ Item {
 
     signal triggered(string name)
     signal closeRequested
+    // The scene behind, for Ember Glass's live blur under the menu.
+    property Item backdrop: null
 
     visible: open || dim.opacity > 0
     // Fading out, it takes no touches.
@@ -192,7 +198,7 @@ Item {
             }
             return w;
         }
-        source: Theme.asset("popup-bg.png")
+        source: Theme.emberGlass ? "" : Theme.asset("popup-bg.png")
         border { left: Theme.artBorder(35, source); right: Theme.artBorder(35, source); top: Theme.artBorder(40, source); bottom: Theme.artBorder(40, source) }
         opacity: menu.open ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: Theme.statusBarMenuFadeDuration } }
@@ -201,6 +207,19 @@ Item {
         transformOrigin: menu.side === "right" ? Item.Left : menu.side === "left" ? Item.Right
                        : menu.side === "below" ? Item.Top : Item.Bottom
         MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton }   // swallow taps
+
+        // Ember Glass: the L4 sheet where the art's panel is (inside its
+        // shadow's edge).
+        EgSheet {
+            objectName: "emberIconMenu"
+            visible: Theme.emberGlass
+            x: menu._edge
+            y: menu._edge
+            width: panel.width - 2 * menu._edge
+            height: panel.height - 2 * menu._edge
+            backdrop: menu.backdrop
+            radius: Theme.px(EmberGlass.radiusMenu)
+        }
 
         Column {
             id: column
@@ -218,16 +237,46 @@ Item {
                     readonly property real labelWidth: label.implicitWidth
                     objectName: "iconMenu_" + modelData.name
                     width: column.width
-                    height: Theme.systemMenuRowHeight
+                    height: Theme.emberGlass ? Theme.px(46) : Theme.systemMenuRowHeight
+                    readonly property bool highlighted: row.available && ((area.pressed && area.containsMouse) || menu.keyIndex === row.index)
+                    // Ember Glass: a hairline between rows, the sunk tint
+                    // and the ember bar on the pressed one (.menu hr, .mi.sel).
+                    Rectangle {
+                        visible: Theme.emberGlass && row.index > 0
+                        x: Theme.px(12)
+                        width: parent.width - 2 * x
+                        height: Math.max(1, EmberGlass.hairline * Theme.u)
+                        color: Theme.eg.colorLine2
+                    }
+                    Rectangle {
+                        objectName: "emberIconMenuHighlight"
+                        visible: Theme.emberGlass && row.highlighted
+                        x: Theme.px(6)
+                        width: parent.width - 2 * x
+                        height: parent.height
+                        radius: Theme.px(EmberGlass.radiusMenuItem)
+                        color: Theme.eg.colorSunk
+                        Rectangle {
+                            x: Theme.px(4)
+                            y: Theme.px(13)
+                            width: 2.5 * Theme.u
+                            height: parent.height - 2 * y
+                            radius: width / 2
+                            gradient: Gradient {
+                                GradientStop { position: 0; color: EmberGlass.emberB }
+                                GradientStop { position: 1; color: EmberGlass.emberA }
+                            }
+                        }
+                    }
                     Image {
-                        visible: row.index > 0
+                        visible: row.index > 0 && !Theme.emberGlass
                         x: Theme.systemMenuDividerInset / 2
                         width: parent.width - Theme.systemMenuDividerInset
                         height: Theme.px(2)
                         source: Theme.asset("menu-divider.png")
                     }
                     ArtBorderImage {
-                        visible: row.available && ((area.pressed && area.containsMouse) || menu.keyIndex === row.index)
+                        visible: row.highlighted && !Theme.emberGlass
                         source: Theme.asset(row.index === menu.items.length - 1 ? "menu-selection-gradient-last.png" : "menu-selection-gradient-default.png")
                         x: Theme.px(2)
                         width: parent.width - Theme.px(4)
@@ -236,15 +285,16 @@ Item {
                     }
                     Text {
                         id: label
-                        x: Theme.systemMenuIndent
-                        width: parent.width - 2 * Theme.systemMenuIndent
+                        x: Theme.emberGlass ? Theme.px(20) : Theme.systemMenuIndent
+                        width: parent.width - 2 * x
                         anchors.verticalCenter: parent.verticalCenter
                         elide: Text.ElideRight
                         text: row.modelData.text
-                        color: Theme.systemMenuText
+                        color: Theme.emberGlass ? Theme.eg.colorInk : Theme.systemMenuText
                         opacity: row.available ? 1 : 0.4
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.systemMenuFontSize
+                        font.family: Theme.emberGlass ? Theme.egFontFamily : Theme.fontFamily
+                        font.pixelSize: Theme.emberGlass ? Math.round(15 * Theme.u) : Theme.systemMenuFontSize
+                        font.weight: Theme.emberGlass ? 550 : Font.Normal
                     }
                     MouseArea {
                         id: area
