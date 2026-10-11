@@ -41,6 +41,7 @@
 #                    (a copy-on-write overlay, one per device) is made anew
 #   --dry-run        print the QEMU command and exit (nothing is needed)
 #   --utm            print UTM's settings for this device and exit
+#                    (scripts/make-utm.sh makes the whole VM for UTM)
 #
 # Each device keeps its own disk (its data, its apps) in
 # ${XDG_STATE_HOME:-~/.local/state}/webos-phoenix/vm/<device>.qcow2, an
@@ -57,7 +58,7 @@ HOST_OS=${PHOENIX_VM_HOST_OS:-$(uname -s)}
 HOST_ARCH=${PHOENIX_VM_HOST_ARCH:-$(uname -m)}
 
 die() { echo "vm.sh: $*" >&2; exit 2; }
-usage() { sed -n '11,48p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '11,49p' "$0" | sed 's/^# \{0,1\}//'; }
 
 command -v python3 >/dev/null 2>&1 || die "python3 is needed (to read the device profiles)"
 profile() { python3 "$PROFILES" get "$DEVICE" "$1"; }
@@ -157,13 +158,15 @@ case $HOST_OS in Darwin) AUDIODEV=coreaudio ;; *) AUDIODEV=pa ;; esac
 
 if [ -n "$UTM" ]; then
     cat <<EOF
-UTM settings for the $NAME (docs/BUILDING-MAC.md, "UTM"):
+UTM settings for the $NAME (docs/BUILDING-MAC.md, "UTM"; or let
+scripts/make-utm.sh $DEVICE --for mac make the VM):
   Create a New Virtual Machine > Virtualize > Linux
     Use Apple Virtualization: off (QEMU)
     Boot from kernel image: on
       Kernel image:  Image (from the image folder)
       Root image:    webos-phoenix-image-phoenix-vm-arm64.rootfs.ext4
-      Boot arguments: $APPEND
+      Boot arguments, with the double quotes (UTM splits them at the spaces
+      otherwise): "$APPEND"
   Hardware: Memory $MEMORY MiB, CPU cores $CPUS
   Then edit the VM:
     Display: Emulated Display Card "virtio-gpu-gl-pci (GPU Supported)"; turn off
@@ -171,10 +174,11 @@ UTM settings for the $NAME (docs/BUILDING-MAC.md, "UTM"):
     QEMU > Arguments, add:
       -global virtio-gpu-gl-pci.xres=$WIDTH
       -global virtio-gpu-gl-pci.yres=$HEIGHT
-      -device virtio-multitouch-pci
-      -device virtio-tablet-pci
-    Sound: virtio-sound-pci (or "Intel HD Audio")
-    Network: Shared Network, virtio-net-pci
+    (UTM's own USB tablet and keyboard take the input: its window sends the
+    pointer through SPICE, which has no touches for a virtio multitouch.)
+    Sound: Intel HD Audio (or virtio-sound-pci)
+    Network: Emulated VLAN, virtio-net-pci; Port Forward: TCP, host
+      127.0.0.1 port $SSH_PORT, guest port 22
 EOF
     exit 0
 fi

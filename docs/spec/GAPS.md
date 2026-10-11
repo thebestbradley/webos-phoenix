@@ -42,7 +42,9 @@ device, not yet run"):
   (Q82) and on hardware (Q79-Q85). Before the hardware: `phoenix-sim --device <id>`
   shows each (done), and the ARM64 VM `phoenix-vm-arm64` runs the real image as each
   (`scripts/vm.sh <id>`; parsed, not built or booted: the owner's first boot on the Mac;
-  HARDWARE.md, "Device profiles", "Device VMs").
+  HARDWARE.md, "Device profiles", "Device VMs"), also in UTM on an iPad or a Mac
+  (`scripts/make-utm.sh <id>`: emulation on an iPad, one pointer for touch; checked against
+  UTM's source, not run in UTM; BUILDING-MAC.md, "Run it on an iPad with UTM").
 - 🟡 **P0** E1: Edit and the long-press popup written for WebAppMgr (through the pages'
   line to the shell, `services/shellhost`), not run.
 - 🟡 **P0** The one-process audit (docs/DEVICE-AUDIT.md): what a page did by calling the

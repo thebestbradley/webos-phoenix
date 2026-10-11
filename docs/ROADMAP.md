@@ -15,7 +15,7 @@ plan, milestone by milestone. Every gap still open, by area and priority:
 | M0: shell in a simulator (done) | 13 | 0 |
 | Source material still to mine | 3 | 1 |
 | Build infrastructure | 1 | 2 |
-| Development devices | 0 | 3 |
+| Development devices | 0 | 4 |
 | M1: running on webOS OSE | 0 | 10 |
 | M2: legacy UI parity | 18 | 2 |
 | M3: phones and tablets | 0 | 8 |
@@ -163,8 +163,21 @@ mouse pointer, shows the Mac's menu bar and only reaches as far as the Mac.
       [BUILDING-MAC.md](BUILDING-MAC.md#run-it-in-a-vm)). Parses and resolves
       (`scripts/parse-check.sh`, 11 October 2026; in CI's matrix); not built or
       booted yet: the owner's first boot, on the Mac. The real OS rather than the simulator, at near-native speed.
-      On an iPad, UTM can only emulate (no hypervisor access), which is far too
-      slow for OSE and Chromium, and touch reaches the guest as a pointer
+      On an iPad, UTM can only emulate (no hypervisor access), expected to be
+      far too slow for OSE and Chromium, and touch reaches the guest as a
+      pointer: the next item tries it
+- [ ] 🟡 **iPad (and Mac), in UTM**: `scripts/make-utm.sh <device>` makes a
+      UTM bundle of the ARM64 image with `vm.sh`'s machine, for UTM SE (App
+      Store, interpreter) or UTM with JIT (sideloaded) on an iPad, or UTM on
+      a Mac: the PineTab2 by default, at most 4 CPUs and 3 GB on an iPad,
+      virgl GL, UTM's USB tablet and keyboard (one pointer: SPICE carries no
+      touches), long systemd timeouts for emulation
+      ([BUILDING-MAC.md](BUILDING-MAC.md#run-it-on-an-ipad-with-utm)).
+      Checked against UTM's source (4.0 to 5.0.6: `tools/check-utm-bundle.py`)
+      and UTM's QEMU command started with a stand-in kernel
+      (`tools/test-make-utm.py --boot`, 11 October 2026); not run in UTM or
+      with the image yet: the owner's first try decides whether it is a
+      development route (OPEN-QUESTIONS Q170-Q173)
 - [x] **Device profiles in the simulator**: `phoenix-sim --device <id>`
       (View > Device) is each first target as its image configures it: exact
       pixels, density, layout, buttons, rounded corners and camera cutout
