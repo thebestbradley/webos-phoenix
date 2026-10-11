@@ -712,8 +712,9 @@ All seven start cleanly and are usable on phone and tablet
 - **Servers**: contacts and calendars sync with a CardDAV & CalDAV account
   (below); there is no mail server, so email accounts cannot be signed in.
 - **Background services**: scheduled activities fire (the activity manager
-  block; see [Tasks](#tasks)), but Clock alarms and calendar reminders have
-  not been checked end to end.
+  block; see [Tasks](#tasks)); the Clock's alarms ring at their minute, with
+  Clock closed too (`tools/test-alarm.cjs`, `tools/test-activities-sim.cjs`);
+  calendar reminders have not been checked end to end.
 - **Contacts**: contacts are linked into people only when a CardDAV sync
   adds them (the linker's strongest rules); no photos for local contacts, no
   vCard import/export.
@@ -1493,12 +1494,23 @@ The runtime's activity manager block simulates: `create`
 older `com.palm.power` `timeout/set {key, at | in, uri, params}` and
 `timeout/clear` on the same schedule. Schedule times are UTC unless
 `local: true`. Activities are kept in the shared store (`activities`), so
-every page sees them and any page can fire one: the target app's own page
-at once (a relaunch in place), other pages a second later (the shell then
-launches or relaunches the app; `SimWindowSource` does not bring up the
-card of a launch whose params carry `$activity`). A page claims an activity
-in the store before firing it, so it fires once; one that came due while no
-page ran fires when the next page starts. An activity started with no
+every page sees them, and one page fires each, as OSE's activity manager,
+a service, fires them at their time whatever runs: the target app's own
+page at once (a relaunch in place), and anything else the system UI's
+page, which phoenix-sim always runs (`SimWindowSource.bootApps`): a launch
+of an app that is not running at its time (the shell starts the app with
+the params; `SimWindowSource` does not bring up the card of a launch whose
+params carry `$activity`), so an alarm rings with Clock closed; a launch of
+an app that runs a second later, if its page has not fired it; any other
+callback at its time. (When every page fired them, each did: the pages are
+processes of their own, and one page's claim in the store reaches another a
+moment later.) With no system UI (a page alone in a browser, the web tests)
+every page fires them, as before. A relaunch that comes while the page is
+starting waits until the page has loaded and read its own launch params
+(as WebAppMgr held one until the page had loaded,
+`SysMgrWebBridge.cpp:133-139`): Clock opened while one of its alarms was
+due opens its card, then rings. One that came due while the simulator was
+not running fires when it starts. An activity started with no
 schedule or trigger runs at once, on the page that created it ("Sync now");
 one with an interval schedule is kept but never fires. Tests move the clock on with
 `__phoenixRuntime.activities.fireDue(at)`; `activities.list()` shows what is

@@ -11201,9 +11201,8 @@
     // com.palm.service.contacts reads it, contactsService.js:347-352). The
     // subscription ends when it fires; complete {restart: true, trigger?,
     // callback?, schedule?} subscribes again (contactsService.js:433-465).
-    // One page subscribes: the system UI's (always running in the shell),
-    // else, with no system UI, each page, the first to claim the activity in
-    // the store firing it. The subscription is the creator's (ctx.caller),
+    // One page subscribes: the host (below), the first to claim the activity
+    // in the store firing it. The subscription is the creator's (ctx.caller),
     // so the location service asks for the creator's permission. db8 watch
     // triggers (com.palm.db/watch) are not subscribed yet (syncTriggers):
     // those activities wait, as before.
@@ -11217,12 +11216,21 @@
     // goes on the same schedule (as activity "timeout:" + key).
     //
     // Activities live in the shared store ("activities"), so every app page
-    // sees them and any page may fire one: the page of the app a launch is
-    // for fires it at once (as OSE's webOSRelaunch, the card is not brought
-    // up: the app decides what to show), other pages a second later (the
-    // shell then starts or relaunches the app without focusing its card).
-    // One page claims each activity in the store before firing it. What is
-    // due while no page runs fires when the next page starts. A dashboard or
+    // sees them. As OSE's activity manager, a service, fires each at its
+    // time whatever runs (activitymanager activity/schedule/
+    // AbstractScheduleManager.cpp:230-238, "If anything on the queue
+    // already happened in the past, dequeue it", also at start-up), one
+    // page fires it: the page of the app a launch is for, at
+    // once, relaunching itself in place (as OSE's webOSRelaunch, the card is
+    // not brought up: the app decides what to show; a relaunch while the
+    // page starts comes after its own launch, runtime.relaunch); anything
+    // else the host, the system UI's page, which phoenix-sim's shell always
+    // runs (hostsActivities): a launch of an app that is not running at its
+    // time (the shell starts the app without focusing a card, with the
+    // params; an alarm rings with Clock closed), of one that runs a second
+    // later if its page has not, any other callback at its time. The page
+    // that fires an activity claims it in the store first. What is due while
+    // the simulator is not running fires when it starts. A dashboard or
     // popup alert of the app counts as another page (it may outlive the
     // app's card).
     //
@@ -11231,8 +11239,11 @@
     // what is scheduled.
     (function activityManagerService() {
         var KEY = "activities";
-        var GRACE_MS = 1000;          // other pages wait this long for the app's own page
+        var GRACE_MS = 1000;          // the host waits this long for a running app's own page
         var MAX_WAIT_MS = 60000;      // re-check at least this often (clock changes)
+        var HOST_WAIT_MS = 30000;     // no system UI for this long: a page hosts (hostsActivities)
+        var pageStarted = Date.now();
+        var inSimulator = String(global.location && global.location.protocol || "") === "phoenix:";
         var timer = null;
 
         function load() { return store.get(KEY, { nextId: 1, byName: {} }); }
@@ -11339,6 +11350,32 @@
                 a.callback.params.id === PalmSystem.appIdentifier && !systemWindow();
         }
 
+        // The app an activity launches, or "".
+        function launches(a) {
+            return a.callback && isAppLaunch(a.callback.method) && a.callback.params && typeof a.callback.params.id === "string"
+                ? a.callback.params.id : "";
+        }
+
+        // The one page that fires what no page of its app fires (a launch
+        // for an app with no page running, any other callback) and
+        // subscribes to the triggers, as the activity manager was one
+        // service: the system UI's, which phoenix-sim's shell starts at boot
+        // and keeps (SimWindowSource.bootApps, as LunaSysMgr started
+        // com.palm.systemui). When every page fired them, each fired each
+        // one: the pages are processes of their own, and one's claim in the
+        // store reaches the others a moment later (an activity due with its
+        // app closed launched it once from each page running). With no
+        // system UI listening for HOST_WAIT_MS (subscribeToSystemUI's
+        // systemui:listening), every page, as before: a page alone in a
+        // browser (the web tests); in phoenix-sim only once it has run that
+        // long itself, so the pages starting with the shell leave it to the
+        // system UI starting with them.
+        function hostsActivities() {
+            if (PalmSystem.appIdentifier === "com.palm.systemui" && !systemWindow()) return true;
+            if (Date.now() - store.get("systemui:listening", 0) < HOST_WAIT_MS) return false;
+            return !inSimulator || Date.now() - pageStarted >= HOST_WAIT_MS;
+        }
+
         function fire(a, triggered) {
             if (!a.callback || !a.callback.method) return;
             var act = { activityId: a.activityId, name: a.name };
@@ -11359,14 +11396,20 @@
 
         function charging() { return store.get("power", { charger: "none" }).charger !== "none"; }
 
-        // Fire what is due (for this page: see above). `at` forces the time.
+        // Fire what is due: a launch of this page's app at its time, in
+        // place; on the host (hostsActivities) the rest, a launch of an app
+        // that runs GRACE_MS later (its own page fires it first), of one
+        // that does not at its time (asked of the shell: fireUnlessRunning).
+        // `at` forces the time, and fires everything due by then.
         function check(at) {
             var now = at === undefined ? Date.now() : at;
-            var st = load(), due = [];
-            var plugged = charging();
+            var st = load(), due = [], early = [];
+            var plugged = charging(), host = hostsActivities();
             for (var n in st.byName) {
                 var a = st.byName[n];
+                var others = at === undefined && !forThisPage(a);
                 if (a.charging && !a.fired && !a.schedule && a.callback && plugged) {
+                    if (others && !host) continue;
                     a.fired = true;
                     a.due = now;
                     due.push(a);
@@ -11375,26 +11418,66 @@
                 if (a.charging && !plugged) continue;
                 if (a.trigger) continue;     // its trigger fires it (syncTriggers), once its schedule is due
                 if (a.fired || a.due === null || a.due === undefined || a.due > now) continue;
-                if (at === undefined && !forThisPage(a) && now < a.due + GRACE_MS) continue;
+                if (others) {
+                    if (!host) continue;
+                    if (launches(a) && now < a.due + GRACE_MS) {
+                        early.push({ name: a.name, activityId: a.activityId, due: a.due });
+                        continue;
+                    }
+                }
                 a.fired = true;
                 due.push(a);
             }
             if (due.length) save(st);
             // (Not forEach(fire): its index would be fire's `triggered`.)
             due.sort(function (x, y) { return x.due - y.due; }).forEach(function (a) { fire(a); });
+            if (early.length) fireUnlessRunning(early);
             arm();
             return due.length;
+        }
+
+        // The host's launches due now whose app is not running fire at once:
+        // nothing of it will fire them in place. The shell says what runs
+        // (applicationManager/running: cards, headless pages, windows kept
+        // alive); where it cannot (a page in a browser), they wait GRACE_MS.
+        var asking = false;
+        function fireUnlessRunning(early) {
+            if (asking || !inSimulator || typeof runtime.hostOp !== "function") return;
+            asking = true;
+            runtime.hostOp("running", {}).then(function (r) {
+                asking = false;
+                if (!r || !r.ok || !Array.isArray(r.running)) return;
+                var running = r.running.map(function (x) { return x && x.id; });
+                var st = load(), go = [];
+                early.forEach(function (e) {
+                    var a = st.byName[e.name];
+                    if (!a || a.fired || a.activityId !== e.activityId || a.due !== e.due) return;
+                    if (running.indexOf(launches(a)) >= 0) return;
+                    a.fired = true;
+                    go.push(a);
+                });
+                if (!go.length) return;
+                save(st);
+                go.forEach(function (a) { fire(a); });
+            }, function () { asking = false; });
         }
 
         function arm() {
             if (timer) clearTimeout(timer);
             timer = null;
-            var st = load(), next = Infinity;
+            var st = load(), next = Infinity, now = Date.now();
+            var host = hostsActivities(), plugged = charging();
             for (var n in st.byName) {
                 var a = st.byName[n];
                 if (a.fired || a.due === null || a.due === undefined) continue;
-                if (a.trigger && a.due <= Date.now()) continue;     // subscribed already (syncTriggers)
-                next = Math.min(next, forThisPage(a) || a.trigger ? a.due : a.due + GRACE_MS);
+                if (a.charging && !plugged) continue;     // the charger coming re-checks (the storage listener)
+                if (a.trigger && a.due <= now) continue;     // subscribed already (syncTriggers)
+                if (forThisPage(a) || a.trigger) next = Math.min(next, a.due);
+                // The host: at its time, a running app's launch GRACE_MS later.
+                else if (host) next = Math.min(next, a.due > now ? a.due : a.due + GRACE_MS);
+                // Another page's to fire: looked at again in a while, in case
+                // this page has become the host.
+                else next = Math.min(next, a.due > now ? a.due + GRACE_MS : now + HOST_WAIT_MS);
             }
             syncTriggers(st);
             if (next === Infinity) return;
@@ -11404,9 +11487,6 @@
 
         // ---- Triggers (above) ----
         var subs = {};     // activity name -> {key, cancel}: this page's subscriptions
-        function hostsTriggers() {
-            return PalmSystem.appIdentifier === "com.palm.systemui" || Date.now() - store.get("systemui:listening", 0) >= 30000;
-        }
         function valueAt(o, path) {
             return String(path || "").split(".").reduce(function (v, k) { return v === null || v === undefined ? undefined : v[k]; }, o);
         }
@@ -11481,7 +11561,7 @@
         // This page's subscriptions, as the store has the activities now.
         function syncTriggers(st) {
             var want = {}, now = Date.now();
-            if (hostsTriggers()) {
+            if (hostsActivities()) {
                 for (var n in st.byName) {
                     var a = st.byName[n];
                     if (a.trigger && a.started && !a.fired && !dbWatch(a.trigger) && (!a.schedule || (a.due !== null && a.due <= now))) want[n] = a;
@@ -11538,7 +11618,7 @@
         global.addEventListener && global.addEventListener("storage", function (e) {
             if (e.key === "phoenix:" + KEY) arm();
             else if (e.key === "phoenix:power") check();   // the charger, for requirements.charging
-            else if (e.key === "phoenix:systemui:listening") syncTriggers(load());   // who subscribes to triggers
+            else if (e.key === "phoenix:systemui:listening") arm();   // who hosts (fires others', subscribes to triggers)
         });
         var setPower = runtime.setPower;
         runtime.setPower = function (changes) {
@@ -11552,6 +11632,8 @@
         runtime.activities = {
             /** Fire every activity due by `at` (ms) now, from this page. Returns how many. */
             fireDue: function (at) { return check(at === undefined ? Date.now() : at); },
+            /** Whether this page hosts what no app's own page does (hostsActivities). */
+            hosts: function () { return hostsActivities(); },
             list: function () {
                 var st = load(), out = [];
                 for (var n in st.byName) out.push(details(st.byName[n]));
