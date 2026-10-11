@@ -839,6 +839,23 @@ function createAssistantService(deps) {
             return { text: "", toolCalls: [{ name: name, args: args }] };
         });
     }
+    // The time a model wrote for an alarm, a reminder or an event, where
+    // the grammar reads a time in the words: the grammar's, which is exact
+    // (a model fills only what the grammar could not read). Qwen3 0.6B set
+    // "I want an alarm at 5:30 tomorrow morning" for 6:30 (the held-out
+    // set, 11 October 2026).
+    function timeFromWords(cmd, args, asked) {
+        var key = { alarm: "time", reminder: "due", event: "start" }[cmd.id], l = lang();
+        if (!key || !args || !(args[key] > 0) || !asked || !l.extract) return args;
+        var info = l.extract(l.clean(asked), now());
+        if (!info.clock && info.relative === undefined) return args;
+        var r = l.resolve(info, now(), cmd.id === "alarm" ? "alarm" : "day");
+        if (r.start === null || r.allDay || r.start === args[key]) return args;
+        var out = Object.assign({}, args);
+        if (cmd.id === "event") out.end = r.end || (out.end > 0 ? out.end + (r.start - out.start) : out.end);
+        out[key] = r.start;
+        return out;
+    }
     // An answer: words, or a tool call to run (cloud ones only when allowed).
     function answer(thread, result, cat, layer, source, cloud, asked) {
         var s = lang().say;
@@ -848,7 +865,7 @@ function createAssistantService(deps) {
                 return Promise.resolve([say(thread, s.cloudNoControl(source), { via: layer, source: source, status: "failed" })]);
             var cmd = commands.fromToolName(cat.all, call.name);
             if (!cmd) return Promise.resolve([say(thread, s.unknownTool(call.name), { via: layer, source: source, status: "failed" })]);
-            var args = commands.fromModel(cmd, call.args, env());
+            var args = timeFromWords(cmd, commands.fromModel(cmd, call.args, env()), asked);
             if (cmd.id === "open" && call.args && call.args.name) args.name = call.args.name;
             return act(thread, cmd, args, layer, source, asked);
         }
@@ -1105,9 +1122,14 @@ function createAssistantService(deps) {
                 // are the calendar's and Contacts'), but only a command that
                 // reads may answer it: "how do I make banana pudding" is never
                 // made a memo (measured: docs/AI-AND-MCP.md).
-                var ctx = lang().say.context ? lang().say.context(lastAsked(thread)) : { question: false, smallTalk: false };
+                var ctx = lang().say.context ? lang().say.context(lastAsked(thread), cat.names) : { question: false, smallTalk: false };
                 var pre = localPrefix(cat);
-                if (ctx.smallTalk) return callModel(p, "", thread, [], undefined, left(), pre);
+                // A question about the world alone ("who wrote Pride and
+                // Prejudice"): answered in words at once. The choice before it
+                // could only have picked a command that reads the phone's
+                // things, which nothing in the words is about; it took a
+                // second to many under load (docs/AI-AND-MCP.md "Speed").
+                if (ctx.smallTalk || ctx.world) return callModel(p, "", thread, [], undefined, left(), pre);
                 return pickCommand(p, thread, cat, left()).then(function (c) {
                     if (c && ctx.question && c.risk !== "read") c = null;
                     // A choice that takes away, for words that say nothing of

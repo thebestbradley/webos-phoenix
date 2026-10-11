@@ -87,6 +87,28 @@ describe("an emergency call", () => {
     });
 });
 
+describe("a time a model wrote", () => {
+    it("is the grammar's reading of the words where it reads one", async () => {
+        // Qwen3 0.6B set "I want an alarm at 5:30 tomorrow morning" for 6:30 (the held-out set).
+        const llm = { status: () => Promise.resolve({ available: true, installed: [{ id: "qwen3-0.6b-q8_0" }] }), ensure: () => Promise.resolve({ baseUrl: "http://127.0.0.1:9/v1" }) };
+        const reply = (o: object) => ({ status: 200, body: JSON.stringify({ choices: [{ message: o }] }) });
+        const llmRequest = async (r: { body: string }) => {
+            const b = JSON.parse(r.body);
+            const props = b.response_format?.json_schema?.schema?.properties || {};
+            if (props.command) return reply({ content: JSON.stringify({ command: "alarm" }) });
+            if (props.time) return reply({ content: JSON.stringify({ time: "6:30 am tomorrow" }) });
+            return reply({ content: "An answer." });
+        };
+        const d = device({ llm, llmRequest, settings: { followUps: false } });
+        const m = await d.ask("an alarm at 5:30 tomorrow morning would be great");
+        expect(m).toMatchObject({ command: "alarm" });
+        expect(m.trace.path).toBe("on-device");
+        const made = d.of("com.palm.clock.alarm:1").filter((a) => a.hour === 5);
+        expect(made).toHaveLength(1);
+        expect(made[0].minute).toBe(30);
+    });
+});
+
 describe("a reminder for a place", () => {
     it("asks for a time instead of dropping the place, and the time said makes it", async () => {
         const d = device();

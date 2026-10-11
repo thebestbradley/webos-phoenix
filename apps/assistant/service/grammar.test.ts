@@ -236,10 +236,14 @@ describe("what the assistant suggests", () => {
         expect(parse("how do I make banana pudding")).toBeNull();
     });
     it("tells a question about the world, small talk and a request apart (what a model gets tools for)", () => {
-        expect(en.say.context("how do you make banana pudding")).toEqual({ question: true, smallTalk: false, app: "" });
+        expect(en.say.context("how do you make banana pudding")).toEqual({ question: true, smallTalk: false, app: "", world: true });
+        // Not about the world alone: the owner's things, a contact, what the phone measures.
+        expect(en.say.context("why is my phone so slow").world).toBe(false);
+        expect(en.say.context("is Sam coming", ["Sam Delgado"]).world).toBe(false);
+        expect(en.say.context("how cold is it in Oslo").world).toBe(false);
         expect(en.say.context("tell me a joke")).toMatchObject({ question: false, smallTalk: true });
         expect(en.say.context("can you put the torch on for me")).toMatchObject({ question: false, smallTalk: false });
-        expect(en.say.context("make a playlist of my songs")).toEqual({ question: false, smallTalk: false, app: "Music" });
+        expect(en.say.context("make a playlist of my songs")).toEqual({ question: false, smallTalk: false, app: "Music", world: false });
         expect(en.say.related("how do you make banana pudding", "Slice bananas.")[0]).toMatchObject({ label: "Save as Memo", run: { command: "note", args: { text: "Banana pudding\n\nSlice bananas." } } });
         expect(en.say.related("where is the eiffel tower", "In Paris.")).toEqual([{ label: "Show in Maps", map: "eiffel tower" }]);
     });

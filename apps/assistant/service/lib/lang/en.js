@@ -2193,6 +2193,10 @@ var APP_WORDS = [
 // (it may not).
 var QUESTION = /^(?:what|what's|whats|who|who's|whom|whose|when|when's|where|where's|why|how|how's|which|is|are|was|were|do|does|did|can|could|should|would|will|tell me|explain|define|describe|meaning of|recipe|give me)\b|\?$/;
 var SMALL_TALK = /^(?:hi|hello|hey|yo|good (?:morning|afternoon|evening|night)|how are you(?: doing| today)?|how's it going|what's up|sup|thanks|thank you|cheers|tell me a joke|say something funny|make me laugh|who are you|what(?:'s| is) your name|are you (?:there|real|a robot|human)|i love you|you're (?:great|awesome|funny|smart)|bye|goodbye|see you|good job|well done|nice)\b/;
+// What a question needs the phone for: its owner's things, and what the
+// commands keep or measure (say.context world).
+var PERSONAL = /\b(?:i|my|mine|me|myself|am i|do i have|have i|did i|i have|i've|i'm|we|our|ours|us)\b/;
+var MEASURED = /\b(?:outside|out there|morning|afternoon|evening|night|dentist|doctor|flight|reservation|party|weather|forecast|rain\w*|snow\w*|sunny|temperature|hot|cold|warm|windy|umbrella|time|date|day|today|tonight|tomorrow|yesterday|week|weekend|month|o'clock|clock|alarms?|timers?|calendar|meetings?|appointments?|events?|battery|storage|wi-?fi|bluetooth|volume|brightness|flashlight|convert|miles?|km|kilomet\w+|feet|foot|inch\w*|pounds?|kg|kilo\w*|ounces?|grams?|lit(?:er|re)s?|gallons?|cups?|celsius|fahrenheit|dollars?|euros?|currenc\w+|exchange|percent|plus|minus|times|divided|near|nearest|nearby|closest|far|distance|directions|drive|walk|route|traffic|where|messages?|texts?|e-?mails?|calls?|contacts?|notes?|memos?|tasks?|lists?|photos?|pictures?|files?|songs?|music|playing)\b|\d/;
 // After a model's answer: what to do with it ("Save as Memo" for a recipe,
 // Maps for where something is).
 var RECIPE = /\b(?:recipes?|how (?:do|can|should) (?:you|i|we|one) (?:make|cook|bake|prepare|brew)|how to (?:make|cook|bake|prepare|brew))\b/;
@@ -2200,13 +2204,18 @@ var PLACE = /^(?:where(?:'s| is| are)|how far is|directions to|what(?:'s| is) th
 
 var say = {
     // What a request is: {question, smallTalk, app: an app's title or ""}.
-    context: function (text) {
+    // world: a question about the world alone, nothing of the phone's or
+    // its owner's in it (no "my", no one in Contacts: names, nothing the
+    // commands keep or measure), which only words can answer.
+    context: function (text, names) {
         var t = clean(text), app = "";
         for (var i = 0; i < APP_WORDS.length && !app; ++i) if (APP_WORDS[i][0].test(t)) app = APP_WORDS[i][1];
         var small = SMALL_TALK.test(t);
         // "Can you put the torch on?" asks the device to do something.
         var request = /^(?:can|could|would|will) you (?:please )?(?:turn|set|put|switch|call|text|send|open|play|start|stop|pause|add|remind|make|take|show|find|navigate|get|create|delete|cancel|mark|move|lock|mute|dim|raise|lower)\b/.test(t);
-        return { question: !small && !request && QUESTION.test(t), smallTalk: small, app: app };
+        var question = !small && !request && QUESTION.test(t);
+        var named = (names || []).some(function (n) { var w = String(n).toLowerCase().split(" ")[0]; return w.length > 1 && new RegExp("\\b" + w.replace(/[^a-z0-9]/g, "") + "\\b").test(t); });
+        return { question: question, smallTalk: small, app: app, world: question && !app && !named && !PERSONAL.test(t) && !MEASURED.test(t) };
     },
     // Layer 4's words: nothing here can, and what can instead ("app":
     // the app that does it; "question": a web search; "other").

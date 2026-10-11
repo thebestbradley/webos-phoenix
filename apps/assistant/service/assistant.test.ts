@@ -565,9 +565,14 @@ describe("the on-device model", () => {
         t.as("com.palm.systemui");
         const from = mock.requests.length;
         await ask(t, "it's dark, put the flashlight on for me");
-        await ask(t, "why is the sky blue");
+        // (A question of the owner's goes through the choice; "why is the sky
+        // blue", about the world alone, is answered without it: below.)
+        await ask(t, "why is my sky blue");
         const sent = mock.requests.slice(from).map((r) => r.body);
         const [pick, call, pick2, chat] = sent;
+        const before = mock.requests.length;
+        await ask(t, "why is the sky blue");
+        expect(mock.requests.slice(before).map((r) => !!r.body.response_format)).toEqual([false]);
         expect(pick.response_format).toBeDefined();
         expect(call.tools).toBeUndefined();
         expect(Object.keys(call.response_format.json_schema.schema.properties)).toContain("setting");
