@@ -14,7 +14,9 @@ const SERVICE = "luna://org.webosphoenix.service.backup/";
 
 export type BackupDestination =
     | { type: "usb"; folder?: string }
-    | { type: "webdav"; url: string; username?: string; password?: string };
+    | { type: "webdav"; url: string; username?: string; password?: string }
+    /** Phoenix Cloud: the Phoenix Account's WebDAV folder for this device (its address from the account). */
+    | { type: "phoenix"; url?: string; username?: string };
 
 export interface BackupResult {
     time: string;

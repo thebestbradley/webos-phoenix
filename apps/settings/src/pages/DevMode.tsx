@@ -22,7 +22,7 @@
 //   frame rate counter and touch plot, under Debugging while it is on)
 
 import { useEffect, useState } from "react";
-import { apps, call, deviceLock, devMode, LunaError, subscribe, type LockMode } from "@phoenix/luna";
+import { apps, call, deviceLock, devMode, LunaError, phoenixAccount, subscribe, type LockMode, type PlatformServers } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
 import { Button, Dialog, ErrorText, Group, Note, Page, PageHeader, Row, TextField, ToggleButton } from "@phoenix/ui";
 
@@ -68,6 +68,7 @@ export function DevModePage() {
                 them from people you trust.
             </Note>
             {on && <DebugOverlays />}
+            {on && <PlatformServersGroup />}
             {on === false && (
                 <>
                     <Button data-testid="devmode-hide" onClick={() => void hide()}>Hide Developer Mode</Button>
@@ -76,6 +77,50 @@ export function DevModePage() {
             )}
             <DevModeDialog open={asking} lockMode={lockMode} onDone={() => setAsking(false)} />
         </Page>
+    );
+}
+
+/**
+ * Platform Servers: the servers this device uses (/etc/palm/phoenix/servers.json,
+ * docs/PLATFORM-CLIENT.md), and, for testing, another platform's (a staging
+ * server, tools/platform-mock) from its own servers.json. Only while
+ * Developer Mode is on; turning it off goes back to the image's.
+ */
+function PlatformServersGroup() {
+    const [info, setInfo] = useState<{ servers: PlatformServers; override: Record<string, unknown> | null } | null>(null);
+    const [url, setUrl] = useState("");
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    useEffect(() => { phoenixAccount.servers().then(setInfo, () => setInfo(null)); }, []);
+    async function apply(fn: () => Promise<{ servers: PlatformServers }>) {
+        setBusy(true);
+        setError(null);
+        try {
+            await fn();
+            setInfo(await phoenixAccount.servers());
+            setUrl("");
+        } catch (e) { setError(e instanceof LunaError ? e.errorText : String(e)); } finally { setBusy(false); }
+    }
+    const s = info?.servers;
+    const host = (u: string | null | undefined) => (u ? u.replace(/^https?:\/\//, "").replace(/\/$/, "") : "Not set up");
+    return (
+        <Group label="Platform Servers">
+            <Row title="Feeds" value={host(s?.feeds)} testId="devmode-servers-feeds" />
+            <Row title="Account and cloud" value={host(s?.api)} testId="devmode-servers-api" />
+            <Row title="Catalog key" value={!s?.catalog ? "Not set up" : s.catalog.root ? "Root key pinned" : s.catalog.key ? "Key pinned" : "Asks you"} />
+            <Row title="Updates" value={!s?.updates ? "Not set up" : s.updates.root || s.updates.key ? "Signed" : "Not signed"} />
+            {s?.overridden && <Note testId="devmode-servers-overridden">This device is using other servers than the ones it came with.</Note>}
+            <TextField label="Use the servers at" value={url} onChange={setUrl} testId="devmode-servers-url"
+                       placeholder="https://api.staging.example.org/v1/servers.json" />
+            <Button disabled={busy || !/^https?:\/\//.test(url.trim())} onClick={() => void apply(() => phoenixAccount.useServersAt(url.trim()))}
+                    data-testid="devmode-servers-use">Use These Servers</Button>
+            {info?.override && (
+                <Button variant="dark" disabled={busy} onClick={() => void apply(() => phoenixAccount.setServers(null))} data-testid="devmode-servers-reset">
+                    Use the Device's Own Servers
+                </Button>
+            )}
+            {error && <ErrorText testId="devmode-servers-error">{error}</ErrorText>}
+        </Group>
     );
 }
 

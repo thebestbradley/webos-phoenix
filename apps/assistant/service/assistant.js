@@ -270,7 +270,19 @@ function createAssistantService(deps) {
         return { id: p.id, type: p.type, name: p.name || providers.TYPES[p.type].label, model: p.model || "", baseUrl: p.baseUrl || "",
                  hasKey: !!p.keyEnc, keyHint: p.keyHint || "", label: providers.displayName(p) };
     }
-    function keyOf(p) { return p && p.keyEnc ? deps.secrets.unseal(p.keyEnc) : Promise.resolve(""); }
+    function keyOf(p) {
+        // The Phoenix provider: the proxy's address and the account's token,
+        // asked of the Phoenix Account service each time (the token is
+        // refreshed there); "not set up" or "signed out" is the error shown.
+        if (p && p.type === "phoenix") {
+            return deps.luna.call("luna://org.webosphoenix.service.account/assistantProvider", {}).then(function (r) {
+                if (!r || !r.returnValue) throw new Error((r && r.errorText) || "the Phoenix assistant service is not available");
+                p.baseUrl = String(r.baseUrl).replace(/\/+$/, "");
+                return r.apiKey;
+            });
+        }
+        return p && p.keyEnc ? deps.secrets.unseal(p.keyEnc) : Promise.resolve("");
+    }
     function defaultProvider() {
         var s = settings(), p = getProvider(s.defaultProvider);
         return p || allProviders()[0] || null;
@@ -1494,7 +1506,7 @@ function createAssistantService(deps) {
         if (!saved && p.model !== undefined) prov.model = p.model;
         if (!providers.TYPES[prov.type] || prov.type === "local") return Promise.resolve(fail(ERRORS.BAD_PARAMS, "unknown provider type"));
         if (saved && p.model) prov.model = p.model;
-        var key = typeof p.key === "string" && p.key ? Promise.resolve(p.key) : keyOf(saved);
+        var key = typeof p.key === "string" && p.key ? Promise.resolve(p.key) : keyOf(prov.type === "phoenix" ? prov : saved);
         return key.then(function (k) { return fn(prov, k); }).catch(function (e) {
             return ok({ ok: false, error: e && e.message || String(e) });
         });
