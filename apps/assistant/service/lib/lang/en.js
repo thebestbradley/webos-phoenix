@@ -1251,7 +1251,12 @@ function weather(t) {
 }
 
 function search(t) {
-    var m = /^(?:search(?: the web| the internet| online)?(?: for)?|google|look up|web search(?: for)?|find (?:on|online) ?(?:the web )?)\s+(.+)$/.exec(t);
+    // "Search the web", "look it up", "google that": with nothing to
+    // search for, the question before it when a web search was offered
+    // (assistant.js answerChoice), else it asks what ("search the web" was
+    // a search for "the web": the owner, 11 October 2026).
+    if (WEB_ASKED.test(t)) return { query: "" };
+    var m =/^(?:search(?: the web| the internet| online)?(?: for)?|google|look up|web search(?: for)?|find (?:on|online) ?(?:the web )?)\s+(.+)$/.exec(t);
     return m ? { query: m[1] } : null;
 }
 
@@ -2564,7 +2569,7 @@ var say = {
     opening: function (title) { return "Opening " + title + "."; },
     navigating: function (dest) { return "Getting directions to " + dest + "."; },
     playing: function (q) { return q ? "Playing " + q + "." : "Playing your music."; },
-    searching: function (q) { return "Searching the web for \"" + q + "\"."; },
+    searching: function (q) { return "Searching the web for " + quote(q) + "."; },
     answer: function (expr, value) { return expr + " = " + value; },
     time: function (now) { return "It's " + timeText(now) + "."; },
     date: function (now) { return "It's " + new Date(now).toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" }) + "."; },
@@ -2664,13 +2669,102 @@ var say = {
     }
 };
 
-// The answer to a read-back ("Send it?") in words: "yes", "no", or null for
-// something else (a new request).
+// The answer to a read-back ("Send it?") or any question with choices, in
+// words: "yes", "no", or null for something else (a new request, or not
+// clear). Only plain words: a read-back of what sends, calls or deletes
+// runs on these (or its button), never on a guess (assistant.js
+// confirmAnswer). t: clean()'s words.
+var YES = /^(?:yes|yeah|yea|yep|yup|ya|sure|sure thing|ok|okay|alright|all right|correct|right|that's right|go ahead|go for it|do it|do that|please|please do|yes please|yes do it|yes go ahead|yeah go ahead|yep go ahead|ok go ahead|okay go ahead|yeah sure|yes sure|sounds good|absolutely|definitely|of course|why not|let's do it|send|send it|call|call (?:him|her|them)|yes send it|yes call)$/;
+var NO = /^(?:no|nope|nah|no thanks|no thank you|don't|do not|don't send it|don't call|don't bother|cancel|cancel it|cancel that|stop|never ?mind|forget it|leave it|skip it|not now|no need|not really|(?:no )?(?:that's|it's|that is|it is) (?:ok|okay|fine|alright|all right)|(?:no )?i'm (?:good|fine))$/;
 function answer(t) {
-    if (/^(?:yes|yeah|yep|yup|sure|ok|okay|correct|right|that's right|go ahead|do it|please do|yes please|send|send it|call|call (?:him|her|them)|yes send it|yes call)$/.test(t)) return "yes";
-    if (/^(?:no|nope|no thanks|no thank you|don't|do not|don't send it|don't call|cancel|cancel it|stop|never ?mind)$/.test(t)) return "no";
+    t = String(t || "").replace(/[,.!]+/g, " ").replace(/\s+/g, " ").trim();
+    if (YES.test(t)) return "yes";
+    if (NO.test(t)) return "no";
     return null;
 }
+
+// ---- A question with choices, answered in words (assistant.js answerChoice) -----------------
+// The buttons under an answer and the words are the same choice: "yes" or
+// "no" to it, one of them by name ("search it", "ask Claude", "open
+// Music", "Chris Moore"), or by its place ("the second one", "number 2").
+// Asking to search the web, with what to search for left out ("search the
+// web", "look it up", "google that"): the question before it, when a web
+// search is offered; else it asks what (search, below).
+var WEB_ASKED = /^(?:(?:do |run )?(?:a |an )?(?:web|internet|google|online) search(?: for (?:it|that|this|me))?|search(?: (?:it|that|this))?(?: (?:on )?(?:the web|the internet|online|google))?(?: for (?:it|that|this|me))?|google(?: (?:it|that|this))?(?: for me)?|look (?:it|that|this) up(?: (?:on the web|online|for me))?|look up (?:it|that|this)|(?:search|look) for (?:it|that|this)(?: (?:on the web|online))?)$/;
+// ... and naming that choice among others ("the web").
+var WEB_NAMED = /^(?:(?:on |search )?the (?:web|internet)|web|online|(?:a )?web search)$/;
+var PLACES = { first: 0, "1st": 0, one: 0, "1": 0, second: 1, "2nd": 1, two: 1, "2": 1, third: 2, "3rd": 2, three: 2, "3": 2,
+               fourth: 3, "4th": 3, four: 3, "4": 3, fifth: 4, "5th": 4, five: 4, "5": 4 };
+function bare(s) { return String(s || "").toLowerCase().replace(/[“”"'().,!?]/g, "").replace(/&/g, "and").replace(/\s+/g, " ").trim(); }
+// Which of options the words name: -1 for none. partial: a clear part of a
+// name is enough ("Moore" for "Chris Moore": a "which one?"'s things).
+// places: how many of them a place reaches (the ones asked aloud come first).
+function choiceNamed(t, options, partial, places) {
+    var n = places === undefined ? options.length : places;
+    t = bare(t).replace(/^(?:i mean |i meant |it's |its |go with |pick |choose |let's go with |let's do |do )/, "").trim();
+    var place = t.replace(/^(?:the |number |option |choice )/, "").replace(/ (?:one|option|choice)$/, "").trim();
+    if (PLACES[place] !== undefined && PLACES[place] < n) return PLACES[place];
+    if (/^(?:the )?last(?: one)?$/.test(t) && n > 1) return n - 1;
+    for (var i = 0; i < options.length; ++i) {
+        var o = options[i], label = bare(o.label), name = bare(o.name || "");
+        if (t === label) return i;
+        if (o.kind === "web" && (WEB_ASKED.test(t) || WEB_NAMED.test(t))) return i;
+        if (o.kind === "connect" && /^(?:connect(?: a)? model|connect one|set up a model)$/.test(t)) return i;
+        if ((o.kind === "cloud" || o.kind === "open") && name) {
+            var first = name.split(" ")[0], verb = o.kind === "cloud" ? "ask" : "open";
+            if (t === name || t === verb + " " + name || (first.length > 2 && (t === first || t === verb + " " + first))) return i;
+        }
+        if (o.kind === "item" && t === name) return i;
+    }
+    if (!partial) return -1;
+    var words = t.replace(/^(?:the one with |with )/, "").split(" ").filter(function (w) { return w.length > 2; });
+    if (!words.length) return -1;
+    var hits = options.map(function (o, k) {
+        var mine = bare(o.label).split(" ");
+        return words.every(function (w) { return mine.indexOf(w) >= 0; }) ? k : -1;
+    }).filter(function (k) { return k >= 0; });
+    return hits.length === 1 ? hits[0] : -1;
+}
+// -> {pick: i} | {yes: true} | {no: true} | null (not an answer: unclear,
+// or a request of its own). "Yes, the second one": the one named.
+function choiceAnswer(text, options, partial, places) {
+    var t = clean(text).replace(/[.!?]+$/, "").trim();
+    var rest = t.replace(/^(?:yes|yeah|yep|sure|ok|okay|please)[,]?\s+(?:please\s+)?(?=\S)/, "");
+    var i = choiceNamed(rest, options, partial, places);
+    if (i >= 0) return { pick: i };
+    var yn = answer(t);
+    return yn === "yes" ? { yes: true } : yn === "no" ? { no: true } : null;
+}
+// A choice as words in a question ("search the web", "open Music").
+var CHOICE_PHRASES = { "Pause": "pause it", "Play": "play it", "Next": "skip to the next one", "Save as Memo": "save it as a memo",
+                       "Show in Maps": "show it in Maps", "Allow": "use your location", "Don't Allow": "leave your location alone",
+                       "Allow Location": "use your location", "Copy It Instead": "copy it instead", "Location Settings": "open Location Settings",
+                       "Start Navigation": "start navigation", "Call Voicemail": "call voicemail" };
+function choicePhrase(o) {
+    if (o.kind === "web") return "search the web";
+    if (o.kind === "cloud") return "ask " + o.name;
+    if (o.kind === "open" && o.name) return "open " + o.name;
+    if (o.kind === "connect") return "connect a model";
+    if (o.kind === "item") return String(o.label);
+    var l = String(o.label);
+    if (CHOICE_PHRASES[l]) return CHOICE_PHRASES[l];
+    return l.replace(/^(\S+)(?: (On|Off|To|It|As|In|Up|Down|Back))?/, function (w, a, b) { return a.toLowerCase() + (b ? " " + b.toLowerCase() : ""); });
+}
+// What a read-back would do, for asking again and for saying it was not done.
+function doing(command) {
+    if (/^(?:text|email|emailReply|replyMessage)$/.test(command)) return "send it";
+    if (/^(?:call|callBack|voicemail)$/.test(command)) return "make the call";
+    if (/^(?:alarmManage|eventCancel)$/.test(command)) return "do that";
+    if (command === "undo") return "undo it";
+    return "go ahead";
+}
+// Asked aloud, the web search offered: a few phrasings, taken in turn.
+var WEB_ASKS = ["Want me to search the web for that?", "Should I look that up on the web?", "Shall I search the web for it?"];
+// Words about the user's own things (their messages, contacts, calendar,
+// notes, files, accounts, where they live): never sent to a web search
+// unasked (assistant.js looksPrivate adds the contacts' names, addresses
+// and numbers).
+var PERSONAL = /\b(?:my|mine|our|ours|myself)\b|\b(?:did i|do i have|have i|am i|was i|i've|i have|i had|i missed|i got|i received|i sent|i wrote|i saved|i took|i called|i texted|i emailed|i booked|i paid|i owe|i bought|i ordered)\b|\b(?:inbox|voicemails?|passwords?|passcodes?|pin code|account numbers?|bank (?:account|balance|statement)s?|credit cards?|social security|ssn|home address)\b/;
 
 // ---- Follow-up questions (lib/followups.js) -------------------------------------------------
 var TOPICS = { location: "where your meetings are", invitees: "who's coming to things", duration: "how long things last",
@@ -2880,6 +2974,48 @@ say.done = function (text, checkIn) {
     return DONE.test(t) || (!!checkIn && NO_MORE.test(t));
 };
 
+// ---- A question with choices, asked aloud (assistant.js askAloud, answerChoice) -------------
+// options: [{label, kind: "web" | "cloud" | "open" | "connect" | "action" | "item", name}].
+// The question for the buttons: one ("Want me to search the web for
+// that?", "Want me to open Calendar?"), or up to three by name, then "or
+// something else" ("Want me to open Music, ask Claude or search the
+// web?"); a "which one?" names its things (n: which phrasing).
+say.askChoice = function (options, n) {
+    if (options.length === 1 && options[0].kind === "web") return WEB_ASKS[Math.abs(n || 0) % WEB_ASKS.length];
+    var said = options.slice(0, 3).map(choicePhrase), more = options.length > 3;
+    if (options.every(function (o) { return o.kind === "item"; }))
+        return "Which one: " + (more ? said.join(", ") + ", or someone else" : list(said, "or")) + "?";
+    return "Want me to " + (more ? said.join(", ") + ", or something else" : list(said, "or")) + "?";
+};
+// The reply with its question asked aloud: the offer in words gives way to
+// the question ("I can't answer that on my own yet. Want me to search the
+// web for that?").
+say.withQuestion = function (text, question) {
+    var t = String(text || "").replace(/,? but I can search the web for it\.$/, ".")
+        .replace(/ I can search the web for it, or say “help” to see what I can do\.$/, "").trim();
+    if (t && !/[.!?…]["”)]?$/.test(t)) t += ".";
+    return (t ? t + " " : "") + question;
+};
+// An answer that was not clear: asked once more, then left (nothing done).
+// what: {kind: "confirm", command} | {kind: "choice", question}.
+say.reAsk = function (what) {
+    if (what.kind === "confirm") return "Sorry, should I " + doing(what.command) + "? Yes or no.";
+    var q = String(what.question || "");
+    return "Sorry, " + q.charAt(0).toLowerCase() + q.slice(1);
+};
+say.unclearDropped = function (command) {
+    return command ? "I didn't catch that, so I won't " + doing(command) + "." : "I didn't catch that, so I'll leave it.";
+};
+// The wait over (or "I'm done") with a read-back unanswered: not done.
+say.unanswered = function (command) { return "I didn't hear an answer, so I won't " + doing(command) + "."; };
+say.leftUndone = function (command) { return "OK, I won't " + doing(command) + "."; };
+// "No" to an offer: left, and said so.
+say.declined = function (web) { return web ? "OK, I won't search for it." : "OK, I'll leave it."; };
+// "Search the web", with nothing to search for and no question before it.
+say.searchWhat = function () { return "What should I search the web for?"; };
+// "Connect a model", said: Settings opens on it.
+say.connecting = function () { return "I've opened Settings > Assistant to connect a model."; };
+
 module.exports = {
     id: "en",
     name: "English",
@@ -2926,5 +3062,9 @@ module.exports = {
     // Words that take something away ("turn off", "delete", "I don't need"): a model's removing choice needs them.
     removing: function (t) { return /\b(?:off|delet\w*|remov\w*|cancel\w*|clear\w*|stop\w*|disabl\w*|kill|dismiss|drop|scrap|get rid|erase|forget|don't need|do not need|no longer|anymore|any more|not happening|isn't happening|won't happen|shut|silenc\w*|mute|quiet|skip)\b/.test(String(t || "").toLowerCase()); },
     answer: answer,
+    // An answer to a question with choices (assistant.js answerChoice).
+    choiceAnswer: choiceAnswer,
+    // Words about the user's own things (assistant.js looksPrivate).
+    personal: function (text) { return PERSONAL.test(clean(text)); },
     followUp: followUp
 };

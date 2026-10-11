@@ -12,8 +12,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
-import { assistant, call } from "@phoenix/luna";
-import { AssistantPage, waitLabel } from "./Assistant";
+import { assistant, call, universalSearch } from "@phoenix/luna";
+import { AssistantPage, searchEngineName, waitLabel } from "./Assistant";
 
 type PS = { getResource(p: string): string | undefined; appIdentifier: string };
 const ps = () => (window as unknown as { PalmSystem: PS }).PalmSystem;
@@ -90,6 +90,43 @@ describe("Settings > Assistant: personality and the wait after answering", () =>
         expect(waitLabel(15)).toBe("15 seconds");
         expect(waitLabel(60)).toBe("1 minute");
         expect(waitLabel(120)).toBe("2 minutes");
+    });
+});
+
+describe("Settings > Assistant: Search the web automatically", () => {
+    it("is off until turned on, and names the search engine Just Type uses", async () => {
+        await assistant.setSettings({ enabled: true });
+        render(<AssistantPage />);
+        await waitFor(() => expect(screen.getByTestId("as-auto-search-row").textContent).toMatch(/searches Google at once/));
+        expect(checked("as-auto-search")).toBe(false);
+        expect((await assistant.settings()).autoSearch).toBe(false);
+        expect(screen.getByTestId("as-auto-search-row").textContent).toMatch(/Your words go to Google; never ones about your messages, contacts or calendar/);
+        fireEvent.click(toggle("as-auto-search"));
+        await waitFor(() => expect(checked("as-auto-search")).toBe(true));
+        expect((await assistant.settings()).autoSearch).toBe(true);
+        // Just Type's default engine changed: named here too.
+        await act(async () => { await universalSearch.setDefaultEngine("duckduckgo"); });
+        await waitFor(() => expect(screen.getByTestId("as-auto-search-row").textContent).toMatch(/searches DuckDuckGo at once.*Your words go to DuckDuckGo/));
+        await act(async () => { await universalSearch.setDefaultEngine("google"); });
+        fireEvent.click(toggle("as-auto-search"));
+        await waitFor(async () => expect((await assistant.settings()).autoSearch).toBe(false));
+    });
+
+    it("can be turned on only by Settings", async () => {
+        ps().appIdentifier = "org.webosphoenix.assistant";
+        try {
+            await expect(assistant.setSettings({ autoSearch: true })).rejects.toMatchObject({ errorText: expect.stringMatching(/Only Settings/) });
+        } finally {
+            ps().appIdentifier = "org.webosphoenix.settings";
+        }
+        expect((await assistant.settings()).autoSearch).toBe(false);
+    });
+
+    it("names the default engine, else the first", () => {
+        const e = (id: string, displayName: string) => ({ id, displayName, enabled: true });
+        expect(searchEngineName(undefined)).toBe("");
+        expect(searchEngineName({ engines: [e("google", "Google")], optional: [e("bing", "Bing")], actions: [], content: [], defaultSearchEngine: "bing" })).toBe("Bing");
+        expect(searchEngineName({ engines: [e("google", "Google")], optional: [], actions: [], content: [], defaultSearchEngine: "gone" })).toBe("Google");
     });
 });
 

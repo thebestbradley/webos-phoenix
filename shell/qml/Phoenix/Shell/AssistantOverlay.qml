@@ -53,6 +53,13 @@
 // 45 s by default; the owner, 10 October 2026); then it asks whether there
 // is anything else, listens 10 s more, and says goodbye in its personality
 // and closes; "I'm done" (or "no" to the check-in) says goodbye at once.
+// Every reply that ends on buttons asks them aloud there (the service's
+// ask {voice}: "Want me to search the web for that?", a read-back, "Which
+// one: ...?"), and the answer is listened for in that wait like any other
+// words; the buttons stay, and whichever answers first answers both. A
+// read-back nobody answered before the wait is over is cancelled at the
+// check-in (never done). A search, or an app a spoken choice opened, comes
+// up in front: said, the view makes way, as for the button.
 // Woken with nothing said, it closes after a moment. Over the lock screen
 // (locked) the service does only what shows nothing private; for the rest
 // it says to unlock, and unlockNeeded hands the words to the shell, which
@@ -410,10 +417,25 @@ Item {
             p.newThread = true;
         _call("ask", p, function (r) {
             _settled(r);
-            ov._afterReply();
+            // Typed, and the browser came up (a web search, a site): out of
+            // its way at once, as for the Search the web button. Spoken: once
+            // it has been said (followTimer).
+            if (!ov.voice && !ov.handsFree && ov._opened(r && r.messages))
+                ov.closeRequested();
+            else
+                ov._afterReply();
             if (done)
                 done(r);
         });
+    }
+    // The reply brought something up in front (the service's data.opened:
+    // the browser on a search, an app a spoken choice opened, Settings).
+    function _opened(list) {
+        var last = null;
+        for (var i = (list || []).length - 1; i >= 0 && !last; --i)
+            if (list[i] && list[i].role === "assistant")
+                last = list[i];
+        return !!(last && last.data && last.data.opened);
     }
     function choose(message, choice) {
         if (busy)
@@ -570,13 +592,21 @@ Item {
         }
     }
     readonly property bool speaking: !!speech && !!speech.speaking
-    // A read-back waiting for its answer, or a follow-up question (the
-    // service's lib/followups.js: "Where is it?" with its answers): the bird
-    // asks, and a spoken turn listens for the answer.
+    // A read-back waiting for its answer, a follow-up question (the
+    // service's lib/followups.js: "Where is it?" with its answers), a
+    // "which one?", or buttons asked aloud in a spoken conversation ("Want
+    // me to search the web for that?": the service's data.asked): the bird
+    // asks, and a spoken turn listens for the answer (as after any answer:
+    // until the wait is over).
     readonly property bool asking: {
-        for (var i = messages.length - 1; i >= 0; --i)
-            if (messages[i].role === "assistant")
-                return (messages[i].status === "pending" && !!messages[i].confirm) || (!!messages[i].followUp && !messages[i].chosen);
+        for (var i = messages.length - 1; i >= 0; --i) {
+            var m = messages[i];
+            if (m.role !== "assistant")
+                continue;
+            if (m.status === "pending" && !!m.confirm)
+                return true;
+            return !m.chosen && (!!m.followUp || !!(m.data && (m.data.asked || (m.data.awaiting && m.choices && m.choices.length))));
+        }
         return false;
     }
     // (What goes on comes before the opening's wave: a request asked
@@ -721,17 +751,16 @@ Item {
             if (!ov._followDone) {
                 ov._followDone = true;
                 var last = ov._lastAssistant();
-                // "I'm done": the goodbye has been said.
-                if (last && last.status === "goodbye") {
+                // "I'm done": the goodbye has been said. The browser (a
+                // search) or an app came up: said, the view makes way.
+                if (last && (last.status === "goodbye" || (last.data && last.data.opened))) {
                     stop();
                     ov.closeRequested();
                     return;
                 }
-                if (ov.voice && ov.asking) {
-                    stop();
-                    ov.listen();
-                    return;
-                }
+                // (A question waiting, a read-back or a button's asked aloud,
+                // listens like any answer: on, until the wait is over. Then
+                // the service's check-in cancels a read-back nobody answered.)
                 if (last && last.status === "locked") {
                     stop();
                     ov.unlockNeeded(ov._lastUserText());

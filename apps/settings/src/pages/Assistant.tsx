@@ -16,6 +16,9 @@
 //   Assistant        on or off (on by default), speak answers, its
 //                    personality (friendly by default: its tone, and its
 //                    words when a spoken conversation ends)
+//   Web search       search the web automatically (off by default) for
+//                    what nothing on the phone can answer, with Just
+//                    Type's default engine, which it names
 //   Voice            listen for "Hey Phoenix" (off by default), also with
 //                    the screen off or locked (off by default), voice
 //                    replies (on by default), how long a spoken
@@ -44,8 +47,8 @@
 
 import { useEffect, useState } from "react";
 import {
-    apps, assistant, formatBytes, ASSISTANT_APP_ID, PERSONALITIES, VOICE_WAITS, type ConnectMode, type AssistantCommand, type AssistantProvider, type AssistantSettings, type LocalModel,
-    type LocalModelStatus, type LunaError, type ProviderType, type ProviderTypeInfo,
+    apps, assistant, formatBytes, universalSearch, ASSISTANT_APP_ID, PERSONALITIES, VOICE_WAITS, type ConnectMode, type AssistantCommand, type AssistantProvider, type AssistantSettings, type LocalModel,
+    type LocalModelStatus, type LunaError, type ProviderType, type ProviderTypeInfo, type SearchList,
 } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import { Button, Dialog, Group, ListSelector, Note, Page, PageHeader, PopupMenu, Row, Spinner, TextField, ToggleButton } from "@phoenix/ui";
@@ -291,6 +294,34 @@ function ConnectModel({ c, set, prov, local, settings, onEdit }: {
     );
 }
 
+// ---- Web search ----------------------------------------------------------------------------------
+
+/** The search engine the Assistant's web searches use: Just Type's default (Settings > Just Type), by name. */
+export function searchEngineName(list: SearchList | undefined): string {
+    if (!list) return "";
+    const all = [...list.engines, ...list.optional];
+    return all.find((e) => e.id === list.defaultSearchEngine)?.displayName ?? list.engines[0]?.displayName ?? "";
+}
+
+// Search the web automatically (the owner, 11 October 2026; off by default,
+// since the words go to the search engine): what nothing on the phone can
+// answer is searched at once instead of offered. Never words about your own
+// things (the service's looksPrivate). The engine is Just Type's default,
+// the one the Assistant's "search the web for ..." opens.
+function WebSearch({ settings, set, off }: { settings: AssistantSettings; set: (c: Partial<AssistantSettings>) => void; off: boolean }) {
+    const list = useLuna<SearchList>((cb, err) => universalSearch.watchList(cb, err), []).value;
+    const engine = searchEngineName(list) || "the search engine";
+    return (
+        <Group label="Web search">
+            <Row title="Search the web automatically" testId="as-auto-search-row" disabled={off}
+                 subtitle={`When nothing on the phone can answer, it searches ${engine} at once instead of asking. Your words go to ${engine}; never ones about your messages, contacts or calendar.`}>
+                <ToggleButton value={settings.autoSearch} label="Search the web automatically" testId="as-auto-search" disabled={off}
+                              onChange={(v) => set({ autoSearch: v })} />
+            </Row>
+        </Group>
+    );
+}
+
 // ---- The page ------------------------------------------------------------------------------------
 
 export function AssistantPage() {
@@ -332,6 +363,8 @@ export function AssistantPage() {
                               options={[{ label: "Automatic", value: "auto" as const }, { label: "°C", value: "metric" as const }, { label: "°F", value: "imperial" as const }]}
                               onChange={(v) => set({ units: v })} />
             </Group>
+
+            <WebSearch settings={s} set={set} off={off} />
 
             {/* Two choices, not one: an answer to something typed is shown
                 (and spoken only if asked for); to something said, spoken and
