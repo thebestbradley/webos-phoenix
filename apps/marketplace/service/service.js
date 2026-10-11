@@ -80,6 +80,7 @@ var methods = packages.createPackagesService({
             return { id: p.id, sourceId: p.sourceId || "phoenix", version: String(info.version || ""), title: info.title || p.id };
         });
     },
+    firstParty: function () { return (readJson(PREINSTALLED) || {}).firstParty || []; },
     log: function (msg) { console.log("[marketplace] " + msg); }
 });
 

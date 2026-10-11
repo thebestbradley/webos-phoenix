@@ -1,28 +1,24 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Picture messages (MMS) and instant messages (the simulated Jabber / XMPP
-// transport) against runtime/phoenix-runtime.js: sending and receiving,
-// threads, unread counts, the shell's notifications, the IM account's
-// sign-in through the accounts service, the roster with presence (tempdb)
-// and your own status.
+// Picture messages (MMS) against runtime/phoenix-runtime.js: sending and
+// receiving, threads, unread counts, the shell's notifications; and what
+// Messaging asks of the IM transports (which are connectors with tests of
+// their own: apps/xmpp, apps/matrix, ...).
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { call } from "./bridge";
-import { db, tempdb } from "./db8";
-import { AVAILABILITY, IM_BUDDY_KIND, IM_LOGIN_KIND, messaging, presenceClass, serviceLabel, type ChatThread, type ImBuddy,
-         type ImLoginState, type Message } from "./messaging";
+import { db } from "./db8";
+import { AVAILABILITY, IM_LOGIN_KIND, messaging, presenceClass, serviceLabel, takesPictures, transportService, type ChatThread,
+         type Message } from "./messaging";
 
 const REPO = resolve(__dirname, "../../../..");
-const TEMPLATE = "/usr/share/phoenix/runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json";
 
 interface Rt {
     simulateIncomingMms(o?: object): Promise<string>;
-    simulateIncomingIm(o?: object): string | null;
     seedPhoneDemoData(force: boolean): boolean;
-    xmpp: { setBuddyPresence(jid: string, availability: number, status?: string): boolean };
 }
 const hostMessages: { type: string; payload: Record<string, unknown> }[] = [];
 let rt: Rt;
@@ -38,7 +34,6 @@ beforeAll(() => {
     rt = w.__phoenixRuntime as Rt;
     const files: Record<string, string> = {
         "/usr/share/phoenix/runtime/sample-data.js": readFileSync(resolve(REPO, "runtime/sample-data.js"), "utf8"),
-        [TEMPLATE]: readFileSync(resolve(REPO, "runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json"), "utf8"),
     };
     (w.PalmSystem as { getResource: (p: string) => string | undefined }).getResource = (p: string) => files[p];
 });
@@ -113,96 +108,27 @@ describe("picture messages (MMS)", () => {
     });
 });
 
-describe("instant messaging (simulated Jabber / XMPP)", () => {
-    async function signIn(username = "me@chat.example") {
-        const checked = await call("luna://org.webosphoenix.service.xmpp/checkCredentials", { username, password: "secret" });
-        expect(checked).toMatchObject({ credentials: { common: { password: "secret" } } });
-        const r = await call("luna://com.palm.service.accounts/createAccount", {
-            templateId: "com.webosphoenix.xmpp", username, capabilityProviders: [{ id: "com.webosphoenix.xmpp.im" }],
-            credentials: { common: { password: "secret" } },
-        }) as unknown as { result: { _id: string } };
-        // onCreate, then onEnabled(true): signed in, with the roster.
-        await eventually(() => db.find<ImLoginState>({ from: IM_LOGIN_KIND }), (s) => s.some((x) => x.state === "online"));
-        return r.result._id;
-    }
-    const buddies = () => tempdb.find<ImBuddy>({ from: IM_BUDDY_KIND });
-
-    it("checks credentials as the Accounts app asks", async () => {
-        await expect(call("luna://org.webosphoenix.service.xmpp/checkCredentials", { username: "me", password: "x" }))
-            .rejects.toMatchObject({ errorText: expect.stringMatching(/like you@chat\.example/) });
-        await expect(call("luna://org.webosphoenix.service.xmpp/checkCredentials", { username: "me@elsewhere.example", password: "x" }))
-            .rejects.toMatchObject({ errorCode: "HOST_NOT_FOUND" });
-        await expect(call("luna://org.webosphoenix.service.xmpp/checkCredentials", { username: "me@chat.example", password: "" }))
-            .rejects.toMatchObject({ errorCode: "401_UNAUTHORIZED" });
-        const t = await call("luna://com.palm.service.accounts/listAccountTemplates", { capability: "MESSAGING" }) as unknown as
-            { results: { templateId: string; loc_name: string }[] };
-        expect(t.results.find((x) => x.templateId === "com.webosphoenix.xmpp")?.loc_name).toBe("Jabber (XMPP)");
-    });
-
-    it("signs in when the account is made: its state, and the roster with presence linked to Contacts", async () => {
-        const accountId = await signIn();
-        const [state] = await db.find<ImLoginState>({ from: IM_LOGIN_KIND });
-        expect(state).toMatchObject({ accountId, username: "me@chat.example", serviceName: "type_jabber", state: "online", availability: 0 });
-        const roster = await buddies();
-        const ada = roster.find((b) => b.username === "ada.palmer@chat.example")!;
-        expect(ada).toMatchObject({ accountId, displayName: "Ada Palmer", availability: AVAILABILITY.AVAILABLE, status: "Flashing a Pre 3" });
-        const [person] = await db.get<{ _kind: string; name: { givenName: string } }>([ada.personId!]);
-        expect(person.name.givenName).toBe("Ada");
-        expect(presenceClass(roster.find((b) => b.username.startsWith("marcus"))!.availability)).toBe("busy");
-        expect(presenceClass(roster.find((b) => b.username.startsWith("theo"))!.availability)).toBe("offline");
+// The IM transports are connectors now, each with its own tests (apps/xmpp,
+// apps/matrix, ...: their service/connector.test.ts); Messaging with them,
+// in Chromium: tools/test-xmpp.cjs. Here, what Messaging asks of them.
+describe("instant messaging transports", () => {
+    it("names each service, its transport and whether it takes pictures", () => {
         expect(serviceLabel("type_jabber")).toBe("Jabber (XMPP)");
+        expect(serviceLabel("type_matrix")).toBe("Matrix");
+        expect(transportService("type_jabber")).toBe("org.webosphoenix.service.xmpp");
+        expect(transportService("type_matrix")).toBe("org.webosphoenix.service.matrix");
+        expect(transportService("sms")).toBeUndefined();
+        expect(takesPictures("sms")).toBe(true);
+        expect(takesPictures("type_jabber")).toBe(true);
+        expect(takesPictures("type_fediverse")).toBe(false);
+        expect(presenceClass(AVAILABILITY.BUSY)).toBe("busy");
     });
-
-    it("sends an instant message, and the buddy answers: threaded, unread, notified", async () => {
-        await signIn();
-        const [threadId] = await messaging.sendIm("type_jabber", "me@chat.example", { addr: "ada.palmer@chat.example", name: "Ada Palmer" },
-                                                  "Running Phoenix?");
-        const t = await threadOf(threadId);
-        expect(t).toMatchObject({ replyService: "type_jabber", replyAddress: "ada.palmer@chat.example", username: "me@chat.example",
-                                  displayName: "Ada Palmer" });
-        expect(t.personId).toBeTruthy();
-        const all = await eventually(() => messagesOf(threadId), (ms) => ms.some((x) => x.folder === "inbox"));
-        expect(all.find((x) => x.folder === "outbox")).toMatchObject({ status: "successful", _kind: "com.palm.immessage.xmpp:1" });
-        expect(all.find((x) => x.folder === "inbox")).toMatchObject({ messageText: "Ha, yes!", from: { addr: "ada.palmer@chat.example" } });
-        expect((await threadOf(threadId)).unreadCount).toBe(1);
-        expect(hostMessages.find((h) => h.type === "notification")?.payload).toMatchObject({ title: "Ada Palmer", body: "Ha, yes!" });
-        // Texts to Ada's number stay a conversation of their own.
-        const sms = (await db.find<ChatThread>({ from: "com.palm.chatthread:1" })).find((x) => x.replyService === "sms" && x.displayName === "Ada Palmer");
-        expect(sms?._id).not.toBe(threadId);
-    });
-
-    it("an offline buddy does not answer; signed out, nothing is sent", async () => {
-        const accountId = await signIn();
-        const [t1] = await messaging.sendIm("type_jabber", "me@chat.example", { addr: "theo.lindqvist@chat.example" }, "Hello?");
-        await wait(2600);
-        expect((await messagesOf(t1)).filter((m) => m.folder === "inbox")).toEqual([]);
-        await messaging.setPresence(accountId, AVAILABILITY.OFFLINE);
-        expect((await db.find<ImLoginState>({ from: IM_LOGIN_KIND }))[0]).toMatchObject({ state: "offline", availability: 4 });
-        expect(await buddies()).toEqual([]);
-        const [t2] = await messaging.sendIm("type_jabber", "me@chat.example", { addr: "ada.palmer@chat.example" }, "Anyone?");
-        const m = await eventually(() => messagesOf(t2), (ms) => ms.some((x) => x.status === "failed"));
-        expect(m.find((x) => x.messageText === "Anyone?")?.status).toBe("failed");
-        // Busy is signed in, and shows so.
-        await messaging.setPresence(accountId, AVAILABILITY.BUSY);
-        expect((await db.find<ImLoginState>({ from: IM_LOGIN_KIND }))[0]).toMatchObject({ state: "online", availability: 2 });
-        expect((await buddies()).length).toBe(4);
-    });
-
-    it("receives a message from a buddy, and follows their presence", async () => {
-        await signIn();
-        const threadId = rt.simulateIncomingIm({ from: "lena.okafor@chat.example", text: "Just landed" })!;
-        expect(await threadOf(threadId)).toMatchObject({ displayName: "Lena Okafor", unreadCount: 1, summary: "Just landed" });
-        expect(rt.xmpp.setBuddyPresence("lena.okafor@chat.example", AVAILABILITY.BUSY, "Driving")).toBe(true);
-        const lena = (await buddies()).find((b) => b.username === "lena.okafor@chat.example");
-        expect(lena).toMatchObject({ availability: 2, status: "Driving" });
-    });
-
-    it("deleting the account takes its conversations", async () => {
-        const accountId = await signIn();
-        const id = rt.simulateIncomingIm({ text: "hi" })!;
-        await call("luna://com.palm.service.accounts/deleteAccount", { accountId });
-        await eventually(() => db.find<ImLoginState>({ from: IM_LOGIN_KIND }), (s) => s.length === 0);
-        expect(await threadOf(id)).toBeUndefined();
-        expect(await buddies()).toEqual([]);
+    it("asks the account's transport to set your status", async () => {
+        const seen: unknown[] = [];
+        const state = { _kind: IM_LOGIN_KIND, accountId: "acc-m", username: "me@example.org", serviceName: "type_matrix", state: "online", availability: 0 };
+        await db.put([state]);
+        await messaging.setPresence("acc-m", AVAILABILITY.BUSY).catch((e: { errorText?: string }) => seen.push(e.errorText));
+        // No Matrix service runs in this page: the call went to it, by name.
+        expect(String(seen[0] || "")).toMatch(/org\.webosphoenix\.service\.matrix|matrix/i);
     });
 });

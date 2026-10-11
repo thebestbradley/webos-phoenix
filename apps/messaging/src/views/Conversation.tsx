@@ -27,8 +27,11 @@ function statusLabel(m: Message): string | null {
     switch (m.status) {
     case "pending": case "sending": return "Sending…";
     case "failed": case "permanent-fail": return "Not sent";
-    default: return null;
     }
+    // An instant message the other side has (a receipt, a chat marker).
+    if (m.deliveryStatus === "read") return "Read";
+    if (m.deliveryStatus === "delivered") return "Delivered";
+    return null;
 }
 
 function stamp(ts: number): string {
@@ -105,7 +108,7 @@ export function Conversation({ threadId, people, buddies, header, initialText, i
         setError(null);
         const to = { addr: thread.replyAddress, name: thread.displayName };
         const sent = im
-            ? thread.username ? messaging.sendIm(thread.replyService!, thread.username, to, text, threadId)
+            ? thread.username ? messaging.sendIm(thread.replyService!, thread.username, to, text, threadId, parts)
                               : Promise.reject(new Error("This conversation's IM account is gone"))
             : parts.length ? messaging.sendMms(to, text, parts, threadId)
             : messaging.sendSms(to, text, threadId);
@@ -121,7 +124,8 @@ export function Conversation({ threadId, people, buddies, header, initialText, i
                         <div className="msg-header-title">{name}</div>
                         {im && hasPresence(thread?.replyService) ? (
                             <div className="msg-header-sub" data-testid="thread-presence">
-                                <Presence availability={buddy?.availability} /> {presenceText(buddy)} · {serviceLabel(thread?.replyService)}
+                                <Presence availability={buddy?.availability} />{" "}
+                                {buddy?.chatState === "composing" ? <span data-testid="typing">typing…</span> : presenceText(buddy)} · {serviceLabel(thread?.replyService)}
                             </div>
                         ) : im ? (
                             <div className="msg-header-sub" data-testid="thread-service">

@@ -65,12 +65,12 @@ if [ "$MARKETPLACE_DEV" = 1 ]; then
         fi
     fi
     # Phoenix's own connectors in the catalog that it does not come with
-    # (catalog/phoenix-connectors.json: Jabber, Matrix, Delta Chat), once per
+    # (preinstalled.json "firstParty": Jabber, Matrix, Delta Chat), once per
     # catalog, as its admin; a catalog seeded before them gets them now.
     if [ -f "$DATA/seed/done" ] && [ ! -f "$DATA/seed/catalog-connectors.done" ] && [ -f "$KIT/lib/tools/cli.js" ]; then
         rm -rf "$DATA/seed/catalog"
         mkdir -p "$DATA/seed/catalog"
-        for from in $(php -r 'foreach (json_decode(file_get_contents("catalog/phoenix-connectors.json"), true)["packages"] as $p) echo $p["from"], "\n";'); do
+        for from in $(php -r 'foreach (json_decode(file_get_contents("../../apps/marketplace/service/etc/palm/marketplace/preinstalled.json"), true)["firstParty"] ?? [] as $p) echo $p["from"], "\n";'); do
             [ -d "../../$from" ] && node "$KIT/bin/phoenix-connector.cjs" pack "../../$from" --out "$DATA/seed/catalog" \
                 --namespace org.webosphoenix --namespace com.webosphoenix >/dev/null || true
         done

@@ -7,13 +7,14 @@
 //
 // The transport is the conversation's: a text (SMS) to a phone number,
 // which becomes a picture message (MMS) once a picture is attached, or the
-// IM service of a buddy (Jabber). Tapping it lists them, with the IM
+// IM service of a buddy (Jabber, Matrix, ...), which takes pictures too
+// where the service does (IM_SERVICES pictures). Tapping it lists them, with the IM
 // networks webOS had that Phoenix cannot reach greyed out. A picture comes
 // from the system's picture picker (org.webosphoenix.filepicker/pick); it
 // waits above the field until it is sent or taken off.
 
 import { useEffect, useRef, useState } from "react";
-import { filePicker, IM_SERVICES, isImService, serviceLabel, type MessagePart } from "@phoenix/luna";
+import { filePicker, IM_SERVICES, isImService, serviceLabel, takesPictures, type MessagePart } from "@phoenix/luna";
 import { useFileUrl } from "@phoenix/luna/react";
 import { PopupMenu } from "@phoenix/ui";
 import { AttachPicture, SendArrow } from "../icons";
@@ -44,9 +45,10 @@ export function ComposeBar({ onSend, disabled, autoFocus, initialText, initialPa
     const [picking, setPicking] = useState(false);
     const pill = useRef<HTMLButtonElement>(null);
     const im = isImService(service);
-    // IM sends text only: a waiting picture is taken off when the message
-    // turns into an instant message (a buddy chosen in "To:").
-    useEffect(() => { if (im) setParts([]); }, [im]);
+    const pictures = takesPictures(service);
+    // A service that takes no pictures: a waiting picture is taken off when
+    // the message turns into one of its messages (a buddy chosen in "To:").
+    useEffect(() => { if (!pictures) setParts([]); }, [pictures]);
     const send = () => {
         const t = text.trim();
         if ((!t && !parts.length) || disabled) return;
@@ -64,7 +66,7 @@ export function ComposeBar({ onSend, disabled, autoFocus, initialText, initialPa
         } catch { /* no picker */ }
         setPicking(false);
     };
-    const label = im ? serviceLabel(service).replace(/ \(.*\)$/, "") : parts.length ? "MMS" : "SMS";
+    const label = im ? serviceLabel(service).replace(/ \(.*\)$/, "").replace(/^Unofficial /, "") : parts.length ? "MMS" : "SMS";
     const options = [
         { value: im ? service : "sms", label: im ? serviceLabel(service) : parts.length ? "Picture (MMS)" : "Text (SMS)" },
         ...IM_SERVICES.filter((s) => !s.available).map((s) => ({
@@ -82,7 +84,7 @@ export function ComposeBar({ onSend, disabled, autoFocus, initialText, initialPa
                         aria-label={`Send as ${label}`}>
                     {label}<span className="pui-row-arrow" />
                 </button>
-                {!im && (
+                {pictures && (
                     <button type="button" className="attach-button" data-testid="attach" onClick={() => void attach()}
                             disabled={disabled || picking} aria-label="Attach a picture"><AttachPicture /></button>
                 )}
