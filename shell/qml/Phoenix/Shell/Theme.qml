@@ -108,6 +108,10 @@ QtObject {
                 return want[i];
         return "Open Sans";
     }
+    // Ember Glass's floats and overlays blur live (the system preference
+    // glassBlur "live", and a GPU); off, they are their 94% tints
+    // (glass.fallback; SPEC.md, "GPU cost and fallback"). Set by Shell.qml.
+    property bool egLiveBlur: true
     // A colour token with its alpha scaled (a glow fading out, a light
     // breathing).
     function egAlpha(c, a) { return Qt.rgba(c.r, c.g, c.b, c.a * a) }

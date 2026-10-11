@@ -2698,6 +2698,7 @@ FocusScope {
     // "none"): Settings > Advanced > Live blur off, or no GPU (the low end;
     // SPEC.md, "GPU cost and fallback").
     readonly property string glassBlur: tweak("glassBlur") === "none" || GraphicsInfo.api === GraphicsInfo.Software ? "none" : "live"
+    Binding { target: Theme; property: "egLiveBlur"; value: shell.glassBlur === "live" }
 
     // ---- Layers, bottom to top ----------------------------------------------------
     // Behind everything: what shows around the turning snapshots.

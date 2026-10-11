@@ -24,7 +24,10 @@ Item {
     property Item mask: null
     property real radius: Theme.px(Theme.backdropBlurRadius)
 
+    // Ember Glass without live blur (Theme.egLiveBlur): none; the surface
+    // is its plain tint.
     visible: source !== null && width > 0 && height > 0 && GraphicsInfo.api !== GraphicsInfo.Software
+             && (!Theme.emberGlass || Theme.egLiveBlur)
 
     // Where this surface sits over the source. Re-evaluated as the surface or
     // its parent moves (the dock slides with the cards).

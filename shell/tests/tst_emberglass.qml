@@ -405,5 +405,19 @@ Item {
             verify(!dot.visible && !capsule.visible);
             compare(ql.slotCentre(0), centre0);
         }
+
+        // Live blur off (the system preference glassBlur "none", or no GPU):
+        // Just Type's bar and the dock are their 94% tints (glass.fallback)
+        // and blur nothing; 1.0's look keeps its faint blur.
+        function test_liveBlurOff() {
+            shell.look = "ember-glass";
+            var pill = findChild(shell, "emberSearchPill");
+            compare(Theme.egLiveBlur, GraphicsInfo.api !== GraphicsInfo.Software);
+            sys.tweaks = { glassBlur: "none" };
+            verify(!Theme.egLiveBlur);
+            verify(Qt.colorEqual(pill.color, EmberGlass.dark.glassFallback));
+            verify(Qt.colorEqual(findChild(shell, "emberDock").color, EmberGlass.dark.glassFallback));
+            sys.tweaks = {};
+        }
     }
 }

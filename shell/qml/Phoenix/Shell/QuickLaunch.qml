@@ -71,7 +71,8 @@ Item {
         height: Theme.px(64)
         y: Math.round((ql.height - height) / 2)
         radius: height / 2
-        color: Qt.rgba(20 / 255, 18 / 255, 20 / 255, 0.34)
+        // Without live blur, the dark theme's 94% tint (glass.fallback).
+        color: Theme.egLiveBlur ? Qt.rgba(20 / 255, 18 / 255, 20 / 255, 0.34) : EmberGlass.dark.glassFallback
         border.color: Qt.rgba(1, 1, 1, 0.28)
         border.width: Math.max(1, EmberGlass.hairline * Theme.u)
         layer.enabled: ql.egDock
