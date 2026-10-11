@@ -61,7 +61,7 @@ export const IM_MESSAGE_KINDS: Record<string, string> = {
     type_jabber: "com.palm.immessage.xmpp:1",
     // The Fediverse account's direct mentions (apps/fediverse; docs/SYNERGY-CONNECTORS.md C2).
     type_fediverse: "com.palm.immessage.fediverse:1",
-    // Matrix (apps/matrix), Delta Chat (apps/deltachat), the unofficial Telegram client (apps/telegram).
+    // Matrix (apps/connectors/matrix), Delta Chat (apps/connectors/deltachat), Unofficial Telegram (apps/telegram).
     type_matrix: "com.palm.immessage.matrix:1",
     type_deltachat: "com.palm.immessage.deltachat:1",
     type_telegram: "com.palm.immessage.telegram:1",

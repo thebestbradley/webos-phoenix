@@ -318,6 +318,14 @@
   "owner": "the app's or service's owner",
   "row": "C6"
  },
+ "luna:unknown-group:org.webosphoenix.service.telegram:accounts.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
+ "luna:unknown-group:org.webosphoenix.service.telegram:messaging.operation": {
+  "owner": "the app's or service's owner",
+  "row": "C6"
+ },
  "luna:unknown-group:org.webosphoenix.voicememos:media.operation": {
   "owner": "the app's or service's owner",
   "row": "C6"
@@ -618,10 +626,6 @@
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C3"
  },
- "luna:unknown-service:org.webosphoenix.service.xmpp": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md)",
-  "row": "C3"
- },
  "luna:unknown-service:org.webosphoenix.share": {
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C3"
@@ -729,5 +733,9 @@
  "licences:no-provenance:apps/settings/public/icons": {
   "owner": "Settings (record where the Time exhibition icon comes from)",
   "row": "L1"
+ },
+ "licences:recipe-licence:deltachat-rpc-server_2.63.0.bb:MPL-2.0": {
+  "owner": "the owner: may images ship Delta Chat's MPL-2.0 core? (docs/OPEN-QUESTIONS.md Q80; not installed until then, PHOENIX_DELTACHAT)",
+  "row": "L3"
  }
 }

@@ -8007,11 +8007,19 @@
         function isIm(service) { return /^type_/.test(String(service || "")); }
         // The person an IM buddy is (the transport links its roster to the
         // address book, as the contacts linker did: imbuddystatus personId).
+        // Networks without buddies (Matrix, Delta Chat, Telegram: no
+        // presence) link through the person's IM addresses, which their
+        // contacts carry (ims [{value, type: the service}]).
         function personForIm(addr, service) {
+            var a = String(addr).toLowerCase();
             var b = (tempdbCall("/find", { query: { from: IM_BUDDY_KIND } }).results || []).filter(function (x) {
-                return x.serviceName === service && String(x.username).toLowerCase() === String(addr).toLowerCase();
+                return x.serviceName === service && String(x.username).toLowerCase() === a;
             })[0];
-            return b && b.personId ? (dbCall("/get", { ids: [b.personId] }).results || [])[0] || null : null;
+            if (b && b.personId) return (dbCall("/get", { ids: [b.personId] }).results || [])[0] || null;
+            var people = dbCall("/find", { query: { from: "com.palm.person:1" } }).results || [];
+            return people.filter(function (p) {
+                return (p.ims || []).some(function (im) { return im.type === service && String(im.value).toLowerCase() === a; });
+            })[0] || null;
         }
         // What a conversation's last line says of a picture message.
         function summaryOf(msg) {

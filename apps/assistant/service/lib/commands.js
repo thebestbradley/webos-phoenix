@@ -130,8 +130,9 @@ var WHEN = { type: "string", description: "When, as said (\"tomorrow at 3pm\", \
 var BUILT_IN = [
     { id: "call", title: "Phone calls", risk: "call", description: "Phone a contact or a number.",
       parameters: { type: "object", properties: { who: { type: "string", description: "Contact name" }, number: { type: "string", description: "Phone number, if no contact" }, label: { type: "string", enum: ["", "mobile", "home", "work"] } } } },
-    { id: "text", title: "Text messages", risk: "send", description: "Send a text message (SMS) to a contact.",
-      parameters: { type: "object", properties: { who: { type: "string", description: "Contact name or number" }, message: { type: "string", description: "The words to send" } }, required: ["who"] } },
+    { id: "text", title: "Text messages", risk: "send", description: "Send a text message (SMS) to a contact, or a chat message on Jabber, Matrix, Delta Chat or Telegram.",
+      parameters: { type: "object", properties: { who: { type: "string", description: "Contact name or number (or their address on the chat network)" }, message: { type: "string", description: "The words to send" },
+        via: { type: "string", enum: ["", "sms", "jabber", "matrix", "deltachat", "telegram"], description: "The chat network, if the person asked for one; empty for a text message" } }, required: ["who"] } },
     { id: "readMessages", title: "Reading messages", risk: "read", description: "Read the last text message received, from anyone or from a contact, or the unread ones.",
       parameters: { type: "object", properties: { who: { type: "string", description: "Contact name; empty for anyone" }, unread: B } } },
     { id: "email", title: "Email", risk: "send", description: "Send an email to a contact (read back first); without a body, open a new email to them.",
@@ -418,6 +419,64 @@ function emailOf(p) {
     var pick = list.filter(function (e) { return e.primary; })[0] || list[0];
     return pick ? pick.value : null;
 }
+
+// ---- Chat messages: the IM accounts' networks (docs/SYNERGY-CONNECTORS.md 7) ------------------
+//
+// A message on a chat network goes as Messaging sends one (luna messaging.ts
+// sendIm): into the network's message kind, in the outbox, from the account
+// signed in on it (its imloginstate); the account's transport sends it.
+var CHAT_NETS = {
+    jabber: { service: "type_jabber", kind: "com.palm.immessage.xmpp:1", label: "Jabber", address: /^[^\s@]+@[^\s@]+\.[^\s@]+$/ },
+    matrix: { service: "type_matrix", kind: "com.palm.immessage.matrix:1", label: "Matrix", address: /^@[^\s:]+:\S+$/ },
+    deltachat: { service: "type_deltachat", kind: "com.palm.immessage.deltachat:1", label: "Delta Chat", address: /^[^\s@]+@[^\s@]+\.[^\s@]+$/ },
+    telegram: { service: "type_telegram", kind: "com.palm.immessage.telegram:1", label: "Telegram", address: /^(?:\+\d{6,15}|@\w{4,})$/ }
+};
+function chatAccounts(env) {
+    return dbFind(env, "com.palm.imloginstate:1").catch(function () { return []; });
+}
+// args.chat for the person on a network (net), or, with none named, on the
+// first network they have an address on and the user an account: else why not.
+function chatTarget(env, cmd, args, net, person) {
+    var say = env.lang.say, who = String(args.who || "").trim();
+    return chatAccounts(env).then(function (accounts) {
+        function accountOn(n) { return accounts.filter(function (a) { return a.serviceName === n.service; })[0]; }
+        if (net && !accountOn(net)) return { args: args, reply: say.noChatAccount(net.label) };
+        if (net && net.address.test(who)) {
+            args.chat = { service: net.service, kind: net.kind, label: net.label, username: accountOn(net).username, addr: who };
+            args.name = "";
+            return withConfirm(cmd, args, env);
+        }
+        var found = person ? Promise.resolve(person) : findPerson(env, who);
+        return found.then(function (p) {
+            if (!p) return { args: args, reply: say.noSuchContact(who) };
+            var name = personName(p) || who;
+            var nets = net ? [net] : Object.keys(CHAT_NETS).map(function (k) { return CHAT_NETS[k]; }).filter(accountOn);
+            for (var i = 0; i < nets.length; ++i) {
+                var im = (p.ims || []).filter(function (x) { return x.type === nets[i].service && x.value; })[0];
+                if (im) {
+                    args.chat = { service: nets[i].service, kind: nets[i].kind, label: nets[i].label, username: accountOn(nets[i]).username, addr: im.value };
+                    args.name = name;
+                    args.personId = p._id;
+                    return withConfirm(cmd, args, env);
+                }
+            }
+            return { args: args, reply: net ? say.noChatAddress(name, net.label) : say.noNumber(name) };
+        });
+    });
+}
+function sendChat(env, args, now) {
+    var say = env.lang.say, c = args.chat, name = args.name || c.addr;
+    if (!String(args.message || "").trim()) {
+        var params = { compose: { ims: [{ value: c.addr, type: c.service }], personId: args.personId || "" } };
+        return launch(env, MESSAGING_APP, params)
+            .then(function () { return { text: say.composing(name), open: { appId: MESSAGING_APP, params: params, title: "Messaging" } }; });
+    }
+    return lunaCall(env, "luna://org.webosports.service.messaging/putMessage", { message: {
+        _kind: c.kind, folder: "outbox", status: "pending", serviceName: c.service, username: c.username,
+        messageText: String(args.message), to: [{ addr: c.addr, name: args.name || "" }],
+        localTimestamp: now, timestamp: now, flags: { visible: true, read: true } } })
+        .then(function () { return { text: say.sentChat(name, c.label), open: { appId: MESSAGING_APP, params: {}, title: "Messaging" } }; });
+}
 // Who a number or address belongs to, for messages and email.
 // A person's phoneNumbers[].normalizedValue, as the contacts linker writes it.
 function normalizedPhone(number) {
@@ -523,6 +582,7 @@ function prepareInner(cmd, args, env) {
     var say = env.lang.say;
     args = Object.assign({}, args || {});
     function reply(text) { return Promise.resolve({ args: args, reply: text }); }
+    if (cmd.id === "text" && args.via && args.via !== "sms") return chatTarget(env, cmd, args, CHAT_NETS[args.via]);
     if (cmd.id === "call" || cmd.id === "text") {
         var who = String(args.who || "").trim();
         var raw = args.number || (/^[+\d][\d\s().-]{2,}$/.test(who) ? who : "");
@@ -535,6 +595,8 @@ function prepareInner(cmd, args, env) {
         return findPerson(env, who).then(function (p) {
             if (!p) return { args: args, reply: say.noSuchContact(who) };
             var number = numberOf(p, args.label);
+            // No number to text, but an address on a chat network the user is signed in to: that.
+            if (!number && cmd.id === "text") return chatTarget(env, cmd, args, null, p);
             if (!number) return { args: args, reply: say.noNumber(personName(p) || who) };
             args.name = personName(p) || who;
             args.number = number;
@@ -724,6 +786,7 @@ function withConfirm(cmd, args, env) {
     if (cmd.id === "call") return { args: args, confirm: say.confirmCall(args.name, args.number) };
     if (cmd.id === "text") {
         if (!String(args.message || "").trim()) return { args: args };   // compose: nothing is sent
+        if (args.chat) return { args: args, confirm: say.confirmChat(args.name || args.chat.addr, args.message, args.chat.label) };
         return { args: args, confirm: say.confirmText(args.name || args.number, args.message) };
     }
     if (cmd.id === "email") {
@@ -1372,6 +1435,7 @@ function runInner(cmd, args, env) {
         return launch(env, "org.webosphoenix.phone", { number: args.number, dial: true })
             .then(function () { return { text: say.calling(args.name || args.number), open: { appId: "org.webosphoenix.phone", params: {}, title: "Phone" } }; });
     case "text":
+        if (args.chat) return sendChat(env, args, now);
         if (!String(args.message || "").trim())
             return launch(env, MESSAGING_APP, { to: args.number, name: args.name || "" })
                 .then(function () { return { text: say.composing(args.name || args.number), open: { appId: MESSAGING_APP, params: { to: args.number, name: args.name || "" }, title: "Messaging" } }; });

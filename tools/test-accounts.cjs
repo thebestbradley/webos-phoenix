@@ -44,7 +44,7 @@ const outIdx = args.indexOf("--out");
 const outDir = outIdx >= 0 ? args[outIdx + 1] : path.join(REPO, "build", "accounts-tests");
 const ACCOUNTS = "luna://com.palm.service.accounts/";
 const BUILTIN = ["com.palm.imap", "com.palm.othermail", "com.palm.palmprofile", "com.palm.pop",
-                 "com.webosphoenix.dav", "com.webosphoenix.fediverse", "com.webosphoenix.webcal", "com.webosphoenix.xmpp"];
+                 "com.webosphoenix.dav", "com.webosphoenix.fediverse", "com.webosphoenix.telegram", "com.webosphoenix.webcal"];
 
 let failures = 0;
 function check(cond, what) {
@@ -70,6 +70,24 @@ function connector() {
         files: [{ path: dir + "public/accounts/org.example.feeds/org.example.feeds.json", data: JSON.stringify(template) },
                 { path: dir + "public/accounts/org.example.feeds/images/feeds-32.png", data: new Uint8Array(servers.png(32, [240, 140, 0])) },
                 { path: dir + "public/accounts/org.example.feeds/images/feeds-48.png", data: new Uint8Array(servers.png(48, [240, 140, 0])) }]
+    });
+}
+// Another, whose template says where to get an account (signUp) and has no
+// sign-in page of its own: the library's credentials view shows the link.
+function signUpConnector() {
+    const dir = "usr/palm/applications/org.example.chat/";
+    const template = {
+        templateId: "org.example.chat", loc_name: "Example Chat",
+        icon: { loc_32x32: "images/chat-32.png", loc_48x48: "images/chat-48.png" },
+        validator: "palm://org.example.chat.service/checkCredentials",
+        signUp: { url: "https://example.org/join" },
+        capabilityProviders: [{ id: "org.example.chat.im", capability: "MESSAGING", implementation: "palm://org.example.chat.service/" }]
+    };
+    return servers.webApp("org.example.chat", "1.0.0", {
+        title: "Example Chat", appinfo: { phoenix: { hidden: true } },
+        files: [{ path: dir + "public/accounts/org.example.chat/org.example.chat.json", data: JSON.stringify(template) },
+                { path: dir + "public/accounts/org.example.chat/images/chat-32.png", data: new Uint8Array(servers.png(32, [40, 140, 200])) },
+                { path: dir + "public/accounts/org.example.chat/images/chat-48.png", data: new Uint8Array(servers.png(48, [40, 140, 200])) }]
     });
 }
 
@@ -191,10 +209,19 @@ async function main() {
               "a template without its own sign-in page: the credentials view");
         await app.screenshot({ path: path.join(outDir, "3-setup-credentials.png") });
         check(!(await app.locator(".accounts-signup:visible").count()), "a template without a signUp: no sign-up link");
-        // A template with a signUp (Jabber's: XMPP's list of providers): the
-        // library's own sign-in page says where to get an account (compat
-        // lib/accounts/source/phoenix-signup.js), and the link opens it.
-        await app.goto(accountsUrl({ templateId: "com.webosphoenix.xmpp" }));
+        // A template with a signUp (a second example connector's, installed for
+        // this and removed after): the library's own sign-in page says where to
+        // get an account (compat lib/accounts/source/phoenix-signup.js), and the
+        // link opens it.
+        const chatIpk = Buffer.from(await signUpConnector());
+        await page.evaluate((b64) => __phoenixRuntime.tmpFiles.write("/tmp/chat.ipk", Uint8Array.from(atob(b64), (c) => c.charCodeAt(0))), chatIpk.toString("base64"));
+        const chatInstalled = await page.evaluate(() => new Promise((res) => {
+            const b = new PalmServiceBridge();
+            b.onservicecallback = (s) => { const r = JSON.parse(s); if (r.statusValue === 30 || r.statusValue === 24) res(r); };
+            b.call("luna://com.webos.appInstallService/install", JSON.stringify({ id: "org.example.chat", ipkUrl: "/tmp/chat.ipk", subscribe: true }));
+        }));
+        check(chatInstalled.statusValue === 30, "a connector whose template has a signUp installs");
+        await app.goto(accountsUrl({ templateId: "org.example.chat" }));
         const signUpLine = app.locator(".accounts-signup:visible");
         await signUpLine.waitFor({ timeout: 10000 }).catch(() => {});
         check(/Don't have an account\? Sign up/.test(await signUpLine.textContent().catch(() => "")),
@@ -204,8 +231,13 @@ async function main() {
         host.length = 0;
         await app.locator(".accounts-signup-link:visible").first().click().catch(() => {});
         await app.waitForTimeout(800);
-        check(host.some((m) => JSON.stringify(m.payload || {}).indexOf("https://providers.xmpp.net/") >= 0),
+        check(host.some((m) => JSON.stringify(m.payload || {}).indexOf("https://example.org/join") >= 0),
               "Sign up opens the providers' page in the browser (" + JSON.stringify(host.map((m) => m.type)) + ")");
+        await page.evaluate(() => new Promise((res) => {
+            const b = new PalmServiceBridge();
+            b.onservicecallback = (s) => { const r = JSON.parse(s); if (r.statusValue === 31 || r.statusValue === 25) res(r); };
+            b.call("luna://com.webos.appInstallService/remove", JSON.stringify({ id: "org.example.chat", subscribe: true }));
+        }));
         await app.goto(accountsUrl());
         await app.waitForTimeout(3000);
         await app.evaluate(() => __phoenixRuntime.relaunch({ templateId: "com.webosphoenix.dav" }));
