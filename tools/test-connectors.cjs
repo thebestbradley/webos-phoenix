@@ -104,10 +104,13 @@ async function main() {
         browser = await chromium.launch();
         const context = await browser.newContext({ viewport });
         await context.route("**/usr/share/phoenix/host.json", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ marketplaceCatalog: true }) }));
-        await context.route("**/etc/palm/marketplace/sources.json", async (r) => {
+        // The device's servers.json, its feeds at this test's catalog (the
+        // built-in Phoenix catalog's address comes from there, not from
+        // sources.json: docs/PLATFORM-CLIENT.md).
+        await context.route("**/etc/palm/phoenix/servers.json", async (r) => {
             const res = await r.fetch();
             const json = await res.json();
-            json.sources.find((x) => x.id === "phoenix").url = catalog.catalogUrl;
+            json.feeds = catalog.url + "/";
             await r.fulfill({ response: res, body: JSON.stringify(json) });
         });
         const errors = [], host = [];
