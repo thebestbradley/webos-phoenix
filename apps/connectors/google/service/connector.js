@@ -146,6 +146,22 @@ function pullEvents(ctx, token) {
     });
 }
 
+// The user's answer to an invitation (their attendee entry, as Calendar or
+// the Assistant sets it): their responseStatus on the event's attendees,
+// with sendUpdates=all so the organizer is told
+// (https://developers.google.com/calendar/api/guides/manage-attendees);
+// a guest changes nothing else on the organizer's event.
+var RESPONSE = { ACCEPTED: "accepted", DECLINED: "declined", TENTATIVE: "tentative", "NEEDS-ACTION": "needsAction" };
+function answeredGuests(f) {
+    return (f.attendees || []).filter(function (a) { return a && a.email; }).map(function (a) {
+        var out = { email: a.email, responseStatus: RESPONSE[a.participationStatus || "NEEDS-ACTION"] || "needsAction" };
+        if (a.commonName) out.displayName = a.commonName;
+        if (a.organizer) out.organizer = true;
+        if (a.role === "OPT-PARTICIPANT") out.optional = true;
+        return out;
+    });
+}
+
 function pushEvent(ctx, ch) {
     var tz = localTz();
     return session(ctx).then(function (g) {
@@ -155,6 +171,11 @@ function pushEvent(ctx, ch) {
         }
         var f = ch.fields || {};
         var body = GG.googleEvent(f, tz);
+        if (kit.answerChanged(ch, ctx.account && ctx.account.username)) {
+            var y = splitId(ch.remoteId);
+            return g.calendar.patch("/calendars/" + enc(y.container) + "/events/" + enc(y.id) + "?sendUpdates=all", { attendees: answeredGuests(f) })
+                .then(function (e) { return { remoteId: ch.remoteId, etag: e.etag }; });
+        }
         return kit.containerRemoteIds(ctx, K.calendar).then(function (cals) {
             if (ch.op === "create") {
                 var cal = cals[f.calendarId] || "primary";

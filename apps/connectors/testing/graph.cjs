@@ -106,6 +106,18 @@ function addGraph(base) {
         if (!/outlook\.timezone="UTC"/.test(req.headers.prefer || "")) return send(res, 400, { error: { code: "Test", message: "the connector must ask for UTC" } });
         return send(res, 200, page(req, c, g.events.filter((e) => e.calendarId === cal.id).map(strip), c.url.pathname));
     });
+    // A guest's reply (https://learn.microsoft.com/graph/api/event-accept): the user's attendee entry, and g.replies.
+    g.replies = [];
+    base.route("POST", /^\/graph\/v1\.0\/me\/events\/([^/]+)\/(accept|decline|tentativelyAccept)$/, (req, res, c) => {
+        const e = g.events.find((x) => x.id === decodeURIComponent(c.m[1]));
+        if (!e) return notFound(res);
+        const mine = (e.attendees || []).find((a) => a.emailAddress && a.emailAddress.address === g.me.mail);
+        if (!mine) return send(res, 400, { error: { code: "ErrorInvalidRequest", message: "You can't respond to this meeting because you're not an attendee." } });
+        mine.status = { response: { accept: "accepted", decline: "declined", tentativelyAccept: "tentativelyAccepted" }[c.m[2]], time: new Date().toISOString() };
+        stamp(e);
+        g.replies.push({ id: e.id, action: c.m[2], body: c.json() });
+        return send(res, 202, "");
+    });
     base.route("*", /^\/graph\/v1\.0\/me\/events\/([^/]+)$/, (req, res, c) => {
         const i = g.events.findIndex((x) => x.id === decodeURIComponent(c.m[1]));
         if (i < 0) return notFound(res);

@@ -17,6 +17,11 @@
 //       a meeting's address (Teams, Zoom, Meet, Webex, Jitsi) found in an
 //       event's text, and the note that carries it ("Join: <address>"), as
 //       docs/SYNERGY-CONNECTORS.md 7 "Meetings and video calls" asks
+//   answerChanged(change, address)
+//       the user's own answer to an invitation, when the device changed it
+//       (their attendee entry's participationStatus: ACCEPTED, DECLINED,
+//       TENTATIVE, as Calendar or the Assistant sets it), else "": what a
+//       provider sends as the attendee's reply, not as an edit of the event
 //   taskPriority / todoistPriority ...: in the providers' own modules
 
 import * as synckit from "@phoenix/synckit";
@@ -156,6 +161,23 @@ export function joinUrlOf(...texts: (string | undefined | null)[]): string {
         if (m) return m[0];
     }
     return "";
+}
+
+/** The user's (address's) own attendee entry's answer in an event's fields, or "" when they are no guest. */
+function answerIn(fields: Json, address: string): string {
+    const me = String(address || "").toLowerCase();
+    const a = ((fields && fields.attendees) || []).filter((x: Json) => x && !x.organizer && String(x.email || "").toLowerCase() === me)[0];
+    return a ? String(a.participationStatus || "NEEDS-ACTION") : "";
+}
+/**
+ * The user's answer to an invitation when the device changed it since the
+ * last sync (ACCEPTED, DECLINED, TENTATIVE), else "". change: the engine's
+ * push {op, fields, base}.
+ */
+export function answerChanged(change: Json, address: string): string {
+    if (!change || change.op !== "update" || !change.base) return "";
+    const now = answerIn(change.fields, address), was = answerIn(change.base, address);
+    return now && now !== was && /^(?:ACCEPTED|DECLINED|TENTATIVE)$/.test(now) ? now : "";
 }
 
 /** The event's note with the meeting's address first ("Join Microsoft Teams meeting: <address>"), once. */
