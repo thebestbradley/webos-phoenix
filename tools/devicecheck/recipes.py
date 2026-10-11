@@ -8,7 +8,7 @@
   unpinned       a source that is not pinned: a git SRC_URI whose SRCREV
                  defaults to AUTOREV (asks the network at parse time and
                  builds whatever the branch has), an http(s) one without a
-                 sha256sum
+                 sha256sum (or sha384sum, sha512sum)
   missing-file   a file:// in SRC_URI that is not beside the recipe
   network        a task body that fetches (npm install/ci, pip install,
                  curl, wget, git clone): BitBake forbids the network
@@ -106,10 +106,14 @@ def check(root):
                     f.add("unpinned", name, "%s fetches %s at %s: the branch's head when parsed, not a pinned "
                           "commit (local.conf's PHOENIX_SRCREV pins it; a release must)" %
                           (name, u.split(";")[0], srcrev or "no SRCREV"), where)
-            elif u.startswith(("http://", "https://")) and "sha256sum=" not in u:
+            elif u.startswith(("http://", "https://")) and not re.search(r"sha(256|384|512)sum=", u):
+                # sha256, or a stronger sum BitBake also checks (a device
+                # kernel takes postmarketOS's sha512 as its APKBUILD has it).
                 nm = re.search(r";name=([^;]+)", u)
-                key = "SRC_URI[%ssha256sum]" % (nm.group(1) + "." if nm else "")
-                if key not in text and not (nm and "${" in nm.group(1) and re.search(r"SRC_URI\[[^]]+\.sha256sum\]", text)):
+                keys = ["SRC_URI[%s%s]" % (nm.group(1) + "." if nm else "", s)
+                        for s in ("sha256sum", "sha384sum", "sha512sum")]
+                if not any(k in text for k in keys) and not (
+                        nm and "${" in nm.group(1) and re.search(r"SRC_URI\[[^]]+\.sha(256|384|512)sum\]", text)):
                     f.add("unpinned", "%s:%s" % (name, u.split(";")[0]), "%s downloads %s without a sha256sum"
                           % (name, u.split(";")[0]), where)
         for task, body in funcs.items():

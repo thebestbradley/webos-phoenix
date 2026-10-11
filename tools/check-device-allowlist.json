@@ -702,10 +702,6 @@
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C3"
  },
- "image:missing-path:/etc/phoenix/device.json": {
-  "owner": "platform (per-device adaptation)",
-  "row": "H1"
- },
  "image:missing-path:/etc/phoenix/transcriber.json": {
   "owner": "optional configuration (defaults apply)",
   "row": "F9"

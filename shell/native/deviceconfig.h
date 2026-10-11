@@ -16,6 +16,14 @@
 //       (luna.conf [UI] HomeButtonOrientationAngle; the TouchPad's 270).
 //       The boot animation is drawn upright with the button below, and the
 //       Touch to Share glow comes from its edge.
+//   formFactor  (string, default "auto") "phone", "tablet" or "auto": the
+//       layout (Shell.formFactor). "auto" takes the tablet layout when the
+//       screen's shorter side is at least Theme.tabletMinSide legacy
+//       pixels. A device names its own so it does not change layout with
+//       the screen's size (the Odin 2 Portal's 7" is a tablet).
+//   density  (number, default 0) device pixels per legacy pixel
+//       (Shell.density: 1.0 on a Pre, 1.5 on a Pre 3); 0 derives it from
+//       the panel's size as DRM reports it, which some panels get wrong.
 
 #pragma once
 
@@ -30,6 +38,8 @@ class DeviceConfig : public QObject
     QML_SINGLETON
     Q_PROPERTY(bool hardwareHomeButton READ hardwareHomeButton CONSTANT)
     Q_PROPERTY(int homeButtonOrientationAngle READ homeButtonOrientationAngle CONSTANT)
+    Q_PROPERTY(QString formFactor READ formFactor CONSTANT)
+    Q_PROPERTY(qreal density READ density CONSTANT)
     Q_PROPERTY(QString path READ path CONSTANT)
 
 public:
@@ -37,6 +47,8 @@ public:
 
     bool hardwareHomeButton() const;
     int homeButtonOrientationAngle() const;
+    QString formFactor() const;
+    qreal density() const;
     QString path() const { return m_path; }
 
 private:

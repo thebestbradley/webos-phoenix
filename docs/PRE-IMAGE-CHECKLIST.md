@@ -44,8 +44,8 @@ scarthgap, Qt 6.8.1) and meta-webosose `d7ed46c`.
 | X. Security | 1 | 1 | 2 | 1 | 5 |
 | L. Licences | 1 | 2 | 1 | 0 | 4 |
 | Q. What the platform needs on the device (PLATFORM.md 12) | 0 | 0 | 6 | 1 | 7 |
-| H. Per device | 0 | 1 | 2 | 1 | 4 |
-| **Total** | **13** | **24** | **41** | **8** | **86** |
+| H. Per device | 0 | 2 | 2 | 5 | 9 |
+| **Total** | **13** | **25** | **41** | **12** | **91** |
 
 **The few that would stop the first image outright**, all fixed here:
 phoenix-apps' `FILES` left 580 installed files unpackaged (do_package's
@@ -56,8 +56,8 @@ would have refused every app's every call (C4, F7). **The ones that would
 make it boot to a broken system**, open: the original apps' and Phoenix's
 legacy service names that OSE does not have (C1-C3, the device audit's), the
 apps' missing ACG groups (C4), OSE's own home, status bar and notification
-apps beside Phoenix's (F3), no device.json for either machine (H1), and the
-default image being a pre-release one with root and no password (X1).
+apps beside Phoenix's (F3), and the default image being a pre-release one
+with root and no password (X1). (Every machine now gets a device.json, H1.)
 
 ## Checkers
 
@@ -97,7 +97,7 @@ boot shows (the rest of this list).
 | Row | Item | Status | Owner | Notes |
 | --- | --- | --- | --- | --- |
 | B1 | The image has never been built | ⬜ | platform | Needs an x86-64 Linux host (Ubuntu 22.04 or 24.04; macOS cannot: BUILDING-MAC.md), about 250 GB free (OSE's own figure is 200 GB, plus the firmware, the assistant's models and two machines' sstate), 16 GB RAM or more, and 6-10 hours for the first `bitbake webos-phoenix-image` on 8 cores (OSE's Chromium alone is 3-5 h); later builds from sstate take minutes. Not as root; on Ubuntu 24.04 lift AppArmor's userns restriction (HARDWARE.md, Build). `scripts/setup-build.sh` then `bitbake webos-phoenix-image`, with `PHOENIX_SRCREV` and `PHOENIX_APPS_DIST` set (B3, B6) |
-| B2 | Parse and dry run for `qemux86-64` and `raspberrypi4-64` | 🟡 | platform | `scripts/parse-check.sh` in CI (`.github/workflows/parse.yml`) on every PR. Not run in this audit's container (under 1 GB of disk free); CI runs it on these changes (the new `phoenix-diag` recipe, phoenix-apps' `SRC_URI` and `RDEPENDS`, the image's `IMAGE_FEATURES:remove`). It cannot see a wrong checksum, a missing `file://` or a compile error: `check-recipes.py` now covers the first two |
+| B2 | Parse and dry run for `qemux86-64` and `raspberrypi4-64` | 🟡 | platform | `scripts/parse-check.sh` in CI (`.github/workflows/parse.yml`) on every PR, now also for the first targets' five machines (H9). Not run in this audit's container (under 1 GB of disk free); CI runs it on these changes (the new `phoenix-diag` recipe, phoenix-apps' `SRC_URI` and `RDEPENDS`, the image's `IMAGE_FEATURES:remove`). It cannot see a wrong checksum, a missing `file://` or a compile error: `check-recipes.py` now covers the first two |
 | B3 | The web apps reach the recipe built | 🟡 | platform | **Was broken:** phoenix-apps runs `install-rootfs.py` with no build step, so every React, Enact and Flutter app (40) was silently missing and the Fediverse service's `@phoenix/connector-kit` stopped do_install. BitBake allows no npm in do_compile. Now: CI packs the built apps (`tools/pack-apps-dist.sh`, artifact `apps-dist`), local.conf names it (`PHOENIX_APPS_DIST`), and install-rootfs.py stops with "the app is not built" rather than leave one out. Later: a release asset per tag, fetched with a checksum, or OE's npmsw fetcher (Q67) |
 | B4 | phoenix-apps packages everything it installs | ✅ | packaging | **Was broken:** `/etc/palm/{backup,hardware,marketplace}`, `/etc/palm/updates.json`, `/etc/palm/sysservice-backupkeys.json`, `/usr/lib/luna` (Just Type's and the system alerts' 570 files) and `/usr/palm/command-resource-handlers.json` were in no package: do_package's installed-vs-shipped QA error. `FILES` now takes `/usr/palm`, `/usr/lib/luna`, `/etc/palm` whole; `check-image.py` keeps it so |
 | B5 | No path from two packages | ✅ | packaging | **Was broken:** phoenix-shell (CMake) and phoenix-apps (rootfs.json's mount) both installed `/usr/share/fonts/open-sans`. install-rootfs.py leaves it to phoenix-shell (`SHELL_OWNS`); `check-image.py` checks every CMake install against the plan |
@@ -256,7 +256,12 @@ its owner. Counts are on 10 October 2026.
 
 | Row | Device | Status | Owner | Notes |
 | --- | --- | --- | --- | --- |
-| H1 | `/etc/phoenix/device.json` for each machine | ⬜ | platform | Read by Phoenix.Native's DeviceConfig and phoenix-devices; no recipe installs one for `qemux86-64` or `raspberrypi4-64`, so every key takes its default (HARDWARE.md, Device configuration). Add a `phoenix-device-config` recipe with a file per machine (`device.json:<machine>`): the Pi has no Home button, backlight `rpi_backlight` on the 7" panel, no sensors |
+| H1 | `/etc/phoenix/device.json` for each machine | 🟡 | platform | **Written** (11 October 2026): `phoenix-device-config` (in webos-phoenix-image) installs `files/<MACHINE>/device.json` and `compositor.env` (the output's geometry, sourced by product.env), else the defaults (`formFactor` auto, density from the panel). The first targets have their own (HARDWARE.md, Device configuration); the shell now takes `formFactor` and `density` from it (`DeviceConfig`, `PhoenixViewsRoot.qml`). The Pi's backlight `rpi_backlight` is found without a key |
 | H2 | qemux86-64 | 🟡 | platform | The first image to boot: no touch (I5), virgl for GL (D4), no Wi-Fi, no battery (the status bar's battery must say so) |
 | H3 | Raspberry Pi 4 (4 GB+), official 7" display | 🚫 | hardware | D6, I1, A2; no RTC (F6), no battery, no sensors, no microphone |
-| H4 | Other devices in HARDWARE.md's tiers | ⬜ | platform | Each needs its BSP layer, adaptation package and device.json (HARDWARE.md, tiers (b) to (g)); not before the first image |
+| H4 | Other devices in HARDWARE.md's tiers | ⬜ | platform | Each needs its machine, kernel and device.json, as the first targets now have (HARDWARE.md, tiers (b) to (g)) |
+| H5 | Fairphone 6 / 6+ (`fairphone-fp6`) | 🚫 | hardware, owner | Machine, kernel (milos-mainline `v7.2.0-milos`), `boot-fairphone-fp6.img`, device.json written, not built. On the device: the bootloader takes `phoenix-bootimg`'s image (header v2, an empty ramdisk) and the kernel mounts `root=PARTLABEL=userdata`; `tools/device-firmware.py` against a real factory image (FairBlobs' paths); GPU needs a Mesa with Adreno gen 8 (26+, OPEN-QUESTIONS); grow the root to the partition at first boot (systemd-growfs); the side switch's `silentValue`; Wi-Fi is partial and audio and camera do not work on mainline yet (HARDWARE.md, First targets) |
+| H6 | AYN Odin 2 Portal (`ayn-odin2portal`) | 🚫 | hardware, owner | Machine, kernel (AYN `ayn/v7.0`), SD card image written, not built. On the device: ROCKNIX's bootloader reading Phoenix's `extlinux.conf`; the panel's 270° turn in the compositor's geometry (`compositor.env` sets none yet); where Android keeps the blobs `device-firmware.py` needs; the gamepad (rsinput) as keys; audio through the AW88166 amplifiers; GPU in a Mesa newer than 24.0 |
+| H7 | PINE64 PinePhone Pro (`pinephonepro`) | 🚫 | hardware | Machine, kernel (megi 7.2), SD image written, not built. Tow-Boot in SPI first; `eg25-manager` for the modem and oFono's EG25-G support; the Bluetooth firmware from the catalog; 4 GB: measure P1 |
+| H8 | PINE64 PinePhone and PineTab2 (`pinephone`, `pinetab2`) | 🚫 | hardware | Written, not built. PinePhone: 2-3 GB and GLES 2: the light profile, measure whether WebAppMgr is usable at all; Tow-Boot in the eMMC boot partition. PineTab2: the panel's turn (`compositor.env`), BES2600 Wi-Fi firmware from the catalog |
+| H9 | The first targets' kernels and boot images build | ⬜ | platform | `bitbake webos-phoenix-image` per machine (B1); the kernels' configurations come from pmaports/ROCKNIX for clang and are built with GCC here (olddefconfig drops clang-only options); `KERNEL_DTBVENDORED` names in `IMAGE_BOOT_FILES`. A local parse check (11 October 2026) parsed `fairphone-fp6` and `pinephone` cleanly (`bitbake -p`); the dry run then stopped on OSE's media stack, built only for OSE's machines (g-media-pipeline, media-resource-calculator, media-codec-interface): `phoenix-mobile.inc` now turns WebAppMgr's GStreamer media off for these machines and a bbappend drops g-media-pipeline from packagegroup-webos-extended; CI confirms the rest. Media in web apps then plays through Chromium's own pipeline, without OSE's umediaserver (OPEN-QUESTIONS Q87) |
