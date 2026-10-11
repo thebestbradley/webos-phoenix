@@ -140,6 +140,21 @@ describe("messages on every messaging account", () => {
         expect(await d.ask("message Kai on jabber")).toMatchObject({ status: "ask", text: "What should I say to Kai Tanaka on Jabber?" });
         expect((await d.ask("I'm running late")).text).toBe("Send \"I'm running late\" to Kai Tanaka on Jabber?");
     });
+    it("takes a model's \"None\" for no account, not an account called None", async () => {
+        // Qwen3 0.6B's call for "anything new on slack" (the held-out set).
+        const llm = { status: () => Promise.resolve({ available: true, installed: [{ id: "qwen3-0.6b-q8_0" }] }), ensure: () => Promise.resolve({ baseUrl: "http://127.0.0.1:9/v1" }) };
+        const reply = (o: object) => ({ status: 200, body: JSON.stringify({ choices: [{ message: o }] }) });
+        const llmRequest = async (r: any) => {
+            const props = JSON.parse(r.body).response_format?.json_schema?.schema?.properties || {};
+            if (props.command) return reply({ content: JSON.stringify({ command: props.command.enum.find((n: string) => /read.?messages/i.test(n)) }) });
+            if (props.via) return reply({ content: JSON.stringify({ who: "None", via: "None", unread: true }) });
+            return reply({ content: "An answer." });
+        };
+        const d = synergy(undefined, { llm, llmRequest, settings: { followUps: false } });
+        const m = await d.ask("anything fresh from my coworkers");
+        expect(m.command).toBe("readMessages");
+        expect(m.text).toMatch(/^You have 3 new messages\./);
+    });
     it("reads every account's new messages, or one account's", async () => {
         const d = synergy();
         expect((await d.ask("read my unread slack messages")).text).toBe(

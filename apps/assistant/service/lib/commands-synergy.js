@@ -136,6 +136,8 @@ function extend(builtIn) {
     });
 }
 
+// What a model puts for an argument it has nothing for.
+var NOTHING = /^(?:none|null|nil|undefined|n\/a)$/i;
 function lower(s) { return String(s || "").toLowerCase().trim(); }
 function unique(list) { return list.filter(function (x, i) { return x && list.indexOf(x) === i; }); }
 
@@ -911,6 +913,12 @@ module.exports = function (h) {
     // account's part decided), or of {pass: args} to go on as the command does.
     function prepare(cmd, args, env) {
         var say = env.lang.say;
+        // A model's "nothing" for an argument ("None", "null"): nothing, never
+        // an account or a person by that name (Qwen3 0.6B gave readMessages
+        // {who: "None", via: "None"} for "anything new on slack").
+        Object.keys(args || {}).forEach(function (k) {
+            if (typeof args[k] === "string" && NOTHING.test(args[k].trim())) args[k] = "";
+        });
         switch (cmd.id) {
         case "text": {
             var via = String(args.via || "").trim();
