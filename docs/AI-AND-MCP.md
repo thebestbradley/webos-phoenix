@@ -1538,7 +1538,11 @@ where it came from (cases a-sw-*, with a case's own contacts: `put`):
   have today", "call mom on speaker", "turn up the volume all the way",
   "open the photos app" (it searched photos for "app"), "launch messages"
   (what people call the apps: Messaging), "will I need a jacket tonight"
-  (the cold, not the rain).
+  (the cold, not the rain), "send Mark a message" (it read back a text
+  saying "a message"; now it asks what to say).
+- "Send the photo to Sam", "email Mom the pictures from the trip": "I
+  can't send photos or videos yet." (the model's set: Qwen3 0.6B offered
+  a screenshot); "text Rose I got the pictures" stays a text.
 
 And one found by the talk-mode work (tools/test-assistant.cjs): "did you
 add it?" went on being answered with its switch off in Settings >

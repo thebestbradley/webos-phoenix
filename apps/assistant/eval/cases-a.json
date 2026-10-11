@@ -71,6 +71,10 @@
 {"id":"a-sw-47","cat":"settings","say":"turn up the volume all the way","expect":{"command":"volume","args":{"action":"set","level":100}}},
 {"id":"a-sw-48","cat":"apps","say":"open the photos app","expect":{"command":"open","args":{"title":"Photos"}}},
 {"id":"a-sw-49","cat":"apps","say":"launch messages","expect":{"command":"open","args":{"title":"Messaging"}}},
-{"id":"a-sw-50","cat":"weather","say":"will I need a jacket tonight","expect":{"command":"weather","args":{"day":"tonight","about":"cold"}}}
+{"id":"a-sw-50","cat":"weather","say":"will I need a jacket tonight","expect":{"command":"weather","args":{"day":"tonight","about":"cold"}}},
+{"id":"a-sw-51","cat":"messages","put":[{"_id":"p-mark","_kind":"com.palm.person:1","name":{"givenName":"Mark","familyName":"Jones"},"phoneNumbers":[{"value":"(303) 555-0170","type":"type_mobile"}],"emails":[]}],"say":"send Mark a message","expect":{"command":"text","status":"ask","args":{"message":""}},"notText":"a message"},
+{"id":"a-sw-52","cat":"messages","say":"send Mom a text","expect":{"command":"text","status":"ask","args":{"message":""}},"notText":"a text"},
+{"id":"a-sw-53","cat":"messages","put":[{"_id":"p-rose","_kind":"com.palm.person:1","name":{"givenName":"Rose","familyName":"Tyler"},"phoneNumbers":[{"value":"(303) 555-0160","type":"type_mobile"}],"emails":[]}],"say":"text Rose I got the pictures","expect":{"command":"text","status":"pending","args":{"message":{"$re":"^I got the pictures$"}}}},
+{"id":"a-sw-54","cat":"messages","say":"email Mom the pictures from the trip","expect":{"answer":["fallback","clarify"]},"forbid":["text","email"]}
 ]
 }

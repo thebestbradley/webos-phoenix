@@ -646,6 +646,9 @@ function textMessageWords(t, ctx) {
     if (/^write (?:this|that|it|down)\b/.test(t)) return null;   // "write this down: ...": a note
     // "send Mom a message saying call me back": who, without the message's name.
     rest = rest.replace(/^(.+?) (?:a |an )?(?:quick )?(?:text|message|sms|note|line)(?: message)?(?=,|:| saying| that says| to say| and say| that)/, "$1");
+    // "Send Mark a message", "send Sam a text": who, and nothing to say yet
+    // (asked for), never the words "a message".
+    rest = rest.replace(/^(.+?) (?:a |an )(?:quick |short )?(?:text|message|sms|imessage)(?: message)?$/, "$1");
     // "text Will, Rose and Mark that dinner is at 7": a text to each
     // (lib/lang/en-talk.js multiples), never one to Will saying "Rose and Mark ...".
     var many = /^(.+?)(?::| saying| that says| to say| and say| that)\s+(.+)$/.exec(rest);
@@ -1300,6 +1303,13 @@ var NOT_HERE = [
     // command's (none yet); what is on the screen needs a model that sees.
     ["share", /\b(?:my (?:eta|e\.t\.a|location|current location|whereabouts|position|arrival time|live location)|where i am|where i'm at|when i(?:'ll| will) (?:be there|be home|arrive|get there|get home))\b/,
      /^(?:send|share|text|tell|give|message|let|show|email)\b/],
+    // "Send the photo to Sam": no command attaches a picture (the model's
+    // set: Qwen3 0.6B offered a screenshot).
+    // The picture is what is sent: right after the verb, or after one or two
+    // words of a name ("text Mom a picture"), not in the words of a text
+    // ("text Rose I got the pictures").
+    ["photo", /^\S+ (?:\S+ (?:\S+ )?)?(?:the|this|that|these|those|my|our|a|some) (?:(?:last|latest|new|recent|best|other) )?(?:photos?|pictures?|pics?|selfies?|screenshots?|videos?|vids?)\b(?! (?:were|was|are|is|look|looks|looked|came|turned)\b)/,
+     /^(?:send|share|text|email|e-mail|message|forward|mms|attach)\b/],
     ["podcast", /\b(?:podcasts?|(?:latest|new|next|last) episodes?|episodes? of)\b/, /^(?:play|resume|continue|start|put on|listen to|i want to (?:listen to|hear)|shuffle)\b/],
     ["screen", /\b(?:on|in|at) (?:my|the|this) screen\b|\b(?:my|the|this) screen (?:say|show|mean)s?\b|\bwhat am i (?:looking at|seeing|reading)\b|\b(?:read|describe|explain|summari[sz]e) (?:my|the|this) screen\b|\bwhat(?:'s| is) this (?:app|page)\b/,
      /^(?:what|what's|read|describe|explain|summari[sz]e|tell me|can you see|do you see|look at|who|whats)\b/]
@@ -1314,6 +1324,8 @@ function notHere(t) {
             if (NOT_HERE[i][0] === "booking" && /\b(?:appointment|meeting|calendar)\b/.test(t)) return null;
             // "Tell me where I am" asks where; "the brightness on my screen" is the brightness.
             if (NOT_HERE[i][0] === "share" && /^(?:tell|show|give) me\b/.test(t)) return null;
+            // "Text Sam saying I love the photo": words about a picture, not one.
+            if (NOT_HERE[i][0] === "photo" && /\b(?:saying|says|say|that reads|telling|tell (?:him|her|them)|about|that (?:i|we|you|he|she|they|it)|i'll|i will|i've|i have)\b/.test(t)) return null;
             if (NOT_HERE[i][0] === "screen" && /\b(?:bright|brightness|dim|dimmer|wallpaper|rotat\w*|lock)\b/.test(t)) return null;
             return { what: NOT_HERE[i][0] };
         }
@@ -2716,6 +2728,7 @@ var say = {
                  image: "I can't make pictures yet.",
                  post: "I can't post to social media for you yet.",
                  share: "I can't share your location or arrival time yet.",
+                 photo: "I can't send photos or videos yet.",
                  podcast: "I can't play podcasts myself yet.",
                  screen: "I can't see what's on your screen yet." }[what] || "";
     },
