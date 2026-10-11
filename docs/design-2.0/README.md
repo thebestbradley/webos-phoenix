@@ -13,7 +13,9 @@ sized phone (1116 × 2484) and a 1280 × 800 tablet, in light and dark.
 
 **The owner chose Ember Glass** (11 October 2026; OPEN-QUESTIONS Q119).
 [BUILD-PLAN.md](BUILD-PLAN.md) says how it becomes the UI layer for Enact,
-Ionic and Flutter, in its own repository, `ember-glass-ui`.
+Ionic and Flutter, in its own repository, `ember-glass-ui`;
+[../SYSTEM-UI-2.md](../SYSTEM-UI-2.md) how the shell is drawn in it, with
+screenshots beside the renders in `img/system-ui-2/`.
 
 ## Look at them
 

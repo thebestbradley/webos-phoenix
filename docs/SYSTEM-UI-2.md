@@ -28,7 +28,7 @@ The look comes from:
 
 | Where | How |
 | --- | --- |
-| The system preference `look` (`"classic"` or `"ember-glass"`) | The runtime's `tweaks` (`runtime/phoenix-runtime.js` `tweaks()`), as Settings > Advanced's other options; the shell's `tweak("look")` (`Shell.tweakDefaults`) |
+| The system preference `look` (`"classic"` or `"ember-glass"`) | Settings > Advanced > Look ("Phoenix 1.0", "Ember Glass (2.0 preview)"); the runtime's `tweaks` (`runtime/phoenix-runtime.js` `tweaks()`) carry it to the shell's `tweak("look")`, which follows at once (owner question 11) |
 | The simulator, for one run | `phoenix-sim ... -- --look ember-glass` (after `--`: see "Later, with C++") |
 | The default | `Shell.tweakDefaults.look`: `"classic"`. **In the 2.0 repository, flipping the default is this one value** |
 
@@ -39,7 +39,10 @@ writes `shell/qml/Phoenix/Shell/EmberGlass.qml`, a QML singleton: every
 token as a property (colours as QML colours with their alpha, gradients as
 lists of stops, dimensions in CSS px), the themed ones under
 `EmberGlass.light` and `EmberGlass.dark`. `--check` fails when the file
-differs from what the tokens give (CI). The few values the shell needs that
+differs from what the tokens give (CI runs it). The Phosphor glyphs the shell
+draws come the same way, from `@phosphor-icons/core` (MIT), through
+`tools/gen-ember-glass-icons.cjs` into `EmberGlassIcons.js`, drawn by
+`EgIcon.qml` (`shell/design/PROVENANCE.md`). The few values the shell needs that
 the tokens do not hold (the status bar's and gesture strip's scrims, the
 card view's labels, the Just Type pill) are read off `base.css` and
 `cards.html` and cited where used; they are proposed for the tokens
@@ -63,7 +66,7 @@ tokens"), and how the shell draws it in QML:
 
 | Level | In the shell | QML |
 | --- | --- | --- |
-| L1 (the card) | The blurred wallpaper under a card's window (the loading card; apps draw their own from the contract below) | `WallpaperBlur`'s texture, positioned as the wallpaper lies under the window, then the tone map and the tint |
+| L1 (the card) | Each app draws its own from what the shell gives it (the contract below); the shell draws it only for its own card, the loading card | `WallpaperBlur`'s picture under the shell's theme's tone map, positioned as the wallpaper lies under the window, then the tint and the highlight |
 | L2 (planes) | Rows inside the system menu and the dashboard | a tint (`Rectangle`), no blur |
 | L3 (floats) | Bars things scroll under: the dock, the Just Type pill | `BackdropBlur` at 22 px, the tint |
 | L4 (overlays) | The system menu, the dashboard, banners, dialogs, the app menu tab's menu | `BackdropBlur` at 30 px, the tone map, the tint |
@@ -79,8 +82,10 @@ tokens"), and how the shell draws it in QML:
 - **Stays:** cropped about its centre (`Wallpaper.qml`, the TouchPad's
   square wallpapers).
 - **QML:** `Shell.qml` (the `Wallpaper` reaches under the gesture strip),
-  `Theme.qml` (`defaultWallpaperPath` by look), `runtime/phoenix-runtime.js`
-  (the `wallpaper` preference's default by look).
+  `Theme.qml` (`defaultWallpaperPath` by look), `sim.qml` (the shell shows
+  its look's default when the system says none is chosen:
+  `runtime/phoenix-runtime.js` systemStatus `wallpaperDefault`; the runtime
+  gives Settings the same default, from the look the shell tells it).
 
 ### 2. The gesture area and its light
 - **Changes:** Onyx Reborn's long bar, 118 x 4, radius 2, its ends fading,
@@ -96,8 +101,10 @@ tokens"), and how the shell draws it in QML:
   (CoreNaviManager::restoreLightbar; owner question 2), each gesture's own
   light (the waterdrop, the runs left and right; `light(kind)`), the glow
   while held (the meta key).
-- **QML:** `GestureArea.qml` (an `EmberGestureLight` in place of the white
-  bar), `Theme.qml` (`gestureAreaHeight`).
+- **QML:** `GestureArea.qml` (Ember Glass's light beside 1.0's white bar,
+  its gradient's stops made from the token, its glow drawn once with
+  `Canvas`, whose shadow is CSS's drop-shadow), `Theme.qml`
+  (`gestureAreaHeight`).
 - **Tokens:** `gesture-light.*`, `motion.breathe`, `size.gesture-strip`.
 
 ### 3. The status bar
@@ -105,9 +112,10 @@ tokens"), and how the shell draws it in QML:
   `.statusbar`), 32 px (`size.statusbar`; 1.0's 28); the app's name in the
   app-menu tab (24 px capsule, white 7 %, a 0.38 white hairline, 12.5 px
   semibold, a caret: `.appmenu-tab`); the clock centred, 13.5 px medium; on
-  the right the signal, Wi-Fi and the battery as Phosphor glyphs (MIT; the
-  mock-ups' `icons.js`) and a 22 x 11 battery cell with the charge
-  (`.sb-batt`); notification icons with the ember dot on tablets (`.sb-notes`).
+  the right the signal and Wi-Fi as Phosphor glyphs (MIT, as the mock-ups'
+  `icons.js`) and a 22 x 11 battery cell with the charge (`.sb-batt`); on
+  tablets, notification icons with the ember dot (`.sb-notes`: step 10, the
+  tablet's group is still 1.0's).
 - **Stays:** what it shows and when (the carrier or the app's name,
   StatusBarTitle; the clock; the lock screen's date; the tablet's notification
   group), its taps (the app menu, the system menu), the safe area around a
@@ -125,24 +133,25 @@ tokens"), and how the shell draws it in QML:
     black in dark) in place of `card-shadow-tile.png`;
   - a maximized card keeps its corners and the wallpaper shows around it
     (`.card`: top 32, bottom 22, radius 30; owner question 6);
-  - under each card's window the shell's blurred wallpaper, as it lies under
-    the window when it is maximized, scaled and moved with the card (the
-    mock-ups' `html[data-embed] .device > .wall`); an app that is not glass
-    (all of today's) covers it;
+  - each card's glass is the blurred wallpaper as it lies under the window
+    when it is maximized, scaled and moved with the card (the mock-ups'
+    `html[data-embed] .device > .wall`): the app draws it from what the
+    shell gives it (the contract below); an app that is not glass (all of
+    today's but the test page, `tools/fixtures/glass-app`) is opaque as in 1.0;
   - the loading card (`CardLoading`) is the shell's own L1 glass: the blur,
     the tone map and the tint, with the app's icon;
-  - over the stack in front, its app and the number of cards, "Messaging ·
-    2 cards" (`.label`: 13 px semibold white, the count at 55 % white, 108 px
-    from the top; owner question 7);
+  - over the stack in front, its card's title and, for a stack, the number
+    of cards, "Messaging · 2 cards" (`.label`: 13 px semibold white, the
+    count at 55 % white, 38 px over the card; owner question 7);
   - under the card in front, Ember's light on the floor and an ember rim
     (`.floor`, `.rim`);
   - the dimming of cards that lost focus stays (CardWindow.cpp:211-213).
 - **Stays:** the layout (`CardLayout.js`, CardGroup's fans and stacks; the
   side cards are not turned in 3D: owner question 1), the scale, every
   gesture, maximize and minimize, closing, reordering, the modal card.
-- **QML:** `Card.qml` (the corners, the shadow, the glass under the
-  window), `CardView.qml` (the labels, the floor light), `CardLoading.qml`,
-  `WallpaperBlur.qml` (new).
+- **QML:** `Card.qml` (the corners, the shadow, the rim, what the window
+  gets), `CardView.qml` (the label, the floor light and rim),
+  `CardLoading.qml`, `WallpaperBlur.qml` and `WallpaperBlurWorker.js` (new).
 - **Tokens:** `radius.card`, `theme.*.glass.l1.*`, `theme.*.glass.highlight`,
   `theme.*.glass.rim`, `theme.*.shadow.card`, `ember.*`.
 
@@ -157,9 +166,11 @@ tokens"), and how the shell draws it in QML:
 
 ### 6. The quick launch dock (card view)
 - **Changes:** a 64 px capsule, 34 px in from each side, `rgb(20 18 20 / .34)`
-  over a 12 px blur, hairline and highlight; Phosphor glyphs for the default
-  apps, the app in front marked by a 4 px ember dot (`cards.html` `.dock`).
-  Owner question 10: an app's own icon or a glyph.
+  over a 12 px blur, hairline and highlight, the apps spread inside it; the
+  launcher button Phosphor's four squares; the app in front marked by a 4 px
+  ember dot (`cards.html` `.dock`). The mock-ups draw glyphs for the apps
+  too; the apps keep their own icons (owner question 10). Phones; the
+  tablet's dock is still 1.0's.
 - **Stays:** its items, the launcher button, dragging icons in and out, the
   wave launcher.
 - **QML:** `QuickLaunch.qml`.
@@ -204,14 +215,23 @@ As `ember-glass-ui/docs/SHELL-CONTRACT.md` specifies, in the Ember Glass
 look only (in 1.0's look an app gets nothing and draws the tint-only
 fallback).
 
-**The blurred wallpaper, once.** `WallpaperBlur.qml` draws the wallpaper as
-the screen shows it (cover, centred) at a quarter of the screen's CSS
-pixels, inside a 60 px border of `#140604` (the mock-up's padding, so the
-blur darkens towards the edges instead of clamping), blurs it with a
-Gaussian of standard deviation 40 CSS px (`glass.l1.blur`; 10 px at a
-quarter), with no tone map, and keeps the result: as a texture for the
-shell's own glass, and as a PNG whose address the apps get. It runs again
-only when the wallpaper or the screen's size changes.
+**The blurred wallpaper, once.** `WallpaperBlur.qml` grabs the wallpaper
+as the screen shows it (the `Wallpaper` item: cover, centred, under the
+whole screen) at a quarter of the screen's CSS pixels, puts it inside a
+60 px border of `#140604` (the mock-up's padding, so the blur darkens
+towards the edges instead of clamping) and blurs it with a Gaussian of
+standard deviation 40 CSS px (`glass.l1.blur`; 10 px at a quarter), with no
+tone map. The blur is CSS's own: three box blurs each way of the sizes the
+Filter Effects spec gives for the deviation (as Skia does for Chromium), in
+script on a thread of its own (`WallpaperBlurWorker.js`, a `WorkerScript`),
+on the pixels a `Canvas` reads: no shader to compile, the same without a
+GPU, and the screen never waits for it (about a second on the development
+machine; not measured on a device yet). Across a black and white edge its profile is the
+Gaussian's within 4 levels (`tst_emberglass.qml`). It gives two PNGs: the
+blur as it is (the apps'), and under the shell's own theme's tone map (CSS's
+`saturate()`, `contrast()`, `brightness()`, for the loading card). It runs
+again only when the wallpaper or the screen's size changes, a quarter of a
+second after (the adaptive simulator resizes in a stream of sizes).
 
 **What each web app gets**, through the web runtime:
 
@@ -221,7 +241,7 @@ only when the wallpaper or the screen's size changes.
 | `window` | `{x, y, width, height}` in CSS px: where the window lies on the screen when its card is maximized |
 | `screen` | `{width, height}`: the whole screen in CSS px, the status bar and gesture strip included |
 | `windowRadius` | 30 for a card's window, 0 for another (a dashboard, an alert) |
-| `blur` | `"live"`, or `"none"` (Settings > Advanced > Live blur off, or no GPU) |
+| `blur` | `"live"`, or `"none"` (Settings > Advanced > Live blur off: the system preference `glassBlur` `"none"`; or there is no GPU) |
 
 - `runtime/phoenix-runtime.js` `__phoenixRuntime.glassChanged(data)`: sets
   `PalmSystem.glass` (the JSON, a string as `deviceInfo` and `launchParams`
@@ -240,8 +260,9 @@ only when the wallpaper or the screen's size changes.
   `file://` one. The QML shell cannot make a folder to write a file into
   (that needs C++: "Later" below), and the simulator's data folder may not
   exist yet in a fresh home; a data URL needs no file and no clean-up. On a
-  device the compositor writes a file (`/var/run/phoenix/wallpaper-blurred.png`)
-  and gives its `file://` address, as the contract shows.
+  device the compositor is to write a file (proposed:
+  `/var/run/phoenix/wallpaper-blurred.png`) and give its `file://` address,
+  as the contract shows.
 - **In the card view the window's place stays where the window is when
   maximized.** The contract says the place is "where the card is drawn, so
   the blur moves with the card". A card is the window scaled about its
@@ -255,17 +276,38 @@ only when the wallpaper or the screen's size changes.
   when the card is maximized.
 - **`PalmSystem.glass` is a JSON string**, as webOS's other PalmSystem data
   (`deviceInfo`, `launchParams`); the event's `detail` is the parsed object.
+- **The shell does not draw L1 under an app's window** (SPEC.md's "Building
+  it" has the shell draw it under each card): the contract has each app draw
+  it, under its own theme's tone map, and a copy under an opaque window would
+  be a full-screen draw for nothing. The shell draws L1 only where the card
+  is its own, the loading card.
+
+**Tests.**
+- `shell/tests/tst_emberglass.qml`: the blur is CSS's (the Gaussian's
+  profile, the padding, the tone map), the shell makes it in Ember Glass only
+  and gives it to the card view, each card's `glass` (the window's place
+  maximized and in the card view, the screen, the corners, live blur, none in
+  1.0's look), the loading card's glass.
+- `tools/test-glass.cjs` (Chromium): the runtime's side, down to a page
+  drawing L1 as Ember Glass UI's `.eg-window` does putting each pixel of the
+  picture where it lies on the screen; `tools/test-runtime-device.cjs`: the
+  device's `glass` event.
+- `tools/test-glass-sim.py` (the simulator): the test page drawing only the
+  blur the shell gave it, maximized, against the sharp wallpaper blurred as
+  the contract says: 0.9 levels of 255 apart on average in the middle of the
+  screen, and 10 to 12 when moved by the status bar's height or 40 px
+  sideways.
 
 ## The order of work
 
 | # | Step | State |
 | --- | --- | --- |
 | 1 | This plan | done |
-| 2 | The switch: `Theme.look`, the `look` preference, the simulator's `--look`; `EmberGlass.qml` from the tokens | |
-| 3 | The gesture light and the gesture strip | |
-| 4 | The wallpaper under the whole screen, the card view's cards (corners, shadow, glass under the window, the loading card), the card labels, the floor light, the status bar | |
-| 5 | The shell contract: `WallpaperBlur`, the window's place for each web app, the runtime's side; tests (QML, the runtime in Chromium, the simulator lining the blur up) | |
-| 6 | Just Type's pill and the dock | |
+| 2 | The switch: `Theme.look`, the `look` preference, the simulator's `--look`; `EmberGlass.qml` from the tokens | done |
+| 3 | The gesture light and the gesture strip | done |
+| 4 | The wallpaper under the whole screen, the card view's cards (corners, shadow, rim, the loading card's glass), the stack's label, the floor light, the status bar (phones; the tablet's notification group is still 1.0's) | done |
+| 5 | The shell contract: `WallpaperBlur`, the window's place for each web app, the runtime's side; tests (QML, the runtime in Chromium, the simulator lining the blur up) | done |
+| 6 | Just Type's pill and the dock (phones; the tablet's dock is still 1.0's) | done |
 | 7 | Notifications (the banner, the dashboard, the card view's notification bar, the tablet's drop-down) | |
 | 8 | The system menu | |
 | 9 | The launcher | |
@@ -295,11 +337,37 @@ only when the wallpaper or the screen's size changes.
   luminance, read once when it is made.
 
 ## GPU cost
-- L1 is one texture draw per card (the blurred wallpaper, made once).
+- The wallpaper is blurred once, on the CPU, off the screen's thread; L1 is
+  then one picture each app draws under its tint.
 - A maximized card keeps its rounded corners: one layer (an offscreen pass)
   for the card in front, as 1.0's card view already has for every card.
-- Live blur (`BackdropBlur`) only for L3 and L4 surfaces, at most three on
-  screen; none with Live blur off or without a GPU.
+- Live blur (`BackdropBlur`) only for L3 and L4 surfaces (today Just Type's
+  bar and the dock), at most three on screen; without it (Live blur off, or
+  no GPU: `Theme.egLiveBlur`) they are their 94% tints (`glass.fallback`).
+
+## Screenshots
+
+`tools/glass-screenshots.sh OUT_DIR` takes them on the Fairphone 6's screen
+(the renders' frame) with the test page (`tools/fixtures/glass-app`, three
+copies: dark, light, dark). Kept, as small JPEGs, in
+`docs/design-2.0/img/system-ui-2/`, each beside its render:
+
+| File | What |
+| --- | --- |
+| `cards-dark.jpg`, `cards-light.jpg` | The card view, render on the left: glass cards over the phoenix, the blur moving with each card, the stack's label, the floor light and rim, Just Type's bar, the dock, the status bar, the gesture light (dim, as in card view) |
+| `app-dark.jpg`, `app-light.jpg` | A glass page maximized (the test page), beside Messaging's render: the rounded card over the wallpaper, the status bar's tab, the lit gesture light |
+| `cards-classic.jpg` | The same card view in 1.0's look: unchanged; the test pages get nothing and draw the tint-only fallback |
+| `statusbar.jpg`, `gesture-light.jpg` | The status bar and the gesture light, render above, Phoenix below |
+| `glass-alignment.jpg` | The alignment check: the test page drawing only the blur the shell gave it, beside the sharp wallpaper |
+
+**Still unlike the renders:** the card view's notification bar is 1.0's
+(step 7), so the dock sits at 1.0's place, lower than drawn; the dock shows
+the apps' own icons (owner question 10); the font is Open Sans where Manrope
+is not installed (owner question 4); the side cards lie flat (owner question
+1); the stack's label is the card's title (the renders: the app's name); the
+gesture light is dim in the card view (owner question 2); in the card view
+the status bar shows the carrier without the tab (1.0 does; the renders draw
+a tab). The test pages are not the renders' apps: their content differs.
 
 ## Questions for the owner
 1. **The card view's 3D deck.** `cards.html` turns the side cards 26° in
@@ -327,5 +395,13 @@ only when the wallpaper or the screen's size changes.
    `ember-glass.tokens.json`; add them there (a `shell` group)?
 10. **The dock's icons:** the mock-ups draw Phosphor glyphs for the default
     apps; 1.0 shows each app's icon. Meanwhile: the apps' own icons.
-11. **Where the look is chosen:** Settings > Advanced > Look, while 2.0 is
-    being built, and gone once 2.0 ships with Ember Glass only?
+11. **Where the look is chosen:** Settings > Advanced > Look while 2.0 is
+    being built, and gone once 2.0 ships with Ember Glass only? Meanwhile:
+    there, beside Live blur, and the simulator's option.
+12. **The orb in Just Type's bar:** the mock-ups draw the Assistant's ember
+    orb at its end. Meanwhile it is drawn and the whole bar still opens Just
+    Type; should a tap on the orb open the Assistant instead, as a hold on
+    the launcher button does?
+13. **The status bar's tab in the card view:** the renders put the carrier
+    ("Phoenix") in the app menu's tab with a caret; 1.0 (StatusBarTitle)
+    draws the carrier plain, as nothing opens from it. Meanwhile: plain.

@@ -124,7 +124,9 @@ layer falls back to tint only):
 5. **The remaining reference screens** (Messaging, the conversation, Music,
    Email, Calendar).
 6. **The shell's part** in webos-phoenix: the blurred wallpaper and the
-   window's position for apps, and the card view moving the blur with each card.
+   window's position for apps, and the card view moving the blur with each card
+   (built in the simulator, with the shell in Ember Glass:
+   [../SYSTEM-UI-2.md](../SYSTEM-UI-2.md)).
 
 ## Open choices
 

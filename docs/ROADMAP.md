@@ -71,6 +71,7 @@ Phoenix UI, PixiOS with Bennu UI, an XR bird) are in [BRANDING.md](BRANDING.md).
 | [SECURITY-APPS.md](SECURITY-APPS.md) | Passwords and Authenticator threat model | M4 |
 | [CONVERGENCE.md](CONVERGENCE.md) | 2.0: desktop mode, TV mode, wireless display | 2.0 |
 | [design-2.0/](design-2.0/README.md) | 2.0's UI layer: five design directions drawn on the same screens (Aurora Glass, Onyx Reborn, Phoenix Material, Ember, Ember Glass), with their specs, sources and a gallery | 2.0 |
+| [SYSTEM-UI-2.md](SYSTEM-UI-2.md) | 2.0's shell in Ember Glass, behind a switch beside 1.0's look: part by part, the shell's side of Ember Glass's contract with the apps, the order of work, the owner's questions | 2.0 |
 | [LUNEOS.md](LUNEOS.md), [WEBOS-FAMILY.md](WEBOS-FAMILY.md) | LuneOS, webOS Community Edition, OSE and Phoenix compared; which LuneOS layers to build on | M1, M3 |
 | [LEGAL.md](LEGAL.md), [BRANDING.md](BRANDING.md) | Licences, artwork and sounds, names and trademarks | all |
 | [PLATFORM.md](PLATFORM.md), [PLATFORM-BUILD-PROMPT.md](PLATFORM-BUILD-PROMPT.md) | The servers: website, account, developer portal, the signed feeds (catalog, updates, drivers), downloads, cloud services; the prompt for building them in Laravel | 1.0 |
