@@ -235,6 +235,14 @@
             "apps/fediverse/icon"
         ]
     },
+    "drives": {
+        "platter": "diamond",
+        "base": 180,
+        "foot": 78,
+        "out": [
+            "apps/connectors/drives/icon"
+        ]
+    },
     "wifi": {
         "platter": "diamond",
         "base": 172,

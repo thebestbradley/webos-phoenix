@@ -74,6 +74,10 @@ var methods = packages.createPackagesService({
         remove: function (file) { try { fs.unlinkSync(file); } catch (e) { /* gone */ } }
     },
     defaultSources: function () { return (readJson(SOURCES) || {}).sources || []; },
+    // Phoenix's own connectors from the catalog, not pre-installed (the drives).
+    firstParty: function () {
+        return ((readJson(PREINSTALLED) || {}).catalog || []).map(function (p) { return { id: p.id, sourceId: p.sourceId || "phoenix" }; });
+    },
     preinstalled: function () {
         return ((readJson(PREINSTALLED) || {}).packages || []).map(function (p) {
             var info = readJson(INSTALLED_APPS + p.id + "/appinfo.json") || {};

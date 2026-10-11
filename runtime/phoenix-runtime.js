@@ -3744,13 +3744,24 @@
     // (/etc/palm/marketplace/preinstalled.json; tools/install-rootfs.py and
     // phoenix-sim put them among the installed apps): [{id, sourceId,
     // service, templates}].
-    var preinstalledCache = null;
+    // Its "catalog": Phoenix's own connectors installed from the catalog, not
+    // pre-installed (the drives): trusted as the pre-installed ones are.
+    var preinstalledCache = null, firstPartyCache = null;
     runtime.preinstalledPackages = function () {
         if (!preinstalledCache) {
             try { preinstalledCache = JSON.parse(PalmSystem.getResource("/etc/palm/marketplace/preinstalled.json") || "{}").packages || []; }
             catch (e) { preinstalledCache = []; }
         }
         return preinstalledCache;
+    };
+    runtime.firstPartyPackages = function () {
+        if (!firstPartyCache) {
+            var catalog = [];
+            try { catalog = JSON.parse(PalmSystem.getResource("/etc/palm/marketplace/preinstalled.json") || "{}").catalog || []; }
+            catch (e) { catalog = []; }
+            firstPartyCache = runtime.preinstalledPackages().concat(catalog);
+        }
+        return firstPartyCache;
     };
 
     (function accountsService() {
@@ -3789,7 +3800,7 @@
                 if (!lp.removable || lp.dynamic || seen[lp.id]) return;
                 seen[lp.id] = true;
                 var base = "/usr/palm/applications/" + lp.id + "/";
-                var pre = runtime.preinstalledPackages().filter(function (p) { return p.id === lp.id; })[0];
+                var pre = runtime.firstPartyPackages().filter(function (p) { return p.id === lp.id; })[0];
                 var named = pre && pre.templates ? pre.templates.map(function (t) { return "public/accounts/" + t + "/" + t + ".json"; }) : null;
                 (packaged[lp.id] || named || ["public/accounts/" + lp.id + "/" + lp.id + ".json"]).forEach(function (rel) {
                     out.push(base + rel);
@@ -9947,7 +9958,139 @@
                 reply(ok({ path: path, size: size }));
             }
         };
-        register(["org.webosphoenix.filemanager"], methods);
+        // ---- Drives (docs/SHARE-AND-FILES.md "Drives") --------------------------------------------
+        //
+        // Every account with the DOCUMENTS capability is a folder under
+        // /media/drives, as on a device (apps/files/service/filemanager.js):
+        // the connector kit's router (@phoenix/connector-kit lib/drives.js)
+        // takes those paths, and a copy with one side on a drive, and asks
+        // the account's connector service (block "Synergy connectors on the
+        // kit"), with this store's methods for the device's files. A drive's
+        // transfers read and write the device's files through localFiles
+        // (big files in the media store, as the Camera's pictures).
+        var DRIVES = "/media/drives";
+        function onDrive(x) { var p = typeof x === "string" ? norm(x) : null; return !!p && (p === DRIVES || p.indexOf(DRIVES + "/") === 0); }
+        function asPromise(name) {
+            return function (p) { return new Promise(function (resolve) { methods["/" + name](p || {}, resolve); }); };
+        }
+        var localMethods = {};
+        ["list", "stat", "mkdir", "remove", "read", "write", "copy", "move", "search"].forEach(function (n) { localMethods[n] = asPromise(n); });
+        var driveRouter = null;
+        function drives() {
+            if (!driveRouter) {
+                var lib = nodeServiceLoader(NODE_MODULES + "@phoenix/connector-kit/", "Drives")("lib/drives.js");
+                var bus = nodeServiceLuna("org.webosphoenix.filemanager");
+                driveRouter = lib.createDriveRouter({ call: function (uri, params) { return bus.call(uri, params); }, local: localMethods,
+                                                      log: function (m) { console.info("[drives] " + m); } });
+            }
+            return driveRouter;
+        }
+        function mediaBlob(p) { return runtime.mediaFiles ? runtime.mediaFiles.read(p) : Promise.resolve(null); }
+        var localFiles = {
+            size: function (path) {
+                var p = norm(path), n = p && load().nodes[p];
+                if (n && n.t === "d") return Promise.reject(Object.assign(new Error("Is a folder: " + p), { code: E.IS_DIR }));
+                if (n && !n.media && n.size >= 0) return Promise.resolve(n.size);
+                if (n && !n.media) return bytesOf(n, p).then(function (b) { return b.length; });
+                return mediaBlob(p).then(function (b) {
+                    if (!b) throw Object.assign(new Error("No such file: " + p), { code: E.NOT_FOUND });
+                    return b.size;
+                });
+            },
+            read: function (path, offset, length) {
+                var p = norm(path), n = p && load().nodes[p];
+                if (n && !n.media) return bytesOf(n, p).then(function (b) { return b.subarray(offset, offset + length); });
+                return mediaBlob(p).then(function (b) {
+                    if (!b) throw Object.assign(new Error("No such file: " + p), { code: E.NOT_FOUND });
+                    return blobBytes(b.slice(offset, offset + length));
+                });
+            },
+            // Under /media/internal the bytes go to the media store; elsewhere inline.
+            write: function (path, bytes, append) {
+                var p = norm(path);
+                if (!p) return Promise.reject(new Error("Not a path: " + path));
+                var put = p.indexOf(MEDIA_ROOT + "/") === 0 && runtime.mediaFiles
+                    ? (append ? mediaBlob(p) : Promise.resolve(null)).then(function (old) {
+                        var blob = new Blob(old ? [old, bytes] : [bytes], { type: mimeOf(p) });
+                        return runtime.mediaFiles.write(p, blob).then(function () { return { media: true, size: blob.size }; });
+                    })
+                    : (append ? localFiles.read(p, 0, 1 << 30).catch(function () { return new Uint8Array(0); }) : Promise.resolve(new Uint8Array(0))).then(function (old) {
+                        var all = new Uint8Array(old.length + bytes.length);
+                        all.set(old); all.set(bytes, old.length);
+                        if (all.length > INLINE_LIMIT) throw Object.assign(new Error("The simulator keeps files outside /media/internal up to 1 MB"), { code: E.TOO_LARGE });
+                        return { data: toB64(all), size: all.length };
+                    });
+                return put.then(function (r) {
+                    var v = load();
+                    for (var d = parentOf(p), missing = []; !v.nodes[d] && d !== "/"; d = parentOf(d)) missing.unshift(d);
+                    missing.forEach(function (dir) { v.nodes[dir] = { t: "d", m: Date.now(), mode: 493 }; });
+                    v.nodes[p] = r.media ? { t: "f", m: Date.now(), mode: 420, media: true, size: r.size }
+                                         : { t: "f", m: Date.now(), mode: 420, data: r.data, enc: "base64", size: r.size };
+                    if (r.media) v.mediaSeen[p] = true;
+                    touch(v, parentOf(p));
+                    if (!save(v)) throw Object.assign(new Error("Not enough room to store " + p), { code: E.TOO_LARGE });
+                });
+            },
+            rename: function (from, to) {
+                return localFiles.size(from).then(function (size) { return localFiles.read(from, 0, size); }).then(function (b) {
+                    return localFiles.write(to, b, false);
+                }).then(function () { return localFiles.remove(from); });
+            },
+            remove: function (path) {
+                var p = norm(path), v = load(), n = p && v.nodes[p];
+                if (runtime.mediaFiles && p) runtime.mediaFiles.remove(p);
+                if (n) { delete v.nodes[p]; delete v.mediaSeen[p]; save(v); }
+                return Promise.resolve();
+            }
+        };
+        function viaDrives(name) {
+            return function (p, reply) {
+                var r;
+                try { r = drives(); } catch (e) { return reply(fail(E.IO, "The drives are not available here: " + (e && e.message || e))); }
+                r[name](p || {}).then(reply, ioError(reply));
+            };
+        }
+        var registered = {};
+        Object.keys(methods).forEach(function (k) {
+            registered[k] = function (p, reply, ctx) {
+                p = p || {};
+                var routed = k === "/search" ? onDrive(p.path) : (onDrive(p.path) || onDrive(p.from) || onDrive(p.to));
+                if (routed) return viaDrives(k.slice(1))(p, reply);
+                methods[k](p, reply, ctx);
+            };
+        });
+        // /media shows the drives' folder while there is a drive account.
+        registered["/list"] = function (p, reply, ctx) {
+            p = p || {};
+            if (onDrive(p.path)) return viaDrives("list")(p, reply);
+            methods["/list"](p, function (r) {
+                if (!r.returnValue || norm(p.path) !== "/media") return reply(r);
+                var list;
+                try { list = drives().drives(); } catch (e) { return reply(r); }
+                list.then(function (d) {
+                    if (d.length && !r.entries.some(function (e) { return e.name === "drives"; }))
+                        r.entries.push({ name: "drives", path: DRIVES, type: "directory", size: 0, mtime: 0, mode: 365, readOnly: true });
+                    reply(r);
+                }, function () { reply(r); });
+            }, ctx);
+        };
+        // open {path}: a file to read by path (a drive's: its copy on the device).
+        registered["/open"] = function (p, reply) {
+            p = p || {};
+            if (onDrive(p.path)) return viaDrives("open")(p, reply);
+            var path = norm(p.path), n = path && load().nodes[path];
+            if (!n) return reply(fail(E.NOT_FOUND, "No such file or directory: " + p.path));
+            if (n.t === "d") return reply(fail(E.IS_DIR, "Is a folder: " + path));
+            reply(ok({ path: path }));
+        };
+        registered["/quota"] = viaDrives("quota");
+        registered["/transfers"] = function (p, reply) {
+            var r;
+            try { r = drives(); } catch (e) { return reply(ok({ transfers: [] })); }
+            r.transfers(p || {}).then(reply, function () { reply(ok({ transfers: [] })); });
+        };
+        registered["/cancel"] = viaDrives("cancel");
+        register(["org.webosphoenix.filemanager"], registered);
 
         // com.palm.appinstaller (Files' .ipk sheet): see "Installing apps" below.
 
@@ -10183,6 +10326,8 @@
             },
             /** Throw the virtual filesystem away and seed it again. */
             reset: function () { store.set(VFS_KEY, seed()); },
+            /** The device's files for a drive's transfers (the connector kit's LocalFiles). */
+            localFiles: localFiles,
             /** Write a file (base64), making its folders, as a service of the
                 system writes one (com.palm.image's pictures). False when it
                 does not fit in this store. */
@@ -12071,6 +12216,16 @@
             }, function () { return url; });
         }
 
+        // /etc/palm/<name> of the image (a drive provider's client id:
+        // docs/DEVELOPER-APPS.md): the simulator's store "systemConfig:<name>"
+        // first (a developer's own registration, the tests' servers), else
+        // the file the rootfs serves, if any.
+        function systemConfig(name) {
+            var kept = store.get("systemConfig:" + name, null);
+            if (kept) return Promise.resolve(kept);
+            try { return Promise.resolve(JSON.parse(PalmSystem.getResource("/etc/palm/" + name) || "null")); } catch (e) { return Promise.resolve(null); }
+        }
+
         function host(appId, service) {
             if (hosted[service]) return;
             var dir = "/usr/palm/applications/" + appId + "/service/";
@@ -12083,6 +12238,8 @@
                 var def = loadModule("connector.js");
                 made = { def: def, kit: kit, methods: kit.createConnectorService(def, {
                     luna: luna, request: request, readFile: readFile,
+                    files: runtime.fileManager && runtime.fileManager.localFiles,
+                    systemConfig: systemConfig,
                     cachePhoto: function (key, url) { return cachePhoto(service, key, url); },
                     log: function (m) { console.info("[" + service + "] " + m); }
                 }) };
@@ -12187,10 +12344,25 @@
             delete all[appId];
             store.set(INSTALLED, all);
             // Its service (a pre-installed one was never in the store's list).
+            unhost(appId);
+        };
+        function unhost(appId) {
             Object.keys(hosted).forEach(function (svc) {
                 if (hosted[svc].appId === appId) { delete hosted[svc]; delete runtime.services[svc]; }
             });
-        };
+        }
+        // Installed or removed in another page (Connections): the pages
+        // already open (System UI, Email, Files) serve it from now on too,
+        // as the bus would on a device.
+        if (global.addEventListener) global.addEventListener("storage", function (e) {
+            if (e.key !== "phoenix:" + INSTALLED) return;
+            var now = store.get(INSTALLED, {});
+            Object.keys(now).forEach(function (appId) { host(appId, now[appId]); });
+            Object.keys(hosted).forEach(function (svc) {
+                var appId = hosted[svc].appId;
+                if (!now[appId] && !runtime.preinstalledPackages().some(function (b) { return b.id === appId; })) unhost(appId);
+            });
+        });
         runtime.connectors = {
             hosted: function () { return Object.keys(hosted); },
             service: function (name) { return hosted[name] ? hosted[name].load().methods : null; }
@@ -12934,7 +13106,7 @@
                 var serviceFile = pkg.files.filter(function (f) { return f.path === app.dir + "service/package.json"; })[0];
                 var connectorService = "";
                 if (serviceFile) {
-                    if (!dev && !(firstParty && runtime.preinstalledPackages().some(function (p) { return p.id === id; })))
+                    if (!dev && !(firstParty && runtime.firstPartyPackages().some(function (p) { return p.id === id; })))
                         throw Object.assign(new Error("Synergy connectors (an account type with a background service) need Developer Mode"), { code: "NEEDS_DEVMODE" });
                     try { connectorService = JSON.parse(new TextDecoder().decode(serviceFile.data)).name || ""; } catch (e) { connectorService = ""; }
                 }
@@ -13269,6 +13441,9 @@
                     // appinfo.json is read once per page: the service asks at
                     // every call, and only uses the version the first time it
                     // counts the package as installed.
+                    firstParty: function () {
+                        return runtime.firstPartyPackages().map(function (p) { return { id: p.id, sourceId: p.sourceId || "phoenix" }; });
+                    },
                     preinstalled: function () {
                         if (!preinstalledInfo) {
                             preinstalledInfo = runtime.preinstalledPackages().map(function (p) {
@@ -14578,7 +14753,41 @@
 
         // ---- Writing a file -------------------------------------------------------------
 
+        // A drive's folder (/media/drives/<accountId>/...; docs/SHARE-AND-FILES.md
+        // "Drives"): the file manager uploads it (copied from `from`, or from
+        // `data` kept on the device a moment first); the upload's progress is
+        // in the notification area's ongoing activities.
+        var DRIVES = "/media/drives/";
+        function writeToDrive(dest, req, overwrite) {
+            var lf = runtime.fileManager && runtime.fileManager.localFiles;
+            var temp = MEDIA + "/.phoenix/drive-cache/.transfer/" + Date.now().toString(36) + "-" + dest.replace(/^.*\//, "");
+            function upload(from) {
+                return callP("luna://org.webosphoenix.filemanager/copy", { from: from, to: dest, overwrite: !!overwrite }).then(function (r) {
+                    if (!r || r.returnValue === false) throw Object.assign(new Error(r && r.errorText || "Could not save to the drive"), { errorCode: r && r.errorCode });
+                });
+            }
+            function viaTemp(bytesP) {
+                if (!lf) return Promise.reject(new Error("No device files here"));
+                return bytesP.then(function (bytes) { return lf.write(temp, bytes, false); }).then(function () { return upload(temp); })
+                    .then(function () { return lf.remove(temp); }, function (e) { return lf.remove(temp).then(function () { throw e; }); });
+            }
+            if (req.data !== undefined) {
+                var bin = atob(String(req.data).replace(/^data:[^,]*,/, "")), bytes = new Uint8Array(bin.length);
+                for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                return viaTemp(Promise.resolve(bytes));
+            }
+            return upload(req.from).then(null, function (e) {
+                // Not one of the user's files (a sample of the system image): its bytes, from where the system serves it.
+                if (e.errorCode !== 1 || !global.fetch) throw e;
+                return viaTemp(global.fetch(req.from).then(function (res) {
+                    if (!res.ok) throw e;
+                    return res.arrayBuffer();
+                }).then(function (b) { return new Uint8Array(b); }));
+            });
+        }
+
         function writeTo(dest, req, overwrite) {
+            if (dest.indexOf(DRIVES) === 0) return writeToDrive(dest, req, overwrite);
             var mf = runtime.mediaFiles;
             var before = overwrite ? callP("luna://org.webosphoenix.filemanager/remove", { path: dest }) : Promise.resolve();
             return before.then(function () {
@@ -14722,11 +14931,24 @@
                 var title = p.title || (kinds.length === 1 && kinds[0] === "image" ? (multiple ? "Choose Pictures" : "Choose a Picture")
                                                                                    : (multiple ? "Choose Files" : "Choose a File"));
                 showSheet("pick", { title: title, kinds: kinds, multiple: multiple, crop: crop, extensions: exts }).then(function (r) {
-                    if (!r || r.action !== "pick" || !r.files || !r.files.length) return reply(ok({ canceled: true }));
+                    if (!r || r.action !== "pick" || !r.files || !r.files.length) return null;
+                    // A file of a drive: the app gets the device's copy of it
+                    // (the file manager's open: downloaded, or the copy kept
+                    // when it has not changed), and where it came from.
+                    return Promise.all(r.files.map(function (f) {
+                        if (f.path.indexOf(DRIVES) !== 0) return f;
+                        return callP("luna://org.webosphoenix.filemanager/open", { path: f.path }).then(function (o) {
+                            if (!o || o.returnValue === false) throw new Error((o && o.errorText) || "Could not open " + f.path);
+                            return Object.assign({}, f, { path: o.path, remotePath: f.path });
+                        });
+                    })).then(function (picked) { return { files: picked }; });
+                }).then(function (r) {
+                    if (!r) return reply(ok({ canceled: true }));
                     var files = r.files.map(function (f) {
                         var o = { fullPath: f.path, mimeType: f.mimeType || "", name: f.path.replace(/^.*\//, "") };
                         if (f.size !== undefined) o.size = f.size;
                         if (f.cropInfo) o.cropInfo = f.cropInfo;
+                        if (f.remotePath) o.remotePath = f.remotePath;
                         return o;
                     });
                     var first = files[0];
@@ -14742,6 +14964,9 @@
                         if (c.returnValue !== false) first.croppedPath = dest;
                         reply(ok({ files: files }));
                     });
+                }).then(null, function (e) {
+                    // A drive's file could not be had (offline, signed out).
+                    reply(fail(-1, String(e && e.message || e)));
                 });
             },
             "/save": function (p, reply) {

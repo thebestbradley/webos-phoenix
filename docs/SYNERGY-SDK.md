@@ -201,6 +201,33 @@ have `watch: {query, method}`: an activity with a db8 trigger calls that
 method when the query matches (the outbox of pending messages, as mojomail
 watched its outbox).
 
+**A drive** (cloud storage as a place in Files, the pickers and Save to
+Files) is the legacy `DOCUMENTS` capability with `files(ctx)` instead: it
+returns the account's provider (`DriveProvider`, connector-kit
+`src/files.ts`): `list(path)`, `stat(path)`, `download(entry, sink, opts)`
+(`kit.downloadInRanges` does it with ranged GETs), `upload(path, source,
+opts)` (source: `{size, name, mimeType, read(offset, length)}`;
+`kit.forEachChunk` cuts it in `opts.chunkSize` pieces, reporting
+`opts.onProgress(done, total)` and stopping when `opts.signal.aborted`),
+`mkdir`, `move(from, to, {overwrite})`, `copy?`, `remove`,
+`search?(query, {path, limit})` and `quota?()`. Paths are the drive's own
+(`/Photos/lake.png`); entries are `{name, path, type: "file" |
+"directory", size, mtime, mimeType?, etag?, id?}`.
+The kit makes the service methods from it (`listFiles`, `statFile`,
+`downloadFile`, `uploadFile`, `makeFolder`, `moveFile`, `copyFile`,
+`removeFile`, `searchFiles`, `driveQuota`, `transfers`, `cancelTransfer`:
+reserved names), runs transfers as ongoing activities with progress and
+cancel, and turns failures into the numbers apps see (`FILE_ERRORS`:
+OFFLINE 10 for no connection, AUTH 11 for a 401, QUOTA 12, CANCELED 13,
+NOT_AVAILABLE 14, UNSUPPORTED 15, RATE_LIMITED 16 with `retryAt`;
+`kit.fileError(code, text)`, `kit.httpError(status, what)`). A drive has
+no periodic sync (its "sync" checks the drive answers); nothing is copied
+ahead. `chunkSize` (64 KB or more, 8 MB by default) on the capability.
+Files reaches it through the kit's drive router (`createDriveRouter`,
+`/media/drives/<accountId>/...`; [SHARE-AND-FILES.md](SHARE-AND-FILES.md)
+"Drives"). `apps/connectors/drives` is the worked example: WebDAV, S3,
+Dropbox, Microsoft Graph, Google Drive and Box behind that one interface.
+
 **What every function gets (`ctx`):**
 
 | | |
@@ -210,6 +237,7 @@ watched its outbox).
 | `ctx.oauth` | `token(keyId)`, `forget(keyId)`: tokens the OAuth service keeps for you (section 6) |
 | `ctx.cachePhoto(key, url)` | A remote picture as a file of the device (a contact's photo must be a file: the Contacts framework checks with `palmGetResource`) |
 | `ctx.readFile(path)` | A file the user shares: `{bytes, mimeType}` |
+| `ctx.systemConfig(name)` | `/etc/palm/<name>` of the image, parsed (an OAuth client id kept out of the source tree: [DEVELOPER-APPS.md](DEVELOPER-APPS.md)); `null` when there is none |
 | `ctx.log(text)`, `ctx.now()` | Never log tokens, message text or addresses (3.2 rule 9) |
 | Account functions also: `ctx.accountId`, `ctx.account`, `ctx.credentials` (the account's `common` credentials), `ctx.config` (the validator's config, kept since `onCreate`), `ctx.state` (yours, saved after the call when it changed), `ctx.notify({title, body, appId, params})` (a notification: `com.webos.notification` `createToast`), `ctx.putMessage(message)` (into Messaging: `org.webosports.service.messaging` `putMessage`) | |
 
@@ -460,6 +488,7 @@ manager in memory. A connector must pass it to be listed:
 | rate limit | a 429 with `Retry-After` stops the sync, and nothing reaches the server before then |
 | conflict | (two-way) a field edited on both sides keeps both edits or records the loser |
 | share, share limits, share errors | (with `share`) section 7, "Testing it" |
+| drive lifecycle, drive files, drive unauthorized, drive rate limit | (a drive, in place of lifecycle to rate limit) no periodic sync and the sync checks the drive; upload, list, download, refuse to overwrite, rename, remove; a 401 is AUTH (11) for the files and `401_UNAUTHORIZED` for the account; a 429 is RATE_LIMITED (16) and nothing is sent before its `retryAt` |
 
 The fixture (`service/test/fixture.js`) gives the template, what the sign-in
 page sends (`validateParams`), `server()` (a fake server: `request`,

@@ -36,6 +36,7 @@ import * as synckit from "@phoenix/synckit";
 import type { DbObject, ItemStore } from "@phoenix/synckit";
 import { emptyStats, removeObjects, syncObjects, type CapabilityStats } from "./engine";
 import { checkShare, maxBytesOf } from "./share";
+import { createFilesMethods, DEFAULT_CHUNK, fileError, FILE_ERRORS, FILES_METHODS } from "./files";
 import type {
     AccountContext, BaseContext, ConnectorDefinition, Environment, Json, MethodContext, Reply, ServiceMethods, ValidateContext
 } from "./types";
@@ -47,7 +48,12 @@ function ok(extra?: Json): Reply { return Object.assign({ returnValue: true }, e
 
 /** Every method name the service registers. */
 export function methodNames(def: ConnectorDefinition): string[] {
-    return CALLBACKS.concat(def.share ? ["share"] : [], Object.keys(def.methods || {}));
+    return CALLBACKS.concat(def.share ? ["share"] : [], hasFiles(def) ? FILES_METHODS : [], Object.keys(def.methods || {}));
+}
+
+/** A drive: a capability with files (DOCUMENTS). */
+export function hasFiles(def: ConnectorDefinition): boolean {
+    return Object.keys(def.capabilities || {}).some((id) => !!(def.capabilities[id] && def.capabilities[id].files));
 }
 
 export function createConnectorService(def: ConnectorDefinition, env: Environment): ServiceMethods {
@@ -79,7 +85,8 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
                 maxWaitMs: env.maxWaitMs, now, sleep: env.sleep, log, userAgent: def.userAgent
             }),
             cachePhoto: env.cachePhoto || (async (_key: string, url: string) => url),
-            readFile: env.readFile || (async (path: string) => { throw new Error("cannot read " + path + " here"); })
+            readFile: env.readFile || (async (path: string) => { throw new Error("cannot read " + path + " here"); }),
+            systemConfig: (name: string) => (env.systemConfig ? env.systemConfig(name).catch(() => null) : Promise.resolve(null))
         };
     }
 
@@ -239,6 +246,11 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
                     }
                 } else if (cap.sync) {
                     stats[id] = (await cap.sync(ctx)) || {};
+                } else if (cap.files) {
+                    // A drive keeps nothing on the device: its sync checks that it
+                    // answers, so a refused sign-in shows on the account.
+                    await (await cap.files(ctx)).stat("/");
+                    stats[id] = {};
                 } else {
                     stats[id] = emptyStats();
                 }
@@ -297,6 +309,11 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
             if (!def.capabilities[providerId]) return { returnValue: false, errorCode: "UNSUPPORTED_CAPABILITY", errorText: "not a capability of " + def.service };
             try {
                 if (p.enabled) {
+                    const cap = def.capabilities[providerId];
+                    if (cap.files && !cap.sync && !cap.pull) {
+                        // A drive is browsed on demand: no periodic sync, no background use.
+                        return ok();
+                    }
                     if (env.periodicSync !== false) {
                         await scheduler.schedule(p.accountId, {
                             every: (def.schedule && def.schedule.every) || "1h",
@@ -407,12 +424,36 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
                 return ok(Object.assign({ posted }, posted.url ? { url: posted.url } : {}));
             } catch (e) {
                 const r = synckit.fail(e) as Reply;
-                const code = r.errorCode || "";
+                const code = String(r.errorCode || "");
                 // Trying again later may post it (the same idempotencyKey: once).
                 r.retryable = ["503_SERVICE_UNAVAILABLE", "500_SERVER_ERROR", "CONNECTION_FAILED", "CONNECTION_TIMEOUT", "HOST_NOT_FOUND"].indexOf(code) >= 0 || !!r.retryAt;
                 return r;
             }
         };
+    }
+
+    // Drives (the DOCUMENTS capability): files.ts.
+    if (hasFiles(def)) {
+        const filesMethods = createFilesMethods({
+            call: (uri: string, params: Json) => Promise.resolve(env.luna.call(uri, params)),
+            files: env.files, now, log,
+            withProvider: async (accountId, fn) => {
+                const { ctx, rec } = await accountContext(accountId);
+                if (!ctx.account || !ctx.account.templateId || ctx.account.beingDeleted || def.templateIds.indexOf(ctx.account.templateId) < 0)
+                    throw fileError(FILE_ERRORS.NOT_FOUND, "No such drive account: " + accountId);
+                const id = enabledProviders(ctx.account).filter((x) => !!def.capabilities[x].files)[0];
+                if (!id) throw fileError(FILE_ERRORS.PERMISSION, "Files are turned off for this account (Accounts)");
+                const cap = def.capabilities[id];
+                const before = snapshot(rec);
+                try {
+                    const provider = await (cap.files as NonNullable<typeof cap.files>)(ctx);
+                    return await fn(provider, ctx, cap.chunkSize || DEFAULT_CHUNK);
+                } finally {
+                    if (snapshot(rec) !== before) await saveState(rec, before).catch((e: Error) => log("state not saved: " + e.message));
+                }
+            }
+        });
+        Object.keys(filesMethods).forEach((name) => { methods[name] = filesMethods[name]; });
     }
 
     Object.keys(def.methods || {}).forEach((name) => {

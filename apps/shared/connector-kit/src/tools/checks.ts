@@ -74,10 +74,10 @@ export const GENERIC_KINDS: Record<string, string[]> = {
     IM: ["com.palm.message:1", "com.palm.immessage:1", "com.palm.imbuddystatus:1", "com.palm.imloginstate:1"]
 };
 
-/** The services a connector's service may call (3.2 rule 10, and what SOCIAL and MESSAGING connectors need). */
+/** The services a connector's service may call (3.2 rule 10, and what SOCIAL and MESSAGING connectors need; a drive's transfers show in the ongoing activities). */
 export const ALLOWED_OUTBOUND = ["com.palm.db", "com.palm.tempdb", "com.palm.activitymanager", "com.palm.service.accounts",
                                  "org.webosphoenix.service.oauth", "org.webosphoenix.service.keystore", "org.webosphoenix.service.push",
-                                 "com.webos.notification", "org.webosports.service.messaging"];
+                                 "com.webos.notification", "org.webosports.service.messaging", "org.webosphoenix.ongoing"];
 
 const CALLBACKS = ["onCreate", "onEnabled", "onDelete", "onCredentialsChanged", "sync"];
 const SYSBUS_REQUIRED = [".service", ".role.json", ".api.json"];

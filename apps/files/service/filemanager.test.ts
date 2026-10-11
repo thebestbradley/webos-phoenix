@@ -35,8 +35,33 @@ afterEach(() => rmSync(root, { recursive: true, force: true }));
 const names = (r: Reply) => (r.entries as { name: string }[]).map((e) => e.name).sort();
 
 describe("org.webosphoenix.filemanager (device service)", () => {
-    it("has the nine methods", () => {
-        expect(METHODS).toEqual(["list", "stat", "mkdir", "copy", "move", "remove", "read", "write", "search"]);
+    it("has the methods, the drives' among them", () => {
+        expect(METHODS).toEqual(["list", "stat", "mkdir", "copy", "move", "remove", "read", "write", "search", "open", "quota", "transfers", "cancel"]);
+    });
+
+    it("hands the drives' paths (and copies to or from one) to the drives' router", async () => {
+        const seen: string[] = [];
+        let localApi: Api | null = null;
+        const router: Record<string, unknown> = {
+            handles: (p: unknown) => typeof p === "string" && (p === "/media/drives" || p.startsWith("/media/drives/")),
+            drives: async () => [{ accountId: "a1" }]
+        };
+        for (const m of ["list", "stat", "mkdir", "copy", "move", "remove", "read", "write", "search", "open", "quota", "transfers", "cancel"])
+            router[m] = async (p: Record<string, unknown>) => { seen.push(m + " " + (p.path || p.from + ">" + p.to || "")); return { returnValue: true, entries: [] }; };
+        const routed = (createFileManager as unknown as (o: object) => Api & Record<string, (p: object) => Promise<Reply>>)({
+            writableRoots: [home], drives: (local: Api) => { localApi = local; return router; }
+        });
+        await routed.list({ path: "/media/drives/a1/Photos" });
+        await routed.copy({ from: join(home, "Documents", "a.txt"), to: "/media/drives/a1/a.txt" });
+        await routed.read({ path: "/media/drives/a1/a.txt" });
+        await routed.transfers({});
+        expect(seen).toEqual(["list /media/drives/a1/Photos", "copy " + join(home, "Documents", "a.txt") + ">/media/drives/a1/a.txt",
+                              "read /media/drives/a1/a.txt", "transfers undefined>undefined"]);
+        // The device's own files stay the file manager's.
+        expect(names(await routed.list({ path: join(home, "Documents") }))).toEqual(["a.txt"]);
+        expect(localApi).not.toBeNull();
+        // open of a device file: the file itself.
+        expect(await routed.open({ path: join(home, "Documents", "a.txt") })).toMatchObject({ returnValue: true, path: join(home, "Documents", "a.txt") });
     });
 
     it("searches names under a folder, every word, hidden ones skipped", async () => {

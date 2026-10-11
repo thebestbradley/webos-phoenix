@@ -79,6 +79,22 @@
   "svg": "70c8318b1b0dbe3af51f9601e9cdc41f75520b5db4b13d62dcb2e98ffd35a8de",
   "png": "dc0997a46eb455a9a65782aa821c87e2b4665fdac032a08b63d78bc8cb4d57e1"
  },
+ "apps/connectors/drives/icon-128x128.png": {
+  "svg": "07eb7f3096ef1d4532a2c1424b33b6f51e98b5fce78ba2efa9c7866498ff6c1f",
+  "png": "88d55bdbb219a2ab1d501f836f6caba7ff7b37db475c6837741fc8c13d5b557f"
+ },
+ "apps/connectors/drives/icon-256x256.png": {
+  "svg": "65050914c51e913b4ab1904f2936e7fff1551b2a02a7639e47aee5c9a1231f97",
+  "png": "212b30fc06779e4be688a63256ba2caf474d66fa545ee97fef9ff835ed00e93b"
+ },
+ "apps/connectors/drives/icon-512x512.png": {
+  "svg": "631ea0013c63d125fe6b9bd429be813b17ad12dbddc88b339b4c6967112dd570",
+  "png": "7a10c3d04a4912bce0073ffebe911f9a8565e38046b2b748019c73e8f28cbb54"
+ },
+ "apps/connectors/drives/icon.png": {
+  "svg": "588cfa46f5c11bdb4bee465274321051dbd30d50699e791d7b0b9fc3f5ff394e",
+  "png": "8c65538e8f89a9ea9b27a5cd5241818a41a5c2b5530d7b6b3c57d5f2959cae0e"
+ },
  "apps/dav/icon-128x128.png": {
   "svg": "abf5ef5f74a6737a7c880235be1c62f39f029ba7ec62efa0792d02f9092a8f91",
   "png": "afd6d75bda2a9a24a23534bf995ab4c98884292d9b41c351da172ee071f86433"

@@ -736,7 +736,7 @@ Most providers Phoenix connects to accept **public clients with PKCE**:
 the device does everything, no server sees a token
 ([SYNERGY-MODERN.md](SYNERGY-MODERN.md) 4.4: Google (its desktop "secret"
 is not treated as secret), Microsoft (public client), Mastodon (per-device
-registration), Dropbox, Box, Spotify). Those need nothing from the
+registration), Dropbox, Spotify; Box, but for its secret: Q78). Those need nothing from the
 platform but the registration itself, whose **client id is public** and
 ships in the connector package.
 
@@ -785,7 +785,8 @@ redirect URLs registered.
 | --- | --- | --- | --- |
 | Google (Drive, Calendar; Gmail later) | Public client, PKCE | client id (and its non-secret desktop secret) | Relay for Calendar/Gmail push; domain verification; OAuth consent screen's homepage and privacy policy on the website |
 | Microsoft (Entra app) | Public client | client id | Relay for Graph webhooks |
-| Dropbox, Box, Spotify | PKCE | client id | nothing |
+| Dropbox, Spotify | PKCE | client id | nothing |
+| Box | PKCE, but its token exchange asks for the secret | client id (the secret: Q78) | the broker, if Q78 says so |
 | Slack, LinkedIn, Zoom, Yahoo | Confidential | client id | the broker holds the secret |
 | Telegram | `api_id` / `api_hash` for TDLib, not OAuth | both, as every open-source Telegram client does; Telegram asks each fork to register its own | nothing; kept out of the public tree as a build setting (SYNERGY-CONNECTORS.md 7), knowing it can be read from an image |
 | Bluesky (atproto OAuth) | Client id is a URL | the URL | the metadata JSON at a stable address (6.5.6) |

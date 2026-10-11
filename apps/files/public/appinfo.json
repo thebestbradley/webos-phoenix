@@ -13,7 +13,7 @@
     "uiRevision": 2,
     "phoenix": {
         "//": "Phoenix launcher metadata (docs/APP-RUNTIME.md): launcherTab 0 = Apps, 1 = Downloads, 2 = Settings.",
-        "launchParams": ["path"],
+        "launchParams": ["path", "transfer"],
         "launcherTab": 0
     },
     "//requiredPermissions": "OSE access control groups for the services the app calls (the groups in each service's sysbus api.json; filemanager.operation is apps/files/service's).",

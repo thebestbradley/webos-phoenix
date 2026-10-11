@@ -114,6 +114,10 @@ function clone(o) { return JSON.parse(JSON.stringify(o)); }
 //            connector packages the device came with
 //            (/etc/palm/marketplace/preinstalled.json), the version each
 //            has now (its appinfo.json)
+//   firstParty() (optional) -> [{id, sourceId}]: Phoenix's own connector
+//            packages the device does not come with but trusts from its
+//            catalog (preinstalled.json "catalog": the drives), installed
+//            without Developer Mode as the pre-installed ones are
 //   now(), log(msg) (optional)
 //   pending({appId, catalogId, sourceId, title, icon, state, progress,
 //            errorText}) (optional): an install as it goes, for the
@@ -173,6 +177,10 @@ function createPackagesService(deps) {
         try { return (deps.preinstalled ? deps.preinstalled() : []) || []; } catch (e) { return []; }
     }
     function isPreinstalled(id) { return preinstalledList().some(function (p) { return p.id === id; }); }
+    function isFirstParty(id) {
+        if (isPreinstalled(id)) return true;
+        try { return ((deps.firstParty ? deps.firstParty() : []) || []).some(function (p) { return p.id === id; }); } catch (e) { return false; }
+    }
     function sourceOf(s, id) { return s.sources.filter(function (x) { return x.id === id; })[0] || null; }
     function publicSource(x) {
         return { id: x.id, name: x.name, kind: x.kind, url: x.url, enabled: x.enabled, builtin: !!x.builtin,
@@ -364,6 +372,12 @@ function createPackagesService(deps) {
             (idx.accounts || []).forEach(function (t) {
                 if (seen[t.templateId]) return;
                 seen[t.templateId] = true;
+                // Phoenix's own connector from the catalog the device ships with
+                // (pre-installed or preinstalled.json "catalog": the drives):
+                // installed without Developer Mode (firstPartyEntry).
+                if (t.package && !t.package.builtin && isFirstParty(t.package.id) && src.builtin && !!src.key) {
+                    t = Object.assign({}, t, { package: Object.assign({}, t.package, { firstParty: true }) });
+                }
                 out.push(t);
             });
         });
@@ -422,13 +436,14 @@ function createPackagesService(deps) {
     }
 
     // Whether an entry is a first-party connector the device vouches for:
-    // one it came with (preinstalled), from a Phoenix catalog it ships with
+    // one it came with (preinstalled) or one of Phoenix's own it lists as
+    // installed from the catalog (firstParty: the drives), from a Phoenix catalog it ships with
     // (a builtin source) whose key is the one the device was given or the
     // user checked: its index is signed with that key, so the package (its
     // SHA-256 in the index) is the catalog's.
     function firstPartyEntry(s, entry) {
         var src = sourceOf(s, entry.sourceId);
-        return entry.kind === "connector" && isPreinstalled(entry.id) && !!src && src.builtin && src.kind === "phoenix" && !!src.key;
+        return entry.kind === "connector" && isFirstParty(entry.id) && !!src && src.builtin && src.kind === "phoenix" && !!src.key;
     }
 
     // The package's bytes -> its app, or an error saying why it cannot be installed.

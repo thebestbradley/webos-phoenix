@@ -8,6 +8,11 @@
 //       the system is). On a device it is the Node.js service in
 //       apps/files/service; the simulator backs it with a virtual
 //       filesystem (runtime/phoenix-runtime.js, block "File manager").
+//       The drives (Synergy accounts with the DOCUMENTS capability: Nextcloud,
+//       WebDAV, S3, Dropbox, OneDrive, Google Drive, Box) are folders under
+//       /media/drives (DRIVES_ROOT): the same methods, plus open (a file's
+//       copy on the device), quota, transfers and cancel
+//       (docs/SHARE-AND-FILES.md "Drives").
 //   com.palm.appinstaller          legacy webOS: installNoVerify {target,
 //       subscribe} installs an .ipk and reports {ticket, status} until
 //       SUCCESS or FAILED_*, as the Preware-era file managers called it
@@ -41,7 +46,58 @@ export const FILE_ERRORS = {
     INVALID: 8,
     /** Anything else. */
     IO: 9,
+    /** A drive could not be reached: nothing was lost, try again online. */
+    OFFLINE: 10,
+    /** A drive refused the sign-in: sign in again in Accounts. */
+    AUTH: 11,
+    /** The drive is full. */
+    QUOTA: 12,
+    /** A transfer was cancelled. */
+    CANCELED: 13,
+    /** The drive's provider is not set up in this build (no client id). */
+    NOT_AVAILABLE: 14,
+    /** The drive cannot do that (e.g. search). */
+    UNSUPPORTED: 15,
+    /** The drive asked to wait (retryAt). */
+    RATE_LIMITED: 16,
 } as const;
+
+/** Where the drives are: /media/drives/<accountId>/... */
+export const DRIVES_ROOT = "/media/drives";
+
+/** A drive account, on its folder's entry (/media/drives/<accountId>). */
+export interface DriveInfo {
+    accountId: string;
+    templateId: string;
+    /** The account type ("Nextcloud"). */
+    title: string;
+    /** The account (user@server). */
+    account: string;
+    icon: string;
+}
+
+/** An upload or download of a drive under way. */
+export interface Transfer {
+    id: string;
+    accountId: string;
+    direction: "upload" | "download";
+    name: string;
+    path: string;
+    done: number;
+    total: number;
+    startedAt: number;
+}
+
+/** Is the path a drive's (or the drives' folder)? */
+export function isDrivePath(path: string): boolean {
+    return path === DRIVES_ROOT || path.startsWith(DRIVES_ROOT + "/");
+}
+
+/** /media/drives/<accountId> of a path inside a drive, or null. */
+export function driveRootOf(path: string): string | null {
+    const m = /^\/media\/drives\/[^/]+/.exec(path);
+    return m ? m[0] : null;
+}
 
 export type FileType = "file" | "directory";
 
@@ -63,6 +119,11 @@ export interface FileEntry {
     link?: boolean;
     /** Folders: how many entries (stat only). */
     count?: number;
+    /** On a drive (opened through a copy on the device). */
+    remote?: boolean;
+    /** A drive's own folder: which account. */
+    drive?: DriveInfo;
+    mimeType?: string;
 }
 
 export type FileEncoding = "utf8" | "base64";
@@ -96,6 +157,13 @@ declare module "./types" {
             params: { path: string; data: string; encoding?: FileEncoding; overwrite?: boolean };
             result: { path: string; size: number };
         };
+        "luna://org.webosphoenix.filemanager/open": {
+            params: { path: string };
+            result: { path: string; remotePath?: string; entry?: FileEntry; stale?: boolean; cached?: boolean };
+        };
+        "luna://org.webosphoenix.filemanager/quota": { params: { path: string }; result: { used: number; total?: number } };
+        "luna://org.webosphoenix.filemanager/transfers": { params: Record<string, never>; result: { transfers: Transfer[] } };
+        "luna://org.webosphoenix.filemanager/cancel": { params: { transferId: string }; result: Record<string, never> };
         "luna://com.palm.appinstaller/installNoVerify": { params: { target: string; subscribe?: boolean }; result: InstallStatus };
         "luna://com.webos.applicationManager/listAllHandlersForMime": { params: { mime: string }; result: { resources?: MimeHandler[] } };
         "luna://com.webos.applicationManager/open": { params: { target: string; id?: string }; result: Record<string, unknown> };
@@ -147,7 +215,36 @@ export const fileManager = {
     writeBase64(path: string, data: string, overwrite = true) {
         return call(`${FM}/write`, { path, data, encoding: "base64", overwrite });
     },
+    /**
+     * open {path}: a file to read by path. A drive's file: its copy on the
+     * device (downloaded, or the copy kept when it has not changed; offline,
+     * the last copy with stale: true).
+     */
+    open(path: string) {
+        return call(`${FM}/open`, { path });
+    },
+    /** quota {path}: how full a drive is (bytes). */
+    quota(path: string) {
+        return call(`${FM}/quota`, { path });
+    },
+    /** transfers {}: the drives' uploads and downloads under way. */
+    async transfers(): Promise<Transfer[]> {
+        try { return (await call(`${FM}/transfers`, {})).transfers ?? []; } catch { return []; }
+    },
+    /** cancel {transferId}: stop an upload or download between two chunks. */
+    cancel(transferId: string) {
+        return call(`${FM}/cancel`, { transferId });
+    },
+    /** The drive accounts (/media/drives), [] when there are none. */
+    async drives(): Promise<FileEntry[]> {
+        try { return (await call(`${FM}/list`, { path: DRIVES_ROOT })).entries; } catch { return []; }
+    },
 };
+
+/** A drive folder's name: the account type and account for its own folder, else the folder's. */
+export function driveTitle(entry: Pick<FileEntry, "name" | "drive">): string {
+    return entry.drive ? entry.drive.title : entry.name;
+}
 
 // ---- com.palm.appinstaller (legacy) ----------------------------------------------------
 
@@ -178,6 +275,10 @@ export const openWith = {
         } catch {
             return [];
         }
+    },
+    /** launch {id, params}: an app (Accounts, to sign in to a drive again). */
+    launchApp(appId: string, params: Record<string, unknown> = {}) {
+        return call("luna://com.webos.applicationManager/launch", { id: appId, params });
     },
     /** launch {id, params: {target}}: open the file in that app. */
     launch(appId: string, path: string) {

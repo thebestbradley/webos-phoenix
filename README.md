@@ -482,6 +482,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `node tools/test-passwords.cjs` | Passwords (KeePass) |
 | `node tools/test-authenticator.cjs` | Authenticator (TOTP/HOTP) |
 | `node tools/test-clipboard.cjs` | Clipboard history: the Clipboard app and Settings > Clipboard |
+| `node tools/test-drives.cjs` | Drives (Synergy DOCUMENTS) against fake WebDAV, Nextcloud Login Flow v2 and Dropbox servers: installed from the catalog, signed in, browsed and opened in Files, Save to Files from Screenshot, shared from Files, the file picker, a chunked upload as an ongoing activity, offline |
 | `node tools/test-sharing.cjs` | Sharing, sync and health (M6 F4): DropShare (Settings, receiving into Downloads, sending, the share sheet, Touch to Share), a subscribed .ics calendar, the temperature warnings |
 | `node tools/test-community.cjs` | The community's features (M6 F4): Settings > Advanced, repeat alerts and lock screen previews reaching the shell, Contacts' tones and a text's tone, Email's cycling dashboard |
 | `node tools/test-assistant.cjs` | The Assistant: the app's commands, read-backs and choices, Settings > Assistant with a stand-in cloud provider, the permission gate, conversations (the panes on a phone and a tablet, swipe to delete, Open in New Card with two cards) |

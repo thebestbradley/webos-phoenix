@@ -571,18 +571,22 @@ final class Catalog
             throw new CheckFailed('package: {id: the providing app or service, builtin, preinstalled?}');
         }
         // Here (catalog/accounts.json): built in (part of the system, never removed: the generic
-        // logins), or a first-party connector package Phoenix comes with (builtin false,
+        // logins), a first-party connector package Phoenix comes with (builtin false,
         // preinstalled true: removable, installed again from the catalog; the package is uploaded
-        // as Phoenix's own, firstPartyPackages). A developer's connector lists its own (catalog.json).
+        // as Phoenix's own, firstPartyPackages), or one of Phoenix's own connector packages that
+        // is installed from the catalog only (builtin false, no preinstalled: the drives; its id
+        // in Phoenix's namespaces, the package uploaded as Phoenix's own; devices trust it from
+        // preinstalled.json "catalog"). A developer's connector lists its own (catalog.json).
         $preinstalled = $package['preinstalled'] ?? false;
         if (!is_bool($preinstalled) || ($preinstalled && ($package['builtin'] ?? null) !== false)) {
             throw new CheckFailed('package: preinstalled is true or false, and only for a package (builtin: false)');
         }
+        $phoenixOwn = str_starts_with($package['id'], 'org.webosphoenix.') || str_starts_with($package['id'], 'com.webosphoenix.');
         if ($fromPackage ? (($package['builtin'] ?? null) !== false || $preinstalled)
-                         : (($package['builtin'] ?? null) !== true && !$preinstalled)) {
+                         : (($package['builtin'] ?? null) !== true && !$preinstalled && !(($package['builtin'] ?? null) === false && $phoenixOwn))) {
             throw new CheckFailed($fromPackage ? 'package: a connector package\'s (builtin: false)'
-                : 'package: built in (builtin: true), or a connector package Phoenix comes with (builtin: false, preinstalled: true); '
-                  . 'any other connector package lists its own (catalog.json)');
+                : 'package: built in (builtin: true), a connector package Phoenix comes with (builtin: false, preinstalled: true), '
+                  . 'or one of Phoenix\'s own (org.webosphoenix.*, builtin: false); any other connector package lists its own (catalog.json)');
         }
         // The icon: a file under the published icons/accounts/, copied from iconFrom (a file in
         // this checkout), or an https:// address.
