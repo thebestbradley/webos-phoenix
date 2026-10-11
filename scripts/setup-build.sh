@@ -36,14 +36,21 @@ cd "$BUILD_DIR"
 git checkout -q "$BUILD_WEBOS_COMMIT"
 
 # mcf only resolves layer paths relative to the build directory, so link
-# this repository in and register meta-phoenix from there (empty URL means
-# "don't clone"). Priority 60 puts it above meta-webos and the BSP layers.
+# meta-phoenix in and register it from there (empty URL means "don't
+# clone"). Priority 60 puts it above meta-webos and the BSP layers. The link
+# is the layer itself, not this repository: mcf walks a layer's location for
+# <name>/conf/layer.conf and keeps the last match (mcf, traversedir), so
+# given the whole checkout it could pick another copy, such as a git
+# worktree's under .claude/worktrees. A build directory set up before this
+# registered 'webos-phoenix'; its entry is replaced.
 ln -sfn "$REPO_DIR" webos-phoenix
-if ! grep -q "'meta-phoenix'" weboslayers.py; then
+ln -sfn "$REPO_DIR/meta-phoenix" meta-phoenix
+if ! grep -q "'meta-phoenix',.*'meta-phoenix')" weboslayers.py; then
     python3 - <<'PY'
 path = "weboslayers.py"
-src = open(path).read()
-entry = "('meta-phoenix',              60, '', '', 'webos-phoenix'),\n"
+src = "".join(l for l in open(path).read().splitlines(True)
+              if "('meta-phoenix'," not in l)
+entry = "('meta-phoenix',              60, '', '', 'meta-phoenix'),\n"
 start = src.index("webos_layers = [")
 end = src.index("\n]", start)
 open(path, "w").write(src[:end + 1] + entry + src[end + 1:])
