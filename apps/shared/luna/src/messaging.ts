@@ -60,6 +60,8 @@ export const IM_MESSAGE_KINDS: Record<string, string> = {
     type_jabber: "com.palm.immessage.xmpp:1",
     // The Fediverse account's direct mentions (apps/fediverse; docs/SYNERGY-CONNECTORS.md C2).
     type_fediverse: "com.palm.immessage.fediverse:1",
+    // The Bluesky account's direct messages (apps/connectors/bluesky).
+    type_bluesky: "com.palm.immessage.bluesky:1",
 };
 
 export const AVAILABILITY = { AVAILABLE: 0, MOBILE: 1, BUSY: 2, INVISIBLE: 3, OFFLINE: 4 } as const;
@@ -274,6 +276,9 @@ export const IM_SERVICES: { id: string; label: string; available: boolean; prese
     // (docs/SYNERGY-MODERN.md 3.1: shown "with a not private label").
     { id: "type_fediverse", label: "Fediverse", available: true, presence: false,
       notPrivate: "Not private: direct mentions are not encrypted, and the admins of both servers can read them." },
+    // Bluesky's direct messages: no presence; Bluesky's chat service can read them.
+    { id: "type_bluesky", label: "Bluesky", available: true, presence: false,
+      notPrivate: "Not end-to-end encrypted: Bluesky's chat service can read these messages." },
     { id: "type_aim", label: "AIM", available: false },
     { id: "type_gtalk", label: "Google Talk", available: false },
     { id: "type_yahoo", label: "Yahoo!", available: false },

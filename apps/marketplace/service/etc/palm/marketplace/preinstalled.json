@@ -21,6 +21,20 @@
             "from": "apps/connectors/drives",
             "service": "org.webosphoenix.service.drives",
             "templates": ["com.webosphoenix.drive.nextcloud", "com.webosphoenix.drive.owncloud", "com.webosphoenix.drive.webdav", "com.webosphoenix.drive.s3", "com.webosphoenix.drive.dropbox", "com.webosphoenix.drive.onedrive", "com.webosphoenix.drive.googledrive", "com.webosphoenix.drive.box"]
+        },
+        {
+            "id": "org.webosphoenix.todoist",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/todoist",
+            "service": "org.webosphoenix.service.todoist",
+            "templates": ["com.webosphoenix.todoist"]
+        },
+        {
+            "id": "org.webosphoenix.bluesky",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/bluesky",
+            "service": "org.webosphoenix.service.bluesky",
+            "templates": ["com.webosphoenix.bluesky"]
         }
     ]
 }

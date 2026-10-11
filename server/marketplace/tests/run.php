@@ -106,9 +106,12 @@ check($idx['version'] === 1 && $idx['build'] === $pub['build'] && count($idx['ap
 $types = array_column($idx['accounts'] ?? [], null, 'templateId');
 $drives = ['com.webosphoenix.drive.nextcloud', 'com.webosphoenix.drive.owncloud', 'com.webosphoenix.drive.webdav', 'com.webosphoenix.drive.s3',
            'com.webosphoenix.drive.dropbox', 'com.webosphoenix.drive.onedrive', 'com.webosphoenix.drive.googledrive', 'com.webosphoenix.drive.box'];
-check(array_keys($types) === array_merge(['com.webosphoenix.dav', 'com.webosphoenix.fediverse', 'com.webosphoenix.webcal', 'com.palm.othermail', 'com.webosphoenix.xmpp'], $drives)
-      && $pub['accounts'] === 13 && !isset($types['com.palm.palmprofile']),
-      'the index lists the account types Phoenix connects to (not the HP webOS profile), the drives among them');
+// Phoenix's other connector packages from the catalog (docs/SYNERGY-CONNECTORS.md "Status of the connectors"): template => package.
+$ownPackages = ['com.webosphoenix.todoist' => 'org.webosphoenix.todoist', 'com.webosphoenix.bluesky' => 'org.webosphoenix.bluesky'];
+check(array_keys($types) === array_merge(['com.webosphoenix.dav', 'com.webosphoenix.fediverse', 'com.webosphoenix.webcal', 'com.palm.othermail', 'com.webosphoenix.xmpp'], $drives,
+                                         array_keys($ownPackages))
+      && $pub['accounts'] === 13 + count($ownPackages) && !isset($types['com.palm.palmprofile']),
+      'the index lists the account types Phoenix connects to (not the HP webOS profile), the drives and Phoenix\'s other connectors among them');
 $shape = ['templateId', 'title', 'provider', 'icon', 'summary', 'capabilities', 'protocols', 'auth', 'server', 'privacy', 'push', 'status', 'package', 'featured'];
 // Built in, but for the connector packages Phoenix comes with (pre-installed, removable: the Fediverse).
 $withSignUp = array_merge(array_slice($shape, 0, -1), ['signUp', 'featured']);
@@ -116,7 +119,7 @@ check(!array_filter($types, fn ($t) => array_keys($t) !== (isset($t['signUp']) ?
                                        || array_keys($t['privacy']) !== ['dataGoesTo', 'e2ee', 'phoenixServers']
                                        || $t['package'] !== ($t['package']['builtin'] ? ['id' => $t['package']['id'], 'builtin' => true]
                                                              : (isset($t['package']['preinstalled']) ? ['id' => $t['package']['id'], 'builtin' => false, 'preinstalled' => true]
-                                                                : ['id' => 'org.webosphoenix.drives', 'builtin' => false]))),
+                                                                : ['id' => $ownPackages[$t['templateId']] ?? 'org.webosphoenix.drives', 'builtin' => false]))),
       '... each with the fields devices read, in order, built in, pre-installed or Phoenix\'s own from the catalog, and nothing else (no iconFrom)');
 $nc = $types['com.webosphoenix.drive.nextcloud'];
 $box = $types['com.webosphoenix.drive.box'];

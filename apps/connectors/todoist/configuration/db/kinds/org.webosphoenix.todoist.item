@@ -1,0 +1,15 @@
+{
+    "id": "org.webosphoenix.todoist.item:1",
+    "owner": "org.webosphoenix.service.todoist",
+    "sync": false,
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        }
+    ]
+}

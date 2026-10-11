@@ -1,0 +1,11 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.service.todoist"
+    ],
+    "accounts.transport": [
+        "oem"
+    ],
+    "todoist.account": [
+        "oem"
+    ]
+}

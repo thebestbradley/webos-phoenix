@@ -1,0 +1,9 @@
+{
+    "org.webosphoenix.service.todoist": [
+        "database.operation",
+        "activity.operation",
+        "accounts.operation",
+        "accounts.transport",
+        "oauth.signin"
+    ]
+}

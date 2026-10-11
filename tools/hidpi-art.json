@@ -1327,6 +1327,22 @@
                 { "art": "xmpp-32x32.png", "method": "downscale", "source": "apps/messaging/public/icon-256x256.png" },
                 { "art": "xmpp-48x48.png", "method": "downscale", "source": "apps/messaging/public/icon-256x256.png" }
             ]
+        },
+        {
+            "name": "connector-todoist",
+            "art": "apps/connectors/todoist/public/accounts/com.webosphoenix.todoist/images",
+            "upscale": [
+                { "art": "todoist-32x32.png", "method": "downscale", "source": "apps/connectors/todoist/icon-512x512.png" },
+                { "art": "todoist-48x48.png", "method": "downscale", "source": "apps/connectors/todoist/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "connector-bluesky",
+            "art": "apps/connectors/bluesky/public/accounts/com.webosphoenix.bluesky/images",
+            "upscale": [
+                { "art": "bluesky-32x32.png", "method": "downscale", "source": "apps/connectors/bluesky/icon-512x512.png" },
+                { "art": "bluesky-48x48.png", "method": "downscale", "source": "apps/connectors/bluesky/icon-512x512.png" }
+            ]
         }
     ]
 }

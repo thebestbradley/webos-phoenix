@@ -1,0 +1,11 @@
+{
+    "name": "org.webosphoenix.service.bluesky",
+    "version": "0.1.0",
+    "private": true,
+    "description": "webOS Phoenix's Bluesky account (Synergy connector on @phoenix/connector-kit): the people you follow in Contacts, direct messages in Messaging, notifications, and posting from the share sheet, over the AT Protocol with an app password or AT Protocol OAuth",
+    "license": "Apache-2.0",
+    "main": "service.js",
+    "dependencies": {
+        "@phoenix/connector-kit": "*"
+    }
+}
