@@ -15,6 +15,14 @@
 #include <cstdio>
 #include <cstring>
 
+#if defined(Q_OS_LINUX)
+#include <QProcess>
+#include <QThread>
+#include <csignal>
+#include <fcntl.h>
+#include <unistd.h>
+#endif
+
 static int failures = 0;
 static void check(bool ok, const char *what)
 {
@@ -23,9 +31,94 @@ static void check(bool ok, const char *what)
         ++failures;
 }
 
+#if defined(Q_OS_LINUX)
+// A process's state letter from /proc (R, S, Z, ...), or 0 when it is gone.
+static char procState(qint64 pid)
+{
+    QFile f(QStringLiteral("/proc/%1/stat").arg(pid));
+    if (!f.open(QIODevice::ReadOnly))
+        return 0;
+    const QByteArray s = f.readAll();
+    const int close = s.lastIndexOf(')');
+    return close > 0 && close + 2 < s.size() ? s.at(close + 2) : 0;
+}
+
+// The transcriber's pid: this process's child running `program`.
+static qint64 childRunning(const QByteArray &program)
+{
+    const QString me = QString::number(QCoreApplication::applicationPid());
+    for (const QString &pid : QDir(QStringLiteral("/proc")).entryList(QDir::Dirs)) {
+        QFile f(QStringLiteral("/proc/%1/stat").arg(pid));
+        if (!f.open(QIODevice::ReadOnly))
+            continue;
+        const QByteArray s = f.readAll();
+        const int open = s.indexOf('('), close = s.lastIndexOf(')');
+        if (open < 0 || close < open || s.mid(open + 1, close - open - 1) != program)
+            continue;
+        if (s.mid(close + 2).split(' ').value(1) == me.toLatin1())
+            return pid.toLongLong();
+    }
+    return 0;
+}
+
+// --as-shell: a stand-in for the shell, transcribing with a transcriber
+// that never answers (sleep), a descriptor of its own open without
+// close-on-exec; it says the transcriber's pid and waits to be killed.
+static int asShell()
+{
+    const int stray = ::open("/dev/null", O_RDONLY);    // no O_CLOEXEC
+    Dictation d;
+    d.setCommand({ QStringLiteral("/bin/sleep"), QStringLiteral("60") });
+    d.transcribeFile(QStringLiteral("/dev/null"));
+    qint64 pid = 0;
+    for (int i = 0; i < 100 && !pid; ++i) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        pid = childRunning("sleep");
+        if (!pid)
+            QThread::msleep(20);
+    }
+    std::printf("transcriber %lld\n", pid);
+    std::fflush(stdout);
+    QCoreApplication::exec();
+    ::close(stray);
+    return 0;
+}
+#endif
+
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
+#if defined(Q_OS_LINUX)
+    if (argc > 1 && std::strcmp(argv[1], "--as-shell") == 0)
+        return asShell();
+
+    // The transcriber ends with the shell, however the shell ends (GAPS V9:
+    // whisper-cli left running 52 minutes after a killed phoenix-sim), and
+    // gets none of the shell's own descriptors.
+    {
+        QProcess shell;
+        shell.start(QCoreApplication::applicationFilePath(), { QStringLiteral("--as-shell") });
+        qint64 pid = 0;
+        if (shell.waitForReadyRead(10000)) {
+            const QByteArray line = shell.readLine().trimmed();
+            if (line.startsWith("transcriber "))
+                pid = line.mid(12).toLongLong();
+        }
+        check(pid > 0 && procState(pid) != 0 && procState(pid) != 'Z', "the stand-in shell's transcriber runs");
+        const QStringList fds = QDir(QStringLiteral("/proc/%1/fd").arg(pid)).entryList(QDir::NoDotAndDotDot | QDir::AllEntries | QDir::System);
+        check(pid > 0 && fds.size() == 3, "it has only stdin, stdout and stderr, not the shell's descriptors");
+        shell.kill();                                  // SIGKILL: no clean-up in the shell
+        shell.waitForFinished(5000);
+        QElapsedTimer gone;
+        gone.start();
+        while (pid > 0 && procState(pid) != 0 && procState(pid) != 'Z' && gone.elapsed() < 3000)
+            QThread::msleep(20);
+        const char st = pid > 0 ? procState(pid) : 'R';
+        check(st == 0 || st == 'Z', "the shell killed, its transcriber ends too");
+        if (pid > 0 && st != 0 && st != 'Z')
+            ::kill(pid, SIGKILL);                      // the test leaves nothing behind either way
+    }
+#endif
 
     // A 16 kHz mono WAV header around the samples.
     QByteArray pcm(3200, 0);

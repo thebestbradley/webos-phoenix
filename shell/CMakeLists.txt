@@ -118,7 +118,7 @@ if(PHOENIX_BUILD_SIM)
     # Run straight from the build tree against the source QML and apps.
     get_filename_component(PHOENIX_REPO_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
     # The keyboard's dictation, without a microphone (CI: build/dictation-test).
-    add_executable(dictation-test native/dictation_test.cpp native/dictation.cpp native/dictation.h)
+    add_executable(dictation-test native/dictation_test.cpp native/dictation.cpp native/dictation.h native/childprocess.h)
     target_link_libraries(dictation-test PRIVATE Qt6::Core Qt6::Qml)
     target_compile_definitions(dictation-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
     # The Assistant's on-device model runner and speech (CI: build/localmodels-test).

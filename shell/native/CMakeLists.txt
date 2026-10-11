@@ -13,7 +13,7 @@ qt_add_qml_module(phoenix-native
     PLUGIN_TARGET phoenix-native
     OUTPUT_DIRECTORY ${PHOENIX_QML_BUILD_DIR}/Phoenix/Native
     SOURCES keyinjector.h keyinjector.cpp keytext.h fonttools.h fonttools.cpp hidpi.h hidpi.cpp deviceconfig.h deviceconfig.cpp
-            dictation.h dictation.cpp imagetools.h imagetools.cpp systemkeys.h systemkeys.cpp
+            childprocess.h dictation.h dictation.cpp imagetools.h imagetools.cpp systemkeys.h systemkeys.cpp
             useractivity.h useractivity.cpp memorymonitor.h memorymonitor.cpp
             keyboardaccess.h keyboardaccess.cpp cornermask.h cornermask.cpp
             localmodels.h localmodels.cpp speech.h speech.cpp
