@@ -334,7 +334,7 @@ module.exports = function (h) {
                     var text = unread ? say.imMessages(unread.map(function (m) { return { from: nameOf(m), net: labelOf(m), text: m.messageText || "" }; }), true, shownLabel, now)
                         : say.lastMessage(fromFirst + (netFirst ? " on " + netFirst : ""), first.messageText || "", first.localTimestamp || first.timestamp, now);
                     var replyTo = room ? room.displayName || who : fromFirst;
-                    var reply = netFirst ? { command: "text", args: { who: replyTo, via: netFirst, message: "" } } : { command: "replyMessage", args: { message: "" } };
+                    var reply = netFirst ? { command: "text", args: { who: replyTo, via: netFirst, message: "" } } : { command: "replyMessage", args: { message: "", ask: true } };
                     return { text: text, open: threadOf(first), actions: [{ label: say.replyTo(replyTo), run: reply }],
                              attachments: h.cards(list.map(function (m) {
                                  return { title: nameOf(m), subtitle: [h.whenShown(env, m.localTimestamp || m.timestamp, null, false), labelOf(m)].filter(Boolean).join(" · "),

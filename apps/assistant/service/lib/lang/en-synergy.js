@@ -459,7 +459,7 @@ module.exports = function (h) {
         alreadyOnCalendar: function (title, name) { return quote(title) + " is already on your " + name + " calendar."; },
         // Meetings
         joining: function (title, service) { return "Joining " + quote(title) + " on " + service + "."; },
-        meetingLater: function (title, service, start, now) { return quote(title) + " on " + service + " is " + h.whenText(start, null, false, now) + ". Join it then, or now?"; },
+        meetingLater: function (title, service, start, now) { return quote(title) + " on " + service + " is " + h.whenText(start, null, false, now) + ". Join it now?"; },
         joinNow: function () { return "Join Now"; },
         noMeetingLink: function (query) { return query ? "I couldn't find a meeting " + quote(query) + " with a link to join." : "You have no meetings with a link to join today."; },
         // Invitations
@@ -519,7 +519,7 @@ module.exports = function (h) {
         postFailed: function (label, why) { return "I couldn't post to " + label + (why ? ": " + why : "") + "."; },
         // Drives
         filesOn: function (text, drive) { return text.replace(/\.$/, "") + " on " + drive + "."; },
-        noFilesOn: function (q, drive) { return "I couldn't find " + quote(q) + " on " + drive + ". I can open it in Files for you."; },
+        noFilesOn: function (q, drive) { return "I couldn't find " + quote(q) + " on " + drive + "."; },
         confirmUpload: function (name, drive) { return "Upload " + quote(name) + " to " + drive + "?"; },
         uploaded: function (name, drive) { return "Uploaded " + quote(name) + " to " + drive + "."; },
         uploadFailed: function (name, drive, why) { return "I couldn't upload " + quote(name) + " to " + drive + (why ? ": " + why : "") + "."; },

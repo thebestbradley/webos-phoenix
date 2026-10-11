@@ -2743,7 +2743,8 @@ function choiceAnswer(text, options, partial, places) {
 var CHOICE_PHRASES = { "Pause": "pause it", "Play": "play it", "Next": "skip to the next one", "Save as Memo": "save it as a memo",
                        "Show in Maps": "show it in Maps", "Allow": "use your location", "Don't Allow": "leave your location alone",
                        "Allow Location": "use your location", "Copy It Instead": "copy it instead", "Location Settings": "open Location Settings",
-                       "Start Navigation": "start navigation", "Call Voicemail": "call voicemail" };
+                       "Start Navigation": "start navigation", "Call Voicemail": "call voicemail",
+                       "Join Now": "join it now", "Open Post": "open the post" };
 function choicePhrase(o) {
     if (o.kind === "web") return "search the web";
     if (o.kind === "cloud") return "ask " + o.name;

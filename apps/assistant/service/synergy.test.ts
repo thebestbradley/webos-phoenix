@@ -182,7 +182,7 @@ describe("calendars and meetings", () => {
         expect((await d.ask("join my next meeting")).text).toBe("Joining “Weekly sync” on Zoom.");
         expect(d.called("applicationManager/open").at(-1)!.params).toEqual({ target: "https://zoom.us/j/5551234567" });
         const later = await d.ask("join the design review");
-        expect(later.text).toBe("“Design review” on Microsoft Teams is tomorrow at 4:00 PM. Join it then, or now?");
+        expect(later.text).toBe("“Design review” on Microsoft Teams is tomorrow at 4:00 PM. Join it now?");
         const r = await d.choose(later, "do:0");
         expect(r.messages.at(-1).text).toBe("Joining “Design review” on Microsoft Teams.");
         expect(d.called("applicationManager/open").at(-1)!.params.target).toBe("https://teams.microsoft.com/l/meetup-join/19%3ameeting_review");
@@ -336,6 +336,32 @@ describe("where you are, sent on any account", () => {
         const r = await d.choose(m, "do:0");
         expect(r.messages.map((x) => x.text)).toEqual(["OK, I can use your location now.", "Text your location to Sam Delgado?"]);
         expect(sentMessages(d)).toHaveLength(0);
+    });
+});
+
+describe("hands-free: the buttons answered in words (assistant.js choiceOf)", () => {
+    const voice = { voice: true };
+    it("picks the account by its name, then sends on yes", async () => {
+        const d = synergy();
+        expect(await d.ask("text Kai see you at the stand-up", voice)).toMatchObject({ status: "ask", text: "On Slack or Jabber?" });
+        expect(await d.ask("Jabber", voice)).toMatchObject({ status: "pending", text: "Send \"see you at the stand-up\" to Kai Tanaka on Jabber?" });
+        expect((await d.ask("yes", voice)).text).toBe("Sent to Kai Tanaka on Jabber.");
+        expect(sentMessages(d)[0]).toMatchObject({ _kind: "com.palm.immessage.xmpp:1", messageText: "see you at the stand-up" });
+    });
+    it("joins a later meeting on yes, and leaves it on no", async () => {
+        const d = synergy();
+        expect((await d.ask("join the design review", voice)).text).toBe("“Design review” on Microsoft Teams is tomorrow at 4:00 PM. Join it now?");
+        expect((await d.ask("yes", voice)).text).toBe("Joining “Design review” on Microsoft Teams.");
+        await d.ask("join the design review", voice);
+        const opened = d.called("applicationManager/open").length;
+        expect((await d.ask("no", voice)).text).toBe("OK, I'll leave it.");
+        expect(d.called("applicationManager/open")).toHaveLength(opened);
+    });
+    it("offers the reply aloud after reading the messages", async () => {
+        const d = synergy();
+        const m = await d.ask("read my unread slack messages", voice);
+        expect(m.text).toMatch(/ Want me to reply to #design\?$/);
+        expect((await d.ask("yes", voice)).text).toBe("What should I say to #design on Slack?");
     });
 });
 
