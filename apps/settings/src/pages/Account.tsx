@@ -19,7 +19,7 @@ import { useEffect, useState } from "react";
 import { phoenixAccount, accountErrorCode, type AccountStatus } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
 import { Button, ErrorText, Group, Note, Page, PageHeader, Row, Spinner } from "@phoenix/ui";
-import { errorText, size, when } from "./Backup";
+import { errorText, size } from "./Backup";
 
 
 export function AccountPage() {
@@ -77,7 +77,10 @@ export function AccountPage() {
                             <Row title="Cloud backup" value={`${size(st.entitlements.features.backup.usedBytes)} of ${size(st.entitlements.features.backup.quotaBytes)}`}
                                  testId="account-backup" />
                         )}
-                        {st.entitlements?.validUntil && <Row title="Until" value={when(st.entitlements.validUntil)} />}
+                        {st.entitlements?.validUntil && (
+                            <Row title="Renews" value={new Date(st.entitlements.validUntil).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+                                 testId="account-until" />
+                        )}
                     </Group>
                     <Group>
                         <Button variant="dark" onClick={() => void run(() => phoenixAccount.signOut())} data-testid="account-sign-out">Sign Out</Button>
@@ -117,7 +120,7 @@ function SigningIn({ st, onCancel }: { st: AccountStatus; onCancel: () => void }
             </div>
             <div className="account-code" data-testid="account-code">{s.userCode}</div>
             {qr && <div className="account-qr" data-testid="account-qr" dangerouslySetInnerHTML={{ __html: qr }} />}
-            <Row title="Waiting for you to approve…"><Spinner /></Row>
+            <Row title="Waiting for approval…"><Spinner /></Row>
             <Button variant="dark" onClick={onCancel} data-testid="account-cancel">Cancel</Button>
         </Group>
     );

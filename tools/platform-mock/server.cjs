@@ -258,7 +258,8 @@ function start(opts) {
     async function handleApi(req, res, p, url) {
         const raw = await body(req);
         const b = parse(req, raw);
-        if (b === null) return error(res, 400, "The body is not JSON", "BAD_REQUEST");
+        // WebDAV bodies are XML or the backup file: not JSON.
+        if (b === null && !/^dav\//.test(p)) return error(res, 400, "The body is not JSON", "BAD_REQUEST");
         const m = (re) => re.exec(p);
         let x;
 
