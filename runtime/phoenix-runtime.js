@@ -2105,19 +2105,33 @@
     // calling app's banner, as PalmSystem.addBannerMessage shows it: tapping
     // it opens that app with onclick.params. onclick naming another app or a
     // target URL is not supported yet and is refused, not silently dropped.
+    // {title} (OSE's schema, createToast.schema) goes before the message, as
+    // the shell's device source shows it (LsmWindowSource toast()). Phoenix:
+    // {group} on a toast for another app stacks it with that app's
+    // notifications of the group (NotificationStacks.js), as a connector's
+    // messages of one conversation; OSE's notificationmgr passes on only
+    // the fields it knows, so on a device it is a toast of its own.
     register(["com.webos.notification"], {
-        "/createToast": function (p, reply) {
+        "/createToast": function (p, reply, ctx) {
             var click = p.onclick || {};
             if (!p.message) return reply(fail(-1, "message is required"));
             if (click.target) return reply(fail(-1, "onclick.target is not supported in the Phoenix simulator"));
+            var title = p.title ? String(p.title) : "";
             // For another app (a service's toast: "Updated to ...", opening
             // Settings): its notification, which a tap launches with the params.
-            if (click.appId && appId(click.appId, click.params) !== PalmSystem.appIdentifier) {
-                host.postToHost("notification", { appId: appId(click.appId, click.params), title: String(p.message), body: "",
-                                                  params: aliasParams(click.appId, click.params) });
+            // The caller is who asks, not the page: a service run in an app's
+            // page calls as itself (ctx.caller, nodeServiceLuna), so a
+            // connector's message toast for Messaging, from inside Messaging,
+            // is still Messaging's notification, with its group.
+            var caller = (ctx && ctx.caller) || PalmSystem.appIdentifier;
+            if (click.appId && appId(click.appId, click.params) !== caller) {
+                host.postToHost("notification", { appId: appId(click.appId, click.params), title: title || String(p.message),
+                                                  body: title ? String(p.message) : "",
+                                                  params: aliasParams(click.appId, click.params),
+                                                  group: p.group ? String(p.group) : "" });
                 return reply(ok({ toastId: "n" + Date.now() }));
             }
-            var id = PalmSystem.addBannerMessage(String(p.message),
+            var id = PalmSystem.addBannerMessage(title ? title + ": " + String(p.message) : String(p.message),
                                                  toJson(p.noaction ? {} : click.appId ? aliasParams(click.appId, click.params) : click.params || {}),
                                                  p.iconUrl || "");
             reply(ok({ toastId: id }));
@@ -7655,9 +7669,12 @@
     //   __phoenixRuntime.simulateIncomingSms({from?, text?})
     //   __phoenixRuntime.seedPhoneDemoData(force)   fictional contacts, calls, texts
     // A received text is announced with the host message
-    //   phoenixHost.postToHost("notification", {appId, title, body, params, soundClass})
+    //   phoenixHost.postToHost("notification", {appId, title, body, params, group, soundClass})
     // which the shell shows as a banner and dashboard item for that app, with
-    // the notification tone (soundClass "notifications").
+    // the notification tone (soundClass "notifications"). Its conversation
+    // (the thread id) is its group: a conversation's texts stack in one row,
+    // newest on top (the shell's NotificationStacks.js), and Messaging takes
+    // the stack away when the conversation is read.
     (function phoneServices() {
         var KEY = "telephony:state";
         var PHONE_APP = "org.webosphoenix.phone";
@@ -8181,7 +8198,7 @@
                 var person = personFor(from);
                 host.postToHost("notification", textNotification({ appId: MESSAGING_APP, title: person ? personName(person) : from,
                                                   body: text ? "Picture: " + text : "Picture message",
-                                                  params: { threadId: r.threadId } }, person));
+                                                  params: { threadId: r.threadId }, group: r.threadId }, person));
                 return r.threadId;
             });
         };
@@ -8198,7 +8215,7 @@
             });
             var person = personFor(from);
             host.postToHost("notification", textNotification({ appId: MESSAGING_APP, title: person ? personName(person) : from, body: text,
-                                              params: { threadId: r.threadId } }, person));
+                                              params: { threadId: r.threadId }, group: r.threadId }, person));
             return r.threadId;
         };
 

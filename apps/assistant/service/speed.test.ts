@@ -13,11 +13,12 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { device } from "./test/device";
+import { device, NOW } from "./test/device";
 
 const req = createRequire(import.meta.url);
+const grammar = req("./lib/grammar.js") as { parse(t: string, ctx: object): { command: string } | null };
 type Turn = { say: string; replies: { path: string }[] };
-type Case = { id: string; say?: string; turns?: { say: string }[]; settings?: object; deviceState?: object; locationAllowed?: boolean | null; put?: object[] };
+type Case = { id: string; say?: string; turns?: { say: string; silence?: boolean; voice?: boolean }[]; settings?: object; deviceState?: object; locationAllowed?: boolean | null; put?: object[]; voice?: boolean };
 const harness = req("../../../tools/eval-assistant.cjs") as {
     loadCases(f?: string): Case[];
     runCase(c: Case, o: object): Promise<{ turns: Turn[] }>;
@@ -59,13 +60,26 @@ describe("what the grammar does never waits for the model", () => {
                                locationAllowed: c.locationAllowed === undefined ? true : c.locationAllowed });
             if (c.deviceState) Object.assign(d.state, c.deviceState);
             const turns = c.turns ?? [{ say: c.say! }];
-            for (let i = 0; i < turns.length; ++i) {
+            // Once the model answered a turn (rightly), the next one follows
+            // its answer, not the grammar's: not compared.
+            let diverged = false;
+            for (let i = 0; i < turns.length && !diverged; ++i) {
                 const before = m.asked.length;
+                // As the evaluation asks it: spoken (talk mode), or the voice
+                // session's wait running out (the check-in).
+                if (turns[i].silence) { await d.svc.sessionPhrase({ kind: "checkIn", threadId: d.thread(), speak: false }); continue; }
                 m.saying(turns[i].say);
-                await d.askAll(turns[i].say);
-                const grammarDid = alone.turns[i] && !alone.turns[i].replies.some((r) => r.path === "fallback");
+                await d.askAll(turns[i].say, turns[i].voice || c.voice ? { voice: true } : undefined);
+                // What the grammar answered alone: no "nothing here can", and
+                // no web search for words it did not take ("Search the web
+                // automatically", which a model answers instead).
+                const replies = alone.turns[i] ? alone.turns[i].replies : [];
+                const parsed = grammar.parse(turns[i].say, { lang: "en", now: NOW }) as { command: string } | null;
+                const searchedForIt = replies.some((r) => r.command === "search") && (!parsed || parsed.command === "beyond");
+                const grammarDid = !!alone.turns[i] && !replies.some((r) => r.path === "fallback") && !searchedForIt;
                 const waited = m.asked.slice(before).filter((a) => !(composing(a.body) && /\b(?:write|draft|compose|make me|create me)\b/i.test(a.words)));
                 if (grammarDid && waited.length) slowed.push(c.id + ": " + turns[i].say);
+                if (m.asked.length > before) diverged = true;
             }
         }
         expect(slowed).toEqual([]);

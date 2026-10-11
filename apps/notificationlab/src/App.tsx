@@ -12,16 +12,19 @@
 // - Notifications as webOS apps make them: a banner
 //   (PalmSystem.addBannerMessage), a dashboard (a window of type
 //   "dashboard": the app's own page as a row, here ?view=dashboard) and a
-//   popup alert (type "popupalert", ?view=alert).
+//   popup alert (type "popupalert", ?view=alert); a stack: notifications
+//   of one group (Ada's and Ben's, as a conversation's messages) piled in
+//   one row each, newest on top with the count (the shell's
+//   NotificationStacks.js), and Clear Stacks taking them away.
 // - Background tasks (com.palm.activitymanager): one due in 10 or 60
 //   seconds, or when the device charges; when it runs, the app is
 //   relaunched with {$activity} and posts a banner and a dashboard.
 //
 // Launch params: {from: <activity id>} (a live activity's row was tapped),
-// {from: "dashboard" | "alert" | "banner"}, {task, $activity} (a task ran).
+// {from: "dashboard" | "alert" | "banner" | "stack"}, {task, $activity} (a task ran).
 
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { call } from "@phoenix/luna";
+import { call, postNotification, removeNotificationGroup } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import { Button, Group, Note, Page, PageHeader, Row } from "@phoenix/ui";
 import { APP_ID, Lab, TASK_NAME, rowFor, taskRequest, type Host, type TaskLaunch } from "./lib/lab";
@@ -50,6 +53,20 @@ export function openDashboard(title: string, text: string) {
         'height=52, attributes={"window":"dashboard","icon":"icon.png"}');
 }
 
+/**
+ * A notification on Ada's or Ben's stack (its group), as a conversation's
+ * messages pile up: the shell shows each with its banner and keeps one row
+ * per group, the newest on top with the count.
+ */
+const STACKS = ["lab-ada", "lab-ben"];
+const LINES = ["Are you there?", "Call me when you can", "It's about Friday", "Never mind, found it", "See you at 6"];
+let stackedCount = 0;
+export function stacked(who: "Ada" | "Ben") {
+    const n = ++stackedCount;
+    postNotification({ appId: APP_ID, title: who, body: `${LINES[(n - 1) % LINES.length]} (#${n})`,
+                       params: { from: "stack", who, n }, group: who === "Ada" ? STACKS[0] : STACKS[1] });
+}
+
 /** A popup alert (phones: over the bottom of the screen; tablets: top right). */
 export function openAlert() {
     window.open("index.html?view=alert", `lab-alert-${Date.now()}`,
@@ -62,6 +79,7 @@ function describeLaunch(p: TaskLaunch): string {
     if (p.from === "dashboard") return "Opened from its dashboard";
     if (p.from === "alert") return "Opened from its alert";
     if (p.from === "banner") return "Opened from its banner";
+    if (p.from === "stack") return `Opened from a stack, its top one (${p.who ?? "?"} #${p.n ?? "?"})`;
     if (p.from === "task") return "Opened from the background task's banner";
     return `Opened from the live activity "${p.from}"`;
 }
@@ -157,6 +175,12 @@ export function App() {
                     <Button data-testid="banner" onClick={() => { banner("Hello from the Notification Lab", { from: "banner" }, true); say("Banner shown"); }}>Banner</Button>
                     <Button data-testid="dashboard" onClick={() => { openDashboard("New lab message", "Tap to open the lab, swipe to dismiss"); say("Dashboard opened"); }}>Dashboard</Button>
                     <Button data-testid="alert" onClick={() => { openAlert(); say("Alert opened"); }}>Popup Alert</Button>
+                </div>
+                <div className="nl-buttons">
+                    <Button data-testid="stack-ada" onClick={() => { stacked("Ada"); say("A notification on Ada's stack"); }}>Ada's Stack</Button>
+                    <Button data-testid="stack-ben" onClick={() => { stacked("Ben"); say("A notification on Ben's stack"); }}>Ben's Stack</Button>
+                    <Button data-testid="stack-clear" variant="negative"
+                            onClick={() => { STACKS.forEach((g) => removeNotificationGroup(APP_ID, g)); say("Stacks cleared"); }}>Clear Stacks</Button>
                 </div>
             </Group>
 

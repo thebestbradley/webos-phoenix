@@ -42,7 +42,8 @@ export interface PhoenixPlugin {
     // Telling the user
     showBanner(options: { message: string } & BannerOptions): Promise<{ id: string }>;
     postNotification(options: NotificationOptions): Promise<void>;
-    removeNotification(options: { tag: string }): Promise<void>;
+    /** The notification of this tag, or the stack of this group. */
+    removeNotification(options: { tag?: string; group?: string }): Promise<void>;
     setOngoing(options: OngoingActivity): Promise<void>;
     clearOngoing(options: { id: string }): Promise<void>;
     scheduleActivity(options: ScheduleOptions): Promise<void>;

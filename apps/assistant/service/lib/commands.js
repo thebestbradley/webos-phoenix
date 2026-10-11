@@ -731,6 +731,9 @@ function prepareInner(cmd, args, env) {
             return { args: args };
         });
     }
+    // "Search the web" with nothing to search for: asked, and the next words are it.
+    if (cmd.id === "search" && !String(args.query || "").trim())
+        return Promise.resolve({ args: args, reply: say.searchWhat(), awaiting: { command: "search", args: args, field: "query" } });
     if (cmd.id === "timer" && !(args.seconds > 0)) return reply(say.failed("how long?"));
     if (cmd.id === "alarm" && !(args.time > env.now())) return reply(say.failed("that time has passed"));
     if (cmd.id === "reminder" && !String(args.text || "").trim()) return reply(say.failed("remind you of what?"));
@@ -818,6 +821,10 @@ function prepareInner(cmd, args, env) {
             return people(env).then(function (all) {
                 args.number = String(last.from.addr);
                 args.name = last.from.name || nameForPhone(all, last.from.addr);
+                // Reply, its button (or a yes to it, spoken): what to say,
+                // asked here (the next words are it), the conversation in front.
+                if (!String(args.message || "").trim() && args.ask)
+                    return { args: args, reply: say.whatToSay(args.name || args.number), awaiting: { command: "replyMessage", args: args, field: "message" } };
                 if (!String(args.message || "").trim()) return { args: args };
                 return { args: args, confirm: say.confirmText(args.name || args.number, args.message) };
             });
@@ -838,6 +845,9 @@ function prepareInner(cmd, args, env) {
             if (cmd.id === "readEmail") return { args: args };
             args.addr = args.from.addr; args.name = args.from.name || "";
             args.subject = /^re:/i.test(args.subject) ? args.subject : "Re: " + args.subject;
+            // Reply, its button: what to say, asked here (as replyMessage).
+            if (!String(args.body || "").trim() && args.ask)
+                return { args: args, reply: say.whatToSay(args.name || args.addr), awaiting: { command: "emailReply", args: args, field: "body" } };
             if (!String(args.body || "").trim()) return { args: args };
             return { args: args, confirm: say.confirmEmail(args.name || args.addr, args.subject, args.body) };
         });
@@ -1034,10 +1044,11 @@ var LOCATION_PERMISSIONS = "luna://org.webosphoenix.service.location/";
 function locationBlocked(env, why, purpose) {
     var say = env.lang.say, actions = [];
     var settings = { label: say.locationSettings(), open: { appId: SETTINGS_APP, params: { page: "location" }, title: "Location Services" } };
-    if (why === "ask") actions = [{ label: say.allow(), run: { command: "locationAccess", args: { allow: true } } },
-                                  { label: say.dontAllow(), run: { command: "locationAccess", args: { allow: false } } }];
-    else if (why === "denied") actions = [{ label: say.allowLocation(), run: { command: "locationAccess", args: { allow: true } } }, settings];
-    else if (why === "off") actions = [{ label: say.turnOnLocation(), run: { command: "toggle", args: { setting: "location", state: "on" } } }, settings];
+    // ("Is it OK if I use it?": a spoken or typed yes is Allow, no Don't Allow: assistant.js answerChoice.)
+    if (why === "ask") actions = [{ label: say.allow(), answer: "yes", run: { command: "locationAccess", args: { allow: true } } },
+                                  { label: say.dontAllow(), answer: "no", run: { command: "locationAccess", args: { allow: false } } }];
+    else if (why === "denied") actions = [{ label: say.allowLocation(), answer: "yes", run: { command: "locationAccess", args: { allow: true } } }, settings];
+    else if (why === "off") actions = [{ label: say.turnOnLocation(), answer: "yes", run: { command: "toggle", args: { setting: "location", state: "on" } } }, settings];
     // No fix yet: the setting at least, never a dead end (the owner's first
     // "I don't know where you are" had no button at all).
     else actions = [settings];
@@ -1067,7 +1078,7 @@ function here(env, purpose) {
 // what to do, and the request again once it is done (then).
 function blockedReply(e, then) {
     return { text: e.said, failed: e.location !== "ask", actions: (e.actions || []).map(function (a) {
-        return a.run && !(a.run.command === "locationAccess" && !a.run.args.allow) ? { label: a.label, run: Object.assign({}, a.run, { then: then }) } : a;
+        return a.run && !(a.run.command === "locationAccess" && !a.run.args.allow) ? Object.assign({}, a, { run: Object.assign({}, a.run, { then: then }) }) : a;
     }) };
 }
 
@@ -1637,7 +1648,7 @@ function runInner(cmd, args, env) {
                 var threadOf = function (m) { return { appId: MESSAGING_APP, params: m.threadId ? { threadId: m.threadId } : {}, title: "Messaging" }; };
                 var said = say.lastMessage(from, last.messageText || "", last.localTimestamp || last.timestamp, now);
                 return { text: unread ? say.unreadMessages(unread.length) + " " + said : said, open: threadOf(last),
-                         actions: [{ label: say.replyTo(from), run: { command: "replyMessage", args: { message: "" } } }],
+                         actions: [{ label: say.replyTo(from), run: { command: "replyMessage", args: { message: "", ask: true } } }],
                          attachments: cards((unread || [last]).map(function (m) {
                              return { title: nameOf(m), subtitle: whenShown(env, m.localTimestamp || m.timestamp, null, false), detail: m.messageText || "", open: threadOf(m) };
                          })) };
@@ -2071,10 +2082,14 @@ function runInner(cmd, args, env) {
             if (env.storage) env.storage.set("assistant:chatTurn", (env.storage.get("assistant:chatTurn") || 0) + 1);
             return r;
         });
-    case "search":
-        return defaultSearchUrl(env, args.query).then(function (url) {
+    case "search": {
+        // The words as asked, without the question's own mark ("Searching
+        // the web for “who won the 1998 World Series”.").
+        var query = String(args.query || "").trim().replace(/[\s?.!]+$/, "");
+        return defaultSearchUrl(env, query).then(function (url) {
             return lunaCall(env, "luna://com.palm.applicationManager/open", { target: url });
-        }).then(function () { return { text: say.searching(args.query) }; });
+        }).then(function () { return { text: say.searching(query) }; });
+    }
     case "callBack":
     case "voicemail":
         if (cmd.id === "voicemail" && args.action !== "call") {
@@ -2098,7 +2113,7 @@ function runInner(cmd, args, env) {
         var fromName = args.from.name || args.from.addr || "someone";
         return Promise.resolve({ text: say.readEmail(fromName, args.subject, args.summary, args.at, now), open: mail,
                                  attachments: cards([{ title: args.subject || "(no subject)", subtitle: fromName + " · " + whenShown(env, args.at, null, false), detail: args.summary, open: mail }]),
-                                 actions: [{ label: say.replyTo(fromName), run: { command: "emailReply", args: { who: args.from.addr || fromName, body: "" } } }] });
+                                 actions: [{ label: say.replyTo(fromName), run: { command: "emailReply", args: { who: args.from.addr || fromName, body: "", ask: true } } }] });
     }
     case "emailReply":
         return runInner(find(BUILT_IN, "email"), { who: args.addr, addr: args.addr, name: args.name, subject: args.subject, body: args.body }, env);

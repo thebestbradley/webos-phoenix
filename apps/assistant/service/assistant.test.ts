@@ -250,7 +250,7 @@ describe("when nothing on the phone can answer", () => {
         const r = await ask(t, "who wrote the odyssey");
         expect(last(r).choices).toEqual([{ id: "web", label: "Search the web" }, { id: "connect", label: "Connect model" }]);
         const w = await t.svc.choose({ threadId: r.thread.id, messageId: last(r).id, choice: "web" });
-        expect(last(w).text).toBe("Searching the web for \"who wrote the odyssey\".");
+        expect(last(w).text).toBe("Searching the web for “who wrote the odyssey”.");
         expect(t.called("applicationManager/open")[0].params.target).toBe("https://www.google.com/search?q=who%20wrote%20the%20odyssey");
     });
 
@@ -401,7 +401,7 @@ describe("never a dead end (the owner's banana pudding, 9 October 2026)", () => 
         const q = await ask(t, "who wrote the odyssey");
         expect(last(q).choices).toEqual([{ id: "web", label: "Search the web" }]);
         const w = await t.svc.choose({ threadId: q.thread.id, messageId: last(q).id, choice: "web" });
-        expect(last(w).text).toBe("Searching the web for \"who wrote the odyssey\".");
+        expect(last(w).text).toBe("Searching the web for “who wrote the odyssey”.");
         // Device requests still go to the tools.
         const f = await ask(t, "can you put the torch on for me");
         expect(last(f)).toMatchObject({ command: "toggle", status: "done", via: "on-device" });

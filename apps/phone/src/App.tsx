@@ -14,7 +14,8 @@
 // calls it, {target: "tel:..."} (a link) fills it in; the original apps'
 // {address, transport} (a number tapped in Contacts, Just Type's Call)
 // calls it, {action: "voicemail"} calls voicemail; {emergency: true} is the
-// restricted mode the lock screen opens (views/Emergency).
+// restricted mode the lock screen opens (views/Emergency); {action:
+// "missedcalls"} (the missed calls' notification) the call log's missed calls.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apps, primaryCall, ringingCall, setWindowOrientation, telephony, type Call } from "@phoenix/luna";
@@ -76,6 +77,9 @@ function Phone() {
     const [tab, setTab] = useState<Tab>("dial");
     const [number, setNumber] = useState(intent.kind === "show" ? dialable(intent.number) : "");
     const [error, setError] = useState<string | null>(null);
+    // Opened from the missed calls' notification: the log on its missed
+    // calls, made anew each time (its key).
+    const [missedShown, setMissedShown] = useState(0);
     const lastDialed = useLastDialed();
     useCallBookkeeping(status.calls, people);
     useIncomingAlert(status.calls, people);
@@ -93,6 +97,9 @@ function Phone() {
             setTab("dial");
         } else if (intent.kind === "preferences") {
             void apps.launch("org.webosphoenix.settings", { page: "phone" }).catch(() => undefined);
+        } else if (intent.kind === "missedcalls") {
+            setTab("log");
+            setMissedShown((n) => n + 1);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [intent, voicemail?.number]);
@@ -129,7 +136,8 @@ function Phone() {
     );
     const shownTab: Tab = wide && tab === "dial" ? "log" : tab;
     const list = shownTab === "log"
-        ? <CallLog people={people} voicemail={voicemail} onCall={callBack} onVoicemail={callVoicemail} />
+        ? <CallLog key={missedShown} people={people} voicemail={voicemail} onCall={callBack} onVoicemail={callVoicemail}
+                   initialFilter={missedShown > 0 ? "missed" : "all"} />
         : shownTab === "favorites" ? <Favorites people={people} onCall={callBack} /> : null;
 
     return (

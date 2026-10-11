@@ -183,7 +183,8 @@ async function world(o?: { websocket?: boolean }) {
     const written: Record<string, Uint8Array> = {};
     let methods: any = {};
     const handlers: Record<string, any> = {
-        "luna://com.webos.notification/createToast": (p: any) => { toasts.push(p); return { returnValue: true }; },
+        // A toast as its banner reads it: "title: message".
+        "luna://com.webos.notification/createToast": (p: any) => { toasts.push({ ...p, message: p.title ? p.title + ": " + p.message : p.message }); return { returnValue: true }; },
         // The messaging service's thread per address (runtime "Messaging", LuneOS MessageAssigner.js).
         "luna://org.webosports.service.messaging/putMessage": async (p: any) => {
             const addr = p.message.folder === "inbox" ? p.message.from.addr : p.message.to[0].addr;
@@ -280,6 +281,8 @@ describe("the Jabber account", () => {
             expect(inbox.serviceMessageId).toMatch(/^sid-/);
             expect(w.toasts.map((t) => t.message)).toEqual(["Ada Palmer: Is it booting?"]);
             expect(w.toasts[0].onclick).toEqual({ appId: "org.webosphoenix.messaging", params: { threadId: "thread-ada.palmer@chat.test" } });
+            // Sender and text apart (OSE's title and message), the conversation its group: one stack per conversation.
+            expect(w.toasts[0]).toMatchObject({ title: "Ada Palmer", group: "thread-ada.palmer@chat.test" });
             const id = await w.send("ada.palmer@chat.test", "Yes, cards and all");
             const sent = await until(() => { const m = w.messages().find((x) => x._id === id); return m && m.status === "successful" ? m : null; });
             expect(sent.serviceMessageId).toBe(id);

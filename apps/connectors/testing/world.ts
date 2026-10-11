@@ -74,7 +74,8 @@ export async function world(o: WorldOptions) {
         "luna://org.webosphoenix.service.oauth/*": (p: any, uri: string) => (oauth as any)[uri.slice(uri.lastIndexOf("/") + 1)](p, service),
         "luna://com.palm.service.accounts/listAccounts": (p: any) => ({ returnValue: true,
             results: Object.values(accounts).filter((a: any) => !p || !p.templateId || a.templateId === p.templateId) }),
-        "luna://com.webos.notification/createToast": (p: any) => { toasts.push(p); return { returnValue: true, toastId: "t" + toasts.length }; },
+        // A toast as its banner reads it: "title: message".
+        "luna://com.webos.notification/createToast": (p: any) => { toasts.push({ ...p, message: p.title ? p.title + ": " + p.message : p.message }); return { returnValue: true, toastId: "t" + toasts.length }; },
         "luna://org.webosports.service.messaging/putMessage": async (p: any) => {
             const r = await db.put([Object.assign({ conversations: ["thread-" + ((p.message.from && p.message.from.addr) || "x")] }, p.message)]);
             return { returnValue: true, threadids: ["thread-" + ((p.message.from && p.message.from.addr) || "x")], id: r[0].id };

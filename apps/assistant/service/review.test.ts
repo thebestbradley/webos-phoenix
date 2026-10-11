@@ -109,6 +109,23 @@ describe("a time a model wrote", () => {
     });
 });
 
+describe("a command switched off in Settings > Assistant", () => {
+    it("is refused, every one of them, \"did you add it?\" too", async () => {
+        // "Did you add it?" was answered by the router itself, past the
+        // switch (tools/test-assistant.cjs saw it; so did this, before).
+        const PHRASES = req("./test/phrases.cjs") as Record<string, string>;
+        const harness = req("../../../tools/eval-assistant.cjs") as { APPS: { id: string; title: string }[] };
+        const notOff: string[] = [];
+        for (const [id, text] of Object.entries(PHRASES)) {
+            if (!text) continue;
+            const d = device({ apps: harness.APPS, settings: { followUps: false, localModel: "off", disabledCommands: [id] } });
+            const m = await d.ask(text);
+            if (!/is turned off in Settings > Assistant\.$/.test(m.text)) notOff.push(`${id}: ${m.text}`);
+        }
+        expect(notOff).toEqual([]);
+    });
+});
+
 describe("a reminder for a place", () => {
     it("asks for a time instead of dropping the place, and the time said makes it", async () => {
         const d = device();

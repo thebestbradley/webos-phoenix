@@ -43,6 +43,11 @@
 //   effects: [{kind, where: {...}, count}]   what the device keeps after the turn
 //   and, in expect, "anyOf": [expect, ...] when more than one outcome is right.
 // A case's "put": [db8 objects] adds records to the device for it alone.
+// A case's or a turn's "voice": true asks it as spoken (talk mode: the
+// buttons' question asked aloud, an unclear answer asked again); a turn
+// {"silence": true} is the voice session's wait running out unanswered.
+// A case's "settings" are the Assistant's (autoSearch: Search the web
+// automatically).
 
 "use strict";
 
@@ -213,10 +218,17 @@ function runCase(c, opts) {
     if (c.deviceState) Object.assign(d.state, c.deviceState);
     var turns = c.turns || [{ say: c.say, expect: c.expect, forbid: c.forbid, text: c.text, notText: c.notText, effects: c.effects }];
     var rows = [];
+    // Talk mode (a turn's or the case's "voice": true): asked as spoken,
+    // as the system view asks in a voice session; a turn {"silence": true}
+    // is the session's wait running out with nothing said (its check-in).
+    function turn(t) {
+        if (t.silence) return d.svc.sessionPhrase({ kind: "checkIn", threadId: d.thread(), speak: false }).then(function (r) { return r.messages || []; });
+        return d.askAll(t.say, t.voice || c.voice ? { voice: true } : undefined);
+    }
     return turns.reduce(function (p, t, i) {
         return p.then(function (ok) {
             var t0 = Date.now();
-            return d.askAll(t.say).then(function (msgs) {
+            return turn(t).then(function (msgs) {
                 var ms = Date.now() - t0;
                 var outs = outcomes(msgs);
                 var e = t.expect || {};
@@ -229,7 +241,7 @@ function runCase(c, opts) {
                     (!t.text || new RegExp(t.text, "i").test(last ? last.text : "")) &&
                     (!t.notText || !new RegExp(t.notText, "i").test(msgs.filter(function (x) { return x.role === "assistant"; }).map(function (x) { return x.text; }).join(" "))) && effectsOk(t.effects, d);
                 if (wrongReadBack.length && (!t.expect || !t.expect.command || !oneMatches(t.expect, outs) || wrongReadBack.some(forbidden))) pass = false;
-                rows.push({ turn: i, say: t.say, pass: pass, ms: ms, unsafe: unsafe.map(function (o) { return o.command; }),
+                rows.push({ turn: i, say: t.silence ? "(silence)" : t.say, pass: pass, ms: ms, unsafe: unsafe.map(function (o) { return o.command; }),
                             wrongReadBack: wrongReadBack.map(function (o) { return o.command; }),
                             got: outs, replies: msgs.filter(function (x) { return x.role === "assistant"; }).map(function (x) {
                                 return { text: x.text, path: x.trace && x.trace.path, command: x.command || "", status: x.status || "", kind: x.kind || "",

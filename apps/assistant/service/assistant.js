@@ -119,7 +119,8 @@ var DEFAULTS = {
     followUpFirst: 60,          // ... a question left unanswered comes back this many minutes later
     followUpAgain: 240,         // ... and once more this many after that (0: not again)
     followUpTopicsOff: [],      // follow-up topics turned off (Settings, or "Stop asking"): lib/followups.js KINDS
-    decider: "off"              // the decision model between the grammar and the general model (deps.decider): "on" | "off"
+    decider: "off",             // the decision model between the grammar and the general model (deps.decider): "on" | "off"
+    autoSearch: false           // what nothing here can answer searched on the web at once (searchesItself); off: offered
 };
 var HISTORY = 20;               // turns a model sees
 var CALL_TOKENS = 160;          // the most a call of a command may say (its arguments)
@@ -180,7 +181,7 @@ function createAssistantService(deps) {
     function settings() {
         var s = storage.get("assistant:settings") || {}, out = {};
         for (var k in DEFAULTS) out[k] = k in s ? s[k] : DEFAULTS[k];
-        ["enabled", "speak", "allowCloudControl", "voiceReplies", "wakeWord", "wakeWhenLocked", "followUps"].forEach(function (b) { out[b] = !!out[b]; });
+        ["enabled", "speak", "allowCloudControl", "voiceReplies", "wakeWord", "wakeWhenLocked", "followUps", "autoSearch"].forEach(function (b) { out[b] = !!out[b]; });
         if (!HHMM.test(out.quietStart)) out.quietStart = DEFAULTS.quietStart;
         if (!HHMM.test(out.quietEnd)) out.quietEnd = DEFAULTS.quietEnd;
         if (FIRST_CHOICES.indexOf(out.followUpFirst) < 0) out.followUpFirst = DEFAULTS.followUpFirst;
@@ -485,7 +486,14 @@ function createAssistantService(deps) {
             return commands.run(cmd, p.args, e).then(function (r) {
                 if (r.focus) keepFocus(thread, r.focus);
                 if (!r.failed && !r.offerWeb) keepLast(thread, { command: cmd.id, args: plainArgs(p.args), status: "done", made: !!r.undo, name: p.args && p.args.name || "" });
-                return withFollowUp(thread, cmd, p.args, r, [say(thread, r.text, outcome(r, layer, source, cmd))]);
+                // What the command could not answer and the web can (a
+                // currency without the day's rates): searched at once when
+                // Settings says so, as the button would.
+                var asked = r.offerWeb ? lastAsked(thread) : "";
+                return searchesItself(thread, asked).then(function (go) {
+                    if (go) return searchNow(thread, asked);
+                    return withFollowUp(thread, cmd, p.args, r, [say(thread, r.text, outcome(r, layer, source, cmd))]);
+                });
             });
         }).catch(function (err) {
             log("command " + cmd.id + " failed: " + (err && err.message));
@@ -551,6 +559,245 @@ function createAssistantService(deps) {
         });
     }
 
+    // ---- A question with choices (docs/AI-AND-MCP.md "Every button, asked aloud") -----------
+    // A reply that ends on buttons is one pending choice: a read-back
+    // (Send / Call / Yes and Cancel), a "which one?" (its names), a
+    // follow-up question (its answers), or an offer (Search the web, Ask
+    // <model>, Open <app>, Turn On ..., Allow / Don't Allow, Save as Memo).
+    // The buttons and the words are the same choice: either answers it, and
+    // then the other goes (the message is chosen, or its read-back done or
+    // cancelled). Only the assistant's last word waits for an answer: a
+    // "yes" answers what was just asked, never something said before it.
+    // m -> {kind: "confirm" | "pick" | "followUp" | "awaiting" | "offer", message, options?, command?} | null.
+    function choiceOf(m) {
+        if (!m || m.role !== "assistant") return null;
+        if (m.status === "pending" && m.confirm) return { kind: "confirm", message: m, command: m.confirm.command };
+        if (m.chosen) return null;
+        if (m.followUp) return followUps.answerable(m.followUp.id) ? { kind: "followUp", message: m } : null;
+        var w = m.data && m.data.awaiting;
+        if (w && w.options && m.choices && m.choices.length)
+            return { kind: "pick", message: m, command: m.command, options: w.options.map(function (o, i) { return { id: "pick:" + i, label: String(o), name: String(o), kind: "item" }; }) };
+        // A question answered in words ("When is it?", "What should I say?"): fillAwaiting.
+        if (w) return { kind: "awaiting", message: m };
+        var options = choiceOptions(m);
+        return options.length ? { kind: "offer", message: m, options: options } : null;
+    }
+    // A message's buttons as choices to name: {id, label, kind: "web" |
+    // "cloud" | "open" | "connect" | "action", name (an app's or a model's),
+    // answer ("yes" | "no": which a plain yes or no means, as Allow and
+    // Don't Allow for "Is it OK if I use it?")}.
+    function choiceOptions(m) {
+        var actions = (m.data && m.data.actions) || [];
+        return (m.choices || []).filter(function (c) { return !/^(?:show|fu|pick):/.test(c.id); }).map(function (c) {
+            var o = { id: c.id, label: c.label, kind: "action" }, n = /^(?:open|do):(\d+)$/.exec(c.id), a = n ? actions[Number(n[1])] : null;
+            if (c.id === "web") o.kind = "web";
+            else if (c.id === "connect") o.kind = "connect";
+            else if (c.id.indexOf("cloud:") === 0) {
+                var prov = getProvider(c.id.slice(6));
+                o.kind = "cloud";
+                o.name = prov ? providers.displayName(prov).replace(/\s*\(.*\)$/, "") : String(c.label).replace(/^\S+\s+/, "");
+                // Named by its model too: "ask Claude" for Anthropic's, "ask ChatGPT" for OpenAI's.
+                var family = prov && /^[a-z]+/i.exec(String(prov.model || ""));
+                if (family) o.aliases = family[0].toLowerCase() === "gpt" ? ["gpt", "chatgpt", "chat gpt"] : [family[0].toLowerCase()];
+            } else if (c.id === "open") {
+                o.kind = "open";
+                o.name = (m.data && m.data.open && m.data.open.title) || "";
+            } else if (a && a.open && a.open.title && /^open\s/i.test(String(c.label))) {
+                o.kind = "open";
+                o.name = a.open.title;
+            }
+            if (a && a.answer) o.answer = a.answer;
+            if (a && a.open && a.open.title) o.app = a.open.title;
+            return o;
+        });
+    }
+    function pendingChoice(thread) {
+        var msgs = messagesOf(thread.id);
+        for (var i = msgs.length - 1; i >= 0; --i) if (msgs[i].role === "assistant") return choiceOf(msgs[i]);
+        return null;
+    }
+    // What sends, calls or deletes (and what an app says does): only a plain
+    // yes or its button runs it, never a guess.
+    function outward(command) {
+        var b = commands.BUILT_IN.filter(function (x) { return x.id === command; })[0];
+        return !b || /^(?:send|call|delete)$/.test(b.risk);
+    }
+    // "Yes" or "no" to a read-back: plain words (lang answer); else the
+    // decision model's reading of them ("nah, leave it"), whose yes is
+    // taken only for what neither sends, calls nor deletes.
+    function confirmAnswer(c, text) {
+        var l = lang(), yn = l.answer ? l.answer(l.clean(text)) : null;
+        if (yn) return Promise.resolve(yn);
+        var d = deps.decider;
+        if (!d || !d.yesNo || settings().decider === "off" || grammar.parse(text, { lang: settings().language, now: now() })) return Promise.resolve(null);
+        return Promise.resolve(d.yesNo(text, c.message.text)).catch(function () { return null; }).then(function (said) {
+            return said === "yes" && outward(c.command) ? null : said;
+        });
+    }
+    // Words that are a request of their own, not an answer: a command the
+    // grammar knows, or a whole question.
+    function newRequest(text) {
+        var parsed = grammar.parse(text, { lang: settings().language, now: now() });
+        if (parsed && !/^(?:chat|beyond)$/.test(parsed.command)) return true;
+        var l = lang(), ctx = l.say.context ? l.say.context(text) : {};
+        return !!ctx.question && l.clean(text).split(" ").length >= 3;
+    }
+    // The choices a question names aloud: not Connect model (Settings, set
+    // up by hand), nor the app a command that did what was asked offers
+    // (“Sent to Sam.” and Open Messaging: nothing waits there; said,
+    // “open Messaging” still opens it).
+    function spokenOptions(c) {
+        var did = c.message.status === "done" && !!c.message.command;
+        return c.options.filter(function (o) { return o.kind !== "connect" && !(did && o.kind === "open"); });
+    }
+    // The question a choice asks, in words.
+    function questionOf(c) {
+        var spoken = spokenOptions(c);
+        return lang().say.askChoice(spoken.length ? spoken : c.options, 0);
+    }
+    // An answer that was not clear (in talk mode: "hmm, maybe"; or "yes" to
+    // several): asked once more, the buttons going with the question; not
+    // clear again, nothing is done, and it says so.
+    function unclear(thread, c) {
+        var s = lang().say, m = c.message, again = !(m.data && m.data.reasked);
+        // (What a web search asked again searches: the words before the first asking.)
+        var data = Object.assign(c.kind === "offer" ? { webQuery: askedBefore(thread, m.id) } : {}, m.data || {}, { reasked: m.id });
+        if (c.kind === "confirm") {
+            m.status = again ? "reasked" : "cancelled";
+            putMessage(m);
+            if (again) return [say(thread, s.reAsk({ kind: "confirm", command: m.command }), { via: m.via, source: m.source, command: m.command, status: "pending", confirm: m.confirm, data: data })];
+            return [say(thread, s.unclearDropped(m.command), { via: m.via, command: m.command, status: "cancelled" })];
+        }
+        m.chosen = again ? "reasked" : "unclear";
+        putMessage(m);
+        if (!again) return [say(thread, s.unclearDropped(""), { via: "commands", status: "cancelled" })];
+        var extra = { via: m.via, source: m.source, choices: m.choices, data: data };
+        if (m.command) extra.command = m.command;
+        if (m.status) extra.status = m.status;
+        if (m.kind) extra.kind = m.kind;
+        return [say(thread, s.reAsk({ kind: "choice", question: questionOf(c) }), extra)];
+    }
+    // "No" to an offer or a "which one?": left as it is, and said so.
+    function decline(thread, c) {
+        var m = c.message;
+        m.chosen = "declined";
+        putMessage(m);
+        var web = c.kind === "offer" && c.options.some(function (o) { return o.kind === "web"; }) &&
+                  c.options.every(function (o) { return /^(?:web|cloud|connect)$/.test(o.kind); });
+        return [say(thread, lang().say.declined(web), { via: "commands", status: "cancelled" })];
+    }
+    // Words answering the choice waiting: -> Promise<messages> | null (not
+    // an answer: on as a request). p.voice: in talk mode, where an answer
+    // that is not clear is asked again rather than taken as a new request.
+    // (Read-backs' yes and no are confirm's: ask; follow-ups' and the
+    // free-word questions' answers are route's.)
+    function answerChoice(thread, c, text, p) {
+        if (c.kind === "followUp" || c.kind === "awaiting") return null;
+        if (c.kind === "confirm") return p.voice && !newRequest(text) ? unclear(thread, c) : null;
+        var l = lang(), m = c.message;
+        // As its button would (a choice gone meanwhile: said so).
+        var choose = function (id) {
+            var o = c.options.filter(function (x) { return x.id === id; })[0] || {};
+            return runChoice(thread, m, id).then(function (out) {
+                if (!Array.isArray(out)) return [say(thread, l.say.failed(out.errorText), { via: "commands", status: "failed" })];
+                // An app opened (a tap needs no words; said, it does): "Opening Calendar."
+                return out.length ? out : [say(thread, l.say.opening(o.name || o.app || o.label), { via: "commands", status: "done", data: { opened: true } })];
+            });
+        };
+        // Named by any of them; "the second one" counts the ones asked aloud.
+        var spoken = c.kind === "pick" ? c.options : spokenOptions(c);
+        var named = spoken.concat(c.options.filter(function (o) { return spoken.indexOf(o) < 0; }));
+        var a = l.choiceAnswer ? l.choiceAnswer(text, named, c.kind === "pick", spoken.length) : null;
+        var picked = a && a.pick !== undefined ? named[a.pick] : null;
+        // A button named by words that are a command of their own ("open
+        // settings", "turn off wifi"): the command, as the grammar has it.
+        if (picked && c.kind === "offer" && picked.kind !== "web" && newRequest(text)) return null;
+        if (picked) return choose(picked.id);
+        // Yes and no answer what was put as a question: asked aloud, in
+        // words ending with one, or what nothing here could ("I can search
+        // the web for it"), never the buttons alone under an answer.
+        var asked = c.kind === "pick" || m.kind === "fallback" || (m.data && m.data.asked) || /\?["”]?\s*$/.test(m.text);
+        if (a && asked && a.no) {
+            var no = c.options.filter(function (o) { return o.answer === "no"; })[0];
+            return no ? choose(no.id) : decline(thread, c);
+        }
+        if (a && asked && a.yes) {
+            var ayes = spoken.filter(function (o) { return o.answer !== "no"; });
+            var yes = c.options.filter(function (o) { return o.answer === "yes"; })[0] || (ayes.length === 1 && c.kind === "offer" ? ayes[0] : null);
+            return yes ? choose(yes.id) : unclear(thread, c);
+        }
+        if (p.voice && c.kind === "pick" && !newRequest(text)) return unclear(thread, c);
+        return null;
+    }
+    // The wait over, or "I'm done", with a read-back unanswered: cancelled,
+    // never done, and said ("I didn't hear an answer, so I won't send it.").
+    // Other choices keep their buttons.
+    // said: ended in words ("I'm done": "OK, I won't send it.").
+    function endChoice(thread, said) {
+        var c = pendingChoice(thread);
+        if (!c || c.kind !== "confirm") return "";
+        c.message.status = "cancelled";
+        putMessage(c.message);
+        return said ? lang().say.leftUndone(c.command) : lang().say.unanswered(c.command);
+    }
+    // Talk mode (ask {voice}): a reply that ends on buttons asks their
+    // question aloud, and shows it ("I can't answer that on my own yet.
+    // Want me to search the web for that?"), unless its words ask it
+    // already ("Send “hi” to Sam?", "Which one: Chris Park or Chris
+    // Moore?"); the session listens on for the answer (AssistantOverlay.qml).
+    function askAloud(list) {
+        var m = list[list.length - 1], c = m ? choiceOf(m) : null;
+        if (!c || (c.kind !== "offer" && c.kind !== "pick")) return;
+        var s = lang().say, spoken = spokenOptions(c);
+        if (!spoken.length || !s.askChoice) return;
+        if (c.kind === "pick") {
+            // Up to three names, then "or someone else".
+            if (spoken.length <= 3) return;
+            m.text = s.askChoice(spoken, 0);
+        } else {
+            if (/\?["”]?\s*$/.test(m.text)) return;
+            var n = storage.get("assistant:askTurn") || 0;
+            storage.set("assistant:askTurn", n + 1);
+            m.text = s.withQuestion(m.text, s.askChoice(spoken, n));
+        }
+        m.data = Object.assign({}, m.data || {}, { asked: true });
+        putMessage(m);
+    }
+
+    // ---- Searching the web unasked (Settings > Assistant > Search the web automatically) ------
+    // Off by default: the words go to the search provider. On, what nothing
+    // here could answer (no command for it, no model or the model out of
+    // time, a translation without a model, a currency without the day's
+    // rates) is searched at once instead of offered: "Searching the web for
+    // “...”", spoken in talk mode, and the browser on it, as the button
+    // does. Never what a command did or failed at for another reason (they
+    // never get here), never over the lock screen, and never words that
+    // look private: the user's own things (lang personal: "my", "did I",
+    // their inbox, passwords), a contact's name, an email address or a
+    // phone number. This is the one place that rule is kept.
+    function looksPrivate(text, names) {
+        // (Words as words: "Sam's" is Sam.)
+        var t = String(text || ""), low = " " + t.toLowerCase().replace(/[‘’]/g, "'").replace(/'s\b/g, "").replace(/[^a-z0-9@.+' -]+/g, " ") + " ";
+        if (lang().personal && lang().personal(t)) return true;
+        if (/[^\s@,]+@[^\s@,]+\.[a-z]{2,}/i.test(t) || /(?:^|\D)\+?\d[\d\s().-]{5,}\d(?:\D|$)/.test(t)) return true;
+        return (names || []).some(function (n) {
+            return String(n).toLowerCase().split(/\s+/).some(function (w) { return w.length > 1 && low.indexOf(" " + w.replace(/[^a-z0-9'-]/g, "") + " ") >= 0; });
+        });
+    }
+    function searchesItself(thread, query) {
+        if (!query || !settings().autoSearch || lockedAsk[thread.id]) return Promise.resolve(false);
+        return commands.contactNames(env()).then(function (names) { return !looksPrivate(query, names); }, function () { return false; });
+    }
+    function searchNow(thread, query) {
+        return catalogue().then(function (cat) {
+            return act(thread, commands.find(cat.all, "search"), { query: query }, "commands", "").then(function (out) {
+                var m = out[out.length - 1];
+                if (m && m.command === "search" && m.status === "done") { m.data = Object.assign({}, m.data || {}, { autoSearch: true }); putMessage(m); }
+                return out;
+            });
+        });
+    }
+
     // A command's answer as a message: done, with the app it offers ("Open
     // Calendar", choice "open"), what takes it back (undo), and other things
     // to do next (r.actions: [{label, open: {appId, params, title}} | {label,
@@ -568,6 +815,9 @@ function createAssistantService(deps) {
         // What it found, shown in the conversation (pictures, cards); each
         // item's open is the app on it (choice "show:<n>", n across them all).
         if (r.attachments && r.attachments.length) data.attachments = r.attachments;
+        // The browser came up in front (a web search, a site): the system
+        // view makes way once this is said, as for the button.
+        if ((cmd.id === "search" || cmd.id === "website") && !r.failed) data.opened = true;
         if (r.open) choices.push({ id: "open", label: lang().say.openApp(r.open.title) });
         if (r.offerWeb) choices.push({ id: "web", label: lang().say.searchWeb() });
         if (choices.length) extra.choices = choices;
@@ -651,13 +901,15 @@ function createAssistantService(deps) {
             picked[w.field] = w.options[n];
             return done(Object.assign({}, w.args, picked));
         }
-        // Free words (what to say, what the memo says): taken unless they are a request of their own.
-        if (w.field === "message" || w.field === "text") {
+        // Free words (what to say, what the memo says, what to search the
+        // web for): taken unless they are a request of their own.
+        if (w.field === "message" || w.field === "text" || w.field === "query" || w.field === "body") {
             if (parsed && l.startsCommand && l.startsCommand(t)) return null;
             if (!t || (l.negation && l.negation(t)) || (l.answer && l.answer(t) === "no")) return null;
             var words = String(text).trim().replace(/[.!]+$/, "");
             var filled = {};
-            filled[w.field] = w.command === "note" && w.args.topic ? w.args.topic + "\n" + words : words.charAt(0).toUpperCase() + words.slice(1);
+            filled[w.field] = w.field === "query" ? words.replace(/\?+$/, "")
+                : w.command === "note" && w.args.topic ? w.args.topic + "\n" + words : words.charAt(0).toUpperCase() + words.slice(1);
             return done(Object.assign({}, w.args, filled));
         }
         // "When should I remind you?" (a reminder for a place, which is not
@@ -1109,8 +1361,8 @@ function createAssistantService(deps) {
     function localFailed(thread, e, asked) {
         log("on-device model failed: " + (e && e.message));
         var s = lang().say;
-        if (e && e.deadline && s.localTimeout) return offer(thread, function (app) { return s.localTimeout(app); }, true, asked);
-        return offer(thread, s.localFailed(e && e.message || "no answer"), false, asked);
+        if (e && e.deadline && s.localTimeout) return offer(thread, function (app) { return s.localTimeout(app); }, true, asked, "timeout");
+        return offer(thread, s.localFailed(e && e.message || "no answer"), false, asked, "failed");
     }
     function askLocal(thread, model, cat) {
         return bounded(thread, function (left, stage) {
@@ -1163,11 +1415,23 @@ function createAssistantService(deps) {
     // for a question, a model; and the commands the words come close to.
     // instead: the note replaces the words (it says why and what instead).
     // asked: the words nothing understood (not after a model tried). note
-    // may be a function (the app's title or "") -> the note.
-    function offer(thread, note, instead, asked) {
+    // may be a function (the app's title or "") -> the note. why: "beyond"
+    // (what nothing here does: money, ordering, other devices), else what
+    // could not answer ("unknown", "translate", "timeout", "failed"): with
+    // Settings' Search the web automatically, a question (or words close
+    // to no command, no app) is searched at once (searchesItself).
+    function offer(thread, note, instead, asked, why) {
         var s = lang().say, p = defaultProvider(), ctx = asked && s.context ? s.context(asked) : { app: "" };
         return apps().then(function (list) {
-            var app = appByTitle(list, ctx.app), choices = [], data = {};
+            var app = appByTitle(list, ctx.app);
+            var close = asked && !note && s.suggest ? s.suggest(asked) : [];
+            var web = !!asked && why !== "beyond" && (ctx.question || (!app && !close.length));
+            return (web ? searchesItself(thread, asked) : Promise.resolve(false)).then(function (go) {
+                return go ? searchNow(thread, asked) : offered(list, app, close);
+            });
+        });
+        function offered(list, app, close) {
+            var choices = [], data = {};
             if (typeof note === "function") note = note(app ? app.title : "");
             if (app) {
                 data.actions = [{ label: s.openApp(app.title), open: { appId: app.id, params: app.params || {}, title: app.title } }];
@@ -1176,13 +1440,12 @@ function createAssistantService(deps) {
             if (p) choices.push({ id: "cloud:" + p.id, label: s.askCloud(providers.displayName(p)) });
             choices.push({ id: "web", label: s.searchWeb() });
             if (!p) choices.push({ id: "connect", label: s.connectModel() });
-            var close = asked && !note && s.suggest ? s.suggest(asked) : [];
             if (close.length) data.suggest = close;
-            var why = s.fallback(app ? "app" : ctx.question ? "question" : "other", app && app.title, close.length > 0);
-            var text = instead ? note : (note ? note + " " : "") + why + (close.length ? " " + s.didYouMeanAny(close) : "");
+            var reason = s.fallback(app ? "app" : ctx.question ? "question" : "other", app && app.title, close.length > 0);
+            var text = instead ? note : (note ? note + " " : "") + reason + (close.length ? " " + s.didYouMeanAny(close) : "");
             return [say(thread, text, { via: "commands", kind: "fallback", choices: choices,
                                         data: Object.keys(data).length ? data : undefined })];
-        });
+        }
     }
 
     // ---- What the grammar found, done ----------------------------------------------------------
@@ -1446,11 +1709,18 @@ function createAssistantService(deps) {
         if (parsed && parsed.command === "negated") return notThis(thread, parsed.args, cat);
         if (parsed && parsed.command === "multi") return actParts(thread, parsed.args.parts, cat, text);
         if (parsed && parsed.command === "chat") return chatAnswer(thread, parsed, cat);
-        if (parsed && parsed.command === "checkDone") return checkDone(thread, parsed.args, cat);
+        // "Did you add it?" is answered here, not by act(), so its switch in
+        // Settings > Assistant > Commands is checked here too (it went on
+        // answering when turned off: tools/test-assistant.cjs).
+        if (parsed && parsed.command === "checkDone") {
+            var cd = commands.find(cat.all, "checkDone");
+            if (cd && !allowed(cd)) return Promise.resolve([say(thread, lang().say.notAllowed(cd.title), { via: "commands", command: "checkDone", status: "failed" })]);
+            return checkDone(thread, parsed.args, cat);
+        }
         // Only a model or the web can: noted, and on to them; what nothing
         // here does (another device, money, ordering), said at once.
         var note = parsed && parsed.command === "beyond" ? lang().say.beyond(parsed.args.what) : "";
-        if (note && lang().say.beyondModel && !lang().say.beyondModel(parsed.args.what)) return offer(thread, note, true, text);
+        if (note && lang().say.beyondModel && !lang().say.beyondModel(parsed.args.what)) return offer(thread, note, true, text, "beyond");
         if (note) parsed = null;
         if (parsed) {
             var done = actParsed(thread, parsed, cat, text);
@@ -1460,12 +1730,62 @@ function createAssistantService(deps) {
         if (cloud) return askCloud(thread, cloud, cat);
         return decide(thread, text, cat).then(function (d) {
             if (d && d.done) return d.done;
-            if (d && d.nothing) return offer(thread, note, !!note, text);
+            if (d && d.nothing) return offer(thread, note, !!note, text, note ? "translate" : "unknown");
             return localReady().then(function (m) {
-                if (!m) return offer(thread, note, !!note, text);
+                if (!m) return offer(thread, note, !!note, text, note ? "translate" : "unknown");
                 return askLocal(thread, m, cat).catch(function (e) { return localFailed(thread, e, text); });
             });
         });
+    }
+
+    // A choice made, by its button (choose) or in words naming it
+    // (answerChoice): -> Promise<messages>, or a failure reply (nothing
+    // to do there any more).
+    function runChoice(thread, m, c) {
+        var asked = askedBefore(thread, m.id);
+        var launch = function (o) {
+            return deps.luna.call("luna://com.palm.applicationManager/launch", { id: o.appId, params: o.params || {}, returnToCaller: true }).then(function () { return []; });
+        };
+        if (c === "connect") {
+            // Said, not tapped: Settings opens on it (the tap asks which kind first).
+            return methods.connect({ threadId: thread.id, messageId: m.id }).then(function (r) {
+                if (r.returnValue === false) return r;
+                m.chosen = c;
+                putMessage(m);
+                return [say(thread, lang().say.connecting(), { via: "commands", status: "done", data: { opened: true } })];
+            });
+        }
+        m.chosen = c;
+        putMessage(m);
+        if (c.indexOf("cloud:") === 0) {
+            var prov = getProvider(c.slice(6));
+            if (!prov) return Promise.resolve(fail(ERRORS.NOT_FOUND, "That provider is gone"));
+            thread.provider = prov.id;
+            putThread(thread);
+            return catalogue().then(function (cat) { return askCloud(thread, prov, cat); });
+        }
+        if (c === "open") {
+            var o = m.data && m.data.open;
+            if (!o || !o.appId) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to open there"));
+            return launch(o);
+        }
+        if (/^(?:open|do):\d+$/.test(c)) {
+            // One of the things to do next (outcome, offer, withNext).
+            var a = ((m.data && m.data.actions) || [])[Number(c.split(":")[1])];
+            if (!a) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to do there"));
+            return a.open ? launch(a.open) : catalogue().then(function (cat) { return runAction(thread, cat, a.run); });
+        }
+        if (/^pick:\d+$/.test(c) && m.data && m.data.awaiting && m.data.awaiting.options) {
+            var w = m.data.awaiting, picked = {};
+            picked[w.field] = w.options[Number(c.slice(5))];
+            return catalogue().then(function (cat) { return act(thread, commands.find(cat.all, w.command), Object.assign({}, w.args, picked), "commands", ""); });
+        }
+        if (c.indexOf("fu:") === 0 && m.followUp) return answerFollowUp(thread, m, { choice: c });
+        if (c === "web") {
+            var query = (m.data && m.data.webQuery) || asked;
+            return catalogue().then(function (cat) { return act(thread, commands.find(cat.all, "search"), { query: query }, "commands", ""); });
+        }
+        return deps.luna.call("luna://com.palm.applicationManager/launch", { id: SETTINGS_APP, params: { page: "assistant" } }).then(function () { return []; });
     }
 
     // The user's words before a message (what it answers).
@@ -1497,6 +1817,8 @@ function createAssistantService(deps) {
         return t || createThread();
     }
     function done(thread, list, p) {
+        // Talk mode: the buttons' question asked aloud, before it is said.
+        if (p.voice) askAloud(list);
         endTurn(thread);
         speakLast(list, p);
         changed("threads");
@@ -1551,16 +1873,15 @@ function createAssistantService(deps) {
             if (!thread) return Promise.resolve(fail(ERRORS.NOT_FOUND, "No such conversation: " + p.threadId));
             storage.set("assistant:current", thread.id);
             if (!thread.title) thread.title = text.slice(0, 80);
+            // The question the assistant's last word asks, if any (choiceOf).
+            var c = pendingChoice(thread);
             var user = say(thread, text, { role: "user" });
             startTurn(thread);
             changed("threads");
             // "Yes" or "No" to a read-back waiting: its answer.
-            var pend = lastPending(thread), yn = pend && lang().answer ? lang().answer(lang().clean(text)) : null;
-            var asking = !yn && pend && deps.decider && deps.decider.yesNo && settings().decider !== "off" && !grammar.parse(text, { lang: settings().language, now: now() })
-                ? Promise.resolve(deps.decider.yesNo(text, pend.text)).catch(function () { return null; }) : Promise.resolve(null);
-            return asking.then(function (said) { return said ? said : yn; }).then(function (yn) {
+            return (c && c.kind === "confirm" ? confirmAnswer(c, text) : Promise.resolve(null)).then(function (yn) {
             if (yn) {
-                return methods.confirm({ threadId: thread.id, messageId: pend.id, accept: yn === "yes", voice: p.voice, speak: p.speak })
+                return methods.confirm({ threadId: thread.id, messageId: c.message.id, accept: yn === "yes", voice: p.voice, speak: p.speak })
                     .then(function (r) {
                         if (r.returnValue !== false) r.messages = [user].concat(r.messages);
                         return r;
@@ -1568,13 +1889,20 @@ function createAssistantService(deps) {
             }
             // "I'm done", "that's all" in a spoken conversation (after the
             // check-in, a plain "no" too): a goodbye, and the view closes
-            // once it is said (status "goodbye", AssistantOverlay.qml).
-            if (p.voice && lang().say.done && lang().say.done(text, !!p.checkIn))
-                return Promise.resolve(done(thread, [user, say(thread, lang().say.goodbye(settings().personality), { status: "goodbye" })], p));
+            // once it is said (status "goodbye", AssistantOverlay.qml). A
+            // read-back left waiting is not done.
+            if (p.voice && lang().say.done && lang().say.done(text, !!p.checkIn)) {
+                var left = endChoice(thread, true), bye = lang().say.goodbye(settings().personality);
+                return Promise.resolve(done(thread, [user, say(thread, left ? left + " " + bye : bye, { status: "goodbye" })], p));
+            }
             if (p.locked) lockedAsk[thread.id] = true;
             var unlocked = function () { delete lockedAsk[thread.id]; };
-            return route(thread, text, p.locked ? null : openFollowUp(thread)).then(function (out) { unlocked(); return done(thread, [user].concat(out), p); },
-                                            function (e) { unlocked(); throw e; });
+            // The words answer the choice waiting (a button's, said or typed), or go on as a request.
+            return Promise.resolve(c && !p.locked ? answerChoice(thread, c, text, p) : null).then(function (answered) {
+                if (answered) return answered;
+                return route(thread, text, p.locked ? null : openFollowUp(thread));
+            }).then(function (out) { unlocked(); return done(thread, [user].concat(out), p); },
+                    function (e) { unlocked(); throw e; });
             });
         },
         choose: function (p) {
@@ -1592,47 +1920,10 @@ function createAssistantService(deps) {
                     .then(function () { return ok({ thread: summary(thread), messages: [] }); });
             }
             if (p.choice === "connect") return methods.connect({ threadId: thread.id, messageId: m.id });
-            var asked = askedBefore(thread, m.id);
-            m.chosen = p.choice;
-            putMessage(m);
             startTurn(thread);
-            var c = String(p.choice);
-            var work;
-            if (c.indexOf("cloud:") === 0) {
-                var prov = getProvider(c.slice(6));
-                if (!prov) return Promise.resolve(fail(ERRORS.NOT_FOUND, "That provider is gone"));
-                thread.provider = prov.id;
-                putThread(thread);
-                work = catalogue().then(function (cat) { return askCloud(thread, prov, cat); });
-            } else if (c === "open") {
-                var o = m.data && m.data.open;
-                if (!o || !o.appId) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to open there"));
-                work = deps.luna.call("luna://com.palm.applicationManager/launch", { id: o.appId, params: o.params || {}, returnToCaller: true })
-                    .then(function () { return []; });
-            } else if (/^(?:open|do):\d+$/.test(c)) {
-                // One of the things to do next (outcome, offer, withNext).
-                var a = ((m.data && m.data.actions) || [])[Number(c.split(":")[1])];
-                if (!a) return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing to do there"));
-                if (a.open) {
-                    work = deps.luna.call("luna://com.palm.applicationManager/launch", { id: a.open.appId, params: a.open.params || {}, returnToCaller: true })
-                        .then(function () { return []; });
-                } else {
-                    work = catalogue().then(function (cat) { return runAction(thread, cat, a.run); });
-                }
-            } else if (/^pick:\d+$/.test(c) && m.data && m.data.awaiting && m.data.awaiting.options) {
-                var w = m.data.awaiting, picked = {};
-                picked[w.field] = w.options[Number(c.slice(5))];
-                work = catalogue().then(function (cat) { return act(thread, commands.find(cat.all, w.command), Object.assign({}, w.args, picked), "commands", ""); });
-            } else if (c.indexOf("fu:") === 0 && m.followUp) {
-                work = answerFollowUp(thread, m, { choice: c });
-            } else if (c === "web") {
-                var query = (m.data && m.data.webQuery) || asked;
-                work = catalogue().then(function (cat) { return act(thread, commands.find(cat.all, "search"), { query: query }, "commands", ""); });
-            } else {
-                work = deps.luna.call("luna://com.palm.applicationManager/launch", { id: SETTINGS_APP, params: { page: "assistant" } })
-                    .then(function () { return []; });
-            }
-            return work.then(function (out) { return done(thread, out, p); });
+            return runChoice(thread, m, String(p.choice)).then(function (out) {
+                return Array.isArray(out) ? done(thread, out, p) : out;
+            });
         },
         // "Connect model": Settings > Assistant, to set up an on-device model,
         // a cloud one or both; the question waits on the thread (retry).
@@ -1730,7 +2021,7 @@ function createAssistantService(deps) {
             Object.keys(p).forEach(function (k) {
                 if (!(k in DEFAULTS)) return;
                 var v = p[k];
-                if (/^(enabled|speak|allowCloudControl|voiceReplies|wakeWord|wakeWhenLocked|followUps)$/.test(k) && typeof v !== "boolean") bad = k + ": true or false";
+                if (/^(enabled|speak|allowCloudControl|voiceReplies|wakeWord|wakeWhenLocked|followUps|autoSearch)$/.test(k) && typeof v !== "boolean") bad = k + ": true or false";
                 else if (k === "speechRate" && RATE_CHOICES.indexOf(v) < 0) bad = "speechRate: one of " + RATE_CHOICES.join(", ");
                 else if (k === "personality" && !PERSONALITIES[v]) bad = "personality: one of " + Object.keys(PERSONALITIES).join(", ");
                 else if (k === "voiceWait" && WAIT_CHOICES.indexOf(v) < 0) bad = "voiceWait: seconds, one of " + WAIT_CHOICES.join(", ");
@@ -1748,9 +2039,11 @@ function createAssistantService(deps) {
                 else cur[k] = v;
             });
             if (bad) return Promise.resolve(fail(ERRORS.BAD_PARAMS, bad));
-            // Only Settings may let cloud models act.
+            // Only Settings may let cloud models act, or send questions to the web unasked.
             if (p.allowCloudControl === true && caller() !== SETTINGS_APP && !(deps.trusted && deps.trusted(caller())))
                 return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Only Settings can allow cloud models to control the device"));
+            if (p.autoSearch === true && caller() !== SETTINGS_APP && !(deps.trusted && deps.trusted(caller())))
+                return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Only Settings can turn on searching the web automatically"));
             storage.set("assistant:settings", cur);
             // Follow-up questions turned off: none waits any more.
             if (p.followUps === false) followUps.clear();
@@ -2005,6 +2298,9 @@ function createAssistantService(deps) {
             if ((kind !== "checkIn" && kind !== "goodbye") || !l.checkIn) return Promise.resolve(fail(ERRORS.BAD_PARAMS, "kind: checkIn or goodbye"));
             var text = kind === "checkIn" ? l.checkIn(settings().personality) : l.goodbye(settings().personality);
             var thread = p.threadId ? getThread(p.threadId) : currentThread();
+            // A read-back nobody answered before the wait was over: not done, and said so.
+            var left = thread ? endChoice(thread) : "";
+            if (left) text = left + " " + text;
             var list = thread ? [say(thread, text, kind === "goodbye" ? { status: "goodbye" } : { kind: "checkIn" })] : [];
             if (p.speak !== false) speakLast([{ role: "assistant", text: text }], { voice: true });
             if (thread) changed("threads");
