@@ -198,13 +198,20 @@ async function main() {
             await accounts.waitForTimeout(600);
             return w;
         };
-        const createAccount = async (templateId, name) => {
+        const createAccount = async (templateId, name, stateKind) => {
             const create = accounts.locator(".enyo-button:visible, .enyo-custom-button:visible", { hasText: "Create Account" }).first();
             await create.waitFor({ timeout: 20000 }).catch(() => {});
             await accounts.waitForTimeout(400);
             await shot(accounts, name);
             await create.click().catch(() => {});
-            return until(async () => (await luna(accounts, "luna://com.palm.service.accounts/listAccounts", { templateId })).results[0], 10000);
+            const account = await until(async () => (await luna(accounts, "luna://com.palm.service.accounts/listAccounts", { templateId })).results[0], 10000);
+            // The accounts service answers createAccount, then calls onCreate
+            // with the account's config (app-services notify-created.js; the
+            // runtime 500 ms later): a sync before that has no config yet.
+            if (account && stateKind) {
+                await until(async () => (await db(accounts, stateKind)).some((o) => o.accountId === account._id && Object.keys(o.config || {}).length), 15000);
+            }
+            return account;
         };
         let w = await wizardOf(TODOIST, "org.webosphoenix.todoist");
         check(/Sign In with Todoist is not available in this build/.test(await w.locator(".connector-unavailable").textContent().catch(() => "")),
@@ -284,7 +291,7 @@ async function main() {
         await w.locator("input[type=password]").first().press("Tab");
         await shot(accounts, "10-bluesky-sign-in");
         await w.getByText("Sign In", { exact: true }).click();
-        const sky = await createAccount(BLUESKY, "11-bluesky-create");
+        const sky = await createAccount(BLUESKY, "11-bluesky-create", "org.webosphoenix.bluesky.state:1");
         check(sky && sky.username === "anna.test" && sky.capabilityProviders.length === 3, "the Bluesky account exists, with contacts, messages and notifications");
         if (!sky) throw new Error("no Bluesky account");
         const firstSync = await syncNow(accounts, "org.webosphoenix.service.bluesky", sky._id);
