@@ -70,8 +70,7 @@ describe("the Assistant as a TouchPad app", () => {
     it("starts the on-device model as it opens, waiting for nothing", async () => {
         luna.warm.mockClear();
         render(<App />);
-        await screen.findByText("The flashlight is on.");
-        expect(luna.warm).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(luna.warm).toHaveBeenCalledTimes(1));
     });
 
     it("shows the list beside the conversation on a tablet, and one at a time on a phone, as the card is resized", async () => {

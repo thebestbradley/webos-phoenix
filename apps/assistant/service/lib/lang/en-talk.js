@@ -84,11 +84,26 @@ module.exports = function (h) {
         return null;
     }
     // "set two timers, one for 5 minutes and one for 10": each said whole.
-    function multiples(t) {
-        var m = /^(?:set|start|make)(?: me)? (?:two|2|three|3|a couple of) (timers|alarms)[,:]? (?:one )?(?:for |at )(.+?)(?:,? and (?:one |another )?(?:for |at )(.+?))(?:,? and (?:one |another )?(?:for |at )(.+?))?$/.exec(t);
+    // "set an alarm for 6:15 and another for 6:30" too. A later one said
+    // without its unit has the first one's ("one for five minutes and one
+    // for twelve": twelve minutes).
+    function multiples(t, names) {
+        // "text Will, Rose and Mark that dinner is at 7": the same words to each.
+        var g = /^(text|message|tell|send a text to|send a message to) (.+?)(:| saying| that says| to say| that) (.+)$/.exec(t);
+        if (g && /,| and /.test(g[2])) {
+            var known = (names || []).map(function (n) { return String(n).toLowerCase(); });
+            var who = g[2].split(/\s*,\s*(?:and\s+)?|\s+and\s+/);
+            if (who.length > 1 && who.length <= 8 && who.every(function (p) { return known.indexOf(p) >= 0; }))
+                return who.map(function (p) { return g[1] + " " + p + (g[3] === ":" ? ":" : g[3]) + " " + g[4]; });
+        }
+        var m = /^(?:set|start|make)(?: me)? (?:two|2|three|3|a couple of) (timers|alarms)[,:]? (?:one )?(?:for |at )(.+?)(?:,? and (?:one |another )?(?:for |at )(.+?))(?:,? and (?:one |another )?(?:for |at )(.+?))?$/.exec(t)
+            || /^(?:set|start|make)(?: me)? (?:an? )?(timer|alarm)s? (?:for |at )(.+?),? and (?:another|one more|a second|a third)(?: one)? (?:for |at )(.+?)(?:,? and (?:another|one more|a third)(?: one)? (?:for |at )(.+?))?$/.exec(t);
         if (!m) return null;
-        var noun = m[1] === "timers" ? "set a timer for " : "set an alarm for ";
-        return [m[2], m[3], m[4]].filter(Boolean).map(function (x) { return noun + x; });
+        var noun = /^timer/.test(m[1]) ? "set a timer for " : "set an alarm for ";
+        var unit = / ((?:minutes?|mins?|hours?|hrs?|seconds?|secs?))$/.exec(m[2]);
+        return [m[2], m[3], m[4]].filter(Boolean).map(function (x) {
+            return noun + (unit && /^(?:\d+|[a-z]+(?:[ -][a-z]+)?)$/.test(x) && !/(?:minutes?|mins?|hours?|hrs?|seconds?|secs?)$/.test(x) && h.number(x) !== null ? x + " " + unit[1] : x);
+        });
     }
 
     // ---- Typos and transcripts ---------------------------------------------------------------

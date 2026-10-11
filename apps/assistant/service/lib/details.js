@@ -202,11 +202,7 @@ module.exports = function (h) {
     // A list: by its name, or the one the task in focus is on.
     function theList(env, args) {
         if (!args.it) {
-            return h.dbFind(env, "com.palm.tasklist:1").then(function (lists) {
-                var n = h.words(args.query).replace(/ list$/, "");
-                return lists.filter(function (l) { return h.words(l.name).replace(/ list$/, "") === n; })[0]
-                    || lists.filter(function (l) { return h.words(l.name).indexOf(n) === 0; })[0] || null;
-            });
+            return h.dbFind(env, "com.palm.tasklist:1").then(function (lists) { return h.listNamed(lists, args.query); });
         }
         var f = env.focus;
         return get(env, f.id).then(function (task) {

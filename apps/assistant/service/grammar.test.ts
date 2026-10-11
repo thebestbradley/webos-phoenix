@@ -136,8 +136,8 @@ describe("English", () => {
         expect(parse("navigate home")).toEqual({ command: "navigate", args: { destination: "home" } });
         expect(parse("directions to the Eiffel Tower")).toEqual({ command: "navigate", args: { destination: "eiffel tower" } });
         expect(parse("take me to 1 Main Street")).toEqual({ command: "navigate", args: { destination: "1 main street" } });
-        expect(parse("play Daft Punk")).toEqual({ command: "play", args: { query: "daft punk" } });
-        expect(parse("play some music by Miles Davis")).toEqual({ command: "play", args: { query: "miles davis" } });
+        expect(parse("play Daft Punk")).toEqual({ command: "play", args: { query: "Daft Punk" } });
+        expect(parse("play some music by Miles Davis")).toEqual({ command: "play", args: { query: "Miles Davis" } });
         expect(parse("play music")).toEqual({ command: "play", args: { query: "" } });
         expect(parse("search the web for palm pre")).toEqual({ command: "search", args: { query: "palm pre" } });
         expect(parse("look up webos history")).toEqual({ command: "search", args: { query: "webos history" } });

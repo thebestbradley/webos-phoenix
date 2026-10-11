@@ -159,7 +159,8 @@ var BUILT_IN = [
     { id: "alarm", title: "Alarms", risk: "change", description: "Set an alarm in the Clock app, once or repeating.",
       parameters: { type: "object", properties: { time: { type: "string", description: "When, as said: \"7:30 am\", \"tomorrow at 6\", or ISO 8601 local time" }, label: S,
         repeat: { type: "string", enum: ["once", "daily", "weekdays", "weekends"] } }, required: ["time"] } },
-    { id: "alarmList", title: "Listing alarms", risk: "read", description: "Tell which alarms are set.", parameters: { type: "object", properties: {} } },
+    { id: "alarmList", title: "Listing alarms", risk: "read", description: "Tell which alarms are set, or when the next one rings.",
+      parameters: { type: "object", properties: { next: { type: "boolean", description: "Only the next alarm to ring, and how long until it does" } } } },
     { id: "alarmManage", title: "Turning off and deleting alarms", risk: "change", description: "Turn off or delete an alarm (by its time) or all alarms.",
       parameters: { type: "object", properties: { action: { type: "string", enum: ["off", "delete"] }, time: { type: "string", description: "The alarm's time, \"7am\"" }, all: B }, required: ["action"] } },
     { id: "reminder", title: "Reminders", risk: "change", description: "Add a task to Tasks, with a reminder when a time is given.",
@@ -268,7 +269,7 @@ var BUILT_IN = [
 // One thing about one item, and the item a conversation is about (lib/details.js).
 var details = require("./details")({ D: D, lunaCall: lunaCall, dbFind: dbFind, findEvent: findEvent, matches: matches, words: words,
                                      whenShown: whenShown, cards: cards, findPerson: findPerson, personName: personName, emailOf: emailOf,
-                                     addTask: addTask, scheduleAlarm: scheduleAlarm, nextRing: nextRing });
+                                     addTask: addTask, scheduleAlarm: scheduleAlarm, nextRing: nextRing, listNamed: listNamed });
 Array.prototype.push.apply(BUILT_IN, details.COMMANDS);
 // How people ask for each, in other words (lib/examples.js): for a model choosing one.
 (function (examples) {
@@ -1077,15 +1078,19 @@ function weather(args, env) {
     var say = env.lang.say;
     var imperial = env.units === "imperial";
     var week = args.day === "this week" || args.day === "this weekend";
+    // A day of the week ("the weather on Saturday"): its forecast, up to a week ahead.
+    var wd = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"].indexOf(String(args.day || "").replace(/^(?:on|this|next) /, ""));
+    var ahead = wd >= 0 ? (wd - new Date(env.now()).getDay() + 7) % 7 : args.day === "tomorrow" ? 1 : 0;
     var where = args.place ? geocode(env, args.place) : here(env, "weather");
     return where.then(function (pl) {
         var url = "https://api.open-meteo.com/v1/forecast?latitude=" + pl.lat + "&longitude=" + pl.lon +
             "&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max" +
             (typeof args.hour === "number" ? "&hourly=temperature_2m,weather_code,precipitation_probability" : "") +
-            "&forecast_days=" + (week ? 7 : 2) + "&timezone=auto" + (imperial ? "&temperature_unit=fahrenheit" : "");
+            "&forecast_days=" + (week ? 7 : Math.max(2, ahead + 1)) + "&timezone=auto" + (imperial ? "&temperature_unit=fahrenheit" : "");
         return getJson(env, url).then(function (f) {
             var unit = imperial ? "F" : "C";
-            var i = args.day === "tomorrow" ? 1 : 0, daily = f.daily || {};
+            var i = ahead, daily = f.daily || {};
+            if (wd >= 0 && (!daily.temperature_2m_max || daily.temperature_2m_max[i] === undefined)) throw new Error("no forecast for " + args.day);
             var open = { appId: "org.webosphoenix.weather", params: {}, title: "Weather" };
             if (week) {
                 var now = env.now(), days = (daily.time || (daily.temperature_2m_max || []).map(function (x, k) { return D.addDays(D.startOfDay(now), k); }))
@@ -1107,7 +1112,7 @@ function weather(args, env) {
                                                  (f.hourly.precipitation_probability || [])[k], args.about, env.now()), open: open };
             }
             var hi = daily.temperature_2m_max ? daily.temperature_2m_max[i] : null, lo = daily.temperature_2m_min ? daily.temperature_2m_min[i] : null;
-            var code = i === 1 ? (daily.weather_code || [])[1] : f.current && f.current.weather_code;
+            var code = i >= 1 ? (daily.weather_code || [])[i] : f.current && f.current.weather_code;
             if (args.about) {
                 var chance = (daily.precipitation_probability_max || [])[i];
                 return { text: say.weatherWill(args.about, pl.name, args.day || "today", chance, WMO[(daily.weather_code || [])[i]] || "", hi, lo, unit), open: open };
@@ -1410,13 +1415,27 @@ var MEMO_COLORS = ["blue", "yellow", "green", "pink", "salmon"];
 
 // ---- Tasks ---------------------------------------------------------------------------------------
 
+// A list's name as people say it: "grocery", "groceries" and "the shopping
+// list" are one list, as Siri's and Google Assistant's shopping list is (the
+// sweep: "add batteries to the grocery list" made a second list beside
+// Groceries); "to do", "tasks", "reminders": the default list ("").
+function listKey(name) {
+    var n = words(name).replace(/^(?:my|the|our) /, "").replace(/ list$/, "").trim();
+    if (/^(?:to ?-?dos?|todos?|tasks?|reminders?|inbox)$/.test(n)) return "";
+    if (/^(?:grocery|groceries|shopping|grocery shopping|food shopping|supermarket)$/.test(n)) return "grocery";
+    return n.replace(/ies$/, "y").replace(/([^s])s$/, "$1");
+}
+function listNamed(lists, name) {
+    var key = listKey(name), n = words(name);
+    if (!key) return lists.filter(function (l) { return l.isDefault; })[0] || null;
+    return lists.filter(function (l) { return words(l.name) === n; })[0]
+        || lists.filter(function (l) { return listKey(l.name) === key; })[0]
+        || lists.filter(function (l) { return words(l.name).indexOf(n) === 0; })[0] || null;
+}
 function taskList(env, name) {
     return dbFind(env, "com.palm.tasklist:1").then(function (lists) {
-        if (name) {
-            var n = words(name);
-            var hit = lists.filter(function (l) { return words(l.name) === n; })[0]
-                || lists.filter(function (l) { return words(l.name).replace(/ list$/, "") === n.replace(/ list$/, ""); })[0]
-                || lists.filter(function (l) { return words(l.name).indexOf(n) === 0; })[0];
+        if (name && listKey(name)) {
+            var hit = listNamed(lists, name);
             if (hit) return listOf(hit, hit.name);
             return dbPut(env, [{ _kind: "com.palm.tasklist:1", name: name, accountId: "", sortOrder: lists.length }])
                 .then(function (ids) { return { id: ids[0], name: name, made: true }; });
@@ -1730,6 +1749,12 @@ function runInner(cmd, args, env) {
     case "alarmList":
         return dbFind(env, "com.palm.clock.alarm:1").then(function (all) {
             all.sort(function (a, b) { return (a.hour * 60 + a.minute) - (b.hour * 60 + b.minute); });
+            // "When's my next alarm", "how long until my alarm goes off": the one to ring first, when.
+            if (args.next) {
+                var rings = all.filter(function (a) { return a.enabled !== false && !a._del; })
+                    .map(function (a) { return nextRing(a, now); }).filter(function (t) { return t; }).sort(function (a, b) { return a - b; });
+                return { text: say.nextAlarm(rings.length ? rings[0] : null, now), open: { appId: CLOCK_APP, params: {}, title: "Clock" } };
+            }
             return { text: say.alarmsList(all), open: { appId: CLOCK_APP, params: {}, title: "Clock" } };
         });
     case "alarmManage": {
@@ -2177,9 +2202,9 @@ function runInner(cmd, args, env) {
     }
     case "taskList":
         return dbFind(env, "com.palm.tasklist:1").then(function (lists) {
-            var name = String(args.list || ""), n = words(name).replace(/ list$/, "");
-            var l = name ? lists.filter(function (x) { return words(x.name).replace(/ list$/, "") === n; })[0] || lists.filter(function (x) { return words(x.name).indexOf(n) === 0; })[0]
-                         : lists.filter(function (x) { return x.isDefault; })[0];
+            var name = String(args.list || "");
+            if (!listKey(name)) name = "";
+            var l = name ? listNamed(lists, name) : lists.filter(function (x) { return x.isDefault; })[0];
             if (name && !l) return { text: say.noList(name), open: { appId: TASKS_APP, params: {}, title: "Tasks" } };
             return dbFind(env, "com.palm.task:1").then(function (tasks) {
                 // "for today": what is due by the end of that day (or of the week).

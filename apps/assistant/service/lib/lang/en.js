@@ -209,7 +209,11 @@ function repeatDays(list) {
 }
 
 function extract(text, now) {
-    var t = " " + timeWords(String(text || "").toLowerCase()) + " ", info = {};
+    // "at like six thirty", "at about 3", "for maybe ten minutes": the time as said.
+    var said = String(text || "").toLowerCase().replace(/\b(at|by|for|in|around|about) (?:like|about|around|roughly|approximately|maybe|say|um|uh)\b ?/g, "$1 ")
+        // "in a couple of hours", "in a few minutes"
+        .replace(/\ba couple(?: of)? (?=(?:minutes?|mins?|hours?|hrs?|days?|weeks?)\b)/g, "2 ").replace(/\ba few (?=(?:minutes?|mins?|hours?|hrs?|days?|weeks?)\b)/g, "3 ");
+    var t = " " + timeWords(said) + " ", info = {};
     function take(re, fn) {
         var m = re.exec(t);
         if (!m || fn(m) === false) return false;
@@ -442,7 +446,9 @@ function arithmetic(text) {
          .replace(/\bto the power of\b/g, "^").replace(/\bsquared\b/g, "^2").replace(/\bcubed\b/g, "^3")
          .replace(/\b(?:multiplied by|times)\b/g, "*").replace(/(\d)\s*x\s*(\d)/g, "$1 * $2")
          .replace(/\b(?:divided by|over)\b/g, "/").replace(/\bplus\b/g, "+").replace(/\b(?:minus|take away)\b/g, "-")
-         .replace(/×/g, "*").replace(/÷/g, "/").replace(/(\d),(\d{3})\b/g, "$1$2").trim();
+         .replace(/×/g, "*").replace(/÷/g, "/").replace(/(\d),(\d{3})\b/g, "$1$2")
+         // "20 percent of 45 dollars": the sum, the currency aside.
+         .replace(/\$\s?(?=\d)/g, "").replace(/(\d)\s*(?:dollars?|bucks|euros?|pounds?|quid)\b/g, "$1").trim();
     if (!/^[\d\s.+\-*/^()%sqrt]+$/.test(t)) return null;
     if (!/[+\-*/^%]|sqrt/.test(t.replace(/^-/, ""))) return null;
     return t;
@@ -459,6 +465,13 @@ var CONTRACTIONS = { whats: "what's", hows: "how's", wheres: "where's", whens: "
                      im: "i'm", ive: "i've", dont: "don't", doesnt: "doesn't", didnt: "didn't", cant: "can't", wont: "won't", isnt: "isn't",
                      arent: "aren't", wasnt: "wasn't", havent: "haven't", shouldnt: "shouldn't", couldnt: "couldn't", todays: "today's",
                      tomorrows: "tomorrow's", lemme: "let me", gimme: "give me", gotta: "got to", gonna: "going to", wanna: "want to", youre: "you're" };
+// The requests said as "would you mind ...ing" ("turning off the wifi"), as their verbs.
+var GERUND = { turning: "turn", switching: "switch", setting: "set", putting: "put", calling: "call", texting: "text", messaging: "message",
+               emailing: "email", playing: "play", pausing: "pause", skipping: "skip", opening: "open", adding: "add", making: "make",
+               taking: "take", giving: "give", reminding: "remind", sending: "send", checking: "check", reading: "read", starting: "start",
+               stopping: "stop", waking: "wake", locking: "lock", muting: "mute", showing: "show", finding: "find", getting: "get",
+               telling: "tell", creating: "create", scheduling: "schedule", navigating: "navigate", booking: "book", cancelling: "cancel",
+               canceling: "cancel", deleting: "delete", removing: "remove", moving: "move", writing: "write", looking: "look", searching: "search" };
 function clean(text) {
     var t = String(text || "").toLowerCase().replace(/[“”]/g, "\"").replace(/[‘’]/g, "'").replace(/\s+/g, " ").trim();
     t = t.replace(/(^|[\s,])(?:um+|uh+|umm+|uhm+|erm+|hmm+|uh huh)(?=[\s,.!?]|$)[,]?/g, "$1").replace(/\s+/g, " ").trim();
@@ -473,6 +486,14 @@ function clean(text) {
     do {
         before = t;
         t = t.replace(/^(?:hey |ok |okay )?(?:phoenix|assistant)[,!.]?\s+/, "")
+             // "hey, can you wake me up ...": a bare "hey" before a request (a greeting alone stays one).
+             .replace(/^(?:hey|hi|yo)[,!.]?\s+(?=(?:can|could|would|will|please|set|wake|remind|call|text|turn|play|what|what's|how|is|are|do|show|tell|open|add|send|make|start|stop|put|take|navigate|give|find|i|i'm|let's)\b)/, "")
+             // "would you mind turning off the wifi", "do me a favor and turn on bluetooth", "you know what, set an alarm".
+             .replace(/^(?:would|do) you mind (\w+ing)\b/, function (m, g) { return GERUND[g] || m; })
+             .replace(/^(?:(?:can|could|would) you )?do me a (?:favou?r|solid)[,]?(?: and| to)?\s+/, "")
+             .replace(/^you know what[,!.]?\s+/, "")
+             // "I need an alarm for 6", "I'd like a timer for 5 minutes": set one.
+             .replace(/^(?:i (?:want|need|would like|'d like)|i'd like|give me|get me|i'll need)\s+(?=(?:a|an|another|one more|a new)\s+(?:alarm|timer|reminder|wake ?up call|countdown)\b)/, "set ")
              .replace(/^(?:please|kindly|just|so|well|alright|all right|ok so|okay so)[,]?\s+/, "")
              .replace(/^(?:ok|okay)[,]?\s+(?=\S+\s+\S)/, "")
              .replace(/^(?:can|could|would|will) you(?: please| possibly| maybe| kindly| just)*\s+/, "")
@@ -529,7 +550,7 @@ function toggle(t) {
         return { setting: target, state: "toggle" };
     if ((m = /^(.+?) (on|off)$/.exec(t)) && (target = toggleTarget(m[1])))
         return { setting: target, state: m[2] };
-    if (/^(?:go|switch|put (?:me|the phone) )?(?:in(?:to)? )?(?:do not disturb|dnd)(?: mode)?$/.test(t)) return { setting: "dnd", state: "on" };
+    if (/^(?:go|switch|put (?:me|the phone|my phone) |set (?:the |my )?phone )?(?:in(?:to)? |on |to )?(?:do not disturb|dnd)(?: mode)?$/.test(t)) return { setting: "dnd", state: "on" };
     // Silent mode is the ringer off.
     if (/^(?:silence|mute) (?:the |my )?(?:phone|ringer|ringtone)$|^(?:put|set|switch) (?:the |my )?(?:phone|ringer) (?:on|to) silent$|^(?:turn on |switch on |enable )?(?:silent|vibrate) mode(?: on)?$|^go silent$/.test(t))
         return { setting: "ringer", state: "off" };
@@ -620,6 +641,10 @@ function textMessageWords(t, ctx) {
     if (/^write (?:this|that|it|down)\b/.test(t)) return null;   // "write this down: ...": a note
     // "send Mom a message saying call me back": who, without the message's name.
     rest = rest.replace(/^(.+?) (?:a |an )?(?:quick )?(?:text|message|sms|note|line)(?: message)?(?=,|:| saying| that says| to say| and say| that)/, "$1");
+    // "text Will, Rose and Mark that dinner is at 7": a text to each
+    // (lib/lang/en-talk.js multiples), never one to Will saying "Rose and Mark ...".
+    var many = /^(.+?)(?::| saying| that says| to say| and say| that)\s+(.+)$/.exec(rest);
+    if (many && /,| and /.test(many[1]) && many[1].split(/\s*,\s*(?:and\s+)?|\s+and\s+/).every(function (p) { return p && nameAtStart(p, ctx) === p; })) return null;
     var sep = /^(.+?)(?:,|:| saying| that says| to say| and say| that)\s+(.+)$/.exec(rest);
     // "tell me a joke" is no message; "tell priya i'll be late" is, to a contact.
     if (/^tell /.test(t) && !sep && !nameAtStart(rest, ctx)) return null;
@@ -651,6 +676,8 @@ function timer(t) {
     var sleep = sleepTimer(t);
     if (sleep) return sleep;
     var m = /^(?:set|start|create|make|put on|run)?\s*(?:a |an |the )?(?:timer|countdown)(?: for| of)? (.+?)(?: (?:for|called|named|labelled|labeled) (?:the )?(.+))?$/.exec(t)
+        // "put a timer on for 4 minutes", "set a timer going for ten minutes"
+        || /^(?:put|set|get|start) (?:a |an |the )?timer (?:on|going|running)(?: for)? (.+?)(?: (?:for|called|named) (?:the )?(.+))?$/.exec(t)
         || /^(?:set |start )?(?:a |an )?(.+?) (?:timer|countdown)(?: (?:for|called) (?:the )?(.+))?$/.exec(t)
         || /^(?:time|count down) (.+?)()$/.exec(t);
     if (!m) return null;
@@ -666,7 +693,8 @@ function timer(t) {
 function snooze(t, now) {
     var m = /^snooze(?: (?:it|that|the alarm|my alarm|alarm))?(?:(?: for| by)? (.+))?$/.exec(t);
     if (!m) return null;
-    var s = m[1] ? duration(m[1]) : 600;
+    // "snooze for five more minutes", "another ten minutes".
+    var s = m[1] ? duration(m[1].replace(/^(?:another|an extra|a further) /, "").replace(/ (?:more|extra|longer) (?=min|sec|hour)/, " ")) : 600;
     if (!s) return null;
     return { time: now + s * 1000, label: "Snooze" };
 }
@@ -734,6 +762,9 @@ function alarmManage(t, now) {
              all: !c && (/\ball\b/.test(t) || /alarms$/.test(t)) };
 }
 function alarmList(t) {
+    // "When's my next alarm", "how long until my alarm goes off": the next one to ring.
+    if (/^(?:what(?:'s| is)|when(?:'s| is)|what time is|what time's) my next alarm(?: set for)?$|^how (?:long|much time)(?: is there)? (?:until|till|before) (?:my |the )?(?:next )?alarm(?: goes off| rings| wakes me(?: up)?)?$|^when (?:does|will) (?:my |the )?(?:next )?alarm (?:go off|ring)$|^when do i (?:have to )?(?:wake|get) up$/.test(t))
+        return { next: true };
     if (/^(?:what|which) alarms?(?: do i have| are set| have i set| are on| is set| have i got)?(?: set| on)?(?: for tomorrow| tomorrow)?$|^what time is my (?:next )?alarm(?: set)?(?: for)?(?: tomorrow| for tomorrow)?$|^(?:show|list|check|open)(?: me)? (?:my |the |all (?:my )?)?alarms$|^do i have (?:an |any )?alarms?(?: set| on)?(?: for tomorrow| tomorrow)?$|^(?:what(?:'s| is)|when(?:'s| is)) my (?:next )?alarm(?: set for)?$|^(?:my )?alarms$|^what time (?:is|'s) (?:my |the )?(?:next )?alarm(?: set)?(?: for)?$|^(?:have|did) i (?:set|got) (?:an |any |my )?alarms?(?: set| on)?(?: for tomorrow| tomorrow| for the morning)?$|^is (?:there|my) (?:an |any )?alarm (?:set|on)(?: for tomorrow| tomorrow)?$|^are (?:there )?any alarms (?:set|on)(?: for tomorrow| tomorrow)?$/.test(t))
         return {};
     return null;
@@ -819,7 +850,8 @@ function event(t, ctx) {
         if (noun && (!said || /^with /.test(said))) title = noun[1].replace(/^calendar /, "").replace(/^appt$/, "appointment") + (said ? " " + said : "");
         else title = said;
     }
-    title = title.replace(/^(?:an?|the) /, "").trim();
+    // "lunch with Will on my calendar for Thursday": the day taken, its "for" too.
+    title = title.replace(/^(?:an?|the) /, "").replace(/\s+(?:for|on|at|by|this|next)$/, "").trim();
     // Who comes: "with Sam and Priya".
     var invitees = [];
     var w = / with (.+?)(?: (?:about|for|to discuss|re) .+)?$/.exec(" " + title);
@@ -846,7 +878,7 @@ function event(t, ctx) {
 // is my dentist appointment"
 function agenda(t, ctx) {
     var CAL = "(?:calendar|schedule|agenda|diary|appointments?|meetings?|events?|plans?)";
-    var asks = new RegExp("^(?:what(?:'s| is| do i have| have i got| are)|whats|show(?: me)?|tell me|read(?: me)?|check|list|give me|how(?:'s| does| is)|open|go through|anything|do i have anything|do i have any|have i got anything|have i got any|am i (?:busy|free)|any)\\b").test(t);
+    var asks = new RegExp("^(?:what(?:'s| is| do i have| have i got| are| am i)|whats|show(?: me)?|tell me|read(?: me)?|check|list|give me|how(?:'s| does| is)|open|go through|anything|do i have anything|do i have any|have i got anything|have i got any|am i (?:busy|free)|any)\\b").test(t);
     var mentions = new RegExp("\\b" + CAL + "\\b").test(t);
     var m;
     // Next: "what's next", "what's my next meeting"
@@ -864,7 +896,7 @@ function agenda(t, ctx) {
     if ((m = /^(?:show(?: me)?|check|open|find|look up) (?:my |the |our )?(?:(.+?) )?(?:appointment|meeting|event|appt)(?: with (.+?))?(?: thing)?$/.exec(t))
         && (m[1] || m[2]) && !dayish && !/^(?:next|first|last|upcoming|\d|today|tomorrow|this|that|calendar|a|an|any)\b/.test(m[1] || ""))
         return { range: "find", query: m[1] || m[2] };
-    if (!(asks && (mentions || (dayish && /\b(?:have|got|on|busy|free|planned|happening)\b/.test(t)))) && !/^(?:my )?(?:calendar|schedule|agenda)(?: for)?(?: .+)?$/.test(t))
+    if (!(asks && (mentions || (dayish && /\b(?:have|got|on|busy|free|planned|happening|doing|up to)\b/.test(t)))) && !/^(?:my )?(?:calendar|schedule|agenda)(?: for)?(?: .+)?$/.test(t))
         return null;
     if (/^(?:add|create|new|schedule|book|put|make|set up)\b/.test(t)) return null;
     var info = extract(t, ctx.now);
@@ -1019,6 +1051,9 @@ function readMessages(t) {
     var m = /^(?:read|show|play|what(?:'s| is| was| were))(?: me)? (?:my |the )?(?:last|latest|most recent|newest|new|unread|recent)? ?(?:text |sms )?(?:messages?|texts?|sms)(?: from (.+))?$/.exec(t)
         || /^(?:do i have|have i got|any|check(?: my)?) (?:any )?(?:new |unread )?(?:text )?(?:messages?|texts?|sms)(?: from (.+))?$/.exec(t)
         || /^what did (.+?) (?:say|text|send|write)(?: me)?$/.exec(t)
+        // "did anyone text me", "who texted me", "has anybody messaged me today"
+        || /^(?:did|has|have) (?:anyone|anybody|someone|somebody)(?: just)? (?:text(?:ed)?|messaged?|sms(?:ed)?|written|wr(?:ote|ite)|sent)(?: me| to me)?(?: (?:a )?(?:text|message|anything))?(?: today| recently| yet| lately| this morning)?()$/.exec(t)
+        || /^who (?:just )?(?:texted|messaged|wrote to|sent) me(?: (?:a )?(?:text|message))?(?: last| today| just now)?()$/.exec(t)
         || /^(?:any word|anything|have i heard anything|did i hear anything|any news) from (.+)$/.exec(t);
     if (!m) return null;
     // "any new texts", "read my unread messages": the unread ones.
@@ -1032,10 +1067,15 @@ function media(t) {
     if (new RegExp("^(?:pause|hold)" + THIS + "$|^stop (?:the |this |my )?(?:music|song|track|playback|audio|podcast|playing)$").test(t)) return { action: "pause" };
     if (new RegExp("^(?:resume|unpause|continue|keep playing|restart)" + THIS + "$|^(?:play|start)(?: the| my)? (?:music|song|playback) (?:again|back)$|^(?:play)$|^continue playing$").test(t)) return { action: "play" };
     if (/^(?:next|skip)(?: (?:the |this )?(?:song|track|tune|one))?$|^(?:play |go to )?(?:the )?next (?:song|track|tune|one)$|^skip (?:this|it|ahead)$/.test(t)) return { action: "next" };
+    // "Play it again", "replay this song": from its start (the previous-track
+    // key, as on a headset: a song playing a while starts over). It was "Playing it again." from Music's search.
+    if (/^(?:play (?:it|that|this(?: song| track)?) again|replay(?: (?:it|that|this|this song|the song|that song))?|start (?:the|this) (?:song|track) over|(?:play it )?from the (?:top|beginning))$/.test(t)) return { action: "prev" };
     if (/^(?:previous|prev|last|go back|back)(?: (?:a )?(?:song|track|tune|one))?$|^(?:play |go to )?(?:the )?(?:previous|last) (?:song|track|tune|one)(?: again)?$|^go back (?:a|one) (?:song|track)$/.test(t)) return { action: "prev" };
     return null;
 }
 function volume(t) {
+    // "set the volume to seventy percent": the number as digits.
+    t = digits(t);
     var m;
     var V = "(?:volume|sound|music|it|audio|media volume)";
     if ((m = new RegExp("^(?:turn|crank|bring|put|push|set) (?:the )?" + V + " (up|down)(?: (?:a bit|a little|a lot|some|more))?$").exec(t))
@@ -1054,6 +1094,7 @@ function volume(t) {
     return null;
 }
 function brightness(t) {
+    t = digits(t);
     var m;
     var B = "(?:screen |display )?(?:brightness|backlight)";
     if ((m = new RegExp("^(?:set|change|put|turn|adjust|make) (?:the )?(?:" + B + "|screen|display)(?: level)? (?:to|at|up to|down to) (\\d+|max(?:imum)?|full|half|min(?:imum)?|lowest|highest)(?: ?%| percent)?$").exec(t))
@@ -1297,7 +1338,7 @@ function navigate(t) {
     return r;
 }
 
-function play(t) {
+function play(t, ctx) {
     var m = /^(?:play|listen to|put on|shuffle) (.+)$/.exec(t);
     if (!m) return null;
     var q = m[1].replace(/^sum (?=music|songs|tunes|jazz|rock)/, "some ").replace(/^(?:some |my |the )/, "")
@@ -1305,11 +1346,12 @@ function play(t) {
         .replace(/^(?:the )?(?:album|song|track|artist) /, "")
         .replace(/ (?:on|in) (?:music|the music app)$/, "").replace(/^by /, "").trim();
     if (/^(?:a )?(?:game|video|movie)\b/.test(q)) return null;
-    return { query: q === "music" ? "" : q };
+    // As said ("Playing Will Smith", not "will smith").
+    return { query: q === "music" ? "" : cased(q, ctx) };
 }
 
 function weather(t) {
-    var m = /^(?:what(?:'s| is| will be)(?: the)? |how(?:'s| is)(?: the)? |show(?: me)?(?: the)? |check(?: the)? |get(?: the)? |tell me the )?(weather|forecast|temperature)(?: be)?(?: looking)?(?: like| going to be like| forecast| (?:right )?now| outside)?(?: (?:in|for|at) (.+?))?(?: (today|tonight|tomorrow|this week|this weekend))?$/.exec(t);
+    var m = /^(?:what(?:'s| is| will be)(?: the)? |how(?:'s| is)(?: the)? |show(?: me)?(?: the)? |check(?: the)? |get(?: the)? |tell me the )?(weather|forecast|temperature)(?: be)?(?: looking)?(?: like| going to be like| forecast| (?:right )?now| outside)?(?: (?:in|for|at) (.+?))?(?: (today|tonight|tomorrow|this week|this weekend|(?:on |this |next )?(?:mon|tues|wednes|thurs|fri|satur|sun)day))?$/.exec(t);
     if (m) {
         var place = (m[2] || "").replace(/ (today|tonight|tomorrow)$/, "");
         // "the forecast for this week": a time, not a place.
@@ -1317,13 +1359,16 @@ function weather(t) {
         if (asDay) return { place: "", day: "this " + asDay[2] };
         var day = m[3] || (/ (today|tonight|tomorrow)$/.exec(m[2] || "") || [])[1] || "";
         if (/^(?:it|that)$/.test(place)) return null;
-        if (/^(?:today|tonight|tomorrow)$/.test(place)) { day = place; place = ""; }
+        if (/^(?:today|tonight|tomorrow|(?:this |next )?(?:mon|tues|wednes|thurs|fri|satur|sun)day)$/.test(place)) { day = place; place = ""; }
         return { place: place, day: day };
     }
-    m = /^(?:will|is) it (?:going to )?(?:be )?(rain|raining|snow|snowing|sunny|hot|cold|warm|windy)(?: (?:in|at) (.+?))?(?: (today|tonight|tomorrow))?$/.exec(t)
+    m = /^(?:will|is) it (?:going to )?(?:be )?(rain|raining|snow|snowing|sunny|hot|cold|warm|windy)(?: (?:in|at) (.+?))?(?: (today|tonight|tomorrow|this week|this weekend|(?:on |this |next )?(?:mon|tues|wednes|thurs|fri|satur|sun)day))?$/.exec(t)
         || /^do i need (?:an umbrella|a coat|a jacket)()(?: (?:in|at) (.+?))?(?: (today|tonight|tomorrow))?$/.exec(t);
     if (m) return { place: m[2] || "", day: m[3] || "", about: m[1] || "rain" };
     if (/^(?:how (?:hot|cold|warm) is it|is it (?:hot|cold) outside)(?: outside)?$/.test(t)) return { place: "", day: "" };
+    // "what's the high today", "what's the low tonight", "how hot will it get tomorrow"
+    if ((m = /^what(?:'s| is| will be) (?:the |today's |tomorrow's )?(?:high|low|high and low|highs and lows|temperature high)(?: (?:in|for|at) (.+?))?(?: (today|tonight|tomorrow))?$/.exec(t)))
+        return { place: m[1] || "", day: m[2] || (/tomorrow's/.test(t) ? "tomorrow" : "") };
     m = /^how (hot|cold|warm) (?:is it going to be|will it be|is it going to get|will it get)(?: (?:in|at) (.+?))?(?: (today|tonight|tomorrow|this week|this weekend))?$/.exec(t)
         || /^(?:what(?:'s| is) it like|how(?:'s| is) it(?: looking)?) (?:outside|out there|out)()(?: (today|tonight|tomorrow))?$/.exec(t);
     if (m) return { place: m[2] || "", day: m[3] || "" };
@@ -1380,6 +1425,8 @@ function callBack(t) {
 // "who called me", "did I miss any calls", "my recent calls"
 function callLog(t) {
     if (/^(?:did i (?:miss|have) any (?:missed )?calls(?: today)?|(?:do i have |have i got |any )?missed calls?|(?:show(?: me)?|check|read) (?:my )?missed calls|have i missed any calls|who did i miss)$/.test(t)) return { missed: true };
+    // "did anyone call me", "has anybody called today"
+    if (/^(?:did|has|have) (?:anyone|anybody|someone|somebody) (?:call(?:ed)?|ring(?:ed)?|phone(?:d)?|tr(?:y|ied) to call)(?: me)?(?: today| recently| yet| lately| this morning)?$/.test(t)) return { missed: true };
     if (/^(?:who (?:just )?called(?: me)?(?: last| today)?|who was (?:that|the last) call(?: from)?|(?:what was|show(?: me)?|read) (?:my )?(?:last|latest|recent) calls?|(?:show(?: me)?|check) (?:my )?(?:recent calls|call log|call history)|(?:my )?(?:recent calls|call log|call history))$/.test(t)) return { missed: false };
     return null;
 }
@@ -1861,7 +1908,7 @@ function edit(t, ctx) {
 
 // The talk around the commands (lib/lang/en-talk.js).
 var talk = require("./en-talk")({ D: D, extract: extract, resolve: resolve, clock: clock, duration: duration, withPart: withPart,
-                                  toggleTarget: toggleTarget, capital: capital });
+                                  toggleTarget: toggleTarget, capital: capital, number: number });
 
 var rules = [
     ["help", help],
@@ -2245,7 +2292,7 @@ var say = {
     noList: function (name) { return "You don't have a list called " + quote(name) + "."; },
     tasks: function (name, items) {
         var where = name ? "your " + name + " list" : "your tasks";
-        if (!items.length) return "There's nothing on " + where + ".";
+        if (!items.length) return name ? "There's nothing on " + where + "." : "You have no tasks to do.";
         var shown = items.slice(0, 8).map(quote);
         return cap(where.replace(/^your /, "Your ")) + ": " + list(shown) + (items.length > 8 ? ", and " + (items.length - 8) + " more" : "") + ".";
     },
@@ -2365,6 +2412,13 @@ var say = {
         return (alarms.length === 1 ? "You have one alarm: " : "You have " + alarms.length + " alarms" + (on.length !== alarms.length ? ", " + on.length + " on" : "") + ": ") + list(items) + ".";
     },
     alarmNoMatch: function (what) { return "You have no alarm for " + what + "."; },
+    // The next alarm to ring (at: ms, or null for none on), and how long until then.
+    nextAlarm: function (at, now) {
+        if (!at) return "You have no alarms on.";
+        var mins = Math.max(1, Math.round((at - now) / 60000)), day = dayText(at, now);
+        var left = mins < 600 ? durationText(mins * 60) : "about " + plural(Math.round(mins / 60), "hour");
+        return "Your next alarm is " + (/^(?:today|tomorrow)$/.test(day) ? day : "on " + day) + " at " + timeText(at) + ", in " + left + ".";
+    },
     alarmsOff: function (items) {
         var seen = {}, unique = items.filter(function (x) { return seen[x] ? false : (seen[x] = true); });
         return items.length === 1 ? "Turned off your alarm for " + items[0] + "." : "Turned off " + items.length + " alarms (" + list(unique) + ").";
@@ -2665,12 +2719,16 @@ var say = {
     weather: function (place, temp, unit, desc, day, hi, lo) {
         var where = place ? " in " + place : "";
         if (day === "tomorrow") return "Tomorrow" + where + ": " + desc + ", " + Math.round(hi) + "° / " + Math.round(lo) + "°" + unit + ".";
+        var wd = /^(?:on |this |next )?((?:mon|tues|wednes|thurs|fri|satur|sun)day)$/.exec(day || "");
+        if (wd) return "On " + cap(wd[1]) + where + ": " + desc + ", " + Math.round(hi) + "° / " + Math.round(lo) + "°" + unit + ".";
         return "It's " + Math.round(temp) + "°" + unit + " and " + desc + where + "." + (hi !== null ? " Today: " + Math.round(hi) + "° / " + Math.round(lo) + "°." : "");
     },
     // "Will it rain tomorrow?": about (rain, snow, sunny, hot, cold, warm,
     // windy) by the chance of rain and the day's sky and temperatures.
     weatherWill: function (about, place, day, chance, desc, hi, lo, unit) {
         var where = place ? " in " + place : "", when = day === "tonight" ? "tonight" : day;
+        var wd = /^(?:on |this |next )?((?:mon|tues|wednes|thurs|fri|satur|sun)day)$/.exec(day || "");
+        if (wd) when = "on " + cap(wd[1]);
         var sky = desc ? cap(desc) + ", " + Math.round(hi) + "° / " + Math.round(lo) + "°" + unit + "." : "";
         if (about === "rain" || about === "snow") {
             if (typeof chance !== "number") return sky || "I couldn't get the chance of " + about + ".";
@@ -3019,6 +3077,15 @@ module.exports = {
     help: function (id) { return HELP.filter(function (h) { return h.id === id; })[0] || null; },
     eventWords: eventWords,
     grounded: grounded,
+    // The day the first of two requests named, for a second that names none
+    // ("the weather tomorrow and do I have any meetings"): the second with it, or null.
+    sharedDay: function (left, right) {
+        var DAY = /\b(today|tonight|tomorrow(?: (?:morning|afternoon|evening|night))?|this (?:morning|afternoon|evening|weekend|week)|next (?:week|weekend)|(?:on |this |next )?(?:mon|tues|wednes|thurs|fri|satur|sun)day)\b/;
+        var d = DAY.exec(left);
+        return d && !DAY.test(right) ? right + " " + d[1] : null;
+    },
+    // A correction mid-sentence ("for seven, no wait, eight"): the sentence as meant (lib/lang/en-corrections.js).
+    corrected: require("./en-corrections")({ number: number }),
     // The decision model's options for words the grammar did not take (lib/lang/en-candidates.js).
     candidates: require("./en-candidates")({ MENTIONS: MENTIONS, extract: extract, resolve: resolve, duration: duration }),
     // Words that take something away ("turn off", "delete", "I don't need"): a model's removing choice needs them.

@@ -101,7 +101,7 @@ describe("casual words for every kind of command", () => {
         ["dim the screen", "brightness", { action: "down" }],
         // Music.
         ["spin some jams", "play", { query: "" }],
-        ["blast some Daft Punk", "play", { query: "daft punk" }],
+        ["blast some Daft Punk", "play", { query: "Daft Punk" }],
         ["let me hear some jazz", "play", { query: "jazz" }],
         // Weather.
         ["what's the weather looking like", "weather", { place: "", day: "" }],

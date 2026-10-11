@@ -96,7 +96,14 @@ function parse(text, ctx) {
     var t = lang.clean(text);
     if (!t) return null;
     var c = { now: ctx.now || Date.now(), original: String(ctx.original || text), apps: ctx.apps || [], names: ctx.names || [], appCommands: ctx.appCommands || [] };
-    var found = attempt(lang, t, c, 0);
+    // A correction mid-sentence ("set an alarm for seven, no wait, eight"):
+    // the sentence as meant, before the words as said ({corrected: words}).
+    var found;
+    if (lang.corrected) {
+        var meant = lang.corrected(t, c.names, function (s) { var p = attempt(lang, s, c, 0); return !!p && p.command !== "negated"; });
+        if (meant && (found = attempt(lang, meant, c, 0))) { found.corrected = meant; return found; }
+    }
+    found = attempt(lang, t, c, 0);
     if (found || !lang.normalize) return found;
     var fixed = lang.normalize(t, c.names);
     if (fixed && (found = attempt(lang, fixed, c, 0))) found.normalized = fixed;
@@ -114,7 +121,7 @@ function one(lang, t, c) {
 function attempt(lang, t, c, depth) {
     var found = one(lang, t, c);
     if (lang.multiples && !found) {
-        var said = lang.multiples(t), parts = said ? said.map(function (x) { return one(lang, x, c); }) : null;
+        var said = lang.multiples(t, c.names), parts = said ? said.map(function (x) { return one(lang, x, c); }) : null;
         if (parts && parts.every(Boolean)) return { command: "multi", args: { parts: parts } };
     }
     var multi = depth < 2 && lang.splits ? split(lang, t, c, depth) : null;
@@ -154,6 +161,15 @@ function split(lang, t, c, depth) {
         if (L.command === "call" && /^tell (?:him|her|them)\b/.test(right)) return L;
         var R = (lang.startsCommand(right) ? attempt(lang, right, c, depth + 1) : null) || (carried ? attempt(lang, carried, c, depth + 1) : null);
         if (!R || R.command === "beyond" || R.command === "negated") continue;
+        // "Remind me tomorrow to call Will and text Rose": what to be reminded
+        // of, one reminder (the sweep, 11 October 2026: it texted Rose).
+        if ((L.command === "reminder" || L.command === "task") && /^(?:call|text|email|replyMessage)$/.test(R.command)) continue;
+        // "What's the weather tomorrow and do I have any meetings": the
+        // second about the day the first named.
+        if (lang.sharedDay && /^(?:agenda|weather|freeTime)$/.test(R.command)) {
+            var withDay = lang.sharedDay(left, right), R2 = withDay ? attempt(lang, withDay, c, depth + 1) : null;
+            if (R2 && R2.command === R.command) R = R2;
+        }
         // "call sam and tell him I'm on my way": the call.
         if (L.command === "call" && R.command === "text" && /^(?:him|her|them)$/.test(String(R.args.who || ""))) return L;
         if (!addressed(R, c)) continue;

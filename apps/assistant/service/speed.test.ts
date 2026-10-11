@@ -17,7 +17,7 @@ import { device } from "./test/device";
 
 const req = createRequire(import.meta.url);
 type Turn = { say: string; replies: { path: string }[] };
-type Case = { id: string; say?: string; turns?: { say: string }[]; settings?: object; deviceState?: object; locationAllowed?: boolean | null };
+type Case = { id: string; say?: string; turns?: { say: string }[]; settings?: object; deviceState?: object; locationAllowed?: boolean | null; put?: object[] };
 const harness = req("../../../tools/eval-assistant.cjs") as {
     loadCases(f?: string): Case[];
     runCase(c: Case, o: object): Promise<{ turns: Turn[] }>;
@@ -54,7 +54,7 @@ describe("what the grammar does never waits for the model", () => {
         for (const c of harness.loadCases().concat(heldOut)) {
             const alone = await harness.runCase(c, {});
             const m = model();
-            const d = device({ seed: harness.seed, apps: harness.APPS, llm: m.llm, llmRequest: m.llmRequest,
+            const d = device({ seed: (put) => { harness.seed(put); for (const o of c.put ?? []) put(JSON.parse(JSON.stringify(o))); }, apps: harness.APPS, llm: m.llm, llmRequest: m.llmRequest,
                                settings: { followUps: false, ...(c.settings ?? {}) },
                                locationAllowed: c.locationAllowed === undefined ? true : c.locationAllowed });
             if (c.deviceState) Object.assign(d.state, c.deviceState);
