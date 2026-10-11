@@ -310,15 +310,21 @@ export function searchEngineName(list: SearchList | undefined): string {
 // the one the Assistant's "search the web for ..." opens.
 function WebSearch({ settings, set, off }: { settings: AssistantSettings; set: (c: Partial<AssistantSettings>) => void; off: boolean }) {
     const list = useLuna<SearchList>((cb, err) => universalSearch.watchList(cb, err), []).value;
-    const engine = searchEngineName(list) || "the search engine";
+    const name = searchEngineName(list);
+    const engine = name || "the search engine";
+    // A row is one line of title and one of subtitle (cut on a phone): the
+    // engine first in it, the rest in the note under it.
     return (
-        <Group label="Web search">
-            <Row title="Search the web automatically" testId="as-auto-search-row" disabled={off}
-                 subtitle={`When nothing on the phone can answer, it searches ${engine} at once instead of asking. Your words go to ${engine}; never ones about your messages, contacts or calendar.`}>
-                <ToggleButton value={settings.autoSearch} label="Search the web automatically" testId="as-auto-search" disabled={off}
-                              onChange={(v) => set({ autoSearch: v })} />
-            </Row>
-        </Group>
+        <>
+            <Group label="Web search">
+                <Row title="Search automatically" testId="as-auto-search-row" disabled={off}
+                     subtitle={`${name ? name + ", w" : "W"}ithout asking`}>
+                    <ToggleButton value={settings.autoSearch} label="Search the web automatically" testId="as-auto-search" disabled={off}
+                                  onChange={(v) => set({ autoSearch: v })} />
+                </Row>
+            </Group>
+            <Note testId="as-auto-search-note">{`When nothing on the phone can answer, the Assistant searches ${engine} at once instead of offering to (off: it asks, aloud when you talk to it). What you asked goes to ${engine}; never words about your own messages, contacts or calendar. The engine is the default in Settings > Just Type.`}</Note>
+        </>
     );
 }
 

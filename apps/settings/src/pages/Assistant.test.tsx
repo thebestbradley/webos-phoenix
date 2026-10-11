@@ -97,16 +97,17 @@ describe("Settings > Assistant: Search the web automatically", () => {
     it("is off until turned on, and names the search engine Just Type uses", async () => {
         await assistant.setSettings({ enabled: true });
         render(<AssistantPage />);
-        await waitFor(() => expect(screen.getByTestId("as-auto-search-row").textContent).toMatch(/searches Google at once/));
+        await waitFor(() => expect(screen.getByTestId("as-auto-search-row").textContent).toMatch(/^Search automaticallyGoogle, without asking/));
         expect(checked("as-auto-search")).toBe(false);
         expect((await assistant.settings()).autoSearch).toBe(false);
-        expect(screen.getByTestId("as-auto-search-row").textContent).toMatch(/Your words go to Google; never ones about your messages, contacts or calendar/);
+        expect(screen.getByTestId("as-auto-search-note").textContent).toMatch(/searches Google at once instead of offering to.*What you asked goes to Google; never words about your own messages, contacts or calendar/);
         fireEvent.click(toggle("as-auto-search"));
         await waitFor(() => expect(checked("as-auto-search")).toBe(true));
         expect((await assistant.settings()).autoSearch).toBe(true);
         // Just Type's default engine changed: named here too.
         await act(async () => { await universalSearch.setDefaultEngine("duckduckgo"); });
-        await waitFor(() => expect(screen.getByTestId("as-auto-search-row").textContent).toMatch(/searches DuckDuckGo at once.*Your words go to DuckDuckGo/));
+        await waitFor(() => expect(screen.getByTestId("as-auto-search-row").textContent).toMatch(/DuckDuckGo, without asking/));
+        expect(screen.getByTestId("as-auto-search-note").textContent).toMatch(/searches DuckDuckGo at once.*goes to DuckDuckGo/);
         await act(async () => { await universalSearch.setDefaultEngine("google"); });
         fireEvent.click(toggle("as-auto-search"));
         await waitFor(async () => expect((await assistant.settings()).autoSearch).toBe(false));

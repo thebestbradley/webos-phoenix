@@ -1131,6 +1131,142 @@ grammar or a bigger model; Qwen3 4B, the owner's model, was not measured
 here (no new models downloaded); times on a phone are still to be
 measured; the decision model below.
 
+### Every button, asked aloud (11 October 2026)
+
+The owner: "For the assistant, we need to have a toggle that it
+automatically searches the web in settings, and if talk mode is on and it
+displays the search the web button that it also asks out loud so you can
+answer hands-free and it'll search the web"; "you can also ask it just
+plainly to search the web and it'll do it"; and then "that approval logic
+for any button ... any action tool or command that displays a button, if
+we're in talk mode, it should ask as well, so it could be completely
+hands-free".
+
+**One pending choice** (`assistant.js` `choiceOf`, `answerChoice`). A
+reply that ends on buttons waits for one answer: the button, or words,
+typed or spoken, whichever comes first; the other then goes (the message is
+chosen, or its read-back done or cancelled), in the system view and the
+app alike. Only the assistant's last word waits: a "yes" answers what was
+just asked, never something said before it (a read-back followed by
+anything else no longer takes a later "yes", typed or spoken). The words
+(`lib/lang/en.js` `answer`, `choiceAnswer`): yes ("yes", "yeah", "sure",
+"go ahead", "please", "do it", "yes please", ...), no ("no", "nope",
+"never mind", "cancel", "stop", "that's okay", "no thanks", ...), a choice
+by its name ("search it", "look it up", "google that", "ask Claude", "open
+Music", "Chris Moore"), a clear part of a name in a "which one?" ("Moore"),
+its place or number ("the second one", "2", "the last one"; the places are
+the choices read aloud). Words that are a request of their own go on as
+one ("set a timer for 5 minutes" after a web search was offered; "open
+settings" by the grammar, as it would have).
+
+**Talk mode** (a spoken conversation in the system view: `ask {voice}`).
+The buttons' question is asked aloud and shown, in place of the offer in
+words (`askAloud`); the session listens for the answer in its wait, as for
+anything said (`AssistantOverlay.qml`: it listened for ever while a
+read-back waited; now for Keep listening, then the check-in and goodbye).
+An answer that is not clear is asked again once ("Sorry, should I send it?
+Yes or no.", "Sorry, which one: Chris Park or Chris Moore?"), then left
+("I didn't catch that, so I won't send it."); an offer takes anything else
+as a new request, so the user can just ask again in other words.
+
+| Buttons | Where | Asked aloud in talk mode | A yes, a no, a name |
+| --- | --- | --- | --- |
+| Read-backs: Send / Call / Yes and Cancel | `text`, `replyMessage`, `email`, `emailReply`, `call`, `callBack`, `voicemail` (call), deleting alarms, `eventCancel` (one day or all), `undo`, an app's command that sends or deletes, and a model's or the decision model's guess | The read-back is the question: "Send “I'm running late” to Sam Lee?", "Call Mom ((303) 555-0101)?", "Delete 2 alarms (7:00 AM on weekdays and 6:30 PM)?", "Undo: remove “Lunch” from your calendar?", "Did you mean: turn the flashlight off?" | Only a plain yes (or the button) does it; no, cancel, stop or never mind cancels; not clear: asked again, then cancelled; nothing said before the wait is over: cancelled at the check-in ("I didn't hear an answer, so I won't send it. Anything else?"), and by "I'm done" ("OK, I won't send it. Bye for now!") |
+| Which one: the names | A text, call or email to a first name two contacts share | "Which one: Chris Park or Chris Moore?" (four or more: the first three, then "or someone else?") | The name, a clear part of it, its place or number; no: left ("OK, I'll leave it."); yes or anything unclear: asked again, then left |
+| Follow-up questions: their answers and Skip | `lib/followups.js` | The question, after what was done (as before) | Its own answers (as before); unanswered, it waits for later |
+| Nothing here can: Open <app>, Ask <cloud model>, Search the web, Connect model | `offer` | "I can't answer that on my own yet. Want me to search the web for that?" (or "Should I look that up on the web?", "Shall I search the web for it?", in turn), "Want me to open Music or search the web?", "Want me to ask Claude or search the web?"; out of time: "I couldn't think that through in time. Want me to search the web or open Photos?" | Yes: the one choice read aloud (with several, "which one?"); no: "OK, I won't search for it."; Connect model is never read (it is set up by hand in Settings), but said by name it opens Settings |
+| A command's next step | `r.actions` | "You have 2 new voicemails. Want me to call voicemail?", "... Want me to reply to Sam Delgado?", "Wi-Fi is on. Want me to turn off Wi-Fi?", "Want me to pause it or skip to the next one?", "... Want me to start navigation?", "I couldn't save it to Memos ... Want me to copy it instead or open Memos?" | Yes runs it as its button does, and what sends or calls is still read back ("Call voicemail ((408) 555-0100)?"); Reply asks "What should I say to Sam Delgado?" in the conversation (its button too: it opened Messaging) |
+| The location: Allow / Don't Allow, Allow Location, Turn On Location Services, Location Settings | `lib/commands.js` `locationBlocked` | "Is it OK if I use it?" (the question already); "Want me to use your location or open Location Settings?" | Yes: Allow (Allow Location, Turn On Location Services); no: Don't Allow |
+| After a model's answer: Save as Memo, Show in Maps, Search the web | `withNext` | "Want me to save it as a memo or search the web?" | As above |
+| A currency without the day's rates: Search the web | `convert` (`offerWeb`) | "Want me to search the web for that?" | As above |
+| Open <app> after a command did what was asked | `outcome` (`r.open`) | Not asked: nothing waits there, and the conversation stays in front ("Sent to Sam Lee." needs no "Want me to open Messaging?") | Said, "open Messaging" opens it |
+| Not buttons: "Did you mean ...?" suggestions, the things an answer shows, help's examples | | Their words are said as they are | They fill the field, or open on a tap |
+
+A search, or an app a spoken choice opened, comes up in front: once it is
+said, the system view makes way, as for the Search the web button (typed,
+at once).
+
+**"Search the web", plainly.** "search the web", "look it up", "google
+that", "search for that", "do a web search" after a web search was offered
+search the question before it (they searched for "the web" and "that"); with
+none offered they ask "What should I search the web for?", and the next
+words are it. "Search the web for X" and "look up X" are as before. The
+search is the `search` command's, with Just Type's default engine
+(`com.palm.universalsearch` `defaultSearchEngine`, Settings > Just Type).
+
+**Search the web automatically** (Settings > Assistant > Web search >
+Search automatically, "Google, without asking": the engine first, as a
+row's one line is cut on a phone, and a note under it saying the rest; off
+by default, as the question goes to the search engine; `autoSearch`, which
+only Settings may turn on). What nothing on the phone
+could answer is searched at once instead of offered: one line ("Searching
+the web for “who won the 1998 World Series”."), spoken in talk mode, and
+the browser on it, as the button does. That is a question nothing here
+answers, words close to no command and no app, no on-device model or the
+model out of time or failing, a translation without a model, a currency
+without the day's rates. Never what a command did or failed at for another
+reason (an alarm that could not be set), nor what nothing here does (other
+devices, payments, orders: said at once, the web offered), nor over the
+lock screen, nor words that look private: the user's own things ("my",
+"did I", "do I have", their inbox, voicemail, passwords, bank), a
+contact's name, an email address or a phone number. That rule is kept in
+one place, `assistant.js` `looksPrivate` with the language's `personal`;
+then the web search is offered as before.
+
+**Hands-free to the end.** "Hey Phoenix, who won the 1998 World Series?"
+... "Want me to search the web for that?" ... "Sure." ... "Searching the
+web for “Who won the 1998 World Series”." and the browser comes up with the
+results. Reading the top result aloud would need a search API that answers
+in words or data (the engines in Just Type are web pages; DuckDuckGo's
+Instant Answer API has no general results, Brave's and Bing's need a key
+and an account): an open question (OPEN-QUESTIONS Q116), not built.
+
+**Measured** (`tools/eval-assistant.cjs`: a case's or turn's `"voice":
+true` asks it as spoken, `{"silence": true}` is the wait running out).
+New cases: the owner's "search the web" after an offer and its other words
+(`ws-*`), the automatic search and what it never searches (`auto-*`), and
+talk mode (`talk-*`: yes, no, unclear then yes, unclear twice, silence,
+"I'm done", which one by name, part, place and number, the location, Call
+Voicemail, Reply to the end, Start Navigation, a yes after something else);
+10 held out, written after and not tuned for.
+
+| Set | Before | After |
+| --- | --- | --- |
+| Main (`cases.json`) | 434/434 (100%), 0 unsafe | 490/490 (100%), 0 unsafe, 0 wrong read-backs (434 as before, and 56 new: search 26, talk mode 29, voice 1) |
+| Held out (`held-out.json`) | 69/79 (87%), 0 unsafe | 76/89 (85%), 0 unsafe: the 79 as before (69), and 7 of the 10 new; missed "yep send it" and "actually no" (asked again, then a plain yes or no does it) and "sure why not" (a new request) |
+
+The coordinator's first measure of the gap, on the service as it was: 2 of
+6 ("search the web" searched for "the web", "search for that" for "that",
+"look it up" and "yes" not understood). Tests: `choices.test.ts` (the
+words, the offer, talk mode, safety, the automatic search and what it never
+sends), `tst_wakeword.qml` (asked aloud, listened for, the browser making
+way; a read-back listened for only for the wait), Settings'
+`Assistant.test.tsx`.
+
+**Checked in the simulator** (a phone, `--scene wakeword`, the requests
+spoken by Kitten TTS into `--microphone-file` and heard by whisper; a
+machine so loaded that each turn took some 40 s): "Hey Phoenix, add Sam
+Lee to my contacts with the number 555 0100" (added; "Do you have an email
+address for Sam Lee?"), "Text Sam, I'm running late" ("Which one: Sam
+Delgado or Sam Lee?" with both as buttons, listening), "The second one"
+("Send "I'm running late" to Sam Lee?" with Send and Cancel), "Yes" ("Sent
+to Sam Lee.", Open Messaging not asked). "Hey Phoenix, who won the 1998
+World Series?" ("I can't answer that on my own yet. Want me to search the
+web for that?" with Search the web and Connect model, listening), "Yes"
+(the view made way for the browser on
+`google.com/search?q=Who won the 1998 World Series`; the page itself does
+not load in this container, which has no network for it). Whisper heard
+Kitten's "Sure." once as "Be sure.": not a yes, so it went on as a new
+request ("I'm not sure how to help with that yet. Should I look that up on
+the web?"), as an offer takes anything else; and it once wrote "Text Sam.
+I'm running late.", which looked for a contact called "sam.": a full stop
+after a name now ends it as a comma does. Then Settings > Assistant > Web
+search > Search automatically turned on (it reads "Google, without
+asking"), and "Hey Phoenix, who won the 1998 World Series?" went straight
+to the browser on the search; the conversation (in the Assistant app) has
+the question and one line, "Searching the web for “Who won the 1998 World
+Series”."
+
 ### A decision model: Laya (11 October 2026)
 
 The owner asked for a small specialised model between the grammar and the
