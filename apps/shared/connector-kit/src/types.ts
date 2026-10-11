@@ -77,7 +77,7 @@ export interface CapabilityDefinition {
      * runs on each sync instead of pull / push.
      */
     sync?(ctx: AccountContext): Promise<Json | void>;
-    /** Turned off or the account deleted: remove what it wrote (default: its kind's objects of the account). */
+    /** Turned off or the account deleted: remove what it wrote (default: its kind's objects of the account). With a pull, the kit removes its item records after it. */
     remove?(ctx: AccountContext): Promise<void>;
     /**
      * A db8 watch that calls one of the connector's methods with {accountId}

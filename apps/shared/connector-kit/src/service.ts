@@ -201,8 +201,14 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
     async function removeCapability(ctx: AccountContext, providerId: string): Promise<void> {
         const cap = def.capabilities[providerId];
         let removed: string[] = [];
-        if (cap.remove) await cap.remove(ctx);
-        else removed = await removeObjects(ctx, providerId, cap, items(ctx.accountId));
+        if (cap.remove) {
+            await cap.remove(ctx);
+            // Its item records go too: left behind, a capability turned on again
+            // would take its objects for deleted on the device and delete them
+            // on the server.
+            const store = cap.pull ? items(ctx.accountId) : null;
+            if (store) await store.removeAll(providerId);
+        } else removed = await removeObjects(ctx, providerId, cap, items(ctx.accountId));
         if (cap.capability === "CONTACTS" && cap.linkPersons !== false && env.linkPersons !== false && removed.length)
             await synckit.linker.updatePersons(bus.db, [], removed);
         if (cap.pull) {
