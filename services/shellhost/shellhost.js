@@ -48,13 +48,25 @@
 // and org.webosphoenix.system (the runtime's, which the Assistant's service
 // calls on a device: "what's playing", "pause"):
 //
-//   setNowPlaying {title, artist?, album?, playing, appId?}, getNowPlaying
+//   setNowPlaying {title, artist?, album?, playing, appId?, uri?, shuffle?, repeat?}, getNowPlaying
 //                               -> {nowPlaying: {..., appId, time} | null}
+//   emergencyCall {number, countdown}  the Assistant's emergency call, placed: an
+//                               "emergencyCall" message; the shell opens Phone's
+//                               emergency window, over the lock screen too
 //   mediaKey {key}              a "mediaKey" message for the shell, which
 //                               presses it (com.palm.display/phoenix/report
 //                               {mediaKey}: phoenix-devices' /media events)
 //   restartUi {}                not on a device yet (Luna Restart restarts
 //                               luna-surfacemanager: OPEN-QUESTIONS)
+//   setNotifications {notifications, locked, previews}
+//                               the shell only: the notification list as
+//                               it is (NotificationFeed.qml)
+//   getNotifications            -> {notifications: [{id, appId, app, title,
+//                               body, time, ongoing}] newest first, locked,
+//                               previews, private}: the Assistant ("what did
+//                               I miss") and the system UI only; private
+//                               (locked with Show previews off): no titles
+//                               or words
 //
 // createShellHost({isShell(caller), now()}) -> {post, listen, events, send,
 // ongoing: {set, clear}, system: {...}}
@@ -88,6 +100,30 @@ function appIdOf(caller) {
     var s = String(caller || "").trim();
     s = s.split(" ")[0];
     return s;
+}
+
+// Who may read the notification list (getNotifications): the Assistant's
+// service ("what did I miss") and the system UI. Its luna-service2 group is
+// notifications.read (sysbus), granted to them alone.
+var NOTIFICATION_READERS = ["org.webosphoenix.assistant", "com.palm.systemui"];
+var MAX_NOTIFICATIONS = 100;
+function notificationOf(n) {
+    n = n && typeof n === "object" ? n : {};
+    var s = function (v, max) { return String(v === undefined || v === null ? "" : v).slice(0, max); };
+    return { id: s(n.id, 200), appId: s(n.appId, 200), app: s(n.app, 200), title: s(n.title, 500), body: s(n.body, 2000),
+             time: Number(n.time) || 0, ongoing: n.ongoing === true };
+}
+// What getNotifications answers: newest first; with the lock screen up and
+// its previews off (Settings > Screen & Lock > Show previews), what came
+// and from which app, never who sent it or what it says (as the lock
+// screen shows them: LockScreen.qml privatePreviews). The simulator's
+// pages answer the same (runtime/phoenix-runtime.js, org.webosphoenix.system).
+function notificationsAnswer(st) {
+    var hidden = !!st.locked && st.previews === false;
+    var list = (st.list || []).slice().sort(function (a, b) { return b.time - a.time; }).map(function (n) {
+        return hidden ? { id: n.id, appId: n.appId, app: n.app, title: "", body: "", time: n.time, ongoing: n.ongoing } : n;
+    });
+    return { notifications: list, locked: !!st.locked, previews: st.previews !== false, private: hidden };
 }
 
 function sizeOf(v) {
@@ -200,12 +236,17 @@ function createShellHost(opts) {
     };
 
     var nowPlaying = null;
+    var notifications = { list: [], locked: false, previews: true };
     var MEDIA_KEYS = ["play", "pause", "togglePausePlay", "stop", "next", "prev"];
     var system = {
         setNowPlaying: function (p, caller, respond) {
             if (typeof p.title !== "string") return respond(fail(-1, "title is required"));
             nowPlaying = { title: p.title, artist: String(p.artist || ""), album: String(p.album || ""), playing: !!p.playing,
                            appId: String(p.appId || appIdOf(caller)), time: now() };
+            // Music's: the song (its media indexer uri), shuffled, repeating (the Assistant's "like this song", "is shuffle on").
+            if (typeof p.uri === "string") nowPlaying.uri = p.uri;
+            if (typeof p.shuffle === "boolean") nowPlaying.shuffle = p.shuffle;
+            if (p.repeat === "off" || p.repeat === "all" || p.repeat === "one") nowPlaying.repeat = p.repeat;
             respond(ok());
         },
         getNowPlaying: function (p, caller, respond) { respond(ok({ nowPlaying: nowPlaying })); },
@@ -213,8 +254,32 @@ function createShellHost(opts) {
             if (MEDIA_KEYS.indexOf(p.key) < 0) return respond(fail(-1, "key: play, pause, togglePausePlay, stop, next or prev"));
             post({ type: "mediaKey", payload: { key: p.key } }, caller, function (r) { respond(r.returnValue ? ok() : r); });
         },
+        // The Assistant's emergency call, its countdown over (lib/commands.js call):
+        // an "emergencyCall" message for the shell, which opens Phone's emergency
+        // window over everything with {number, countdown} (0: it calls at once).
+        emergencyCall: function (p, caller, respond) {
+            if (NOTIFICATION_READERS.indexOf(appIdOf(caller)) < 0 && !isShell(caller)) return respond(fail(-1, "Not allowed"));
+            var n = String(p.number || "").replace(/[^0-9]/g, "");
+            if (!/^\d{2,6}$/.test(n)) return respond(fail(-1, "number: an emergency number"));
+            var secs = Math.max(0, Math.min(10, Math.round(Number(p.countdown) || 0)));
+            post({ type: "emergencyCall", payload: { number: n, countdown: secs } }, caller, function (r) { respond(r.returnValue ? ok() : r); });
+        },
         restartUi: function (p, caller, respond) {
             respond(fail(-1, "Restarting the system UI is not available on this device yet"));
+        },
+        // The notification list, as the shell last said it
+        // (NotificationFeed.qml: {notifications, locked, previews}).
+        setNotifications: function (p, caller, respond) {
+            if (!isShell(caller)) return respond(fail(-1, "Only the shell says what the notifications are"));
+            if (!Array.isArray(p.notifications)) return respond(fail(-1, "notifications: a list"));
+            notifications = { list: p.notifications.slice(0, MAX_NOTIFICATIONS).map(notificationOf), locked: p.locked === true,
+                              previews: p.previews !== false };
+            respond(ok());
+        },
+        getNotifications: function (p, caller, respond) {
+            if (NOTIFICATION_READERS.indexOf(appIdOf(caller)) < 0 && !isShell(caller))
+                return respond(fail(-1, "Not allowed to read the notifications"));
+            respond(ok(notificationsAnswer(notifications)));
         }
     };
 
@@ -225,8 +290,9 @@ var METHODS = ["post", "listen", "events", "send"];
 var ONGOING = "org.webosphoenix.ongoing";
 var ONGOING_METHODS = ["set", "clear"];
 var SYSTEM = "org.webosphoenix.system";
-var SYSTEM_METHODS = ["setNowPlaying", "getNowPlaying", "mediaKey", "restartUi"];
+var SYSTEM_METHODS = ["setNowPlaying", "getNowPlaying", "mediaKey", "restartUi", "setNotifications", "getNotifications", "emergencyCall"];
 
 module.exports = { createShellHost: createShellHost, appIdOf: appIdOf, METHODS: METHODS, SERVICE: SERVICE,
+                   notificationsAnswer: notificationsAnswer, NOTIFICATION_READERS: NOTIFICATION_READERS,
                    ONGOING: ONGOING, ONGOING_METHODS: ONGOING_METHODS, SYSTEM: SYSTEM, SYSTEM_METHODS: SYSTEM_METHODS,
                    SHELL_NAMES: SHELL_NAMES, KEEP: KEEP, KEEP_MS: KEEP_MS };

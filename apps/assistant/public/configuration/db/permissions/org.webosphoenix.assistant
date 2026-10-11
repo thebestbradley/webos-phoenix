@@ -134,6 +134,43 @@
     },
     {
         "type": "db.kind",
+        "object": "org.webosphoenix.maps.place:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "create": "allow",
+            "read": "allow",
+            "update": "allow",
+            "delete": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "org.webosphoenix.music.favorite:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "create": "allow",
+            "read": "allow",
+            "delete": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "org.webosphoenix.podcast:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "read": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "org.webosphoenix.podcast.episode:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "read": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
         "object": "com.palm.imap.email:1",
         "caller": "org.webosphoenix.assistant",
         "operations": {

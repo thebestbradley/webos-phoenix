@@ -98,7 +98,11 @@ function parse(text, ctx) {
     var t = lang.clean(text);
     if (!t) return null;
     var c = { now: ctx.now || Date.now(), original: String(ctx.original || text), apps: ctx.apps || [], names: ctx.names || [], appCommands: ctx.appCommands || [],
-              accounts: ctx.accounts || [] };
+              accounts: ctx.accounts || [],
+              // The user's routines that are on, [{id, name, phrases}] (lib/commands-routines.js).
+              routines: ctx.routines || [],
+              // Home Assistant, once connected: {entities: [{name, domain}]} (lib/commands-home.js).
+              home: ctx.home || null };
     // A correction mid-sentence ("set an alarm for seven, no wait, eight"):
     // the sentence as meant, before the words as said ({corrected: words}).
     var found;

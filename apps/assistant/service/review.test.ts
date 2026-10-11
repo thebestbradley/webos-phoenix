@@ -33,16 +33,18 @@ describe("a sleep timer", () => {
     });
 });
 
+// An emergency call placed: Phone's emergency window, opened by the shell over everything (lib/commands.js call).
+const placed = (d: { called(part: string): { params: any }[] }) => d.called("org.webosphoenix.system/emergencyCall").map((c) => c.params);
+
 describe("an emergency call", () => {
     it("is placed after a countdown, with no yes needed", async () => {
         const d = device({ deps: { countdownMs: 30 } });
         const m = await d.ask("call 911");
         expect(m).toMatchObject({ command: "call", status: "pending", confirm: { countdown: 5, args: { number: "911", emergency: true } } });
         expect(m.text).toBe("Calling 911 in 5 seconds. Cancel to stop.");
-        expect(d.state.launched).toEqual([]);
+        expect(placed(d)).toEqual([]);
         await wait(80);
-        expect(d.state.launched).toHaveLength(1);
-        expect(d.state.launched[0]).toMatchObject({ id: "org.webosphoenix.phone", params: { number: "911", dial: true } });
+        expect(placed(d)).toEqual([{ number: "911", countdown: 0 }]);
         const all = (await d.svc.thread({})).messages;
         expect(all.at(-1)).toMatchObject({ role: "assistant", command: "call", status: "done" });
     });
@@ -54,15 +56,15 @@ describe("an emergency call", () => {
         await e.ask("call the police");
         expect((await e.ask("cancel")).status).toBe("cancelled");
         await wait(80);
-        expect(d.state.launched).toEqual([]);
-        expect(e.state.launched).toEqual([]);
+        expect(placed(d)).toEqual([]);
+        expect(placed(e)).toEqual([]);
     });
     it("is placed once, when Call Now is tapped as the countdown ends", async () => {
         const d = device({ deps: { countdownMs: 0 } });
         const m = await d.ask("call 112");
         await d.svc.confirm({ threadId: d.thread(), messageId: m.id, accept: true });
         await wait(30);
-        expect(d.state.launched).toHaveLength(1);
+        expect(placed(d)).toHaveLength(1);
     });
     it("in talk mode, is not asked again for unclear words, nor dropped by \"I'm done\"", async () => {
         // Talk mode asks a read-back again for words that are not a yes or a
@@ -73,14 +75,13 @@ describe("an emergency call", () => {
         expect(m.text).not.toMatch(/should I make the call/i);
         await d.ask("I'm done", { voice: true });
         await wait(150);
-        expect(d.state.launched).toHaveLength(1);
-        expect(d.state.launched[0]).toMatchObject({ id: "org.webosphoenix.phone", params: { number: "911", dial: true } });
+        expect(placed(d)).toEqual([{ number: "911", countdown: 0 }]);
         // "No" still stops it.
         const e = device({ deps: { countdownMs: 60 } });
         await e.ask("call 911", { voice: true });
         expect((await e.ask("no", { voice: true })).status).toBe("cancelled");
         await wait(150);
-        expect(e.state.launched).toEqual([]);
+        expect(placed(e)).toEqual([]);
     });
     it("may be asked for over the lock screen; another call may not", async () => {
         const d = device({ deps: { countdownMs: 10000 } });
@@ -159,6 +160,9 @@ describe("a command switched off in Settings > Assistant", () => {
         for (const [id, text] of Object.entries(PHRASES)) {
             if (!text) continue;
             const d = device({ apps: harness.APPS, settings: { followUps: false, localModel: "off", disabledCommands: [id] } });
+            // A routine of the user's ("good night"), and Home Assistant connected, for the words that need them.
+            if (/^routine/.test(id)) await d.svc.setRoutine({ routine: { name: "Good night", steps: [{ text: "turn on do not disturb" }] } });
+            if (/^home/.test(id)) d.connectHome();
             const m = await d.ask(text);
             if (!/is turned off in Settings > Assistant\.$/.test(m.text)) notOff.push(`${id}: ${m.text}`);
         }
@@ -167,18 +171,15 @@ describe("a command switched off in Settings > Assistant", () => {
 });
 
 describe("a reminder for a place", () => {
-    it("asks for a time instead of dropping the place, and the time said makes it", async () => {
+    // The place is kept: a reminder at a place (lib/commands-places.js,
+    // everyday-places.test.ts) once home is known, else it asks where home is
+    // and makes nothing that drops it.
+    it("keeps the place, and asks where home is before making anything", async () => {
         const d = device();
         const q = await d.ask("remind me to buy milk when I get home");
-        expect(q).toMatchObject({ command: "reminder", status: "ask" });
-        expect(q.text).toBe("I can't remind you when you get home yet, only at a time. When should I remind you to buy milk?");
+        expect(q).toMatchObject({ command: "placeReminder" });
+        expect(q.text).toBe("I don't know where your home is yet. Should I use where you are now?");
         expect(d.of("com.palm.task:1").filter((t) => /buy milk/i.test(t.summary))).toEqual([]);
-        const r = await d.ask("tomorrow morning");
-        expect(r).toMatchObject({ command: "reminder", status: "done" });
-        const made = d.of("com.palm.task:1").filter((t) => /buy milk/i.test(t.summary));
-        expect(made).toHaveLength(1);
-        expect(made[0].summary).toBe("buy milk");
-        expect(made[0].dueDate ?? made[0].due ?? made[0].reminder).toBeTruthy();
         void NOW;
     });
     it("words that are another request are that request", async () => {

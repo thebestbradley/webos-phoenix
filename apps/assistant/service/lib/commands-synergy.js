@@ -853,10 +853,19 @@ module.exports = function (h) {
         if (!String(args.who || "").trim())
             return Promise.resolve({ args: args, reply: say.shareWithWhom(!!args.eta) });
         if (args.eta && !place) return Promise.resolve({ args: args, reply: say.whereTo() });
-        if (args.eta && NO_PLACE_SAVED.test(place)) return Promise.resolve({ args: args, reply: say.noPlaceSaved(lower(place).replace(/^(?:the |my )/, "").replace(/^(?:office|house|place)$/, function (w) { return w === "office" ? "work" : "home"; })) });
+        // Home and work: the saved places in Maps called so (lib/commands-places.js), one store for both.
+        var key = args.eta && NO_PLACE_SAVED.test(place) ? lower(place).replace(/^(?:the |my )/, "").replace(/^(?:office|house|place)$/, function (w) { return w === "office" ? "work" : "home"; }) : "";
+        var saved = key ? Promise.resolve(h.savedPlace(env, key)) : Promise.resolve(null);
+        return saved.then(function (sp) {
+            if (key && !sp) return { args: args, reply: say.noPlaceSaved(key) };
+            return sharePrepareAt(env, args, place, key && sp ? { name: key, lat: sp.lat, lon: sp.lon } : null);
+        });
+    }
+    function sharePrepareAt(env, args, place, known) {
+        var say = env.lang.say;
         return h.here(env, "share").then(function (me) {
             if (!args.eta) return { message: say.locationMessage(osmLink(me.lat, me.lon)) };
-            return h.resolvePlace(env, place, me).then(function (list) {
+            return (known ? Promise.resolve([known]) : h.resolvePlace(env, place, me)).then(function (list) {
                 var to = list[0];
                 return h.routeSummary(env, me, to, "drive").then(function (sum) {
                     if (!sum) throw Object.assign(new Error("no route"), { said: say.noRoute(to.name) });

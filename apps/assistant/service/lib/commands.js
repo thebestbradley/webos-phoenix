@@ -281,6 +281,8 @@ var synergy = require("./commands-synergy")({ D: D, lunaCall: lunaCall, dbFind: 
                                              findPeople: findPeople, findPerson: findPerson, ambiguous: ambiguous, personName: personName, people: people,
                                              samePhone: samePhone, nameForPhone: nameForPhone, receivedEmails: receivedEmails, withConfirm: withConfirm,
                                              here: here, resolvePlace: resolvePlace, routeSummary: routeSummary, blockedReply: blockedReply,
+                                             // Home and work, saved in Maps (lib/commands-places.js; everyday is made below).
+                                             savedPlace: function (e, which) { return everyday.savedPlace(e, which); },
                                              prepareInner: function (c, a, e) { return prepareInner(c, a, e); }, runInner: function (c, a, e) { return runInner(c, a, e); } });
 Array.prototype.push.apply(BUILT_IN, synergy.COMMANDS);
 synergy.extend(BUILT_IN);
@@ -625,6 +627,8 @@ function prepareInner(cmd, args, env) {
     var say = env.lang.say;
     args = Object.assign({}, args || {});
     function reply(text) { return Promise.resolve({ args: args, reply: text }); }
+    var own = everyday.prepare(cmd, args, env);
+    if (own) return own;
     // An emergency number ("call 911", "call the police"): never refused
     // and never held for a yes; placed after a short countdown the user can
     // cancel (countdown, lib/emergency.js), as Siri and Google Assistant do.
@@ -1574,7 +1578,7 @@ function helpNow(env) {
 
 function runInner(cmd, args, env) {
     var say = env.lang.say, now = env.now();
-    var detailed = details.run(cmd, args, env);
+    var detailed = details.run(cmd, args, env) || everyday.run(cmd, args, env);
     if (detailed) return detailed;
     var connected = synergy.run(cmd, args, env);
     if (connected) return connected;
@@ -1582,8 +1586,19 @@ function runInner(cmd, args, env) {
     if (searched) return searched;
     switch (cmd.id) {
     case "call":
-        return launch(env, "org.webosphoenix.phone", { number: args.number, dial: true })
-            .then(function () { return { text: say.calling(args.name || args.number), open: { appId: "org.webosphoenix.phone", params: {}, title: "Phone" } }; });
+        // An emergency call, its countdown over: Phone's emergency window,
+        // which the shell opens over everything, the lock screen too (a
+        // card's call is behind it there), and which calls at once
+        // (org.webosphoenix.system emergencyCall: the runtime's, services/shellhost's);
+        // Phone's card where the shell cannot.
+        return (args.emergency ? lunaCall(env, "luna://org.webosphoenix.system/emergencyCall", { number: args.number, countdown: 0 }) : Promise.reject(null))
+            .catch(function () { return launch(env, "org.webosphoenix.phone", { number: args.number, dial: true }); })
+            // An emergency call: with Text My Location to the emergency contacts (lib/commands-sos.js).
+            .then(function () { return args.emergency ? everyday.sosOffer(env, args.number) : []; })
+            .then(function (actions) {
+                return Object.assign({ text: say.calling(args.name || args.number), open: { appId: "org.webosphoenix.phone", params: {}, title: "Phone" } },
+                                     actions.length ? { actions: actions } : {}, args.emergency ? { data: { opened: true } } : {});
+            });
     case "text":
         if (!String(args.message || "").trim())
             return launch(env, MESSAGING_APP, { to: args.number, name: args.name || "" })
@@ -2238,7 +2253,7 @@ function runInner(cmd, args, env) {
         }
         return helpNow(env).then(function (nowList) {
             var groups = [{ type: "examples", title: say.rightNow(), items: nowList.map(function (x) { return { text: x }; }) }]
-                .concat(HELP_GROUPS.map(function (g) { return { type: "examples", title: g.title, items: g.examples.map(function (x) { return { text: x }; }) }; }));
+                .concat(HELP_GROUPS.concat(env.lang.everydayHelp || []).map(function (g) { return { type: "examples", title: g.title, items: g.examples.map(function (x) { return { text: x }; }) }; }));
             return { text: say.helpOverview(), attachments: groups, open: { appId: HELP_APP, params: {}, title: "Help" } };
         });
     }
@@ -2359,10 +2374,25 @@ function undo(u, env) {
     if (u.kind === "merge") return lunaCall(env, DB + "merge", { objects: u.objects || [] });
     if (u.kind === "multi") return (u.steps || []).reduce(function (p, step) { return p.then(function () { return undo(step, env); }); }, Promise.resolve());
     if (u.kind === "put") return lunaCall(env, DB + "put", { objects: (u.objects || []).map(function (o) { var c = Object.assign({}, o); delete c._rev; delete c._del; return c; }) });
+    // A system preference as it was, or the Assistant's own setting (lib/commands-settings.js).
+    if (u.kind === "prefs") return lunaCall(env, SYSTEM_SERVICE + "setPreferences", u.prefs || {});
+    if (u.kind === "settings") return Promise.resolve(env.setSettings(u.settings || {}));
+    // The everyday features' own (lib/commands-everyday.js: the home's devices as they were).
+    var own = everyday.undo(u, env);
+    if (own) return own;
     return cancel(u.activities).then(function () { return lunaCall(env, DB + "del", { ids: u.ids || [] }); });
 }
 
+// The everyday features (lib/commands-everyday.js: each area's own file).
+var everyday = require("./commands-everyday")({ D: D, lunaCall: lunaCall, dbFind: dbFind, cards: cards, whenShown: whenShown, launch: launch,
+                                                TOGGLE_RUN: TOGGLE_RUN, TOGGLE_STATE: TOGGLE_STATE, activityDate: activityDate, localDate: localDate,
+                                                personName: personName, findPerson: findPerson, people: people, here: here, getJson: getJson,
+                                                blockedReply: blockedReply, addTask: addTask,
+                                                prepare: prepare, run: run, find: find, needsConfirm: needsConfirm, BUILT_IN: BUILT_IN });
+Array.prototype.push.apply(BUILT_IN, everyday.COMMANDS);
+
 module.exports = {
+    everyday: everyday,
     findPeople: findPeople,
     personName: personName,
     dbGet: dbGet,

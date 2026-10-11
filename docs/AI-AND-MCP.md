@@ -1419,6 +1419,274 @@ Whether to fine-tune it and ship it is the owner's decision
 (OPEN-QUESTIONS.md Q88). The candidates are worth having without Laya
 too: they are the "Did you mean" list a fallback could offer.
 
+### Everyday features (11 October 2026)
+
+What other assistants do every day and the grammar did not, built without
+a model (the owner: "making our assistant on par with everyone else's").
+Each area is a file of commands (`apps/assistant/service/lib/commands-<area>.js`,
+registered by `lib/commands-everyday.js`) and a file of English
+(`lib/lang/en-<area>.js`, by `lib/lang/en-everyday.js`), with its tests
+(`everyday-<area>.test.ts`) and evaluation cases (`apps/assistant/eval/cases-c.json`).
+The service's own methods for them (the shell's, Settings') are added the
+same way (`METHODS`). A command may run over the lock screen when it keeps
+to what the lock screen shows (`whenLocked`).
+
+**What did I miss** (`notifications`; `lib/commands-notify.js`). "What did
+I miss", "read my notifications (from Messaging)", "any new notifications",
+"catch me up": the shell's notification list, grouped by app, the app
+with the newest first and each app's newest first, six said by name at
+most ("and 3 more"), each a card opening its app. The list is the
+shell's (the dashboard): `NotificationFeed.qml` gives it, newest first,
+with the lock screen's state, to the window source's `publishNotifications`;
+in the simulator the pages keep it from the shell's status and answer
+`org.webosphoenix.system getNotifications`, on a device the shell gives it
+to `services/shellhost` (`setNotifications`), which answers it; only the
+Assistant and the system UI may read it (`phoenix.system.notifications.read`).
+A dashboard window's words come from its page (`.dashboard-title`,
+`.palm-dashboard-text`: enyo-1.0 `DashboardContent.js:183-185`). With the
+lock screen up and **Show previews** off (Settings > Screen & Lock), it
+says how many from which app and "Unlock your phone to hear what they
+say", never who or what, as the lock screen itself shows them
+(`LockScreen.qml` privatePreviews); it may be asked over the lock screen.
+Missed calls are in it only when the Phone app has put a notification
+there (it does not yet: GAPS E6); "did I miss any calls" is still the
+call log.
+
+**Announcing messages and driving mode** (`announceMessages`,
+`drivingMode`). Settings > Assistant > Messages & Driving. With **Announce
+Messages** on (off by default; "announce my messages on my headphones"),
+a message that comes while headphones are in (a wired headset, or a
+Bluetooth headset connected) is said aloud: "Sam Delgado says: Where are
+you?". **Driving mode** ("I'm driving", "I'm done driving", "am I in
+driving mode", or its switch) says every message as it comes, then "Want
+to reply?", and listens: "yes" asks what to say, the words are read back
+("Send "Almost there" to Sam Delgado?") and sent on a "yes", as any
+spoken read-back is; "no" lets it go; "reply on my way" does it at once.
+The rest stays quiet: Do Not Disturb (the ringer off, as webOS's mute
+switch) while it is on, as it was before when it ends. The shell offers
+each notification to the service (`announce {appId, app, title, body,
+headphones}`), which decides; `{listen: true}` opens the Assistant's view
+on that conversation and listens once the announcement has been said.
+Messages are Messaging's and the chat apps'; other notifications are
+never said. Each layer of a notification stack (an app's notifications of
+one conversation) is a notification of its own here, and one pushed on a
+stack is announced as a new one is. Checked in the simulator (`--scene
+"assistant:@notified|what did I miss"`, `"assistant:I'm driving|@sms|@wait:10000"`:
+the `assistant:` scene asks its own requests; `@notified`, `@sms`, `@lock`,
+`@starter:<id>`, `@location:<lat>,<lon>`, `@dashboard`, `@open:<app>:<params>`, `@tap:<choice>`, `@close` and
+`@wait:<ms>` set the scene, `sim.qml`).
+
+**Routines** (`routine`, `routineList`, `routineManage`;
+`lib/commands-routines.js`). Settings > Assistant > Routines: a routine
+is a name, the words that start it ("good night", "bedtime"), its steps
+in turn, and optionally a time and days, "when put on charge" and "when
+connected to a car". A step is a request in words, picked from a list
+with what it needs filled in ("Set an alarm for {7am}", "Set the
+brightness to {30}%", "The weather", "My calendar tomorrow", "What I
+missed", "Lock the screen", or anything else one would ask); it is read
+by the grammar when the routine runs, so "7am" is the next 7 AM then.
+Saying its words runs each step in turn and says what each did ("Good
+night. Do Not Disturb is on: the ringer and alerts are silent. You have 2
+alarms: ... Tomorrow you have 1 event: ... Locked."); a step's buttons
+(the location's Allow) stay on the answer. A routine never sends, calls
+or deletes: each step is read and prepared when it is saved, and one that
+would ask first is refused with the reason, as is one that needs more
+("set an alarm" without a time) or runs a routine. "Good night" (Do Not
+Disturb, the alarms, tomorrow's calendar, lock) and "Good morning" (Do Not
+Disturb off, the weather, today's calendar, what I missed) are offered as
+starters, off until added. Its time is an activity (the activity manager,
+as the Clock's alarms) that calls `routineWake {id, at}` then, which runs
+it (only when it is due: a minute's grace), says it, puts it in the
+conversation, leaves a notification and sets the next; the charger and
+the car come from the shell (`AssistantMoments.qml`: the charger going
+from none to any, and a Bluetooth device connecting whose class of
+device is car audio, major 0x04 minor 0x08, or whose name says so),
+`routineEvent {event}`. By voice: "what routines do I have", "make a
+routine" (Settings), "turn off / turn on / delete (read back first) /
+change my good night routine" (change opens its editor in Settings).
+Decided on the owner's behalf: a routine's steps are words rather than
+commands with typed arguments (the grammar reads them; the editor fills
+in a template's words), and routines may not send, call or delete.
+
+**The camera and voice memos** (`camera`, `voiceMemo`, `stopRecording`;
+`lib/commands-capture.js`). "Take a photo", "take a selfie in 3 seconds",
+"take a picture with a 10 second timer", "record a (selfie) video",
+"record a voice memo called groceries", "stop recording". The Camera
+comes to the front (the answer's `data.opened`: the Assistant's view
+makes way, unlike the apps other answers open behind it) with launch
+params `{capture: "photo" | "video" | "stop", facing: "user" |
+"environment", timer}`: it opens that camera (a selfie: the front one, by
+`facingMode`), counts down over the viewfinder with Cancel, then presses
+its own shutter, so the picture or video is saved and indexed as one
+taken by hand (`apps/camera` App.tsx, `capture.ts` captureOrder). Voice
+Memos takes its Just Type action's `{newMemo: title}` and starts
+recording, and `{stopRecording: true}` stops and saves it; "stop
+recording" stops whichever the Assistant last started. Over the lock
+screen they wait for the unlock. Checked in the simulator with Chromium's
+fake camera (`QTWEBENGINE_CHROMIUM_FLAGS="--use-fake-device-for-media-stream
+--use-fake-ui-for-media-stream"`): the countdown and Cancel over the
+viewfinder, the shot in the last-shot thumbnail, and Voice Memos
+recording "Groceries".
+
+**Places** (`parking`, `findParking`, `placeReminder`, `setPlace`;
+`lib/commands-places.js`). "Remember where I parked" ("I parked on level
+3": the note kept) saves where the phone is now; "where did I park" says
+how far and which way from here, when, and the note ("Your car is about
+390 meters southwest of here. You parked 20 minutes ago, on level 3."),
+with Maps behind it on the spot and Walking Directions; "take me back to
+my car" opens the walk; "forget where I parked". **Home and work** are
+the user's saved places in Maps called "Home" and "Work"
+(`org.webosphoenix.maps.place:1`, which Maps lists, renames and removes),
+one store for everything that needs them: "this is my home" or "set my
+work location to here" saves one where the phone is (taken back by
+"undo"), as Settings > Assistant > Home & Work does ("Set to Where I Am
+Now", "Clear"); an address is Maps' to find and save ("set my home address
+to 12 Main Street" looks it up there). **Reminders at a place**: "remind me
+to buy milk when I get home", "when I leave work remind me to call Mom",
+"remind me to lock the door when I leave" (here), "... when I get to the
+gym" (any saved place by its name). The reminder is a task in Tasks (its
+note "When you get home") and a geofence the device watches. OSE's
+location service has no geofences (its methods: `getLocationUpdates` and
+the rest), so it is an activity of the activity manager's whose trigger is
+`getLocationUpdates` (a fix a minute at most, or 50 m on) with db8 where
+clauses on the reply's latitude and longitude: inside a box 150 m each way
+about the place to arrive, outside one of 250 m (`{or: [...]}`, a side
+each) to leave, so a fix at the edge does not come and go. Nothing of the
+Assistant runs until a fix matches; then `placeWake` gets the fix as
+`$activity.trigger` (as com.palm.service.contacts reads its trigger,
+`contactsService.js:347-352`) and restarts the activity with the next
+trigger (`complete {restart, trigger}`, `contactsService.js:433-465`), or
+at the end launches Tasks with `{reminder: taskId}`, which posts the
+reminder as it does a timed one. Made at the place itself, "when I get
+home" first waits to be away (and "when I leave work", said elsewhere,
+first to get there). With no fix (location off) it tries again in 15
+minutes. With no Home yet it asks "Should I use where you are now?" (Set
+Home to Here, or Settings); a place Maps does not have still gets the task,
+and says how to have the reminder there. The simulator's activity manager
+has OSE's triggers for it (where clauses, `and`/`or`, an error firing
+it, `$activity.trigger`, `complete {restart: true, trigger}`; the system
+UI's page subscribes, `runtime/phoenix-runtime.js`), and its location
+moves with Simulate > Location or the scene step `@location:<lat>,<lon>`:
+checked with `--scene "assistant:this is my home|yes|@location:37.3437,-121.8907|remind
+me to buy milk when I get home|@close|@location:37.3338,-121.8906|@wait:8000|@dashboard"`,
+Tasks' "buy milk / When you get home" in the dashboard. On a device the
+same calls go to OSE's activity manager and location service; not run on
+one yet. "Send Sam my ETA home" (the Synergy commands' `shareLocation`)
+uses the same saved Home and Work.
+
+**Music and podcasts** (`musicMode`, `favorites`, `podcast`;
+`lib/commands-music.js`). "Shuffle my music" plays everything shuffled;
+"turn on shuffle", "turn shuffle off", "repeat this song", "repeat all",
+"stop repeating", "is shuffle on": Music behind the answer with
+`{shuffle}` or `{repeat: "off" | "all" | "one"}`, which its player takes
+as its own buttons set them (`apps/music` launchParams.ts); Music now says
+what plays with its uri, shuffle and repeat (`setNowPlaying`, which
+`services/shellhost` and the simulator keep). "Like this song", "add this
+to my favorites", "unlike this song": Music's favorites, new, in db8
+(`org.webosphoenix.music.favorite:1`, `apps/music` favorites.ts): the star
+on Now Playing, a Favorites tab (a star, so four tabs fit a phone), and
+"play my favorites" / "shuffle my favorites" (`{favorites: true}`); the
+Assistant writes the song Music says plays and checks it is there. The
+sleep timer is the timer command's (below, "Speed and correctness"): "set
+a sleep timer" with no time asks "For how long?", and the time said sets
+it; "when does the music stop" is how long is left. Podcasts: "play the
+latest episode of The Daily", "play the Hard Fork podcast", "resume my
+podcast": the episode is chosen from Podcasts' own (the one left
+part-way, else the newest not played, else the newest; "latest": the
+newest) and Podcasts plays it from where it was left (`{playEpisode:
+id}`); a podcast not followed is said, with the ones that are. Shuffle
+and repeat are Music's: asked while a podcast plays, it says so. Checked
+in the simulator (`--scene 'assistant:@open:org.webosphoenix.music:{"play":""}|like
+this song|repeat this song'`: the star lit and repeat-one on Now Playing).
+
+**Quick facts** (`define`, `spell`, `coin`, `dice`, `randomNumber`,
+`wikipedia`, `news`; `lib/commands-facts.js`). "Define ephemeral", "what
+does serendipity mean": the dictionary on the phone, offline
+(`data/dictionary.json`, 66,603 words from Princeton WordNet 3.0 by
+`tools/make-dictionary.py`, its licence beside it: LEGAL.md), the commonest
+part of speech first, a second sense after ("Ephemeral, adjective: lasting
+a very short time. Also, as a noun: ..."); "ran" is found as "run", "cats"
+as "cat" (WordNet's own forms and suffix rules); a word it does not have
+offers the web. "How do you spell rhythm": letter by letter. "Flip a coin",
+"roll two dice", "roll a d20", "pick a random number between 1 and 50".
+"Look up Ada Lovelace on Wikipedia", "what does Wikipedia say about the
+Eiffel Tower": the article's summary from Wikipedia's REST API, said as
+"From Wikipedia, ...", with a card naming Wikipedia and its licence and
+opening the article. Open questions ("who was Ada Lovelace") stay the
+model's or the web's, as before; whether they should try Wikipedia first
+when no model is connected is the owner's to say (OPEN-QUESTIONS.md Q154).
+"What's the news", "read me the headlines": the five newest headlines of
+the user's feeds (RSS or Atom), each a card opening the story; the feeds
+are in Settings > Assistant > News (two public ones to start with, the
+owner's choice: OPEN-QUESTIONS.md Q153).
+
+**Settings by voice** (`deviceSetting`; `lib/commands-settings.js`). The
+switches of Settings the toggle command (Wi-Fi, Bluetooth, airplane mode,
+the flashlight, the ringer, Do Not Disturb, Location Services, rotation,
+the hotspot, VPN), volume and brightness did not have: previews and
+notifications on the lock screen, the notification light, system sounds,
+keyboard clicks, high contrast, reduce motion ("turn off animations"),
+captions, mono audio, DropShare, network time, Exhibition's night mode,
+"Hey Phoenix", answers aloud; and "set the screen timeout to 2 minutes"
+(Settings' nearest choice). Each is set in the system preference
+Settings reads (an object preference keeping its other fields), read back
+before it is said, and taken back by "undo"; "is high contrast on"
+answers with Turn It Off. Showing previews on the lock screen is read back
+first: it shows what messages say to whoever holds the phone. Phoenix has
+no dark mode (webOS's look had none; 2.0's design brings light and dark):
+"turn on dark mode" says so and offers high contrast (OPEN-QUESTIONS.md Q155).
+
+**Emergency calls** (the call command's, `lib/emergency.js`, with
+`emergencyText` in `lib/commands-sos.js`). The call is the one "Speed and
+correctness" (below) describes: "call 911", "call the police", placed after
+a five-second countdown with Cancel and Call Now, never held for a yes,
+over the lock screen too. More words reach it (`lib/lang/en-sos.js`):
+"emergency", "SOS", "this is an emergency", "get the paramedics", "call
+911 now"; and while it counts, any few words with a stop in them ("wait,
+no, stop", "false alarm", "never mind") stop it as "no" and "cancel" do,
+"hurry" and "call now" place it at once (`countdownAnswer`, asked before
+the decision model in `assistant.js` confirmAnswer). With emergency
+contacts (Settings > Emergency Info), the call's answer offers Text My
+Location to them: "text my location to my emergency contacts" reads back
+"Text Mom and Sam: “I've called 911. I'm here: <map link>”?" and sends a
+text to each. The tests never place a call (a test device that records).
+
+**The smart home, through Home Assistant** (`home`, `homeScene`;
+`lib/commands-home.js`). Settings > Assistant > Smart Home keeps the
+user's Home Assistant: its address and a long-lived access token (made in
+Home Assistant under the user's profile, Security), both checked against
+its REST API (`GET /api/`) before they are kept, the token sealed as the
+model providers' keys are and never shown again (`homeAssistant`,
+`setHomeAssistant`, `removeHomeAssistant`, Settings' and the system UI's
+only). The Assistant then reads the house (`GET /api/states`: lights,
+switches, fans, input booleans, thermostats, locks, covers and scenes, by
+their friendly names) and calls its services (`POST
+/api/services/<domain>/<service>`). "Turn off the living room lamp", "turn
+on all the lights", "kitchen lights off", "dim the bedroom light to 30%",
+"start the coffee maker", "set the thermostat to 70", "turn up the heat"
+(two degrees Fahrenheit, one Celsius), "make it warmer", "lock the front
+door", "close the garage door", "is the front door locked", "what's the
+temperature inside", "activate movie night" (a scene by its name). A
+device is the one whose name has all the words said, or every one of the
+kind said ("the lights", "the thermostat"). Each change is read back from
+Home Assistant (`GET /api/states/<id>`, once more 1.5 s later for a slow
+device) before it is said: "Turned off the Living Room Lamp", or "I asked
+Home Assistant to ..., but it doesn't say it did"; a lock still locking or
+a door still closing is said so ("Locking the Front Door."). Unlocking a
+lock and opening a garage door or blinds are read back first, by Home
+Assistant's names ("Unlock the Front Door?"), a model's choice too. "Undo"
+puts lights, switches, fans and the thermostat back as they were, never a
+lock or a door. The words wait for Home Assistant to be connected (the
+grammar's context: the entities' names and kinds); until then "turn off the
+lights" is still "I can't control other devices ... by myself. With Home
+Assistant, I can: connect it in Settings > Assistant > Smart Home", and the
+phone's own words stay the phone's ("turn on the flashlight", "lock the
+screen", "turn off the alarm", "set the volume to 50"). Words for a device
+it cannot act on ("preheat the oven") say what it can do. Tested against a
+stand-in Home Assistant (`test/home-assistant.cjs`: its REST API on a small
+house, served over HTTP for the simulator's checks). The owner's questions on
+these features: OPEN-QUESTIONS.md Q150-Q157.
+
 ### Speed and correctness (11 October 2026)
 
 The owner: "if the language model is installed ... some of the commands
@@ -1528,9 +1796,9 @@ cases in `eval/cases-a.json` and `review.test.ts`):
 | Said | Was | Now |
 |---|---|---|
 | "send my ETA to Sam" | a text to a contact called "my" | `shareLocation` ("The Assistant and Synergy", below), which reads it first; no word like "my", "the", "this" is taken for a name; "send happy birthday to Mom" texts Mom; "send the photo to Sam" is not a text |
-| "remind me to buy milk when I get home" | a plain task "buy milk when I get home" | there is no reminder by place yet: "I can't remind you when you get home yet, only at a time. When should I remind you to buy milk?", and the time said next makes it ("when I leave work", "next time I'm at the store", "before I leave home"; "when I wake up" stays a reminder's words) |
+| "remind me to buy milk when I get home" | a plain task "buy milk when I get home" | a reminder at the place ("Everyday features", above: a task and a geofence; where home is asked first when Maps has no Home); the time-only stopgap this row first had is gone ("when I wake up" stays a reminder's words) |
 | "set a sleep timer for 30 minutes" | a timer ringing over the music | a timer whose activity presses pause (`org.webosphoenix.system` mediaKey, as "pause" does) and rings nothing; "stop the music in 20 minutes", "turn off the music after an hour" |
-| "play my podcast" | Music searched for "podcast" | "I can't play podcasts myself yet.", with Open Podcasts where it is installed |
+| "play my podcast" | Music searched for "podcast" | the podcast command ("Everyday features", above): the podcasts the user follows, by name or where left off; a podcast to find is still "not yet" |
 | "call 911" | "Call 911?" like any number | `lib/emergency.js` (the Phone's lists: 3GPP TS 22.101's numbers and the national ones): "Calling 911 in 5 seconds. Cancel to stop." with Call Now and Cancel and the seconds counting down; the service places it when they run out (also with the app closed); "no", "cancel" or Cancel stop it; asked over the lock screen too. "Call the police", "call an ambulance": the region's number (999 for en-GB). A model's choice of one is read back as any call (Q133) |
 | "what's on my screen" | "Did you mean set brightness to 50%?" | "I can't see what's on your screen yet."; the brightness suggestion needs brightness words |
 

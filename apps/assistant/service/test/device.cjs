@@ -128,7 +128,11 @@ function device(opts) {
                   prefs: { rotationLock: false }, nowPlaying: null,
                   hotspot: false, hotspotPass: false, vpn: "", vpnProfiles: [],
                   wifi: true, bluetooth: false, airplane: false, flashlight: false, launched: [],
-                  shared: [], copied: [], driveFiles: opts.driveFiles || {} };
+                  shared: [], copied: [], driveFiles: opts.driveFiles || {},
+                  // The shell's notifications ({id, appId, app, title, body, time, ongoing}), the lock screen, its previews.
+                  notifications: [], deviceLocked: false, previews: true,
+                  // Where the device is (getLocationUpdates; tests move it).
+                  position: { latitude: 37.37, longitude: -122.04 } };
     function okr(o) { return Promise.resolve(Object.assign({ returnValue: true }, o || {})); }
     var index = null;
     var luna = {
@@ -171,6 +175,13 @@ function device(opts) {
             if (m === "com.palm.db/reserveIds") return okr({ ids: Array.from({ length: p.count }, function () { return "res" + ++n; }) });
             if (m === "com.palm.activitymanager/create") { state.activities.set(p.activity.name, p.activity); return okr({ activityId: 1 }); }
             if (m === "com.palm.activitymanager/cancel") { state.activities.delete(p.activityName); return okr(); }
+            // complete: done (gone), or {restart: true} with its new trigger, callback or schedule.
+            if (m === "com.palm.activitymanager/complete") {
+                var act = state.activities.get(p.activityName);
+                if (act && p.restart) state.activities.set(p.activityName, Object.assign({}, act, p.trigger ? { trigger: p.trigger } : {}, p.callback ? { callback: p.callback } : {}, p.schedule ? { schedule: p.schedule } : {}));
+                else state.activities.delete(p.activityName);
+                return okr();
+            }
             if (m === "com.webos.service.audio/master/getVolume") return okr({ volumeStatus: { volume: state.volume, muted: state.muted } });
             if (m === "com.webos.service.audio/master/setVolume") { state.volume = p.volume; return okr(); }
             if (m === "com.webos.service.audio/master/muteVolume") { state.muted = p.mute; return okr(); }
@@ -189,7 +200,7 @@ function device(opts) {
             if (m === "com.webos.service.location/setState") { state[p.Handler] = p.state; return okr(); }
             if (m === "com.webos.service.location/getLocationUpdates") {
                 if (!state.gps && !state.network) return Promise.resolve({ returnValue: false, errorCode: 5, errorText: "Location services are off" });
-                return okr({ errorCode: 0, latitude: 37.37, longitude: -122.04, horizAccuracy: 8 });
+                return okr({ errorCode: 0, latitude: state.position.latitude, longitude: state.position.longitude, horizAccuracy: 8 });
             }
             // What OSE's service does not have (getCurrentPosition was the legacy com.palm.location's).
             if (m.indexOf("com.webos.service.location/") === 0) return Promise.resolve({ returnValue: false, errorCode: -1, errorText: "Unknown method" });
@@ -209,6 +220,14 @@ function device(opts) {
             if (m === "com.webos.service.vpn/connect") { state.vpn = p.vpnProfileName; return okr(); }
             if (m === "com.webos.service.vpn/disconnect") { state.vpn = ""; return okr(); }
             if (m === "org.webosphoenix.system/getNowPlaying") return okr({ nowPlaying: state.nowPlaying });
+            // The shell's notification list (services/shellhost notificationsAnswer, as the runtime answers it).
+            if (m === "org.webosphoenix.system/getNotifications") {
+                var hidden = state.deviceLocked && !state.previews;
+                var nl = state.notifications.slice().sort(function (a, b) { return b.time - a.time; }).map(function (x) {
+                    return hidden ? { id: x.id, appId: x.appId, app: x.app, title: "", body: "", time: x.time, ongoing: !!x.ongoing } : x;
+                });
+                return okr({ notifications: nl, locked: state.deviceLocked, previews: state.previews, private: hidden });
+            }
             if (m === "com.palm.telephony/voicemailQuery") return okr({ number: "(408) 555-0100", waiting: true, count: 2 });
             if (m === "com.webos.service.systemservice/deviceInfo/query") return okr({ storage_free: "5.8 GB", storage_size: "8 GB" });
             if (m === "org.webosphoenix.service.packages/search")
@@ -226,10 +245,16 @@ function device(opts) {
         keys: function (prefix) { return Array.from(data.keys()).filter(function (k) { return k.indexOf(prefix) === 0; }); }
     };
     var requests = [];
+    var homeAssistant = require("./home-assistant.cjs").create();
     function request(r) {
         if (opts.llmRequest && /^http:\/\/127\.0\.0\.1[:/]/.test(r.url)) return opts.llmRequest(r);
         requests.push(r.url);
         if (opts.offline) return Promise.reject(new Error("offline"));
+        // A test's own web: opts.http(url) -> {status, body} | null.
+        var own = opts.http ? opts.http(r.url) : null;
+        if (own) return Promise.resolve(own);
+        // The user's Home Assistant (test/home-assistant.cjs).
+        if (r.url.indexOf(homeAssistant.URL) === 0) return homeAssistant.request(r);
         if (r.url.indexOf("frankfurter") >= 0) return Promise.resolve({ status: 200, body: JSON.stringify({ amount: 20, base: "USD", date: "2026-10-07", rates: { EUR: 17.3 } }) });
         if (r.url.indexOf("api.open-meteo.com/v1/forecast") >= 0 && r.url.indexOf("hourly=") < 0)
             return Promise.resolve({ status: 200, body: JSON.stringify({ current: { temperature_2m: 64.4, weather_code: 2 },
@@ -257,7 +282,8 @@ function device(opts) {
     data.set("assistant:settings", opts.settings || { followUps: false });
     var svc = createAssistantService(Object.assign({ luna: luna, storage: storage, request: request, now: function () { return clock; }, caller: function () { return "com.palm.systemui"; },
                                                      llm: opts.llm, localDeadlineMs: opts.llm ? 600000 : undefined,
-                                                     secrets: { seal: function () { return Promise.resolve({}); }, unseal: function () { return Promise.resolve(""); } },
+                                                     // Sealed as {sealed}: what a test keeps sealed comes back (the Home Assistant token).
+                                                     secrets: { seal: function (v) { return Promise.resolve({ sealed: v }); }, unseal: function (e) { return Promise.resolve(e && e.sealed || ""); } },
                                                      locale: function () { return "en-US"; } }, opts.deps || {}));
     var thread = "";
     // The last message of each answer (all of them: askAll).
@@ -280,7 +306,9 @@ function device(opts) {
     function of(kind) { return Array.from(db.values()).filter(function (o) { return o._kind === kind; }); }
     function called(part) { return calls.filter(function (c) { return c.uri.indexOf(part) >= 0; }); }
     return { svc: svc, db: db, put: put, luna: luna, of: of, calls: calls, called: called, state: state, ask: ask, askAll: askAll, confirm: confirm, choose: choose,
-             requests: requests, storage: storage, thread: function () { return thread; }, newThread: function () { thread = ""; },
+             requests: requests, storage: storage,
+             // The stand-in Home Assistant, and connecting the Assistant to it.
+             homeAssistant: homeAssistant, connectHome: function () { homeAssistant.connect(storage); }, thread: function () { return thread; }, newThread: function () { thread = ""; },
              setNow: function (t) { clock = t; } };
 }
 

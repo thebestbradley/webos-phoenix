@@ -581,6 +581,8 @@ Item {
     signal sceneTransitionRequested(string uid, string op, string transition, bool isPop)
     signal screenshotRequested
     signal mediaKeyRequested(string key)
+    // The Assistant's emergency call, placed: {number, countdown} (org.webosphoenix.system/emergencyCall).
+    signal emergencyCallRequested(var params)
     signal progressAnimationRequested(string type, string state)
     signal debugOverlayRequested(var request)
     property var activeCallBanner: null
@@ -716,6 +718,9 @@ Item {
             _assistantRequest(appId, payload);
         } else if (type === "takeScreenshot") {
             screenshotRequested();
+        } else if (type === "emergencyCall") {
+            // The Assistant's "call 911" (org.webosphoenix.system/emergencyCall): Shell.openEmergency.
+            emergencyCallRequested(payload || {});
         } else if (type === "mediaKey") {
             // The Assistant's "pause" (org.webosphoenix.system/mediaKey):
             // pressed as the hardware key, phoenix-devices' /media events.
@@ -876,8 +881,17 @@ Item {
                                      color: info.color || "#666666", glyph: info.glyph || "!", icon: info.icon || "",
                                      params: params && typeof params === "object" ? JSON.stringify(params) : (typeof params === "string" ? params : ""),
                                      windowKey: "", clickableWhenLocked: false, ongoing: false, progress: -1,
-                                     tag: extra && extra.tag ? extra.tag : "", actions: acts ? JSON.stringify(acts) : "" },
+                                     tag: extra && extra.tag ? extra.tag : "", actions: acts ? JSON.stringify(acts) : "",
+                                     time: Date.now(), dashboardTitle: "", dashboardBody: "" },
                     extra && extra.group ? String(extra.group) : "");
+    }
+
+    // The list as NotificationFeed.qml reads it ({notifications, locked,
+    // previews}): to org.webosphoenix.system (services/shellhost), which
+    // answers getNotifications (the Assistant's "what did I miss").
+    // STATUS: written against shellhost.test.ts; not yet run on a device.
+    function publishNotifications(digest) {
+        lunaCall("luna://org.webosphoenix.system/setNotifications", digest, function() {});
     }
 
     function removeTagged(appId, tag, prefix) {
@@ -917,7 +931,8 @@ Item {
             id: key, appId: target, title: p.title || "", body: p.body || "",
             color: info.color || "#666666", glyph: info.glyph || "!", icon: p.icon ? _iconUrl(p.icon, target) : (info.icon || ""),
             params: params, windowKey: "", clickableWhenLocked: false, ongoing: true, progress: progress, tag: "", actions: "",
-            group: "", layerCount: 1, layers: ""
+            group: "", layerCount: 1, layers: "",
+            time: Date.now(), dashboardTitle: "", dashboardBody: ""
         });
     }
 

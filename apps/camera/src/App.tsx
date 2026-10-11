@@ -19,12 +19,18 @@
 //   com.webos.applicationManager launch: open the shot in Photos with
 //       {imageList: {results: [item], count: 1}}, the params OSE's camera
 //       passes its image viewer.
+//
+// Launch params {capture: "photo" | "video" | "stop", facing?: "user" |
+// "environment", timer?: seconds} (the Assistant's "take a selfie in 3
+// seconds", "record a video", "stop recording"): that camera, then a
+// countdown over the viewfinder with Cancel, then the shutter as a tap
+// would press it (capture.ts captureOrder).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apps, CAMERA_DIR, cameraService, folderOf, mediaFiles, mediaIndexer, type ImageItem, type MediaItem, type VideoItem } from "@phoenix/luna";
-import { useLuna, useMediaUrl } from "@phoenix/luna/react";
+import { useLaunchParams, useLuna, useMediaUrl } from "@phoenix/luna/react";
 import { AppMenu, Glyph, GroupedToolButtons, Spinner } from "@phoenix/ui";
-import { grabFrame, nextCapturePath, nextFlash, recorderType, recordingTime, type FlashMode } from "./capture";
+import { captureOrder, grabFrame, nextCapturePath, nextFlash, recorderType, recordingTime, type CaptureOrder, type FlashMode } from "./capture";
 
 type Status = "starting" | "ready" | "none" | "denied";
 type Mode = "photo" | "video";
@@ -79,6 +85,20 @@ export function App() {
     const [shutter, setShutter] = useState(0);
     const [flyer, setFlyer] = useState<string | null>(null);
     const [preview, setPreview] = useState<string | undefined>();
+    // The camera asked for by its facing (a selfie: "user"), else by index.
+    const [facing, setFacing] = useState<"user" | "environment" | null>(null);
+    // A capture the launch params asked for, and its countdown.
+    const params = useLaunchParams<{ capture?: string; facing?: string; timer?: number }>();
+    const [order, setOrder] = useState<CaptureOrder | null>(null);
+    const [count, setCount] = useState<number | null>(null);
+    useEffect(() => {
+        const o = captureOrder(params);
+        if (!o) return;
+        setOrder(o);
+        setCount(null);
+        if (o.facing) setFacing(o.facing);
+        if (o.capture !== "stop") setMode(o.capture);
+    }, [params]);
 
     const images = useLuna<ImageItem[]>((cb, err) => mediaIndexer.watchImages(cb, err), []);
     const videos = useLuna<VideoItem[]>((cb, err) => mediaIndexer.watchVideos(cb, err), []);
@@ -93,7 +113,7 @@ export function App() {
         if (videoEl.current) videoEl.current.srcObject = null;
     }, []);
 
-    const start = useCallback(async (index: number) => {
+    const start = useCallback(async (index: number, facingMode: "user" | "environment" | null) => {
         stop();
         setStatus("starting");
         try {
@@ -108,9 +128,12 @@ export function App() {
         try {
             const inputs = (await md.enumerateDevices()).filter((d) => d.kind === "videoinput");
             const dev = inputs[index % Math.max(1, inputs.length)];
+            // Asked for by its facing: that one where there is one (ideal, so
+            // a device with a single camera still gives it).
             const s = await md.getUserMedia({
                 video: {
-                    ...(dev?.deviceId ? { deviceId: { exact: dev.deviceId } } : { facingMode: "environment" }),
+                    ...(facingMode ? { facingMode: { ideal: facingMode } }
+                        : dev?.deviceId ? { deviceId: { exact: dev.deviceId } } : { facingMode: "environment" }),
                     width: { ideal: 1280 }, height: { ideal: 720 },
                 },
                 audio: false,
@@ -131,11 +154,11 @@ export function App() {
         // Not while hidden: the shell starts Camera without a card at boot
         // (luna.conf [LaunchAtBoot]) and keeps it ready; the viewfinder
         // starts when its card shows.
-        if (!document.hidden) void start(cameraIndex);
-        const onVis = () => { if (document.hidden) stop(); else void start(cameraIndex); };
+        if (!document.hidden) void start(cameraIndex, facing);
+        const onVis = () => { if (document.hidden) stop(); else void start(cameraIndex, facing); };
         document.addEventListener("visibilitychange", onVis);
         return () => { document.removeEventListener("visibilitychange", onVis); stop(); };
-    }, [cameraIndex, start, stop]);
+    }, [cameraIndex, facing, start, stop]);
 
     useEffect(() => {
         try { localStorage.setItem(FLASH_KEY, flash); } catch { /* ignore */ }
@@ -215,6 +238,31 @@ export function App() {
         setNow(Date.now());
     };
 
+    // The capture the launch params asked for, once the viewfinder runs: a
+    // countdown first (its timer), then the shutter, as a tap presses it.
+    useEffect(() => {
+        if (!order || status !== "ready" || count !== null) return;
+        if (order.capture === "stop" || (order.capture === "video" && recorder.current)) {
+            if (order.capture === "stop") recorder.current?.stop();
+            setOrder(null);
+            return;
+        }
+        setCount(order.timer);
+    }, [order, status, count]);
+    useEffect(() => {
+        if (count === null || !order) return;
+        if (count > 0) {
+            const t = setTimeout(() => setCount(count - 1), 1000);
+            return () => clearTimeout(t);
+        }
+        const o = order;
+        setOrder(null);
+        setCount(null);
+        void (o.capture === "photo" ? takePhoto() : toggleRecording());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [count]);
+    const cancelCountdown = () => { setOrder(null); setCount(null); };
+
     const openLast = () => {
         if (!last) return;
         void apps.launch("org.webosphoenix.photos", { imageList: { results: [last], count: 1 } });
@@ -263,6 +311,12 @@ export function App() {
                         </div>
                     </div>
                 )}
+                {count !== null && count > 0 && (
+                    <div className="cam-countdown" data-testid="countdown">
+                        <div key={count} className="cam-countdown-n">{count}</div>
+                        <button type="button" className="cam-countdown-cancel" data-testid="countdown-cancel" onClick={cancelCountdown}>Cancel</button>
+                    </div>
+                )}
                 {shutter > 0 && <div key={shutter} className="cam-shutter"><span /><span /></div>}
                 {flyer && <img ref={flyerRef} className="cam-flyer" src={flyer} alt="" />}
 
@@ -277,7 +331,7 @@ export function App() {
                     )}
                     {cameraCount > 1 && (
                         <button type="button" className="cam-switch" aria-label="Switch camera" disabled={recording}
-                                onClick={() => setCameraIndex((i) => (i + 1) % cameraCount)}>
+                                onClick={() => { setFacing(null); setCameraIndex((i) => (i + 1) % cameraCount); }}>
                             <Glyph name="switch-camera" size={26} />
                         </button>
                     )}

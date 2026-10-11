@@ -917,10 +917,20 @@ FocusScope {
     readonly property bool emergencyShown: emergencyWindow.windowKey !== ""
     readonly property bool emergencyAvailable: !!source && typeof source.openSystemWindow === "function"
 
-    function openEmergency() {
+    // extra: the Assistant's emergency call ({number, countdown}: Phone calls,
+    // after counting down with Cancel when countdown is given; apps/phone
+    // views/Emergency.tsx), which replaces a window already open.
+    function openEmergency(extra) {
+        if (emergencyShown && extra)
+            closeEmergency();
         if (emergencyShown || !emergencyAvailable)
             return emergencyShown;
-        var key = source.openSystemWindow(emergencyAppId, { emergency: true }, "emergency");
+        var params = { emergency: true };
+        if (extra && extra.number) {
+            params.number = String(extra.number);
+            params.countdown = Number(extra.countdown) || 0;
+        }
+        var key = source.openSystemWindow(emergencyAppId, params, "emergency");
         emergencyWindow.windowKey = key || "";
         return emergencyShown;
     }
@@ -949,6 +959,11 @@ FocusScope {
                 return;
             emergencyWindow.windowKey = "";
             shell._emergencyClosed();
+        }
+        // The Assistant's emergency call, its countdown over ({number, countdown}).
+        function onEmergencyCallRequested(params) {
+            if (params && params.number)
+                shell.openEmergency(params);
         }
     }
 
@@ -2267,6 +2282,38 @@ FocusScope {
     Connections {
         target: dictationEngine
         function onWakeHeard(heard) { shell.wakeAssistant(); }
+    }
+    // The notification list for the services that read it, and each new
+    // notification for the Assistant to announce (driving mode; headphones
+    // in with Announce Messages on): NotificationFeed.qml.
+    NotificationFeed {
+        id: notificationFeed
+        source: shell.source
+        locked: shell.locked
+        previews: !shell.system || shell.system.lockScreenPreviews !== false
+        headphones: !!shell.system && ((shell.system.headset !== undefined && shell.system.headset !== "none")
+                                       || /head(?:set|phone)|ear ?(?:bud|phone)|airpods/i.test(String(shell.system.bluetoothDevice || "")))
+        onReplyByVoice: (threadId) => shell.listenForReply(threadId)
+    }
+    // Put on charge, connected to the car: the Assistant's routines that
+    // wait for them (AssistantMoments.qml).
+    AssistantMoments {
+        source: shell.source
+        system: shell.system
+    }
+    // Driving mode: a message read aloud asks "Want to reply?", and the
+    // Assistant listens for the answer in that conversation (over the lock
+    // screen too, as a spoken request may be).
+    function listenForReply(threadId) {
+        if (firstUse || dockMode)
+            return;
+        justType.open = false;
+        iconMenu.open = false;
+        assistantView.listenOnOpen = false;
+        assistantView.origin = Qt.point(assistantView.width / 2, assistantView.height);
+        if (!assistantView.open)
+            assistantView.open = true;
+        assistantView.replyByVoice(threadId);
     }
     function wakeAssistant() {
         if (!wakeWordListening)

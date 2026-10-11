@@ -437,16 +437,18 @@ module.exports = function (h) {
         },
         whereTo: function () { return "Where are you going? Say it with the place, like “send Sam my ETA to the airport”."; },
         noPlaceSaved: function (place) {
-            return "I don't know where " + (place === "home" || place === "work" ? place : "that") + " is. Say the place, like “send Sam my ETA to the airport”.";
+            return "I don't know where " + (place === "home" || place === "work" ? place : "that") + " is. Say “this is my " + (place === "work" ? "work" : "home") +
+                   "” when you're there, or say the place, like “send Sam my ETA to the airport”.";
         },
         locationMessage: function (link) { return "I'm here: " + link; },
         locationReady: function () { return "I can see where you are now. Ask me again to send it."; },
+        // place: a place's name, or "home" / "work" (the saved places, lib/commands-places.js).
         etaMessage: function (place, seconds, at) {
-            return "On my way to " + place + ", there around " + h.timeText(at) + " (" + about(seconds) + " from here).";
+            return (place === "home" ? "On my way home" : "On my way to " + place) + ", there around " + h.timeText(at) + " (" + about(seconds) + " from here).";
         },
         // Naming the account it goes on (or a text).
         confirmShare: function (eta, who, net, place, at) {
-            if (eta) return (net ? "Tell " + who + " on " + net : "Text " + who) + " that you'll be at " + place + " around " + h.timeText(at) + "?";
+            if (eta) return (net ? "Tell " + who + " on " + net : "Text " + who) + " that you'll be " + (place === "home" ? "home" : "at " + place) + " around " + h.timeText(at) + "?";
             return (net ? "Send your location to " + who + " on " + net : "Text your location to " + who) + "?";
         },
         // Calendars

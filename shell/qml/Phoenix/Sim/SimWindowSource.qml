@@ -38,9 +38,13 @@
 //                            true} window attribute), group, layerCount,
 //                            layers (a stack of the app's notifications of
 //                            one group, the top layer's fields the row's:
-//                            NotificationStacks.js)
+//                            NotificationStacks.js), time (ms, when its top
+//                            layer came), dashboardTitle and dashboardBody
+//                            (a dashboard window's words, from its page)
 //   dismissNotification(index), popNotificationLayer(index)
 //                            the row (its whole stack) gone; its top layer gone
+//   publishNotifications(digest)  (optional) the list for the services
+//                            that read it (NotificationFeed.qml)
 //   alerts        ListModel  key, appId, height (legacy px), sound,
 //                            soundClass (the window's sound attributes):
 //                            popup alert windows (windowFor(key)), front first
@@ -952,6 +956,9 @@ Item {
             shutdownRequested(payload.reason ? String(payload.reason) : "");
         } else if (type === "restartUi") {
             restartUiRequested();
+        } else if (type === "emergencyCall") {
+            // The Assistant's "call 911" (org.webosphoenix.system/emergencyCall): Shell.openEmergency.
+            emergencyCallRequested(payload || {});
         } else if (type === "mediaKey") {
             mediaKeyRequested(String(payload.key || ""));
         } else if (type === "takeScreenshot") {
@@ -1034,6 +1041,8 @@ Item {
     // A media key pressed by a service (org.webosphoenix.system/mediaKey),
     // and a screen capture asked for (com.palm.systemmanager/takeScreenShot).
     signal mediaKeyRequested(string key)
+    // The Assistant's emergency call, placed: {number, countdown} (org.webosphoenix.system/emergencyCall).
+    signal emergencyCallRequested(var params)
     signal screenshotRequested
     // A page asked the simulator for something it does on this computer
     // ("simulator" host messages: {op: "startMarketplaceCatalog"}).
@@ -1407,6 +1416,9 @@ Item {
                 // Its page draws its own layers (enyo.Dashboard's
                 // DashboardContent): one layer to the shell.
                 group: "", layerCount: 1, layers: "",
+                // When it came, and its words as its page reports them
+                // (windowProperties {dashboardText}): NotificationFeed.qml.
+                time: Date.now(), dashboardTitle: "", dashboardBody: "",
                 // Its window attributes {persistent: true} (no swipe or flick
                 // dismisses it: DashboardWindow::persistent; luna-systemui's
                 // update dashboard, SysUpdateService.js:184-188) and
@@ -1429,6 +1441,16 @@ Item {
     // persistent flag has no such way: WebAppMgr sends it once, from the
     // window's attributes (DashboardWebApp::attach, DashboardWebApp.cpp:86-96).
     function _systemWindowProperties(key, payload) {
+        // A dashboard's words (the runtime reads them from its page), for
+        // the services that read the list (NotificationFeed.qml).
+        if (payload.dashboardText && typeof payload.dashboardText === "object") {
+            for (var d = 0; d < notifications.count; ++d) {
+                if (notifications.get(d).windowKey === key) {
+                    notifications.setProperty(d, "dashboardTitle", String(payload.dashboardText.title || ""));
+                    notifications.setProperty(d, "dashboardBody", String(payload.dashboardText.body || ""));
+                }
+            }
+        }
         if (payload.webosDragMode === undefined)
             return;
         for (var i = 0; i < notifications.count; ++i) {
@@ -2002,7 +2024,7 @@ Item {
     // not the pages' to overrule.
     readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout", "gestureArea", "dockMode",
                                         "debugOverlays", "usbHost", "gamepads", "usbDrives", "formFactor", "screen",
-                                        "marketplaceCatalog", "learnedWords"]
+                                        "marketplaceCatalog", "learnedWords", "notifications"]
     property var _shellStatus: ({})
 
     function pushSystemStatus(changes) {
@@ -2038,6 +2060,12 @@ Item {
         var writer = _writerPage();
         for (var i = 0; i < pages.length; ++i)
             pages[i].runScript(_statusScript(changes, pages[i] === writer));
+    }
+
+    // The notification list as NotificationFeed.qml reads it ({notifications,
+    // locked, previews}): the pages' org.webosphoenix.system getNotifications.
+    function publishNotifications(digest) {
+        pushSystemStatus({ notifications: digest });
     }
 
     // A screen capture for the runtime to save (runtime.saveScreenshot:
@@ -2958,7 +2986,8 @@ Item {
             windowKey: "", clickableWhenLocked: false,
             ongoing: false, progress: -1,
             tag: extra && extra.tag ? extra.tag : "",
-            actions: acts ? JSON.stringify(acts) : ""
+            actions: acts ? JSON.stringify(acts) : "",
+            time: Date.now(), dashboardTitle: "", dashboardBody: ""
         }, extra && extra.group ? String(extra.group) : "");
     }
     // The app's notification of that tag, gone (replaced or taken back);
@@ -3006,7 +3035,8 @@ Item {
             color: info.color, glyph: info.glyph, icon: p.icon ? _iconUrl(p.icon, target) : (info.icon || ""),
             params: params, windowKey: "", clickableWhenLocked: false,
             ongoing: true, progress: progress, tag: "", actions: "",
-            group: "", layerCount: 1, layers: ""
+            group: "", layerCount: 1, layers: "",
+            time: Date.now(), dashboardTitle: "", dashboardBody: ""
         });
     }
 

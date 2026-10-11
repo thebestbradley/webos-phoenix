@@ -18,5 +18,14 @@
     ],
     "phoenix.system.restart": [
         "oem"
+    ],
+    "phoenix.system.notifications.publish": [
+        "oem"
+    ],
+    "phoenix.system.notifications.read": [
+        "oem"
+    ],
+    "phoenix.system.emergency": [
+        "oem"
     ]
 }

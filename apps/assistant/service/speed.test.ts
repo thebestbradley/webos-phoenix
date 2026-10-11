@@ -20,7 +20,8 @@ const grammar = req("./lib/grammar.js") as { parse(t: string, ctx: object): { co
 // The accounts' drives, as the evaluation gives them (tools/eval-assistant.cjs runCase).
 const world = req("./test/accounts-world.cjs") as { DRIVE_FILES: Record<string, object[]> };
 type Turn = { say: string; replies: { path: string }[] };
-type Case = { id: string; say?: string; turns?: { say: string; silence?: boolean; voice?: boolean }[]; settings?: object; deviceState?: object; locationAllowed?: boolean | null; put?: object[]; voice?: boolean };
+type Case = { id: string; say?: string; turns?: { say: string; silence?: boolean; voice?: boolean }[]; settings?: object; deviceState?: object; locationAllowed?: boolean | null; put?: object[]; voice?: boolean;
+              storage?: Record<string, unknown>; db?: { _id: string }[]; home?: boolean };
 const harness = req("../../../tools/eval-assistant.cjs") as {
     loadCases(f?: string): Case[];
     runCase(c: Case, o: object): Promise<{ turns: Turn[] }>;
@@ -62,6 +63,10 @@ describe("what the grammar does never waits for the model", () => {
                                settings: { followUps: false, ...(c.settings ?? {}) },
                                locationAllowed: c.locationAllowed === undefined ? true : c.locationAllowed });
             if (c.deviceState) Object.assign(d.state, c.deviceState);
+            // As the evaluation starts a case (tools/eval-assistant.cjs runCase): what the assistant keeps, db8 objects, Home Assistant.
+            for (const [k, v] of Object.entries(c.storage ?? {})) d.storage.set(k, v);
+            for (const o of c.db ?? []) d.db.set(o._id, JSON.parse(JSON.stringify(o)));
+            if (c.home) d.connectHome();
             const turns = c.turns ?? [{ say: c.say! }];
             // Once the model answered a turn (rightly), the next one follows
             // its answer, not the grammar's: not compared.

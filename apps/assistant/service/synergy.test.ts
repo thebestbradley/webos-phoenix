@@ -333,6 +333,13 @@ describe("where you are, sent on any account", () => {
         expect(sentMessages(d)[0]).toMatchObject({ _kind: "com.palm.smsmessage:1",
                                                    messageText: "On my way to San Jose Airport, there around 10:18 AM (about 18 minutes from here)." });
     });
+    it("sends the ETA home, home being the saved place in Maps called Home (lib/commands-places.js)", async () => {
+        const d = synergy((put) => put({ _kind: "org.webosphoenix.maps.place:1", name: "Home", detail: "", lat: 37.40, lon: -122.08, created: 1, searchText: "home" }));
+        const q = await d.ask("let Sam know when I'll be home");
+        expect(q.text).toBe("Text Sam Delgado that you'll be home around 10:18 AM?");
+        await d.confirm(q);
+        expect(sentMessages(d)[0]).toMatchObject({ messageText: "On my way home, there around 10:18 AM (about 18 minutes from here)." });
+    });
     it("asks which account when several fit, and what is missing", async () => {
         const d = synergy();
         const q = await d.ask("tell Kai where I am");
@@ -340,7 +347,7 @@ describe("where you are, sent on any account", () => {
         const r = await d.choose(q, "pick:1");
         expect(r.messages.at(-1)).toMatchObject({ status: "pending", text: "Send your location to Kai Tanaka on Jabber?" });
         expect((await d.ask("send my ETA to Sam")).text).toBe("Where are you going? Say it with the place, like “send Sam my ETA to the airport”.");
-        expect((await d.ask("let Sam know when I'll be home")).text).toBe("I don't know where home is. Say the place, like “send Sam my ETA to the airport”.");
+        expect((await d.ask("let Sam know when I'll be home")).text).toBe("I don't know where home is. Say “this is my home” when you're there, or say the place, like “send Sam my ETA to the airport”.");
         expect((await d.ask("share my location with Sam on Signal")).text).toBe("I can't reach Signal: Signal has no way in for other apps.");
         expect(sentMessages(d)).toHaveLength(0);
     });

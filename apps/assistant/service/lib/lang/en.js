@@ -1304,8 +1304,8 @@ var NOT_HERE = [
     ["post", /\b(?:twitter|x\.com|facebook|instagram|tiktok|linkedin|mastodon|social media)\b/, /^(?:post|tweet|share|upload|publish)\b/],
     // Found by the review (11 October 2026), each taken as something else:
     // "play my podcast" searched Music for "podcast"; "what's on my screen"
-    // offered the brightness. Where a podcast plays is another command's
-    // (none yet); what is on the screen needs a model that sees. ("Send my
+    // offered the brightness. A podcast the user follows plays (podcast:
+    // lib/commands-music.js); one to find is not; what is on the screen needs a model that sees. ("Send my
     // ETA to Sam", which texted a contact called "my", is shareLocation.)
     // "Send the photo to Sam": no command attaches a picture (the model's
     // set: Qwen3 0.6B offered a screenshot).
@@ -2735,14 +2735,16 @@ var say = {
     },
     beyond: function (what) {
         return { translate: "I can't translate without a language model yet, but I can search the web for it.",
-                 home: "I can't control other devices, like lights, TVs, doors or cars, from here yet.",
+                 home: "I can't control other devices, like lights, TVs, doors or cars, by myself. With Home Assistant, I can: connect it in Settings > Assistant > Smart Home.",
+                 // Home Assistant connected, the words none of its (lib/lang/en-home.js).
+                 homeOther: "I can turn things in your Home Assistant on and off, set lights, fans and the thermostat, lock and unlock doors, open and close garage doors and blinds, and turn on scenes, but not that.",
                  money: "I can't send or pay money from here.",
                  order: "I can't order or buy things for you yet.",
                  booking: "I can't book things for you yet.",
                  image: "I can't make pictures yet.",
                  post: "I can't post to social media for you yet.",
                  photo: "I can't send photos or videos yet.",
-                 podcast: "I can't play podcasts myself yet.",
+                 podcast: "I can play the podcasts you follow in Podcasts, like “play the latest episode of The Daily”, but not find new ones yet.",
                  screen: "I can't see what's on your screen yet.",
                  moreTime: "I can't add time to a running timer yet, but I can set another one." }[what] || "";
     },
@@ -2816,8 +2818,9 @@ var say = {
     // answered yet), "denied", "off", "unavailable"; purpose "weather" or
     // "distance".
     location: function (why, purpose) {
-        var need = purpose === "distance" ? "work out how far that is" : purpose === "share" ? "send where you are" : purpose === "places" ? "find places near you and the way there" : "check the weather where you are";
-        var instead = purpose === "distance" || purpose === "places" || purpose === "share" ? "" : " Or say a city, like \u201cweather in Paris\u201d.";
+        var own = say.locationNeed ? say.locationNeed(purpose) : "";   // the everyday features' (en-places.js)
+        var need = own || (purpose === "distance" ? "work out how far that is" : purpose === "share" ? "send where you are" : purpose === "places" ? "find places near you and the way there" : "check the weather where you are");
+        var instead = own || purpose === "distance" || purpose === "places" || purpose === "share" ? "" : " Or say a city, like \u201cweather in Paris\u201d.";
         if (why === "ask") return "To " + need + ", I need your location. Is it OK if I use it?";
         if (why === "denied") return "I'm not allowed to use your location. Allow it, here or in Settings > Location Services, and I'll " + need + "." + instead;
         if (why === "off") return "Location Services are off. Turn them on and I'll " + need + "." + instead;
@@ -3232,6 +3235,20 @@ say.searchWhat = function () { return "What should I search the web for?"; };
 // "Connect a model", said: Settings opens on it.
 say.connecting = function () { return "I've opened Settings > Assistant to connect a model."; };
 
+// The everyday features' words (lib/lang/en-everyday.js): their rules
+// first, after help and undo (each held to its own words), the late ones
+// before "open an app".
+var everyday = require("./en-everyday")({ D: D, extract: extract, resolve: resolve, clock: clock, duration: duration, number: number, digits: digits,
+                                          capital: capital, cased: cased, plural: plural, list: list, timeText: timeText, dayText: dayText,
+                                          whenText: whenText, durationText: durationText, clean: clean, toggleTarget: toggleTarget });
+Array.prototype.splice.apply(rules, [2, 0].concat(everyday.rules));
+Array.prototype.splice.apply(rules, [rules.length - 1, 0].concat(everyday.late));
+Array.prototype.splice.apply(rules, [0, 0].concat(everyday.first));
+Object.keys(everyday.say).forEach(function (k) { if (!(k in say)) say[k] = everyday.say[k]; });
+Object.keys(everyday.MENTIONS).forEach(function (k) { if (!(k in MENTIONS)) MENTIONS[k] = everyday.MENTIONS[k]; });
+var describeCommand = say.describe;
+say.describe = function (command, args, title) { return everyday.describe(command, args, title) || describeCommand(command, args, title); };
+
 // What is connected through Synergy (lib/lang/en-synergy.js): its rules
 // before the others (they hear an account named: "on Slack", "my work
 // calendar"), its words for a model's choice, and what it says.
@@ -3242,6 +3259,8 @@ Object.keys(synergyWords.MENTIONS).forEach(function (k) { MENTIONS[k] = synergyW
 Object.keys(synergyWords.say).forEach(function (k) { say[k] = synergyWords.say[k]; });
 
 module.exports = {
+    // Help's examples for the everyday features ([{title, examples}]).
+    everydayHelp: everyday.help,
     id: "en",
     name: "English",
     // The services people name, for lib/commands-synergy.js (canon: "gmail" -> "google").
@@ -3309,4 +3328,6 @@ module.exports = {
     aboutMine: phoneSearch.personal,
     followUp: followUp
 };
+// The everyday features' own (routineStarters(), routineTemplates(), ...).
+Object.keys(everyday.lang).forEach(function (k) { if (!(k in module.exports)) module.exports[k] = everyday.lang[k]; });
 Object.keys(phoneSearch.say).forEach(function (k) { if (!say[k]) say[k] = phoneSearch.say[k]; });

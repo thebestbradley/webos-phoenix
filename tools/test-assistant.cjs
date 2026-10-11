@@ -334,6 +334,13 @@ async function main() {
         // Assistant is refused, and on again.
         const PHRASES = require(path.join(REPO, "apps/assistant/service/test/phrases.cjs"));
         const currentBefore = (await svc(app, A + "threads", {})).current, made = new Set();
+        // A routine for the routine commands' requests ("good night"), removed after.
+        const routine = (await svc(app, A + "setRoutine", { routine: { name: "Good night", steps: [{ text: "turn on do not disturb" }] } })).routine;
+        // A Home Assistant for the home's commands (the service's stand-in, served on 127.0.0.1), disconnected after.
+        const house = require(path.join(REPO, "apps/assistant/service/test/home-assistant.cjs")).create();
+        const haServer = await house.serve();
+        const haLinked = await svc(app, A + "setHomeAssistant", { url: haServer.url, token: house.TOKEN });
+        check(haLinked.connected === true && haLinked.entities === 10, "Home Assistant connects through the simulator's network: " + JSON.stringify(haLinked));
         const broken = [];
         for (const [id, text] of Object.entries(PHRASES)) {
             if (!text || id === "lock") continue;   // locking the page's screen: test-device-services.cjs
@@ -358,6 +365,9 @@ async function main() {
             if (!/is turned off in Settings > Assistant\.$/.test(m.text)) notOff.push(`${id}: ${m.text}`);
         }
         await svc(app, A + "setSettings", { disabledCommands: [] });
+        if (routine) await svc(app, A + "removeRoutine", { id: routine.id });
+        await svc(app, A + "removeHomeAssistant", {});
+        haServer.close();
         for (const id of made) await svc(app, A + "deleteThread", { id });
         await svc(app, A + "setCurrent", { id: currentBefore });
         check(notOff.length === 0, "each command turned off in Settings is refused" + (notOff.length ? ": " + notOff.join(" | ") : ""));

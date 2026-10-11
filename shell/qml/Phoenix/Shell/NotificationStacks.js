@@ -18,7 +18,7 @@
 //   group       the app's group key ("" for none): same app + same group =
 //               one stack
 //   layerCount  how many layers (1 for a plain notification)
-//   layers      JSON: [{id, title, body, params, tag, actions}], oldest
+//   layers      JSON: [{id, title, body, params, tag, actions, time}], oldest
 //               first; the row's own title, body, params, tag and actions
 //               are the top (last) layer's, so whatever reads a row (a tap,
 //               the lock screen, the keyboard) has the top layer
@@ -27,15 +27,17 @@
 
 .pragma library
 
-// The layer a notification makes. params and actions: strings (JSON or "").
-function layer(id, title, body, params, tag, actions) {
+// The layer a notification makes. params and actions: strings (JSON or "");
+// time: when it came (ms), for what reads the list (NotificationFeed.qml).
+function layer(id, title, body, params, tag, actions, time) {
     return {
         id: String(id || ""),
         title: String(title || ""),
         body: String(body || ""),
         params: typeof params === "string" ? params : "",
         tag: String(tag || ""),
-        actions: typeof actions === "string" ? actions : ""
+        actions: typeof actions === "string" ? actions : "",
+        time: Number(time) || 0
     };
 }
 
@@ -52,7 +54,7 @@ function layersOf(row) {
         }
     }
     return [layer(row ? row.id : "", row ? row.title : "", row ? row.body : "",
-                  row ? row.params : "", row ? row.tag : "", row ? row.actions : "")];
+                  row ? row.params : "", row ? row.tag : "", row ? row.actions : "", row ? row.time : 0)];
 }
 
 // The row's fields for these layers: the top layer's, the count, the JSON.
@@ -64,6 +66,7 @@ function topFields(layers) {
         params: top.params,
         tag: top.tag,
         actions: top.actions,
+        time: Number(top.time) || 0,
         layerCount: layers.length,
         layers: JSON.stringify(layers)
     };
@@ -88,7 +91,7 @@ function find(model, appId, group) {
 // its top layer (Dashboard.push, :77-83; the row stays where it is, as a
 // dashboard window did); otherwise a new row. Returns the row's index.
 function push(model, row, group) {
-    var l = layer(row.id, row.title, row.body, row.params, row.tag, row.actions);
+    var l = layer(row.id, row.title, row.body, row.params, row.tag, row.actions, row.time);
     var at = find(model, row.appId, group || "");
     if (at >= 0) {
         model.set(at, topFields(layersOf(model.get(at)).concat([l])));
