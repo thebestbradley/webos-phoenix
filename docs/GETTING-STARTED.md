@@ -86,6 +86,22 @@ modern tablet (1180x820). **View > Phone** and **Tablet** snap to the Pre
 and the TouchPad. Turning the device (Ctrl+Left, Ctrl+Right) still works at
 any size: a phone on its side stays a phone, a tablet stands up.
 
+### As one of the first target devices
+
+`./phoenix run --device fairphone-fp6` (or `phoenix-sim --device ...`, or
+**View > Device**) is one of the devices Phoenix is being brought up on,
+as its OS image will configure it: the panel's exact pixels and density,
+the phone or tablet layout, its buttons on the toolbar (the Fairphone's
+Moment switch as the ringer switch), and its rounded corners and camera
+cutout drawn in black over the screen, which the status bar makes room for.
+The devices: `fairphone-fp6`, `ayn-odin2portal`, `pinephonepro`, `pinetab2`
+and `raspberrypi4-64` (with the 7" Touch Display 2). A phone's panel is
+taller than most monitors, so the window shows it at what fits (the title
+says the percentage; `--zoom 0.5` picks one); `--screenshot` saves the
+exact pixels. Where the numbers come from: docs/HARDWARE.md, "Device
+profiles". To run the real OS image as one of them, in a VM:
+[BUILDING-MAC.md, "Run it in a VM"](BUILDING-MAC.md#run-it-in-a-vm).
+
 What does not change live: the density (**View > Scale** restarts, keeping
 the size), and the apps the system starts at boot and keeps alive (the
 phone's and the TouchPad's lists differ; luna.conf, luna-topaz.conf): they
@@ -161,6 +177,7 @@ cmake --build build
 | `./build/phoenix-sim --tablet` | A tablet (TouchPad, 1024x768) |
 | `./build/phoenix-sim --size 480x800 --scale 1.5` | Pre 3 |
 | `./build/phoenix-sim --tablet --size 2560x1600 --scale 2` | A large tablet |
+| `./phoenix run --device fairphone-fp6` | The Fairphone 6, as its image configures it (above) |
 | `./build/phoenix-sim --launch com.palm.app.notes` | Open an app at start-up |
 | `./build/phoenix-sim --no-toolbar` | Without the toolbar beside the screen |
 | `./build/phoenix-sim --marketplace` | With the Marketplace's catalog (below), the Marketplace open |
@@ -329,7 +346,8 @@ webOS OSE with the `meta-phoenix` layer.
    - On an x86-64 Ubuntu machine or server: `scripts/setup-build.sh`, then
      `bitbake webos-phoenix-image` (see the README's "Build a webOS OSE image").
 3. **Run it:** `qemux86-64` in QEMU; `raspberrypi4-64` written to an SD card
-   (`*.wic`). Which phones and tablets are supported, and how drivers are found
+   (`*.wic`); `phoenix-vm-arm64` in QEMU or UTM as any first target device
+   (`scripts/vm.sh fairphone-fp6`; [BUILDING-MAC.md](BUILDING-MAC.md#run-it-in-a-vm)). Which phones and tablets are supported, and how drivers are found
    and installed, is in [HARDWARE.md](HARDWARE.md).
 
 A MacBook isn't a target device; on a Mac you develop with the simulator,

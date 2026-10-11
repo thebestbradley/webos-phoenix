@@ -1,0 +1,11 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.service.matrix"
+    ],
+    "accounts.transport": [
+        "oem"
+    ],
+    "matrix.account": [
+        "oem"
+    ]
+}

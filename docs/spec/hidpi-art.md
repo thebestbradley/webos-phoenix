@@ -234,7 +234,8 @@ Facebook's, Google's and Yahoo!'s logos, as released; trademarks are not
 licensed by Apache-2.0, section 6), pictures of products (the HP TouchPad,
 the Pre's battery door with the Palm logo), photographs and sample content
 (the first-use dial pad's sky, the apps' mock data, Email's spawn test page,
-a sample photo, Settings' wallpapers), the apps' icons themselves (the shell
+a sample photo, Settings' wallpapers, drawn as 2048 px squares the shell
+scales to the screen), the apps' icons themselves (the shell
 draws their 256 and 512 px files; see below), Calendar's dated launcher
 icons (the shell does not show `updateLaunchPointIcon`), Enyo's own 1.5x
 art (drawn as Enyo wrote it at ratios from 1.5 to 2), transparent pixels,

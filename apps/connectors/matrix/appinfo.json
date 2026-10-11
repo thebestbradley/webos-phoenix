@@ -1,0 +1,19 @@
+{
+    "id": "org.webosphoenix.matrix",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Matrix",
+    "icon": "icon.png",
+    "uiRevision": 2,
+    "phoenix": {
+        "//": "Not in the launcher: the app carries the Matrix account (accounts/signin.html, the template in public/accounts, the service). Rooms are in Messaging; sharing to a person goes through Messaging's share target.",
+        "hidden": true
+    },
+    "requiredPermissions": [
+        "accounts.transport",
+        "matrix.account",
+        "phoenix.appmanager.launch"
+    ]
+}

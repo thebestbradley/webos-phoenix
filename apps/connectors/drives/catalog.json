@@ -1,0 +1,125 @@
+{
+    "//": "What the Marketplace's Connections view says of this connector package's account types (server/marketplace Catalog::connectorTypes; docs/SYNERGY-SDK.md). It is one of Phoenix's own, installed from the catalog, not pre-installed (preinstalled.json \"catalog\"); the catalog's own entries (catalog/accounts.json) are the ones listed, these are checked when the package is uploaded.",
+    "accountTypes": [
+        {
+            "templateId": "com.webosphoenix.drive.nextcloud",
+            "title": "Nextcloud",
+            "provider": "Your Nextcloud, or a Nextcloud provider's",
+            "summary": "Your Nextcloud's files as a place in Files, the file pickers and Save to Files. Sign in on your server's own page: Phoenix gets an app password you can revoke there.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["webdav", "nextcloud-login-flow-v2"],
+            "auth": { "type": "app-password", "registration": "none" },
+            "server": "user",
+            "privacy": { "dataGoesTo": "the Nextcloud server you sign in to", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "beta"
+        },
+        {
+            "templateId": "com.webosphoenix.drive.owncloud",
+            "title": "ownCloud",
+            "provider": "Your ownCloud server",
+            "summary": "Your ownCloud's files as a place in Files, the file pickers and Save to Files, with an app password from ownCloud's settings.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["webdav"],
+            "auth": { "type": "app-password", "registration": "none" },
+            "server": "user",
+            "privacy": { "dataGoesTo": "the ownCloud server you enter", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "beta"
+        },
+        {
+            "templateId": "com.webosphoenix.drive.webdav",
+            "title": "WebDAV",
+            "provider": "Any WebDAV server",
+            "summary": "Any WebDAV server's files (a NAS, a hosting provider, your own server) as a place in Files, the file pickers and Save to Files.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["webdav"],
+            "auth": { "type": "password", "registration": "none" },
+            "server": "user",
+            "privacy": { "dataGoesTo": "the server you enter", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "beta"
+        },
+        {
+            "templateId": "com.webosphoenix.drive.s3",
+            "title": "S3 Storage",
+            "provider": "Backblaze B2, Wasabi, MinIO and other S3-compatible storage",
+            "summary": "A bucket of S3-compatible storage as a place in Files, the file pickers and Save to Files, with an access key you make in the provider's console. Large files go up in parts.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["s3"],
+            "auth": { "type": "api-key", "registration": "none" },
+            "server": "user",
+            "privacy": { "dataGoesTo": "the storage provider you enter", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "beta"
+        },
+        {
+            "templateId": "com.webosphoenix.drive.dropbox",
+            "title": "Dropbox",
+            "provider": "Dropbox",
+            "summary": "Your Dropbox as a place in Files, the file pickers and Save to Files. Sign in on Dropbox's own page.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["dropbox-api-v2"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Dropbox", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental"
+        },
+        {
+            "templateId": "com.webosphoenix.drive.onedrive",
+            "title": "OneDrive",
+            "provider": "Microsoft OneDrive (personal, work or school)",
+            "summary": "Your OneDrive as a place in Files, the file pickers and Save to Files, through Microsoft Graph. Sign in on Microsoft's own page.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["microsoft-graph"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Microsoft", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental"
+        },
+        {
+            "templateId": "com.webosphoenix.drive.googledrive",
+            "title": "Google Drive",
+            "provider": "Google Drive",
+            "summary": "Google Drive as a place in Files, the file pickers and Save to Files. Phoenix sees the files it saves there or opens from there (Google's per-file access), not the rest of your drive.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["google-drive-api-v3"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Google", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental"
+        },
+        {
+            "templateId": "com.webosphoenix.drive.box",
+            "title": "Box",
+            "provider": "Box",
+            "summary": "Your Box as a place in Files, the file pickers and Save to Files, through Box's content API. Sign in on Box's own page.",
+            "capabilities": [
+                { "capability": "DOCUMENTS", "direction": "two-way" }
+            ],
+            "protocols": ["box-content-api"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Box", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental"
+        }
+    ]
+}

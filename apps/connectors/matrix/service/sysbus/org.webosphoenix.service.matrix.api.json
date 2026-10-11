@@ -1,0 +1,19 @@
+{
+    "accounts.transport": [
+        "org.webosphoenix.service.matrix/checkCredentials",
+        "org.webosphoenix.service.matrix/onCreate",
+        "org.webosphoenix.service.matrix/onEnabled",
+        "org.webosphoenix.service.matrix/onCredentialsChanged",
+        "org.webosphoenix.service.matrix/onDelete",
+        "org.webosphoenix.service.matrix/sync",
+        "org.webosphoenix.service.matrix/connect",
+        "org.webosphoenix.service.matrix/disconnect",
+        "org.webosphoenix.service.matrix/outbox"
+    ],
+    "matrix.account": [
+        "org.webosphoenix.service.matrix/signInOptions",
+        "org.webosphoenix.service.matrix/signIn",
+        "org.webosphoenix.service.matrix/markRead",
+        "org.webosphoenix.service.matrix/setPresence"
+    ]
+}

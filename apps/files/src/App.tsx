@@ -17,20 +17,30 @@
 //   adds the folder to the favourites (the star in the command menu).
 // - The back gesture goes back through the folders visited.
 //
-// Launch params: {path} opens that folder.
+// Launch params: {path} opens that folder; {transfer} (a tap on a drive's
+// upload in the notification area) shows the transfers.
+//
+// Drives (docs/SHARE-AND-FILES.md "Drives"): each Synergy account with the
+// DOCUMENTS capability (Nextcloud, WebDAV, S3, Dropbox, OneDrive, Google
+// Drive, Box) is a place beside the favourites, a folder of
+// /media/drives. Its files open through a copy on the device (the file
+// manager's open), copies to and from it are uploads and downloads with
+// their progress and a Cancel, and when it cannot be reached the folder
+// says so, with Try Again (and Accounts, when the sign-in was refused).
 //
 // Everything goes through org.webosphoenix.filemanager (@phoenix/luna
 // files.ts).
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
-    fileManager, formatSize, isHidden, joinPath, kindOf, LunaError, mimeOf, opensAsText, parentOf, shareSheet, sortEntries, type FileEntry, type SortKey,
+    driveRootOf, DRIVES_ROOT, FILE_ERRORS, fileManager, formatSize, isDrivePath, isHidden, joinPath, kindOf, LunaError, mimeOf, openWith, opensAsText,
+    parentOf, shareSheet, sortEntries, type FileEntry, type SortKey, type Transfer,
 } from "@phoenix/luna";
 import { useLaunchParams } from "@phoenix/luna/react";
 import {
     AppMenu, BackProvider, CheckBox, cx, FileIcon, Glyph, IconToolButton, PageHeader, PopupMenu, Spinner, Toolbar, ToolSpacer, useBack, type Option,
 } from "@phoenix/ui";
-import { crumbs, folderTitle, HOME, loadPrefs, planPaste, savePrefs, shortDate, type Clipboard, type Prefs } from "./browse";
+import { crumbs, driveNames, folderTitle, HOME, loadPrefs, planPaste, savePrefs, shortDate, type Clipboard, type Prefs } from "./browse";
 import { DeleteDialog, InfoDialog, InstallDialog, NameDialog, OpenWithDialog } from "./Dialogs";
 import { ImageViewer, TextEditor } from "./Viewers";
 
@@ -38,7 +48,7 @@ type Sheet =
     | { kind: "new-folder" } | { kind: "new-file" }
     | { kind: "rename"; entry: FileEntry }
     | { kind: "delete"; entries: FileEntry[] }
-    | { kind: "info"; entry: FileEntry }
+    | { kind: "info"; entry: FileEntry; quota?: { used: number; total?: number } }
     | { kind: "open-with"; entry: FileEntry }
     | { kind: "install"; entry: FileEntry }
     | null;
@@ -50,6 +60,8 @@ type Menu = { anchor: HTMLElement; kind: "main" | "favorites" | "new" | "more" }
 const HOLD_MS = 500;
 
 const errorText = (e: unknown) => (e instanceof LunaError ? e.errorText : e instanceof Error ? e.message : String(e));
+const errorCode = (e: unknown) => (e instanceof LunaError ? e.errorCode : undefined);
+const percent = (t: Transfer) => (t.total > 0 ? Math.min(100, Math.floor(t.done * 100 / t.total)) : 0);
 
 function useWide(): boolean {
     const [wide, setWide] = useState(() => window.innerWidth >= 600);
@@ -80,7 +92,8 @@ function FileRow({ entry, selecting, selected, onTap, onHold, onToggle }: {
         if (start.current && Math.hypot(e.clientX - start.current.x, e.clientY - start.current.y) > 10) clear();
     };
     const folder = entry.type === "directory";
-    const sub = folder ? shortDate(entry.mtime) : `${formatSize(entry.size)} · ${shortDate(entry.mtime)}`;
+    const sub = entry.drive ? entry.drive.account
+        : folder ? (entry.mtime ? shortDate(entry.mtime) : "") : `${formatSize(entry.size)} · ${entry.mtime ? shortDate(entry.mtime) : ""}`;
     return (
         <div
             className={cx("pui-row", "tappable", "fm-row", selected && "selected", isHidden(entry) && "hidden-file")}
@@ -101,9 +114,9 @@ function FileRow({ entry, selecting, selected, onTap, onHold, onToggle }: {
             }}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (selecting) onToggle(); else onTap(); } }}
         >
-            <div className="pui-row-icon"><FileIcon kind={kindOf(entry)} /></div>
+            <div className="pui-row-icon"><FileIcon kind={entry.drive ? "drive" : kindOf(entry)} /></div>
             <div className="pui-row-body">
-                <div className="pui-row-title">{entry.name}</div>
+                <div className="pui-row-title">{entry.drive ? entry.drive.title : entry.name}</div>
                 <div className="pui-row-subtitle">{sub}{entry.readOnly ? " · read-only" : ""}</div>
             </div>
             <div className="pui-row-end">
@@ -115,8 +128,24 @@ function FileRow({ entry, selecting, selected, onTap, onHold, onToggle }: {
     );
 }
 
+// A drive's upload or download under way: its progress and Cancel.
+function TransferBar({ transfers, onCancel }: { transfers: Transfer[]; onCancel: (id: string) => void }) {
+    if (!transfers.length) return null;
+    const t = transfers[0];
+    return (
+        <div className="fm-transfer" data-testid="transfer" role="status">
+            <div className="fm-transfer-text">
+                {t.direction === "upload" ? "Uploading" : "Downloading"} {t.name}
+                {transfers.length > 1 ? ` and ${transfers.length - 1} more` : ""} · {percent(t)}%
+            </div>
+            <div className="fm-transfer-bar"><div style={{ width: `${percent(t)}%` }} /></div>
+            <button type="button" className="fm-transfer-cancel" data-testid="transfer-cancel" onClick={() => onCancel(t.id)}>Cancel</button>
+        </div>
+    );
+}
+
 function Browser() {
-    const launch = useLaunchParams<{ path?: string }>();
+    const launch = useLaunchParams<{ path?: string; transfer?: string }>();
     const [prefs, setPrefsState] = useState<Prefs>(loadPrefs);
     const [path, setPath] = useState(launch.path || HOME);
     const [history, setHistory] = useState<string[]>([]);
@@ -130,7 +159,12 @@ function Browser() {
     const [menu, setMenu] = useState<Menu>(null);
     const [toast, setToast] = useState("");
     const [busy, setBusy] = useState(false);
+    const [drives, setDrives] = useState<FileEntry[]>([]);
+    const [transfers, setTransfers] = useState<Transfer[]>([]);
+    const [errorKind, setErrorKind] = useState<number | undefined>(undefined);
     const wide = useWide();
+    const driveLabels = useMemo(() => driveNames(drives), [drives]);
+    const title = (p: string) => folderTitle(p, driveLabels);
     const pathBar = useRef<HTMLDivElement>(null);
     const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -146,13 +180,33 @@ function Browser() {
             const list = await fileManager.list(p);
             setEntries(list);
             setError("");
+            setErrorKind(undefined);
         } catch (e) {
             setEntries([]);
             setError(errorText(e));
+            setErrorKind(errorCode(e));
         }
+        if (p === DRIVES_ROOT || p === "/media" || p === HOME) fileManager.drives().then(setDrives);
     }, [path]);
 
     useEffect(() => { setEntries(null); reload(path); }, [path, reload]);
+    // The drive accounts: places beside the favourites (and again when an account is added).
+    useEffect(() => {
+        fileManager.drives().then(setDrives);
+        const again = () => { if (document.visibilityState === "visible") fileManager.drives().then(setDrives); };
+        document.addEventListener("visibilitychange", again);
+        return () => document.removeEventListener("visibilitychange", again);
+    }, []);
+    // A drive's transfers while something is under way (or Files was opened for one).
+    const watching = busy || !!launch.transfer;
+    useEffect(() => {
+        if (!watching) { setTransfers([]); return; }
+        let live = true;
+        const poll = () => fileManager.transfers().then((t) => { if (live) setTransfers(t); });
+        poll();
+        const timer = setInterval(poll, 400);
+        return () => { live = false; clearInterval(timer); };
+    }, [watching]);
     useEffect(() => { if (launch.path) { setPath(launch.path); setHistory([]); } }, [launch.path]);
     useEffect(() => { pathBar.current?.scrollTo?.({ left: 1e6 }); }, [path]);
 
@@ -184,9 +238,27 @@ function Browser() {
         return true;
     }, !selecting && !viewer && history.length > 0);
 
+    // A drive's file: its copy on the device (downloaded, with its progress), as an entry of the device.
+    const local = async (e: FileEntry): Promise<FileEntry> => {
+        if (!e.remote) return e;
+        const r = await fileManager.open(e.path);
+        if (r.stale) say("Offline: the copy kept on this device");
+        return { ...e, path: r.path, remote: false };
+    };
+
     const open = (e: FileEntry) => {
         if (e.type === "directory") { go(e.path); return; }
         const kind = kindOf(e);
+        if (e.remote && !(opensAsText(e) && (kind === "text" || kind === "code" || kind === "file"))) {
+            // Fetched first (the editor reads and saves through the drive itself).
+            void run(async () => {
+                const copy = await local(e);
+                if (kind === "image") setViewer({ kind: "image", images: [copy], index: 0 });
+                else if (kind === "package") setSheet({ kind: "install", entry: copy });
+                else setSheet({ kind: "open-with", entry: copy });
+            }, undefined, false);
+            return;
+        }
         if (kind === "image") {
             const images = shown.filter((x) => kindOf(x) === "image");
             setViewer({ kind: "image", images, index: images.findIndex((x) => x.path === e.path) });
@@ -199,18 +271,19 @@ function Browser() {
         }
     };
 
-    const run = async (what: () => Promise<unknown>, done?: string) => {
+    const run = async (what: () => Promise<unknown>, done?: string, refresh = true) => {
         setBusy(true);
         try {
             await what();
             if (done) say(done);
         } catch (e) {
-            say(errorText(e));
+            say(errorCode(e) === FILE_ERRORS.CANCELED ? "Cancelled" : errorText(e));
         } finally {
             setBusy(false);
-            reload();
+            if (refresh) reload();
         }
     };
+    const cancelTransfer = (id: string) => { fileManager.cancel(id).catch(() => {}); };
 
     const paste = () => {
         if (!clip) return;
@@ -226,7 +299,12 @@ function Browser() {
     };
 
     const showInfo = async (e: FileEntry) => {
-        try { setSheet({ kind: "info", entry: await fileManager.stat(e.path) }); } catch (x) { say(errorText(x)); }
+        try {
+            const entry = await fileManager.stat(e.path);
+            // A drive's own folder: how full it is, where the drive says.
+            const quota = entry.drive ? await fileManager.quota(entry.path).catch(() => undefined) : undefined;
+            setSheet({ kind: "info", entry, quota });
+        } catch (x) { say(errorText(x)); }
     };
 
     const isFavorite = prefs.favorites.includes(path);
@@ -247,10 +325,11 @@ function Browser() {
             setPrefs({ favorites: isFavorite ? prefs.favorites.filter((f) => f !== path) : [...prefs.favorites, path] });
             say(isFavorite ? "Removed from Favorites" : "Added to Favorites");
         } else if (v === "select") setSelecting(true);
-        else if (v === "info") fileManager.stat(path).then((entry) => setSheet({ kind: "info", entry }), (e) => say(errorText(e)));
+        else if (v === "info") showInfo({ path } as FileEntry);
         else if (v === "refresh") reload();
     };
-    const favOptions: Option<string>[] = prefs.favorites.map((f) => ({ label: folderTitle(f), value: f }));
+    const favOptions: Option<string>[] = prefs.favorites.map((f) => ({ label: title(f), value: f }))
+        .concat(drives.map((d) => ({ label: d.drive ? `${d.drive.title} (${d.drive.account})` : d.name, value: d.path })));
     const one = chosen.length === 1 ? chosen[0] : null;
     const moreOptions: Option<string>[] = [
         { label: "Rename", value: "rename", disabled: !one || !!one.readOnly },
@@ -264,16 +343,22 @@ function Browser() {
         else if (v === "open-with" && one) setSheet({ kind: "open-with", entry: one });
         else if (v === "all") setSelected(chosen.length === shown.length ? new Set() : new Set(shown.map((e) => e.path)));
     };
-    // Share: files only (a folder is not something another app takes).
+    // Share: files only (a folder is not something another app takes). A
+    // drive's files are shared as their copies on the device.
     const shareable = chosen.length > 0 && chosen.every((e) => e.type === "file");
     const sharedFiles = () => chosen.map((e) => ({ path: e.path, mimeType: mimeOf(e.name) }));
     const share = async () => {
-        const files = sharedFiles();
+        let files = sharedFiles();
         try {
+            if (chosen.some((e) => e.remote)) {
+                setBusy(true);
+                try { files = await Promise.all(chosen.map(async (e) => ({ path: (await local(e)).path, mimeType: mimeOf(e.name) }))); }
+                finally { setBusy(false); }
+            }
             const r = await shareSheet.open({ files });
             if (r.action === "cancel") return;
             if (r.action === "photos") say(files.length === 1 ? "Saved to Photos" : `Saved ${files.length} items to Photos`);
-            else if (r.action === "files") say(`Saved to ${folderTitle(parentOf(r.path))}`);
+            else if (r.action === "files") say(`Saved to ${title(parentOf(r.path))}`);
             endSelect();
             reload();
         } catch (e) {
@@ -287,7 +372,7 @@ function Browser() {
     };
 
     const header = (
-        <PageHeader icon="icon.png" title={<span data-testid="folder-title">{selecting ? `${chosen.length} selected` : folderTitle(path)}</span>}>
+        <PageHeader icon="icon.png" title={<span data-testid="folder-title">{selecting ? `${chosen.length} selected` : title(path)}</span>}>
             <button type="button" className="fm-menu-button" aria-label="Menu" data-testid="menu"
                     onClick={(e) => setMenu({ anchor: e.currentTarget, kind: "main" })}>
                 <Glyph name="menu" size={22} />
@@ -300,8 +385,16 @@ function Browser() {
             <div className="fm-favorites-title">Favorites</div>
             {prefs.favorites.map((f) => (
                 <div key={f} className={cx("fm-favorite", f === path && "current")} role="button" tabIndex={0}
-                     data-testid={`fav-${folderTitle(f)}`} onClick={() => go(f)}>
-                    <FileIcon kind="folder" size={24} /> <span>{folderTitle(f)}</span>
+                     data-testid={`fav-${title(f)}`} onClick={() => go(f)}>
+                    <FileIcon kind="folder" size={24} /> <span>{title(f)}</span>
+                </div>
+            ))}
+            {drives.length > 0 && <div className="fm-favorites-title" data-testid="drives-title">Drives</div>}
+            {drives.map((d) => (
+                <div key={d.path} className={cx("fm-favorite", "fm-drive", driveRootOf(path) === d.path && "current")} role="button" tabIndex={0}
+                     data-testid={`drive-${d.drive?.title ?? d.name}`} title={d.drive?.account} onClick={() => go(d.path)}>
+                    <FileIcon kind="drive" size={24} />
+                    <span className="fm-drive-text"><span>{d.drive?.title ?? d.name}</span><small>{d.drive?.account}</small></span>
                 </div>
             ))}
         </nav>
@@ -321,14 +414,29 @@ function Browser() {
             <div className="fm-main">
                 {header}
                 <div className="fm-path" ref={pathBar} data-testid="path-bar">
-                    {crumbs(path).map((c, i, all) => (
+                    {crumbs(path, driveLabels).map((c, i, all) => (
                         <button key={c.path} type="button" className={cx("fm-crumb", i === all.length - 1 && "current")}
                                 data-testid={`crumb-${i}`} onClick={() => go(c.path)}>{c.label}</button>
                     ))}
                 </div>
                 <div className="fm-scroll" data-testid="file-list">
                     {entries === null && <div className="fm-loading"><Spinner large /></div>}
-                    {error && <div className="fm-empty" role="alert">{error}</div>}
+                    {error && (
+                        <div className="fm-empty" role="alert" data-testid="folder-error">
+                            {errorKind === FILE_ERRORS.OFFLINE ? `${title(driveRootOf(path) ?? path)} can't be reached. Check your connection; nothing was lost.`
+                                : errorKind === FILE_ERRORS.AUTH ? `${title(driveRootOf(path) ?? path)} did not accept the sign-in. Sign in again in Accounts.`
+                                : error}
+                            {isDrivePath(path) && (
+                                <div className="fm-error-buttons">
+                                    <button type="button" className="fm-retry" data-testid="retry" onClick={() => { setEntries(null); void reload(); }}>Try Again</button>
+                                    {errorKind === FILE_ERRORS.AUTH && (
+                                        <button type="button" className="fm-retry" data-testid="open-accounts"
+                                                onClick={() => { void openWith.launchApp("com.palm.app.accounts"); }}>Accounts</button>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
                     {entries !== null && !error && shown.length === 0 && (
                         <div className="fm-empty" data-testid="empty">
                             {entries.length ? "Only hidden files here. Show them from the menu." : "This folder is empty."}
@@ -343,7 +451,8 @@ function Browser() {
                     </div>
                 </div>
                 {toast && <div className="fm-toast" data-testid="toast">{toast}</div>}
-                {busy && <div className="fm-busy"><Spinner /></div>}
+                {busy && !transfers.length && <div className="fm-busy"><Spinner /></div>}
+                <TransferBar transfers={transfers} onCancel={cancelTransfer} />
                 {selecting ? (
                     <Toolbar>
                         <IconToolButton icon="close" label="Done" testId="select-done" onClick={endSelect} />
@@ -361,7 +470,8 @@ function Browser() {
                     <Toolbar>
                         {!wide && <IconToolButton icon="star" label="Favorites" testId="favorites"
                                                   onClick={() => { const a = document.querySelector<HTMLElement>("[data-testid='favorites']"); if (a) setMenu({ anchor: a, kind: "favorites" }); }} />}
-                        <IconToolButton icon="up" label="Up" testId="up" disabled={path === "/"} onClick={() => go(parentOf(path))} />
+                        <IconToolButton icon="up" label="Up" testId="up" disabled={path === "/"}
+                                        onClick={() => go(driveRootOf(path) === path ? DRIVES_ROOT : parentOf(path))} />
                         <ToolSpacer />
                         {clip && <IconToolButton icon="paste" label="Paste" caption={String(clip.paths.length)} testId="paste" onClick={paste} />}
                         <IconToolButton icon="plus" label="New" testId="new"
@@ -411,7 +521,7 @@ function Browser() {
                     }
                 }} />
             )}
-            {sheet?.kind === "info" && <InfoDialog entry={sheet.entry} onClose={() => setSheet(null)} />}
+            {sheet?.kind === "info" && <InfoDialog entry={sheet.entry} quota={sheet.quota} onClose={() => setSheet(null)} />}
             {sheet?.kind === "open-with" && (
                 <OpenWithDialog entry={sheet.entry} onClose={() => setSheet(null)}
                                 onOpenAsText={sheet.entry.size <= 256 * 1024 ? () => setViewer({ kind: "text", entry: sheet.entry }) : undefined} />

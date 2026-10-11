@@ -150,6 +150,11 @@ def recipe_installs(root):
                 continue
             text = read(os.path.join(d, fn))
             for m in re.finditer(r"\$\{(?:D|IMAGE_ROOTFS)\}((?:\$\{[A-Za-z0-9_]+\}|/[^\s\"'$;)]*)+)", text):
+                # `install -d` and `mkdir` make an empty folder: they install
+                # nothing in it (a file named under it is still missing).
+                line = text[text.rfind("\n", 0, m.start()) + 1:m.start()]
+                if re.search(r"\binstall\b[^\n]*\s-d\b|\bmkdir\b", line):
+                    continue
                 p = expand(m.group(1)).rstrip("/")
                 if p.startswith("/") and "${" not in p:
                     out.add(p)

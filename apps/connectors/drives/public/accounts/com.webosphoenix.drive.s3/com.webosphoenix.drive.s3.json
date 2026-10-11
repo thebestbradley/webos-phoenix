@@ -1,0 +1,55 @@
+{
+    "templateId": "com.webosphoenix.drive.s3",
+    "loc_name": "S3 Storage",
+    "icon": {
+        "loc_32x32": "images/drive-32x32.png",
+        "loc_48x48": "images/drive-48x48.png"
+    },
+    "loc_usernameLabel": "ACCESS KEY ID",
+    "validator": {
+        "customUI": {
+            "appId": "org.webosphoenix.drives",
+            "name": "accounts/wizard.html"
+        },
+        "address": "palm://org.webosphoenix.service.drives/checkCredentials"
+    },
+    "readPermissions": [
+        "org.webosphoenix.service.drives",
+        "org.webosphoenix.drives",
+        "org.webosphoenix.filemanager",
+        "org.webosphoenix.files"
+    ],
+    "writePermissions": [
+        "org.webosphoenix.drives"
+    ],
+    "capabilityProviders": [
+        {
+            "capability": "DOCUMENTS",
+            "id": "com.webosphoenix.drive.s3.files",
+            "loc_name": "Files",
+            "icon": {
+                "loc_32x32": "images/drive-32x32.png",
+                "loc_48x48": "images/drive-48x48.png"
+            },
+            "implementation": "palm://org.webosphoenix.service.drives/",
+            "onCreate": "palm://org.webosphoenix.service.drives/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.drives/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.drives/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.drives/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.drives/sync"
+        }
+    ],
+    "signUp": {
+        "url": "https://www.backblaze.com/sign-up/cloud-storage",
+        "servers": [
+            {
+                "name": "Backblaze B2",
+                "url": "https://www.backblaze.com/sign-up/cloud-storage"
+            },
+            {
+                "name": "Wasabi",
+                "url": "https://console.wasabisys.com/signup"
+            }
+        ]
+    }
+}

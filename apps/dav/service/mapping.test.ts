@@ -21,7 +21,7 @@ const vcard = synckit.vcard as Any;
 const ical = synckit.ical as Any;
 const CL = synckit.contentline as Any;
 const DT = synckit.datetime as Any;
-const X = load("lib/xml.js") as Any;
+const X = synckit.xml as Any;
 const { parseMultistatus } = load("lib/davclient.js") as Any;
 
 const card = (...lines: string[]) => ["BEGIN:VCARD", ...lines, "END:VCARD", ""].join("\r\n");

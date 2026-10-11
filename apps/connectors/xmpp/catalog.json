@@ -1,0 +1,26 @@
+{
+    "//": "What the Marketplace's Connections view says of this connector package (docs/SYNERGY-SDK.md 'Publishing'). A Phoenix package in the catalog, not pre-installed (docs/SYNERGY-CONNECTORS.md 7, 'What comes with Phoenix'); the catalog's own entry is server/marketplace/catalog/accounts.json.",
+    "accountTypes": [
+        {
+            "templateId": "com.webosphoenix.xmpp",
+            "title": "Jabber (XMPP)",
+            "provider": "Any XMPP server (Prosody, ejabberd, Snikket, Conversations.im and other providers)",
+            "summary": "Chats in Messaging, pictures included, your buddies in Contacts with their status, and what you send from your other clients, all as it happens.",
+            "capabilities": [
+                { "capability": "CONTACTS", "direction": "read-only" },
+                { "capability": "MESSAGING", "direction": "two-way" }
+            ],
+            "protocols": ["xmpp", "xep-0198", "xep-0280", "xep-0313", "xep-0363", "xep-0357"],
+            "auth": { "type": "password", "registration": "none" },
+            "server": "discovered",
+            "privacy": {
+                "dataGoesTo": "the server in your Jabber ID (and the servers of the people you write to)",
+                "e2ee": false,
+                "phoenixServers": "none"
+            },
+            "push": "connection",
+            "status": "beta",
+            "signUp": "https://providers.xmpp.net/"
+        }
+    ]
+}

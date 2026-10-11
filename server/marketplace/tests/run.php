@@ -104,19 +104,29 @@ check($idx['version'] === 1 && $idx['build'] === $pub['build'] && count($idx['ap
 
 // ---- Account types (Connections): built in, from catalog/accounts.json ------------------------
 $types = array_column($idx['accounts'] ?? [], null, 'templateId');
-check(array_keys($types) === ['com.webosphoenix.dav', 'com.webosphoenix.fediverse', 'com.webosphoenix.webcal', 'com.palm.othermail', 'com.webosphoenix.xmpp']
-      && $pub['accounts'] === 5 && !isset($types['com.palm.palmprofile']),
-      'the index lists the account types Phoenix connects to (not the HP webOS profile)');
+$drives = ['com.webosphoenix.drive.nextcloud', 'com.webosphoenix.drive.owncloud', 'com.webosphoenix.drive.webdav', 'com.webosphoenix.drive.s3',
+           'com.webosphoenix.drive.dropbox', 'com.webosphoenix.drive.onedrive', 'com.webosphoenix.drive.googledrive', 'com.webosphoenix.drive.box'];
+check(array_keys($types) === array_merge(['com.webosphoenix.dav', 'com.webosphoenix.fediverse', 'com.webosphoenix.webcal', 'com.palm.othermail'], $drives)
+      && $pub['accounts'] === 12 && !isset($types['com.palm.palmprofile']) && !isset($types['com.webosphoenix.xmpp']),
+      'the index lists the account types Phoenix connects to (not the HP webOS profile), the drives among them; Jabber\'s comes from its package (catalog.json)');
 $shape = ['templateId', 'title', 'provider', 'icon', 'summary', 'capabilities', 'protocols', 'auth', 'server', 'privacy', 'push', 'status', 'package', 'featured'];
 // Built in, but for the connector packages Phoenix comes with (pre-installed, removable: the Fediverse).
 $withSignUp = array_merge(array_slice($shape, 0, -1), ['signUp', 'featured']);
 check(!array_filter($types, fn ($t) => array_keys($t) !== (isset($t['signUp']) ? $withSignUp : $shape) || array_keys($t['auth']) !== ['type', 'registration']
                                        || array_keys($t['privacy']) !== ['dataGoesTo', 'e2ee', 'phoenixServers']
                                        || $t['package'] !== ($t['package']['builtin'] ? ['id' => $t['package']['id'], 'builtin' => true]
-                                                             : ['id' => $t['package']['id'], 'builtin' => false, 'preinstalled' => true])),
-      '... each with the fields devices read, in order, built in or pre-installed, and nothing else (no iconFrom)');
-check(array_keys(array_filter($types, fn ($t) => $t['package']['builtin'])) === ['com.webosphoenix.dav', 'com.webosphoenix.webcal', 'com.palm.othermail', 'com.webosphoenix.xmpp'],
-      '... only the generic logins are built in (Contacts & Calendars, Email; the simulator\'s Jabber)');
+                                                             : (isset($t['package']['preinstalled']) ? ['id' => $t['package']['id'], 'builtin' => false, 'preinstalled' => true]
+                                                                : ['id' => 'org.webosphoenix.drives', 'builtin' => false]))),
+      '... each with the fields devices read, in order, built in, pre-installed or Phoenix\'s own from the catalog, and nothing else (no iconFrom)');
+$nc = $types['com.webosphoenix.drive.nextcloud'];
+$box = $types['com.webosphoenix.drive.box'];
+check($nc['capabilities'] === [['capability' => 'DOCUMENTS', 'direction' => 'two-way']] && $nc['auth'] === ['type' => 'app-password', 'registration' => 'none']
+      && $nc['status'] === 'beta' && $nc['signUp'] === 'https://nextcloud.com/sign-up/'
+      && $box['auth'] === ['type' => 'oauth', 'registration' => 'required'] && $box['status'] === 'experimental' && $box['server'] === 'fixed'
+      && !array_filter($drives, fn ($d) => $types[$d]['package'] !== ['id' => 'org.webosphoenix.drives', 'builtin' => false] || $types[$d]['privacy']['phoenixServers'] !== 'none'),
+      'the drives (DOCUMENTS): Phoenix\'s own package from the catalog, not pre-installed; no registration for WebDAV and S3 (beta), the OAuth ones experimental until registered');
+check(array_keys(array_filter($types, fn ($t) => $t['package']['builtin'])) === ['com.webosphoenix.dav', 'com.webosphoenix.webcal', 'com.palm.othermail'],
+      '... only the generic logins are built in (Contacts & Calendars, Email)');
 $dav = $types['com.webosphoenix.dav'];
 check($dav['title'] === 'CardDAV & CalDAV' && $dav['capabilities'] === [['capability' => 'CONTACTS', 'direction' => 'two-way'], ['capability' => 'CALENDAR', 'direction' => 'two-way']]
       && $dav['auth'] === ['type' => 'app-password', 'registration' => 'none'] && $dav['server'] === 'user'
@@ -128,18 +138,16 @@ check($fedi['title'] === 'Fediverse' && $fedi['auth'] === ['type' => 'oauth', 'r
       && array_column($fedi['capabilities'], 'capability') === ['CONTACTS', 'MESSAGING', 'SOCIAL'] && $fedi['featured'] === true
       && $fedi['package'] === ['id' => 'org.webosphoenix.fediverse', 'builtin' => false, 'preinstalled' => true] && $fedi['privacy']['phoenixServers'] === 'none',
       'Fediverse (phase C2): OAuth with the server found from the handle, a connector package Phoenix comes with (pre-installed), featured');
-check($fedi['signUp'] === 'https://joinmastodon.org/servers' && $types['com.webosphoenix.xmpp']['signUp'] === 'https://providers.xmpp.net/'
+check($fedi['signUp'] === 'https://joinmastodon.org/servers'
       && !isset($types['com.webosphoenix.dav']['signUp']) && !isset($types['com.webosphoenix.webcal']['signUp']) && !isset($types['com.palm.othermail']['signUp']),
-      'sign-up links: the Fediverse\'s servers, XMPP\'s providers; none where the server is your own or no account is needed');
+      'sign-up links: the Fediverse\'s servers; none where the server is your own or no account is needed');
 check($types['com.webosphoenix.webcal']['capabilities'] === [['capability' => 'CALENDAR', 'direction' => 'read-only']]
-      && $types['com.palm.othermail']['capabilities'][0]['capability'] === 'MAIL'
-      && $types['com.webosphoenix.xmpp']['capabilities'][0]['capability'] === 'MESSAGING' && $types['com.webosphoenix.xmpp']['status'] === 'experimental',
-      'the Subscribed Calendar reads only; mail is MAIL, Jabber MESSAGING (experimental)');
+      && $types['com.palm.othermail']['capabilities'][0]['capability'] === 'MAIL',
+      'the Subscribed Calendar reads only; mail is MAIL');
 // Every template the list names exists, with those capabilities.
 $templateFiles = ['com.webosphoenix.dav' => 'apps/dav/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json',
                   'com.webosphoenix.webcal' => 'apps/dav/public/accounts/com.webosphoenix.webcal/com.webosphoenix.webcal.json',
-                  'com.palm.othermail' => 'third_party/app-services/mojomail/imap/files/usr/palm/public/accounts/com.palm.othermail/com.palm.othermail.json',
-                  'com.webosphoenix.xmpp' => 'runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json'];
+                  'com.palm.othermail' => 'third_party/app-services/mojomail/imap/files/usr/palm/public/accounts/com.palm.othermail/com.palm.othermail.json'];
 $mismatch = [];
 foreach ($templateFiles as $tid => $f) {
     $t = json_decode((string) @file_get_contents(dirname(__DIR__, 3) . "/$f"), true);
@@ -590,14 +598,14 @@ check($s === 200 && $fediApp && $fediApp['kind'] === 'connector' && count($fediT
 
 // ---- The system update feed (served at /updates/, published by the admin API) ----------------
 $bundle = str_repeat("\x00\x01raucb", 64);
-$q = ['compatible' => 'phoenix-pinephone', 'version' => '1.1.0', 'build' => '110', 'notes' => ['Faster cards', 'Share everywhere']];
+$q = ['compatible' => 'phoenix-pinephonepro', 'version' => '1.1.0', 'build' => '110', 'notes' => ['Faster cards', 'Share everywhere']];
 [$s] = $api->handle('POST', '/api/admin/updates', $bundle, "Bearer {$dev['token']}", $q);
 check($s === 403, 'updates: only an admin publishes one');
 [$s, $r] = $api->handle('POST', '/api/admin/updates', $bundle, "Bearer $admin", $q);
-check($s === 200 && $r['feed']['format'] === 1 && $r['feed']['compatible'] === 'phoenix-pinephone' && $r['feed']['channel'] === 'stable'
+check($s === 200 && $r['feed']['format'] === 1 && $r['feed']['compatible'] === 'phoenix-pinephonepro' && $r['feed']['channel'] === 'stable'
       && $r['feed']['release']['version'] === '1.1.0' && $r['feed']['release']['build'] === 110
       && $r['feed']['release']['notes'] === ['Faster cards', 'Share everywhere'], 'updates: a release on the stable channel');
-$feedFile = getenv('MARKETPLACE_DATA') . '/updates/phoenix-pinephone/stable.json';
+$feedFile = getenv('MARKETPLACE_DATA') . '/updates/phoenix-pinephonepro/stable.json';
 $onDisk = json_decode((string) @file_get_contents($feedFile), true);
 check(is_array($onDisk) && $onDisk['release']['sha256'] === hash('sha256', $bundle) && $onDisk['release']['size'] === strlen($bundle)
       && hash_file('sha256', dirname($feedFile) . '/' . $onDisk['release']['url']) === hash('sha256', $bundle),
@@ -609,9 +617,9 @@ check($s === 400, 'updates: device types are names, not paths');
 [$s, $r] = $api->handle('POST', '/api/admin/updates', '', "Bearer $admin", ['compatible' => 'phoenix-sim', 'version' => '0.2.0', 'build' => '2', 'channel' => 'beta']);
 check($s === 200 && $r['feed']['release']['url'] === 'phoenix-sim-0.2.0-2.raucb', "updates: the simulator's stand-in bundle when none is sent");
 [$s, $r] = $call('GET', '/api/updates');
-check($s === 200 && array_map(fn ($f) => $f['compatible'] . '/' . $f['channel'], $r['feeds']) === ['phoenix-pinephone/stable', 'phoenix-sim/beta'],
+check($s === 200 && array_map(fn ($f) => $f['compatible'] . '/' . $f['channel'], $r['feeds']) === ['phoenix-pinephonepro/stable', 'phoenix-sim/beta'],
       'updates: GET /api/updates lists every channel');
-[$s, $r] = $call('POST', '/api/admin/updates/withdraw', ['compatible' => 'phoenix-pinephone', 'channel' => 'stable'], $admin);
+[$s, $r] = $call('POST', '/api/admin/updates/withdraw', ['compatible' => 'phoenix-pinephonepro', 'channel' => 'stable'], $admin);
 check($s === 200 && $r['feed']['release'] === null && $r['feed']['withdrawn']['build'] === 110, 'updates: withdrawn');
 
 // The router serves it (PHP's built-in server, as bin/serve.sh runs it).

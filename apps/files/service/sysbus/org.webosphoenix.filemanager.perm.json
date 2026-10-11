@@ -1,5 +1,8 @@
 {
-    "org.webosphoenix.filemanager": [],
+    "org.webosphoenix.filemanager": [
+        "accounts.operation",
+        "drives.files"
+    ],
     "com.webos.surfacemanager": [
         "filemanager.operation"
     ]

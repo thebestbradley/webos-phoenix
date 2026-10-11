@@ -1,0 +1,59 @@
+#!/bin/sh
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The ARM64 VM (phoenix-vm-arm64) is every first target: the kernel's
+# command line says which (phoenix.device=fairphone-fp6), and this puts
+# that device's device.json and compositor geometry where the shell and
+# phoenix-devices read them: /etc/phoenix/device.json and compositor.env
+# are links into /run/phoenix/ (phoenix-device-config.bb), filled here at
+# every boot from /usr/share/phoenix/devices/<device>/. No phoenix.device,
+# or one the image does not have: the default (everything detected), and a
+# line in the journal saying so.
+#
+# Run by phoenix-device-select.service, early in boot, before the shell.
+# The environment variables are for the tests (tools/test-device-select.sh).
+
+set -eu
+
+CMDLINE=${PHOENIX_CMDLINE:-/proc/cmdline}
+DEVICES=${PHOENIX_DEVICES_DIR:-/usr/share/phoenix/devices}
+RUN=${PHOENIX_RUN_DIR:-/run/phoenix}
+
+device=
+# The last phoenix.device= wins, as the kernel's own parameters do. (The
+# command line is one line of words: split on purpose.)
+# shellcheck disable=SC2013
+for arg in $(cat "$CMDLINE"); do
+    case $arg in
+        phoenix.device=*) device=${arg#phoenix.device=} ;;
+    esac
+done
+
+chosen=default
+case $device in
+    "") echo "phoenix-device-select: no phoenix.device= on the kernel's command line; the default device configuration" >&2 ;;
+    default|*[!a-z0-9-]*|-*)
+        echo "phoenix-device-select: phoenix.device=\"$device\" is not a device name; the default device configuration" >&2 ;;
+    *)
+        if [ -f "$DEVICES/$device/device.json" ] && [ -f "$DEVICES/$device/compositor.env" ]; then
+            chosen=$device
+        else
+            known=
+            for d in "$DEVICES"/*/; do
+                d=${d%/}; d=${d##*/}
+                [ "$d" = default ] || known="$known${known:+ }$d"
+            done
+            echo "phoenix-device-select: this image has no device \"$device\" (it has: $known); the default device configuration" >&2
+        fi
+        ;;
+esac
+
+mkdir -p "$RUN"
+# Each file whole or not at all: copied beside, then renamed over.
+for f in device.json compositor.env; do
+    cp "$DEVICES/$chosen/$f" "$RUN/.$f.new"
+    mv -f "$RUN/.$f.new" "$RUN/$f"
+done
+echo "$chosen" > "$RUN/device"
+echo "phoenix-device-select: $chosen"

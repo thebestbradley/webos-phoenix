@@ -1,0 +1,16 @@
+/* Copyright (c) 2026 webOS Phoenix contributors
+   SPDX-License-Identifier: Apache-2.0 */
+
+html, body { margin: 0; height: 100%; background: #f3f1ec; color: #444; }
+body { font-family: "Prelude", "Open Sans", sans-serif; display: flex; align-items: center; justify-content: center; }
+.si-box { text-align: center; padding: 16px; max-width: 280px; }
+.si-icon { display: block; margin: 0 auto 8px; }
+#message { font-size: 16px; margin: 0 0 12px; }
+.si-spinner {
+    width: 22px; height: 22px; margin: 0 auto; border-radius: 50%;
+    border: 3px solid rgba(0, 0, 0, 0.12); border-top-color: #3b8fd9;
+    animation: si-spin 0.9s linear infinite;
+}
+.si-spinner[hidden] { display: none; }
+#close { font: inherit; font-size: 16px; padding: 8px 20px; border-radius: 8px; border: 1px solid #8a8a8a; background: #fff; color: #333; }
+@keyframes si-spin { to { transform: rotate(360deg); } }

@@ -40,7 +40,9 @@ describe("the on-device model's set", () => {
         expect(modelSet.length).toBeGreaterThanOrEqual(150);
         expect(modelSet.filter((x) => x.command === "none").length).toBeGreaterThanOrEqual(20);
         // A phrasing the grammar learns leaves the set (it is the grammar's then): never a wrong take.
-        const taken = modelSet.map((x) => [x.text, grammar.parse(x.text, ctx)?.command ?? null, x.command]).filter((x) => x[1] !== null);
+        // Small talk the grammar answers itself is "none" (words, no command).
+        const taken = modelSet.map((x) => [x.text, grammar.parse(x.text, ctx)?.command ?? null, x.command]).filter((x) => x[1] !== null)
+            .map((x) => (x[1] === "chat" ? [x[0], "none", x[2]] : x));
         expect(taken.filter((x) => x[1] !== x[2])).toEqual([]);
     });
     it("names only commands there are, and repeats no example", () => {

@@ -466,7 +466,9 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | Command | What it does |
 | --- | --- |
 | `node tools/test-apps.cjs && node tools/test-settings.cjs` | Needs Playwright |
-| `node tools/test-phone-messaging.cjs` | Calls, texts, MMS and IM |
+| `node tools/test-phone-messaging.cjs` | Calls, texts, MMS, Buddies without an account |
+| `node tools/test-xmpp.cjs`, `test-matrix.cjs`, `test-deltachat.cjs`, `test-telegram.cjs` | The messaging accounts with Messaging, against the simulator's demo servers |
+| `node tools/test-xmpp-server.cjs` | The Jabber account against a real Prosody it starts (ports 15222, 15280; skipped without `prosody`: apt install prosody) |
 | `node tools/test-voicedial.cjs` | Voice Dial |
 | `node tools/test-media.cjs` | Camera, Photos, Music |
 | `node tools/test-files.cjs` | Files |
@@ -482,6 +484,9 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `node tools/test-passwords.cjs` | Passwords (KeePass) |
 | `node tools/test-authenticator.cjs` | Authenticator (TOTP/HOTP) |
 | `node tools/test-clipboard.cjs` | Clipboard history: the Clipboard app and Settings > Clipboard |
+| `node tools/test-drives.cjs` | Drives (Synergy DOCUMENTS) against fake WebDAV, Nextcloud Login Flow v2 and Dropbox servers: installed from the catalog, signed in, browsed and opened in Files, Save to Files from Screenshot, shared from Files, the file picker, a chunked upload as an ongoing activity, offline |
+| `node tools/test-signin-card.cjs` | OAuth sign-ins as a device does them: the OAuth service's device code (loopback listener, sealed key store) and the Sign In card's page in Chromium against a fake provider and the fake Mastodon server: Allow, Deny, the card closed, the redirect, tokens sealed, refresh and revocation |
+| `xvfb-run -a node tools/test-signin-card-sim.cjs [--tablet]` | The Sign In card in phoenix-sim (the runtime's OAuth service switched to it): the provider's page under the shell's bar, Allow, CANCELED when the card closes; screenshots |
 | `node tools/test-sharing.cjs` | Sharing, sync and health (M6 F4): DropShare (Settings, receiving into Downloads, sending, the share sheet, Touch to Share), a subscribed .ics calendar, the temperature warnings |
 | `node tools/test-community.cjs` | The community's features (M6 F4): Settings > Advanced, repeat alerts and lock screen previews reaching the shell, Contacts' tones and a text's tone, Email's cycling dashboard |
 | `node tools/test-assistant.cjs` | The Assistant: the app's commands, read-backs and choices, Settings > Assistant with a stand-in cloud provider, the permission gate, conversations (the panes on a phone and a tablet, swipe to delete, Open in New Card with two cards) |

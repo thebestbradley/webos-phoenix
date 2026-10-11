@@ -1,0 +1,21 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# phoenix-vm-arm64: the device the kernel's command line names
+# (phoenix.device=ID) into /run/phoenix, where /etc/phoenix/device.json and
+# compositor.env point, before anything reads them (the shell, through
+# luna-surfacemanager, and phoenix-devices start long after sysinit).
+
+[Unit]
+Description=webOS Phoenix: the device configuration the kernel's command line names
+DefaultDependencies=no
+After=local-fs.target
+Before=sysinit.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/sbin/phoenix-device-select
+
+[Install]
+WantedBy=sysinit.target

@@ -1,0 +1,18 @@
+{
+    "accounts.transport": [
+        "org.webosphoenix.service.deltachat/checkCredentials",
+        "org.webosphoenix.service.deltachat/onCreate",
+        "org.webosphoenix.service.deltachat/onEnabled",
+        "org.webosphoenix.service.deltachat/onCredentialsChanged",
+        "org.webosphoenix.service.deltachat/onDelete",
+        "org.webosphoenix.service.deltachat/sync",
+        "org.webosphoenix.service.deltachat/connect",
+        "org.webosphoenix.service.deltachat/disconnect",
+        "org.webosphoenix.service.deltachat/outbox"
+    ],
+    "deltachat.account": [
+        "org.webosphoenix.service.deltachat/available",
+        "org.webosphoenix.service.deltachat/markRead",
+        "org.webosphoenix.service.deltachat/setPresence"
+    ]
+}

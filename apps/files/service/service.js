@@ -11,10 +11,14 @@
 "use strict";
 
 const Service = require("webos-service");
+const { createDriveRouter } = require("@phoenix/connector-kit/lib/drives");
 const { createFileManager, METHODS } = require("./filemanager");
 
 const service = new Service("org.webosphoenix.filemanager");
-const fm = createFileManager();
+// The drives (/media/drives/<accountId>): the accounts service names them,
+// their connectors' services hold the files (@phoenix/connector-kit drives.js).
+const call = (uri, params) => new Promise((resolve) => service.call(uri, params || {}, (m) => resolve(m.payload)));
+const fm = createFileManager({ drives: (local) => createDriveRouter({ call, local }) });
 
 for (const name of METHODS) {
     service.register(name, (message) => {

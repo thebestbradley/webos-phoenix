@@ -1,0 +1,22 @@
+{
+    "appId": "org.webosphoenix.service.xmpp",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.service.xmpp"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.xmpp",
+            "outbound": [
+                "org.webosphoenix.service.xmpp",
+                "com.palm.db",
+                "com.palm.tempdb",
+                "com.palm.activitymanager",
+                "com.palm.service.accounts",
+                "com.webos.notification",
+                "org.webosports.service.messaging"
+            ]
+        }
+    ]
+}

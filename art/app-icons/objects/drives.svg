@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Drives (the drive accounts: Nextcloud, WebDAV, S3, Dropbox, OneDrive, Google Drive, Box): a folder with a cloud in front,
+     drawn for Phoenix (Apache-2.0). No provider's logo. -->
+<defs>
+  <linearGradient id="back" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9b85a"/><stop offset="1" stop-color="#b9832a"/></linearGradient>
+  <linearGradient id="front" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbd889"/><stop offset="0.55" stop-color="#eebc5c"/><stop offset="1" stop-color="#c98f31"/></linearGradient>
+  <linearGradient id="cloud" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="0.6" stop-color="#e3eef8"/><stop offset="1" stop-color="#b9cfe2"/></linearGradient>
+  <linearGradient id="arrow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a9ee0"/><stop offset="1" stop-color="#1f5f9e"/></linearGradient>
+</defs>
+<!-- The folder: its back with the tab, the paper, the front. -->
+<path d="M58 66 h46 l12 12 h82 a8 8 0 0 1 8 8 v86 a8 8 0 0 1 -8 8 H58 a8 8 0 0 1 -8 -8 V74 a8 8 0 0 1 8 -8 z" fill="url(#back)" stroke="#8a5f1c" stroke-width="3"/>
+<rect x="64" y="84" width="128" height="70" rx="3" fill="#fbfaf5" stroke="#cfc7b2" stroke-width="2"/>
+<path d="M50 104 a8 8 0 0 1 8 -8 h140 a8 8 0 0 1 8 8 v68 a8 8 0 0 1 -8 8 H58 a8 8 0 0 1 -8 -8 z" fill="url(#front)" stroke="#8a5f1c" stroke-width="3"/>
+<path d="M56 104 h144" stroke="#fff3cf" stroke-opacity="0.8" stroke-width="2"/>
+<!-- The cloud in front, with the arrows of a transfer. -->
+<path d="M98 176 a24 24 0 0 1 4 -47.6 a32 32 0 0 1 61.2 -6.4 a22 22 0 0 1 22.8 22 a16 16 0 0 1 -2 32 z" fill="url(#cloud)" stroke="#5b7996" stroke-width="3.5"/>
+<path d="M128 166 v-26 m-9 9 l9 -10 l9 10" fill="none" stroke="url(#arrow)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M150 136 v26 m-9 -9 l9 10 l9 -10" fill="none" stroke="url(#arrow)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

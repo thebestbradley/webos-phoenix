@@ -1,0 +1,11 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.service.deltachat"
+    ],
+    "accounts.transport": [
+        "oem"
+    ],
+    "deltachat.account": [
+        "oem"
+    ]
+}

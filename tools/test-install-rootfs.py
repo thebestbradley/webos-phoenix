@@ -80,6 +80,25 @@ for name in ("org.webosphoenix.shellhost", "com.palm.applicationManager", "org.w
     check("/usr/share/luna-service2/services.d/%s.service" % name in paths, name + ": installed")
 check(not any(".test." in p for p in paths), "no tests in the image")
 
+# Every wallpaper Settings offers (its albums, apps/settings/src/WallpaperPicker.tsx),
+# picture and thumbnail, is installed where the picker sets it, and the
+# shell's default (Theme.defaultWallpaperPath) is among them.
+WP_DIR = "/usr/palm/applications/org.webosphoenix.settings/wallpapers/"
+with open(os.path.join(REPO, "apps", "settings", "src", "WallpaperPicker.tsx"), encoding="utf-8") as f:
+    picker = f.read()
+albums = re.findall(r'album\("(\w+)", \[([^\]]*)\]\)', picker)
+names = [n for _, ns in albums for n in re.findall(r'"([^"]+)"', ns)]
+check([a for a, _ in albums] == ["Artistic", "Nature"] and len(names) == 21,
+      "Settings' wallpapers: %d in albums %s" % (len(names), ", ".join(a for a, _ in albums)))
+slugs = [n.lower().replace(" ", "-") for n in names]
+missing = [s for s in slugs if WP_DIR + s + ".jpg" not in paths or WP_DIR + "thumbs/" + s + ".jpg" not in paths]
+check(not missing, "every wallpaper and its thumbnail is installed (missing: %s)" % (", ".join(missing) or "none"))
+on_disk = sorted(f[:-4] for f in os.listdir(os.path.join(REPO, "apps", "settings", "public", "wallpapers")) if f.endswith(".jpg"))
+check(on_disk == sorted(slugs), "every wallpaper in public/wallpapers is offered in an album")
+with open(os.path.join(REPO, "shell", "qml", "Phoenix", "Shell", "Theme.qml"), encoding="utf-8") as f:
+    default = re.search(r'defaultWallpaperPath: "([^"]+)"', f.read()).group(1)
+check(default == WP_DIR + "northern-lights.jpg" and default in paths, "the shell's default wallpaper is installed: " + default)
+
 if failures:
     print("%d failed" % failures)
     sys.exit(1)

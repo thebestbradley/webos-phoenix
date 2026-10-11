@@ -1,0 +1,15 @@
+{
+    "id": "org.webosphoenix.xmpp.item:1",
+    "owner": "org.webosphoenix.service.xmpp",
+    "sync": false,
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        }
+    ]
+}

@@ -126,13 +126,13 @@ Item {
         function test_hostMessageReportsStatusAndResolvesWallpaper() {
             windows._hostMessage("org.webosphoenix.settings.wifi", "w1", "systemStatus", {
                 wifiEnabled: false, bluetoothOn: true,
-                wallpaperFile: "/usr/palm/applications/org.webosphoenix.settings/wallpapers/aurora.jpg"
+                wallpaperFile: "/usr/palm/applications/org.webosphoenix.settings/wallpapers/northern-lights.jpg"
             });
             compare(reported.count, 1);
             var s = reported.signalArguments[0][0];
             compare(s.wifiEnabled, false);
             compare(s.bluetoothOn, true);
-            compare(s.wallpaperUrl, "file:///apps/settings/dist/wallpapers/aurora.jpg");
+            compare(s.wallpaperUrl, "file:///apps/settings/dist/wallpapers/northern-lights.jpg");
             windows._hostMessage("x", "w1", "systemStatus", { wallpaperFile: "" });
             compare(reported.signalArguments[1][0].wallpaperUrl, "");
             compare(windows.resolveDevicePath("/usr/palm/applications/unknown.app/x.jpg"), "");

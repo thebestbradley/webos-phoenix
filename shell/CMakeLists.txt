@@ -72,8 +72,19 @@ if(PHOENIX_BUILD_SIM)
     # (SimChrome).
     find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Widgets)
     add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h sim/simfonts.cpp sim/simfonts.h sim/simsettings.h sim/simprocess.h sim/simpty.cpp sim/simpty.h sim/siminstaller.cpp sim/siminstaller.h sim/simsnapshots.cpp sim/simsnapshots.h
-                               sim/simchrome.cpp sim/simchrome.h)
+                               sim/simchrome.cpp sim/simchrome.h sim/simdevices.h)
     target_link_libraries(phoenix-sim PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets phoenix-pty-core)
+    # --device ID: the first targets' profiles and the device.json each
+    # image installs (meta-phoenix's phoenix-device-config), compiled in
+    # (sim/simdevices.h; docs/HARDWARE.md, "Device profiles").
+    set(_phoenix_device_files "${CMAKE_CURRENT_SOURCE_DIR}/../meta-phoenix/recipes-phoenix/phoenix-device-config/files")
+    qt_add_resources(phoenix-sim "sim-devices" PREFIX "/devices" BASE "${_phoenix_device_files}" FILES
+        "${_phoenix_device_files}/device-profiles.json"
+        "${_phoenix_device_files}/fairphone-fp6/device.json"
+        "${_phoenix_device_files}/ayn-odin2portal/device.json"
+        "${_phoenix_device_files}/pinephonepro/device.json"
+        "${_phoenix_device_files}/pinetab2/device.json"
+        "${_phoenix_device_files}/rpi-touch-display-2/device.json")
     # The toolbar's icons (SVG: drawn with Qt's SVG icon engine where it is
     # installed, else the toolbar shows their names).
     qt_add_resources(phoenix-sim "sim-icons" PREFIX "/sim" BASE sim FILES
