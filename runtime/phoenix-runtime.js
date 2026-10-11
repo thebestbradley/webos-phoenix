@@ -9815,11 +9815,104 @@
             };
         }
 
+        // ---- A picture's EXIF (the indexer's extra metadata) ----
+        // getImageMetadata adds what OSE's indexer extracts on request
+        // (MediaDb, mediadb.cpp:330-365, extractExtraMeta; getImageList has
+        // only the basic fields, :872-884): ImageExtractor's exifMap_
+        // (imageextractor.cpp:23-29, :313-345) with libexif's text for each
+        // tag (exif_entry_get_value): date_of_creation is IFD0's DateTime
+        // ("2026:10:06 10:00:00"), geo_location_latitude and _longitude the
+        // GPS reference and value ("N 52, 31, 12.00": each rational with
+        // as many decimals as its denominator has digits, "%2.*f",
+        // libexif exif-entry.c:538-566), geo_location_country and _city
+        // empty (no EXIF tag gives them). A tag the picture lacks: empty.
+        function exifOf(buf) {
+            var v = new DataView(buf), out = {};
+            if (buf.byteLength < 4 || v.getUint16(0) !== 0xFFD8) return out;
+            for (var at = 2; at + 4 <= buf.byteLength;) {
+                if (v.getUint8(at) !== 0xFF) break;
+                var marker = v.getUint8(at + 1), len = v.getUint16(at + 2);
+                if (marker === 0xDA || marker === 0xD9) break;     // the picture's data: no EXIF before it
+                if (marker === 0xE1 && at + 10 <= buf.byteLength && v.getUint32(at + 4) === 0x45786966 && v.getUint16(at + 8) === 0) {
+                    readTiff(v, at + 10, out);
+                    break;
+                }
+                at += 2 + len;
+            }
+            return out;
+        }
+        function readTiff(v, base, out) {
+            var le = v.getUint16(base) === 0x4949;
+            var u16 = function (o) { return v.getUint16(base + o, le); }, u32 = function (o) { return v.getUint32(base + o, le); };
+            var size = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 7: 1, 9: 4, 10: 8 };
+            function entries(ifd) {
+                var list = {}, n;
+                try { n = u16(ifd); } catch (e) { return list; }
+                for (var i = 0; i < n; i++) {
+                    var e = ifd + 2 + i * 12;
+                    try {
+                        var tag = u16(e), type = u16(e + 2), count = u32(e + 4);
+                        var bytes = (size[type] || 1) * count, off = bytes <= 4 ? e + 8 : u32(e + 8);
+                        list[tag] = { type: type, count: count, off: off };
+                    } catch (x) { break; }
+                }
+                return list;
+            }
+            function ascii(en) {
+                var s = "";
+                for (var i = 0; en && i < en.count; i++) {
+                    var c = v.getUint8(base + en.off + i);
+                    if (!c) break;
+                    s += String.fromCharCode(c);
+                }
+                return s;
+            }
+            function rationals(en) {
+                if (!en || en.type !== 5) return "";
+                var parts = [];
+                for (var i = 0; i < en.count; i++) {
+                    var num = u32(en.off + i * 8), den = u32(en.off + i * 8 + 4);
+                    if (!den) { parts.push(num + "/" + den); continue; }
+                    var decimals = Math.max(0, Math.floor(Math.log10(den) - 0.08 + 1));
+                    var t = (num / den).toFixed(decimals);
+                    parts.push(t.length < 2 ? " " + t : t);
+                }
+                return parts.join(", ");
+            }
+            try {
+                var ifd0 = entries(u32(4));
+                if (ifd0[0x0132]) out.date = ascii(ifd0[0x0132]);
+                if (ifd0[0x8825]) {
+                    var gps = entries(u32(ifd0[0x8825].off));
+                    var geo = function (refTag, valTag) {
+                        var parts = [ascii(gps[refTag]), rationals(gps[valTag])].filter(function (x) { return x; });
+                        return parts.join(" ");
+                    };
+                    out.latitude = geo(1, 2);
+                    out.longitude = geo(3, 4);
+                }
+            } catch (e) { /* a broken EXIF: what was read */ }
+            return out;
+        }
+        function withExtraMeta(item) {
+            return files.read(item.file_path).then(function (blob) { return blob || readUrl(item.file_path); })
+                .then(function (blob) { return blob ? blob.arrayBuffer() : null; })
+                .then(function (buf) {
+                    var exif = buf ? exifOf(buf) : {};
+                    return Object.assign({}, item, { date_of_creation: exif.date || "", geo_location_latitude: exif.latitude || "",
+                                                     geo_location_longitude: exif.longitude || "", geo_location_country: "",
+                                                     geo_location_city: "" });
+                }, function () { return item; });
+        }
+        runtime.mediaExif = exifOf;
+
         function metadataMethod(type) {
             return function (p, reply) {
                 if (!p.uri) return reply(fail(-1, "client must specify uri"));
                 var it = loadIndex()[type].filter(function (x) { return x.uri === p.uri; })[0];
-                reply(it ? ok({ metadata: it }) : fail(-1, "Invalid uri"));
+                if (!it) return reply(fail(-1, "Invalid uri"));
+                if (type !== "image") return reply(ok({ metadata: it }));
+                withExtraMeta(it).then(function (meta) { reply(ok({ metadata: meta })); });
             };
         }
 

@@ -54,6 +54,23 @@ export interface ImageItem extends MediaItem {
     height?: number;
 }
 
+/**
+ * getImageMetadata's picture: the list's fields and what the indexer reads
+ * from its EXIF when asked (OSE's ImageExtractor, through libexif): the text
+ * libexif gives each tag, "" when the picture lacks it.
+ */
+export interface ImageMetadata extends ImageItem {
+    /** IFD0's DateTime, as EXIF writes it: "2026:10:06 10:00:00". */
+    date_of_creation?: string;
+    /** The GPS reference and degrees, minutes, seconds: "N 52, 31, 12.00". */
+    geo_location_latitude?: string;
+    /** As the latitude: "W  0,  7, 39.50". */
+    geo_location_longitude?: string;
+    /** Always "" (no EXIF tag gives them). */
+    geo_location_country?: string;
+    geo_location_city?: string;
+}
+
 export interface AudioItem extends MediaItem {
     artist?: string;
     album?: string;
@@ -81,7 +98,7 @@ declare module "./types" {
         "luna://com.webos.service.mediaindexer/getImageList": { params: ListParams; result: { imageList?: MediaList<ImageItem> } };
         "luna://com.webos.service.mediaindexer/getAudioList": { params: ListParams; result: { audioList?: MediaList<AudioItem> } };
         "luna://com.webos.service.mediaindexer/getVideoList": { params: ListParams; result: { videoList?: MediaList<VideoItem> } };
-        "luna://com.webos.service.mediaindexer/getImageMetadata": { params: { uri: string }; result: { metadata: ImageItem } };
+        "luna://com.webos.service.mediaindexer/getImageMetadata": { params: { uri: string }; result: { metadata: ImageMetadata } };
         "luna://com.webos.service.mediaindexer/getAudioMetadata": { params: { uri: string }; result: { metadata: AudioItem } };
         "luna://com.webos.service.mediaindexer/requestDelete": { params: { uri: string }; result: Record<string, never> };
         "luna://com.webos.service.mediaindexer/requestMediaScan": { params: { path: string }; result: Record<string, never> };
