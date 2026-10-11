@@ -12,9 +12,11 @@ How the ids are kept and which providers need a secret:
 [PLATFORM.md](PLATFORM.md) 6.5.4.
 
 This page is the checklist, provider by provider, for the drives (Files'
-places: [SHARE-AND-FILES.md](SHARE-AND-FILES.md) "Drives"). Telegram,
-Slack, LinkedIn and Zoom (Q17) get their rows here when their connectors
-are built.
+places: [SHARE-AND-FILES.md](SHARE-AND-FILES.md) "Drives") and for the
+Synergy accounts built on the connector kit (Microsoft, Google, Todoist,
+Bluesky, Zoom, LinkedIn, Slack: "The accounts" below; what each one does:
+[SYNERGY-CONNECTORS.md](SYNERGY-CONNECTORS.md) 8). Telegram gets its row
+when its connector is built.
 
 ## Where the ids go
 
@@ -155,3 +157,127 @@ WebDAV (Nextcloud with Login Flow v2, ownCloud, any server) and
 S3-compatible storage (Backblaze B2, MinIO, Wasabi, any) sign in with the
 user's own app password or keys: nothing to register. SFTP is not offered
 (SHARE-AND-FILES.md "Drives").
+
+## The accounts
+
+Each account's connector reads its own setting, `/etc/palm/<name>/clients.json`
+(`ctx.systemConfig`; in the simulator the store key
+`phoenix:systemConfig:<name>/clients.json`, or a file under
+`compat/rootfs/etc/palm/`), with the same shape as the drives' file: the
+provider's name, then `clientId` and what else it needs. Without it the
+account type is still in Accounts and Connections, and its sign-in page
+says "&lt;Provider&gt; is not available in this build"; Todoist and Bluesky
+then offer their sign-ins that need no registration.
+
+| Account | File | Needs | Works without it |
+| --- | --- | --- | --- |
+| Microsoft (Outlook.com, Microsoft 365) | `microsoft/clients.json` | `{"microsoft": {"clientId"}}`: the drives' OneDrive registration | nothing |
+| Google | `google/clients.json` | `{"google": {"clientId", "clientSecret"}}`: the drives' Google project and Desktop client | nothing |
+| Todoist | `todoist/clients.json` | `{"todoist": {"clientId", "clientSecret"}}` | the personal API token: everything |
+| Bluesky | `bluesky/clients.json` | `{"bluesky": {"clientId": "https://webosphoenix.org/oauth/bluesky/client-metadata.json", "redirectUri": "org.webosphoenix:/oauth/bluesky"}}`, and the OAuth service lending its sheet (Q121) | an app password: everything |
+| Zoom | `zoom/clients.json` | `{"zoom": {"clientId", "relay"}}` and the OAuth service's broker (Q49, Q122), or `clientSecret` | nothing |
+| LinkedIn | `linkedin/clients.json` | `{"linkedin": {"clientId", "relay"}}` and the broker, or `clientSecret` | the Connections.csv import needs a signed-in account |
+| Slack | `slack/clients.json` | `{"slack": {"clientId", "relay"}}` and the broker; `"marketplace": true` once listed | nothing |
+
+Optional in each: `redirectUri` (the OAuth service's otherwise), `scope`,
+and a test server's addresses (`authorizationEndpoint`, `tokenEndpoint`,
+`revocationEndpoint`, and the API's: `graph`; `userinfo`, `calendar`,
+`people`, `tasks`; `api`; Bluesky's `resolver`, `plc`, `wellKnown`).
+
+**Trying them without registrations.** `node
+apps/connectors/testing/fake-providers.cjs 8098` starts stand-ins for all
+seven providers on one port (the same ones the connectors' tests and
+`tools/test-connectors.cjs` use: their sign-in pages, token endpoints and
+APIs, Bluesky's with real DPoP checks) and prints the `localStorage` lines
+that point each connector at them, the Todoist token and the Bluesky
+handle and app password; it then logs each request as it comes
+(`FAKE_SHOW_AUTH=1` adds the Authorization header).
+
+### Microsoft (Outlook.com, Microsoft 365)
+
+| | |
+| --- | --- |
+| Console | The OneDrive registration above (https://entra.microsoft.com, App registrations) |
+| Add | API permissions, Microsoft Graph, Delegated: `Contacts.ReadWrite`, `Calendars.ReadWrite`, `Tasks.ReadWrite` (with `User.Read`, `openid`, `profile`, `offline_access`) |
+| Redirect URI | The same loopback address |
+| Teams meetings | Their join addresses come with the events (`onlineMeeting.joinUrl`): no more scopes. Making a Teams meeting would need `OnlineMeetings.ReadWrite` (not used) |
+| Mail | Not asked for: Outlook's mail in Email is still to come (SYNERGY.md 2.5; Graph's `Mail.ReadWrite`, `Mail.Send`, or `IMAP.AccessAsUser.All` and `SMTP.Send` on outlook.office.com for IMAP with XOAUTH2) |
+| Verification | As OneDrive: none to work, publisher verification for the label; work tenants may need their admin's consent to the calendar and contacts scopes |
+| Cost | Free |
+
+### Google (Calendar, Contacts, Tasks)
+
+| | |
+| --- | --- |
+| Console | The Google Drive project above; APIs & Services, Library: enable the **Google Calendar API**, **People API** and **Google Tasks API** |
+| Client | The same Desktop app client (PKCE; its secret ships, as Google says it may for installed apps) |
+| Scopes (consent screen, Data access) | `openid`, `email`, `profile`, `https://www.googleapis.com/auth/calendar`, `https://www.googleapis.com/auth/contacts`, `https://www.googleapis.com/auth/tasks` |
+| Verification | Calendar, contacts and tasks are **sensitive** scopes: Google's app verification (the consent screen's brand, a privacy policy on the project's domain, a video of each scope in use) before more than 100 users, who meanwhile see the "unverified app" screen. No security assessment (that is for restricted scopes only) |
+| Cost | Free |
+
+### Todoist
+
+| | |
+| --- | --- |
+| Console | https://app.todoist.com/app/settings/integrations/app-management, Create a new app |
+| Client | Todoist's token exchange asks for the `client_secret`: it ships in `clients.json` (readable from an image) or goes through the token relay (Q49) |
+| Redirect URI | One "OAuth redirect URL" per app: the OAuth service's loopback address *(check that Todoist takes one)* |
+| Scopes | `data:read_write,data:delete` |
+| Verification | None; listing in Todoist's integrations directory is optional (its own submission) |
+| Cost | Free |
+
+Without it: the user pastes the personal API token (Todoist's Settings,
+Integrations, Developer), and everything works.
+
+### Bluesky (AT Protocol OAuth)
+
+Nothing to register with Bluesky: the client id is the address of a
+**client metadata document** Phoenix publishes, and any AT Protocol
+authorization server fetches it.
+
+| | |
+| --- | --- |
+| Host | `apps/connectors/bluesky/oauth/client-metadata.json` at `https://webosphoenix.org/oauth/bluesky/client-metadata.json` (its `client_id` is that address; served as `application/json` over HTTPS), with `client_uri` and the site's homepage on the same domain |
+| Client | `application_type: native`, public (`token_endpoint_auth_method: none`), DPoP-bound tokens |
+| Redirect URI | `org.webosphoenix:/oauth/bluesky`: native clients use the client id's domain reversed as the scheme |
+| Scopes | `atproto transition:generic transition:chat.bsky` (direct messages need the chat one) |
+| Device | The OAuth service lending its sign-in sheet for the browser step alone: the AT Protocol's PAR, DPoP and per-server endpoints are the connector's (`lib/oauth.js`), not the generic `authorize` (Q121) |
+| Cost | Free (the hosting) |
+
+Without it: the handle and an app password (Bluesky's Settings, Privacy
+and security, App passwords, with direct messages allowed), and
+everything works.
+
+### Zoom
+
+| | |
+| --- | --- |
+| Console | https://marketplace.zoom.us, Develop, Build App, **General App**, user-managed |
+| Client | Zoom's token endpoint takes the secret by HTTP Basic client authentication: the token relay (Q49), or `clientSecret` in `clients.json` once the OAuth service can send it that way (Q122) |
+| Redirect URI | "OAuth Redirect URL" and the allow list: the relay's callback (the loopback address only for a build that ships the secret) |
+| Scopes (granular) | `user:read:user`, `meeting:read:list_meetings`, `meeting:read:meeting`, `meeting:write:meeting` |
+| Verification | Users outside the developer's own Zoom account can add the app only once it is published through Zoom's app review |
+| Cost | Free |
+
+### LinkedIn
+
+| | |
+| --- | --- |
+| Console | https://www.linkedin.com/developers/apps, Create app (it must name a LinkedIn Page, whose admin verifies the app) |
+| Products | **Sign In with LinkedIn using OpenID Connect** and **Share on LinkedIn** (both self-serve) |
+| Client | The token exchange needs the `client_secret`: the token relay (Q49), or `clientSecret` in `clients.json` |
+| Redirect URI | "Authorized redirect URLs for your app": the relay's callback |
+| Scopes | `openid`, `profile`, `email`, `w_member_social` |
+| Verification | The Page admin's verification of the app; nothing more for these two products. The connections API stays closed (partner programmes): connections come from the user's own `Connections.csv` |
+| Cost | Free |
+
+### Slack
+
+| | |
+| --- | --- |
+| Console | https://api.slack.com/apps, Create New App, From scratch |
+| Client | `oauth.v2.access` needs the `client_secret` and answers with the user token inside `authed_user`: the token relay (Q49) |
+| Redirect URI | OAuth & Permissions, Redirect URLs: the relay's callback (Slack asks for HTTPS) |
+| User token scopes | `channels:history`, `groups:history`, `im:history`, `mpim:history`, `channels:read`, `groups:read`, `im:read`, `mpim:read`, `users:read`, `users:read.email`, `chat:write` |
+| Verification | Distribution on (Manage Distribution) to sign in outside the developer's workspace; a workspace's admins may have to approve outside apps. **The Slack Marketplace listing** (Slack's review) lifts the 2025 history limit for apps outside it (one `conversations.history` call a minute, 15 messages): until then the connector reads one conversation per sync; `"marketplace": true` in the setting once listed |
+| Cost | Free |

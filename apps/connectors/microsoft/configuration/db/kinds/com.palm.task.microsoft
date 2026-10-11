@@ -1,0 +1,26 @@
+{
+    "id": "com.palm.task.microsoft:1",
+    "owner": "org.webosphoenix.service.microsoft",
+    "sync": false,
+    "extends": [
+        "com.palm.task:1"
+    ],
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        },
+        {
+            "name": "listId",
+            "props": [
+                {
+                    "name": "listId"
+                }
+            ]
+        }
+    ]
+}

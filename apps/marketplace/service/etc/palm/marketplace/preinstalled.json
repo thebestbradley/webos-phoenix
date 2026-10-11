@@ -33,6 +33,55 @@
             "from": "apps/connectors/deltachat",
             "service": "org.webosphoenix.service.deltachat",
             "templates": ["com.webosphoenix.deltachat"]
+        },
+        {
+            "id": "org.webosphoenix.todoist",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/todoist",
+            "service": "org.webosphoenix.service.todoist",
+            "templates": ["com.webosphoenix.todoist"]
+        },
+        {
+            "id": "org.webosphoenix.bluesky",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/bluesky",
+            "service": "org.webosphoenix.service.bluesky",
+            "templates": ["com.webosphoenix.bluesky"]
+        },
+        {
+            "id": "org.webosphoenix.microsoft",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/microsoft",
+            "service": "org.webosphoenix.service.microsoft",
+            "templates": ["com.webosphoenix.microsoft"]
+        },
+        {
+            "id": "org.webosphoenix.google",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/google",
+            "service": "org.webosphoenix.service.google",
+            "templates": ["com.webosphoenix.google"]
+        },
+        {
+            "id": "org.webosphoenix.zoom",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/zoom",
+            "service": "org.webosphoenix.service.zoom",
+            "templates": ["com.webosphoenix.zoom"]
+        },
+        {
+            "id": "org.webosphoenix.linkedin",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/linkedin",
+            "service": "org.webosphoenix.service.linkedin",
+            "templates": ["com.webosphoenix.linkedin"]
+        },
+        {
+            "id": "org.webosphoenix.slack",
+            "sourceId": "phoenix",
+            "from": "apps/connectors/slack",
+            "service": "org.webosphoenix.service.slack",
+            "templates": ["com.webosphoenix.slack"]
         }
     ],
     "packages": [

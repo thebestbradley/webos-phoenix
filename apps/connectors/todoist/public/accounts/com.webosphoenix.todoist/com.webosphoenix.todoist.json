@@ -1,0 +1,49 @@
+{
+    "templateId": "com.webosphoenix.todoist",
+    "loc_name": "Todoist",
+    "icon": {
+        "loc_32x32": "images/todoist-32x32.png",
+        "loc_48x48": "images/todoist-48x48.png"
+    },
+    "loc_usernameLabel": "EMAIL",
+    "validator": {
+        "customUI": {
+            "appId": "org.webosphoenix.todoist",
+            "name": "accounts/wizard.html"
+        },
+        "address": "palm://org.webosphoenix.service.todoist/checkCredentials"
+    },
+    "readPermissions": [
+        "org.webosphoenix.service.todoist",
+        "org.webosphoenix.todoist",
+        "org.webosphoenix.tasks"
+    ],
+    "writePermissions": [
+        "org.webosphoenix.todoist",
+        "org.webosphoenix.tasks"
+    ],
+    "capabilityProviders": [
+        {
+            "capability": "TASKS",
+            "id": "com.webosphoenix.todoist.tasks",
+            "loc_name": "Tasks",
+            "icon": {
+                "loc_32x32": "images/todoist-32x32.png",
+                "loc_48x48": "images/todoist-48x48.png"
+            },
+            "dbkinds": {
+                "task": "com.palm.task.todoist:1",
+                "tasklist": "com.palm.tasklist.todoist:1"
+            },
+            "implementation": "palm://org.webosphoenix.service.todoist/",
+            "onCreate": "palm://org.webosphoenix.service.todoist/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.todoist/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.todoist/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.todoist/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.todoist/sync"
+        }
+    ],
+    "signUp": {
+        "url": "https://app.todoist.com/auth/signup"
+    }
+}

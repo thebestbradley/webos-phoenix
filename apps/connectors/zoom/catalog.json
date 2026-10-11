@@ -1,0 +1,20 @@
+{
+    "//": "What the Marketplace's Connections view says of this connector package's account type (server/marketplace Catalog::connectorTypes; docs/SYNERGY-SDK.md). One of Phoenix's own, installed from the catalog (preinstalled.json \"catalog\"); the catalog's own entry (catalog/accounts.json) is the one listed, this one is checked when the package is uploaded.",
+    "accountTypes": [
+        {
+            "templateId": "com.webosphoenix.zoom",
+            "title": "Zoom",
+            "provider": "Zoom",
+            "summary": "Your upcoming Zoom meetings in Calendar, each with where to join; meetings open in the browser. Sign in on Zoom's own page.",
+            "capabilities": [
+                { "capability": "CALENDAR", "direction": "read-only" }
+            ],
+            "protocols": ["zoom-api-v2"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Zoom", "e2ee": false, "phoenixServers": "token-relay" },
+            "push": "poll",
+            "status": "experimental"
+        }
+    ]
+}

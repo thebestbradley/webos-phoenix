@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- Slack (the Slack account's connector: direct messages and channels in Messaging): two speech balloons, a channel's
+     # on the front one, drawn for Phoenix (Apache-2.0). Not Slack's logo. -->
+<defs>
+  <linearGradient id="back" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b892c9"/><stop offset="1" stop-color="#7b4f93"/></linearGradient>
+  <linearGradient id="front" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e8e0ee"/></linearGradient>
+  <linearGradient id="hash" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6c3f86"/><stop offset="1" stop-color="#43215a"/></linearGradient>
+</defs>
+<path d="M66 56 h88 a14 14 0 0 1 14 14 v44 a14 14 0 0 1 -14 14 h-56 l-20 18 v-18 h-12 a14 14 0 0 1 -14 -14 v-44 a14 14 0 0 1 14 -14 z" fill="url(#back)" stroke="#4d2a62" stroke-width="3" stroke-linejoin="round"/>
+<path d="M78 82 h60 M78 100 h44" stroke="#ead9f3" stroke-width="6" stroke-linecap="round"/>
+<path d="M108 100 h86 a14 14 0 0 1 14 14 v46 a14 14 0 0 1 -14 14 h-14 v18 l-20 -18 h-52 a14 14 0 0 1 -14 -14 v-46 a14 14 0 0 1 14 -14 z" fill="url(#front)" stroke="#4d2a62" stroke-width="3" stroke-linejoin="round"/>
+<path d="M140 116 l-8 46 M162 116 l-8 46 M124 130 h48 M120 148 h48" stroke="url(#hash)" stroke-width="7" stroke-linecap="round"/>
+</svg>

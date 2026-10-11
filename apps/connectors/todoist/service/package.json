@@ -1,0 +1,11 @@
+{
+    "name": "org.webosphoenix.service.todoist",
+    "version": "0.1.0",
+    "private": true,
+    "description": "webOS Phoenix's Todoist account (Synergy connector on @phoenix/connector-kit, the TASKS capability): projects and tasks in Tasks both ways, with the personal API token or Todoist's OAuth; Add to Todoist in the share sheet",
+    "license": "Apache-2.0",
+    "main": "service.js",
+    "dependencies": {
+        "@phoenix/connector-kit": "*"
+    }
+}

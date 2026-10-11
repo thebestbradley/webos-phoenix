@@ -1,0 +1,26 @@
+{
+    "id": "com.palm.calendarevent.zoom:1",
+    "owner": "org.webosphoenix.service.zoom",
+    "sync": false,
+    "extends": [
+        "com.palm.calendarevent:1"
+    ],
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        },
+        {
+            "name": "calendarId",
+            "props": [
+                {
+                    "name": "calendarId"
+                }
+            ]
+        }
+    ]
+}

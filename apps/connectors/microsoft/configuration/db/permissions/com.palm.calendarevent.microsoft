@@ -1,0 +1,43 @@
+[
+    {
+        "type": "db.kind",
+        "object": "com.palm.calendarevent.microsoft:1",
+        "caller": "com.palm.app.calendar",
+        "operations": {
+            "read": "allow",
+            "create": "allow",
+            "delete": "allow",
+            "update": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.calendarevent.microsoft:1",
+        "caller": "com.palm.service.accounts",
+        "operations": {
+            "read": "allow",
+            "create": "allow",
+            "delete": "allow",
+            "update": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.calendarevent.microsoft:1",
+        "caller": "org.webosphoenix.assistant",
+        "operations": {
+            "read": "allow",
+            "create": "allow",
+            "delete": "allow",
+            "update": "allow"
+        }
+    },
+    {
+        "type": "db.kind",
+        "object": "com.palm.calendarevent.microsoft:1",
+        "caller": "com.palm.launcher",
+        "operations": {
+            "read": "allow"
+        }
+    }
+]

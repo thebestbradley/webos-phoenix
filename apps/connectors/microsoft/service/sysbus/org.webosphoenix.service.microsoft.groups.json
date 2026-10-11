@@ -1,0 +1,11 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.service.microsoft"
+    ],
+    "accounts.transport": [
+        "oem"
+    ],
+    "microsoft.account": [
+        "oem"
+    ]
+}

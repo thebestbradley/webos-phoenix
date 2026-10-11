@@ -230,6 +230,146 @@
             "status": "experimental",
             "package": { "id": "org.webosphoenix.drives", "builtin": false },
             "signUp": "https://account.box.com/signup/personal"
+        },
+        {
+            "templateId": "com.webosphoenix.todoist",
+            "title": "Todoist",
+            "provider": "Todoist",
+            "icon": "icons/accounts/com.webosphoenix.todoist.png",
+            "iconFrom": "apps/connectors/todoist/public/accounts/com.webosphoenix.todoist/images/todoist-48x48@2x.png",
+            "summary": "Your Todoist projects and tasks in Tasks, kept in step both ways, and Add to Todoist in the share sheet. Sign in with your API token from Todoist's settings, or on Todoist's own page.",
+            "capabilities": [
+                { "capability": "TASKS", "direction": "two-way" }
+            ],
+            "protocols": ["todoist-api-v1"],
+            "auth": { "type": "api-key", "registration": "none" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Todoist", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental",
+            "package": { "id": "org.webosphoenix.todoist", "builtin": false },
+            "signUp": "https://app.todoist.com/auth/signup"
+        },
+        {
+            "templateId": "com.webosphoenix.bluesky",
+            "title": "Bluesky",
+            "provider": "Bluesky, or any AT Protocol server",
+            "icon": "icons/accounts/com.webosphoenix.bluesky.png",
+            "iconFrom": "apps/connectors/bluesky/public/accounts/com.webosphoenix.bluesky/images/bluesky-48x48@2x.png",
+            "summary": "The people you follow on contact cards, your direct messages in Messaging, notifications, and posting from the share sheet. Sign in with your handle and an app password.",
+            "capabilities": [
+                { "capability": "CONTACTS", "direction": "read-only" },
+                { "capability": "MESSAGING", "direction": "two-way" },
+                { "capability": "SOCIAL", "direction": "read-only" }
+            ],
+            "protocols": ["atproto"],
+            "auth": { "type": "app-password", "registration": "none" },
+            "server": "discovered",
+            "privacy": { "dataGoesTo": "your Bluesky server (PDS) and Bluesky's app and chat services", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental",
+            "package": { "id": "org.webosphoenix.bluesky", "builtin": false },
+            "signUp": "https://bsky.app/"
+        },
+        {
+            "templateId": "com.webosphoenix.microsoft",
+            "title": "Microsoft",
+            "provider": "Outlook.com and Microsoft 365 (work or school)",
+            "icon": "icons/accounts/com.webosphoenix.microsoft.png",
+            "iconFrom": "apps/connectors/microsoft/public/accounts/com.webosphoenix.microsoft/images/microsoft-48x48@2x.png",
+            "summary": "Your contacts, calendars and Microsoft To Do, kept in step both ways, with one sign-in on Microsoft's own page. Teams meetings show in Calendar with where to join.",
+            "capabilities": [
+                { "capability": "CONTACTS", "direction": "two-way" },
+                { "capability": "CALENDAR", "direction": "two-way" },
+                { "capability": "TASKS", "direction": "two-way" }
+            ],
+            "protocols": ["microsoft-graph"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Microsoft", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental",
+            "package": { "id": "org.webosphoenix.microsoft", "builtin": false },
+            "signUp": "https://signup.live.com/"
+        },
+        {
+            "templateId": "com.webosphoenix.google",
+            "title": "Google",
+            "provider": "Google Calendar, Contacts and Tasks",
+            "icon": "icons/accounts/com.webosphoenix.google.png",
+            "iconFrom": "apps/connectors/google/public/accounts/com.webosphoenix.google/images/google-48x48@2x.png",
+            "summary": "Your Google Calendar, Contacts and Tasks, kept in step both ways, with one sign-in on Google's own page. Google Meet meetings show in Calendar with where to join.",
+            "capabilities": [
+                { "capability": "CONTACTS", "direction": "two-way" },
+                { "capability": "CALENDAR", "direction": "two-way" },
+                { "capability": "TASKS", "direction": "two-way" }
+            ],
+            "protocols": ["google-calendar-api-v3", "google-people-api-v1", "google-tasks-api-v1"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Google", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental",
+            "package": { "id": "org.webosphoenix.google", "builtin": false },
+            "signUp": "https://accounts.google.com/signup"
+        },
+        {
+            "templateId": "com.webosphoenix.zoom",
+            "title": "Zoom",
+            "provider": "Zoom",
+            "icon": "icons/accounts/com.webosphoenix.zoom.png",
+            "iconFrom": "apps/connectors/zoom/public/accounts/com.webosphoenix.zoom/images/zoom-48x48@2x.png",
+            "summary": "Your upcoming Zoom meetings in Calendar, each with where to join; meetings open in the browser. Sign in on Zoom's own page.",
+            "capabilities": [
+                { "capability": "CALENDAR", "direction": "read-only" }
+            ],
+            "protocols": ["zoom-api-v2"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Zoom", "e2ee": false, "phoenixServers": "token-relay" },
+            "push": "poll",
+            "status": "experimental",
+            "package": { "id": "org.webosphoenix.zoom", "builtin": false },
+            "signUp": "https://zoom.us/signup"
+        },
+        {
+            "templateId": "com.webosphoenix.linkedin",
+            "title": "LinkedIn",
+            "provider": "LinkedIn",
+            "icon": "icons/accounts/com.webosphoenix.linkedin.png",
+            "iconFrom": "apps/connectors/linkedin/public/accounts/com.webosphoenix.linkedin/images/linkedin-48x48@2x.png",
+            "summary": "Sign In with LinkedIn and share from the share sheet as you; your connections come to Contacts from your own data export (Connections.csv), imported, not live.",
+            "capabilities": [
+                { "capability": "CONTACTS", "direction": "read-only" }
+            ],
+            "protocols": ["openid-connect", "linkedin-posts-api"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "LinkedIn (what you share); your connections stay on this device", "e2ee": false, "phoenixServers": "token-relay" },
+            "push": "poll",
+            "status": "experimental",
+            "package": { "id": "org.webosphoenix.linkedin", "builtin": false },
+            "signUp": "https://www.linkedin.com/signup"
+        },
+        {
+            "templateId": "com.webosphoenix.slack",
+            "title": "Slack",
+            "provider": "Slack",
+            "icon": "icons/accounts/com.webosphoenix.slack.png",
+            "iconFrom": "apps/connectors/slack/public/accounts/com.webosphoenix.slack/images/slack-48x48@2x.png",
+            "summary": "Your Slack direct messages and channels in Messaging, and your workspace's people in Contacts. Slow until Phoenix's Slack app is in the Slack Marketplace: Slack lets it read one conversation a minute.",
+            "capabilities": [
+                { "capability": "MESSAGING", "direction": "two-way" },
+                { "capability": "CONTACTS", "direction": "read-only" }
+            ],
+            "protocols": ["slack-web-api"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Slack (and your workspace's admins)", "e2ee": false, "phoenixServers": "token-relay" },
+            "push": "poll",
+            "status": "experimental",
+            "package": { "id": "org.webosphoenix.slack", "builtin": false },
+            "signUp": "https://slack.com/get-started"
         }
     ]
 }

@@ -1,0 +1,23 @@
+{
+    "appId": "org.webosphoenix.service.bluesky",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.service.bluesky"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.bluesky",
+            "outbound": [
+                "org.webosphoenix.service.bluesky",
+                "com.palm.db",
+                "com.palm.tempdb",
+                "com.palm.activitymanager",
+                "com.palm.service.accounts",
+                "org.webosphoenix.service.oauth",
+                "com.webos.notification",
+                "org.webosports.service.messaging"
+            ]
+        }
+    ]
+}

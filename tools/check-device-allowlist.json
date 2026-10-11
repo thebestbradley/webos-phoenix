@@ -394,6 +394,10 @@
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C5"
  },
+ "luna:unknown-method:org.webosphoenix.service.oauth/broker": {
+  "owner": "the OAuth service's owner (services/oauth): the token relay's broker, PLATFORM.md 6.5.4, OPEN-QUESTIONS Q49; the connector kit's viaRelay probes it",
+  "row": "C5"
+ },
  "luna:unknown-method:org.webosphoenix.transcriber/listen": {
   "owner": "keyboard agent (dictation, V5)",
   "row": "C5"

@@ -1,0 +1,84 @@
+{
+    "templateId": "com.webosphoenix.bluesky",
+    "loc_name": "Bluesky",
+    "icon": {
+        "loc_32x32": "images/bluesky-32x32.png",
+        "loc_48x48": "images/bluesky-48x48.png"
+    },
+    "loc_usernameLabel": "HANDLE",
+    "validator": {
+        "customUI": {
+            "appId": "org.webosphoenix.bluesky",
+            "name": "accounts/wizard.html"
+        },
+        "address": "palm://org.webosphoenix.service.bluesky/checkCredentials"
+    },
+    "readPermissions": [
+        "org.webosphoenix.service.bluesky",
+        "org.webosphoenix.bluesky"
+    ],
+    "writePermissions": [
+        "org.webosphoenix.bluesky",
+        "com.palm.app.contacts",
+        "org.webosphoenix.messaging"
+    ],
+    "capabilityProviders": [
+        {
+            "capability": "CONTACTS",
+            "id": "com.webosphoenix.bluesky.contacts",
+            "loc_name": "People you follow",
+            "icon": {
+                "loc_32x32": "images/bluesky-32x32.png",
+                "loc_48x48": "images/bluesky-48x48.png"
+            },
+            "dbkinds": {
+                "contact": "com.palm.contact.bluesky:1"
+            },
+            "readOnlyData": true,
+            "implementation": "palm://org.webosphoenix.service.bluesky/",
+            "onCreate": "palm://org.webosphoenix.service.bluesky/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.bluesky/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.bluesky/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.bluesky/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.bluesky/sync"
+        },
+        {
+            "capability": "MESSAGING",
+            "capabilitySubtype": "IM",
+            "serviceName": "type_bluesky",
+            "id": "com.webosphoenix.bluesky.messaging",
+            "loc_name": "Direct messages",
+            "icon": {
+                "loc_32x32": "images/bluesky-32x32.png",
+                "loc_48x48": "images/bluesky-48x48.png"
+            },
+            "dbkinds": {
+                "immessage": "com.palm.immessage.bluesky:1"
+            },
+            "implementation": "palm://org.webosphoenix.service.bluesky/",
+            "onCreate": "palm://org.webosphoenix.service.bluesky/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.bluesky/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.bluesky/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.bluesky/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.bluesky/sync"
+        },
+        {
+            "capability": "SOCIAL",
+            "id": "com.webosphoenix.bluesky.notifications",
+            "loc_name": "Notifications",
+            "icon": {
+                "loc_32x32": "images/bluesky-32x32.png",
+                "loc_48x48": "images/bluesky-48x48.png"
+            },
+            "implementation": "palm://org.webosphoenix.service.bluesky/",
+            "onCreate": "palm://org.webosphoenix.service.bluesky/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.bluesky/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.bluesky/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.bluesky/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.bluesky/sync"
+        }
+    ],
+    "signUp": {
+        "url": "https://bsky.app/"
+    }
+}

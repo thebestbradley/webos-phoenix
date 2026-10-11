@@ -1,0 +1,26 @@
+{
+    "id": "com.palm.immessage.bluesky:1",
+    "owner": "org.webosphoenix.service.bluesky",
+    "sync": false,
+    "extends": [
+        "com.palm.immessage:1"
+    ],
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        },
+        {
+            "name": "username",
+            "props": [
+                {
+                    "name": "username"
+                }
+            ]
+        }
+    ]
+}

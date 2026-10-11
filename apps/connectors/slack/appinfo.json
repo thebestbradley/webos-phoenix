@@ -1,0 +1,22 @@
+{
+    "id": "org.webosphoenix.slack",
+    "version": "0.1.0",
+    "vendor": "webOS Phoenix",
+    "type": "web",
+    "main": "index.html",
+    "title": "Slack",
+    "icon": "icon.png",
+    "splashicon": "icon-256x256.png",
+    "largeIcon": "icon-128x128.png",
+    "extraLargeIcon": "icon-512x512.png",
+    "uiRevision": 2,
+    "phoenix": {
+        "//": "Not in the launcher: the app carries the Slack account (accounts/wizard.html, the template in public/accounts, the service). A connector package of Phoenix's own, installed from the catalog's Connections (docs/SYNERGY-CONNECTORS.md 7); its sign-in needs Phoenix's Slack app and the token relay, and its reading speed the Slack Marketplace listing (docs/DEVELOPER-APPS.md).",
+        "hidden": true
+    },
+    "requiredPermissions": [
+        "accounts.transport",
+        "slack.account",
+        "phoenix.appmanager.launch"
+    ]
+}

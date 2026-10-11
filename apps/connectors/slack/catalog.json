@@ -1,0 +1,21 @@
+{
+    "//": "What the Marketplace's Connections view says of this connector package's account type (server/marketplace Catalog::connectorTypes; docs/SYNERGY-SDK.md). One of Phoenix's own, installed from the catalog (preinstalled.json \"catalog\"); the catalog's own entry (catalog/accounts.json) is the one listed, this one is checked when the package is uploaded.",
+    "accountTypes": [
+        {
+            "templateId": "com.webosphoenix.slack",
+            "title": "Slack",
+            "provider": "Slack",
+            "summary": "Your Slack direct messages and channels in Messaging, and your workspace's people in Contacts. Slow until Phoenix's Slack app is in the Slack Marketplace: Slack lets it read one conversation a minute.",
+            "capabilities": [
+                { "capability": "MESSAGING", "direction": "two-way" },
+                { "capability": "CONTACTS", "direction": "read-only" }
+            ],
+            "protocols": ["slack-web-api"],
+            "auth": { "type": "oauth", "registration": "required" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Slack (and your workspace's admins)", "e2ee": false, "phoenixServers": "token-relay" },
+            "push": "poll",
+            "status": "experimental"
+        }
+    ]
+}

@@ -1,0 +1,14 @@
+{
+    "accounts.transport": [
+        "org.webosphoenix.service.microsoft/checkCredentials",
+        "org.webosphoenix.service.microsoft/onCreate",
+        "org.webosphoenix.service.microsoft/onEnabled",
+        "org.webosphoenix.service.microsoft/onCredentialsChanged",
+        "org.webosphoenix.service.microsoft/onDelete",
+        "org.webosphoenix.service.microsoft/sync"
+    ],
+    "microsoft.account": [
+        "org.webosphoenix.service.microsoft/providerInfo",
+        "org.webosphoenix.service.microsoft/signIn"
+    ]
+}

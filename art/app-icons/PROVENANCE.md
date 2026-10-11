@@ -70,6 +70,18 @@ checked 10 October 2026): five coloured nodes on a pentagon joined by a
 pentagram, drawn anew in `objects/fediverse.svg`, nothing copied from the
 file. Ours is Apache-2.0 like the rest.
 
+The connectors of providers (`apps/connectors/<name>`: each one's icons and
+its account template's `<name>-32x32` / `<name>-48x48`) are drawn for
+Phoenix after what each account does, never the provider's logo, so no
+trademark or logo licence is involved: `todoist` (a card of tasks, two
+ticked off), `bluesky` (a round window on a blue sky with a cloud and a
+speech balloon; not Bluesky's butterfly), `microsoft` (a calendar page
+with a letter in front; not Microsoft's or Outlook's logo), `google` (an
+address card beside a day of the calendar with a tick), `zoom` (a video
+camera before a calendar day), `slack` (two speech balloons, a channel's
+`#` on the front one; not Slack's logo), `linkedin` (a briefcase with a
+name badge).
+
 ## The originals' 512 px icons
 
 `compat/rootfs/usr/palm/applications/<id>/icon-512x512.png` (Accounts,

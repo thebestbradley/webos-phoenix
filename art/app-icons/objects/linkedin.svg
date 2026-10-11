@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- LinkedIn (the LinkedIn account's connector: your profile, sharing, imported connections): a briefcase with a
+     name badge clipped to it, drawn for Phoenix (Apache-2.0). Not LinkedIn's logo. -->
+<defs>
+  <linearGradient id="case" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a9744a"/><stop offset="1" stop-color="#6d4426"/></linearGradient>
+  <linearGradient id="badge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dfe7ef"/></linearGradient>
+  <linearGradient id="band" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a7dc0"/><stop offset="1" stop-color="#1d4f86"/></linearGradient>
+  <linearGradient id="person" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8aa6c4"/><stop offset="1" stop-color="#4b6a8e"/></linearGradient>
+</defs>
+<!-- The briefcase: handle, body, clasp. -->
+<path d="M104 70 v-10 a8 8 0 0 1 8 -8 h32 a8 8 0 0 1 8 8 v10" fill="none" stroke="#4d2f19" stroke-width="7"/>
+<rect x="56" y="70" width="144" height="100" rx="12" fill="url(#case)" stroke="#43280f" stroke-width="3"/>
+<path d="M56 108 h144" stroke="#4d2f19" stroke-width="3"/>
+<rect x="118" y="100" width="20" height="16" rx="3" fill="#e2c27a" stroke="#7a5a1c" stroke-width="2"/>
+<!-- The badge in front. -->
+<rect x="120" y="116" width="76" height="72" rx="8" fill="url(#badge)" stroke="#23466e" stroke-width="3"/>
+<path d="M120 124 a8 8 0 0 1 8 -8 h60 a8 8 0 0 1 8 8 v8 h-76 z" fill="url(#band)"/>
+<circle cx="146" cy="152" r="11" fill="url(#person)"/>
+<path d="M130 178 a16 13 0 0 1 32 0 z" fill="url(#person)"/>
+<path d="M168 148 h18 M168 162 h14" stroke="#9fb0c2" stroke-width="4" stroke-linecap="round"/>
+</svg>

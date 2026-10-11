@@ -49,6 +49,12 @@ export interface TaskList extends DbObject {
     sortOrder?: number;
     /** The default list; it cannot be deleted. */
     isDefault?: boolean;
+    /**
+     * The kind of its tasks when an account syncs it (the account's sub-kind
+     * of com.palm.task:1, as com.palm.task.todoist:1), so a task added or
+     * edited here is the connector's to send; com.palm.task:1 without one.
+     */
+    taskKind?: string;
 }
 
 export interface Task extends DbObject {
@@ -171,9 +177,13 @@ export const tasks = {
      * cancelled otherwise. Resolves with the task's _id.
      */
     async save(input: TaskInput, now = Date.now()): Promise<string> {
+        // Its list decides its kind: an account's list keeps its tasks in the
+        // account's own sub-kind (TaskList.taskKind), which its connector syncs.
+        const [list] = input.listId ? await db.get<TaskList>([input.listId]) : [];
+        const kind = list && typeof list.taskKind === "string" && /^[\w.-]+:\d+$/.test(list.taskKind) ? list.taskKind : TASK_KIND;
         const task: Task = {
             ...input,
-            _kind: TASK_KIND,
+            _kind: kind,
             summary: input.summary.trim(),
             due: input.due ?? null,
             remind: input.remind ?? null,

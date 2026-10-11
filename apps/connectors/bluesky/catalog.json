@@ -1,0 +1,22 @@
+{
+    "//": "What the Marketplace's Connections view says of this connector package's account type (server/marketplace Catalog::connectorTypes; docs/SYNERGY-SDK.md). One of Phoenix's own, installed from the catalog, not pre-installed (preinstalled.json \"catalog\"); the catalog's own entry (catalog/accounts.json) is the one listed, this one is checked when the package is uploaded.",
+    "accountTypes": [
+        {
+            "templateId": "com.webosphoenix.bluesky",
+            "title": "Bluesky",
+            "provider": "Bluesky, or any AT Protocol server",
+            "summary": "The people you follow on contact cards, your direct messages in Messaging, notifications, and posting from the share sheet. Sign in with your handle and an app password.",
+            "capabilities": [
+                { "capability": "CONTACTS", "direction": "read-only" },
+                { "capability": "MESSAGING", "direction": "two-way" },
+                { "capability": "SOCIAL", "direction": "read-only" }
+            ],
+            "protocols": ["atproto"],
+            "auth": { "type": "app-password", "registration": "none" },
+            "server": "discovered",
+            "privacy": { "dataGoesTo": "your Bluesky server (PDS) and Bluesky's app and chat services", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental"
+        }
+    ]
+}

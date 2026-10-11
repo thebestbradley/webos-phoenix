@@ -1394,21 +1394,27 @@ function taskList(env, name) {
             var hit = lists.filter(function (l) { return words(l.name) === n; })[0]
                 || lists.filter(function (l) { return words(l.name).replace(/ list$/, "") === n.replace(/ list$/, ""); })[0]
                 || lists.filter(function (l) { return words(l.name).indexOf(n) === 0; })[0];
-            if (hit) return { id: hit._id, name: hit.name, made: false };
+            if (hit) return listOf(hit, hit.name);
             return dbPut(env, [{ _kind: "com.palm.tasklist:1", name: name, accountId: "", sortOrder: lists.length }])
                 .then(function (ids) { return { id: ids[0], name: name, made: true }; });
         }
         var inbox = lists.filter(function (l) { return l.isDefault; })[0];
-        if (inbox) return { id: inbox._id, name: "", made: false };
+        if (inbox) return listOf(inbox, "");
         return dbPut(env, [{ _kind: "com.palm.tasklist:1", name: "Inbox", accountId: "", sortOrder: 0, isDefault: true }])
             .then(function (ids) { return { id: ids[0], name: "", made: false }; });
     });
 }
+// A list of an account's (Todoist, Microsoft To Do, Google Tasks) names the kind its tasks go in, so its
+// connector sends them on, and the account (as Tasks does: @phoenix/luna tasks.ts save()).
+function listOf(l, name) {
+    var kind = typeof l.taskKind === "string" && /^[\w.-]+:\d+$/.test(l.taskKind) ? l.taskKind : "com.palm.task:1";
+    return { id: l._id, name: name, made: false, kind: kind, accountId: l.accountId || "" };
+}
 function addTask(env, text, list, due, remind) {
     var now = env.now();
     return taskList(env, list).then(function (l) {
-        var task = { _kind: "com.palm.task:1", summary: String(text).trim(), due: due, allDay: false, completed: false,
-            completedTime: null, priority: 0, listId: l.id, accountId: "", remind: remind ? due : null,
+        var task = { _kind: l.kind || "com.palm.task:1", summary: String(text).trim(), due: due, allDay: false, completed: false,
+            completedTime: null, priority: 0, listId: l.id, accountId: l.accountId || "", remind: remind ? due : null,
             uid: now.toString(36) + "-assistant@webosphoenix", createdTime: now, modifiedTime: now };
         return dbPut(env, [task]).then(function (ids) {
             var taskId = ids[0];

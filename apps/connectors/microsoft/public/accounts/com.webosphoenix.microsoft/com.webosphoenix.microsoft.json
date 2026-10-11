@@ -1,0 +1,89 @@
+{
+    "templateId": "com.webosphoenix.microsoft",
+    "loc_name": "Microsoft",
+    "icon": {
+        "loc_32x32": "images/microsoft-32x32.png",
+        "loc_48x48": "images/microsoft-48x48.png"
+    },
+    "loc_usernameLabel": "EMAIL",
+    "validator": {
+        "customUI": {
+            "appId": "org.webosphoenix.microsoft",
+            "name": "accounts/wizard.html"
+        },
+        "address": "palm://org.webosphoenix.service.microsoft/checkCredentials"
+    },
+    "readPermissions": [
+        "org.webosphoenix.service.microsoft",
+        "org.webosphoenix.microsoft",
+        "com.palm.app.calendar",
+        "org.webosphoenix.tasks"
+    ],
+    "writePermissions": [
+        "org.webosphoenix.microsoft",
+        "com.palm.app.contacts",
+        "com.palm.app.calendar",
+        "org.webosphoenix.tasks"
+    ],
+    "capabilityProviders": [
+        {
+            "capability": "CONTACTS",
+            "id": "com.webosphoenix.microsoft.contacts",
+            "loc_name": "Contacts",
+            "icon": {
+                "loc_32x32": "images/microsoft-32x32.png",
+                "loc_48x48": "images/microsoft-48x48.png"
+            },
+            "dbkinds": {
+                "contact": "com.palm.contact.microsoft:1"
+            },
+            "implementation": "palm://org.webosphoenix.service.microsoft/",
+            "onCreate": "palm://org.webosphoenix.service.microsoft/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.microsoft/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.microsoft/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.microsoft/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.microsoft/sync"
+        },
+        {
+            "capability": "CALENDAR",
+            "id": "com.webosphoenix.microsoft.calendar",
+            "loc_name": "Calendar",
+            "icon": {
+                "loc_32x32": "images/microsoft-32x32.png",
+                "loc_48x48": "images/microsoft-48x48.png"
+            },
+            "dbkinds": {
+                "calendar": "com.palm.calendar.microsoft:1",
+                "calendarevent": "com.palm.calendarevent.microsoft:1"
+            },
+            "implementation": "palm://org.webosphoenix.service.microsoft/",
+            "onCreate": "palm://org.webosphoenix.service.microsoft/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.microsoft/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.microsoft/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.microsoft/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.microsoft/sync"
+        },
+        {
+            "capability": "TASKS",
+            "id": "com.webosphoenix.microsoft.tasks",
+            "loc_name": "To Do",
+            "icon": {
+                "loc_32x32": "images/microsoft-32x32.png",
+                "loc_48x48": "images/microsoft-48x48.png"
+            },
+            "dbkinds": {
+                "task": "com.palm.task.microsoft:1",
+                "tasklist": "com.palm.tasklist.microsoft:1"
+            },
+            "implementation": "palm://org.webosphoenix.service.microsoft/",
+            "onCreate": "palm://org.webosphoenix.service.microsoft/onCreate",
+            "onEnabled": "palm://org.webosphoenix.service.microsoft/onEnabled",
+            "onDelete": "palm://org.webosphoenix.service.microsoft/onDelete",
+            "onCredentialsChanged": "palm://org.webosphoenix.service.microsoft/onCredentialsChanged",
+            "sync": "palm://org.webosphoenix.service.microsoft/sync"
+        }
+    ],
+    "signUp": {
+        "url": "https://signup.live.com/"
+    }
+}

@@ -1,0 +1,11 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.service.linkedin"
+    ],
+    "accounts.transport": [
+        "oem"
+    ],
+    "linkedin.account": [
+        "oem"
+    ]
+}

@@ -1,0 +1,16 @@
+{
+    "accounts.transport": [
+        "org.webosphoenix.service.linkedin/checkCredentials",
+        "org.webosphoenix.service.linkedin/onCreate",
+        "org.webosphoenix.service.linkedin/onEnabled",
+        "org.webosphoenix.service.linkedin/onCredentialsChanged",
+        "org.webosphoenix.service.linkedin/onDelete",
+        "org.webosphoenix.service.linkedin/sync"
+    ],
+    "linkedin.account": [
+        "org.webosphoenix.service.linkedin/providerInfo",
+        "org.webosphoenix.service.linkedin/signIn",
+        "org.webosphoenix.service.linkedin/share",
+        "org.webosphoenix.service.linkedin/importConnections"
+    ]
+}

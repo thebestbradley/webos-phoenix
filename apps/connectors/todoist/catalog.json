@@ -1,0 +1,20 @@
+{
+    "//": "What the Marketplace's Connections view says of this connector package's account type (server/marketplace Catalog::connectorTypes; docs/SYNERGY-SDK.md). One of Phoenix's own, installed from the catalog, not pre-installed (preinstalled.json \"catalog\"); the catalog's own entry (catalog/accounts.json) is the one listed, this one is checked when the package is uploaded.",
+    "accountTypes": [
+        {
+            "templateId": "com.webosphoenix.todoist",
+            "title": "Todoist",
+            "provider": "Todoist",
+            "summary": "Your Todoist projects and tasks in Tasks, kept in step both ways, and Add to Todoist in the share sheet. Sign in with your API token from Todoist's settings, or on Todoist's own page.",
+            "capabilities": [
+                { "capability": "TASKS", "direction": "two-way" }
+            ],
+            "protocols": ["todoist-api-v1"],
+            "auth": { "type": "api-key", "registration": "none" },
+            "server": "fixed",
+            "privacy": { "dataGoesTo": "Todoist", "e2ee": false, "phoenixServers": "none" },
+            "push": "poll",
+            "status": "experimental"
+        }
+    ]
+}

@@ -82,6 +82,8 @@ export interface ConformanceFixture {
      * more of the validator's parameters (a finished session's key).
      */
     beforeValidate?(methods: ServiceMethods, server: FakeServer): Promise<Json>;
+    /** The image's settings the connector reads (/etc/palm/<name>: a provider's registration, pointing at the fake server). */
+    systemConfig?(name: string): Json | null;
 }
 
 export interface ConformanceResult { name: string; ok: boolean; error?: string }
@@ -138,7 +140,8 @@ async function setup(def: ConnectorDefinition, fx: ConformanceFixture, periodic:
             const f = fx.files && fx.files[path];
             if (!f) throw new Error("no file " + path + " in the fixture's files");
             return f;
-        }
+        },
+        systemConfig: async (name: string) => (fx.systemConfig ? fx.systemConfig(name) : null)
     }));
     return { methods, db, tempdb, bus, server, accountId: ACCOUNT, clock, providers, files };
 }

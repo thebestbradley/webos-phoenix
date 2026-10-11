@@ -1351,6 +1351,62 @@
                 { "art": "xmpp-32x32.png", "method": "downscale", "source": "apps/messaging/public/icon-256x256.png" },
                 { "art": "xmpp-48x48.png", "method": "downscale", "source": "apps/messaging/public/icon-256x256.png" }
             ]
+        },
+        {
+            "name": "connector-todoist",
+            "art": "apps/connectors/todoist/public/accounts/com.webosphoenix.todoist/images",
+            "upscale": [
+                { "art": "todoist-32x32.png", "method": "downscale", "source": "apps/connectors/todoist/icon-512x512.png" },
+                { "art": "todoist-48x48.png", "method": "downscale", "source": "apps/connectors/todoist/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "connector-bluesky",
+            "art": "apps/connectors/bluesky/public/accounts/com.webosphoenix.bluesky/images",
+            "upscale": [
+                { "art": "bluesky-32x32.png", "method": "downscale", "source": "apps/connectors/bluesky/icon-512x512.png" },
+                { "art": "bluesky-48x48.png", "method": "downscale", "source": "apps/connectors/bluesky/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "connector-microsoft",
+            "art": "apps/connectors/microsoft/public/accounts/com.webosphoenix.microsoft/images",
+            "upscale": [
+                { "art": "microsoft-32x32.png", "method": "downscale", "source": "apps/connectors/microsoft/icon-512x512.png" },
+                { "art": "microsoft-48x48.png", "method": "downscale", "source": "apps/connectors/microsoft/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "connector-google",
+            "art": "apps/connectors/google/public/accounts/com.webosphoenix.google/images",
+            "upscale": [
+                { "art": "google-32x32.png", "method": "downscale", "source": "apps/connectors/google/icon-512x512.png" },
+                { "art": "google-48x48.png", "method": "downscale", "source": "apps/connectors/google/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "connector-zoom",
+            "art": "apps/connectors/zoom/public/accounts/com.webosphoenix.zoom/images",
+            "upscale": [
+                { "art": "zoom-32x32.png", "method": "downscale", "source": "apps/connectors/zoom/icon-512x512.png" },
+                { "art": "zoom-48x48.png", "method": "downscale", "source": "apps/connectors/zoom/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "connector-linkedin",
+            "art": "apps/connectors/linkedin/public/accounts/com.webosphoenix.linkedin/images",
+            "upscale": [
+                { "art": "linkedin-32x32.png", "method": "downscale", "source": "apps/connectors/linkedin/icon-512x512.png" },
+                { "art": "linkedin-48x48.png", "method": "downscale", "source": "apps/connectors/linkedin/icon-512x512.png" }
+            ]
+        },
+        {
+            "name": "connector-slack",
+            "art": "apps/connectors/slack/public/accounts/com.webosphoenix.slack/images",
+            "upscale": [
+                { "art": "slack-32x32.png", "method": "downscale", "source": "apps/connectors/slack/icon-512x512.png" },
+                { "art": "slack-48x48.png", "method": "downscale", "source": "apps/connectors/slack/icon-512x512.png" }
+            ]
         }
     ]
 }

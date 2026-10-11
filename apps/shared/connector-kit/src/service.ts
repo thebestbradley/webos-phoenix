@@ -64,6 +64,21 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
     const bus = synckit.createLuna(env.luna);
     const scheduler = synckit.createScheduler({ call: bus.call, service: def.service, log });
     const serialize = synckit.createSerializer();
+    // What reads and writes an account's state (its sync, its methods, a
+    // share) runs one at a time per account, in turn: each loads the state,
+    // changes it and saves the whole record, so two at once lost the
+    // first's change (a method's import, written over by a sync that had
+    // loaded the state before it). A method must not wait for its own
+    // account's sync (it would wait behind itself): it asks for one and
+    // goes on.
+    const turns: Record<string, Promise<unknown>> = {};
+    function inTurn<T>(accountId: string, fn: () => Promise<T>): Promise<T> {
+        const run = (turns[accountId] || Promise.resolve()).then(fn);
+        const settled = run.then(() => undefined, () => undefined);
+        turns[accountId] = settled;
+        settled.then(() => { if (turns[accountId] === settled) delete turns[accountId]; });
+        return run;
+    }
     const providerIds = Object.keys(def.capabilities);
 
     const oauth = {
@@ -322,8 +337,14 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
     async function removeCapability(ctx: AccountContext, providerId: string): Promise<void> {
         const cap = def.capabilities[providerId];
         let removed: string[] = [];
-        if (cap.remove) await cap.remove(ctx);
-        else removed = await removeObjects(ctx, providerId, cap, items(ctx.accountId));
+        if (cap.remove) {
+            await cap.remove(ctx);
+            // Its item records go too: left behind, a capability turned on again
+            // would take its objects for deleted on the device and delete them
+            // on the server.
+            const store = cap.pull ? items(ctx.accountId) : null;
+            if (store) await store.removeAll(providerId);
+        } else removed = await removeObjects(ctx, providerId, cap, items(ctx.accountId));
         if (cap.capability === "CONTACTS" && cap.linkPersons !== false && env.linkPersons !== false && removed.length)
             await synckit.linker.updatePersons(bus.db, [], removed);
         if (cap.pull) {
@@ -503,7 +524,7 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
 
         sync: (p: Json) => {
             if (!p || !p.accountId) return Promise.resolve({ returnValue: false, errorCode: "400_BAD_REQUEST", errorText: "accountId is required" });
-            return serialize(p.accountId, () => syncAccount(p).catch((e) => synckit.fail(e) as Reply)).then((reply) => {
+            return serialize(p.accountId, () => inTurn(p.accountId, () => syncAccount(p)).catch((e) => synckit.fail(e) as Reply)).then((reply) => {
                 // A periodic activity is told the run is over (legacy activity manager "complete").
                 scheduler.complete(p.$activity);
                 return reply;
@@ -536,9 +557,8 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
     if (def.share) {
         const share = def.share;
         const templateIds = share.templateId ? [share.templateId] : def.templateIds;
-        methods.share = async (p: Json) => {
+        const shareNow = async (p: Json): Promise<Reply> => {
             try {
-                if (!p || !p.accountId) return { returnValue: false, errorCode: "400_BAD_REQUEST", errorText: "accountId is required" };
                 const checked = checkShare(share, p);
                 const { ctx, rec } = await accountContext(p.accountId);
                 if (!ctx.account || templateIds.indexOf(ctx.account.templateId) < 0 || ctx.account.beingDeleted)
@@ -581,6 +601,11 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
                 return r;
             }
         };
+        // In the account's turn (a post may change its state: a refreshed session).
+        methods.share = (p: Json) => {
+            if (!p || !p.accountId) return Promise.resolve({ returnValue: false, errorCode: "400_BAD_REQUEST", errorText: "accountId is required" });
+            return inTurn(String(p.accountId), () => shareNow(p));
+        };
     }
 
     // Drives (the DOCUMENTS capability): files.ts.
@@ -609,7 +634,7 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
 
     Object.keys(def.methods || {}).forEach((name) => {
         const fn = (def.methods as NonNullable<ConnectorDefinition["methods"]>)[name];
-        methods[name] = async (p: Json) => {
+        const call = async (p: Json): Promise<Reply> => {
             try {
                 let ctx: MethodContext;
                 let rec: StateRecord | null = null;
@@ -629,6 +654,8 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
                 return synckit.fail(e) as Reply;
             }
         };
+        // An account's method in the account's turn (its state), one without an account at once.
+        methods[name] = (p: Json) => (p && p.accountId ? inTurn(String(p.accountId), () => call(p)) : call(p));
     });
 
     return methods;

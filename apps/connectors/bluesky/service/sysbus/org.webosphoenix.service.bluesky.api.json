@@ -1,0 +1,16 @@
+{
+    "accounts.transport": [
+        "org.webosphoenix.service.bluesky/checkCredentials",
+        "org.webosphoenix.service.bluesky/onCreate",
+        "org.webosphoenix.service.bluesky/onEnabled",
+        "org.webosphoenix.service.bluesky/onCredentialsChanged",
+        "org.webosphoenix.service.bluesky/onDelete",
+        "org.webosphoenix.service.bluesky/sync",
+        "org.webosphoenix.service.bluesky/outbox"
+    ],
+    "bluesky.account": [
+        "org.webosphoenix.service.bluesky/providerInfo",
+        "org.webosphoenix.service.bluesky/signIn",
+        "org.webosphoenix.service.bluesky/share"
+    ]
+}

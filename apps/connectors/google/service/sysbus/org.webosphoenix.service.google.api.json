@@ -1,0 +1,14 @@
+{
+    "accounts.transport": [
+        "org.webosphoenix.service.google/checkCredentials",
+        "org.webosphoenix.service.google/onCreate",
+        "org.webosphoenix.service.google/onEnabled",
+        "org.webosphoenix.service.google/onCredentialsChanged",
+        "org.webosphoenix.service.google/onDelete",
+        "org.webosphoenix.service.google/sync"
+    ],
+    "google.account": [
+        "org.webosphoenix.service.google/providerInfo",
+        "org.webosphoenix.service.google/signIn"
+    ]
+}

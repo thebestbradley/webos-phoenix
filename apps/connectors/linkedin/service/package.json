@@ -1,0 +1,11 @@
+{
+    "name": "org.webosphoenix.service.linkedin",
+    "version": "0.1.0",
+    "private": true,
+    "description": "webOS Phoenix's LinkedIn account (Synergy connector on @phoenix/connector-kit): Sign In with LinkedIn, Share on LinkedIn from the share sheet, and your connections from LinkedIn's own data export in Contacts",
+    "license": "Apache-2.0",
+    "main": "service.js",
+    "dependencies": {
+        "@phoenix/connector-kit": "*"
+    }
+}

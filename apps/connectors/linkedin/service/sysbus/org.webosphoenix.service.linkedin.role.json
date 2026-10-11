@@ -1,0 +1,21 @@
+{
+    "appId": "org.webosphoenix.service.linkedin",
+    "type": "regular",
+    "trustLevel": "oem",
+    "allowedNames": [
+        "org.webosphoenix.service.linkedin"
+    ],
+    "permissions": [
+        {
+            "service": "org.webosphoenix.service.linkedin",
+            "outbound": [
+                "org.webosphoenix.service.linkedin",
+                "com.palm.db",
+                "com.palm.tempdb",
+                "com.palm.activitymanager",
+                "com.palm.service.accounts",
+                "org.webosphoenix.service.oauth"
+            ]
+        }
+    ]
+}
