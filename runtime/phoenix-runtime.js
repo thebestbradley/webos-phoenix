@@ -3684,6 +3684,21 @@
             reply(ok());
         },
         "/getNowPlaying": function (p, reply) { reply(ok({ nowPlaying: store.get("media:nowPlaying", null) })); },
+        // emergencyCall {number, countdown} | {cancel: true}: the Assistant's
+        // "call 911" (its lib/commands-sos.js): the shell opens Phone's
+        // emergency window over everything, the lock screen included
+        // (Shell openEmergency), which counts down with Cancel, then calls;
+        // {cancel} closes it while it still counts. The Assistant and the
+        // system UI only (services/shellhost the same on a device).
+        "/emergencyCall": function (p, reply, ctx) {
+            var who = (ctx && ctx.caller) || PalmSystem.appIdentifier;
+            if (["org.webosphoenix.assistant", "com.palm.systemui"].indexOf(who) < 0) return reply(fail(-1, "Not allowed"));
+            if (p.cancel === true) { host.postToHost("emergencyCall", { cancel: true }); return reply(ok()); }
+            var n = String(p.number || "").replace(/[^0-9]/g, "");
+            if (!/^\d{2,6}$/.test(n)) return reply(fail(-1, "number: an emergency number"));
+            host.postToHost("emergencyCall", { number: n, countdown: Math.max(0, Math.min(10, Math.round(Number(p.countdown) || 0))) });
+            reply(ok());
+        },
         // The notification list, as the shell last said it (NotificationFeed.qml
         // through systemStatus {notifications}): getNotifications -> {notifications:
         // [{id, appId, app, title, body, time, ongoing}] newest first, locked,

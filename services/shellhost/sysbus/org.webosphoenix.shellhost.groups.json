@@ -24,5 +24,8 @@
     ],
     "phoenix.system.notifications.read": [
         "oem"
+    ],
+    "phoenix.system.emergency": [
+        "oem"
     ]
 }

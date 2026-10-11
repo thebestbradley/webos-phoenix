@@ -24,5 +24,8 @@
     ],
     "phoenix.system.notifications.read": [
         "org.webosphoenix.system/getNotifications"
+    ],
+    "phoenix.system.emergency": [
+        "org.webosphoenix.system/emergencyCall"
     ]
 }

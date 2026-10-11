@@ -1635,6 +1635,32 @@ first: it shows what messages say to whoever holds the phone. Phoenix has
 no dark mode (webOS's look had none; 2.0's design brings light and dark):
 "turn on dark mode" says so and offers high contrast (OPEN-QUESTIONS.md).
 
+**Emergency calls** (`emergency`, `emergencyCancel`, `emergencyText`;
+`lib/commands-sos.js`). "Call 911", "call 112", "emergency", "SOS", "call
+an ambulance": never behind a read-back. The Assistant asks the shell
+(`org.webosphoenix.system emergencyCall {number, countdown}`, the runtime's
+and `services/shellhost`'s, for the Assistant and the system UI only) to
+open Phone's emergency window, the one the PIN pad's Emergency Call opens
+(`Shell.openEmergency`, over everything, the lock screen included), with
+the number and a five-second countdown: "Calling 911 in" and the seconds,
+Cancel and Call Now (`apps/phone` views/Emergency.tsx, emergency numbers
+only), then the call. The Assistant says "Calling 911 in 5 seconds. Call
+now, or cancel?" and its view makes way; while it counts, "cancel",
+"stop", "no", "wait, no, stop" (any few words with a stop in them) cancel
+it, before the undo command's "cancel" (the area's `first` rules, with
+`sos` in the grammar's context), and "call now" calls at once; after it,
+"cancel" says the call has started (hung up in Phone; the shell never
+closes the window under a call). With no number said, the region's
+(911 in the US, 999 in the UK, 112 elsewhere: the locale), and any number
+said must be an emergency one. With emergency contacts (Settings >
+Emergency Info), the answer offers Text My Location to them: "text my
+location to my emergency contacts" reads back "Text Mom and Sam: “I've
+called 911. I'm here: <map link>”?" and sends a text to each. Checked in
+the simulator, over the lock screen too (`--scene
+'assistant:@lock|call 911'`: the countdown, then the simulated call); the
+tests never place a call (the simulator's telephony, and a test device
+that records).
+
 ### The Assistant and Synergy (11 October 2026)
 
 The owner: "anything connected through the Synergy system should be

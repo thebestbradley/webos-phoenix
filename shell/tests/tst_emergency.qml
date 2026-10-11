@@ -123,6 +123,28 @@ Item {
             verify(!shell.emergencyShown);
         }
 
+        // The Assistant's "call 911" (org.webosphoenix.system/emergencyCall):
+        // Phone's emergency window with {number, countdown}, over the lock
+        // screen; its "cancel" closes it while it counts, never after.
+        function test_assistantEmergencyCallAndItsCancel() {
+            windows.emergencyCallRequested({ number: "911", countdown: 5 });
+            verify(shell.emergencyShown);
+            compare(windows.systemWindows.count, 1);
+            compare(windows.systemWindows.get(0).kind, "emergency");
+            windows.emergencyCallRequested({ cancel: true });
+            verify(!shell.emergencyShown, "cancelled while it counts");
+            // Called at once (countdown 0): the call is Phone's, "cancel" leaves it.
+            windows.emergencyCallRequested({ number: "911", countdown: 0 });
+            verify(shell.emergencyShown);
+            windows.emergencyCallRequested({ cancel: true });
+            verify(shell.emergencyShown, "not closed under the call");
+            // A second one replaces the first (the PIN pad's one too).
+            var first = findChild(shell, "emergencyWindow").windowKey;
+            windows.emergencyCallRequested({ number: "112", countdown: 5 });
+            verify(findChild(shell, "emergencyWindow").windowKey !== first);
+            compare(windows.systemWindows.count, 1);
+        }
+
         function test_noEmergencyCallWithoutASource() {
             var lock = shell.lockScreen;
             verify(lock.emergencyAvailable);

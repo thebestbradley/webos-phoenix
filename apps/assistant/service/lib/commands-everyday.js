@@ -5,6 +5,7 @@
 // "Everyday features"), each area in a file of its own, registered here
 // with lib/commands.js's helpers (require("./commands-everyday")(h)):
 //
+//   commands-sos.js        emergency calls (a countdown, never a read-back), texting the emergency contacts
 //   commands-notify.js     what did I miss, announcing messages, driving mode
 //   commands-routines.js   routines: steps run on a phrase, a time, the charger or the car
 //   commands-capture.js    photos, selfies, videos and voice memos, and stopping them
@@ -21,7 +22,7 @@
 
 "use strict";
 
-var AREAS = [require("./commands-notify"), require("./commands-routines"), require("./commands-capture"), require("./commands-places"),
+var AREAS = [require("./commands-sos"), require("./commands-notify"), require("./commands-routines"), require("./commands-capture"), require("./commands-places"),
              require("./commands-music"), require("./commands-facts"), require("./commands-settings")];
 
 module.exports = function (h) {
@@ -44,10 +45,11 @@ module.exports = function (h) {
             return a ? a.run(cmd, args, env) : null;
         },
         // What the grammar needs from the device for these (lib/grammar.js
-        // parse ctx): {routines: the phrases of the routines that are on}.
+        // parse ctx): {routines: the phrases of the routines that are on; sos:
+        // an emergency call counting down}.
         parseContext: function (env) {
             var out = {};
-            areas.forEach(function (a) { if (a.phrases) out.routines = a.phrases(env); });
+            areas.forEach(function (a) { if (a.phrases) out.routines = a.phrases(env); if (a.context) Object.assign(out, a.context(env)); });
             return out;
         },
         // Home, work or a saved place by name (lib/commands-places.js): {name, detail, lat, lon} | null.

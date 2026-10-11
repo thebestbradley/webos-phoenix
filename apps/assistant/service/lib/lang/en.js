@@ -3030,6 +3030,7 @@ var everyday = require("./en-everyday")({ D: D, extract: extract, resolve: resol
                                           whenText: whenText, durationText: durationText, clean: clean, toggleTarget: toggleTarget });
 Array.prototype.splice.apply(rules, [2, 0].concat(everyday.rules));
 Array.prototype.splice.apply(rules, [rules.length - 1, 0].concat(everyday.late));
+Array.prototype.splice.apply(rules, [0, 0].concat(everyday.first));
 Object.keys(everyday.say).forEach(function (k) { if (!(k in say)) say[k] = everyday.say[k]; });
 Object.keys(everyday.MENTIONS).forEach(function (k) { if (!(k in MENTIONS)) MENTIONS[k] = everyday.MENTIONS[k]; });
 var describeCommand = say.describe;

@@ -954,6 +954,9 @@ Item {
             shutdownRequested(payload.reason ? String(payload.reason) : "");
         } else if (type === "restartUi") {
             restartUiRequested();
+        } else if (type === "emergencyCall") {
+            // The Assistant's "call 911" (org.webosphoenix.system/emergencyCall): Shell.openEmergency.
+            emergencyCallRequested(payload || {});
         } else if (type === "mediaKey") {
             mediaKeyRequested(String(payload.key || ""));
         } else if (type === "takeScreenshot") {
@@ -1036,6 +1039,8 @@ Item {
     // A media key pressed by a service (org.webosphoenix.system/mediaKey),
     // and a screen capture asked for (com.palm.systemmanager/takeScreenShot).
     signal mediaKeyRequested(string key)
+    // The Assistant's "call 911": {number, countdown} or {cancel: true} (org.webosphoenix.system/emergencyCall).
+    signal emergencyCallRequested(var params)
     signal screenshotRequested
     // A page asked the simulator for something it does on this computer
     // ("simulator" host messages: {op: "startMarketplaceCatalog"}).

@@ -125,6 +125,9 @@
 {"id":"h-c-fact-4","cat":"facts","say":"give me today's headlines","expect":{"command":"news","status":["done","failed"]}},
 {"id":"h-c-set-1","cat":"settings","say":"switch off the system sounds","expect":{"command":"deviceSetting","args":{"setting":"systemSounds","state":"off"}}},
 {"id":"h-c-set-2","cat":"settings","say":"make the phone use a dark theme","expect":{"command":"deviceSetting","args":{"setting":"darkMode"}}},
-{"id":"h-c-set-3","cat":"settings","say":"turn captions on for videos","expect":{"command":"deviceSetting","args":{"setting":"captions","state":"on"}}}
+{"id":"h-c-set-3","cat":"settings","say":"turn captions on for videos","expect":{"command":"deviceSetting","args":{"setting":"captions","state":"on"}}},
+{"id":"h-c-sos-1","cat":"emergency","say":"dial 999 now","expect":{"command":"emergency","args":{"number":"999"}}},
+{"id":"h-c-sos-2","cat":"emergency","say":"get the paramedics","expect":{"command":"emergency"}},
+{"id":"h-c-sos-3","cat":"emergency","turns":[{"say":"call 911","expect":{"command":"emergency"}},{"say":"wait no stop","expect":{"command":"emergencyCancel"}}]}
 ]
 }

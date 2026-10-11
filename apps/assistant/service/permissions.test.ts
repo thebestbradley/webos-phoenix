@@ -57,6 +57,7 @@ const GROUPS: [RegExp, string][] = [
     [/^org\.webosphoenix\.service\.location\//, "phoenix.location.permissions"],
     [/^org\.webosphoenix\.system\/(?:mediaKey|getNowPlaying)$/, "phoenix.system.media"],
     [/^org\.webosphoenix\.system\/getNotifications$/, "phoenix.system.notifications.read"],               // services/shellhost
+    [/^org\.webosphoenix\.system\/emergencyCall$/, "phoenix.system.emergency"],                          // services/shellhost
     [/^com\.webos\.service\.wifi\//, "wifi.management"],
     [/^com\.webos\.service\.connectionmanager\//, "networkconnection"],
     [/^org\.webosports\.service\.torch\//, "torch.operation"],
@@ -111,7 +112,8 @@ function device() {
     const used: [string, string, string][] = [];
     // eslint-disable-next-line prefer-const
     let dev: { allowed: boolean | null; lose: string } = { allowed: true, lose: "" };
-    const prefs: Record<string, unknown> = {};
+    // (An emergency contact: lib/commands-sos.js texts them.)
+    const prefs: Record<string, unknown> = { emergencyInfo: { contacts: [{ name: "Mom", number: "5550101" }] } };
     const kindOf = (o: any) => o && (o._kind || db.get(o._id)?._kind);
     const ok = (o: object = {}) => Promise.resolve({ returnValue: true, ...o });
     const luna = {

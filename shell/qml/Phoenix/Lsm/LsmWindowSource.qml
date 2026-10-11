@@ -581,6 +581,8 @@ Item {
     signal sceneTransitionRequested(string uid, string op, string transition, bool isPop)
     signal screenshotRequested
     signal mediaKeyRequested(string key)
+    // The Assistant's "call 911": {number, countdown} or {cancel: true} (org.webosphoenix.system/emergencyCall).
+    signal emergencyCallRequested(var params)
     signal progressAnimationRequested(string type, string state)
     signal debugOverlayRequested(var request)
     property var activeCallBanner: null
@@ -716,6 +718,9 @@ Item {
             _assistantRequest(appId, payload);
         } else if (type === "takeScreenshot") {
             screenshotRequested();
+        } else if (type === "emergencyCall") {
+            // The Assistant's "call 911" (org.webosphoenix.system/emergencyCall): Shell.openEmergency.
+            emergencyCallRequested(payload || {});
         } else if (type === "mediaKey") {
             // The Assistant's "pause" (org.webosphoenix.system/mediaKey):
             // pressed as the hardware key, phoenix-devices' /media events.

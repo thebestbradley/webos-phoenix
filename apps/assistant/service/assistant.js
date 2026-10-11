@@ -360,7 +360,9 @@ function createAssistantService(deps) {
     function allowed(cmd) { return settings().disabledCommands.indexOf(cmd.id) < 0; }
     function env() {
         return { luna: deps.luna, request: deps.request, now: now, lang: lang(), units: units(), storage: storage,
-                 apps: apps, settings: settings(), setSettings: function (c) { return methods.setSettings(c); } };
+                 apps: apps, settings: settings(), setSettings: function (c) { return methods.setSettings(c); },
+                 // The region (the emergency number: lib/commands-sos.js).
+                 locale: deps.locale ? deps.locale() : "" };
     }
     var followUps = followups.create({ storage: storage, now: now, env: env, settings: settings, log: log, changed: changed,
                                        notify: deps.notify || function () {},

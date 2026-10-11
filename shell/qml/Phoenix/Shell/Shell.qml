@@ -917,12 +917,31 @@ FocusScope {
     readonly property bool emergencyShown: emergencyWindow.windowKey !== ""
     readonly property bool emergencyAvailable: !!source && typeof source.openSystemWindow === "function"
 
-    function openEmergency() {
+    // extra: the Assistant's "call 911" ({number, countdown}: Phone counts
+    // down with Cancel, then calls; apps/phone views/Emergency.tsx), which
+    // replaces a window already open.
+    property double _emergencyCountdownEnds: 0
+    function openEmergency(extra) {
+        if (emergencyShown && extra)
+            closeEmergency();
         if (emergencyShown || !emergencyAvailable)
             return emergencyShown;
-        var key = source.openSystemWindow(emergencyAppId, { emergency: true }, "emergency");
+        var params = { emergency: true };
+        if (extra && extra.number) {
+            params.number = String(extra.number);
+            params.countdown = Number(extra.countdown) || 0;
+        }
+        _emergencyCountdownEnds = params.countdown ? Date.now() + params.countdown * 1000 : 0;
+        var key = source.openSystemWindow(emergencyAppId, params, "emergency");
         emergencyWindow.windowKey = key || "";
         return emergencyShown;
+    }
+    // The Assistant's "cancel" while it still counts down: closed, no call.
+    // After that the call is Phone's (hung up there), never closed under it.
+    function cancelEmergencyCountdown() {
+        if (emergencyShown && Date.now() < _emergencyCountdownEnds)
+            closeEmergency();
+        _emergencyCountdownEnds = 0;
     }
     // The Home button closes it (EmergencyWindowManager::slotHomeButtonPressed).
     function closeEmergency() {
@@ -949,6 +968,13 @@ FocusScope {
                 return;
             emergencyWindow.windowKey = "";
             shell._emergencyClosed();
+        }
+        // The Assistant's "call 911" ({number, countdown}) or its "cancel" ({cancel: true}).
+        function onEmergencyCallRequested(params) {
+            if (params && params.cancel)
+                shell.cancelEmergencyCountdown();
+            else if (params && params.number)
+                shell.openEmergency(params);
         }
     }
 

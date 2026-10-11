@@ -42,4 +42,5 @@ module.exports = {
     define: "define ephemeral", spell: "how do you spell rhythm", coin: "flip a coin", dice: "roll two dice", randomNumber: "pick a random number between 1 and 10",
     wikipedia: "look up Ada Lovelace on Wikipedia", news: "what's the news",
     deviceSetting: "turn off keyboard clicks",
+    emergency: "call 911", emergencyCancel: "cancel the emergency call", emergencyText: "text my location to my emergency contacts",
 };

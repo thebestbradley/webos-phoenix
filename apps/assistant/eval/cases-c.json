@@ -148,6 +148,19 @@
   { "id": "c-set-07", "cat": "settings", "say": "turn off the notification light", "expect": { "command": "deviceSetting", "args": { "setting": "blink", "state": "off" } } },
   { "id": "c-set-08", "cat": "settings", "say": "stop listening for hey phoenix", "expect": { "command": "deviceSetting", "args": { "setting": "wakeWord", "state": "off" } } },
   { "id": "c-set-09", "cat": "settings", "say": "turn on wifi", "expect": { "command": "toggle", "args": { "setting": "wifi" } }, "forbid": ["deviceSetting"] },
-  { "id": "c-set-10", "cat": "settings", "say": "is high contrast on", "expect": { "command": "deviceSetting", "args": { "setting": "highContrast", "state": "status" } }, "text": "^No" }
+  { "id": "c-set-10", "cat": "settings", "say": "is high contrast on", "expect": { "command": "deviceSetting", "args": { "setting": "highContrast", "state": "status" } }, "text": "^No" },
+  { "id": "c-sos-01", "cat": "emergency", "say": "call 911", "expect": { "command": "emergency", "status": "done", "args": { "number": "911" } }, "text": "Calling 911 in 5 seconds" },
+  { "id": "c-sos-02", "cat": "emergency", "say": "emergency", "expect": { "command": "emergency", "status": "done" }, "text": "Calling 911" },
+  { "id": "c-sos-03", "cat": "emergency", "turns": [
+    { "say": "call an ambulance", "expect": { "command": "emergency", "status": "done" } },
+    { "say": "cancel", "expect": { "command": "emergencyCancel" }, "text": "didn't call 911" } ] },
+  { "id": "c-sos-04", "cat": "emergency", "voice": true, "turns": [
+    { "say": "call 112", "expect": { "command": "emergency", "args": { "number": "112" } } },
+    { "say": "no", "expect": { "command": "emergencyCancel" }, "text": "didn't call 112" } ] },
+  { "id": "c-sos-05", "cat": "emergency", "say": "call mom", "expect": { "command": "call", "status": "pending" }, "forbid": ["emergency"] },
+  { "id": "c-sos-06", "cat": "emergency", "say": "text my location to my emergency contacts",
+    "deviceState": { "prefs": { "rotationLock": false, "emergencyInfo": { "contacts": [ { "name": "Mom", "number": "(303) 555-0101" } ] } } },
+    "expect": { "command": "emergencyText", "status": "pending" }, "text": "^Text Mom: .I need help\\. I'm here: https://www\\.openstreetmap\\.org" },
+  { "id": "c-sos-07", "cat": "emergency", "say": "don't call 911", "forbid": ["emergency"], "expect": { "command": "emergencyCancel" } }
  ]
 }

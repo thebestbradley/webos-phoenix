@@ -100,7 +100,9 @@ function parse(text, ctx) {
     var c = { now: ctx.now || Date.now(), original: String(ctx.original || text), apps: ctx.apps || [], names: ctx.names || [], appCommands: ctx.appCommands || [],
               accounts: ctx.accounts || [],
               // The user's routines that are on, [{id, name, phrases}] (lib/commands-routines.js).
-              routines: ctx.routines || [] };
+              routines: ctx.routines || [],
+              // An emergency call counting down (lib/commands-sos.js): "cancel" stops it.
+              sos: !!ctx.sos };
     var found = attempt(lang, t, c, 0);
     if (found || !lang.normalize) return found;
     var fixed = lang.normalize(t, c.names);
