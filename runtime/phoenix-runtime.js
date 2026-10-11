@@ -8539,17 +8539,27 @@
         // page was still loading ("If the headless app is still loading,
         // buffer this until our progress is complete": webappmanager
         // Src/webbase/SysMgrWebBridge.cpp:133-139): the page loaded and its
-        // launch params read (PalmSystem.launchParams above), and a moment
-        // more (RELAUNCH_SETTLE_MS) for the handler that read them to set up
-        // its relaunch listener (React's useEffect comes after the render
-        // that read them). A page that never reads them gets it at most
-        // RELAUNCH_HOLD_MS after loading (RELAUNCH_MAX_HOLD_MS after it
-        // started, loaded or not). Otherwise the relaunch rewrote the
-        // launch params before the app had read its own: Clock launched while
-        // one of its alarms was due opened only the alarm, not its card.
-        // Held ones go in order; later ones go at once.
+        // launch params read (PalmSystem.launchParams above), and its
+        // relaunch listener set up: a "webOSRelaunch" listener added since
+        // (@phoenix/sdk's onLaunch, React's useEffect after the render that
+        // read them), else a moment more (RELAUNCH_SETTLE_MS: Mojo.relaunch's
+        // apps, such as the original Clock, which reads its params as it
+        // starts and acts on them once its prefs are read). A page that
+        // never reads them gets it at most RELAUNCH_HOLD_MS after loading
+        // (RELAUNCH_MAX_HOLD_MS after it started, loaded or not). Otherwise
+        // the relaunch rewrote the launch params before the app had read its
+        // own: Clock launched while one of its alarms was due opened only the
+        // alarm, not its card. Held ones go in order; later ones go at once.
         var RELAUNCH_SETTLE_MS = 200, RELAUNCH_HOLD_MS = 5000, RELAUNCH_MAX_HOLD_MS = 15000;
         var pageStartedAt = Date.now(), pageLoadedAt = 0, heldRelaunches = [], holdTimer = null;
+        var relaunchListenerAt = 0;
+        if (global.document && typeof global.document.addEventListener === "function") {
+            var addListener = global.document.addEventListener;
+            global.document.addEventListener = function (type) {
+                if (type === "webOSRelaunch") relaunchListenerAt = Date.now();
+                return addListener.apply(this, arguments);
+            };
+        }
         if (global.document && global.document.readyState === "complete") pageLoadedAt = Date.now();
         else if (global.addEventListener) global.addEventListener("load", function () { pageLoadedAt = Date.now(); });
         function ownLaunchTaken() {
@@ -8559,7 +8569,8 @@
             if (now - pageStartedAt >= RELAUNCH_MAX_HOLD_MS) return true;
             if (doc && doc.readyState !== "complete") return false;
             if (!pageLoadedAt) pageLoadedAt = now;     // complete, its load event still to come
-            return (launchParamsReadAt && now - launchParamsReadAt >= RELAUNCH_SETTLE_MS) || now - pageLoadedAt >= RELAUNCH_HOLD_MS;
+            if (launchParamsReadAt && (relaunchListenerAt >= launchParamsReadAt || now - launchParamsReadAt >= RELAUNCH_SETTLE_MS)) return true;
+            return now - pageLoadedAt >= RELAUNCH_HOLD_MS;
         }
         runtime.afterOwnLaunch = function (fn) {
             if (!heldRelaunches.length && ownLaunchTaken()) {
