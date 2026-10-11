@@ -165,7 +165,7 @@ var BUILT_IN = [
       parameters: { type: "object", properties: { text: S, list: { type: "string", description: "The list's name; empty for the default" }, due: WHEN }, required: ["text"] } },
     { id: "note", title: "Memos", risk: "change", description: "Save a memo in Memos.", parameters: { type: "object", properties: { text: S }, required: ["text"] } },
     { id: "findNotes", title: "Finding memos", risk: "read", description: "Find memos by their words.", parameters: { type: "object", properties: { query: S } } },
-    { id: "contactAdd", title: "Adding contacts", risk: "change", description: "Add a contact with a phone number and/or email address.",
+    { id: "contactAdd", title: "Adding contacts", risk: "change", description: "Add a contact, or add a phone number or email address to one.",
       parameters: { type: "object", properties: { name: S, number: S, email: S, label: { type: "string", enum: ["", "mobile", "home", "work"] } }, required: ["name"] } },
     { id: "contactInfo", title: "Contact details", risk: "read", description: "Tell a contact's phone number, email, address or birthday.",
       parameters: { type: "object", properties: { who: S, what: { type: "string", enum: ["phone", "email", "address", "birthday"] }, label: S }, required: ["who"] } },
@@ -239,8 +239,9 @@ var BUILT_IN = [
         "notifications", "systemmenu", "unlock", "passcode", "location", "screenshot", "assistant"] } } } },
     { id: "findFiles", title: "Finding files", risk: "read", description: "Find files and folders on the device by their names.",
       parameters: { type: "object", properties: { query: { type: "string", description: "Words of the file's name" }, kind: { type: "string", enum: ["", "pdf"] } }, required: ["query"] } },
-    { id: "readEmail", title: "Reading email", risk: "read", description: "Read the latest email, or the latest from someone.",
-      parameters: { type: "object", properties: { who: { type: "string", description: "Who it is from; empty for anyone" } } } },
+    { id: "readEmail", title: "Reading email", risk: "read", description: "Read the latest email, or the latest from someone, or the last few.",
+      parameters: { type: "object", properties: { who: { type: "string", description: "Who it is from; empty for anyone" },
+                                                  count: { type: "integer", minimum: 1, maximum: 10, description: "How many of the latest; 1 unless asked for more" } } } },
     { id: "emailReply", title: "Replying to email", risk: "send", description: "Reply to the latest email (from someone): sent after a read-back, or a reply opened to write.",
       parameters: { type: "object", properties: { who: S, body: { type: "string", description: "The words; empty to write them in Email" } } } },
     { id: "travelTime", title: "Travel time", risk: "read", description: "Tell how long it takes to drive, walk or cycle to a place from here (no live traffic).",
@@ -250,7 +251,16 @@ var BUILT_IN = [
     { id: "locationAccess", title: "Location", risk: "change", internal: true, description: "Let the Assistant use the device's location, or not.",
       parameters: { type: "object", properties: { allow: B }, required: ["allow"] } },
     { id: "undo", title: "Undo", risk: "delete", internal: true, description: "Take back what the assistant just did.",
-      parameters: { type: "object", properties: {} } }
+      parameters: { type: "object", properties: {} } },
+    // Small talk the grammar answers ("hello", "thanks", "are you there?").
+    { id: "chat", title: "Small talk", risk: "read", internal: true, description: "Answer a greeting, thanks or small talk.",
+      parameters: { type: "object", properties: { kind: S } } },
+    // "Is wifi on?": how a switch is, read from its service.
+    { id: "settingStatus", title: "Checking switches", risk: "read", description: "Tell whether a device setting (Wi-Fi, Bluetooth, airplane mode, the flashlight, Location Services, rotation lock, Do Not Disturb) is on.",
+      parameters: { type: "object", properties: { setting: { type: "string", enum: ["wifi", "bluetooth", "airplane", "flashlight", "ringer", "dnd", "location", "rotationLock"] } }, required: ["setting"] } },
+    // "Did you add the number?": what was done, read back from the device (assistant.js checkDone).
+    { id: "checkDone", title: "Checking what was done", risk: "read", internal: true, description: "Say whether the last thing asked for was done.",
+      parameters: { type: "object", properties: { field: S } } }
 ];
 // One thing about one item, and the item a conversation is about (lib/details.js).
 var details = require("./details")({ D: D, lunaCall: lunaCall, dbFind: dbFind, findEvent: findEvent, matches: matches, words: words,
@@ -361,6 +371,50 @@ function namedIn(items, nameOf, said) {
     return names.length > 1 ? { ambiguous: names } : { hit: top[0].x };
 }
 function digitsOnly(s) { return String(s || "").replace(/\D/g, ""); }
+// A number as people write it: (864) 252-6990 for ten digits, else as said.
+function phoneShown(n) {
+    var d = digitsOnly(n);
+    if (d.length === 10 && !/^\+/.test(String(n).trim())) return "(" + d.slice(0, 3) + ") " + d.slice(3, 6) + "-" + d.slice(6);
+    return String(n).trim();
+}
+function dbGet(env, id) {
+    return lunaCall(env, DB + "get", { ids: [id] }).then(function (r) { var o = (r.results || [])[0]; return o && !o._del ? o : null; }, function () { return null; });
+}
+// A number or an address added to the contact there (its person and its
+// contacts), beside what it has; what it already has is not added twice.
+function addToContact(args, env) {
+    var say = env.lang.say;
+    return dbGet(env, args.personId).then(function (p) {
+        if (!p) return { text: say.noSuchContact(args.name) };
+        var name = personName(p) || args.name, change = {}, old = {}, added = [];
+        if (args.number) {
+            var phones = (p.phoneNumbers || []).slice();
+            if (!phones.some(function (x) { return samePhone(x.value, args.number); })) {
+                old.phoneNumbers = p.phoneNumbers || [];
+                phones.push({ value: phoneShown(args.number), type: "type_" + (args.label || "mobile"), primary: !phones.length, normalizedValue: normalizedPhone(args.number), speedDial: "", favoriteData: {} });
+                change.phoneNumbers = phones;
+                added.push(phoneShown(args.number));
+            }
+        }
+        if (args.email) {
+            var mails = (p.emails || []).slice();
+            if (!mails.some(function (x) { return String(x.value).toLowerCase() === String(args.email).toLowerCase(); })) {
+                old.emails = p.emails || [];
+                mails.push({ value: String(args.email), type: "type_home", primary: !mails.length, normalizedValue: String(args.email).toLowerCase(), favoriteData: {} });
+                change.emails = mails;
+                added.push(String(args.email));
+            }
+        }
+        var person = { appId: CONTACTS_APP, params: { launchType: "showPerson", id: p._id }, title: "Contacts" };
+        var has = (change.phoneNumbers || p.phoneNumbers || []).map(function (x) { return x.value; }).concat((change.emails || p.emails || []).map(function (x) { return x.value; }));
+        if (!added.length) return { text: say.contactHasIt(name, has), open: person };
+        var ids = [p._id].concat(p.contactIds || []);
+        return lunaCall(env, DB + "merge", { objects: ids.map(function (id) { return Object.assign({ _id: id }, change); }) }).then(function () {
+            return { text: say.contactUpdated(name, added, has), open: person, data: { personId: p._id },
+                     undo: { kind: "merge", objects: ids.map(function (id) { return Object.assign({ _id: id }, old); }), what: say.undoWhat.edit(name + "'s card") } };
+        });
+    });
+}
 function samePhone(a, b) {
     var x = digitsOnly(a), y = digitsOnly(b);
     return x.length >= 7 && y.length >= 7 && x.slice(-7) === y.slice(-7);
@@ -387,6 +441,28 @@ function contactNames(env) {
         });
         return names;
     });
+}
+// Everyone the words could mean, best first: [] none; one, or several
+// that fit as well as each other (a first name two people share).
+function findPeople(env, who) {
+    var w = String(who || "").toLowerCase().trim().replace(/^my /, "");
+    return people(env).then(function (all) {
+        var tests = [
+            function (p) { return personName(p).toLowerCase() === w; },
+            function (p) { return p.nickname && p.nickname.toLowerCase() === w; },
+            function (p) { return p.name && p.name.givenName && p.name.givenName.toLowerCase() === w; },
+            function (p) { return w.length >= 2 && personName(p).toLowerCase().indexOf(w) === 0; }
+        ];
+        for (var i = 0; i < tests.length; ++i) {
+            var hit = all.filter(tests[i]);
+            if (hit.length) return hit.sort(function (a, b) { return (b.favorite ? 1 : 0) - (a.favorite ? 1 : 0); });
+        }
+        return [];
+    });
+}
+// Several fit equally and none is a favourite: the user is asked which.
+function ambiguous(list) {
+    return list.length > 1 && !list[0].favorite ? list.slice(0, 4).map(personName) : null;
 }
 function findPerson(env, who) {
     var w = String(who || "").toLowerCase().trim();
@@ -532,26 +608,37 @@ function prepareInner(cmd, args, env) {
             return Promise.resolve(withConfirm(cmd, args, env));
         }
         if (!who) return reply(say.noSuchContact("that person"));
-        return findPerson(env, who).then(function (p) {
+        return findPeople(env, who).then(function (list) {
+            var p = list[0], several = ambiguous(list);
             if (!p) return { args: args, reply: say.noSuchContact(who) };
+            if (several) return { args: args, reply: say.whichPerson(several), awaiting: { command: cmd.id, args: args, field: "who", options: several } };
             var number = numberOf(p, args.label);
             if (!number) return { args: args, reply: say.noNumber(personName(p) || who) };
             args.name = personName(p) || who;
             args.number = number;
             args.personId = p._id;
+            // "text sam": what to say, asked (the next words are it).
+            if (cmd.id === "text" && !String(args.message || "").trim() && !args.compose)
+                return { args: args, reply: say.whatToSay(args.name), awaiting: { command: "text", args: args, field: "message" } };
             return withConfirm(cmd, args, env);
         });
     }
     if (cmd.id === "email") {
         var to = String(args.who || "").trim();
+        // A draft to nobody yet ("write an email announcing the new version"):
+        // Email's new message with the words, the recipient left to the user.
+        if (!to && (args.draft || args.subject || args.body)) return Promise.resolve({ args: Object.assign(args, { addr: "", name: "" }) });
         if (!to) return reply(say.noSuchContact("that person"));
         var direct = /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(to) ? Promise.resolve({ name: "", addr: to })
-            : findPerson(env, to).then(function (p) {
+            : findPeople(env, to).then(function (list) {
+                var p = list[0], several = ambiguous(list);
+                if (several) return { which: several };
                 if (!p) return { error: say.noSuchContact(to) };
                 var addr = emailOf(p);
                 return addr ? { name: personName(p), addr: addr } : { error: say.noEmail(personName(p) || to) };
             });
         return direct.then(function (r) {
+            if (r.which) return { args: args, reply: say.whichPerson(r.which), awaiting: { command: "email", args: args, field: "who", options: r.which } };
             if (r.error) return { args: args, reply: r.error };
             args.name = r.name; args.addr = r.addr;
             return withConfirm(cmd, args, env);
@@ -573,15 +660,30 @@ function prepareInner(cmd, args, env) {
     if (cmd.id === "alarm" && !(args.time > env.now())) return reply(say.failed("that time has passed"));
     if (cmd.id === "reminder" && !String(args.text || "").trim()) return reply(say.failed("remind you of what?"));
     if (cmd.id === "task" && !String(args.text || "").trim()) return reply(say.failed("add what?"));
-    if (cmd.id === "note" && !String(args.text || "").trim()) return reply(say.failed("what should the memo say?"));
+    if (cmd.id === "note" && !String(args.text || "").trim()) {
+        if (args.topic) return Promise.resolve({ args: args, reply: say.memoWhat(args.topic), awaiting: { command: "note", args: args, field: "text" } });
+        return reply(say.failed("what should the memo say?"));
+    }
     if (cmd.id === "event") {
         if (!args.title) args.title = "New event";
-        if (!(args.start > 0)) return Promise.resolve({ args: args, reply: say.eventWhen(), awaiting: { command: "event", args: args } });
+        if (!(args.start > 0)) return Promise.resolve({ args: args, reply: args.day ? say.eventWhatTime(args.title) : say.eventWhen(), awaiting: { command: "event", args: args } });
         return Promise.resolve({ args: args });
     }
     if (cmd.id === "contactAdd") {
-        if (!String(args.name || "").trim() || !(args.number || args.email)) return reply(say.contactNeedsMore());
-        return Promise.resolve({ args: args });
+        if (!String(args.name || "").trim() && !args.personId) return reply(say.contactNeedsMore());
+        // The one already there by that name (or the one in focus, personId)
+        // gets the number or address: never a second card (the owner's
+        // "add 8642526990 to Megan E Weaver's contact" made three).
+        var same = args.personId ? dbGet(env, args.personId).then(function (p) { return p ? [p] : []; })
+            : people(env).then(function (all) {
+                var n = String(args.name).toLowerCase().replace(/\s+/g, " ").trim();
+                return all.filter(function (p) { return !p._del && personName(p).toLowerCase().replace(/\s+/g, " ") === n; });
+            });
+        return same.then(function (hit) {
+            if (hit.length) { args.personId = hit[0]._id; args.name = personName(hit[0]) || args.name; args.update = true; }
+            if (args.update && !(args.number || args.email)) return { args: args, reply: say.contactExists(args.name) };
+            return { args: args };
+        });
     }
     if (cmd.id === "alarmManage") {
         return dbFind(env, "com.palm.clock.alarm:1").then(function (all) {
@@ -633,6 +735,13 @@ function prepareInner(cmd, args, env) {
                 if (!String(args.message || "").trim()) return { args: args };
                 return { args: args, confirm: say.confirmText(args.name || args.number, args.message) };
             });
+        });
+    }
+    if (cmd.id === "readEmail" && Number(args.count) > 1) {
+        return receivedEmails(env, args.who).then(function (list) {
+            if (!list.length) return { args: args, reply: args.who ? say.noEmailFrom(args.who) : say.noEmails() };
+            args.list = list.slice(0, Math.min(10, Number(args.count)));
+            return { args: args };
         });
     }
     if (cmd.id === "emailReply" || cmd.id === "readEmail") {
@@ -1254,14 +1363,28 @@ function remindTask(env, taskId, due) {
 
 // ---- Email ---------------------------------------------------------------------------------------
 // The newest email (from who, by name or address), and its words without markup.
-function latestEmail(env, who) {
-    return dbFind(env, "com.palm.email:1").then(function (all) {
+// The email received, newest first: not what the user sent, drafted or
+// deleted (their account's Sent, Outbox, Drafts and Trash folders, and
+// their own address: the owner's "Read the last email I got." read the
+// email the assistant had just sent for him).
+function receivedEmails(env, who) {
+    return Promise.all([dbFind(env, "com.palm.email:1"), dbFind(env, "com.palm.mail.account:1")]).then(function (got) {
+        var own = {}, mine = {};
+        got[1].forEach(function (a) {
+            ["sentFolderId", "outboxFolderId", "draftsFolderId", "trashFolderId"].forEach(function (k) { if (a[k]) own[a[k]] = true; });
+            if (a.email) mine[String(a.email).toLowerCase()] = true;
+            if (a.username) mine[String(a.username).toLowerCase()] = true;
+        });
         var w = String(who || "").trim();
-        return all.filter(function (e) {
-            if (e._del || (e.flags && e.flags.visible === false) || e.folderId === "outbox") return false;
+        return got[0].filter(function (e) {
+            if (e._del || (e.flags && e.flags.visible === false) || e.folderId === "outbox" || own[e.folderId]) return false;
+            if (e.from && e.from.addr && mine[String(e.from.addr).toLowerCase()]) return false;
             return !w || matches((e.from ? (e.from.name || "") + " " + (e.from.addr || "") : ""), w);
-        }).sort(function (a, b) { return (b.timestamp || 0) - (a.timestamp || 0); })[0] || null;
+        }).sort(function (a, b) { return (b.timestamp || 0) - (a.timestamp || 0); });
     });
+}
+function latestEmail(env, who) {
+    return receivedEmails(env, who).then(function (list) { return list[0] || null; });
 }
 function textOf(e) {
     var body = ((e.parts || []).filter(function (p) { return p.type === "body"; })[0] || {}).content || "";
@@ -1406,6 +1529,12 @@ function runInner(cmd, args, env) {
             });
         });
     case "email":
+        if (!args.addr && (args.draft || !String(args.body || "").trim())) {
+            // A draft for the user to finish: Email's compose with the words, no recipient yet.
+            var draftParams = { summary: String(args.subject || ""), text: String(args.body || "") };
+            return launch(env, EMAIL_APP, draftParams)
+                .then(function () { return { text: say.emailDraft(args.subject, args.body), open: { appId: EMAIL_APP, params: draftParams, title: "Email" } }; });
+        }
         if (!String(args.body || "").trim())
             return launch(env, EMAIL_APP, { recipients: [{ type: "email", role: 1, value: args.addr, contactDisplay: args.name || args.addr }],
                                             summary: String(args.subject || "") })
@@ -1552,6 +1681,7 @@ function runInner(cmd, args, env) {
                      })) };
         });
     case "contactAdd": {
+        if (args.update && args.personId) return addToContact(args, env);
         // As runtime/sample-data.js and the contacts linker store a local
         // contact: the contact in the profile account, and its person.
         return dbFind(env, "com.palm.account:1").then(function (accounts) {
@@ -1560,7 +1690,7 @@ function runInner(cmd, args, env) {
             var given = parts.length > 1 ? parts.slice(0, -1).join(" ") : parts[0], family = parts.length > 1 ? parts[parts.length - 1] : "";
             var name = { givenName: given, familyName: family, middleName: "", honorificPrefix: "", honorificSuffix: "" };
             var type = "type_" + (args.label || "mobile");
-            var phones = args.number ? [{ value: String(args.number), type: type, primary: true }] : [];
+            var phones = args.number ? [{ value: phoneShown(args.number), type: type, primary: true }] : [];
             var emails = args.email ? [{ value: String(args.email), type: "type_home", primary: true }] : [];
             return lunaCall(env, DB + "reserveIds", { count: 2 }).then(function (r) {
                 var cid = r.ids[0], pid = r.ids[1];
@@ -1785,7 +1915,34 @@ function runInner(cmd, args, env) {
         return Promise.resolve({ text: say.answer(arith.pretty(args.expression), arith.format(v)), data: { value: v } });
     }
     case "time":
+        if (args.what === "until") return Promise.resolve({ text: say.daysUntil(args.name, Math.round((D.startOfDay(args.day) - D.startOfDay(now)) / 864e5), args.unit, args.day, now) });
+        if (args.what === "weekday") return Promise.resolve({ text: say.dayOfWeek(args.name, args.day, now) });
+        if (args.what === "year") return Promise.resolve({ text: say.year(now) });
         return Promise.resolve({ text: args.what === "date" ? say.date(now) : say.time(now) });
+    case "settingStatus": {
+        var READ = {
+            wifi: function () { return lunaCall(env, "luna://com.webos.service.wifi/getstatus", {}).then(function (r) { return r.status ? r.status !== "serviceDisabled" : null; }); },
+            bluetooth: function () { return lunaCall(env, "luna://com.webos.service.bluetooth2/adapter/getStatus", {}).then(function (r) { var a = (r.adapters || [])[0]; return a ? !!a.powered : null; }); },
+            airplane: function () { return lunaCall(env, "luna://com.webos.service.connectionmanager/getstatus", {}).then(function (r) { return r.offlineMode ? r.offlineMode === "enabled" : null; }); },
+            flashlight: function () { return lunaCall(env, "luna://org.webosports.service.torch/getStatus", {}).then(function (r) { return typeof r.on === "boolean" ? r.on : null; }); },
+            location: function () { return lunaCall(env, LOCATION + "getAllLocationHandlers", {}).then(function (r) { return (r.handlers || []).length ? r.handlers.some(function (h) { return h.state; }) : null; }); },
+            rotationLock: function () { return lunaCall(env, SYSTEM_SERVICE + "getPreferences", { keys: ["rotationLock"] }).then(function (r) { return typeof r.rotationLock === "boolean" ? r.rotationLock : null; }); },
+            rotation: function () { return lunaCall(env, SYSTEM_SERVICE + "getPreferences", { keys: ["rotationLock"] }).then(function (r) { return typeof r.rotationLock === "boolean" ? !r.rotationLock : null; }); },
+            dnd: function () { return lunaCall(env, AUDIO + "getInputVolume", { streamType: "pringtones" }).then(function (r) { return typeof r.volume === "number" ? r.volume === 0 : null; }); },
+            ringer: function () { return lunaCall(env, AUDIO + "getInputVolume", { streamType: "pringtones" }).then(function (r) { return typeof r.volume === "number" ? r.volume > 0 : null; }); }
+        };
+        var read = READ[args.setting];
+        return (read ? read() : Promise.resolve(null)).catch(function () { return null; }).then(function (on) {
+            var out = { text: say.settingIs(args.setting, on) };
+            if (on !== null && TOGGLE_RUN[args.setting]) out.actions = [{ label: say.turnItOn(args.setting, !on), run: { command: "toggle", args: { setting: args.setting, state: on ? "off" : "on" } } }];
+            return out;
+        });
+    }
+    case "chat":
+        return Promise.resolve({ text: say.chat(args.kind || "", env.storage ? (env.storage.get("assistant:chatTurn") || 0) : 0) }).then(function (r) {
+            if (env.storage) env.storage.set("assistant:chatTurn", (env.storage.get("assistant:chatTurn") || 0) + 1);
+            return r;
+        });
     case "search":
         return defaultSearchUrl(env, args.query).then(function (url) {
             return lunaCall(env, "luna://com.palm.applicationManager/open", { target: url });
@@ -1800,6 +1957,15 @@ function runInner(cmd, args, env) {
             return { text: say.calling(cmd.id === "voicemail" ? "voicemail" : args.name || args.number), open: { appId: "org.webosphoenix.phone", params: {}, title: "Phone" } };
         });
     case "readEmail": {
+        if (args.list && args.list.length > 1) {
+            var box = { appId: EMAIL_APP, params: {}, title: "Email" };
+            return Promise.resolve({ text: say.readEmails(args.list.map(function (e) { return { from: e.from ? e.from.name || e.from.addr : "", subject: e.subject || "", at: e.timestamp || 0 }; }), now),
+                                     open: box,
+                                     attachments: cards(args.list.map(function (e) {
+                                         var o = { appId: EMAIL_APP, params: { emailId: e._id }, title: "Email" };
+                                         return { title: e.subject || say.noSubject(), subtitle: (e.from ? e.from.name || e.from.addr : "") + " · " + whenShown(env, e.timestamp, null, false), detail: e.summary || textOf(e), open: o };
+                                     })) });
+        }
         var mail = { appId: EMAIL_APP, params: { emailId: args.emailId }, title: "Email" };
         var fromName = args.from.name || args.from.addr || "someone";
         return Promise.resolve({ text: say.readEmail(fromName, args.subject, args.summary, args.at, now), open: mail,
@@ -2087,6 +2253,9 @@ function undo(u, env) {
 }
 
 module.exports = {
+    findPeople: findPeople,
+    personName: personName,
+    dbGet: dbGet,
     BUILT_IN: BUILT_IN,
     HELP_GROUPS: HELP_GROUPS,
     catalogue: catalogue,
