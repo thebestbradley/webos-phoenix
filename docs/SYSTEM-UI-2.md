@@ -14,9 +14,23 @@ gesture, stays luna-sysmgr's and luna-systemui's, as 1.0 reproduces them.
   repository (`docs/design-2.0/BUILD-PLAN.md`); its side of the shell's
   contract is `ember-glass-ui/docs/SHELL-CONTRACT.md`, and its values are
   `tokens/ember-glass.tokens.json`.
-- **This branch** (`tbb/system-ui-2`) moves to the 2.0 repository. Until
-  then 1.0's look stays the default and every 1.0 test and screenshot is
-  unchanged.
+- **Where it lives:** the 2.0 repository,
+  [thebestbradley/phoenix-ember-glass-ui](https://github.com/thebestbradley/phoenix-ember-glass-ui),
+  is webos-phoenix with this shell (it started from the `tbb/system-ui-2`
+  branch, history and all). 1.0's look stays the default and every 1.0
+  test and screenshot is unchanged.
+- **1.0's changes come in by merging webos-phoenix's main**, never by
+  copying: the shell's behaviour is shared code, so a fix in 1.0 is a fix
+  here. Once per clone, then whenever 1.0's main moves:
+
+  ```sh
+  git remote add upstream https://github.com/thebestbradley/webos-phoenix.git
+  git fetch upstream && git merge upstream/main && git submodule update --init
+  ```
+
+  Conflicts go towards 1.0's behaviour and 2.0's drawing. Changes that
+  belong to both (the runtime, the simulator, the original apps) are made
+  in webos-phoenix first and merged here.
 
 ## How the look is built
 

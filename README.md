@@ -1,5 +1,11 @@
 # webOS Phoenix
 
+> **This is webOS Phoenix 2.0**: webos-phoenix with the Ember Glass system UI
+> ([docs/SYSTEM-UI-2.md](docs/SYSTEM-UI-2.md)). 1.0 lives in
+> [thebestbradley/webos-phoenix](https://github.com/thebestbradley/webos-phoenix);
+> this repository takes its changes by merging its main. Run the 2.0 look with
+> `./build/phoenix-sim --phone -- --look ember-glass`.
+
 Bringing the classic Palm webOS phone and tablet experience back, built on the
 open-source **webOS Open Source Edition (OSE)**.
 
