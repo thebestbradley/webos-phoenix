@@ -2246,7 +2246,7 @@ var SMALL_TALK = /^(?:hi|hello|hey|yo|good (?:morning|afternoon|evening|night)|h
 // What a question needs the phone for: its owner's things, and what the
 // commands keep or measure (say.context world).
 var OWNERS = /\b(?:i|my|mine|me|myself|am i|do i have|have i|did i|i have|i've|i'm|we|our|ours|us)\b/;
-var MEASURED = /\b(?:outside|out there|morning|afternoon|evening|night|dentist|doctor|flight|reservation|party|weather|forecast|rain\w*|snow\w*|sunny|temperature|hot|cold|warm|windy|umbrella|time|date|day|today|tonight|tomorrow|yesterday|week|weekend|month|o'clock|clock|alarms?|timers?|calendar|meetings?|appointments?|events?|battery|storage|wi-?fi|bluetooth|volume|brightness|flashlight|convert|miles?|km|kilomet\w+|feet|foot|inch\w*|pounds?|kg|kilo\w*|ounces?|grams?|lit(?:er|re)s?|gallons?|cups?|celsius|fahrenheit|dollars?|euros?|currenc\w+|exchange|percent|plus|minus|times|divided|near|nearest|nearby|closest|far|distance|directions|drive|walk|route|traffic|where|messages?|texts?|e-?mails?|calls?|contacts?|notes?|memos?|tasks?|lists?|photos?|pictures?|files?|songs?|music|playing)\b|\d/;
+var MEASURED = /\b(?:outside|out there|morning|afternoon|evening|night|dentist|doctor|flight|reservation|party|weather|forecast|rain\w*|snow\w*|sunny|temperature|hot|cold|warm|windy|umbrella|time|date|day|today|tonight|tomorrow|yesterday|week|weekend|month|o'clock|clock|alarms?|timers?|calendar|meetings?|appointments?|events?|battery|storage|wi-?fi|bluetooth|volume|brightness|flashlight|convert|miles?|km|kilomet\w+|feet|foot|inch\w*|pounds?|kg|kilo\w*|ounces?|grams?|lit(?:er|re)s?|gallons?|cups?|celsius|fahrenheit|dollars?|euros?|currenc\w+|exchange|percent|plus|minus|times|divided|squared|cubed|roots?|power|near|nearest|nearby|closest|far|distance|directions|drive|walk|route|traffic|where|messages?|texts?|e-?mails?|calls?|contacts?|notes?|memos?|tasks?|lists?|photos?|pictures?|files?|songs?|music|playing)\b|\d/;
 // After a model's answer: what to do with it ("Save as Memo" for a recipe,
 // Maps for where something is).
 var RECIPE = /\b(?:recipes?|how (?:do|can|should) (?:you|i|we|one) (?:make|cook|bake|prepare|brew)|how to (?:make|cook|bake|prepare|brew))\b/;
@@ -2265,7 +2265,10 @@ var say = {
         var request = /^(?:can|could|would|will) you (?:please )?(?:turn|set|put|switch|call|text|send|open|play|start|stop|pause|add|remind|make|take|show|find|navigate|get|create|delete|cancel|mark|move|lock|mute|dim|raise|lower)\b/.test(t);
         var question = !small && !request && QUESTION.test(t);
         var named = (names || []).some(function (n) { var w = String(n).toLowerCase().split(" ")[0]; return w.length > 1 && new RegExp("\\b" + w.replace(/[^a-z0-9]/g, "") + "\\b").test(t); });
-        return { question: question, smallTalk: small, app: app, world: question && !app && !named && !OWNERS.test(t) && !MEASURED.test(t) };
+        // A year is history, not a measure ("who won the 1998 World Series":
+        // Qwen3 0.6B, asked to choose, told the time in New York).
+        var measured = MEASURED.test(t.replace(/\b(?:1[0-9]{3}|20[0-9]{2})s?\b/g, ""));
+        return { question: question, smallTalk: small, app: app, world: question && !app && !named && !OWNERS.test(t) && !measured };
     },
     // Layer 4's words: nothing here can, and what can instead ("app":
     // the app that does it; "question": a web search; "other").
@@ -3293,7 +3296,7 @@ module.exports = {
     // The decision model's options for words the grammar did not take (lib/lang/en-candidates.js).
     candidates: require("./en-candidates")({ MENTIONS: MENTIONS, extract: extract, resolve: resolve, duration: duration }),
     // Words that take something away ("turn off", "delete", "I don't need"): a model's removing choice needs them.
-    // Words about the music stopping: a model's sleep timer needs them (assistant.js heldToWords).
+    // Words about the music stopping: a model's sleep timer needs them (assistant.js timeFromWords).
     sleepSaid: function (t) { return /\b(?:sleep|music|songs?|playing|playback|audio|podcasts?)\b/.test(String(t || "").toLowerCase()); },
     removing: function (t) { return /\b(?:off|delet\w*|remov\w*|cancel\w*|clear\w*|stop\w*|disabl\w*|kill|dismiss|drop|scrap|get rid|erase|forget|don't need|do not need|no longer|anymore|any more|not happening|isn't happening|won't happen|shut|silenc\w*|mute|quiet|skip)\b/.test(String(t || "").toLowerCase()); },
     answer: answer,

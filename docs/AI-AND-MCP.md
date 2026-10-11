@@ -1479,6 +1479,11 @@ such request after a pause also waited for that.
 - A time a model writes for an alarm, a reminder or an event is the
   grammar's reading of the words where it reads one (Qwen3 0.6B set "I
   want an alarm at 5:30 tomorrow morning" for 6:30).
+- A sleep timer a model chooses (it stops the music) holds only where the
+  words speak of the music, sleep or playing (`lib/lang/en.js` sleepSaid; Qwen3 0.6B
+  made "add 5 minutes to the timer" one); "add 5 minutes to the timer"
+  is said at once to be out of reach (a running timer is not lengthened
+  yet), as "put 10 more minutes on the timer".
 
 `speed.test.ts` asks every request of the main and held-out sets the
 grammar answers alone again with a model installed: none may make a
@@ -1576,6 +1581,10 @@ where it came from (cases a-sw-*, with a case's own contacts: `put`):
 - "Send the photo to Sam", "email Mom the pictures from the trip": "I
   can't send photos or videos yet." (the model's set: Qwen3 0.6B offered
   a screenshot); "text Rose I got the pictures" stays a text.
+- "Add a timer for 5 minutes" was a timer called "add a"; "add milk to my
+  list" made a list called "My" (now the default list), and with
+  Synergy's accounts "add stamps to my to do list" went to Microsoft's To
+  Do ("To Do" is as generic a name as "Tasks" now, `lib/synergy.js`).
 
 And one found by the talk-mode work (tools/test-assistant.cjs): "did you
 add it?" went on being answered with its switch off in Settings >

@@ -241,6 +241,10 @@ describe("what the assistant suggests", () => {
         expect(en.say.context("why is my phone so slow").world).toBe(false);
         expect(en.say.context("is Sam coming", ["Sam Delgado"]).world).toBe(false);
         expect(en.say.context("how cold is it in Oslo").world).toBe(false);
+        // A year is history; a number to work out is not the world's.
+        expect(en.say.context("Who won the 1998 World Series?").world).toBe(true);
+        expect(en.say.context("what is 2048 squared").world).toBe(false);
+        expect(en.say.context("what is 15 times 4").world).toBe(false);
         expect(en.say.context("tell me a joke")).toMatchObject({ question: false, smallTalk: true });
         expect(en.say.context("can you put the torch on for me")).toMatchObject({ question: false, smallTalk: false });
         expect(en.say.context("make a playlist of my songs")).toEqual({ question: false, smallTalk: false, app: "Music", world: false });
