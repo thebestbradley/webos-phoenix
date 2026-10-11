@@ -136,9 +136,20 @@ service bus). `runtime/phoenix-runtime.js` runs before the app's own scripts:
   - **contacts linker** (`com.palm.service.contacts.linker`): runs the
     linker's own steps on the page's contacts framework (new contact,
     manual link/unlink); no automatic linking of similar contacts.
+  - **contacts service** (`com.palm.service.contacts`): favourites and an
+    app's favourite default (`favoritePerson`, `unfavoritePerson`,
+    `setFavoriteDefault`), vCards (`countVCardContacts`, `readVCard`,
+    `importVCard` of a `file://` target; `vCardExportOne`, `vCardExportAll`)
+    and `sortOrderChanged`, the steps of app-services' service and the
+    contacts framework on the db8 objects, for every app; an imported
+    contact gets a person of its own (`tools/test-contacts.cjs`).
   - **email transports** (`com.palm.smtp`, `com.palm.imap`, `com.palm.pop`):
     saving drafts and sending (into Sent at once, bodies in a simulated file
-    cache); there is no mail server, so syncs find nothing new.
+    cache, the saved email's `_id` answered); a moved message lands in its
+    folder and a deleted one in Trash, a folder's sync writes the sync state
+    (`com.palm.account.syncstate:1`), `com.palm.pop/parseEmlMessage` reads
+    an `.eml` file; there is no mail server, so syncs find nothing new
+    (`tools/test-email.cjs`).
 
   On first start it loads **sample data** (`runtime/sample-data.js`,
   simulator only, all fictional): an owner, the HP webOS profile account and

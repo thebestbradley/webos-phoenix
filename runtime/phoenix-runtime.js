@@ -4264,18 +4264,484 @@
             "*": function (p, reply) { reply(ok({})); }
         });
 
-        // Contacts service: the favourite calls change the person's favorite flag.
+    })();
+
+    // ---- Contacts service (com.palm.service.contacts) --------------------------------
+    //
+    // app-services' contactsService.js, a node service whose methods run the
+    // contacts framework (loadable-frameworks/contacts: Person.js,
+    // vCard/VCardImporter.js, VCardExporter.js, properties/SortKey.js). Here
+    // the same steps on the db8 objects, for every app (the rebuilt ones load
+    // no framework):
+    //
+    //   favoritePerson {personId, defaultData?}    the person a favourite, and
+    //       with defaultData the default below (Person._favoritePerson, :2254-2283)
+    //   unfavoritePerson {personId}                not one, every favorite
+    //       default gone (Person._unfavoritePerson, _removeFavoriteDefaults, :2414-2480)
+    //   setFavoriteDefault {personId, defaultData: {value, contactPointType,
+    //       listIndex, type?, auxData?, appId?}}    the app's default number,
+    //       email or IM: {listIndex, auxData} in that contact point's
+    //       favoriteData under the app's id, the point moved first, the app's
+    //       default taken off every other point (Person._setFavoriteDefault,
+    //       :2309-2399; _setDefaultForContactPointType, :379-405). The app's
+    //       id is defaultData.appId, else "com.palm.app.phone": the service
+    //       never took it from the caller (getApplicationId,
+    //       contactsService.js:621-629).
+    //   countVCardContacts {filePath: "file://..."} -> {count}
+    //   readVCard {filePath} -> {contacts}        not saved
+    //   importVCard {filePath} -> {contacts}       saved to Contacts' default
+    //       account (its prefs' defaultAccountId, else the HP webOS profile, as
+    //       Contacts' Prefs.js:93-101 chooses), as that account's contact kind
+    //       (VCardImporter._setupImport, :925-1022)
+    //   vCardExportOne {personId, filePath, vCardVersion?, onlyPhoneNumbers?,
+    //       charset?, useFileCache?} -> {success, filePath}
+    //   vCardExportAll {filePath, vCardVersion?, onlyPhoneNumbers?, charset?}
+    //       -> {success, filePath}               every person
+    //   sortOrderChanged {} -> every person's sortKey again, by the list sort
+    //       order in Contacts' prefs (contactsService.js:330-400, SortKey.js)
+    //
+    // A vCard file is read as the importer reads one, line by line, the
+    // property's name and its TYPE words deciding the field and its type
+    // (VCardImporter.js:214-320, _extractLabel :700-728); Phoenix also joins
+    // folded lines and decodes quoted-printable, which the original left
+    // unread, and keeps the values as written (the original escaped them as
+    // HTML for its own display, _getLineValue :731-734). The original's
+    // importVCard answered an error after importing (it mapped `true`, not the
+    // contacts saved: Contacts' VCardHelper.js:94-98 notes it); here it
+    // answers the contacts. Imported contacts each get a person, as the
+    // linker makes one for a contact like no other (the simulator has no
+    // automatic linker). A file is written as the exporter wrote it
+    // (_exportVCard, VCardExporter.js:197-280), with vCardVersion honoured
+    // (the original's exporter read `version`, so always wrote 3.0) and URLs
+    // as URL lines (it wrote the type alone, :560-584).
+    (function contactsService() {
+        var PERSON_KIND = "com.palm.person:1";
+        var PREFS_KIND = "com.palm.app.contacts.prefs:1";
+        var POINT = { "contact_point_type_phoneNumber": "phoneNumbers", "contact_point_type_emailAddress": "emails",
+                      "contact_point_type_imAddress": "ims" };
+        function dbGet(id) { return id ? (callNow("palm://com.palm.db/get", { ids: [id] }).results || [])[0] : undefined; }
+        function prefs() { return (callNow("palm://com.palm.db/find", { query: { from: PREFS_KIND, limit: 1 } }).results || [])[0] || {}; }
+        function digits(v) { return String(v || "").replace(/\D/g, ""); }
+        // Person._getNormalizedValueForContactPointType (:2610-2635): an email or
+        // IM lower case and trimmed; a phone number parsed (Globalization.Phone),
+        // here by its digits, so the number written any way matches.
+        function normalized(cpt, v) {
+            return cpt === "contact_point_type_phoneNumber" ? digits(v) : String(v || "").toLowerCase().trim();
+        }
+        function appIdOf(p) { return p.defaultData && p.defaultData.appId ? String(p.defaultData.appId).split(" ")[0] : "com.palm.app.phone"; }
+
+        // The default set on the person (unsaved): null, or the error's text.
+        function setDefault(person, p) {
+            var d = p.defaultData, app = appIdOf(p);
+            if (!d) return "_setFavoriteDefault: missing required argument - defaultData";
+            if (d.contactPointType === undefined) return "_setFavoriteDefault: missing required defaultData property - contactPointType";
+            if (!POINT[d.contactPointType]) return "_setFavoriteDefault: unsupported contact point type specified";
+            if (d.listIndex === undefined) return "_setFavoriteDefault: missing required defaultData property - listIndex";
+            if (d.value === undefined) return "_setFavoriteDefault: missing required defaultData property - value";
+            if (!person.favorite) return "_setFavoriteDefault: cannot set a default on a person that is not a favorite";
+            var field = POINT[d.contactPointType], want = normalized(d.contactPointType, d.value);
+            var points = (person[field] || []).slice();
+            var at = -1;
+            points.forEach(function (pt, i) { if (at < 0 && want !== "" && normalized(d.contactPointType, pt.value) === want && pt.type === d.type) at = i; });
+            if (at < 0) return "Setting favorite default on person - " + person._id + " - failed! Could not find a contact point with value - " + d.value + " - on person";
+            var chosen = clone(points[at]);
+            chosen.favoriteData = Object.assign({}, chosen.favoriteData || {});
+            chosen.favoriteData[app] = { listIndex: d.listIndex, auxData: d.auxData };
+            points.splice(at, 1);
+            person[field] = [chosen].concat(points);
+            // One default per app, over all three kinds of contact point.
+            Object.keys(POINT).forEach(function (cpt) {
+                person[POINT[cpt]] = (person[POINT[cpt]] || []).map(function (pt) {
+                    if (pt === chosen || !pt.favoriteData || !pt.favoriteData[app]) return pt;
+                    var copy = clone(pt);
+                    delete copy.favoriteData[app];
+                    return copy;
+                });
+            });
+            return null;
+        }
+        function favoriteFields(person) {
+            return { _id: person._id, favorite: person.favorite, phoneNumbers: person.phoneNumbers || [], emails: person.emails || [], ims: person.ims || [] };
+        }
+        function findPerson(p, who) {
+            if (p.personId === undefined) return { error: who + ": missing required argument - personId" };
+            var person = dbGet(p.personId);
+            return person ? { person: clone(person) } : { error: who + ": could not find the person with id - " + p.personId };
+        }
+
+        // ---- vCards ----
+        var VCARD_PHONE = { type_home: ["HOME", "VOICE"], type_work: ["WORK", "VOICE"], type_mobile: ["CELL", "VOICE"], type_pager: ["PAGER"],
+                            type_personal_fax: ["HOME", "FAX"], type_work_fax: ["WORK", "FAX"] };
+        var VCARD_EMAIL = { type_home: ["HOME", "INTERNET"], type_work: ["WORK", "INTERNET"] };
+        var VCARD_ADDRESS = { type_home: ["HOME"], type_work: ["WORK"] };
+        var VCARD_URL = { type_home: ["HOME"], type_work: ["WORK"] };
+        var VCARD_IM = { type_gtalk: "X-GTALK", type_aim: "X-AIM", type_msn: "X-MSN", type_yahoo: "X-YAHOO", type_jabber: "X-JABBER",
+                         type_qq: "X-QQ", type_icq: "X-ICQ", type_skype: "X-SKYPE" };
+        var IM_OF_VCARD = { "X-GTALK": "type_gtalk", "X-AIM": "type_aim", "X-MSN": "type_msn", "X-YAHOO": "type_yahoo", "X-JABBER": "type_jabber",
+                            "X-QQ": "type_qq", "X-ICQ": "type_icq", "X-SKYPE": "type_skype", "X-IM": "type_default" };
+        var RELATIONS = ["ASSISTANT", "BROTHER", "CHILD", "FATHER", "FRIEND", "MANAGER", "MOTHER", "PARENT", "PARTNER", "RELATIVE",
+                         "SISTER", "SPOUSE", "REFERRED_BY", "DOMESTIC_PARTNER"];
+
+        // Person.generateDisplayNameFromRawPerson (:2061-2112).
+        function displayName(o) {
+            var n = o.name || {};
+            var full = [n.honorificPrefix, n.givenName, n.middleName, n.familyName, n.honorificSuffix].filter(Boolean).join(" ");
+            if (full) return full;
+            if (o.nickname) return o.nickname;
+            var org = o.organization || (o.organizations || [])[0];
+            if (org && (org.title || org.name)) return org.title && org.name ? org.title + ", " + org.name : org.name || org.title;
+            var first = (o.emails || [])[0] || (o.ims || [])[0] || (o.phoneNumbers || [])[0];
+            return first ? first.value : "[No Name Available]";
+        }
+        function typeLabel(version, labels) {
+            if (!labels || !labels.length) return "";
+            return version === "2.1" ? labels.join(";") : "TYPE=" + labels.join(",");
+        }
+        // VCardExporter._exportVCard: one person, CRLF lines (each written with
+        // "\r", the writer adding "\n").
+        function exportPerson(person, version, utf8, onlyPhoneNumbers) {
+            var phones = person.phoneNumbers || [];
+            if (onlyPhoneNumbers && !phones.length) return "";
+            var cs = utf8 && version === "2.1" ? ";CHARSET=UTF-8" : "";
+            var lines = ["BEGIN:VCARD", "VERSION:" + (version === "2.1" ? "2.1" : "3.0")];
+            var n = person.name || {}, shown = displayName(person);
+            if (!n.givenName && !n.familyName) n = { familyName: shown };
+            lines.push("N" + cs + ":" + [n.familyName, n.givenName, n.middleName, n.honorificPrefix, n.honorificSuffix].map(function (x) { return x || ""; }).join(";"));
+            if (shown) lines.push("FN" + cs + ":" + shown);
+            if (!onlyPhoneNumbers) {
+                var org = person.organization || (person.organizations || [])[0];
+                if (org && org.name) lines.push("ORG:" + org.name + ";");
+                if (org && org.title) lines.push("TITLE:" + org.title);
+                if (person.nickname) lines.push("NICKNAME:" + person.nickname);
+            }
+            phones.forEach(function (ph) {
+                var v = onlyPhoneNumbers ? String(ph.value || "").replace(/[^0-9+*wpt#]/gi, "") : ph.value;
+                if (!v) return;
+                var label = typeLabel(version, VCARD_PHONE[ph.type] || ["OTHER"]);
+                lines.push("TEL" + cs + (label ? ";" + label : "") + ":" + v);
+            });
+            if (!onlyPhoneNumbers) {
+                (person.emails || []).forEach(function (e) {
+                    if (e.value) lines.push("EMAIL;" + typeLabel(version, VCARD_EMAIL[e.type] || ["INTERNET"]) + ":" + e.value);
+                });
+                (person.addresses || []).forEach(function (a) {
+                    var v = [String(a.streetAddress || "").replace(/\n/g, " "), a.locality || "", a.region || "", a.postalCode || "", a.country || ""].join(";");
+                    if (v.replace(/;/g, "")) lines.push("ADR;" + typeLabel(version, VCARD_ADDRESS[a.type] || ["OTHER"]) + ":;;" + v);
+                });
+                (person.urls || []).forEach(function (u) {
+                    var label = typeLabel(version, VCARD_URL[u.type]);
+                    if (u.value) lines.push("URL" + (label ? ";" + label : "") + ":" + u.value);
+                });
+                (person.ims || []).forEach(function (im) {
+                    if (im.value) lines.push((VCARD_IM[im.type] || "X-IM") + ":" + im.value);
+                });
+                if (person.birthday) lines.push("BDAY:" + person.birthday);
+                var note = (person.notes || [person.note]).map(function (x) { return x && typeof x === "object" ? x.value : x; }).filter(Boolean)[0];
+                if (note) lines.push("NOTE:" + String(note).replace(/\n/g, "\\n").replace(/\r/g, "\\r"));
+            }
+            return lines.join("\r\n") + "\r\nEND:VCARD\r\n\r\n";
+        }
+        function toBase64Utf8(text) {
+            var bytes = new TextEncoder().encode(text), bin = "";
+            for (var i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            return btoa(bin);
+        }
+        // VCardFileWriter.close: the file written (palmPutResource), as a
+        // system service writes one.
+        function writeFile(path, text) {
+            return !!(runtime.fileManager && runtime.fileManager.store(path, toBase64Utf8(text)));
+        }
+        var exportCount = 0;
+        function exportVCards(p, persons, reply) {
+            if (!p.filePath) return reply(fail(-1, "File path must be specified to make a VCardImporter"));
+            var version = p.vCardVersion === "2.1" ? "2.1" : "3.0", utf8 = p.charset !== "US-ASCII";
+            var text = persons.map(function (person) { return exportPerson(person, version, utf8, !!p.onlyPhoneNumbers); }).join("");
+            // useFileCache: the file cache's path for it (InsertCacheObject, typeName contactvcard).
+            var path = p.useFileCache ? "/var/file-cache/contactvcard/" + (++exportCount) + "/" + String(p.filePath).split("/").pop() : String(p.filePath);
+            if (!writeFile(path, text)) return reply(fail(-1, "Writing file failed!"));
+            reply(ok({ success: true, filePath: path }));
+        }
+
+        // ---- Reading a vCard file ----
+        function filePathOf(p, reply) {
+            if (typeof p.filePath !== "string") { reply(fail(-1, "getPathFromFileTypeSchemaPath did not specify a filePath for the vcard to count")); return null; }
+            if (p.filePath.indexOf("file://") !== 0) { reply(fail(-1, "getPathFromFileTypeSchemaPath did not specify a target to a local file")); return null; }
+            return p.filePath.slice(7);
+        }
+        function readText(path, then) {
+            dispatch("luna://org.webosphoenix.filemanager/read", { path: path, encoding: "base64" }, function (r) {
+                if (!r || r.returnValue === false || typeof r.data !== "string") return then(null);
+                var bin = atob(r.data), bytes = new Uint8Array(bin.length);
+                for (var i = 0; i < bin.length; ++i) bytes[i] = bin.charCodeAt(i);
+                then(new TextDecoder("utf-8").decode(bytes));
+            }, { cancelled: function () { return true; }, onCancel: null });
+        }
+        // _splitValues (:740-800): on ";" not escaped, then \\ \: \; \, unescaped.
+        function splitValues(v) {
+            var out = [], cur = "";
+            for (var i = 0; i < v.length; ++i) {
+                var c = v.charAt(i);
+                if (c === "\\" && i + 1 < v.length) { cur += c + v.charAt(++i); continue; }
+                if (c === ";") { out.push(cur); cur = ""; } else cur += c;
+            }
+            out.push(cur);
+            return out.map(function (x) { return x.replace(/\\([\\:;,])/g, "$1"); });
+        }
+        function unescapeText(v) { return v.replace(/\\[nN]/g, "\n").replace(/\\([\\:;,])/g, "$1"); }
+        // _extractLabel: from the words before the value.
+        function labelOf(head) {
+            head = head.toUpperCase();
+            if (head.indexOf("FAX") >= 0) return head.indexOf("HOME") >= 0 ? "FAX_HOME" : "FAX_WORK";
+            var order = ["WORK", "HOME", "CELL", "PAGER", "MAIN"];
+            for (var i = 0; i < order.length; ++i) if (head.indexOf(order[i]) >= 0) return order[i];
+            return "OTHER";
+        }
+        var PHONE_OF = { FAX_HOME: "type_personal_fax", FAX_WORK: "type_work_fax", HOME: "type_home", WORK: "type_work", CELL: "type_mobile",
+                         PAGER: "type_pager", MAIN: "type_main" };
+        function homeWork(label) { return label === "HOME" ? "type_home" : label === "WORK" ? "type_work" : "type_other"; }
+        // Folded lines joined, quoted-printable decoded (its soft line breaks too).
+        function vcardLines(text) {
+            var raw = text.split("\n").map(function (l) { return l.replace(/\r$/, ""); }), lines = [];
+            for (var i = 0; i < raw.length; ++i) {
+                var l = raw[i];
+                if (/^[ \t]/.test(l) && lines.length) { lines[lines.length - 1] += l.slice(1); continue; }
+                lines.push(l);
+            }
+            return lines.reduce(function (acc, l) {
+                var prev = acc[acc.length - 1];
+                if (prev !== undefined && /ENCODING=QUOTED-PRINTABLE/i.test(prev.split(":")[0]) && /=$/.test(prev)) acc[acc.length - 1] = prev.slice(0, -1) + l;
+                else acc.push(l);
+                return acc;
+            }, []).map(function (l) {
+                var colon = l.indexOf(":");
+                if (colon < 0) return l;
+                var head = l.slice(0, colon), value = l.slice(colon + 1);
+                if (!/ENCODING=QUOTED-PRINTABLE/i.test(head)) return l;
+                var cs = (/CHARSET=([^;:]+)/i.exec(head) || [])[1] || "utf-8";
+                var bin = value.replace(/=([0-9A-Fa-f]{2})/g, function (m, h) { return String.fromCharCode(parseInt(h, 16)); });
+                var bytes = new Uint8Array(bin.length);
+                for (var k = 0; k < bin.length; ++k) bytes[k] = bin.charCodeAt(k) & 255;
+                var decoded;
+                try { decoded = new TextDecoder(cs).decode(bytes); } catch (e) { decoded = new TextDecoder("utf-8").decode(bytes); }
+                return head + ":" + decoded;
+            });
+        }
+        function emptyContact() {
+            return { name: { familyName: "", givenName: "", middleName: "", honorificPrefix: "", honorificSuffix: "" }, nickname: "",
+                     phoneNumbers: [], emails: [], addresses: [], urls: [], ims: [], organizations: [], birthday: "", note: "", relations: [] };
+        }
+        function parseVCards(text) {
+            var lines = vcardLines(text), contacts = [], c = null;
+            for (var i = 0; i < lines.length; ++i) {
+                var line = lines[i], upper = line.toUpperCase();
+                if (/BEGIN:VCARD/.test(upper)) { c = emptyContact(); continue; }
+                if (/END:VCARD/.test(upper)) { if (c) contacts.push(c); c = null; continue; }
+                var m = /^(item[0-9]*?.)?([A-Z-]+)[;|:]/i.exec(line);
+                if (!m || line.indexOf(":") < 0) continue;
+                if (!c) c = emptyContact();
+                var prop = m[2].toUpperCase(), head = line.slice(0, line.indexOf(":")), value = line.slice(line.indexOf(":") + 1);
+                // X-IM;YAHOO;...: the service's own property (_getVCardLinePrefixType, :743-764).
+                if (prop === "X-IM") { var sv = head.split(";")[1]; if (sv && IM_OF_VCARD["X-" + sv.toUpperCase()]) prop = "X-" + sv.toUpperCase(); }
+                var org = c.organizations[0];
+                switch (prop) {
+                case "N":
+                    var parts = splitValues(value);
+                    c.name = { familyName: parts[0] || "", givenName: parts[1] || "", middleName: parts[2] || "", honorificPrefix: parts[3] || "", honorificSuffix: parts[4] || "" };
+                    break;
+                case "NICKNAME": c.nickname = unescapeText(value); break;
+                case "ORG":
+                    if (!org) c.organizations.push(org = { name: "", title: "" });
+                    org.name = splitValues(value)[0] || "";
+                    break;
+                case "TITLE":
+                    if (!org) c.organizations.push(org = { name: "", title: "" });
+                    org.title = unescapeText(value);
+                    break;
+                case "TEL": c.phoneNumbers.push({ value: value, type: PHONE_OF[labelOf(head)] || "type_other", primary: false }); break;
+                case "EMAIL": c.emails.push({ value: value, type: homeWork(labelOf(head)), primary: false }); break;
+                case "URL": c.urls.push({ value: value, type: homeWork(labelOf(head)), primary: false }); break;
+                case "ADR":
+                    var a = value.split(";"), poBox = a[0] || "", street = a[2] || "";
+                    var extended = (a[1] || "").replace(/\\n/g, "\n").replace(/\\,/g, ",");
+                    poBox = poBox && (street || extended) ? poBox + ", " : poBox;
+                    street = street && extended ? street + ", " : street;
+                    c.addresses.push({ streetAddress: poBox + street + extended, locality: a[3] || "", region: a[4] || "", postalCode: a[5] || "",
+                                       country: a[6] || "", type: homeWork(labelOf(head)), primary: false });
+                    break;
+                case "BDAY":
+                    // _handleBirthday (:392-410): YYYYMMDD made YYYY-MM-DD; too short or long, none.
+                    if (value.length === 8) c.birthday = value.slice(0, 4) + "-" + value.slice(4, 6) + "-" + value.slice(6, 8);
+                    else if (value.length >= 8 && value.length <= 10) c.birthday = value;
+                    break;
+                case "NOTE": c.note = unescapeText(value); break;
+                case "X-ABRELATEDNAMES":
+                    // Its type on the next line (item1.X-ABLabel:_$!<Spouse>!$_).
+                    var next = (lines[i + 1] || "").toUpperCase(), rel = "OTHER";
+                    if (/X-ABLABEL/.test(next)) {
+                        i++;
+                        RELATIONS.some(function (r) { if (next.indexOf(r) >= 0) { rel = r; return true; } return false; });
+                    }
+                    if (value) c.relations.push({ value: value, type: "type_" + rel.toLowerCase(), primary: false });
+                    break;
+                case "X-SPOUSE": if (value) c.relations.push({ value: value, type: "type_spouse", primary: false }); break;
+                case "X-CHILD": if (value) c.relations.push({ value: value, type: "type_child", primary: false }); break;
+                default:
+                    if (IM_OF_VCARD[prop] && value) c.ims.push({ value: value, type: IM_OF_VCARD[prop], primary: false });
+                }
+            }
+            return contacts;
+        }
+
+        // ---- Sort keys (SortKey._generateSortKeyHelper, :305-370) ----
+        var SORT_DEFAULT = "𧻓";
+        function sortKeyOf(person, order) {
+            var n = person.name || {}, given = String(n.givenName || "").trim(), family = String(n.familyName || "").trim();
+            var org = person.organization || (person.organizations || [])[0] || {}, company = String(org.name || "").trim();
+            var key = "";
+            if (order === "COMPANY_LAST_FIRST" || order === "COMPANY_FIRST_LAST") key += (company || SORT_DEFAULT + SORT_DEFAULT) + "\t";
+            if (given || family) {
+                var firstLast = order === "COMPANY_FIRST_LAST" || order === "FIRST_LAST";
+                (firstLast ? [given, family] : [family, given]).forEach(function (x) { if (x) key += x + "\t"; });
+            } else {
+                key += displayName(person).trim() + "\t";
+            }
+            key = key.trim();
+            if (key) {
+                var first = key.charAt(0);
+                if (first !== SORT_DEFAULT && first !== "\t" && !/\p{L}/u.test(first)) key = SORT_DEFAULT + key;
+            } else {
+                key = SORT_DEFAULT + SORT_DEFAULT;
+            }
+            return key.toLocaleLowerCase().trim();
+        }
+
+        // PhoneNumber.normalizePhoneNumber's form (properties/PhoneNumber.js:162-
+        // 213: each part reversed, "-" between), for a North American number
+        // as Globalization parses one; any other as the subscriber's number
+        // (as runtime/sample-data.js makes them).
+        function normalizedPhone(v) {
+            var d = digits(v), rev = function (x) { return x.split("").reverse().join(""); };
+            return d.length === 10 ? "-" + rev(d.slice(3)) + "-" + rev(d.slice(0, 3)) + "--" : "-" + rev(d) + "---";
+        }
+        // A person for a contact that matches no other, as the linker makes one
+        // (the shape of runtime/sample-data.js's, which follows it).
+        function personFor(contact, order) {
+            var point = function (pt, norm) { return { value: pt.value, type: pt.type, primary: false, normalizedValue: norm(pt.value), favoriteData: {} }; };
+            var org = contact.organizations[0];
+            var person = {
+                _kind: PERSON_KIND, contactIds: [contact._id], name: contact.name, names: [contact.name], nickname: contact.nickname,
+                emails: contact.emails.map(function (e) { return point(e, function (v) { return String(v).toLowerCase().trim(); }); }),
+                phoneNumbers: contact.phoneNumbers.map(function (ph) { var o = point(ph, normalizedPhone); o.speedDial = ""; return o; }),
+                ims: contact.ims.map(function (im) { return point(im, function (v) { return String(v).toLowerCase().trim(); }); }),
+                addresses: contact.addresses, urls: contact.urls, relations: contact.relations,
+                organization: org ? { name: org.name, title: org.title, department: "", type: "", description: "", startDate: "", endDate: "", location: {} }
+                                  : { name: "", title: "", department: "", type: "", description: "", startDate: "", endDate: "", location: {} },
+                notes: contact.note ? [contact.note] : [], birthday: contact.birthday, anniversary: "", gender: "", favorite: false,
+                photos: { accountId: "", bigPhotoId: "", bigPhotoPath: "", contactId: "", listPhotoPath: "", listPhotoSource: "", squarePhotoId: "", squarePhotoPath: "" },
+                ringtone: { location: "", name: "" }, reminder: "", launcherId: ""
+            };
+            person.sortKey = sortKeyOf(person, order);
+            return person;
+        }
+        // The account and kind imported contacts go to (VCardImporter._setupImport).
+        function importTarget() {
+            var accountId = prefs().defaultAccountId;
+            if (!accountId) {
+                var profile = (callNow("palm://com.palm.service.accounts/listAccounts", { templateId: "com.palm.palmprofile" }).results || [])[0];
+                accountId = profile && profile._id;
+            }
+            var info = accountId && callNow("palm://com.palm.service.accounts/getAccountInfo", { accountId: accountId });
+            if (!info || !info.returnValue) return { error: fail("NO_ACCOUNT_INFO", "no account info could be retrieved for account: \"" + (accountId || "") + "\"") };
+            var kind = null;
+            ((info.result || {}).capabilityProviders || []).some(function (cp) {
+                if (cp.capability !== "CONTACTS") return false;
+                kind = cp.id === "com.palm.palmprofile.contacts" ? "com.palm.contact.palmprofile:1" : cp.dbkinds && cp.dbkinds.contact || null;
+                return true;
+            });
+            if (!kind) return { error: fail("NO_PROVIDER_FOR_CONTACTS", "no provider for contacts could be retrieved for account: \"" + accountId + "\"") };
+            return { accountId: accountId, kind: kind };
+        }
+
         register(["com.palm.service.contacts"], {
             "/favoritePerson": function (p, reply) {
-                callNow("palm://com.palm.db/merge", { objects: [{ _id: p.personId, favorite: true }] });
+                var f = findPerson(p, "_getPersonAndSetFavoriteValueTo");
+                if (f.error) return reply(fail(-1, f.error));
+                f.person.favorite = true;
+                var err = p.defaultData ? setDefault(f.person, p) : null;
+                if (err) return reply(fail(-1, err));
+                callNow("palm://com.palm.db/merge", { objects: [favoriteFields(f.person)] });
                 reply(ok({}));
             },
             "/unfavoritePerson": function (p, reply) {
-                callNow("palm://com.palm.db/merge", { objects: [{ _id: p.personId, favorite: false }] });
+                var f = findPerson(p, "_getPersonAndSetFavoriteValueTo");
+                if (f.error) return reply(fail(-1, f.error));
+                f.person.favorite = false;
+                Object.keys(POINT).forEach(function (cpt) {
+                    f.person[POINT[cpt]] = (f.person[POINT[cpt]] || []).map(function (pt) { var c = clone(pt); c.favoriteData = {}; return c; });
+                });
+                callNow("palm://com.palm.db/merge", { objects: [favoriteFields(f.person)] });
+                reply(ok({}));
+            },
+            "/setFavoriteDefault": function (p, reply) {
+                var f = findPerson(p, "_setFavoriteDefault");
+                if (f.error) return reply(fail(-1, f.error));
+                var err = setDefault(f.person, p);
+                if (err) return reply(fail(-1, err));
+                callNow("palm://com.palm.db/merge", { objects: [favoriteFields(f.person)] });
+                reply(ok({}));
+            },
+            "/countVCardContacts": function (p, reply) {
+                var path = filePathOf(p, reply);
+                if (path === null) return;
+                readText(path, function (text) {
+                    if (text === null) return reply(fail(-1, "File to count vCards does not exist"));
+                    reply(ok({ count: text.split("\n").filter(function (l) { return /BEGIN:VCARD/.test(l.toUpperCase()); }).length }));
+                });
+            },
+            "/readVCard": function (p, reply) {
+                var path = filePathOf(p, reply);
+                if (path === null) return;
+                readText(path, function (text) {
+                    if (text === null) return reply(fail(-1, "There was a problem reading this vcard: " + path));
+                    reply(ok({ contacts: parseVCards(text) }));
+                });
+            },
+            "/importVCard": function (p, reply) {
+                var path = filePathOf(p, reply);
+                if (path === null) return;
+                readText(path, function (text) {
+                    if (text === null) return reply(fail(-1, "There was a problem reading this vcard: " + path));
+                    var target = importTarget();
+                    if (target.error) return reply(target.error);
+                    var order = prefs().listSortOrder || "LAST_FIRST";
+                    var contacts = parseVCards(text).map(function (c) { c._kind = target.kind; c.accountId = target.accountId; return c; });
+                    var ids = contacts.length ? callNow("palm://com.palm.db/put", { objects: contacts }).results || [] : [];
+                    contacts.forEach(function (c, i) { c._id = ids[i] && ids[i].id; });
+                    var saved = contacts.filter(function (c) { return c._id; });
+                    if (saved.length) callNow("palm://com.palm.db/put", { objects: saved.map(function (c) { return personFor(c, order); }) });
+                    reply(ok({ contacts: saved }));
+                });
+            },
+            "/vCardExportOne": function (p, reply) {
+                if (!p.personId) return reply(fail(-1, "personId passed to export was not truthy. export requires a valid personId to export"));
+                var person = dbGet(p.personId);
+                if (!person) return reply(fail(-1, "The personId passed into export was not a person that currently exists"));
+                exportVCards(p, [person], reply);
+            },
+            "/vCardExportAll": function (p, reply) {
+                exportVCards(p, callNow("palm://com.palm.db/find", { query: { from: PERSON_KIND } }).results || [], reply);
+            },
+            "/sortOrderChanged": function (p, reply) {
+                var order = prefs().listSortOrder || "LAST_FIRST";
+                var persons = callNow("palm://com.palm.db/find", { query: { from: PERSON_KIND, select: ["_id", "name", "organization", "nickname", "emails", "ims", "phoneNumbers", "sortKey"] } }).results || [];
+                var changed = persons.map(function (x) { return { _id: x._id, sortKey: sortKeyOf(x, order) }; })
+                                     .filter(function (x, i) { return x.sortKey !== persons[i].sortKey; });
+                if (changed.length) callNow("palm://com.palm.db/merge", { objects: changed });
                 reply(ok({}));
             },
             "*": function (p, reply) { reply(fail(-1, "not available in the Phoenix simulator")); }
         });
+        runtime.contactsService = { parseVCards: parseVCards, exportPerson: exportPerson, sortKeyOf: sortKeyOf };
     })();
 
     // ---- Email transports (com.palm.smtp, com.palm.imap, com.palm.pop) ---------------

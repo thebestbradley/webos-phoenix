@@ -331,6 +331,8 @@ jobs:
           t node tools/test-alarm.cjs --out app-tests/alarm
           t node tools/test-email.cjs --out app-tests/email-phone
           t node tools/test-email.cjs --tablet --out app-tests/email-tablet
+          t node tools/test-contacts.cjs --out app-tests/contacts-phone
+          t node tools/test-contacts.cjs --tablet --out app-tests/contacts-tablet
           t node tools/test-voicememos.cjs --out app-tests/voicememos-phone
           t node tools/test-voicememos.cjs --tablet --out app-tests/voicememos-tablet
           t node tools/test-flashlight.cjs --out app-tests/flashlight-phone

@@ -481,6 +481,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `node tools/test-db8-pages.cjs` | Db8 shared by pages writing at once |
 | `node tools/test-alarm.cjs` | A Clock alarm rings as a popup alert; one due when the Clock is opened rings after its card opens |
 | `xvfb-run -a node tools/test-activities-sim.cjs [--tablet]` | The activity manager in phoenix-sim: a Clock alarm rings at its minute with the Clock closed, once; activities due together each fire once; `--launch 'appId:{json}'` |
+| `node tools/test-contacts.cjs` | The simulated contacts service: favourites and an app's default, vCards counted, read, imported and exported, the sort order; the original Contacts opening a `.vcf` |
 | `node tools/test-email.cjs` | The simulated mail transports under the original Email: SMTP's `_id`, moves and deletes (to Trash) finished, the sync state, `com.palm.pop/parseEmlMessage` |
 | `node tools/test-device-services.cjs` | The Clock's alarm holds the display on (`com.palm.display`), a volume key or Power snoozes it (`com.palm.keys`), the ringer switch |
 | `node tools/test-keyboard.cjs` | Web fields and the virtual keyboard |
