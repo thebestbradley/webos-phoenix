@@ -477,7 +477,7 @@ final class Catalog
         'auth.registration' => ['none', 'required'],
         'server' => ['user', 'fixed', 'discovered'],
         'privacy.phoenixServers' => ['none', 'push-relay', 'token-relay'],
-        'push' => ['poll', 'unifiedpush', 'relay'],
+        'push' => ['poll', 'unifiedpush', 'relay', 'connection'],
         'status' => ['stable', 'beta', 'experimental'],
     ];
 

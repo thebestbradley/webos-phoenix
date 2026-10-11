@@ -1,0 +1,8 @@
+{
+    "//": "Phoenix's own connector packages that are in the catalog but do not come with Phoenix (docs/SYNERGY-CONNECTORS.md 7, 'What comes with Phoenix': installed by those who want them). bin/serve.sh packs and uploads each, as the catalog's admin, to a development catalog; a release catalog gets them the same way (upload --phoenix). Their account types come from their packages' catalog.json. The pre-installed ones are in apps/marketplace/service/etc/palm/marketplace/preinstalled.json.",
+    "packages": [
+        { "id": "org.webosphoenix.xmpp", "from": "apps/xmpp" },
+        { "id": "org.webosphoenix.matrix", "from": "apps/matrix" },
+        { "id": "org.webosphoenix.deltachat", "from": "apps/deltachat" }
+    ]
+}

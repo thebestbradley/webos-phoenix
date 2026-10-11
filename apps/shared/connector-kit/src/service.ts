@@ -35,9 +35,10 @@
 import * as synckit from "@phoenix/synckit";
 import type { DbObject, ItemStore } from "@phoenix/synckit";
 import { emptyStats, removeObjects, syncObjects, type CapabilityStats } from "./engine";
+import { createNet } from "./net";
 import { checkShare, maxBytesOf } from "./share";
 import type {
-    AccountContext, BaseContext, ConnectorDefinition, Environment, Json, MethodContext, Reply, ServiceMethods, ValidateContext
+    AccountContext, BaseContext, ConnectorDefinition, Environment, Json, LiveConnection, MethodContext, Reply, ServiceMethods, ValidateContext
 } from "./types";
 
 export const CALLBACKS = ["checkCredentials", "onCreate", "onEnabled", "onCredentialsChanged", "onDelete", "sync"];
@@ -47,7 +48,7 @@ function ok(extra?: Json): Reply { return Object.assign({ returnValue: true }, e
 
 /** Every method name the service registers. */
 export function methodNames(def: ConnectorDefinition): string[] {
-    return CALLBACKS.concat(def.share ? ["share"] : [], Object.keys(def.methods || {}));
+    return CALLBACKS.concat(def.share ? ["share"] : [], def.connection ? ["connect", "disconnect"] : [], Object.keys(def.methods || {}));
 }
 
 export function createConnectorService(def: ConnectorDefinition, env: Environment): ServiceMethods {
@@ -71,6 +72,7 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
         }
     };
 
+    let settingsCache: Promise<Record<string, Json> | null> | null = null;
     function baseContext(hosts?: string[], backoff?: { retryAt: number }): BaseContext {
         return {
             luna: bus, db: bus.db, tempdb: bus.tempdb, log, now, service: def.service, oauth,
@@ -78,9 +80,76 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
                 request: env.request, hosts: hosts ? (def.hosts || []).concat(hosts) : undefined, backoff,
                 maxWaitMs: env.maxWaitMs, now, sleep: env.sleep, log, userAgent: def.userAgent
             }),
+            net: createNet({ env: env.net, hosts: (def.hosts || []).concat(hosts || []), backoff, now }),
             cachePhoto: env.cachePhoto || (async (_key: string, url: string) => url),
-            readFile: env.readFile || (async (path: string) => { throw new Error("cannot read " + path + " here"); })
+            readFile: env.readFile || (async (path: string) => { throw new Error("cannot read " + path + " here"); }),
+            // Only the settings the definition names, from the device's file for this service.
+            setting: async (name: string) => {
+                if ((def.settings || []).indexOf(name) < 0) return undefined;
+                if (!settingsCache) settingsCache = env.settings ? env.settings(def.service).catch(() => null) : Promise.resolve(null);
+                const all = await settingsCache;
+                return all ? all[name] : undefined;
+            },
+            helper: async (name: string, args?: string[]) => {
+                if ((def.helpers || []).indexOf(name) < 0)
+                    throw synckit.syncError(name + " is not one of " + def.service + "'s helpers", "PERMISSION_DENIED");
+                if (!env.helper) throw synckit.syncError(name + " is not on this device", "HELPER_NOT_AVAILABLE");
+                return env.helper(name, args);
+            },
+            writeFile: async (name: string, bytes: Uint8Array, mimeType?: string) => {
+                if (!env.writeFile) throw synckit.syncError("cannot keep files here", "UNSUPPORTED");
+                return env.writeFile(def.service, String(name).replace(/[^A-Za-z0-9._-]/g, "_"), bytes, mimeType);
+            },
+            setTimeout: (fn: () => void, ms: number) => (env.setTimeout || setTimeout)(fn, ms),
+            clearTimeout: (h: Json) => (env.clearTimeout || clearTimeout)(h)
         };
+    }
+
+    // ---- Long-lived connections (definition.connection) -------------------------------------
+
+    interface Live { handle: LiveConnection | null; opening: Promise<LiveConnection> | null }
+    const lives: Record<string, Live> = {};
+    const liveHere = () => !env.live || env.live();
+    function liveOf(accountId: string): LiveConnection | null {
+        const l = lives[accountId];
+        return l && l.handle && !l.handle.closed ? l.handle : null;
+    }
+    // Opened with a context of its own, which lives as long as the connection.
+    async function openLive(accountId: string): Promise<LiveConnection> {
+        if (!def.connection) throw synckit.syncError(def.service + " keeps no connection", "UNSUPPORTED");
+        const open = liveOf(accountId);
+        if (open) return open;
+        const l = lives[accountId] = lives[accountId] || { handle: null, opening: null };
+        if (l.opening) return l.opening;
+        if (!liveHere()) throw synckit.syncError("Connections are kept elsewhere", "NOT_LIVE_HERE");
+        l.opening = (async () => {
+            const { ctx, rec } = await accountContext(accountId);
+            if (rec.retryAt && rec.retryAt > now()) {
+                const e = synckit.syncError("The server asked to wait", "503_SERVICE_UNAVAILABLE") as Error & { retryAt?: number };
+                e.retryAt = rec.retryAt;
+                throw e;
+            }
+            const handle = await (def.connection as NonNullable<ConnectorDefinition["connection"]>).open(ctx);
+            l.handle = handle;
+            return handle;
+        })();
+        try {
+            return await l.opening;
+        } finally {
+            l.opening = null;
+        }
+    }
+    async function closeLive(accountId: string): Promise<void> {
+        const l = lives[accountId];
+        delete lives[accountId];
+        if (l && l.opening) await l.opening.catch(() => null);
+        const h = l && l.handle;
+        if (h && !h.closed) await Promise.resolve(h.close()).catch((e: Error) => log("closing: " + e.message));
+    }
+    // After a sync: the connection open again if it dropped (a periodic sync reconnects).
+    function keepLive(accountId: string): void {
+        if (!def.connection || !liveHere() || liveOf(accountId)) return;
+        openLive(accountId).catch((e: Error) => log("not connected: " + e.message));
     }
 
     // ---- The account's state (def.kinds.state) ----------------------------------------------
@@ -93,16 +162,43 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
         rec.config = rec.config || {};
         rec.tokens = rec.tokens || {};
         rec.data = rec.data || {};
+        bases.set(rec, keysJson(rec.data));
         return rec;
+    }
+    // Each key of the state's data as JSON, as it was read: a save writes the
+    // keys this context changed onto the record as it is now, so a long-lived
+    // connection's context and a call's do not undo each other's changes.
+    const bases = new WeakMap<StateRecord, Record<string, string>>();
+    function keysJson(data: Json): Record<string, string> {
+        const out: Record<string, string> = {};
+        Object.keys(data || {}).forEach((k) => { out[k] = JSON.stringify(data[k]); });
+        return out;
     }
     // Written only when something in it changed: a sync that changed nothing writes nothing.
     async function saveState(rec: StateRecord, before: string): Promise<void> {
         const now_ = JSON.stringify({ c: rec.config, t: rec.tokens, d: rec.data, r: rec.retryAt || 0 });
         if (now_ === before && rec._id) return;
-        const out = Object.assign({}, rec);
+        const out: Json = Object.assign({}, rec);
+        const base = bases.get(rec);
+        if (rec._id && base) {
+            const current = (await bus.db.find({ from: def.kinds.state, where: [{ prop: "accountId", op: "=", val: rec.accountId }] }))[0];
+            if (current && current._rev !== rec._rev) {
+                const data = Object.assign({}, current.data || {});
+                Object.keys(Object.assign({}, base, rec.data)).forEach((k) => {
+                    const mine = rec.data[k] === undefined ? undefined : JSON.stringify(rec.data[k]);
+                    if (mine === base[k]) return;
+                    if (mine === undefined) delete data[k];
+                    else data[k] = rec.data[k];
+                });
+                out.data = data;
+            }
+        }
         delete out._rev;
         const r = await bus.db.put([out]);
         rec._id = r[0].id;
+        rec._rev = r[0].rev;
+        bases.set(rec, keysJson(out.data));
+        if (out.data !== rec.data) Object.keys(out.data).forEach((k) => { if (!(k in rec.data)) rec.data[k] = out.data[k]; });
     }
     function snapshot(rec: StateRecord): string {
         return JSON.stringify({ c: rec.config, t: rec.tokens, d: rec.data, r: rec.retryAt || 0 });
@@ -115,7 +211,7 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
     // The user's server (config.serverUrl / config.server) is always reachable.
     function userHosts(config: Json): string[] {
         const out: string[] = [];
-        [config && config.serverUrl, config && config.server, config && config.url].forEach((v) => {
+        [config && config.serverUrl, config && config.server, config && config.url, config && config.host].forEach((v) => {
             const h = hostOfUrl(v) || (typeof v === "string" && /^[a-z0-9.-]+(:\d+)?$/i.test(v) ? v.toLowerCase() : null);
             if (h) out.push(h);
         });
@@ -140,8 +236,16 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
                     message, onclick: n.appId ? { appId: n.appId, params: n.params || {} } : undefined, sourceId: def.service
                 }).catch((e: Error) => log("notification not shown: " + e.message));
             },
-            putMessage: (message: Json) => bus.call("luna://org.webosports.service.messaging/putMessage", { message })
+            putMessage: (message: Json) => bus.call("luna://org.webosports.service.messaging/putMessage", { message }),
+            live: () => liveOf(accountId),
+            connect: () => openLive(accountId),
+            connectionsHere: () => liveHere(),
+            saveState: async () => {
+                await saveState(state, savedAs);
+                savedAs = snapshot(state);
+            }
         });
+        let savedAs = snapshot(state);
         // The backoff object is shared with http: a 429 during the call is kept with the state.
         Object.defineProperty(state, "retryAt", { get: () => backoff.retryAt, set: (v: number) => { backoff.retryAt = v; },
                                                   enumerable: true, configurable: true });
@@ -245,11 +349,14 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
                 await setState(accountId, id, "IDLE");
             } catch (e) {
                 failure = e as Error;
+                // A wait the connector was told of other than by HTTP (a stream's policy-violation): kept as the backoff.
+                if (failure.retryAt && failure.retryAt > (rec.retryAt || 0)) rec.retryAt = failure.retryAt;
                 await setState(accountId, id, "ERROR", failure);
                 const code = synckit.errorCodeOf(failure);
                 // Credentials or a rate limit concern the whole account: stop here.
                 if (code === "401_UNAUTHORIZED" || code === "503_SERVICE_UNAVAILABLE" || code === "CREDENTIALS_NOT_FOUND") {
-                    for (const other of providers.slice(providers.indexOf(id) + 1)) await setState(accountId, other, "ERROR", failure);
+                    // (all of its capabilities, those synced before it too: their data is as stale now).
+                    for (const other of providers) if (other !== id) await setState(accountId, other, "ERROR", failure);
                     break;
                 }
             }
@@ -257,8 +364,10 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
         await saveState(rec, before);
         if (failure) {
             const r = synckit.fail(failure);
+            if (rec.retryAt && rec.retryAt > now()) r.retryAt = rec.retryAt;
             return Object.assign(r, { stats }) as Reply;
         }
+        keepLive(accountId);
         return ok({ stats });
     }
 
@@ -317,7 +426,10 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
                     { prop: "accountId", op: "=", val: p.accountId }, { prop: "capabilityProvider", op: "=", val: providerId }] })
                     .catch(() => {});
                 const left = enabledProviders(ctx.account).filter((id) => id !== providerId);
-                if (!left.length) await scheduler.cancel(p.accountId);
+                if (!left.length) {
+                    await scheduler.cancel(p.accountId);
+                    await closeLive(p.accountId);
+                }
                 return ok();
             } catch (e) {
                 return synckit.fail(e) as Reply;
@@ -338,6 +450,7 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
         onDelete: async (p: Json) => {
             try {
                 await scheduler.cancel(p.accountId);
+                await closeLive(p.accountId);
                 const { ctx, rec } = await accountContext(p.accountId);
                 if (def.onDelete) await def.onDelete(ctx).catch((e: Error) => log("onDelete: " + e.message));
                 for (const id of providerIds) {
@@ -363,6 +476,27 @@ export function createConnectorService(def: ConnectorDefinition, env: Environmen
             });
         }
     };
+
+    // The connection, at once (the simulator's always-running page; a device's
+    // activity when the network comes): {accountId} -> {connected: true}.
+    if (def.connection) {
+        methods.connect = async (p: Json) => {
+            if (!p || !p.accountId) return { returnValue: false, errorCode: "400_BAD_REQUEST", errorText: "accountId is required" };
+            try {
+                const { ctx } = await accountContext(p.accountId);
+                if (!enabledProviders(ctx.account).length) return ok({ connected: false, skipped: "no enabled capability" });
+                await openLive(p.accountId);
+                return ok({ connected: true });
+            } catch (e) {
+                return synckit.fail(e) as Reply;
+            }
+        };
+        methods.disconnect = async (p: Json) => {
+            if (p && p.accountId) await closeLive(p.accountId);
+            else for (const id of Object.keys(lives)) await closeLive(id);
+            return ok();
+        };
+    }
 
     // Sharing (definition.share): docs/SYNERGY-SDK.md "Sharing to your service".
     if (def.share) {

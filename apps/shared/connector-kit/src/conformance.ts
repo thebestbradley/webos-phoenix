@@ -36,7 +36,7 @@
 import type { DbObject, RequestFn } from "@phoenix/synckit";
 import * as memdbModule from "@phoenix/synckit/src/test/memdb.js";
 import { createConnectorService } from "./service";
-import type { ConnectorDefinition, Json, ServiceMethods, ValidateParams } from "./types";
+import type { ConnectorDefinition, Environment, Json, ServiceMethods, ValidateParams } from "./types";
 
 export interface FakeServer {
     request: RequestFn;
@@ -69,6 +69,12 @@ export interface ConformanceFixture {
     share?: { content: Json; audience?: string };
     /** Files the share's content names (path -> bytes and type), for ctx.readFile. */
     files?: Record<string, { bytes: Uint8Array; mimeType: string }>;
+    /**
+     * More of the environment the connector runs in, from its fake server:
+     * sockets (net) for a connector that keeps a connection, helpers, settings.
+     * The server's unauthorized() and throttle() then concern those too.
+     */
+    environment?(server: FakeServer): Partial<Environment>;
 }
 
 export interface ConformanceResult { name: string; ok: boolean; error?: string }
@@ -116,7 +122,7 @@ async function setup(def: ConnectorDefinition, fx: ConformanceFixture, periodic:
         return r.then((x: Json) => ({ returnValue: true, threadids: ["thread-1"], id: x[0].id }));
     };
     const bus = m.createFakeBus({ db, tempdb, accounts: { [ACCOUNT]: account }, credentials: {}, handlers });
-    methods = createConnectorService(def, {
+    methods = createConnectorService(def, Object.assign({}, fx.environment ? fx.environment(server) : {}, {
         luna: bus, request: server.request, log: () => {}, periodicSync: periodic, now: () => clock.t,
         sleep: async (ms: number) => { clock.t += ms; },
         readFile: async (path: string) => {
@@ -124,7 +130,7 @@ async function setup(def: ConnectorDefinition, fx: ConformanceFixture, periodic:
             if (!f) throw new Error("no file " + path + " in the fixture's files");
             return f;
         }
-    });
+    }));
     return { methods, db, tempdb, bus, server, accountId: ACCOUNT, clock, providers };
 }
 

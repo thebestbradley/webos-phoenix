@@ -1,0 +1,11 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.service.xmpp"
+    ],
+    "accounts.transport": [
+        "oem"
+    ],
+    "xmpp.account": [
+        "oem"
+    ]
+}

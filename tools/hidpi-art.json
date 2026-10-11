@@ -1258,7 +1258,7 @@
         },
         {
             "name": "xmpp",
-            "art": "runtime/accounts/com.webosphoenix.xmpp/images",
+            "art": "apps/xmpp/public/accounts/com.webosphoenix.xmpp/images",
             "upscale": [
                 { "art": "xmpp-32x32.png", "method": "downscale", "source": "apps/messaging/public/icon-256x256.png" },
                 { "art": "xmpp-48x48.png", "method": "downscale", "source": "apps/messaging/public/icon-256x256.png" }

@@ -1,0 +1,26 @@
+{
+    "id": "com.palm.contact.xmpp:1",
+    "owner": "org.webosphoenix.service.xmpp",
+    "sync": false,
+    "extends": [
+        "com.palm.contact:1"
+    ],
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        },
+        {
+            "name": "remoteId",
+            "props": [
+                {
+                    "name": "remoteId"
+                }
+            ]
+        }
+    ]
+}

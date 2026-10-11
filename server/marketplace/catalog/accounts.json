@@ -1,5 +1,5 @@
 {
-    "//": "The account types the Marketplace's Connections view lists (docs/SYNERGY-CONNECTORS.md 2.1, phase C0): the templates Phoenix has today, all built in. Catalog::publish() checks each one and writes it into the signed index as `accounts`; iconFrom (a file in this repository, not published) is copied to `icon` under the published folder. capabilities use each template's own capabilityProviders[].capability. signUp: where a person without an account gets one (https), when there is a public page for it: the Fediverse's list of servers, XMPP's list of providers; none for the types whose server is the user's own (CardDAV, mail) or that need no account (a subscribed calendar).",
+    "//": "The account types the Marketplace's Connections view lists (docs/SYNERGY-CONNECTORS.md 2.1, phase C0): the templates Phoenix has today, all built in. Catalog::publish() checks each one and writes it into the signed index as `accounts`; iconFrom (a file in this repository, not published) is copied to `icon` under the published folder. capabilities use each template's own capabilityProviders[].capability. signUp: where a person without an account gets one (https), when there is a public page for it: the Fediverse's list of servers; none for the types whose server is the user's own (CardDAV, mail) or that need no account (a subscribed calendar). Phoenix's own connector packages in the catalog that it does not come with (Jabber, Matrix, Delta Chat: phoenix-connectors.json, which bin/serve.sh uploads as Phoenix's) list their types from their packages (catalog.json), as a developer's do.",
     "accounts": [
         {
             "templateId": "com.webosphoenix.dav",
@@ -78,25 +78,6 @@
             "push": "poll",
             "status": "beta",
             "package": { "id": "com.palm.app.email", "builtin": true }
-        },
-        {
-            "templateId": "com.webosphoenix.xmpp",
-            "title": "Jabber (XMPP)",
-            "provider": "Any XMPP server",
-            "icon": "icons/accounts/com.webosphoenix.xmpp.png",
-            "iconFrom": "runtime/accounts/com.webosphoenix.xmpp/images/xmpp-48x48@2x.png",
-            "summary": "Chats and buddies' presence in Messaging and Contacts. Simulator only for now, against the simulated server chat.example.",
-            "capabilities": [
-                { "capability": "MESSAGING", "direction": "two-way" }
-            ],
-            "protocols": ["xmpp"],
-            "auth": { "type": "password", "registration": "none" },
-            "server": "discovered",
-            "privacy": { "dataGoesTo": "the server in your Jabber ID", "e2ee": false, "phoenixServers": "none" },
-            "push": "poll",
-            "status": "experimental",
-            "package": { "id": "org.webosphoenix.service.xmpp", "builtin": true },
-            "signUp": "https://providers.xmpp.net/"
         }
     ]
 }
