@@ -339,9 +339,27 @@ Item {
     // show the pressed art behind the group, in the same three slices: it
     // has the same transparent 10 px down each side, which stretched whole
     // left the microphone outside the tab and a gap after the battery.
+    // Ember Glass: the open menu's tab is the app menu tab's capsule, lit
+    // (components.html: white 16% while its menu is open), round the
+    // indicators.
+    Rectangle {
+        objectName: "emberSystemMenuTab"
+        visible: Theme.emberGlass && opacity > 0
+        opacity: bar.systemMenuOpen ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: Theme.systemMenuFadeDuration } }
+        x: indicators.x - Theme.px(8)
+        width: indicators.width + Theme.px(16)
+        height: Theme.px(24)
+        anchors.verticalCenter: parent.verticalCenter
+        radius: height / 2
+        color: Qt.rgba(1, 1, 1, 0.16)
+        border.color: Qt.rgba(1, 1, 1, 0.38)
+        border.width: Math.max(1, EmberGlass.hairline * Theme.u)
+    }
     ArtBorderImage {
         id: menuTab
         objectName: "systemMenuTab"
+        visible: !Theme.emberGlass
         anchors.right: parent.right
         anchors.rightMargin: -Theme.statusBarTabCap
         anchors.top: parent.top

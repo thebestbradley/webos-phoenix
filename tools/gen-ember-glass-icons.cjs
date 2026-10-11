@@ -29,7 +29,15 @@ const GLYPHS = [
     "wifi-none", "wifi-low", "wifi-medium", "wifi-high", "wifi-slash",
     "airplane", "bluetooth", "bluetooth-connected",
     // Just Type and the dock (SearchPill.qml, QuickLaunch.qml).
-    "magnifying-glass", "phone", "envelope-simple", "chat-circle", "calendar-blank", "squares-four"
+    "magnifying-glass", "phone", "envelope-simple", "chat-circle", "calendar-blank", "squares-four",
+    // The system menu (SystemMenu.qml): each row's glyph, a drawer's caret,
+    // a network's lock and check, the scroll carets.
+    "battery-full", "battery-high", "battery-medium", "battery-low", "battery-empty", "battery-charging",
+    "sun-dim", "sun", "speaker-low", "speaker-high", "speaker-slash", "shield-check", "device-rotate",
+    "lock-simple", "flashlight", "check", "caret-up", "caret-right",
+    // The launcher (Launcher.qml, IconMenu.qml): its tabs' and edit mode's
+    // buttons, the icon menu's rows.
+    "plus", "x", "pencil-simple", "dots-three", "folder-simple", "info", "trash", "star"
 ];
 
 function main() {

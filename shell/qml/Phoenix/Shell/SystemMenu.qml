@@ -24,8 +24,18 @@
 //
 // Not reproduced: the drawers asking the view to scroll to show an opened
 // list (commented out in the original too, SystemMenu.qml:182-186).
+//
+// Ember Glass (docs/SYSTEM-UI-2.md, 9) draws the same menu as its menus
+// (base.css .menu): an L4 sheet under the status bar's right end (its
+// corner there 4 px, the others 20; lift-high), 46 px rows (.mi) with a
+// Phosphor glyph before the text (ember while what it stands for is on),
+// the pressed or focused row marked by the sunk tint and the ember bar
+// (.mi.sel), hairlines between rows, the sliders Ember's (.slider), a
+// drawer's state in ink-2 and a caret that turns as it opens. The rows,
+// their labels and what they do are 1.0's.
 
 import QtQuick
+import QtQuick.Shapes
 
 Item {
     id: menu
@@ -43,6 +53,16 @@ Item {
 
     // The scene behind, for the blur under the menu.
     property Item backdrop: null
+
+    // ---- Ember Glass ---------------------------------------------------------------
+    readonly property bool eg: Theme.emberGlass
+    // Where a row's text starts: after its glyph (.mi: 14 px in, a 19 px
+    // glyph, 12 apart); a drawer's entries line up with it.
+    readonly property int textX: eg ? Theme.px(14 + 19 + 12) : Theme.systemMenuIndent
+    readonly property int subX: eg ? textX : Theme.systemMenuIndent + Theme.systemMenuSubIndent
+    readonly property color ink: eg ? Theme.eg.colorInk : Theme.systemMenuText
+    readonly property color ink2: eg ? Theme.eg.colorInk2 : Theme.systemMenuTextDim
+    readonly property color ink3: eg ? Theme.eg.colorInk3 : Theme.systemMenuTextDim
     // Room below the status bar: the positive space's height plus 10, as
     // SystemMenu::slotPositiveSpaceChangeFinished gave setHeight
     // (SystemMenu.cpp:945-953); the menu is at most 410 tall.
@@ -54,6 +74,13 @@ Item {
     // source opens its launch point for it (Wi-Fi, Bluetooth cards).
     readonly property string settingsAppId: "org.webosphoenix.settings"
     function openPreferences(page) { launchRequested(settingsAppId, { page: page }); }
+
+    // Open a drawer: "wifi", "vpn" or "bluetooth" (as a tap on its row).
+    function openDrawer(name) {
+        var d = ({ wifi: wifi, vpn: vpn, bluetooth: bluetooth })[name];
+        if (d && d.active)
+            d.open();
+    }
 
     // SystemMenu.qml:336-342: the menu closes itself a moment after a row
     // is used, so the tap shows.
@@ -249,12 +276,24 @@ Item {
     }
 
     // ---- MenuDivider.qml ---------------------------------------------------------
-    component Divider: Image {
-        property int inset: Theme.systemMenuDividerInset
+    component Divider: Item {
+        property int inset: Theme.emberGlass ? Theme.px(24) : Theme.systemMenuDividerInset
         width: parent ? parent.width - inset : 0
         x: inset / 2
         height: Theme.px(2)
-        source: Theme.asset("menu-divider.png")
+        Image {
+            visible: !Theme.emberGlass
+            anchors.fill: parent
+            source: Theme.asset("menu-divider.png")
+        }
+        // Ember Glass: a hairline of line-2, 12 px in (.menu hr).
+        Rectangle {
+            visible: Theme.emberGlass
+            width: parent.width
+            y: (parent.height - height) / 2
+            height: Math.max(1, EmberGlass.hairline * Theme.u)
+            color: Theme.eg.colorLine2
+        }
     }
 
     // ---- MenuListEntry.qml: a 42 px row, highlighted while pressed ----------------
@@ -272,12 +311,45 @@ Item {
         // (menuPosition 2, MenuListEntry.qml:19-20).
         property bool last: false
         readonly property bool pressed: area.pressed && area.containsMouse
+        // Ember Glass: the row's glyph (EmberGlassIcons.js), ember while lit.
+        property string glyph: ""
+        property bool glyphLit: false
+        readonly property bool highlighted: (entry.selectable && entry.pressed) || entry.forceSelected || entry.keyFocused
         signal action
         width: parent ? parent.width : 0
-        height: Theme.systemMenuRowHeight
+        height: Theme.emberGlass ? Theme.px(46) : Theme.systemMenuRowHeight
 
+        // Ember Glass: the sunk tint and the ember bar (.mi.sel).
+        Rectangle {
+            objectName: "emberMenuRowHighlight"
+            visible: Theme.emberGlass && entry.highlighted
+            anchors.fill: parent
+            radius: Theme.px(EmberGlass.radiusMenuItem)
+            color: Theme.eg.colorSunk
+            Rectangle {
+                x: Theme.px(4)
+                y: Theme.px(13)
+                width: 2.5 * Theme.u
+                height: parent.height - 2 * y
+                radius: width / 2
+                gradient: Gradient {
+                    GradientStop { position: 0; color: EmberGlass.emberB }
+                    GradientStop { position: 1; color: EmberGlass.emberA }
+                }
+            }
+        }
+        EgIcon {
+            objectName: "emberMenuGlyph"
+            visible: Theme.emberGlass && entry.glyph !== ""
+            x: Theme.px(14)
+            anchors.verticalCenter: parent.verticalCenter
+            width: Theme.px(19)
+            height: width
+            name: entry.glyph
+            color: entry.glyphLit ? EmberGlass.emberMid : Theme.eg.colorInk2
+        }
         ArtBorderImage {
-            visible: (entry.selectable && entry.pressed) || entry.forceSelected || entry.keyFocused
+            visible: !Theme.emberGlass && entry.highlighted
             source: Theme.asset(entry.last ? "menu-selection-gradient-last.png" : "menu-selection-gradient-default.png")
             x: Theme.px(4)
             width: parent.width - Theme.px(8)
@@ -293,16 +365,20 @@ Item {
     }
 
     // Prelude 18, 14 px in (AirplaneModeElement.qml:13-22).
+    // Ember Glass: 15 px semibold in ink (.menu .mi), after the glyph.
     component Label: Text {
-        x: Theme.systemMenuIndent
+        x: menu.textX
         anchors.verticalCenter: parent.verticalCenter
-        color: Theme.systemMenuText
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.systemMenuFontSize
+        color: menu.ink
+        font.family: Theme.emberGlass ? Theme.egFontFamily : Theme.fontFamily
+        font.pixelSize: Theme.emberGlass ? Math.round(15 * Theme.u) : Theme.systemMenuFontSize
+        font.weight: Theme.emberGlass ? 550 : Font.Normal
     }
 
     // A row's icon, 12 px from its right edge (AirplaneModeElement.qml:24-25,32).
+    // (Ember Glass: the row's glyph stands for it.)
     component Icon: Image {
+        visible: !Theme.emberGlass
         x: parent.width - width - Theme.px(4 + 8)
         anchors.verticalCenter: parent.verticalCenter
         width: Theme.artWidth(source)
@@ -310,16 +386,51 @@ Item {
     }
 
     // ---- Spinner: SystemMenu.cpp's AnimatedSpinner (:991-1073) ---------------------
-    component Spinner: Image {
+    component Spinner: Item {
         id: spinner
         property bool on: false
         property int frame: 0
         visible: on
-        source: Theme.asset("spinner.png")
         width: Theme.px(32)
         height: Theme.px(32)
-        smooth: true
         rotation: frame * 360 / Theme.spinnerFrames
+        Image {
+            visible: !Theme.emberGlass
+            anchors.fill: parent
+            source: Theme.asset("spinner.png")
+            smooth: true
+        }
+        // Ember Glass: three quarters of a hairline ring in ink-2, its head
+        // ember, turning as 1.0's art turned.
+        Shape {
+            visible: Theme.emberGlass
+            anchors.centerIn: parent
+            width: Theme.px(16)
+            height: width
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+                strokeColor: Theme.eg.colorInk2
+                strokeWidth: Math.max(1, 1.5 * Theme.u)
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+                PathAngleArc {
+                    centerX: Theme.px(8); centerY: Theme.px(8)
+                    radiusX: Theme.px(7); radiusY: Theme.px(7)
+                    startAngle: 0; sweepAngle: 270
+                }
+            }
+            ShapePath {
+                strokeColor: EmberGlass.emberMid
+                strokeWidth: Math.max(1, 1.5 * Theme.u)
+                fillColor: "transparent"
+                capStyle: ShapePath.RoundCap
+                PathAngleArc {
+                    centerX: Theme.px(8); centerY: Theme.px(8)
+                    radiusX: Theme.px(7); radiusY: Theme.px(7)
+                    startAngle: 230; sweepAngle: 40
+                }
+            }
+        }
         NumberAnimation on frame {
             running: spinner.on
             from: 0
@@ -341,35 +452,68 @@ Item {
         // Wi-Fi's icons sit 3 px from the edge, the others' 8 (WifiEntry.qml:12, BluetoothEntry.qml:10).
         readonly property int rightMargin: Theme.px(bars >= 0 ? 3 : 8)
         readonly property int iconSpacing: Theme.px(4)
-        x: Theme.systemMenuIndent + Theme.systemMenuSubIndent
+        x: menu.subX
         width: parent ? parent.width - x : 0
         height: parent ? parent.height : 0
+
+        // Ember Glass: the signal, the lock and the check as glyphs
+        // (Wi-Fi's levels; ink-2, the check in ember).
+        Row {
+            id: egIcons
+            visible: Theme.emberGlass
+            anchors.right: parent.right
+            anchors.rightMargin: Theme.px(10)
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Theme.px(6)
+            EgIcon {
+                objectName: "emberMenuEntryCheck"
+                visible: le.connected
+                width: Theme.px(16); height: width
+                name: "check"
+                color: Theme.eg.colorEmberText
+            }
+            EgIcon {
+                visible: le.secured
+                width: Theme.px(14); height: width
+                anchors.verticalCenter: parent.verticalCenter
+                name: "lock-simple"
+                color: Theme.eg.colorInk3
+            }
+            EgIcon {
+                visible: le.bars >= 0
+                width: Theme.px(16); height: width
+                name: ["wifi-none", "wifi-low", "wifi-medium", "wifi-high"][Math.max(0, Math.min(3, le.bars))]
+                color: Theme.eg.colorInk2
+            }
+        }
 
         Text {
             id: nameText
             anchors.verticalCenter: parent.verticalCenter
-            width: le.bars >= 0
+            width: Theme.emberGlass ? parent.width - egIcons.width - Theme.px(10 + 8)
+                 : le.bars >= 0
                    ? parent.width - sig.width - check.width - lock.width - le.rightMargin - 3 * le.iconSpacing - Theme.px(5)
                    : parent.width - check.width - le.rightMargin - le.iconSpacing - Theme.px(5)
             elide: Text.ElideRight
             text: le.name
-            color: Theme.systemMenuText
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.systemMenuEntryFontSize
+            color: menu.ink
+            font.family: Theme.emberGlass ? Theme.egFontFamily : Theme.fontFamily
+            font.pixelSize: Theme.emberGlass ? Math.round(15 * Theme.u) : Theme.systemMenuEntryFontSize
+            font.weight: Theme.emberGlass ? 500 : Font.Normal
         }
         Text {
             visible: le.status !== ""
             y: nameText.y + nameText.baselineOffset + Theme.px(1)
             text: le.status
-            color: Theme.systemMenuTextDim
+            color: Theme.emberGlass ? Theme.eg.colorInk3 : Theme.systemMenuTextDim
             font.bold: le.statusBold
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.systemMenuStatusFontSize
+            font.family: Theme.emberGlass ? Theme.egFontFamily : Theme.fontFamily
+            font.pixelSize: Theme.emberGlass ? Math.round(11 * Theme.u) : Theme.systemMenuStatusFontSize
             font.capitalization: Font.AllUppercase
         }
         Image {
             id: sig
-            visible: le.bars >= 0
+            visible: le.bars >= 0 && !Theme.emberGlass
             x: parent.width - width - le.iconSpacing - le.rightMargin
             anchors.verticalCenter: parent.verticalCenter
             width: le.bars >= 0 ? Theme.artWidth(source) : 0
@@ -378,7 +522,7 @@ Item {
         }
         Image {
             id: lock
-            visible: le.secured
+            visible: le.secured && !Theme.emberGlass
             x: sig.x - width - le.iconSpacing
             anchors.verticalCenter: parent.verticalCenter
             width: le.bars >= 0 ? Theme.artWidth(source) : 0
@@ -387,7 +531,7 @@ Item {
         }
         Image {
             id: check
-            visible: le.connected
+            visible: le.connected && !Theme.emberGlass
             x: le.bars >= 0 ? lock.x - width - le.iconSpacing : parent.width - width - le.iconSpacing - le.rightMargin
             anchors.verticalCenter: parent.verticalCenter
             width: Theme.artWidth(source)
@@ -402,6 +546,9 @@ Item {
         property string title
         property string stateText
         property bool spinning: false
+        // Ember Glass: the header's glyph, lit while the radio is on.
+        property string glyph: ""
+        property bool glyphLit: false
         // The spinner sits this far from the title's start, the state text
         // leaves this much for the title (WiFiElement.qml:158,168;
         // BluetoothElement.qml:160,168).
@@ -442,28 +589,49 @@ Item {
         Entry {
             selectable: drawer.active
             onAction: drawer.isOpen ? drawer.close() : drawer.open()
+            glyph: drawer.glyph
+            glyphLit: drawer.glyphLit
 
             Label {
                 id: titleText
                 text: drawer.title
-                color: drawer.active ? Theme.systemMenuText : Theme.systemMenuTextDim
+                color: drawer.active ? menu.ink : menu.ink3
             }
             Spinner {
-                x: titleText.width + Theme.px(drawer.spinnerOffset)
+                x: Theme.emberGlass ? titleText.x + titleText.width + Theme.px(4) : titleText.width + Theme.px(drawer.spinnerOffset)
                 y: (parent.height - height) / 2 - Theme.px(1)
                 on: drawer.spinning
             }
+            // Ember Glass: a caret at the right, turned up while open.
+            EgIcon {
+                id: drawerCaret
+                objectName: "emberMenuDrawerCaret"
+                visible: Theme.emberGlass
+                x: parent.width - width - Theme.px(14)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Theme.px(12)
+                height: width
+                name: "caret-down"
+                color: Theme.eg.colorInk3
+                opacity: drawer.active ? 1 : 0.5
+                rotation: drawer.isOpen ? 180 : 0
+                Behavior on rotation { NumberAnimation { duration: Theme.systemMenuDrawerDuration; easing.type: Easing.OutCubic } }
+            }
             Text {
-                x: parent.width - width - Theme.systemMenuIndent
-                width: parent.width - titleText.width - Theme.px(drawer.stateGap)
+                objectName: "systemMenuDrawerState"
+                x: Theme.emberGlass ? drawerCaret.x - width - Theme.px(8) : parent.width - width - Theme.systemMenuIndent
+                width: Theme.emberGlass ? Math.max(0, drawerCaret.x - Theme.px(8) - titleText.x - titleText.width - Theme.px(drawer.spinning ? 40 : 16))
+                                        : parent.width - titleText.width - Theme.px(drawer.stateGap)
                 anchors.verticalCenter: parent.verticalCenter
                 horizontalAlignment: Text.AlignRight
                 elide: Text.ElideRight
                 text: drawer.stateText
-                color: Theme.systemMenuTextDim
-                font.family: Theme.fontFamily
-                font.pixelSize: Theme.systemMenuStateFontSize
-                font.capitalization: Font.AllUppercase
+                color: menu.ink2
+                font.family: Theme.emberGlass ? Theme.egFontFamily : Theme.fontFamily
+                font.pixelSize: Theme.emberGlass ? Math.round(13.5 * Theme.u) : Theme.systemMenuStateFontSize
+                font.weight: Theme.emberGlass ? Font.Medium : Font.Normal
+                // (Ember Glass: as the network calls itself.)
+                font.capitalization: Theme.emberGlass ? Font.MixedCase : Font.AllUppercase
             }
         }
         Item {
@@ -499,6 +667,9 @@ Item {
         // Icons drawn in place of art (the volume's speakers).
         property Component lessIcon: null
         property Component moreIcon: null
+        // Ember Glass: the ends' glyphs.
+        property string lessGlyph: ""
+        property string moreGlyph: ""
         signal moved(real v)
         selectable: false
         // Left and Right move it a tenth.
@@ -514,17 +685,27 @@ Item {
 
             Loader {
                 id: less
-                x: brightnessContent.margin
+                x: Theme.emberGlass ? Theme.px(10) : brightnessContent.margin
                 anchors.verticalCenter: parent.verticalCenter
-                sourceComponent: sliderRow.lessIcon ? sliderRow.lessIcon : artIcon
+                sourceComponent: Theme.emberGlass ? egIcon : sliderRow.lessIcon ? sliderRow.lessIcon : artIcon
                 property url art: sliderRow.lessSource
+                property string glyph: sliderRow.lessGlyph
             }
             Loader {
                 id: more
-                x: parent.width - width - brightnessContent.margin
+                x: parent.width - width - (Theme.emberGlass ? Theme.px(10) : brightnessContent.margin)
                 anchors.verticalCenter: parent.verticalCenter
-                sourceComponent: sliderRow.moreIcon ? sliderRow.moreIcon : artIcon
+                sourceComponent: Theme.emberGlass ? egIcon : sliderRow.moreIcon ? sliderRow.moreIcon : artIcon
                 property url art: sliderRow.moreSource
+                property string glyph: sliderRow.moreGlyph
+            }
+            Component {
+                id: egIcon
+                EgIcon {
+                    width: Theme.px(19); height: width
+                    name: parent ? parent.glyph : ""
+                    color: Theme.eg.colorInk2
+                }
             }
             Component {
                 id: artIcon
@@ -554,6 +735,7 @@ Item {
                 y: (parent.height - height) / 2
 
                 ArtBorderImage {
+                    visible: !Theme.emberGlass
                     width: parent.width
                     height: Theme.artHeight(source)
                     anchors.verticalCenter: parent.verticalCenter
@@ -561,6 +743,7 @@ Item {
                     border { left: Theme.artBorder(11, source); right: Theme.artBorder(11, source) }
                 }
                 ArtBorderImage {
+                    visible: !Theme.emberGlass
                     width: Math.max((parent.width - handle.width / 2) * slider.value + handle.width / 2,
                                     2 * slider.railBorderWidth)
                     height: Theme.artHeight(source)
@@ -568,8 +751,56 @@ Item {
                     source: Theme.asset("statusBar/slider-track-progress.png")
                     border { left: Theme.artBorder(11, source); right: Theme.artBorder(11, source) }
                 }
+                // Ember Glass's slider (.slider): a hairline of ink-3, the
+                // part set 2 px of ember up to the knob, the knob a 20 px
+                // disc with an ember heart. The art's handle still decides
+                // where a press takes hold (as 1.0's).
+                Rectangle {
+                    visible: Theme.emberGlass
+                    x: slider.railEdgeOffset
+                    width: parent.width - 2 * slider.railEdgeOffset
+                    height: Math.max(1, Theme.u)
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: Theme.eg.colorInk3
+                    opacity: 0.8
+                }
+                Rectangle {
+                    objectName: "emberSliderFill"
+                    visible: Theme.emberGlass
+                    x: slider.railEdgeOffset
+                    width: handle.x + handle.width / 2 - x
+                    height: Theme.px(2)
+                    radius: height / 2
+                    anchors.verticalCenter: parent.verticalCenter
+                    gradient: Gradient {
+                        orientation: Gradient.Horizontal
+                        GradientStop { position: 0; color: EmberGlass.emberA }
+                        GradientStop { position: 0.45; color: EmberGlass.emberMid }
+                        GradientStop { position: 1; color: EmberGlass.emberB }
+                    }
+                }
+                Rectangle {
+                    objectName: "emberSliderKnob"
+                    visible: Theme.emberGlass
+                    width: Theme.px(20)
+                    height: width
+                    radius: width / 2
+                    x: handle.x + handle.width / 2 - width / 2
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: Theme.eg === EmberGlass.dark ? Theme.eg.colorInk : Theme.eg.colorPlane2
+                    border.color: Theme.eg.colorLine2
+                    border.width: Math.max(1, EmberGlass.hairline * Theme.u)
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: parent.width - 2 * Theme.px(7)
+                        height: width
+                        radius: width / 2
+                        color: EmberGlass.emberMid
+                    }
+                }
                 Image {
                     id: handle
+                    visible: !Theme.emberGlass
                     x: slider.railEdgeOffset + (slider.width - 2 * slider.railEdgeOffset) * slider.value - width / 2
                     y: (slider.height - height) / 2
                     width: Theme.artWidth(source); height: Theme.artHeight(source)
@@ -647,13 +878,30 @@ Item {
 
     Item {
         id: panel
+        objectName: "systemMenuPanel"
         width: Theme.systemMenuWidth
         height: Math.min(Theme.systemMenuMaxHeight, menu.availableHeight)
-        x: menu.width - width + Theme.systemMenuEdgeOffset
-        y: Theme.statusBarHeight
+        // Ember Glass: 10 px in from the screen's edge, 2 under the bar
+        // (components.html's app menu: 34 px down, 10 in).
+        x: menu.eg ? menu.width - width - Theme.px(10) : menu.width - width + Theme.systemMenuEdgeOffset
+        y: Theme.statusBarHeight + (menu.eg ? Theme.px(2) : 0)
+        readonly property int padding: menu.eg ? Theme.px(EmberGlass.sizeMenuPadding) : 0
+
+        // Ember Glass: the L4 sheet, its corner under the bar's right end 4 px.
+        EgSheet {
+            objectName: "emberSystemMenu"
+            visible: menu.eg
+            width: parent.width
+            height: Math.min(panel.height, mainMenu.height + 2 * panel.padding)
+            backdrop: menu.backdrop
+            radius: Theme.px(EmberGlass.radiusMenu)
+            topRightRadius: Theme.px(EmberGlass.radiusMenuCorner)
+            MouseArea { anchors.fill: parent }  // swallow taps
+        }
 
         ArtBorderImage {
             id: background
+            visible: !menu.eg
             width: parent.width
             height: Math.min(panel.height, mainMenu.height + Theme.systemMenuBottomMargin)
             source: Theme.asset("menu-dropdown-bg.png")
@@ -679,9 +927,10 @@ Item {
 
         Item {
             id: clipRect
-            x: Theme.systemMenuSideMargin
-            width: parent.width - 2 * Theme.systemMenuSideMargin
-            height: parent.height - Theme.systemMenuBottomMargin
+            x: menu.eg ? panel.padding : Theme.systemMenuSideMargin
+            y: panel.padding
+            width: parent.width - 2 * x
+            height: parent.height - (menu.eg ? 2 * panel.padding : Theme.systemMenuBottomMargin)
             clip: true
 
             Flickable {
@@ -713,7 +962,8 @@ Item {
                             repeat: true
                             onTriggered: date.refresh()
                         }
-                        Label { text: date.label; color: Theme.systemMenuTextDim }
+                        glyph: "calendar-blank"
+                        Label { text: date.label; color: menu.ink2 }
                     }
                     Divider {}
 
@@ -725,7 +975,10 @@ Item {
                         readonly property int percent: menu.sys ? menu.sys.batteryPercent : -1
                         readonly property string label: qsTr("Battery: ")
                             + (percent >= 0 && percent <= 100 ? percent + "%" : qsTr("Not Available"))
-                        Label { text: battery.label; color: Theme.systemMenuTextDim }
+                        glyph: menu.sys && menu.sys.charging ? "battery-charging"
+                             : percent > 80 ? "battery-full" : percent > 55 ? "battery-high"
+                             : percent > 30 ? "battery-medium" : percent > 10 ? "battery-low" : "battery-empty"
+                        Label { text: battery.label; color: menu.ink2 }
                     }
                     Divider {}
 
@@ -736,6 +989,8 @@ Item {
                         sliderName: "systemMenuBrightness"
                         lessSource: Theme.asset("statusBar/brightness-less.png")
                         moreSource: Theme.asset("statusBar/brightness-more.png")
+                        lessGlyph: "sun-dim"
+                        moreGlyph: "sun"
                         value: menu.sys ? (menu.sys.brightness - floor) / (1 - floor) : 0
                         onMoved: (v) => { if (menu.sys) menu.sys.brightness = floor + v * (1 - floor); }
                     }
@@ -746,6 +1001,8 @@ Item {
                         sliderName: "systemMenuVolume"
                         lessIcon: Component { SpeakerIcon { waves: 0 } }
                         moreIcon: Component { SpeakerIcon { waves: 2 } }
+                        lessGlyph: "speaker-low"
+                        moreGlyph: "speaker-high"
                         value: menu.sys && menu.sys.volume !== undefined ? menu.sys.volume / 100 : 0
                         onMoved: (v) => { if (menu.sys) menu.sys.volume = Math.round(v * 100); }
                     }
@@ -756,6 +1013,8 @@ Item {
                         id: wifi
                         objectName: "systemMenuWifi"
                         title: qsTr("Wi-Fi")
+                        glyph: menu.wifiOn ? "wifi-high" : "wifi-slash"
+                        glyphLit: menu.wifiOn
                         stateText: !menu.wifiOn ? qsTr("OFF") : menu.sys.wifiSsid ? menu.sys.wifiSsid : qsTr("ON")
                         spinnerOffset: 18
                         stateGap: 60
@@ -832,7 +1091,7 @@ Item {
                                     menu.sys.setWifiOn(true);
                                 }
                             }
-                            Label { x: Theme.systemMenuIndent + Theme.systemMenuSubIndent; text: wifiToggle.label }
+                            Label { x: menu.subX; text: wifiToggle.label }
                         }
                         Divider {}
                         Repeater {
@@ -866,7 +1125,7 @@ Item {
                                 menu.openPreferences("wifi");
                                 menu.closeAfter(Theme.systemMenuRowCloseDelay);
                             }
-                            Label { x: Theme.systemMenuIndent + Theme.systemMenuSubIndent; text: qsTr("Wi-Fi Preferences") }
+                            Label { x: menu.subX; text: qsTr("Wi-Fi Preferences") }
                         }
                     }
                     Divider {}
@@ -876,6 +1135,8 @@ Item {
                         id: vpn
                         objectName: "systemMenuVpn"
                         title: qsTr("VPN")
+                        glyph: "shield-check"
+                        glyphLit: menu.vpnInUse !== ""
                         stateText: menu.vpnInUse !== "" ? menu.vpnInUse : qsTr("Off")
                         active: !menu.restricted && !menu.airplaneModeInProgress
                         property string joining: ""
@@ -940,7 +1201,7 @@ Item {
                                 menu.openPreferences("vpn");
                                 menu.closeAfter(Theme.systemMenuRowCloseDelay);
                             }
-                            Label { x: Theme.systemMenuIndent + Theme.systemMenuSubIndent; text: qsTr("VPN Preferences") }
+                            Label { x: menu.subX; text: qsTr("VPN Preferences") }
                         }
                     }
                     Divider {}
@@ -950,6 +1211,8 @@ Item {
                         id: bluetooth
                         objectName: "systemMenuBluetooth"
                         title: qsTr("Bluetooth")
+                        glyph: menu.bluetoothOn && menu.sys.bluetoothDevice ? "bluetooth-connected" : "bluetooth"
+                        glyphLit: menu.bluetoothOn
                         // SystemMenu.cpp:562-610: OFF while coming up, the device when connected.
                         stateText: !menu.bluetoothOn ? qsTr("OFF")
                                    : menu.sys.bluetoothDevice ? menu.sys.bluetoothDevice : qsTr("ON")
@@ -998,7 +1261,7 @@ Item {
                                 if (!menu.bluetoothTurningOn)
                                     menu.sys.setBluetoothOn(!menu.bluetoothOn);
                             }
-                            Label { x: Theme.systemMenuIndent + Theme.systemMenuSubIndent; text: bluetoothToggle.label }
+                            Label { x: menu.subX; text: bluetoothToggle.label }
                         }
                         Divider {}
                         Repeater {
@@ -1026,7 +1289,7 @@ Item {
                                 menu.openPreferences("bluetooth");
                                 menu.closeAfter(Theme.systemMenuRowCloseDelay);
                             }
-                            Label { x: Theme.systemMenuIndent + Theme.systemMenuSubIndent; text: qsTr("Bluetooth Preferences") }
+                            Label { x: menu.subX; text: qsTr("Bluetooth Preferences") }
                         }
                     }
                     Divider {}
@@ -1041,13 +1304,15 @@ Item {
                             : (on ? qsTr("Turn off Airplane Mode") : qsTr("Turn on Airplane Mode"))
                         // Restricted: not selectable (SystemMenu.cpp:231-235).
                         selectable: !menu.restricted && !menu.airplaneModeInProgress
+                        glyph: "airplane"
+                        glyphLit: on
                         onAction: {
                             menu.sys.airplaneMode = !menu.sys.airplaneMode;
                             menu.closeAfter(Theme.systemMenuToggleCloseDelay);
                         }
                         Label {
                             text: airplane.label
-                            color: airplane.selectable ? Theme.systemMenuText : Theme.systemMenuTextDim
+                            color: airplane.selectable ? menu.ink : menu.ink3
                         }
                         Icon {
                             opacity: airplane.selectable ? 1.0 : 0.65
@@ -1070,6 +1335,8 @@ Item {
                             restoreMode: Binding.RestoreNone
                         }
                         readonly property string label: locked ? qsTr("Turn off Rotation Lock") : qsTr("Turn on Rotation Lock")
+                        glyph: locked ? "lock-simple" : "device-rotate"
+                        glyphLit: locked
                         onAction: {
                             delayUpdate = true;
                             menu.sys.rotationLocked = !menu.sys.rotationLocked;
@@ -1095,6 +1362,8 @@ Item {
                             restoreMode: Binding.RestoreNone
                         }
                         readonly property string label: muted ? qsTr("Unmute Sound") : qsTr("Mute Sound")
+                        glyph: muted ? "speaker-slash" : "speaker-high"
+                        glyphLit: muted
                         onAction: {
                             delayUpdate = true;
                             menu.sys.muted = !menu.sys.muted;
@@ -1123,6 +1392,8 @@ Item {
                             restoreMode: Binding.RestoreNone
                         }
                         readonly property string label: on ? qsTr("Turn off Flashlight") : qsTr("Turn on Flashlight")
+                        glyph: "flashlight"
+                        glyphLit: on
                         onAction: {
                             delayUpdate = true;
                             menu.toggleTorch();
@@ -1131,6 +1402,7 @@ Item {
                         Label { text: torch.label }
                         Canvas {
                             objectName: "systemMenuFlashlightIcon"
+                            visible: !menu.eg
                             width: Theme.px(24)
                             height: Theme.px(24)
                             anchors.right: parent.right
@@ -1174,15 +1446,26 @@ Item {
             z: 10
             width: parent.width - Theme.px(22)
             x: (parent.width - width) / 2
+            y: panel.padding
             opacity: !flick.atYBeginning ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: Theme.systemMenuScrollFadeDuration } }
+            // Ember Glass: a caret over the top row.
+            EgIcon {
+                visible: menu.eg
+                x: (parent.width - width) / 2
+                width: Theme.px(14); height: width
+                name: "caret-up"
+                color: Theme.eg.colorInk2
+            }
             ArtBorderImage {
+                visible: !menu.eg
                 width: parent.width
                 height: Theme.artHeight(source)
                 source: Theme.asset("menu-dropdown-scrollfade-top.png")
                 border { left: Theme.artBorder(20, source); right: Theme.artBorder(20, source) }
             }
             Image {
+                visible: !menu.eg
                 x: (parent.width - width) / 2
                 width: Theme.artWidth(source); height: Theme.artHeight(source)
                 source: Theme.asset("menu-arrow-up.png")
@@ -1193,16 +1476,25 @@ Item {
             z: 10
             width: parent.width - Theme.px(22)
             x: (parent.width - width) / 2
-            y: flick.height - Theme.px(29)
+            y: menu.eg ? panel.padding + flick.height - Theme.px(16) : flick.height - Theme.px(29)
             opacity: !flick.atYEnd ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: Theme.systemMenuScrollFadeDuration } }
+            EgIcon {
+                visible: menu.eg
+                x: (parent.width - width) / 2
+                width: Theme.px(14); height: width
+                name: "caret-down"
+                color: Theme.eg.colorInk2
+            }
             ArtBorderImage {
+                visible: !menu.eg
                 width: parent.width
                 height: Theme.artHeight(source)
                 source: Theme.asset("menu-dropdown-scrollfade-bottom.png")
                 border { left: Theme.artBorder(20, source); right: Theme.artBorder(20, source) }
             }
             Image {
+                visible: !menu.eg
                 x: (parent.width - width) / 2
                 y: Theme.px(10)
                 width: Theme.artWidth(source); height: Theme.artHeight(source)

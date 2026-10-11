@@ -532,6 +532,13 @@ FocusScope {
     // Not over the lock screen (LockWindow sits above the menus), nor in First Use.
     // In dock mode it opens over the exhibition (DockModeMenuManager's own).
     function openSystemMenu() { if ((!locked || dockMode) && !firstUse) systemMenu.open = true; }
+    // The system menu with one of its drawers open ("wifi", "vpn",
+    // "bluetooth"): the simulator's --scene systemmenuwifi.
+    function openSystemMenuDrawer(name) {
+        openSystemMenu();
+        if (systemMenu.open)
+            systemMenu.openDrawer(name);
+    }
 
     function lock() {
         if (firstUse)

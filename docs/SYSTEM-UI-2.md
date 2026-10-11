@@ -238,6 +238,23 @@ tokens"), and how the shell draws it in QML:
 - **Stays:** every row and drawer, what each does, the close delays, the
   dock mode restrictions.
 - **QML:** `SystemMenu.qml`.
+- **Built:** the L4 sheet (`EgSheet`) 10 px in from the screen's edge and
+  2 px under the bar (`components.html`'s app menu: 34 down, 10 in), its
+  corner under the bar's right end 4 px, the others 20, lift-high, 6 px
+  inside; 46 px rows, each with its Phosphor glyph 14 px in and the text
+  after it (15 px semibold, ink; the date and battery in ink-2), the glyph
+  ember while what it stands for is on (Wi-Fi, VPN in use, Bluetooth,
+  airplane mode, rotation lock, mute, the torch), in place of 1.0's art at
+  the right; the pressed or focused row the sunk tint and the ember bar;
+  hairlines between rows, 12 px in; a drawer's state in ink-2 (as the
+  network names itself, not in capitals) and a caret that turns up as it
+  opens; its entries lined up with the titles, the connected one's check
+  in ember, the lock and Wi-Fi's level as glyphs; the sliders Ember's; the
+  spinner a turning hairline ring with an ember head; the scroll hints
+  carets. While it is open the status bar's indicators sit in the app
+  menu tab's capsule, lit (white 16%). The rows keep 1.0's labels ("Turn
+  on Airplane Mode"), which say what a tap does, so they have no toggles:
+  a toggle beside "Turn on..." would say the state a second way.
 
 ### 10. Later: the lock screen, dock mode, alerts, the keyboard
 Not drawn in the mock-ups yet. Alerts and dialogs are L4 sheets with Ember's
@@ -344,7 +361,7 @@ second after (the adaptive simulator resizes in a stream of sizes).
 | 6 | Just Type's pill and the dock (phones; the tablet's dock is still 1.0's) | done |
 | 7 | The phone's notification bar under the dock, the banner, the active call; the dock 10 px over the bar | done |
 | 8 | The dashboard: its sheet, the rows, the stacks, the drawer | done |
-| 9 | The system menu | |
+| 9 | The system menu | done |
 | 10 | The launcher | |
 | 11 | The tablet: the status bar's notification group, the drop-down, the dock | |
 | 12 | Light and dark for the shell's sheets, from a theme preference | |
@@ -398,6 +415,8 @@ those screenshots and `tools/test-glass-sim.py`'s):
 | `glass-alignment.jpg` | The alignment check: the test page drawing only the blur the shell gave it, beside the sharp wallpaper |
 | `notification-bar.jpg` | The bottom of the card view, render above, Phoenix below: the notification bar and the dock over it |
 | `banner.jpg` | A banner over a maximized app (no render draws one on a phone) |
+| `system-menu.jpg` | The system menu, 1.0's on the left, Ember Glass's on the right |
+| `system-menu-wifi.jpg` | Ember Glass's, closed and with its Wi-Fi drawer open |
 | `dashboard.jpg`, `stacks.jpg`, `drawer.jpg` | The dashboard open over an app; with two stacks of texts (their counts, their layers' edges); pulled to the whole screen, a download on top |
 
 **Still unlike the renders:** the dock and the notification bar show the

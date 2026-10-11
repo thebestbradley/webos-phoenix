@@ -9,7 +9,7 @@
 //                  "notifystacks" | "notifystacksbar" | "notifystackslocked" | "drawer" | "capture" | "capturepreview" |
 //                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistantbird" | "assistantbirds" | "assistantbirdmoves" |
 //                  "wakeword" | "wakewordlocked" | "modal" |
-//                  "systemmenu" | "empty" | "cardsnotified" (with --launch: those apps' cards and three
+//                  "systemmenu" | "systemmenuwifi" | "empty" | "cardsnotified" (with --launch: those apps' cards and three
 //                  notifications under them; "cards", "banner", "notified" and "dashboard" also take --launch)
 //   simFirstUse    start with First Use (--first-use); without it First Use
 //                  runs at start-up until it has been done once
@@ -2013,6 +2013,9 @@ Item {
             shell.cardView.position = 0;
         } else if (scene === "systemmenu") {
             shell.openSystemMenu();
+        } else if (scene === "systemmenuwifi") {
+            // The menu with its Wi-Fi drawer open, the networks listed.
+            shell.openSystemMenuDrawer("wifi");
         } else if (scene === "launcher" || scene === "launcheredit") {
             shell.gestureUp();
             if (scene === "launcheredit")

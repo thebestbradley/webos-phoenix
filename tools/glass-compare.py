@@ -72,5 +72,19 @@ def alone(ours, name, w=380):
         return
     load(ours, w).save(os.path.join(out, name), quality=82, optimize=True)
 alone(f'{shots}/drawer.png', 'drawer.jpg')
+# The system menu, 1.0's beside Ember Glass's: the top right of the screen.
+def corner(a, b, name, box=(0.25, 0, 1, 0.55), w=380, gap=8):
+    if not have(a, b):
+        return
+    def crop(p):
+        im = Image.open(p).convert('RGB')
+        c = im.crop((round(im.width * box[0]), round(im.height * box[1]), round(im.width * box[2]), round(im.height * box[3])))
+        return c.resize((w, round(c.height * w / c.width)), Image.LANCZOS)
+    A, B = crop(a), crop(b)
+    im = Image.new('RGB', (2 * w + gap, max(A.height, B.height)), (24, 24, 26))
+    im.paste(A, (0, 0)); im.paste(B, (w + gap, 0))
+    im.save(os.path.join(out, name), quality=82, optimize=True)
+corner(f'{shots}/systemmenu-classic.png', f'{shots}/systemmenu.png', 'system-menu.jpg')
+corner(f'{shots}/systemmenu.png', f'{shots}/systemmenu-wifi.png', 'system-menu-wifi.jpg')
 for f in sorted(os.listdir(out)):
     print(f, os.path.getsize(os.path.join(out, f)) // 1024, 'KB')

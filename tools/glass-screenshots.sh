@@ -18,6 +18,9 @@
 #   stacks.png        the dashboard with two stacks of texts and a reminder
 #   drawer.png        the dashboard pulled to the whole screen, a download
 #                     on top
+#   systemmenu.png    the system menu over the card view
+#   systemmenu-wifi.png  its Wi-Fi drawer open
+#   systemmenu-classic.png  the system menu in 1.0's look
 #
 # Each run in a fresh home; the glass pages are installed for the run only.
 #
@@ -81,3 +84,6 @@ DELAY=3500 shot banner --scene banner -- --look ember-glass
 DELAY=6000 shot dashboard --scene dashboard -- --look ember-glass
 DELAY=6000 shot stacks --scene notifystacks -- --look ember-glass
 DELAY=6000 shot drawer --scene drawer -- --look ember-glass
+DELAY=6000 shot systemmenu --scene systemmenu -- --look ember-glass
+DELAY=8000 shot systemmenu-wifi --scene systemmenuwifi -- --look ember-glass
+DELAY=6000 shot systemmenu-classic --scene systemmenu
