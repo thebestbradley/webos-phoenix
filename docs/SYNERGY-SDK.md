@@ -249,6 +249,45 @@ Dropbox, Microsoft Graph, Google Drive and Box behind that one interface.
 | `ctx.setTimeout`, `ctx.clearTimeout` | Timers (the tests drive them) |
 | Account functions also: `ctx.accountId`, `ctx.account`, `ctx.credentials` (the account's `common` credentials), `ctx.config` (the validator's config, kept since `onCreate`), `ctx.state` (yours, saved after the call when it changed), `ctx.notify({title, body, appId, params, group})` (a notification: `com.webos.notification` `createToast` with `{title, message}`; `group`, Phoenix's, stacks it with the app's others of that group, e.g. a conversation's messages), `ctx.putMessage(message)` (into Messaging: `org.webosports.service.messaging` `putMessage`); with `connection`: `ctx.connect()` (the account's open connection, opened if need be), `ctx.live()` (it, or null), `ctx.connectionsHere()`, `ctx.saveState()` (state changed between calls, by a connection) | |
 
+### The Assistant
+
+The Assistant reaches an account of your connector as soon as it is signed
+in, with nothing registered and no code of its own for you
+([AI-AND-MCP.md](AI-AND-MCP.md) "The Assistant and Synergy"). It finds the
+account through `listAccounts` and reads your template: what each
+capability provider says is what it uses, so fill it in:
+
+| In your template's provider | What the Assistant does with it |
+| --- | --- |
+| `capability`, `capabilitySubtype` | Which requests the account answers: `MESSAGING` with `IM` (messages), `CALENDAR`, `TASKS`, `MAIL`, `DOCUMENTS`, `CONTACTS`, `SOCIAL` |
+| `loc_name`, `loc_shortName`, the account's alias and user name | The names it is heard and spoken by ("text Ola on Acme Chat", "On Slack or Acme?") |
+| `serviceName`, `dbkinds.immessage` | A message it sends: put in your message kind in the outbox (`status: "pending"`), from the account's user name (your `imloginstate`'s, if you keep one), through Messaging's `putMessage`: your outbox `watch` sends it, as it sends Messaging's |
+| `dbkinds.calendarevent` | A new event "on my Acme calendar": put in your event kind with your calendar's `calendarId`, for your `push` to send |
+| `tasklist` objects' `taskKind` | A task added to one of your lists, in that kind |
+| `DOCUMENTS` (`files`) | A drive at `/media/drives/<accountId>`: its files found by your `search` (if you give one), a file uploaded with `upload` |
+| `share` (section 7) | "Post to Acme: ...": your service's `share` method, as the account, after the user hears it read back naming the account |
+
+What it reads it reads in the standard kinds (`com.palm.immessage:1`,
+`com.palm.chatthread:1`, `com.palm.calendar:1`, `com.palm.calendarevent:1`,
+`com.palm.tasklist:1`, `com.palm.task:1`, the email kinds), which include
+your sub-kinds. On a device that needs two grants of you:
+
+- **db8**: your sub-kinds' permission files grant `org.webosphoenix.assistant`
+  `read` (and `create`, `update`, `delete` for event and task kinds, which it
+  writes); `phoenix-connector new` writes the read grant on your item kind.
+- **Luna**: your `share` method is in your own group and also in
+  `phoenix.connector.share` (the kit's `SYSTEM_SHARE_GROUP`, which the
+  scaffold writes), the group the Assistant holds for posting.
+
+**Invitations.** "Accept the invite from Alex" changes the user's own entry
+in the event's `attendees` (`participationStatus`: `ACCEPTED`, `DECLINED`
+or `TENTATIVE`), which reaches your `push` as an update. The kit's
+`answerChanged(change, address)` (`src/pim.ts`) tells you when that is all
+that changed and what the answer is, so you send it the way your service
+tells the organizer (Microsoft Graph's `accept`, `decline` and
+`tentativelyAccept`; Google's attendees with `sendUpdates=all`; CalDAV's
+`PARTSTAT`) rather than as an edit of the event.
+
 ## 4. The sync engine
 
 For a capability with a kind, each sync:

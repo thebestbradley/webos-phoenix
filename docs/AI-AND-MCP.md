@@ -158,6 +158,7 @@ in the task rule (`m` stayed null); it is a task now.
 | `noteAppend`, `taskList`, `taskDone` | "add the guest code to my Wi-Fi note", "what's on my shopping list", "what are my tasks", "check off milk", "mark pay rent as done" | Adds a line to a memo; reads a list; completes a task (undo opens it again) | |
 | `readEmail`, `emailReply` | "read my latest email", "read the email from Alex", "reply to the email from Alex saying paid, thanks", "reply to my last email" | The newest (from someone): who, when, the subject and the start of its words, with Reply; a reply "Re: ..." sent through `com.palm.smtp` after the read-back, or opened in Email to write | Yes (Send) |
 | `findFiles` | "find my file called budget", "find the trip pdf", "search my files for invoice" | `org.webosphoenix.filemanager` `search`: cards opening each one's folder in Files | |
+| Synergy: `post`, `joinMeeting`, `inviteReply`, `emailMark`, `emailDelete`, `eventCalendar`, `saveToDrive`, `shareLocation`, `accounts` | "post to Bluesky: ...", "join my next meeting", "accept the invite from Alex", "archive it", "share my location with Sam on Slack", "what accounts do I have"; any command with an account named ("text Sam on Slack ...", "what's on my work calendar") | On every account connected through Synergy: "The Assistant and Synergy" below | Sending, posting, answering, uploading, deleting |
 | `travelTime` | "how long will it take to drive to the airport", "how long to walk to Union Square", "what's the traffic like to work" | The place by Photon near here, the route by Valhalla (the keyless FOSSGIS servers Maps uses): the time and distance by car, on foot or by bike, without traffic (no keyless source has live traffic: it says so), with Open Maps | |
 | `nearby`, `website`, `storage`, `appStore` | "coffee near me", "where's the nearest pharmacy", "what coffee shops are near me", "open example.com", "how much storage do I have", "find Doom in the Marketplace", "install Doom" | The closest five as cards (name, distance, kind, address; OpenStreetMap has no ratings), each opening Maps on that place (Back returns to the conversation), Maps behind on the whole list (`{nearby}`, what is looked for, never the sentence); offline, Maps finds them; the browser opens the site; the free storage; the Marketplace's search (`org.webosphoenix.service.packages`), and its page to install from (it never installs unasked) | |
 | `help` | "help", "what can you do", "give me some tips", "how do I close an app", "how do I go back", "what is Just Type" | What it can do, by app, with examples (a tap puts one in the field) and what fits now; how to use Phoenix from the Help app's topics (`lib/lang/en-help.js`), with Open Help | |
@@ -1414,6 +1415,124 @@ does not hold, and 1.7 GB is more than the image should carry for it.
 Whether to fine-tune it and ship it is the owner's decision
 (OPEN-QUESTIONS.md Q88). The candidates are worth having without Laya
 too: they are the "Did you mean" list a fallback could offer.
+
+### The Assistant and Synergy (11 October 2026)
+
+The owner: "anything connected through the Synergy system should be
+accessible to the Assistant, and it should be able to act on it."
+
+**Found when asked, not known in advance** (`lib/synergy.js`). The
+Assistant asks the accounts service which accounts there are
+(`com.palm.service.accounts/listAccounts`, each annotated with its
+template's capability providers as the original's `Account.annotate` does:
+app-services `models/account-model.js`:26-71) and reads what each provider
+says about itself: its capability (`MESSAGING` with subtype `IM`,
+`CALENDAR`, `TASKS`, `MAIL`, `DOCUMENTS`, `CONTACTS`, `SOCIAL`), its
+`serviceName` (`type_slack`), its db8 kinds (`dbkinds.immessage`,
+`calendarevent`, `task`, `tasklist`), its names (`loc_name`,
+`loc_shortName`) and the account's alias and user name. Sharing targets come
+from the installed apps' `phoenix.shareTargets[].connector`, drives from
+`/media/drives/<accountId>`. So a connector installed later, a third
+party's included, is heard by its names and acted on as soon as its account
+is signed in, with no change to the Assistant: `synergy.test.ts` "a
+connector no code here knows" installs an "Acme Chat" connector the code has
+never seen and sends on it, reads it, lists it and posts to it. The grammar
+hears accounts by those names (`ctx.accounts`) and by the services people
+name ("Gmail" is the Google account, "Mastodon" the Fediverse one,
+`lib/lang/en-synergy.js` `SERVICES`).
+
+**What it can read and do, by what is connected:**
+
+| Through Synergy | Accounts (today) | The Assistant reads | The Assistant does | Asks first |
+| --- | --- | --- | --- | --- |
+| Messages | Texts (SMS/MMS); Jabber, Matrix, Delta Chat, Unofficial Telegram, Slack (people and channels), Bluesky and Fediverse direct messages; any `MESSAGING`/`IM` provider | Every account's new messages, or one account's ("read my unread Slack messages", "what did Sam say on Slack", "any new messages on Telegram"), with Reply on the account they came by | Sends to a person or a group conversation ("text Sam on Jabber: ...", "message the #design channel on Slack: ..."), from the account's user name, in its message kind, as Messaging sends; with no account named, as Messaging would: the person's latest conversation's network, else a text, else their one network; several: "On Slack or Jabber?" | Yes, naming the account ("Send ... to Sam Delgado on Slack?") |
+| Where you are | The same accounts | | "Share my location with Sam on Slack", "send my ETA to Sam", "let Priya know when I'll be at the airport": a map link (as Maps shares a place) or the time the route gives, sent as a message is | Yes, naming the account ("Send your location to Sam Delgado on Slack?", "Text Sam Delgado that you'll be at San Jose Airport around 10:18 AM?") |
+| Calendars | The device's, CardDAV & CalDAV, Subscribed Calendar (read only), Google, Microsoft, Zoom (read only) | One calendar's or one account's events and free time ("what's on my work calendar", "am I free at 3 on my Google calendar") | A new event in the account's calendar, in its own event kind for its connector to send on (com.palm.app.calendar `CalendarsManager.js`:320-337); an event moved to another calendar ("add it to my Google calendar"), undone by "undo"; a read-only calendar refused | No (undo) |
+| Meetings | A Zoom, Teams, Google Meet, Webex or Jitsi link on any event | The meeting now or next | Opens its link ("join my next meeting", "join the design review"); a later one asks "Join it now?" | No |
+| Invitations | Google, Microsoft, CalDAV events with the user as a guest; email invitations | Which are waiting | Accept, decline, maybe: the user's attendee entry, which the account's connector sends to the organizer (Graph `accept`/`decline`/`tentativelyAccept`, Google's attendees with `sendUpdates=all`, CalDAV's `PARTSTAT`); an email invitation's `meetingInfo.response`, as Email's buttons set it (`MessageDisplay.js`:461-500) | Yes, naming the organizer ("... from Alex Rivera on your Work calendar? Alex will be told.") |
+| Tasks | The device's lists, Todoist, Google Tasks, Microsoft To Do; any `TASKS` provider | An account's lists or one of them ("what's on my Microsoft To Do") | Adds to an account's list in its kind ("add milk to my Todoist shopping list") | No (undo) |
+| Email | IMAP and POP accounts (the original transports), any account writing the email kinds | One account's mail ("any new emails in my work account", "read my latest email in my work mail inbox") | Archive (to the account's Archive folder, as Email moves mail: `Email.js`:235-241), mark read or unread, flag, unflag, mark all read; delete (`Email.js`:244-262) | Deleting, naming the account |
+| Posting | Bluesky, the Fediverse, LinkedIn; any connector with a share target | | Posts through the account's `share` method ("post to Bluesky: ...", "toot ...", "share this on LinkedIn"), within its length, with its default audience | Yes, naming the account and who sees it ("Post to Fediverse as @jordan@mastodon.example: “hello fediverse”? Who can see it: Public."); with none named and several accounts, which |
+| Files | Nextcloud, ownCloud, WebDAV, S3, Dropbox, OneDrive, Google Drive, Box | A drive's files by name ("find the budget file on Dropbox") | Uploads the file found to a drive ("save it to Google Drive") | Yes |
+| Contacts | People merged across accounts | Names, numbers, addresses, chat addresses (as before) | | |
+| The accounts | All | "What accounts do I have": each and what it does, by name | | |
+| Out of reach | Signal, WhatsApp, iCloud Drive, X, Facebook, Instagram, Threads | | Says why ("I can't reach Signal: Signal has no way in for other apps."); an account not signed in: "You're not signed in to Matrix. Add the account in Accounts first." | |
+
+**The rules.** Sending, posting, answering an invitation, uploading,
+sharing where you are and deleting are read back first and name the account
+they go by. When several accounts fit an outward action and none was named,
+it asks which ("On Slack or Jabber?", "Which account: Bluesky
+(@jordan.bsky.social), LinkedIn (Jordan Avery) or Fediverse
+(@jordan@mastodon.example)?"), never a model's guess: a model may name an account only from
+the words said. Every button these answers carry is one pending choice
+("Every button, asked aloud"): "Jabber", "yes", "join it now" answer it
+hands-free.
+
+**On a device** a command can do only what its grants allow
+("Permissions"): the Assistant's db8 grants cover the standard kinds it
+reads and writes (the email kinds, folders, messages, chat threads, login
+states, calendars, events, task lists); a connector's own sub-kinds grant it
+too (each connector's `configuration/db/permissions`: the message and login
+kinds, the DAV calendars), and every connector's `share` method is also in
+the system's posting group, `phoenix.connector.share`, which the Assistant
+holds (the kit's scaffold writes it: `SYSTEM_SHARE_GROUP`).
+`permissions.test.ts` checks each Synergy command's calls and kinds against
+them, the connectors' files included. How a connector developer gets this:
+[SYNERGY-SDK.md](SYNERGY-SDK.md) "The Assistant".
+
+| Command | Say, for example | Does | Asks first |
+| --- | --- | --- | --- |
+| `post` | "post to Bluesky: shipping today", "toot good morning", "share this on LinkedIn" | Posts through the account's share target | Yes |
+| `joinMeeting` | "join my next meeting", "join the Zoom call", "join the design review" | Opens the meeting's link | |
+| `inviteReply` | "accept the invite from Alex", "decline it", "tentatively accept the design review" | The user's answer, for the organizer | Yes |
+| `emailMark`, `emailDelete` | "archive it", "mark the email from Priya as unread", "flag it", "mark all as read", "delete the email from Alex" | As Email does | Deleting |
+| `eventCalendar` | "add it to my Google calendar", "move the dentist to my work calendar" | Moves the event | |
+| `saveToDrive` | "save it to Google Drive", "upload the budget file to Dropbox" | Uploads the file found | Yes |
+| `shareLocation` | "share my location with Sam on Slack", "send my ETA to Sam" | Where you are, or when you'll be there, as a message | Yes |
+| `accounts` | "what accounts do I have" | The accounts and what each does | |
+| an account named | "text Sam on Slack ...", "read my unread Slack messages", "what's on my work calendar", "add lunch Friday at noon to my Google calendar", "any new emails in my work account", "what's on my Microsoft To Do", "add milk to Todoist", "find the budget file on Dropbox" | `text`, `readMessages`, `agenda`, `freeTime`, `event`, `task`, `taskList`, `searchEmail`, `readEmail`, `findFiles` take the account (`via`, `calendar`, `account`, `drive`) | As the command does |
+
+**Measured.** `apps/assistant/eval/cases-b.json`, 61 cases in a world of
+the user's accounts (`test/accounts-world.cjs`: Slack, Bluesky, the
+Fediverse, Jabber, Unofficial Telegram, Google, Microsoft named "Work",
+Zoom, Todoist, Dropbox, Google Drive, LinkedIn, two email accounts),
+loaded with the main set. The grammar alone, before and after: the main
+set 494 of 551 right with 1 unsafe (the Synergy cases 4 of 61; "send my
+ETA to Sam" texted a contact) against 551 of 551, none unsafe and no wrong
+read-backs; held out (12 Synergy phrasings written after, not tuned for)
+6 of 12, and the rest of that set unchanged (76 of 89). The time per turn
+went from 1 to 4 ms on average (the accounts are read for each request).
+With Qwen3 0.6B behind the grammar the Synergy cases stay 61 of 61 (the
+grammar answers them all). In phoenix-sim (`tools/test-assistant-synergy-sim.cjs`,
+the real connectors against their stand-ins and the Jabber demo server):
+"add oat milk to my todoist groceries list" puts it in Todoist's kind and,
+after a sync, on Todoist; "what's on my todoist groceries list" reads it;
+"post to bluesky: ..." is read back as "Post to Bluesky as @anna.test:
+...?", nothing posted before Yes, then on Bluesky's server; "message Ada on
+Jabber: the mock-ups are ready" is read back naming Jabber and sent from the
+account; "what accounts do I have" lists them
+([the read-backs](screenshots/assistant-synergy-readbacks.png),
+[the accounts](screenshots/assistant-synergy-accounts.png)).
+
+**Found on the way, in the simulator.** The accounts service gave a
+connector's account with its providers bare (an id and a capability), so
+the Assistant said "You're not signed in to Jabber": the runtime's
+`annotate` let the account's fields overwrite the template's providers
+before completing them from it. Two pages could both keep a connector's
+connections (each found none kept), every message handed to both; the page
+that started first now keeps them. And Chromium slowed the hidden pages
+that keep them to a timer a minute after five minutes out of sight, so a
+message waited up to a minute for its acknowledgement: phoenix-sim now
+keeps hidden pages running (`shell/sim/main.cpp`), as a device's services
+run.
+
+**Not yet.** Reading a social feed or its notifications ("what's new on
+Bluesky": no FEEDS kinds yet, OPEN-QUESTIONS.md Q3); Outlook and Gmail mail
+(Phoenix's Google and Microsoft accounts bring no email, Q124: the Assistant
+says so); Zoom's `createMeeting` ("schedule a Zoom meeting"); a phrasing the
+held-out set shows it misses ("shoot Sam a slack message saying ...",
+"anything new on Slack", "anything in my work inbox"). Decisions for the
+owner: OPEN-QUESTIONS.md Q140-Q146.
 
 ### Next: 2.0
 
