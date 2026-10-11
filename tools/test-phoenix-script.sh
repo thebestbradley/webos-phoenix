@@ -268,6 +268,11 @@ check "run: adaptive by default" '[ $status = 0 ]' 'has "would run: .*phoenix-si
 phoenix --dry-run --no-assistant run tablet --scene cards --launch org.webosphoenix.settings
 check "run tablet ARGS: the arguments go to the simulator" \
     'has "would run: .*phoenix-sim --tablet --scene cards --launch org.webosphoenix.settings$"'
+# An app with its launch params (phoenix-sim --launch 'appId:{json}'): one
+# argument, as given, quoted in what it prints.
+phoenix --dry-run --no-assistant run phone --launch 'com.palm.app.clock:{"action": "edit"}'
+check "run phone --launch 'appId:{json}': the params go to the simulator whole" '[ $status = 0 ]' \
+    "has \"would run: .*phoenix-sim --phone --launch 'com.palm.app.clock:{\\\"action\\\": \\\"edit\\\"}'\$\""
 phoenix --dry-run --no-assistant run --marketplace
 check "run --marketplace: the catalog's option goes to the simulator" '[ $status = 0 ]' 'has "would run: .*phoenix-sim --adaptive --marketplace$"'
 phoenix --dry-run --no-assistant run tablet --marketplace --scene cards

@@ -179,6 +179,7 @@ cmake --build build
 | `./build/phoenix-sim --tablet --size 2560x1600 --scale 2` | A large tablet |
 | `./phoenix run --device fairphone-fp6` | The Fairphone 6, as its image configures it (above) |
 | `./build/phoenix-sim --launch com.palm.app.notes` | Open an app at start-up |
+| `./build/phoenix-sim --launch 'com.palm.app.clock:{"action": "edit"}'` | Open it with launch params (a deep link), as the application manager's launch `{id, params}` |
 | `./build/phoenix-sim --no-toolbar` | Without the toolbar beside the screen |
 | `./build/phoenix-sim --marketplace` | With the Marketplace's catalog (below), the Marketplace open |
 | `./build/phoenix-sim --help` | Every option |

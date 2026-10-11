@@ -223,6 +223,10 @@ jobs:
         timeout-minutes: 10
         run: build/simfonts-test
 
+      - name: The simulator's --launch values (an app id, or appId:{json})
+        timeout-minutes: 10
+        run: build/simlaunch-test
+
       - name: The keyboard's dictation (recording format, transcriber replies)
         timeout-minutes: 10
         run: build/dictation-test
@@ -500,6 +504,7 @@ jobs:
         run: |
           build/pty/pty-test
           build/siminstaller-test
+          build/simlaunch-test
           build/dictation-test
           python3 tools/get-wakeword.py && build/wakeword-test
           build/localmodels-test

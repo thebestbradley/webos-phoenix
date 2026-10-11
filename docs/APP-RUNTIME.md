@@ -75,6 +75,18 @@ writes (`build/rootfs/`):
 (phoenix-default-apps' `npm run sim` does this.) `build/siminstaller-test`
 checks it.
 
+A deep link is tested with the app's launch params after its id,
+`--launch 'appId:{json}'` (a JSON object; repeatable, one app each), which
+starts the app as `luna://com.palm.applicationManager/launch {id, params}`
+does: a new page with them as `PalmSystem.launchParams`, or, for an app
+already running, a relaunch with them (`webOSRelaunch`, `Mojo.relaunch`).
+`./phoenix run` passes it on whole (`build/simlaunch-test` checks what
+`--launch` takes):
+
+```sh
+./phoenix run phone --extra-rootfs ../phoenix-default-apps/build/rootfs --launch 'com.palm.app.clock:{"action": "edit", "key": "alarm1"}'
+```
+
 ## phoenix-runtime.js
 
 Web apps expect the device's web runtime to provide `PalmSystem` (app and

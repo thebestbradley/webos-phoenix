@@ -441,7 +441,10 @@ framework demos, Terminal) show only while it is on
 ([docs/APP-RUNTIME.md](docs/APP-RUNTIME.md#developer-mode)).
 
 `--launch com.palm.app.notes` opens an app at start-up (repeatable);
-`--launch org.webosphoenix.settings.wifi` opens a Settings pane.
+`--launch org.webosphoenix.settings.wifi` opens a Settings pane;
+`--launch 'com.palm.app.contacts:{"launchType": "pseudo-card", "contact": {"phoneNumbers": [{"value": "4151234567"}]}}'`
+opens an app with those launch params, as the application manager's launch
+`{id, params}` would (`appId:{json}`; the params a JSON object).
 
 `--scene locked|cards|stacks|reorder|maximized|heldcard|launcher|launcherinstall|dashboard|justtype|keyboard|systemmenu|pin|emergency|firstuse` opens
 a demo state (`keyboard`: Just Type with the virtual keyboard up; `heldcard`: a card that keeps the upright orientation, drawn
