@@ -44,6 +44,24 @@ Item {
             function runScript(js) { scripts = scripts.concat([js]); }
         }
     }
+    // A page that loads (ready, loaded) and answers scripts as Chromium does
+    // (done with the result, later): the luna calls' scripts return whether
+    // the page's runtime took the call.
+    Component {
+        id: loadingPage
+        QtObject {
+            property bool ready: false
+            property bool runtime: false
+            signal loaded
+            property var scripts: []
+            function runScript(js, done) {
+                scripts = scripts.concat([js]);
+                var result = runtime;
+                if (done)
+                    Qt.callLater(function () { done(result); });
+            }
+        }
+    }
 
     TestCase {
         name: "SimStatus"
@@ -234,6 +252,53 @@ Item {
             compare(told.length, 1, ui.scripts.join("\n"));
             delete windows._headless["com.palm.systemui"];
             ui.destroy();
+        }
+
+        // The shell's luna calls go to the system UI page's runtime. Made
+        // while that page is still loading (at start), they wait for it, as
+        // the runtime is not there yet to reply (phoenix-sim logged
+        // "phoenixHost is not defined" and the reply never came); a page
+        // with no runtime answers null.
+        function test_lunaCallsWaitForTheSystemUiPage() {
+            var ui = loadingPage.createObject(root);
+            windows._headless["com.palm.systemui"] = ui;
+            var once = [], each = [];
+            windows.lunaCall("luna://org.webosphoenix.assistant/announce", { text: "hi" }, function (r) { once.push(r); });
+            windows.lunaSubscribe("luna://org.webosphoenix.assistant/getSettings", { subscribe: true }, function (r) { each.push(r); });
+            tryVerify(function () { return ui.scripts.length === 2; }, 1000);
+            wait(50);
+            compare(once.length, 0, "no reply before the page has loaded");
+            compare(each.length, 0);
+            compare(ui.scripts.length, 2);
+            ui.runtime = true;
+            ui.ready = true;
+            ui.loaded();
+            tryVerify(function () { return ui.scripts.length === 4; }, 1000);
+            compare(ui.scripts[2], ui.scripts[0]);
+            compare(ui.scripts[3], ui.scripts[1]);
+            wait(50);
+            compare(ui.scripts.length, 4, "sent once more, not again");
+            // The runtime replies through phoenixHost.
+            var idOf = function (js) { return Number(/var id = (\d+)/.exec(js)[1]); };
+            windows._hostMessage("com.palm.systemui", "", "lunaReply", { id: idOf(ui.scripts[0]), reply: { returnValue: true } });
+            windows._hostMessage("com.palm.systemui", "", "lunaReply", { id: idOf(ui.scripts[1]), reply: { n: 1 }, keep: true });
+            windows._hostMessage("com.palm.systemui", "", "lunaReply", { id: idOf(ui.scripts[1]), reply: { n: 2 }, keep: true });
+            compare(once, [{ returnValue: true }]);
+            compare(each, [{ n: 1 }, { n: 2 }]);
+            delete windows._headless["com.palm.systemui"];
+            ui.destroy();
+
+            // A loaded page without the runtime (a site): null, once.
+            var site = loadingPage.createObject(root, { ready: true });
+            windows._headless["com.palm.systemui"] = site;
+            var got = [];
+            windows.lunaCall("luna://com.example/x", {}, function (r) { got.push(r); });
+            tryVerify(function () { return got.length === 1; }, 1000);
+            compare(got[0], null);
+            wait(50);
+            compare(site.scripts.length, 1);
+            delete windows._headless["com.palm.systemui"];
+            site.destroy();
         }
 
         function test_launchParamsPickTheLaunchPoint() {
