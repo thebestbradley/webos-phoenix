@@ -64,6 +64,24 @@ describe("an emergency call", () => {
         await wait(30);
         expect(d.state.launched).toHaveLength(1);
     });
+    it("in talk mode, is not asked again for unclear words, nor dropped by \"I'm done\"", async () => {
+        // Talk mode asks a read-back again for words that are not a yes or a
+        // no, and drops it at "I'm done": never an emergency call's countdown.
+        const d = device({ deps: { countdownMs: 60 } });
+        await d.ask("call 911", { voice: true });
+        const m = await d.ask("uh please hurry", { voice: true });
+        expect(m.text).not.toMatch(/should I make the call/i);
+        await d.ask("I'm done", { voice: true });
+        await wait(150);
+        expect(d.state.launched).toHaveLength(1);
+        expect(d.state.launched[0]).toMatchObject({ id: "org.webosphoenix.phone", params: { number: "911", dial: true } });
+        // "No" still stops it.
+        const e = device({ deps: { countdownMs: 60 } });
+        await e.ask("call 911", { voice: true });
+        expect((await e.ask("no", { voice: true })).status).toBe("cancelled");
+        await wait(150);
+        expect(e.state.launched).toEqual([]);
+    });
     it("may be asked for over the lock screen; another call may not", async () => {
         const d = device({ deps: { countdownMs: 10000 } });
         expect(await d.ask("call 911", { locked: true })).toMatchObject({ command: "call", status: "pending" });

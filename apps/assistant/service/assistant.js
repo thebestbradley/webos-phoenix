@@ -501,6 +501,8 @@ function createAssistantService(deps) {
         });
     }
 
+    // A read-back that is an emergency call's countdown.
+    function counting(m) { return !!(m && m.status === "pending" && m.confirm && m.confirm.countdown); }
     // An emergency call's countdown (lib/emergency.js): when it ends with
     // the call still waiting (no Cancel, no "no"), it is placed, as if Call
     // had been tapped. deps.countdownMs: the tests' shorter wait.
@@ -693,7 +695,9 @@ function createAssistantService(deps) {
     // free-word questions' answers are route's.)
     function answerChoice(thread, c, text, p) {
         if (c.kind === "followUp" || c.kind === "awaiting") return null;
-        if (c.kind === "confirm") return p.voice && !newRequest(text) ? unclear(thread, c) : null;
+        // (An emergency call counting down is not asked again: words that
+        // are not "no" or "cancel" leave it to be placed.)
+        if (c.kind === "confirm") return p.voice && !newRequest(text) && !counting(c.message) ? unclear(thread, c) : null;
         var l = lang(), m = c.message;
         // As its button would (a choice gone meanwhile: said so).
         var choose = function (id) {
@@ -735,7 +739,9 @@ function createAssistantService(deps) {
     // said: ended in words ("I'm done": "OK, I won't send it.").
     function endChoice(thread, said) {
         var c = pendingChoice(thread);
-        if (!c || c.kind !== "confirm") return "";
+        // An emergency call counting down is placed all the same: only "no",
+        // "cancel" or the button stop it (lib/emergency.js).
+        if (!c || c.kind !== "confirm" || counting(c.message)) return "";
         c.message.status = "cancelled";
         putMessage(c.message);
         return said ? lang().say.leftUndone(c.command) : lang().say.unanswered(c.command);

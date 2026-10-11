@@ -1540,6 +1540,12 @@ where it came from (cases a-sw-*, with a case's own contacts: `put`):
   (what people call the apps: Messaging), "will I need a jacket tonight"
   (the cold, not the rain).
 
+And one found by the talk-mode work (tools/test-assistant.cjs): "did you
+add it?" went on being answered with its switch off in Settings >
+Assistant > Commands, the router answering it past `act()`'s check; the
+switch is checked there now, and `review.test.ts` asks every command's
+phrase with its switch off.
+
 Left from the sweep, for others or the owner: adding several items in
 one ("eggs, milk and bread": one task, Q131), a group text as one
 message, "turn off the lights and lock the screen" (smart home with a
