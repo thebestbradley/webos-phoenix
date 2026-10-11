@@ -602,7 +602,7 @@ function timer(t) {
 // snooze, 10 minutes (com.palm.app.clock utility/prefsmanager.js:91
 // SnoozeDuration, utility/alarm.js:328), as a one-off alarm.
 function snooze(t, now) {
-    var m = /^snooze(?: (?:it|that|the alarm|my alarm|alarm))?(?: (?:for|by) (.+))?$/.exec(t);
+    var m = /^snooze(?: (?:it|that|the alarm|my alarm|alarm))?(?:(?: for| by)? (.+))?$/.exec(t);
     if (!m) return null;
     var s = m[1] ? duration(m[1]) : 600;
     if (!s) return null;
