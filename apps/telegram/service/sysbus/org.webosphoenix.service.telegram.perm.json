@@ -1,5 +1,5 @@
 {
-    "org.webosphoenix.service.telegram": [
+    "org.webosphoenix.service.telegram": ["phoenix.appservices.accounts", 
         "database.operation",
         "activity.operation",
         "accounts.operation",

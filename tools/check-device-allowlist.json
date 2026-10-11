@@ -510,10 +510,6 @@
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C1"
  },
- "luna:unknown-service:com.palm.service.accounts": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
-  "row": "C2"
- },
  "luna:unknown-service:com.palm.service.backup": {
   "owner": "device audit (docs/DEVICE-AUDIT.md)",
   "row": "C1"
@@ -530,15 +526,7 @@
   "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
   "row": "C2"
  },
- "luna:unknown-service:com.palm.service.calendar.reminders": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
-  "row": "C2"
- },
  "luna:unknown-service:com.palm.service.calendar.yahoo": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
-  "row": "C2"
- },
- "luna:unknown-service:com.palm.service.contacts": {
   "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
   "row": "C2"
  },
@@ -547,10 +535,6 @@
   "row": "C2"
  },
  "luna:unknown-service:com.palm.service.contacts.google": {
-  "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
-  "row": "C2"
- },
- "luna:unknown-service:com.palm.service.contacts.linker": {
   "owner": "device audit (docs/DEVICE-AUDIT.md); Synergy",
   "row": "C2"
  },
