@@ -12,7 +12,12 @@
 // Messaging's outbox, and the token revoked with the account.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { readFileSync } from "node:fs";
+import * as fs from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import * as nodeCrypto from "node:crypto";
+import * as nodeHttp from "node:http";
+import * as nodePath from "node:path";
+import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -24,6 +29,7 @@ import * as memdb from "@phoenix/synckit/src/test/memdb.js";
 const require = createRequire(__filename);
 const { createFakeMastodon } = require("./test/fake-mastodon.cjs");
 const oauthLib = require("../../../services/oauth/oauthservice.js");
+const deviceOAuth = require("../../../services/oauth/device.js");
 const fediverse = loadCommonJs(join(__dirname, "connector.js"));
 const template = JSON.parse(readFileSync(join(__dirname, "..", "public", "accounts", "com.webosphoenix.fediverse", "com.webosphoenix.fediverse.json"), "utf8"));
 const SERVICE = "org.webosphoenix.service.fediverse";
@@ -60,7 +66,38 @@ describe("conformance: the Fediverse account", () => {
 
 // ---- The whole account ----------------------------------------------------------------------
 
-async function world() {
+// The device's way (services/oauth/device.js): the Sign In card, played by
+// a user who presses "Authorize" on the server's page, the redirect
+// answered by the loopback listener on 127.0.0.1 (the fixed port: the
+// Fediverse registers its redirect exactly), the token sealed on disk.
+function onDevice(server: any, sheetSeen: string[], isDenied: () => boolean) {
+    const dir = mkdtempSync(join(tmpdir(), "phoenix-fedi-oauth-"));
+    const fixedPort = 41000 + Math.floor(Math.random() * 8000);
+    const answers: number[] = [];
+    const dev = deviceOAuth.createDeviceOAuth({
+        request: (r: any) => server.request(r), fs, path: nodePath, crypto: nodeCrypto, http: nodeHttp, dir, fixedPort,
+        launchCard: async (params: any) => {
+            setTimeout(async () => {
+                const pend = await dev.methods.pending({ session: params.session }, deviceOAuth.SIGNIN_APP);
+                sheetSeen.push(pend.url);
+                const page = await server.request({ method: "GET", url: pend.url });
+                const fields: Record<string, string> = {};
+                for (const m of page.body.matchAll(/name="([^"]+)" value="([^"]*)"/g)) fields[m[1]] = m[2].replace(/&amp;/g, "&").replace(/&quot;/g, "\"");
+                fields.decision = isDenied() ? "deny" : "allow";
+                const r = await server.request({ method: "POST", url: server.base + "/oauth/authorize", headers: { "content-type": "application/x-www-form-urlencoded" },
+                                                 body: new URLSearchParams(fields).toString() });
+                // The redirect, for real, to the listener.
+                answers.push(await new Promise<number>((resolve) => nodeHttp.get(r.headers.location, (res) => { res.resume(); resolve(res.statusCode || 0); })));
+            }, 0);
+            return { returnValue: true };
+        },
+        closeCard: async () => ({ returnValue: true }),
+        bar: () => {}
+    });
+    return { methods: dev.methods, dir, fixedPort, answers };
+}
+
+async function world(opts: { device?: boolean } = {}) {
     const server = await createFakeMastodon().start(0);
     const db = memdb.createMemDb(Object.assign({}, memdb.KIND_PARENTS, KINDS));
     const tempdb = memdb.createMemDb();
@@ -72,7 +109,8 @@ async function world() {
     // The OAuth service, its sheet a user who presses "Authorize" on the server's page.
     const sheetSeen: string[] = [];
     let deny = false;
-    const oauth = oauthLib.createOAuthService({
+    const device = opts.device ? onDevice(server, sheetSeen, () => deny) : null;
+    const oauth = device ? device.methods : oauthLib.createOAuthService({
         request: (r: any) => server.request(r),
         keystore: { get: async (k: string) => keys[k], put: async (k: string, v: any) => { keys[k] = v; }, del: async (k: string) => { delete keys[k]; } },
         crypto: { randomBytes: (n: number) => new Uint8Array(require("crypto").randomBytes(n)),
@@ -121,7 +159,7 @@ async function world() {
         return r;
     }
     const live = (kind: string) => Object.values(db.objects).filter((o: any) => !o._del && o._kind === kind) as any[];
-    return { server, db, tempdb, keys, toasts, messages, methods, bus, signIn, live, sheetSeen, setDeny: (d: boolean) => { deny = d; } };
+    return { server, db, tempdb, keys, toasts, messages, methods, bus, signIn, live, sheetSeen, device, setDeny: (d: boolean) => { deny = d; } };
 }
 
 describe("the Fediverse account", () => {
@@ -292,5 +330,39 @@ describe("the Fediverse account", () => {
             expect(Object.keys(w.keys).filter((k) => k.indexOf("key:") === 0)).toEqual([]);
             expect(w.live("com.palm.contact.fediverse:1")).toEqual([]);
         } finally { await w.server.close(); }
+    });
+});
+
+describe("the Fediverse account on a device's sign-in path", () => {
+    it("signs in through the Sign In card and the loopback redirect; the token is sealed; deleting the account revokes it", async () => {
+        const w = await world({ device: true });
+        const dev = w.device!;
+        try {
+            const r = await w.signIn();
+            expect(r.username).toBe("phoenix@" + w.server.domain);
+            // The app registered itself with the device's fixed loopback redirect, and the sign-in came back there.
+            const app: any = Object.values(w.server.apps)[0];
+            expect(app.redirect_uris).toEqual(["http://127.0.0.1:" + dev.fixedPort + "/oauth/callback"]);
+            expect(new URL(w.sheetSeen[0]).searchParams.get("redirect_uri")).toBe("http://127.0.0.1:" + dev.fixedPort + "/oauth/callback");
+            for (let i = 0; i < 50 && !dev.answers.length; i++) await new Promise((res) => setTimeout(res, 20));
+            expect(dev.answers).toEqual([200]);
+            const key = r.credentials.common.oauthKey;
+            const token = await dev.methods.token({ keyId: key }, SERVICE);
+            expect(token.accessToken).toBeTruthy();
+            const sealed = readFileSync(join(dev.dir, "keys.enc"), "utf8");
+            expect(sealed).not.toContain(token.accessToken);
+            expect(sealed).not.toContain(app.client_secret);
+            // Refused on the server's page.
+            w.setDeny(true);
+            expect(await w.methods.signIn({ handle: "@phoenix@" + w.server.domain })).toMatchObject({ returnValue: false, errorCode: "ACCESS_DENIED" });
+            w.setDeny(false);
+            // Signed out: the token revoked, the key gone.
+            expect(await w.methods.onDelete({ accountId: ACCOUNT })).toMatchObject({ returnValue: true });
+            expect(w.server.revoked).toContain(token.accessToken);
+            expect((await dev.methods.token({ keyId: key }, SERVICE)).errorCode).toBe("NOT_FOUND");
+        } finally {
+            await w.server.close();
+            rmSync(dev.dir, { recursive: true, force: true });
+        }
     });
 });

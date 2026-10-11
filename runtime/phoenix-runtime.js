@@ -11896,23 +11896,40 @@
     // The OAuth sign-ins of Synergy connectors (docs/SYNERGY-CONNECTORS.md
     // 4.1): the device's own service code (services/oauth/oauthservice.js,
     // loaded from /usr/palm/services/org.webosphoenix.service.oauth/), with
-    // what the simulator has for its pieces:
+    // what the simulator has for its pieces. Two ways to show the provider's
+    // page:
     //
-    //   the browser sheet   the system's sheet page (org.webosphoenix.sharesheet,
-    //                       kind "signin") over the card in front, showing the
-    //                       provider's page with its address in a web view
-    //                       (BrowserAdapter above: a native view in
-    //                       phoenix-sim, an <iframe> elsewhere). The page
-    //                       asking cannot read it; the sheet hears the address
-    //                       change and closes when it reaches the redirect;
-    //   the redirect        this simulator's own address of the sheet app's
-    //                       signed-in.html (same origin, so even the iframe
-    //                       engine sees it arrive);
+    //   the browser sheet   (the default) the system's sheet page
+    //                       (org.webosphoenix.sharesheet, kind "signin") over
+    //                       the card in front, showing the provider's page
+    //                       with its address in a web view (BrowserAdapter
+    //                       above: a native view in phoenix-sim, an <iframe>
+    //                       elsewhere). The page asking cannot read it; the
+    //                       sheet hears the address change and closes when it
+    //                       reaches the redirect, this simulator's own address
+    //                       of the sheet app's signed-in.html (same origin, so
+    //                       even the iframe engine sees it arrive);
+    //   the Sign In card    (runtime.oauthUseCard(true), the store's
+    //                       "oauth:signInCard") the device's way
+    //                       (services/oauth/signincard.js, the same module):
+    //                       the card org.webosphoenix.signin (apps/signin),
+    //                       launched with {session}; its page asks pending
+    //                       for the address (the store's "oauth:cardPending"
+    //                       here, the card's page being another page) and
+    //                       goes there; the redirect is the RFC 8252
+    //                       loopback address, which phoenix-sim's card stops
+    //                       at instead of a listener (WebAppWindow's
+    //                       "signInRedirect"), and the card's close comes from
+    //                       the shell (SimWindowSource._appGone); both reach
+    //                       the page waiting as oauthCardEvent, through the
+    //                       store ("oauth:cardEvent"). The listener itself is
+    //                       a device's (loopback.js): tested in Node, and end
+    //                       to end with this card's page in Chromium
+    //                       (tools/test-signin-card.cjs);
     //   the key store       the runtime's credential storage: the shared store
     //                       ("oauth:keys"), beside the accounts' credentials
-    //                       ("accountCredentials"). On a device: see
-    //                       services/oauth/service.js (a placeholder file
-    //                       until org.webosphoenix.service.keystore);
+    //                       ("accountCredentials"). On a device: sealed with
+    //                       AES-256-GCM (services/oauth/keystore.js);
     //   who asks            ctx.caller (a service in the page, nodeServiceLuna),
     //                       else the page's app. A connector's sign-in page may
     //                       act for the service its template names.
@@ -11920,9 +11937,18 @@
         var SERVICE = "org.webosphoenix.service.oauth";
         var loadModule = nodeServiceLoader("/usr/palm/services/" + SERVICE + "/", "OAuth service");
         var KEYS = "oauth:keys";
-        var methods = null;
+        var CARD_FLAG = "oauth:signInCard";
+        var CARD_PENDING = "oauth:cardPending";
+        var CARD_EVENT = "oauth:cardEvent";
+        var CARD_APP = "org.webosphoenix.signin";
+        var LOOPBACK = "http://127.0.0.1/oauth/callback";
+        var FIXED_LOOPBACK = "http://127.0.0.1:47613/oauth/callback";   // services/oauth/device.js FIXED_PORT
+        var methods = null, card = null;
 
-        function redirectUri() {
+        function useCard() { return store.get(CARD_FLAG, false) === true; }
+        runtime.oauthUseCard = function (on) { store.set(CARD_FLAG, !!on); };
+
+        function sheetRedirectUri() {
             var origin = String(global.location.href).replace(/^([a-z][a-z0-9+.-]*:\/\/[^\/]*).*$/i, "$1");
             return origin + "/usr/palm/applications/org.webosphoenix.sharesheet/signed-in.html";
         }
@@ -11935,22 +11961,119 @@
             if (!rt.signInSheet) return Promise.reject(Object.assign(new Error("No sign-in sheet in this page"), { errorCode: "UNSUPPORTED" }));
             return rt.signInSheet(url, prefix);
         }
+
+        // ---- The Sign In card's pieces in this page --------------------------------------
+
+        // The loopback stand-ins waiting here: state -> resolve.
+        var waiting = {};
+        var seen = {};
+        function cardEvent(ev) {
+            if (!ev || !ev.id || seen[ev.id]) return;
+            seen[ev.id] = true;
+            if (ev.type === "redirect") {
+                var q = loadModule("oauthservice.js").queryOf(ev.url);
+                if (waiting[q.state]) waiting[q.state](ev.url);
+            } else if (ev.type === "closed" && card) {
+                card.appClosed();
+            }
+        }
+        // From phoenix-sim (SimWindowSource._oauthCardEvent), in one page;
+        // the others hear it through the store.
+        runtime.oauthCardEvent = function (ev) {
+            var e = Object.assign({ id: Date.now() + "-" + Math.random().toString(36).slice(2, 8) }, ev || {});
+            store.set(CARD_EVENT, e);
+            cardEvent(e);
+        };
+        try {
+            global.addEventListener("storage", function (e) {
+                if (e.key === "phoenix:" + CARD_EVENT) cardEvent(store.get(CARD_EVENT, null));
+            });
+        } catch (e) { /* no storage events */ }
+
+        // The simulator's stand-in for loopback.js: the address with the
+        // port asked for (or a made-up ephemeral one), answered by the
+        // card's "signInRedirect" for this sign-in's state.
+        function fakeLoopback(requested, opts) {
+            var lb = loadModule("loopback.js");
+            var target = requested === sheetRedirectUri() ? LOOPBACK : requested;
+            if (!lb.isLoopback(target))
+                return Promise.reject(Object.assign(new Error("A sign-in on this device comes back to " + LOOPBACK + ", not " + requested), { errorCode: "BAD_PARAMS" }));
+            var port = lb.portOf(target) || 49152 + Math.floor(Math.random() * 16000);
+            var state = opts && opts.state;
+            var resolveResult;
+            var result = new Promise(function (r) { resolveResult = r; });
+            waiting[state] = function (url) { delete waiting[state]; resolveResult(url); };
+            return Promise.resolve({
+                redirectUri: "http://127.0.0.1:" + port + "/oauth/callback", port: port, result: result,
+                close: function () { if (waiting[state]) { delete waiting[state]; resolveResult(null); } }
+            });
+        }
+
+        function closeApp(appId) {
+            if (!runtime.hostOp) return Promise.resolve();
+            return runtime.hostOp("processId", { appId: appId }).then(function (r) {
+                return r && r.processId ? runtime.hostOp("close", { processId: r.processId }) : null;
+            });
+        }
+
+        function signInCard() {
+            if (!card) {
+                card = loadModule("signincard.js").createSignInCard({
+                    launch: function (params) {
+                        var cur = card.current();
+                        store.set(CARD_PENDING, { session: params.session, url: cur ? cur.url : "" });
+                        host.postToHost("launch", { id: CARD_APP, params: params });
+                        return Promise.resolve({ returnValue: true });
+                    },
+                    close: function () {
+                        store.set(CARD_PENDING, null);
+                        return closeApp(CARD_APP);
+                    },
+                    // phoenix-sim's card draws its bar from its own page's
+                    // address (WebAppWindow); a device's shell hears it.
+                    bar: function () {},
+                    randomId: function () {
+                        var b = global.crypto.getRandomValues(new Uint8Array(12)), s = "";
+                        for (var i = 0; i < b.length; i++) s += ("0" + b[i].toString(16)).slice(-2);
+                        return s;
+                    },
+                    log: function (m) { console.info("[oauth] " + m); }
+                });
+            }
+            return card;
+        }
+
         function service() {
             if (!methods) {
                 var subtle = global.crypto && global.crypto.subtle;
-                methods = loadModule("oauthservice.js").createOAuthService({
+                var env = {
                     request: function (req) { return proxiedRequest(req); },
                     keystore: {
                         get: function (id) { return Promise.resolve(store.get(KEYS, {})[id]); },
                         put: function (id, v) { var all = store.get(KEYS, {}); all[id] = v; store.set(KEYS, all); return Promise.resolve(); },
-                        del: function (id) { var all = store.get(KEYS, {}); delete all[id]; store.set(KEYS, all); return Promise.resolve(); }
+                        del: function (id) { var all = store.get(KEYS, {}); delete all[id]; store.set(KEYS, all); return Promise.resolve(); },
+                        wipe: function () { store.set(KEYS, {}); return Promise.resolve(); }
                     },
-                    sheet: sheet,
+                    redirect: function (requested, opts) {
+                        return useCard() ? fakeLoopback(requested, opts) : Promise.resolve({ redirectUri: requested });
+                    },
+                    sheet: function (url, redirectUri, pending) {
+                        return useCard() ? signInCard().show(url, redirectUri, pending) : sheet(url, redirectUri);
+                    },
+                    // The card's page is another page: what it asks is in the store.
+                    card: {
+                        pending: function (p, caller) {
+                            if (caller !== CARD_APP) return { returnValue: false, errorCode: "PERMISSION_DENIED", errorText: "Only the Sign In card asks for this" };
+                            var rec = store.get(CARD_PENDING, null);
+                            if (!rec || !p.session || rec.session !== p.session) return { returnValue: false, errorCode: "NOT_FOUND", errorText: "No such sign-in (it has ended)" };
+                            var h = loadModule("signincard.js").hostOf(rec.url);
+                            return { returnValue: true, url: rec.url, host: h.host, secure: h.secure };
+                        }
+                    },
                     crypto: {
                         randomBytes: function (n) { return global.crypto.getRandomValues(new Uint8Array(n)); },
                         sha256: function (bytes) { return subtle.digest("SHA-256", bytes).then(function (d) { return new Uint8Array(d); }); }
                     },
-                    redirectUri: redirectUri(),
                     // A connector's sign-in page (its template's customUI app)
                     // signs in for the template's service.
                     mayActFor: function (caller, owner) {
@@ -11960,13 +12083,20 @@
                                 (t.capabilityProviders || []).some(function (cp) { return String(cp.implementation || "").indexOf("//" + owner + "/") > 0; });
                         });
                     },
+                    // Erase: the shell's (a device's luna-surfacemanager; the
+                    // simulator's system UI page) and the system manager's.
+                    mayWipe: function (caller) { return ["com.webos.surfacemanager", "com.palm.systemmanager", "com.palm.systemui"].indexOf(caller) >= 0; },
                     log: function (m) { console.info("[oauth] " + m); }
-                });
+                };
+                // The addresses follow the way chosen (redirectUri {}).
+                Object.defineProperty(env, "redirectUri", { get: function () { return useCard() ? LOOPBACK : sheetRedirectUri(); } });
+                Object.defineProperty(env, "fixedRedirectUri", { get: function () { return useCard() ? FIXED_LOOPBACK : sheetRedirectUri(); } });
+                methods = loadModule("oauthservice.js").createOAuthService(env);
             }
             return methods;
         }
         var serviceMethods = {};
-        ["authorize", "token", "forget", "client", "redirectUri"].forEach(function (name) {
+        ["authorize", "token", "forget", "client", "redirectUri", "pending", "wipe"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
                 var m;
                 try { m = service(); } catch (e) { return reply(fail("UNKNOWN_ERROR", String(e.message || e))); }

@@ -140,8 +140,15 @@ Item {
             return uidOf(item);
         var uid = "s" + (_nextUid++);
         _surfaces.push({ uid: uid, item: item });
-        var host = hostComponent.createObject(source, { surface: item });
+        var host = hostComponent.createObject(source, { surface: item, appId: item.appId });
         _hosts[uid] = host;
+        // The Sign In card's bar, while the OAuth service says a sign-in is
+        // open in it; its Cancel closes the card (the service hears the
+        // close from the application manager and ends the sign-in).
+        host.signIn = Qt.binding(function() {
+            return source.signInCard !== null && source.signInCard.appId === host.appId ? source.signInCard : null;
+        });
+        host.signInCancel.connect(function() { source.close(uid); });
         // The card's edit popup: the command goes back to its page.
         var appOfCard = item.appId;
         host.editTriggered.connect(function(action) { source.sendToApp(appOfCard, "editAction", { action: action }); });
@@ -577,6 +584,12 @@ Item {
     property var speech: null
 
     readonly property string shellHost: "luna://org.webosphoenix.shellhost"
+    // The Sign In card's bar: {appId, session, host, secure} while a sign-in
+    // is open in it, from org.webosphoenix.service.oauth only (its
+    // "signInCard" message: services/oauth/signincard.js); never from a page,
+    // so the provider's page in the card cannot draw the bar.
+    readonly property string oauthServiceId: "org.webosphoenix.service.oauth"
+    property var signInCard: null
 
     // A message for every page of appId (its runtime's shellEvent).
     function sendToApp(appId, type, payload) {
@@ -700,6 +713,10 @@ Item {
             progressAnimationRequested(String(payload.type || ""), String(payload.state || ""));
         } else if (type === "debugOverlay") {
             debugOverlayRequested(payload);
+        } else if (type === "signInCard" && appId === oauthServiceId) {
+            signInCard = payload.closed || !payload.appId ? null
+                : { appId: String(payload.appId), session: String(payload.session || ""),
+                    host: String(payload.host || ""), secure: payload.secure === true };
         } else if (type === "justTypeDismiss" && appId === justTypeAppId) {
             justTypeDismissed();
         }

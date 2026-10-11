@@ -1,4 +1,6 @@
 {
     "allowedNames": ["org.webosphoenix.service.oauth"],
-    "oauth.signin": ["oem"]
+    "oauth.signin": ["oem"],
+    "oauth.card": ["oem"],
+    "oauth.erase": ["oem"]
 }

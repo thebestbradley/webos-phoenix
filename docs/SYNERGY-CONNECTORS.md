@@ -32,7 +32,7 @@ kit**, and a few gaps found in today's code that block third-party connectors.
 | Templates | HP profile, IMAP, POP, other mail; CardDAV & CalDAV; Subscribed Calendar (webcal); the connector packages' own (the Fediverse, Unofficial Telegram; Jabber, Matrix, Delta Chat from the catalog) | `compat/rootfs/usr/palm/public/accounts/`, `apps/dav/public/accounts/`, each package's `public/accounts/` |
 | Reference connector | `apps/dav`: hidden app + wizard + template + db8 kinds and permissions + Node service with luna-service2 files | `apps/dav/` (layout in section 3.1) |
 | Marketplace | Index kinds `pwa`, `ipk` and (C4) `connector`: a package with a service only as a connector that passes the rules; third-party connectors need Developer Mode on the device, the pre-installed ones (the Fediverse, Unofficial Telegram) and Phoenix's own in its catalog (Jabber, Matrix, Delta Chat: `preinstalled.json` "firstParty", OPEN-QUESTIONS Q94) do not | `server/marketplace/src/Catalog.php` `publish()`, `src/Ipk.php` (header: "no services"), `apps/marketplace/service/packagesservice.js` lines 338-357 |
-| OAuth, key store, push, synckit | synckit built (C1); the OAuth service's sign-in with PKCE built for the Fediverse (C2), its sheet and key store in the simulator only; push planned. Simulator keeps credentials in localStorage | SYNERGY.md 2.3, 2.9; SYNERGY-MODERN.md 4.2, 4.8; `services/oauth` |
+| OAuth, key store, push, synckit | synckit built (C1); the OAuth service's sign-in with PKCE built for the Fediverse (C2), on a device through the Sign In card, the loopback redirect and a sealed key store (4.1, "As built"; written, not run on hardware); push planned. Simulator keeps credentials in localStorage | SYNERGY.md 2.3, 2.9; SYNERGY-MODERN.md 4.2, 4.8; `services/oauth` |
 
 **Gaps that matter for third-party connectors** (found while reading the code):
 
@@ -475,7 +475,7 @@ They are not listed as connectors.
 | Template discovery | Scan both roots, reload on install or remove (gap 2) | Original behaviour; needed by anything installable |
 | Connector trust tier | A sandbox level between web apps and Developer Mode: JS service only, no native code, a fixed luna allow-list (3.2 rule 10), network limited to declared hosts or the user's server, a CPU/wake budget | The concrete form of APP-STORE.md A5 for connectors |
 | db8 permissions | Readers of a generic kind may read kinds that extend it; a connector may grant access only to its own kinds (gap 4) | Verify OSE db8 semantics first |
-| OAuth service | `org.webosphoenix.service.oauth`: PKCE, loopback redirect, device-code fallback (SYNERGY.md 2.3, SM 4.4), shown as a **system browser sheet** over the Accounts card. The address bar is visible and the page can't be read by the connector | Never an embedded web view; bring-your-own client id per connector |
+| OAuth service | `org.webosphoenix.service.oauth`: PKCE, loopback redirect, device-code fallback (SYNERGY.md 2.3, SM 4.4), shown as a **system browser sheet** over the Accounts card (on a device the **Sign In card**: "As built" below). The address bar is visible and the page can't be read by the connector | Never an embedded web view; bring-your-own client id per connector |
 | Key store | `org.webosphoenix.service.keystore` behind the legacy `com.palm.keymanager` API (SYNERGY.md 2.9). Also holds per-account keys for encrypted local stores (Matrix, Standard Notes, Bitwarden) | Exclude it from unencrypted backup (SM 4.5) |
 | Push | UnifiedPush distributor over Luna + optional relay (SM 4.8, 4.9); the kit's `push` option registers for the connector | Polling stays the fallback |
 | Rate limits | Per-account backoff in the kit; a per-connector budget enforced by the activity manager; show "paused: provider asked us to slow down" | |
@@ -484,6 +484,66 @@ They are not listed as connectors.
 | Per-account data permissions | In Accounts: what each account syncs (already capability switches) **and which apps may see it** (e.g. a work account's contacts hidden from Messaging), plus "Export my data" and "Remove data on sign-out" | New UI in an overlay; enforced by db8 queries per app |
 | Account health | One list of sync states, last sync, errors, data used, battery attributed per account | Builds on `lib/syncui` dashboards |
 | Webhooks | Only through the relay; the device creates subscriptions itself so the relay never holds tokens (SM 4.9) | |
+
+**As built: OAuth sign-ins on a device** (11 October 2026; the owner's
+design: a system card rather than a sheet, as WebAppMgr has no web view,
+OPEN-QUESTIONS Q38). Written against OSE's sources and tested in Node,
+Chromium and phoenix-sim; not yet run on hardware.
+
+- **The Sign In card** `org.webosphoenix.signin` (`apps/signin`): the OAuth
+  service launches it through SAM with `{session}` only; its page asks
+  `pending {session}` (group `oauth.card`, the card's only one) for the
+  address and replaces itself with the provider's real page, which
+  WebAppMgr loads in the card like any page (WAM has no navigation policy
+  for an app's main frame: `web_page_blink.cc:686-698` only logs it). The
+  original showed a connector's sign-in inside Accounts (the template's
+  `validator.customUI` page in a cross-app iframe, enyo-1.0
+  `lib/accounts/source/entry-add.js:55-56`, `cross-app.js:17-26`) with an
+  embedded browser view for a provider's site (`palm/controls/BasicWebView.js:92`),
+  which the connector's page could script; here no page of the connector
+  sees the provider's page or the tokens. The card is `trustLevel`
+  `default` (a trusted app's page may load local files,
+  `web_page_blink.cc:139-143`). Phoenix's runtime is not in the provider's
+  page (install-rootfs.py adds it to the app's own HTML only); WebAppMgr's
+  own `webOSSystem` and bridge are, as in every page it loads
+  (`web_page_blink.cc:957-960`), limited by the card's groups (Q95).
+- **The bar**: the shell draws it over the card (`Phoenix.Shell
+  SignInBar`: the provider's host, a lock for https, Cancel), from the
+  OAuth service's `signInCard` message through `org.webosphoenix.shellhost`,
+  which only that service's bus name can send; Cancel closes the card.
+  phoenix-sim's bar follows the page's address; a device's shows the host
+  the sign-in started at (Q95).
+- **The redirect**: RFC 8252 7.3 loopback, `services/oauth/loopback.js`:
+  127.0.0.1 only, only while a sign-in waits; an ephemeral port, or the
+  fixed 47613 for providers that match exactly (per provider:
+  DEVELOPER-APPS.md "The redirect on a device"). It answers only its
+  path with this sign-in's `state` (others get 404 or 400, so a program
+  guessing the port cannot end the sign-in), then stops; the code is
+  exchanged with the PKCE verifier, the card closed, the caller answered.
+  The card closed by the user (SAM's `getAppLifeEvents` "close"/"stop"):
+  `CANCELED`; nothing back in ten minutes: `TIMEOUT`; a second sign-in
+  replaces the first once its card has gone.
+- **The key store**: `services/oauth/keystore.js`, one AES-256-GCM sealed
+  file (`/var/lib/phoenix/oauth/keys.enc`, a fresh IV per write) under a
+  data key in `master.key` (0600 in a 0700 folder) until the key store
+  service (Q96); tokens, refresh tokens and client secrets (a Mastodon
+  server's) inside; the placeholder's plain `keys.json` is sealed in and
+  overwritten on first use. Tokens go only to the service that owns the
+  key (ACG group `oauth.signin`, oem; the owner check), never to a page;
+  a sign-out's `forget` revokes and deletes; `wipe` (the shell's Full
+  Erase, the system manager's Wipe; group `oauth.erase`) removes the store
+  and its key.
+- **Simulator**: the sheet stays the default; `__phoenixRuntime.oauthUseCard(true)`
+  switches the runtime's OAuth service to the card (`tools/test-signin-card-sim.cjs`;
+  `docs/screenshots/signin-card-phone.png`, `signin-card-tablet.png`: a
+  fake provider's page in the card, the bar's open grey lock for its plain
+  `http`).
+- **Tests**: `services/oauth/oauth.test.ts` (PKCE, state, the listener,
+  cancel, timeout, a second sign-in, refresh, revocation, sealing,
+  migration, wipe), the Fediverse's `connector.test.ts` on the device
+  path, `tools/test-signin-card.cjs` (the card's page in Chromium against a
+  fake provider and the fake Mastodon server), `shell/tests-device/tst_lsm.qml`
+  and `shell/tests/tst_signinbar.qml` (the bar).
 
 ### 4.2 Keep
 
@@ -553,8 +613,8 @@ with provider" flag.
   with PKCE in the system's browser sheet (the share sheet's page, kind
   `signin`: the server's page in a web view, its address above it); the
   token in the key store (in the simulator the runtime's credential storage;
-  on a device a placeholder file until the key store, and no sheet yet:
-  `services/oauth/service.js`); the account's credentials keep only the key.
+  on a device sealed with AES-256-GCM, and the sign-in in the Sign In card:
+  4.1, "As built"); the account's credentials keep only the key.
   Scopes: `read:accounts read:follows read:notifications read:statuses
   write:statuses write:media`.
 - **Contacts** (read only): the accounts you follow, as
@@ -583,8 +643,8 @@ with provider" flag.
   visibility chosen (public, unlisted, followers, mentioned only), through
   the kit's `share` method, with an `Idempotency-Key`.
 - **Not done**: Pixelfed albums in Photos (no PHOTO capability or kinds yet;
-  OPEN-QUESTIONS.md Q3), Bluesky, Web Push (C6), the sheet and key store on
-  a device (C3).
+  OPEN-QUESTIONS.md Q3), Bluesky, Web Push (C6). (The sign-in and key
+  store on a device: 4.1, "As built", 11 October 2026.)
 - **Tests**: a fake Mastodon server (`apps/fediverse/service/test/fake-mastodon.cjs`,
   following docs.joinmastodon.org page by page), the conformance suite and
   unit tests (`connector.test.ts`), and `tools/test-fediverse.cjs`, the whole

@@ -30,9 +30,9 @@ connector (`org.webosphoenix.drives`, `ctx.systemConfig("drives/clients.json")`)
 }
 ```
 
-Optional per provider: `redirectUri` (the default is the OAuth service's:
-`http://127.0.0.1/oauth/callback` on a device, RFC 8252 7.3; the
-simulator's own `signed-in.html` page in the simulator), `scope` (Google
+Optional per provider: `redirectUri` (the default is the OAuth service's,
+below; the simulator's own `signed-in.html` page in the simulator's
+sheet), `scope` (Google
 Drive only: `"drive"` turns on the full scope, below), and endpoint
 addresses for a test server (`authorizationEndpoint`, `tokenEndpoint`,
 `revocationEndpoint`, and `api` / `content` / `upload` / `graph`: what
@@ -51,6 +51,45 @@ addresses for a test server (`authorizationEndpoint`, `tokenEndpoint`,
 A registration's redirect URI must be the one the sign-in uses. The sign-in
 sheet watches for that address and stops there, so it never has to load.
 
+## The redirect on a device
+
+A device signs in through the Sign In card (`org.webosphoenix.signin`:
+the provider's own page in a card of its own, the shell's bar above it
+with the provider's host, the lock and Cancel) and comes back to the
+OAuth service's **loopback listener** (RFC 8252 7.3: `http`, the address
+`127.0.0.1`, never `localhost`; `services/oauth/loopback.js`), which
+listens only while a sign-in waits. Two forms, from the service's
+`redirectUri {}`:
+
+- `redirectUri` `http://127.0.0.1/oauth/callback`: each sign-in listens on
+  an **ephemeral port** the system picks and sends
+  `http://127.0.0.1:<port>/oauth/callback`. For providers that match a
+  loopback redirect on any port, as RFC 8252 7.3 and 8.4 ask: register it
+  without a port.
+- `fixedRedirectUri` `http://127.0.0.1:47613/oauth/callback`: the
+  service's **fixed port** (`FIXED_PORT`, `services/oauth/device.js`), for
+  providers that compare the redirect exactly, port included. Register it
+  with the port. Only open while a sign-in waits, like the other; if some
+  other program holds the port, the sign-in fails with `BUSY`.
+
+PKCE (S256) and `state` are checked on every sign-in, so a program that
+guesses the port and catches a code cannot use it.
+
+| Provider | Loopback on any port? | Register | Source |
+| --- | --- | --- | --- |
+| Google (Desktop app client) | Yes | nothing: desktop clients take loopback addresses unregistered | Google, "OAuth 2.0 for Mobile & Desktop Apps", loopback IP address option |
+| Microsoft Entra (OneDrive, Outlook) | Yes: "the port component is ignored for the purposes of matching a localhost redirect URI" (`http://127.0.0.1` is added in the app manifest's `replyUrlsWithType`; the portal's form refuses `http`) | `http://127.0.0.1/oauth/callback` | learn.microsoft.com, "Redirect URI (reply URL) best practices and limitations", Localhost exceptions (read 2026-10-11) |
+| Mastodon (Doorkeeper) | Yes, since Doorkeeper 5.2 (#1182: "loopback IP redirect URIs ... RFC8252 7.3"); `URIChecker.matches?` compares every part but the port for loopback hosts | registered by the device itself (`POST /api/v1/apps`); Phoenix registers the fixed port anyway, for the other servers | doorkeeper-gem `lib/doorkeeper/oauth/helpers/uri_checker.rb`, CHANGELOG (read 2026-10-11) |
+| Other Fediverse servers (Pleroma/Akkoma, GoToSocial, Pixelfed, Friendica) | Not established | the fixed port, registered by the device | Phoenix's Fediverse connector always uses `fixedRedirectUri` |
+| Bluesky (atproto OAuth) | Yes for loopback redirects: "Path components must match, but port numbers are not matched" | in the client metadata document's `redirect_uris` (`http://127.0.0.1/oauth/callback`) | atproto.com/specs/oauth (read 2026-10-11) |
+| Dropbox | **No**: redirect URIs are matched exactly, port included (Dropbox staff on the developer forum, "Redirect URI with variable loopback port") | `http://127.0.0.1:47613/oauth/callback` (the drives connector uses `fixedRedirectUri`) | dropboxforum.com thread 197621 |
+| Box | **Not documented**; users report an exact match, port included | `http://127.0.0.1:47613/oauth/callback` (the drives connector uses `fixedRedirectUri`) | Box support community, "redirect_uri_mismatch" threads |
+
+Where a provider takes neither (an `https` redirect only, or a custom
+scheme), the sign-in cannot come back to the device by itself: that
+provider would need the token broker (OPEN-QUESTIONS Q49) or a device
+code flow; none of the providers above needs one.
+
 ## Per provider
 
 Costs are what the provider asked when this was written (October 2026):
@@ -64,7 +103,7 @@ outside the developer's own accounts can sign in.
 | Console | https://www.dropbox.com/developers/apps, Create app |
 | App type | Scoped access, **Full Dropbox** (a place in Files is the whole Dropbox, not an app folder) |
 | Client | Public: PKCE, no secret on the device |
-| Redirect URI | `http://127.0.0.1/oauth/callback` (Dropbox takes `http` only for loopback addresses) |
+| Redirect URI | `http://127.0.0.1:47613/oauth/callback`, with the port: Dropbox matches it exactly (above; it takes `http` only for loopback addresses) |
 | Scopes (Permissions tab, then Submit) | `account_info.read`, `files.metadata.read`, `files.content.read`, `files.content.write` |
 | Tokens | `token_access_type=offline` (a refresh token; the connector asks for it) |
 | Verification | A new app is in *development* status with a cap on linked users; apply for *production* in the console before release (Dropbox's review: branding, how the scopes are used) |
@@ -77,7 +116,7 @@ outside the developer's own accounts can sign in.
 | Console | https://entra.microsoft.com, App registrations, New registration |
 | Accounts | "Accounts in any organizational directory and personal Microsoft accounts" (OneDrive personal and work) |
 | Platform | Mobile and desktop applications; "Allow public client flows": yes (no secret) |
-| Redirect URI | `http://127.0.0.1/oauth/callback` (Entra matches loopback addresses on any port) |
+| Redirect URI | `http://127.0.0.1/oauth/callback` (Entra matches loopback addresses on any port; add it in the manifest's `replyUrlsWithType`, as the portal refuses `http` there) |
 | Scopes (delegated) | `Files.ReadWrite`, `User.Read`, `offline_access` |
 | Verification | None to work; *publisher verification* (a Microsoft partner id) removes the "unverified" label on the consent page; work tenants may need their admin's consent |
 | Cost | Free |
@@ -105,7 +144,7 @@ picked with it, not the whole Drive: its sign-in page says so.
 | --- | --- |
 | Console | https://app.box.com/developers/console, Create New App, **Custom App**, User Authentication (OAuth 2.0) |
 | Client | Box's token endpoint asks for the `client_secret` even with PKCE: it ships in `clients.json` (readable from an image) or goes through the token broker (PLATFORM.md 6.5.4; OPEN-QUESTIONS Q78) |
-| Redirect URI | `http://127.0.0.1/oauth/callback` (Box takes `http` for loopback only) |
+| Redirect URI | `http://127.0.0.1:47613/oauth/callback`, with the port (Box takes `http` for loopback only, and is not documented to match any port) |
 | Scopes | "Read and write all files and folders stored in Box" (`root_readwrite`) |
 | Verification | None for personal accounts; an enterprise's admin may have to authorize the app for their users |
 | Cost | Free |

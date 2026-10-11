@@ -691,7 +691,11 @@
   "row": "N4"
  },
  "simrefs:loopback:services/oauth:127.0.0.1": {
-  "owner": "owner decision (Q29)",
+  "owner": "intended: the OAuth sign-in's loopback redirect (RFC 8252 7.3), listening on 127.0.0.1 only while a sign-in waits (services/oauth/loopback.js; see the row)",
+  "row": "N4"
+ },
+ "simrefs:loopback:apps/signin:localhost": {
+  "owner": "intended: the Sign In card opens a plain-http sign-in page only on the device's own loopback (a developer's test provider; see the row)",
   "row": "N4"
  },
  "simrefs:loopback:services/updates:127.0.0.1": {

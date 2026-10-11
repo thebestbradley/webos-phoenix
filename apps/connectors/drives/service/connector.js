@@ -52,11 +52,15 @@ var T = {
 };
 var NAMES = { nextcloud: "Nextcloud", owncloud: "ownCloud", webdav: "WebDAV", s3: "S3 storage", dropbox: "Dropbox", onedrive: "OneDrive",
               googledrive: "Google Drive", box: "Box" };
+// fixedRedirect: the provider matches the registered redirect exactly, its
+// port too, so the sign-in comes back to the OAuth service's fixed port
+// (redirectUri's fixedRedirectUri); the others take the RFC 8252 loopback
+// address on any port (docs/DEVELOPER-APPS.md).
 var OAUTH_PROVIDERS = {
-    dropbox: { lib: DBX, endpoints: ["api", "content"] },
+    dropbox: { lib: DBX, endpoints: ["api", "content"], fixedRedirect: true },
     onedrive: { lib: G, endpoints: ["graph"] },
     googledrive: { lib: GD, endpoints: ["api", "upload"] },
-    box: { lib: BOX, endpoints: ["api", "upload"] }
+    box: { lib: BOX, endpoints: ["api", "upload"], fixedRedirect: true }
 };
 // S3 providers the sign-in page offers, with their endpoints ({region}).
 var S3_PRESETS = {
@@ -231,7 +235,8 @@ function signIn(ctx, p) {
         return lunaOk(ctx, OAUTH + "redirectUri", {});
     }).then(function (r) {
         var req = { authorizationEndpoint: client.authorizationEndpoint, tokenEndpoint: client.tokenEndpoint, clientId: client.clientId,
-                    scope: client.scope, redirectUri: client.redirectUri || r.redirectUri };
+                    scope: client.scope,
+                    redirectUri: client.redirectUri || (OAUTH_PROVIDERS[provider].fixedRedirect && r.fixedRedirectUri) || r.redirectUri };
         if (client.clientSecret) req.clientSecret = client.clientSecret;
         if (client.revocationEndpoint) req.revocationEndpoint = client.revocationEndpoint;
         if (client.params) req.params = client.params;

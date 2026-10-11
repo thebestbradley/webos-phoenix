@@ -45,8 +45,8 @@ device, not yet run"):
   simulator's host or a service answered in the page now has a device path, written, not
   run: the pages' line to the shell, the legacy application manager, com.palm.power,
   DropShare, Just Type's page, toasts, screen captures, media keys, the media store,
-  Open webOS's app services. Left: WebAppMgr child windows (Q37), page views and the
-  OAuth sheet (Q38), Restart UI (Q39), LuneOS's packages of Open webOS (Q61), ACG for
+  Open webOS's app services. Left: WebAppMgr child windows (Q37), page views (Q38;
+  OAuth sign-ins have the Sign In card instead of a sheet), Restart UI (Q39), LuneOS's packages of Open webOS (Q61), ACG for
   apps (Q75).
 - 🟡 **P0** K1, G1, G2: written, not run: the device lock service (`services/systemmanager`,
   com.palm.systemmanager with the passcode as scrypt), the bezel swipe, Back (to the
@@ -68,13 +68,23 @@ device, not yet run"):
   (OSE has none); sounds added on the device have no PCM twin (OPEN-QUESTIONS Q22).
 - 🟡 **P2** C11, N5, R5: scene transitions, the card tutorial, Touch to Share, refusing
   launches in low memory, dashboard windows, and dock mode on a device.
-- **P1** Synergy sign-ins on a device: the system's browser sheet for OAuth
-  (the simulator lays it over the card: the share sheet's page, kind
-  `signin`) and the key store behind it (`services/oauth/service.js` keeps
-  tokens in a file meanwhile); the Fediverse account needs both to sign in
-  on hardware (docs/SYNERGY-CONNECTORS.md C2, C3). The OAuth drives (Dropbox,
-  OneDrive, Google Drive, Box) wait for the same, and for Phoenix's
-  registrations with each provider (docs/DEVELOPER-APPS.md, OPEN-QUESTIONS Q17).
+- 🟡 **P1** Synergy sign-ins on a device: written, not run on hardware. The
+  Sign In card (`org.webosphoenix.signin`, `apps/signin`): the provider's own
+  page in a card WebAppMgr loads, the shell's bar over it (host, lock,
+  Cancel; `SignInBar`, from the OAuth service's message only); the RFC 8252
+  loopback listener on 127.0.0.1 while a sign-in waits (ephemeral port, or
+  the fixed 47613 for providers that match exactly); state, PKCE, cancel,
+  ten-minute timeout; tokens and client secrets sealed with AES-256-GCM
+  (`services/oauth/keystore.js`, the old plain file moved in), wiped on
+  sign-out and Erase (docs/SYNERGY-CONNECTORS.md 4.1 "As built"; tests:
+  `services/oauth/oauth.test.ts`, `tools/test-signin-card.cjs`,
+  `tools/test-signin-card-sim.cjs`). Left: the data key is a file until the
+  key store service (SYNERGY.md 2.9; hardware-bound where the board has a
+  TPM/TEE); the bar shows the host the sign-in started at, not later
+  navigations (WebAppMgr tells the shell no address: Q38); the OAuth
+  drives wait for Phoenix's registrations (docs/DEVELOPER-APPS.md,
+  OPEN-QUESTIONS Q17, Q76-Q78) and providers that need a client secret
+  for the token broker (Q49).
 - 🟡 **P2** Drives (docs/SHARE-AND-FILES.md "Drives"; built in the simulator):
   SFTP (the kit has no socket API; `ssh2` needs Node's `net`); drives in the
   original picker (SF1 lists the media indexer's kinds); the viewers' save

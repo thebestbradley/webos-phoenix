@@ -41,7 +41,7 @@ Every other object: `camera`, `podcasts`, `voicememos`, `weather`, `pdfview`,
 `passwords`, `authenticator`, `flashlight`, `scanner` (its code is a made-up
 pattern), `files`, `marketplace` (a bag with a star where the App Catalog's
 had HP's logo), the four `notes-*` notebooks, and the system objects
-`settings`, `firstuse`, `help`, `sharesheet`, `screenshot`, `printmanager`, `notificationlab`,
+`settings`, `firstuse`, `help`, `sharesheet`, `signin` (a globe behind a gold padlock: the Sign In card), `screenshot`, `printmanager`, `notificationlab`,
 `terminal`, `bluetooth`, `vpn`, `airplane`, `screen`, `sounds`, `datetime`,
 `language`, `textassist`, `justtype` (a magnifying glass), `certificates`
 (a certificate with a seal), `phoneprefs` (the `deviceinfo` phone with a

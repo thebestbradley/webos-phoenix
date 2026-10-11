@@ -5,5 +5,11 @@
         "org.webosphoenix.service.oauth/forget",
         "org.webosphoenix.service.oauth/client",
         "org.webosphoenix.service.oauth/redirectUri"
+    ],
+    "oauth.card": [
+        "org.webosphoenix.service.oauth/pending"
+    ],
+    "oauth.erase": [
+        "org.webosphoenix.service.oauth/wipe"
     ]
 }

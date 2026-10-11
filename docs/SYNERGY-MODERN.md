@@ -672,7 +672,7 @@ Google and Microsoft. The rest of the list:
 | Google | Loopback + PKCE [S7]; no device flow for these scopes [S6] | Project's Cloud project, or the user's own (1.2) | No (yes for push) |
 | Microsoft | Loopback + PKCE [M7]; device code as fallback | Project's Entra app | No (yes for push) |
 | Nextcloud | Login Flow v2: poll endpoint, browser login, app password returned [N1] | None | No |
-| Mastodon | Register an app on the instance from the device, then code flow with loopback; the per-device client secret goes into the key store [MA1]. **Built** (C2): `org.webosphoenix.service.oauth` `client` keeps the registration per server, `authorize` runs the code flow with PKCE in the system's browser sheet; the redirect is the simulator's own page there, the RFC 8252 loopback address on a device (not yet: no sheet on devices) | None (per instance, per device) | No |
+| Mastodon | Register an app on the instance from the device, then code flow with loopback; the per-device client secret goes into the key store [MA1]. **Built** (C2): `org.webosphoenix.service.oauth` `client` keeps the registration per server, `authorize` runs the code flow with PKCE in the system's browser sheet (simulator) or the Sign In card (device); the redirect is the simulator's own page there, the RFC 8252 loopback address on a device (Doorkeeper matches loopback redirects on any port; Phoenix registers the fixed port, for the other Fediverse servers: DEVELOPER-APPS.md) | None (per instance, per device) | No |
 | Bluesky | atproto OAuth public client with PKCE and DPoP; the client ID is a metadata document at an HTTPS URL [B1] | A static JSON file on the project's website | A static file only |
 | Dropbox | PKCE public client *(not rechecked)* | Project's Dropbox app | No |
 | Yahoo mail | Only after Yahoo approves the project [Y1] | Application | Probably a confidential client *(unverified)* |
@@ -700,8 +700,10 @@ SYNERGY.md 2.9 chooses the key store. Additional needs from this page:
 - **Built so far** (C2): the OAuth service keeps tokens under keys owned by
   the service that asked (`token` and `forget` refuse anyone else, pages
   included); the account's credentials hold the key, not the token. The
-  store itself is the runtime's credential storage in the simulator and a
-  file only the service reads on a device (a placeholder for the key store).
+  store itself is the runtime's credential storage in the simulator and,
+  on a device, one file sealed with AES-256-GCM under a data key only the
+  service reads (`services/oauth/keystore.js`; the key store service will
+  wrap that key, OPEN-QUESTIONS Q96), wiped on Erase.
 - **Per-account isolation**: transports read only their own accounts'
   credentials (`readCredentials` checks the caller against the template's
   `implementation`), as the legacy service did through `services.json`.

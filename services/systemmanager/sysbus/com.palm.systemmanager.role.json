@@ -6,7 +6,7 @@
     "permissions": [
         {
             "service": "com.palm.systemmanager",
-            "outbound": ["com.palm.db", "com.webos.service.systemservice", "com.palm.storage"]
+            "outbound": ["com.palm.db", "com.webos.service.systemservice", "com.palm.storage", "org.webosphoenix.service.oauth"]
         }
     ]
 }

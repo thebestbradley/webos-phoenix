@@ -176,7 +176,7 @@ its owner. Counts are on 10 October 2026.
 | N1 | connman and the Wi-Fi service | ✅ | platform | OSE's `webos-connman-adapter` (`com.webos.service.wifi`, `connectionmanager`) is on the image; the shell's perm file grants `wifi.query`/`wifi.management`/`networkconnection.query` |
 | N2 | Wi-Fi in First Use without a keyboard | ⬜ | keyboard agent, First Use | F5, I3 |
 | N3 | Firmware for Wi-Fi and Bluetooth | 🟡 | platform | `packagegroup-phoenix-firmware` and the Pi's `linux-firmware-rpidistro-bcm43455` (HARDWARE.md, Firmware in the image) |
-| N4 | Servers on the device itself | 🚫 | owner decision (Q29); intended | Intended and fine: llama-server on 127.0.0.1 (the Assistant's model runner, `localmodels.cpp`, `node-device.js`), the "OpenAI-compatible" provider's `localhost:11434` default (a server the user runs), the VPN's `0.0.0.0` route, DropShare's server on every network (`0.0.0.0`; with no LAN address it refuses a session rather than offer the phone's loopback). Open: the OAuth loopback redirect (`services/oauth`, Q29). Known findings of `check-simrefs.py` |
+| N4 | Servers on the device itself | 🚫 | owner decision (Q29); intended | Intended and fine: llama-server on 127.0.0.1 (the Assistant's model runner, `localmodels.cpp`, `node-device.js`), the "OpenAI-compatible" provider's `localhost:11434` default (a server the user runs), the VPN's `0.0.0.0` route, DropShare's server on every network (`0.0.0.0`; with no LAN address it refuses a session rather than offer the phone's loopback). The OAuth loopback redirect (`services/oauth/loopback.js`, Q29): 127.0.0.1 only, only while a sign-in waits, an ephemeral port or the fixed 47613. Known findings of `check-simrefs.py` |
 
 ## S. Storage
 
@@ -200,7 +200,7 @@ its owner. Counts are on 10 October 2026.
 
 | Row | Item | Status | Owner | Notes |
 | --- | --- | --- | --- | --- |
-| R1 | Factory reset | ⬜ | device audit, platform | Settings' Erase calls `org.webosphoenix.service.reset` (the simulator's) and Security's erase calls `com.palm.storage/erase/Wipe`: neither exists on OSE (C1, C3, Q20). A device needs a reset service that wipes the data partition and reboots |
+| R1 | Factory reset | ⬜ | device audit, platform | Settings' Erase calls `org.webosphoenix.service.reset` (the simulator's) and Security's erase calls `com.palm.storage/erase/Wipe`: neither exists on OSE (C1, C3, Q20). A device needs a reset service that wipes the data partition and reboots. The shell's Full Erase and the system manager's Wipe first call `org.webosphoenix.service.oauth/wipe` (the sealed OAuth tokens and their key, `/var/lib/phoenix/oauth`); the reset service must also clear `/var/lib/phoenix` and WebAppMgr's profile of `org.webosphoenix.signin` (the providers' sign-in cookies) |
 | R2 | Recovery boot | ⬜ | platform | With RAUC: the other slot. Without it, the Pi's SD card is the recovery. A recovery image (fastboot devices) later |
 | R3 | A boot that never finishes | 🚫 | hardware | bootd's boot-done never comes: the animation ends after 90 s (Q19) and the shell comes up; ssh (Developer Mode) and phoenix-diag are the way in |
 
