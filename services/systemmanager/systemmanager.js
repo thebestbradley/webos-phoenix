@@ -63,7 +63,7 @@ var STARTUP_KEYS = ["infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges", "s
                     "animationSpeed", "gestureSensitivity", "hapticFeedback", "launcherGridDensity", "showBatteryPercent",
                     "keyboardNumberRow", "keyboardStyle", "startupAnimation",
                     "keyboardButton", "keyboardButtonSide", "keyboardButtonY", "keyboardButtonHintShown",
-                    "rotationLock"];
+                    "look", "glassBlur", "rotationLock"];
 
 var METHODS = ["getDeviceLockMode", "getSecurityPolicy", "setDevicePasscode", "matchDevicePasscode",
                "getLockStatus", "getDockModeStatus", "getSystemStatus", "phoenix/report", "phoenix/learnedWords"];

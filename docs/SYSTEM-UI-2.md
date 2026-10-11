@@ -28,7 +28,7 @@ The look comes from:
 
 | Where | How |
 | --- | --- |
-| The system preference `look` (`"classic"` or `"ember-glass"`) | Settings > Advanced > Look ("Phoenix 1.0", "Ember Glass (2.0 preview)"); the runtime's `tweaks` (`runtime/phoenix-runtime.js` `tweaks()`) carry it to the shell's `tweak("look")`, which follows at once (owner question 11) |
+| The system preference `look` (`"classic"` or `"ember-glass"`) | Settings > Advanced > Look ("Phoenix 1.0", "Ember Glass (2.0 preview)"); the runtime's `tweaks` (`runtime/phoenix-runtime.js` `tweaks()`) carry it to the shell's `tweak("look")`, which follows at once (owner question 11). On a device the same preference (and `glassBlur`) comes through `Phoenix/Lsm/LsmStatus.js` `tweaks()`, and services/systemmanager's start-up file keeps both, so the shell starts in its look without a frame of 1.0 |
 | The simulator, for one run | `phoenix-sim ... -- --look ember-glass` (after `--`: see "Later, with C++") |
 | The default | `Shell.tweakDefaults.look`: `"classic"`. **In the 2.0 repository, flipping the default is this one value** |
 

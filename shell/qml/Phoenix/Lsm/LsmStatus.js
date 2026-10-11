@@ -27,7 +27,8 @@ function _num(v) {
 var tweakKeys = ["infiniteCardCyclingEnabled", "sysUiEnableMaximizeEdges", "sysUiEnableWaveLauncher", "showReticleAnimation",
                  "animationSpeed", "gestureSensitivity", "hapticFeedback", "launcherGridDensity", "showBatteryPercent",
                  "keyboardNumberRow", "keyboardStyle", "startupAnimation",
-                 "keyboardButton", "keyboardButtonSide", "keyboardButtonY", "keyboardButtonHintShown"];
+                 "keyboardButton", "keyboardButtonSide", "keyboardButtonY", "keyboardButtonHintShown",
+                 "look", "glassBlur"];
 
 // The preferences seen so far, with what reply adds (only tweakKeys).
 function mergePrefs(prefs, reply) {
@@ -62,7 +63,11 @@ function tweaks(p) {
         keyboardButton: p.keyboardButton !== false,
         keyboardButtonSide: pick(p.keyboardButtonSide, ["left", "right"], "right"),
         keyboardButtonY: typeof p.keyboardButtonY === "number" && p.keyboardButtonY >= 0 && p.keyboardButtonY <= 1 ? p.keyboardButtonY : 1,
-        keyboardButtonHintShown: !!p.keyboardButtonHintShown
+        keyboardButtonHintShown: !!p.keyboardButtonHintShown,
+        // Phoenix 2.0 (docs/SYSTEM-UI-2.md): the look, only once chosen
+        // (Shell.tweakDefaults otherwise), and Ember Glass's live blur.
+        look: pick(p.look, ["classic", "ember-glass"], undefined),
+        glassBlur: pick(p.glassBlur, ["live", "none"], "live")
     };
 }
 

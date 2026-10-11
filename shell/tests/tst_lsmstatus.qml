@@ -34,6 +34,14 @@ TestCase {
         compare(t.gridDensity, "dense");
         compare(t.keyboardButtonY, 0.25);
         compare(t.keyboardStyle, "auto");
+        // The look only once chosen (the shell's default otherwise), as the
+        // runtime's tweaks(p).
+        compare(d.look, undefined);
+        compare(d.glassBlur, "live");
+        compare(LsmStatus.tweaks({ look: "ember-glass", glassBlur: "none" }).look, "ember-glass");
+        compare(LsmStatus.tweaks({ look: "ember-glass", glassBlur: "none" }).glassBlur, "none");
+        compare(LsmStatus.tweaks({ look: "aero", glassBlur: "maybe" }).look, undefined);
+        compare(LsmStatus.tweaks({ look: "aero", glassBlur: "maybe" }).glassBlur, "live");
         // Every tweak the shell has a default for is read (Shell.tweakDefaults).
         compare(Object.keys(d).length, LsmStatus.tweakKeys.length);
     }
@@ -57,6 +65,8 @@ TestCase {
         compare(p.rotationLock, "left");
         compare(p.other, undefined);
         compare(LsmStatus.tweaks(p).startupAnimation, "classic");
+        // The look is there before the first frame too: no flash of 1.0.
+        compare(LsmStatus.tweaks(LsmStatus.startupPrefs(JSON.stringify({ prefs: { look: "ember-glass" } }))).look, "ember-glass");
         compare(JSON.stringify(LsmStatus.startupPrefs("")), "{}");
         compare(JSON.stringify(LsmStatus.startupPrefs("{broken")), "{}");
     }
