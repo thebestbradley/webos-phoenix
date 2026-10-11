@@ -1,0 +1,13 @@
+{
+    "org.webosphoenix.service.index": [
+        "database.operation",
+        "activity.operation",
+        "phoenix.appmanager.query",
+        "filemanager.operation",
+        "devices.power.query",
+        "devices.display.control",
+        "systemsettings.query"
+    ],
+    "com.webos.surfacemanager": ["index.search", "index.settings", "index.erase"],
+    "com.palm.activitymanager": ["index.settings"]
+}

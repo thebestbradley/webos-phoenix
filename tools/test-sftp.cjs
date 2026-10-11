@@ -214,6 +214,25 @@ async function main() {
         // The sign-in page's fields, by their names.
         const field = (w, name) => w.locator("#drivesWizard_" + name + "_input");
         const create = () => accounts.locator(".enyo-button:visible, .enyo-custom-button:visible", { hasText: "Create Account" }).first();
+        // Sign In ends the form, inside its scroller: on a tablet's sign-in
+        // page the SFTP form is longer than the page, and the button lies under
+        // the toolbar (Cancel) until the scroller moves. Playwright's scroll into
+        // view does not move Enyo 1.0's scroller, and BasicScroller's
+        // scrollIntoView moves only for a point below its frame, which the
+        // button's top is not (it is inside the frame, under the toolbar); so
+        // scroll to the end as the page itself does (scrollToBottom) and tap
+        // once the button is what is under the finger.
+        const tapSignIn = async (w) => {
+            const ready = await until(() => w.evaluate(() => {
+                const d = enyo.$.drivesWizard, n = d && d.$.signInButton.hasNode();
+                if (!n) return false;
+                d.$.scroller.scrollToBottom();
+                const r = n.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+                return !!hit && n.contains(hit);
+            }), 15000, 200);
+            if (!ready) throw new Error("Sign In stays under the toolbar");
+            await w.getByText("Sign In", { exact: true }).click();
+        };
         // The server's key to trust (or what the page said instead).
         const trustShown = async (w, name) => {
             const r = await Promise.race([
@@ -232,7 +251,7 @@ async function main() {
         await field(w, "password").fill("any password");
         await field(w, "password").press("Tab");
         await shot(accounts, "1-demo-sign-in");
-        await w.getByText("Sign In", { exact: true }).click();
+        await tapSignIn(w);
         await trustShown(w, "2-demo");
         const demoFp = (await w.locator(".drives-fingerprint").textContent()).trim();
         check(/^SHA256:[A-Za-z0-9+/]{43}$/.test(demoFp), "the demo server's key is shown to trust: " + demoFp);
@@ -259,12 +278,12 @@ async function main() {
         const keyBox = w.locator("#drivesWizard_privateKey [contenteditable], #drivesWizard_privateKey[contenteditable]").first();
         await keyBox.click();
         await keyBox.fill(String(locked));
-        await w.getByText("Sign In", { exact: true }).click();
+        await tapSignIn(w);
         await w.waitForSelector(".error-box", { state: "visible", timeout: 15000 });
         check(/passphrase/.test(await w.locator(".error-box").textContent()), "a pasted key with a passphrase is refused, saying how to make a copy without one");
         await shot(accounts, "2b-key-passphrase");
         await keyBox.fill(String(plainKey));
-        await w.getByText("Sign In", { exact: true }).click();
+        await tapSignIn(w);
         await trustShown(w, "2b-key");
         await w.getByText("Trust and Sign In", { exact: true }).click();
         await create().waitFor({ timeout: 20000 }).catch(async () => { await shot(accounts, "2b-key-failed"); });
@@ -294,7 +313,7 @@ async function main() {
             await accounts.waitForTimeout(300);
             await shot(accounts, "3-openssh-key");
             sshd.authorize(pub);
-            await w.getByText("Sign In", { exact: true }).click();
+            await tapSignIn(w);
             await trustShown(w, "4-openssh");
             const fp = (await w.locator(".drives-fingerprint").textContent()).trim();
             check(fp === sshd.fingerprint, "the fingerprint shown is ssh-keygen -l's of the server's key (" + fp + ")");

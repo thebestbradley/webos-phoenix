@@ -949,7 +949,7 @@ function findNotes(t, ctx) {
         || /^(?:find|search|look for|look up) (?:my )?(.+?) in (?:my |the )?(?:notes|memos)$/.exec(t)
         || /^(?:find|show(?: me)?|open) (?:my |the )?(?:note|memo)s? (?:about|for|on|called) (.+)$/.exec(t);
     if (!m) return null;
-    return { query: cased((m[1] || "").trim(), ctx) };
+    return { query: cased((m[1] || "").trim().replace(/^(?:the|my|an?|any|that|this) /, ""), ctx) };
 }
 
 // "add milk to my shopping list", "create a task pay rent", "add a task to
@@ -1056,7 +1056,7 @@ function searchEmail(t, ctx) {
     m = /^(?:search|find|look (?:for|through|in)|check|search through)(?: in| through)? (?:my |the )?(?:e-?mails?|inbox|mail(?:box)?)(?: for| about)? (.+)$/.exec(t)
         || /^(?:find|show(?: me)?|look for|search for|get|open) (?:the |my |any )?(?:e-?mails?|mail|messages in my inbox) (?:about|with|mentioning|regarding|on|containing) (.+)$/.exec(t)
         || /^(?:find|search for|look for) (.+?) in (?:my )?(?:e-?mails?|inbox|mail)$/.exec(t);
-    if (m) return { query: cased(m[1].replace(/^(?:for|about) /, ""), ctx), from: false, unread: false };
+    if (m) return { query: cased(m[1].replace(/^(?:for|about) /, "").replace(/^(?:the|my|an?|any|that|this) /, ""), ctx), from: false, unread: false };
     m = /^(?:do i have|have i got|any|check(?: my)?|read(?: me)?|show(?: me)?|what(?:'s| is| are)(?: in)?) (?:any )?(?:my |the )?(new |unread |latest |recent )?(?:e-?mails?|mail|inbox)(?: from (.+))?$/.exec(t);
     if (m) return { query: m[2] || "", from: !!m[2], unread: !!m[1] && !/latest|recent/.test(m[1]) };
     return null;
@@ -1947,6 +1947,9 @@ function edit(t, ctx) {
     return null;
 }
 
+// Search your phone, by meaning (lib/lang/en-search.js).
+var phoneSearch = require("./en-search")({ cased: cased, quote: quote, list: list, excerpt: excerpt, dayText: dayText, timeText: timeText });
+
 // The talk around the commands (lib/lang/en-talk.js).
 var talk = require("./en-talk")({ D: D, extract: extract, resolve: resolve, clock: clock, duration: duration, withPart: withPart,
                                   toggleTarget: toggleTarget, capital: capital, number: number });
@@ -1988,7 +1991,8 @@ var rules = [
     ["agenda", agenda],
     ["app", appCommand(false)],
     ["noteAppend", noteAppend],
-    ["note", note],
+    ["note", note]
+].concat(phoneSearch.rules, [
     ["findNotes", findNotes],
     ["contactAdd", contactAdd],
     ["contactInfo", contactInfo],
@@ -2029,7 +2033,7 @@ var rules = [
     ["website", website],
     ["appStore", appStore],
     ["open", openApp]
-];
+]);
 
 // ---- Does a model's choice fit what was said? -----------------------------------------------
 
@@ -2039,6 +2043,7 @@ var rules = [
 // otherwise the assistant reads it back first. Reads (weather, sums, the
 // time, a web search, the agenda) need nothing.
 var MENTIONS = {
+    searchPhone: phoneSearch.mentions,
     toggle: {
         wifi: /\b(wi-?fi|wi fi|wireless|wlan|internet)\b/,
         bluetooth: /\bblue ?tooth\b/,
@@ -3287,7 +3292,11 @@ module.exports = {
     answer: answer,
     // An answer to a question with choices (assistant.js answerChoice).
     choiceAnswer: choiceAnswer,
-    // Words about the user's own things (assistant.js looksPrivate).
+    // Words about the user's own things, kept from a web search (assistant.js looksPrivate).
     personal: function (text) { return PERSONAL.test(clean(text)); },
+    // Whether a question to a model is about the user's own things, so that
+    // Search your phone's passages go with it (lib/commands-search.js contextFor).
+    aboutMine: phoneSearch.personal,
     followUp: followUp
 };
+Object.keys(phoneSearch.say).forEach(function (k) { if (!say[k]) say[k] = phoneSearch.say[k]; });

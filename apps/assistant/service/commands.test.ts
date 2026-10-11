@@ -348,7 +348,7 @@ describe("tasks, memos, contacts", () => {
         // The colour after the first memo's (Memo.getNextMemoColor); a position before "m".
         expect(memo).toMatchObject({ title: "Buy flowers for Ada", color: "green", position: "g" });
         expect(memo.position < "m").toBe(true);
-        expect((await d.ask("find my notes about the cabin")).text).toBe("One memo about “the cabin”: “Wi-Fi at the cabin: network Lakeview”.");
+        expect((await d.ask("find my notes about the cabin")).text).toBe("One memo about “cabin”: “Wi-Fi at the cabin: network Lakeview”.");
     });
     it("adds a contact the next command can call", async () => {
         const d = device();

@@ -1,0 +1,18 @@
+{
+    "index.search": [
+        "org.webosphoenix.service.index/search",
+        "org.webosphoenix.service.index/getStatus"
+    ],
+    "index.settings": [
+        "org.webosphoenix.service.index/setSettings",
+        "org.webosphoenix.service.index/sync",
+        "org.webosphoenix.service.index/rebuild",
+        "org.webosphoenix.service.index/deleteIndex",
+        "org.webosphoenix.service.index/downloadModel",
+        "org.webosphoenix.service.index/cancelDownload",
+        "org.webosphoenix.service.index/removeModel"
+    ],
+    "index.erase": [
+        "org.webosphoenix.service.index/wipe"
+    ]
+}

@@ -1,0 +1,6 @@
+{
+    "allowedNames": ["org.webosphoenix.service.index"],
+    "index.search": ["oem"],
+    "index.settings": ["oem"],
+    "index.erase": ["oem"]
+}

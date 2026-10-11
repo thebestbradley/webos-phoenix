@@ -33,4 +33,5 @@ module.exports = {
     emailReply: "reply to my last email saying thanks", travelTime: "how long will it take to drive to the airport", locationAccess: "",
     detail: "what time is my dentist appointment", edit: "rename my dentist appointment to Dentist checkup",
     chat: "hello", checkDone: "did you add it", settingStatus: "is wifi on",
+    searchPhone: "what did Sam say about the party",
 };

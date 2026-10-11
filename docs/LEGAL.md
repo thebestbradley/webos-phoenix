@@ -572,9 +572,9 @@ records WAV, so it is optional.
 The Assistant (`apps/assistant`) runs **llama.cpp**
 (<https://github.com/ggml-org/llama.cpp>, MIT) as a separate program,
 `llama-server`; no llama.cpp code is in this repository. The `meta-phoenix`
-recipe (`recipes-support/llama-cpp`, release b11239) builds it from source
+recipe (`recipes-support/llama-cpp`, release b11552) builds it from source
 without OpenSSL or the downloaded web UI, and ships llama.cpp's `LICENSE`;
-`scripts/linux-setup.sh` builds the same release for the simulator,
+`./phoenix` builds the same release for the simulator,
 Homebrew's `llama.cpp` on a Mac.
 
 One model is built in: **Qwen3 0.6B**, **Apache-2.0**, the Qwen team's
@@ -587,9 +587,27 @@ models are downloaded by the user, never shipped: Qwen3 1.7B, 4B, 8B, 14B
 and 30B-A3B, the Qwen team's own GGUFs, each **Apache-2.0** (its
 repository's `LICENSE` and model card: Qwen/Qwen3-1.7B-GGUF,
 Qwen/Qwen3-4B-GGUF, Qwen/Qwen3-8B-GGUF, Qwen/Qwen3-14B-GGUF,
-Qwen/Qwen3-30B-A3B-GGUF; checked 9 October 2026). Left out on purpose: Llama 3.2 (Llama 3.2 Community License, not
-permissive) and Qwen2.5 3B (Qwen Research License). An image that ships a
+Qwen/Qwen3-30B-A3B-GGUF; checked 9 October 2026); and Gemma 4 E2B and
+E4B, Google's own quantized GGUFs (google/gemma-4-E2B-it-qat-q4_0-gguf,
+google/gemma-4-E4B-it-qat-q4_0-gguf, pinned revisions), **Apache-2.0**
+from Gemma 4 on (each repository's `license: apache-2.0`, checked 11
+October 2026). Left out on purpose: Llama 3.2 (Llama 3.2 Community License, not
+permissive), Qwen2.5 3B (Qwen Research License), and Gemma 3 and older
+(Google's own Gemma Terms of Use, not permissive). An image that ships a
 model must carry its licence.
+
+Search your phone (`services/index`) embeds the user's things with
+**EmbeddingGemma 2** (Google, 6 October 2026), downloaded by the user in
+Settings > Assistant, never shipped: llama.cpp's conversion,
+ggml-org/embeddinggemma-2-GGUF (the text model and the `mmproj` with
+its vision and audio encoders, Q8_0, pinned revision, SHA-256 checked),
+**Apache-2.0** per both model cards (google/embeddinggemma-2 and the
+GGUF repository, checked 11 October 2026). Google's card adds that
+"deployments must adhere to the Gemma Prohibited Use Policy"; the
+licence named is Apache-2.0, and Phoenix's use (searching the user's own
+things on their device) is within that policy. Whether Settings should
+show the policy with the download is in OPEN-QUESTIONS.md. The index it
+makes is the user's data, kept on the device.
 
 The voice is **Kitten TTS** (9 October 2026), all of it permissive and
 none of it GPL:

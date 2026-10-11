@@ -30,6 +30,10 @@
 //   On device        llama.cpp models to download, use or remove, with their
 //                    size and the memory they want (what fits is offered);
 //                    how to get llama-server when it is missing
+//   Search your      the index of the user's things by meaning (services/index):
+//   phone            on or off, its model, a switch per source, photos and
+//                    voice memos themselves, its size, Rebuild, Delete
+//                    (AssistantSearch.tsx)
 //   Cloud models     providers (Anthropic, OpenAI, Google Gemini, any
 //                    OpenAI-compatible server) with their model and key; add,
 //                    edit, test, remove; the one "Ask ..." offers
@@ -57,6 +61,7 @@ import { FollowUpQuestions } from "./AssistantFollowUps";
 import { VoiceMissing } from "./AssistantVoice";
 import { SpeakingVoice } from "./AssistantSpeech";
 import { AssistantPermissions } from "./AssistantPermissions";
+import { SearchYourPhone } from "./AssistantSearch";
 
 /** "45 seconds", "2 minutes". */
 export function waitLabel(seconds: number): string {
@@ -404,6 +409,8 @@ export function AssistantPage() {
             <FollowUpQuestions settings={s} set={set} off={off} />
 
             {local ? <LocalModels m={local} /> : <Group label="On-device model"><Row title={<Spinner />} /></Group>}
+
+            <SearchYourPhone off={off} />
 
             <Group label="Cloud models">
                 {prov && prov.providers.length === 0 && <Row title={<span className="as-none">None yet</span>} />}

@@ -41,3 +41,4 @@ export * from "./assistant";
 export * from "./dropshare";
 export * from "./accessories";
 export * from "./links";
+export * from "./semanticindex";

@@ -483,7 +483,7 @@
 {"id":"auto-4","cat":"search","settings":{"autoSearch":true},"say":"translate good morning into spanish","expect":{"command":"search","args":{"query":{"$re":"good morning"}}}},
 {"id":"auto-5","cat":"search","settings":{"autoSearch":true},"say":"set an alarm for 6am","expect":{"command":"alarm"},"forbid":["search"]},
 {"id":"auto-6","cat":"search","settings":{"autoSearch":true},"say":"turn on the living room lights","expect":{"answer":"fallback"},"forbid":["search"]},
-{"id":"auto-7","cat":"search","settings":{"autoSearch":true},"say":"what did alex@example.com say about the invoice","expect":{"answer":["knowledge","fallback"]},"forbid":["search"]},
+{"id":"auto-7","cat":"search","settings":{"autoSearch":true},"say":"what did alex@example.com say about the invoice","expect":{"anyOf":[{"command":"searchPhone"},{"answer":["knowledge","fallback"]}]},"forbid":["search"]},
 {"id":"talk-1","cat":"talk mode","voice":true,"turns":[{"say":"text sam I'm running late","expect":{"command":"text","status":"pending"}},{"say":"yes","expect":{"command":"text","status":"done"}}]},
 {"id":"talk-2","cat":"talk mode","voice":true,"turns":[{"say":"text sam I'm running late","expect":{"command":"text","status":"pending"}},{"say":"no","expect":{"answer":"chat"},"forbid":["text"]}]},
 {"id":"talk-3","cat":"talk mode","voice":true,"turns":[{"say":"text sam I'm running late","expect":{"command":"text","status":"pending"}},{"say":"hmm maybe","expect":{"command":"text","status":"pending"},"text":"sorry, should i send it\\? yes or no"},{"say":"purple","expect":{"answer":"chat"},"forbid":["text"],"text":"didn't catch that, so i won't send it"}]},

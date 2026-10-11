@@ -38,6 +38,9 @@
 //                the Memos app places a new one (com.palm.app.notes
 //                app/agents/GridAgent.js:91-97, app/models/Memo.js:98-180)
 //   findNotes    com.palm.note:1 by its words
+//   searchPhone  the user's things by what they mean (lib/commands-search.js:
+//                org.webosphoenix.service.index), and the same for findNotes,
+//                searchEmail, findFiles and photos when no item has the words
 //   contactAdd   a local contact and its person (com.palm.contact.palmprofile:1,
 //                com.palm.person:1), as the contacts linker builds them
 //   contactInfo  a contact's number, email, address or birthday
@@ -281,6 +284,11 @@ var synergy = require("./commands-synergy")({ D: D, lunaCall: lunaCall, dbFind: 
                                              prepareInner: function (c, a, e) { return prepareInner(c, a, e); }, runInner: function (c, a, e) { return runInner(c, a, e); } });
 Array.prototype.push.apply(BUILT_IN, synergy.COMMANDS);
 synergy.extend(BUILT_IN);
+// Search your phone, by meaning (lib/commands-search.js; services/index).
+var phoneSearch = require("./commands-search").create({ findPerson: findPerson, personName: personName, whenShown: whenShown, dbFind: dbFind, matches: matches,
+    sameAddress: function (a, b) { return samePhone(a, b) || String(a || "").toLowerCase() === String(b || "").toLowerCase(); },
+    runCommand: function (id, args, env) { return runInner(find(BUILT_IN, id), args, env); } });
+Array.prototype.push.apply(BUILT_IN, phoneSearch.COMMANDS);
 // How people ask for each, in other words (lib/examples.js): for a model choosing one.
 (function (examples) {
     BUILT_IN.forEach(function (c) { if (examples[c.id] && !c.examples) c.examples = examples[c.id]; });
@@ -1569,6 +1577,8 @@ function runInner(cmd, args, env) {
     if (detailed) return detailed;
     var connected = synergy.run(cmd, args, env);
     if (connected) return connected;
+    var searched = phoneSearch.run(cmd, args, env);
+    if (searched) return searched;
     switch (cmd.id) {
     case "call":
         return launch(env, "org.webosphoenix.phone", { number: args.number, dial: true })
@@ -2269,6 +2279,9 @@ function run(cmd, args, env) {
         });
     } });
     return runInner(cmd, args, Object.assign({}, env, { luna: spy })).then(function (out) {
+        // None had the words: what they mean, when the index is on (lib/commands-search.js).
+        return phoneSearch.augment(cmd, args, env, out);
+    }).then(function (out) {
         // The one item the answer shows: what "it" means next (lib/details.js).
         if (out && out.focus === undefined) {
             var f = details.focusOf(out);
@@ -2375,6 +2388,8 @@ module.exports = {
     emailOf: emailOf,
     taskList: taskList,
     remindTask: remindTask,
+    // What Search your phone found, as the conversation shows it (cards, pictures).
+    phoneShown: function (env, results) { return phoneSearch.shown(env, results); },
     scheduleAlarm: scheduleAlarm,
     nextRing: nextRing,
     normalizedPhone: normalizedPhone
