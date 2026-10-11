@@ -64,7 +64,9 @@ Check changes in the real simulator, not only in tests, and look at the result:
 `./phoenix run [adaptive|phone|tablet] [args]` builds first and passes the
 rest to `phoenix-sim` (under `xvfb-run` when there is no display).
 `--scene cards|launcher|dashboard|systemmenu|...` opens a state, `--launch
-<appId>` an app, `--screenshot` saves a PNG and exits. `--adaptive` (the
+<appId>` an app, `--launch '<appId>:{json}'` an app with those launch params
+(a deep link, as the application manager's launch `{id, params}`), `--screenshot`
+saves a PNG and exits. `--adaptive` (the
 default without `--phone`/`--tablet`) switches the layout live as the window
 is resized; View > Device Size snaps to presets. Without a display (Linux
 containers): prefix `QTWEBENGINE_DISABLE_SANDBOX=1 xvfb-run -a -s "-screen 0

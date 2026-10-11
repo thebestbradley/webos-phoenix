@@ -921,6 +921,10 @@
     // ---- PalmSystem -----------------------------------------------------------------
 
     var launchParams = queryParam("launchParams") || "{}";
+    // When the page first read its launch params (PalmSystem.launchParams,
+    // as Mojo, Enyo and @phoenix/sdk's app.onLaunch read them): a relaunch
+    // waits for it (runtime.afterOwnLaunch, at runtime.relaunch).
+    var launchParamsReadAt = 0;
     var activated = true;
 
     var bannerSerial = 0;   // addBannerMessage ids, unique within the app
@@ -928,7 +932,11 @@
         identifier: appIdFromLocation() + " 1000",
         appIdentifier: appIdFromLocation(),
         activityId: 1000,
-        launchParams: launchParams,
+        get launchParams() {
+            if (!launchParamsReadAt) launchParamsReadAt = Date.now();
+            return launchParams;
+        },
+        set launchParams(v) { launchParams = v; },
         locale: store.get("prefs", {}).locale || "en_us",
         localeRegion: "us",
         phoneRegion: "us",
@@ -2429,7 +2437,9 @@
         return APP_ROUTES[id] ? APP_ROUTES[id](params || {}) : null;
     }
     var HELP_TOPICS = { universalsearch: "justtype", accountsmgr: "accounts", phone: "phone", messaging: "messaging",
-                        camera: "camera", photos: "photos", music: "music", launcher: "launcher", notifications: "notifications" };
+                        camera: "camera", photos: "photos", music: "music", launcher: "launcher", notifications: "notifications",
+                        // Email's MailApp.js:586, Clock's main.js:50, Calculator.js:49.
+                        email: "email", clock: "clock", calculator: "calculator" };
     function appId(id, params) {
         var r = routed(id, params);
         if (r) return r.id;
@@ -4256,18 +4266,484 @@
             "*": function (p, reply) { reply(ok({})); }
         });
 
-        // Contacts service: the favourite calls change the person's favorite flag.
+    })();
+
+    // ---- Contacts service (com.palm.service.contacts) --------------------------------
+    //
+    // app-services' contactsService.js, a node service whose methods run the
+    // contacts framework (loadable-frameworks/contacts: Person.js,
+    // vCard/VCardImporter.js, VCardExporter.js, properties/SortKey.js). Here
+    // the same steps on the db8 objects, for every app (the rebuilt ones load
+    // no framework):
+    //
+    //   favoritePerson {personId, defaultData?}    the person a favourite, and
+    //       with defaultData the default below (Person._favoritePerson, :2254-2283)
+    //   unfavoritePerson {personId}                not one, every favorite
+    //       default gone (Person._unfavoritePerson, _removeFavoriteDefaults, :2414-2480)
+    //   setFavoriteDefault {personId, defaultData: {value, contactPointType,
+    //       listIndex, type?, auxData?, appId?}}    the app's default number,
+    //       email or IM: {listIndex, auxData} in that contact point's
+    //       favoriteData under the app's id, the point moved first, the app's
+    //       default taken off every other point (Person._setFavoriteDefault,
+    //       :2309-2399; _setDefaultForContactPointType, :379-405). The app's
+    //       id is defaultData.appId, else "com.palm.app.phone": the service
+    //       never took it from the caller (getApplicationId,
+    //       contactsService.js:621-629).
+    //   countVCardContacts {filePath: "file://..."} -> {count}
+    //   readVCard {filePath} -> {contacts}        not saved
+    //   importVCard {filePath} -> {contacts}       saved to Contacts' default
+    //       account (its prefs' defaultAccountId, else the HP webOS profile, as
+    //       Contacts' Prefs.js:93-101 chooses), as that account's contact kind
+    //       (VCardImporter._setupImport, :925-1022)
+    //   vCardExportOne {personId, filePath, vCardVersion?, onlyPhoneNumbers?,
+    //       charset?, useFileCache?} -> {success, filePath}
+    //   vCardExportAll {filePath, vCardVersion?, onlyPhoneNumbers?, charset?}
+    //       -> {success, filePath}               every person
+    //   sortOrderChanged {} -> every person's sortKey again, by the list sort
+    //       order in Contacts' prefs (contactsService.js:330-400, SortKey.js)
+    //
+    // A vCard file is read as the importer reads one, line by line, the
+    // property's name and its TYPE words deciding the field and its type
+    // (VCardImporter.js:214-320, _extractLabel :700-728); Phoenix also joins
+    // folded lines and decodes quoted-printable, which the original left
+    // unread, and keeps the values as written (the original escaped them as
+    // HTML for its own display, _getLineValue :731-734). The original's
+    // importVCard answered an error after importing (it mapped `true`, not the
+    // contacts saved: Contacts' VCardHelper.js:94-98 notes it); here it
+    // answers the contacts. Imported contacts each get a person, as the
+    // linker makes one for a contact like no other (the simulator has no
+    // automatic linker). A file is written as the exporter wrote it
+    // (_exportVCard, VCardExporter.js:197-280), with vCardVersion honoured
+    // (the original's exporter read `version`, so always wrote 3.0) and URLs
+    // as URL lines (it wrote the type alone, :560-584).
+    (function contactsService() {
+        var PERSON_KIND = "com.palm.person:1";
+        var PREFS_KIND = "com.palm.app.contacts.prefs:1";
+        var POINT = { "contact_point_type_phoneNumber": "phoneNumbers", "contact_point_type_emailAddress": "emails",
+                      "contact_point_type_imAddress": "ims" };
+        function dbGet(id) { return id ? (callNow("palm://com.palm.db/get", { ids: [id] }).results || [])[0] : undefined; }
+        function prefs() { return (callNow("palm://com.palm.db/find", { query: { from: PREFS_KIND, limit: 1 } }).results || [])[0] || {}; }
+        function digits(v) { return String(v || "").replace(/\D/g, ""); }
+        // Person._getNormalizedValueForContactPointType (:2610-2635): an email or
+        // IM lower case and trimmed; a phone number parsed (Globalization.Phone),
+        // here by its digits, so the number written any way matches.
+        function normalized(cpt, v) {
+            return cpt === "contact_point_type_phoneNumber" ? digits(v) : String(v || "").toLowerCase().trim();
+        }
+        function appIdOf(p) { return p.defaultData && p.defaultData.appId ? String(p.defaultData.appId).split(" ")[0] : "com.palm.app.phone"; }
+
+        // The default set on the person (unsaved): null, or the error's text.
+        function setDefault(person, p) {
+            var d = p.defaultData, app = appIdOf(p);
+            if (!d) return "_setFavoriteDefault: missing required argument - defaultData";
+            if (d.contactPointType === undefined) return "_setFavoriteDefault: missing required defaultData property - contactPointType";
+            if (!POINT[d.contactPointType]) return "_setFavoriteDefault: unsupported contact point type specified";
+            if (d.listIndex === undefined) return "_setFavoriteDefault: missing required defaultData property - listIndex";
+            if (d.value === undefined) return "_setFavoriteDefault: missing required defaultData property - value";
+            if (!person.favorite) return "_setFavoriteDefault: cannot set a default on a person that is not a favorite";
+            var field = POINT[d.contactPointType], want = normalized(d.contactPointType, d.value);
+            var points = (person[field] || []).slice();
+            var at = -1;
+            points.forEach(function (pt, i) { if (at < 0 && want !== "" && normalized(d.contactPointType, pt.value) === want && pt.type === d.type) at = i; });
+            if (at < 0) return "Setting favorite default on person - " + person._id + " - failed! Could not find a contact point with value - " + d.value + " - on person";
+            var chosen = clone(points[at]);
+            chosen.favoriteData = Object.assign({}, chosen.favoriteData || {});
+            chosen.favoriteData[app] = { listIndex: d.listIndex, auxData: d.auxData };
+            points.splice(at, 1);
+            person[field] = [chosen].concat(points);
+            // One default per app, over all three kinds of contact point.
+            Object.keys(POINT).forEach(function (cpt) {
+                person[POINT[cpt]] = (person[POINT[cpt]] || []).map(function (pt) {
+                    if (pt === chosen || !pt.favoriteData || !pt.favoriteData[app]) return pt;
+                    var copy = clone(pt);
+                    delete copy.favoriteData[app];
+                    return copy;
+                });
+            });
+            return null;
+        }
+        function favoriteFields(person) {
+            return { _id: person._id, favorite: person.favorite, phoneNumbers: person.phoneNumbers || [], emails: person.emails || [], ims: person.ims || [] };
+        }
+        function findPerson(p, who) {
+            if (p.personId === undefined) return { error: who + ": missing required argument - personId" };
+            var person = dbGet(p.personId);
+            return person ? { person: clone(person) } : { error: who + ": could not find the person with id - " + p.personId };
+        }
+
+        // ---- vCards ----
+        var VCARD_PHONE = { type_home: ["HOME", "VOICE"], type_work: ["WORK", "VOICE"], type_mobile: ["CELL", "VOICE"], type_pager: ["PAGER"],
+                            type_personal_fax: ["HOME", "FAX"], type_work_fax: ["WORK", "FAX"] };
+        var VCARD_EMAIL = { type_home: ["HOME", "INTERNET"], type_work: ["WORK", "INTERNET"] };
+        var VCARD_ADDRESS = { type_home: ["HOME"], type_work: ["WORK"] };
+        var VCARD_URL = { type_home: ["HOME"], type_work: ["WORK"] };
+        var VCARD_IM = { type_gtalk: "X-GTALK", type_aim: "X-AIM", type_msn: "X-MSN", type_yahoo: "X-YAHOO", type_jabber: "X-JABBER",
+                         type_qq: "X-QQ", type_icq: "X-ICQ", type_skype: "X-SKYPE" };
+        var IM_OF_VCARD = { "X-GTALK": "type_gtalk", "X-AIM": "type_aim", "X-MSN": "type_msn", "X-YAHOO": "type_yahoo", "X-JABBER": "type_jabber",
+                            "X-QQ": "type_qq", "X-ICQ": "type_icq", "X-SKYPE": "type_skype", "X-IM": "type_default" };
+        var RELATIONS = ["ASSISTANT", "BROTHER", "CHILD", "FATHER", "FRIEND", "MANAGER", "MOTHER", "PARENT", "PARTNER", "RELATIVE",
+                         "SISTER", "SPOUSE", "REFERRED_BY", "DOMESTIC_PARTNER"];
+
+        // Person.generateDisplayNameFromRawPerson (:2061-2112).
+        function displayName(o) {
+            var n = o.name || {};
+            var full = [n.honorificPrefix, n.givenName, n.middleName, n.familyName, n.honorificSuffix].filter(Boolean).join(" ");
+            if (full) return full;
+            if (o.nickname) return o.nickname;
+            var org = o.organization || (o.organizations || [])[0];
+            if (org && (org.title || org.name)) return org.title && org.name ? org.title + ", " + org.name : org.name || org.title;
+            var first = (o.emails || [])[0] || (o.ims || [])[0] || (o.phoneNumbers || [])[0];
+            return first ? first.value : "[No Name Available]";
+        }
+        function typeLabel(version, labels) {
+            if (!labels || !labels.length) return "";
+            return version === "2.1" ? labels.join(";") : "TYPE=" + labels.join(",");
+        }
+        // VCardExporter._exportVCard: one person, CRLF lines (each written with
+        // "\r", the writer adding "\n").
+        function exportPerson(person, version, utf8, onlyPhoneNumbers) {
+            var phones = person.phoneNumbers || [];
+            if (onlyPhoneNumbers && !phones.length) return "";
+            var cs = utf8 && version === "2.1" ? ";CHARSET=UTF-8" : "";
+            var lines = ["BEGIN:VCARD", "VERSION:" + (version === "2.1" ? "2.1" : "3.0")];
+            var n = person.name || {}, shown = displayName(person);
+            if (!n.givenName && !n.familyName) n = { familyName: shown };
+            lines.push("N" + cs + ":" + [n.familyName, n.givenName, n.middleName, n.honorificPrefix, n.honorificSuffix].map(function (x) { return x || ""; }).join(";"));
+            if (shown) lines.push("FN" + cs + ":" + shown);
+            if (!onlyPhoneNumbers) {
+                var org = person.organization || (person.organizations || [])[0];
+                if (org && org.name) lines.push("ORG:" + org.name + ";");
+                if (org && org.title) lines.push("TITLE:" + org.title);
+                if (person.nickname) lines.push("NICKNAME:" + person.nickname);
+            }
+            phones.forEach(function (ph) {
+                var v = onlyPhoneNumbers ? String(ph.value || "").replace(/[^0-9+*wpt#]/gi, "") : ph.value;
+                if (!v) return;
+                var label = typeLabel(version, VCARD_PHONE[ph.type] || ["OTHER"]);
+                lines.push("TEL" + cs + (label ? ";" + label : "") + ":" + v);
+            });
+            if (!onlyPhoneNumbers) {
+                (person.emails || []).forEach(function (e) {
+                    if (e.value) lines.push("EMAIL;" + typeLabel(version, VCARD_EMAIL[e.type] || ["INTERNET"]) + ":" + e.value);
+                });
+                (person.addresses || []).forEach(function (a) {
+                    var v = [String(a.streetAddress || "").replace(/\n/g, " "), a.locality || "", a.region || "", a.postalCode || "", a.country || ""].join(";");
+                    if (v.replace(/;/g, "")) lines.push("ADR;" + typeLabel(version, VCARD_ADDRESS[a.type] || ["OTHER"]) + ":;;" + v);
+                });
+                (person.urls || []).forEach(function (u) {
+                    var label = typeLabel(version, VCARD_URL[u.type]);
+                    if (u.value) lines.push("URL" + (label ? ";" + label : "") + ":" + u.value);
+                });
+                (person.ims || []).forEach(function (im) {
+                    if (im.value) lines.push((VCARD_IM[im.type] || "X-IM") + ":" + im.value);
+                });
+                if (person.birthday) lines.push("BDAY:" + person.birthday);
+                var note = (person.notes || [person.note]).map(function (x) { return x && typeof x === "object" ? x.value : x; }).filter(Boolean)[0];
+                if (note) lines.push("NOTE:" + String(note).replace(/\n/g, "\\n").replace(/\r/g, "\\r"));
+            }
+            return lines.join("\r\n") + "\r\nEND:VCARD\r\n\r\n";
+        }
+        function toBase64Utf8(text) {
+            var bytes = new TextEncoder().encode(text), bin = "";
+            for (var i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            return btoa(bin);
+        }
+        // VCardFileWriter.close: the file written (palmPutResource), as a
+        // system service writes one.
+        function writeFile(path, text) {
+            return !!(runtime.fileManager && runtime.fileManager.store(path, toBase64Utf8(text)));
+        }
+        var exportCount = 0;
+        function exportVCards(p, persons, reply) {
+            if (!p.filePath) return reply(fail(-1, "File path must be specified to make a VCardImporter"));
+            var version = p.vCardVersion === "2.1" ? "2.1" : "3.0", utf8 = p.charset !== "US-ASCII";
+            var text = persons.map(function (person) { return exportPerson(person, version, utf8, !!p.onlyPhoneNumbers); }).join("");
+            // useFileCache: the file cache's path for it (InsertCacheObject, typeName contactvcard).
+            var path = p.useFileCache ? "/var/file-cache/contactvcard/" + (++exportCount) + "/" + String(p.filePath).split("/").pop() : String(p.filePath);
+            if (!writeFile(path, text)) return reply(fail(-1, "Writing file failed!"));
+            reply(ok({ success: true, filePath: path }));
+        }
+
+        // ---- Reading a vCard file ----
+        function filePathOf(p, reply) {
+            if (typeof p.filePath !== "string") { reply(fail(-1, "getPathFromFileTypeSchemaPath did not specify a filePath for the vcard to count")); return null; }
+            if (p.filePath.indexOf("file://") !== 0) { reply(fail(-1, "getPathFromFileTypeSchemaPath did not specify a target to a local file")); return null; }
+            return p.filePath.slice(7);
+        }
+        function readText(path, then) {
+            dispatch("luna://org.webosphoenix.filemanager/read", { path: path, encoding: "base64" }, function (r) {
+                if (!r || r.returnValue === false || typeof r.data !== "string") return then(null);
+                var bin = atob(r.data), bytes = new Uint8Array(bin.length);
+                for (var i = 0; i < bin.length; ++i) bytes[i] = bin.charCodeAt(i);
+                then(new TextDecoder("utf-8").decode(bytes));
+            }, { cancelled: function () { return true; }, onCancel: null });
+        }
+        // _splitValues (:740-800): on ";" not escaped, then \\ \: \; \, unescaped.
+        function splitValues(v) {
+            var out = [], cur = "";
+            for (var i = 0; i < v.length; ++i) {
+                var c = v.charAt(i);
+                if (c === "\\" && i + 1 < v.length) { cur += c + v.charAt(++i); continue; }
+                if (c === ";") { out.push(cur); cur = ""; } else cur += c;
+            }
+            out.push(cur);
+            return out.map(function (x) { return x.replace(/\\([\\:;,])/g, "$1"); });
+        }
+        function unescapeText(v) { return v.replace(/\\[nN]/g, "\n").replace(/\\([\\:;,])/g, "$1"); }
+        // _extractLabel: from the words before the value.
+        function labelOf(head) {
+            head = head.toUpperCase();
+            if (head.indexOf("FAX") >= 0) return head.indexOf("HOME") >= 0 ? "FAX_HOME" : "FAX_WORK";
+            var order = ["WORK", "HOME", "CELL", "PAGER", "MAIN"];
+            for (var i = 0; i < order.length; ++i) if (head.indexOf(order[i]) >= 0) return order[i];
+            return "OTHER";
+        }
+        var PHONE_OF = { FAX_HOME: "type_personal_fax", FAX_WORK: "type_work_fax", HOME: "type_home", WORK: "type_work", CELL: "type_mobile",
+                         PAGER: "type_pager", MAIN: "type_main" };
+        function homeWork(label) { return label === "HOME" ? "type_home" : label === "WORK" ? "type_work" : "type_other"; }
+        // Folded lines joined, quoted-printable decoded (its soft line breaks too).
+        function vcardLines(text) {
+            var raw = text.split("\n").map(function (l) { return l.replace(/\r$/, ""); }), lines = [];
+            for (var i = 0; i < raw.length; ++i) {
+                var l = raw[i];
+                if (/^[ \t]/.test(l) && lines.length) { lines[lines.length - 1] += l.slice(1); continue; }
+                lines.push(l);
+            }
+            return lines.reduce(function (acc, l) {
+                var prev = acc[acc.length - 1];
+                if (prev !== undefined && /ENCODING=QUOTED-PRINTABLE/i.test(prev.split(":")[0]) && /=$/.test(prev)) acc[acc.length - 1] = prev.slice(0, -1) + l;
+                else acc.push(l);
+                return acc;
+            }, []).map(function (l) {
+                var colon = l.indexOf(":");
+                if (colon < 0) return l;
+                var head = l.slice(0, colon), value = l.slice(colon + 1);
+                if (!/ENCODING=QUOTED-PRINTABLE/i.test(head)) return l;
+                var cs = (/CHARSET=([^;:]+)/i.exec(head) || [])[1] || "utf-8";
+                var bin = value.replace(/=([0-9A-Fa-f]{2})/g, function (m, h) { return String.fromCharCode(parseInt(h, 16)); });
+                var bytes = new Uint8Array(bin.length);
+                for (var k = 0; k < bin.length; ++k) bytes[k] = bin.charCodeAt(k) & 255;
+                var decoded;
+                try { decoded = new TextDecoder(cs).decode(bytes); } catch (e) { decoded = new TextDecoder("utf-8").decode(bytes); }
+                return head + ":" + decoded;
+            });
+        }
+        function emptyContact() {
+            return { name: { familyName: "", givenName: "", middleName: "", honorificPrefix: "", honorificSuffix: "" }, nickname: "",
+                     phoneNumbers: [], emails: [], addresses: [], urls: [], ims: [], organizations: [], birthday: "", note: "", relations: [] };
+        }
+        function parseVCards(text) {
+            var lines = vcardLines(text), contacts = [], c = null;
+            for (var i = 0; i < lines.length; ++i) {
+                var line = lines[i], upper = line.toUpperCase();
+                if (/BEGIN:VCARD/.test(upper)) { c = emptyContact(); continue; }
+                if (/END:VCARD/.test(upper)) { if (c) contacts.push(c); c = null; continue; }
+                var m = /^(item[0-9]*?.)?([A-Z-]+)[;|:]/i.exec(line);
+                if (!m || line.indexOf(":") < 0) continue;
+                if (!c) c = emptyContact();
+                var prop = m[2].toUpperCase(), head = line.slice(0, line.indexOf(":")), value = line.slice(line.indexOf(":") + 1);
+                // X-IM;YAHOO;...: the service's own property (_getVCardLinePrefixType, :743-764).
+                if (prop === "X-IM") { var sv = head.split(";")[1]; if (sv && IM_OF_VCARD["X-" + sv.toUpperCase()]) prop = "X-" + sv.toUpperCase(); }
+                var org = c.organizations[0];
+                switch (prop) {
+                case "N":
+                    var parts = splitValues(value);
+                    c.name = { familyName: parts[0] || "", givenName: parts[1] || "", middleName: parts[2] || "", honorificPrefix: parts[3] || "", honorificSuffix: parts[4] || "" };
+                    break;
+                case "NICKNAME": c.nickname = unescapeText(value); break;
+                case "ORG":
+                    if (!org) c.organizations.push(org = { name: "", title: "" });
+                    org.name = splitValues(value)[0] || "";
+                    break;
+                case "TITLE":
+                    if (!org) c.organizations.push(org = { name: "", title: "" });
+                    org.title = unescapeText(value);
+                    break;
+                case "TEL": c.phoneNumbers.push({ value: value, type: PHONE_OF[labelOf(head)] || "type_other", primary: false }); break;
+                case "EMAIL": c.emails.push({ value: value, type: homeWork(labelOf(head)), primary: false }); break;
+                case "URL": c.urls.push({ value: value, type: homeWork(labelOf(head)), primary: false }); break;
+                case "ADR":
+                    var a = value.split(";"), poBox = a[0] || "", street = a[2] || "";
+                    var extended = (a[1] || "").replace(/\\n/g, "\n").replace(/\\,/g, ",");
+                    poBox = poBox && (street || extended) ? poBox + ", " : poBox;
+                    street = street && extended ? street + ", " : street;
+                    c.addresses.push({ streetAddress: poBox + street + extended, locality: a[3] || "", region: a[4] || "", postalCode: a[5] || "",
+                                       country: a[6] || "", type: homeWork(labelOf(head)), primary: false });
+                    break;
+                case "BDAY":
+                    // _handleBirthday (:392-410): YYYYMMDD made YYYY-MM-DD; too short or long, none.
+                    if (value.length === 8) c.birthday = value.slice(0, 4) + "-" + value.slice(4, 6) + "-" + value.slice(6, 8);
+                    else if (value.length >= 8 && value.length <= 10) c.birthday = value;
+                    break;
+                case "NOTE": c.note = unescapeText(value); break;
+                case "X-ABRELATEDNAMES":
+                    // Its type on the next line (item1.X-ABLabel:_$!<Spouse>!$_).
+                    var next = (lines[i + 1] || "").toUpperCase(), rel = "OTHER";
+                    if (/X-ABLABEL/.test(next)) {
+                        i++;
+                        RELATIONS.some(function (r) { if (next.indexOf(r) >= 0) { rel = r; return true; } return false; });
+                    }
+                    if (value) c.relations.push({ value: value, type: "type_" + rel.toLowerCase(), primary: false });
+                    break;
+                case "X-SPOUSE": if (value) c.relations.push({ value: value, type: "type_spouse", primary: false }); break;
+                case "X-CHILD": if (value) c.relations.push({ value: value, type: "type_child", primary: false }); break;
+                default:
+                    if (IM_OF_VCARD[prop] && value) c.ims.push({ value: value, type: IM_OF_VCARD[prop], primary: false });
+                }
+            }
+            return contacts;
+        }
+
+        // ---- Sort keys (SortKey._generateSortKeyHelper, :305-370) ----
+        var SORT_DEFAULT = "𧻓";
+        function sortKeyOf(person, order) {
+            var n = person.name || {}, given = String(n.givenName || "").trim(), family = String(n.familyName || "").trim();
+            var org = person.organization || (person.organizations || [])[0] || {}, company = String(org.name || "").trim();
+            var key = "";
+            if (order === "COMPANY_LAST_FIRST" || order === "COMPANY_FIRST_LAST") key += (company || SORT_DEFAULT + SORT_DEFAULT) + "\t";
+            if (given || family) {
+                var firstLast = order === "COMPANY_FIRST_LAST" || order === "FIRST_LAST";
+                (firstLast ? [given, family] : [family, given]).forEach(function (x) { if (x) key += x + "\t"; });
+            } else {
+                key += displayName(person).trim() + "\t";
+            }
+            key = key.trim();
+            if (key) {
+                var first = key.charAt(0);
+                if (first !== SORT_DEFAULT && first !== "\t" && !/\p{L}/u.test(first)) key = SORT_DEFAULT + key;
+            } else {
+                key = SORT_DEFAULT + SORT_DEFAULT;
+            }
+            return key.toLocaleLowerCase().trim();
+        }
+
+        // PhoneNumber.normalizePhoneNumber's form (properties/PhoneNumber.js:162-
+        // 213: each part reversed, "-" between), for a North American number
+        // as Globalization parses one; any other as the subscriber's number
+        // (as runtime/sample-data.js makes them).
+        function normalizedPhone(v) {
+            var d = digits(v), rev = function (x) { return x.split("").reverse().join(""); };
+            return d.length === 10 ? "-" + rev(d.slice(3)) + "-" + rev(d.slice(0, 3)) + "--" : "-" + rev(d) + "---";
+        }
+        // A person for a contact that matches no other, as the linker makes one
+        // (the shape of runtime/sample-data.js's, which follows it).
+        function personFor(contact, order) {
+            var point = function (pt, norm) { return { value: pt.value, type: pt.type, primary: false, normalizedValue: norm(pt.value), favoriteData: {} }; };
+            var org = contact.organizations[0];
+            var person = {
+                _kind: PERSON_KIND, contactIds: [contact._id], name: contact.name, names: [contact.name], nickname: contact.nickname,
+                emails: contact.emails.map(function (e) { return point(e, function (v) { return String(v).toLowerCase().trim(); }); }),
+                phoneNumbers: contact.phoneNumbers.map(function (ph) { var o = point(ph, normalizedPhone); o.speedDial = ""; return o; }),
+                ims: contact.ims.map(function (im) { return point(im, function (v) { return String(v).toLowerCase().trim(); }); }),
+                addresses: contact.addresses, urls: contact.urls, relations: contact.relations,
+                organization: org ? { name: org.name, title: org.title, department: "", type: "", description: "", startDate: "", endDate: "", location: {} }
+                                  : { name: "", title: "", department: "", type: "", description: "", startDate: "", endDate: "", location: {} },
+                notes: contact.note ? [contact.note] : [], birthday: contact.birthday, anniversary: "", gender: "", favorite: false,
+                photos: { accountId: "", bigPhotoId: "", bigPhotoPath: "", contactId: "", listPhotoPath: "", listPhotoSource: "", squarePhotoId: "", squarePhotoPath: "" },
+                ringtone: { location: "", name: "" }, reminder: "", launcherId: ""
+            };
+            person.sortKey = sortKeyOf(person, order);
+            return person;
+        }
+        // The account and kind imported contacts go to (VCardImporter._setupImport).
+        function importTarget() {
+            var accountId = prefs().defaultAccountId;
+            if (!accountId) {
+                var profile = (callNow("palm://com.palm.service.accounts/listAccounts", { templateId: "com.palm.palmprofile" }).results || [])[0];
+                accountId = profile && profile._id;
+            }
+            var info = accountId && callNow("palm://com.palm.service.accounts/getAccountInfo", { accountId: accountId });
+            if (!info || !info.returnValue) return { error: fail("NO_ACCOUNT_INFO", "no account info could be retrieved for account: \"" + (accountId || "") + "\"") };
+            var kind = null;
+            ((info.result || {}).capabilityProviders || []).some(function (cp) {
+                if (cp.capability !== "CONTACTS") return false;
+                kind = cp.id === "com.palm.palmprofile.contacts" ? "com.palm.contact.palmprofile:1" : cp.dbkinds && cp.dbkinds.contact || null;
+                return true;
+            });
+            if (!kind) return { error: fail("NO_PROVIDER_FOR_CONTACTS", "no provider for contacts could be retrieved for account: \"" + accountId + "\"") };
+            return { accountId: accountId, kind: kind };
+        }
+
         register(["com.palm.service.contacts"], {
             "/favoritePerson": function (p, reply) {
-                callNow("palm://com.palm.db/merge", { objects: [{ _id: p.personId, favorite: true }] });
+                var f = findPerson(p, "_getPersonAndSetFavoriteValueTo");
+                if (f.error) return reply(fail(-1, f.error));
+                f.person.favorite = true;
+                var err = p.defaultData ? setDefault(f.person, p) : null;
+                if (err) return reply(fail(-1, err));
+                callNow("palm://com.palm.db/merge", { objects: [favoriteFields(f.person)] });
                 reply(ok({}));
             },
             "/unfavoritePerson": function (p, reply) {
-                callNow("palm://com.palm.db/merge", { objects: [{ _id: p.personId, favorite: false }] });
+                var f = findPerson(p, "_getPersonAndSetFavoriteValueTo");
+                if (f.error) return reply(fail(-1, f.error));
+                f.person.favorite = false;
+                Object.keys(POINT).forEach(function (cpt) {
+                    f.person[POINT[cpt]] = (f.person[POINT[cpt]] || []).map(function (pt) { var c = clone(pt); c.favoriteData = {}; return c; });
+                });
+                callNow("palm://com.palm.db/merge", { objects: [favoriteFields(f.person)] });
+                reply(ok({}));
+            },
+            "/setFavoriteDefault": function (p, reply) {
+                var f = findPerson(p, "_setFavoriteDefault");
+                if (f.error) return reply(fail(-1, f.error));
+                var err = setDefault(f.person, p);
+                if (err) return reply(fail(-1, err));
+                callNow("palm://com.palm.db/merge", { objects: [favoriteFields(f.person)] });
+                reply(ok({}));
+            },
+            "/countVCardContacts": function (p, reply) {
+                var path = filePathOf(p, reply);
+                if (path === null) return;
+                readText(path, function (text) {
+                    if (text === null) return reply(fail(-1, "File to count vCards does not exist"));
+                    reply(ok({ count: text.split("\n").filter(function (l) { return /BEGIN:VCARD/.test(l.toUpperCase()); }).length }));
+                });
+            },
+            "/readVCard": function (p, reply) {
+                var path = filePathOf(p, reply);
+                if (path === null) return;
+                readText(path, function (text) {
+                    if (text === null) return reply(fail(-1, "There was a problem reading this vcard: " + path));
+                    reply(ok({ contacts: parseVCards(text) }));
+                });
+            },
+            "/importVCard": function (p, reply) {
+                var path = filePathOf(p, reply);
+                if (path === null) return;
+                readText(path, function (text) {
+                    if (text === null) return reply(fail(-1, "There was a problem reading this vcard: " + path));
+                    var target = importTarget();
+                    if (target.error) return reply(target.error);
+                    var order = prefs().listSortOrder || "LAST_FIRST";
+                    var contacts = parseVCards(text).map(function (c) { c._kind = target.kind; c.accountId = target.accountId; return c; });
+                    var ids = contacts.length ? callNow("palm://com.palm.db/put", { objects: contacts }).results || [] : [];
+                    contacts.forEach(function (c, i) { c._id = ids[i] && ids[i].id; });
+                    var saved = contacts.filter(function (c) { return c._id; });
+                    if (saved.length) callNow("palm://com.palm.db/put", { objects: saved.map(function (c) { return personFor(c, order); }) });
+                    reply(ok({ contacts: saved }));
+                });
+            },
+            "/vCardExportOne": function (p, reply) {
+                if (!p.personId) return reply(fail(-1, "personId passed to export was not truthy. export requires a valid personId to export"));
+                var person = dbGet(p.personId);
+                if (!person) return reply(fail(-1, "The personId passed into export was not a person that currently exists"));
+                exportVCards(p, [person], reply);
+            },
+            "/vCardExportAll": function (p, reply) {
+                exportVCards(p, callNow("palm://com.palm.db/find", { query: { from: PERSON_KIND } }).results || [], reply);
+            },
+            "/sortOrderChanged": function (p, reply) {
+                var order = prefs().listSortOrder || "LAST_FIRST";
+                var persons = callNow("palm://com.palm.db/find", { query: { from: PERSON_KIND, select: ["_id", "name", "organization", "nickname", "emails", "ims", "phoneNumbers", "sortKey"] } }).results || [];
+                var changed = persons.map(function (x) { return { _id: x._id, sortKey: sortKeyOf(x, order) }; })
+                                     .filter(function (x, i) { return x.sortKey !== persons[i].sortKey; });
+                if (changed.length) callNow("palm://com.palm.db/merge", { objects: changed });
                 reply(ok({}));
             },
             "*": function (p, reply) { reply(fail(-1, "not available in the Phoenix simulator")); }
         });
+        runtime.contactsService = { parseVCards: parseVCards, exportPerson: exportPerson, sortKeyOf: sortKeyOf };
     })();
 
     // ---- Email transports (com.palm.smtp, com.palm.imap, com.palm.pop) ---------------
@@ -4275,10 +4751,27 @@
     // mojomail's SMTP service saves outgoing mail (SaveEmailCommand): parts
     // given as "content" are written to the file cache and replaced by a
     // "path", the body's text becomes the summary, and the email is merged
-    // into the account's Outbox (sendMail) or Drafts (saveDraft). There is
-    // no mail server here: a sent email moves to the Sent folder a moment
-    // later, and folder syncs find nothing new. The file cache lives in
-    // localStorage and PalmSystem.getResource (palmGetResource) reads it.
+    // into the account's Outbox (sendMail) or Drafts (saveDraft); it answers
+    // the email's {_id} (SaveEmailCommand.cpp:263-276, DatabaseAdapter.cpp:23),
+    // which Email's Composition._handleSuccess keeps for the next save of
+    // the draft (Composition.js:268-273), and here {emailId} too, as
+    // Phoenix's apps read it before. There is no mail server here: a sent
+    // email moves to the Sent folder a moment later, and folder syncs find
+    // nothing new. The file cache lives in localStorage and
+    // PalmSystem.getResource (palmGetResource) reads it.
+    //
+    // What the IMAP and POP transports do with the account's mail on the
+    // device, they do here (localChanges below): a message the app moved
+    // ({destFolderId}, hidden: facades/Email.js:235-241) goes to that
+    // folder and shows again, and one it deleted (db8 del, :244-270) goes to
+    // the account's Trash, or away from the Trash itself (IMAP
+    // SyncLocalChangesCommand.cpp:470-478, MoveEmailsCommand.cpp; POP
+    // MovePopEmailsCommand.cpp:130-165, DeleteServerEmailsCommand.cpp:70-90,
+    // MojoDatabase.cpp:510-525). A sync writes its state
+    // (com.palm.account.syncstate:1, in tempdb) while it runs, as the
+    // apps' "Updating…" reads it (mojomail BaseSyncSession.cpp:293-342,
+    // SyncStateUpdater.cpp:36-108). com.palm.pop/parseEmlMessage reads an
+    // .eml file for the viewer (ParseEmlHandler.cpp).
     (function emailTransports() {
         var FILE_CACHE = "/var/file-cache/email/phoenix/";
         var readFile = PalmSystem.getResource;
@@ -4329,7 +4822,7 @@
                 callNow("palm://com.palm.db/merge", { objects: [{ _id: id, folderId: account.sentFolderId,
                     sendStatus: { error: null, fatalError: false, retryCount: 0, sent: true } }] });
             }
-            reply(ok({ emailId: id }));
+            reply(ok({ _id: id, emailId: id }));
         }
 
         register(["com.palm.smtp"], {
@@ -4338,12 +4831,392 @@
             "*": function (p, reply) { reply(ok({})); }
         });
 
-        register(["com.palm.imap", "com.palm.pop"], {
-            "/downloadMessage": function (p, reply) { reply(fail(-1, "The mail server is not available in the Phoenix simulator")); },
-            "/downloadAttachment": function (p, reply) { reply(fail(-1, "The mail server is not available in the Phoenix simulator")); },
-            // syncFolder, syncAccount, accountCreated, ...: nothing to sync.
-            "*": function (p, reply) { reply(ok({})); }
-        });
+        // ---- The transports' accounts ----
+        // The mail account's kind says whose it is (mojomail's IMAP and POP
+        // transports keep com.palm.imap.account:1 and com.palm.pop.account:1).
+        var TRANSPORT_OF_KIND = { "com.palm.imap.account:1": "com.palm.imap", "com.palm.pop.account:1": "com.palm.pop" };
+        function getObject(id) {
+            return id ? (callNow("palm://com.palm.db/get", { ids: [id] }).results || [])[0] : undefined;
+        }
+        // The account an email (or folder) is in, if a simulated transport has it.
+        function transportAccount(folderId) {
+            var folder = getObject(folderId);
+            var account = folder && mailAccount(folder.accountId);
+            return account && TRANSPORT_OF_KIND[account._kind] ? account : null;
+        }
+
+        // ---- Sync state (com.palm.account.syncstate:1) ----
+        // SyncStateUpdater::UpdateSyncState: in one tempdb batch, the old
+        // state of the account's folder (collectionId; null: the account
+        // itself) goes and the new one comes; the transport's capability
+        // provider and bus address say whose it is (SyncSession.cpp:144-156).
+        var SYNC_STATE_KIND = "com.palm.account.syncstate:1";
+        function setSyncState(transport, accountId, collectionId, state) {
+            var where = [{ prop: "capabilityProvider", op: "=", val: transport + ".mail" },
+                         { prop: "accountId", op: "=", val: accountId },
+                         { prop: "collectionId", op: "=", val: collectionId }];
+            callNow("palm://com.palm.tempdb/batch", { operations: [
+                // (Purged at once: db8 purges deleted objects itself, later.)
+                { method: "del", params: { query: { from: SYNC_STATE_KIND, where: where }, purge: true } },
+                { method: "put", params: { objects: [{ _kind: SYNC_STATE_KIND, capabilityProvider: transport + ".mail",
+                    busAddress: transport, accountId: accountId, collectionId: collectionId, syncState: state,
+                    errorCode: "", errorText: "", metadata: null }] } }
+            ] });
+        }
+        // A sync of the account's folder (or, initial, the whole account):
+        // INITIAL_SYNC or INCREMENTAL_SYNC while it runs, IDLE when done
+        // (BaseSyncSession.cpp:285-342). No server answers here, so it runs
+        // as long as a short exchange with one would (SYNC_MS), and does the
+        // local changes (as SyncLocalChangesCommand runs in a folder's sync).
+        var SYNC_MS = 1000;
+        function sync(transport, accountId, folderId, initial) {
+            var state = initial ? "INITIAL_SYNC" : "INCREMENTAL_SYNC";
+            if (initial) setSyncState(transport, accountId, null, state);
+            if (folderId) setSyncState(transport, accountId, folderId, state);
+            localChanges();
+            setTimeout(function () {
+                if (folderId) setSyncState(transport, accountId, folderId, "IDLE");
+                if (initial) setSyncState(transport, accountId, null, "IDLE");
+            }, SYNC_MS);
+        }
+
+        // ---- Local changes: moves and deletes ----
+        // Every message of a simulated account counts as on its server, but
+        // for the Outbox's, which are not sent yet: IMAP puts drafts and sent
+        // mail there too (UpSyncDraftsCommand, UpSyncSentEmailsCommand), and
+        // POP moves a deleted message to Trash with or without a server's uid
+        // (DeleteServerEmailsCommand.cpp:52-58). A move to the folder a message is
+        // in already is none (SyncLocalChangesCommand.cpp:314-319: Undo of a
+        // move puts it back there); one to a folder that is gone is taken
+        // back (MoveEmailsCommand.cpp:80-90, UnmoveEmails :243-270).
+        function localChanges() {
+            var moved = callNow("palm://com.palm.db/find", { query: { from: "com.palm.email:1",
+                where: [{ prop: "destFolderId", op: "!=", val: null }] } }).results || [];
+            var deleted = callNow("palm://com.palm.db/find", { query: { from: "com.palm.email:1",
+                where: [{ prop: "_del", op: "=", val: true }], incDel: true } }).results || [];
+            var merges = [], purges = [];
+            moved.forEach(function (e) {
+                var account = transportAccount(e.folderId);
+                if (!account || !e.destFolderId || e.destFolderId === e.folderId || e.folderId === account.outboxFolderId) return;
+                var shown = Object.assign({}, e.flags || {}, { visible: true });
+                merges.push(getObject(e.destFolderId) ? { _id: e._id, folderId: e.destFolderId, destFolderId: null, flags: shown }
+                                                      : { _id: e._id, destFolderId: null, flags: shown });
+            });
+            deleted.forEach(function (e) {
+                var account = transportAccount(e.folderId);
+                if (!account || e.folderId === account.outboxFolderId) return;
+                var trash = account.trashFolderId;
+                if (!trash || e.folderId === trash) purges.push(e._id);
+                else merges.push({ _id: e._id, folderId: trash, _del: false, destFolderId: null });
+            });
+            if (merges.length) callNow("palm://com.palm.db/merge", { objects: merges });
+            if (purges.length) callNow("palm://com.palm.db/del", { ids: purges, purge: true });
+            return merges.length + purges.length;
+        }
+        // On the device each folder's watch activity runs a sync of its local
+        // changes as the app makes them (ImapActivityFactory's folder watch;
+        // POP's ActivityBuilderFactory.cpp:300-320, destFolderId != null, which
+        // calls moveEmail). Here the page hosting the activity manager (the
+        // system UI's, runtime.activities.hosts) does, a moment after a change.
+        // Only that page watches (a watch reads the whole store again on
+        // each change); the others look once a minute whether they host now.
+        var LOCAL_CHANGES_MS = 500;
+        var localTimer = null, watching = false;
+        function hosting() { return !!(runtime.activities && runtime.activities.hosts()); }
+        function watchLocalChanges() {
+            var first = true;
+            watching = true;
+            dispatch("palm://com.palm.db/find", { query: { from: "com.palm.email:1", limit: 1 }, watch: true }, function (r) {
+                if (first) { first = false; return; }
+                if (!r || !r.fired) return;
+                if (localTimer) clearTimeout(localTimer);
+                localTimer = setTimeout(function () {
+                    localTimer = null;
+                    if (hosting()) localChanges();
+                }, LOCAL_CHANGES_MS);
+                if (hosting()) watchLocalChanges();
+                else watching = false;
+            }, { cancelled: function () { return false; }, onCancel: null });
+        }
+        function startLocalChanges() {
+            if (watching || !hosting()) return;
+            watchLocalChanges();
+            localChanges();
+        }
+        setTimeout(startLocalChanges, 0);
+        setInterval(startLocalChanges, 60000);
+
+        // ---- A message file (RFC 5322 and MIME), as mojomail's AsyncEmailParser
+        // and EmailHeaderFieldParser read it ----
+        // raw: the file's bytes, one character each. The parts come flattened
+        // and typed as EmailPart::GetFlattenedParts types them (EmailPart.cpp:
+        // 118-190): a leaf is a body if it is text/html, text/plain or
+        // text/enriched, an inline picture if it has a Content-ID, else an
+        // attachment ("Content-Disposition: attachment" always); of a
+        // multipart/alternative's choices the last with a body gives the body,
+        // the others' bodies are alt text. A text part comes as text (its
+        // charset decoded), any other as base64.
+        function bytesOf(bin) {
+            var b = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; ++i) b[i] = bin.charCodeAt(i) & 255;
+            return b;
+        }
+        function decodeText(bin, charset) {
+            var cs = String(charset || "utf-8").trim().toLowerCase();
+            if (cs === "us-ascii" || cs === "ascii") cs = "utf-8";
+            try { return new TextDecoder(cs).decode(bytesOf(bin)); } catch (e) { return new TextDecoder("utf-8").decode(bytesOf(bin)); }
+        }
+        function unQuotedPrintable(s, underscores) {
+            if (underscores) s = s.replace(/_/g, " ");
+            return s.replace(/=\r?\n/g, "").replace(/=([0-9A-Fa-f]{2})/g, function (m, h) { return String.fromCharCode(parseInt(h, 16)); });
+        }
+        function unBase64(s) {
+            s = String(s).replace(/[^A-Za-z0-9+\/]/g, "");
+            if (s.length % 4 === 1) s = s.slice(0, -1);
+            while (s.length % 4) s += "=";
+            try { return atob(s); } catch (e) { return ""; }
+        }
+        // RFC 2047's encoded words (=?charset?B|Q?text?=), the space between two of them dropped.
+        function decodeWords(s) {
+            return String(s).replace(/=\?([^?\s]+)\?([BbQq])\?([^?\s]*)\?=(?:\s+(?==\?[^?\s]+\?[BbQq]\?))?/g, function (all, cs, enc, text) {
+                return decodeText(/b/i.test(enc) ? unBase64(text) : unQuotedPrintable(text, true), cs.replace(/\*.*$/, ""));
+            });
+        }
+        // Header fields, unfolded, the first of each name (lower case).
+        function headersOf(head) {
+            var h = {};
+            head.replace(/\r?\n[ \t]+/g, " ").split(/\r?\n/).forEach(function (line) {
+                var i = line.indexOf(":");
+                if (i <= 0) return;
+                var name = line.slice(0, i).trim().toLowerCase();
+                if (!Object.prototype.hasOwnProperty.call(h, name)) h[name] = decodeText(line.slice(i + 1).trim(), "utf-8");
+            });
+            return h;
+        }
+        // "text/html; charset=utf-8; name=\"a.txt\"" -> {value, params}, with
+        // RFC 2231's name*=utf-8''a%20b.txt and its numbered continuations.
+        function paramsOf(v) {
+            var parts = [], cur = "", q = false, i;
+            v = String(v || "");
+            for (i = 0; i < v.length; ++i) {
+                var c = v.charAt(i);
+                if (c === "\\" && q) { cur += c + v.charAt(++i); continue; }
+                if (c === '"') q = !q;
+                if (c === ";" && !q) { parts.push(cur); cur = ""; } else cur += c;
+            }
+            parts.push(cur);
+            var out = { value: parts[0].trim().toLowerCase(), params: {} }, pieces = {};
+            parts.slice(1).forEach(function (part) {
+                var eq = part.indexOf("=");
+                if (eq < 0) return;
+                var m = /^([^*]+)(?:\*(\d+))?(\*)?$/.exec(part.slice(0, eq).trim().toLowerCase());
+                if (!m) return;
+                var val = part.slice(eq + 1).trim();
+                if (val.charAt(0) === '"') val = val.slice(1, -1).replace(/\\(.)/g, "$1");
+                (pieces[m[1]] = pieces[m[1]] || []).push({ n: m[2] ? +m[2] : 0, val: val, ext: !!m[3] });
+            });
+            Object.keys(pieces).forEach(function (k) {
+                var list = pieces[k].sort(function (a, b) { return a.n - b.n; }), charset = "";
+                out.params[k] = list.map(function (piece, n) {
+                    if (!piece.ext) return piece.val;
+                    var val = piece.val;
+                    if (n === 0) {
+                        var m = /^([^']*)'[^']*'(.*)$/.exec(val);
+                        if (m) { charset = m[1]; val = m[2]; }
+                    }
+                    return decodeText(val.replace(/%([0-9A-Fa-f]{2})/g, function (x, h) { return String.fromCharCode(parseInt(h, 16)); }), charset);
+                }).join("");
+            });
+            return out;
+        }
+        // An address list (To, Cc, ...): [{type, addr, name}], the name the
+        // address itself when there is none (EmailAdapter.cpp:376-397).
+        function addressesOf(v, type) {
+            var list = [], cur = "", q = false, angle = 0;
+            v = String(v || "");
+            for (var i = 0; i < v.length; ++i) {
+                var c = v.charAt(i);
+                if (c === "\\" && q) { cur += c + v.charAt(++i); continue; }
+                if (c === '"') q = !q;
+                else if (!q && c === "<") angle++;
+                else if (!q && c === ">") angle = Math.max(0, angle - 1);
+                if ((c === "," || c === ";") && !q && !angle) { list.push(cur); cur = ""; } else cur += c;
+            }
+            list.push(cur);
+            return list.map(function (one) {
+                one = one.trim().replace(/^[^"<@]*:\s*/, "");     // a group's name ("Team: a@b, c@d;")
+                var m = /^(.*?)\s*<([^>]*)>\s*$/.exec(one), name = "", addr;
+                if (m) {
+                    name = m[1].trim().replace(/^"([\s\S]*)"$/, "$1").replace(/\\(.)/g, "$1");
+                    addr = m[2].trim();
+                } else {
+                    var c = /^(\S+)\s*\(([^)]*)\)$/.exec(one);     // addr (Name)
+                    addr = c ? c[1] : one;
+                    name = c ? c[2] : "";
+                }
+                if (!addr) return null;
+                name = decodeWords(name).trim();
+                return { type: type, addr: addr, name: name || addr };
+            }).filter(Boolean);
+        }
+        function splitMultipart(body, boundary) {
+            var dash = "--" + boundary, parts = [], cur = null;
+            var lines = body.split(/\r?\n/);
+            for (var i = 0; i < lines.length; ++i) {
+                var line = lines[i];
+                if (line.indexOf(dash) === 0 && /^(--)?\s*$/.test(line.slice(dash.length))) {
+                    if (cur) parts.push(cur.join("\r\n"));
+                    if (line.slice(dash.length, dash.length + 2) === "--") { cur = null; break; }
+                    cur = [];
+                } else if (cur) {
+                    cur.push(line);
+                }
+            }
+            if (cur) parts.push(cur.join("\r\n"));
+            return parts;
+        }
+        function walk(text, out, depth) {
+            var head = "", body = text, cut = /\r?\n\r?\n/.exec(text);
+            if (/^\r?\n/.test(text)) body = text.replace(/^\r?\n/, "");     // no headers
+            else if (cut) { head = text.slice(0, cut.index); body = text.slice(cut.index + cut[0].length); }
+            else { head = text; body = ""; }
+            var h = headersOf(head);
+            var ct = paramsOf(h["content-type"] || "text/plain");
+            if (ct.value.indexOf("/") < 0) ct.value = "text/plain";
+            if (/^multipart\//.test(ct.value) && ct.params.boundary && depth < 100) {
+                var subs = splitMultipart(body, ct.params.boundary).map(function (t) { var o = []; walk(t, o, depth + 1); return o; });
+                if (ct.value === "multipart/alternative") {
+                    var seen = false, chosen = [];
+                    for (var i = subs.length - 1; i >= 0; --i) {
+                        var hasBody = !seen && subs[i].some(function (p) { return p.type === "body"; });
+                        subs[i].forEach(function (p) {
+                            if (p.type === "body" && !hasBody) p.type = "altText";
+                            chosen.push(p);
+                        });
+                        if (hasBody) seen = true;
+                    }
+                    out.push.apply(out, chosen);
+                } else {
+                    subs.forEach(function (o) { out.push.apply(out, o); });
+                }
+                return h;
+            }
+            var disp = paramsOf(h["content-disposition"] || "");
+            var cid = String(h["content-id"] || "").trim();
+            var part = { type: disp.value === "attachment" ? "attachment" : "inline", mimeType: ct.value };
+            if (part.type === "inline") {
+                if (/^text\/(html|plain|enriched)$/.test(ct.value)) part.type = "body";
+                else if (!cid || !/^image\//.test(ct.value)) part.type = "attachment";
+            }
+            var name = disp.params.filename || ct.params.name;
+            if (name) part.name = decodeWords(name);
+            if (cid) part.contentId = cid;
+            var cte = String(h["content-transfer-encoding"] || "").trim().toLowerCase();
+            if (cte) part.encoding = cte;
+            if (ct.params.charset) part.charset = ct.params.charset;
+            var data = cte === "base64" ? unBase64(body) : cte === "quoted-printable" ? unQuotedPrintable(body) : body;
+            part.estimatedSize = data.length;
+            if (part.type === "body") part.text = decodeText(data, ct.params.charset);
+            else part.base64 = btoa(data);
+            out.push(part);
+            return h;
+        }
+        function parseEml(raw) {
+            var parts = [];
+            var h = walk(String(raw), parts, 0);
+            var email = { _kind: "com.palm.email:1", flags: { read: false, replied: false, flagged: false },
+                          subject: decodeWords(h.subject || "") };
+            var when = Date.parse(String(h.date || "").replace(/\s*\([^)]*\)\s*$/, ""));
+            email.timestamp = isNaN(when) ? 0 : when;
+            email.from = addressesOf(h.from, "from")[0] || {};
+            var replyTo = addressesOf(h["reply-to"], "replyTo")[0];
+            if (replyTo) email.replyTo = replyTo;
+            email.to = addressesOf(h.to, "to").concat(addressesOf(h.cc, "cc"), addressesOf(h.bcc, "bcc"));
+            email.parts = parts;
+            if (h["message-id"]) email.messageId = h["message-id"].trim();
+            if (h["in-reply-to"]) email.inReplyTo = h["in-reply-to"].trim();
+            // X-Priority 1-2 high, 4-5 low; Importance high or low.
+            var xp = parseInt(h["x-priority"], 10), imp = String(h.importance || h.priority || "").toLowerCase();
+            if (xp === 1 || xp === 2 || imp === "high" || imp === "urgent") email.priority = "high";
+            else if (xp === 4 || xp === 5 || imp === "low" || imp === "non-urgent") email.priority = "low";
+            return email;
+        }
+
+        // ---- parseEmlMessage {filePath} (POP; ParseEmlHandler.cpp) ----
+        // The file must be one any app may read: under /media/internal, or
+        // /tmp (:79-107). The email comes back as the transport would store
+        // it (EmailAdapter::SerializeToDatabaseObject, EmailAdapter.cpp:295-
+        // 371) with no folder, its bodies and attachments written to the
+        // file cache with their paths; every failure is "error parsing eml"
+        // (:204-241).
+        var emlCount = 0;
+        function parseEmlMessage(p, reply) {
+            if (typeof p.filePath !== "string" || !p.filePath) return reply(fail(-1986, "Invalid query string"));
+            var path = p.filePath.replace(/^file:\/\//, "");
+            var failed = function () { reply(fail(-1, "error parsing eml")); };
+            if (!/^\/(media\/internal|tmp)\//.test(path) || /(^|\/)\.\.(\/|$)/.test(path)) return failed();
+            dispatch("luna://org.webosphoenix.filemanager/read", { path: path, encoding: "base64" }, function (r) {
+                if (!r || r.returnValue === false || typeof r.data !== "string") return failed();
+                var email;
+                try { email = parseEml(atob(r.data)); } catch (e) { return failed(); }
+                var dir = FILE_CACHE + "eml-" + Date.now().toString(36) + "-" + (++emlCount) + "/";
+                var cache = store.get("fileCache", {});
+                var files = [];
+                email.parts.forEach(function (part, i) {
+                    var name = part.type === "attachment" ? (part.name || "attachment" + i) : "body" + (/html/.test(part.mimeType) ? ".html" : ".txt");
+                    part.path = dir + i + "-" + name.replace(/[\/\\]/g, "_");
+                    if (part.text !== undefined) cache[part.path] = part.text;
+                    else files.push({ path: part.path, data: part.base64 });
+                    if (part.type === "body" && email.summary === undefined) email.summary = part.mimeType === "text/html" ? previewText(part.text) : String(part.text).replace(/\s+/g, " ").trim().slice(0, 128);
+                    delete part.text;
+                    delete part.base64;
+                });
+                if (email.summary === undefined) email.summary = "";
+                store.set("fileCache", cache);
+                // Attachments and pictures: files of their own in the device's
+                // filesystem (the file manager's, as a system service writes
+                // one), which palmGetResource and the file manager read.
+                files.forEach(function (f) {
+                    if (!runtime.fileManager || !runtime.fileManager.store(f.path, f.data))
+                        console.warn("[phoenix-runtime] parseEmlMessage: no room for " + f.path);
+                });
+                reply(ok({ email: email }));
+            }, { cancelled: function () { return true; }, onCancel: null });
+        }
+
+        function transportMethods(transport) {
+            return {
+                "/downloadMessage": function (p, reply) { reply(fail(-1, "The mail server is not available in the Phoenix simulator")); },
+                "/downloadAttachment": function (p, reply) { reply(fail(-1, "The mail server is not available in the Phoenix simulator")); },
+                // A folder's sync (the app opening it, pull to refresh), the
+                // account's (its Inbox), and the first one after it is made.
+                "/syncFolder": function (p, reply) {
+                    reply(ok({}));
+                    if (p.accountId && p.folderId) sync(transport, p.accountId, p.folderId, false);
+                },
+                "/syncAccount": function (p, reply) {
+                    reply(ok({}));
+                    var account = p.accountId && mailAccount(p.accountId);
+                    if (account) sync(transport, p.accountId, account.inboxFolderId, false);
+                },
+                "/accountCreated": function (p, reply) {
+                    reply(ok({}));
+                    var account = p.accountId && mailAccount(p.accountId);
+                    if (account) sync(transport, p.accountId, account.inboxFolderId, true);
+                },
+                // accountEnabled, accountUpdated, credentialsChanged, ...: nothing to do.
+                "*": function (p, reply) { reply(ok({})); }
+            };
+        }
+        register(["com.palm.imap"], transportMethods("com.palm.imap"));
+        var pop = transportMethods("com.palm.pop");
+        pop["/parseEmlMessage"] = parseEmlMessage;
+        // The POP transport's own method for its moves (PopClient::MoveEmail),
+        // which its destFolderId activity calls.
+        pop["/moveEmail"] = function (p, reply) { localChanges(); reply(ok({})); };
+        register(["com.palm.pop"], pop);
+
+        runtime.mailTransports = { localChanges: localChanges, setSyncState: setSyncState, parseEml: parseEml, SYNC_MS: SYNC_MS };
     })();
 
     // ---- db8 kinds installed with the system -----------------------------------------
@@ -7660,20 +8533,80 @@
         // user opened the app again and wants its data fresh; Phoenix's
         // apps also hear "phoenixRefresh" (@phoenix/luna's Refreshed starts
         // the app's root again on it).
-        runtime.relaunch = function (params, refresh) {
-            PalmSystem.launchParams = toJson(params || {});
-            var event = function (name, detail) {
-                var e;
-                try { e = new CustomEvent(name, { detail: detail }); }
-                catch (x) { e = global.document.createEvent("CustomEvent"); e.initCustomEvent(name, false, false, detail); }
-                global.document.dispatchEvent(e);
+        //
+        // A relaunch that comes while the page is starting waits until it has
+        // taken its own launch, as WebAppMgr held one that came while the
+        // page was still loading ("If the headless app is still loading,
+        // buffer this until our progress is complete": webappmanager
+        // Src/webbase/SysMgrWebBridge.cpp:133-139): the page loaded, and
+        // listening for relaunches (a "webOSRelaunch" listener added, after
+        // it read its launch params if it has: @phoenix/sdk's onLaunch,
+        // React's useEffect after the render that read them), or its launch
+        // params read (PalmSystem.launchParams above) and a moment more
+        // (RELAUNCH_SETTLE_MS: Mojo.relaunch's apps, such as the original
+        // Clock, which reads its params as it starts and acts on them once
+        // its prefs are read). A page that never reads them gets it at most
+        // RELAUNCH_HOLD_MS after loading
+        // (RELAUNCH_MAX_HOLD_MS after it started, loaded or not). Otherwise
+        // the relaunch rewrote the launch params before the app had read its
+        // own: Clock launched while one of its alarms was due opened only the
+        // alarm, not its card. Held ones go in order; later ones go at once.
+        var RELAUNCH_SETTLE_MS = 200, RELAUNCH_HOLD_MS = 5000, RELAUNCH_MAX_HOLD_MS = 15000;
+        var pageStartedAt = Date.now(), pageLoadedAt = 0, heldRelaunches = [], holdTimer = null;
+        var relaunchListenerAt = 0;
+        if (global.document && typeof global.document.addEventListener === "function") {
+            var addListener = global.document.addEventListener;
+            global.document.addEventListener = function (type) {
+                if (type === "webOSRelaunch") relaunchListenerAt = Date.now();
+                return addListener.apply(this, arguments);
             };
-            if (global.Mojo && typeof global.Mojo.relaunch === "function")
-                global.Mojo.relaunch();
-            else
-                event("webOSRelaunch", params || {});
-            if (refresh)
-                event("phoenixRefresh", params || {});
+        }
+        if (global.document && global.document.readyState === "complete") pageLoadedAt = Date.now();
+        else if (global.addEventListener) global.addEventListener("load", function () { pageLoadedAt = Date.now(); });
+        function ownLaunchTaken() {
+            var doc = global.document, now = Date.now();
+            // A page still loading after RELAUNCH_MAX_HOLD_MS (a frame that
+            // never finishes) gets it all the same.
+            if (now - pageStartedAt >= RELAUNCH_MAX_HOLD_MS) return true;
+            if (doc && doc.readyState !== "complete") return false;
+            if (!pageLoadedAt) pageLoadedAt = now;     // complete, its load event still to come
+            // Listening for relaunches (since it read its launch params, if it has).
+            if (relaunchListenerAt && relaunchListenerAt >= launchParamsReadAt) return true;
+            if (launchParamsReadAt && now - launchParamsReadAt >= RELAUNCH_SETTLE_MS) return true;
+            return now - pageLoadedAt >= RELAUNCH_HOLD_MS;
+        }
+        runtime.afterOwnLaunch = function (fn) {
+            if (!heldRelaunches.length && ownLaunchTaken()) {
+                fn();
+                return;
+            }
+            heldRelaunches.push(fn);
+            if (holdTimer) return;
+            holdTimer = setInterval(function () {
+                if (!ownLaunchTaken()) return;
+                clearInterval(holdTimer);
+                holdTimer = null;
+                var held = heldRelaunches;
+                heldRelaunches = [];
+                held.forEach(function (f) { f(); });
+            }, 50);
+        };
+        runtime.relaunch = function (params, refresh) {
+            runtime.afterOwnLaunch(function () {
+                PalmSystem.launchParams = toJson(params || {});
+                var event = function (name, detail) {
+                    var e;
+                    try { e = new CustomEvent(name, { detail: detail }); }
+                    catch (x) { e = global.document.createEvent("CustomEvent"); e.initCustomEvent(name, false, false, detail); }
+                    global.document.dispatchEvent(e);
+                };
+                if (global.Mojo && typeof global.Mojo.relaunch === "function")
+                    global.Mojo.relaunch();
+                else
+                    event("webOSRelaunch", params || {});
+                if (refresh)
+                    event("phoenixRefresh", params || {});
+            });
             return true;
         };
 
@@ -8909,11 +9842,104 @@
             };
         }
 
+        // ---- A picture's EXIF (the indexer's extra metadata) ----
+        // getImageMetadata adds what OSE's indexer extracts on request
+        // (MediaDb, mediadb.cpp:330-365, extractExtraMeta; getImageList has
+        // only the basic fields, :872-884): ImageExtractor's exifMap_
+        // (imageextractor.cpp:23-29, :313-345) with libexif's text for each
+        // tag (exif_entry_get_value): date_of_creation is IFD0's DateTime
+        // ("2026:10:06 10:00:00"), geo_location_latitude and _longitude the
+        // GPS reference and value ("N 52, 31, 12.00": each rational with
+        // as many decimals as its denominator has digits, "%2.*f",
+        // libexif exif-entry.c:538-566), geo_location_country and _city
+        // empty (no EXIF tag gives them). A tag the picture lacks: empty.
+        function exifOf(buf) {
+            var v = new DataView(buf), out = {};
+            if (buf.byteLength < 4 || v.getUint16(0) !== 0xFFD8) return out;
+            for (var at = 2; at + 4 <= buf.byteLength;) {
+                if (v.getUint8(at) !== 0xFF) break;
+                var marker = v.getUint8(at + 1), len = v.getUint16(at + 2);
+                if (marker === 0xDA || marker === 0xD9) break;     // the picture's data: no EXIF before it
+                if (marker === 0xE1 && at + 10 <= buf.byteLength && v.getUint32(at + 4) === 0x45786966 && v.getUint16(at + 8) === 0) {
+                    readTiff(v, at + 10, out);
+                    break;
+                }
+                at += 2 + len;
+            }
+            return out;
+        }
+        function readTiff(v, base, out) {
+            var le = v.getUint16(base) === 0x4949;
+            var u16 = function (o) { return v.getUint16(base + o, le); }, u32 = function (o) { return v.getUint32(base + o, le); };
+            var size = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 7: 1, 9: 4, 10: 8 };
+            function entries(ifd) {
+                var list = {}, n;
+                try { n = u16(ifd); } catch (e) { return list; }
+                for (var i = 0; i < n; i++) {
+                    var e = ifd + 2 + i * 12;
+                    try {
+                        var tag = u16(e), type = u16(e + 2), count = u32(e + 4);
+                        var bytes = (size[type] || 1) * count, off = bytes <= 4 ? e + 8 : u32(e + 8);
+                        list[tag] = { type: type, count: count, off: off };
+                    } catch (x) { break; }
+                }
+                return list;
+            }
+            function ascii(en) {
+                var s = "";
+                for (var i = 0; en && i < en.count; i++) {
+                    var c = v.getUint8(base + en.off + i);
+                    if (!c) break;
+                    s += String.fromCharCode(c);
+                }
+                return s;
+            }
+            function rationals(en) {
+                if (!en || en.type !== 5) return "";
+                var parts = [];
+                for (var i = 0; i < en.count; i++) {
+                    var num = u32(en.off + i * 8), den = u32(en.off + i * 8 + 4);
+                    if (!den) { parts.push(num + "/" + den); continue; }
+                    var decimals = Math.max(0, Math.floor(Math.log10(den) - 0.08 + 1));
+                    var t = (num / den).toFixed(decimals);
+                    parts.push(t.length < 2 ? " " + t : t);
+                }
+                return parts.join(", ");
+            }
+            try {
+                var ifd0 = entries(u32(4));
+                if (ifd0[0x0132]) out.date = ascii(ifd0[0x0132]);
+                if (ifd0[0x8825]) {
+                    var gps = entries(u32(ifd0[0x8825].off));
+                    var geo = function (refTag, valTag) {
+                        var parts = [ascii(gps[refTag]), rationals(gps[valTag])].filter(function (x) { return x; });
+                        return parts.join(" ");
+                    };
+                    out.latitude = geo(1, 2);
+                    out.longitude = geo(3, 4);
+                }
+            } catch (e) { /* a broken EXIF: what was read */ }
+            return out;
+        }
+        function withExtraMeta(item) {
+            return files.read(item.file_path).then(function (blob) { return blob || readUrl(item.file_path); })
+                .then(function (blob) { return blob ? blob.arrayBuffer() : null; })
+                .then(function (buf) {
+                    var exif = buf ? exifOf(buf) : {};
+                    return Object.assign({}, item, { date_of_creation: exif.date || "", geo_location_latitude: exif.latitude || "",
+                                                     geo_location_longitude: exif.longitude || "", geo_location_country: "",
+                                                     geo_location_city: "" });
+                }, function () { return item; });
+        }
+        runtime.mediaExif = exifOf;
+
         function metadataMethod(type) {
             return function (p, reply) {
                 if (!p.uri) return reply(fail(-1, "client must specify uri"));
                 var it = loadIndex()[type].filter(function (x) { return x.uri === p.uri; })[0];
-                reply(it ? ok({ metadata: it }) : fail(-1, "Invalid uri"));
+                if (!it) return reply(fail(-1, "Invalid uri"));
+                if (type !== "image") return reply(ok({ metadata: it }));
+                withExtraMeta(it).then(function (meta) { reply(ok({ metadata: meta })); });
             };
         }
 
@@ -11150,9 +12176,8 @@
     // com.palm.service.contacts reads it, contactsService.js:347-352). The
     // subscription ends when it fires; complete {restart: true, trigger?,
     // callback?, schedule?} subscribes again (contactsService.js:433-465).
-    // One page subscribes: the system UI's (always running in the shell),
-    // else, with no system UI, each page, the first to claim the activity in
-    // the store firing it. The subscription is the creator's (ctx.caller),
+    // One page subscribes: the host (below), the first to claim the activity
+    // in the store firing it. The subscription is the creator's (ctx.caller),
     // so the location service asks for the creator's permission. db8 watch
     // triggers (com.palm.db/watch) are not subscribed yet (syncTriggers):
     // those activities wait, as before.
@@ -11166,12 +12191,21 @@
     // goes on the same schedule (as activity "timeout:" + key).
     //
     // Activities live in the shared store ("activities"), so every app page
-    // sees them and any page may fire one: the page of the app a launch is
-    // for fires it at once (as OSE's webOSRelaunch, the card is not brought
-    // up: the app decides what to show), other pages a second later (the
-    // shell then starts or relaunches the app without focusing its card).
-    // One page claims each activity in the store before firing it. What is
-    // due while no page runs fires when the next page starts. A dashboard or
+    // sees them. As OSE's activity manager, a service, fires each at its
+    // time whatever runs (activitymanager activity/schedule/
+    // AbstractScheduleManager.cpp:230-238, "If anything on the queue
+    // already happened in the past, dequeue it", also at start-up), one
+    // page fires it: the page of the app a launch is for, at
+    // once, relaunching itself in place (as OSE's webOSRelaunch, the card is
+    // not brought up: the app decides what to show; a relaunch while the
+    // page starts comes after its own launch, runtime.relaunch); anything
+    // else the host, the system UI's page, which phoenix-sim's shell always
+    // runs (hostsActivities): a launch of an app that is not running at its
+    // time (the shell starts the app without focusing a card, with the
+    // params; an alarm rings with Clock closed), of one that runs a second
+    // later if its page has not, any other callback at its time. The page
+    // that fires an activity claims it in the store first. What is due while
+    // the simulator is not running fires when it starts. A dashboard or
     // popup alert of the app counts as another page (it may outlive the
     // app's card).
     //
@@ -11180,8 +12214,11 @@
     // what is scheduled.
     (function activityManagerService() {
         var KEY = "activities";
-        var GRACE_MS = 1000;          // other pages wait this long for the app's own page
+        var GRACE_MS = 1000;          // the host waits this long for a running app's own page
         var MAX_WAIT_MS = 60000;      // re-check at least this often (clock changes)
+        var HOST_WAIT_MS = 30000;     // no system UI for this long: a page hosts (hostsActivities)
+        var pageStarted = Date.now();
+        var inSimulator = String(global.location && global.location.protocol || "") === "phoenix:";
         var timer = null;
 
         function load() { return store.get(KEY, { nextId: 1, byName: {} }); }
@@ -11288,6 +12325,32 @@
                 a.callback.params.id === PalmSystem.appIdentifier && !systemWindow();
         }
 
+        // The app an activity launches, or "".
+        function launches(a) {
+            return a.callback && isAppLaunch(a.callback.method) && a.callback.params && typeof a.callback.params.id === "string"
+                ? a.callback.params.id : "";
+        }
+
+        // The one page that fires what no page of its app fires (a launch
+        // for an app with no page running, any other callback) and
+        // subscribes to the triggers, as the activity manager was one
+        // service: the system UI's, which phoenix-sim's shell starts at boot
+        // and keeps (SimWindowSource.bootApps, as LunaSysMgr started
+        // com.palm.systemui). When every page fired them, each fired each
+        // one: the pages are processes of their own, and one's claim in the
+        // store reaches the others a moment later (an activity due with its
+        // app closed launched it once from each page running). With no
+        // system UI listening for HOST_WAIT_MS (subscribeToSystemUI's
+        // systemui:listening), every page, as before: a page alone in a
+        // browser (the web tests); in phoenix-sim only once it has run that
+        // long itself, so the pages starting with the shell leave it to the
+        // system UI starting with them.
+        function hostsActivities() {
+            if (PalmSystem.appIdentifier === "com.palm.systemui" && !systemWindow()) return true;
+            if (Date.now() - store.get("systemui:listening", 0) < HOST_WAIT_MS) return false;
+            return !inSimulator || Date.now() - pageStarted >= HOST_WAIT_MS;
+        }
+
         function fire(a, triggered) {
             if (!a.callback || !a.callback.method) return;
             var act = { activityId: a.activityId, name: a.name };
@@ -11308,14 +12371,20 @@
 
         function charging() { return store.get("power", { charger: "none" }).charger !== "none"; }
 
-        // Fire what is due (for this page: see above). `at` forces the time.
+        // Fire what is due: a launch of this page's app at its time, in
+        // place; on the host (hostsActivities) the rest, a launch of an app
+        // that runs GRACE_MS later (its own page fires it first), of one
+        // that does not at its time (asked of the shell: fireUnlessRunning).
+        // `at` forces the time, and fires everything due by then.
         function check(at) {
             var now = at === undefined ? Date.now() : at;
-            var st = load(), due = [];
-            var plugged = charging();
+            var st = load(), due = [], early = [];
+            var plugged = charging(), host = hostsActivities();
             for (var n in st.byName) {
                 var a = st.byName[n];
+                var others = at === undefined && !forThisPage(a);
                 if (a.charging && !a.fired && !a.schedule && a.callback && plugged) {
+                    if (others && !host) continue;
                     a.fired = true;
                     a.due = now;
                     due.push(a);
@@ -11324,25 +12393,66 @@
                 if (a.charging && !plugged) continue;
                 if (a.trigger) continue;     // its trigger fires it (syncTriggers), once its schedule is due
                 if (a.fired || a.due === null || a.due === undefined || a.due > now) continue;
-                if (at === undefined && !forThisPage(a) && now < a.due + GRACE_MS) continue;
+                if (others) {
+                    if (!host) continue;
+                    if (launches(a) && now < a.due + GRACE_MS) {
+                        early.push({ name: a.name, activityId: a.activityId, due: a.due });
+                        continue;
+                    }
+                }
                 a.fired = true;
                 due.push(a);
             }
             if (due.length) save(st);
-            due.sort(function (x, y) { return x.due - y.due; }).forEach(fire);
+            // (Not forEach(fire): its index would be fire's `triggered`.)
+            due.sort(function (x, y) { return x.due - y.due; }).forEach(function (a) { fire(a); });
+            if (early.length) fireUnlessRunning(early);
             arm();
             return due.length;
+        }
+
+        // The host's launches due now whose app is not running fire at once:
+        // nothing of it will fire them in place. The shell says what runs
+        // (applicationManager/running: cards, headless pages, windows kept
+        // alive); where it cannot (a page in a browser), they wait GRACE_MS.
+        var asking = false;
+        function fireUnlessRunning(early) {
+            if (asking || !inSimulator || typeof runtime.hostOp !== "function") return;
+            asking = true;
+            runtime.hostOp("running", {}).then(function (r) {
+                asking = false;
+                if (!r || !r.ok || !Array.isArray(r.running)) return;
+                var running = r.running.map(function (x) { return x && x.id; });
+                var st = load(), go = [];
+                early.forEach(function (e) {
+                    var a = st.byName[e.name];
+                    if (!a || a.fired || a.activityId !== e.activityId || a.due !== e.due) return;
+                    if (running.indexOf(launches(a)) >= 0) return;
+                    a.fired = true;
+                    go.push(a);
+                });
+                if (!go.length) return;
+                save(st);
+                go.forEach(function (a) { fire(a); });
+            }, function () { asking = false; });
         }
 
         function arm() {
             if (timer) clearTimeout(timer);
             timer = null;
-            var st = load(), next = Infinity;
+            var st = load(), next = Infinity, now = Date.now();
+            var host = hostsActivities(), plugged = charging();
             for (var n in st.byName) {
                 var a = st.byName[n];
                 if (a.fired || a.due === null || a.due === undefined) continue;
-                if (a.trigger && a.due <= Date.now()) continue;     // subscribed already (syncTriggers)
-                next = Math.min(next, forThisPage(a) || a.trigger ? a.due : a.due + GRACE_MS);
+                if (a.charging && !plugged) continue;     // the charger coming re-checks (the storage listener)
+                if (a.trigger && a.due <= now) continue;     // subscribed already (syncTriggers)
+                if (forThisPage(a) || a.trigger) next = Math.min(next, a.due);
+                // The host: at its time, a running app's launch GRACE_MS later.
+                else if (host) next = Math.min(next, a.due > now ? a.due : a.due + GRACE_MS);
+                // Another page's to fire: looked at again in a while, in case
+                // this page has become the host.
+                else next = Math.min(next, a.due > now ? a.due + GRACE_MS : now + HOST_WAIT_MS);
             }
             syncTriggers(st);
             if (next === Infinity) return;
@@ -11352,9 +12462,6 @@
 
         // ---- Triggers (above) ----
         var subs = {};     // activity name -> {key, cancel}: this page's subscriptions
-        function hostsTriggers() {
-            return PalmSystem.appIdentifier === "com.palm.systemui" || Date.now() - store.get("systemui:listening", 0) >= 30000;
-        }
         function valueAt(o, path) {
             return String(path || "").split(".").reduce(function (v, k) { return v === null || v === undefined ? undefined : v[k]; }, o);
         }
@@ -11429,7 +12536,7 @@
         // This page's subscriptions, as the store has the activities now.
         function syncTriggers(st) {
             var want = {}, now = Date.now();
-            if (hostsTriggers()) {
+            if (hostsActivities()) {
                 for (var n in st.byName) {
                     var a = st.byName[n];
                     if (a.trigger && a.started && !a.fired && !dbWatch(a.trigger) && (!a.schedule || (a.due !== null && a.due <= now))) want[n] = a;
@@ -11486,7 +12593,7 @@
         global.addEventListener && global.addEventListener("storage", function (e) {
             if (e.key === "phoenix:" + KEY) arm();
             else if (e.key === "phoenix:power") check();   // the charger, for requirements.charging
-            else if (e.key === "phoenix:systemui:listening") syncTriggers(load());   // who subscribes to triggers
+            else if (e.key === "phoenix:systemui:listening") arm();   // who hosts (fires others', subscribes to triggers)
         });
         var setPower = runtime.setPower;
         runtime.setPower = function (changes) {
@@ -11500,6 +12607,8 @@
         runtime.activities = {
             /** Fire every activity due by `at` (ms) now, from this page. Returns how many. */
             fireDue: function (at) { return check(at === undefined ? Date.now() : at); },
+            /** Whether this page hosts what no app's own page does (hostsActivities). */
+            hosts: function () { return hostsActivities(); },
             list: function () {
                 var st = load(), out = [];
                 for (var n in st.byName) out.push(details(st.byName[n]));

@@ -223,6 +223,10 @@ jobs:
         timeout-minutes: 10
         run: build/simfonts-test
 
+      - name: The simulator's --launch values (an app id, or appId:{json})
+        timeout-minutes: 10
+        run: build/simlaunch-test
+
       - name: The keyboard's dictation (recording format, transcriber replies)
         timeout-minutes: 10
         run: build/dictation-test
@@ -310,6 +314,7 @@ jobs:
           t node tools/test-notification-stacks.cjs --tablet --out app-tests/notification-stacks-tablet
           t node tools/test-media.cjs --out app-tests/media-phone
           t node tools/test-media.cjs --tablet --out app-tests/media-tablet
+          t node tools/test-media-index.cjs
           t node tools/test-justtype.cjs --out app-tests/justtype-phone
           t node tools/test-justtype.cjs --tablet --out app-tests/justtype-tablet
           t node tools/test-browser.cjs --out app-tests/browser-phone
@@ -325,6 +330,10 @@ jobs:
           t node tools/test-tasks.cjs --tablet --out app-tests/tasks-tablet
           t node tools/test-db8-pages.cjs --out app-tests/db8-pages
           t node tools/test-alarm.cjs --out app-tests/alarm
+          t node tools/test-email.cjs --out app-tests/email-phone
+          t node tools/test-email.cjs --tablet --out app-tests/email-tablet
+          t node tools/test-contacts.cjs --out app-tests/contacts-phone
+          t node tools/test-contacts.cjs --tablet --out app-tests/contacts-tablet
           t node tools/test-voicememos.cjs --out app-tests/voicememos-phone
           t node tools/test-voicememos.cjs --tablet --out app-tests/voicememos-tablet
           t node tools/test-flashlight.cjs --out app-tests/flashlight-phone
@@ -500,6 +509,7 @@ jobs:
         run: |
           build/pty/pty-test
           build/siminstaller-test
+          build/simlaunch-test
           build/dictation-test
           python3 tools/get-wakeword.py && build/wakeword-test
           build/localmodels-test

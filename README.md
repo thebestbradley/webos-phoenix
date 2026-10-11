@@ -441,7 +441,10 @@ framework demos, Terminal) show only while it is on
 ([docs/APP-RUNTIME.md](docs/APP-RUNTIME.md#developer-mode)).
 
 `--launch com.palm.app.notes` opens an app at start-up (repeatable);
-`--launch org.webosphoenix.settings.wifi` opens a Settings pane.
+`--launch org.webosphoenix.settings.wifi` opens a Settings pane;
+`--launch 'com.palm.app.contacts:{"launchType": "pseudo-card", "contact": {"phoneNumbers": [{"value": "4151234567"}]}}'`
+opens an app with those launch params, as the application manager's launch
+`{id, params}` would (`appId:{json}`; the params a JSON object).
 
 `--scene locked|cards|stacks|reorder|maximized|heldcard|launcher|launcherinstall|dashboard|justtype|keyboard|systemmenu|pin|emergency|firstuse` opens
 a demo state (`keyboard`: Just Type with the virtual keyboard up; `heldcard`: a card that keeps the upright orientation, drawn
@@ -473,10 +476,14 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `node tools/test-voicedial.cjs` | Voice Dial |
 | `node tools/test-media.cjs` | Camera, Photos, Music |
 | `node tools/test-files.cjs` | Files |
+| `node tools/test-media-index.cjs` | The simulated media indexer's EXIF date and place for a picture (`getImageMetadata`), as OSE's indexer gives them |
 | `node tools/test-filepicker.cjs` | The file pickers: luna-systemui's for Clock, Email and Contacts; `org.webosphoenix.filepicker/pick` |
 | `node tools/test-tasks.cjs` | Tasks and reminders |
 | `node tools/test-db8-pages.cjs` | Db8 shared by pages writing at once |
-| `node tools/test-alarm.cjs` | A Clock alarm rings as a popup alert |
+| `node tools/test-alarm.cjs` | A Clock alarm rings as a popup alert; one due when the Clock is opened rings after its card opens |
+| `xvfb-run -a node tools/test-activities-sim.cjs [--tablet]` | The activity manager in phoenix-sim: a Clock alarm rings at its minute with the Clock closed, once; activities due together each fire once; `--launch 'appId:{json}'` |
+| `node tools/test-contacts.cjs` | The simulated contacts service: favourites and an app's default, vCards counted, read, imported and exported, the sort order; the original Contacts opening a `.vcf` |
+| `node tools/test-email.cjs` | The simulated mail transports under the original Email: SMTP's `_id`, moves and deletes (to Trash) finished, the sync state, `com.palm.pop/parseEmlMessage` |
 | `node tools/test-device-services.cjs` | The Clock's alarm holds the display on (`com.palm.display`), a volume key or Power snoozes it (`com.palm.keys`), the ringer switch |
 | `node tools/test-keyboard.cjs` | Web fields and the virtual keyboard |
 | `node tools/test-voicememos.cjs` | Voice Memos |

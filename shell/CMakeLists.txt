@@ -72,7 +72,7 @@ if(PHOENIX_BUILD_SIM)
     # (SimChrome).
     find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Widgets)
     add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h sim/simfonts.cpp sim/simfonts.h sim/simsettings.h sim/simprocess.h sim/simpty.cpp sim/simpty.h sim/siminstaller.cpp sim/siminstaller.h sim/simsnapshots.cpp sim/simsnapshots.h
-                               sim/simchrome.cpp sim/simchrome.h sim/simdevices.h)
+                               sim/simchrome.cpp sim/simchrome.h sim/simdevices.h sim/simlaunch.h)
     target_link_libraries(phoenix-sim PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets phoenix-pty-core)
     # --device ID: the first targets' profiles and the device.json each
     # image installs (meta-phoenix's phoenix-device-config), compiled in
@@ -130,6 +130,9 @@ if(PHOENIX_BUILD_SIM)
     add_executable(siminstaller-test sim/siminstaller_test.cpp sim/rootfs.cpp sim/rootfs.h sim/siminstaller.cpp sim/siminstaller.h)
     target_link_libraries(siminstaller-test PRIVATE Qt6::Core)
     target_compile_definitions(siminstaller-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
+    # --launch's values, an app id or appId:{json} (CI: build/simlaunch-test).
+    add_executable(simlaunch-test sim/simlaunch_test.cpp sim/simlaunch.h)
+    target_link_libraries(simlaunch-test PRIVATE Qt6::Core)
     # The colour emoji font's fontconfig setup (CI: build/simfonts-test).
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_executable(simfonts-test sim/simfonts_test.cpp sim/simfonts.cpp sim/simfonts.h)

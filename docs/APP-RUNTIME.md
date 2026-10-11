@@ -75,6 +75,18 @@ writes (`build/rootfs/`):
 (phoenix-default-apps' `npm run sim` does this.) `build/siminstaller-test`
 checks it.
 
+A deep link is tested with the app's launch params after its id,
+`--launch 'appId:{json}'` (a JSON object; repeatable, one app each), which
+starts the app as `luna://com.palm.applicationManager/launch {id, params}`
+does: a new page with them as `PalmSystem.launchParams`, or, for an app
+already running, a relaunch with them (`webOSRelaunch`, `Mojo.relaunch`).
+`./phoenix run` passes it on whole (`build/simlaunch-test` checks what
+`--launch` takes):
+
+```sh
+./phoenix run phone --extra-rootfs ../phoenix-default-apps/build/rootfs --launch 'com.palm.app.clock:{"action": "edit", "key": "alarm1"}'
+```
+
 ## phoenix-runtime.js
 
 Web apps expect the device's web runtime to provide `PalmSystem` (app and
@@ -124,9 +136,20 @@ service bus). `runtime/phoenix-runtime.js` runs before the app's own scripts:
   - **contacts linker** (`com.palm.service.contacts.linker`): runs the
     linker's own steps on the page's contacts framework (new contact,
     manual link/unlink); no automatic linking of similar contacts.
+  - **contacts service** (`com.palm.service.contacts`): favourites and an
+    app's favourite default (`favoritePerson`, `unfavoritePerson`,
+    `setFavoriteDefault`), vCards (`countVCardContacts`, `readVCard`,
+    `importVCard` of a `file://` target; `vCardExportOne`, `vCardExportAll`)
+    and `sortOrderChanged`, the steps of app-services' service and the
+    contacts framework on the db8 objects, for every app; an imported
+    contact gets a person of its own (`tools/test-contacts.cjs`).
   - **email transports** (`com.palm.smtp`, `com.palm.imap`, `com.palm.pop`):
     saving drafts and sending (into Sent at once, bodies in a simulated file
-    cache); there is no mail server, so syncs find nothing new.
+    cache, the saved email's `_id` answered); a moved message lands in its
+    folder and a deleted one in Trash, a folder's sync writes the sync state
+    (`com.palm.account.syncstate:1`), `com.palm.pop/parseEmlMessage` reads
+    an `.eml` file; there is no mail server, so syncs find nothing new
+    (`tools/test-email.cjs`).
 
   On first start it loads **sample data** (`runtime/sample-data.js`,
   simulator only, all fictional): an owner, the HP webOS profile account and
@@ -700,8 +723,9 @@ All seven start cleanly and are usable on phone and tablet
 - **Servers**: contacts and calendars sync with a CardDAV & CalDAV account
   (below); there is no mail server, so email accounts cannot be signed in.
 - **Background services**: scheduled activities fire (the activity manager
-  block; see [Tasks](#tasks)), but Clock alarms and calendar reminders have
-  not been checked end to end.
+  block; see [Tasks](#tasks)); the Clock's alarms ring at their minute, with
+  Clock closed too (`tools/test-alarm.cjs`, `tools/test-activities-sim.cjs`);
+  calendar reminders have not been checked end to end.
 - **Contacts**: contacts are linked into people only when a CardDAV sync
   adds them (the linker's strongest rules); no photos for local contacts, no
   vCard import/export.
@@ -1163,7 +1187,7 @@ them.
 
 | What | Service and methods | Source |
 | --- | --- | --- |
-| Find media | `com.webos.service.mediaindexer` `getImageList`, `getVideoList`, `getAudioList` `{uri, count, subscribe}` (first reply `{subscribed: true}`, then `{imageList: {results, count}}` and again on every change), `get*Metadata {uri}`, `getDeviceList` | `com.webos.service.mediaindexer` `src/indexerservice.cpp`, `src/dbconnector/mediadb.cpp` (reply shapes, item fields), `src/mediaitem.cpp` (field names) |
+| Find media | `com.webos.service.mediaindexer` `getImageList`, `getVideoList`, `getAudioList` `{uri, count, subscribe}` (first reply `{subscribed: true}`, then `{imageList: {results, count}}` and again on every change), `get*Metadata {uri}`, `getDeviceList`. `getImageMetadata` adds a picture's EXIF as OSE's indexer reads it through libexif, which the list does not have: `date_of_creation` ("2026:10:06 10:00:00"), `geo_location_latitude` / `_longitude` ("N 52, 31, 12.00"), `geo_location_country` / `_city` (always ""); "" for a tag the picture lacks (`tools/test-media-index.cjs`) | `com.webos.service.mediaindexer` `src/indexerservice.cpp`, `src/dbconnector/mediadb.cpp` (reply shapes, item fields; the extra metadata on request, :330-365), `src/mediaitem.cpp` (field names), `src/metadataextractors/imageextractor.cpp` (the EXIF tags) |
 | Index a new file | mediaindexer `requestMediaScan {path}`, as `com.webos.app.camera` does after a snapshot | same; `webosose/com.webos.app.camera` `src/actions/syncMedia.js` |
 | Forget a file | mediaindexer `requestDelete {uri}` | same |
 | Is there a camera | `com.webos.service.camera2` `getCameraList` (`deviceList: [{id: "camera1"}]`), `getInfo {id}` | `com.webos.service.camera` `src/services/camera/camera_service.cpp`, `json_parser.cpp` |
@@ -1481,12 +1505,23 @@ The runtime's activity manager block simulates: `create`
 older `com.palm.power` `timeout/set {key, at | in, uri, params}` and
 `timeout/clear` on the same schedule. Schedule times are UTC unless
 `local: true`. Activities are kept in the shared store (`activities`), so
-every page sees them and any page can fire one: the target app's own page
-at once (a relaunch in place), other pages a second later (the shell then
-launches or relaunches the app; `SimWindowSource` does not bring up the
-card of a launch whose params carry `$activity`). A page claims an activity
-in the store before firing it, so it fires once; one that came due while no
-page ran fires when the next page starts. An activity started with no
+every page sees them, and one page fires each, as OSE's activity manager,
+a service, fires them at their time whatever runs: the target app's own
+page at once (a relaunch in place), and anything else the system UI's
+page, which phoenix-sim always runs (`SimWindowSource.bootApps`): a launch
+of an app that is not running at its time (the shell starts the app with
+the params; `SimWindowSource` does not bring up the card of a launch whose
+params carry `$activity`), so an alarm rings with Clock closed; a launch of
+an app that runs a second later, if its page has not fired it; any other
+callback at its time. (When every page fired them, each did: the pages are
+processes of their own, and one page's claim in the store reaches another a
+moment later.) With no system UI (a page alone in a browser, the web tests)
+every page fires them, as before. A relaunch that comes while the page is
+starting waits until the page has loaded and read its own launch params
+(as WebAppMgr held one until the page had loaded,
+`SysMgrWebBridge.cpp:133-139`): Clock opened while one of its alarms was
+due opens its card, then rings. One that came due while the simulator was
+not running fires when it starts. An activity started with no
 schedule or trigger runs at once, on the page that created it ("Sync now");
 one with an interval schedule is kept but never fires. Tests move the clock on with
 `__phoenixRuntime.activities.fireDue(at)`; `activities.list()` shows what is
