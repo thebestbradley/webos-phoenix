@@ -1365,17 +1365,6 @@ function createAssistantService(deps) {
             });
         }).catch(function (e) { log("writing it failed: " + (e && e.message)); return null; });
     }
-    // The on-device model's words for small talk (no command chosen).
-    function askLocalWords(thread, model) {
-        return bounded(thread, function (left, stage) {
-            return deps.llm.ensure(model).then(function (srv) {
-                stage("thinking");
-                return catalogue().then(function (cat) {
-                    return callModel({ type: "local", baseUrl: srv.baseUrl, model: model.id }, "", thread, [], undefined, left(), localPrefix(cat));
-                });
-            });
-        }).then(function (r) { return [say(thread, r.text || lang().say.done(), { via: "on-device", source: model.name })]; });
-    }
     // The decision model's slot (docs/AI-AND-MCP.md "A decision model"): a
     // choice among complete requests. The language says which requests the
     // words come close to ("turn bluetooth off", "turn bluetooth on", "is

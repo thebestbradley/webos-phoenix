@@ -79,6 +79,16 @@
 {"id":"h-fu-3","cat":"follow-ups","turns":[{"say":"turn off bluetooth","expect":{"command":"toggle"}},{"say":"turn it back on","expect":{"command":"toggle","args":{"setting":"bluetooth","state":"on"}}}]},
 {"id":"h-fu-4","cat":"follow-ups","turns":[{"say":"text Priya see you soon","expect":{"command":"text","status":"pending"}},{"say":"yes send it","expect":{"command":"text","status":"done"}}]},
 {"id":"h-corr-1","cat":"corrections","turns":[{"say":"remind me to call the bank at 4","expect":{"command":"reminder"}},{"say":"no, make it 5","expect":{"command":"reminder","args":{"due":"2026-10-07T17:00"}}}]},
-{"id":"h-corr-2","cat":"corrections","turns":[{"say":"what's the time in Paris","expect":{"command":"worldTime"}},{"say":"I meant Rome","expect":{"command":"worldTime","args":{"place":"rome"}}}]}
+{"id":"h-corr-2","cat":"corrections","turns":[{"say":"what's the time in Paris","expect":{"command":"worldTime"}},{"say":"I meant Rome","expect":{"command":"worldTime","args":{"place":"rome"}}}]},
+{"id":"h-a-1","cat":"corrections","say":"set a timer for ten minutes, sorry, fifteen","expect":{"command":"timer","args":{"seconds":900}}},
+{"id":"h-a-2","cat":"reminders","say":"remind me to grab the dry cleaning next time I'm at the mall","expect":{"anyOf":[{"answer":"clarify"},{"command":"reminder","status":["ask","done","pending"],"args":{"place":{"$re":"mall"}}}]},"effects":[{"kind":"com.palm.task:1","where":{"summary":{"$re":"mall"}},"count":0}]},
+{"id":"h-a-3","cat":"messages","say":"dial 112","expect":{"command":"call","status":"pending","args":{"number":"112","emergency":true}}},
+{"id":"h-a-4","cat":"timers","say":"turn the music off in 45 minutes","expect":{"command":"timer","args":{"seconds":2700,"sleep":true}}},
+{"id":"h-a-5","cat":"multi-intent","say":"what's the weather friday and am I busy that day","expect":{"all":[{"command":"weather"},{"command":["agenda","freeTime"]}]}},
+{"id":"h-a-6","cat":"notes","say":"put toothpaste on the shopping list","expect":{"command":"task"},"effects":[{"kind":"com.palm.task:1","where":{"summary":"Toothpaste","listId":"list-shop"},"count":1}]},
+{"id":"h-a-7","cat":"alarms","say":"when does my alarm go off","expect":{"command":"alarmList","args":{"next":true}}},
+{"id":"h-a-8","cat":"out-of-scope","say":"what am I looking at","expect":{"answer":"fallback"},"forbid":["brightness"]},
+{"id":"h-a-9","cat":"messages","say":"send my location to Mom","expect":{"anyOf":[{"answer":"fallback"},{"answer":"clarify"},{"command":["text","shareLocation"],"status":["pending","ask"]}]},"notText":"find my"},
+{"id":"h-a-10","cat":"casual","say":"would you mind setting an alarm for 7 tomorrow","expect":{"command":"alarm","args":{"time":"2026-10-08T07:00"}}}
 ]
 }
