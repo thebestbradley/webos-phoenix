@@ -62,6 +62,15 @@
 {"id":"a-sw-38","cat":"messages","put":[{"_id":"p-rose","_kind":"com.palm.person:1","name":{"givenName":"Rose","familyName":"Tyler"},"phoneNumbers":[{"value":"(303) 555-0160","type":"type_mobile"}],"emails":[]}],"say":"send happy birthday to Rose","expect":{"command":"text","status":"pending","args":{"name":"Rose Tyler","message":"happy birthday"}}},
 {"id":"a-sw-39","cat":"timers","say":"I'd like a timer for 20 minutes","expect":{"command":"timer","args":{"seconds":1200}}},
 {"id":"a-sw-40","cat":"corrections","say":"set an alarm for 6 am no 7","expect":{"command":"alarm","args":{"time":"2026-10-08T07:00"}}},
-{"id":"a-sw-41","cat":"messages","say":"text Sam I actually liked the movie","expect":{"command":"text","status":"pending","args":{"name":"Sam Delgado","message":"I actually liked the movie"}}}
+{"id":"a-sw-41","cat":"messages","say":"text Sam I actually liked the movie","expect":{"command":"text","status":"pending","args":{"name":"Sam Delgado","message":"I actually liked the movie"}}},
+{"id":"a-sw-42","cat":"voice","say":"set an alarm for 6 30","expect":{"command":"alarm","args":{"time":"2026-10-07T18:30"}}},
+{"id":"a-sw-43","cat":"timers","say":"how much longer on the timer","expect":{"command":"timerStatus"}},
+{"id":"a-sw-44","cat":"calendar","say":"what meetings do I have today","expect":{"command":"agenda","args":{"from":"2026-10-07T00:00"}}},
+{"id":"a-sw-45","cat":"messages","say":"call mom on speaker","expect":{"command":"call","status":"pending","args":{"name":"Mom"}}},
+{"id":"a-sw-46","cat":"messages","say":"email my boss that I'm sick today","expect":{"command":"email","status":"failed","args":{"who":"boss"}},"notText":"find my\\b"},
+{"id":"a-sw-47","cat":"settings","say":"turn up the volume all the way","expect":{"command":"volume","args":{"action":"set","level":100}}},
+{"id":"a-sw-48","cat":"apps","say":"open the photos app","expect":{"command":"open","args":{"title":"Photos"}}},
+{"id":"a-sw-49","cat":"apps","say":"launch messages","expect":{"command":"open","args":{"title":"Messaging"}}},
+{"id":"a-sw-50","cat":"weather","say":"will I need a jacket tonight","expect":{"command":"weather","args":{"day":"tonight","about":"cold"}}}
 ]
 }

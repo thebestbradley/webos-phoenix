@@ -481,7 +481,11 @@ function clean(text) {
     t = t.replace(/\b((?:mon|tues|wednes|thurs|fri|satur|sun)day|noon|midnight|morning|afternoon|evening|tonight|tomorrow|\d{1,2}(?::\d{2})?(?: ?[ap]m)?|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)-?ish\b/g, "$1");
     // "seven a m", "5 45 pm": the time as written.
     t = t.replace(new RegExp("\\b(\\d{1,2}|" + NUMBER_WORD + ") ([ap])\\.? ?m\\b\\.?", "g"), "$1 $2m")
-         .replace(/\b(\d{1,2}) (\d{2}) ?([ap]m)\b/g, "$1:$2 $3");
+         .replace(/\b(\d{1,2}) (\d{2}) ?([ap]m)\b/g, "$1:$2 $3")
+         // "set an alarm for 6 30", "at 7 45 tomorrow": a transcript's time.
+         .replace(/\b(at|for|to|by|until|till) (\d{1,2}) ([0-5]\d)\b(?! ?(?:minutes?|mins?|seconds?|secs?|hours?|hrs?|percent|%|dollars?|people|times|days?|\d))/g, function (m, p, h, mm) {
+             return Number(h) <= 23 ? p + " " + h + ":" + mm : m;
+         });
     var before;
     do {
         before = t;
@@ -570,7 +574,8 @@ function call(t) {
     if (!m && /^(?:get me|send|i need|we need)(?: an?)? (?:ambulance|police|paramedics|the police|the fire (?:department|brigade))(?: now| here| right now)?$/.test(t)) return { emergency: true, label: "" };
     if (!m || /^(?:me|back)$/.test(m[1]) || /^me /.test(m[1])) return null;
     if (EMERGENCY_SAID.test(m[1])) return { emergency: true, label: "" };
-    var who = m[1].replace(/^my (?=\S)/, ""), label = "";
+    // "call mom on speaker": the call (the Phone's speaker button is the user's).
+    var who = m[1].replace(/^my (?=\S)/, "").replace(/\s+(?:on|with|using|over) (?:the )?(?:speaker ?phone|speaker|loud ?speaker)$/, ""), label = "";
     var l = PHONE_LABEL.exec(who);
     if (l) { label = { cell: "mobile", cellphone: "mobile", office: "work" }[l[1]] || l[1]; who = who.slice(0, l.index); }
     if (/^[+\d][\d\s().-]{2,}$/.test(who)) return { number: who.replace(/[^\d+]/g, ""), label: label };
@@ -699,7 +704,7 @@ function snooze(t, now) {
     return { time: now + s * 1000, label: "Snooze" };
 }
 function timerStatus(t) {
-    if (/^(?:how (?:much|long)(?: time)?(?: is| 's)?(?: there)? (?:left|remaining)(?: on (?:the |my )?(?:.+ )?timer)?|how long (?:is )?left|(?:time|how much) left|(?:check|show)(?: me)? (?:the |my )?timers?|how(?:'s| is) (?:the |my )?timer(?: doing| going)?|what(?:'s| is) (?:left )?on (?:the |my )?timer|what timers? (?:do i have|are (?:set|running))|is (?:the |my )?timer (?:still )?(?:going|running|on))$/.test(t))
+    if (/^(?:how (?:much|long)(?: time)?(?: is| 's)?(?: there)? (?:left|remaining)(?: on (?:the |my )?(?:.+ )?timer)?|how much longer(?: is there)?(?: on| for)? (?:the |my )?(?:.+ )?timer|how (?:much )?longer (?:is|until|till|before) (?:the |my )?(?:.+ )?timer(?: (?:goes off|is done|rings|ends))?|how long (?:is )?left|(?:time|how much) left|(?:check|show)(?: me)? (?:the |my )?timers?|how(?:'s| is) (?:the |my )?timer(?: doing| going)?|what(?:'s| is) (?:left )?on (?:the |my )?timer|what timers? (?:do i have|are (?:set|running))|is (?:the |my )?timer (?:still )?(?:going|running|on))$/.test(t))
         return { };
     return null;
 }
@@ -878,7 +883,7 @@ function event(t, ctx) {
 // is my dentist appointment"
 function agenda(t, ctx) {
     var CAL = "(?:calendar|schedule|agenda|diary|appointments?|meetings?|events?|plans?)";
-    var asks = new RegExp("^(?:what(?:'s| is| do i have| have i got| are| am i)|whats|show(?: me)?|tell me|read(?: me)?|check|list|give me|how(?:'s| does| is)|open|go through|anything|do i have anything|do i have any|have i got anything|have i got any|am i (?:busy|free)|any)\\b").test(t);
+    var asks = new RegExp("^(?:what(?:'s| is| do i have| have i got| are| am i| meetings?| events?| appointments?| plans)|whats|show(?: me)?|tell me|read(?: me)?|check|list|give me|how(?:'s| does| is)|open|go through|anything|do i have anything|do i have any|have i got anything|have i got any|am i (?:busy|free)|any)\\b").test(t);
     var mentions = new RegExp("\\b" + CAL + "\\b").test(t);
     var m;
     // Next: "what's next", "what's my next meeting"
@@ -1032,6 +1037,8 @@ function email(t, ctx) {
         if (best && best !== who) { body = who.slice(best.length).trim(); who = best; }
     }
     who = who.replace(/^(?:to )/, "").trim();
+    // "email my boss ...": "boss", never "my boss" (as a text: "my" is no name).
+    if (/^my \S/.test(who) && !nameAtStart(who, ctx)) who = who.slice(3);
     if (!who || /^(?:me|myself)$/.test(who)) return null;
     return { who: who, subject: subject ? capital(cased(subject, ctx)) : "", body: body ? capital(cased(body, ctx)) : "" };
 }
@@ -1082,6 +1089,9 @@ function volume(t) {
         || (m = new RegExp("^(?:turn|crank|bring) (up|down) (?:the )?" + V + "(?: a bit| a little)?$").exec(t))
         || (m = /^(?:volume|sound) (up|down)$/.exec(t)))
         return { action: m[1] };
+    // "turn up the volume all the way", "turn the volume all the way down"
+    if ((m = new RegExp("^(?:turn|crank|bring|put) (up|down) (?:the )?" + V + " all the way$|^(?:turn|crank|bring|put) (?:the )?" + V + " all the way (up|down)$|^(?:turn|crank|bring) (?:the )?" + V + " (up|down) all the way$").exec(t)))
+        return (m[1] || m[2] || m[3]) === "up" ? { action: "set", level: 100 } : { action: "mute" };
     if (/^(?:louder|make it louder|(?:a bit|a little) louder|increase (?:the )?volume|raise (?:the )?volume|more volume)$/.test(t)) return { action: "up" };
     if (/^(?:quieter|softer|make it quieter|(?:a bit|a little) quieter|decrease (?:the )?volume|lower (?:the )?volume|reduce (?:the )?volume|less volume)$/.test(t)) return { action: "down" };
     if ((m = /^(?:set|change|put|turn|adjust) (?:the )?(?:volume|sound)(?: level)? (?:to|at|up to|down to) (\d+|max(?:imum)?|full|half|min(?:imum)?)(?: ?%| percent)?$/.exec(t))
@@ -1234,6 +1244,8 @@ function photosSaid(t, ctx) {
         || /^how many (?:photos|pictures|pics|screen ?shots)(?: (?:did i take|have i taken|do i have|i took))?(?: (.+?))?$/.exec(t);
     if (!m) return null;
     var said = (m[1] || "").replace(/^(?:from|on|of|taken) /, "");
+    // "open the photos app": the app (openApp), not photos about "app".
+    if (/^(?:app|application)$/.test(said)) return null;
     if (!said) return { from: null, to: null, label: "" };
     var info = extract(said, ctx.now);
     var about = info.rest.replace(/\b(?:from|on|the|of|my|in|at|with|taken|i took|that i took)\b/g, " ").replace(/\s+/g, " ").trim();
@@ -1363,8 +1375,10 @@ function weather(t) {
         return { place: place, day: day };
     }
     m = /^(?:will|is) it (?:going to )?(?:be )?(rain|raining|snow|snowing|sunny|hot|cold|warm|windy)(?: (?:in|at) (.+?))?(?: (today|tonight|tomorrow|this week|this weekend|(?:on |this |next )?(?:mon|tues|wednes|thurs|fri|satur|sun)day))?$/.exec(t)
-        || /^do i need (?:an umbrella|a coat|a jacket)()(?: (?:in|at) (.+?))?(?: (today|tonight|tomorrow))?$/.exec(t);
-    if (m) return { place: m[2] || "", day: m[3] || "", about: m[1] || "rain" };
+        || /^(?:do|will|would|should) i need (?:an umbrella|a coat|a jacket|a sweater|a raincoat)()(?: (?:in|at) (.+?))?(?: (today|tonight|tomorrow))?$/.exec(t)
+        || /^should i (?:bring|take|wear|grab) (?:an umbrella|a coat|a jacket|a sweater|a raincoat)()(?: (?:in|at|to) (.+?))?(?: (today|tonight|tomorrow))?$/.exec(t);
+    // An umbrella is about rain; a coat, a jacket or a sweater about the cold.
+    if (m) return { place: m[2] || "", day: m[3] || "", about: m[1] || (/\b(?:coat|jacket|sweater)\b/.test(t) ? "cold" : "rain") };
     if (/^(?:how (?:hot|cold|warm) is it|is it (?:hot|cold) outside)(?: outside)?$/.test(t)) return { place: "", day: "" };
     // "what's the high today", "what's the low tonight", "how hot will it get tomorrow"
     if ((m = /^what(?:'s| is| will be) (?:the |today's |tomorrow's )?(?:high|low|high and low|highs and lows|temperature high)(?: (?:in|for|at) (.+?))?(?: (today|tonight|tomorrow))?$/.exec(t)))
@@ -1388,6 +1402,12 @@ function openApp(t, ctx) {
     var norm = function (s) { return String(s || "").toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim(); };
     var w = norm(want);
     apps.forEach(function (a) { if (!found && norm(a.title) === w) found = a; });
+    // What people call the apps ("launch messages": Messaging; "open my mail": Email).
+    var called = { messages: "messaging", texts: "messaging", "text messages": "messaging", sms: "messaging", mail: "email", "e mail": "email",
+                   notes: "memos", "sticky notes": "memos", alarms: "clock", "alarm clock": "clock", timer: "clock", pictures: "photos",
+                   gallery: "photos", "photo gallery": "photos", browser: "web", internet: "web", "web browser": "web", "app store": "marketplace",
+                   store: "marketplace", "address book": "contacts", "to do": "tasks", "to dos": "tasks", todos: "tasks", reminders: "tasks", dialer: "phone" }[w];
+    if (called) apps.forEach(function (a) { if (!found && norm(a.title) === called) found = a; });
     apps.forEach(function (a) {
         if (!found && (a.keywords || []).some(function (k) { return norm(k) === w; })) found = a;
     });
