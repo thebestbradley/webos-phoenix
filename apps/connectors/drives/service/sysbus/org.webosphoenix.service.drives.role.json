@@ -15,6 +15,7 @@
                 "com.palm.activitymanager",
                 "com.palm.service.accounts",
                 "org.webosphoenix.service.oauth",
+                "com.webos.notification",
                 "org.webosphoenix.ongoing"
             ]
         }
