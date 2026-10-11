@@ -8,6 +8,10 @@
         "org.webosphoenix.filemanager/remove",
         "org.webosphoenix.filemanager/read",
         "org.webosphoenix.filemanager/write",
-        "org.webosphoenix.filemanager/search"
+        "org.webosphoenix.filemanager/search",
+        "org.webosphoenix.filemanager/open",
+        "org.webosphoenix.filemanager/quota",
+        "org.webosphoenix.filemanager/transfers",
+        "org.webosphoenix.filemanager/cancel"
     ]
 }

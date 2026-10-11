@@ -1848,7 +1848,10 @@
             return { ZoneID: z, City: z.split("/").pop().replace(/_/g, " "), Country: "" };
         })(PalmSystem.TZ),
         useNetworkTime: true,
-        wallpaper: { wallpaperName: "", wallpaperFile: "" },
+        // A file, as luna-sysmgr's conf/defaultPreferences.txt named one:
+        // Settings' Northern Lights (Theme.defaultWallpaperPath).
+        wallpaper: { wallpaperName: "Northern Lights",
+                     wallpaperFile: "/usr/palm/applications/org.webosphoenix.settings/wallpapers/northern-lights.jpg" },
         // Dock mode's own wallpaper (Preferences.cpp "dockwallpaper"), behind
         // the exhibitions; none: dock mode is black, the Time exhibition on
         // its clock_bg.png.
@@ -3717,7 +3720,7 @@
     // serves the templates released with Open webOS (com.palm.*: the HP webOS
     // profile and the email templates), which have no transport here: a new
     // account is not validated against a server. The others (CardDAV and
-    // CalDAV, the Subscribed Calendar, Jabber, connectors whose service
+    // CalDAV, the Subscribed Calendar, connectors whose service
     // runs here) go through the block "CardDAV and CalDAV" (Synergy
     // transport), which calls their callbacks.
     //
@@ -3728,7 +3731,7 @@
     // folder, so here they are:
     //   - /usr/palm/public/accounts/<dir>/<dir>.json for each folder
     //     runtime/rootfs.json mounts there (BUILTIN_TEMPLATES if it cannot
-    //     be read), and the runtime's own (the simulated Jabber account);
+    //     be read);
     //   - for each app the user installed, the templates its package had in
     //     the app's public/accounts/<dir>/ (the connector layout,
     //     docs/SYNERGY-CONNECTORS.md 3.1), which installPackage records
@@ -3744,13 +3747,23 @@
     // (/etc/palm/marketplace/preinstalled.json; tools/install-rootfs.py and
     // phoenix-sim put them among the installed apps): [{id, sourceId,
     // service, templates}].
-    var preinstalledCache = null;
+    var preinstalledCache = null, firstPartyCache = null;
     runtime.preinstalledPackages = function () {
         if (!preinstalledCache) {
             try { preinstalledCache = JSON.parse(PalmSystem.getResource("/etc/palm/marketplace/preinstalled.json") || "{}").packages || []; }
             catch (e) { preinstalledCache = []; }
         }
         return preinstalledCache;
+    };
+    // Phoenix's own connector packages it does not come with but trusts as
+    // those (the same file's "firstParty": the drives, Jabber, Matrix,
+    // Delta Chat): installed from its catalog without Developer Mode.
+    runtime.firstPartyPackages = function () {
+        if (!firstPartyCache) {
+            try { firstPartyCache = JSON.parse(PalmSystem.getResource("/etc/palm/marketplace/preinstalled.json") || "{}").firstParty || []; }
+            catch (e) { firstPartyCache = []; }
+        }
+        return firstPartyCache;
     };
 
     (function accountsService() {
@@ -3763,7 +3776,7 @@
             "/usr/palm/public/accounts/com.webosphoenix.dav/com.webosphoenix.dav.json",
             "/usr/palm/public/accounts/com.webosphoenix.webcal/com.webosphoenix.webcal.json"
         ];
-        var RUNTIME_TEMPLATES = ["/usr/share/phoenix/runtime/accounts/com.webosphoenix.xmpp/com.webosphoenix.xmpp.json"];
+        // (The simulated Jabber template that was here is the Jabber connector's now: apps/connectors/xmpp.)
         var PACKAGED = "accountTemplateFiles";   // store: {appId: [paths in the app]}
         var ACCOUNT_KIND = "com.palm.account:1";
         var SIGNAL_KIND = "com.palm.signaling:1";
@@ -3789,7 +3802,7 @@
                 if (!lp.removable || lp.dynamic || seen[lp.id]) return;
                 seen[lp.id] = true;
                 var base = "/usr/palm/applications/" + lp.id + "/";
-                var pre = runtime.preinstalledPackages().filter(function (p) { return p.id === lp.id; })[0];
+                var pre = runtime.preinstalledPackages().concat(runtime.firstPartyPackages()).filter(function (p) { return p.id === lp.id; })[0];
                 var named = pre && pre.templates ? pre.templates.map(function (t) { return "public/accounts/" + t + "/" + t + ".json"; }) : null;
                 (packaged[lp.id] || named || ["public/accounts/" + lp.id + "/" + lp.id + ".json"]).forEach(function (rel) {
                     out.push(base + rel);
@@ -3817,7 +3830,7 @@
         function allTemplates() {
             if (templateCache) return clone(templateCache);
             var list = [], ids = {};
-            builtinFiles().concat(RUNTIME_TEMPLATES, installedFiles()).forEach(function (file) {
+            builtinFiles().concat(installedFiles()).forEach(function (file) {
                 var text = PalmSystem.getResource(file);
                 if (!text) return;
                 var dir = file.slice(0, file.lastIndexOf("/") + 1), parsed;
@@ -5091,6 +5104,14 @@
         // After the focus has moved on (focusout fires first).
         global.document.addEventListener("focusout", function () { setTimeout(followFocus, 0); }, true);
     }
+    // The page itself going away with a field focused: a frame taken out of
+    // its card (Accounts closes a template's sign-in page when it answers,
+    // with its code field still focused) fires no focusout, and its watch
+    // goes with it: the keyboard is told, as WebKit told the IMEController
+    // when the frame went.
+    if (global.addEventListener) global.addEventListener("pagehide", function () {
+        if (!ime.manual && ime.reported) reportInput(false);
+    });
 
     runtime.imeSetManual = function (on) {
         ime.manual = !!on;
@@ -7997,11 +8018,19 @@
         function isIm(service) { return /^type_/.test(String(service || "")); }
         // The person an IM buddy is (the transport links its roster to the
         // address book, as the contacts linker did: imbuddystatus personId).
+        // Networks without buddies (Matrix, Delta Chat, Telegram: no
+        // presence) link through the person's IM addresses, which their
+        // contacts carry (ims [{value, type: the service}]).
         function personForIm(addr, service) {
+            var a = String(addr).toLowerCase();
             var b = (tempdbCall("/find", { query: { from: IM_BUDDY_KIND } }).results || []).filter(function (x) {
-                return x.serviceName === service && String(x.username).toLowerCase() === String(addr).toLowerCase();
+                return x.serviceName === service && String(x.username).toLowerCase() === a;
             })[0];
-            return b && b.personId ? (dbCall("/get", { ids: [b.personId] }).results || [])[0] || null : null;
+            if (b && b.personId) return (dbCall("/get", { ids: [b.personId] }).results || [])[0] || null;
+            var people = dbCall("/find", { query: { from: "com.palm.person:1" } }).results || [];
+            return people.filter(function (p) {
+                return (p.ims || []).some(function (im) { return im.type === service && String(im.value).toLowerCase() === a; });
+            })[0] || null;
         }
         // What a conversation's last line says of a picture message.
         function summaryOf(msg) {
@@ -8097,10 +8126,9 @@
             }));
         }
 
-        // The IM transports deliver outgoing instant messages
-        // (org.webosphoenix.service.xmpp, block "Instant messaging" below).
-        // Others (block "Synergy connectors on the kit") answer by name when
-        // a message is sent: runtime.resolveImTransport(fn(serviceName) ->
+        // The IM transports (block "Synergy connectors on the kit": Jabber,
+        // Matrix, the Fediverse, ...) deliver outgoing instant messages: they
+        // answer by name when a message is sent: runtime.resolveImTransport(fn(serviceName) ->
         // send or null), so nothing reads the templates as the page starts.
         var imTransports = {}, imResolvers = [];
         runtime.registerImTransport = function (service, send) { imTransports[service] = send; };
@@ -8292,221 +8320,65 @@
     })();
 
     // ================================================================================
-    // Instant messaging (simulated XMPP: org.webosphoenix.service.xmpp)
+    // Instant messaging: the Jabber demo server (chat.example)
     // ================================================================================
     //
-    // An IM transport as webOS's Synergy ones were (libpurple's AIM and
-    // Google Talk), shaped like the XMPP transport Phoenix plans
-    // (docs/SYNERGY-MODERN.md: template com.webosphoenix.xmpp, MESSAGING
-    // with capabilitySubtype "IM", serviceName "type_jabber"), against a
-    // simulated server, chat.example, whose people are fictional and linked
-    // to the sample contacts.
-    //
-    //   The account: Accounts > Add Account > Jabber (XMPP), with any
-    //   address on chat.example (you@chat.example) and a password; the
-    //   template (runtime/accounts/com.webosphoenix.xmpp/) goes through the
-    //   accounts block of "CardDAV and CalDAV", which calls this service's
-    //   checkCredentials, onCreate, onEnabled and onDelete as Synergy did.
-    //   Signed in, the account's state is a com.palm.imloginstate:1 (db8:
-    //   accountId, username, serviceName, state "online" | "offline",
-    //   availability 0 available, 2 busy, 4 offline, customMessage) and its
-    //   roster com.palm.imbuddystatus:1 objects (tempdb: accountId, username
-    //   (the buddy's address), serviceName, displayName, personId,
-    //   availability, personAvailability, status, group), which Messaging's
-    //   Buddies and Contacts' presence read, as on webOS.
-    //   Messages are com.palm.immessage.xmpp:1 (extends com.palm.immessage:1,
-    //   extends com.palm.message:1: folder, status, serviceName, username =
-    //   the account's address, from / to, messageText), put through
-    //   putMessage like texts and threaded per buddy; the outbox goes out
-    //   here (successful, or failed while signed out or in airplane mode).
-    //   A buddy who is available or busy answers after a moment (the
-    //   simulated server); an offline one does not.
-    //
-    //   setPresence {accountId, availability, customMessage?} (Phoenix): your
-    //   own status; 4 signs out (the roster goes offline), else signs in.
+    // Jabber (XMPP) is a real connector now (apps/connectors/xmpp, block "Synergy
+    // connectors on the kit"), which speaks XMPP to any server. The
+    // simulator's demo is a server, not a pretend account: chat.example, the
+    // connector's fake XMPP server (apps/connectors/xmpp/service/test/fake-xmpp.cjs
+    // demoServer), runs in the page that keeps the connection, and the
+    // connector reaches it as it reaches any server over a WebSocket. Any
+    // name on chat.example signs in with any password; its people are
+    // fictional (Ada Palmer, Marcus Reyes, Lena Okafor, Theo Lindqvist),
+    // named as the sample contacts, and answer a message after a moment.
     //
     // Simulator helpers (phoenix-sim Ctrl+F5, the tests):
-    //   __phoenixRuntime.simulateIncomingIm({from?, text?}) -> thread id
-    //   __phoenixRuntime.xmpp.setBuddyPresence(jid, availability, status?)
+    //   __phoenixRuntime.simulateIncomingIm({from?, text?}) -> Promise<thread id | null>
+    //   __phoenixRuntime.xmpp.setBuddyPresence(jid, availability, status?) -> Promise<bool>
     (function instantMessaging() {
         var M = runtime.messaging;
         if (!M) return;
         var SERVICE = "org.webosphoenix.service.xmpp";
-        var TEMPLATE = "com.webosphoenix.xmpp";
-        var IM_SERVICE = "type_jabber";
-        var MSG_KIND = "com.palm.immessage.xmpp:1";
         var SERVER = "chat.example";
-        var MESSAGING_APP = runtime.messagingAppId;
-        var AVAILABLE = 0, BUSY = 2, OFFLINE = 4;
+        var DEFAULT_FROM = "ada.palmer@" + SERVER;
 
-        // The simulated server's people, and how they answer.
-        var ROSTER = [
-            { jid: "ada.palmer@" + SERVER, given: "Ada", family: "Palmer", availability: AVAILABLE, status: "Flashing a Pre 3",
-              replies: ["Ha, yes!", "Cards forever.", "Send me a picture when it boots?", "On my way."] },
-            { jid: "marcus.reyes@" + SERVER, given: "Marcus", family: "Reyes", availability: BUSY, status: "In a meeting until 3",
-              replies: ["In a meeting, will reply after.", "Can't talk now, later?"] },
-            { jid: "lena.okafor@" + SERVER, given: "Lena", family: "Okafor", availability: AVAILABLE, status: "",
-              replies: ["Hi! Just landed.", "Sounds good.", "See you there."] },
-            { jid: "theo.lindqvist@" + SERVER, given: "Theo", family: "Lindqvist", availability: OFFLINE, status: "", replies: [] }
-        ];
-        function rosterEntry(jid) {
-            return ROSTER.filter(function (b) { return b.jid === String(jid).toLowerCase(); })[0] || null;
+        function threadOfMessage(text, from, since) {
+            var found = (M.dbCall("/find", { query: { from: "com.palm.immessage.xmpp:1" } }).results || []).filter(function (m) {
+                return m.folder === "inbox" && m.messageText === text && m.from && m.from.addr === from && (m.localTimestamp || 0) >= since;
+            })[0];
+            return found && found.conversations ? found.conversations[0] : null;
         }
-
-        function db(method, params) { return M.dbCall(method, params); }
-        function tdb(method, params) { return M.tempdbCall(method, params); }
-        function account(id) { return (db("/get", { ids: [id] }).results || [])[0] || null; }
-        function loginState(accountId) {
-            return (db("/find", { query: { from: M.IM_LOGIN_KIND, where: [{ prop: "accountId", op: "=", val: accountId }] } }).results || [])[0] || null;
-        }
-        function signedInAccounts() {
-            return (db("/find", { query: { from: M.IM_LOGIN_KIND } }).results || []).filter(function (s) {
-                return s.serviceName === IM_SERVICE && s.state === "online";
-            });
-        }
-        function personByName(given, family) {
-            return (db("/find", { query: { from: "com.palm.person:1" } }).results || []).filter(function (p) {
-                return p.name && p.name.givenName === given && p.name.familyName === family;
-            })[0] || null;
-        }
-
-        // Presence (the buddies' and your own) as stored for the apps.
-        // The server's view of the buddies' presence, per account
-        // ("xmpp:presence:<account>": jid -> {availability, status}); a buddy
-        // not in it has the roster's.
-        function buddyPresence(accountId, b) {
-            return store.get("xmpp:presence:" + accountId, {})[b.jid] || { availability: b.availability, status: b.status };
-        }
-        function writeRoster(accountId, signedIn) {
-            tdb("/del", { purge: true, query: { from: M.IM_BUDDY_KIND, where: [{ prop: "accountId", op: "=", val: accountId }] } });
-            if (!signedIn) return;
-            tdb("/put", { objects: ROSTER.map(function (b) {
-                var person = personByName(b.given, b.family), pr = buddyPresence(accountId, b);
-                var o = { _kind: M.IM_BUDDY_KIND, accountId: accountId, serviceName: IM_SERVICE, username: b.jid,
-                          displayName: b.given + " " + b.family, availability: pr.availability, personAvailability: pr.availability,
-                          status: pr.status || "", group: "Buddies" };
-                if (person) o.personId = person._id;
-                return o;
-            }) });
-        }
-        function setLogin(acc, availability, customMessage) {
-            var cur = loginState(acc._id);
-            var online = availability !== OFFLINE;
-            var o = { _kind: M.IM_LOGIN_KIND, accountId: acc._id, serviceName: IM_SERVICE, username: acc.username,
-                      state: online ? "online" : "offline", availability: availability,
-                      customMessage: customMessage !== undefined ? customMessage : cur && cur.customMessage || "" };
-            if (cur) { o._id = cur._id; db("/merge", { objects: [o] }); }
-            else db("/put", { objects: [o] });
-            writeRoster(acc._id, online);
-        }
-
-        // ---- Messages ----------------------------------------------------------------------
-
-        function deliver(acc, jid, text) {
-            var b = rosterEntry(jid);
-            var now = Date.now();
-            var r = M.assign({ _kind: MSG_KIND, folder: "inbox", status: "successful", serviceName: IM_SERVICE,
-                               username: acc.username, messageText: text, localTimestamp: now, timestamp: now,
-                               from: { addr: jid, name: b ? b.given + " " + b.family : jid }, flags: { read: false, visible: true } });
-            host.postToHost("notification", { appId: MESSAGING_APP, title: b ? b.given + " " + b.family : jid, body: text,
-                                              params: { threadId: r.threadId }, soundClass: "notifications" });
-            return r.threadId;
-        }
-        var replySeq = {};
-        function send(messageId) {
-            var m = (db("/get", { ids: [messageId] }).results || [])[0];
-            if (!m || m.status !== "pending") return;
-            var login = (db("/find", { query: { from: M.IM_LOGIN_KIND, where: [{ prop: "username", op: "=", val: m.username }] } }).results || [])[0];
-            var st = store.get("settings:state", null);
-            var ok_ = login && login.state === "online" && !(st && st.offlineMode);
-            db("/merge", { objects: [{ _id: m._id, status: "sending" }] });
-            setTimeout(function () {
-                db("/merge", { objects: [{ _id: m._id, status: ok_ ? "successful" : "failed" }] });
-                if (!ok_) return;
-                var jid = m.to && m.to[0] && m.to[0].addr, b = rosterEntry(jid);
-                var acc = account(login.accountId);
-                if (!b || !acc || !b.replies.length) return;
-                var pr = buddyPresence(acc._id, b);
-                if (pr.availability === OFFLINE) return;
-                var n = replySeq[b.jid] = (replySeq[b.jid] || 0) + 1;
-                setTimeout(function () {
-                    var still = loginState(acc._id);
-                    if (still && still.state === "online") deliver(acc, b.jid, b.replies[(n - 1) % b.replies.length]);
-                }, 1800);
-            }, 400);
-        }
-        runtime.registerImTransport(IM_SERVICE, send);
-
-        // ---- The transport's service (Synergy callbacks) -------------------------------------
-
-        register([SERVICE], {
-            // Any address on the simulated server with a password signs in.
-            "/checkCredentials": function (p, reply) {
-                var user = String(p.username || "").trim().toLowerCase();
-                if (!/^[^@\s]+@[^@\s]+$/.test(user))
-                    return reply({ returnValue: false, errorCode: "401_UNAUTHORIZED", errorText: "Enter your address, like you@" + SERVER });
-                if (user.split("@")[1] !== SERVER)
-                    return reply({ returnValue: false, errorCode: "HOST_NOT_FOUND", errorText: "Only the simulated server, " + SERVER + ", is reachable here" });
-                if (!p.password)
-                    return reply({ returnValue: false, errorCode: "401_UNAUTHORIZED", errorText: "Enter your password" });
-                reply(ok({ credentials: { common: { password: String(p.password) } }, config: { server: SERVER } }));
-            },
-            "/onCreate": function (p, reply) { reply(ok()); },
-            "/onEnabled": function (p, reply) {
-                var acc = account(p.accountId);
-                if (!acc) return reply(fail(-1, "No such account: " + p.accountId));
-                setLogin(acc, p.enabled ? AVAILABLE : OFFLINE);
-                reply(ok());
-            },
-            // The account goes: its state, roster, messages and conversations.
-            "/onDelete": function (p, reply) {
-                var acc = account(p.accountId) || { _id: p.accountId, username: "" };
-                writeRoster(acc._id, false);
-                db("/del", { query: { from: M.IM_LOGIN_KIND, where: [{ prop: "accountId", op: "=", val: acc._id }] } });
-                var threads = (db("/find", { query: { from: "com.palm.chatthread:1" } }).results || []).filter(function (t) {
-                    return t.replyService === IM_SERVICE && (!acc.username || t.username === acc.username);
-                });
-                threads.forEach(function (t) {
-                    db("/del", { query: { from: "com.palm.message:1", where: [{ prop: "conversations", op: "=", val: t._id }] } });
-                    db("/del", { ids: [t._id] });
-                });
-                reply(ok());
-            },
-            "/setPresence": function (p, reply) {
-                var acc = account(p.accountId);
-                if (!acc) return reply(fail(-1, "No such account: " + p.accountId));
-                var a = Number(p.availability);
-                if ([AVAILABLE, BUSY, OFFLINE].indexOf(a) < 0) return reply(fail(-1, "availability: 0, 2 or 4"));
-                setLogin(acc, a, p.customMessage);
-                reply(ok());
-            }
-        });
-
-        // ---- Helpers for the simulator and the tests ----------------------------------------
 
         runtime.simulateIncomingIm = function (opts) {
             opts = opts || {};
-            var login = signedInAccounts()[0];
-            if (!login) return null;
-            var acc = account(login.accountId);
-            return acc ? deliver(acc, opts.from || ROSTER[0].jid, opts.text || "Are you on Phoenix yet?") : null;
+            var from = opts.from || DEFAULT_FROM, text = opts.text || "Are you on Phoenix yet?", since = Date.now() - 1000;
+            if (!runtime.connectorDemo) return Promise.resolve(null);
+            return runtime.connectorDemo(SERVICE, { op: "deliver", from: from, text: text }).then(function (r) {
+                if (!r || r.returnValue === false) return null;
+                return new Promise(function (resolve) {
+                    var tries = 0;
+                    (function look() {
+                        var t = threadOfMessage(text, from, since);
+                        if (t || ++tries > 40) return resolve(t);
+                        setTimeout(look, 150);
+                    })();
+                });
+            });
         };
         runtime.xmpp = {
             server: SERVER,
-            roster: function () { return ROSTER.map(function (b) { return { jid: b.jid, name: b.given + " " + b.family }; }); },
+            // 0 available, 2 busy, 4 offline (webOS's numbers) as the server's presence.
             setBuddyPresence: function (jid, availability, status) {
-                var b = rosterEntry(jid);
-                if (!b) return false;
-                signedInAccounts().forEach(function (login) {
-                    var mine = store.get("xmpp:presence:" + login.accountId, {});
-                    mine[b.jid] = { availability: availability, status: status || "" };
-                    store.set("xmpp:presence:" + login.accountId, mine);
-                    writeRoster(login.accountId, true);
+                var show = availability === 4 ? "unavailable" : availability === 2 ? "away" : "available";
+                if (!runtime.connectorDemo) return Promise.resolve(false);
+                return runtime.connectorDemo(SERVICE, { op: "presence", jid: jid, show: show, status: status || "" }).then(function (r) {
+                    return !!(r && r.done);
                 });
-                return true;
             }
         };
     })();
+
 
     // ================================================================================
     // Media services (simulated webOS OSE APIs used by apps/camera, apps/photos, apps/music)
@@ -9947,7 +9819,139 @@
                 reply(ok({ path: path, size: size }));
             }
         };
-        register(["org.webosphoenix.filemanager"], methods);
+        // ---- Drives (docs/SHARE-AND-FILES.md "Drives") --------------------------------------------
+        //
+        // Every account with the DOCUMENTS capability is a folder under
+        // /media/drives, as on a device (apps/files/service/filemanager.js):
+        // the connector kit's router (@phoenix/connector-kit lib/drives.js)
+        // takes those paths, and a copy with one side on a drive, and asks
+        // the account's connector service (block "Synergy connectors on the
+        // kit"), with this store's methods for the device's files. A drive's
+        // transfers read and write the device's files through localFiles
+        // (big files in the media store, as the Camera's pictures).
+        var DRIVES = "/media/drives";
+        function onDrive(x) { var p = typeof x === "string" ? norm(x) : null; return !!p && (p === DRIVES || p.indexOf(DRIVES + "/") === 0); }
+        function asPromise(name) {
+            return function (p) { return new Promise(function (resolve) { methods["/" + name](p || {}, resolve); }); };
+        }
+        var localMethods = {};
+        ["list", "stat", "mkdir", "remove", "read", "write", "copy", "move", "search"].forEach(function (n) { localMethods[n] = asPromise(n); });
+        var driveRouter = null;
+        function drives() {
+            if (!driveRouter) {
+                var lib = nodeServiceLoader(NODE_MODULES + "@phoenix/connector-kit/", "Drives")("lib/drives.js");
+                var bus = nodeServiceLuna("org.webosphoenix.filemanager");
+                driveRouter = lib.createDriveRouter({ call: function (uri, params) { return bus.call(uri, params); }, local: localMethods,
+                                                      log: function (m) { console.info("[drives] " + m); } });
+            }
+            return driveRouter;
+        }
+        function mediaBlob(p) { return runtime.mediaFiles ? runtime.mediaFiles.read(p) : Promise.resolve(null); }
+        var localFiles = {
+            size: function (path) {
+                var p = norm(path), n = p && load().nodes[p];
+                if (n && n.t === "d") return Promise.reject(Object.assign(new Error("Is a folder: " + p), { code: E.IS_DIR }));
+                if (n && !n.media && n.size >= 0) return Promise.resolve(n.size);
+                if (n && !n.media) return bytesOf(n, p).then(function (b) { return b.length; });
+                return mediaBlob(p).then(function (b) {
+                    if (!b) throw Object.assign(new Error("No such file: " + p), { code: E.NOT_FOUND });
+                    return b.size;
+                });
+            },
+            read: function (path, offset, length) {
+                var p = norm(path), n = p && load().nodes[p];
+                if (n && !n.media) return bytesOf(n, p).then(function (b) { return b.subarray(offset, offset + length); });
+                return mediaBlob(p).then(function (b) {
+                    if (!b) throw Object.assign(new Error("No such file: " + p), { code: E.NOT_FOUND });
+                    return blobBytes(b.slice(offset, offset + length));
+                });
+            },
+            // Under /media/internal the bytes go to the media store; elsewhere inline.
+            write: function (path, bytes, append) {
+                var p = norm(path);
+                if (!p) return Promise.reject(new Error("Not a path: " + path));
+                var put = p.indexOf(MEDIA_ROOT + "/") === 0 && runtime.mediaFiles
+                    ? (append ? mediaBlob(p) : Promise.resolve(null)).then(function (old) {
+                        var blob = new Blob(old ? [old, bytes] : [bytes], { type: mimeOf(p) });
+                        return runtime.mediaFiles.write(p, blob).then(function () { return { media: true, size: blob.size }; });
+                    })
+                    : (append ? localFiles.read(p, 0, 1 << 30).catch(function () { return new Uint8Array(0); }) : Promise.resolve(new Uint8Array(0))).then(function (old) {
+                        var all = new Uint8Array(old.length + bytes.length);
+                        all.set(old); all.set(bytes, old.length);
+                        if (all.length > INLINE_LIMIT) throw Object.assign(new Error("The simulator keeps files outside /media/internal up to 1 MB"), { code: E.TOO_LARGE });
+                        return { data: toB64(all), size: all.length };
+                    });
+                return put.then(function (r) {
+                    var v = load();
+                    for (var d = parentOf(p), missing = []; !v.nodes[d] && d !== "/"; d = parentOf(d)) missing.unshift(d);
+                    missing.forEach(function (dir) { v.nodes[dir] = { t: "d", m: Date.now(), mode: 493 }; });
+                    v.nodes[p] = r.media ? { t: "f", m: Date.now(), mode: 420, media: true, size: r.size }
+                                         : { t: "f", m: Date.now(), mode: 420, data: r.data, enc: "base64", size: r.size };
+                    if (r.media) v.mediaSeen[p] = true;
+                    touch(v, parentOf(p));
+                    if (!save(v)) throw Object.assign(new Error("Not enough room to store " + p), { code: E.TOO_LARGE });
+                });
+            },
+            rename: function (from, to) {
+                return localFiles.size(from).then(function (size) { return localFiles.read(from, 0, size); }).then(function (b) {
+                    return localFiles.write(to, b, false);
+                }).then(function () { return localFiles.remove(from); });
+            },
+            remove: function (path) {
+                var p = norm(path), v = load(), n = p && v.nodes[p];
+                if (runtime.mediaFiles && p) runtime.mediaFiles.remove(p);
+                if (n) { delete v.nodes[p]; delete v.mediaSeen[p]; save(v); }
+                return Promise.resolve();
+            }
+        };
+        function viaDrives(name) {
+            return function (p, reply) {
+                var r;
+                try { r = drives(); } catch (e) { return reply(fail(E.IO, "The drives are not available here: " + (e && e.message || e))); }
+                r[name](p || {}).then(reply, ioError(reply));
+            };
+        }
+        var registered = {};
+        Object.keys(methods).forEach(function (k) {
+            registered[k] = function (p, reply, ctx) {
+                p = p || {};
+                var routed = k === "/search" ? onDrive(p.path) : (onDrive(p.path) || onDrive(p.from) || onDrive(p.to));
+                if (routed) return viaDrives(k.slice(1))(p, reply);
+                methods[k](p, reply, ctx);
+            };
+        });
+        // /media shows the drives' folder while there is a drive account.
+        registered["/list"] = function (p, reply, ctx) {
+            p = p || {};
+            if (onDrive(p.path)) return viaDrives("list")(p, reply);
+            methods["/list"](p, function (r) {
+                if (!r.returnValue || norm(p.path) !== "/media") return reply(r);
+                var list;
+                try { list = drives().drives(); } catch (e) { return reply(r); }
+                list.then(function (d) {
+                    if (d.length && !r.entries.some(function (e) { return e.name === "drives"; }))
+                        r.entries.push({ name: "drives", path: DRIVES, type: "directory", size: 0, mtime: 0, mode: 365, readOnly: true });
+                    reply(r);
+                }, function () { reply(r); });
+            }, ctx);
+        };
+        // open {path}: a file to read by path (a drive's: its copy on the device).
+        registered["/open"] = function (p, reply) {
+            p = p || {};
+            if (onDrive(p.path)) return viaDrives("open")(p, reply);
+            var path = norm(p.path), n = path && load().nodes[path];
+            if (!n) return reply(fail(E.NOT_FOUND, "No such file or directory: " + p.path));
+            if (n.t === "d") return reply(fail(E.IS_DIR, "Is a folder: " + path));
+            reply(ok({ path: path }));
+        };
+        registered["/quota"] = viaDrives("quota");
+        registered["/transfers"] = function (p, reply) {
+            var r;
+            try { r = drives(); } catch (e) { return reply(ok({ transfers: [] })); }
+            r.transfers(p || {}).then(reply, function () { reply(ok({ transfers: [] })); });
+        };
+        registered["/cancel"] = viaDrives("cancel");
+        register(["org.webosphoenix.filemanager"], registered);
 
         // com.palm.appinstaller (Files' .ipk sheet): see "Installing apps" below.
 
@@ -10183,6 +10187,8 @@
             },
             /** Throw the virtual filesystem away and seed it again. */
             reset: function () { store.set(VFS_KEY, seed()); },
+            /** The device's files for a drive's transfers (the connector kit's LocalFiles). */
+            localFiles: localFiles,
             /** Write a file (base64), making its folders, as a service of the
                 system writes one (com.palm.image's pictures). False when it
                 does not fit in this store. */
@@ -11890,23 +11896,40 @@
     // The OAuth sign-ins of Synergy connectors (docs/SYNERGY-CONNECTORS.md
     // 4.1): the device's own service code (services/oauth/oauthservice.js,
     // loaded from /usr/palm/services/org.webosphoenix.service.oauth/), with
-    // what the simulator has for its pieces:
+    // what the simulator has for its pieces. Two ways to show the provider's
+    // page:
     //
-    //   the browser sheet   the system's sheet page (org.webosphoenix.sharesheet,
-    //                       kind "signin") over the card in front, showing the
-    //                       provider's page with its address in a web view
-    //                       (BrowserAdapter above: a native view in
-    //                       phoenix-sim, an <iframe> elsewhere). The page
-    //                       asking cannot read it; the sheet hears the address
-    //                       change and closes when it reaches the redirect;
-    //   the redirect        this simulator's own address of the sheet app's
-    //                       signed-in.html (same origin, so even the iframe
-    //                       engine sees it arrive);
+    //   the browser sheet   (the default) the system's sheet page
+    //                       (org.webosphoenix.sharesheet, kind "signin") over
+    //                       the card in front, showing the provider's page
+    //                       with its address in a web view (BrowserAdapter
+    //                       above: a native view in phoenix-sim, an <iframe>
+    //                       elsewhere). The page asking cannot read it; the
+    //                       sheet hears the address change and closes when it
+    //                       reaches the redirect, this simulator's own address
+    //                       of the sheet app's signed-in.html (same origin, so
+    //                       even the iframe engine sees it arrive);
+    //   the Sign In card    (runtime.oauthUseCard(true), the store's
+    //                       "oauth:signInCard") the device's way
+    //                       (services/oauth/signincard.js, the same module):
+    //                       the card org.webosphoenix.signin (apps/signin),
+    //                       launched with {session}; its page asks pending
+    //                       for the address (the store's "oauth:cardPending"
+    //                       here, the card's page being another page) and
+    //                       goes there; the redirect is the RFC 8252
+    //                       loopback address, which phoenix-sim's card stops
+    //                       at instead of a listener (WebAppWindow's
+    //                       "signInRedirect"), and the card's close comes from
+    //                       the shell (SimWindowSource._appGone); both reach
+    //                       the page waiting as oauthCardEvent, through the
+    //                       store ("oauth:cardEvent"). The listener itself is
+    //                       a device's (loopback.js): tested in Node, and end
+    //                       to end with this card's page in Chromium
+    //                       (tools/test-signin-card.cjs);
     //   the key store       the runtime's credential storage: the shared store
     //                       ("oauth:keys"), beside the accounts' credentials
-    //                       ("accountCredentials"). On a device: see
-    //                       services/oauth/service.js (a placeholder file
-    //                       until org.webosphoenix.service.keystore);
+    //                       ("accountCredentials"). On a device: sealed with
+    //                       AES-256-GCM (services/oauth/keystore.js);
     //   who asks            ctx.caller (a service in the page, nodeServiceLuna),
     //                       else the page's app. A connector's sign-in page may
     //                       act for the service its template names.
@@ -11914,9 +11937,18 @@
         var SERVICE = "org.webosphoenix.service.oauth";
         var loadModule = nodeServiceLoader("/usr/palm/services/" + SERVICE + "/", "OAuth service");
         var KEYS = "oauth:keys";
-        var methods = null;
+        var CARD_FLAG = "oauth:signInCard";
+        var CARD_PENDING = "oauth:cardPending";
+        var CARD_EVENT = "oauth:cardEvent";
+        var CARD_APP = "org.webosphoenix.signin";
+        var LOOPBACK = "http://127.0.0.1/oauth/callback";
+        var FIXED_LOOPBACK = "http://127.0.0.1:47613/oauth/callback";   // services/oauth/device.js FIXED_PORT
+        var methods = null, card = null;
 
-        function redirectUri() {
+        function useCard() { return store.get(CARD_FLAG, false) === true; }
+        runtime.oauthUseCard = function (on) { store.set(CARD_FLAG, !!on); };
+
+        function sheetRedirectUri() {
             var origin = String(global.location.href).replace(/^([a-z][a-z0-9+.-]*:\/\/[^\/]*).*$/i, "$1");
             return origin + "/usr/palm/applications/org.webosphoenix.sharesheet/signed-in.html";
         }
@@ -11929,22 +11961,119 @@
             if (!rt.signInSheet) return Promise.reject(Object.assign(new Error("No sign-in sheet in this page"), { errorCode: "UNSUPPORTED" }));
             return rt.signInSheet(url, prefix);
         }
+
+        // ---- The Sign In card's pieces in this page --------------------------------------
+
+        // The loopback stand-ins waiting here: state -> resolve.
+        var waiting = {};
+        var seen = {};
+        function cardEvent(ev) {
+            if (!ev || !ev.id || seen[ev.id]) return;
+            seen[ev.id] = true;
+            if (ev.type === "redirect") {
+                var q = loadModule("oauthservice.js").queryOf(ev.url);
+                if (waiting[q.state]) waiting[q.state](ev.url);
+            } else if (ev.type === "closed" && card) {
+                card.appClosed();
+            }
+        }
+        // From phoenix-sim (SimWindowSource._oauthCardEvent), in one page;
+        // the others hear it through the store.
+        runtime.oauthCardEvent = function (ev) {
+            var e = Object.assign({ id: Date.now() + "-" + Math.random().toString(36).slice(2, 8) }, ev || {});
+            store.set(CARD_EVENT, e);
+            cardEvent(e);
+        };
+        try {
+            global.addEventListener("storage", function (e) {
+                if (e.key === "phoenix:" + CARD_EVENT) cardEvent(store.get(CARD_EVENT, null));
+            });
+        } catch (e) { /* no storage events */ }
+
+        // The simulator's stand-in for loopback.js: the address with the
+        // port asked for (or a made-up ephemeral one), answered by the
+        // card's "signInRedirect" for this sign-in's state.
+        function fakeLoopback(requested, opts) {
+            var lb = loadModule("loopback.js");
+            var target = requested === sheetRedirectUri() ? LOOPBACK : requested;
+            if (!lb.isLoopback(target))
+                return Promise.reject(Object.assign(new Error("A sign-in on this device comes back to " + LOOPBACK + ", not " + requested), { errorCode: "BAD_PARAMS" }));
+            var port = lb.portOf(target) || 49152 + Math.floor(Math.random() * 16000);
+            var state = opts && opts.state;
+            var resolveResult;
+            var result = new Promise(function (r) { resolveResult = r; });
+            waiting[state] = function (url) { delete waiting[state]; resolveResult(url); };
+            return Promise.resolve({
+                redirectUri: "http://127.0.0.1:" + port + "/oauth/callback", port: port, result: result,
+                close: function () { if (waiting[state]) { delete waiting[state]; resolveResult(null); } }
+            });
+        }
+
+        function closeApp(appId) {
+            if (!runtime.hostOp) return Promise.resolve();
+            return runtime.hostOp("processId", { appId: appId }).then(function (r) {
+                return r && r.processId ? runtime.hostOp("close", { processId: r.processId }) : null;
+            });
+        }
+
+        function signInCard() {
+            if (!card) {
+                card = loadModule("signincard.js").createSignInCard({
+                    launch: function (params) {
+                        var cur = card.current();
+                        store.set(CARD_PENDING, { session: params.session, url: cur ? cur.url : "" });
+                        host.postToHost("launch", { id: CARD_APP, params: params });
+                        return Promise.resolve({ returnValue: true });
+                    },
+                    close: function () {
+                        store.set(CARD_PENDING, null);
+                        return closeApp(CARD_APP);
+                    },
+                    // phoenix-sim's card draws its bar from its own page's
+                    // address (WebAppWindow); a device's shell hears it.
+                    bar: function () {},
+                    randomId: function () {
+                        var b = global.crypto.getRandomValues(new Uint8Array(12)), s = "";
+                        for (var i = 0; i < b.length; i++) s += ("0" + b[i].toString(16)).slice(-2);
+                        return s;
+                    },
+                    log: function (m) { console.info("[oauth] " + m); }
+                });
+            }
+            return card;
+        }
+
         function service() {
             if (!methods) {
                 var subtle = global.crypto && global.crypto.subtle;
-                methods = loadModule("oauthservice.js").createOAuthService({
+                var env = {
                     request: function (req) { return proxiedRequest(req); },
                     keystore: {
                         get: function (id) { return Promise.resolve(store.get(KEYS, {})[id]); },
                         put: function (id, v) { var all = store.get(KEYS, {}); all[id] = v; store.set(KEYS, all); return Promise.resolve(); },
-                        del: function (id) { var all = store.get(KEYS, {}); delete all[id]; store.set(KEYS, all); return Promise.resolve(); }
+                        del: function (id) { var all = store.get(KEYS, {}); delete all[id]; store.set(KEYS, all); return Promise.resolve(); },
+                        wipe: function () { store.set(KEYS, {}); return Promise.resolve(); }
                     },
-                    sheet: sheet,
+                    redirect: function (requested, opts) {
+                        return useCard() ? fakeLoopback(requested, opts) : Promise.resolve({ redirectUri: requested });
+                    },
+                    sheet: function (url, redirectUri, pending) {
+                        return useCard() ? signInCard().show(url, redirectUri, pending) : sheet(url, redirectUri);
+                    },
+                    // The card's page is another page: what it asks is in the store.
+                    card: {
+                        pending: function (p, caller) {
+                            if (caller !== CARD_APP) return { returnValue: false, errorCode: "PERMISSION_DENIED", errorText: "Only the Sign In card asks for this" };
+                            var rec = store.get(CARD_PENDING, null);
+                            if (!rec || !p.session || rec.session !== p.session) return { returnValue: false, errorCode: "NOT_FOUND", errorText: "No such sign-in (it has ended)" };
+                            var h = loadModule("signincard.js").hostOf(rec.url);
+                            return { returnValue: true, url: rec.url, host: h.host, secure: h.secure };
+                        }
+                    },
                     crypto: {
                         randomBytes: function (n) { return global.crypto.getRandomValues(new Uint8Array(n)); },
                         sha256: function (bytes) { return subtle.digest("SHA-256", bytes).then(function (d) { return new Uint8Array(d); }); }
                     },
-                    redirectUri: redirectUri(),
                     // A connector's sign-in page (its template's customUI app)
                     // signs in for the template's service.
                     mayActFor: function (caller, owner) {
@@ -11954,13 +12083,20 @@
                                 (t.capabilityProviders || []).some(function (cp) { return String(cp.implementation || "").indexOf("//" + owner + "/") > 0; });
                         });
                     },
+                    // Erase: the shell's (a device's luna-surfacemanager; the
+                    // simulator's system UI page) and the system manager's.
+                    mayWipe: function (caller) { return ["com.webos.surfacemanager", "com.palm.systemmanager", "com.palm.systemui"].indexOf(caller) >= 0; },
                     log: function (m) { console.info("[oauth] " + m); }
-                });
+                };
+                // The addresses follow the way chosen (redirectUri {}).
+                Object.defineProperty(env, "redirectUri", { get: function () { return useCard() ? LOOPBACK : sheetRedirectUri(); } });
+                Object.defineProperty(env, "fixedRedirectUri", { get: function () { return useCard() ? FIXED_LOOPBACK : sheetRedirectUri(); } });
+                methods = loadModule("oauthservice.js").createOAuthService(env);
             }
             return methods;
         }
         var serviceMethods = {};
-        ["authorize", "token", "forget", "client", "redirectUri"].forEach(function (name) {
+        ["authorize", "token", "forget", "client", "redirectUri", "pending", "wipe"].forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
                 var m;
                 try { m = service(); } catch (e) { return reply(fail("UNKNOWN_ERROR", String(e.message || e))); }
@@ -12034,6 +12170,16 @@
         function readFile(path) {
             var type = MIME[String(path).replace(/^.*\./, "").toLowerCase()] || "application/octet-stream";
             var fromStore = runtime.mediaFiles ? runtime.mediaFiles.read(path) : Promise.resolve(null);
+            // A file the apps wrote (a picture picked in Files, one received): the file manager's store.
+            fromStore = fromStore.then(function (blob) {
+                if (blob) return blob;
+                return new Promise(function (resolve) {
+                    dispatch("luna://org.webosphoenix.filemanager/read", { path: path, encoding: "base64" }, function (r) {
+                        if (!r || !r.returnValue || typeof r.data !== "string") return resolve(null);
+                        resolve(new Blob([fromBase64(r.data)], { type: type }));
+                    }, { cancelled: function () { return false; }, onCancel: null });
+                });
+            });
             return fromStore.then(function (blob) {
                 // Not a stored file: one of the system's (the samples), from where it is served.
                 return blob || global.fetch(path).then(function (res) {
@@ -12071,6 +12217,242 @@
             }, function () { return url; });
         }
 
+        // /etc/palm/<name> of the image (a drive provider's client id:
+        // docs/DEVELOPER-APPS.md): the simulator's store "systemConfig:<name>"
+        // first (a developer's own registration, the tests' servers), else
+        // the file the rootfs serves, if any.
+        function systemConfig(name) {
+            var kept = store.get("systemConfig:" + name, null);
+            if (kept) return Promise.resolve(kept);
+            try { return Promise.resolve(JSON.parse(PalmSystem.getResource("/etc/palm/" + name) || "null")); } catch (e) { return Promise.resolve(null); }
+        }
+
+        // ---- Connections that stay open (definition.connection) ---------------------------------
+        //
+        // A device runs one copy of a connector's service; the simulator one
+        // per page. A connection (an XMPP stream, a Matrix sync) is kept by
+        // one page at a time: the one that holds "connector:live:<service>"
+        // in the shared store (every few seconds it says it is still there;
+        // a page gone quiet for 15 s is taken over). The system UI's page,
+        // which runs as long as the simulator does, opens the accounts'
+        // connections as it starts. Another page asked for something that
+        // needs the connection (Messaging sending, "Sync now") gets
+        // NOT_LIVE_HERE from the kit and hands the call to the keeping page
+        // through the store ("connector:call:<id>", answered in
+        // "connector:reply:<id>").
+        var PAGE_ID = "p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+        var LIVE_FRESH_MS = 15000, LIVE_BEAT_MS = 4000, CALL_WAIT_MS = 45000;
+        var liveHeld = {}, beatTimer = null, callSeq = 0;
+        function beat() {
+            store.set("connector:alive:" + PAGE_ID, Date.now());
+            Object.keys(liveHeld).forEach(function (svc) { store.set("connector:live:" + svc, { page: PAGE_ID, at: Date.now() }); });
+        }
+        function startBeat() {
+            beat();
+            if (!beatTimer) beatTimer = setInterval(beat, LIVE_BEAT_MS);
+        }
+        // A sync lock is held while its page runs (a page gone, its card
+        // closed mid-sync, leaves none behind) and for at most LOCK_MS.
+        function lockHeld(v) {
+            if (typeof v === "number") return Date.now() - v < LOCK_MS;
+            if (!v || Date.now() - (v.at || 0) >= LOCK_MS) return false;
+            return v.page === PAGE_ID || Date.now() - store.get("connector:alive:" + v.page, 0) < LIVE_FRESH_MS;
+        }
+        function claimLive(service) {
+            if (liveHeld[service]) return true;
+            var o = store.get("connector:live:" + service, null);
+            if (o && o.page !== PAGE_ID && Date.now() - (o.at || 0) < LIVE_FRESH_MS) return false;
+            liveHeld[service] = true;
+            startBeat();
+            return true;
+        }
+        try {
+            global.addEventListener("pagehide", function () {
+                store.remove("connector:alive:" + PAGE_ID);
+                Object.keys(liveHeld).forEach(function (svc) {
+                    var o = store.get("connector:live:" + svc, null);
+                    if (o && o.page === PAGE_ID) store.remove("connector:live:" + svc);
+                });
+            });
+        } catch (e) { /* no window events */ }
+
+        // A call for the page that keeps the connection.
+        function forwardCall(service, method, params) {
+            var id = PAGE_ID + "-" + (++callSeq);
+            return new Promise(function (resolve) {
+                var done = false, timer = null, poll = null;
+                function finish(r) {
+                    if (done) return;
+                    done = true;
+                    clearTimeout(timer);
+                    clearInterval(poll);
+                    try { global.removeEventListener("storage", onStorage); } catch (e) { /* none */ }
+                    store.remove("connector:call:" + id);
+                    store.remove("connector:reply:" + id);
+                    resolve(r);
+                }
+                function check() { var r = store.get("connector:reply:" + id, null); if (r) finish(r); }
+                function onStorage(e) { if (e.key === "phoenix:connector:reply:" + id) check(); }
+                try { global.addEventListener("storage", onStorage); } catch (e) { /* none */ }
+                poll = setInterval(check, 500);
+                timer = setTimeout(function () {
+                    finish(fail("CONNECTION_FAILED", "The page that keeps the connection did not answer"));
+                }, CALL_WAIT_MS);
+                store.set("connector:call:" + id, { service: service, method: method, params: params, at: Date.now() });
+            });
+        }
+        function answerCall(key) {
+            var c = store.get(key, null);
+            if (!c || !liveHeld[c.service] || !hosted[c.service]) return;
+            store.remove(key);
+            var id = key.slice("connector:call:".length);
+            var run = c.method === "__demo" ? demoOp(c.service, c.params) : callHere(c.service, c.method, c.params);
+            Promise.resolve(run).then(function (r) {
+                store.set("connector:reply:" + id, r || ok());
+            }, function (e) {
+                store.set("connector:reply:" + id, fail("UNKNOWN_ERROR", String(e && e.message || e)));
+            });
+        }
+        try {
+            global.addEventListener("storage", function (e) {
+                if (e.key && e.key.indexOf("phoenix:connector:call:") === 0 && e.newValue) answerCall(e.key.slice(8));
+            });
+        } catch (e) { /* no window events */ }
+        function callHere(service, name, p) {
+            var m = hosted[service].load();
+            if (!m.methods[name]) return Promise.resolve(fail(-1, "No method " + name + " on " + service));
+            return m.methods[name](p);
+        }
+
+        // ---- Sockets: WebSocket from the page; the demo servers ------------------------------------
+        //
+        // A page has no TCP: a connector reaches its server by WebSocket
+        // (XMPP's RFC 7395, found through the domain's host-meta). The
+        // simulator's demo servers answer for their own domains (chat.example:
+        // the Jabber connector's fake server, apps/connectors/xmpp/service/test), in the
+        // page that keeps the connection.
+        var demos = {};
+        var DEMO_HOSTS = {
+            "org.webosphoenix.service.xmpp": { hosts: ["chat.example", "upload.chat.example"], dir: "/usr/share/phoenix/demo/xmpp/",
+                                               module: "test/fake-xmpp.cjs", make: "demoServer" },
+            "org.webosphoenix.service.matrix": { hosts: ["matrix.example"], dir: "/usr/share/phoenix/demo/matrix/",
+                                                 module: "test/fake-homeserver.cjs", make: "demoHomeserver" },
+            // No server but a system helper: Delta Chat's core, faked (its
+            // test's fake deltachat-rpc-server), for addresses at
+            // chatmail.example only.
+            "org.webosphoenix.service.deltachat": { hosts: [], helper: "deltachat-rpc-server", dir: "/usr/share/phoenix/demo/deltachat/",
+                                                    module: "test/fake-rpc-server.cjs", make: "demoRpcServer" },
+            // TDLib, faked (its test's fake tdjson): reached only where the
+            // checkout has a Telegram app id for the simulator
+            // (runtime/connector-settings/, not in the repository); without
+            // one the account says it is not available in this build.
+            "org.webosphoenix.service.telegram": { hosts: [], helper: "phoenix-tdjson", dir: "/usr/share/phoenix/demo/telegram/",
+                                                   module: "test/fake-tdjson.cjs", make: "demoTdjson" }
+        };
+        function demoServer(service, host) {
+            var d = DEMO_HOSTS[service];
+            if (!d || d.hosts.indexOf(String(host).replace(/:\d+$/, "")) < 0 || !hosted[service]) return null;
+            return loadDemo(service);
+        }
+        function demoHelper(service, name) {
+            var d = DEMO_HOSTS[service];
+            return d && d.helper === name && hosted[service] ? loadDemo(service) : null;
+        }
+        function loadDemo(service) {
+            var d = DEMO_HOSTS[service];
+            if (!demos[service]) {
+                try {
+                    var mod = nodeServiceLoader(d.dir, service + " demo")(d.module);
+                    demos[service] = mod[d.make]();
+                } catch (e) {
+                    console.warn("[phoenix-runtime] no demo server for " + service + ": " + (e && e.message));
+                    demos[service] = false;
+                }
+            }
+            return demos[service] || null;
+        }
+        function hostOf(url) { try { return new URL(url).host; } catch (e) { return ""; } }
+        function websocket(service, url, protocols) {
+            var demo = demoServer(service, hostOf(url));
+            if (demo) return Promise.resolve(demo.socket({ framing: "message", secure: true }));
+            return new Promise(function (resolve, reject) {
+                var ws;
+                try { ws = new global.WebSocket(url, protocols); } catch (e) { return reject(Object.assign(new Error(String(e.message || e)), { code: "ECONNREFUSED" })); }
+                var dataFns = [], closeFns = [], opened = false;
+                ws.onopen = function () {
+                    opened = true;
+                    resolve({
+                        framing: "message", secure: /^wss:/.test(url),
+                        write: function (t) { try { ws.send(t); } catch (e) { /* closed */ } },
+                        close: function () { try { ws.close(); } catch (e) { /* closed */ } },
+                        onData: function (f) { dataFns.push(f); },
+                        onClose: function (f) { closeFns.push(f); }
+                    });
+                };
+                ws.onerror = function () { if (!opened) reject(Object.assign(new Error("Could not connect to " + url), { code: "ECONNREFUSED" })); };
+                ws.onmessage = function (m) { var t = String(m.data); dataFns.forEach(function (f) { f(t); }); };
+                ws.onclose = function () { if (opened) closeFns.forEach(function (f) { f(); }); };
+            });
+        }
+        function requestFor(service) {
+            return function (req) {
+                var demo = demoServer(service, hostOf(req.url));
+                return demo ? demo.request(req) : request(req);
+            };
+        }
+        // What the demo servers do for the simulator's menu and the tests,
+        // in the page that keeps the connection.
+        function demoOp(service, p) {
+            var demo = demos[service];
+            if (!demo) return Promise.resolve(fail("NOT_FOUND", "No demo server runs here"));
+            if (p.op === "deliver") {
+                var user = demo.signedIn();
+                if (!user) return Promise.resolve(fail("NOT_FOUND", "No account is signed in to the demo server"));
+                // {picture: true}: the last picture put on the server, sent back.
+                if (!demo.deliver(p.from, user, p.text, { picture: !!p.picture }))
+                    return Promise.resolve(fail("NOT_FOUND", "Nothing to send back yet"));
+                return Promise.resolve(ok({ to: user }));
+            }
+            if (p.op === "presence" && demo.setPresence) return Promise.resolve(ok({ done: demo.setPresence(p.jid, p.show, p.status) }));
+            return Promise.resolve(fail(-1, "No demo op " + p.op));
+        }
+        runtime.connectorDemo = function (service, p) {
+            if (liveHeld[service] && demos[service]) return demoOp(service, p);
+            var o = store.get("connector:live:" + service, null);
+            if (o && o.page !== PAGE_ID && Date.now() - (o.at || 0) < LIVE_FRESH_MS) return forwardCall(service, "__demo", p);
+            // No page keeps the connections: this one does, from now.
+            connectAll();
+            return new Promise(function (resolve) {
+                var tries = 0;
+                (function wait() {
+                    var d = demos[service];
+                    if ((d && d.signedIn()) || ++tries > 60) return resolve(demoOp(service, p));
+                    setTimeout(wait, 250);
+                })();
+            });
+        };
+
+        // Files a connector keeps (pictures received): the Files block's
+        // store, as avatars are (up to 1 MB each in the simulator).
+        function writeFile(service, name, bytes) {
+            var path = "/media/internal/.phoenix/connector-files/" + service + "/" + name;
+            var fm = runtime.fileManager;
+            if (fm && fm.store && fm.store(path, toBase64(bytes))) return Promise.resolve(path);
+            return Promise.reject(Object.assign(new Error("Too large to keep here: " + name), { errorCode: "SHARE_TOO_LARGE" }));
+        }
+        // Build-time settings (/etc/phoenix/connectors/<service>.json: an app
+        // id registered with a service), from the checkout's
+        // runtime/connector-settings/ (not in the repository; README there).
+        function settings(service) {
+            try { return Promise.resolve(JSON.parse(PalmSystem.getResource("/etc/phoenix/connectors/" + service + ".json") || "null")); }
+            catch (e) { return Promise.resolve(null); }
+        }
+        // System helpers a first-party connector starts (TDLib's, Delta
+        // Chat's JSON interfaces): none run in a page. A simulated one is
+        // registered here by name (runtime.registerHelper) for demos and tests.
+        var helpers = {};
+        runtime.registerHelper = function (name, make) { helpers[name] = make; };
+
         function host(appId, service) {
             if (hosted[service]) return;
             var dir = "/usr/palm/applications/" + appId + "/service/";
@@ -12082,9 +12464,21 @@
                 var kit = loadModule("@phoenix/connector-kit");
                 var def = loadModule("connector.js");
                 made = { def: def, kit: kit, methods: kit.createConnectorService(def, {
-                    luna: luna, request: request, readFile: readFile,
+                    luna: luna, request: requestFor(service), readFile: readFile,
+                    files: runtime.fileManager && runtime.fileManager.localFiles,
+                    systemConfig: systemConfig,
                     cachePhoto: function (key, url) { return cachePhoto(service, key, url); },
-                    log: function (m) { console.info("[" + service + "] " + m); }
+                    log: function (m) { console.info("[" + service + "] " + m); },
+                    net: { websocket: function (url, protocols) { return websocket(service, url, protocols); } },
+                    live: function () { return claimLive(service); },
+                    writeFile: writeFile,
+                    settings: settings,
+                    helper: function (name, args) {
+                        if (helpers[name]) return Promise.resolve(helpers[name](args || [], service));
+                        var demo = demoHelper(service, name);
+                        if (demo) return Promise.resolve(demo.process());
+                        return Promise.reject(Object.assign(new Error(name + " is not on this device"), { errorCode: "HELPER_NOT_AVAILABLE" }));
+                    }
                 }) };
                 installKinds(appId, service, def);
                 return made;
@@ -12098,11 +12492,15 @@
                     var lock = name === "sync" && p.accountId ? "connector:syncLock:" + service + ":" + p.accountId : null;
                     if (lock) {
                         var held = store.get(lock, 0);
-                        if (held && Date.now() - held < LOCK_MS) return reply(ok({ alreadyRunning: true }));
-                        store.set(lock, Date.now());
+                        if (held && lockHeld(held)) return reply(ok({ alreadyRunning: true }));
+                        store.set(lock, { page: PAGE_ID, at: Date.now() });
+                        startBeat();
                     }
                     m.methods[name](p).then(function (r) {
                         if (lock) store.set(lock, 0);
+                        // Another page keeps this connector's connections: it does it there.
+                        if (r && r.returnValue === false && r.errorCode === "NOT_LIVE_HERE")
+                            return forwardCall(service, name, p).then(reply);
                         reply(r);
                     }, function (e) {
                         if (lock) store.set(lock, 0);
@@ -12111,6 +12509,50 @@
                 }
             });
         }
+
+        // The system UI's page opens the connections of the accounts of
+        // connectors that keep one, as a device's services start with it.
+        // A connector's accounts (its templates', as the app has them).
+        function accountsOf(service, def) {
+            return Promise.all((def.templateIds || []).map(function (tid) {
+                return callP("luna://com.palm.service.accounts/listAccounts", { templateId: tid }).then(function (r) { return r.results || []; });
+            })).then(function (lists) { return [].concat.apply([], lists); });
+        }
+        function connectAll() {
+            Object.keys(hosted).forEach(function (service) {
+                var m;
+                try { m = hosted[service].load(); } catch (e) { return; }
+                if (!m.def.connection) return;
+                accountsOf(service, m.def).then(function (list) {
+                    if (!list.length || !claimLive(service)) return;
+                    list.forEach(function (a) {
+                        // A sync: the connection opened after it, and what came meanwhile filed.
+                        callP("luna://" + service + "/sync", { accountId: a._id }).then(function (x) {
+                            if (x && x.returnValue === false) console.info("[" + service + "] " + a.username + ": " + (x.errorText || x.errorCode));
+                        });
+                    });
+                });
+            });
+        }
+        function callP(uri, params) {
+            return new Promise(function (resolve) {
+                dispatch(uri, params || {}, resolve, { cancelled: function () { return false; }, onCancel: null });
+            });
+        }
+        setTimeout(function () { if (PalmSystem.appIdentifier === "com.palm.systemui") connectAll(); }, 2500);
+        runtime.connectConnectors = connectAll;
+        // No page keeps them (the one that did went, its card closed, or the
+        // account was made in a page that closed before it connected): one
+        // takes over within a quarter of a minute, as a device's service
+        // would simply still run.
+        setInterval(function () {
+            var orphaned = Object.keys(hosted).some(function (service) {
+                if (liveHeld[service]) return false;
+                var o = store.get("connector:live:" + service, null);
+                return !o || Date.now() - (o.at || 0) >= LIVE_FRESH_MS;
+            });
+            if (orphaned) connectAll();
+        }, LIVE_FRESH_MS + Math.floor(Math.random() * 3000));
 
         // The templates of the connector's app (its public/accounts).
         function templatesOf(service) {
@@ -12132,16 +12574,28 @@
             var done = store.get("connectorKinds", {});
             if (done[service] === version) return;
             var ids = [def.kinds.state].concat(def.kinds.item ? [def.kinds.item] : []);
-            templatesOf(service).forEach(function (t) {
+            // The templates as the app has them (the accounts block's list may not be read yet).
+            var templates = templatesOf(service);
+            (def.templateIds || []).forEach(function (tid) {
+                try {
+                    var t = JSON.parse(PalmSystem.getResource("/usr/palm/applications/" + appId + "/public/accounts/" + tid + "/" + tid + ".json") || "null");
+                    if (t) templates.push(t);
+                } catch (e) { /* not there */ }
+            });
+            templates.forEach(function (t) {
                 (t.capabilityProviders || []).forEach(function (cp) {
                     Object.keys(cp.dbkinds || {}).forEach(function (k) { if (ids.indexOf(cp.dbkinds[k]) < 0) ids.push(cp.dbkinds[k]); });
                 });
             });
             ids.forEach(function (id) {
-                var file = "/usr/palm/applications/" + appId + "/configuration/db/kinds/" + id.replace(/:\d+$/, "");
-                var k = null;
-                try { k = JSON.parse(PalmSystem.getResource(file) || "null"); } catch (e) { k = null; }
-                callNow("palm://com.palm.db/putKind", { id: id, owner: service, extends: (k && k.extends) || [] });
+                // configuration/db/kinds, or tempdb's (a buddy's presence lives in tempdb).
+                var name = id.replace(/:\d+$/, ""), k = null, temp = false;
+                try { k = JSON.parse(PalmSystem.getResource("/usr/palm/applications/" + appId + "/configuration/db/kinds/" + name) || "null"); } catch (e) { k = null; }
+                if (!k) {
+                    try { k = JSON.parse(PalmSystem.getResource("/usr/palm/applications/" + appId + "/configuration/tempdb/kinds/" + name) || "null"); } catch (e) { k = null; }
+                    temp = !!k;
+                }
+                callNow(temp ? "palm://com.palm.tempdb/putKind" : "palm://com.palm.db/putKind", { id: id, owner: service, extends: (k && k.extends) || [] });
             });
             done[service] = version;
             store.set("connectorKinds", done);
@@ -12187,10 +12641,25 @@
             delete all[appId];
             store.set(INSTALLED, all);
             // Its service (a pre-installed one was never in the store's list).
+            unhost(appId);
+        };
+        function unhost(appId) {
             Object.keys(hosted).forEach(function (svc) {
                 if (hosted[svc].appId === appId) { delete hosted[svc]; delete runtime.services[svc]; }
             });
-        };
+        }
+        // Installed or removed in another page (Connections): the pages
+        // already open (System UI, Email, Files) serve it from now on too,
+        // as the bus would on a device.
+        if (global.addEventListener) global.addEventListener("storage", function (e) {
+            if (e.key !== "phoenix:" + INSTALLED) return;
+            var now = store.get(INSTALLED, {});
+            Object.keys(now).forEach(function (appId) { host(appId, now[appId]); });
+            Object.keys(hosted).forEach(function (svc) {
+                var appId = hosted[svc].appId;
+                if (!now[appId] && !runtime.preinstalledPackages().some(function (b) { return b.id === appId; })) unhost(appId);
+            });
+        });
         runtime.connectors = {
             hosted: function () { return Object.keys(hosted); },
             service: function (name) { return hosted[name] ? hosted[name].load().methods : null; }
@@ -12304,9 +12773,8 @@
 
         // The templates this block serves (runtime.accountTemplateHasTransport,
         // block "Accounts"): CardDAV and CalDAV, the Subscribed Calendar (a
-        // public .ics, one way: lib/webcal.js), the simulated Jabber (XMPP)
-        // account (block "Instant messaging"), and any other whose service
-        // is on the simulated bus.
+        // public .ics, one way: lib/webcal.js), and any other whose service
+        // is on the simulated bus (the connectors on the kit).
         function templates() {
             return runtime.accountTemplates().filter(runtime.accountTemplateHasTransport);
         }
@@ -12528,7 +12996,9 @@
         var SERVICE_DIR = "/usr/palm/services/" + SERVICE + "/";
         var REGISTRATIONS = ["com.palm.db.backupRegistration.json", "com.palm.sysMgrDataBackup.backupRegistration.json",
                              "com.webos.service.systemservice.backupRegistration.json"];
-        var luna = nodeServiceLuna();
+        // Its calls are the backup service's, as on a device (the Phoenix
+        // Account gives Phoenix Cloud's credentials to it only).
+        var luna = nodeServiceLuna(SERVICE);
         var fm = "luna://org.webosphoenix.filemanager/";
 
         // ---- The participants the simulator stands in for ------------------------------
@@ -12934,7 +13404,7 @@
                 var serviceFile = pkg.files.filter(function (f) { return f.path === app.dir + "service/package.json"; })[0];
                 var connectorService = "";
                 if (serviceFile) {
-                    if (!dev && !(firstParty && runtime.preinstalledPackages().some(function (p) { return p.id === id; })))
+                    if (!dev && !(firstParty && runtime.preinstalledPackages().concat(runtime.firstPartyPackages()).some(function (p) { return p.id === id; })))
                         throw Object.assign(new Error("Synergy connectors (an account type with a background service) need Developer Mode"), { code: "NEEDS_DEVMODE" });
                     try { connectorService = JSON.parse(new TextDecoder().decode(serviceFile.data)).name || ""; } catch (e) { connectorService = ""; }
                 }
@@ -13196,6 +13666,112 @@
         });
     })();
 
+    // ================================================================================
+    // Platform servers and the Phoenix Account (org.webosphoenix.service.account;
+    // services/account, @phoenix/platform)
+    // ================================================================================
+    //
+    // docs/PLATFORM-CLIENT.md. Where the platform is and which keys the
+    // device trusts: /etc/palm/phoenix/servers.json (this checkout's
+    // services/account/etc/palm/phoenix/servers.json: the servers on this
+    // computer, no account server), with Developer Mode's override in the
+    // shared store ("platform:servers", what /var/lib/phoenix/
+    // servers.override.json is on a device), used only while Developer Mode
+    // is on. runtime.platformServers() gives every service here the same
+    // resolved configuration (com.palm.update, the Marketplace, Hardware).
+    //
+    // The account service is the device's own (accountservice.js), its key
+    // store the shared store ("account:keys"), the device's Ed25519 key a
+    // random stand-in (the simulator signs nothing with it).
+    (function platformAccount() {
+        var SERVICE = "org.webosphoenix.service.account";
+        var OVERRIDE = "platform:servers";
+        var KEYS = "account:keys";
+        var loadModule = nodeServiceLoader("/usr/palm/services/" + SERVICE + "/", "Account service");
+        var subtle = global.crypto && global.crypto.subtle;
+        function digest(alg) {
+            return function (bytes) { return subtle.digest(alg, bytes).then(function (h) { return new Uint8Array(h); }); };
+        }
+        var platform = null;
+        function lib() {
+            if (!platform) platform = loadModule("@phoenix/platform");
+            return platform;
+        }
+        runtime.platformServers = function () {
+            var p;
+            try { p = lib(); } catch (e) { return Promise.resolve(null); }   // no rootfs behind the page
+            return p.load({
+                image: function () { return PalmSystem.getResource("/etc/palm/phoenix/servers.json") || null; },
+                override: function () { return store.get(OVERRIDE, null); },
+                devMode: function () { return !!store.get("devMode", false); },
+                log: function (m) { console.warn("[platform] " + m); }
+            });
+        };
+
+        var methods = null, statusSubs = [];
+        function service() {
+            if (methods) return methods;
+            var keystore = {
+                get: function (id) { return Promise.resolve(store.get(KEYS, {})[id]); },
+                put: function (id, v) { var all = store.get(KEYS, {}); all[id] = v; store.set(KEYS, all); return Promise.resolve(); },
+                del: function (id) { var all = store.get(KEYS, {}); delete all[id]; store.set(KEYS, all); return Promise.resolve(); }
+            };
+            methods = loadModule("accountservice.js").createAccountService({
+                request: proxiedRequest,
+                requestBytes: proxiedRequestBytes,
+                luna: nodeServiceLuna(SERVICE),
+                keystore: keystore,
+                state: { load: function () { return store.get("account:state", null); }, save: function (o) { store.set("account:state", o); } },
+                servers: runtime.platformServers,
+                override: {
+                    read: function () { return store.get(OVERRIDE, null); },
+                    write: function (o) { if (o === null) store.remove(OVERRIDE); else store.set(OVERRIDE, o); }
+                },
+                crypto: {
+                    sha256: digest("SHA-256"), sha512: digest("SHA-512"),
+                    randomBytes: function (n) { return global.crypto.getRandomValues(new Uint8Array(n)); },
+                    deviceKey: function () {
+                        return keystore.get("device:key").then(function (k) {
+                            if (k && k.publicKey) return k.publicKey;
+                            var pub = lib().b64.toBase64(global.crypto.getRandomValues(new Uint8Array(32)));
+                            return keystore.put("device:key", { publicKey: pub }).then(function () { return pub; });
+                        });
+                    }
+                },
+                device: function () {
+                    var slots = runtime.updateSlots ? runtime.updateSlots.get() : null;
+                    var booted = slots && slots.slots[slots.booted];
+                    return Promise.resolve({ name: "Phoenix Simulator", model: "phoenix-sim", compatible: (slots && slots.compatible) || "phoenix-sim",
+                                             osVersion: (booted && booted.version) || "", build: (booted && booted.build) || 0 });
+                },
+                log: function (m) { console.info("[account] " + m); }
+            });
+            methods.watch(function (st) { statusSubs.forEach(function (w) { w(st); }); });
+            return methods;
+        }
+        var names;
+        try { names = loadModule("accountservice.js").METHODS; }
+        catch (e) { return; }   // no rootfs behind the page (the runtime's unit tests)
+        var serviceMethods = {};
+        names.forEach(function (name) {
+            serviceMethods["/" + name] = function (p, reply, ctx) {
+                var m;
+                try { m = service(); } catch (e) { return reply(fail("UNKNOWN_ERROR", String(e.message || e))); }
+                m[name](p, (ctx && ctx.caller) || PalmSystem.appIdentifier).then(function (r) {
+                    if (name === "getStatus" && p.subscribe && r.returnValue) {
+                        r.subscribed = true;
+                        var w = function (x) {
+                            if (ctx.cancelled()) { statusSubs.splice(statusSubs.indexOf(w), 1); return; }
+                            reply(x);
+                        };
+                        statusSubs.push(w);
+                    }
+                    reply(r);
+                });
+            };
+        });
+        register([SERVICE], serviceMethods);
+    })();
 
     // ================================================================================
     // Marketplace (org.webosphoenix.service.packages; apps/marketplace/service)
@@ -13216,7 +13792,7 @@
         function digest(alg) {
             return function (bytes) { return subtle.digest(alg, bytes).then(function (h) { return new Uint8Array(h); }); };
         }
-        var methods = null, shippedSources = null, preinstalledInfo = null;
+        var methods = null, shippedSources = null, preinstalledInfo = null, platformCatalog = null;
         function service() {
             if (!methods) {
                 // Its installs reach the installer as this service's (ctx.caller),
@@ -13231,8 +13807,14 @@
                     },
                     request: proxiedRequest,
                     requestBytes: proxiedRequestBytes,
-                    crypto: { sha256: digest("SHA-256"), sha512: digest("SHA-512") },
+                    crypto: { sha256: digest("SHA-256"), sha512: digest("SHA-512"),
+                              randomBytes: function (n) { return global.crypto.getRandomValues(new Uint8Array(n)); } },
                     gzip: runtime.browserGzip,
+                    // The Phoenix catalog's address and keys, the revocation
+                    // list: /etc/palm/phoenix/servers.json ("Platform servers").
+                    servers: function () {
+                        return runtime.platformServers().then(function (sv) { platformCatalog = sv && sv.catalog; return sv; });
+                    },
                     state: {
                         load: function () { return store.get("marketplace:state", null); },
                         save: function (o) { store.set("marketplace:state", o); }
@@ -13260,8 +13842,10 @@
                         var list = shippedSources;
                         var sim = runtime.simulatorCatalog ? runtime.simulatorCatalog() : null;
                         return list.map(function (src) {
-                            return sim && src.kind === "phoenix" && !src.key && String(src.url).replace(/\/*$/, "/") === sim.url
-                                ? Object.assign({}, src, { key: sim.key }) : src;
+                            // The Phoenix catalog's address is servers.json's.
+                            var url = src.id === "phoenix" && platformCatalog ? platformCatalog.url : src.url;
+                            return sim && src.kind === "phoenix" && !src.key && url && String(url).replace(/\/*$/, "/") === sim.url
+                                ? Object.assign({}, src, { url: url, key: sim.key }) : src;
                         });
                     },
                     // The connector packages the simulator came with (seeded
@@ -13269,6 +13853,9 @@
                     // appinfo.json is read once per page: the service asks at
                     // every call, and only uses the version the first time it
                     // counts the package as installed.
+                    firstParty: function () {
+                        return runtime.firstPartyPackages().map(function (p) { return { id: p.id, sourceId: p.sourceId || "phoenix" }; });
+                    },
                     preinstalled: function () {
                         if (!preinstalledInfo) {
                             preinstalledInfo = runtime.preinstalledPackages().map(function (p) {
@@ -13279,6 +13866,9 @@
                             });
                         }
                         return preinstalledInfo;
+                    },
+                    firstParty: function () {
+                        return runtime.firstPartyPackages().map(function (p) { return { id: p.id, sourceId: p.sourceId || "phoenix" }; });
                     },
                     log: function (m) { console.info("[marketplace] " + m); },
                     // The launcher's pending icon: a tap opens the app's page
@@ -13525,6 +14115,9 @@
                     var c;
                     try { c = JSON.parse(PalmSystem.getResource(SAMPLE + "catalog-sim.json") || "{}"); }
                     catch (e) { c = {}; }
+                    // servers.json's "drivers" over it, as on a device; "hardware:config"
+                    // (a test's edited catalog.json) over both.
+                    if (platformLib && lastServers) c = platformLib.driverConfig(c, lastServers);
                     return Object.assign(c, store.get("hardware:config", {}));
                 },
                 // /usr/share/phoenix/firmware/licences.json and the licence files.
@@ -13546,28 +14139,36 @@
         try { names = loadModule("hardwareservice.js").METHODS; }
         catch (e) { return; }   // no rootfs behind the page (the runtime's unit tests)
         var serviceMethods = {};
+        var platformLib = null, lastServers = null;
+        try { platformLib = loadModule("@phoenix/platform"); } catch (e) { platformLib = null; }
         names.forEach(function (name) {
             serviceMethods["/" + name] = function (p, reply, ctx) {
-                var m;
-                try { m = service(); } catch (e) { return reply(fail("UNKNOWN_ERROR", String(e.message || e))); }
-                if (name === "install" && p.subscribe) {
-                    reply(ok({ subscribed: true, driverId: p.driverId, state: "queued" }));
-                    m.install(p, function (st) { if (!ctx.cancelled()) reply(st); });
-                    return;
-                }
-                m[name](p).then(function (r) {
-                    if (name === "list" && p.subscribe && r.returnValue) {
-                        r.subscribed = true;
-                        var w = function (x) {
-                            if (ctx.cancelled()) { watchers.splice(watchers.indexOf(w), 1); return; }
-                            reply(x);
-                        };
-                        watchers.push(w);
-                    }
-                    reply(r);
-                }, function (e) { reply(fail("UNKNOWN_ERROR", String(e && e.message || e))); });
+                (runtime.platformServers ? runtime.platformServers() : Promise.resolve(null)).then(function (sv) {
+                    lastServers = sv;
+                }, function () {}).then(function () { call(name, p, reply, ctx); });
             };
         });
+        // A call, once servers.json is read (the driver catalog's address and key).
+        function call(name, p, reply, ctx) {
+            var m;
+            try { m = service(); } catch (e) { return reply(fail("UNKNOWN_ERROR", String(e.message || e))); }
+            if (name === "install" && p.subscribe) {
+                reply(ok({ subscribed: true, driverId: p.driverId, state: "queued" }));
+                m.install(p, function (st) { if (!ctx.cancelled()) reply(st); });
+                return;
+            }
+            m[name](p).then(function (r) {
+                if (name === "list" && p.subscribe && r.returnValue) {
+                    r.subscribed = true;
+                    var w = function (x) {
+                        if (ctx.cancelled()) { watchers.splice(watchers.indexOf(w), 1); return; }
+                        reply(x);
+                    };
+                    watchers.push(w);
+                }
+                reply(r);
+            }, function (e) { reply(fail("UNKNOWN_ERROR", String(e && e.message || e))); });
+        }
         register([SERVICE], serviceMethods);
     })();
 
@@ -14173,7 +14774,7 @@
     // ("[update]" compatible=phoenix-sim, version=, build=;
     // server/updates/bin/updates.php simulator makes one, or the catalog
     // server's admin API: POST /api/admin/updates?compatible=phoenix-sim).
-    // The feed is the catalog server's (/etc/palm/updates.json:
+    // The feed is the catalog server's (/etc/palm/phoenix/servers.json "updates":
     // http://127.0.0.1:8088/updates/, server/marketplace). Installing writes
     // the version to the other slot; com.palm.power/shutdown/machineReboot
     // then starts the primary slot (phoenix-sim restarts itself; a browser
@@ -14251,6 +14852,13 @@
                 st.primary = slot === "booted" ? st.booted : slot === "other" ? otherOf(st) : slot;
                 store.set(SLOTS, st);
                 return Promise.resolve();
+            },
+            // rauc status mark-good: the running slot started well.
+            markGood: function () {
+                var st = slots();
+                st.good = st.booted;
+                store.set(SLOTS, st);
+                return Promise.resolve();
             }
         };
 
@@ -14286,14 +14894,16 @@
                     return Promise.resolve({ percent: p.percent, charging: p.charger !== "none" });
                 },
                 luna: nodeServiceLuna(),
-                // /etc/palm/updates.json; "updates:config" in the store
-                // stands for an edited one (tools/test-updates.cjs).
-                config: function () {
-                    var c;
-                    try { c = JSON.parse(PalmSystem.getResource(DIR + "etc/palm/updates.json") || "{}"); }
-                    catch (e) { c = {}; }
-                    return Object.assign(c, store.get("updates:config", {}));
+                requestBytes: proxiedRequestBytes,
+                crypto: {
+                    sha256: function (b) { return subtle.digest("SHA-256", b).then(function (h) { return new Uint8Array(h); }); },
+                    sha512: function (b) { return subtle.digest("SHA-512", b).then(function (h) { return new Uint8Array(h); }); },
+                    randomBytes: function (n) { return global.crypto.getRandomValues(new Uint8Array(n)); }
                 },
+                // The feed, its channels and keys: /etc/palm/phoenix/servers.json
+                // ("Platform servers"; tools/test-updates.cjs points it at its
+                // own feed with Developer Mode's override).
+                servers: runtime.platformServers,
                 state: {
                     load: function () { return store.get("updates:state", null); },
                     save: function (o) { store.set("updates:state", o); }
@@ -14578,7 +15188,41 @@
 
         // ---- Writing a file -------------------------------------------------------------
 
+        // A drive's folder (/media/drives/<accountId>/...; docs/SHARE-AND-FILES.md
+        // "Drives"): the file manager uploads it (copied from `from`, or from
+        // `data` kept on the device a moment first); the upload's progress is
+        // in the notification area's ongoing activities.
+        var DRIVES = "/media/drives/";
+        function writeToDrive(dest, req, overwrite) {
+            var lf = runtime.fileManager && runtime.fileManager.localFiles;
+            var temp = MEDIA + "/.phoenix/drive-cache/.transfer/" + Date.now().toString(36) + "-" + dest.replace(/^.*\//, "");
+            function upload(from) {
+                return callP("luna://org.webosphoenix.filemanager/copy", { from: from, to: dest, overwrite: !!overwrite }).then(function (r) {
+                    if (!r || r.returnValue === false) throw Object.assign(new Error(r && r.errorText || "Could not save to the drive"), { errorCode: r && r.errorCode });
+                });
+            }
+            function viaTemp(bytesP) {
+                if (!lf) return Promise.reject(new Error("No device files here"));
+                return bytesP.then(function (bytes) { return lf.write(temp, bytes, false); }).then(function () { return upload(temp); })
+                    .then(function () { return lf.remove(temp); }, function (e) { return lf.remove(temp).then(function () { throw e; }); });
+            }
+            if (req.data !== undefined) {
+                var bin = atob(String(req.data).replace(/^data:[^,]*,/, "")), bytes = new Uint8Array(bin.length);
+                for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                return viaTemp(Promise.resolve(bytes));
+            }
+            return upload(req.from).then(null, function (e) {
+                // Not one of the user's files (a sample of the system image): its bytes, from where the system serves it.
+                if (e.errorCode !== 1 || !global.fetch) throw e;
+                return viaTemp(global.fetch(req.from).then(function (res) {
+                    if (!res.ok) throw e;
+                    return res.arrayBuffer();
+                }).then(function (b) { return new Uint8Array(b); }));
+            });
+        }
+
         function writeTo(dest, req, overwrite) {
+            if (dest.indexOf(DRIVES) === 0) return writeToDrive(dest, req, overwrite);
             var mf = runtime.mediaFiles;
             var before = overwrite ? callP("luna://org.webosphoenix.filemanager/remove", { path: dest }) : Promise.resolve();
             return before.then(function () {
@@ -14722,11 +15366,24 @@
                 var title = p.title || (kinds.length === 1 && kinds[0] === "image" ? (multiple ? "Choose Pictures" : "Choose a Picture")
                                                                                    : (multiple ? "Choose Files" : "Choose a File"));
                 showSheet("pick", { title: title, kinds: kinds, multiple: multiple, crop: crop, extensions: exts }).then(function (r) {
-                    if (!r || r.action !== "pick" || !r.files || !r.files.length) return reply(ok({ canceled: true }));
+                    if (!r || r.action !== "pick" || !r.files || !r.files.length) return null;
+                    // A file of a drive: the app gets the device's copy of it
+                    // (the file manager's open: downloaded, or the copy kept
+                    // when it has not changed), and where it came from.
+                    return Promise.all(r.files.map(function (f) {
+                        if (f.path.indexOf(DRIVES) !== 0) return f;
+                        return callP("luna://org.webosphoenix.filemanager/open", { path: f.path }).then(function (o) {
+                            if (!o || o.returnValue === false) throw new Error((o && o.errorText) || "Could not open " + f.path);
+                            return Object.assign({}, f, { path: o.path, remotePath: f.path });
+                        });
+                    })).then(function (picked) { return { files: picked }; });
+                }).then(function (r) {
+                    if (!r) return reply(ok({ canceled: true }));
                     var files = r.files.map(function (f) {
                         var o = { fullPath: f.path, mimeType: f.mimeType || "", name: f.path.replace(/^.*\//, "") };
                         if (f.size !== undefined) o.size = f.size;
                         if (f.cropInfo) o.cropInfo = f.cropInfo;
+                        if (f.remotePath) o.remotePath = f.remotePath;
                         return o;
                     });
                     var first = files[0];
@@ -14742,6 +15399,9 @@
                         if (c.returnValue !== false) first.croppedPath = dest;
                         reply(ok({ files: files }));
                     });
+                }).then(null, function (e) {
+                    // A drive's file could not be had (offline, signed out).
+                    reply(fail(-1, String(e && e.message || e)));
                 });
             },
             "/save": function (p, reply) {

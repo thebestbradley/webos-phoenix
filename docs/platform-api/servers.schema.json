@@ -1,0 +1,54 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://webosphoenix.org/platform-api/servers.schema.json",
+    "title": "/etc/palm/phoenix/servers.json",
+    "description": "Where a device finds the Phoenix platform and which keys it trusts: the one configuration every platform client reads (apps/shared/platform/src/servers.js resolves it). An image's is written at build time (meta-phoenix PHOENIX_* settings, tools/servers-json.py); the simulator's is services/account/etc/palm/phoenix/servers.json; with Developer Mode on, an override with the same shape is laid over it section by section. The platform serves its own at GET <api>/v1/servers.json, so a device in Developer Mode (or the conformance suite) can be pointed at it. A url may be relative: catalog, updates, revocations and drivers to feeds, the others to api. Plain http only for 127.0.0.1/localhost, or in Developer Mode's override.",
+    "type": "object",
+    "required": ["format", "feeds"],
+    "properties": {
+        "//": { "description": "A comment" },
+        "format": { "const": 1 },
+        "name": { "type": "string" },
+        "feeds": { "type": ["string", "null"], "description": "Base address of the static feeds (feeds.<domain>/)" },
+        "api": { "type": ["string", "null"], "description": "Base address of the device API (api.<domain>/); null: no account or cloud services" },
+        "catalog": {
+            "type": ["object", "null"],
+            "properties": {
+                "url": { "type": ["string", "null"], "description": "catalog/v1/" },
+                "key": { "type": ["string", "null"], "description": "The online catalog key, pinned" },
+                "root": { "type": ["string", "null"], "description": "The offline root key that delegates to the online key (scope catalog)" }
+            }
+        },
+        "updates": {
+            "type": ["object", "null"],
+            "properties": {
+                "url": { "type": ["string", "null"], "description": "updates/" },
+                "channel": { "enum": ["stable", "beta", "dev"], "description": "The channel a new device starts on" },
+                "channels": { "type": "array", "items": { "enum": ["stable", "beta", "dev"] }, "description": "The channels Settings > Updates offers" },
+                "key": { "type": ["string", "null"] },
+                "root": { "type": ["string", "null"], "description": "Offline root (scope updates)" }
+            }
+        },
+        "revocations": { "type": ["object", "null"], "properties": { "url": { "type": ["string", "null"], "description": "revocations/v1/revoked.json" } } },
+        "drivers": {
+            "type": ["object", "null"],
+            "properties": {
+                "url": { "type": ["string", "null"], "description": "drivers/v1/" },
+                "key": { "type": ["string", "null"], "description": "The driver catalog's key, pinned (never trusted on first use)" },
+                "reportUrl": { "type": ["string", "null"], "description": "drivers/v1/report on the API host" }
+            }
+        },
+        "account": {
+            "type": ["object", "null"],
+            "properties": {
+                "issuer": { "type": ["string", "null"], "description": "The OpenID Connect issuer (its /.well-known/openid-configuration); usually the API host without a trailing slash" },
+                "clientId": { "type": "string", "description": "phoenix-device" },
+                "scope": { "type": "string" },
+                "key": { "type": ["string", "null"], "description": "The API's Ed25519 key that signs entitlements (else GET <api>/v1/key.json)" }
+            }
+        },
+        "push": { "type": ["object", "null"], "properties": { "server": { "type": ["string", "null"], "description": "The ntfy server (UnifiedPush), push.<domain>/" } } },
+        "assistant": { "type": ["object", "null"], "properties": { "url": { "type": ["string", "null"], "description": "v1/assistant/ (OpenAI-compatible)" } } },
+        "connectivity": { "type": ["object", "null"], "properties": { "probe": { "type": ["string", "null"], "description": "https://connect.<domain>/generate_204" } } }
+    }
+}

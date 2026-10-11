@@ -74,10 +74,10 @@ export const GENERIC_KINDS: Record<string, string[]> = {
     IM: ["com.palm.message:1", "com.palm.immessage:1", "com.palm.imbuddystatus:1", "com.palm.imloginstate:1"]
 };
 
-/** The services a connector's service may call (3.2 rule 10, and what SOCIAL and MESSAGING connectors need). */
+/** The services a connector's service may call (3.2 rule 10, and what SOCIAL and MESSAGING connectors need; a drive's transfers show in the ongoing activities). */
 export const ALLOWED_OUTBOUND = ["com.palm.db", "com.palm.tempdb", "com.palm.activitymanager", "com.palm.service.accounts",
                                  "org.webosphoenix.service.oauth", "org.webosphoenix.service.keystore", "org.webosphoenix.service.push",
-                                 "com.webos.notification", "org.webosports.service.messaging"];
+                                 "com.webos.notification", "org.webosports.service.messaging", "org.webosphoenix.ongoing"];
 
 const CALLBACKS = ["onCreate", "onEnabled", "onDelete", "onCredentialsChanged", "sync"];
 const SYSBUS_REQUIRED = [".service", ".role.json", ".api.json"];
@@ -176,7 +176,7 @@ export function checkConnector(files: Files, options?: { namespaces?: string[] }
 
     // C10 kinds
     const kinds: Record<string, any> = {};
-    Object.keys(files).sort().filter((p) => /^configuration\/db\/kinds\/[^/]+$/.test(p)).forEach((p) => {
+    Object.keys(files).sort().filter((p) => /^configuration\/(?:db|tempdb)\/kinds\/[^/]+$/.test(p)).forEach((p) => {
         const k = json(files, p);
         if (!k.ok || !k.value || !KIND_ID.test(String(k.value.id || ""))) { errors.push("C10 " + p + ": not a db8 kind"); return; }
         const id = String(k.value.id);
@@ -193,7 +193,7 @@ export function checkConnector(files: Files, options?: { namespaces?: string[] }
     });
 
     // C11 permissions
-    Object.keys(files).sort().filter((p) => /^configuration\/db\/permissions\/[^/]+$/.test(p)).forEach((p) => {
+    Object.keys(files).sort().filter((p) => /^configuration\/(?:db|tempdb)\/permissions\/[^/]+$/.test(p)).forEach((p) => {
         const perm = json(files, p);
         const list = perm.ok ? (Array.isArray(perm.value) ? perm.value : [perm.value]) : null;
         if (!list) { errors.push("C11 " + p + ": not valid JSON"); return; }

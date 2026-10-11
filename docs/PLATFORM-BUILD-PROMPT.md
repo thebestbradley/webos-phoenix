@@ -38,6 +38,17 @@ Clone the Phoenix repository read-only next to your platform repository.
 You must not change it unless the owner asks; when the platform needs a
 device change, write it down (see "Reporting").
 
+0. **`docs/platform-api/`: the contract you build to.** `openapi.yaml`
+   lists every endpoint a device calls on the feeds and API hosts (and the
+   conformance controls your staging server must offer);
+   `feeds.schema.json`, `api.schema.json` and `servers.schema.json` are the
+   bodies, byte rules and signatures. `docs/PLATFORM-CLIENT.md` says what
+   the device does with each (verification, caching, errors) and which
+   parts of PLATFORM.md it corrected. `tools/platform-mock/server.cjs` is a
+   working reference implementation of all of it (Node, one file), and
+   `tools/test-platform-client.cjs --api <your staging api> --token <t>`
+   is your acceptance test: it runs the device's own code against your
+   server. Where PLATFORM.md and the contract differ, the contract wins.
 1. `docs/PLATFORM.md`: **the spec you implement.** Sections 2 (the device
    contracts), 3 (hosts), 4 (stack), 5 (API conventions), 6 (components),
    7 (keys and release pipeline), 8 (data model), 9 (operations), 10
@@ -51,13 +62,17 @@ device change, write it down (see "Reporting").
    `tests/run.php`, `sample/`).
 4. The device side, which defines the contracts:
    `apps/marketplace/service/lib/catalog.js` (`verifyIndex`, `normalize`),
-   `apps/marketplace/service/packagesservice.js` (`keyInfo`, `refreshOne`),
-   `apps/marketplace/service/etc/palm/marketplace/sources.json`,
-   `services/updates/updatesservice.js` (`parseFeed`, `feedUrl`),
-   `services/updates/etc/palm/updates.json`,
+   `apps/marketplace/service/packagesservice.js` (`keyInfo`, `refreshOne`,
+   `catalogKeys`, `refreshRevocations`),
+   `apps/shared/platform/src/` (`servers.js`: servers.json; `signed.js`:
+   detached signatures and the root's delegations; `rollout.js`;
+   `revocations.js`; `http.js`: errors and backoff),
+   `services/account/etc/palm/phoenix/servers.json` (the simulator's) and
+   `tools/servers-json.py` (an image's),
+   `services/updates/updatesservice.js` (`parseFeedDocument`, `check`),
+   `services/account/accountservice.js` (sign-in, entitlements, cloud),
    `services/hardware/hardwareservice.js` (`reportOf`, `sendReport`),
    `services/hardware/lib/drivers.js` (hand-over),
-   `services/hardware/etc/palm/hardware/catalog.json`,
    `services/oauth/oauthservice.js`.
 5. `docs/APP-STORE.md` (3.3 to 3.10), `docs/DRIVERS.md` ("Releasing the
    catalog"), `docs/SYNERGY-CONNECTORS.md` (2.1, 2.2, 6, 7),
@@ -248,38 +263,33 @@ Windows simulator.
 
 ## Running the device contract tests against your local platform
 
-The Phoenix simulator (`phoenix-sim`, built from the Phoenix repo with
-`./phoenix`; on a Mac it needs Homebrew's Qt) reads:
-
-- the Marketplace catalog at `http://127.0.0.1:8088/v1/`
-  (`apps/marketplace/service/etc/palm/marketplace/sources.json`), its key
-  trusted on first use after showing the fingerprint;
-- the update feed at `http://127.0.0.1:8088/updates/`
-  (`services/updates/etc/palm/updates.json`);
-- in the simulator, the store key `"updates:config"` stands for an edited
-  `updates.json` and `"hardware:config"` for an edited
-  `/etc/palm/hardware/catalog.json` (see `runtime/phoenix-runtime.js`,
-  "System updates", and `tools/test-updates.cjs`).
-
-So: run your platform locally on **127.0.0.1:8088** with its local
-configuration serving the catalog at `/v1/` and updates at `/updates/` (in
-production they are `/catalog/v1/` and `/updates/` on the feeds host: make
-the prefix a configuration value), make sure the Phoenix repo's own PHP
-catalog is not running (the simulator's Services > Marketplace Catalog
-off), and run:
+A device finds everything through one file, `/etc/palm/phoenix/servers.json`
+(`docs/platform-api/servers.schema.json`; `docs/PLATFORM-CLIENT.md`, "The
+configuration"). Your platform publishes its own at `GET <api>/v1/servers.json`
+(its feeds and API hosts, its account issuer, its roots pinned). Then:
 
 ```sh
-./phoenix run tablet --launch org.webosphoenix.marketplace --screenshot out.png --delay 8000
-NODE_PATH="$(npm root -g)" node tools/test-marketplace.cjs
-NODE_PATH="$(npm root -g)" node tools/test-updates.cjs
-NODE_PATH="$(npm root -g)" node tools/test-hardware.cjs
+# the conformance suite: the device's own services against your server,
+# every reply checked against docs/platform-api; --ui adds the simulator's
+# pages (Settings > Updates and Phoenix Account, Backup, First Use, the
+# Marketplace and Connections) in Chromium, with screenshots
+node tools/test-platform-client.cjs --api http://127.0.0.1:8000/api/ --token "$CONFORMANCE_TOKEN"
+NODE_PATH="$(npm root -g)" node tools/test-platform-client.cjs --api ... --token ... --ui --out build/conformance
+
+# the same suite against the reference mock, to compare
+node tools/test-platform-client.cjs
 ```
 
-`tools/test-marketplace.cjs` starts the repo's PHP server itself through
-`apps/marketplace/service/test/servers.cjs`; to point it at your instance
-it needs an option to use a server already running at a URL. That is a
-change in the Phoenix repo: propose it to the owner (see Reporting) rather
-than making it. Without a display, prefix the simulator with
+Your staging (never production) must offer the conformance controls
+(`POST /v1/conformance/{updates,catalog,revocations,approve,deny,rotate}`,
+Bearer token; openapi.yaml, tag `conformance`): they publish signed test
+releases with your staging keys and approve a device code for a test
+account, so the suite can run end to end.
+
+In the real simulator: turn on Developer Mode, then Settings > Developer
+Mode > Platform Servers, "Use the servers at" `<api>/v1/servers.json`;
+everything follows (catalog, updates, account, backup). Look at the
+screenshots, not only the exit codes. Without a display, prefix the simulator with
 `QTWEBENGINE_DISABLE_SANDBOX=1 xvfb-run -a -s "-screen 0 1920x1200x24"`,
 and use a fresh `HOME` per run for a clean device. Look at the
 screenshots, not only the exit codes.

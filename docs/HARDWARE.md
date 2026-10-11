@@ -5,8 +5,501 @@ to target, how the legacy webOS services are backed by standard Linux
 components, and how images are built, installed and updated.
 
 This is a plan, not a status report. Nothing here has run on a device yet
-(see [ROADMAP.md](ROADMAP.md), Milestone 1). Facts are as of September 2026;
-where something is uncertain it says so.
+(see [ROADMAP.md](ROADMAP.md), Milestone 1). Facts are as of September 2026
+(the first targets below: 11 October 2026); where something is uncertain it
+says so.
+
+## First targets
+
+The owner's choice (11 October 2026): the emulator and the Raspberry Pi 4,
+which OSE supports itself, then a flagship phone, a tablet, and the PINE64
+devices because people already have them. Each has a machine in
+`meta-phoenix` now; none has been built or booted yet.
+
+| Target | Role | SoC, GPU | RAM | Route | Boots from | `MACHINE` | Kernel (pinned) |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| QEMU / VirtualBox | Emulator, CI, demo | x86-64, virtio-gpu (virgl) | any | OSE's own machine | OSE's `.wic`/`.vmdk` | `qemux86-64` | OSE's `linux-yocto` |
+| **Raspberry Pi 4** + Touch Display 2 (7") | First hardware | BCM2711, V3D | 4 GB+ | OSE's own machine | SD card | `raspberrypi4-64` | OSE's `linux-raspberrypi` |
+| **Fairphone (Gen. 6) / (Gen. 6+)** | Flagship phone | SM7635 / SM7635-AC ("milos"), Adreno 810 | 8 GB / 12 GB | Mainline; Halium if audio and camera lag | Android boot image (fastboot) + `userdata` | `fairphone-fp6` | milos-mainline `v7.2.0-milos`, `1b485d5` |
+| **AYN Odin 2 Portal** | Tablet (7" OLED) | QCS8550 (Snapdragon 8 Gen 2), Adreno 740 | 8, 12 or 16 GB | Mainline (AYN's tree, going upstream) | microSD through ROCKNIX's bootloader | `ayn-odin2portal` | AYNTechnologies `ayn/v7.0`, `d0bd123` |
+| **PINE64 PinePhone Pro** | Linux phone people own | RK3399S, Mali-T860 (panfrost) | 4 GB | Mainline (megi's tree) | Tow-Boot (SPI) → SD or eMMC | `pinephonepro` | megi `orange-pi-7.2-20260903-2131`, `facc871` |
+| PINE64 PineTab2 | Cheap 10" tablet | RK3566, Mali-G52 (panfrost) | 4 / 8 GB | Mainline + DanctNIX's patches | U-Boot (SPI) → SD or eMMC | `pinetab2` | DanctNIX `v7.1.8-danctnix1`, `344dbbd` |
+| ARM64 VM | Each target above before its hardware ([Device VMs](#device-vms)) | QEMU `virt`, virtio-gpu (virgl where the host has it) | the device's | OSE's `qemuarm64` with the phones' packages | QEMU's or UTM's kernel boot, ext4 root | `phoenix-vm-arm64` | OSE's `linux-yocto` 6.6, qemuarm64 BSP |
+| GPD Pocket 4 | x86 alternative (8.8") | Ryzen AI 9 HX 370, Radeon 890M | up to 64 GB | The generic x86-64 UEFI image | USB / NVMe (UEFI) | none yet: the generic x86-64 machine of [(d)](#d-x86-tablets-2-in-1s-and-generic-uefi) (`qemux86-64` is QEMU's, not a PC image) | the x86 `linux-yocto` with `phoenix-hardware-x86.cfg`, `amdgpu` firmware |
+
+**Future: Fairphone 7.** Not announced; only a teaser from Fairphone's CEO
+so far. Fairphone has supported mainline from launch day for two
+generations (Luca Weiss posted the Fairphone 6's support the day it was
+announced), so the next one is a natural target when it exists.
+
+### What is in meta-phoenix
+
+- **Machines** (`meta-phoenix/conf/machine/`): `fairphone-fp6`,
+  `ayn-odin2portal`, `pinephonepro`, `pinetab2`, and the ARM64 VM that
+  stands in for each of them, `phoenix-vm-arm64` ([Device VMs](#device-vms)), all on
+  `conf/machine/include/phoenix-mobile.inc` (webOS's "hardware" machine
+  implementation and `webos-graphics-drm`, as meta-webosose's
+  `webos-rpi.inc` sets for the Pi). They need **no BSP layer** beyond OSE's:
+  each kernel is a recipe of ours; no meta-qcom (its scarthgap branch is
+  built around Qualcomm's own Linux releases and boards, not these phones'
+  community trees), no meta-rockchip/meta-arm, no LuneOS layer (its
+  machines pull `meta-webos-ports` recipes built for the `luneos` distro;
+  [Device CI matrix](#device-ci-matrix)). The PINE64 machine names are
+  LuneOS's (`meta-pine64-luneos`, scarthgap `9b16114`), so its recipes can
+  be reused where their licences allow. `scripts/setup-build.sh` adds the
+  machines to build-webos's `Machines` list (mcf refuses others).
+- **Kernels** (`recipes-kernel/linux/linux-phoenix-*.bb`, on
+  `linux-phoenix-device.inc`): the device distribution's tree at a pinned
+  commit, with **that distribution's own configuration** (postmarketOS/Nura
+  pmaports `2116628` for the Fairphone and PINE64; ROCKNIX `20261001`
+  for the Odin), then Phoenix's generic driver fragments
+  (`phoenix-hardware*.cfg`, never demoting the device's built-ins to
+  modules) and `phoenix-ose.cfg` (systemd, Chromium's sandbox, OSE's own
+  kernel fragments: PSI, zram, uinput, audit, the crypto user API, the
+  netfilter connman tethers with). Licence: GPL-2.0-only, `COPYING`'s md5
+  checked against each tree.
+- **Boot artefacts:** `phoenix-bootimg` (an Android boot image, header v2,
+  made by AOSP's `mkbootimg`, `recipes-devtools/mkbootimg`, Apache-2.0,
+  tag `android-16.0.0_r1`) for the Fairphone; `wic/phoenix-extlinux.wks.in`
+  (GPT: a FAT boot partition with the kernel, the device trees and the
+  machine's `extlinux.conf`, then the ext4 root, found by
+  `root=PARTLABEL=phoenix-root` without an initramfs) for the others.
+- **Device configuration** (`recipes-phoenix/phoenix-device-config`, in
+  every image): `/etc/phoenix/device.json` and the compositor's geometry
+  per machine ([Device configuration](#device-configuration)).
+- **Firmware:** linux-firmware's redistributable packages per machine
+  (`MACHINE_EXTRA_RRECOMMENDS`); the rest [below](#firmware-the-phone-brings).
+- **Media:** OSE's GStreamer media stack is built only for OSE's own
+  machines (per-machine resource tables), so on these WebAppMgr's Chromium
+  plays media itself (`phoenix-mobile.inc`; OPEN-QUESTIONS Q87).
+- **Graphics:** these GPUs need a newer Mesa than OSE's 24.0.7 (Q82).
+
+### Per device: what works today
+
+"Works" is what the device's own distribution reports, not Phoenix: none of
+this has run Phoenix. Y works, P partly, N not, - not applicable or not
+reported. Sources: the Nura (postmarketOS) wiki's device pages, read raw on
+11 October 2026; ROCKNIX's device pages.
+
+| Component | Fairphone 6 / 6+ | Odin 2 Portal | PinePhone Pro | PineTab2 |
+| --- | --- | --- | --- | --- |
+| Display | Y | Y (ROCKNIX's Sway UI runs on it) | Y | Y |
+| Touch | Y | in the device tree (FocalTech FT5426); not documented | Y | Y |
+| GPU (3D) | Y (needs Mesa 26: Adreno gen 8) | Y (freedreno GL, Turnip Vulkan) | Y | Y |
+| Wi-Fi | P | Y | Y | P (out-of-tree BES2600) |
+| Bluetooth | Y | Y (audio, controllers) | Y | P |
+| Battery, charging | Y | battery level shown (stick LEDs); not documented further | P | Y |
+| Modem: data / SMS / calls | Y / Y / P | - | Y / P / P | - |
+| Audio (speakers, headset) | N | not documented (amplifiers and codec in the device tree) | Y | Y |
+| Camera | N (an experimental ultra-wide stack exists) | - | P | - |
+| GPS | N | - | Y | - |
+| Sensors | Hall Y; accelerometer, light, proximity N | not documented | accelerometer, light, proximity Y | accelerometer Y |
+| Haptics | Y | Y (rumble) | - | - |
+| Suspend | not reported | "fake suspend" only (ROCKNIX) | not reported | not reported |
+| USB | P (SoC page) | USB-C dual role in the device tree | OTG N | not reported |
+
+Sources: Fairphone: [Nura wiki, "Fairphone (Gen. 6) (fairphone-fp6)"](https://wiki.postmarketos.org/wiki/Fairphone_(Gen._6)_(fairphone-fp6))
+and ["Qualcomm Snapdragon 7s Gen 3/7s Gen 4/6 Gen 4 (Milos)"](https://wiki.postmarketos.org/wiki/Qualcomm_Snapdragon_7s_Gen_3/7s_Gen_4/6_Gen_4_(Milos))
+(SoC: display, GPU, storage, Wi-Fi, Bluetooth, modem, video Y; USB P;
+audio, GPS, camera N); the ultra-wide camera:
+[nondescriptpointer/fairphone6-wide-camera-linux](https://github.com/nondescriptpointer/fairphone6-wide-camera-linux)
+(not checked). Odin: [ROCKNIX, Odin 2 Portal](https://rocknix.org/devices/ayn/odin2portal/)
+(Wi-Fi, Bluetooth, fan, rumble, stick LEDs; suspend is ROCKNIX's "fake
+suspend"); the device tree (AYN `ayn/v7.0`) for the rest. PINE64: the Nura
+wiki's PinePhone Pro and PineTab 2 pages.
+
+**Where each stands:**
+
+- **Fairphone 6 / 6+.** Verified: Fairphone's Luca Weiss posted the SoC
+  and device support the day the phone was announced
+  ([Phoronix, 25 June 2025](https://www.phoronix.com/news/Fairphone-6-Linux)),
+  renamed "milos" at Qualcomm's request in v2
+  ([Phoronix](https://phoronix.com/news/Fairphone-6-Linux-v2)); the device
+  tree `milos-fairphone-fp6.dts` is in Linux's master today. The working
+  tree is [milos-mainline/linux](https://github.com/milos-mainline/linux)
+  (tags `vX.Y.Z-milos`), which pmaports' `linux-postmarketos-qcom-milos`
+  builds. pmaports keeps `device-fairphone-fp6` in **`device/testing`**
+  (not community, as first reported to the owner), with prebuilt images and
+  a web flasher. The **6+** (August 2026: Snapdragon 7s Gen 4, SM7635-AC,
+  12 GB, same display and cameras) has no device tree of its own: the Nura
+  wiki says the two are "software-compatible, so you can install the Nura
+  image on either model". One machine covers both.
+- **Odin 2 Portal.** AYN publishes its mainline work as
+  [AYNTechnologies/linux](https://github.com/AYNTechnologies/linux)
+  (branch `ayn/v7.0`, Linux 7.0, with `qcs8550-ayn-odin2portal.dts` and the
+  panel, gamepad, LED and amplifier drivers mainline lacks); the initial
+  port is Teguh Sobirin's for ROCKNIX. Aaron Kling posted the device trees
+  upstream as "arm64: dts: qcom: Support AYN QCS8550 Devices": v1 in March
+  2026 (as this document said), **v9 on 27 July 2026**
+  ([lkml](https://lkml.iu.edu/2607.3/06614.html)), without the nodes whose
+  drivers are not upstream; not in Linux 7.3-rc6. ROCKNIX builds kernel.org
+  7.2 plus its own patches and device trees for its SM8550 image; Phoenix
+  takes AYN's tree (one pinned commit, the drivers included) with ROCKNIX's
+  configuration. postmarketOS has no Odin 2 package (only the original
+  Odin and the Odin 3).
+- **PinePhone Pro.** pmaports' **community** device; Tow-Boot in SPI is
+  required ([tow-boot.org](https://tow-boot.org/devices/pine64-pinephonePro.html)).
+  Modem: Quectel EG25-G, powered by `eg25-manager` (GPL-3.0) and driven by
+  ModemManager in pmOS; Phoenix's telephony plan is oFono
+  ([Hardware abstraction plan](#hardware-abstraction-plan)), which
+  supports the EG25-G as LuneOS does. Camera through libcamera (Megapixels
+  in pmOS).
+- **PineTab2.** Testing; Wi-Fi only with DanctNIX's out-of-tree BES2600
+  driver and its firmware.
+
+**Performance, honestly.** The Fairphone 6 (8-12 GB) and the Odin 2 Portal
+(8-16 GB, the fastest ARM chip here) have room for OSE's Chromium web
+runtime and the on-device assistant. The PinePhone Pro (4 GB, RK3399) will
+run Phoenix but slowly: each card is a Chromium renderer (60-120 MB each,
+PRE-IMAGE-CHECKLIST P1). The PineTab2 sits between them. The original
+PinePhone (2-3 GB, Cortex-A53, GLES 2.0 only) is no longer a target (the
+owner's decision, 11 October 2026: keep the PinePhone Pro); it was probably
+too slow for OSE's Chromium-based WebAppMgr anyway.
+
+### Bring-up order (every device)
+
+1. **Boot to a console**: kernel, root, serial or USB networking
+   (`phoenix-diag`, ssh in a pre-release image).
+2. **Display, touch, GPU**: luna-surfacemanager on KMS with a hardware
+   Mesa; the geometry (`compositor.env`), density and form factor
+   (`device.json`); the card view at full frame rate.
+3. **Wi-Fi and Bluetooth**: connman and BlueZ (OSE's), the firmware.
+4. **Modem, calls, SMS** (phones): oFono and `webos-telephonyd`; mobile
+   data through connman.
+5. **Audio**: PulseAudio/audiod with the device's ALSA UCM profile; in-call
+   routing.
+6. **Camera**: libcamera (Fairphone: the ultra-wide only, experimental).
+7. **GPS**: GeoClue (Qualcomm: through the modem's QMI location service).
+8. **Suspend**: wake on modem, RTC alarm, power key; battery life.
+
+**Halium fallback for the Fairphone.** If audio and camera stay broken on
+mainline when telephony works, the Fairphone can run Phoenix on Halium as
+LuneOS and Ubuntu Touch run other phones (tier (c) below: the Android
+vendor partition's HALs through libhybris). Ubuntu Touch supports the
+Fairphone 4 and 5 that way; whether a Fairphone 6 Halium port exists is
+not checked. Decide after step 5 ([OPEN-QUESTIONS.md](OPEN-QUESTIONS.md)).
+
+### Unlocking and flashing, step by step
+
+Build first: `bitbake webos-phoenix-image` with the machine
+(`MACHINE=fairphone-fp6`, ...), on an x86-64 Linux host ([Build](#build)).
+The images land in `BUILD/deploy/images/<machine>/`.
+
+**Fairphone 6 / 6+** (wipes the phone)
+
+1. Update Fairphone OS to the latest release first (the Nura wiki: work is
+   done against the latest firmware).
+2. Settings > About phone: tap Build number seven times; Developer options:
+   turn on USB debugging and **OEM unlocking**, which asks for Fairphone's
+   **unlock code**: get it from Fairphone's bootloader page with the
+   phone's IMEI and serial number
+   ([Fairphone support, "Manage the bootloader"](https://support.fairphone.com/hc/en-us/articles/10492476238865);
+   that page refused our reader, so the code's exact form is the owner's
+   to check).
+3. Power off; hold **Power + Volume Down** for fastboot. Then
+   `fastboot flashing unlock` and confirm on the phone. **This erases the
+   phone.** Critical partitions need not be unlocked (Nura wiki); some
+   users report Fairphone's tools wanting `fastboot flashing
+   unlock_critical` as well.
+4. **Never re-lock.** Re-locking with a system whose security patch level
+   is older than the bootloader's has soft-bricked phones and needed
+   Fairphone's service to recover (community reports:
+   [Fairphone forum](https://forum.fairphone.com/t/fairphone-6-oem-bootloader-soft-bricked/132109),
+   [/e/ forum](https://community.e.foundation/t/unable-to-lock-the-bootloader-fairphone-6-e-installation/84282)).
+   Also never switch the A/B slot with `qbootctl` from Linux: the Nura
+   wiki warns it bricks the phone until an EDL repair only Fairphone's
+   service can do.
+5. Firmware (the phone's own, see below): download **Fairphone's factory
+   image** for the FP6 and run
+   `tools/device-firmware.py extract fairphone-fp6 --factory-zip <zip> --out fw/`
+   then `tools/device-firmware.py inject --image webos-phoenix-image-fairphone-fp6.ext4 --firmware fw/`.
+6. Flash, from fastboot:
+   ```sh
+   fastboot flash boot boot-fairphone-fp6.img
+   fastboot flash userdata webos-phoenix-image-fairphone-fp6.ext4
+   fastboot erase dtbo        # Android's overlays do not fit the mainline device tree
+   fastboot reboot
+   ```
+   To try without installing: `fastboot boot boot-fairphone-fp6.img` with
+   the root already on `userdata`. The root image is only as big as its
+   files; growing it to the 208 GB partition at first boot is still to do
+   (PRE-IMAGE-CHECKLIST H5).
+7. Back to Android: Fairphone's own [manual install
+   instructions](https://support.fairphone.com/hc/en-us/articles/18896094650513).
+
+**Odin 2 Portal** (Android stays)
+
+1. In Android, copy ROCKNIX's `rocknix_abl` folder (from a ROCKNIX SM8550
+   release) to internal storage and run its `backup_abl.sh`, then
+   `flash_abl.sh`, as root (AYN's Handheld Settings, "Run script as root").
+   **Keep the backup** on a computer: it is AYN's bootloader. Only needed
+   if the fastboot menu has no "Switch boot mode" yet
+   ([ROCKNIX, Odin 2 Portal](https://rocknix.org/devices/ayn/odin2portal/)).
+2. Firmware: copy the device's own blobs (below) to a computer, then
+   `tools/device-firmware.py extract ayn-odin2portal --from-dir <blobs> --out fw/`
+   and inject them into the `.ext4`, or into the card's root partition after
+   writing it.
+3. Write `webos-phoenix-image-ayn-odin2portal.wic.gz` to a good microSD card
+   (`bmaptool copy`, or Raspberry Pi Imager / balenaEtcher).
+4. Insert it, hold **Volume Down** while powering on, choose "Switch boot
+   mode" (Volume keys, Power to confirm), then Power to start.
+5. Whether ROCKNIX's bootloader reads Phoenix's `extlinux.conf` as it reads
+   ROCKNIX's own boot partition is the first thing to confirm (H6).
+
+**PinePhone Pro / PineTab2** (SD card first, eMMC later)
+
+1. Install Tow-Boot once: PinePhone Pro to **SPI** (hold RE at power-on
+   with Tow-Boot's SPI installer on an SD card). PineTab2: its factory U-Boot
+   boots from SD; installing to the eMMC needs U-Boot in SPI (Debian's
+   PineTab2 page warns a bad SPI write needs a UART adapter to recover).
+2. Write `webos-phoenix-image-<machine>.wic.gz` to an SD card (or, booted
+   into Tow-Boot's USB mass storage mode with Volume Up, to the eMMC).
+3. Boot. PinePhone Pro: hold Volume Down at the second vibration to boot
+   the SD card (LED aqua).
+
+### Firmware the phone brings
+
+| Device | In the image (redistributable) | Taken from the owner's copy at install (not shipped) |
+| --- | --- | --- |
+| Fairphone 6 / 6+ | `linux-firmware-ath11k`, `-qca` | ADSP, CDSP, modem (+`modem_pr/`), IPA, WPSS (Wi-Fi), video (`vpu20_2v`), GPU zap shader and microcode (`gen80300_*`), Bluetooth (`msbtfw12.mbn`, `msnv12.bin`): from Fairphone's factory image (`NON-HLOS.bin`, `BTFM.bin`, `vendor_a`) |
+| Odin 2 Portal | `linux-firmware-ath12k`, `-qca` (WCN7850) | GPU zap shader, ADSP, CDSP, the amplifiers' `aw883xx_acf.bin` (AYN's), and the Adreno 740 microcode unless linux-firmware's catch-all package is installed |
+| PinePhone Pro | `-rockchip-dptx`, `-bcm43455` | Bluetooth `BCM4345C5.hcd` and the Wi-Fi board file: Hardware app catalog |
+| PineTab2 | `-rockchip-dptx` | BES2600 firmware: Hardware app catalog |
+
+The Qualcomm firmware is signed for each phone and its licence does not
+allow redistribution: pmaports packages it as `license="proprietary"` from
+[FairBlobs/FP6-firmware](https://github.com/FairBlobs/FP6-firmware) (no
+licence file), and `phoenix-firmware-policy` would rightly fail an image
+carrying it (docs/LEGAL.md). So `tools/device-firmware.py` (Apache-2.0)
+does at install what FairBlobs' `extract.sh` does at packaging: reads the
+owner's factory image, joins split `.mdt`/`.bNN` firmware as linux-msm's
+`pil-squasher` does, lays it out where the device tree asks
+(`qcom/milos/fairphone/fp6/...`), and writes it into the root image's
+`/lib/firmware/updates` with `debugfs`, without mounting anything.
+postmarketOS's other approach, `msm-firmware-loader` (MIT), mounts the
+phone's firmware partitions at every boot; it cannot reach `vendor_a`
+inside `super` without `make-dynpart-mappings` (GPL-3.0), and the device
+trees ask for paths it does not create, so it is not used. Where the
+Odin 2 Portal keeps its blobs in Android (`/vendor/firmware`,
+`/vendor/firmware_mnt/image` on Qualcomm devices) is to be confirmed on the
+device; LuneOS's `linux-firmware-pine64` (licence "Proprietary", mixing
+sources) is not reused for the same reason.
+
+### First boot: what to check
+
+Each device's first image checks the general rows of
+[PRE-IMAGE-CHECKLIST.md](PRE-IMAGE-CHECKLIST.md) (F1-F9 first boot, D1-D5
+display, I1-I4 input, A1-A3 audio, N1-N3 networking, G1-G3 debugging,
+P1-P3 performance) and its own row, H5-H9:
+
+1. It boots to the shell: the boot animation hands over (F4), the lock
+   screen shows; `phoenix-diag` collects the logs (G2).
+2. Display: the geometry and rotation (`compositor.env`), the density and
+   form factor (`device.json`); the card view at 60 fps (D2, D4, P3).
+3. Touch matches the panel, gestures and edge swipes work (I1, I4).
+4. Buttons: Power, Volume, the Fairphone's switch as the ringer switch
+   (`phoenix-devices --probe`), the Odin's sticks and buttons (I2).
+5. Wi-Fi joins a network from First Use; Bluetooth pairs (N1-N3).
+6. Battery level and charging in the status bar (com.palm.power).
+7. Sound: system sounds, headphones, Bluetooth audio (A1, A2).
+8. Phones: a SIM is seen, SMS in and out, a call each way, mobile data.
+9. Sensors: rotation follows the accelerometer (D5), auto-brightness.
+10. Suspend and wake: screen off, wake on power key, on a call, on an alarm.
+11. Firmware licences listed in Settings > Device Info match the image (L4).
+
+### Device profiles: the simulator as each device
+
+Before the hardware arrives, the simulator can be each first target:
+`phoenix-sim --device <id>` (or `./phoenix run --device <id>`, or
+View > Device), with the panel's exact pixels, its density, layout and
+buttons, and its rounded corners and camera cutout drawn over the screen
+in black. The values come from the same files the images ship: the table
+`meta-phoenix/recipes-phoenix/phoenix-device-config/files/device-profiles.json`
+(panel, diagonal, orientation, buttons, CPUs, memory) and each device's
+`device.json` (form factor, density, Home button, ringer switch, corners,
+cutouts), compiled into `phoenix-sim` (`shell/sim/simdevices.h`); the
+shell reads that `device.json` through `DeviceConfig` as it does on the
+device. A phone's panel is taller than most monitors: the window is shown
+at what fits (`--zoom`; the window's title says the percentage),
+and `--screenshot` saves the panel's exact pixels.
+`python3 tools/test-device-profiles.py` checks the table against the
+`device.json` files and the machines' `compositor.env`, and that each
+density is the shell's own rule for the panel's ppi (`Theme.densityFor`).
+
+| `--device` | Panel (used upright) | Diagonal, ppi, density | Layout | Corners, cutout | Buttons | CPU | RAM |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `fairphone-fp6` | 1116x2484, portrait | 6.31", ~432 ppi, 2.5 | phone | 100 px radius; a 90 px punch hole at the top centre (x 513-603, y 16-106) | Power, Volume Up/Down, the Moment switch (the ringer switch) | 8 cores: 1x 2.5 GHz + 3x 2.4 GHz Cortex-A720, 4x 1.8 GHz Cortex-A520 (Gen. 6) | 8 GB (Gen. 6), 12 GB (Gen. 6+) |
+| `ayn-odin2portal` | 1920x1080, landscape (the panel is 1080x1920, mounted turned) | 7", ~315 ppi, 1.75 | tablet | none known (unverified) | Power, Volume Up/Down (the gamepad is not modelled) | 8 cores: 1x Cortex-X3 3.2 GHz, 2x A715 + 2x A710 2.8 GHz, 3x A510 2.0 GHz | 8, 12 or 16 GB |
+| `pinephonepro` | 720x1440, portrait | 6", ~268 ppi, 1.5 | phone | none (camera in the bezel; square corners assumed, unverified) | Power, Volume Up/Down | 6 cores: 2x Cortex-A72 + 4x A53, 1.5 GHz | 4 GB |
+| `pinetab2` | 1280x800, landscape (the panel is 800x1280, mounted turned) | 10.1", ~150 ppi, 1.0 | tablet | none (camera in the bezel; square assumed) | Power, Volume Up/Down | 4x Cortex-A55, 1.8 GHz | 4 or 8 GB |
+| `raspberrypi4-64` | 1280x720, landscape (Touch Display 2, 7": a 720x1280 portrait panel) | 7" (6.98"), ~210 ppi, 1.25 | tablet | none | none (the gesture bar does it all) | 4x Cortex-A72, 1.8 GHz | 1, 2, 4 or 8 GB (the VM: 4) |
+
+The Raspberry Pi's display is the current official one, **Touch Display 2**
+(720x1280, five-finger touch, DSI; the 7" model, which the Pi 4 takes: the
+10" one is for the Pi 5 and Compute Modules only, and a 5" one has the same
+pixels). Its profile's `device.json` (`files/rpi-touch-display-2/`) is
+for the simulator and the VM only: the Pi image (`raspberrypi4-64`) keeps
+the defaults (everything detected), since a Pi may as well drive an HDMI
+monitor. The profiles' **orientation** is how each is used: the phones
+upright, the tablets and the Pi on their side, as the TouchPad's 1024x768
+is upright in the simulator.
+
+**The cutout and the status bar.** webOS's own devices had square screens
+and no cutouts, so luna-sysmgr has nothing to follow here. Phoenix does what
+Android and Phosh do: while the UI is upright, a cutout at the top edge
+makes the status bar at least as tall as the cutout (`Theme.safeAreaTop`;
+Android: "content renders into the cutout area when the display cutout is
+contained in a system bar. Otherwise, the window does not overlap the
+display cutout", developer.android.com, "Support display cutouts"), so
+cards and apps start below it; and the centred clock moves beside the hole
+(to its left when that leaves the title clear, else to its right), while
+both ends of the bar keep out of the rounded corners (Phosh's
+`src/layout-manager.c`, `get_clock_pos` and `get_corner_shift`, which reads
+the same gmobile panel data). On the Fairphone the bar is 106 px (42 legacy
+pixels) instead of 70. Turned on its side the hole is at a side of the UI
+and covers a little of the cards and apps there (GAPS, "Device profiles").
+
+**Sources.** Fairphone 6: [GSMArena](https://m.gsmarena.com/fairphone_6-13955.php)
+(6.31", 1116x2484, ~432 ppi, LTPO OLED, the CPU's cores and clocks, 8 GB);
+Fairphone's [technical specifications](https://support.fairphone.com/hc/en-us/articles/38046290703122)
+(the Gen. 6 with 8 GB and the 7s Gen 3, the Gen. 6+ with 12 GB and the 7s
+Gen 4; Fairphone's page refuses automated reading, so read through search
+results and GSMArena) and its [Fairphone Moments](https://support.fairphone.com/hc/en-us/articles/26886939326610-Fairphone-Moments)
+page (the side switch); the corner radius and the punch hole from Phosh's
+gmobile panel data, [`data/devices/display-panels/fairphone,fp6.json`](https://gitlab.gnome.org/World/Phosh/gmobile/-/raw/main/data/devices/display-panels/fairphone,fp6.json)
+("border-radius": 100, the notch `M 558 16 a 42 42 0 0 0 0 90 ...`: a
+90 px circle centred at x 558 from y 16, on a 66x146 mm panel), checked
+against LineageOS's device tree ([android_device_fairphone_FP6](https://github.com/LineageOS/android_device_fairphone_FP6),
+lineage-24.0, `overlay/FrameworksResCommon_Sys/res/values/config.xml`:
+`config_mainBuiltInDisplayCutout` "M 38,64 a 38,39 0 0 0 -76,0 a 38,39 0 0 0 76,0",
+a 76x78 px hole centred 64 px down, inside gmobile's). LineageOS's
+`config_mainDisplayShape` (a 20 px radius on a 1080x2400 outline) is not
+this panel's and is not used. Odin 2 Portal: 1920x1080 from AYN's device
+tree (`qcs8550-ayn-odin2portal.dts`, `ayn/v7.0`); ~314 ppi from
+[Retro Catalog](https://retrocatalog.com/retro-handhelds/odin-2-portal);
+RAM tiers from [Notebookcheck](https://www.notebookcheck.net/AYN-Odin2-Portal-Full-specs-confirmed-for-high-end-Android-gaming-handheld-shortly-before-release.905071.0.html);
+the cores from [Liliputing](https://liliputing.com/?p=172670) (AYN's own
+product page lists no specifications). PinePhone Pro and PineTab2:
+PINE64's wiki, [PinePhone Pro](https://wiki.pine64.org/wiki/PinePhone_Pro)
+and [PineTab2](https://wiki.pine64.org/wiki/PineTab2). Raspberry Pi:
+[Touch Display 2](https://www.raspberrypi.com/products/touch-display-2/)
+(720x1280, active area 86.94x154.56 mm for the 7"),
+[Raspberry Pi 4 specifications](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/specifications/)
+(BCM2711, 4x Cortex-A72 at 1.8 GHz, 1-8 GB). All read on 11 October 2026.
+
+**Not verified** (best documented estimates, to measure on the devices,
+OPEN-QUESTIONS Q97): the Odin 2 Portal's, the PinePhone Pro's and the
+PineTab2's corner radii (gmobile has no entry for them, and their makers
+publish none: square assumed); the Fairphone's radius is gmobile's
+(Phosh's), not Fairphone's own figure.
+
+### Device VMs
+
+The second layer: the real OS image, on an ARM64 virtual machine, as each
+device. One machine, **`phoenix-vm-arm64`** (`meta-phoenix/conf/machine/`),
+builds the phones' package set (it requires `phoenix-mobile.inc`, so it
+leaves out OSE's camera and media recorder as they do) on OE's
+`qemuarm64`: linux-yocto with the yocto-kernel-cache's qemuarm64 BSP
+(`KMACHINE`), the virtual devices built in (`phoenix-vm.cfg`) and OSE's
+needs (`phoenix-ose.cfg`), a raw ext4 root, and QEMU's `virt` machine.
+**The device is chosen at boot**, not when building: the kernel's command
+line says `phoenix.device=fairphone-fp6`, and `phoenix-device-select` (a
+oneshot unit before `sysinit.target`, from `phoenix-device-config`) copies
+that device's `device.json` and compositor geometry from
+`/usr/share/phoenix/devices/<id>/` to `/run/phoenix/`, where
+`/etc/phoenix/device.json` and `compositor.env` point. No or an unknown
+`phoenix.device`: the defaults (everything detected), and a line in the
+journal. The geometry is the panel upright as QEMU's virtio-gpu shows it
+(`1116x2484+0+0r0s1`; the tablets' landscape modes directly, so no turn),
+and the VM's `compositor.env` shows the pointer's cursor, which the
+devices hide (`WEBOS_CURSOR_HIDE`, `product.env`).
+
+**Does OSE accept it?** Yes: `scripts/parse-check.sh phoenix-vm-arm64`
+parses and resolves `webos-phoenix-image` (11 October 2026). meta-webos's
+machine handling is by override, not by machine name:
+`webos_machine_impl_dep.bbclass` takes `WEBOS_TARGET_MACHINE_IMPL`
+("emulator" by default; "hardware" here, as `phoenix-mobile.inc` and
+`webos-rpi.inc` set it), and the `qemuall` override, which `qemu.inc` adds,
+brings meta-webos's emulator settings that suit a VM
+(luna-surfacemanager's `virtual_display_support`, Mesa's `gallium-llvm`)
+and OSE's qemu-only extras (`packagegroup-webos-audio`'s audio services,
+`packagegroup-webos-media`'s media indexer). The machine puts `qemuarm64`
+in `MACHINEOVERRIDES`, which linux-yocto's `COMPATIBLE_MACHINE` needs, and
+sets `KMACHINE` to it in the linux-yocto bbappend: the cache has no
+`phoenix-vm-arm64` BSP, and `do_kernel_metadata` would stop on that, which
+the parse check cannot see. OSE's media stack stays out exactly as on the
+phones (`media-resource-calculator`'s `COMPATIBLE_MACHINE` lists only OSE's
+machines).
+
+**Running it.** `scripts/vm.sh <device> [--image path]` starts QEMU with
+the device's CPU count (at most the host's), memory and panel resolution:
+HVF on Apple silicon, KVM on an arm64 Linux host, TCG (emulation, slow)
+otherwise; virtio-gpu (with virgl's GL where the host's QEMU has it:
+Linux; UTM on a Mac), `virtio-multitouch-pci` (QEMU 8.0+: a touchscreen,
+`ABS_MT_*`, so the host's touches arrive as touches) beside
+`virtio-tablet-pci` for the mouse, virtio-net (ssh on port 2222),
+`virtio-sound-pci` (QEMU 8.2+) or Intel HDA (`--audio hda`), virtio-blk.
+Each device keeps its own disk, a copy-on-write overlay over the image.
+`--cap-cpu PCT` approximates the slower cores: a CPU quota per virtual CPU
+on Linux, the efficiency cores on a Mac. `--dry-run` prints the command;
+`--utm` prints UTM's settings. The procedure on the Mac:
+[BUILDING-MAC.md, "Run it in a VM"](BUILDING-MAC.md#run-it-in-a-vm).
+
+**Not booted yet.** No `phoenix-vm-arm64` image has been built: the
+container this was written in cannot build Chromium. The first boot is the
+owner's, on the Mac: `scripts/mac-build.sh phoenix-vm-arm64`, then
+`scripts/vm.sh fairphone-fp6`.
+
+**What a VM cannot match**, per device:
+
+| | Fairphone 6 | Odin 2 Portal | PinePhone Pro | PineTab2 | Raspberry Pi 4 |
+| --- | --- | --- | --- | --- | --- |
+| GPU | Adreno 810 (freedreno, Mesa 26+) vs virgl or llvmpipe | Adreno 740 (freedreno, Turnip) vs virgl | Mali-T860 (panfrost, GLES 3.1 at most) vs virgl, which can do more | Mali-G52 (panfrost) vs virgl | VideoCore VI (v3d) vs virgl |
+| Kernel, device tree | milos-mainline 7.2 and its device tree vs linux-yocto 6.6, QEMU's `virt` | AYN's 7.0 tree, the turned panel vs none | megi's 7.2 vs linux-yocto | DanctNIX's 7.1.8 vs linux-yocto | the Pi's kernel vs linux-yocto |
+| Modem | Qualcomm's (calls, SMS, data) | none on the device either | Quectel EG25-G (eg25-manager, oFono) | none | none |
+| Camera | not in the images yet (OSE's camera stack is left out) | none | not in the images yet | not in the images yet | not in the images yet |
+| Sensors | accelerometer, light, proximity, Hall | the sticks, the gamepad | accelerometer, light, proximity | accelerometer | none |
+| Battery, suspend | real battery, suspend | battery, "fake suspend" | battery, suspend | battery | mains power |
+| Performance | big cores at 2.5 GHz vs the host's (HVF/KVM: the host's speed; `--cap-cpu` only approximates) | the fastest here | slow: A72/A53 at 1.5 GHz, 4 GB | slow: four A55 | four A72, memory as chosen |
+
+**Input in the VM.** QEMU's `virtio-multitouch-pci` is a touchscreen
+(`ABS_MT_*`), so a host's touchscreen reaches the shell as touches; a Mac's
+trackpad and mouse arrive through `virtio-tablet-pci` as an absolute pointer
+with wheel notches. OSE builds Qt without libinput (meta-webos d7ed46c,
+`qtbase_git.bbappend:76`), so luna-surfacemanager's eglfs reads them through
+Qt's evdev handlers: the wheel has no pixel delta or scroll phase, which
+takes `TrackpadSwipe.qml`'s mouse-wheel path (a card or page a notch), and
+there are no libinput settings (tap-to-click, natural scrolling) to set
+(OPEN-QUESTIONS Q100). The first boot checks the pointer, the trackpad and
+the keyboard shortcuts in card view and with an app maximized
+([BUILDING-MAC.md, "Run it in a VM"](BUILDING-MAC.md#run-it-in-a-vm), step 5).
+
+In every case the VM has no ringer switch, vibrator, light sensor or
+backlight to drive (phoenix-devices finds none and says so), no Wi-Fi or
+Bluetooth radio (virtio-net is wired networking to connman), and no
+device firmware. It checks the OS itself: the image boots, systemd and
+the Luna bus come up, luna-surfacemanager drives a DRM display at the
+device's resolution, the shell lays out with the device's density, form
+factor and cutout, the web apps run in WebAppMgr's Chromium, the touch
+gestures arrive as touches, sound plays, and the network works.
+
+### Keyboard phones (looked at, not targets)
+
+A phone with a hardware keyboard is the closest thing to a Palm Pre. Checked
+on 11 October 2026 (OPEN-QUESTIONS Q101; the owner: the Pro1 X is a
+tentative future target, the KEY2 is skipped unless it unlocks properly):
+
+| Phone | Can it boot Phoenix? | Linux today | Status |
+| --- | --- | --- | --- |
+| F(x)tec Pro1 X (QX1050): Snapdragon 662, 8 GB, 5.99" 1080x2160 AMOLED, slide-out QWERTY | Yes: `fastboot flashing unlock`, official ([LineageOS install](https://wiki.lineageos.org/devices/pro1x/install/)) | Device tree in mainline (`arch/arm64/boot/dts/qcom/sm6115-fxtec-pro1x.dts`: panel, GPU, touch, modem, Wi-Fi, USB); no keyboard node. postmarketOS (now Nura): display, 3D, Wi-Fi, USB work; touch unreliable on mainline; keyboard, modem and audio untested ([wiki](https://wiki.postmarketos.org/wiki/F(x)tec_Pro1X_(fxtec-qx1050))). Ubuntu Touch and LineageOS 24 support it | **Tentative future target.** Fxtec no longer sells phones (fxtec.com is a B2B studio; the Pro1 X page is gone): used units only, some reported not to power on after storage |
+| F(x)tec Pro1 (QX1000): Snapdragon 835, same keyboard | Yes, the same way | Mainline device tree without display or GPU nodes; postmarketOS boots it unpackaged | Not pursued (no mainline display) |
+| BlackBerry KEY2 / KEY2 LE: Snapdragon 660 / 636, 6 / 4 GB, 4.5" 1620x1080, keyboard | Only by a community exploit (Kibo, with the Blackberry_Key2_Unlocker loaders) on firmware ACQ160 / ACI448 (KEY2) or ACT575 (LE), with a brick risk and no recovery ([postmarketOS wiki](https://wiki.postmarketos.org/wiki/BlackBerry_KEY2_Generic_(blackberry-key2-generic))) | Mainline 6.19: display, touch, keyboard, Wi-Fi, Bluetooth, battery work; the GPU hangs it; no audio, calls, SMS, data, camera or GPS | **Skipped** (no proper unlock) |
+| BlackBerry KEYone | No public unlock | None | Out |
+| BlackBerry Passport | No: BlackBerry 10 (QNX), signed boot | None | Out |
+
+Whatever the hardware, the simulator's `--device` profiles can model a
+keyboard phone's screen (a 4.5" 3:2 or 1:1 panel) with the hardware
+keyboard support (GAPS V8), so Phoenix's layouts are ready for one.
 
 ## Summary
 
@@ -525,12 +1018,14 @@ community category has about 40 devices, and 254 more are in "testing".
 | **OnePlus 6 / 6T** | Snapdragon 845, Adreno 630 (freedreno) | Community | Best mainline phone: calls, data, GPU, suspend. Cameras are limited. 8 GB RAM is plenty for Chromium. **Reference candidate** |
 | **Google Pixel 3a / 3a XL** | Snapdragon 670, Adreno 615 (freedreno) | Community | Also a Halium device (below). $50–80 used. **Reference candidate** |
 | **PINE64 PinePhone Pro** | RK3399S, Mali-T860 (panfrost) | Community | Open hardware, LuneOS layer exists, 4 GB RAM. Modem (Quectel EG25-G) is well understood. Slow and poor battery. **Supported** |
-| PINE64 PinePhone | Allwinner A64, Mali-400 (lima, OpenGL ES 2.0 only) | Community | 2–3 GB RAM and GLES 2 only: likely too slow for OSE's Chromium web runtime. Community at best |
+| PINE64 PinePhone | Allwinner A64, Mali-400 (lima, OpenGL ES 2.0 only) | Testing (pmaports, October 2026; was community) | 2–3 GB RAM and GLES 2 only: likely too slow for OSE's Chromium web runtime. Community at best; dropped from the first targets (the owner, 11 October 2026: the PinePhone Pro stays) |
 | Purism Librem 5 | i.MX 8M Quad, GC7000L (etnaviv) | Community | Good mainline support, hardware kill switches, expensive. Community |
 | SHIFT6mq | Snapdragon 845 | Community | Same SoC as the OnePlus 6, so it mostly comes for free. Community |
 | Xiaomi Poco F1 | Snapdragon 845 | Community | Same again; common and cheap. Community |
 | Fairphone 4 | Snapdragon 750G, Adreno 619 | Community | Sold new until recently, repairable. Supported candidate |
 | Fairphone 5 | QCM6490, Adreno 643 | Testing (known brightness bug) | Better on Halium today (Ubuntu Touch's promoted device) |
+| **Fairphone 6 / 6+** | SM7635 / SM7635-AC (milos), Adreno 810 | Testing (pmaports `device/testing`, October 2026) | **First target, the flagship phone** ([First targets](#first-targets)) |
+| **AYN Odin 2 Portal** | QCS8550, Adreno 740 | Not in pmaports (ROCKNIX supports it) | **First target, the tablet** |
 | Samsung Galaxy S9 | Exynos/Snapdragon variants | Community | Check which variant before promising anything |
 | PINE64 PineTab2 | RK3566, Mali-G52 (panfrost) | Testing | LuneOS supports it; a cheap 10" tablet. Community |
 | Generic x86_64 | Any | Community | See (d) |
@@ -678,19 +1173,41 @@ cheapest way to back several legacy APIs at once.
 ### Device configuration
 
 What the shell needs to know about a device's hardware that it cannot
-detect comes from `/etc/phoenix/device.json`, installed by the device's
-layer in `meta-phoenix` (or the file named by `PHOENIX_DEVICE_CONFIG`). A
-missing file or key means the default. Read by `Phoenix.Native`'s
-`DeviceConfig`.
+detect comes from `/etc/phoenix/device.json`, installed by
+`meta-phoenix`'s `phoenix-device-config` for the machine
+(`files/<MACHINE>/device.json`, else the defaults), or the file named by
+`PHOENIX_DEVICE_CONFIG`. A missing file or key means the default. Read by
+`Phoenix.Native`'s `DeviceConfig`. The same recipe installs
+`/etc/phoenix/compositor.env`, which `phoenix-shell`'s `product.env`
+sources: the machine's `WEBOS_COMPOSITOR_GEOMETRY`
+(`<w>x<h>+<x>+<y>r<rotation>s<scale>`).
 
 | Key | Default | Meaning |
 | --- | --- | --- |
+| `formFactor` | `"auto"` | `"phone"`, `"tablet"` or `"auto"` (the shell's `formFactor`): "auto" takes the tablet layout when the screen's shorter side is at least 600 legacy pixels (`Theme.tabletMinSide`). A device names its own so its layout does not depend on its size (the Odin 2 Portal's 7" is the tablet). |
+| `density` | `0` (from the panel) | Device pixels per legacy pixel (the shell's `density`: 1.0 on a Pre and the TouchPad, 1.5 on a Pre 3). 0 derives it from the panel's size as DRM reports it, about the screen's ppi / 180 in quarters (`Theme.densityFor`), which some panels report wrongly. |
 | `hardwareHomeButton` | `false` | The device has a Home button (physical or capacitive) that its maker uses **instead of** the on-screen gesture bar. The shell then hides the bar, the key does its job (`Key_Home`), and tablets take the bottom-edge flick for swipe up. |
 | `homeButtonOrientationAngle` | `0` | Where that Home button is, as the angle from the screen's own bottom edge: `0`, `90`, `180` or `270` (luna-sysmgr's `HomeButtonOrientationAngle`; the TouchPad's was `270`, its button beside its landscape screen). The boot animation is drawn upright with the button below, and the Touch to Share glow comes from its edge. |
 | `backlight` | the first under `/sys/class/backlight` by the kernel's preference (`type` firmware, then platform, then raw) | The panel's backlight, by name (`phoenix-devices`), for a device with several where that picks the wrong one. |
 | `lightSensor` | the first IIO device with illuminance | The light sensor's IIO device, e.g. `"iio:device1"` (`phoenix-devices`). |
 | `accelerometer` | the first IIO device with `in_accel_x_raw`, `_y_`, `_z_` | The accelerometer's IIO device, for the orientation (`phoenix-devices`). Its axes are taken through the driver's mount matrix (`in_accel_mount_matrix`, from the device tree's `mount-matrix`); a device whose driver has none and whose sensor is mounted turned needs one in its device tree. |
+| `displayCornerRadius` | `0` | The screen's rounded corners' radius in device pixels. The status bar's ends keep out of them (as Phosh's top bar does); the simulator draws them (`--device`). |
+| `displayCutouts` | none | The camera's holes or notches in the screen: `[{"shape": "circle" \| "rect", "x", "y", "width", "height"}]`, device pixels on the screen upright (the compositor's output, unturned). One that starts within the status bar makes the bar tall enough to hold it while the UI is upright, and moves the clock beside it ([Device profiles](#device-profiles-the-simulator-as-each-device)). |
 | `ringerSwitch` | none (the ringer is always on) | The ringer switch: `{"type": "EV_SW" \| "EV_KEY", "code": n, "silentValue": 1}`, the input event code it sends and its value when silent. Linux has no code of its own for it (`SW_MUTE_DEVICE`, 14, is the nearest; OnePlus's alert slider sends keys), so each device names its own (`phoenix-devices`). `phoenix-devices --probe` points at any device with `SW_MUTE_DEVICE` and prints the line to add. |
+
+The machines' values (`meta-phoenix/recipes-phoenix/phoenix-device-config/files/`):
+
+| Machine | `formFactor` | `density` | Screen, geometry | Hardware keys and switches |
+| --- | --- | --- | --- | --- |
+| `qemux86-64`, `raspberrypi4-64` | auto | from the panel | OSE's configd geometry | none (the gesture bar does it all) |
+| `fairphone-fp6` | phone | 2.5 (6.31", 1116x2484, ~432 ppi) | `1116x2484+0+0r0s1`; corners of 100 px and a 90 px punch hole at the top centre (`displayCornerRadius`, `displayCutouts`: gmobile's panel data) | Power, Volume Up/Down; the side switch, `SW_MUTE_DEVICE` (EV_SW 14) in the device tree, as `ringerSwitch` with silentValue 1 (to confirm with `phoenix-devices --probe`); Hall sensor (`SW_LID`) |
+| `ayn-odin2portal` | tablet | 1.75 (7", 1920x1080, ~315 ppi) | panel mounted turned (1080x1920, `rotation = <270>`): geometry to find on the device (H6) | Power, Volume Up/Down, the gamepad (UART, `rsinput`) |
+| `pinephonepro` | phone | 1.5 (6", 720x1440, ~270 ppi) | `720x1440+0+0r0s1` | Power, Volume Up/Down |
+| `pinetab2` | tablet | 1.0 (10.1", 1280x800, ~150 ppi) | panel mounted turned (800x1280): to find on the device (H8) | Power, Volume Up/Down |
+
+| `phoenix-vm-arm64` | each device's, chosen at boot (`phoenix.device=`, [Device VMs](#device-vms)) | | the device's panel, upright: `<w>x<h>+0+0r0s1` | none (virtual) |
+
+No device here has a Home button, so every one keeps the gesture bar.
 
 Phoenix keeps the gesture bar on every phone and tablet by default,
 including the TouchPad, whose Home button was a step back from the Pre's
@@ -1114,8 +1631,8 @@ slot layout in `system.conf`, the bootloader backend, the keyring, and
 | Raspberry Pi 4 | Pi firmware + `tryboot` or U-Boot | RAUC has a documented Pi setup |
 | x86 UEFI | systemd-boot or GRUB | Standard RAUC EFI/GRUB backend |
 | PinePhone, PinePhone Pro, PineTab2 | U-Boot or Tow-Boot | Standard U-Boot backend |
-| Qualcomm phones (OnePlus 6, Pixel 3a, Fairphone) | Android ABL with fastboot; Android A/B slots on most | Either use the Android slots (`qbootctl`-style slot switching as a RAUC custom backend) or chain-load U-Boot/lk2nd and manage slots ourselves (Duranium avoids Android slots) |
-| Halium devices | Android bootloader, Android A/B or single slot | Same as above; vendor partitions stay untouched |
+| Qualcomm phones (OnePlus 6, Pixel 3a, Fairphone) | Android ABL with fastboot; Android A/B slots on most | Either use the Android slots (`qbootctl`-style slot switching as a RAUC custom backend) or chain-load U-Boot/lk2nd and manage slots ourselves (Duranium avoids Android slots). **Not the Android slots on the Fairphone 6**: switching them with `qbootctl` from Linux bricks it (Nura wiki) |
+| AYN Odin 2 Portal | ROCKNIX's replacement ABL, booting the SD card's `extlinux.conf` | Two root partitions on the card, the bootloader's config naming the good one (to design) || Halium devices | Android bootloader, Android A/B or single slot | Same as above; vendor partitions stay untouched |
 
 Bootloader unlocking is a hard limit: carrier-locked US phones (for example
 Verizon Pixels) cannot be unlocked and are out.
@@ -1126,7 +1643,7 @@ Verizon Pixels) cannot be unlocked and are out.
   layers:
   - [`meta-raspberrypi`](https://github.com/agherzan/meta-raspberrypi) (already in OSE)
   - [`meta-pine64-luneos`](https://github.com/webOS-ports/meta-pine64-luneos) (PinePhone, PinePhone Pro, PineTab2; has a scarthgap branch) and [`meta-pine64`](https://github.com/alistair23/meta-pine64) (PineTab2 and boards; now declares styhead to wrynose only)
-  - [`meta-qcom`](https://github.com/qualcomm-linux/meta-qcom) for Qualcomm firmware and tooling, with SDM845/SM7225/QCM6490 kernels taken from the postmarketOS device packages
+  - [`meta-qcom`](https://github.com/qualcomm-linux/meta-qcom) for Qualcomm firmware and tooling, with SDM845/SM7225/QCM6490 kernels taken from the postmarketOS device packages. **Not used for the first targets** (11 October 2026): the Fairphone 6 and Odin 2 Portal need only a kernel recipe, `mkbootimg` and the phone's own firmware, which meta-phoenix carries itself ([First targets](#first-targets))
   - [`meta-smartphone`](https://github.com/shr-distribution/meta-smartphone) (`meta-android` for Halium, and vendor layers `meta-google`, `meta-xiaomi`, `meta-blackberry`, ...) and LuneOS's `meta-luneos` recipes for libhybris, ofono-binder-plugin, droidmedia, gst-droid, pulseaudio-modules-droid
 - **Layer series:** OSE is scarthgap; several of these layers have moved to
   wrynose. Pin scarthgap branches where they exist, and carry backports in a
@@ -1157,10 +1674,10 @@ Verizon Pixels) cannot be unlocked and are out.
 
 | Job | Machines | When |
 | --- | --- | --- |
-| Parse and resolve (`bitbake -p`, `bitbake -n`): **exists**, `.github/workflows/parse.yml` | `qemux86-64`, `raspberrypi4-64` today; every Reference and Supported machine as its BSP layers are added | Every PR |
+| Parse and resolve (`bitbake -p`, `bitbake -n`): **exists**, `.github/workflows/parse.yml` | `qemux86-64`, `raspberrypi4-64`, and the first targets' `fairphone-fp6`, `ayn-odin2portal`, `pinephonepro`, `pinetab2` (11 October 2026), `phoenix-vm-arm64`; every Reference and Supported machine as it is added | Every PR |
 | Full image build (shared sstate) | `qemux86-64`, `raspberrypi4-64` | Every merge to main |
 | Boot test in QEMU (reach the card view, run app smoke tests) | `qemux86-64` | Every merge |
-| Full image build | Phone machines (Pixel 3a mainline and Halium, OnePlus 6, PinePhone Pro) | Nightly |
+| Full image build | The first targets' machines | Nightly |
 | Hardware-in-the-loop boot test | Reference devices on a USB relay / fastboot rig, as postmarketOS is building | Nightly, once we have the rig (M3) |
 | Release images, signed RAUC bundles | All Reference and Supported | Each release |
 
@@ -1170,12 +1687,16 @@ that do not parse, missing `DEPENDS`/`RDEPENDS` providers, wrong
 shows when sources arrive: a wrong `LIC_FILES_CHKSUM` md5, a `SRC_URI` or
 `SRCREV` that does not exist upstream, a missing `file://` file (bitbake
 only notes its absence while parsing) or a compile error. Those wait for the
-full build. PinePhone Pro, the one Supported phone, is not in it yet: its
+full build. LuneOS's PinePhone family machines were not usable for it: their
 BSP (`meta-pine64-luneos`, scarthgap branch) needs `meta-rockchip` and
-`meta-arm`, and its machine pulls `sensorfw`, `qtsensors-sensorfw-plugin`,
+`meta-arm`, and its machines pull `sensorfw`, `qtsensors-sensorfw-plugin`,
 `eg25-manager`, `linux-firmware-pine64` and `initramfs-uboot-image` from
 LuneOS's own layers (`meta-webos-ports`), which are built for the `luneos`
-distro rather than OSE's `webos`.
+distro rather than OSE's `webos`. meta-phoenix's own machines of the same
+names ([First targets](#first-targets)) need no layer beyond OSE's, so CI
+parses them; `eg25-manager` and the sensor stack are still to bring in.
+The new machines skip the firmware compression cases, which do not depend
+on the machine.
 
 ## Community and adoption
 

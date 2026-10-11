@@ -14,6 +14,8 @@ do_compile() {
 
 do_install() {
     ${PYTHON} ${S}/tools/install-rootfs.py ${D}
+    # An empty folder: /etc/phoenix/example.json under it is still missing.
+    install -d ${D}${sysconfdir}/phoenix
 }
 
 FILES:${PN} = "${prefix}/palm"

@@ -182,6 +182,9 @@ and returns it.
 | `push` | `{unifiedPush: true}`: recorded only, until phase C6 |
 | `share` | What the service takes from the share sheet and `send(ctx, content)` to post it: section 7 |
 | `signUp` | Where a person without an account gets one: `"https://..."`, or `{url?, servers?: [{name, url}]}` (below, "Sign-up link") |
+| `connection` | `{open(ctx) -> handle}`: a connection kept open per account while a capability is on (a chat network's socket or sync loop): section 5, "Staying connected" |
+| `settings` | Names of build-time settings the service reads (`ctx.setting`): an app id registered with the service, written into the image by its recipe (`/etc/phoenix/connectors/<service>.json`), never in the package |
+| `helpers` | System programs the service starts (`ctx.helper`): only those the image installs for Phoenix's own connectors (a package cannot bring native code, C12) |
 
 **A capability that is a set of objects** (contacts, events, entries) has a
 `kind` and a `pull`:
@@ -201,6 +204,33 @@ have `watch: {query, method}`: an activity with a db8 trigger calls that
 method when the query matches (the outbox of pending messages, as mojomail
 watched its outbox).
 
+**A drive** (cloud storage as a place in Files, the pickers and Save to
+Files) is the legacy `DOCUMENTS` capability with `files(ctx)` instead: it
+returns the account's provider (`DriveProvider`, connector-kit
+`src/files.ts`): `list(path)`, `stat(path)`, `download(entry, sink, opts)`
+(`kit.downloadInRanges` does it with ranged GETs), `upload(path, source,
+opts)` (source: `{size, name, mimeType, read(offset, length)}`;
+`kit.forEachChunk` cuts it in `opts.chunkSize` pieces, reporting
+`opts.onProgress(done, total)` and stopping when `opts.signal.aborted`),
+`mkdir`, `move(from, to, {overwrite})`, `copy?`, `remove`,
+`search?(query, {path, limit})` and `quota?()`. Paths are the drive's own
+(`/Photos/lake.png`); entries are `{name, path, type: "file" |
+"directory", size, mtime, mimeType?, etag?, id?}`.
+The kit makes the service methods from it (`listFiles`, `statFile`,
+`downloadFile`, `uploadFile`, `makeFolder`, `moveFile`, `copyFile`,
+`removeFile`, `searchFiles`, `driveQuota`, `transfers`, `cancelTransfer`:
+reserved names), runs transfers as ongoing activities with progress and
+cancel, and turns failures into the numbers apps see (`FILE_ERRORS`:
+OFFLINE 10 for no connection, AUTH 11 for a 401, QUOTA 12, CANCELED 13,
+NOT_AVAILABLE 14, UNSUPPORTED 15, RATE_LIMITED 16 with `retryAt`;
+`kit.fileError(code, text)`, `kit.httpError(status, what)`). A drive has
+no periodic sync (its "sync" checks the drive answers); nothing is copied
+ahead. `chunkSize` (64 KB or more, 8 MB by default) on the capability.
+Files reaches it through the kit's drive router (`createDriveRouter`,
+`/media/drives/<accountId>/...`; [SHARE-AND-FILES.md](SHARE-AND-FILES.md)
+"Drives"). `apps/connectors/drives` is the worked example: WebDAV, S3,
+Dropbox, Microsoft Graph, Google Drive and Box behind that one interface.
+
 **What every function gets (`ctx`):**
 
 | | |
@@ -210,8 +240,14 @@ watched its outbox).
 | `ctx.oauth` | `token(keyId)`, `forget(keyId)`: tokens the OAuth service keeps for you (section 6) |
 | `ctx.cachePhoto(key, url)` | A remote picture as a file of the device (a contact's photo must be a file: the Contacts framework checks with `palmGetResource`) |
 | `ctx.readFile(path)` | A file the user shares: `{bytes, mimeType}` |
+| `ctx.systemConfig(name)` | `/etc/palm/<name>` of the image, parsed (an OAuth client id kept out of the source tree: [DEVELOPER-APPS.md](DEVELOPER-APPS.md)); `null` when there is none |
 | `ctx.log(text)`, `ctx.now()` | Never log tokens, message text or addresses (3.2 rule 9) |
-| Account functions also: `ctx.accountId`, `ctx.account`, `ctx.credentials` (the account's `common` credentials), `ctx.config` (the validator's config, kept since `onCreate`), `ctx.state` (yours, saved after the call when it changed), `ctx.notify({title, body, appId, params})` (a notification: `com.webos.notification` `createToast`), `ctx.putMessage(message)` (into Messaging: `org.webosports.service.messaging` `putMessage`) | |
+| `ctx.net` | Sockets for a connection: `resolveSrv(name)`, `connect({host, port, tls, servername})` (with `startTls`), `websocket(url, protocols)`; the same hosts as `ctx.http` (and the targets of the user's server's SRV records), the same backoff. In a page (the simulator) only WebSocket |
+| `ctx.setting(name)` | A build-time setting (`settings`), or `undefined` in a build without it: say "not available in this build" before asking anything |
+| `ctx.helper(name, args?)` | A running system helper (`helpers`): lines in and out (`send`, `onLine`, `onExit`, `kill`); one process per name for all your accounts, started again after it exits; `HELPER_NOT_AVAILABLE` where the image has none |
+| `ctx.writeFile(name, bytes, mimeType?)` | Keeps a file received (a picture in a chat) where Messaging can show it -> its path |
+| `ctx.setTimeout`, `ctx.clearTimeout` | Timers (the tests drive them) |
+| Account functions also: `ctx.accountId`, `ctx.account`, `ctx.credentials` (the account's `common` credentials), `ctx.config` (the validator's config, kept since `onCreate`), `ctx.state` (yours, saved after the call when it changed), `ctx.notify({title, body, appId, params})` (a notification: `com.webos.notification` `createToast`), `ctx.putMessage(message)` (into Messaging: `org.webosports.service.messaging` `putMessage`); with `connection`: `ctx.connect()` (the account's open connection, opened if need be), `ctx.live()` (it, or null), `ctx.connectionsHere()`, `ctx.saveState()` (state changed between calls, by a connection) | |
 
 ## 4. The sync engine
 
@@ -250,6 +286,30 @@ date): up to 30 s it waits and tries once more; longer, the sync stops with
 account, and **no request is sent before then** (a sync asked meanwhile
 answers `{skipped: "backoff"}`). Network errors and 502, 504 are retried
 twice with backoff; every request has a 60 s timeout.
+
+### Staying connected
+
+A chat network is not polled: it pushes messages down a connection kept
+open. `definition.connection.open(ctx)` opens one for an account and returns
+a handle (`close()`, `closed`, and whatever your methods call: `flush`,
+`markRead`, `setPresence`). The kit keeps one per account: a sync or a
+method opens it with `ctx.connect()` (as does the service's `connect`
+method), each sync that succeeds opens it again if it dropped (so the
+periodic sync reconnects), and it is closed when the last capability is
+disabled, the account is deleted, or on `disconnect`. A failed open fails
+the sync that asked for it; its `retryAt` holds the next opens off as
+section 5's backoff does, and a `401_UNAUTHORIZED` puts every capability in
+`ERROR`. Keep the account's own data in `ctx.state` and `ctx.saveState()`
+when it changes between calls (a sync token, the last message filed).
+
+On a device the service holds the connections; in the simulator one page
+does (the system UI's, or the first that asks), and calls from other pages
+are forwarded to it (`NOT_LIVE_HERE`). The four messaging accounts
+(SYNERGY-CONNECTORS.md 7, "Messaging accounts, as built") are the examples:
+a socket and its stream management (Jabber), a long-poll sync loop
+(Matrix), a system helper's events (Delta Chat's core, TDLib).
+
+In the catalog, such an account says `"push": "connection"`.
 
 ## 6. Signing in with OAuth
 
@@ -460,6 +520,7 @@ manager in memory. A connector must pass it to be listed:
 | rate limit | a 429 with `Retry-After` stops the sync, and nothing reaches the server before then |
 | conflict | (two-way) a field edited on both sides keeps both edits or records the loser |
 | share, share limits, share errors | (with `share`) section 7, "Testing it" |
+| drive lifecycle, drive files, drive unauthorized, drive rate limit | (a drive, in place of lifecycle to rate limit) no periodic sync and the sync checks the drive; upload, list, download, refuse to overwrite, rename, remove; a 401 is AUTH (11) for the files and `401_UNAUTHORIZED` for the account; a 429 is RATE_LIMITED (16) and nothing is sent before its `retryAt` |
 
 The fixture (`service/test/fixture.js`) gives the template, what the sign-in
 page sends (`validateParams`), `server()` (a fake server: `request`,
@@ -467,7 +528,13 @@ page sends (`validateParams`), `server()` (a fake server: `request`,
 `editRemote(remoteId, field, value)`), `handlers` for other Luna calls (the
 OAuth service's `token`), `minObjects`, for two-way `conflict: {providerId,
 field, localValue, remoteValue}`, and with `share` what to post (`share`,
-`files`; section 7). Run it:
+`files`; section 7). A connector that keeps a connection gives
+`environment(server)`: more of what it runs in, from the fake server
+(`net`'s sockets, a `helper`, `settings`), whose `unauthorized()` and
+`throttle()` then concern those; one whose sign-in takes steps before the
+validator (a phone number, then a code) gives `beforeValidate(methods,
+server)`, which takes them and returns more of the validator's parameters.
+Run it:
 
 ```sh
 phoenix-connector test path/to/org.example.feeds        # 5 checks, 6 two-way, 3 more with share
@@ -646,13 +713,23 @@ extra methods (`signIn`, `outbox`), and sharing: its `share` declaration
 (text, a link, four pictures with alt text, Mastodon's visibilities) with
 its own compose page in place of the kit's.
 
+**The messaging accounts** (`apps/connectors/xmpp`, `apps/connectors/matrix`,
+`apps/connectors/deltachat`, `apps/telegram`) keep a connection
+(section 5, "Staying connected"), write Messaging's IM kinds as the
+original transports did, and each has a fake server or program for its
+tests and the simulator's demo (`service/test/`): a fake XMPP server, a
+Matrix homeserver, Delta Chat's core, TDLib's JSON interface.
+
 ## 12. Not yet
 
 - The trust tier and the db8 permission rule for generic kinds (C5); until
   then third-party connectors install in Developer Mode only. Review of a
   connector's first release on a public catalog, and the privacy and terms
   fields for reviewers (C4's admin side).
-- Push (UnifiedPush) registration (C6); connectors poll meanwhile.
+- Push (UnifiedPush) registration (C6); connectors poll meanwhile, or keep a
+  connection (section 5).
+- System helpers for third parties: only Phoenix's own connectors start
+  programs the image installs (Delta Chat's core, TDLib's bridge).
 - The OAuth sheet and the key store on a device (C3; placeholders).
 - Generic kinds for FEEDS, SOCIAL, PHOTO, MEDIA, PODCASTS and BOOKMARKS
   (OPEN-QUESTIONS.md Q3).

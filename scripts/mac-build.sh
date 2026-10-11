@@ -14,6 +14,13 @@
 # supports amd64 build hosts. The image itself can target ARM64 devices,
 # e.g. MACHINE=raspberrypi4-64. See docs/BUILDING-MAC.md.
 #
+# Machines: qemux86-64 (OSE's emulator), raspberrypi4-64, meta-phoenix's
+# fairphone-fp6, ayn-odin2portal, pinephonepro, pinetab2, and
+# phoenix-vm-arm64, the ARM64 VM that runs as any of those devices on this
+# Mac: scripts/mac-build.sh phoenix-vm-arm64 copies its kernel and root
+# image to out/phoenix-vm-arm64/, then scripts/vm.sh fairphone-fp6 starts
+# it (docs/BUILDING-MAC.md, "Run it in a VM").
+#
 # Tunables (environment): PHOENIX_CPUS, PHOENIX_MEMORY (e.g. 24g),
 # PHOENIX_VOLUME_SIZE (default 300g).
 

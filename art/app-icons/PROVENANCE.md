@@ -41,7 +41,7 @@ Every other object: `camera`, `podcasts`, `voicememos`, `weather`, `pdfview`,
 `passwords`, `authenticator`, `flashlight`, `scanner` (its code is a made-up
 pattern), `files`, `marketplace` (a bag with a star where the App Catalog's
 had HP's logo), the four `notes-*` notebooks, and the system objects
-`settings`, `firstuse`, `help`, `sharesheet`, `screenshot`, `printmanager`, `notificationlab`,
+`settings`, `firstuse`, `help`, `sharesheet`, `signin` (a globe behind a gold padlock: the Sign In card), `screenshot`, `printmanager`, `notificationlab`,
 `terminal`, `bluetooth`, `vpn`, `airplane`, `screen`, `sounds`, `datetime`,
 `language`, `textassist`, `justtype` (a magnifying glass), `certificates`
 (a certificate with a seal), `phoneprefs` (the `deviceinfo` phone with a
@@ -55,6 +55,12 @@ Touchstone, the Time exhibition's glass clock on its screen), `clipboard`
 bands like a voice's sound waves; `assistantpane` is the same drawing,
 smaller, for Settings > Assistant) and `advancedpane` (Settings > Advanced:
 a brushed metal panel with three sliders) and `hardwarepane` (Settings > Hardware: a circuit board with a chip, standing on its gold edge connector).
+
+`drives` (the drives' connector, `apps/connectors/drives`: its icons and
+every drive template's `drive-32x32` / `drive-48x48`, Nextcloud's and
+Dropbox's alike) is a folder with a cloud and an arrow in front, drawn for
+Phoenix; no provider's logo is used, so no trademark or logo licence is
+involved.
 
 `fediverse` (the Fediverse account: its icons and the account template's
 `fediverse-32x32` / `fediverse-48x48`) is our own drawing of the Fediverse

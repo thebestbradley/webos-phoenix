@@ -1,3 +1,4 @@
 {
-    "org.webosphoenix.service.oauth": []
+    "org.webosphoenix.service.oauth": ["application.launcher", "application.operation", "phoenix.shellhost.app"],
+    "com.webos.surfacemanager": ["oauth.erase"]
 }

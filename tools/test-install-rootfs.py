@@ -80,6 +80,55 @@ for name in ("org.webosphoenix.shellhost", "com.palm.applicationManager", "org.w
     check("/usr/share/luna-service2/services.d/%s.service" % name in paths, name + ": installed")
 check(not any(".test." in p for p in paths), "no tests in the image")
 
+# Every wallpaper Settings offers (its albums, apps/settings/src/WallpaperPicker.tsx),
+# picture and thumbnail, is installed where the picker sets it, and the
+# shell's default (Theme.defaultWallpaperPath) is among them.
+WP_DIR = "/usr/palm/applications/org.webosphoenix.settings/wallpapers/"
+with open(os.path.join(REPO, "apps", "settings", "src", "WallpaperPicker.tsx"), encoding="utf-8") as f:
+    picker = f.read()
+albums = re.findall(r'album\("(\w+)", \[([^\]]*)\]\)', picker)
+names = [n for _, ns in albums for n in re.findall(r'"([^"]+)"', ns)]
+check([a for a, _ in albums] == ["Artistic", "Nature"] and len(names) == 21,
+      "Settings' wallpapers: %d in albums %s" % (len(names), ", ".join(a for a, _ in albums)))
+slugs = [n.lower().replace(" ", "-") for n in names]
+missing = [s for s in slugs if WP_DIR + s + ".jpg" not in paths or WP_DIR + "thumbs/" + s + ".jpg" not in paths]
+check(not missing, "every wallpaper and its thumbnail is installed (missing: %s)" % (", ".join(missing) or "none"))
+on_disk = sorted(f[:-4] for f in os.listdir(os.path.join(REPO, "apps", "settings", "public", "wallpapers")) if f.endswith(".jpg"))
+check(on_disk == sorted(slugs), "every wallpaper in public/wallpapers is offered in an album")
+with open(os.path.join(REPO, "shell", "qml", "Phoenix", "Shell", "Theme.qml"), encoding="utf-8") as f:
+    default = re.search(r'defaultWallpaperPath: "([^"]+)"', f.read()).group(1)
+check(default == WP_DIR + "northern-lights.jpg" and default in paths, "the shell's default wallpaper is installed: " + default)
+# The platform's servers and keys (docs/PLATFORM-CLIENT.md): servers.json,
+# the account service and the shared client package each service carries.
+check("/etc/palm/phoenix/servers.json" in paths, "servers.json: installed (the recipe writes the image's over it)")
+check("/usr/share/luna-service2/services.d/org.webosphoenix.service.account.service" in paths, "org.webosphoenix.service.account: installed")
+for svc in ("com.palm.update", "org.webosphoenix.service.packages", "org.webosphoenix.hardware", "org.webosphoenix.service.account"):
+    check("/usr/palm/services/%s/node_modules/@phoenix/platform/src/index.js" % svc in paths, svc + ": carries @phoenix/platform")
+check("/etc/palm/updates.json" not in paths, "no second place for the update feed (servers.json)")
+
+# tools/servers-json.py: what the recipe runs, and what it refuses.
+import base64  # noqa: E402
+import tempfile  # noqa: E402
+with tempfile.TemporaryDirectory() as tmp:
+    root = base64.b64encode(os.urandom(32)).decode()
+    out = os.path.join(tmp, "servers.json")
+    r = subprocess.run([sys.executable, os.path.join(REPO, "tools", "servers-json.py"), out, "--feeds", "https://feeds.example.org",
+                        "--api", "https://api.example.org/", "--issuer", "https://api.example.org", "--catalog-root", root, "--updates-root", root],
+                       capture_output=True, text=True)
+    made = json.load(open(out)) if r.returncode == 0 else {}
+    check(r.returncode == 0 and made.get("feeds") == "https://feeds.example.org/" and made["catalog"]["root"] == root
+          and made["updates"]["channels"] == ["stable", "beta", "dev"] and made["account"]["issuer"] == "https://api.example.org",
+          "servers-json.py: an image's file, roots pinned")
+    r = subprocess.run([sys.executable, os.path.join(REPO, "tools", "servers-json.py"), out, "--feeds", "http://feeds.example.org/"],
+                       capture_output=True, text=True)
+    check(r.returncode != 0 and "https" in r.stderr, "servers-json.py: plain HTTP refused for an image")
+    r = subprocess.run([sys.executable, os.path.join(REPO, "tools", "servers-json.py"), out, "--feeds", "https://f.example.org/",
+                        "--catalog-root", "c2hvcnQ="], capture_output=True, text=True)
+    check(r.returncode != 0 and "Ed25519" in r.stderr, "servers-json.py: a key that is not one refused")
+    r = subprocess.run([sys.executable, os.path.join(REPO, "tools", "servers-json.py"), "--check",
+                        os.path.join(REPO, "services", "account", "etc", "palm", "phoenix", "servers.json")], capture_output=True, text=True)
+    check(r.returncode == 0, "servers-json.py --check: the simulator's file")
+
 if failures:
     print("%d failed" % failures)
     sys.exit(1)

@@ -693,8 +693,9 @@ drives it (Wi-Fi, password, PIN, brightness, airplane mode, Bluetooth).
 Phoenix Phone and Messaging start cleanly too, and
 `node tools/test-phone-messaging.cjs [--tablet]` places, holds and ends a
 call, answers and ignores simulated incoming calls, and sends and receives
-texts, picture messages (MMS) and instant messages (a Jabber account on
-the simulated server).
+texts and picture messages (MMS), and shows Buddies without an IM
+account; the IM accounts have tests of their own (`tools/test-xmpp.cjs`,
+`test-matrix.cjs`, `test-deltachat.cjs`, `test-telegram.cjs`).
 
 Camera, Photos and Music start cleanly too, and `node tools/test-media.cjs
 [--tablet]` drives them. So does Files, driven by `node tools/test-files.cjs
@@ -934,8 +935,13 @@ Accessibility, Location Services, Emergency Info, Certificate Manager,
 Device Info, Backup, Updates, VPN, Developer Mode.
 Launched without a page it lists them all. The launcher icons are drawn in
 `art/app-icons` (on the grey diamond, as Palm's preference apps were) and the
-wallpapers by
-`tools/make-wallpapers.py` (CC0); Palm's were never open-sourced.
+wallpapers by `tools/wallpapers/generate.py` (twelve, Northern Lights the
+default; the picker's album "Artistic") and nine photographs under CC0 or
+CC BY prepared by `tools/wallpapers/photos.py` (the album "Nature"; authors
+and licences in `public/wallpapers/PROVENANCE.md`); Palm's were never
+open-sourced. The picker (`src/WallpaperPicker.tsx`, Screen & Lock's and
+Exhibition's) lists the albums and opens one into a grid, as the system
+file picker's albums did (luna-systemui `app/FilePicker/ImageAlbumList.js`).
 
 ### Services
 
@@ -1051,8 +1057,8 @@ end of `runtime/phoenix-runtime.js`):
 | Texts | db8 `com.palm.smsmessage:1` (extends `com.palm.message:1`: `folder` inbox / outbox, `status` pending / sending / successful / failed, `messageText`, `from`, `to[]`, `conversations[]`, `flags.read`), `com.palm.chatthread:1` (`displayName`, `summary`, `timestamp`, `unreadCount`, `personId`, `replyAddress`) | `webos-telephonyd` `files/db8/kinds`, `src/telephonyservice_sms.c`; `webOS-ports/org.webosports.messaging` `service/configuration/db/kinds` |
 | Sending | `org.webosports.service.messaging` `putMessage {message}` -> `{threadids}`: assigns the thread and stores the message; the telephony service then sends outbox messages with status pending (`sendSmsFromDb`) | `org.webosports.messaging` `service/javascript/assistants/PutMessage.js`, `utils/MessageAssigner.js`; `webos-telephonyd` `files/activities/com.palm.telephony/outgoing-sms.json` |
 | Picture messages | db8 `com.palm.mmsmessage:1` (extends `com.palm.message:1`; `serviceName: "mms"`, `parts[{path, mimeType, name}]`), shipped by Messaging. `putMessage` first copies each part into `/media/internal/.mms/` so the message keeps its picture (the media indexer skips dot folders); the summary reads "Picture: text" | the legacy `com.palm.mmsmessage` kind (`webos-telephonyd` leaves MMS to `mmsd`, which LuneOS never wired up) |
-| Instant messages | db8 `com.palm.immessage:1` / `com.palm.immessage.xmpp:1` (`serviceName: "type_jabber"`, `username` = your account), `com.palm.imloginstate:1` (per account: `state` online / offline, `availability` 0 available, 2 busy, 4 offline, `customMessage`), tempdb `com.palm.imbuddystatus:1` (`username`, `displayName`, `availability`, `status`, `personId`). An IM conversation is its own `com.palm.chatthread:1` (`replyService`, `replyAddress` = the buddy, `username`); a person's texts and IMs are not merged into one thread | the readers in the tree: Enyo 1.0 `lib/contactsui/UI/PersonList.js` (`imloginstate`, `imbuddystatus` from tempdb), Email `facades/ContactCache.js`; `webOS-ports/org.webosports.messaging` `service/configuration/db/kinds` |
-| IM transport | `org.webosphoenix.service.xmpp`: the Synergy callbacks of the `com.webosphoenix.xmpp` account template (Accounts > Add > Jabber (XMPP), `runtime/accounts/com.webosphoenix.xmpp`): `checkCredentials`, `onCreate`, `onEnabled` (signs in: login state + roster), `onDelete` (state, roster, IM conversations); `setPresence {accountId, availability}` (Phoenix) | the template layout of the legacy Synergy accounts (`com.palm.service.accounts`) |
+| Instant messages | db8 `com.palm.immessage:1` and each transport's kind: `com.palm.immessage.xmpp:1` (`serviceName: "type_jabber"`), `.matrix:1` (`type_matrix`), `.deltachat:1` (`type_deltachat`), `.telegram:1` (`type_telegram`), `.fediverse:1` (`type_fediverse`); `username` = your account; a group's messages have `chatType: "groupchat"`, `channelName`, `channelDisplayName`; ours get `deliveryStatus` delivered / read; `com.palm.imloginstate:1` (per account: `state` online / offline, `availability` 0 available, 2 busy, 4 offline, `customMessage`), tempdb `com.palm.imbuddystatus:1` (`username`, `displayName`, `availability`, `status`, `personId`). An IM conversation is its own `com.palm.chatthread:1` (`replyService`, `replyAddress` = the buddy, `username`); a person's texts and IMs are not merged into one thread | the readers in the tree: Enyo 1.0 `lib/contactsui/UI/PersonList.js` (`imloginstate`, `imbuddystatus` from tempdb), Email `facades/ContactCache.js`; `webOS-ports/org.webosports.messaging` `service/configuration/db/kinds` |
+| IM transports | Connector packages on the kit (below, "Synergy connectors and the Fediverse"): `org.webosphoenix.service.xmpp`, `.matrix`, `.deltachat`, `.telegram`, each with the Synergy callbacks of its template and `outbox` (the db8 watch on pending messages), `markRead {accountId, threadId}` (read receipts), `setPresence {accountId, availability, customMessage}` (Messaging's My Status; the original transports watched `imloginstate`), and Jabber's `chatState` (typing). Messaging finds a conversation's transport by `serviceName` (`@phoenix/luna` `IM_SERVICES`) | LuneOS's imlibpurpleservice (`src/IMMessage.cpp`, `inc/IMMessage.h`, `src/BuddyListConsolidator.cpp`, `src/IMLoginState.cpp`) for the fields; the template layout of the legacy Synergy accounts (`com.palm.service.accounts`) |
 
 The apps ship their db8 kinds in `public/configuration/db/kinds`, which
 `tools/install-rootfs.py` installs to `/etc/palm/db/kinds`.
@@ -1080,16 +1086,17 @@ Helpers for tests and the shell:
 - `__phoenixRuntime.simulateIncomingMms({from?, text?, image?})` the same
   for a picture message (default: a sample photo from Ada; **Shift+F5**)
 - `__phoenixRuntime.simulateIncomingIm({from?, text?})` an instant message
-  to the first signed-in Jabber account (**Ctrl+F5**);
-  `__phoenixRuntime.xmpp.setBuddyPresence(jid, availability, status?)`
+  from a buddy of the demo Jabber server to the account signed in there
+  (**Ctrl+F5**); `__phoenixRuntime.xmpp.setBuddyPresence(jid,
+  availability, status?)`; `__phoenixRuntime.connectorDemo(service, {op:
+  "deliver", from, text?, picture?})` the same for any demo account
 
-The IM server is simulated: any `name@chat.example` with a password signs
-in, the roster is four of the demo contacts (Ada and Lena available,
-Marcus busy, Theo offline), and a buddy who is not offline answers a
-message after about two seconds. Sending fails while signed out or in
-airplane mode. A real transport (XMPP, as planned in
-`docs/SYNERGY-MODERN.md`) registers with
-`runtime.registerImTransport(service, send)` the same way.
+The IM accounts are real transports; in the simulator their servers are
+demos that answer only for their own domains (below, "In the simulator"):
+`name@chat.example` (Jabber; four of the demo contacts in the roster, Ada
+and Lena available, Marcus busy, Theo offline, who answer), `@name:matrix.example`,
+`name@chatmail.example` (Delta Chat) and any phone number with the code
+12345 (Telegram, with a test app id in `runtime/connector-settings/`).
 
 db8 here follows `extends` through every level (`com.palm.immessage.xmpp:1`
 -> `com.palm.immessage:1` -> `com.palm.message:1`), and watches on tempdb
@@ -2409,6 +2416,7 @@ methods. On a device the service runs under `run-js-service`
 | Service | Methods | Notes |
 | --- | --- | --- |
 | `org.webosphoenix.service.fediverse` | the callbacks; `signIn {handle}` (the account page's sign-in), `post {accountId, text, visibility, inReplyTo, media: [{path, description}]}` (the share target), `outbox` (the db8 watch on unsent IM messages) | Template `com.webosphoenix.fediverse`: CONTACTS (read only, `com.palm.contact.fediverse:1`), MESSAGING (IM, `com.palm.immessage.fediverse:1`, `serviceName` `type_fediverse`), SOCIAL (notifications as toasts); kinds `org.webosphoenix.fediverse.state:1`, `.item:1` |
+| `org.webosphoenix.service.xmpp`, `.matrix`, `.deltachat` (`apps/connectors/*`, catalog packages), `.telegram` (`apps/telegram`, comes with Phoenix) | the callbacks; `connect`, `disconnect` (the account's connection); `outbox`, `markRead`, `setPresence`; Jabber's `chatState`, `enablePush`; Matrix's `signInOptions {user}`, `signIn {user}` (the homeserver's OAuth); Delta Chat's `available`; Telegram's `available`, `signIn {phone}` / `{key, code}` / `{key, password}` | MESSAGING (IM) and CONTACTS (read only) each; Jabber's buddies in tempdb `com.palm.imbuddystatus.xmpp:1`. Delta Chat and Telegram start a system helper (`deltachat-rpc-server`, `phoenix-tdjson`); Telegram reads its app id from `/etc/phoenix/connectors/org.webosphoenix.service.telegram.json`. SYNERGY-CONNECTORS.md 7 |
 | `org.webosphoenix.service.oauth` (`services/oauth`) | `authorize {authorizationEndpoint, tokenEndpoint, clientId, clientSecret, scope, key}` (code flow with PKCE S256 and `state` in the system's browser sheet; the token goes to the key store under `key`), `token {key}`, `forget {key, revokeEndpoint}`, `client {server, register}` (a server's app registration, kept per server and redirect), `redirectUri` | Only the service that stored a key reads or forgets it (`PERMISSION_DENIED`); errors `CANCELED`, `ACCESS_DENIED`, `NOT_FOUND`. On a device a placeholder: the keys in `/var/lib/phoenix/oauth/keys.json`, no sheet (`UNSUPPORTED`), redirect `http://127.0.0.1/oauth/callback` (RFC 8252) |
 
 Messaging shows a `type_fediverse` conversation without presence (the handle and
@@ -2428,6 +2436,16 @@ Mode (`installPackage`) is loaded the same way and dropped when the app
 is removed. `__phoenixRuntime.connectors.hosted()` lists them and
 `.service(name)` gives a service's methods (to sync one from a test). Outgoing IM messages of a connector's
 `serviceName` go to its outbox method, as the db8 watch does on a device.
+A connector that keeps a connection (`definition.connection`) has it in one
+page: the first that asks holds a lock in the store (`connector:live:<service>`,
+renewed every 4 s, taken over after 15 s), opens its accounts' connections
+(`connectAll`), and answers the other pages' calls (`NOT_LIVE_HERE` forwards
+them). A page has no TCP: Jabber goes over WebSocket (RFC 7395), and the demo
+servers (`/usr/share/phoenix/demo/<x>/`, mounted from each connector's
+`service/test/`) answer chat.example, matrix.example, and as system helpers
+Delta Chat's core (chatmail.example) and TDLib (with a test app id). Files a
+connector keeps (`writeFile`: pictures received) go to the file store, up to
+1 MB each; build-time settings come from `runtime/connector-settings/`.
 Photos the connector keeps (`cachePhoto`) go to the file cache
 (`/var/file-cache/<service>/`), as Contacts reads them with
 `palmGetResource`.
@@ -2511,7 +2529,10 @@ Update All, Catalogs). Behind it is `org.webosphoenix.service.packages`
 which runs unchanged in the simulator:
 
 - **Sources** (`/etc/palm/marketplace/sources.json`, then the user's):
-  the Phoenix Marketplace (a signed catalog; for now at
+  the Phoenix Marketplace (a signed catalog whose address and pinned root
+  key are `/etc/palm/phoenix/servers.json`'s "catalog",
+  [PLATFORM-CLIENT.md](PLATFORM-CLIENT.md#the-app-catalog), with the signed
+  revocation list and staged app rollouts; in the simulator at
   `http://127.0.0.1:8088/v1/`, `server/marketplace/bin/serve.sh`, or the
   simulator's Services > Marketplace Catalog or `phoenix-sim --marketplace`,
   which start it and open the Marketplace). When it cannot be reached, the
@@ -2707,7 +2728,9 @@ which is `com.palm.app.updates` (the alerts open it).
 The system is installed with RAUC into two root slots, so:
 
 1. a daily activity reads the feed, `<feed>/<compatible>/<channel>.json`
-   (`/etc/palm/updates.json`; `server/updates` writes them), stable or beta;
+   (`/etc/palm/phoenix/servers.json` "updates"; `server/updates` writes them),
+   stable, beta or dev; signed (format 2) through the owner's root when the image
+   pins it, with staged rollouts and revoked builds ([PLATFORM-CLIENT.md](PLATFORM-CLIENT.md#system-updates));
 2. over Wi-Fi (or when asked) it downloads the bundle, checks its size and
    SHA-256 against the feed, and RAUC writes it to the other slot, while the
    device is in use. Both are an ongoing activity in the notification area;
@@ -2740,10 +2763,12 @@ its bundles, and publishes releases with its admin API (`POST
 /api/admin/updates?compatible=&version=&build=&channel=&note=...` with the
 bundle as the body; `POST /api/admin/updates/withdraw`; `GET /api/updates`
 lists every channel). Both it and `server/updates/bin/updates.php` write the
-feed with `server/updates/src/UpdateFeed.php`. A device's default
-(`/etc/palm/updates.json`) is that server: `http://127.0.0.1:8088/updates/`
-on this computer (the simulator's Services > Marketplace Catalog starts it),
-the catalog server's public address once it is hosted.
+feed with `server/updates/src/UpdateFeed.php`. The simulator's servers.json
+(`services/account/etc/palm/phoenix/servers.json`) names that server:
+`http://127.0.0.1:8088/updates/` on this computer (the simulator's Services >
+Marketplace Catalog starts it); a device image's names the platform's feeds
+host (meta-phoenix `PHOENIX_FEEDS_URL`). After the restart into a new system
+the service marks it good (`rauc status mark-good`).
 `com.palm.power/shutdown/machineReboot` restarts phoenix-sim (`simProcess`),
 or reloads the page under `tools/serve-rootfs.py`; for a system update
 (`reason: "System update"`) phoenix-sim starts again with `--updating`, and

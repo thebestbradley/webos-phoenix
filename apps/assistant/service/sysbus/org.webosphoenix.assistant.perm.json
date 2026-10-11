@@ -37,7 +37,8 @@
         "phoenix.appmanager.launch",
         "devices.power.query",
         "vpn.management",
-        "phoenix.clipboard"
+        "phoenix.clipboard",
+        "account.cloud"
     ],
     "org.webosphoenix.tts": []
 }

@@ -1,0 +1,15 @@
+{
+    "id": "org.webosphoenix.telegram.state:1",
+    "owner": "org.webosphoenix.service.telegram",
+    "sync": false,
+    "indexes": [
+        {
+            "name": "accountId",
+            "props": [
+                {
+                    "name": "accountId"
+                }
+            ]
+        }
+    ]
+}

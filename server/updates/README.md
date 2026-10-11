@@ -16,7 +16,10 @@ and the device installs only a bundle newer than what it runs.
 **Phoenix's catalog server serves it** (`server/marketplace`: the
 Marketplace's catalog at `/v1/`, this feed at `/updates/`, one server), and
 publishes releases with its admin API (`POST /api/admin/updates`). Devices
-read it there by default (`services/updates/etc/palm/updates.json`).
+read it there in the simulator (its `/etc/palm/phoenix/servers.json`,
+"updates"). Channels: stable, beta and dev; `--rollout PERCENT [--seed TEXT]`
+stages a release (docs/PLATFORM-CLIENT.md). This server writes format 1,
+unsigned, as a development feed; the platform writes format 2, signed.
 `src/UpdateFeed.php` writes the feed for both that server and this command.
 
 ## On this computer
@@ -42,8 +45,8 @@ for a feed apart from the catalog.
 
 ```sh
 php server/updates/bin/updates.php publish phoenix.raucb \
-    --compatible phoenix-pinephone --version 1.1.0 --build 110 [--channel beta] --note "..."
-php server/updates/bin/updates.php withdraw --compatible phoenix-pinephone [--channel beta]
+    --compatible phoenix-pinephonepro --version 1.1.0 --build 110 [--channel beta] --note "..."
+php server/updates/bin/updates.php withdraw --compatible phoenix-pinephonepro [--channel beta]
 php server/updates/bin/updates.php show
 ```
 

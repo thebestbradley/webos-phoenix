@@ -5,7 +5,9 @@
 // methods of hardwareservice.js with webos-service (OSE's
 // nodejs-module-webos-service). run-js-service starts it on demand
 // (sysbus/); tools/install-rootfs.py installs it, its luna-service2 files and
-// etc/palm/hardware/catalog.json (the driver catalog and its pinned key).
+// etc/palm/hardware/catalog.json (the driver catalogs; the Phoenix one's
+// address, pinned key and report address come from
+// /etc/palm/phoenix/servers.json "drivers", docs/PLATFORM-CLIENT.md).
 // It runs as root: it installs packages (opkg) and loads drivers (modprobe).
 // Its state (the catalog it read, what it installed) is
 // /var/lib/phoenix/hardware/state.json; the packages it installed are kept
@@ -20,6 +22,8 @@ var Service = require("webos-service");
 var hardware = require("./hardwareservice");
 var node = require("./lib/node");
 var sysfs = require("./lib/sysfs");
+var platform = require("@phoenix/platform");
+var platformDevice = require("@phoenix/platform/src/device");
 
 var STATE = "/var/lib/phoenix/hardware/state.json";
 var PACKAGES = "/var/lib/phoenix/hardware/packages";
@@ -27,6 +31,12 @@ var CONFIG = "/etc/palm/hardware/catalog.json";
 var IMAGE_FIRMWARE = "/usr/share/phoenix/firmware/licences.json";
 
 var service = new Service(hardware.SERVICE);
+var servers = null;   // /etc/palm/phoenix/servers.json, resolved (readServers)
+function readServers() {
+    return platformDevice.servers(function (uri, params) {
+        return new Promise(function (resolve) { service.call(uri, params, function (m) { resolve(m.payload); }); });
+    }, function (m) { console.log("[hardware] " + m); }).then(function (r) { servers = r; }, function () { servers = null; });
+}
 var scanner = sysfs.createScanner(node.createFs("/"), {
     names: node.createNames({ pci: ["/usr/share/hwdata/pci.ids", "/usr/share/misc/pci.ids"],
                               usb: ["/usr/share/hwdata/usb.ids", "/usr/share/misc/usb.ids"] })
@@ -71,7 +81,9 @@ var methods = hardware.createHardwareService({
             fs.renameSync(STATE + ".new", STATE);
         }
     },
-    config: function () { return readJson(CONFIG) || {}; },
+    // catalog.json with /etc/palm/phoenix/servers.json's "drivers" over it (the
+    // address, the pinned key, the report address), read before each call.
+    config: function () { return platform.driverConfig(readJson(CONFIG) || {}, servers); },
     // Written when the image is built (meta-phoenix, phoenix-firmware-policy):
     // each firmware package in it, its licence and its licence files.
     imageFirmware: {
@@ -91,18 +103,22 @@ var methods = hardware.createHardwareService({
 hardware.METHODS.forEach(function (name) {
     service.register(name, function (message) {
         var p = message.payload || {};
-        if (name === "install" && p.subscribe) {
-            message.respond({ returnValue: true, subscribed: true, driverId: p.driverId, state: "queued" });
-            methods.install(p, function (st) { message.respond(st); });
-            return;
-        }
-        methods[name](p).then(function (reply) {
-            if (name === "list" && p.subscribe && message.isSubscription && reply.returnValue) {
-                reply.subscribed = true;
-                var stop = methods.watch(function (r) { message.respond(r); });
-                message.on("cancel", function () { stop(); });
-            }
-            message.respond(reply);
-        });
+        readServers().then(function () { handle(name, message, p); });
     });
 });
+
+function handle(name, message, p) {
+    if (name === "install" && p.subscribe) {
+        message.respond({ returnValue: true, subscribed: true, driverId: p.driverId, state: "queued" });
+        methods.install(p, function (st) { message.respond(st); });
+        return;
+    }
+    methods[name](p).then(function (reply) {
+        if (name === "list" && p.subscribe && message.isSubscription && reply.returnValue) {
+            reply.subscribed = true;
+            var stop = methods.watch(function (r) { message.respond(r); });
+            message.on("cancel", function () { stop(); });
+        }
+        message.respond(reply);
+    });
+}

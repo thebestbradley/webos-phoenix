@@ -5,7 +5,7 @@
 // paste does, labels for dates and kinds, and the saved preferences
 // (sort order, hidden files, favourite folders).
 
-import { baseName, isInside, joinPath, kindOf, parentOf, uniqueName, type FileEntry, type FileKind, type SortKey } from "@phoenix/luna";
+import { baseName, DRIVES_ROOT, isInside, joinPath, kindOf, parentOf, uniqueName, type FileEntry, type FileKind, type SortKey } from "@phoenix/luna";
 import { formatTime } from "@phoenix/ui";
 
 export const HOME = "/media/internal";
@@ -13,20 +13,35 @@ export const HOME = "/media/internal";
 /** Favourite folders on first start (legacy webOS's USB drive and its usual folders). */
 export const DEFAULT_FAVORITES = [HOME, HOME + "/Downloads", HOME + "/Documents", HOME + "/Pictures", HOME + "/Music"];
 
-/** A folder's name for headers and lists. */
-export function folderTitle(path: string): string {
-    if (path === "/") return "Device";
-    if (path === HOME) return "Internal storage";
-    return baseName(path);
+/** The drives' folders' names: /media/drives/<accountId> -> "Nextcloud" (from the drives' entries). */
+export type DriveNames = Record<string, string>;
+
+export function driveNames(drives: FileEntry[]): DriveNames {
+    const out: DriveNames = {};
+    for (const d of drives) if (d.drive) out[d.path] = d.drive.title;
+    return out;
 }
 
-/** The path bar: one segment per folder from the root. */
-export function crumbs(path: string): { label: string; path: string }[] {
-    const out = [{ label: "/", path: "/" }];
-    let p = "";
-    for (const seg of path.split("/").filter(Boolean)) {
+/** A folder's name for headers and lists. */
+export function folderTitle(path: string, names: DriveNames = {}): string {
+    if (path === "/") return "Device";
+    if (path === HOME) return "Internal storage";
+    if (path === DRIVES_ROOT) return "Drives";
+    return names[path] ?? baseName(path);
+}
+
+/**
+ * The path bar: one segment per folder from the root. A drive's path
+ * starts at the drive ("Nextcloud", then its folders): its account id
+ * means nothing to the user.
+ */
+export function crumbs(path: string, names: DriveNames = {}): { label: string; path: string }[] {
+    const drive = /^\/media\/drives\/[^/]+/.exec(path);
+    const out = drive ? [{ label: "Drives", path: DRIVES_ROOT }] : [{ label: "/", path: "/" }];
+    let p = drive ? DRIVES_ROOT : "";
+    for (const seg of path.slice(drive ? DRIVES_ROOT.length : 0).split("/").filter(Boolean)) {
         p += "/" + seg;
-        out.push({ label: seg, path: p });
+        out.push({ label: names[p] ?? seg, path: p });
     }
     return out;
 }

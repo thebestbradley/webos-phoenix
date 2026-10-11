@@ -30,7 +30,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine: [qemux86-64, raspberrypi4-64]
+        # OSE's two machines, and meta-phoenix's own (docs/HARDWARE.md,
+        # "First targets" and "Device VMs"), which need no layer beyond
+        # OSE's. The firmware compression cases (PHOENIX_PARSE_COMPRESS) are
+        # resolved on OSE's two only: they do not depend on the machine.
+        include:
+          - machine: qemux86-64
+            compress: xz zstd
+          - machine: raspberrypi4-64
+            compress: xz zstd
+          - machine: fairphone-fp6
+            compress: ""
+          - machine: ayn-odin2portal
+            compress: ""
+          - machine: pinephonepro
+            compress: ""
+          - machine: pinetab2
+            compress: ""
+          # The ARM64 VM that stands in for each of them (docs/HARDWARE.md,
+          # "Device VMs"): OE's qemuarm64 with the phones' package set.
+          - machine: phoenix-vm-arm64
+            compress: ""
     steps:
       # HEAD's commit id is all the recipes need from the checkout; no
       # submodules.
@@ -70,6 +90,8 @@ jobs:
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
       - name: Parse and resolve webos-phoenix-image (${{ matrix.machine }})
+        env:
+          PHOENIX_PARSE_COMPRESS: ${{ matrix.compress }}
         run: scripts/parse-check.sh ${{ matrix.machine }}
 
       - uses: actions/upload-artifact@v4

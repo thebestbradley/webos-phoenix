@@ -93,6 +93,7 @@ describe("an account type in words", () => {
         expect(signInText(type("x.y", { title: "Mastodon", auth: { type: "oauth", registration: "none" } }))).toBe("Sign in with Mastodon");
         expect(pushText(DAV)).toBe("Checks for new data every few minutes");
         expect(pushText(SIGNAL)).toMatch(/as it happens/);
+        expect(pushText(type("com.webosphoenix.drive.box", { capabilities: [{ capability: "DOCUMENTS", direction: "two-way" }] }))).toMatch(/fetched when you open them/);
         expect([DAV, MS, IMMICH].map(statusBadge)).toEqual(["", "Beta", "Experimental"]);
     });
 });

@@ -107,9 +107,27 @@ QtObject {
     // font (assets/fonts/noto-color-emoji/50-phoenix-emoji.conf).
     readonly property string emojiFontFamily: Qt.platform.os === "osx" ? "Apple Color Emoji" : "Noto Color Emoji"
 
+    // ---- Wallpaper
+
+    // The default wallpaper, on the device: Settings' Northern Lights
+    // (apps/settings/public/wallpapers, drawn by tools/wallpapers/generate.py),
+    // as luna-sysmgr's default was a file its conf/defaultPreferences.txt
+    // named. The system service's default wallpaper preference
+    // (runtime/phoenix-runtime.js) is the same file.
+    readonly property string defaultWallpaperPath: "/usr/palm/applications/org.webosphoenix.settings/wallpapers/northern-lights.jpg"
+
     // ---- Status bar (luna-sysmgr/images/statusBar/status-bar-background.png is 28px tall)
 
-    readonly property int statusBarHeight: px(28)
+    // A screen with a camera cutout at its top edge: the bar is at least
+    // as tall as the cutout reaches (device pixels, set by Shell.qml), so
+    // windows below it never run under the hole: Android's rule for a
+    // cutout ("content renders into the cutout area when the display
+    // cutout is contained in a system bar. Otherwise, the window does not
+    // overlap the display cutout", developer.android.com, "Support display
+    // cutouts", LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT). The original's
+    // phones had no cutout: 0 there, and the bar is the Pre's 28 px.
+    property int safeAreaTop: 0
+    readonly property int statusBarHeight: Math.max(px(28), safeAreaTop)
     readonly property int statusBarTitleMaxWidth: px(140)   // Src/base/settings/Settings.cpp:179
     readonly property int statusBarFadeDuration: motion(300)                 // conf/lunaAnimations.conf:112-113 (linear)
     readonly property int statusBarIconSpacing: px(5)                // StatusBarIcon.h:35 ICON_SPACING

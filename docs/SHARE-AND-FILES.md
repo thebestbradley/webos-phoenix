@@ -78,6 +78,71 @@ listing asks the device's accounts service (`listAccounts`) for the
 connector's template, and the compose page calls the connector's service
 under `run-js-service`.
 
+### Drives
+
+Cloud storage as places beside Internal Storage (11 October 2026, built in
+the simulator): in Files (a **Drives** section under the favourites, the
+path bar starting at "Drives"), in the file picker's Files kind (SF2), in
+Save to Files (SF3: Back from Internal Storage shows **Places**, Internal
+Storage and every drive) and so in every share sheet. Each drive is a
+Synergy account (DOCUMENTS) of the drives' connector
+(`apps/connectors/drives`, `org.webosphoenix.drives`), added in Accounts
+or Connections, with a sign-up link:
+
+| Account type | Sign-in | Status |
+| --- | --- | --- |
+| Nextcloud | Login Flow v2 (the server's own page in the browser; an app password comes back, revoked when the account is removed) or an app password | beta |
+| ownCloud, WebDAV (any server) | app password / password | beta |
+| S3 Storage (Backblaze B2, Wasabi, MinIO, Amazon S3, any) | access key and secret; Signature V4 | beta |
+| Dropbox, OneDrive (Microsoft Graph), Google Drive, Box | OAuth with PKCE through `org.webosphoenix.service.oauth`; "not available in this build" without Phoenix's registration ([DEVELOPER-APPS.md](DEVELOPER-APPS.md)) | experimental |
+
+The package is Phoenix's own but **not pre-installed**: it is in the
+catalog (`server/marketplace/catalog/accounts.json`), and installing it
+from Connections needs no Developer Mode (`preinstalled.json` "catalog",
+`packagesservice.js` `isFirstParty`).
+
+**Paths.** A drive is `/media/drives/<accountId>/...` to Files'
+service (`org.webosphoenix.filemanager`), which hands those paths to the
+kit's drive router (`createDriveRouter`, connector-kit `src/drives.ts`):
+list, stat, mkdir, rename and move inside a drive, delete, search, and
+copy between the device and a drive (an upload or a download) or between
+drives. New methods: `open {path}` (a drive file as a device copy, under
+`/media/internal/.phoenix/drive-cache/<accountId>/`, used as is when the
+drive cannot be reached: `stale: true`), `quota`, `transfers`, `cancel
+{id}`. Apps open a drive file through its device copy, so viewers, Email's
+attachments and the pickers read it as any file; the file picker answers
+`fullPath` (the copy) and `remotePath`.
+
+**Transfers.** Uploads go in chunks (8 MB; Nextcloud's chunked upload,
+S3 multipart, Dropbox's upload session, Graph's upload session, Google's
+resumable upload, Box's chunked upload above its threshold), downloads in
+ranges; each transfer is an ongoing activity in the notification area
+(`org.webosphoenix.ongoing`, "Uploading big.bin", with its progress),
+which Files' bar shows with Cancel; a cancel stops between chunks and
+drops the provider's upload session where it has a way to (Dropbox's expire by themselves).
+
+**Offline.** No connection: the folder says the drive can't be reached,
+with Try Again; nothing is lost; a file opened before opens from its
+device copy. A refused sign-in (401) says so with a way to Accounts.
+Errors are the kit's numbers (`FILE_ERRORS`: OFFLINE 10, AUTH 11, QUOTA
+12, CANCELED 13, NOT_AVAILABLE 14, UNSUPPORTED 15, RATE_LIMITED 16, after
+the file manager's own).
+
+**Not offered: SFTP.** The connectors' services reach the network only
+through the kit's `request()` (HTTP, by the runtime's proxy in the
+simulator and Node on a device): there are no raw sockets. The one
+permissively licensed SSH implementation in JavaScript, `ssh2` (MIT),
+needs Node's `net` and `crypto` (and optionally a native module), so it
+could only run on a device and not be tested in the simulator as every
+other provider is. SFTP waits for a socket API in the kit (GAPS.md).
+
+**Not yet:** the original picker (SF1) lists what the media indexer has,
+so drives are not in it (the Files kind of SF2 has them); no offline
+"keep on this device" pinning beyond the cache; device OAuth sign-in waits
+for the browser sheet on devices (`services/oauth/service.js`:
+`UNSUPPORTED` there), so on a device only the WebDAV and S3 drives sign
+in today.
+
 ### The original picker (SF1)
 
 Enyo 1's `enyo.FilePicker` (FilePicker.js:48) shows

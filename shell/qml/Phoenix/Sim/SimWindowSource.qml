@@ -680,7 +680,33 @@ Item {
                 payload.duration | 0];
     }
 
+    // The Sign In card's events for the OAuth service waiting in some page
+    // (runtime/phoenix-runtime.js, "OAuth": oauthCardEvent): told to one
+    // page with the runtime, which shares them with the others through
+    // the store, as a device's application manager and loopback listener
+    // tell the service (services/oauth/signincard.js, loopback.js).
+    readonly property string signInAppId: "org.webosphoenix.signin"
+    function _oauthCardEvent(ev) {
+        var js = "window.__phoenixRuntime && __phoenixRuntime.oauthCardEvent && __phoenixRuntime.oauthCardEvent(" + JSON.stringify(ev) + ")";
+        var page = _headless["com.palm.systemui"] || null;
+        if (!page)
+            for (var u in _windows) {
+                var w = _windows[u];
+                if (w && w.runScript && w.appId !== signInAppId && !w.site) {
+                    page = w;
+                    break;
+                }
+            }
+        if (page && page.runScript)
+            page.runScript(js);
+    }
+
     function _hostMessage(appId, uid, type, payload) {
+        if (type === "signInRedirect") {
+            if (appId === signInAppId && payload && typeof payload.url === "string")
+                _oauthCardEvent({ type: "redirect", url: payload.url });
+            return;
+        }
         if (appId === justTypeAppId && (type === "launch" || type === "open"))
             Qt.callLater(source.justTypeDismissed);
         // A link opened for a card from another page (openLink): as if
@@ -1657,6 +1683,8 @@ Item {
         _clearOngoingOf(appId);
         if (activeCallBanner !== null && activeCallBanner.appId === appId)
             activeCallBanner = null;
+        if (appId === signInAppId)
+            _oauthCardEvent({ type: "closed" });
         // The system UI's alerts for it (its location alert) close too.
         var sysui = _headless["com.palm.systemui"];
         if (sysui && sysui.runScript)

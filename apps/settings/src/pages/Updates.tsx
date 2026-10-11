@@ -13,10 +13,12 @@
 // "Install now".
 
 import { useEffect, useRef, useState } from "react";
-import { systemUpdates, updateErrorCode, type UpdateStatus } from "@phoenix/luna";
+import { systemUpdates, updateErrorCode, type UpdateChannel, type UpdateStatus } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import { Button, ErrorText, Group, ListSelector, Note, Page, PageHeader, Row, Spinner, ToggleButton } from "@phoenix/ui";
 import { errorText, size, when } from "./Backup";
+
+const CHANNEL_LABELS: Record<string, string> = { stable: "Stable", beta: "Beta", dev: "Development" };
 
 export function UpdatesPage() {
     const status = useLuna<UpdateStatus>((cb, err) => systemUpdates.watchStatus(cb, err), []).value;
@@ -73,8 +75,21 @@ export function UpdatesPage() {
                         )}
                     </>
                 )}
-                {status.state === "idle" && !rel && (
+                {status.state === "idle" && !rel && status.rollout?.waiting && (
+                    <div className="update-detail" data-testid="update-rollout">
+                        {status.rollout.version} is reaching devices a few at a time; this one will be offered it soon.
+                    </div>
+                )}
+                {status.state === "idle" && !rel && status.configured !== false && (
                     <Button onClick={() => void run(() => systemUpdates.check())} data-testid="check-updates">Check for Updates</Button>
+                )}
+                {status.configured === false && (
+                    <div className="update-detail" data-testid="update-not-set-up">No update server is set up on this device.</div>
+                )}
+                {status.lastChecked && status.configured !== false && (
+                    <div className="update-detail" data-testid="update-verified">
+                        {status.verified ? "The update server's list is signed and was checked." : "The update server's list is not signed (a development server)."}
+                    </div>
                 )}
                 {status.state === "idle" && rel && (
                     <Button onClick={() => void run(() => systemUpdates.download())} data-testid="update-download">Download</Button>
@@ -101,9 +116,16 @@ export function UpdatesPage() {
                     <ToggleButton value={status.autoDownload} label="Download updates automatically" testId="update-auto"
                                   onChange={(on) => void run(() => systemUpdates.setPreferences({ autoDownload: on }))} />
                 </Row>
-                <ListSelector title="Updates" value={status.channel} testId="update-channel" disabled={busy}
-                              onChange={(v) => void run(() => systemUpdates.setPreferences({ channel: v as "stable" | "beta" }))}
-                              options={[{ label: "Stable", value: "stable" }, { label: "Beta", value: "beta" }]} />
+                <ListSelector title="Updates" value={status.channel} testId="update-channel" disabled={busy || !status.configured}
+                              onChange={(v) => void run(() => systemUpdates.setPreferences({ channel: v as UpdateChannel }))}
+                              options={(status.channels ?? ["stable", "beta"]).map((c) => ({ label: CHANNEL_LABELS[c] ?? c, value: c }))} />
+                {status.channel !== "stable" && (
+                    <Note testId="update-channel-note">
+                        {status.channel === "dev"
+                            ? "Development builds come out every night. They are for testing and can break things; keep a backup."
+                            : "Beta releases come before stable ones, for people who want to try them early."}
+                    </Note>
+                )}
             </Group>
             <Note>
                 Updates are written next to the system you are using, so you can keep using your device meanwhile.

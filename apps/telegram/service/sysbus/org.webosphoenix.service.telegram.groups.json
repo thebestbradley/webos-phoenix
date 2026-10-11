@@ -1,0 +1,11 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.service.telegram"
+    ],
+    "accounts.transport": [
+        "oem"
+    ],
+    "telegram.account": [
+        "oem"
+    ]
+}

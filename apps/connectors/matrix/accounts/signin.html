@@ -1,0 +1,138 @@
+<!doctype html>
+<!-- Copyright (c) 2026 webOS Phoenix contributors
+     SPDX-License-Identifier: Apache-2.0
+
+     The Matrix account's sign-in page (the template's validator.customUI;
+     the protocol of the kit's example page: ?enyoWindowParams, and the
+     answer posted as "enyoCrossAppResult=" + JSON). The Matrix ID finds the
+     homeserver (signInOptions); a server that signs in with a password asks
+     for it here; one that signs in through OAuth (Matrix Authentication
+     Service) shows its own page in the system's sign-in sheet (signIn).
+     The page says what is not end-to-end encrypted yet. -->
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width">
+    <title>Matrix</title>
+    <style>
+        body { margin: 0; font-family: Prelude, "Helvetica Neue", Arial, sans-serif; background: #e5e5e5; color: #333; }
+        header { display: flex; align-items: center; justify-content: center; gap: 8px; height: 50px; background: #f4f4f4; border-bottom: 1px solid #bbb; font-size: 18px; }
+        main { padding: 12px 16px 16px; max-width: 480px; margin: 0 auto; }
+        label { display: block; font-size: 13px; font-weight: bold; color: #555; margin: 12px 4px 6px; text-transform: uppercase; }
+        input { box-sizing: border-box; width: 100%; font-size: 17px; padding: 10px; border: 1px solid #aaa; border-radius: 8px; background: #fff; }
+        p { font-size: 14px; line-height: 1.4; margin: 4px; }
+        .note { margin-top: 12px; padding: 8px 10px; border-radius: 8px; background: #f6f1dc; border: 1px solid #d8cc9a; font-size: 13px; }
+        .error { color: #b00; min-height: 1.4em; }
+        .buttons { display: flex; gap: 10px; margin-top: 12px; }
+        button { flex: 1; font-size: 17px; padding: 10px; border-radius: 8px; border: 1px solid #888; background: #f8f8f8; }
+        button.primary { background: #4a4a4a; color: #fff; border-color: #333; }
+        button:disabled { opacity: 0.5; }
+        .hidden { display: none; }
+        .signup { text-align: center; margin-top: 14px; font-size: 14px; }
+        .signup a { color: #1f5fa8; }
+    </style>
+</head>
+<body>
+    <header><img src="../public/accounts/com.webosphoenix.matrix/images/matrix-32x32.png" srcset="../public/accounts/com.webosphoenix.matrix/images/matrix-32x32@2x.png 2x, ../public/accounts/com.webosphoenix.matrix/images/matrix-32x32@3x.png 3x" width="32" height="32" alt=""> Matrix</header>
+    <main>
+        <label for="user">Matrix ID</label>
+        <input id="user" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="@you:matrix.org">
+        <div id="passwordBox" class="hidden">
+            <label for="password">Password</label>
+            <input id="password" type="password">
+        </div>
+        <p id="server" class="hidden"></p>
+        <p class="note" id="privacy">Rooms that are end-to-end encrypted can't be read or written from this device yet: their messages show as encrypted. Other rooms are encrypted on the way to your homeserver, whose admins can read them.</p>
+        <p class="error" id="error" role="alert"></p>
+        <div class="buttons">
+            <button id="cancel">Cancel</button>
+            <button id="next" class="primary" disabled>Next</button>
+        </div>
+        <p class="signup" id="signup">Don't have an account? <a href="https://matrix.org/ecosystem/hosting/" id="signupLink">Choose a homeserver</a></p>
+    </main>
+    <script>
+        "use strict";
+        var params = {};
+        try { params = JSON.parse(new URLSearchParams(location.search).get("enyoWindowParams") || "{}") || {}; } catch (e) { params = {}; }
+        var SERVICE = "palm://org.webosphoenix.service.matrix/";
+        var user = document.getElementById("user"), password = document.getElementById("password");
+        var next = document.getElementById("next"), error = document.getElementById("error"), server = document.getElementById("server");
+        var modify = params.mode === "modify";
+        var options = null;
+
+        function answer(result) { window.parent.postMessage("enyoCrossAppResult=" + JSON.stringify(result), "*"); }
+        function call(uri, p) {
+            return new Promise(function (resolve) {
+                var bridge = new PalmServiceBridge();
+                bridge.onservicecallback = function (text) { resolve(JSON.parse(text)); };
+                bridge.call(uri, JSON.stringify(p));
+            });
+        }
+        document.getElementById("signupLink").addEventListener("click", function (e) {
+            e.preventDefault();
+            call("palm://com.palm.applicationManager/open", { target: this.href });
+        });
+        if (modify && params.account) {
+            user.value = params.account.username || "";
+            user.disabled = true;
+            document.getElementById("signup").style.display = "none";
+        }
+        function busy(label) { next.disabled = true; next.textContent = label; error.textContent = ""; }
+        function idle() { next.textContent = options ? (options.password ? "Sign In" : "Continue") : "Next"; update(); }
+        function update() { next.disabled = !user.value.trim() || (options && options.password && !password.value); }
+        user.addEventListener("input", function () { options = null; document.getElementById("passwordBox").className = "hidden"; server.className = "hidden"; idle(); });
+        password.addEventListener("input", update);
+        password.addEventListener("keydown", function (e) { if (e.key === "Enter" && !next.disabled) next.click(); });
+        user.addEventListener("keydown", function (e) { if (e.key === "Enter" && !next.disabled) next.click(); });
+        document.getElementById("cancel").addEventListener("click", function () { answer({ returnValue: false }); });
+
+        var MESSAGES = {
+            "401_UNAUTHORIZED": "The homeserver did not accept that Matrix ID and password.",
+            "INVALID_USER": "Enter your Matrix ID, like @you:matrix.org.",
+            "HOST_NOT_FOUND": "No Matrix homeserver answers for that ID.",
+            "CONNECTION_FAILED": "Could not reach the homeserver.",
+            "SSL_CERT_UNTRUSTED": "The homeserver's connection is not secure: not signing in.",
+            "CANCELED": "Signing in was cancelled.",
+            "ACCESS_DENIED": "The homeserver's page refused the sign-in.",
+            "503_SERVICE_UNAVAILABLE": "The homeserver asked to wait. Try again later."
+        };
+        function done(r) {
+            if (!r.returnValue) {
+                idle();
+                error.textContent = MESSAGES[r.errorCode] || ("Could not sign in (" + (r.errorText || r.errorCode) + ").");
+                return;
+            }
+            var result = { returnValue: true, credentials: r.credentials, config: r.config };
+            if (!modify) { result.template = params.template; result.templateId = "com.webosphoenix.matrix"; result.username = r.username; }
+            answer(result);
+        }
+        next.addEventListener("click", function () {
+            if (!options) {
+                busy("Looking...");
+                call(SERVICE + "signInOptions", { user: user.value.trim() }).then(function (r) {
+                    if (!r.returnValue) { idle(); error.textContent = MESSAGES[r.errorCode] || r.errorText; return; }
+                    options = r;
+                    server.textContent = "Homeserver: " + r.homeserver.replace(/^https?:\/\//, "") + (r.slidingSync ? " (sliding sync)" : "");
+                    server.className = "";
+                    if (r.password) { document.getElementById("passwordBox").className = ""; password.focus(); }
+                    else if (!r.oauth) { options = null; error.textContent = "This homeserver signs in a way this device does not support yet."; }
+                    idle();
+                });
+                return;
+            }
+            busy("Signing in...");
+            if (options.password) {
+                call(SERVICE + "checkCredentials", { templateId: "com.webosphoenix.matrix", username: user.value.trim(), password: password.value }).then(done);
+            } else {
+                // The homeserver's own page, in the system's sign-in sheet.
+                call(SERVICE + "signIn", { user: user.value.trim() }).then(function (r) {
+                    if (!r.returnValue) return done(r);
+                    return call(SERVICE + "checkCredentials", { templateId: "com.webosphoenix.matrix",
+                        config: { oauthKey: r.credentials.common.oauthKey, homeserver: r.config.homeserver, userId: r.config.userId } }).then(done);
+                });
+            }
+        });
+        user.focus();
+    </script>
+</body>
+</html>

@@ -4,5 +4,8 @@
   "private": true,
   "description": "webOS Phoenix Marketplace (Luna): signed catalogs, web apps packaged as .ipk, installs and updates through com.webos.appInstallService, App Museum II and Preware as add-on catalogs",
   "license": "Apache-2.0",
-  "main": "service.js"
+  "main": "service.js",
+  "dependencies": {
+    "@phoenix/platform": "*"
+  }
 }

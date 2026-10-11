@@ -1,0 +1,14 @@
+{
+    "allowedNames": [
+        "org.webosphoenix.service.drives"
+    ],
+    "accounts.transport": [
+        "oem"
+    ],
+    "drives.files": [
+        "oem"
+    ],
+    "drives.account": [
+        "oem"
+    ]
+}

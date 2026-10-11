@@ -18,6 +18,15 @@ describe("Files helpers", () => {
         expect(folderTitle("/media/internal")).toBe("Internal storage");
         expect(folderTitle("/")).toBe("Device");
         expect(folderTitle("/media/internal/Music")).toBe("Music");
+        // A drive: its account type's name, and a path bar from the drive (not its account id).
+        const names = { "/media/drives/acct-1": "Nextcloud" };
+        expect(folderTitle("/media/drives")).toBe("Drives");
+        expect(folderTitle("/media/drives/acct-1", names)).toBe("Nextcloud");
+        expect(crumbs("/media/drives/acct-1/Photos", names)).toEqual([
+            { label: "Drives", path: "/media/drives" },
+            { label: "Nextcloud", path: "/media/drives/acct-1" },
+            { label: "Photos", path: "/media/drives/acct-1/Photos" },
+        ]);
     });
 
     it("plans a paste: free names for copies, nothing for a cut in place, no folder into itself", () => {

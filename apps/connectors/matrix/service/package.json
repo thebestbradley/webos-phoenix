@@ -1,0 +1,11 @@
+{
+    "name": "org.webosphoenix.service.matrix",
+    "version": "0.1.0",
+    "private": true,
+    "description": "webOS Phoenix Matrix account (Synergy connector on @phoenix/connector-kit): sign-in with a password or the homeserver's OAuth, sliding sync, rooms as Messaging conversations, direct chats' people in Contacts, pictures, read receipts",
+    "license": "Apache-2.0",
+    "main": "service.js",
+    "dependencies": {
+        "@phoenix/connector-kit": "*"
+    }
+}

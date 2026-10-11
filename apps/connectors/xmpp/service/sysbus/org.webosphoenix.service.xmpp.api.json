@@ -1,0 +1,19 @@
+{
+    "accounts.transport": [
+        "org.webosphoenix.service.xmpp/checkCredentials",
+        "org.webosphoenix.service.xmpp/onCreate",
+        "org.webosphoenix.service.xmpp/onEnabled",
+        "org.webosphoenix.service.xmpp/onCredentialsChanged",
+        "org.webosphoenix.service.xmpp/onDelete",
+        "org.webosphoenix.service.xmpp/sync",
+        "org.webosphoenix.service.xmpp/connect",
+        "org.webosphoenix.service.xmpp/disconnect",
+        "org.webosphoenix.service.xmpp/outbox"
+    ],
+    "xmpp.account": [
+        "org.webosphoenix.service.xmpp/setPresence",
+        "org.webosphoenix.service.xmpp/markRead",
+        "org.webosphoenix.service.xmpp/chatState",
+        "org.webosphoenix.service.xmpp/enablePush"
+    ]
+}

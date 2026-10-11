@@ -135,8 +135,9 @@ export function fromDefinition(dir: string): FromDefinition | null {
     else delete phoenix.shareTargets;
     put("appinfo.json", infoText, info);
 
-    const signUp = templateSignUp(def.signUp);
+    const byTemplate = def.signUpByTemplate && typeof def.signUpByTemplate === "object" ? def.signUpByTemplate : {};
     def.templateIds.forEach((id: string) => {
+        const signUp = templateSignUp(byTemplate[id] !== undefined ? byTemplate[id] : def.signUp);
         const rel = "public/accounts/" + id + "/" + id + ".json";
         if (!f.existsSync(p.join(dir, rel))) return;
         const text = read(rel);

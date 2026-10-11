@@ -21,15 +21,20 @@
 // its icon may be relative to the index.
 //
 // The device trusts a source's key the first time it is added, after the
-// user sees its fingerprint (like an SSH host key or an F-Droid repo), and
-// then takes only indexes signed with it, not expired, and not older than
-// the last one it took (no rollback to an index with a pulled app).
+// user sees its fingerprint (like an SSH host key or an F-Droid repo), or
+// the key servers.json pins for the Phoenix catalog, or an online key the
+// pinned offline root delegated to (packagesservice.js, @phoenix/platform
+// signed.js), and then takes only indexes signed with it, not expired, and
+// not older than the last one it took (no rollback to an index with a
+// pulled app). Optional additions inside version 1: "revoked" (entries as
+// the revocation list's) and a release's "rollout" {percent, seed}.
 
 "use strict";
 
 var ed25519 = require("./ed25519");
 var archive = require("./b64");
 var accounts = require("./accounts");
+var revocations = require("@phoenix/platform").revocations;
 
 function fail(code, text, extra) {
     var e = new Error(text);
@@ -73,6 +78,10 @@ function normalize(e, sourceId) {
         if (!r || !url(r.url) || !/^[0-9a-f]{64}$/i.test(r.sha256 || "") || !(r.size > 0)) return null;
         out.release = { url: r.url, size: r.size, sha256: r.sha256.toLowerCase() };
         if (typeof r.minPhoenix === "string") out.release.minPhoenix = r.minPhoenix;
+        // A staged rollout of this release (docs/PLATFORM-CLIENT.md): offered
+        // as an update only to the devices in its percentage.
+        if (r.rollout && typeof r.rollout.percent === "number")
+            out.release.rollout = { percent: Math.max(0, Math.min(100, r.rollout.percent)), seed: str(r.rollout.seed, 100) };
     }
     return out;
 }
@@ -103,7 +112,10 @@ function verifyIndex(indexBytes, signatureB64, keyB64, opts) {
                 seen[e.id] = true;
                 return true;
             }),
-            accounts: accounts.normalizeList(idx.accounts, opts.baseUrl, sourceId)
+            accounts: accounts.normalizeList(idx.accounts, opts.baseUrl, sourceId),
+            // Apps and connectors the catalog withdrew for cause, signed with
+            // the index (the same entries as the revocation list's).
+            revoked: Array.isArray(idx.revoked) ? idx.revoked.map(revocations.normalizeEntry).filter(Boolean) : []
         };
     });
 }

@@ -450,7 +450,9 @@ function signIn(ctx, p) {
         found = f;
         return lunaOk(ctx, OAUTH + "redirectUri", {});
     }).then(function (r) {
-        var redirectUri = r.redirectUri;
+        // The fixed port: Mastodon (Doorkeeper) matches a loopback redirect
+        // on any port, but the other servers' OAuth may not (docs/DEVELOPER-APPS.md).
+        var redirectUri = r.fixedRedirectUri || r.redirectUri;
         var name = found.server + " " + redirectUri;
         // The app's registration with this server, once (SYNERGY-MODERN.md 4.4).
         return lunaOk(ctx, OAUTH + "client", { name: name }).then(function (c) {

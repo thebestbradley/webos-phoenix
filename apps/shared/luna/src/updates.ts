@@ -21,8 +21,10 @@ export interface SystemRelease {
 }
 
 export type UpdateErrorCode =
-    | "CONNECTION_FAILED" | "BAD_FEED" | "NO_UPDATE" | "DOWNLOAD_FAILED" | "BAD_DOWNLOAD" | "BAD_BUNDLE" | "WRONG_DEVICE"
+    | "NOT_SET_UP" | "CONNECTION_FAILED" | "BAD_FEED" | "BAD_SIGNATURE" | "NO_DELEGATION" | "EXPIRED" | "ROLLBACK" | "REVOKED" | "NO_UPDATE" | "DOWNLOAD_FAILED" | "BAD_DOWNLOAD" | "BAD_BUNDLE" | "WRONG_DEVICE"
     | "NOT_NEWER" | "INSTALL_FAILED" | "LOW_BATTERY" | "BUSY" | "BAD_PARAMS" | "UNKNOWN_ERROR";
+
+export type UpdateChannel = "stable" | "beta" | "dev";
 
 export interface UpdateStatus {
     /** ready: downloaded and prepared; installing it restarts the device. */
@@ -35,7 +37,15 @@ export interface UpdateStatus {
     error: { errorCode: UpdateErrorCode; errorText: string } | null;
     /** Download updates by themselves over Wi-Fi. */
     autoDownload: boolean;
-    channel: "stable" | "beta";
+    channel: UpdateChannel;
+    /** The channels servers.json offers (stable, beta, dev). */
+    channels: UpdateChannel[];
+    /** An update server is set up (servers.json "updates"). */
+    configured: boolean;
+    /** The last feed read was signed and its signature checked. */
+    verified: boolean;
+    /** A staged release this device is not in yet. */
+    rollout: { percent: number; waiting: boolean; version: string } | null;
     battery: { percent: number; charging: boolean } | null;
     minBattery: number;
     /** "Install later": asked again at the next charge. */
@@ -75,7 +85,7 @@ export const systemUpdates = {
     installLater(): Promise<void> {
         return call(SERVICE + "InstallLater", {}).then(() => undefined);
     },
-    setPreferences(p: { autoDownload?: boolean; channel?: "stable" | "beta" }): Promise<UpdateStatus> {
+    setPreferences(p: { autoDownload?: boolean; channel?: UpdateChannel }): Promise<UpdateStatus> {
         return call(SERVICE + "setPreferences", p).then(status);
     },
 };

@@ -156,7 +156,28 @@ Item {
         default: return "other";
         }
     }
+    // ---- The Sign In card (org.webosphoenix.signin; services/oauth/signincard.js) ----
+    // Its page replaces itself with the provider's sign-in page, which
+    // the card shows as it is (no routing to the browser), under the bar
+    // the shell draws (SignInBar: the page's host as it loads, the lock,
+    // Cancel). The redirect to the OAuth service's loopback address is
+    // where a device's listener answers (services/oauth/loopback.js); here
+    // the card stops there and hands the address to the runtime
+    // ("signInRedirect"), the simulator's stand-in for the listener.
+    readonly property bool signInCard: appId === "org.webosphoenix.signin"
+    readonly property bool _remotePage: !/^(phoenix|file|qrc):/i.test(String(view.url))
+    function _signInRedirect(url) {
+        return /^http:\/\/127\.0\.0\.1(?::\d{1,5})?\/oauth\/callback(?:[?#]|$)/.test(String(url));
+    }
+
     function _navigation(request) {
+        if (signInCard) {
+            if (request.isMainFrame && _signInRedirect(request.url)) {
+                request.reject();
+                hostMessage("signInRedirect", { url: String(request.url) });
+            }
+            return;
+        }
         if (Links.navigation(request.url, _kind(request.navigationType), request.isMainFrame, site, _scope) === "route") {
             request.reject();
             linkRequested(String(request.url));
@@ -497,9 +518,20 @@ Item {
         }
     }
 
+    SignInBar {
+        id: signInBar
+        visible: win.signInCard
+        anchors { left: parent.left; right: parent.right; top: parent.top }
+        height: win.signInCard ? Theme.px(40) : 0
+        hostName: { var m = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@\/?#]*@)?([^\/?#]+)/i.exec(String(view.url)); return m && win._remotePage ? m[1] : ""; }
+        secure: /^https:/i.test(String(view.url))
+        loading: view.loading
+        onCancel: win.closeRequested()
+    }
+
     WebEngineView {
         id: view
-        anchors.fill: parent
+        anchors { left: parent.left; right: parent.right; bottom: parent.bottom; top: signInBar.bottom }
         profile: phoenixWebProfile
         url: win.url
         zoomFactor: win.zoom
@@ -530,8 +562,9 @@ Item {
                     win.linkRequested(message.substring(Links.LINK_PREFIX.length));
                 return;
             }
-            // A site has no runtime: it does not talk to the shell.
-            if (message.indexOf("__phoenix__") === 0 && win.site)
+            // A site has no runtime: it does not talk to the shell; nor does
+            // the provider's page in the Sign In card.
+            if (message.indexOf("__phoenix__") === 0 && (win.site || (win.signInCard && win._remotePage)))
                 return;
             if (message.indexOf("__phoenix__") === 0) {
                 try {
