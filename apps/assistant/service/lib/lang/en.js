@@ -2892,7 +2892,7 @@ module.exports = {
     eventWords: eventWords,
     grounded: grounded,
     // Words that take something away ("turn off", "delete", "I don't need"): a model's removing choice needs them.
-    removing: function (t) { return /\b(?:off|delete|remove|cancel|clear|stop|disable|kill|dismiss|drop|scrap|get rid|erase|forget|don't need|do not need|no longer|call off|shut)\b/.test(String(t || "").toLowerCase()); },
+    removing: function (t) { return /\b(?:off|delet\w*|remov\w*|cancel\w*|clear\w*|stop\w*|disabl\w*|kill|dismiss|drop|scrap|get rid|erase|forget|don't need|do not need|no longer|anymore|any more|not happening|isn't happening|won't happen|shut|silenc\w*|mute|quiet|skip)\b/.test(String(t || "").toLowerCase()); },
     answer: answer,
     followUp: followUp
 };

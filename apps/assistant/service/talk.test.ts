@@ -255,6 +255,11 @@ describe("what a model is shown", () => {
         const m = await d.ask("I want an alarm at 5:30 tomorrow morning");
         expect(called).toEqual(["alarm"]);
         expect(m.command).toBe("alarm");
+        // Words that do take away keep the choice ("isn't happening anymore").
+        const en = req("./lib/lang/en.js") as { removing(t: string): boolean };
+        expect(en.removing("lunch with sam isn't happening anymore")).toBe(true);
+        expect(en.removing("silence all my alarms")).toBe(true);
+        expect(en.removing("i want an alarm at 5:30 tomorrow morning")).toBe(false);
     });
     it("never offers the Assistant's own Quick Action as a command", async () => {
         const d = device({ settings: { followUps: false, localModel: "off" },
