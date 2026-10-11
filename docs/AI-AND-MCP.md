@@ -953,6 +953,7 @@ node tools/eval-assistant.cjs --model http://127.0.0.1:8091/v1  # + Qwen3 0.6B i
 node tools/eval-assistant.cjs --cases apps/assistant/eval/held-out.json   # another set
 node tools/eval-assistant.cjs --service DIR                     # another copy of the service (a baseline)
 node tools/eval-assistant.cjs --decider tools/decider-laya.cjs  # + a decision model (below)
+node tools/laya-curve.cjs [--cases FILE] [--rows FILE]         # the decision model: how sure against how often right
 node tools/eval-assistant.cjs --json out.json --md              # every turn as answered; the table as Markdown
 ```
 
@@ -962,7 +963,7 @@ was on 10 October (commit 85c9c95) with today's trace added; Qwen3 0.6B is
 the built-in model (Q8_0) in llama-server b11239 on this 4-core computer,
 which was busy with other work, so the times are long and vary.
 
-| Category | Cases | Grammar, before | Grammar, after | + Qwen3 0.6B, before | + Qwen3 0.6B, after | + Laya + Qwen3 0.6B |
+| Category | Cases | Grammar, before | Grammar, after | + Qwen3 0.6B, before | + Qwen3 0.6B, after | + Laya (first design) + Qwen3 0.6B |
 |---|---|---|---|---|---|---|
 | alarms | 23 | 15 (65%) | 23 (100%) | 20 (87%), 3 wrong read-backs | 23 (100%) | 23 (100%) |
 | apps | 14 | 14 (100%) | 14 (100%) | 14 (100%) | 14 (100%) | 13 (93%), 1 wrong read-back |
@@ -994,13 +995,14 @@ which was busy with other work, so the times are long and vary.
 
 The held-out set and the model's set:
 
-| Set | Cases | Grammar, before | Grammar, after | + Laya | + Qwen3 0.6B, before | + Qwen3 0.6B, after | + Laya + Qwen3 0.6B |
+| Set | Cases | Grammar, before | Grammar, after | + Laya (first design) | + Qwen3 0.6B, before | + Qwen3 0.6B, after | + Laya (first design) + Qwen3 0.6B |
 |---|---|---|---|---|---|---|---|
 | held out | 79 | 44 (56%), 1 wrong read-back | 69 (87%) | 68 (86%) | 57 (72%), 5 wrong read-backs | 76 (96%) | 75 (95%), 1 wrong read-back |
 | the model's set: commands | 138 | 2 (1%) | 12 (9%) | 12 (9%), 1 wrong read-back | 76 (55%), 2 unsafe, 17 wrong read-backs | 80 (58%), 12 wrong read-backs | 77 (56%), 2 unsafe, 14 wrong read-backs |
 | the model's set: questions, chat | 25 | 25 (100%) | 25 (100%) | 25 (100%) | 25 (100%) | 25 (100%) | 25 (100%) |
 
-The Laya columns were measured before the last fixes (the model's set's
+The Laya columns are its first design (the design now, and its numbers:
+"A decision model: Laya" below), measured before the last fixes (the model's set's
 two unsafe actions there are the two the grammar now takes, "Sam has a new
 email, sam@new.example.com" and "my dentist appointment needs to be at 5
 instead"; on that set Laya took 4 commands more than the grammar of the
@@ -1132,74 +1134,150 @@ measured; the decision model below.
 ### A decision model: Laya (11 October 2026)
 
 The owner asked for a small specialised model between the grammar and the
-general model, deciding the intent and its arguments, and whether to go on
-to the general model or the cloud. The slot is in the router
-(`assistant.js` `decide`, `deps.decider`), and the evaluation plugs a
-model into it (`--decider`):
-
-```
-words -> grammar (exact, instant) -> decision model -> general model (Qwen3) -> cloud / web
-                                      |  sure: does it (read back as a model's choice is, unless the words name it)
-                                      |  a command whose arguments are free words: the general model fills
-                                      |    them for that command, without choosing
-                                      |  a question or chat: the general model answers in words
-                                      |  not sure: as if it were not there
-```
-
-`decide({text, history, last, commands, now})` resolves `{command, args,
-confidence, escalate, needsArgs}` or null; below its threshold nothing it
-says is used. It may also answer a read-back the words do not answer
-plainly (`yesNo`: "go for it", "nah, leave it"). Settings `decider` ("on"
-or "off", off by default) switches it.
+general model: one that decides, and never writes. The slot is in the
+router (`assistant.js` `decide`, `deps.decider`; Settings `decider`,
+"on" or "off", **off** by default), and the evaluation plugs a model into
+it (`--decider`).
 
 **Laya** (Convai Innovations; Apache-2.0, checked: docs/LEGAL.md) is a
 ModernBERT-large encoder (421M parameters) with a decision head: given a
 state and typed questions (a choice among options, a score, yes or no) it
-returns calibrated probabilities in one forward pass, writing nothing.
-`lib/decider-laya.js` asks it two things: the kind of request (ten
-options: Laya's calibration holds to ten), then the command among that
-kind's and, in the same pass, the arguments that are a choice (which
-switch, on or off, up or down, today or tomorrow). For the evaluation it
-runs in Python (`tools/laya-server.py`, `tools/decider-laya.cjs`).
+returns calibrated probabilities in one forward pass.
 
-Measured (the English checkpoint, zero-shot):
+**The first design, and why it was wrong.** It asked Laya, zero-shot, for
+the kind of request among ten descriptions ("alarms, waking up, snooze,
+timers ..."), then for a command among that kind's and its arguments
+that are a choice, acting at 0.9. That asks a model to map casual words
+onto abstract categories it was never shown: its weakest use. Measured on
+the model's set, its first choice was the right command for 46 of 149, it
+was sure (0.9 and over) of 15 choices of which 4 wrong ("I don't need
+bluetooth right now, shut it": lock, 0.96; "have I set an alarm": alarm,
+0.99), and with Qwen3 0.6B behind it the Assistant did no better than
+with Qwen3 0.6B alone (the tables' first-design columns).
 
-- **Choosing**: of the 149 requests of the model's set it was asked, its
-  first choice was the right command for 46 (31%); with Qwen3 0.6B's own two
-  steps the Assistant did the right thing for 80 of 138 commands (58%).
-- **Sure of the wrong thing**: at confidence 0.9, 15 sure choices, 11
-  right and 4 wrong ("I don't need bluetooth right now, shut it": lock,
-  0.96; "I have a call with Priya tomorrow afternoon at 2, schedule it":
-  call, 0.99; "have I set an alarm": alarm, 0.99). No threshold keeps the
-  right ones and drops the wrong: at 0.85, 12 right and 6 wrong; at 0.98,
-  2 and 2.
-- **With Qwen3 0.6B** (the tables): no better (the model's set 102 against
-  105 right; the held-out set 75 against 76; one wrong read-back more on
-  the main set, "open spotify" read back as playing music), its calls 0.6
-  to 1.7 s each in Python on the CPU.
+**The design now: a choice among complete requests.**
 
-**On the device** it would run as Kitten TTS does, in ONNX Runtime on the
+```
+words -> grammar (exact, instant)
+      -> the requests the words come close to, each complete and valid:   lib/lang/en-candidates.js
+           "Turn bluetooth off" / "Turn bluetooth on" / "Is bluetooth on"     (said as the grammar takes them,
+           "Set an alarm for 5:30 am tomorrow" / "What alarms do I have"       parsed by it: lib/decision.js)
+           "Call Priya Nair" / "Text Priya Nair" / "What's Priya Nair's number"
+           none found: the decision model is not asked
+      -> one Laya call: which of these, or "something else" (on to the general model),
+         or "none of these" (the user is asked)
+           sure (0.85 and over): done, as a model's choice is (read back unless the words name it)
+           0.5 to 0.85: read back ("Did you mean: turn bluetooth off?")
+           a call, a message sent, a deletion: always read back
+           below 0.5: as if it had said nothing
+      -> general model (Qwen3) -> cloud / web
+```
+
+The options are found by the service, not the model: the switch the
+words name (both ways, and "is it on"), the volume or brightness up and
+down, an alarm at the time said and the alarms there are, a timer for
+the length said, the people named (call, text, email, their number; not
+for "remind me to call mom"), the events the words point at (move to the
+time said, cancel, when is it), the calendar's day, messages, email,
+music, the weather, the battery, the camera, an app named; the previous
+turn's switch the other way. Turning off, deleting and cancelling are
+offered only for words that take away. Eight at most, with "something
+else" and "none of these" ten (Laya's calibration holds to ten options).
+Whatever it picks is a whole command with its arguments: it cannot make
+an invalid action. Its answer to a read-back the words do not answer
+plainly ("go for it", "nah, leave it") is the same shape and stays.
+
+**How sure against how often right** (`tools/laya-curve.cjs`: each case's
+first words, the options the service offers, Laya's pick; right is an
+option with the expected command and arguments, or "something else" when
+no option has them; close is the command without all it was told, "Text
+Sam Delgado" for "text Sam I'm running late", which asks for the rest).
+The thresholds were read off the main set's curve (the cases the fixes
+were made with); the other two sets only measure:
+
+| Confidence | main set: picks, right | held out | the model's set |
+|---|---|---|---|
+| under 0.5 | 42, 7% | 7, 14% | 29, 34% |
+| 0.5-0.7 | 67, 36% | 14, 43% | 35, 49% |
+| 0.7-0.8 | 30, 67% | 6, 50% | 12, 50% |
+| 0.8-0.9 | 53, 83% | 7, 100% | 17, 88% |
+| 0.9 and over | 85, 68% | 17, 82% | 11, 73% |
+
+| At 0.85 and over | requests picked | right | close | another command |
+|---|---|---|---|---|
+| main set (277 asked) | 116 | 86 | 25 | 5 |
+| held out (51 asked) | 19 | 16 | 2 | 1 |
+| the model's set (104 asked) | 20 | 17 | 0 | 3 |
+
+Its pick was right for 149 of 277 on the main set, 31 of 51 held out, and
+56 of 104 on the model's set (the first design: 46 of 149). It never
+picks "something else" zero-shot, even where nothing offered fits ("text
+Sam I'm running late" gets "Text Sam Delgado", 0.99): so a pick of the
+right command without all its words asks for the rest, and a pick of
+another command for a request no option covers is the wrong kind left.
+The five at 0.85 and over on the main set: "remnd me to call mom at 6"
+and "send money to mom" (Call Mom, Text Mom: read back, as a call or a
+message always is), "do not call mom" and "never mind don't text sam"
+(never done: the router does nothing for words that say not to), and
+"What's the weather tomorrow?" with location off (the weather, which
+then asks for the location: scored wrong, harmless).
+
+**In the Assistant** (the evaluation, the decision model at 0.85 and 0.5):
+
+| | held out (79) | the model's set (163) | its time per turn |
+|---|---|---|---|
+| grammar alone | 69 (87%) | 37 (23%) | 1 ms |
+| grammar + Laya | **75 (95%)** | **77 (47%)**, 11 wrong read-backs | 0.6 s on average (Laya's call 1.0 s) |
+| grammar + Qwen3 0.6B | 76 (96%) | **105 (64%)**, 13 wrong read-backs | 2.4 s on average |
+| grammar + Laya + Qwen3 0.6B | **77 (97%)** | not measured (stopped for disk space) | |
+| first design + Qwen3 0.6B | 75 (95%), 1 wrong read-back | 102 (63%), 2 unsafe, 14 wrong read-backs | |
+
+No unsafe action in any of the new design's runs. Of the 11 wrong
+read-backs on the model's set, 7 are a calendar or message read offered
+back ("Did you mean: what's on your calendar today?" for "Sam and I are
+doing lunch friday at 1"), harmless but wrong; one is a call ("how can I
+reach Priya": Call Priya Nair?). Laya's call took 1.0 s on this busy
+computer (a training run beside it); in the earlier runs 0.4 to 0.6 s.
+
+**Fine-tuning** (Apache-2.0 allows it): `tools/laya-train.py` turns the
+main set's rows (`apps/assistant/eval/decision-rows.json`, written by
+`tools/laya-curve.cjs --rows`: the request, the options, the right one)
+into laya's training rows (the same one choice question, options shuffled
+each epoch) and runs laya's own `finetune` (soft cross-entropy; head only
+with `--freeze-encoder`). A head-only run was started here and stopped:
+it would have written a whole fp16 checkpoint (some 850 MB) on a disk
+six agents share with under 1 GB free, and the CPU took some ten minutes
+per epoch. So the numbers above are zero-shot. To run it: `pip install
+laya==0.4.2`, the checkpoint at the revision in `tools/laya-server.py`,
+`tools/laya-train.py --rows apps/assistant/eval/decision-rows.json --base
+DIR --out OUT [--freeze-encoder]`, then `tools/laya-server.py
+--checkpoint OUT` and the curve and evaluation on the held-out and the
+model's sets only. What it should learn first: "something else" for
+requests no option covers.
+
+**On a device** it would run as Kitten TTS does, in ONNX Runtime on the
 CPU: `tools/export-laya-onnx.py` exports the checkpoint at its pinned
-revision (fp32, 1.7 GB) and quantizes it to int8 (**442 MB**); loaded in
-2.1 s; a forward pass took 312 ms for 64 tokens and 1.6 s for 256 on this
-busy 4-core computer (a request is two passes of some 150 to 250 tokens).
-**int8 does not hold**: on the same requests the int8 graph made the same
-choice as the checkpoint for 53 of 145, its first choice was right for 30
-(the checkpoint's 46), and it was never sure (no choice above 0.8): its
-dynamic int8 quantization (onnxruntime `quantize_dynamic`, all MatMuls)
-loses what the decision head reads. A device would need the fp32 graph
-(1.7 GB) or a quantization that keeps the last layers in float, measured
-again.
+revision (fp32, 1.7 GB) and quantizes it to int8 (442 MB, loaded in
+2.1 s, a forward pass 312 ms for 64 tokens). **int8 does not hold**: on
+the first design's questions the int8 graph made the checkpoint's choice
+for 53 of 145, its first choice was right for 30 (the checkpoint's 46),
+and it was never sure (no choice above 0.8): dynamic int8 quantization of
+every MatMul loses what the decision head reads. A device would need the
+fp32 graph (1.7 GB) or a quantization keeping the last layers in float,
+measured again, and a runner: the tokenizer (byte-level BPE) and laya's
+sequence layout in the service, the graph in ONNX Runtime through a small
+program as `phoenix-tts` is.
 
-**So it is off.** Zero-shot it is no better than the general model's own
-choice and not reliably sure of the right thing, so it is not shipped,
-fetched by `./phoenix` or put in the image; the slot, the harness and the
-export stay for when it is tuned on Phoenix's own decisions (laya trains
-with RLCD on labelled decisions: the cases here are a start, with a part
-kept back to measure), which is the owner's decision (OPEN-QUESTIONS.md
-Q76). Running it on a device then needs a runner for its graph: the
-tokenizer (byte-level BPE) and laya's sequence layout in the service, the
-graph in ONNX Runtime through a small program as `phoenix-tts` is.
+**So it stays off.** As a choice among complete requests it is what the
+owner described and it works: it never made an invalid or unsafe action,
+it took held-out requests from 69 to 75 of 79 without the general model
+and in a quarter of its time, and with the general model behind it it was
+the best on the held-out set (77). But on the model's set the general
+model alone still does more (105 against 77), it is not fine-tuned, int8
+does not hold, and 1.7 GB is more than the image should carry for it.
+Whether to fine-tune it and ship it is the owner's decision
+(OPEN-QUESTIONS.md Q76). The candidates are worth having without Laya
+too: they are the "Did you mean" list a fallback could offer.
 
 ### Next: 2.0
 
