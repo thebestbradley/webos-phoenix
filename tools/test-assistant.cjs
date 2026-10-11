@@ -492,7 +492,7 @@ async function main() {
         check(/llama-server/.test(await st.textContent("[data-testid='as-local-status']")), "without llama.cpp, it says how to get it");
         // (The models come with their own answer, after the page.)
         await st.waitForFunction(() => document.querySelectorAll("[data-testid^='as-model-']").length > 0);
-        check(await st.locator("[data-testid^='as-model-']").count() === 6, "six on-device models offered, with size and memory");
+        check(await st.locator("[data-testid^='as-model-']").count() === 8, "eight on-device models offered (six Qwen3, Gemma 4 E2B and E4B), with size and memory");
         const builtIn = st.locator("[data-testid='as-model-qwen3-0.6b-q8_0']");
         check(/Qwen3 0\.6BBuilt in/.test(await builtIn.textContent()) && await builtIn.locator("button").count() === 0,
               "Qwen3 0.6B is built in: nothing to download or remove");

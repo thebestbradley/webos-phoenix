@@ -5,12 +5,12 @@
 // "Everyday features"), each area in a file of its own, registered here
 // with lib/commands.js's helpers (require("./commands-everyday")(h)):
 //
-//   commands-sos.js        emergency calls (a countdown, never a read-back), texting the emergency contacts
+//   commands-sos.js        texting the emergency contacts, with the emergency call (the call command's)
 //   commands-notify.js     what did I miss, announcing messages, driving mode
 //   commands-routines.js   routines: steps run on a phrase, a time, the charger or the car
 //   commands-capture.js    photos, selfies, videos and voice memos, and stopping them
 //   commands-places.js     where I parked, reminders at home, work or here, home and work
-//   commands-music.js      shuffle, repeat, favorite songs, the sleep timer, podcasts
+//   commands-music.js      shuffle, repeat, favorite songs, podcasts
 //   commands-facts.js      define, spell, coins, dice, random numbers, Wikipedia, the news
 //   commands-settings.js   the switches of Settings the toggle command does not have, dark mode
 //   commands-home.js       lights, switches, the thermostat, locks and scenes, through Home Assistant
@@ -38,21 +38,33 @@ module.exports = function (h) {
         COMMANDS: COMMANDS,
         METHODS: METHODS,
         // -> Promise<{args, reply?, confirm?, awaiting?}> | null (not one of these)
+        // (An area may prepare another's command: the sleep timer's "for how
+        // long?" is the music's, the timer the timer command's.)
         prepare: function (cmd, args, env) {
             var a = owner[cmd.id];
-            return a && a.prepare ? a.prepare(cmd, args, env) : null;
+            if (a) return a.prepare ? a.prepare(cmd, args, env) : null;
+            for (var i = 0; i < areas.length; ++i) {
+                var p = areas[i].prepare ? areas[i].prepare(cmd, args, env) : null;
+                if (p) return p;
+            }
+            return null;
         },
         run: function (cmd, args, env) {
             var a = owner[cmd.id];
             return a ? a.run(cmd, args, env) : null;
         },
         // What the grammar needs from the device for these (lib/grammar.js
-        // parse ctx): {routines: the phrases of the routines that are on; sos:
-        // an emergency call counting down}.
+        // parse ctx): {routines: the phrases of the routines that are on; home:
+        // Home Assistant's devices, once connected}.
         parseContext: function (env) {
             var out = {};
             areas.forEach(function (a) { if (a.phrases) out.routines = a.phrases(env); if (a.context) Object.assign(out, a.context(env)); });
             return out;
+        },
+        // The emergency call's buttons (lib/commands-sos.js): Promise<actions>.
+        sosOffer: function (env, number) {
+            for (var i = 0; i < areas.length; ++i) if (areas[i].sosOffer) return areas[i].sosOffer(env, number);
+            return Promise.resolve([]);
         },
         // Home, work or a saved place by name (lib/commands-places.js): {name, detail, lat, lon} | null.
         savedPlace: function (env, which) {

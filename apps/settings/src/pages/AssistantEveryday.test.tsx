@@ -73,7 +73,9 @@ describe("Settings > Assistant: Home & Work", () => {
         await waitFor(() => expect(home.textContent).toContain("Not set"));
         fireEvent.click(home);
         fireEvent.click(await screen.findByRole("option", { name: "Set to Where I Am Now" }));
-        await waitFor(() => expect(screen.getByTestId("as-places-note").textContent).toMatch(/^OK, this is your home now/));
+        // A fix first (the simulated GPS answers after 250 ms, runtime getLocationUpdates), then the
+        // address: some 450 ms alone, past waitFor's own second on a busy machine (the whole suite at once).
+        await waitFor(() => expect(screen.getByTestId("as-places-note").textContent).toMatch(/^OK, this is your home now/), { timeout: 5000 });
         await waitFor(() => expect(screen.getByTestId("as-place-home").textContent).not.toContain("Not set"));
         // A saved place in Maps called Home.
         const saved = (await call("luna://com.palm.db/find", { query: { from: "org.webosphoenix.maps.place:1" } })) as unknown as R;

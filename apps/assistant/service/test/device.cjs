@@ -79,6 +79,7 @@ function annotate(a, more) {
     return out;
 }
 
+// state.index {on, answers}: Search your phone turned on (services/index/test/standin.cjs).
 // opts: {offline, locationAllowed (true | false | null: not asked yet),
 //   seed(put), llm (the on-device model runner), llmRequest (its HTTP:
 //   a real llama-server), apps: more launch points, settings: the
@@ -133,6 +134,7 @@ function device(opts) {
                   // Where the device is (getLocationUpdates; tests move it).
                   position: { latitude: 37.37, longitude: -122.04 } };
     function okr(o) { return Promise.resolve(Object.assign({ returnValue: true }, o || {})); }
+    var index = null;
     var luna = {
         call: function (uri, p) {
             calls.push({ uri: uri, params: p });
@@ -144,7 +146,8 @@ function device(opts) {
             if (m === "com.palm.db/find") {
                 var kind = p.query.from, where = p.query.where || [];
                 return okr({ results: Array.from(db.values()).filter(function (o) {
-                    if (!(isa(o._kind, kind, opts.kinds) || (kind === "com.palm.email:1" && /email:1$/.test(o._kind)))) return false;
+                    if (!(isa(o._kind, kind, opts.kinds) || (kind === "com.palm.email:1" && /email:1$/.test(o._kind))
+                          || (kind === "com.palm.message:1" && /message:1$/.test(o._kind)))) return false;
                     return where.every(function (w) { return w.op !== "=" || o[w.prop] === w.val; });
                 }) });
             }
@@ -161,6 +164,11 @@ function device(opts) {
             }
             if (m === "org.webosphoenix.filemanager/copy") { state.copied.push(p); return okr({ path: p.to }); }
             if (m === "com.palm.db/put") return okr({ results: p.objects.map(function (o) { return { id: put(o), rev: 1 }; }) });
+            // Search your phone (services/index), off unless state.index says {on: true}.
+            if (m.indexOf("org.webosphoenix.service.index/") === 0) {
+                if (!index) index = require(path.join(__dirname, "..", "..", "..", "..", "services", "index", "test", "standin.cjs")).standIn(luna, state.index || {});
+                return index.call(m.slice("org.webosphoenix.service.index/".length), p);
+            }
             if (m === "com.palm.db/merge") { p.objects.forEach(function (o) { db.set(o._id, Object.assign({}, db.get(o._id), o)); }); return okr(); }
             if (m === "com.palm.db/del") { p.ids.forEach(function (id) { db.delete(id); }); return okr(); }
             if (m === "com.palm.db/get") return okr({ results: p.ids.map(function (id) { return db.get(id); }).filter(Boolean) });

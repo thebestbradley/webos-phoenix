@@ -171,8 +171,9 @@ export function EmergencyPhone() {
         return () => window.removeEventListener("keydown", onKey);
     });
 
-    // The Assistant's "call 911" ({emergency, number, countdown}: Shell
-    // openEmergency): a few seconds to cancel, counted down, then the call.
+    // The Assistant's emergency call ({emergency, number, countdown}: Shell
+    // openEmergency): the call, at once (countdown 0: the Assistant counted
+    // down already) or after the seconds given, counted down with Cancel.
     const sos = useLaunchParams<{ number?: string; countdown?: number }>();
     const sosNumber = typeof sos.number === "string" && isEmergencyNumber(dialable(sos.number), country) ? dialable(sos.number) : "";
     // (countdown 0: "call now", at once.)

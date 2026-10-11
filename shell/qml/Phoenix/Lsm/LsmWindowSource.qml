@@ -581,7 +581,7 @@ Item {
     signal sceneTransitionRequested(string uid, string op, string transition, bool isPop)
     signal screenshotRequested
     signal mediaKeyRequested(string key)
-    // The Assistant's "call 911": {number, countdown} or {cancel: true} (org.webosphoenix.system/emergencyCall).
+    // The Assistant's emergency call, placed: {number, countdown} (org.webosphoenix.system/emergencyCall).
     signal emergencyCallRequested(var params)
     signal progressAnimationRequested(string type, string state)
     signal debugOverlayRequested(var request)

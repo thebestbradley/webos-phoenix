@@ -917,10 +917,9 @@ FocusScope {
     readonly property bool emergencyShown: emergencyWindow.windowKey !== ""
     readonly property bool emergencyAvailable: !!source && typeof source.openSystemWindow === "function"
 
-    // extra: the Assistant's "call 911" ({number, countdown}: Phone counts
-    // down with Cancel, then calls; apps/phone views/Emergency.tsx), which
-    // replaces a window already open.
-    property double _emergencyCountdownEnds: 0
+    // extra: the Assistant's emergency call ({number, countdown}: Phone calls,
+    // after counting down with Cancel when countdown is given; apps/phone
+    // views/Emergency.tsx), which replaces a window already open.
     function openEmergency(extra) {
         if (emergencyShown && extra)
             closeEmergency();
@@ -931,17 +930,9 @@ FocusScope {
             params.number = String(extra.number);
             params.countdown = Number(extra.countdown) || 0;
         }
-        _emergencyCountdownEnds = params.countdown ? Date.now() + params.countdown * 1000 : 0;
         var key = source.openSystemWindow(emergencyAppId, params, "emergency");
         emergencyWindow.windowKey = key || "";
         return emergencyShown;
-    }
-    // The Assistant's "cancel" while it still counts down: closed, no call.
-    // After that the call is Phone's (hung up there), never closed under it.
-    function cancelEmergencyCountdown() {
-        if (emergencyShown && Date.now() < _emergencyCountdownEnds)
-            closeEmergency();
-        _emergencyCountdownEnds = 0;
     }
     // The Home button closes it (EmergencyWindowManager::slotHomeButtonPressed).
     function closeEmergency() {
@@ -969,11 +960,9 @@ FocusScope {
             emergencyWindow.windowKey = "";
             shell._emergencyClosed();
         }
-        // The Assistant's "call 911" ({number, countdown}) or its "cancel" ({cancel: true}).
+        // The Assistant's emergency call, its countdown over ({number, countdown}).
         function onEmergencyCallRequested(params) {
-            if (params && params.cancel)
-                shell.cancelEmergencyCountdown();
-            else if (params && params.number)
+            if (params && params.number)
                 shell.openEmergency(params);
         }
     }
@@ -2381,6 +2370,15 @@ FocusScope {
         value: speechEngine
         when: !!shell.source && ("speech" in shell.source)
     }
+    // Search your phone's model (services/index: EmbeddingGemma 2), in the
+    // models folder's index/, its own llama-server beside the Assistant's.
+    readonly property alias indexModels: indexModelsEngine
+    Binding {
+        target: shell.source
+        property: "indexModels"
+        value: shell.localModelsDir !== "" ? indexModelsEngine : null
+        when: !!shell.source && ("indexModels" in shell.source)
+    }
     // When the app in front is resized for a change of the negative space
     // (the keyboard, the dashboard, a banner, an alert), as CardWindowManager
     // did while maximized (MaximizeState::positiveSpaceAboutToChange and
@@ -3680,6 +3678,21 @@ FocusScope {
                 id: localModelsEngine
                 modelsDir: shell.localModelsDir
                 serverCommand: shell.llamaServerCommand
+            }
+            // The index's (Search your phone): llama-server --embedding, one
+            // thread (a background job; on a busy 4-core computer one thread
+            // embedded a passage in 0.5 s and a query in 50 ms, two in 2-3.6 s
+            // and 0.1-0.3 s: services/index/device.js),
+            // and --mmproj with the vision and audio encoders when pictures
+            // and recordings are embedded (SimWindowSource "index" ensure
+            // sets mmproj). After these come LocalModels' own arguments.
+            LocalModels {
+                id: indexModelsEngine
+                property string mmproj: ""
+                modelsDir: shell.localModelsDir !== "" ? shell.localModelsDir + "/index" : ""
+                builtInDirs: []
+                serverCommand: (shell.llamaServerCommand.length ? [shell.llamaServerCommand[0]] : ["llama-server"])
+                               .concat(["--embedding", "-t", "1"]).concat(mmproj !== "" ? ["--mmproj", mmproj] : [])
             }
             Speech {
                 id: speechEngine

@@ -1,0 +1,8 @@
+{
+  "name": "org.webosphoenix.service.index",
+  "version": "0.1.0",
+  "private": true,
+  "description": "webOS Phoenix's search of the user's own things by meaning (Luna): EmbeddingGemma 2 through llama.cpp's llama-server, an index per source on the device, kept up to date in the background",
+  "license": "Apache-2.0",
+  "main": "service.js"
+}

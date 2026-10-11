@@ -252,7 +252,8 @@ describe("what a model is shown", () => {
             return reply({ content: "An answer." });
         };
         const d = device({ llm, llmRequest, settings: { followUps: false } });
-        const m = await d.ask("I want an alarm at 5:30 tomorrow morning");
+        // (The grammar now takes "I want an alarm at 5:30 tomorrow morning" itself.)
+        const m = await d.ask("an alarm at 5:30 tomorrow morning would be great");
         expect(called).toEqual(["alarm"]);
         expect(m.command).toBe("alarm");
         // Words that do take away keep the choice ("isn't happening anymore").

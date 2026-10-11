@@ -4,18 +4,18 @@
 // English for the everyday features (lib/commands-everyday.js), each
 // area's words in a file of its own:
 //
-//   en-sos.js        emergency calls, cancelling one, texting the emergency contacts
+//   en-sos.js        more words for an emergency call, stopping its countdown, texting the emergency contacts
 //   en-notify.js     what did I miss, announcing messages, driving mode
 //   en-routines.js   routines, their starters and the steps Settings offers
 //   en-capture.js    photos, selfies, videos, voice memos
 //   en-places.js     where I parked, reminders at a place, home and work
-//   en-music.js      shuffle, repeat, favorite songs, the sleep timer, podcasts
+//   en-music.js      shuffle, repeat, favorite songs, podcasts, more sleep timer words
 //   en-facts.js      define, spell, coins, dice, random numbers, Wikipedia, the news
 //   en-settings.js   the switches of Settings the toggle command does not have, dark mode
 //   en-home.js       lights, switches, the thermostat, locks and scenes (Home Assistant)
 //
 // Each area: (h) -> {first?: rules tried before every other (before help and
-// undo: an emergency call's "cancel"), rules: [[command, (t, ctx) -> args | null]] (tried
+// undo), rules: [[command, (t, ctx) -> args | null]] (tried
 // before the grammar's own, so each is held to its own words), late?:
 // rules tried after them (before "open an app"), say: its words,
 // MENTIONS: the words a model's choice of a command that changes

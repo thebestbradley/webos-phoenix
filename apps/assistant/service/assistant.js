@@ -40,6 +40,8 @@
 //     question before messageId waits to be asked again
 //   retry {threadId} -> {thread, messages}: that question asked again, of
 //     the on-device model (first, unless mode was "cloud") or the cloud one
+//   warm {} -> {warming}: the Assistant opened; the on-device model's server
+//     started in the background where the model fits the device's memory
 //   confirm {threadId, messageId, accept}
 //   threads {} -> {threads, current}; thread {id?} -> {thread, messages}
 //   newThread {} / setCurrent {id} / deleteThread {id} / clearHistory {}
@@ -86,7 +88,9 @@ var commands = require("./lib/commands");
 var providers = require("./lib/providers");
 var models = require("./lib/models");
 var followups = require("./lib/followups");
+var emergency = require("./lib/emergency");
 var synergy = require("./lib/synergy");
+var phoneSearch = require("./lib/commands-search");
 
 var SERVICE = "org.webosphoenix.assistant";
 var SETTINGS_APP = "org.webosphoenix.settings";
@@ -363,8 +367,8 @@ function createAssistantService(deps) {
                  apps: apps, settings: settings(), setSettings: function (c) { return methods.setSettings(c); },
                  // Sealed secrets (the Home Assistant token: lib/commands-home.js).
                  secrets: deps.secrets,
-                 // The region (the emergency number: lib/commands-sos.js).
-                 locale: deps.locale ? deps.locale() : "" };
+                 // The region (the emergency number: lib/emergency.js, lib/commands-sos.js).
+                 locale: deps.locale ? deps.locale() : "", country: emergency.countryOf(deps.locale ? deps.locale() : "") };
     }
     var followUps = followups.create({ storage: storage, now: now, env: env, settings: settings, log: log, changed: changed,
                                        notify: deps.notify || function () {},
@@ -447,8 +451,10 @@ function createAssistantService(deps) {
         e.locked = !!lockedAsk[thread.id];
         // Asked by voice over the lock screen: only what shows nothing
         // private and sends nothing (or keeps to what the lock screen shows:
-        // whenLocked); the rest waits for the unlock.
-        if (lockedAsk[thread.id] && LOCKED_COMMANDS.indexOf(cmd.id) < 0 && !cmd.whenLocked)
+        // whenLocked); the rest waits for the unlock. An emergency call
+        // never waits (as the Phone's emergency dialer).
+        var sos = cmd.id === "call" && asked === undefined && !!(args.emergency || emergency.isEmergency(args.number || args.who, e.country));
+        if (lockedAsk[thread.id] && LOCKED_COMMANDS.indexOf(cmd.id) < 0 && !cmd.whenLocked && !sos)
             return Promise.resolve([say(thread, s.unlockFirst(), { via: layer, source: source, command: cmd.id, status: "locked" })]);
         if (!allowed(cmd)) return Promise.resolve([say(thread, s.notAllowed(cmd.title), { via: layer, source: source, command: cmd.id, status: "failed" })]);
         noteArgs(thread, cmd.id, args);
@@ -466,6 +472,11 @@ function createAssistantService(deps) {
             }
             if (p.reply) return [say(thread, p.reply, { via: layer, source: source, command: cmd.id, status: "failed" })];
             var confirm = p.confirm;
+            // An emergency call the words asked for is placed after its
+            // countdown unless cancelled; one a model chose is read back as
+            // any call is.
+            var countdown = p.countdown && asked === undefined && !(opts && opts.readBack) ? p.countdown : 0;
+            if (p.countdown && !countdown) confirm = s.confirmCall("", p.args.number);
             if (!confirm && opts && opts.readBack) confirm = s.didYouMean(s.describe(cmd.id, p.args, cmd.title));
             // A model's choice runs only when the words name it and what it
             // works on (a task's, memo's or event's words are in what was said):
@@ -476,12 +487,14 @@ function createAssistantService(deps) {
                 confirm = s.didYouMean(s.describe(cmd.id, p.args, cmd.title));
             if (confirm) {
                 keepLast(thread, { command: cmd.id, args: plainArgs(p.args), status: "pending", name: p.args && p.args.name || "" });
-                return [say(thread, confirm, { via: layer, source: source, command: cmd.id, status: "pending",
-                                               confirm: { command: cmd.id, args: p.args } })];
+                var asking = say(thread, confirm, { via: layer, source: source, command: cmd.id, status: "pending",
+                                                    confirm: Object.assign({ command: cmd.id, args: p.args }, countdown ? { countdown: countdown } : {}) });
+                if (countdown) placeAfter(thread, asking, countdown);
+                return [asking];
             }
             return commands.run(cmd, p.args, e).then(function (r) {
                 if (r.focus) keepFocus(thread, r.focus);
-                if (!r.failed && !r.offerWeb) keepLast(thread, { command: cmd.id, args: plainArgs(p.args), status: "done", made: !!r.undo, name: p.args && p.args.name || "" });
+                if (!r.failed && !r.offerWeb && !r.asks) keepLast(thread, { command: cmd.id, args: plainArgs(p.args), status: "done", made: !!r.undo, name: p.args && p.args.name || "" });
                 // What the command could not answer and the web can (a
                 // currency without the day's rates): searched at once when
                 // Settings says so, as the button would.
@@ -495,6 +508,22 @@ function createAssistantService(deps) {
             log("command " + cmd.id + " failed: " + (err && err.message));
             return [say(thread, s.failed(err && err.message || String(err)), { via: layer, source: source, command: cmd.id, status: "failed" })];
         });
+    }
+
+    // A read-back that is an emergency call's countdown.
+    function counting(m) { return !!(m && m.status === "pending" && m.confirm && m.confirm.countdown); }
+    // An emergency call's countdown (lib/emergency.js): when it ends with
+    // the call still waiting (no Cancel, no "no"), it is placed, as if Call
+    // had been tapped. deps.countdownMs: the tests' shorter wait.
+    function placeAfter(thread, m, seconds) {
+        var ms = deps.countdownMs !== undefined ? deps.countdownMs : seconds * 1000;
+        var t = setTimeout(function () {
+            var cur = getThread(thread.id), waiting = cur && getMessage(cur.id, m.id);
+            if (!waiting || waiting.status !== "pending") return;
+            confirmMessage(cur, waiting, true, {}).then(function () { changed("threads"); },
+                function (e) { log("the emergency call failed: " + (e && e.message)); });
+        }, ms);
+        if (t && t.unref) t.unref();
     }
 
     // ---- Follow-up questions (lib/followups.js) ----------------------------------------------
@@ -610,6 +639,8 @@ function createAssistantService(deps) {
     function confirmAnswer(c, text) {
         var l = lang(), yn = l.answer ? l.answer(l.clean(text)) : null;
         if (yn) return Promise.resolve(yn);
+        // An emergency call counting down: "wait, no, stop" stops it, "hurry" places it (lib/lang/en-sos.js).
+        if (counting(c.message) && l.countdownAnswer && (yn = l.countdownAnswer(l.clean(text)))) return Promise.resolve(yn);
         var d = deps.decider;
         if (!d || !d.yesNo || settings().decider === "off" || grammar.parse(text, { lang: settings().language, now: now() })) return Promise.resolve(null);
         return Promise.resolve(d.yesNo(text, c.message.text)).catch(function () { return null; }).then(function (said) {
@@ -675,7 +706,9 @@ function createAssistantService(deps) {
     // free-word questions' answers are route's.)
     function answerChoice(thread, c, text, p) {
         if (c.kind === "followUp" || c.kind === "awaiting") return null;
-        if (c.kind === "confirm") return p.voice && !newRequest(text) ? unclear(thread, c) : null;
+        // (An emergency call counting down is not asked again: words that
+        // are not "no" or "cancel" leave it to be placed.)
+        if (c.kind === "confirm") return p.voice && !newRequest(text) && !counting(c.message) ? unclear(thread, c) : null;
         var l = lang(), m = c.message;
         // As its button would (a choice gone meanwhile: said so).
         var choose = function (id) {
@@ -717,7 +750,9 @@ function createAssistantService(deps) {
     // said: ended in words ("I'm done": "OK, I won't send it.").
     function endChoice(thread, said) {
         var c = pendingChoice(thread);
-        if (!c || c.kind !== "confirm") return "";
+        // An emergency call counting down is placed all the same: only "no",
+        // "cancel" or the button stop it (lib/emergency.js).
+        if (!c || c.kind !== "confirm" || counting(c.message)) return "";
         c.message.status = "cancelled";
         putMessage(c.message);
         return said ? lang().say.leftUndone(c.command) : lang().say.unanswered(c.command);
@@ -803,7 +838,8 @@ function createAssistantService(deps) {
         if (r.open) choices.push({ id: "open", label: lang().say.openApp(r.open.title) });
         if (r.offerWeb) choices.push({ id: "web", label: lang().say.searchWeb() });
         if (choices.length) extra.choices = choices;
-        return Object.assign({ via: layer, source: source, command: cmd.id, status: r.offerWeb || r.failed ? "failed" : "done",
+        // asks: a question back, nothing done yet ("Should I use where you are now?").
+        return Object.assign({ via: layer, source: source, command: cmd.id, status: r.offerWeb || r.failed ? "failed" : r.asks ? "ask" : "done",
                                data: Object.keys(data).length ? data : undefined }, extra);
     }
     // The last thing the assistant did that can be taken back.
@@ -900,6 +936,21 @@ function createAssistantService(deps) {
             filled[w.field] = w.field === "query" ? words.replace(/\?+$/, "")
                 : w.command === "note" && w.args.topic ? w.args.topic + "\n" + words : words.charAt(0).toUpperCase() + words.slice(1);
             return done(Object.assign({}, w.args, filled));
+        }
+        // "When should I remind you?" (a reminder for a place, which is not
+        // there yet): the time said.
+        if (w.command === "reminder" && w.field === "due") {
+            var said = l.extract(t, now());
+            if (said.rest.replace(/\b(?:at|on|in|for|the|then|instead|remind me|it's|it is|its)\b/g, "").trim()) return null;
+            var when = l.resolve(said, now(), "day");
+            if (when.start === null) return null;
+            var due = when.allDay && !said.allDay ? new Date(when.start).setHours(9, 0, 0, 0) : when.start;
+            return done(Object.assign({}, w.args, { due: due }, when.repeat ? { repeat: when.repeat } : {}));
+        }
+        // "For how long?" (a sleep timer: lib/commands-music.js): the time said.
+        if (w.command === "timer" && w.field === "seconds") {
+            var secs = l.duration ? l.duration(t.replace(/^(?:for|in|after) /, "")) : 0;
+            return secs > 0 && !parsed ? done(Object.assign({}, w.args, { seconds: secs })) : null;
         }
         if (w.command !== "event" || parsed) return null;
         var info = l.extract(t, now());
@@ -1008,18 +1059,44 @@ function createAssistantService(deps) {
     // prefix: the on-device model's shared prefix (localPrefix): the
     // system prompt, the rest after it.
     function callModel(provider, key, thread, tools, toolChoice, timeoutMs, prefix) {
-        var system = prefix ? prefix.text : systemPrompt(tools.length > 0);
-        // After the choice's examples in the shared prompt, the model must
-        // be told this is not a choice ("None." was its whole answer).
-        var tail = promptTail(tools.length > 0) + (tools.length ? "" : " Now answer the user in words, as yourself: never with a command's name or \"none\".");
-        var msgs = prefix ? [{ role: "system", text: tail }].concat(fitted(history(thread), LOCAL_HISTORY_CHARS)) : history(thread);
-        var req = providers.chatRequest(provider, { system: system, messages: msgs, tools: tools, toolChoice: toolChoice }, key);
-        if (timeoutMs) req.timeoutMs = timeoutMs;
-        var t0 = Date.now();
-        return deps.request(req).then(function (r) {
-            noteStep(thread, "answer", t0, r.body, tools.length ? { tools: tools.length } : undefined);
-            return providers.parseChat(provider.type, r.status, r.body);
+        return phoneContext(thread).then(function (found) {
+            // What the user's own phone has for the question: their data, which
+            // may hold anyone's words, so no tools this time (docs/AI-AND-MCP.md
+            // Safety, the taint rule): the model answers in words.
+            if (found) tools = [];
+            var system = prefix ? prefix.text : systemPrompt(tools.length > 0) + (found ? "\n\n" + found.text : "");
+            // After the choice's examples in the shared prompt, the model must
+            // be told this is not a choice ("None." was its whole answer).
+            var tail = promptTail(tools.length > 0) + (tools.length ? "" : " Now answer the user in words, as yourself: never with a command's name or \"none\".") +
+                (found && prefix ? "\n\n" + found.text : "");
+            var msgs = prefix ? [{ role: "system", text: tail }].concat(fitted(history(thread), LOCAL_HISTORY_CHARS)) : history(thread);
+            var req = providers.chatRequest(provider, { system: system, messages: msgs, tools: tools, toolChoice: toolChoice }, key);
+            if (timeoutMs) req.timeoutMs = timeoutMs;
+            var t0 = Date.now();
+            return deps.request(req).then(function (r) {
+                noteStep(thread, "answer", t0, r.body, tools.length ? { tools: tools.length } : undefined);
+                return providers.parseChat(provider.type, r.status, r.body);
+            });
         });
+    }
+    // A question about the user's own things ("what's the wifi password at
+    // the cabin?"): what Search your phone finds for it (lib/commands-search.js
+    // contextFor: only with the index on and "Use in answers"), once a turn;
+    // it goes to the model this thread is already talking to, nowhere else.
+    function phoneContext(thread) {
+        var t = turnOf(thread);
+        if (t && t.found !== undefined) return Promise.resolve(t.found);
+        return phoneSearch.contextFor(lastAsked(thread), env(), lang().aboutMine).then(function (f) {
+            if (t) t.found = f;
+            return f;
+        }, function () { return null; });
+    }
+    // Where what the model was given came from, under its answer.
+    function withSources(thread, extra) {
+        var t = turnOf(thread), f = t && t.found;
+        if (!f || !f.results || !f.results.length) return extra;
+        var data = Object.assign({}, extra.data || {}, { attachments: commands.phoneShown(env(), f.results), fromPhone: true });
+        return Object.assign({}, extra, { data: data });
     }
     // The on-device model calls the command it chose: its arguments as JSON
     // held to the command's parameters (response_format: llama-server
@@ -1070,6 +1147,30 @@ function createAssistantService(deps) {
             return { text: "", toolCalls: [{ name: name, args: args }] };
         });
     }
+    // The time a model wrote for an alarm, a reminder or an event, where
+    // the grammar reads a time in the words: the grammar's, which is exact
+    // (a model fills only what the grammar could not read). Qwen3 0.6B set
+    // "I want an alarm at 5:30 tomorrow morning" for 6:30 (the held-out
+    // set, 11 October 2026).
+    function timeFromWords(cmd, args, asked) {
+        var key = { alarm: "time", reminder: "due", event: "start" }[cmd.id], l = lang();
+        // A sleep timer stops the music: only where the words speak of it
+        // (Qwen3 0.6B made "add 5 minutes to the timer" a sleep timer).
+        if (cmd.id === "timer" && args && (args.sleep || /^sleep$/i.test(String(args.label || ""))) && l.sleepSaid && !l.sleepSaid(asked)) {
+            args = Object.assign({}, args);
+            delete args.sleep;
+            if (/^sleep$/i.test(String(args.label || ""))) args.label = "";
+        }
+        if (!key || !args || !(args[key] > 0) || !asked || !l.extract) return args;
+        var info = l.extract(l.clean(asked), now());
+        if (!info.clock && info.relative === undefined) return args;
+        var r = l.resolve(info, now(), cmd.id === "alarm" ? "alarm" : "day");
+        if (r.start === null || r.allDay || r.start === args[key]) return args;
+        var out = Object.assign({}, args);
+        if (cmd.id === "event") out.end = r.end || (out.end > 0 ? out.end + (r.start - out.start) : out.end);
+        out[key] = r.start;
+        return out;
+    }
     // An answer: words, or a tool call to run (cloud ones only when allowed).
     function answer(thread, result, cat, layer, source, cloud, asked) {
         var s = lang().say;
@@ -1079,12 +1180,12 @@ function createAssistantService(deps) {
                 return Promise.resolve([say(thread, s.cloudNoControl(source), { via: layer, source: source, status: "failed" })]);
             var cmd = commands.fromToolName(cat.all, call.name);
             if (!cmd) return Promise.resolve([say(thread, s.unknownTool(call.name), { via: layer, source: source, status: "failed" })]);
-            var args = commands.fromModel(cmd, call.args, env());
+            var args = timeFromWords(cmd, commands.fromModel(cmd, call.args, env()), asked);
             if (cmd.id === "open" && call.args && call.args.name) args.name = call.args.name;
             return act(thread, cmd, args, layer, source, asked);
         }
         return withNext(asked, result.text || s.done()).then(function (next) {
-            return [say(thread, result.text || s.done(), Object.assign({ via: layer, source: source }, next))];
+            return [say(thread, result.text || s.done(), withSources(thread, Object.assign({ via: layer, source: source }, next)))];
         });
     }
     // What to offer after a model's answer to words: a web search for a
@@ -1336,9 +1437,14 @@ function createAssistantService(deps) {
                 // are the calendar's and Contacts'), but only a command that
                 // reads may answer it: "how do I make banana pudding" is never
                 // made a memo (measured: docs/AI-AND-MCP.md).
-                var ctx = lang().say.context ? lang().say.context(lastAsked(thread)) : { question: false, smallTalk: false };
+                var ctx = lang().say.context ? lang().say.context(lastAsked(thread), cat.names) : { question: false, smallTalk: false };
                 var pre = localPrefix(cat);
-                if (ctx.smallTalk) return callModel(p, "", thread, [], undefined, left(), pre);
+                // A question about the world alone ("who wrote Pride and
+                // Prejudice"): answered in words at once. The choice before it
+                // could only have picked a command that reads the phone's
+                // things, which nothing in the words is about; it took a
+                // second to many under load (docs/AI-AND-MCP.md "Speed").
+                if (ctx.smallTalk || ctx.world) return callModel(p, "", thread, [], undefined, left(), pre);
                 return pickCommand(p, thread, cat, left()).then(function (c) {
                     if (c && ctx.question && c.risk !== "read") c = null;
                     // A choice that takes away, for words that say nothing of
@@ -1407,23 +1513,47 @@ function createAssistantService(deps) {
 
     // ---- What the grammar found, done ----------------------------------------------------------
     // One command as the grammar gave it: {command, args} -> messages.
+    // What the grammar can do never waits for the on-device model (the
+    // owner, 11 October 2026: "shouldn't it go through our tool first so
+    // it's done quicker"): the model writes only what the user asked to
+    // have written (args.write: "write me a memo about ...", "draft an
+    // email announcing ..."), and fills in an argument only when the grammar
+    // could not read it and the command cannot ask for it itself.
     function actParsed(thread, parsed, cat, text) {
         var id = parsed.command === "app" ? "app:" + parsed.args.key : parsed.command;
         var cmd = commands.find(cat.all, id);
         if (!cmd) return null;
         var args = parsed.command === "app" ? { text: parsed.args.text } : parsed.args;
         if (parsed.command === "open") args = { appId: parsed.args.appId, title: parsed.args.title, name: parsed.args.title, params: parsed.args.params };
-        // A memo about a subject, an email to write: the on-device model
-        // writes it where there is one (the owner's "make me a note about
-        // the newest features ..." saved the request as the memo).
-        if ((cmd.id === "note" && args.topic && !args.text) || (cmd.id === "email" && args.draft && args.topic && !args.body))
+        // A memo or an email the user asked to have written: the on-device
+        // model writes it where there is one (the owner's "make me a note
+        // about the newest features ..." saved the request as the memo).
+        // Without one, or for "take a note about ...", the command asks
+        // what it should say.
+        if (args.write && ((cmd.id === "note" && args.topic && !args.text) || (cmd.id === "email" && args.draft && args.topic && !args.body)))
             return compose(thread, cmd, args).then(function (c) { return act(thread, cmd, c ? c.args : args, c ? "on-device" : "commands", c ? c.model.name : ""); });
         if (missingArgs(cmd, args, parsed)) {
-            return fillArgs(thread, cmd, args, text).then(function (f) {
-                return f ? act(thread, cmd, f.args, "on-device", f.model.name, text) : act(thread, cmd, args, "commands", "");
+            // What the command asks for itself ("When is it?" for "add an
+            // event called dentist"), it asks at once: a quick question is
+            // sooner and surer than waiting for the model's reading of
+            // words that do not say it (measured: docs/AI-AND-MCP.md
+            // "Speed").
+            return asksItself(thread, cmd, args).then(function (asks) {
+                if (asks) return act(thread, cmd, args, "commands", "");
+                return fillArgs(thread, cmd, args, text).then(function (f) {
+                    return f ? act(thread, cmd, f.args, "on-device", f.model.name, text) : act(thread, cmd, args, "commands", "");
+                });
             });
         }
         return act(thread, cmd, args, "commands", "");
+    }
+    // Whether the command, given what the grammar read, asks for what is
+    // missing (prepare's awaiting) or can go ahead without it: either way
+    // the model is not needed.
+    function asksItself(thread, cmd, args) {
+        var e = env();
+        e.focus = thread.focus || null;
+        return commands.prepare(cmd, args, e).then(function (p) { return !!p.awaiting || !p.reply; }, function () { return false; });
     }
     // Several requests in one ("turn off wifi and set an alarm for 6"), one after the other.
     function actParts(thread, parts, cat, text) {
@@ -1447,16 +1577,12 @@ function createAssistantService(deps) {
         var what = cmd && cmd.builtIn ? s.describe(cmd.id, n.args || {}, cmd.title) : "";
         return Promise.resolve([say(thread, s.wontDo(what), { via: "commands" })]);
     }
-    // Small talk: the grammar's words; a conversation ("talk to me", a
-    // joke) the on-device model's, where there is one.
+    // Small talk: the grammar's words, at once, a joke and "talk to me"
+    // too (they were the on-device model's, which made "tell me a joke"
+    // wait seconds for it, and longer while it started; the owner, 11
+    // October 2026: what the tool can do goes through it first). What is
+    // said next, a conversation the grammar does not take, is the model's.
     function chatAnswer(thread, parsed, cat) {
-        var kind = parsed.args.kind;
-        if (/^(?:talk|joke)$/.test(kind)) {
-            return localReady().then(function (m) {
-                if (!m) return act(thread, commands.find(cat.all, "chat"), parsed.args, "commands", "");
-                return askLocalWords(thread, m).catch(function () { return act(thread, commands.find(cat.all, "chat"), parsed.args, "commands", ""); });
-            });
-        }
         return act(thread, commands.find(cat.all, "chat"), parsed.args, "commands", "");
     }
     // "Did you add the number?": what the device has, never what a model
@@ -1566,17 +1692,6 @@ function createAssistantService(deps) {
             });
         }).catch(function (e) { log("writing it failed: " + (e && e.message)); return null; });
     }
-    // The on-device model's words for small talk (no command chosen).
-    function askLocalWords(thread, model) {
-        return bounded(thread, function (left, stage) {
-            return deps.llm.ensure(model).then(function (srv) {
-                stage("thinking");
-                return catalogue().then(function (cat) {
-                    return callModel({ type: "local", baseUrl: srv.baseUrl, model: model.id }, "", thread, [], undefined, left(), localPrefix(cat));
-                });
-            });
-        }).then(function (r) { return [say(thread, r.text || lang().say.done(), { via: "on-device", source: model.name })]; });
-    }
     // The decision model's slot (docs/AI-AND-MCP.md "A decision model"): a
     // choice among complete requests. The language says which requests the
     // words come close to ("turn bluetooth off", "turn bluetooth on", "is
@@ -1662,7 +1777,14 @@ function createAssistantService(deps) {
         if (parsed && parsed.command === "negated") return notThis(thread, parsed.args, cat);
         if (parsed && parsed.command === "multi") return actParts(thread, parsed.args.parts, cat, text);
         if (parsed && parsed.command === "chat") return chatAnswer(thread, parsed, cat);
-        if (parsed && parsed.command === "checkDone") return checkDone(thread, parsed.args, cat);
+        // "Did you add it?" is answered here, not by act(), so its switch in
+        // Settings > Assistant > Commands is checked here too (it went on
+        // answering when turned off: tools/test-assistant.cjs).
+        if (parsed && parsed.command === "checkDone") {
+            var cd = commands.find(cat.all, "checkDone");
+            if (cd && !allowed(cd)) return Promise.resolve([say(thread, lang().say.notAllowed(cd.title), { via: "commands", command: "checkDone", status: "failed" })]);
+            return checkDone(thread, parsed.args, cat);
+        }
         // Only a model or the web can: noted, and on to them; what nothing
         // here does (another device, money, ordering), said at once.
         var note = parsed && parsed.command === "beyond" ? lang().say.beyond(parsed.args.what) : "";
@@ -1769,6 +1891,42 @@ function createAssistantService(deps) {
         speakLast(list, p);
         changed("threads");
         return ok({ thread: summary(thread), messages: list });
+    }
+
+    // A read-back answered (confirm, or an emergency call's countdown run
+    // out): m is the message waiting, status "pending".
+    function confirmMessage(thread, m, accept, p) {
+        if (!turnOf(thread)) startTurn(thread);
+        if (!accept) {
+            m.status = "cancelled";
+            putMessage(m);
+            return Promise.resolve(done(thread, [say(thread, lang().say.cancelled(), { via: m.via, command: m.command, status: "cancelled" })], p));
+        }
+        // Taken now, so that a second answer (a tap as the countdown ends) finds nothing waiting.
+        m.status = "running";
+        putMessage(m);
+        return catalogue().then(function (cat) {
+            var cmd = commands.find(cat.all, m.confirm.command);
+            if (!cmd || !allowed(cmd)) {
+                m.status = "failed";
+                putMessage(m);
+                return [say(thread, lang().say.notAllowed(cmd ? cmd.title : m.confirm.command), { status: "failed" })];
+            }
+            noteArgs(thread, cmd.id, m.confirm.args);
+            return commands.run(cmd, m.confirm.args, env()).then(function (r) {
+                m.status = "done";
+                putMessage(m);
+                if (cmd.id === "undo" && m.confirm.args.messageId) {
+                    var target = getMessage(thread.id, m.confirm.args.messageId);
+                    if (target && target.data) { target.data.undone = true; putMessage(target); }
+                }
+                return withFollowUp(thread, cmd, m.confirm.args, r, [say(thread, r.text, outcome(r, m.via, m.source, cmd))]);
+            }, function (e) {
+                m.status = "failed";
+                putMessage(m);
+                return [say(thread, lang().say.failed(e.message), { via: m.via, command: cmd.id, status: "failed" })];
+            });
+        }).then(function (out) { return done(thread, out, p); });
     }
 
     // ---- Methods ---------------------------------------------------------------------------------
@@ -1890,34 +2048,7 @@ function createAssistantService(deps) {
             if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
             var thread = getThread(p.threadId), m = thread && getMessage(thread.id, p.messageId);
             if (!m || !m.confirm || m.status !== "pending") return Promise.resolve(fail(ERRORS.NOT_FOUND, "Nothing waits for an answer there"));
-            if (!turnOf(thread)) startTurn(thread);
-            if (!p.accept) {
-                m.status = "cancelled";
-                putMessage(m);
-                return Promise.resolve(done(thread, [say(thread, lang().say.cancelled(), { via: m.via, command: m.command, status: "cancelled" })], p));
-            }
-            return catalogue().then(function (cat) {
-                var cmd = commands.find(cat.all, m.confirm.command);
-                if (!cmd || !allowed(cmd)) {
-                    m.status = "failed";
-                    putMessage(m);
-                    return [say(thread, lang().say.notAllowed(cmd ? cmd.title : m.confirm.command), { status: "failed" })];
-                }
-                noteArgs(thread, cmd.id, m.confirm.args);
-                return commands.run(cmd, m.confirm.args, env()).then(function (r) {
-                    m.status = "done";
-                    putMessage(m);
-                    if (cmd.id === "undo" && m.confirm.args.messageId) {
-                        var target = getMessage(thread.id, m.confirm.args.messageId);
-                        if (target && target.data) { target.data.undone = true; putMessage(target); }
-                    }
-                    return withFollowUp(thread, cmd, m.confirm.args, r, [say(thread, r.text, outcome(r, m.via, m.source, cmd))]);
-                }, function (e) {
-                    m.status = "failed";
-                    putMessage(m);
-                    return [say(thread, lang().say.failed(e.message), { via: m.via, command: cmd.id, status: "failed" })];
-                });
-            }).then(function (out) { return done(thread, out, p); });
+            return confirmMessage(thread, m, !!p.accept, p);
         },
         threads: function () {
             var cur = currentThread();
@@ -2105,6 +2236,26 @@ function createAssistantService(deps) {
                 return ok({ models: list, selected: localChoice(),
                             status: { available: !!st.available, running: !!st.running, server: st.server || "", error: st.error || "",
                                       ramBytes: st.ramBytes || 0, howToInstall: st.howToInstall || "" } });
+            });
+        },
+        // The Assistant opened (its app, the system's view): the on-device
+        // model's server started now, in the background, so that the first
+        // request that needs the model does not wait seconds for it to load
+        // (llama-server stops itself after five idle minutes: node-device.js,
+        // localmodels.cpp). Only where the model fits the device's memory
+        // (lib/models.js forDevice); nothing waits for it, and what the
+        // grammar answers never needs it.
+        warm: function () {
+            if (!privileged()) return Promise.resolve(fail(ERRORS.NOT_ALLOWED, "Not allowed"));
+            if (!settings().enabled) return Promise.resolve(ok({ warming: false }));
+            return localReady().then(function (m) {
+                if (!m) return ok({ warming: false });
+                return Promise.resolve(deps.llm.status()).then(function (st) {
+                    var fit = models.forDevice(st && st.ramBytes || 0, [m.id]).filter(function (x) { return x.id === m.id; })[0];
+                    if (fit && !fit.fits) return ok({ warming: false, why: "memory" });
+                    Promise.resolve(deps.llm.ensure(m)).catch(function (e) { log("warming the on-device model failed: " + (e && e.message)); });
+                    return ok({ warming: true });
+                });
             });
         },
         downloadModel: function (p) {
@@ -2297,7 +2448,7 @@ var VOICE_PARTS = [
 var METHODS = ["ask", "choose", "confirm", "threads", "thread", "newThread", "setCurrent", "deleteThread", "clearHistory",
                "getSettings", "setSettings", "commands", "providers", "setProvider", "removeProvider", "testProvider", "listModels",
                "models", "downloadModel", "cancelDownload", "removeModel", "selectModel", "speak", "stopSpeaking", "sessionPhrase", "vocabulary", "voice",
-               "connect", "retry",
+               "connect", "retry", "warm",
                "followUps", "answerFollowUp", "followUpOpen", "followUpLeave", "followUpWake", "resetFollowUps", "markRead"]
                .concat(commands.everyday.METHODS);
 

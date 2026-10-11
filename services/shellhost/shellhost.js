@@ -50,9 +50,9 @@
 //
 //   setNowPlaying {title, artist?, album?, playing, appId?, uri?, shuffle?, repeat?}, getNowPlaying
 //                               -> {nowPlaying: {..., appId, time} | null}
-//   emergencyCall {number, countdown} | {cancel}  the Assistant's "call 911": an
+//   emergencyCall {number, countdown}  the Assistant's emergency call, placed: an
 //                               "emergencyCall" message; the shell opens Phone's
-//                               emergency window (or closes it while it counts)
+//                               emergency window, over the lock screen too
 //   mediaKey {key}              a "mediaKey" message for the shell, which
 //                               presses it (com.palm.display/phoenix/report
 //                               {mediaKey}: phoenix-devices' /media events)
@@ -254,12 +254,11 @@ function createShellHost(opts) {
             if (MEDIA_KEYS.indexOf(p.key) < 0) return respond(fail(-1, "key: play, pause, togglePausePlay, stop, next or prev"));
             post({ type: "mediaKey", payload: { key: p.key } }, caller, function (r) { respond(r.returnValue ? ok() : r); });
         },
-        // The Assistant's "call 911" (its lib/commands-sos.js): an "emergencyCall"
-        // message for the shell, which opens Phone's emergency window over
-        // everything with {number, countdown} ({cancel}: closed while it counts).
+        // The Assistant's emergency call, its countdown over (lib/commands.js call):
+        // an "emergencyCall" message for the shell, which opens Phone's emergency
+        // window over everything with {number, countdown} (0: it calls at once).
         emergencyCall: function (p, caller, respond) {
             if (NOTIFICATION_READERS.indexOf(appIdOf(caller)) < 0 && !isShell(caller)) return respond(fail(-1, "Not allowed"));
-            if (p.cancel === true) return post({ type: "emergencyCall", payload: { cancel: true } }, caller, function (r) { respond(r.returnValue ? ok() : r); });
             var n = String(p.number || "").replace(/[^0-9]/g, "");
             if (!/^\d{2,6}$/.test(n)) return respond(fail(-1, "number: an emergency number"));
             var secs = Math.max(0, Math.min(10, Math.round(Number(p.countdown) || 0)));

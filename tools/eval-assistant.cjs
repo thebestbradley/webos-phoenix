@@ -46,6 +46,7 @@
 // keeps: {"assistant:routines": [...]}), db (db8 objects: [{_id, _kind, ...}]), settings,
 // home (true: Home Assistant connected, the stand-in house).
 //   and, in expect, "anyOf": [expect, ...] when more than one outcome is right.
+// A case's "put": [db8 objects] adds records to the device for it alone.
 // A case's or a turn's "voice": true asks it as spoken (talk mode: the
 // buttons' question asked aloud, an unclear answer asked again); a turn
 // {"silence": true} is the voice session's wait running out unanswered.
@@ -218,7 +219,10 @@ function runCase(c, opts) {
     var settings = Object.assign({ followUps: false }, opts.model ? {} : { localModel: "off" }, opts.decider ? { decider: "on" } : {}, c.settings || {});
     var deps = {};
     if (opts.decider) deps.decider = opts.decider;
-    var d = dev.device({ seed: seed, apps: APPS, llm: m.llm, llmRequest: m.llmRequest, settings: settings, deps: deps,
+    // A case's own records besides the seed ("put": db8 objects, such as a
+    // contact whose name is also a word: Will, Rose, Mark).
+    var withCase = function (put) { seed(put); (c.put || []).forEach(function (o) { put(JSON.parse(JSON.stringify(o))); }); };
+    var d = dev.device({ seed: withCase, apps: APPS, llm: m.llm, llmRequest: m.llmRequest, settings: settings, deps: deps,
                          driveFiles: accountsWorld ? accountsWorld.DRIVE_FILES : {},
                          locationAllowed: c.locationAllowed === undefined ? true : c.locationAllowed });
     if (c.deviceState) Object.assign(d.state, c.deviceState);

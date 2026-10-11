@@ -290,6 +290,10 @@ Item {
             _entering = true;
             ++_session;
             _fetchVocabulary();
+            // The on-device model started while the user speaks, so a
+            // request that needs it does not wait for it to load (the
+            // service's warm: where it fits the memory; nothing waits).
+            _call("warm", {});
             if (!listening)
                 status = "";
             busy = false;
@@ -388,6 +392,31 @@ Item {
         if (r.thread)
             threadId = r.thread.id;
         refresh();
+        // An emergency call counting down (the service places it when the
+        // countdown ends, unless Cancel): read again then, to show it placed.
+        var said = r.messages || [], last = said[said.length - 1];
+        if (last && last.status === "pending" && last.confirm && last.confirm.countdown) {
+            countdownRefresh.interval = last.confirm.countdown * 1000 + 600;
+            countdownRefresh.restart();
+        }
+    }
+    Timer {
+        id: countdownRefresh
+        repeat: false
+        onTriggered: ov._countdownOver()
+    }
+    // Read again as the countdown ends: placed, Phone's emergency window is
+    // up over everything (the reply's data.opened), and the view makes way.
+    function _countdownOver() {
+        if (threadId === "")
+            return;
+        _call("thread", { id: threadId }, function (r) {
+            if (!r || r.returnValue === false)
+                return;
+            ov.messages = r.messages || [];
+            if (ov._opened(r.messages))
+                ov.closeRequested();
+        });
     }
 
     // done (optional) hears the reply, after the view has.
@@ -490,7 +519,11 @@ Item {
             p.voice = true;
         _call("confirm", p, function (r) {
             _settled(r);
-            ov._afterReply();
+            // As for a request (ask): what it brought up in front, out of its way.
+            if (!ov.voice && !ov.handsFree && ov._opened(r && r.messages))
+                ov.closeRequested();
+            else
+                ov._afterReply();
         });
     }
     // New: a fresh conversation here. The one before is kept (it has
@@ -1405,7 +1438,8 @@ Item {
                         width: Theme.px(120)
                         height: Theme.px(40)
                         affirmative: true
-                        caption: row.modelData.command === "text" ? qsTr("Send") : row.modelData.command === "call" ? qsTr("Call") : qsTr("Yes")
+                        caption: row.modelData.confirm && row.modelData.confirm.countdown ? qsTr("Call Now")
+                                 : row.modelData.command === "text" ? qsTr("Send") : row.modelData.command === "call" ? qsTr("Call") : qsTr("Yes")
                         onAction: ov.confirm(row.modelData, true)
                         readonly property real appear: actions.shareOf(actions.choices.length + actions.suggestions.length)
                         opacity: appear

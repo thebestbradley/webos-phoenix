@@ -53,7 +53,9 @@ var KNOWN_IM = {
 // Words of a provider's name that name no service ("Messages and
 // channels", "People you follow"): such a name is not one people call the
 // account by.
-var GENERIC = /^(?:contacts?|calendars?|tasks?|notifications?|messages?|messaging|and|channels?|direct|people|you|follow|files?|e-?mail|mail|chats?|workspace|the|im|text|sms|memos?|phone|voice|storage|local|documents?|feeds?|news|entries|posts?)$/;
+// ("To Do", Microsoft's tasks, as generic as "Tasks": "my to do list" is the
+// phone's own default list, lib/commands.js listKey.)
+var GENERIC = /^(?:contacts?|calendars?|tasks?|to|do|to-?dos?|notifications?|messages?|messaging|and|channels?|direct|people|you|follow|files?|e-?mail|mail|chats?|workspace|the|im|text|sms|memos?|phone|voice|storage|local|documents?|feeds?|news|entries|posts?)$/;
 // Account words that are no one's name for it.
 var NOISE = /^(?:com|org|net|io|me|example|www|mail|the|my|account|app)$/;
 

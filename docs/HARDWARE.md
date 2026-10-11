@@ -445,6 +445,20 @@ on Linux, the efficiency cores on a Mac. `--dry-run` prints the command;
 `--utm` prints UTM's settings. The procedure on the Mac:
 [BUILDING-MAC.md, "Run it in a VM"](BUILDING-MAC.md#run-it-in-a-vm).
 
+**In UTM, on an iPad or a Mac.** `scripts/make-utm.sh <device> [--for
+ipad|ipad-se|mac]` turns the image into a UTM bundle (`config.plist` and
+`Data/`, UTM 4.0 and later) with the same machine, adapted where UTM
+differs: UTM's USB tablet and keyboard instead of the virtio input devices
+(UTM's display sends the pointer through SPICE, which has no touches, so
+an iPad's finger is one pointer), Intel HDA, the kernel's command line
+quoted as UTM needs. For an iPad (no hypervisor: TCG, with JIT or UTM SE's
+interpreter) it also caps the VM at 4 CPUs and 3072 MiB, sizes the
+translation cache, and lengthens systemd's start timeouts.
+`tools/check-utm-bundle.py` checks a bundle against UTM's decoders and
+prints the QEMU command UTM builds; `tools/test-make-utm.py --boot` starts
+that command with a stand-in kernel. The procedure:
+[BUILDING-MAC.md, "Run it on an iPad with UTM"](BUILDING-MAC.md#run-it-on-an-ipad-with-utm).
+
 **Not booted yet.** No `phoenix-vm-arm64` image has been built: the
 container this was written in cannot build Chromium. The first boot is the
 owner's, on the Mac: `scripts/mac-build.sh phoenix-vm-arm64`, then
@@ -1734,7 +1748,7 @@ on the machine.
      WebAssembly (*untested*). Added to an iPad's Home Screen it is also a
      touch development device ([ROADMAP.md](ROADMAP.md#development-devices)),
   5. a native iPad app through TestFlight, and an ARM64 image for UTM on
-     Apple silicon Macs (same section).
+     Apple silicon Macs and iPads (same section; `scripts/make-utm.sh`).
 
 ## Timeline
 

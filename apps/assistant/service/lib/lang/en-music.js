@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // English for lib/commands-music.js: shuffle and repeat, favorite songs,
-// the sleep timer and podcasts. h: lib/lang/en.js's helpers.
+// the words about the sleep timer the timer command's leave out, and podcasts. h: lib/lang/en.js's helpers.
 
 "use strict";
 
@@ -42,20 +42,14 @@ module.exports = function (h) {
             return { action: "play", shuffle: m[1] === "shuffle" || /shuffle/.test(t) };
         return null;
     }
-    // "in 30 minutes", "after an hour", "for 20 minutes"
-    function minutesOf(s) {
-        var secs = h.duration(String(s || "").replace(/^(?:in|after|for|of) /, ""));
-        return secs ? Math.max(1, Math.round(secs / 60)) : 0;
-    }
+    // The sleep timer is the timer command's ({sleep: true}: lib/lang/en.js
+    // sleepTimer); these are the words about it that one leaves out.
     function sleepTimer(t) {
-        var m;
-        if ((m = /^(?:set (?:a |the |my )?|start (?:a |the )?)?sleep timer(?: (?:for|to|of|in))? (.+)$/.exec(t)) && minutesOf(m[1])) return { action: "set", minutes: minutesOf(m[1]) };
-        if ((m = /^(?:stop|pause|turn off|switch off|fade out|end|shut off) (?:the |my |this )?(?:music|song|songs|podcast|playback|audio|it|player)(?: playing)? (?:in|after) (.+)$/.exec(t)) && minutesOf(m[1]))
-            return { action: "set", minutes: minutesOf(m[1]) };
-        if (/^(?:set (?:a |the |my )?|start (?:a |the )?)?sleep timer$/.test(t)) return { action: "set", minutes: 0 };
-        if (/^(?:cancel|stop|turn off|switch off|remove|clear|delete|end) (?:the |my )?sleep timer$|^(?:don't|do not) stop the music$/.test(t)) return { action: "cancel" };
-        if (/^how (?:long|much time)(?: is)? left on (?:the |my )?sleep timer$|^(?:when|what time) (?:does|will) the music stop$|^is (?:there )?(?:a |the )?sleep timer (?:set|on)$/.test(t)) return { action: "status" };
+        if (/^(?:set (?:a |the |my )?|start (?:a |the )?)?sleep timer$/.test(t)) return { label: "sleep", sleep: true };
         return null;
+    }
+    function sleepLeft(t) {
+        return /^(?:when|what time) (?:does|will) the music stop$|^is (?:there )?(?:a |the )?sleep timer (?:set|on)$/.test(t) ? {} : null;
     }
     function podcast(t, ctx) {
         var m;
@@ -90,11 +84,7 @@ module.exports = function (h) {
         favoriteAdded: function (title, artist) { return "Added " + q(title) + (artist ? " by " + artist : "") + " to your favorites in Music."; },
         favoriteNotSaved: function () { return "I couldn't add it to your favorites: it isn't there when I check."; },
         undoFavorite: function (title) { return "take " + q(title) + " out of your favorites"; },
-        sleepHowLong: function () { return "For how long? Say it with the time, like “set a sleep timer for 30 minutes”."; },
-        sleepSet: function (minutes, at) { return "OK, I'll stop the music in " + minutesText(minutes) + ", at " + h.timeText(at) + "."; },
-        sleepLeft: function (ms, at) { return "The music stops in " + minutesText(Math.max(1, Math.round(ms / 60000))) + ", at " + h.timeText(at) + "."; },
-        noSleepTimer: function () { return "There's no sleep timer set."; },
-        sleepCancelled: function () { return "OK, the sleep timer is off. The music plays on."; },
+        sleepHowLong: function () { return "For how long?"; },
         noPodcasts: function () { return "You don't follow any podcasts yet. I've opened Podcasts to find some."; },
         noSuchPodcast: function (name, titles) {
             return "You don't follow a podcast called " + q(name) + "." + (titles.length ? " Yours: " + h.list(titles.slice(0, 5)) + "." : "");
@@ -108,18 +98,16 @@ module.exports = function (h) {
     };
 
     return {
-        // Before "play ..." and the timers ("shuffle my music", "set a sleep timer for 20 minutes").
-        rules: [["sleepTimer", sleepTimer], ["musicMode", musicMode], ["favorites", favorites], ["podcast", podcast]],
+        // Before "play ..." and the timers ("shuffle my music", "set a sleep timer").
+        rules: [["timer", sleepTimer], ["timerStatus", sleepLeft], ["musicMode", musicMode], ["favorites", favorites], ["podcast", podcast]],
         say: say,
         MENTIONS: {
             musicMode: /\b(shuffl\w*|repeat\w*|loop\w*|order|again)\b/,
             favorites: /\b(like|love|favou?rites?|heart|star|liked|keeper)\b/,
-            sleepTimer: /\b(sleep|stop|timer|fade|off)\b/
         },
         describe: function (command, args) {
             if (command === "musicMode") return args.mode === "shuffle" ? (args.state === "off" ? "turn shuffle off" : "shuffle the music") : args.state === "off" ? "turn repeat off" : "repeat " + (args.state === "one" ? "this song" : "all");
             if (command === "favorites") return args.action === "play" ? "play your favorite songs" : args.action === "remove" ? "take this song out of your favorites" : "add this song to your favorites";
-            if (command === "sleepTimer") return args.action === "cancel" ? "turn off the sleep timer" : args.action === "status" ? "tell how long is left on the sleep timer" : "stop the music in " + minutesText(Math.round(Number(args.minutes) || 0));
             if (command === "podcast") return args.name ? "play " + args.name : "play your podcast";
             return "";
         },

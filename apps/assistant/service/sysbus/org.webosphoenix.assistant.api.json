@@ -11,6 +11,7 @@
         "org.webosphoenix.assistant/clearHistory",
         "org.webosphoenix.assistant/connect",
         "org.webosphoenix.assistant/retry",
+        "org.webosphoenix.assistant/warm",
         "org.webosphoenix.assistant/followUps",
         "org.webosphoenix.assistant/answerFollowUp",
         "org.webosphoenix.assistant/followUpOpen",
@@ -25,8 +26,7 @@
         "org.webosphoenix.assistant/driving",
         "org.webosphoenix.assistant/routineEvent",
         "org.webosphoenix.assistant/routineWake",
-        "org.webosphoenix.assistant/placeWake",
-        "org.webosphoenix.assistant/sleepWake"
+        "org.webosphoenix.assistant/placeWake"
     ],
     "assistant.settings": [
         "org.webosphoenix.assistant/getSettings",

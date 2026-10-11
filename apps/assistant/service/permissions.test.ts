@@ -67,6 +67,7 @@ const GROUPS: [RegExp, string][] = [
     [/^com\.palm\.universalsearch\//, "systemui.searchprovider"],
     [/^com\.palm\.systemmanager\/takeScreenShot$/, "devices.display.control"],
     [/^com\.palm\.power\/com\/palm\/power\//, "devices.power.query"],                                  // services/devices
+    [/^org\.webosphoenix\.service\.index\/search$/, "index.search"],                                       // services/index
 ];
 const PERM = JSON.parse(readFileSync(resolve(__dirname, "sysbus/org.webosphoenix.assistant.perm.json"), "utf8"))["org.webosphoenix.assistant"] as string[];
 type Grant = { object: string; caller: string; operations: Record<string, string> };
@@ -211,6 +212,8 @@ describe("what each command may do on a device", () => {
                 expect((await d.svc.setRoutine({ routine: { name: "Good night", steps: [{ text: "turn on do not disturb" }], time: "22:00" } })).returnValue).toBe(true);
             // The user's Home Assistant, connected.
             if (/^home/.test(c.id)) d.connectHome();
+            // Something the assistant started recording, to stop.
+            if (c.id === "stopRecording") await ask("record a video");
             let m: any;
             if (c.id === "locationAccess") {
                 // Run as its button: the Assistant asks before it uses the location; Allow.

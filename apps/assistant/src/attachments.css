@@ -11,6 +11,9 @@
 .as-card { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 2px; padding: 8px 12px; border: 1px solid #b4b4b2;
            border-radius: 10px; background: linear-gradient(#fff, #f3f3f1); font: inherit; color: #222; cursor: pointer; }
 .as-card:disabled { cursor: default; }
+.as-card-text { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.as-card.with-icon { flex-direction: row; align-items: flex-start; gap: 10px; }
+.as-card-icon { width: 32px; height: 32px; flex: none; object-fit: contain; }
 .as-card-title { font-weight: bold; font-size: 14px; }
 .as-card-sub { color: #555; font-size: 13px; }
 .as-card-detail { color: #666; font-size: 13px; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }

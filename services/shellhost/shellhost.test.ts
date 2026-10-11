@@ -126,8 +126,6 @@ describe("org.webosphoenix.shellhost", () => {
         const r: Any[] = [];
         w.host.system.emergencyCall({ number: "9-1-1", countdown: 50 }, "org.webosphoenix.assistant", (x: Any) => r.push(x));
         expect(shell.replies[1].message).toMatchObject({ type: "emergencyCall", payload: { number: "911", countdown: 10 } });
-        w.host.system.emergencyCall({ cancel: true }, "org.webosphoenix.assistant", (x: Any) => r.push(x));
-        expect(shell.replies[2].message).toMatchObject({ type: "emergencyCall", payload: { cancel: true } });
         w.host.system.emergencyCall({ number: "911", countdown: 5 }, "com.example.app", (x: Any) => r.push(x));
         expect(r.pop().returnValue).toBe(false);
         w.host.system.emergencyCall({ number: "call me", countdown: 5 }, "org.webosphoenix.assistant", (x: Any) => r.push(x));

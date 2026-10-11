@@ -1,6 +1,8 @@
 // Phoenix compat overlay: the original depends.js plus
-// stylesheets/phoenix-compat.css, which fits Just Type's tab bar to a phone.
-// Nothing else is changed.
+// stylesheets/phoenix-compat.css, which fits Just Type's tab bar to a phone,
+// and Just Type's "From your phone" group (app/PhoenixPhoneSearch.js, after
+// the MainView it joins, and stylesheets/phoenix-phone.css). Nothing else is
+// changed.
 //
 // @@@LICENSE
 //
@@ -30,6 +32,7 @@ enyo.depends(
 		"app/DbSearch.js",
 		"app/HomeView.js",	
 		"app/MainView.js",
+		"app/PhoenixPhoneSearch.js",
 		"app/LaunchPointSearch.js",
 		"app/ContactSearch.js",
 		"app/RemoteContactSearch.js",
@@ -40,5 +43,6 @@ enyo.depends(
 		"data/Contacts.js",
 		"data/AppLauncher.js",
 		"stylesheets/style.css",
-		"stylesheets/phoenix-compat.css"
+		"stylesheets/phoenix-compat.css",
+		"stylesheets/phoenix-phone.css"
 );

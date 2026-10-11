@@ -79,6 +79,9 @@ Item {
                 var added = [msg({ role: "user", text: params.text })];
                 if (/^text/.test(params.text))
                     added.push(msg({ role: "assistant", text: "Send \"hi\" to Sam?", command: "text", status: "pending", confirm: { command: "text", args: {} } }));
+                else if (/^call 911/.test(params.text))
+                    added.push(msg({ role: "assistant", text: "Calling 911 in 1 seconds. Cancel to stop.", command: "call", status: "pending",
+                                     confirm: { command: "call", args: { number: "911", emergency: true }, countdown: 1 } }));
                 else if (/^break/.test(params.text))
                     added.push(msg({ role: "assistant", text: "That didn't work: no torch.", command: "flashlight", status: "failed" }));
                 else if (/^long/.test(params.text))
@@ -413,6 +416,26 @@ Item {
             verify(fake.calls.indexOf("confirm true") >= 0);
             // Answered: no more buttons.
             tryVerify(function () { var y = findChild(overlay, "assistantConfirmYes"); return !y || !y.visible; }, 2000);
+        }
+
+        // An emergency call counts down (the service places it): Call Now,
+        // and the conversation read again once the countdown is over.
+        function test_emergencyCallCountsDown() {
+            openByHold();
+            type("call 911");
+            var yes = findChild(arrived("Calling 911 in 1 seconds. Cancel to stop."), "assistantConfirmYes");
+            compare(yes.caption, "Call Now");
+            var reads = fake.calls.filter(function (c) { return c === "thread"; }).length;
+            // Placed meanwhile: Phone's emergency window is up (data.opened), and the view makes way.
+            fake.messages = fake.messages.concat([fake.msg({ role: "assistant", text: "Calling 911.", command: "call", status: "done", data: { opened: true } })]);
+            tryVerify(function () { return fake.calls.filter(function (c) { return c === "thread"; }).length > reads; }, 4000, "read again after the countdown");
+            tryVerify(function () { return !overlay.open; }, 2000, "out of the emergency window's way");
+        }
+
+        // Opened, it starts the on-device model meanwhile (the service's warm).
+        function test_openingStartsTheModel() {
+            openByHold();
+            tryVerify(function () { return fake.calls.indexOf("warm") >= 0; }, 2000);
         }
 
         function test_choicesAreButtons() {

@@ -263,7 +263,7 @@ module.exports = function (h) {
                         });
                     });
                 // Home or work not known yet: where the user is now, or Settings.
-                return { text: say.noHomeYet(pl.kind),
+                return { text: say.noHomeYet(pl.kind), asks: true,
                          actions: [{ label: say.setPlaceHere(pl.kind), answer: "yes", run: { command: "setPlace", args: { place: pl.kind }, then: { command: "placeReminder", args: args } } },
                                    { label: say.homeWorkSettings(), open: { appId: "org.webosphoenix.settings", params: { page: "assistant", section: "places" }, title: "Settings" } }] };
             }

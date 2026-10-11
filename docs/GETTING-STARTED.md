@@ -347,7 +347,9 @@ webOS OSE with the `meta-phoenix` layer.
      `bitbake webos-phoenix-image` (see the README's "Build a webOS OSE image").
 3. **Run it:** `qemux86-64` in QEMU; `raspberrypi4-64` written to an SD card
    (`*.wic`); `phoenix-vm-arm64` in QEMU or UTM as any first target device
-   (`scripts/vm.sh fairphone-fp6`; [BUILDING-MAC.md](BUILDING-MAC.md#run-it-in-a-vm)). Which phones and tablets are supported, and how drivers are found
+   (`scripts/vm.sh fairphone-fp6`; [BUILDING-MAC.md](BUILDING-MAC.md#run-it-in-a-vm)),
+   also in UTM on an iPad (`scripts/make-utm.sh`;
+   [BUILDING-MAC.md](BUILDING-MAC.md#run-it-on-an-ipad-with-utm)). Which phones and tablets are supported, and how drivers are found
    and installed, is in [HARDWARE.md](HARDWARE.md).
 
 A MacBook isn't a target device; on a Mac you develop with the simulator,

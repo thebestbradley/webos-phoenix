@@ -392,9 +392,14 @@ describe("never a dead end (the owner's banana pudding, 9 October 2026)", () => 
         t.as("org.webosphoenix.settings");
         await t.svc.selectModel({ id: MODEL });
         t.as("org.webosphoenix.assistant");
-        const r = await ask(t, "tell me a joke");
+        // A joke is the grammar's, at once: the model is not waited for.
+        const before = mock.requests.length;
+        const joke = await ask(t, "tell me a joke");
+        expect(last(joke)).toMatchObject({ via: "commands", command: "chat" });
+        expect(mock.requests.length).toBe(before);
+        const r = await ask(t, "you're great at this");
         expect(r.messages).toHaveLength(2);
-        expect(last(r)).toMatchObject({ via: "on-device", text: "chat says: tell me a joke" });
+        expect(last(r)).toMatchObject({ via: "on-device", text: "chat says: you're great at this" });
         expect(last(r).choices).toBeUndefined();
         const q = await ask(t, "who wrote the odyssey");
         expect(last(q).choices).toEqual([{ id: "web", label: "Search the web" }]);
@@ -563,9 +568,14 @@ describe("the on-device model", () => {
         t.as("com.palm.systemui");
         const from = mock.requests.length;
         await ask(t, "it's dark, put the flashlight on for me");
-        await ask(t, "why is the sky blue");
+        // (A question of the owner's goes through the choice; "why is the sky
+        // blue", about the world alone, is answered without it: below.)
+        await ask(t, "why is my sky blue");
         const sent = mock.requests.slice(from).map((r) => r.body);
         const [pick, call, pick2, chat] = sent;
+        const before = mock.requests.length;
+        await ask(t, "why is the sky blue");
+        expect(mock.requests.slice(before).map((r) => !!r.body.response_format)).toEqual([false]);
         expect(pick.response_format).toBeDefined();
         expect(call.tools).toBeUndefined();
         expect(Object.keys(call.response_format.json_schema.schema.properties)).toContain("setting");
@@ -631,8 +641,9 @@ describe("the on-device model", () => {
             // Qwen3 1.7B stays listed beside the Qwen3.5 2B that replaces it:
             // it is installed.
             ["qwen3-0.6b-q8_0", true, true, false, true], [MODEL, false, false, true, false],
-            ["qwen3.5-2b-q8_0", false, false, false, false],
-            ["qwen3.5-4b-q4_k_m", false, false, false, false], ["qwen3.5-9b-q4_k_m", false, false, false, false],
+            ["qwen3.5-2b-q8_0", false, false, false, false], ["gemma-4-e2b-it-qat-q4_0", false, false, false, false],
+            ["qwen3.5-4b-q4_k_m", false, false, false, false], ["gemma-4-e4b-it-qat-q4_0", false, false, false, false],
+            ["qwen3.5-9b-q4_k_m", false, false, false, false],
             ["qwen3-14b-q4_k_m", false, false, false, false], ["qwen3-30b-a3b-q4_k_m", false, false, false, false]]);
     });
 
@@ -643,6 +654,22 @@ describe("the on-device model", () => {
         expect([3.7, 5.6, 7.5, 11.4, 15.5, 31, 62].map(best)).toEqual([
             "qwen3-0.6b-q8_0", "qwen3.5-2b-q8_0", "qwen3.5-4b-q4_k_m", "qwen3.5-9b-q4_k_m", "qwen3-14b-q4_k_m",
             "qwen3-30b-a3b-q4_k_m", "qwen3-30b-a3b-q4_k_m"]);
+    });
+
+    // Gemma 4 (Apache-2.0 from this generation): Google's own QAT GGUFs,
+    // offered beside Qwen and not recommended until measured.
+    it("offers Gemma 4 E2B and E4B from Google's own GGUFs, pinned, not recommended", () => {
+        const models = req("./lib/models.js") as { find(id: string): any; forDevice(r: number): { id: string; recommended: boolean; fits: boolean }[]; BUILT_IN: string };
+        const e2b = models.find("gemma-4-e2b-it-qat-q4_0"), e4b = models.find("gemma-4-e4b-it-qat-q4_0");
+        expect(e2b).toMatchObject({ licence: "Apache-2.0", source: "google/gemma-4-E2B-it-qat-q4_0-gguf", size: 3349516256, ram: 6 * 2 ** 30 });
+        expect(e2b.url).toBe("https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf/resolve/675cff42a74c774d6cb76f76d8eacb49b48c9b93/gemma-4-E2B_q4_0-it.gguf");
+        expect(e4b).toMatchObject({ licence: "Apache-2.0", source: "google/gemma-4-E4B-it-qat-q4_0-gguf", size: 5154941280, ram: 8 * 2 ** 30 });
+        expect(e4b.sha256).toMatch(/^[0-9a-f]{64}$/);
+        const at8 = models.forDevice(7.5 * 2 ** 30);
+        expect(at8.find((m) => m.id === "gemma-4-e4b-it-qat-q4_0")).toMatchObject({ fits: true, recommended: false });
+        expect(models.BUILT_IN).toBe("qwen3-0.6b-q8_0");
+        // No Gemma 3 or older: their terms are Google's own.
+        expect(at8.some((m) => /gemma-[123]\b|gemma-3/.test(m.id))).toBe(false);
     });
 
     // The owner's rule: the Qwen team's GGUF first, Phoenix's conversion of
@@ -792,7 +819,7 @@ describe("the on-device model", () => {
     });
 });
 
-describe("the grammar knew the command, not all it needs: the model fills it in", () => {
+describe("the grammar knew the command, not all it needs: the command asks", () => {
     const BUILT_IN = "qwen3-0.6b-q8_0";
     const withModel = () => ({
         status: () => Promise.resolve({ available: true, installed: [{ id: BUILT_IN, builtIn: true }], ramBytes: 2 * 2 ** 30 }),
@@ -800,31 +827,31 @@ describe("the grammar knew the command, not all it needs: the model fills it in"
         download: () => Promise.resolve(), cancel: () => Promise.resolve(), remove: () => Promise.resolve(),
     });
 
-    it("a time the grammar could not read, held to the command's parameters", async () => {
+    // What a command asks for itself ("When is it?") it asks at once: the
+    // model is not waited for (the owner, 11 October 2026; speed.test.ts).
+    // "Friday-ish" is the grammar's Friday now; the model filled it before.
+    it("a day said roughly is the grammar's, with no model asked", async () => {
         const t = setup({ llm: withModel() });
         const before = mock.requests.length;
         const r = await ask(t, "add an event called dentist friday-ish");
-        expect(mock.requests.length).toBe(before + 1);
-        const fill = mock.requests.at(-1)!.body;
-        expect(Object.keys(fill.response_format.json_schema.schema.properties)).toContain("start");
-        expect(fill.response_format.json_schema.schema.required).toEqual([]);
-        expect(fill.temperature).toBe(0);
-        // The model's Friday 9 AM is the start: the event is made (this test has
-        // no calendar to make it in), not asked "When is it?".
-        expect(last(r)).toMatchObject({ via: "on-device", source: "Qwen3 0.6B", command: "event" });
+        expect(mock.requests.length).toBe(before);
+        // Made on Friday (this test has no calendar to make it in), not asked "When is it?".
+        expect(last(r)).toMatchObject({ via: "commands", command: "event" });
         expect(last(r).data?.awaiting).toBeUndefined();
         expect(last(r).text).toMatch(/no calendar/);
     });
 
-    it("what the words never said is dropped, and asked for as before", async () => {
+    it("what the words never said is asked for at once, without the model", async () => {
         const t = setup({ llm: withModel() });
+        const before = mock.requests.length;
         const r = await ask(t, "add an event called dentist");
         expect(last(r)).toMatchObject({ via: "commands", command: "event", data: { awaiting: { command: "event" } } });
+        expect(mock.requests.length).toBe(before);
     });
 
     it("without an on-device model, the grammar asks as before", async () => {
         const t = setup();
-        const r = await ask(t, "add an event called dentist friday-ish");
+        const r = await ask(t, "add an event called dentist");
         expect(last(r)).toMatchObject({ via: "commands", data: { awaiting: { command: "event" } } });
     });
 });

@@ -14,19 +14,14 @@
 //                (org.webosphoenix.music.favorite:1, apps/music
 //                favorites.ts), the song that plays as Music says it
 //                (getNowPlaying uri); Music watches the list
-//   sleepTimer   "stop the music in 30 minutes", "set a sleep timer for 20
-//                minutes", "cancel the sleep timer", "how long is left on
-//                the sleep timer": an activity at that time calls
-//                sleepWake, which presses pause (org.webosphoenix.system
-//                mediaKey), whatever plays (Music, Podcasts, Videos)
-//   podcast      "play the latest episode of The Daily", "play the Daily
+//   podcast     "play the latest episode of The Daily", "play the Daily
 //                podcast", "resume my podcast": the episode chosen here
 //                from Podcasts' own (org.webosphoenix.podcast:1 and
 //                .episode:1: the one left part-way, else the newest not
 //                played, else the newest), played by Podcasts
 //                ({playEpisode: id}) from where it was left
 //
-// The service's methods: sleepWake {at, $activity} (the activity manager).
+// The sleep timer is the timer command's ({sleep: true}: lib/commands.js).
 
 "use strict";
 
@@ -36,10 +31,6 @@ var FAVORITE_KIND = "org.webosphoenix.music.favorite:1";
 var PODCAST_KIND = "org.webosphoenix.podcast:1";
 var EPISODE_KIND = "org.webosphoenix.podcast.episode:1";
 var DB = "luna://com.palm.db/";
-var AM = "luna://com.palm.activitymanager/";
-var SLEEP_KEY = "assistant:sleepTimer";
-var SLEEP_ACTIVITY = "assistant.sleepTimer";
-var SLEEP_WAKE = "luna://org.webosphoenix.assistant/sleepWake";
 var STARTED = 30;   // seconds in: an episode begun, to pick up again
 
 var COMMANDS = [
@@ -56,12 +47,6 @@ var COMMANDS = [
           action: { type: "string", enum: ["add", "remove", "play"] },
           shuffle: { type: "boolean", description: "Play them shuffled" } }, required: ["action"] },
       examples: ["this one's a keeper", "give this track a heart", "put on the songs I liked"] },
-    { id: "sleepTimer", title: "Sleep timer", risk: "change", whenLocked: true,
-      description: "Stop the music (or podcast) after some minutes, cancel that, or tell how long is left.",
-      parameters: { type: "object", properties: {
-          action: { type: "string", enum: ["set", "cancel", "status"] },
-          minutes: { type: "number", description: "How long until it stops" } }, required: ["action"] },
-      examples: ["turn the music off when I fall asleep in half an hour", "fade out the audio after 45 minutes", "don't stop the music after all"] },
     { id: "podcast", title: "Podcasts", risk: "open", whenLocked: true,
       description: "Play a podcast the user follows in Podcasts: its latest episode, or carry on with the one left part-way.",
       parameters: { type: "object", properties: {
@@ -140,27 +125,6 @@ module.exports = function (h) {
         });
     }
 
-    // ---- Sleep timer ----
-    function sleep(args, env) {
-        var say = env.lang.say, cur = env.storage.get(SLEEP_KEY), now = env.now();
-        var live = cur && cur.at > now ? cur : null;
-        if (args.action === "status") return Promise.resolve({ text: live ? say.sleepLeft(live.at - now, live.at) : say.noSleepTimer() });
-        if (args.action === "cancel") {
-            env.storage.remove(SLEEP_KEY);
-            return h.lunaCall(env, AM + "cancel", { activityName: SLEEP_ACTIVITY }).catch(function () { return null; })
-                .then(function () { return { text: live ? say.sleepCancelled() : say.noSleepTimer() }; });
-        }
-        var minutes = Math.round(Number(args.minutes) || 0);
-        if (minutes < 1 || minutes > 12 * 60) return Promise.resolve({ text: say.sleepHowLong() });
-        var at = now + minutes * 60000;
-        return h.lunaCall(env, AM + "create", { start: true, replace: true, activity: {
-            name: SLEEP_ACTIVITY, description: "Assistant sleep timer", type: { foreground: true },
-            schedule: { start: h.activityDate(at) }, callback: { method: SLEEP_WAKE, params: { at: at } } } }).then(function () {
-            env.storage.set(SLEEP_KEY, { at: at, minutes: minutes });
-            return { text: say.sleepSet(minutes, at), data: { at: at } };
-        });
-    }
-
     // ---- Podcasts ----
     function podcast(args, env) {
         var say = env.lang.say;
@@ -190,34 +154,17 @@ module.exports = function (h) {
         });
     }
 
-    function service(s) {
-        function ok(o) { return Object.assign({ returnValue: true }, o || {}); }
-        return {
-            // The activity manager, at the sleep timer's time: pause whatever plays.
-            sleepWake: function (p) {
-                var e = s.env(), cur = e.storage.get(SLEEP_KEY);
-                if (!cur || Math.abs(Number(p.at) - cur.at) > 1000) return Promise.resolve(ok({ paused: false }));
-                e.storage.remove(SLEEP_KEY);
-                return h.lunaCall(e, "luna://org.webosphoenix.system/mediaKey", { key: "pause" }).then(function () { return ok({ paused: true }); },
-                    function () { return ok({ paused: false }); });
-            }
-        };
-    }
-
     return {
         COMMANDS: COMMANDS,
-        METHODS: ["sleepWake"],
-        service: service,
+        // "Set a sleep timer" with no time (the timer command's): how long, before anything is set.
         prepare: function (cmd, args, env) {
-            // "Set a sleep timer" with no time: how long, before anything is set.
-            if (cmd.id === "sleepTimer" && args.action === "set" && !(Number(args.minutes) >= 1))
-                return Promise.resolve({ args: args, reply: env.lang.say.sleepHowLong() });
+            if (cmd.id === "timer" && args.sleep && !(Number(args.seconds) > 0))
+                return Promise.resolve({ args: args, reply: env.lang.say.sleepHowLong(), awaiting: { command: "timer", args: args, field: "seconds" } });
             return null;
         },
         run: function (cmd, args, env) {
             if (cmd.id === "musicMode") return mode(args, env);
             if (cmd.id === "favorites") return fav(args, env);
-            if (cmd.id === "sleepTimer") return sleep(args, env);
             if (cmd.id === "podcast") return podcast(args, env);
             return null;
         }

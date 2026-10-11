@@ -33,6 +33,7 @@
         "phoenix.system.notifications.read",
         "phoenix.system.emergency",
         "filemanager.operation",
+        "index.search",
         "phoenix.accessories.query",
         "phoenix.accessories.management",
         "phoenix.appmanager.query",

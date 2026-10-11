@@ -161,15 +161,33 @@ plain virtio GPU and the image draws with Mesa's software renderer
 ### UTM
 
 [UTM](https://mac.getutm.app/) is QEMU with GL (virglrenderer over
-ANGLE/Metal) and a window around it. `scripts/vm.sh <device> --utm`
-prints these settings with the device's numbers; for the Fairphone:
+ANGLE/Metal) and a window around it. `scripts/make-utm.sh` makes the VM for
+it, as a UTM bundle with the same machine as `vm.sh`:
+
+```sh
+scripts/make-utm.sh fairphone-fp6 --for mac     # out/Phoenix-fairphone-fp6-mac.utm
+```
+
+Double-click the bundle to open it in UTM. It has the device's CPU count,
+memory and resolution, virtio-gpu-gl-pci, UTM's USB tablet and keyboard,
+Intel HD Audio, ssh on port 2222 and the console in UTM's serial window;
+`--help` lists the options, and the next section says what is in it and
+why. To change the image, make the bundle again (`--force` replaces it):
+UTM runs the copy inside it.
+
+By hand, `scripts/vm.sh <device> --utm` prints the settings with the
+device's numbers; for the Fairphone:
 
 1. **Create a New Virtual Machine** > **Virtualize** > **Linux**. Leave
    **Use Apple Virtualization** off (that is QEMU). Turn on **Boot from
    kernel image**:
    - Kernel image: `out/phoenix-vm-arm64/Image`
    - Root image: `out/phoenix-vm-arm64/webos-phoenix-image-phoenix-vm-arm64.rootfs.ext4`
-   - Boot arguments: `root=/dev/vda rw rootwait console=ttyAMA0 phoenix.device=fairphone-fp6`
+   - Boot arguments, **in double quotes**:
+     `"root=/dev/vda rw rootwait console=ttyAMA0 phoenix.device=fairphone-fp6"`.
+     UTM passes them to QEMU's `-append` split at the spaces unless quoted
+     (`parsedUserArguments` in UTM's `UTMQemuConfiguration+Arguments.swift`),
+     and QEMU then stops on `Could not open 'rw'`.
 2. **Hardware**: Memory 8192 MiB, CPU cores 8 (the device's; the Pi 4,
    PineTab2 4, the PinePhone Pro 6).
 3. Finish, then **Edit** the VM:
@@ -178,16 +196,153 @@ prints these settings with the device's numbers; for the Fairphone:
      automatically** (the device's resolution is fixed).
    - **QEMU** > **Arguments**, add, one per line:
      `-global virtio-gpu-gl-pci.xres=1116`,
-     `-global virtio-gpu-gl-pci.yres=2484`,
-     `-device virtio-multitouch-pci`, `-device virtio-tablet-pci`.
-   - **Sound**: `virtio-sound-pci` if listed, else Intel HD Audio.
-   - **Network**: Shared Network, `virtio-net-pci`.
+     `-global virtio-gpu-gl-pci.yres=2484`. (Not `vm.sh`'s virtio
+     multitouch and tablet: UTM's window sends the pointer through SPICE,
+     which has no touches, to its own USB tablet.)
+   - **Sound**: Intel HD Audio (UTM's own choice for ARM64 Linux), or
+     `virtio-sound-pci`.
+   - **Network**: Emulated VLAN, `virtio-net-pci`; **Port Forward** TCP
+     127.0.0.1 port 2222 to guest port 22 for ssh.
 4. Another device: clone the VM and change the boot argument
    (`phoenix.device=pinephonepro`), the memory, the cores and the two
    resolution lines (`scripts/vm.sh pinephonepro --utm`).
 
 UTM keeps its own copy of the root image inside the VM, so after a new
 build, replace the drive (or make the VM again).
+
+## Run it on an iPad with UTM
+
+UTM runs on an iPad too, so the same image can run there as a tablet or a
+phone, with the iPad's own touch screen. iPadOS gives apps no hypervisor,
+so UTM translates every ARM instruction (QEMU's TCG): this is emulation,
+many times slower than on the Mac. Whether it is fast enough to be a
+development device is what a first try finds out.
+
+**Not tried yet.** Nobody has built the image or run it in UTM. The bundle
+was checked against UTM's source (`tools/check-utm-bundle.py`: the keys
+UTM 4.0 to 5.0.6 read, and the QEMU command UTM builds from it), and that
+command was started with QEMU 8.2 and a stand-in kernel, which found the
+panel's resolution, 4 CPUs, 3 GB, the USB tablet and keyboard and the root
+disk where Phoenix expects them (`tools/test-make-utm.py --boot`). GL
+could not be tried there (no GPU).
+
+### What to install on the iPad
+
+| | UTM SE | UTM |
+| --- | --- | --- |
+| Where | the App Store | sideloaded: the `.ipa` from [UTM's releases](https://github.com/utmapp/UTM/releases), signed with your Apple developer account (AltStore, SideStore or Xcode) |
+| How it runs the guest | QEMU's threaded interpreter: no JIT needed | QEMU's JIT |
+| Speed | the slowest | faster: how much is one of the things to measure |
+| What else it needs | nothing | JIT, which iPadOS only allows an app being debugged: at every launch, UTM asks AltStore's AltServer (AltJIT) or a JitStreamer server (UTM's Settings) for it, or you start it from the Mac ([UTM's tethered launch](https://github.com/utmapp/UTM/blob/main/Documentation/TetheredLaunch.md)). UTM 4.7.4 and later know iOS 26's way. Without JIT, UTM cannot emulate |
+| Bundle | `scripts/make-utm.sh --for ipad-se` | `scripts/make-utm.sh` |
+
+Any UTM from 4.0 reads the bundle; 5.0.6 also keeps iPadOS's edge swipes
+from taking the first swipe at the screen's edges.
+
+### Make the bundle on the Mac
+
+```sh
+scripts/mac-build.sh phoenix-vm-arm64   # the image, once (hours)
+brew install qemu                       # qemu-img: a qcow2 disk, smaller to copy
+scripts/make-utm.sh                     # out/Phoenix-pinetab2.utm (UTM with JIT)
+scripts/make-utm.sh --for ipad-se       # out/Phoenix-pinetab2-se.utm (UTM SE)
+scripts/make-utm.sh fairphone-fp6       # the phone: turn the iPad upright
+```
+
+The PineTab2 is the default: the 10.1" tablet, used in landscape, is the
+nearest profile to an iPad. Its 1280x800 (16:10) shows with bands above
+and below on the iPad's wider-than-4:3 screen; an iPad-shaped profile would
+need adding to the image (OPEN-QUESTIONS Q170): an entry in
+`meta-phoenix/recipes-phoenix/phoenix-device-config/files/device-profiles.json`
+(the panel upright, for an 11" iPad half its pixels, 1180x820, to keep the
+emulated drawing down; `"orientation": "landscape"`), its
+`files/<config>/device.json` (`"formFactor": "tablet"`, `"density": 1.0`),
+the id in `tools/test-device-profiles.py`'s list, then a new image build
+(the image carries the profiles) and `scripts/make-utm.sh <id>`. The
+simulator picks it up too (`phoenix-sim --device <id>`). What is in the
+bundle:
+
+- **CPU and memory**: at most 4 CPUs and 3072 MiB, a 384 MiB translation
+  cache. QEMU runs inside UTM's own process on iPadOS, and iPadOS ends an
+  app that outgrows its limit: the guest's memory, the cache (counted
+  twice when JIT comes from a debugger) and UTM have to fit in about 5 GB
+  on an 8 GB iPad. On a 16 GB iPad, raise the memory to 4096 in UTM's
+  settings for the VM (System).
+- **Display**: virtio-gpu-gl-pci, so the image's Mesa draws through virgl
+  on the iPad's GPU (ANGLE over Metal) instead of the software renderer,
+  which under emulation would be far slower; the device's resolution,
+  fixed. If the screen stays black while the console shows the shell
+  running, make it again with `--gl off`.
+- **Touch and keys**: UTM's USB tablet and keyboard. UTM sends what you
+  do on its screen through SPICE, which carries a pointer but no touches:
+  a finger is one pointer (a tap clicks where it lands, a drag drags). No
+  pinch or two-finger gestures reach Phoenix, so the bundle leaves out
+  `vm.sh`'s virtio multitouch, which would get nothing.
+- **Boot**: the kernel itself (no boot loader), `vm.sh`'s command line,
+  and systemd's start and device timeouts at 10 minutes (30 for UTM SE)
+  instead of 90 seconds: under emulation a unit can be that slow without
+  being stuck.
+- **The rest**: Intel HD Audio, network (QEMU's user networking: the
+  iPad's connection), ssh on the iPad's own 127.0.0.1:2222, the console
+  in UTM's serial window, a virtio random number generator.
+
+### Copy it to the iPad
+
+Either of:
+
+- **AirDrop**: in Finder, Share > AirDrop the `.utm` to the iPad and open
+  it with UTM (UTM moves it out of its Inbox into its own folder).
+- **A cable**: connect the iPad, select it in Finder's sidebar, open
+  **Files**, and drag the `.utm` onto **UTM SE** (or **UTM**). It shows
+  in UTM's list when UTM next starts.
+
+If neither offers UTM, compress the bundle in Finder, copy the `.zip` to
+the iPad's Files (iCloud Drive, a USB drive), tap it there to expand it,
+and in UTM tap **+** > **Open…** and choose the `.utm`: UTM runs it where
+it is. UTM warns that the VM uses custom QEMU arguments: it does (the
+panel's resolution and the kernel's command line).
+
+### Start it
+
+1. In UTM's settings (in UTM, or iPadOS's Settings > UTM) > Cursor, set
+   **Touch Input** to **Touch mode (try hiding cursor)**: a finger then
+   acts where it touches. The default, Drag cursor, moves the pointer like
+   a trackpad.
+   Keep UTM on the screen while it runs: iPadOS suspends an app that
+   leaves it, and UTM cannot save the VM's state with GPU acceleration
+   on ("Suspend is not supported when GPU acceleration is enabled"), so
+   if iPadOS then ends UTM the VM stops as if unplugged. **Continue
+   running VM in the background** keeps it going for a while (the
+   sideloaded UTM longer: it asks for your location to stay awake).
+2. Start the VM. UTM's **Display** menu (the toolbar) switches between
+   the screen and **Serial 0**, the console: kernel messages, then a
+   login prompt.
+3. On iPadOS QEMU runs inside UTM, once per launch: when the VM stops,
+   UTM goes to the Home Screen and quits. Open it again to start the VM
+   again.
+
+### What to expect
+
+- Slow. A boot to the lock screen may take many minutes with JIT and
+  longer with UTM SE; nobody has measured either yet.
+- One pointer for touch (above); a hardware keyboard works, and UTM's
+  keyboard button brings up the on-screen one.
+- iPadOS's own swipes from the bottom and the sides compete with
+  Phoenix's gestures there.
+- Sound may stutter when the emulated CPUs are busy.
+- If UTM closes by itself during the boot, iPadOS stopped it for memory:
+  lower the VM's memory (2048) in UTM's settings.
+
+### What to check first
+
+1. It boots: Serial 0 shows the kernel, then a login; `journalctl -u
+   phoenix-device-select` says `phoenix-device-select: pinetab2`.
+2. How long: `systemd-analyze`, and the time from tapping start to the
+   lock screen. Note which UTM, which iPad.
+3. The lock screen fills the picture at 1280x800 the right way up.
+4. A tap unlocks; dragging moves the cards; the cursor follows the finger.
+5. Typing on a keyboard reaches Just Type; sound plays; the network is up.
+6. Send what fails or is slow, with `phoenix-diag`'s logs, as for the Mac.
 
 ## Troubleshooting
 

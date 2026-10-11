@@ -77,7 +77,7 @@
             }
         ]
     },
-    "requiredPermissions": [
+    "requiredPermissions": ["phoenix.appservices.accounts", 
         "accounts.transport",
         "fediverse.account",
         "phoenix.appmanager.launch"

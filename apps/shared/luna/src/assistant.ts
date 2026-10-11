@@ -44,8 +44,9 @@ export interface AssistantMessage {
     command?: string;
     /** "pending": waits for confirm (it sends, deletes or calls). */
     /** "pending": waits for confirm (it sends, deletes or calls); "ask": a question back (which one, what to say). */
-    status?: "pending" | "done" | "cancelled" | "failed" | "ask";
-    confirm?: { command: string; args: Record<string, unknown> };
+    status?: "pending" | "done" | "cancelled" | "failed" | "ask" | "running";
+    /** countdown: seconds after `time` when it runs unless cancelled (an emergency call). */
+    confirm?: { command: string; args: Record<string, unknown>; countdown?: number };
     /** Nothing on the phone could answer: what the user may do next. */
     choices?: AssistantChoice[];
     /** The choice taken. */
@@ -282,6 +283,15 @@ export const assistant = {
     async retry(threadId: string): Promise<AskResult> {
         const r = await c("retry", { threadId });
         return { thread: r.thread, messages: r.messages || [] };
+    },
+    /**
+     * The Assistant opened: the on-device model started in the background
+     * (where it fits the device's memory), so the first request that needs
+     * it does not wait for it to load. Nothing waits for this.
+     */
+    async warm(): Promise<boolean> {
+        const r = await c("warm");
+        return !!r.warming;
     },
     /** Answer a read-back: run it (accept) or not. */
     async confirm(threadId: string, messageId: string, accept: boolean): Promise<AskResult> {

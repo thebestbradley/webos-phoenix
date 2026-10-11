@@ -184,7 +184,9 @@ and installed (it answers free-form requests and picks commands as
 tools); then the choice. Decided on the owner's behalf: the grammar still
 answers first once a model is installed (it is instant and exact; the
 model handles what it does not match), and one tool call per turn (the
-multi-step agent is 2.0). A model's choice runs only when the words name
+multi-step agent is 2.0). Since 11 October 2026 nothing the grammar
+answers waits for the model, and the model starts as the Assistant opens
+("Speed and correctness", below). A model's choice runs only when the words name
 that kind of thing and, for a switch, the way it goes (`grounded()` in the
 language file); otherwise it is read back ("Did you mean: turn the
 flashlight off?"). Checked against the real Qwen2.5 0.5B with llama.cpp
@@ -816,7 +818,8 @@ installed by the setup scripts on a computer and by meta-phoenix's
 | --- | --- | --- | --- | --- |
 | Speech recognition: `whisper-cli` | Homebrew `whisper-cpp` | Built from whisper.cpp `d09f61a` into `/usr/local/bin` (3 MB) | `whisper-cpp` (static) | MIT |
 | Its model, `ggml-base.en.bin` (148 MB) | `build/whisper` (`tools/get-whisper-model.py`) | `build/whisper` | `whisper-cpp-model-base-en`, in the image, `/usr/share/whisper` | MIT (OpenAI's Whisper weights) |
-| On-device model runner: `llama-server` | Homebrew `llama.cpp` | Built from llama.cpp b11239 into `/usr/local/bin` (15 MB) | `llama-cpp-server` (static, b11239) | MIT |
+| On-device model runner: `llama-server` | Homebrew `llama.cpp` | Built from llama.cpp b11552 into `/usr/local/bin` (15 MB) | `llama-cpp-server` (static, b11552) | MIT |
+| Search your phone's model: EmbeddingGemma 2 Q8_0 (310 MB), and its vision and audio encoders (`mmproj`, 555 MB) for photos and voice memos | Downloaded in Settings > Assistant > Search your phone | Same | Same, into `/media/internal/.phoenix/models/index` | Apache-2.0 (Google) |
 | The larger language models (1.8 to 19 GB) | Downloaded in Settings > Assistant | Same | Same, into `/media/internal/.phoenix/models` | Apache-2.0 (Qwen) |
 | Wake word: `phoenix-wakeword` | Built with phoenix-sim | Built with phoenix-sim | `phoenix-shell` | Apache-2.0 (Phoenix) |
 | Wake word: libvosk | `build/wakeword` (`tools/get-wakeword.py`, 13 MB) | `build/wakeword` (26 MB) | `libvosk`, prebuilt from Alpha Cephei's PyPI wheels (x86-64, aarch64, armv7) | Apache-2.0; Kaldi, OpenFST Apache-2.0; OpenBLAS, CLAPACK BSD-3-Clause |
@@ -1571,7 +1574,7 @@ same calls go to OSE's activity manager and location service; not run on
 one yet. "Send Sam my ETA home" (the Synergy commands' `shareLocation`)
 uses the same saved Home and Work.
 
-**Music and podcasts** (`musicMode`, `favorites`, `sleepTimer`, `podcast`;
+**Music and podcasts** (`musicMode`, `favorites`, `podcast`;
 `lib/commands-music.js`). "Shuffle my music" plays everything shuffled;
 "turn on shuffle", "turn shuffle off", "repeat this song", "repeat all",
 "stop repeating", "is shuffle on": Music behind the answer with
@@ -1583,12 +1586,10 @@ to my favorites", "unlike this song": Music's favorites, new, in db8
 (`org.webosphoenix.music.favorite:1`, `apps/music` favorites.ts): the star
 on Now Playing, a Favorites tab (a star, so four tabs fit a phone), and
 "play my favorites" / "shuffle my favorites" (`{favorites: true}`); the
-Assistant writes the song Music says plays and checks it is there. "Stop
-the music in 30 minutes", "set a sleep timer for an hour", "how long is
-left on the sleep timer", "cancel the sleep timer": an activity at that
-time calls `sleepWake`, which presses pause (`org.webosphoenix.system
-mediaKey`), so whatever plays stops (Music, Podcasts, Videos); "set a
-timer for 30 minutes" is still the Clock's timer. Podcasts: "play the
+Assistant writes the song Music says plays and checks it is there. The
+sleep timer is the timer command's (below, "Speed and correctness"): "set
+a sleep timer" with no time asks "For how long?", and the time said sets
+it; "when does the music stop" is how long is left. Podcasts: "play the
 latest episode of The Daily", "play the Hard Fork podcast", "resume my
 podcast": the episode is chosen from Podcasts' own (the one left
 part-way, else the newest not played, else the newest; "latest": the
@@ -1635,31 +1636,20 @@ first: it shows what messages say to whoever holds the phone. Phoenix has
 no dark mode (webOS's look had none; 2.0's design brings light and dark):
 "turn on dark mode" says so and offers high contrast (OPEN-QUESTIONS.md Q155).
 
-**Emergency calls** (`emergency`, `emergencyCancel`, `emergencyText`;
-`lib/commands-sos.js`). "Call 911", "call 112", "emergency", "SOS", "call
-an ambulance": never behind a read-back. The Assistant asks the shell
-(`org.webosphoenix.system emergencyCall {number, countdown}`, the runtime's
-and `services/shellhost`'s, for the Assistant and the system UI only) to
-open Phone's emergency window, the one the PIN pad's Emergency Call opens
-(`Shell.openEmergency`, over everything, the lock screen included), with
-the number and a five-second countdown: "Calling 911 in" and the seconds,
-Cancel and Call Now (`apps/phone` views/Emergency.tsx, emergency numbers
-only), then the call. The Assistant says "Calling 911 in 5 seconds. Call
-now, or cancel?" and its view makes way; while it counts, "cancel",
-"stop", "no", "wait, no, stop" (any few words with a stop in them) cancel
-it, before the undo command's "cancel" (the area's `first` rules, with
-`sos` in the grammar's context), and "call now" calls at once; after it,
-"cancel" says the call has started (hung up in Phone; the shell never
-closes the window under a call). With no number said, the region's
-(911 in the US, 999 in the UK, 112 elsewhere: the locale), and any number
-said must be an emergency one. With emergency contacts (Settings >
-Emergency Info), the answer offers Text My Location to them: "text my
-location to my emergency contacts" reads back "Text Mom and Sam: “I've
-called 911. I'm here: <map link>”?" and sends a text to each. Checked in
-the simulator, over the lock screen too (`--scene
-'assistant:@lock|call 911'`: the countdown, then the simulated call); the
-tests never place a call (the simulator's telephony, and a test device
-that records).
+**Emergency calls** (the call command's, `lib/emergency.js`, with
+`emergencyText` in `lib/commands-sos.js`). The call is the one "Speed and
+correctness" (below) describes: "call 911", "call the police", placed after
+a five-second countdown with Cancel and Call Now, never held for a yes,
+over the lock screen too. More words reach it (`lib/lang/en-sos.js`):
+"emergency", "SOS", "this is an emergency", "get the paramedics", "call
+911 now"; and while it counts, any few words with a stop in them ("wait,
+no, stop", "false alarm", "never mind") stop it as "no" and "cancel" do,
+"hurry" and "call now" place it at once (`countdownAnswer`, asked before
+the decision model in `assistant.js` confirmAnswer). With emergency
+contacts (Settings > Emergency Info), the call's answer offers Text My
+Location to them: "text my location to my emergency contacts" reads back
+"Text Mom and Sam: “I've called 911. I'm here: <map link>”?" and sends a
+text to each. The tests never place a call (a test device that records).
 
 **The smart home, through Home Assistant** (`home`, `homeScene`;
 `lib/commands-home.js`). Settings > Assistant > Smart Home keeps the
@@ -1696,6 +1686,207 @@ it cannot act on ("preheat the oven") say what it can do. Tested against a
 stand-in Home Assistant (`test/home-assistant.cjs`: its REST API on a small
 house, served over HTTP for the simulator's checks). The owner's questions on
 these features: OPEN-QUESTIONS.md Q150-Q157.
+
+### Speed and correctness (11 October 2026)
+
+The owner: "if the language model is installed ... some of the commands
+now are taking a long time because the language model is doing it;
+shouldn't it go through our tool first so it's done quicker before the
+language model". The grammar did answer first; but some of what it
+matched still waited for the model afterwards. Measured with Qwen3 0.6B
+(Q8_0) in llama-server, every request of the main set and the held-out
+set, and each turn's trace (which steps ran, how long): of the turns the
+grammar answers alone, these waited for the model (the times on this
+4-core computer under load, 1 to 25 s per step):
+
+| Request | What waited | Time |
+|---|---|---|
+| "create me a draft email announcing the new webos version" | the model writing the email (asked for) | 28.6 s |
+| "tell me a joke" | the model's joke (`chatAnswer`) | 17.0 s |
+| "make me a note about the newest and greatest features ..." | the model writing the memo (asked for) | 6.1 s |
+| "Talk to me." (twice), "What do you want to talk about?" | the model's words | 4.1 s, 3.7 s, 1.2 s |
+| "add an event called dentist" | the model reading a time the words do not say (`fillArgs`), then "When is it?" anyway | 1.7 s |
+| "make a note about the newest features in webos" | the model writing a memo nobody asked to have written | 1.0 s |
+
+And outside what the evaluation sees (its stand-in starts no server):
+llama-server loads the model when the first request needs it (1.5 s
+here for Qwen3 0.6B, and it stops after five idle minutes), so the first
+such request after a pause also waited for that.
+
+**The rule now** (`assistant.js` actParsed, chatAnswer, warm):
+
+- What the grammar can do runs at once. A command missing something it
+  can ask for ("When is it?", "What should I say to Sam?") asks at once
+  (`asksItself`: the command's own `prepare` says whether it asks); the
+  model fills in an argument only where the grammar could not read it
+  and the command cannot ask for it (no English rule leaves one so today).
+- Small talk is the grammar's, jokes and "talk to me" included
+  (OPEN-QUESTIONS Q130); what follows that the grammar does not take is
+  the model's.
+- The model writes a memo or an email only when the words ask for
+  writing: "write me a memo about", "make me a note explaining", "draft
+  an email announcing" (`args.write`); "take a note about the parking
+  spot" asks what it should say, "email Sam I'm late" sends those words
+  (Q135).
+- The model runs only when the grammar (and the decision model's
+  complete candidates, when it is on) cannot; the view shows the dots at
+  once and the thread's stage ("Starting the on-device model", "Thinking
+  it over") from the first moment of its work (`bounded`).
+- `warm`: the Assistant app and the system's view call it as they open,
+  and the model's server starts in the background where the model fits
+  the device's memory (`models.forDevice`); nothing waits for it (Q134).
+  Checked in phoenix-sim: the app opening started llama-server.
+- A question about the world alone ("who wrote Pride and Prejudice": no
+  "my", no contact's name, nothing the commands keep or measure:
+  `say.context` world) is answered in words without the choice among
+  commands first, which could only have picked a command that reads the
+  phone's things. On the main set the choice those questions skip took
+  6.6 s on average (1.2 to 22 s; 27% of their time); on the model's set
+  it is skipped for 12 of the 25 questions and none of the 138 requests
+  to act.
+- A time a model writes for an alarm, a reminder or an event is the
+  grammar's reading of the words where it reads one (Qwen3 0.6B set "I
+  want an alarm at 5:30 tomorrow morning" for 6:30).
+- A sleep timer a model chooses (it stops the music) holds only where the
+  words speak of the music, sleep or playing (`lib/lang/en.js` sleepSaid; Qwen3 0.6B
+  made "add 5 minutes to the timer" one); "add 5 minutes to the timer"
+  is said at once to be out of reach (a running timer is not lengthened
+  yet), as "put 10 more minutes on the timer".
+
+`speed.test.ts` asks every request of the main and held-out sets the
+grammar answers alone again with a model installed: none may make a
+request of it but the writing asked for (the six above failed it).
+
+**Measured after** (Qwen3 0.6B Q8_0 in llama-server on this computer,
+other work running beside it; `tools/eval-assistant.cjs --model`, each
+turn's steps from its trace):
+
+| | Before | After |
+|---|---|---|
+| The main set's original 434, with the model | 432 right, 0 unsafe | 433 right, 0 unsafe |
+| The held-out set's original 79, with the model | 76 right, 0 unsafe | 78 right, 0 unsafe |
+| Turns the grammar answers that waited for the model (main, held out) | 7, 0 | 2, 0: the two that ask for writing |
+| The model's requests in the turns that need it (main, held out) | 44 (21 of them a choice among commands), 26 (13) | 30 (9), 16 (7) |
+| The 40 cases that reached the model in either, asked of both one right after the other (which first alternating; the code as of the first merge) | 77 requests (34 choices); per case: median 2.9 s, 90th percentile 67.6 s | 50 requests (17 choices); median 2.2 s, 90th percentile 6.9 s |
+| One request of a kind, in the same pairs (median) | a choice 1.3 s, a call 1.5 s, an answer 5.2 s | 1.4 s, 1.8 s, 3.7 s |
+
+The slow end before is the machine's load as much as the model ("open
+spotify": the same two requests took 189 s one time and 3.6 s the next),
+so the measure is the requests no longer made; each costs about what it
+did (the choice reads a longer list of commands now, Synergy's among
+them).
+
+The whole sets now (talk mode's, Synergy's, Search your phone's and
+these cases too): the grammar alone, main 646 of 646 (0 unsafe, 0 wrong
+read-backs), held out 97 of 115 (0 unsafe; 1 wrong read-back, talk
+mode's "actually no" after "call daniel", as on the base). With the
+model: main 639 of 646 (0 unsafe, 1 wrong read-back), held out 102 of
+115 (0 unsafe, the same 1). The model's misses on the main set: "how
+many kilometers is a marathon" (as before), and six of talk mode's
+web-search cases, written for no model: with one, the question is
+answered, so the "yes" to an offer never made goes to the model, and
+"translate good morning into spanish" was read back as a reply to Sam
+(the wrong read-back). The base branch with the model misses five of
+those six too, and searches the web unasked three times ("search the
+web", "look it up") where this branch asks what to search for.
+
+**The review's bugs** (the lead's 42 requests, 11 October 2026; each with
+cases in `eval/cases-a.json` and `review.test.ts`):
+
+| Said | Was | Now |
+|---|---|---|
+| "send my ETA to Sam" | a text to a contact called "my" | `shareLocation` ("The Assistant and Synergy", below), which reads it first; no word like "my", "the", "this" is taken for a name; "send happy birthday to Mom" texts Mom; "send the photo to Sam" is not a text |
+| "remind me to buy milk when I get home" | a plain task "buy milk when I get home" | a reminder at the place ("Everyday features", above: a task and a geofence; where home is asked first when Maps has no Home); the time-only stopgap this row first had is gone ("when I wake up" stays a reminder's words) |
+| "set a sleep timer for 30 minutes" | a timer ringing over the music | a timer whose activity presses pause (`org.webosphoenix.system` mediaKey, as "pause" does) and rings nothing; "stop the music in 20 minutes", "turn off the music after an hour" |
+| "play my podcast" | Music searched for "podcast" | the podcast command ("Everyday features", above): the podcasts the user follows, by name or where left off; a podcast to find is still "not yet" |
+| "call 911" | "Call 911?" like any number | `lib/emergency.js` (the Phone's lists: 3GPP TS 22.101's numbers and the national ones): "Calling 911 in 5 seconds. Cancel to stop." with Call Now and Cancel and the seconds counting down; the service places it when they run out (also with the app closed); "no", "cancel" or Cancel stop it; asked over the lock screen too. "Call the police", "call an ambulance": the region's number (999 for en-GB). A model's choice of one is read back as any call (Q133) |
+| "what's on my screen" | "Did you mean set brightness to 50%?" | "I can't see what's on your screen yet."; the brightness suggestion needs brightness words |
+
+**A sweep of everyday phrasings.** Some 200 requests as people say them
+to Siri, Google Assistant and Alexa, across the commands (fillers,
+corrections mid-sentence, several at once, numbers as words, contacts
+named Will, Rose and Mark), asked of the grammar; each misreading fixed
+where it came from (cases a-sw-*, with a case's own contacts: `put`):
+
+- A correction mid-sentence is the sentence as meant
+  (`lib/lang/en-corrections.js`, tried before the words as said): "set
+  an alarm for seven no wait eight", "remind me at 3 to call the dentist
+  actually make it 4" (the evening kept for 4), "set a timer for 5
+  minutes no 10", "text Sam wait no text Priya that I'm outside", "call
+  Sam no Priya". Only a whole request, a time, number or day, or a
+  contact can be the correction, so "text Sam no worries" and "text Sam I
+  actually liked the movie" stay texts.
+- Fillers and politeness: "hey can you ...", "at like six thirty",
+  "would you mind turning off the wifi", "do me a favor and ...", "you
+  know what, ...", "I need an alarm for 6", "I'd like a timer for 20
+  minutes", "put a timer on for 4 minutes", "snooze for five more
+  minutes", "in a couple of hours", "set the volume to seventy percent",
+  "what's 20 percent of 45 dollars", "friday-ish".
+- Lists: "the grocery list", "groceries" and "the shopping list" are one
+  list (it made a Grocery list beside Groceries; Q132), "my to do list"
+  is the default one ("You don't have a list called to do").
+- Several at once: "text Will, Rose and Mark that dinner is at 7" texts
+  each (it texted Will "Rose and Mark that dinner is at 7"); "remind me
+  tomorrow at 9 to call Will and text Rose" is one reminder (it texted
+  Rose); "what's the weather tomorrow and do I have any meetings" asks
+  about tomorrow's; "set an alarm for 6:15 and another for 6:30"; "one
+  for five minutes and one for twelve" (minutes).
+- "Put lunch with Will on my calendar for Thursday at noon" was titled
+  "Lunch with will for"; "what's the weather on Saturday" read the
+  calendar; "is it going to snow this week", "what's the high today",
+  "what am I doing tomorrow night", "did anyone call me", "when's my next
+  alarm" and "how long until my alarm goes off" (the next one and how
+  long, not the list), "play it again" (it searched Music for "it
+  again"), "play Will Smith" (said back as "will smith"), "put the phone
+  on do not disturb", "text my sister I'm running late" ("I couldn't find
+  sister", not "my"), "email my boss ...", "set an alarm for 6 30" (a
+  transcript's time), "how much longer on the timer", "what meetings do I
+  have today", "call mom on speaker", "turn up the volume all the way",
+  "open the photos app" (it searched photos for "app"), "launch messages"
+  (what people call the apps: Messaging), "will I need a jacket tonight"
+  (the cold, not the rain), "send Mark a message" (it read back a text
+  saying "a message"; now it asks what to say).
+- "Send the photo to Sam", "email Mom the pictures from the trip": "I
+  can't send photos or videos yet." (the model's set: Qwen3 0.6B offered
+  a screenshot); "text Rose I got the pictures" stays a text.
+- "Add a timer for 5 minutes" was a timer called "add a"; "add milk to my
+  list" made a list called "My" (now the default list), and with
+  Synergy's accounts "add stamps to my to do list" went to Microsoft's To
+  Do ("To Do" is as generic a name as "Tasks" now, `lib/synergy.js`).
+
+And one found by the talk-mode work (tools/test-assistant.cjs): "did you
+add it?" went on being answered with its switch off in Settings >
+Assistant > Commands, the router answering it past `act()`'s check; the
+switch is checked there now, and `review.test.ts` asks every command's
+phrase with its switch off.
+
+Left from the sweep, for others or the owner: adding several items in
+one ("eggs, milk and bread": one task, Q131), a group text as one
+message, "turn off the lights and lock the screen" (smart home with a
+phone request), video calls, "open youtube" (no such app: the web could
+be offered), "where am I", contacts' addresses for "navigate to Rose's
+house" (Synergy), "turn off my alarm for tomorrow" (the Clock has no
+skipping one day of a repeating alarm), sunrise and sunset, "how many
+days until my birthday" (the owner's own card), "next Thursday" said on a
+Wednesday (the coming one, as decided; many mean the week after), and the
+features the parity work adds (reminders by place,
+podcasts, dark mode).
+
+**Held out.** Ten requests written after these fixes and not tuned for
+were added to the end of `held-out.json` (h-a-1 to h-a-10): eight
+answered right by the grammar, the original service one. Of the original
+79, four more are now answered by the grammar alone (69 to 73): "I want
+an alarm at 5:30 tomorrow morning", "put a timer on for 4 minutes", "did
+anyone text me" and "is it going to rain this weekend". The sweep had
+the same or like phrasings, written after its author had seen the
+held-out set's misses, so these four are not a clean measure. Nor is
+h-a-4 now: with Qwen3 0.6B behind the grammar, "turn the music off in 45
+minutes" paused the music at once (the evaluation's one unsafe action),
+so the grammar reads it as the sleep timer it is, with "turn off the
+music" (which went to the model) and "switch the music off after an
+hour" (a-sw-56, a-sw-57). And h-a-6 ("put toothpaste on the shopping
+list") may go to a list called Shopping where an account has one (the
+Synergy world's Todoist), never to a new list.
 
 ### The Assistant and Synergy (11 October 2026)
 
@@ -1817,6 +2008,176 @@ says so); Zoom's `createMeeting` ("schedule a Zoom meeting"); a phrasing the
 held-out set shows it misses ("shoot Sam a slack message saying ...",
 "anything new on Slack", "anything in my work inbox"). Decisions for the
 owner: OPEN-QUESTIONS.md Q140-Q146.
+
+### Search your phone (11 October 2026)
+
+The owner (11 October 2026): "Gemma embeddings 2 is out and I think we
+need to look into creating a layer in our assistant that can use it for
+advanced search." It is built: a search of the user's own things by what
+they mean, on the device, which the Assistant and Just Type use. Off
+until the user turns it on (Settings > Assistant > Search your phone).
+
+**The model.** Google's EmbeddingGemma 2 (6 October 2026; Apache-2.0, its
+model card at `google/embeddinggemma-2` and the Gemma 4 licence page it
+links): a 270M text and code model (130M transformer, 140M embeddings)
+with optional vision (170M) and audio (300M) encoders, one 768-dimension
+space for text, code, pictures and sound, 8K tokens, Matryoshka
+dimensions 768/512/256/128. llama.cpp's own conversion
+(`ggml-org/embeddinggemma-2-GGUF` at `bfcd298`, converted with b11451):
+the text model Q8_0, 310 MB, and the projector with both encoders
+(`mmproj`) Q8_0, 555 MB, downloaded in Settings with their SHA-256
+checked (`services/index/lib/model.js`). Its model card's prompts are
+used: a passage is `title: {title} | text: {content}` (`title: none`
+without one), a query `task: search result | query: {query}`; pictures
+and sound without a prefix. Not float16 (the card: its activations
+overflow it); llama.cpp's CPU backend computes in float32.
+
+**llama.cpp.** The model is llama.cpp's `gemma-embedding2` from b11451;
+`./phoenix` and meta-phoenix's `llama-cpp` now build b11552 (`23b0202`,
+10 October 2026), which also takes pictures and sound in
+`/v1/embeddings` (`{"input": [{"content": [{"type": "image_url", ...}]}]}`
+or `input_audio`, the server started with `--mmproj`). `./phoenix`
+builds llama-server again when the one installed is older than b11451
+(`brew upgrade llama.cpp` on a Mac). **Pictures and sound work**: the
+seven sample photos embedded from their pixels and searched with words
+each found its own picture first (7 of 7: "a beach with sand dunes" the
+dunes, 0.742 against at most 0.652; "northern lights in the night sky"
+the aurora 0.795; "boats in a harbor at dusk" the harbour 0.733), and the
+two sample voice memos from their sound ("how to record and transcribe a
+memo": the welcome memo 0.797 against 0.601; llama.cpp calls its audio
+input experimental). On this 4-core computer under load a picture took
+10-15 s and a 8 s recording 3-4 s, one thread; with "Include photos and
+voice memos" off, photos are found by their names, albums and dates and
+voice memos by their titles and transcripts.
+
+**The service** (`services/index`, `org.webosphoenix.service.index`, Node.js
+like the other services; the simulator runs the same code in the page):
+
+| Source | db8 | Opens |
+| --- | --- | --- |
+| Memos | `com.palm.note:1` | Memos `{memoId}` |
+| Tasks | `com.palm.task:1` | Tasks `{taskId}` |
+| Calendar | `com.palm.calendarevent:1` | Calendar `{showEventDetail}` |
+| Contacts | `com.palm.person:1` | Contacts `{id}` |
+| Email | `com.palm.email:1` and every kind that extends it (IMAP, POP, EAS, a connector's) | Email `{emailId}` |
+| Messages | `com.palm.message:1` and every kind that extends it: SMS, MMS and every Synergy account's chat, today's and any future connector's (the messaging contract has each extend it) | Messaging `{threadId}` |
+| Files | `/media/internal` through the file manager: names, and the words of text files and PDFs (`lib/pdftext.js`: content streams, inflated) | Files `{path: its folder}` |
+| Photos | `com.palm.media.image.file:1`: name, album, date; the picture itself with the encoders | Photos `{imageList}` |
+| Voice memos | `org.webosphoenix.voicememo:1`: title, date, transcript; the recording itself with the encoders | Voice Memos `{memoId}` |
+
+Each source is a switch; one turned off takes its part of the index
+with it. Passages are at most 160 words and 700 characters (a passage
+of text without spaces was 785 tokens and stopped a pass in the
+simulator), 8 a record. Vectors are cut to 256 dimensions, normalized
+again and kept as 8 bits with a scale each: 260 bytes a passage, in one
+file per source (`lib/store.js`) in `/var/lib/phoenix/index` (the
+service's own; not on the USB drive; no backup registration, so never in
+a backup or Phoenix Cloud: OPEN-QUESTIONS asks the owner), with no text:
+a result is read again from its record (so one deleted is never shown).
+Full Erase wipes it (Settings' and the security policy's: the shell's
+`SystemScreens._eraseDevice` and the system manager call `wipe` beside the
+OAuth service's).
+
+**Keeping up.** A pass asks db8 for what changed after the last revision
+it indexed, deletions included (`_rev > N`, `incDel`), as the contacts
+linker does (`autolinker.js:1680-1760`), a page of 50 at a time, embeds
+only passages whose text changed, and saves what it has with the
+revision every minute and at its end: it stops between pages when it
+must and goes on from there. On a device an activity per source wakes it
+(a db8 watch on that revision, made again after each pass) and a daily
+one with the charger required looks at files and at records db8 purged;
+the simulator's indexing page looks every 30 seconds. **When**: never on
+a battery saver (the system preference `batterySaver`, when Phoenix has
+one); up to 50 changes at any time above 15% battery; a backlog (the
+first build) while charging, or with the screen off and 30% or more.
+The model's own llama-server (a second one beside the Assistant's chat
+model, stopped after 2 idle minutes) runs one thread: a background job,
+and on this computer at a load average of 40, one thread embedded a
+200-token passage in 0.44-0.62 s and a query in 50 ms, two threads in
+2.1-3.6 s and 115-340 ms (their threads waiting on each other). A search
+goes before the pass's next batch.
+
+**Searching.** The query's embedding (one call; the last 64 kept), a dot
+product with every passage (brute force: 50,000 passages of 256
+dimensions in 45 ms on this computer; 12.4 MB of vectors), the best
+passage of each record, results at least 0.70 and within 0.10 of the
+best (unrelated passages score 0.6 to 0.78 with the simulator's data,
+what was asked for 0.8 to 0.9), a little more for the words asked
+themselves. With the simulator's own data (`tools/test-index-sim.cjs`,
+the real model):
+
+| Asked | Found first (score) | Words in common |
+| --- | --- | --- |
+| "internet password" | the memo "Wi-Fi at the cabin: network "Lakeview", password on the fridge" (0.818) | "password" |
+| "when are the servers down" | the email "Scheduled maintenance this weekend" (0.817) | none |
+| "lunch with Priya" | the event "Lunch with Priya" (0.901), the email "Lunch today?" (0.861) | all, and "lunch" |
+| "the paper about birds" | the memo "Books to read" (its "A Field Guide to Coastal Birds", 0.803), then two emails ("Your order has shipped" 0.724, "Paper draft for review" 0.713) | "birds"; "paper" |
+| "a trip with mountains and a lake" | the Wi-Fi memo ("Lakeview", 0.730), the photo "Alpine Lake" (0.724), the file "Trip notes.md" (0.714) | none; "lake"; "trip" |
+| "what did Daniel send about the hike" | the email "Photos from the hike" (0.868) | "hike" |
+| "how do I get online at the lake house" (Just Type) | the Wi-Fi memo (0.805) | none |
+
+The simulator's 62 items (69 passages: 4 memos, 11 events, 14 contacts,
+7 emails, 8 messages, 11 files, 7 photos by name) were indexed in 33 s
+on one thread of this busy computer, into 25 KB; a query took 56 to 160
+ms with the model's server running (5.5 s for the first, which starts it).
+"The paper about birds" shows the limit: the memo of books has the bird,
+the email of the paper is third.
+
+**In the Assistant** (`apps/assistant/service/lib/commands-search.js`,
+`lib/lang/en-search.js`): `searchPhone` ("what did Sam say about the
+party": Sam's messages and email only, by his numbers and addresses;
+"where's that note about the wifi password"; "find anything about the
+boiler"; "search my phone for ..."), the results as cards with their
+app's icon, each opening its app on itself; and a layer under the
+commands that look for words: when `findNotes`, `searchEmail`,
+`findFiles` or `photos` of something find nothing with the words, the
+index answers ("No emails have those words, but this one is about
+“boiler”."). With the index off they answer as before, and searchPhone
+looks for the words and says how to search by meaning. **Questions to a
+model** about the user's things ("what's my wifi password at the
+cabin?"): with "Use in answers" on, the passages found go with the
+question, marked as the user's data and never instructions, to the
+model the conversation is already using (on the device, or the cloud
+model the user chose: nothing goes to a cloud model it would not have
+seen), with no tools that turn (the taint rule, Safety), and where they
+came from shown under the answer. Evaluation: `cases-search.json` (14
+cases, all right, grammar alone; the stand-in device runs the real
+service with a deterministic fake embedder,
+`services/index/test/fake-embedder.cjs`); held-out: 2 of 4 new phrasings
+by the grammar.
+
+**In Just Type**: "From your phone", under the exact matches (the apps'
+content searches) and above the web: at most five, each with its app's
+icon, half a second after typing stops, leaving out what has the typed
+words (those are above); a tap opens the app on it. Added to the
+original Just Type (luna-applauncher, which runs as `com.palm.launcher`)
+through the compat overlay
+(`compat/rootfs/usr/palm/applications/com.palm.launcher/app/PhoenixPhoneSearch.js`,
+listed in that overlay's `depends.js`).
+
+#### Gemma 4 E2B and E4B
+
+Settings > Assistant offers them (`lib/models.js`), from Google's own
+QAT GGUFs (`google/gemma-4-E2B-it-qat-q4_0-gguf` at `675cff4`, 3.35 GB,
+for 6 GB devices; `-E4B-` at `4b4a2c1`, 5.15 GB, for 8 GB; Apache-2.0 from
+this generation; Gemma 3 and older are not offered: their terms are
+Google's own), not recommended until the evaluation has measured them on
+a device (Qwen stays the recommendation, Qwen3 0.6B the built-in model).
+**The template check** (they are too big for this computer's disk): a
+tiny random-weight Gemma 4 GGUF (`Bingsu/tiny-random-gemma-4-moe`, MIT)
+in llama-server b11552 with `--jinja --chat-template-file` the E2B GGUF's
+own template (Google's of 9 July 2026, the same in the E4B GGUF and
+ggml-org's): every request the Assistant makes was taken (HTTP 200: the
+command choice and a command's arguments, each held to a JSON schema,
+which the grammar enforced even with random weights; answers in words;
+`chat_template_kwargs: {enable_thinking: false}`, which the template
+reads), the Assistant's system prompt is Gemma's `<|turn>system` turn,
+and tools, a call and its result render as Gemma 4's
+`<|tool>declaration:...`, `<|tool_call>call:...` and `<|tool_response>`.
+What it cannot say is how well the real model chooses: for the owner's
+Mac, download Gemma 4 E2B in Settings > Assistant, then
+`llama-server -m <models>/gemma-4-e2b-it-qat-q4_0.gguf --port 8091 -c 4096 -np 1 -fa on -b 512 --jinja`
+and `node tools/eval-assistant.cjs --model http://127.0.0.1:8091/v1`.
 
 ### Next: 2.0
 
@@ -2328,7 +2689,7 @@ shipping one, as for the Whisper model in [LEGAL.md](LEGAL.md)):
 | Model | Sizes | Licence | Notes |
 | --- | --- | --- | --- |
 | **Qwen3.5** small (March 2026) | 0.8B, 2B, 4B, 9B | Apache-2.0 | Tool use, thinking and non-thinking modes, multimodal. **Default candidate**: 0.8B for the Pi and command parsing, 2B for phones |
-| **Gemma 4** E2B, E4B (April 2026) | ~2B and ~4B effective | Apache-2.0 (a change from Gemma 3's own terms) | Built for phones; Google's own runtime is LiteRT-LM. Good second choice |
+| **Gemma 4** E2B, E4B (April 2026) | ~2B and ~4B effective | Apache-2.0 (a change from Gemma 3's own terms) | Built for phones; Google's own runtime is LiteRT-LM. **Offered** in Settings > Assistant (11 October 2026, Google's QAT GGUFs), not recommended until measured ("Search your phone" above; OPEN-QUESTIONS Q162) |
 | Phi-4-mini | 3.8B | MIT (*per the model card, unverified here*) | Strong reasoning for its size |
 | Llama 3.2 | 1B, 3B | Llama 3.2 Community License (not OSI open source, has an acceptable use policy) | Widely tested for tool calling; do not ship by default, let users download it |
 
@@ -2340,7 +2701,7 @@ against a list shipped with Phoenix.
 
 | Runtime | Licence | Fit for Phoenix |
 | --- | --- | --- |
-| **llama.cpp** (`llama-server`) | MIT | **Chosen.** Plain C/C++, builds with Yocto like the `whisper-cpp` recipe (same ggml), CPU NEON everywhere, Vulkan and OpenCL backends to try on GPUs, OpenAI-compatible server with tool calls and JSON Schema grammars, GGUF models for every candidate. Daily builds (b11239 on 28 September 2026) |
+| **llama.cpp** (`llama-server`) | MIT | **Chosen.** Plain C/C++, builds with Yocto like the `whisper-cpp` recipe (same ggml), CPU NEON everywhere, Vulkan and OpenCL backends to try on GPUs, OpenAI-compatible server with tool calls and JSON Schema grammars, GGUF models for every candidate. Daily builds; Phoenix builds b11552 (10 October 2026), which embeds EmbeddingGemma 2's text, pictures and sound (`/v1/embeddings`) |
 | ExecuTorch (1.0 in October 2025, 1.4 now per PyPI) | BSD-3-Clause | ARM64 Linux supported; strong on Android/iOS and NPUs through vendor delegates. More build machinery, per-model export step. Revisit for NPUs |
 | LiteRT-LM (Google) | Apache-2.0 | Linux and Raspberry Pi CLI and Python API; best path for Gemma. A second backend if Gemma 4 becomes the default |
 | ONNX Runtime GenAI (0.17, September 2026) | MIT | Good on Windows and DirectML/QNN; less natural on our Yocto ARM Linux |
@@ -2490,10 +2851,11 @@ small label on each answer: "On device", "Home server (Ollama)",
 | Memories ("my partner is Sam", "I prefer metric") | db8 `org.webosphoenix.assistant.memory:1` | Until deleted | Listed in Settings > Assistant > Memories, editable. The assistant proposes a memory and the user confirms ("Remember this?"); nothing is remembered silently |
 | Personal data (contacts, messages, ...) | Where it already is | Not copied | Read on demand through the hub, per grant; tool results are kept in the conversation only as a short summary |
 | Screen content | Not read by default | | An explicit "Ask about this screen" action takes a screenshot of the front card for that one turn |
+| Search your phone's index | `/var/lib/phoenix/index` (the service's own) | Until turned off, deleted or erased | The Assistant and Just Type, through `org.webosphoenix.service.index`; what it finds goes to a model only with "Use in answers" on, and only to the model the conversation already uses |
 
-There is no background indexing of the user's data for the assistant in
-this plan. A local semantic index (embeddings of notes and email for "find
-the email about the boiler") is an open question, not a default.
+A local semantic index of the user's things is built (11 October 2026,
+"Search your phone" above): off until the user turns it on, on the
+device, vectors without text, never in a backup, wiped by Full Erase.
 
 ### Safety
 
@@ -2730,12 +3092,13 @@ Accessed 28 September 2026 unless noted.
 - MCP Apps (26 January 2026): <https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/>, <https://modelcontextprotocol.io/seps/1865-mcp-apps-interactive-user-interfaces-for-mcp>
 - Android AppFunctions: <https://developer.android.com/ai/appfunctions>; Android Developers Blog (February 2026): <https://android-developers.googleblog.com/2026/02/the-intelligent-os-making-ai-agents.html>; Jetpack release list: <https://developer.android.com/jetpack/androidx/releases/appfunctions>
 - Apple WWDC26 Apple Intelligence guide (App Intents, schemas, View Annotations, Foundation Models): <https://developer.apple.com/wwdc26/guides/apple-intelligence/>
-- llama.cpp releases (b11239, 28 September 2026): <https://github.com/ggml-org/llama.cpp/releases>; OpenCL backend for Adreno (IWOCL 2026 slides): <https://www.iwocl.org/wp-content/uploads/IWOCL-2026-Wang-Llamacpp.pdf>
+- llama.cpp releases (b11239, 28 September 2026; b11552, 10 October 2026): <https://github.com/ggml-org/llama.cpp/releases>; OpenCL backend for Adreno (IWOCL 2026 slides): <https://www.iwocl.org/wp-content/uploads/IWOCL-2026-Wang-Llamacpp.pdf>
 - ExecuTorch 1.0: <https://pytorch.org/blog/introducing-executorch-1-0/>; releases: <https://github.com/pytorch/executorch/releases>
 - LiteRT-LM: <https://ai.google.dev/edge/litert-lm/overview>
 - ONNX Runtime GenAI (0.17.0 on PyPI): <https://pypi.org/project/onnxruntime-genai/>
 - MLC LLM: <https://llm.mlc.ai/>
 - Gemma 4 under Apache-2.0: <https://opensource.googleblog.com/2026/03/gemma-4-expanding-the-gemmaverse-with-apache-20.html>
+- EmbeddingGemma 2's model card: <https://huggingface.co/google/embeddinggemma-2>; llama.cpp's GGUFs: <https://huggingface.co/ggml-org/embeddinggemma-2-GGUF>; Gemma 4's QAT GGUFs: <https://huggingface.co/google/gemma-4-E2B-it-qat-q4_0-gguf>, <https://huggingface.co/google/gemma-4-E4B-it-qat-q4_0-gguf>
 - Qwen3.5 small models (2 March 2026, Apache-2.0): <https://artificialanalysis.ai/articles/qwen3-5-small-models> (secondary)
 - Raspberry Pi 4 and 5 llama.cpp speeds: <https://www.sitepoint.com/llms-raspberry-pi-edge/>, <https://www.stratosphereips.org/blog/2025/6/5/how-well-do-llms-perform-on-a-raspberry-pi-5> (secondary)
 - Design Patterns for Securing LLM Agents against Prompt Injections (June 2025): <https://arxiv.org/abs/2506.08837>; CaMeL, Defeating Prompt Injections by Design (March 2025): <https://arxiv.org/abs/2503.18813>

@@ -46,10 +46,11 @@ describe("the words", () => {
         expect(parse("add this song to my favorites")?.args).toEqual({ action: "add" });
         expect(parse("remove this from my favorites")?.args).toEqual({ action: "remove" });
         expect(parse("shuffle my favorites")?.args).toEqual({ action: "play", shuffle: true });
-        expect(parse("stop the music in 30 minutes")).toEqual({ command: "sleepTimer", args: { action: "set", minutes: 30 } });
-        expect(parse("set a sleep timer for an hour")?.args).toEqual({ action: "set", minutes: 60 });
-        expect(parse("cancel the sleep timer")?.args).toEqual({ action: "cancel" });
-        expect(parse("set a timer for 20 minutes")?.command).toBe("timer");
+        // The sleep timer is the timer command's (review.test.ts); "set a sleep timer" asks how long.
+        expect(parse("stop the music in 30 minutes")).toEqual({ command: "timer", args: { seconds: 1800, label: "sleep", sleep: true } });
+        expect(parse("set a sleep timer")).toEqual({ command: "timer", args: { label: "sleep", sleep: true } });
+        expect(parse("when does the music stop")?.command).toBe("timerStatus");
+        expect(parse("set a timer for 20 minutes")?.args).not.toHaveProperty("sleep");
         expect(parse("play the latest episode of The Daily")).toEqual({ command: "podcast", args: { name: "The Daily", action: "latest" } });
         expect(parse("resume my podcast")?.args).toEqual({ name: "", action: "resume" });
         expect(parse("play the Hard Fork podcast")?.args).toEqual({ name: "Hard Fork", action: "play" });
@@ -101,26 +102,14 @@ describe("favorites", () => {
 });
 
 describe("the sleep timer", () => {
-    it("pauses whatever plays at its time, through an activity", async () => {
+    it("asks how long when no time is said, and the time said sets it", async () => {
         const d = device();
-        expect((await d.ask("set a sleep timer")).text).toBe("For how long? Say it with the time, like “set a sleep timer for 30 minutes”.");
-        const m = await d.ask("stop the music in 30 minutes");
-        expect(m.text).toMatch(/^OK, I'll stop the music in 30 minutes, at \d+:\d\d [AP]M\.$/);
-        const a = d.state.activities.get("assistant.sleepTimer");
-        expect(a.callback).toMatchObject({ method: "luna://org.webosphoenix.assistant/sleepWake", params: { at: NOW + 30 * 60000 } });
-        d.setNow(NOW + 18 * 60000);
-        expect((await d.ask("how long is left on the sleep timer")).text).toMatch(/^The music stops in 12 minutes/);
-        expect(await d.svc.sleepWake({ at: NOW + 30 * 60000 })).toMatchObject({ paused: true });
-        expect(d.called("mediaKey").at(-1)?.params).toEqual({ key: "pause" });
-        // Once: a second call (or an old one) does nothing.
-        expect(await d.svc.sleepWake({ at: NOW + 30 * 60000 })).toMatchObject({ paused: false });
-    });
-    it("is cancelled", async () => {
-        const d = device();
-        await d.ask("set a sleep timer for 20 minutes");
-        expect((await d.ask("cancel the sleep timer")).text).toBe("OK, the sleep timer is off. The music plays on.");
-        expect(d.state.activities.has("assistant.sleepTimer")).toBe(false);
-        expect((await d.ask("cancel the sleep timer")).text).toBe("There's no sleep timer set.");
+        const q = await d.ask("set a sleep timer");
+        expect(q).toMatchObject({ command: "timer", status: "ask" });
+        const m = await d.ask("half an hour");
+        expect(m).toMatchObject({ command: "timer", status: "done" });
+        expect(m.text).toMatch(/music stops in 30 minutes/);
+        expect((await d.ask("when does the music stop")).command).toBe("timerStatus");
     });
 });
 
