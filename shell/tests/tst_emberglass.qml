@@ -3,8 +3,8 @@
 //
 // Phoenix 2.0's look, Ember Glass, beside 1.0's (docs/SYSTEM-UI-2.md):
 // the switch (the system preference "look", the simulator's --look, 1.0's
-// look by default) and the tokens it is drawn with (EmberGlass, generated
-// from Ember Glass UI's).
+// look by default), the tokens it is drawn with (EmberGlass, generated from
+// Ember Glass UI's), and the gesture light.
 // Run: qmltestrunner -import qml -input tests
 
 import QtQuick
@@ -70,6 +70,9 @@ Item {
             verify(!Theme.emberGlass);
             compare(Theme.statusBarHeight, Theme.px(28));
             compare(Theme.gestureAreaHeight, Theme.px(20));
+            verify(findChild(shell, "lightBar").visible);
+            verify(!findChild(shell, "emberGestureLight").visible);
+            verify(!findChild(shell, "gestureScrim").visible);
             compare(Theme.defaultWallpaperPath, "/usr/palm/applications/org.webosphoenix.settings/wallpapers/northern-lights.jpg");
         }
 
@@ -98,14 +101,70 @@ Item {
         }
 
         // Ember Glass's frame: a 32 px status bar and a 22 px gesture strip
-        // (size.statusbar, size.gesture-strip); the phoenix the default
-        // wallpaper.
+        // (size.statusbar, size.gesture-strip), the wallpaper under the
+        // strip's scrim; the phoenix the default wallpaper.
         function test_frame() {
+            var bar = findChild(shell, "gestureBar");
+            var wall = findChild(shell, "wallpaper");
+            compare(wall.mapToItem(shell, 0, wall.height).y, shell.height - bar.height);
             shell.look = "ember-glass";
             compare(Theme.statusBarHeight, Theme.px(32));
             compare(Theme.gestureAreaHeight, Theme.px(22));
-            compare(findChild(shell, "gestureBar").height, Theme.px(22));
+            compare(bar.height, Theme.px(22));
+            verify(findChild(shell, "gestureScrim").visible);
+            compare(wall.mapToItem(shell, 0, wall.height).y, shell.height);
             compare(Theme.defaultWallpaperPath, "/usr/palm/applications/org.webosphoenix.settings/wallpapers/phoenix.jpg");
+            verify(!findChild(shell, "screenCorners").visible);
+        }
+
+        // The gesture light: 118 x 4, the token's gradient (transparent at
+        // both ends, gold-white at the centre), the glow following it; lit
+        // while an app is maximized, dim in card view, as 1.0's bar.
+        function test_gestureLight() {
+            shell.look = "ember-glass";
+            var g = findChild(shell, "gestureBar");
+            var light = findChild(shell, "emberGestureLight");
+            verify(light.visible);
+            verify(!findChild(shell, "lightBar").visible);
+            compare(light.width, Theme.px(118));
+            compare(light.height, Theme.px(4));
+            compare(light.x, Math.round((g.width - light.width) / 2));
+            var grad = findChild(shell, "emberGestureGradient").gradient;
+            compare(grad.orientation, Gradient.Horizontal);
+            compare(grad.stops.length, EmberGlass.gestureLightGradient.stops.length);
+            compare(grad.stops[0].color.a, 0);
+            compare(grad.stops[grad.stops.length - 1].color.a, 0);
+            var centre = null;
+            for (var i = 0; i < grad.stops.length; ++i)
+                if (grad.stops[i].position === 0.5)
+                    centre = grad.stops[i].color;
+            verify(Qt.colorEqual(centre, "#fff3dc"));
+            verify(!g.lit);
+            tryCompare(light, "opacity", 0.25, 2000);
+            var uid = windows.launch("org.webosphoenix.email", "");
+            shell.cardView.maximize(uid);
+            tryVerify(function() { return shell.maximized; }, 2000);
+            verify(g.lit);
+            tryCompare(light, "opacity", 1, 2000);
+        }
+
+        // Each gesture's light runs along it; a finger resting on the area
+        // makes it breathe (motion.breathe), and it stops when it lifts.
+        function test_gestureLightRunsAndBreathes() {
+            shell.look = "ember-glass";
+            var g = findChild(shell, "gestureBar");
+            var m = findChild(shell, "gestureMouse");
+            var light = findChild(shell, "emberGestureLight");
+            var sweep = findChild(shell, "emberLightSweep");
+            mouseDrag(m, m.width * 0.6, m.height / 2, -m.width * 0.2, 0);
+            compare(g.lastLight, "left");
+            tryCompare(sweep, "opacity", 1, 500);
+            tryCompare(sweep, "opacity", 0, 2000);
+            compare(light.breath, 1);
+            mousePress(m, m.width / 2, m.height / 2);
+            tryVerify(function() { return light.breath < 0.8; }, 2000);
+            mouseRelease(m, m.width / 2, m.height / 2);
+            tryCompare(light, "breath", 1, 2000);
         }
     }
 }

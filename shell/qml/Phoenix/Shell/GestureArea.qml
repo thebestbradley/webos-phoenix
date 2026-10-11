@@ -32,6 +32,9 @@
 //                      same swipes, the way the fingers went (Phoenix; see
 //                      trackpadSwipe)
 // A thin glowing bar hints where it is, like the Pre 2 / Pre 3 light bar.
+// In Ember Glass (Phoenix 2.0, docs/SYSTEM-UI-2.md) it is Onyx Reborn's long
+// bar lit gold to ember, fading at both ends, over a scrim on the wallpaper
+// (SPEC.md, "The gesture light"); what it does is the same.
 
 import QtQuick
 
@@ -97,11 +100,24 @@ Item {
     // and back on (ledLightbarFullSwipe).
     readonly property string lastLight: _lastLight
     property string _lastLight: ""
+    // The Ember Glass light's colour at its centre (gold-white).
+    function _egCentre() {
+        var stops = EmberGlass.gestureLightGradient.stops, best = stops[0];
+        for (var i = 1; i < stops.length; ++i)
+            if (Math.abs(stops[i].position - 0.5) < Math.abs(best.position - 0.5))
+                best = stops[i];
+        return best.color;
+    }
+    // The bar the light shows on, and its sweep: 1.0's, or Ember Glass's.
+    readonly property Item _bar: Theme.emberGlass ? egBar : bar
+    readonly property Item _sweep: Theme.emberGlass ? egSweep : sweep
     function light(kind) {
         _lastLight = kind;
         lightAnim.stop();
-        sweep.color = lit ? Qt.rgba(0, 0, 0, 0.75) : "#FFFFFF";
-        var w = bar.width;
+        // Ember Glass: off the lit bar the light runs in the bar's own
+        // gold-white centre (gesture-light.gradient at 50%).
+        _sweep.color = lit ? Qt.rgba(0, 0, 0, 0.75) : Theme.emberGlass ? _egCentre() : "#FFFFFF";
+        var w = _bar.width;
         if (kind === "waterdrop" || kind === "reverse") {
             var out = kind === "waterdrop";
             spreadFrom.value = out ? 0 : w;
@@ -121,11 +137,24 @@ Item {
     Rectangle {
         anchors.fill: parent
         color: Theme.black
+        visible: !Theme.emberGlass
+    }
+    // Ember Glass: a soft scrim over the wallpaper, black 25% to 55%, so a
+    // bright wallpaper never competes with the light (base.css .gesture).
+    Rectangle {
+        objectName: "gestureScrim"
+        anchors.fill: parent
+        visible: Theme.emberGlass
+        gradient: Gradient {
+            GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.25) }
+            GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.55) }
+        }
     }
 
     Rectangle {
         id: bar
         objectName: "lightBar"
+        visible: !Theme.emberGlass
         anchors.centerIn: parent
         width: parent.width * 0.3
         height: Math.max(2, Theme.px(3))
@@ -148,17 +177,126 @@ Item {
         }
         SequentialAnimation {
             id: lightAnim
-            PropertyAction { target: sweep; property: "opacity"; value: 1 }
+            PropertyAction { target: area._sweep; property: "opacity"; value: 1 }
             ParallelAnimation {
-                NumberAnimation { id: spreadAnim; target: sweep; property: "spread"; from: spreadFrom.value; to: spreadTo.value; easing.type: Easing.OutQuad }
-                NumberAnimation { target: sweep; property: "run"; from: runFrom.value; to: runTo.value; duration: spreadAnim.duration; easing.type: Easing.InOutQuad }
+                NumberAnimation { id: spreadAnim; target: area._sweep; property: "spread"; from: spreadFrom.value; to: spreadTo.value; easing.type: Easing.OutQuad }
+                NumberAnimation { target: area._sweep; property: "run"; from: runFrom.value; to: runTo.value; duration: spreadAnim.duration; easing.type: Easing.InOutQuad }
             }
-            NumberAnimation { target: sweep; property: "opacity"; to: 0; duration: Theme.motion(300) }
+            NumberAnimation { target: area._sweep; property: "opacity"; to: 0; duration: Theme.motion(300) }
         }
         QtObject { id: spreadFrom; property real value: 0 }
         QtObject { id: spreadTo; property real value: 0 }
         QtObject { id: runFrom; property real value: 0 }
         QtObject { id: runTo; property real value: 0 }
+    }
+
+    // ---- Ember Glass: the gesture light ---------------------------------------
+    // Onyx Reborn's longer bar (onyx.css:105), 118 x 4 with radius 2 on
+    // phones and tablets, its ends fading to nothing, lit in Ember's
+    // gold-to-ember (gesture-light.gradient: gold-white at the centre,
+    // through gold and ember to nothing at both ends). Its glow follows the
+    // gradient's alpha, so it fades with the ends (gesture-light.glow, a
+    // CSS drop-shadow of 4 px; a box glow would light the whole rectangle).
+    // It breathes over 1.6 s (motion.breathe) while a finger is on the area.
+    // Lit, dim and the glow after a tap are 1.0's (the original's light bar).
+    Item {
+        id: egLight
+        objectName: "emberGestureLight"
+        visible: Theme.emberGlass
+        anchors.centerIn: parent
+        width: Theme.px(EmberGlass.gestureLightWidth)
+        height: Math.max(2, Theme.px(EmberGlass.gestureLightHeight))
+        opacity: area.lit ? 1 : 0.25 + 0.75 * area.glow
+        Behavior on opacity { NumberAnimation { duration: Theme.motion(300) } }
+        // The glow's strength: 1, or breathing while a finger is down.
+        property real breath: 1
+        SequentialAnimation {
+            running: egLight.visible && mouse.pressed && !Theme.reduceMotion
+            loops: Animation.Infinite
+            NumberAnimation { target: egLight; property: "breath"; to: 0.45; duration: EmberGlass.motionBreathe / 2; easing.type: Easing.InOutSine }
+            NumberAnimation { target: egLight; property: "breath"; to: 1; duration: EmberGlass.motionBreathe / 2; easing.type: Easing.InOutSine }
+            // The finger lifted: back to full.
+            onRunningChanged: if (!running) breathBack.restart()
+        }
+        NumberAnimation { id: breathBack; target: egLight; property: "breath"; to: 1; duration: Theme.motion(300); easing.type: Easing.OutQuad }
+
+        // The bar: the token's gradient across it, its stops made from the
+        // token (any number of them).
+        Rectangle {
+            id: egGradient
+            objectName: "emberGestureGradient"
+            anchors.fill: parent
+            radius: Math.min(height / 2, Theme.px(EmberGlass.gestureLightRadius))
+            gradient: Gradient {
+                id: egStops
+                orientation: Gradient.Horizontal
+            }
+            Component.onCompleted: {
+                var list = [];
+                var stops = EmberGlass.gestureLightGradient.stops;
+                for (var i = 0; i < stops.length; ++i)
+                    list.push(egStop.createObject(egStops, { position: stops[i].position, color: stops[i].color }));
+                egStops.stops = list;
+            }
+            Component { id: egStop; GradientStop {} }
+        }
+        // The glow: CSS's drop-shadow, the bar's own alpha blurred in the
+        // glow's colour, drawn once into a picture (Canvas's shadow is
+        // drop-shadow's: the shape's alpha times shadowColor, blurred by
+        // shadowBlur, a Gaussian of half that deviation). The bar is drawn
+        // off the canvas and only its shadow falls on it. A picture, so the
+        // low end (no GPU) has it too (SPEC.md, "GPU cost and fallback").
+        Canvas {
+            id: egGlow
+            objectName: "emberGestureGlow"
+            readonly property real blur: Theme.px(EmberGlass.gestureLightGlow.blur)
+            // Room for the blur: three deviations each way.
+            readonly property int pad: Math.ceil(1.5 * blur) + 1
+            x: -pad
+            y: -pad
+            z: -1
+            width: egLight.width + 2 * pad
+            height: egLight.height + 2 * pad
+            opacity: egLight.breath
+            onWidthChanged: requestPaint()
+            onHeightChanged: requestPaint()
+            onPaint: {
+                var ctx = getContext("2d");
+                ctx.reset();
+                var w = egLight.width, h = egLight.height, r = egGradient.radius;
+                var off = width + 2 * pad;
+                var x0 = pad - off, y0 = pad;
+                ctx.shadowColor = EmberGlass.gestureLightGlow.color;
+                ctx.shadowBlur = blur;
+                ctx.shadowOffsetX = off;
+                ctx.shadowOffsetY = 0;
+                var g = ctx.createLinearGradient(x0, 0, x0 + w, 0);
+                var stops = EmberGlass.gestureLightGradient.stops;
+                for (var i = 0; i < stops.length; ++i)
+                    g.addColorStop(stops[i].position, stops[i].color);
+                ctx.fillStyle = g;
+                ctx.beginPath();
+                ctx.roundedRect(x0, y0, w, h, r, r);
+                ctx.fill();
+            }
+        }
+        // Each gesture's light runs along it as along 1.0's bar.
+        Item {
+            id: egBar
+            anchors.fill: parent
+            clip: true
+            Rectangle {
+                id: egSweep
+                objectName: "emberLightSweep"
+                property real spread: 0
+                property real run: 0
+                height: parent.height
+                radius: height / 2
+                width: spread
+                x: spreadTo.value === spreadFrom.value ? run : (parent.width - spread) / 2
+                opacity: 0
+            }
+        }
     }
 
     MouseArea {

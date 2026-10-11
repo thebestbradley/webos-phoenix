@@ -2731,7 +2731,14 @@ FocusScope {
                     anchors.fill: parent
 
                     Wallpaper {
+                        id: wallpaperItem
+                        objectName: "wallpaper"
                         anchors.fill: parent
+                        // Ember Glass: the wallpaper lies under the whole
+                        // screen, the gesture strip's scrim over it too
+                        // (base.css .device > .wall, inset 0); the strip is
+                        // below the UI's bottom edge at every turn.
+                        anchors.bottomMargin: Theme.emberGlass ? -Theme.gestureAreaHeight : 0
                         source: shell.wallpaper
                     }
 
@@ -3402,7 +3409,9 @@ FocusScope {
                     anchors.fill: parent
                     anchors.topMargin: Theme.statusBarHeight
                     anchors.bottomMargin: notes.negativeSpace
-                    visible: !Theme.tablet && !shell.fullScreen
+                    // Ember Glass: each card has its own corners over the
+                    // wallpaper (radius.card), maximized too (docs/SYSTEM-UI-2.md).
+                    visible: !Theme.tablet && !shell.fullScreen && !Theme.emberGlass
                     Image { anchors.left: parent.left; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-left.png") }
                     Image { anchors.right: parent.right; anchors.top: parent.top; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-top-right.png") }
                     Image { anchors.left: parent.left; anchors.bottom: parent.bottom; width: Theme.screenCornerSize; height: width; source: Theme.asset("wm-corner-bottom-left.png") }
