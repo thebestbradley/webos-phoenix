@@ -428,7 +428,11 @@ out of the box, as on Ubuntu and Debian. The rules that follow from it:
 6. **What may not be redistributed is not shipped, hosted or fetched by
    Phoenix.** For such hardware, firmware is taken from the user's own
    device (an Android vendor partition, at install time), never shipped
-   (HARDWARE.md, "Reverse engineering").
+   (HARDWARE.md, "Reverse engineering"). The first Qualcomm targets work
+   this way: `tools/device-firmware.py` takes the Fairphone 6's firmware
+   from the factory image the owner downloads from Fairphone, and the Odin
+   2 Portal's from a copy off the device, and writes it into the owner's own
+   root image before flashing (HARDWARE.md, "Firmware the phone brings").
 7. **Out-of-tree drivers** (`meta-phoenix` `rtl8812au`, `rtl8814au`) are
    GPL-2.0, built from their upstream sources, and offered separately, not
    in the image. A service in the catalog is reviewed by a person first

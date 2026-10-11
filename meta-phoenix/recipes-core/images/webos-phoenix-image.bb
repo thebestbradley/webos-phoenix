@@ -18,6 +18,11 @@ IMAGE_FEATURES:remove = "${@'debug-tweaks ssh-server-dropbear ssh-server-openssh
 IMAGE_INSTALL:append = " phoenix-shell phoenix-keyboard phoenix-apps phoenix-pty phoenix-devices phoenix-diag packagegroup-phoenix-terminal \
     packagegroup-phoenix-assistant"
 
+# The machine's device configuration: /etc/phoenix/device.json (form
+# factor, density, buttons, the ringer switch) and the compositor's
+# geometry (docs/HARDWARE.md, "Device configuration").
+IMAGE_INSTALL:append = " phoenix-device-config"
+
 # Hardware (docs/HARDWARE.md, "Hardware support and the Hardware app"):
 # every open source kernel module the kernel was built with (the
 # phoenix-hardware*.cfg fragments), loaded by modalias when the hardware is

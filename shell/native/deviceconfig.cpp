@@ -33,3 +33,19 @@ int DeviceConfig::homeButtonOrientationAngle() const
 {
     return m_values.value(QStringLiteral("homeButtonOrientationAngle")).toInt(0);
 }
+
+QString DeviceConfig::formFactor() const
+{
+    const QString f = m_values.value(QStringLiteral("formFactor")).toString(QStringLiteral("auto"));
+    if (f == QLatin1String("phone") || f == QLatin1String("tablet") || f == QLatin1String("auto"))
+        return f;
+    qWarning("phoenix: %s: formFactor \"%s\" is not phone, tablet or auto; using auto",
+             qPrintable(m_path), qPrintable(f));
+    return QStringLiteral("auto");
+}
+
+qreal DeviceConfig::density() const
+{
+    const double d = m_values.value(QStringLiteral("density")).toDouble(0);
+    return d > 0 ? d : 0;
+}

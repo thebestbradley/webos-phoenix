@@ -38,7 +38,10 @@ FocusScope {
         id: phoenix
         anchors.fill: parent
         focus: true
-        formFactor: "auto"
+        // The machine's /etc/phoenix/device.json (phoenix-device-config):
+        // "auto" and the panel's own density unless the device names them.
+        formFactor: DeviceConfig.formFactor
+        density: DeviceConfig.density
         hardwareHomeButton: DeviceConfig.hardwareHomeButton
         homeButtonOrientationAngle: DeviceConfig.homeButtonOrientationAngle
         source: LsmWindowSource { id: windows }

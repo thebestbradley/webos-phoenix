@@ -18,7 +18,7 @@ plan, milestone by milestone. Every gap still open, by area and priority:
 | Development devices | 0 | 3 |
 | M1: running on webOS OSE | 0 | 10 |
 | M2: legacy UI parity | 18 | 2 |
-| M3: phones and tablets | 0 | 7 |
+| M3: phones and tablets | 0 | 8 |
 | M4: core apps and services | 12 | 10 |
 | M5: modernize, within 1.x | 2 | 3 |
 | M6: the last 1.0 features | 13 | 1 |
@@ -171,7 +171,8 @@ build on LuneOS's layers ([LUNEOS.md](LUNEOS.md#9-recommendation)).
 - [ ] Browser on the device: a native page view for enyo.WebView under WebAppMgr
       (OSE has no BrowserAdapter), e.g. a compositor-side view like the simulator's
 - [ ] Rotation on the device: the orientation sensor and apps' orientation requests
-- [ ] `device.json` read on the device (hardware home button, and later other features)
+- [ ] `device.json` read on the device (hardware home button, form factor, density; installed per
+      machine by `phoenix-device-config`)
 - [ ] Pixel comparison against reference screenshots of real devices
 
 ## M2: legacy UI parity
@@ -230,7 +231,12 @@ simulator, the P2 rows are listed there.
 Device tiers, the driver plan and the phased timeline are in
 [HARDWARE.md](HARDWARE.md).
 
-- [ ] First devices on LuneOS's layers: Pixel 3a (Halium and mainline), OnePlus 6, PinePhone Pro, FuriLabs FLX1s
+- [ ] 🟡 First targets (owner, 11 October 2026; [HARDWARE.md](HARDWARE.md#first-targets)):
+      Fairphone 6/6+ (phone), AYN Odin 2 Portal (tablet), PinePhone Pro, PinePhone and
+      PineTab2, on mainline kernels: machines, pinned kernels, boot images and device
+      configuration in meta-phoenix, parsed in CI; not built, waiting on hardware and a
+      newer Mesa ([OPEN-QUESTIONS.md](OPEN-QUESTIONS.md) Q76-Q83)
+- [ ] Later devices on LuneOS's layers: Pixel 3a (Halium and mainline), OnePlus 6, FuriLabs FLX1s
 - [ ] A keyboard phone: Zinwa Q25 (unlocked, LuneOS config `q25`)
 - [ ] Telephony and SMS (oFono, LuneOS's `webos-telephonyd`), cellular indicators
 - [ ] Sensors: accelerometer, proximity, ambient light

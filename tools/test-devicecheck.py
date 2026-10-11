@@ -104,6 +104,21 @@ def main():
         ok(out is not None and not [x for x in out["new"] if x["id"].startswith("recipes:service-file")],
            "a .service file naming several services its role file allows passes")
 
+    # A download is pinned by a sha256sum, or by a stronger sum BitBake also
+    # checks (sha384sum, sha512sum); with none it is not.
+    with tempfile.TemporaryDirectory() as tree:
+        rdir = os.path.join(tree, "meta-phoenix", "recipes-kernel", "linux")
+        os.makedirs(rdir)
+        lic = 'LICENSE = "MIT"\nLIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"\n'
+        with open(os.path.join(rdir, "strong_1.0.bb"), "w") as f:
+            f.write(lic + 'SRC_URI = "https://example.org/k.tar.gz;name=kernel"\nSRC_URI[kernel.sha512sum] = "00"\n')
+        with open(os.path.join(rdir, "bare_1.0.bb"), "w") as f:
+            f.write(lic + 'SRC_URI = "https://example.org/k.tar.gz;name=kernel"\n')
+        status, out = run("recipes", tree, "--allowlist", "none")
+        ids = [x["id"] for x in out["new"]] if out else []
+        ok(not [i for i in ids if "strong_1.0.bb" in i], "a download with a sha512sum is pinned: %s" % ids)
+        ok([i for i in ids if i.startswith("recipes:unpinned:bare_1.0.bb")], "a download without a sum is not")
+
     # install-rootfs.py: each app gets its ACG files, as meta-webos writes them.
     import importlib.util
     spec = importlib.util.spec_from_file_location("install_rootfs", os.path.join(TOOLS, "install-rootfs.py"))

@@ -50,6 +50,21 @@ open(path, "w").write(src[:end + 1] + entry + src[end + 1:])
 PY
 fi
 
+# meta-phoenix's own machines (meta-phoenix/conf/machine: the Fairphone 6,
+# the Odin 2 Portal, the PINE64 devices; docs/HARDWARE.md, "First targets"):
+# mcf refuses a MACHINE that weboslayers.py's Machines does not list.
+python3 - "$REPO_DIR/meta-phoenix/conf/machine" <<'PY'
+import os, re, sys
+path = "weboslayers.py"
+src = open(path).read()
+m = re.search(r"^Machines = \[(.*?)\]", src, re.M)
+have = re.findall(r"'([^']+)'", m.group(1))
+add = sorted(f[:-5] for f in os.listdir(sys.argv[1]) if f.endswith(".conf") and f[:-5] not in have)
+if add:
+    line = "Machines = [%s]" % ", ".join("'%s'" % x for x in have + add)
+    open(path, "w").write(src[:m.start()] + line + src[m.end():])
+PY
+
 ./mcf -p 0 -b 0 --command "${MCF_COMMAND:-update+configure}" "$MACHINE" "$@"
 echo
 echo "Ready. Next:"

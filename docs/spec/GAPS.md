@@ -34,6 +34,11 @@ device, not yet run"):
 
 - ⬜ **P0** Run it: a first image on qemux86-64 or a Raspberry Pi 4 (OPEN-QUESTIONS Q2),
   and every item below checked there.
+- 🟡 **P0** The first targets (OPEN-QUESTIONS Q2, decided 11 October 2026): Fairphone 6/6+,
+  AYN Odin 2 Portal, PinePhone Pro, PinePhone, PineTab2 have machines, pinned kernels,
+  boot images and device.json in meta-phoenix (HARDWARE.md, "First targets"), parsed in
+  CI, not built or booted; the shell takes `formFactor` and `density` from device.json.
+  Blocked on a Mesa new enough for their Adreno GPUs (Q79) and on hardware (Q76-Q82).
 - 🟡 **P0** E1: Edit and the long-press popup written for WebAppMgr (through the pages'
   line to the shell, `services/shellhost`), not run.
 - 🟡 **P0** The one-process audit (docs/DEVICE-AUDIT.md): what a page did by calling the
