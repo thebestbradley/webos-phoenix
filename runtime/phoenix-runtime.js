@@ -5319,6 +5319,7 @@
         var text = PalmSystem.getResource("/usr/share/phoenix/runtime/sample-data.js");
         var data;
         try {
+            if (pageForbidsEval()) throw new EvalError("this page's Content-Security-Policy forbids eval");
             data = new Function(text + "\nreturn phoenixSampleData;")()(new Date());
         } catch (e) {
             console.warn("[phoenix-runtime] sample data not loaded: " + e);
@@ -13137,6 +13138,33 @@
         return null;
     }
 
+    // A page whose Content-Security-Policy forbids eval (its script-src, or
+    // its default-src when it has none, without 'unsafe-eval'), as
+    // phoenix-default-apps' Passwords and Authenticator do, cannot build a
+    // module with new Function: the browser throws EvalError and reports a
+    // violation to the page. The runtime refuses first, with the same error,
+    // so such a page sees no violation; the services it would have hosted
+    // are simply not in it (on a device they run in processes of their own).
+    // Read at each use: a policy in a <meta> only applies once it is parsed.
+    function pageForbidsEval() {
+        var doc = global.document;
+        if (!doc || !doc.querySelectorAll) return false;
+        var metas = doc.querySelectorAll("meta[http-equiv]");
+        for (var i = 0; i < metas.length; i++) {
+            if (String(metas[i].getAttribute("http-equiv")).toLowerCase() !== "content-security-policy") continue;
+            var script = null, fallback = null;
+            String(metas[i].getAttribute("content") || "").split(";").forEach(function (d) {
+                var words = d.trim().toLowerCase().split(/\s+/);
+                var name = words.shift();
+                if (name === "script-src") script = words;
+                else if (name === "default-src") fallback = words;
+            });
+            var sources = script || fallback;
+            if (sources && sources.indexOf("'unsafe-eval'") < 0) return true;
+        }
+        return false;
+    }
+
     function nodeServiceLoader(serviceDir, label) {
         var modules = {};
         // A module of the service looks in the service's folders; one of a
@@ -13168,6 +13196,8 @@
                 if (!found) throw new Error(label + ": no module " + name + " in the simulator");
                 return loadAbsolute(found);
             }
+            if (pageForbidsEval())
+                throw new EvalError(label + ": this page's Content-Security-Policy forbids eval, so " + path + " is not run in it");
             new Function("module", "exports", "require", text + "\n//# sourceURL=" + path)(module, module.exports, req);
             return module.exports;
         }
