@@ -66,6 +66,13 @@ async function waitForServer(url, ms) {
 const spot = (page, text) => page.locator(".spottable", { hasText: text }).first();
 const button = (page, label) => page.locator(`[aria-label="${label}"]`).first();
 const pause = (page, ms = 700) => page.waitForTimeout(ms);
+// A check of what a page shows waits for it to show (as Playwright's own
+// expect() does), up to 10 s: the page draws what a click or a stored change
+// brings in its own time, later on a busy machine. A single isVisible() after
+// a fixed pause read the Recently Deleted list before it was redrawn under
+// CI's load (webos-phoenix PR #26, run 38181643007).
+const shows = (loc, ms = 10000) => loc.waitFor({ state: "visible", timeout: ms }).then(() => true, () => false);
+const gone = (loc, ms = 10000) => loc.waitFor({ state: "hidden", timeout: ms }).then(() => true, () => false);
 
 async function main() {
     for (const app of ["enact-notes-limestone", "enact-notes-agate"]) {
@@ -96,7 +103,7 @@ async function main() {
 
         // ---- Limestone --------------------------------------------------------
         const lime = await open(LIMESTONE);
-        check(await spot(lime, "Welcome to Notes").isVisible(), "Limestone: the welcome note is there on a first run");
+        check(await shows(spot(lime, "Welcome to Notes")), "Limestone: the welcome note is there on a first run");
         await spot(lime, "Welcome to Notes").click();
         await pause(lime);
         check((await editorText(lime)).startsWith("# Welcome to Notes"), "Limestone: a note opens as Markdown");
@@ -114,7 +121,7 @@ async function main() {
         await lime.keyboard.type("eggs");
         await pause(lime, 1200);
         check(await editorText(lime) === "# Groceries\n\n- [ ] milk\n- [ ] eggs", "Limestone: a new note starts with a title, and Enter continues a checklist");
-        check(await spot(lime, "Groceries").isVisible(), "Limestone: the note is listed by its first line");
+        check(await shows(spot(lime, "Groceries")), "Limestone: the note is listed by its first line");
         await lime.screenshot({ path: path.join(outDir, "limestone-editor.png") });
 
         await button(lime, "Preview").click();
@@ -149,7 +156,7 @@ async function main() {
 
         // ---- Agate (the same notes) -------------------------------------------
         const agate = await open(AGATE);
-        check(await spot(agate, "Groceries").isVisible(), "Agate: the note written in Limestone is there");
+        check(await shows(spot(agate, "Groceries")), "Agate: the note written in Limestone is there");
         check(await agate.locator(".spottable", { hasText: "Work" }).count() > 0, "Agate: so is the folder, as a tab");
         await spot(agate, "Groceries").click();
         await pause(agate);
@@ -174,7 +181,7 @@ async function main() {
         await pause(agate, 1000);
         await agate.locator(".spottable", { hasText: "Work" }).first().click();
         await pause(agate);
-        check(await spot(agate, "Groceries").isVisible(), "Agate: the note moves to the folder");
+        check(await shows(spot(agate, "Groceries")), "Agate: the note moves to the folder");
 
         await spot(agate, "Groceries").click();
         await pause(agate);
@@ -187,12 +194,12 @@ async function main() {
         await pause(agate, 1000);
         await spot(agate, "Recently Deleted").click();
         await pause(agate);
-        check(await spot(agate, "Groceries").isVisible(), "Agate: a deleted note is in Recently Deleted");
+        check(await shows(spot(agate, "Groceries")), "Agate: a deleted note is in Recently Deleted");
         await spot(agate, "Groceries").click();
         await pause(agate);
         await spot(agate, "Recover").click();
         await pause(agate, 1000);
-        check(!(await spot(agate, "Groceries").isVisible().catch(() => false)), "Agate: a recovered note leaves Recently Deleted");
+        check(await gone(spot(agate, "Groceries")), "Agate: a recovered note leaves Recently Deleted");
         await agate.screenshot({ path: path.join(outDir, "agate-recovered.png") });
 
         // ---- A phone (320 px): one pane at a time, Back closes the note -------
@@ -202,16 +209,16 @@ async function main() {
             page.on("pageerror", (e) => errors.push(`${id} (phone): ${e.message}`));
             await page.goto(appUrl(id));
             await pause(page, 2500);
-            check(await page.locator("textarea").count() === 0 && await spot(page, "Groceries").isVisible(),
+            check(await shows(spot(page, "Groceries")) && await page.locator("textarea").count() === 0,
                   `${name} on a phone: the notes alone, no note beside them`);
             await spot(page, "Groceries").click();
             await pause(page, 1000);
-            check(await page.locator("textarea").count() > 0 && !(await spot(page, "Groceries").isVisible().catch(() => false)),
+            check(await shows(page.locator("textarea").first()) && await gone(spot(page, "Groceries")),
                   `${name} on a phone: a note opens in the list's place`);
             await page.screenshot({ path: path.join(outDir, `${name.toLowerCase()}-phone-note.png`) });
             check(await page.evaluate(() => __phoenixRuntime.back()) === true, `${name} on a phone: Back is the app's while a note is open`);
             await pause(page, 1000);
-            check(await page.locator("textarea").count() === 0 && await spot(page, "Groceries").isVisible(),
+            check(await shows(spot(page, "Groceries")) && await page.locator("textarea").count() === 0,
                   `${name} on a phone: and goes back to the notes`);
             check(await page.evaluate(() => __phoenixRuntime.back()) === false, `${name} on a phone: then Back is the system's`);
             await page.close();
