@@ -378,6 +378,7 @@ jobs:
           t node tools/test-dav-sync.cjs --out app-tests/dav-phone
           t node tools/test-dav-sync.cjs --tablet --out app-tests/dav-tablet
           t node tools/test-accounts.cjs --out app-tests/accounts
+          t node tools/test-runtime-csp.cjs
           t node tools/test-xmpp.cjs --out app-tests/xmpp-phone
           t node tools/test-matrix.cjs --out app-tests/matrix-phone
           t node tools/test-deltachat.cjs --out app-tests/deltachat-phone
