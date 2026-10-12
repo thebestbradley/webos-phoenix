@@ -708,6 +708,7 @@ Item {
         function onVolumeChanged() { root.statusChanged("volume"); }
         function onKeyboardChanged() { root.statusChanged("keyboard"); }
         function onKeyboardIdChanged() { root.statusChanged("keyboardId"); }
+        function onKeyboardSizeChanged() { root.statusChanged("keyboardSize"); }
     }
     // The browser's page views and the system proxy (the runtime's
     // systemStatus browser and proxy; shell/sim/simbrowser.h).

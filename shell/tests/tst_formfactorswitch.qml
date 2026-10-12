@@ -175,6 +175,56 @@ Item {
             compare(kb.width, 320);
         }
 
+        // Settings > Text Assist > Number row (the owner, 12 October 2026):
+        // unset, each form factor's own (the tablet's number row, none on
+        // the phone); set, the same on both. Switched while the keyboard is
+        // up, it keeps its size right: the negative space is its height.
+        function test_numberRowFollowsTheFormFactor() {
+            var kb = shell.keyboard;
+            function settled() {
+                tryVerify(function() { return kb.visible && !kb._paintQueued && kb.keyRect("q") !== null; }, 2000, "laid out");
+                tryCompare(shell.notifications, "negativeSpace", kb.keyboardHeight, 2000);
+            }
+            sys.tweaks = {};
+            field.forceActiveFocus();
+            tryCompare(shell, "keyboardOpen", true, 2000);
+            settled();
+            verify(kb.keyRect("1") === null, "a phone: none");
+            var phoneHeight = kb.keysHeight;
+
+            tablet();
+            settled();
+            verify(kb.keyRect("1") !== null, "a tablet: its own");
+            compare(kb.keymap.rows, 5);
+            compare(kb.keysHeight, 340 * Theme.keyboardScale);
+            var tabletHeight = kb.keysHeight;
+            // Off: the tablet loses it, live.
+            sys.tweaks = { numberRow: false };
+            settled();
+            verify(kb.keyRect("1") === null, "off on a tablet");
+            compare(kb.keysHeight, tabletHeight - 55 * Theme.keyboardScale);
+
+            phone();
+            settled();
+            verify(kb.keyRect("1") === null, "off on a phone");
+            fuzzyCompare(kb.keysHeight, phoneHeight, 0.01);
+            // On: the phone has one, live, and so has the tablet.
+            sys.tweaks = { numberRow: true };
+            settled();
+            verify(kb.keyRect("1") !== null, "on on a phone");
+            fuzzyCompare(kb.keysHeight, Math.round(336 * 236 / 200) * Theme.keyboardScale, 0.01);
+            tablet();
+            settled();
+            verify(kb.keyRect("1") !== null, "on on a tablet");
+            compare(kb.keysHeight, tabletHeight);
+
+            sys.tweaks = {};
+            phone();
+            settled();
+            verify(kb.keyRect("1") === null);
+            fuzzyCompare(kb.keysHeight, phoneHeight, 0.01);
+        }
+
         function test_notifications() {
             windows.notify("org.webosphoenix.messaging", "Palm Pre", "Hi");
             tryVerify(function() { return windows.notifications.count === 1; }, 2000);

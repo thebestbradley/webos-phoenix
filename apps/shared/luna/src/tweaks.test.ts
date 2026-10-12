@@ -36,7 +36,7 @@ describe("Settings > Advanced", () => {
         await call("luna://com.webos.service.systemservice/setPreferences", { infiniteCardCyclingEnabled: true, launcherGridDensity: "dense" });
         expect(last("systemStatus")?.tweaks).toEqual({
             infiniteCardCycling: true, maximizeEdges: false, waveLauncher: true, tapRipple: true, animationSpeed: "normal",
-            gestureSensitivity: "normal", haptics: false, gridDensity: "dense", batteryPercent: false, numberRow: false,
+            gestureSensitivity: "normal", haptics: false, gridDensity: "dense", batteryPercent: false, numberRow: null,
             keyboardStyle: "auto", startupAnimation: "phoenix",
             keyboardButton: true, keyboardButtonSide: "right", keyboardButtonY: 1,
             keyboardButtonHintShown: false,
@@ -49,6 +49,19 @@ describe("Settings > Advanced", () => {
         expect((last("systemStatus")?.tweaks as Record<string, unknown>).startupAnimation).toBe("classic");
         await call("luna://com.webos.service.systemservice/setPreferences", { startupAnimation: "fireworks" });
         expect((last("systemStatus")?.tweaks as Record<string, unknown>).startupAnimation).toBe("phoenix");
+    });
+    it("the number row: true, false, or unset (null: the form factor's own, on for a tablet)", async () => {
+        await call("luna://com.webos.service.systemservice/setPreferences", { keyboardNumberRow: true });
+        expect((last("systemStatus")?.tweaks as Record<string, unknown>).numberRow).toBe(true);
+        await call("luna://com.webos.service.systemservice/setPreferences", { keyboardNumberRow: false });
+        expect((last("systemStatus")?.tweaks as Record<string, unknown>).numberRow).toBe(false);
+        await call("luna://com.webos.service.systemservice/setPreferences", { keyboardNumberRow: "yes" });
+        expect((last("systemStatus")?.tweaks as Record<string, unknown>).numberRow).toBe(null);
+        const r = await call("luna://com.webos.service.systemservice/getPreferences", { keys: ["keyboardNumberRow"] }) as Record<string, unknown>;
+        expect(r.keyboardNumberRow).toBe("yes");
+        localStorage.clear();
+        const fresh = await call("luna://com.webos.service.systemservice/getPreferences", { keys: ["keyboardNumberRow"] }) as Record<string, unknown>;
+        expect(fresh.keyboardNumberRow).toBe(null);
     });
     it("the keyboard button's place and Hide reach the shell, anything else read as the defaults", async () => {
         await call("luna://com.webos.service.systemservice/setPreferences", { keyboardButton: false, keyboardButtonSide: "left", keyboardButtonY: 0.25, keyboardButtonHintShown: true });

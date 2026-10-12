@@ -143,8 +143,12 @@ async function main() {
         await st.screenshot({ path: path.join(outDir, "advanced.png"), fullPage: true });
 
         await open("textassist");
+        // Unset, the switch shows the form factor's own (on for a tablet's
+        // keyboard, off for a phone's): a tap sets the other.
+        await st.evaluate((f) => window.__phoenixRuntime.applyHostStatus({ formFactor: f }), tablet ? "tablet" : "phone");
+        await st.waitForSelector(`[data-testid='ta-numberrow'][aria-checked='${tablet}']`);
         await st.click("[data-testid='ta-numberrow']");
-        await until(() => tweaks().numberRow === true, "Text Assist > Number row reaches the shell");
+        await until(() => tweaks().numberRow === !tablet, "Text Assist > Number row reaches the shell");
 
         await open("sounds");
         await st.click("[data-testid='repeat-toggle']");

@@ -56,7 +56,8 @@ function tweaks(p) {
         haptics: !!p.hapticFeedback,
         gridDensity: pick(p.launcherGridDensity, ["normal", "dense"], "normal"),
         batteryPercent: !!p.showBatteryPercent,
-        numberRow: !!p.keyboardNumberRow,
+        // true, false, or null: unset, the form factor's own (VirtualKeyboard.numberRow).
+        numberRow: typeof p.keyboardNumberRow === "boolean" ? p.keyboardNumberRow : null,
         keyboardStyle: pick(p.keyboardStyle, ["auto", "black", "touchpad"], "auto"),
         startupAnimation: pick(p.startupAnimation, ["phoenix", "classic"], "phoenix"),
         keyboardButton: p.keyboardButton !== false,
