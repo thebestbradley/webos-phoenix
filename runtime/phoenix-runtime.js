@@ -3802,8 +3802,21 @@
         // URL's enyoWindowParams only when there are no launch params. Pages
         // opened with enyoWindowParams (CrossAppUI iframes such as Email's
         // account wizard inside Accounts) are not app launches: no launchParams.
-        if (queryParam("launchParams") === null && queryParam("enyoWindowParams") !== null)
+        if (queryParam("launchParams") === null && queryParam("enyoWindowParams") !== null) {
             PalmSystem.launchParams = "";
+            // Enyo 1.0 keeps its windows on the root window's enyo: opener,
+            // rootWindow, else top (enyo-1.0 framework/source/palm/system/
+            // windows/manager.js:3-9). In the original the frame's top was
+            // Accounts, an Enyo 1.0 app; a frame in a page without Enyo 1.0
+            // (the rebuilt Accounts) is its own root, or enyo.windows throws
+            // while Enyo loads and the page is never drawn.
+            try {
+                if (global.top !== global && !(global.top.enyo && global.top.enyo.windows))
+                    global.rootWindow = global;
+            } catch (e) {
+                global.rootWindow = global;
+            }
+        }
         // Some apps (Email) spell the connection manager method getStatus.
         var cm = runtime.services["com.palm.connectionmanager"];
         if (cm && !cm["/getStatus"]) cm["/getStatus"] = cm["/getstatus"];

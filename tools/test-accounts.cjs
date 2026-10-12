@@ -14,7 +14,9 @@
 //   - "Find More ..." in Accounts' "Add an Account" opens the Marketplace
 //     with the original's params (com.palm.app.enyo-findapps is an alias);
 //   - Accounts launched (and relaunched) with {templateId} opens that
-//     template's sign-in.
+//     template's sign-in;
+//   - that sign-in page (Enyo 1.0) is drawn in a frame of a page without
+//     Enyo 1.0 too, as in an Accounts built on another framework.
 //
 //   node tools/test-accounts.cjs [--out DIR]
 
@@ -201,7 +203,35 @@ async function main() {
         await setup.goto(accountsUrl({ templateId: "com.webosphoenix.dav" }));
         check(await wizard(setup), "launched with {templateId}, Accounts opens that template's sign-in");
         await setup.screenshot({ path: path.join(outDir, "2-setup.png") });
+        // The same sign-in page in a frame of a page without Enyo 1.0 (an
+        // Accounts built on another framework, as phoenix-default-apps' is):
+        // Enyo 1.0 looks for its windows on the top window (enyo-1.0
+        // framework/source/palm/system/windows/manager.js:3-9), so the runtime
+        // makes the frame its own root, or Enyo stops loading and the page is
+        // never drawn.
+        const wizardSrc = (setup.frames().find((f) => /accounts\/wizard\.html/.test(f.url())) || { url: () => "" }).url();
         await setup.close();
+        const host2 = await context.newPage();
+        const frameErrors = [];
+        host2.on("pageerror", (e) => frameErrors.push(e.message));
+        await host2.goto(`${origin}/usr/palm/applications/org.webosphoenix.flashlight/index.html`);
+        await host2.waitForFunction(() => !!window.__phoenixRuntime);
+        check(await host2.evaluate(() => !(window.enyo && window.enyo.windows)), "a page without Enyo 1.0 to frame the sign-in in");
+        await host2.evaluate((src) => {
+            const f = document.createElement("iframe");
+            f.id = "signin";
+            f.src = src;
+            f.style.cssText = "position:fixed;inset:0;width:100%;height:100%;border:0;background:#fff;z-index:99";
+            document.body.appendChild(f);
+        }, wizardSrc);
+        const framed = host2.frameLocator("#signin");
+        const drawn = await framed.locator("input").first().waitFor({ state: "visible", timeout: 15000 }).then(() => true, () => false);
+        check(!!wizardSrc && drawn, "in a frame of a page without Enyo 1.0, the template's sign-in is drawn" + (drawn ? "" : ": " + (frameErrors.join("; ") || "no error")));
+        const frame = host2.frames().find((f) => /accounts\/wizard\.html/.test(f.url()));
+        check(!!frame && await frame.evaluate(() => !!(window.enyo && enyo.windows && enyo.windows.getRootWindow() === window && enyo.palmServices)),
+              "and Enyo 1.0 in the frame takes it as its root window, and loaded to its end (enyo.palmServices)");
+        await host2.screenshot({ path: path.join(outDir, "2b-setup-framed.png") });
+        await host2.close();
         await app.goto(accountsUrl({ templateId: "org.example.feeds" }));
         await app.waitForTimeout(3000);
         check(/USERNAME/i.test(await app.evaluate(() => document.body.innerText))
