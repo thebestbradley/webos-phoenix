@@ -142,6 +142,10 @@ Item {
             windows.pushSystemStatus({ deviceLocked: false, firstUse: true });
             var r = FakeBus.last("com.palm.systemmanager", "/phoenix/report");
             compare(JSON.stringify(r.params), JSON.stringify({ deviceLocked: false }));
+            // The shell's layout, for Settings (getSystemStatus formFactor).
+            windows.pushSystemStatus({ formFactor: "tablet", screen: { width: 1280, height: 800 } });
+            r = FakeBus.last("com.palm.systemmanager", "/phoenix/report");
+            compare(JSON.stringify(r.params), JSON.stringify({ formFactor: "tablet" }));
         }
 
         function test_soundsPlayTheirPcmTwins() {

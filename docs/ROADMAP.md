@@ -400,7 +400,7 @@ Agreed with the owner on 7 October 2026; [M6-PLAN.md](M6-PLAN.md) has the detail
   - [x] System: the power menu (hold Power), a Flashlight row in the system menu, battery percentage (in the simulator)
   - [x] Notifications: repeat until seen, private lock screen previews, the cycling email dashboard, per-contact tones (in the simulator)
   - [x] Settings > Advanced (animation speed, tap ripple, gesture sensitivity, haptics and the options above) (in the simulator)
-  - [x] Keyboard: a number row, off by default (in the simulator)
+  - [x] Keyboard: a number row, off by default on a phone, and off on a tablet's if the user chooses (in the simulator)
   - [x] Browser: private browsing, find on page, a content blocker, mobile or desktop sites, more search engines and a custom one, a system proxy (in the simulator)
   - [x] Sharing and sync: DropShare, subscribed .ics calendars, game controllers, a USB (OTG) page, tethering on phones (in the simulator)
   - [x] Health: temperature warnings, a battery usage pane (in the simulator)

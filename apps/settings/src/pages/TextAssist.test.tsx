@@ -1,22 +1,24 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Text Assist > Shortcuts and Keyboard style, and Sounds > the alert and
-// notification tones, against the simulated system service: what is saved
-// (x_palm_textinput, keyboardStyle, alerttone, notificationtone) and what the
+// Text Assist > Shortcuts, Keyboard style, Number row and Keyboard size, and
+// Sounds > the alert and notification tones, against the simulated system
+// service: what is saved (x_palm_textinput, keyboardStyle, keyboardNumberRow,
+// x_palm_virtualkeyboard_settings, alerttone, notificationtone) and what the
 // runtime tells the shell's keyboard and sounds (systemStatus
-// textAssist.shortcuts, tweaks.keyboardStyle, alerttone, notificationtone).
+// textAssist.shortcuts, tweaks.keyboardStyle, tweaks.numberRow, keyboardSize,
+// alerttone, notificationtone).
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
-import { system } from "@phoenix/luna";
+import { keyboardSize, numberRowShown, system, withKeyboardSettings } from "@phoenix/luna";
 import { installedKeyboards, keyboardStyle, moveKeyboard, TextAssistPage } from "./TextAssist";
 import { SoundsPage, toneOptions, SYSTEM_TONES } from "./Sounds";
 import { shortcutProblem, textInputPrefs, withShortcut, withoutShortcut } from "./shortcuts";
 
-type Runtime = { hostStatus(): Record<string, unknown> };
+type Runtime = { hostStatus(): Record<string, unknown>; applyHostStatus(st: object, opts?: object): void };
 const runtime = () => (window as unknown as { __phoenixRuntime: Runtime }).__phoenixRuntime;
 const hostMessages: { type: string; payload: Record<string, unknown> }[] = [];
 const lastStatus = () => [...hostMessages].reverse().find((m) => m.type === "systemStatus")?.payload ?? {};
@@ -182,5 +184,82 @@ describe("Text Assist > Hardware keyboard > Keyboard button", () => {
         // The shell's hold menu turns it off the same way; turned on elsewhere, it shows here.
         await system.setPreferences({ keyboardButton: true });
         await waitFor(() => expect(screen.getByTestId("ta-keyboardbutton").getAttribute("aria-checked")).toBe("true"));
+    });
+});
+
+describe("Text Assist > Number row (the owner, 12 October 2026)", () => {
+    const toggle = () => screen.getByTestId("ta-numberrow");
+    it("reads the setting, else the form factor's own", () => {
+        expect(numberRowShown(undefined, true)).toBe(true);
+        expect(numberRowShown(null, false)).toBe(false);
+        expect(numberRowShown(false, true)).toBe(false);
+        expect(numberRowShown(true, false)).toBe(true);
+    });
+    it("shows what this device's keyboard does, and flipping it writes the preference", async () => {
+        await system.setPreferences({ keyboardNumberRow: null });
+        runtime().applyHostStatus({ formFactor: "phone" });
+        render(<TextAssistPage />);
+        await screen.findByTestId("ta-numberrow");
+        expect(screen.getByTestId("ta-numberrow-row").textContent).toContain("Numbers above the letters");
+        // Unset: off on a phone, on on a tablet (the shell's layout, live).
+        await waitFor(() => expect(toggle().getAttribute("aria-checked")).toBe("false"));
+        expect((runtime().hostStatus().tweaks as { numberRow: unknown }).numberRow).toBe(null);
+        runtime().applyHostStatus({ formFactor: "tablet" });
+        await waitFor(() => expect(toggle().getAttribute("aria-checked")).toBe("true"));
+        // Off on the tablet: an explicit false, for both form factors.
+        fireEvent.click(toggle());
+        await waitFor(() => expect((lastStatus().tweaks as { numberRow: unknown }).numberRow).toBe(false));
+        await waitFor(() => expect(toggle().getAttribute("aria-checked")).toBe("false"));
+        runtime().applyHostStatus({ formFactor: "phone" });
+        await waitFor(() => expect(toggle().getAttribute("aria-checked")).toBe("false"));
+        // On on the phone: true, the tablet's too.
+        fireEvent.click(toggle());
+        await waitFor(() => expect((lastStatus().tweaks as { numberRow: unknown }).numberRow).toBe(true));
+        runtime().applyHostStatus({ formFactor: "tablet" });
+        await waitFor(() => expect(toggle().getAttribute("aria-checked")).toBe("true"));
+        await system.setPreferences({ keyboardNumberRow: null });
+        runtime().applyHostStatus({ formFactor: "phone" });
+    });
+});
+
+describe("Text Assist > Keyboard size", () => {
+    const settings = async () => (await new Promise<Record<string, unknown>>((res) => {
+        const sub = system.watchPreferences(["x_palm_virtualkeyboard_settings"], (v) => { sub.cancel(); res(v); });
+    })).x_palm_virtualkeyboard_settings;
+    it("reads the original's \"keyboard size\", Medium otherwise", () => {
+        expect(keyboardSize(undefined)).toBe(0);
+        expect(keyboardSize(JSON.stringify({ layout: "qwerty", language: "en", "keyboard size": -2 }))).toBe(-2);
+        expect(keyboardSize(JSON.stringify({ "keyboard size": 7 }))).toBe(1);
+        expect(keyboardSize("{broken")).toBe(0);
+        expect(JSON.parse(withKeyboardSettings(JSON.stringify({ layout: "azerty", language: "fr" }), { "keyboard size": 1 })))
+            .toEqual({ layout: "azerty", language: "fr", "keyboard size": 1 });
+    });
+    it("is a tablet's only; picked here, the shell's keyboard is told; picked on the keyboard, it shows here", async () => {
+        runtime().applyHostStatus({ formFactor: "phone" });
+        render(<TextAssistPage />);
+        await screen.findByTestId("ta-numberrow");
+        // (jsdom's 1024 x 768 card is a tablet's until the shell's layout arrives.)
+        await waitFor(() => expect(screen.queryByTestId("ta-keyboard-size")).toBeNull());
+        runtime().applyHostStatus({ formFactor: "tablet" });
+        const size = await screen.findByTestId("ta-keyboard-size");
+        await waitFor(() => expect(size.textContent).toContain("Medium"));
+        fireEvent.click(size);
+        expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Extra Small", "Small", "Medium", "Large"]);
+        fireEvent.click(screen.getByRole("option", { name: "Small" }));
+        await waitFor(() => expect(lastStatus().keyboardSize).toBe(-1));
+        expect(runtime().hostStatus().keyboardSize).toBe(-1);
+        await waitFor(() => expect(screen.getByTestId("ta-keyboard-size").textContent).toContain("Small"));
+        // The keyboard in use is kept beside it.
+        expect(JSON.parse(String(await settings()))).toMatchObject({ "keyboard size": -1 });
+        // The hide key's long press picks Large (the shell's systemStatus keyboardSize).
+        runtime().applyHostStatus({ keyboardSize: 1 });
+        await waitFor(() => expect(screen.getByTestId("ta-keyboard-size").textContent).toContain("Large"));
+        expect(JSON.parse(String(await settings()))["keyboard size"]).toBe(1);
+        // ... and the language key another keyboard: the size stays.
+        runtime().applyHostStatus({ keyboard: { layout: "qwerty", language: "none" } });
+        await waitFor(async () => expect(JSON.parse(String(await settings()))).toMatchObject({ language: "none", "keyboard size": 1 }));
+        expect(runtime().hostStatus().keyboardSize).toBe(1);
+        runtime().applyHostStatus({ keyboard: { layout: "qwerty", language: "en" }, keyboardSize: 0 });
+        runtime().applyHostStatus({ formFactor: "phone" });
     });
 });

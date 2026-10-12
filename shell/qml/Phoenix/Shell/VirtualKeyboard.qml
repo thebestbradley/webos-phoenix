@@ -172,13 +172,28 @@ Item {
             selectKeyboard(0);
     }
 
-    // Tablet: the keyboard size, -2 to 1 (XS, S, M, L).
+    // Tablet: the keyboard size, -2 to 1 (XS, S, M, L), as the system keeps
+    // it (VirtualKeyboardPreferences' "keyboard size",
+    // VirtualKeyboardPreferences.cpp:178-197, read back at :267-271). The
+    // hide key's long press picks one: keyboardSizeSelected, which the host
+    // keeps and hands back here (selectKeyboardSize, TabletKeyboard.cpp:946-950),
+    // as Settings > Text Assist > Keyboard size does.
     property int keyboardSize: 0
+    signal keyboardSizeSelected(int size)
     // Settings > Text Assist > Number row (docs/M6-PLAN.md F4; the
-    // community's keyboard layout patches): the phone keyboard gets a row of
-    // numbers above its letters, three quarters of a letter row tall, and
-    // grows by it. The tablet keyboard has its number row already.
-    property bool numberRow: false
+    // community's keyboard layout patches; the owner, 12 October 2026):
+    // true, false, or unset (null: the form factor's own, on for the tablet,
+    // off for the phone). On, the phone keyboard gets a row of numbers above
+    // its letters, three quarters of a letter row tall, and grows by it;
+    // off, the tablet keyboard loses its number row (TabletKeymap.cpp:188-194)
+    // and is shorter by it, its digits on the symbol page as the phone's.
+    // The letter rows keep their size either way.
+    property var numberRow: null
+    // The number row in effect, resolved here only (_hasNumberRow).
+    readonly property bool numberRowShown: _hasNumberRow(numberRow, tablet)
+    function _hasNumberRow(setting, isTablet) {
+        return setting === true || setting === false ? setting : !!isTablet;
+    }
     // Settings > Text Assist > Keyboard style (Phoenix; the owner, 8 October
     // 2026): the keys' look, apart from the layout (`tablet`). "auto": the
     // phone's black keys on a phone, the TouchPad's on a tablet, as each
@@ -193,8 +208,11 @@ Item {
             _setKeyboardHeight(_requestedHeight > 0 ? _requestedHeight : _presetHeight());
         _triggerRepaint();
     }
-    onNumberRowChanged: {
-        if (_km && _km.setNumberRow(numberRow)) {
+    onNumberRowShownChanged: {
+        // The keymap changes in place (a new one would be unsized). A form
+        // factor change makes a new keymap with its own (_reset): not this
+        // keymap of the other form factor.
+        if (_km && _km.tablet === tablet && _km.setNumberRow(numberRowShown)) {
             _extendedKeys = null;
             _availableSpaceChanged();
         }
@@ -1082,10 +1100,21 @@ Item {
     readonly property int _artKeyHalf: touchpadLook ? 70 : 48
     // The phone's number row: three quarters of a letter row.
     readonly property int _numberRowHalf: 36
+    // The keymap's number row, where the original tested the tablet's row 0
+    // (TabletKeyboard.cpp:49-57, 1490, 1702): with the number row off the
+    // tablet's row 0 is its top letters.
+    function _isNumberRow(r) { return r === 0 && !!_km && _km.numberRow; }
     function _rowHalf(r) {
-        return tablet && r === 0 ? _shortKeyHalf : _km && _km.numberRow && r === 0 ? _numberRowHalf : _keyHalf;
+        return _isNumberRow(r) ? (tablet ? _shortKeyHalf : _numberRowHalf) : _keyHalf;
     }
     readonly property int _shortKeyHalf: 55
+    // The height the number row adds to the keyboard's own (the phone's,
+    // which has none: +36) or takes from it (the tablet's, which has one:
+    // -55), in the art's pixels, beside its background's height (_bgHeight).
+    function _numberRowExtra() {
+        var has = !!_km && _km.numberRow;
+        return tablet ? (has ? 0 : -_shortKeyHalf) : (has ? _numberRowHalf : 0);
+    }
     // 9-tile corners: 22 phone, 13 tablet (PhoneKeyboard.cpp:181, TabletKeyboard.cpp:176).
     readonly property int _corner: touchpadLook ? 13 : 22
     // Phoenix: the phone's bordered keys (shift, delete, the bottom row)
@@ -1180,7 +1209,7 @@ Item {
         _refreshCandidates();
     }
     function _reset() {
-        _km = new KM.Keymap(tablet, layoutName, numberRow);
+        _km = new KM.Keymap(tablet, layoutName, _hasNumberRow(numberRow, tablet));
         _km.setCombos(_comboNames, keyboardIndex, _comboCap);
         _touches = ({});
         _extendedKeys = null;
@@ -1234,13 +1263,17 @@ Item {
     // Tablet: XS, S, M, L (TabletKeyboard.cpp:245-248).
     readonly property var _tabletPresets: [243, Math.floor((340 + 243) / 2), 340, 393]
 
-    function _presetHeight() {
-        if (tablet)
-            return _tabletPresets[Math.max(0, Math.min(3, 2 + keyboardSize))];
-        // PhoneKeyboard.cpp:231-232: 377 upright (Phoenix: cPhoneHeight), 260 on its side;
-        // the number row adds its share (keeping the letter rows' size).
-        var h = _landscape ? 260 : cPhoneHeight;
-        return _km && _km.numberRow ? Math.round(h * (_bgHeight + _numberRowHalf) / _bgHeight) : h;
+    // The height for a size (the tablet's, -2 to 1; keyboardSize when not
+    // given): the original's (getKeyboardHeight, TabletKeyboard.cpp:421-425;
+    // the phone's, PhoneKeyboard.cpp:231-232: 377 upright (Phoenix:
+    // cPhoneHeight), 260 on its side), with the number row's share added or
+    // taken away (_numberRowExtra), so the letter rows keep their size.
+    function _presetHeight(size) {
+        if (size === undefined)
+            size = keyboardSize;
+        var h = tablet ? _tabletPresets[Math.max(0, Math.min(3, 2 + size))] : _landscape ? 260 : cPhoneHeight;
+        var extra = _numberRowExtra();
+        return extra === 0 ? h : Math.round(h * (_bgHeight + extra) / _bgHeight);
     }
 
     function _availableSpaceChanged() {
@@ -1257,7 +1290,7 @@ Item {
     }
     onKeyboardSizeChanged: if (tablet) { _requestedHeight = _presetHeight(); _setKeyboardHeight(_requestedHeight); }
     Component.onCompleted: {
-        _km = new KM.Keymap(tablet, "qwerty", numberRow);
+        _km = new KM.Keymap(tablet, "qwerty", _hasNumberRow(numberRow, tablet));
         _km.setLayoutFamily(layoutName);
         _km.setCombos(_comboNames, keyboardIndex, _comboCap);
         TA.setLanguage(language, layoutName);
@@ -1280,10 +1313,13 @@ Item {
             height = Math.max(50, Math.min(height, screenHeight - 28));
         if (height <= 0 || width <= 0)
             return;
-        // The art's "ideal" sizes; the padding above the keys scales with them.
-        var fullHeight = _bgHeight + (_km.numberRow ? _numberRowHalf : 0);
-        var fullKeymapHeight = tablet ? Math.floor((2 * _shortKeyHalf + (rows - 1) * 2 * _keyHalf) / 2)
-                                      : (_km.numberRow ? _numberRowHalf + (rows - 1) * _keyHalf : rows * _keyHalf);
+        // The art's "ideal" sizes; the padding above the keys scales with
+        // them (TabletKeyboard.cpp:502-507, PhoneKeyboard.cpp:457-462): the
+        // background with the number row's share, the rows' own heights.
+        var fullHeight = _bgHeight + _numberRowExtra();
+        var fullKeymapHeight = 0;
+        for (r = 0; r < rows; ++r)
+            fullKeymapHeight += _rowHalf(r);
         if (fullHeight < fullKeymapHeight)
             fullHeight = fullKeymapHeight;
         var keymapHeight = Math.floor(height * fullKeymapHeight / fullHeight);
@@ -1391,7 +1427,7 @@ Item {
     // short keys in the TouchPad's look.
     function _keyBackground(x, y, key) {
         if (touchpadLook) {
-            if (y === 0 && (tablet || _km.numberRow))
+            if (_isNumberRow(y))
                 return "key-gray-short.png";
             if (key === KM.Key.Shift)
                 return _km.shiftMode === KM.ShiftMode.CapsLock ? "key-shift-lock.png"
@@ -1465,9 +1501,9 @@ Item {
             var plain = _km.mapPage(cx, cy, 0), alt = _km.mapPage(cx, cy, 1);
             var c = String.fromCharCode(key);
             if (plain !== alt && alt !== KM.Key.None) {
-                if (tablet) {
-                    twoH = cy === 0 && !KM.isFunctionKey(plain);
-                    twoV = !KM.isFunctionKey(plain) && cy > 0 && !KM.isLetter(plain);
+                if (tablet) {      // KeyCap_TwoHorizontal, KeyCap_TwoVertical (TabletKeyboard.cpp:49-57)
+                    twoH = _isNumberRow(cy) && !KM.isFunctionKey(plain);
+                    twoV = !KM.isFunctionKey(plain) && !_isNumberRow(cy) && !KM.isLetter(plain);
                 } else {
                     useTwo = twoV = !KM.isFunctionKey(plain) && !KM.isLetter(plain);
                 }
@@ -1576,7 +1612,7 @@ Item {
         } else {
             var size = Math.min(height, fontSize);
             var color = mainColor, back = touchpadLook ? mainBack : cFunctionColorBack;
-            if (touchpadLook && (cy > 0 || !tablet) && KM.isFunctionKey(key) && !KM.isTextShortcutKey(key)) {
+            if (touchpadLook && (!tablet || !_isNumberRow(cy)) && KM.isFunctionKey(key) && !KM.isTextShortcutKey(key)) {
                 color = cFunctionColor;
                 back = cFunctionColorBack;
             } else if (touchpadLook) {
@@ -1941,7 +1977,7 @@ Item {
                 break;
             default:
                 if (tablet && KM.isSizeKey(key))
-                    kb.keyboardSize = key - KM.Key.ResizeDefault;   // selectKeyboardSize
+                    kb.keyboardSizeSelected(key - KM.Key.ResizeDefault);   // selectKeyboardSize
                 break;
             }
         }
@@ -2246,7 +2282,7 @@ Item {
             if (strike)
                 text = text.slice(0, -1);
             // The keyboard in use, as the current size is (blue).
-            var current = (tablet && KM.isSizeKey(key) && _requestedHeight === _tabletPresets[key - KM.Key.ResizeTiny])
+            var current = (tablet && KM.isSizeKey(key) && _requestedHeight === _presetHeight(key - KM.Key.ResizeDefault))
                 || (KM.isComboKey(key) && key - KM.Key.ComboFirst === keyboardIndex);
             cells.push({ x: cx, y: cy, highlighted: extendedKey === key && key !== 0, text: text,
                          size: text.length < 6 ? cPopupFontSize : cPopupFontSize - 8,

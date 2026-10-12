@@ -263,10 +263,12 @@ function phoneAzerty() {   // sAzerty (:275-280)
 
 // Phoenix: a row of numbers above the letters (docs/M6-PLAN.md F4; the
 // community's keyboard layout patches), for the phone keyboard, whose
-// digits are otherwise on the letters' symbol page (the tablet keyboard
-// has its own number row, TabletKeymap.cpp:188-194). The digits, the
-// symbols above them on the symbol page and the same long-press
-// characters as there (PX.q1 ...), all 12 cells as the letter rows.
+// digits are otherwise on the letters' symbol page (PhoneKeymap.cpp:156-161).
+// The tablet keyboard has its own number row (TabletKeymap.cpp:188-194),
+// which the same setting can take away (tabletWithoutNumberRow). The
+// digits, the symbols above them on the symbol page and the same
+// long-press characters as there (PX.q1 ...), all 12 cells as the letter
+// rows.
 function phoneNumberRow() {
     return pairs(1, "1234567890", "!@#$%^&*()",
                  [PX.q1, PX.q2, PX.q3, PX.q4, PX.q5, PX.q6, PX.q7, PX.q8, PX.q9, PX.q0]).concat(nokeys(2));
@@ -431,6 +433,32 @@ function tabletAzerty() {   // sAzerty (:405-411)
     ];
 }
 
+// Phoenix: the tablet keyboard without its number row (Settings > Text
+// Assist > Number row off; the owner, 12 October 2026). The digits go where
+// the phone keeps them, on the symbol page of the top letter row (Q is 1,
+// W 2 ..., as PhoneKeymap.cpp:156-161), so they stay in reach. Nothing the
+// row had is lost: a long press on a digit there offers the number row's
+// own long-press characters (TX.q1 "1!¹¼½¡" ...: its shifted symbols, ! @ #
+// $ % ^ & * ( ) on QWERTY, and AZERTY's & É " ' ( - È ) Ç À), then the
+// symbol the letter had there before (` ~ € £ \ | { } [ ]), if not among
+// them. The number row's cells line up with the letters one to the right
+// (its first is half a key, invisible): digit d at x is the letter at x - 1.
+function tabletWithoutNumberRow(layout) {
+    var numbers = layout[0];
+    var letters = layout[1].slice();
+    for (var x = 1; x < numbers.length; ++x) {
+        var n = numbers[x], l = letters[x - 1];
+        if (n.w <= 0 || !n.ext || !isLetter(l.key))
+            continue;
+        var digit = n.ext[0];                    // the key's own digit, first of its long press
+        var ext = n.ext.slice();
+        if (ext.indexOf(l.alt) < 0)
+            ext.push(l.alt);
+        letters[x - 1] = K(l.w, l.key, digit, l.ext, ext);
+    }
+    return [letters].concat(layout.slice(2));
+}
+
 // "+ = [  ]", "Q w y": the spaces are HAIR SPACE (U+200A) (:417-425).
 var hair = " ";
 var tabletFamilies = {
@@ -497,9 +525,14 @@ var SymbolMode = { Off: 0, Lock: 1 };
 
 function Keymap(tablet, familyName, numberRow) {
     this.tablet = !!tablet;
-    // The phone keyboard's number row (Phoenix; phoneNumberRow): a fifth row.
-    this.numberRow = !tablet && !!numberRow;
-    this.rows = tablet || this.numberRow ? 5 : 4;   // cKeymapRows
+    // The number row (Phoenix; Settings > Text Assist > Number row, as the
+    // keyboard resolves it): the tablet's own (TabletKeymap.cpp:188-194),
+    // or the phone's added one (phoneNumberRow), above four letter rows.
+    // Without one the tablet has four rows (tabletWithoutNumberRow) and the
+    // phone its own four. Left out, each keyboard's own: the tablet's row,
+    // none on the phone.
+    this.numberRow = numberRow === undefined ? this.tablet : !!numberRow;
+    this.rows = this.numberRow ? 5 : 4;   // cKeymapRows
     this.columns = 12;                   // cKeymapColumns
     this.shiftMode = ShiftMode.Off;
     this.symbolMode = SymbolMode.Off;
@@ -537,7 +570,9 @@ Keymap.prototype.setLayoutFamily = function (name, force) {
         return false;
     this.family = family;
     this.layout = family.layout();
-    if (this.numberRow)
+    if (this.tablet && !this.numberRow)
+        this.layout = tabletWithoutNumberRow(this.layout);
+    else if (!this.tablet && this.numberRow)
         this.layout = [phoneNumberRow()].concat(this.layout);
     if (this.tablet) {
         this.bottomRows = { "": tabletRowWithEmoji(family.bottomRow("")), noEmoji: family.bottomRow(""),
@@ -551,10 +586,11 @@ Keymap.prototype.setLayoutFamily = function (name, force) {
     return true;
 };
 
-// The phone keyboard's number row on or off: the rows and the layout
-// again. Returns whether anything changed.
+// The number row on or off (either keyboard): the rows and the layout
+// again, the letter rows keeping their heights. Returns whether anything
+// changed.
 Keymap.prototype.setNumberRow = function (on) {
-    on = !this.tablet && !!on;
+    on = !!on;
     if (on === this.numberRow)
         return false;
     this.numberRow = on;
@@ -643,7 +679,11 @@ Keymap.prototype.map = function (x, y) {
     var wkey = this.wkey(x, y);
     var key = wkey.key;
     var numLock = this.tablet ? (this.numLock || (this.family.needNumLock && this.shiftMode === ShiftMode.CapsLock)) : this.numLock;
-    if (numLock && wkey.alt >= code("0") && wkey.alt <= code("9")) {
+    // The number lock types the number row's digits (AZERTY's, whose digits
+    // are its shifted keys); a letter keeps its own (the tablet without its
+    // number row has digits behind the top letters, tabletWithoutNumberRow,
+    // which AZERTY's caps lock must not type).
+    if (numLock && !isLetter(wkey.key) && wkey.alt >= code("0") && wkey.alt <= code("9")) {
         if (!this.isShiftActive())
             key = wkey.alt;
     } else {
@@ -946,7 +986,9 @@ Keymap.prototype.extendedChars = function (x, y) {
     var wkey = this.wkey(x, y);
     var ext;
     if (this.tablet) {
-        ext = (!isLetter(wkey.key) || !this.isSymbolActive()) ? wkey.ext : null;
+        // A letter on the symbol page: none (TabletKeymap.cpp:520-529), but
+        // for the digits there without the number row (tabletWithoutNumberRow).
+        ext = !isLetter(wkey.key) || !this.isSymbolActive() ? wkey.ext : wkey.altExt;
     } else if (isLetter(wkey.key) || isFunctionKey(wkey.key)) {
         ext = (this.page === 1 && wkey.key !== wkey.alt) ? wkey.altExt : wkey.ext;
     } else {

@@ -1979,15 +1979,17 @@
         // "low", "normal" or "high" (Buttah); a vibration on every tap
         // (Haptic Feedback Manager); the launcher's grid, "normal" or
         // "dense" (the icon grid patches); the battery's percentage in the
-        // status bar (Battery Percent and Icon); the keyboard's number row;
-        // the keyboard's look, "auto" (the phone's black keys on a phone,
-        // the TouchPad's on a tablet), "black" or "touchpad".
+        // status bar (Battery Percent and Icon); the keyboard's number row,
+        // true, false or unset (null: the form factor's own, on for the
+        // tablet keyboard, which had one, off for the phone's; the owner,
+        // 12 October 2026); the keyboard's look, "auto" (the phone's black
+        // keys on a phone, the TouchPad's on a tablet), "black" or "touchpad".
         animationSpeed: "normal",
         gestureSensitivity: "normal",
         hapticFeedback: false,
         launcherGridDensity: "normal",
         showBatteryPercent: false,
-        keyboardNumberRow: false,
+        keyboardNumberRow: null,
         keyboardStyle: "auto",
         // Phoenix's start-up animation: "phoenix" (the bird's story,
         // BootStory.qml) or "classic" (the original logo's glow).
@@ -2046,7 +2048,7 @@
             haptics: !!p.hapticFeedback,
             gridDensity: pick(p.launcherGridDensity, ["normal", "dense"], "normal"),
             batteryPercent: !!p.showBatteryPercent,
-            numberRow: !!p.keyboardNumberRow,
+            numberRow: typeof p.keyboardNumberRow === "boolean" ? p.keyboardNumberRow : null,
             keyboardStyle: pick(p.keyboardStyle, ["auto", "black", "touchpad"], "auto"),
             startupAnimation: pick(p.startupAnimation, ["phoenix", "classic"], "phoenix"),
             keyboardButton: p.keyboardButton !== false,
@@ -6638,6 +6640,9 @@
                 // the layout and the modifier keys remapped.
                 hardwareKeyboard: hardwareKeyboardPrefs(p.hardwareKeyboard),
                 keyboardId: keyboardIdInUse(p),
+                // The tablet keyboard's size (Settings > Text Assist >
+                // Keyboard size, or the hide key's long press).
+                keyboardSize: keyboardSize(p),
                 ringtone: (p.ringtone && p.ringtone.fullPath) || "",
                 // Phone preferences: unconditional call forwarding on (the
                 // status bar's call-forward icon, StatusBarInfo::setCallForward).
@@ -6781,6 +6786,23 @@
         function keyboardIdInUse(p) {
             var id = keyboardSettings(p).keyboardId, list = installedKeyboards(p);
             return list.indexOf(id) >= 0 ? id : list[0];
+        }
+        // The tablet keyboard's size, -2 to 1 (XS, S, M, L; 0 the default),
+        // where VirtualKeyboardPreferences kept it: "keyboard size" in
+        // x_palm_virtualkeyboard_settings beside the keyboard in use
+        // (saveSettings, VirtualKeyboardPreferences.cpp:189-197; read back
+        // at :267-271 and at start, applyInitSettings :63).
+        function keyboardSize(p) {
+            var v = keyboardSettings(p)["keyboard size"];
+            return typeof v === "number" && isFinite(v) ? Math.max(-2, Math.min(1, Math.round(v))) : 0;
+        }
+        // x_palm_virtualkeyboard_settings with these keys changed, the
+        // others kept (each writer keeps what the others wrote).
+        function withKeyboardSettings(p, changes) {
+            var next = {}, st = keyboardSettings(p), k;
+            for (k in st) next[k] = st[k];
+            for (k in changes) next[k] = changes[k];
+            return JSON.stringify(next);
         }
         function keyboardInUse(p) {
             var st = p.x_palm_virtualkeyboard_settings;
@@ -7647,8 +7669,12 @@
                     // gestureArea (Phoenix): the shell says whether there is one.
                     // learnedWords (Phoenix): what the keyboard learned that
                     // its word list lacks, as the shell last said.
+                    // formFactor (Phoenix): the shell's layout, "phone" or
+                    // "tablet", once it has said ("" before): Settings > Text
+                    // Assist shows the keyboard's options by it.
                     return ok({ ime: { visible: !!store.get("imeVisible", false) }, orientation: { ui: o.ui || "up", device: o.device || "up" },
-                                gestureArea: !!store.get("gestureArea", false), learnedWords: store.get("learnedWords", []) });
+                                gestureArea: !!store.get("gestureArea", false), learnedWords: store.get("learnedWords", []),
+                                formFactor: store.get("formFactor", "") });
                 });
             },
             "/getDeviceLockMode": function (p, reply, ctx) {
@@ -8389,6 +8415,13 @@
                 store.set("gestureArea", !!st.gestureArea);
                 changed();
             }
+            // The shell's layout, "phone" or "tablet" (getSystemStatus
+            // formFactor): the adaptive simulator switches it as its window
+            // is resized.
+            if ((st.formFactor === "phone" || st.formFactor === "tablet") && st.formFactor !== store.get("formFactor", "")) {
+                store.set("formFactor", st.formFactor);
+                changed();
+            }
             // A cable from a computer is in (com.palm.storage diskmode/hostIsConnected).
             if ("usbHost" in st) {
                 store.set("usbHost", !!st.usbHost);
@@ -8423,10 +8456,16 @@
                 if (kbSettings) {
                     var nextId = typeof st.keyboardId === "string" && installedKeyboards(prefs()).indexOf(st.keyboardId) >= 0
                         ? st.keyboardId : keyboardIdInUse(prefs());
-                    sys["/setPreferences"]({ x_palm_virtualkeyboard_settings: JSON.stringify({ layout: kbSettings.layout, language: kbSettings.language,
-                                                                                             keyboardId: nextId }) },
+                    sys["/setPreferences"]({ x_palm_virtualkeyboard_settings: withKeyboardSettings(prefs(), { layout: kbSettings.layout, language: kbSettings.language,
+                                                                                                           keyboardId: nextId }) },
                                            function () {}, { cancelled: function () { return false; } });
                 }
+                // The hide key's long press chose a size (selectKeyboardSize:
+                // saveSettings, VirtualKeyboardPreferences.cpp:178-197).
+                if (typeof st.keyboardSize === "number" && st.keyboardSize >= -2 && st.keyboardSize <= 1
+                        && Math.round(st.keyboardSize) !== keyboardSize(prefs()))
+                    sys["/setPreferences"]({ x_palm_virtualkeyboard_settings: withKeyboardSettings(prefs(), { "keyboard size": Math.round(st.keyboardSize) }) },
+                                           function () {}, { cancelled: function () { return false; } });
                 // The keyboard's "Add" (after backspace put back a corrected
                 // word): into the personal dictionary.
                 if (typeof st.dictionaryWordAdded === "string" && DICTIONARY_WORD.test(st.dictionaryWordAdded)) {

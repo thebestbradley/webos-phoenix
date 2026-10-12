@@ -409,6 +409,50 @@ async function main() {
         await page.click("[data-testid='ta-kb-qwertz-de']");
         await page.waitForSelector("[data-testid='ta-kb-qwertz-de'][aria-checked='false']");
         check(last().keyboard && last().keyboard.language === "en", "turned off, the keyboard in use goes back to the first");
+        // Number row (the owner, 12 October 2026): unset, the switch shows
+        // this device's keyboard (the shell's layout: on for a tablet, off
+        // for a phone); flipped, the preference is set, for both.
+        const form = tablet ? "tablet" : "phone";
+        await page.evaluate((f) => window.__phoenixRuntime.applyHostStatus({ formFactor: f }), form);
+        const numberRowPref = async () => (await svc("luna://com.webos.service.systemservice/getPreferences", { keys: ["keyboardNumberRow"] })).keyboardNumberRow;
+        check(await numberRowPref() === null, "Number row: unset by default");
+        await page.waitForSelector(`[data-testid='ta-numberrow'][aria-checked='${tablet}']`, { timeout: 5000 }).catch(() => {});
+        check(await page.getAttribute("[data-testid='ta-numberrow']", "aria-checked") === String(tablet),
+              `Number row: unset, ${tablet ? "on on a tablet" : "off on a phone"}`);
+        check((await page.textContent("[data-testid='ta-numberrow-row']")).includes("Numbers above the letters"), "Number row: its subtitle");
+        await page.click("[data-testid='ta-numberrow']");
+        await page.waitForSelector(`[data-testid='ta-numberrow'][aria-checked='${!tablet}']`);
+        check(await numberRowPref() === !tablet && last().tweaks && last().tweaks.numberRow === !tablet,
+              `Number row: flipped, the preference is ${!tablet} and reaches the shell (${JSON.stringify(last().tweaks && last().tweaks.numberRow)})`);
+        // The other form factor (the adaptive simulator): the same choice.
+        await page.evaluate((f) => window.__phoenixRuntime.applyHostStatus({ formFactor: f }), tablet ? "phone" : "tablet");
+        await page.waitForTimeout(300);
+        check(await page.getAttribute("[data-testid='ta-numberrow']", "aria-checked") === String(!tablet), "Number row: the choice holds on the other form factor");
+        await page.evaluate((f) => window.__phoenixRuntime.applyHostStatus({ formFactor: f }), form);
+        // Keyboard size: a tablet's only (the phone keyboard had none).
+        await page.waitForTimeout(300);
+        check(await page.locator("[data-testid='ta-keyboard-size']").count() === (tablet ? 1 : 0),
+              `Keyboard size: ${tablet ? "shown on a tablet" : "not on a phone"}`);
+        if (tablet) {
+            check((await page.textContent("[data-testid='ta-keyboard-size']")).includes("Medium"), "Keyboard size: Medium by default");
+            await page.click("[data-testid='ta-keyboard-size']");
+            await page.click("role=option[name='Small']");
+            for (let i = 0; i < 50 && last().keyboardSize !== -1; ++i) await page.waitForTimeout(100);
+            check(last().keyboardSize === -1, `Keyboard size: Small reaches the shell (${last().keyboardSize})`);
+            const kbSettings = async () => JSON.parse((await svc("luna://com.webos.service.systemservice/getPreferences", { keys: ["x_palm_virtualkeyboard_settings"] })).x_palm_virtualkeyboard_settings || "{}");
+            check((await kbSettings())["keyboard size"] === -1, "Keyboard size: kept as the original's \"keyboard size\"");
+            await shot("textassist-keyboard-size");
+            // The hide key's long press picks Large: shown here.
+            await page.evaluate(() => window.__phoenixRuntime.applyHostStatus({ keyboardSize: 1 }));
+            await page.waitForFunction(() => /Large/.test(document.querySelector("[data-testid='ta-keyboard-size']")?.textContent || ""), null, { timeout: 5000 }).catch(() => {});
+            check((await page.textContent("[data-testid='ta-keyboard-size']")).includes("Large"), "Keyboard size: one chosen on the keyboard shows here");
+            // The language key keeps it.
+            await page.evaluate(() => window.__phoenixRuntime.applyHostStatus({ keyboard: { layout: "qwerty", language: "none" } }));
+            const kept = await kbSettings();
+            check(kept["keyboard size"] === 1 && kept.language === "none", `Keyboard size: kept beside the keyboard in use (${JSON.stringify(kept)})`);
+            await page.evaluate(() => window.__phoenixRuntime.applyHostStatus({ keyboard: { layout: "qwerty", language: "en" } }));
+        }
+        await shot("textassist-layout");
         // Hardware keyboard: the shortcut scheme reaches the shell.
         check(last().keyboardShortcuts === "ipad", "iPad-style shortcuts by default");
         // ... on the Hardware Keyboard page (V8 (5)), with its layout and

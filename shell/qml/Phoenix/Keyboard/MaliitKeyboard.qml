@@ -142,6 +142,8 @@ Item {
         // Settings > Text Assist (the system preferences).
         numberRow: DK.numberRow(root.prefs)
         keyboardStyle: DK.keyboardStyle(root.prefs)
+        keyboardSize: DK.keyboardSize(root.prefs)
+        onKeyboardSizeSelected: (size) => root._setPreferences(DK.sizeChoice(root.prefs, size))
         tapSounds: DK.tapSounds(root.prefs)
         readonly property var _assistPrefs: DK.textAssist(root.prefs)
         textSuggestions: _assistPrefs.suggestions

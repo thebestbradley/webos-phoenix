@@ -114,6 +114,8 @@ FocusScope {
         function onKeyboardOpenChanged() { windows.pushSystemStatus({ ime: { visible: phoenix.keyboardOpen } }); }
         function onUiOrientationChanged() { root._pushOrientation(); }
         function onDeviceOrientationChanged() { root._pushOrientation(); }
+        // The shell's layout (getSystemStatus formFactor; sim.qml pushScreen).
+        function onTabletChanged() { windows.pushSystemStatus({ formFactor: phoenix.tablet ? "tablet" : "phone" }); }
     }
     // Which app is in front with the screen on, for Settings > Battery's
     // use (org.webosphoenix.battery, services/accessories): every minute
@@ -173,7 +175,7 @@ FocusScope {
     Component.onCompleted: {
         windows.lunaSubscribe("luna://com.webos.bootManager/getBootStatus", { subscribe: true }, root._bootStatus);
         windows.pushSystemStatus({ deviceLocked: phoenix.locked, dockMode: phoenix.dockMode,
-                                   ime: { visible: phoenix.keyboardOpen } });
+                                   ime: { visible: phoenix.keyboardOpen }, formFactor: phoenix.tablet ? "tablet" : "phone" });
         root._pushOrientation();
     }
 

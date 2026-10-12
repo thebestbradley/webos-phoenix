@@ -16,9 +16,18 @@
 // KeyboardButton.qml), system preference keyboardButton, on by default,
 // which its hold menu's Hide Keyboard Button turns off. Shortcuts: the user's text replacements
 // (TextAssistShortcuts.tsx; x_palm_textinput). Number row (Phoenix; the
-// community's keyboard layout patches, docs/M6-PLAN.md F4): digits above
-// the phone keyboard's letters, system preference keyboardNumberRow, off by
-// default (the tablet keyboard has its own number row). Keyboard style
+// community's keyboard layout patches, docs/M6-PLAN.md F4; the owner, 12
+// October 2026): digits above the letters, system preference
+// keyboardNumberRow, on phones and tablets; unset, each keeps its own (the
+// TouchPad's keyboard had a number row, the phone's had none), so the
+// switch shows what this device's keyboard does: the setting, else on for
+// a tablet layout (the shell's, getSystemStatus formFactor) and off for a
+// phone. Keyboard size (tablet layouts only: the phone keyboard had none,
+// PhoneKeyboard.h:136): the TouchPad keyboard's sizes, as its hide key's
+// long press offers them (XS, S, M, L), kept where the original kept them
+// (x_palm_virtualkeyboard_settings "keyboard size",
+// VirtualKeyboardPreferences.cpp:178-197); a size chosen on the keyboard
+// shows here, one chosen here resizes the keyboard. Keyboard style
 // (Phoenix; the owner, 8 October 2026): the keys' look, system preference
 // keyboardStyle: "auto" (the phone's black keys on a phone, the TouchPad's on
 // a tablet), "black" or "touchpad" on every device; the keyboard changes at
@@ -33,8 +42,11 @@
 //
 // Launch params {page: "textassist"}; com.palm.app.textassist opens it.
 
-import { useState } from "react";
-import { keyboardPrefs, system, withKeyboardPrefs, type SystemPreferences, type VirtualKeyboardPrefs } from "@phoenix/luna";
+import { useEffect, useState } from "react";
+import {
+    KEYBOARD_SIZES, keyboardPrefs, keyboardSize, numberRowShown, system, systemStatus, withKeyboardPrefs, withKeyboardSettings,
+    type KeyboardSize, type SystemPreferences, type SystemStatus, type VirtualKeyboardPrefs,
+} from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
 import { Group, ListSelector, Note, Page, PageHeader, Row, ToggleButton } from "@phoenix/ui";
 import { useBack } from "../nav";
@@ -83,8 +95,29 @@ export const KEYBOARD_STYLES: { label: string; value: KeyboardStyle }[] = [
 type KeyboardStyle = "auto" | "black" | "touchpad";
 export const keyboardStyle = (v: unknown): KeyboardStyle => (v === "black" || v === "touchpad" ? v : "auto");
 
+/** The card's own size by the shell's rule (Theme.tabletLayoutFor: the shorter side at least 600). */
+const cardIsTablet = () => typeof window !== "undefined" && Math.min(window.innerWidth, window.innerHeight) >= 600;
+
+/**
+ * Whether the shell is laid out as a tablet, following it (the adaptive
+ * simulator switches as its window is resized): getSystemStatus formFactor,
+ * the shell's own layout; before the shell has said, the card's size.
+ */
+export function useTabletLayout(): boolean {
+    const status = useLuna<SystemStatus>((cb, err) => systemStatus.watch(cb, err), []).value;
+    const [card, setCard] = useState(cardIsTablet);
+    useEffect(() => {
+        const on = () => setCard(cardIsTablet());
+        window.addEventListener("resize", on);
+        return () => window.removeEventListener("resize", on);
+    }, []);
+    const ff = status?.formFactor;
+    return ff === "tablet" || ff === "phone" ? ff === "tablet" : card;
+}
+
 export function TextAssistPage() {
-    const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["x_palm_virtualkeyboard_prefs", "keyboardShortcuts", "x_palm_textinput", "keyboardNumberRow", "keyboardStyle", "hardwareKeyboard", "keyboardButton"], cb, err), []).value ?? {};
+    const prefs = useLuna<SystemPreferences>((cb, err) => system.watchPreferences(["x_palm_virtualkeyboard_prefs", "x_palm_virtualkeyboard_settings", "keyboardShortcuts", "x_palm_textinput", "keyboardNumberRow", "keyboardStyle", "hardwareKeyboard", "keyboardButton"], cb, err), []).value ?? {};
+    const tablet = useTabletLayout();
     const kb = keyboardPrefs(prefs.x_palm_virtualkeyboard_prefs);
     const [dictionary, setDictionary] = useState(false);
     useBack(() => { setDictionary(false); return true; }, dictionary);
@@ -138,10 +171,15 @@ export function TextAssistPage() {
             <Group label="Layout">
                 <ListSelector<KeyboardStyle> title="Keyboard style" value={keyboardStyle(prefs.keyboardStyle)} testId="ta-keyboard-style"
                     options={KEYBOARD_STYLES} onChange={(v) => void system.setPreferences({ keyboardStyle: v })} />
-                <Row title="Number row" subtitle="Numbers above the letters on a phone" testId="ta-numberrow-row">
-                    <ToggleButton value={!!prefs.keyboardNumberRow} label="Number row" testId="ta-numberrow"
+                <Row title="Number row" subtitle="Numbers above the letters" testId="ta-numberrow-row">
+                    <ToggleButton value={numberRowShown(prefs.keyboardNumberRow, tablet)} label="Number row" testId="ta-numberrow"
                                   onChange={(v) => void system.setPreferences({ keyboardNumberRow: v })} />
                 </Row>
+                {tablet && (
+                    <ListSelector<KeyboardSize> title="Keyboard size" value={keyboardSize(prefs.x_palm_virtualkeyboard_settings)} testId="ta-keyboard-size"
+                        options={KEYBOARD_SIZES.map((k) => ({ label: k.label, value: k.value }))}
+                        onChange={(v) => void system.setPreferences({ x_palm_virtualkeyboard_settings: withKeyboardSettings(prefs.x_palm_virtualkeyboard_settings, { "keyboard size": v }) })} />
+                )}
             </Group>
             <Group label="Keyboards">
                 <ReorderList items={installed} keyOf={(id) => id} testId="ta-installed" label={(id) => `Move ${byId(id).title}`}

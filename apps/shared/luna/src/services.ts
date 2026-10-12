@@ -8,7 +8,7 @@
 import { call, subscribe, type LunaError, type Subscription } from "./bridge";
 import type {
     AudioStream, BluetoothAdapter, BluetoothDevice, ConnectionStatus, DeviceInfo, LockMode, OsInfo, Ringtone,
-    SystemPreferences, SystemSettings, SystemStatus, SystemTime, TimeZone, VirtualKeyboardPrefs, WifiNetworkInfo, WifiSecurityType, WifiStatus,
+    SystemPreferences, SystemSettings, SystemStatus, SystemTime, TimeZone, VirtualKeyboardPrefs, VirtualKeyboardSettings, WifiNetworkInfo, WifiSecurityType, WifiStatus,
 } from "./types";
 
 type OnError = (e: LunaError) => void;
@@ -184,6 +184,47 @@ export function withTapSounds(value: unknown, on: boolean): string {
 /** The same preference with these keys changed, the others kept, as the string it is stored as. */
 export function withKeyboardPrefs(value: unknown, changes: Partial<VirtualKeyboardPrefs>): string {
     return JSON.stringify({ ...keyboardPrefs(value), ...changes });
+}
+
+/**
+ * The keyboard's settings (x_palm_virtualkeyboard_settings, a JSON string:
+ * LunaSysMgr VirtualKeyboardPreferences.cpp:189-197): the keyboard in use,
+ * which its language key picks, and the tablet keyboard's size.
+ */
+export function keyboardSettings(value: unknown): VirtualKeyboardSettings {
+    if (typeof value === "string") {
+        try { value = JSON.parse(value); } catch { value = null; }
+    }
+    return value && typeof value === "object" ? value as VirtualKeyboardSettings : {};
+}
+
+/** The same settings with these keys changed, the others kept (the keyboard writes them too), as the string they are stored as. */
+export function withKeyboardSettings(value: unknown, changes: Partial<VirtualKeyboardSettings>): string {
+    return JSON.stringify({ ...keyboardSettings(value), ...changes });
+}
+
+/** The tablet keyboard's sizes, as its hide key's long press offers them (TabletKeyboard.cpp:245-248, 1215-1218). */
+export const KEYBOARD_SIZES = [
+    { value: -2, label: "Extra Small" },
+    { value: -1, label: "Small" },
+    { value: 0, label: "Medium" },
+    { value: 1, label: "Large" },
+] as const;
+export type KeyboardSize = -2 | -1 | 0 | 1;
+
+/** The tablet keyboard's size in the settings, -2 to 1; Medium (0) when unset or not one. */
+export function keyboardSize(value: unknown): KeyboardSize {
+    const v = keyboardSettings(value)["keyboard size"];
+    return typeof v === "number" && Number.isFinite(v) ? Math.max(-2, Math.min(1, Math.round(v))) as KeyboardSize : 0;
+}
+
+/**
+ * The keyboard's number row in effect: the setting (keyboardNumberRow), or
+ * unset, the form factor's own: on for a tablet (the TouchPad's keyboard
+ * had one), off for a phone (the owner, 12 October 2026).
+ */
+export function numberRowShown(setting: unknown, tablet: boolean): boolean {
+    return typeof setting === "boolean" ? setting : tablet;
 }
 
 // ---- com.webos.service.audio (audiod-pro) --------------------------------------------

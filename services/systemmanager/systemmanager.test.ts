@@ -140,12 +140,23 @@ describe("the shell's state, for the apps", () => {
                      "com.webos.surfacemanager");
         await new Promise((r) => setTimeout(r, 0));
         expect(locks).toEqual([{ returnValue: true, locked: false }]);
-        expect(systems.at(-1)).toEqual({ returnValue: true, ime: { visible: true }, orientation: { ui: "left", device: "left" }, learnedWords: [] });
+        expect(systems.at(-1)).toEqual({ returnValue: true, ime: { visible: true }, orientation: { ui: "left", device: "left" }, learnedWords: [],
+                                         formFactor: "" });
         expect((await w.call("getDockModeStatus")).enabled).toBe(false);
         // The same again: no news.
         await w.call("phoenix/report", { deviceLocked: false }, "com.webos.surfacemanager");
         await new Promise((r) => setTimeout(r, 0));
         expect(locks.length).toBe(1);
+        // The shell's layout (Settings > Text Assist shows the keyboard's
+        // options by it), and nothing else in its place.
+        await w.call("phoenix/report", { formFactor: "tablet" }, "com.webos.surfacemanager");
+        await new Promise((r) => setTimeout(r, 0));
+        expect(systems.at(-1).formFactor).toBe("tablet");
+        const before = systems.length;
+        await w.call("phoenix/report", { formFactor: "watch" }, "com.webos.surfacemanager");
+        await new Promise((r) => setTimeout(r, 0));
+        expect(systems.length).toBe(before);
+        expect((await w.call("getSystemStatus")).formFactor).toBe("tablet");
     });
 });
 

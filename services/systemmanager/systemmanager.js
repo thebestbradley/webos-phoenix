@@ -33,7 +33,7 @@
 //   getLockStatus {subscribe}      -> {locked}
 //   getDockModeStatus {subscribe}  -> {enabled}       (SystemService.cpp:1913-1990)
 //   getSystemStatus {subscribe}    -> {ime: {visible}, orientation: {ui, device},
-//                                      learnedWords}
+//                                      learnedWords, formFactor}
 // The words the keyboard learned (GAPS V5: the Phoenix keyboard, a Maliit
 // plugin in maliit-server, reports them to /phoenix/learnedWords; only the
 // keyboard may), for Settings > Text Assist > Personal Dictionary, as the
@@ -178,7 +178,7 @@ function passcodeError(code, mode) {
 function createSystemManager(deps) {
     var watchers = { lockMode: [], lock: [], dock: [], system: [] };
     var shell = { deviceLocked: true, dockMode: false, orientation: { ui: "up", device: "up" }, ime: { visible: false },
-                  learnedWords: [] };
+                  learnedWords: [], formFactor: "" };
     var startupPrefs = {};
 
     function load() {
@@ -313,10 +313,11 @@ function createSystemManager(deps) {
         getDockModeStatus: function () { return Promise.resolve(ok({ enabled: shell.dockMode })); },
         getSystemStatus: function () {
             return Promise.resolve(ok({ ime: { visible: shell.ime.visible }, orientation: { ui: shell.orientation.ui, device: shell.orientation.device },
-                                        learnedWords: shell.learnedWords.slice() }));
+                                        learnedWords: shell.learnedWords.slice(), formFactor: shell.formFactor }));
         },
         // The shell's state: {deviceLocked, dockMode, orientation: {ui,
-        // device}, ime: {visible}}, any of them.
+        // device}, ime: {visible}, formFactor: "phone" | "tablet" (its
+        // layout, Phoenix)}, any of them.
         "phoenix/report": function (p, sender) {
             if (!deps.isShell(sender))
                 return Promise.resolve(fail(-1, "Only the shell reports its state"));
@@ -340,6 +341,10 @@ function createSystemManager(deps) {
             }
             if (p.ime && typeof p.ime.visible === "boolean" && p.ime.visible !== shell.ime.visible) {
                 shell.ime.visible = p.ime.visible;
+                changed.system = true;
+            }
+            if ((p.formFactor === "phone" || p.formFactor === "tablet") && p.formFactor !== shell.formFactor) {
+                shell.formFactor = p.formFactor;
                 changed.system = true;
             }
             if (changed.lock) methods.getLockStatus().then(function (r) { notify("lock", r); });

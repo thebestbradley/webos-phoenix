@@ -360,14 +360,15 @@ Item {
 
     // State only the shell knows, for the apps (SimWindowSource's
     // pushSystemStatus; PhoenixViewsRoot sends it): the lock screen, dock
-    // mode, how the UI and the device are turned, the keyboard. On a device
+    // mode, how the UI and the device are turned, the keyboard, the shell's
+    // layout (formFactor: "phone" or "tablet"). On a device
     // it goes to com.palm.systemmanager (services/lock: /phoenix/report),
     // which answers the apps' getLockStatus, getDockModeStatus and
     // getSystemStatus. The simulator's other keys are not for it.
     // STATUS: written against services/lock's tests; not yet run on a device.
     function pushSystemStatus(changes) {
         var report = {};
-        ["deviceLocked", "dockMode", "orientation", "ime"].forEach(function(k) {
+        ["deviceLocked", "dockMode", "orientation", "ime", "formFactor"].forEach(function(k) {
             if (changes && changes[k] !== undefined)
                 report[k] = changes[k];
         });

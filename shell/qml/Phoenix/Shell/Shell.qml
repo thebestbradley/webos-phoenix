@@ -135,7 +135,7 @@ FocusScope {
     readonly property var tweaks: shell.system && shell.system.tweaks ? shell.system.tweaks : ({})
     readonly property var tweakDefaults: ({ infiniteCardCycling: false, maximizeEdges: false, waveLauncher: true, tapRipple: true,
                                             animationSpeed: "normal", gestureSensitivity: "normal", haptics: false,
-                                            gridDensity: "normal", batteryPercent: false, numberRow: false,
+                                            gridDensity: "normal", batteryPercent: false, numberRow: null,
                                             keyboardStyle: "auto", startupAnimation: "phoenix",
                                             keyboardButton: true, keyboardButtonSide: "right",
                                             keyboardButtonY: 1, keyboardButtonHintShown: false })
@@ -3703,8 +3703,14 @@ FocusScope {
                 objectName: "virtualKeyboard"
                 dictation: shell.dictation
                 tablet: shell.tablet
-                // Settings > Text Assist > Number row (the phone keyboard).
+                // Settings > Text Assist > Number row: true, false, or null
+                // (unset: the form factor's own, on for the tablet).
                 numberRow: shell.tweak("numberRow")
+                // The tablet's keyboard size (Settings > Text Assist >
+                // Keyboard size, or the hide key's long press): kept by the
+                // system (x_palm_virtualkeyboard_settings "keyboard size").
+                keyboardSize: shell.system && typeof shell.system.keyboardSize === "number" ? shell.system.keyboardSize : 0
+                onKeyboardSizeSelected: (size) => { if (shell.system && shell.system.keyboardSize !== undefined) shell.system.keyboardSize = size; }
                 // Settings > Text Assist > Keyboard style: "auto", "black", "touchpad".
                 keyboardStyle: shell.tweak("keyboardStyle")
                 pixelScale: Theme.keyboardScale
