@@ -83,11 +83,13 @@ DeckCraft uses the Symphonia audio decoders unmodified under MPL-2.0; its
 3.2 asks of a binary distribution of unmodified code.
 
 **Open and Save** in the ArtCraft apps (and opening a `.kdbx` in KeeWeb)
-use the browser's file dialogs, which do not work in Phoenix's cards yet:
-the simulator's web app windows are getting them
-(`shell/qml/Phoenix/Sim/WebAppWindow.qml`, in progress). Until then the
-apps start, make new documents and run, but cannot open or save files on
-the device.
+go through Phoenix's own pickers: a file input or `showOpenFilePicker`
+opens the file picker, and Save (a Blob download or `showSaveFilePicker`)
+opens the save picker; the files show in Files (SHARE-AND-FILES.md "A web
+page's own files"). WordCraft's and VectorCraft's Save and Open were
+checked that way in the simulator. On a device the app runtime refuses
+file choosers and downloads until WebAppMgr's side is done (GAPS, "A web
+page's own files").
 
 ### Links (curated web apps)
 
