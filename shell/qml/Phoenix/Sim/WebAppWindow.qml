@@ -14,6 +14,7 @@ import QtWebEngine
 import Phoenix.Shell
 import Phoenix.Native
 import "Links.js" as Links
+import "PageBridge.js" as PageBridge
 
 Item {
     id: win
@@ -200,6 +201,45 @@ Item {
         script.runsOnSubFrames = true;
         script.sourceCode = Links.linkScript;
         target.userScripts.insert(script);
+    }
+
+    // ---- A script of the app's in its page view (PageBridge.js) ----------------------
+    // The runtime's setPageBridge (BrowserAdapter, Phoenix's): the app's
+    // script in the pages of one origin the view shows, and messages both
+    // ways ("pageMessage" to the app; "bridgePost" to the page). Home
+    // Assistant's external bus and external authentication run on it.
+    function _setBridge(v, p) {
+        if (!PageBridge.validOrigin(p.origin) || !PageBridge.validNonce(p.nonce) || typeof p.script !== "string")
+            return;
+        v.bridge = { origin: p.origin, nonce: p.nonce, script: p.script };
+        _installBridge(v);
+    }
+    function _installBridge(v) {
+        const old = v.userScripts.find("phoenix-bridge");
+        for (let i = 0; i < old.length; ++i)
+            v.userScripts.remove(old[i]);
+        if (!v.bridge)
+            return;
+        const script = WebEngine.script();
+        script.name = "phoenix-bridge";
+        script.worldId = WebEngineScript.MainWorld;
+        script.injectionPoint = WebEngineScript.DocumentCreation;
+        script.runsOnSubFrames = false;
+        script.sourceCode = PageBridge.wrap(v.bridge.script, v.bridge.origin, v.bridge.nonce);
+        v.userScripts.insert(script);
+    }
+    function _bridgeShown(v) {
+        return !!v.bridge && PageBridge.originOf(v.url) === v.bridge.origin;
+    }
+    function _bridgeMessage(v, text) {
+        const json = v.bridge ? PageBridge.message(text, v.bridge.nonce) : null;
+        if (json !== null && _bridgeShown(v))
+            _webViewEvent(v.viewId, "pageMessage", [json]);
+    }
+    function _bridgePost(v, json) {
+        const js = PageBridge.deliverScript(json);
+        if (js && _bridgeShown(v))
+            v.runJavaScript(js);
     }
 
     // Let a window opened by another page load into this view.
@@ -408,11 +448,13 @@ Item {
             if (!!p.on === v.privateMode)
                 break;
             _webViews[p.id] = _makeView(p.id, p.on, { x: v.x, y: v.y, width: v.width, height: v.height, visible: v.visible,
-                                                      redirects: v.redirects });
+                                                      redirects: v.redirects, bridge: v.bridge });
             if (p.url)
                 _webViews[p.id].url = p.url;
             v.destroy();
             break;
+        case "bridge": _setBridge(v, p); break;
+        case "bridgePost": _bridgePost(v, p.message); break;
         case "edit": edit(p.action, v); break;
         case "print": _print(v, p); break;
         case "destroy":
@@ -434,6 +476,8 @@ Item {
             // runtime): links matching one go back to the page as
             // urlRedirected(url, cookie) instead of loading.
             property var redirects: []
+            // The app's script and its secret ({origin, nonce, script}: _setBridge).
+            property var bridge: null
             function redirected(url) {
                 const cookie = Links.redirectFor(url, redirects);
                 if (cookie === null)
@@ -449,7 +493,11 @@ Item {
             settings.playbackRequiresUserGesture: false
             // Links to other schemes never reach the computer's own apps.
             settings.unknownUrlSchemePolicy: WebEngineSettings.DisallowUnknownUrlSchemes
-            Component.onCompleted: win._addLinkScript(page)
+            Component.onCompleted: {
+                win._addLinkScript(page);
+                if (page.bridge)
+                    win._installBridge(page);
+            }
             touchHandleDelegate: selectionHandle
             onContextMenuRequested: (request) => win._contextMenu(page, request)
             onTouchSelectionMenuRequested: (request) => win._touchMenu(page, request)
@@ -490,6 +538,8 @@ Item {
             onJavaScriptConsoleMessage: (level, message) => {
                 if (message.indexOf(Links.LINK_PREFIX) === 0)
                     page.redirected(message.substring(Links.LINK_PREFIX.length));
+                else if (PageBridge.isBridgeMessage(message))
+                    win._bridgeMessage(page, message);
             }
             // Links that open a new window stay in this view, unless the
             // app takes them.
