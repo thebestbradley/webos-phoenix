@@ -71,7 +71,18 @@ export function catalogDetailsProblem(files: Files, templates: string[]): string
     if (!list) return "catalog.json: {\"accountTypes\": [{templateId, summary, auth, server, privacy, ...}]}";
     const named = list.map((t: any) => t && t.templateId);
     const missing = templates.filter((t) => named.indexOf(t) < 0);
-    return missing.length ? "catalog.json: nothing for the template " + missing.join(", ") : "";
+    if (missing.length) return "catalog.json: nothing for the template " + missing.join(", ");
+    // The texts Connections shows, as long as the catalog takes them (Catalog::accountType):
+    // the title and the provider are one line each, the summary a sentence or two.
+    for (const t of list) {
+        for (const [key, max] of [["title", 80], ["provider", 80], ["summary", 300]] as const) {
+            const v = t ? t[key] : undefined;
+            if (v !== undefined && (typeof v !== "string" || !v.trim() || [...v].length > max)) {
+                return `catalog.json, ${t.templateId}: ${key}, a text of 1 to ${max} characters` + (typeof v === "string" ? ` (this one has ${[...v].length})` : "");
+            }
+        }
+    }
+    return "";
 }
 
 /** The checkout this kit is in (apps/shared/connector-kit -> its top). */

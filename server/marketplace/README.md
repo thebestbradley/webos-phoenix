@@ -267,7 +267,9 @@ package (below).
 The list is `catalog/accounts.json`, edited by hand. It is not kept in the
 database: every `publish` reads it, checks each entry (required fields, the
 allowed values in `Catalog::ACCOUNT_ENUMS`, capabilities as the template
-names them) and stops on a bad one, so the published index stays as it was;
+names them, texts of 1 to 80 characters for `title` and `provider`, each a
+line in Connections, 300 for `summary` and 200 for `privacy.dataGoesTo`)
+and stops on a bad one, so the published index stays as it was;
 `init` and `seed` check it too. Each entry's `iconFrom` is the template's own
 icon in this checkout (open-source release or Phoenix art, with its
 provenance where it lives); `publish` copies it to

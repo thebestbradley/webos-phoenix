@@ -4,7 +4,7 @@
         {
             "templateId": "com.webosphoenix.xmpp",
             "title": "Jabber (XMPP)",
-            "provider": "Any XMPP server (Prosody, ejabberd, Snikket, Conversations.im and other providers)",
+            "provider": "Any XMPP server (Prosody, ejabberd, Snikket and other providers)",
             "summary": "Chats in Messaging, pictures included, your buddies in Contacts with their status, and what you send from your other clients, all as it happens.",
             "capabilities": [
                 { "capability": "CONTACTS", "direction": "read-only" },

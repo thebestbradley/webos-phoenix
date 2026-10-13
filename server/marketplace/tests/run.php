@@ -602,6 +602,27 @@ check($s === 200 && $fediApp && $fediApp['kind'] === 'connector' && count($fediT
       && $fediTypes[0]['package'] === ['id' => 'org.webosphoenix.fediverse', 'builtin' => false, 'preinstalled' => true] && $fediTypes[0]['featured'] === true,
       'the Fediverse, Phoenix\'s own (an admin\'s upload, its namespaces): in the index to install again, its account type once, '
       . 'catalog/accounts.json\'s (pre-installed, featured)' . ($s === 200 ? '' : " ($r[error])"));
+// Every connector package serve.sh uploads (preinstalled.json: those Phoenix comes with, and its
+// "firstParty" ones that are in the catalog only): its catalog.json passes the catalog's rules for
+// an account type, as the upload checks it (Catalog::connectorTypes). serve.sh goes on past a
+// refused one, so without this a connector would only be missing from Connections.
+$preinstalled = json_decode((string) file_get_contents(dirname(__DIR__, 3) . '/apps/marketplace/service/etc/palm/marketplace/preinstalled.json'), true);
+$seeded = array_merge($preinstalled['packages'], $preinstalled['firstParty'] ?? []);
+$refused = [];
+foreach ($seeded as $p) {
+    $pFiles = $appFiles(dirname(__DIR__, 3) . '/' . $p['from'], $p['id']);
+    $pInfo = json_decode($pFiles["usr/palm/applications/{$p['id']}/appinfo.json"] ?? 'null', true) ?: [];
+    try {
+        $pTypes = array_column(array_column($app->catalog->connectorTypes(ipk($tmp, $p['id'], (string) ($pInfo['version'] ?? '1.0.0'), $pFiles, [], $pInfo)), 0), 'templateId');
+        if (array_diff($p['templates'] ?? [], $pTypes)) {
+            $refused[] = "$p[id]: no account type for " . implode(', ', array_diff($p['templates'], $pTypes));
+        }
+    } catch (Phoenix\Marketplace\CheckFailed $e) {
+        $refused[] = "$p[id]: " . $e->getMessage();
+    }
+}
+check(count($seeded) >= 13 && !$refused, 'every connector package serve.sh uploads passes the catalog\'s rules for its account types ('
+      . count($seeded) . ' packages' . ($refused ? '; refused: ' . implode('; ', $refused) : '') . ')');
 
 // ---- Packages Phoenix hosts: an upstream's open-source web app, listed by an admin ---------------
 // (bin/web-apps.py packs it and runs `upload --phoenix --listing`.)

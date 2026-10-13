@@ -689,7 +689,10 @@ The fields are those of the catalog's own account types
 the title, the provider and the capabilities default to the template's
 `loc_name`, your app's `vendor` and its capability providers (`readOnlyData`:
 read-only), the status to `experimental`, `push` to `poll`; the icon is the
-template's (`loc_48x48`, its `@2x`). Only Phoenix features a type.
+template's (`loc_48x48`, its `@2x`). Only Phoenix features a type. The
+title and the provider are a line each in Connections, at most 80
+characters, and the summary at most 300: `publish` says so before it
+uploads, and the catalog refuses a package whose `catalog.json` has more.
 
 `--local` is the catalog on this computer (`server/marketplace/bin/serve.sh`,
 which the simulator starts: `http://127.0.0.1:8088/`, or `PHOENIX_CATALOG`).
