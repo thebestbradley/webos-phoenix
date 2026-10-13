@@ -182,6 +182,20 @@ device, not yet run"):
 - 🟠 ~~V8: Settings > Hardware Keyboard, the keyboard key, menus, popup alerts and the PIN pad by keyboard, the keyboard button~~ (one layout case left)
 - ✅ ~~E5: SF1, SF2, SF5: the original file picker, the picker's kinds, Share in Docs, Voice Memos and Maps, Open in Music~~ (SF6 is 2.0)
 
+**The Marketplace's hosted apps** (13 October 2026; not luna-sysmgr's, so
+not a row here): open-source web apps packed from their upstreams'
+releases and the 2.0 apps from a phoenix-default-apps checkout
+(`server/marketplace/bin/web-apps.py`), and a catalog app with a built-in
+app's id installed as an update in its place, removable back to it (the
+App Catalog's ROM app updates; docs/APP-STORE.md 3.12-3.14,
+docs/WEB-APP-CATALOG.md). Left: the file dialogs in web app cards (the
+ArtCraft apps' Open and Save, KeeWeb's files; `WebAppWindow.qml`, in
+progress), a run on a device (appinstalld2 and SAM, and the device
+launcher keeping an updated app's place when the update is removed, which
+the simulator's does), cross-origin isolation for apps that need
+SharedArrayBuffer (Godot's web editor), packages over 64 MB (CyberChef),
+and the 2.0 apps' bundled packages' notices in their builds.
+
 **The platform's clients** (11 October 2026; not luna-sysmgr's, so not a
 row here): the device side of Palm's update, App Catalog and Palm Profile
 servers' successors is done against a mock platform: one

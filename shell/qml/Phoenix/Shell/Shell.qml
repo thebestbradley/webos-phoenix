@@ -3246,7 +3246,9 @@ FocusScope {
                             var i = info();
                             return i && i.reason ? qsTr("%1: %2").arg(e.title).arg(i.reason) : e.title;
                         }
-                        return e.version ? qsTr("%1 - v.%2").arg(e.title).arg(e.version) : e.title;
+                        var text = e.version ? qsTr("%1 - v.%2").arg(e.title).arg(e.version) : e.title;
+                        // An update of a built-in app: removing it brings the built-in one back.
+                        return e.builtinVersion ? text + "\n" + qsTr("The built-in version %1 comes back.").arg(e.builtinVersion) : text;
                     }
                     function remove() {
                         var id = deleteDialog.appId;
@@ -3256,8 +3258,11 @@ FocusScope {
                                 shell.source.dismissInstall(id);
                             return;
                         }
-                        shell.setLauncherLayout(mode === "shortcut" ? LauncherLayout.drop(shell.launcherLayout, id)
-                                                                    : LauncherLayout.remove(shell.launcherLayout, id));
+                        // An update of a built-in app keeps its place: the built-in one comes back.
+                        var e = iconDrag.entry(id);
+                        if (!(e && e.builtinVersion))
+                            shell.setLauncherLayout(mode === "shortcut" ? LauncherLayout.drop(shell.launcherLayout, id)
+                                                                        : LauncherLayout.remove(shell.launcherLayout, id));
                         if (shell.source && typeof shell.source.removeApp === "function")
                             shell.source.removeApp(id);
                     }

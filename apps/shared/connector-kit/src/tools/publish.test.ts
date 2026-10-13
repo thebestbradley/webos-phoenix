@@ -40,6 +40,14 @@ describe("catalog addresses", () => {
         expect(catalogDetailsProblem({ "catalog.json": enc({ accountTypes: [{ templateId: "x.y.z" }] }) }, ["a.b.c"])).toMatch(/nothing for the template a.b.c/);
         expect(catalogDetailsProblem({ "catalog.json": enc({ accountTypes: [{ templateId: "a.b.c" }] }) }, ["a.b.c"])).toBe("");
     });
+    it("catalog.json: its texts as long as the catalog takes them (Catalog::accountType)", () => {
+        const enc = (o: unknown) => new TextEncoder().encode(JSON.stringify(o));
+        const one = (t: object) => catalogDetailsProblem({ "catalog.json": enc({ accountTypes: [{ templateId: "a.b.c", ...t }] }) }, ["a.b.c"]);
+        expect(one({ provider: "x".repeat(81) })).toMatch(/a.b.c: provider, a text of 1 to 80 characters \(this one has 81\)/);
+        expect(one({ title: " " })).toMatch(/title, a text of 1 to 80/);
+        expect(one({ summary: "x".repeat(301) })).toMatch(/summary, a text of 1 to 300/);
+        expect(one({ title: "Matrix", provider: "é".repeat(80), summary: "Chats." })).toBe("");
+    });
     it("a catalog that is not on this computer needs a token", async () => {
         await expect(publish(FEEDS, { catalog: "https://apps.example.org/v1/", vendor: false }))
             .rejects.toThrow(/--token TOKEN or PHOENIX_CATALOG_TOKEN/);

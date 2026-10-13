@@ -351,7 +351,13 @@ sec("Local servers")
 it("Marketplace catalog", "PHP 8 with sodium and pdo_sqlite, on port 8088. The simulator starts it itself. Its review page is `/admin`; the token is in `server/marketplace/data/admin.token`.", B, WP,
    "webos-phoenix/server/marketplace/bin/serve.sh:20 · bin/marketplace.php:118,147 · README.md:170-181",
    ["server/marketplace/bin/serve.sh", ("php server/marketplace/bin/marketplace.php seed", "also init, publish, admin, queue, approve, reject, key, developer"),
-    ("php server/marketplace/bin/marketplace.php upload FILE.ipk", "--phoenix for a Phoenix app"), "python3 server/marketplace/bin/probe-pwas.py"])
+    ("php server/marketplace/bin/marketplace.php upload FILE.ipk", "--phoenix for a Phoenix app, with --listing LISTING.json"), "python3 server/marketplace/bin/probe-pwas.py"])
+it("The Marketplace's hosted apps", "Open-source web apps from their upstreams' releases (pinned in `server/marketplace/catalog/web-apps.json`; docs/WEB-APP-CATALOG.md), and the 2.0 apps from a phoenix-default-apps checkout (`--from` or `PHOENIX_DEFAULT_APPS`; skipped without one). Downloads go to a cache outside the repository (`--cache`, `PHOENIX_WEB_APPS_CACHE`). `--software-gl` for WebGL 2 apps on a machine without a GPU.", B, WP,
+   "webos-phoenix/server/marketplace/bin/web-apps.py:28-45,655-680 · bin/marketplace.php:26,177 · README.md \"Open-source web apps and the 2.0 apps\"",
+   [("python3 -I server/marketplace/bin/web-apps.py check", "the manifest, offline; also list"),
+    ("python3 -I server/marketplace/bin/web-apps.py publish", "every app, or IDs; also fetch, pack"),
+    ("python3 -I server/marketplace/bin/web-apps.py shoot photocraft --software-gl", "screenshots for the listing"),
+    ("python3 -I server/marketplace/bin/web-apps.py default-apps --from ../phoenix-default-apps --publish", "the 2.0 apps")])
 it("Update feed", "The catalog server also serves `/updates/`; alone, the feed runs on port 8089.", B, WP, "webos-phoenix/server/updates/README.md:28-30,46-50 · bin/serve.sh:9",
    ["UPDATES_FEED=server/marketplace/data/updates php server/updates/bin/updates.php simulator --version 0.2.0 --build 2 --note \"What changed\"",
     "server/updates/bin/serve.sh", ("php server/updates/bin/updates.php show", "also publish, withdraw")])

@@ -4,7 +4,7 @@
         {
             "templateId": "com.webosphoenix.matrix",
             "title": "Matrix",
-            "provider": "Any Matrix homeserver (matrix.org, Element, your own Synapse or Conduit), with its bridges",
+            "provider": "Any Matrix homeserver (matrix.org, Synapse, Conduit), with its bridges",
             "summary": "Rooms and direct chats in Messaging, pictures included, read receipts both ways, and the people of your direct chats in Contacts. Encrypted rooms cannot be read here yet.",
             "capabilities": [
                 { "capability": "CONTACTS", "direction": "read-only" },

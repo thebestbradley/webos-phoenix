@@ -115,7 +115,49 @@ int main(int argc, char **argv)
     check(!installer.install(QStringLiteral("org.webosphoenix.settings"),
                              { file(QStringLiteral("appinfo.json"), R"({"id": "org.webosphoenix.settings"})") }).isEmpty()
           && entry(rootfs, QStringLiteral("org.webosphoenix.settings")).value(QStringLiteral("installed")).toBool() == false,
-          "a built-in app's id is refused");
+          "a built-in app's id without a newer version is refused");
+
+    // An update of a built-in app (docs/APP-STORE.md "Updating a built-in
+    // app"): newer, it takes the built-in one's place, installed and
+    // removable; removed, the built-in one is back.
+    {
+        const QString settings = QStringLiteral("org.webosphoenix.settings");
+        const QString shipped = entry(rootfs, settings).value(QStringLiteral("version")).toString();
+        const int listed = rootfs.apps().size();
+        check(rootfs.builtinVersion(settings) == shipped && !shipped.isEmpty(), "a built-in app's version is its built-in version");
+        check(!installer.install(settings, { file(QStringLiteral("appinfo.json"), QByteArray(R"({"id": "org.webosphoenix.settings", "version": ")")
+                                                  + shipped.toUtf8() + "\"}") }).isEmpty(),
+              "... the same version is refused");
+        const QString err2 = installer.install(settings, { file(QStringLiteral("appinfo.json"), R"({"id": "org.webosphoenix.settings", "version": "9.0.0", "title": "Settings 2"})"),
+                                                         file(QStringLiteral("index.html"), "<h1>new</h1>") });
+        const QVariantMap up = entry(rootfs, settings);
+        check(err2.isEmpty() && up.value(QStringLiteral("installed")).toBool() && up.value(QStringLiteral("version")).toString() == QStringLiteral("9.0.0")
+              && up.value(QStringLiteral("builtinVersion")).toString() == shipped,
+              qPrintable(QStringLiteral("a newer version takes its place, installed (%1)").arg(err2)));
+        int copies = 0;
+        for (const QVariant &v : rootfs.apps())
+            copies += v.toMap().value(QStringLiteral("id")).toString() == settings ? 1 : 0;
+        check(copies == 1 && rootfs.isInstalled(settings) && rootfs.builtinVersion(settings) == shipped,
+              qPrintable(QStringLiteral("... once (%1), and the built-in version is remembered (%2)").arg(copies).arg(rootfs.builtinVersion(settings))));
+        QFile page(rootfs.resolve(QStringLiteral("/usr/palm/applications/org.webosphoenix.settings/index.html")));
+        check(page.open(QIODevice::ReadOnly) && page.readAll() == "<h1>new</h1>", "... and is served in its place");
+        check(rootfs.launchPointsJson().contains(("\"builtinVersion\":\"" + shipped + "\"").toUtf8()), "the pages' list says what it replaces");
+        check(!installer.install(settings, { file(QStringLiteral("appinfo.json"), R"({"id": "org.webosphoenix.settings", "version": "0.0.1"})") }).isEmpty()
+              && entry(rootfs, settings).value(QStringLiteral("version")).toString() == QStringLiteral("9.0.0"),
+              "an update older than the built-in app is refused, and the installed update stays");
+        const QString removed = installer.remove(settings);
+        check(removed.isEmpty() && !rootfs.isInstalled(settings)
+              && entry(rootfs, settings).value(QStringLiteral("version")).toString() == shipped
+              && !entry(rootfs, settings).value(QStringLiteral("installed")).toBool() && rootfs.apps().size() == listed,
+              qPrintable(QStringLiteral("removing the update brings the built-in app back (%1; %2 apps, %3 before)")
+                             .arg(removed).arg(rootfs.apps().size()).arg(listed)));
+        check(Rootfs::compareVersions(QStringLiteral("2.0.0"), QStringLiteral("0.1.0")) > 0
+              && Rootfs::compareVersions(QStringLiteral("4.0.0"), QStringLiteral("3.0.12000")) > 0
+              && Rootfs::compareVersions(QStringLiteral("1.2"), QStringLiteral("1.2.0")) == 0
+              && Rootfs::compareVersions(QStringLiteral("1.10.0"), QStringLiteral("1.9.9")) > 0
+              && Rootfs::compareVersions(QStringLiteral("0.8.2"), QStringLiteral("0.10.0")) < 0,
+              "versions compare as SAM compares them");
+    }
     check(!installer.install(QStringLiteral("org.example.evil"), { file(QStringLiteral("appinfo.json"), R"({"id": "org.example.evil"})"),
                                                                     file(QStringLiteral("../../../../escape.txt"), "x") }).isEmpty()
           && !QFile::exists(dir.path() + QStringLiteral("/escape.txt")) && entry(rootfs, QStringLiteral("org.example.evil")).isEmpty(),
@@ -244,7 +286,15 @@ int main(int argc, char **argv)
         SimInstaller inst(&fs);
         check(!inst.install(QStringLiteral("com.palm.app.notes"), { file(QStringLiteral("appinfo.json"), R"({"id": "com.palm.app.notes"})") }).isEmpty()
               && !inst.remove(QStringLiteral("com.palm.app.notes")).isEmpty(),
-              "its apps are built in: not installed over, not removed");
+              "its apps are built in: not removed, nor installed over without a newer version");
+        check(inst.install(QStringLiteral("com.palm.app.notes"), { file(QStringLiteral("appinfo.json"), R"({"id": "com.palm.app.notes", "version": "2.1.0"})"),
+                                                                  file(QStringLiteral("index.html"), "update") }).isEmpty()
+              && read(fs.resolve(QStringLiteral("/usr/palm/applications/com.palm.app.notes/index.html"))) == "update"
+              && fs.builtinVersion(QStringLiteral("com.palm.app.notes")) == QStringLiteral("2.0.0"),
+              "a newer one is an update of the extra rootfs' app");
+        check(inst.remove(QStringLiteral("com.palm.app.notes")).isEmpty()
+              && read(fs.resolve(QStringLiteral("/usr/palm/applications/com.palm.app.notes/index.html"))) == "rebuilt",
+              "... removed, the extra rootfs' app is back");
     }
     std::printf(failures ? "%d failed\n" : "all passed\n", failures);
     return failures ? 1 : 0;

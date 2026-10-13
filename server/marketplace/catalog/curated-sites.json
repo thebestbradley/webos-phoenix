@@ -160,6 +160,13 @@
         { "id": "org.webosphoenix.pwa.tuta", "title": "Tuta Mail", "developer": "Tuta", "url": "https://app.tuta.com/", "categories": ["Communication"], "featured": false, "summary": "Encrypted email and calendar." },
         { "id": "org.webosphoenix.pwa.zohomail", "title": "Zoho Mail", "developer": "Zoho", "url": "https://mail.zoho.com/", "categories": ["Communication"], "featured": false, "summary": "Ad-free email for you and your business." },
         { "id": "org.webosphoenix.pwa.yahoomail", "title": "Yahoo Mail", "developer": "Yahoo", "url": "https://mail.yahoo.com/", "categories": ["Communication"], "featured": false, "summary": "Your Yahoo inbox." },
-        { "id": "org.webosphoenix.pwa.evernote", "title": "Evernote", "developer": "Evernote", "url": "https://www.evernote.com/client/web", "categories": ["Productivity"], "featured": false, "summary": "Notes, to-dos and documents, searchable everywhere." }
+        { "id": "org.webosphoenix.pwa.evernote", "title": "Evernote", "developer": "Evernote", "url": "https://www.evernote.com/client/web", "categories": ["Productivity"], "featured": false, "summary": "Notes, to-dos and documents, searchable everywhere." },
+        { "id": "org.webosphoenix.pwa.cinny", "title": "Cinny", "developer": "Cinny", "url": "https://app.cinny.in/", "categories": ["Communication"], "featured": false, "summary": "A Matrix chat client with a clean, simple look." },
+        { "id": "org.webosphoenix.pwa.fluffychat", "title": "FluffyChat", "developer": "FluffyChat", "url": "https://fluffychat.im/web/", "categories": ["Communication"], "featured": false, "summary": "A friendly Matrix messenger with end-to-end encryption." },
+        { "id": "org.webosphoenix.pwa.elk", "title": "Elk", "developer": "Elk", "url": "https://elk.zone/", "categories": ["Social"], "featured": false, "summary": "A nimble client for Mastodon and the Fediverse." },
+        { "id": "org.webosphoenix.pwa.jupyterlite", "title": "JupyterLite", "developer": "Project Jupyter", "url": "https://jupyterlite.github.io/demo/", "categories": ["Developer", "Education"], "featured": false, "summary": "Jupyter notebooks with Python running in the browser itself." },
+        { "id": "org.webosphoenix.pwa.wavacity", "title": "Wavacity", "developer": "Wavacity", "url": "https://wavacity.com/", "categories": ["Music"], "featured": false, "summary": "The Audacity sound editor, ported to the browser." },
+        { "id": "org.webosphoenix.pwa.cyberchef", "title": "CyberChef", "developer": "GCHQ", "url": "https://gchq.github.io/CyberChef/", "categories": ["Developer", "Utilities"], "featured": false, "summary": "Encode, decode, convert and analyse data with chained recipes." },
+        { "id": "org.webosphoenix.pwa.jspaint", "title": "JS Paint", "developer": "Isaiah Odhner", "url": "https://jspaint.app/", "categories": ["Graphics"], "featured": false, "summary": "The classic paint program, remade for the web." }
     ]
 }

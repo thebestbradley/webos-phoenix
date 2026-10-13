@@ -802,6 +802,30 @@ Item {
             removeEntry("com.example.info");
         }
 
+        // An update of a built-in app (docs/APP-STORE.md 3.14): removing it
+        // says the built-in version comes back, and the icon keeps its place.
+        function test_menuRemoveUpdate() {
+            addEntry({ appId: "com.example.updated", title: "Updated", page: "downloads", version: "4.0.0", removable: true, installed: true,
+                       builtinVersion: "3.0.1300" });
+            var at = LauncherLayout.pageOf(shell.launcherLayout, "com.example.updated");
+            launcher.showPage(at);
+            wait(Theme.cardSlideDuration + 100);
+            holdForMenu(iconPoint(shell.launcherLayout.pages[at].indexOf("com.example.updated")));
+            mouseClick(menuRow("info"));
+            var dialog = findChild(shell, function(o) { return o.objectName === "deleteDialog"; });
+            tryCompare(dialog, "opacity", 1, 1000);
+            mouseClick(findChild(shell, function(o) { return o.objectName === "deleteDialogUninstall"; }));
+            compare(findChild(shell, function(o) { return o.objectName === "deleteDialogTitle"; }).text, "Remove Application?");
+            compare(findChild(shell, function(o) { return o.objectName === "deleteDialogMessage"; }).text,
+                    "Updated - v.4.0.0\nThe built-in version 3.0.1300 comes back.");
+            var remove = findChild(shell, function(o) { return o.objectName === "deleteDialogRemove"; });
+            waitForItemPolished(remove.parent);
+            mouseClick(remove);
+            tryCompare(dialog, "visible", false, 1000);
+            compare(LauncherLayout.pageOf(shell.launcherLayout, "com.example.updated"), at, "the icon keeps its place");
+            removeEntry("com.example.updated");
+        }
+
         // New Window: only for apps that run several at once; another card
         // while one runs.
         function test_menuNewWindow() {

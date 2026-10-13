@@ -151,9 +151,12 @@ proxy the operator trusts (it then resolves the names).
 `bin/serve.sh` publishes the index again at each start, and runs PHP's
 server with several workers, since a first copy waits on its site.
 
-Today 135 of the 160 sites are listed, three of them (Ground News, NYT
+Today 139 of the 167 sites are listed, three of them (Ground News, NYT
 Games, Formula 1) with generated icons, as all the icons their manifests
-name are missing (probed again 9 October 2026). Of the rest, some show a
+name are missing (probed again 9 October 2026; JS Paint, JupyterLite, Cinny
+and FluffyChat, open-source web apps linked rather than hosted, added 13
+October 2026, docs/WEB-APP-CATALOG.md; Elk, Wavacity and CyberChef, added
+then too, have no manifest the probe can find). Of the rest, some show a
 visitor who is not signed in no manifest at all (Bluesky, Discord, Notion,
 Trello, Word, OneDrive, Tuta, Zoho Mail, Yahoo Mail, Evernote, McDonald's,
 trivago), and the others turned the probe away with a bot check from the cloud network it ran
@@ -190,6 +193,63 @@ as on the server first, or run the two commands there. Add a site by
 adding a line to `curated-sites.json` (our own summary, its developer,
 categories from the ones already used) and running the probe.
 
+## Open-source web apps and the 2.0 apps
+
+The catalog hosts packages it makes itself from their makers' builds
+(docs/APP-STORE.md 3.12-3.14): open-source web apps from their upstream's
+release (`catalog/web-apps.json` pins each one; why each app is hosted, a
+link or left out: docs/WEB-APP-CATALOG.md), and webOS Phoenix 2.0's apps
+from a phoenix-default-apps checkout. `bin/web-apps.py` makes and
+publishes them; run it isolated (`python3 -I`; it restarts itself so):
+
+    python3 -I server/marketplace/bin/web-apps.py check              catalog/web-apps.json, offline
+    python3 -I server/marketplace/bin/web-apps.py publish [ID ...]   fetch, check, pack, publish
+    python3 -I server/marketplace/bin/web-apps.py shoot ID ...       screenshots for the listing
+    python3 -I server/marketplace/bin/web-apps.py default-apps --from ../phoenix-default-apps --publish
+
+- **fetch** downloads an app's release, its icon and its licence files into
+  a cache outside the repository (`--cache`, `PHOENIX_WEB_APPS_CACHE`, else
+  `~/.cache/phoenix-marketplace/web-apps`; it refuses one inside), each
+  download into a new empty folder, each checked against its pinned
+  SHA-256 and, where upstream publishes a `SHA256SUMS.txt`, against that
+  too. The archive is unpacked by the script itself, every path checked: no
+  links or special files, nothing outside its folder, at most 512 MB.
+- **pack** writes `<id>_<version>_all.ipk` in the cache: the release's
+  files (those under its `root`, or its `include` list), an `appinfo.json`
+  (upstream's title and vendor, `main`, `icon.png`, `removable`, the
+  launcher's Downloads tab), the icon and `licenses/` (the notices).
+  Deterministic: the same inputs give the same bytes, so a re-run
+  publishes nothing new. A package over 64 MB is refused, as the catalog
+  and devices refuse one.
+- **publish** packs, then runs `php bin/marketplace.php upload --phoenix
+  --listing LISTING.json PKG` (`--data` for another data folder, `--php`):
+  the admin's upload, approved and published, with the listing
+  (`Catalog::applyListing`: title, developer and its address, summary, our
+  description with where the release came from, categories, licence,
+  homepage, `source`, icon, the screenshots in `<cache>/<id>/screenshots/`).
+  A version already there with the same bytes only gets its listing again;
+  other bytes under a version already uploaded are refused.
+- **shoot** starts the packed app in phoenix-sim (`--sim`, default
+  `build/phoenix-sim`; `--extra-rootfs` with its files, a fresh HOME,
+  `--tablet`, `--delay`; under `xvfb-run` without a display) and keeps the
+  screenshot for the next publish. `--software-gl` gives WebGL 2 in
+  software (`--ignore-gpu-blocklist --enable-unsafe-swiftshader`), which
+  the ArtCraft apps need on a machine without a GPU.
+- **default-apps** packs each built app of the checkout (`--from PATH` or
+  `PHOENIX_DEFAULT_APPS`; none given: it says the 2.0 apps are skipped and
+  why), its `dist/` with `removable: true`, and with `--publish` publishes
+  it as Phoenix's own under "Phoenix 2.0". The apps offered in the
+  Marketplace only (`phoenix.catalogOnly`: Home) are packed with the rest
+  and listed as new apps, not updates; `DEFAULT_LISTINGS` holds our own
+  words for a listing where the app's `package.json` summary is not what
+  the catalog should say (Home: a companion for Home Assistant, not
+  affiliated with the Open Home Foundation). The checkout is private:
+  nothing of it is ever committed here.
+
+`php bin/marketplace.php listing ID LISTING.json` sets an app's listing
+again (and publishes). On a server the same commands run there, with the
+server's `MARKETPLACE_*` settings.
+
 ## Account types (Connections)
 
 The index also lists the **account types** Phoenix can connect to, for the
@@ -212,7 +272,9 @@ package (below).
 The list is `catalog/accounts.json`, edited by hand. It is not kept in the
 database: every `publish` reads it, checks each entry (required fields, the
 allowed values in `Catalog::ACCOUNT_ENUMS`, capabilities as the template
-names them) and stops on a bad one, so the published index stays as it was;
+names them, texts of 1 to 80 characters for `title` and `provider`, each a
+line in Connections, 300 for `summary` and 200 for `privacy.dataGoesTo`)
+and stops on a bad one, so the published index stays as it was;
 `init` and `seed` check it too. Each entry's `iconFrom` is the template's own
 icon in this checkout (open-source release or Phoenix art, with its
 provenance where it lives); `publish` copies it to

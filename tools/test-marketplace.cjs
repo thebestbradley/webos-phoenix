@@ -195,6 +195,50 @@ async function main() {
         await page.waitForSelector("[data-testid=install-app]", { timeout: 15000 });
         check(!(await apps()).some((a) => a.id === "com.example.notes"), "Remove takes it off the device");
 
+        // ---- An update of a built-in app (docs/APP-STORE.md 3.14) -------------------------------------------------
+        // Newer than the built-in Flashlight: offered as an update, installed in its
+        // place and removable; removed, the built-in one is back.
+        const builtinBefore = (await apps()).find((a) => a.id === "org.webosphoenix.flashlight");
+        const own = await catalog.api("POST", "/api/apps/packages", await servers.webApp("org.webosphoenix.flashlight", "9.0.0", { title: "Flashlight" }), catalog.admin);
+        await catalog.api("POST", `/api/admin/releases/${own.release.id}/approve`, {}, catalog.admin);
+        await luna(P + "refresh", {});
+        await page.goto(appUrl("org.webosphoenix.marketplace"));
+        await page.click("[data-testid=tab-apps]");
+        await page.waitForSelector("[data-testid='app-org.webosphoenix.flashlight']", { timeout: 15000 });
+        check(/Update/.test(await page.textContent("[data-testid='app-org.webosphoenix.flashlight']")), "a built-in app's newer version is listed as an update");
+        await page.click("[data-testid='app-org.webosphoenix.flashlight']");
+        await page.waitForSelector("[data-testid=builtin-note]", { timeout: 15000 });
+        check((await page.textContent("[data-testid=install-app]")).includes("Update to 9.0.0")
+              && (await page.textContent("[data-testid=builtin-note]")).includes("came with Flashlight " + builtinBefore.version),
+              "... its page offers the update, saying which version the device came with");
+        await shot("5b-builtin-update");
+        await page.click("[data-testid=install-app]");
+        await page.waitForSelector("[data-testid=open-app]", { timeout: 20000 });
+        const updated = (await apps()).find((a) => a.id === "org.webosphoenix.flashlight");
+        check(updated.removable && updated.version === "9.0.0" && updated.builtinVersion === builtinBefore.version
+              && (await (await fetch(origin + "/usr/palm/applications/org.webosphoenix.flashlight/index.html")).text()).includes("9.0.0"),
+              "installed in the built-in app's place: removable, served from the update");
+        check((await page.textContent("[data-testid=remove-app]")).includes("Remove Update"), "... and the Marketplace offers to remove the update");
+        await page.click("[data-testid=remove-app]");
+        check((await page.textContent("[data-testid=remove-dialog]")).includes("goes back to " + builtinBefore.version), "... saying the built-in version comes back");
+        await page.click("[data-testid=remove-confirm]");
+        await page.waitForSelector("[data-testid=install-app]", { timeout: 15000 });
+        const back = (await apps()).find((a) => a.id === "org.webosphoenix.flashlight");
+        check(back && !back.removable && back.version === builtinBefore.version, "removing the update brings the built-in app back");
+
+        // ---- An app's page opened by a launch before the catalogs are read again ----------------------------------
+        // (a link to an app published since the device last read its catalog): the first look finds
+        // nothing; once the Marketplace has read the catalogs the page shows the app, not that error.
+        const late = await catalog.api("POST", "/api/apps/packages", await servers.webApp("com.example.late", "1.0.0", { title: "Late Arrival" }), catalog.admin);
+        await catalog.api("POST", `/api/admin/releases/${late.release.id}/approve`, {}, catalog.admin);
+        const lateSource = (await luna(P + "getSources", {})).sources.find((s) => s.kind === "phoenix" && !s.builtin);
+        await page.goto(appUrl("org.webosphoenix.marketplace", { sourceId: lateSource.id, id: "com.example.late" }));
+        await page.waitForSelector("[data-testid=app-title]", { timeout: 15000 });
+        await page.waitForSelector("[data-testid=install-app]", { timeout: 15000 });
+        check((await page.textContent("[data-testid=app-title]")) === "Late Arrival" && await page.locator("[data-testid=install-error]").count() === 0,
+              "a page opened by a launch shows an app published since the last read once the catalogs are read, without the first look's error");
+        await shot("5c-late-app");
+
         // ---- Search -------------------------------------------------------------------------------------------------
         await page.goto(appUrl("org.webosphoenix.marketplace"));
         await page.fill("[data-testid=search]", "tide tables");

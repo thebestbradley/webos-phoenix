@@ -33,13 +33,20 @@ const ipk = ipkLib.createIpk({ gzip });
 function makeService(sources: Any[], preinstalled?: Any[]) {
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-mkt-"));
     const world = { state: null as Any, installed: {} as Record<string, Any>, installs: [] as Any[], toasts: [] as Any[], fail: null as string | null,
-                    devMode: false, noIcons: false, pending: [] as Any[] };
+                    devMode: false, noIcons: false, pending: [] as Any[],
+                    // The apps the device came with (not removable), by id: their versions.
+                    builtins: {} as Record<string, string> };
     const luna = {
         call: async (uri: string, params: Any) => {
             if (uri.endsWith("/getDevMode")) return { returnValue: true, status: world.devMode ? "enabled" : "disabled" };
             // As the launcher has them: the app's own icon, on the device (none when world.noIcons).
-            if (uri.endsWith("/listLaunchPoints")) return { returnValue: true, launchPoints: Object.keys(world.installed).map((id) => ({
-                id, launchPointId: id + "_default", removable: true, icon: world.noIcons ? "" : `/usr/palm/applications/${id}/icon.png` })) };
+            // A built-in app is not removable; an installed update of one is, in its place.
+            if (uri.endsWith("/listLaunchPoints")) return { returnValue: true, launchPoints: [
+                ...Object.keys(world.installed).map((id) => ({
+                    id, launchPointId: id + "_default", removable: true, icon: world.noIcons ? "" : `/usr/palm/applications/${id}/icon.png`,
+                    ...(id in world.builtins ? { builtinVersion: world.builtins[id] } : {}) })),
+                ...Object.keys(world.builtins).filter((id) => !world.installed[id]).map((id) => ({
+                    id, launchPointId: id + "_default", removable: false, version: world.builtins[id], icon: `/usr/palm/applications/${id}/icon.png` }))] };
             if (uri.endsWith("/createToast")) { world.toasts.push(params); return { returnValue: true }; }
             return { returnValue: true };
         },
@@ -234,6 +241,41 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
 
         // Removed in the launcher: forgotten here too.
         delete world.installed["com.example.notes"];
+        expect((await service.listInstalled()).apps).toEqual([]);
+    });
+
+    it("installs a newer version of a built-in app in its place, and removing it brings the built-in one back", async () => {
+        const dev = await catalog.api("POST", "/api/accounts", { name: "Cal", email: "cal@example.com", role: "developer" });
+        for (const [id, v] of [["com.example.calc", "2.0.0"], ["com.example.clock", "1.0.0"]]) {
+            const up = await catalog.api("POST", "/api/apps/packages", await servers.webApp(id, v), dev.token);
+            await catalog.api("POST", `/api/admin/releases/${up.release.id}/approve`, {}, catalog.admin);
+        }
+        const { service, world } = makeService(defaults());
+        world.builtins = { "com.example.calc": "1.5.0", "com.example.clock": "1.0.0" };
+        await service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
+        const listed = (await service.browse({ section: "apps" })).apps;
+        expect(listed.find((a: Any) => a.id === "com.example.calc")).toMatchObject({ builtin: { version: "1.5.0", replaced: false }, update: "2.0.0", installed: null });
+        expect(listed.find((a: Any) => a.id === "com.example.clock")).toMatchObject({ builtin: { version: "1.0.0", replaced: false }, update: null });
+
+        // Not newer than the built-in app: refused before anything is downloaded.
+        expect(await service.install({ sourceId: "phoenix", id: "com.example.clock" })).toMatchObject({ returnValue: false, errorCode: "UNSUPPORTED" });
+        expect(world.installs.some((i: Any) => i.id === "com.example.clock")).toBe(false);
+
+        // Newer: it takes the built-in app's place.
+        expect(await service.install({ sourceId: "phoenix", id: "com.example.calc" })).toMatchObject({ returnValue: true, appId: "com.example.calc" });
+        expect((await service.getApp({ sourceId: "phoenix", id: "com.example.calc" })).app)
+            .toMatchObject({ installed: { version: "2.0.0" }, update: null, builtin: { version: "1.5.0", replaced: true } });
+        expect((await service.listInstalled()).apps).toEqual([expect.objectContaining({ id: "com.example.calc", version: "2.0.0", builtin: "1.5.0" })]);
+
+        // Removed: the built-in one is back, and the Marketplace offers the update again.
+        expect(await service.remove({ id: "com.example.calc" })).toMatchObject({ returnValue: true, builtin: "1.5.0" });
+        expect((await service.listInstalled()).apps).toEqual([]);
+        expect((await service.getApp({ sourceId: "phoenix", id: "com.example.calc" })).app)
+            .toMatchObject({ installed: null, update: "2.0.0", builtin: { version: "1.5.0", replaced: false } });
+
+        // Removed in the launcher (the built-in one back): forgotten here too.
+        await service.install({ sourceId: "phoenix", id: "com.example.calc" });
+        delete world.installed["com.example.calc"];
         expect((await service.listInstalled()).apps).toEqual([]);
     });
 

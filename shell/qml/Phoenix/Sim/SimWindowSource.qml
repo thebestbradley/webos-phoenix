@@ -261,6 +261,9 @@ Item {
                  removable: a.dynamic ? a.removable !== false : !!a.installed, version: a.version || "",
                  page: a.page || "", dynamic: !!a.dynamic, category: a.category || "", keywords: a.keywords || "",
                  installed: !!a.installed,
+                 // An update of a built-in app (docs/APP-STORE.md): the
+                 // built-in version removing it brings back, else "".
+                 builtinVersion: a.builtinVersion || "",
                  // appinfo.json exhibitionMode (dockMode): it can be an
                  // exhibition in dock mode, under exhibitionTitle.
                  exhibition: !!a.exhibition, exhibitionTitle: a.exhibitionTitle || a.title,
@@ -286,7 +289,7 @@ Item {
         return { page: "", dynamic: false, category: "", keywords: "", installed: false,
                  installState: "", progress: -1, pending: false, installReason: "",
                  exhibition: false, exhibitionTitle: "", tapToShare: false,
-                 multipleInstances: false, size: 0, scope: "", developer: "" };
+                 multipleInstances: false, size: 0, scope: "", developer: "", builtinVersion: "" };
     }
 
     // Apps that run in several windows at once whose appinfo.json cannot

@@ -31,8 +31,8 @@ QString SimInstaller::install(const QString &appId, const QVariantList &files)
         return QStringLiteral("Installing apps is not available");
     if (!validId(appId))
         return QStringLiteral("Not a valid app id: ") + appId;
-    if (m_rootfs->hasApp(appId) && !m_rootfs->isInstalled(appId))
-        return QStringLiteral("A built-in app has the id ") + appId;
+    // A built-in app's id: an update of it, when newer (Rootfs::builtinVersion).
+    const QString builtin = m_rootfs->builtinVersion(appId);
 
     const QString dir = QDir(appsDir(m_rootfs)).filePath(appId);
     const QString temp = dir + QStringLiteral(".new");
@@ -52,9 +52,18 @@ QString SimInstaller::install(const QString &appId, const QVariantList &files)
             QByteArray json = data;
             if (json.startsWith("\xEF\xBB\xBF"))
                 json.remove(0, 3);
-            if (QJsonDocument::fromJson(json).object().value(QStringLiteral("id")).toString() != appId) {
+            const QJsonObject info = QJsonDocument::fromJson(json).object();
+            if (info.value(QStringLiteral("id")).toString() != appId) {
                 QDir(temp).removeRecursively();
                 return QStringLiteral("appinfo.json does not have the id ") + appId;
+            }
+            // Not newer than the built-in app: the device would keep the
+            // built-in one (SAM's AppDescriptionList::add), so it is refused.
+            const QString version = info.value(QStringLiteral("version")).toString();
+            if (!builtin.isEmpty() && Rootfs::compareVersions(version, builtin) <= 0) {
+                QDir(temp).removeRecursively();
+                return QStringLiteral("%1 is built in (version %2); this package (version %3) is not newer")
+                    .arg(appId, builtin, version.isEmpty() ? QStringLiteral("none") : version);
             }
             hasInfo = true;
         }
@@ -86,6 +95,8 @@ QString SimInstaller::install(const QString &appId, const QVariantList &files)
 
 QString SimInstaller::remove(const QString &appId)
 {
+    // An update of a built-in app is removed like any installed app; the
+    // built-in one is then back (Rootfs::rescan).
     if (!m_rootfs->isInstalled(appId))
         return QStringLiteral("No such id");
     if (!QDir(QDir(appsDir(m_rootfs)).filePath(appId)).removeRecursively())

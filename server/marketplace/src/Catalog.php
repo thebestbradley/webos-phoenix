@@ -12,6 +12,8 @@
 //   <data>/public/v1/index.json.sig  base64 Ed25519 signature of index.json
 //   <data>/public/v1/packages/       approved .ipk files
 //   <data>/public/v1/icons/accounts/ the account types' icons
+//   <data>/public/v1/icons/<id>.png  icons of packages Phoenix lists itself (applyListing)
+//   <data>/public/v1/screenshots/<id>/  their screenshots
 //
 // Each publish is a new build number; the index expires after 14 days, so
 // a mirror cannot serve an old one forever, and devices refuse a build
@@ -155,6 +157,113 @@ final class Catalog
     {
         $r = $this->db->one('SELECT AVG(stars) AS stars, COUNT(*) AS n FROM reviews WHERE app_id = ? AND hidden = 0', [$id]);
         return $r && (int) $r['n'] > 0 ? ['stars' => round((float) $r['stars'], 1), 'count' => (int) $r['n']] : null;
+    }
+
+    // ---- Listings of the packages Phoenix hosts (admins) ----------------------------------------
+
+    /** The fields a listing may set (applyListing). */
+    private const LISTING_TEXT = ['title' => 80, 'developer' => 80, 'summary' => 300, 'description' => 8000, 'license' => 80];
+    private const LISTING_URLS = ['developerUrl', 'homepage', 'source', 'donation'];
+    /** Pictures a listing names: at most this many screenshots, of at most this size each. */
+    private const LISTING_SCREENSHOTS = 8;
+    private const LISTING_PICTURE_MAX = 8 * 1024 * 1024;
+
+    /**
+     * What the index says of a package Phoenix hosts beyond the package itself, set by an admin
+     * (`bin/marketplace.php upload --phoenix --listing FILE`; bin/web-apps.py writes the file): an
+     * open-source web app from its upstream release, under its upstream's name, icon and vendor, or
+     * one of Phoenix's own (the 2.0 apps). $l: {title, developer, developerUrl, summary, description,
+     * categories (up to 5), license (SPDX), homepage, source, donation (https addresses), featured,
+     * icon, screenshots}. icon and screenshots are files on this computer (relative to $baseDir) of
+     * PNG, JPEG or WebP, copied into the published files (icons/<id>.<ext>, screenshots/<id>/<n>.<ext>),
+     * or https addresses (copied when first asked for, mediaCopy). A field left out is left as it was.
+     */
+    public function applyListing(string $id, array $l, string $baseDir = ''): array
+    {
+        if (!$this->db->one('SELECT id FROM apps WHERE id = ?', [$id])) {
+            throw new CheckFailed("No app $id");
+        }
+        if ($extra = array_diff(array_keys($l), [...array_keys(self::LISTING_TEXT), ...self::LISTING_URLS,
+                                                 'categories', 'featured', 'icon', 'screenshots', '//'])) {
+            throw new CheckFailed('listing: unknown fields: ' . implode(', ', $extra));
+        }
+        $set = [];
+        foreach (self::LISTING_TEXT as $k => $max) {
+            if (!array_key_exists($k, $l)) {
+                continue;
+            }
+            if (!is_string($l[$k]) || mb_strlen($l[$k]) > $max || ($k === 'title' && trim($l[$k]) === '')) {
+                throw new CheckFailed("listing: $k, a text of at most $max characters");
+            }
+            $set[$k === 'developer' ? 'developer_name' : $k] = $l[$k];
+        }
+        foreach (self::LISTING_URLS as $k) {
+            if (!array_key_exists($k, $l)) {
+                continue;
+            }
+            if (!is_string($l[$k]) || ($l[$k] !== '' && !preg_match('#^https://[^\s]{1,490}$#i', $l[$k]))) {
+                throw new CheckFailed("listing: $k, an https:// address");
+            }
+            $set[$k === 'developerUrl' ? 'developer_url' : $k] = $l[$k];
+        }
+        if (array_key_exists('categories', $l)) {
+            $cats = $l['categories'];
+            if (!is_array($cats) || !array_is_list($cats) || count($cats) > 5
+                || array_filter($cats, fn ($c) => !is_string($c) || trim($c) === '' || mb_strlen($c) > 40)) {
+                throw new CheckFailed('listing: categories, up to 5 names');
+            }
+            $set['categories'] = json_encode($cats);
+        }
+        if (array_key_exists('featured', $l)) {
+            $set['featured'] = !empty($l['featured']) ? 1 : 0;
+        }
+        $safe = preg_replace('/[^A-Za-z0-9._-]/', '_', $id);
+        if (array_key_exists('icon', $l)) {
+            $set['icon'] = $this->listingPicture($l['icon'], $baseDir, "icons/$safe", 2 * 1024 * 1024);
+        }
+        if (array_key_exists('screenshots', $l)) {
+            if (!is_array($l['screenshots']) || !array_is_list($l['screenshots']) || count($l['screenshots']) > self::LISTING_SCREENSHOTS) {
+                throw new CheckFailed('listing: screenshots, a list of at most ' . self::LISTING_SCREENSHOTS . ' pictures');
+            }
+            // The published copies are this listing's alone: the ones it no longer names go.
+            $dir = $this->publicDir() . "/screenshots/$safe";
+            foreach (glob("$dir/*") ?: [] as $old) {
+                @unlink($old);
+            }
+            $shots = [];
+            foreach ($l['screenshots'] as $n => $src) {
+                $shots[] = $this->listingPicture($src, $baseDir, "screenshots/$safe/" . ($n + 1), self::LISTING_PICTURE_MAX);
+            }
+            $set['screenshots'] = json_encode($shots);
+        }
+        if ($set) {
+            $cols = implode(', ', array_map(fn ($k) => "$k = ?", array_keys($set)));
+            $this->db->run("UPDATE apps SET $cols, updated = ? WHERE id = ?", [...array_values($set), Db::now(), $id]);
+        }
+        $this->copyMedia($id);
+        return $this->app($id);
+    }
+
+    /** A listing's picture: an https address as it is, or a file here copied to <public>/$name.<ext>; its URL. */
+    private function listingPicture(mixed $src, string $baseDir, string $name, int $max): string
+    {
+        if (is_string($src) && preg_match('#^https://[^\s]{1,990}$#i', $src)) {
+            return $src;
+        }
+        if (!is_string($src) || $src === '') {
+            throw new CheckFailed('listing: a picture is a file (PNG, JPEG or WebP) or an https:// address');
+        }
+        $file = str_starts_with($src, '/') || $baseDir === '' ? $src : rtrim($baseDir, '/') . '/' . $src;
+        $bytes = is_file($file) ? (string) file_get_contents($file) : '';
+        $ext = $bytes !== '' && strlen($bytes) <= $max ? self::imageType($bytes) : null;
+        if (!in_array($ext, ['png', 'jpg', 'webp'], true)) {
+            throw new CheckFailed("listing: $src is not a PNG, JPEG or WebP picture of at most " . ($max >> 20) . ' MB');
+        }
+        $path = $this->publicDir() . "/$name.$ext";
+        @mkdir(dirname($path), 0755, true);
+        file_put_contents($path, $bytes);
+        // A new picture is a new address, so no device keeps an old one.
+        return $this->config['base_url'] . "$name.$ext?" . substr(hash('sha256', $bytes), 0, 12);
     }
 
     // ---- Decisions (admins) ------------------------------------------------------------
@@ -810,6 +919,10 @@ final class Catalog
                 'icon' => $this->publishedIcon($a), 'screenshots' => $this->publishedScreenshots($a), 'license' => $a['license'], 'homepage' => $a['homepage'],
                 'donation' => $a['donation'], 'featured' => $a['featured'], 'rating' => $a['rating'], 'version' => $a['version'],
             ];
+            // Where its source code is (an open-source app Phoenix hosts: applyListing).
+            if (($a['source'] ?? '') !== '') {
+                $e['source'] = $a['source'];
+            }
             if ($a['kind'] === 'pwa') {
                 $e['pwa'] = ['manifest' => $a['manifest'], 'origin' => $a['origin']];
                 // Its icon made here (the site's are broken): devices install it.

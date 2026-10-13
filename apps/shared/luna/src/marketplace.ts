@@ -49,6 +49,8 @@ export interface MarketApp {
     screenshots: string[];
     license: string;
     homepage: string;
+    /** Where its source code is (an open-source app the catalog hosts), else "". */
+    source?: string;
     donation: string;
     featured: boolean;
     rating: { stars: number; count: number } | null;
@@ -65,6 +67,13 @@ export interface MarketApp {
     appId?: string;
     /** Installed: the app's own icon on the device, as the launcher shows it. */
     ownIcon?: string;
+    /**
+     * Its id is a built-in app's (docs/APP-STORE.md "Updating a built-in
+     * app"): the version the device came with; replaced: this app, installed,
+     * takes its place (removing it brings that version back). Only a newer
+     * version is offered (update).
+     */
+    builtin?: { version: string; replaced: boolean };
 }
 
 export interface InstalledApp {
@@ -80,6 +89,8 @@ export interface InstalledApp {
     kind: AppKind;
     installedAt: string;
     update: string | null;
+    /** An update of a built-in app: the built-in version removing it brings back. */
+    builtin?: string | null;
 }
 
 export interface InstallProgress {
@@ -177,8 +188,9 @@ export const marketplace = {
                          (r) => onProgress(r as unknown as InstallProgress),
                          (e: LunaError) => onProgress({ id, state: "failed", errorCode: String(e.reply.errorCode), errorText: e.errorText }));
     },
-    remove(id: string): Promise<unknown> {
-        return call(SERVICE + "remove", { id });
+    /** Removes an app; an update of a built-in one answers the built-in version that is back. */
+    remove(id: string): Promise<{ builtin?: string }> {
+        return call(SERVICE + "remove", { id }) as unknown as Promise<{ builtin?: string }>;
     },
     async installed(): Promise<InstalledApp[]> {
         return ((await call(SERVICE + "listInstalled", {})) as unknown as { apps: InstalledApp[] }).apps;

@@ -2658,7 +2658,11 @@ which runs unchanged in the simulator:
     (`lib/ipk.js`) whose `appinfo.json` "main" is the site, with the site's
     icons: its own launcher icon and cards;
   - a Phoenix app: the `.ipk`, checked against the size and SHA-256 the
-    catalog signed;
+    catalog signed (also the open-source web apps the catalog packs from
+    their upstreams' releases and the 2.0 apps, [APP-STORE.md](APP-STORE.md)
+    3.12-3.13; one with a built-in app's id is an update in its place,
+    offered only when newer and removable back to the built-in version,
+    3.14);
   - a Classic: the App Museum's package (`lib/appmuseum.js`), or a Preware
     feed's (`lib/preware.js`, MD5 checked).
   Every package is read first and refused when it is native or a Mojo app
