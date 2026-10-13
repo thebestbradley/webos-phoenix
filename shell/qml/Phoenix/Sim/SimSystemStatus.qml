@@ -139,6 +139,11 @@ QtObject {
     // "qwertz", "azerty"), remap {capslock, control, alt, meta}}.
     property var hardwareKeyboardPrefs: ({ layout: "auto", remap: {} })
     property string keyboardId: "classic"
+    // The tablet keyboard's size, -2 to 1 (XS, S, M, L; 0 the default):
+    // Settings > Text Assist > Keyboard size or the hide key's long press,
+    // kept as the original kept it (x_palm_virtualkeyboard_settings
+    // "keyboard size", VirtualKeyboardPreferences.cpp:178-197).
+    property int keyboardSize: 0
     property string ringtone: "/usr/palm/sounds/ringtone.mp3"
     property string alerttone: "/usr/palm/sounds/alert.wav"
     property string notificationtone: "/usr/palm/sounds/notification.wav"
@@ -177,9 +182,9 @@ QtObject {
     // {infiniteCardCycling, maximizeEdges, waveLauncher, tapRipple,
     // animationSpeed ("normal", "fast"), gestureSensitivity ("low",
     // "normal", "high"), haptics, gridDensity ("normal", "dense"),
-    // batteryPercent, numberRow, keyboardStyle ("auto", "black",
-    // "touchpad")}. Missing keys are the defaults
-    // (Shell.tweak()).
+    // batteryPercent, numberRow (true, false or null: unset, the form
+    // factor's own), keyboardStyle ("auto", "black", "touchpad")}. Missing
+    // keys are the defaults (Shell.tweak()).
     property var tweaks: ({})
     // The browser's page views (its Preferences: browserContentBlocker,
     // browserUserAgent) and the system proxy (Settings > Wi-Fi > Proxy,
@@ -404,7 +409,7 @@ QtObject {
     // (0-100), rotationLocked, muted, timeFormat, showAlertsWhenLocked,
     // screenTimeout, lockTimeout, advancedGestures, appRelaunch, keyboardShortcuts,
     // volume, streams, systemSounds, tapSounds, textAssist, keyboards,
-    // keyboard, ringtone, alerttone,
+    // keyboard, keyboardSize, ringtone, alerttone,
     // notificationtone, callForwarding, reduceMotion, keyboardAccess, tweaks, browser, proxy,
     // vpnProfiles, exhibitionApps, devMode, devModeUnlocked, dockModeSound, exhibition {enabled,
     // startAfter, nightMode, nightStart, nightEnd}, dockWallpaperUrl,
@@ -479,6 +484,8 @@ QtObject {
             installedKeyboards = s.installedKeyboards;
         if (typeof s.keyboardId === "string" && s.keyboardId !== "")
             keyboardId = s.keyboardId;
+        if (typeof s.keyboardSize === "number")
+            keyboardSize = Math.max(-2, Math.min(1, Math.round(s.keyboardSize)));
         if (s.ringtone !== undefined)
             ringtone = s.ringtone;
         if (s.alerttone !== undefined)
@@ -540,6 +547,7 @@ QtObject {
         case "volume": return { volume: volume };
         case "keyboard": return { keyboard: keyboard };
         case "keyboardId": return { keyboardId: keyboardId };
+        case "keyboardSize": return { keyboardSize: keyboardSize };
         }
         return {};
     }

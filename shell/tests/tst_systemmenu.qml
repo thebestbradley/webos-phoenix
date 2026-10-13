@@ -431,6 +431,34 @@ Item {
             tryCompare(wifi, "height", 42, 500);
         }
 
+        // close(true) while the drawer is still opening (the menu closing,
+        // dock mode restricting it): the body is shut at once and stays
+        // shut, the opening does not carry on; and nothing is logged (the
+        // height's animation is its Behavior's, which Qt does not let the
+        // drawer stop: "setRunning() cannot be used on non-root animation
+        // nodes").
+        function test_instantCloseWhileOpening() {
+            failOnWarning(/setRunning/);
+            var wifi = findChild(menu, "systemMenuWifi");
+            var body = findChild(wifi, "systemMenuDrawerBody");
+            wifi.open();
+            tryVerify(function() { return body.height > 0; }, 1000);
+            verify(body.height < body.childrenRect.height, "still opening");
+            wifi.close(true);
+            verify(!wifi.isOpen);
+            compare(body.height, 0);
+            verify(wifi.closedFully);
+            wait(Theme.systemMenuDrawerDuration + 100);
+            compare(body.height, 0, "the opening did not carry on");
+            tryCompare(wifi, "height", 42, 500);
+            // It opens again as before.
+            wifi.open();
+            tryVerify(function() { return body.height > 0 && body.height === body.childrenRect.height; },
+                      Theme.systemMenuDrawerDuration + 1000);
+            wifi.close(true);
+            compare(body.height, 0);
+        }
+
         function test_settingsLaunchPoint() {
             // The window source opens Settings' Wi-Fi launch point for {page: "wifi"}.
             windows.apps.append({ appId: "org.webosphoenix.settings.wifi", title: "Wi-Fi", color: "#555c66", glyph: "W",

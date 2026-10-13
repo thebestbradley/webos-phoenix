@@ -152,8 +152,21 @@ function textAssist(p) {
              shortcuts: shortcuts, shortcutsOn: ti.shortcutChecking !== "off",
              userWords: dictionaryWords(ti), removedWords: removedWords(ti) };
 }
-// Settings > Text Assist > Number row, Keyboard style.
-function numberRow(p) { return !!(p || {}).keyboardNumberRow; }
+// Settings > Text Assist > Number row, Keyboard style. The number row is
+// true, false or null (unset: the form factor's own; VirtualKeyboard.numberRow).
+function numberRow(p) {
+    var v = (p || {}).keyboardNumberRow;
+    return typeof v === "boolean" ? v : null;
+}
+// Settings > Text Assist > Keyboard size, or the hide key's long press: the
+// tablet keyboard's size, -2 to 1 (XS, S, M, L; 0 the default), where
+// VirtualKeyboardPreferences kept it ("keyboard size" in
+// x_palm_virtualkeyboard_settings, VirtualKeyboardPreferences.cpp:189-197,
+// :267-271; phoenix-runtime.js keyboardSize).
+function keyboardSize(p) {
+    var v = keyboardSettings(p)["keyboard size"];
+    return typeof v === "number" && isFinite(v) ? Math.max(-2, Math.min(1, Math.round(v))) : 0;
+}
 function keyboardStyle(p) {
     var s = (p || {}).keyboardStyle;
     return ["auto", "black", "touchpad"].indexOf(s) >= 0 ? s : "auto";
@@ -170,13 +183,33 @@ function mergePrefs(prefs, reply) {
 }
 
 // ---- What the keyboard writes ----------------------------------------------------------
+// x_palm_virtualkeyboard_settings with these keys changed, the others kept
+// (the keyboard in use and its size share it; phoenix-runtime.js
+// withKeyboardSettings).
+function _withSettings(p, changes) {
+    var next = {}, st = keyboardSettings(p), k;
+    for (k in st)
+        next[k] = st[k];
+    for (k in changes)
+        next[k] = changes[k];
+    return JSON.stringify(next);
+}
 // setPreferences for the keyboard in use: the language key's {layout,
-// language} or the globe key's keyboard id (phoenix-runtime.js 6946-6961).
+// language} or the globe key's keyboard id (phoenix-runtime.js, the
+// systemStatus keyboard and keyboardId).
 function keyboardChoice(p, choice) {
     choice = choice || {};
     var c = combo(choice.keyboard) || combo(keyboardSettings(p)) || keyboard(p);
     var id = installedKeyboards(p).indexOf(choice.keyboardId) >= 0 ? choice.keyboardId : keyboardId(p);
-    return { x_palm_virtualkeyboard_settings: JSON.stringify({ layout: c.layout, language: c.language, keyboardId: id }) };
+    return { x_palm_virtualkeyboard_settings: _withSettings(p, { layout: c.layout, language: c.language, keyboardId: id }) };
+}
+// setPreferences for a size the hide key's long press chose
+// (VirtualKeyboardPreferences::selectKeyboardSize, :178-187), or null for
+// none or the one in use.
+function sizeChoice(p, size) {
+    if (typeof size !== "number" || size < -2 || size > 1 || Math.round(size) === keyboardSize(p))
+        return null;
+    return { x_palm_virtualkeyboard_settings: _withSettings(p, { "keyboard size": Math.round(size) }) };
 }
 // setPreferences for "Add" in the candidate bar, or null when the word is
 // not one or is there already (phoenix-runtime.js 6964-6973).

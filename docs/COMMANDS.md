@@ -1395,6 +1395,12 @@ Weather, with recorded Open-Meteo replies:
 NODE_PATH="$(npm root -g)" node tools/test-weather.cjs
 ```
 
+A web page's own files: file inputs, the File System Access API, downloads:
+
+```sh
+NODE_PATH="$(npm root -g)" node tools/test-webfiles.cjs
+```
+
 Two simulators at once with --instance, each with its own data:
 
 ```sh
@@ -2293,7 +2299,7 @@ Also init, publish, admin, queue, approve, reject, key, developer:
 php server/marketplace/bin/marketplace.php seed
 ```
 
---phoenix for a Phoenix app:
+--phoenix for a Phoenix app, with --listing LISTING.json:
 
 ```sh
 php server/marketplace/bin/marketplace.php upload FILE.ipk
@@ -2301,6 +2307,36 @@ php server/marketplace/bin/marketplace.php upload FILE.ipk
 
 ```sh
 python3 server/marketplace/bin/probe-pwas.py
+```
+
+### The Marketplace's hosted apps
+
+Open-source web apps from their upstreams' releases (pinned in `server/marketplace/catalog/web-apps.json`; docs/WEB-APP-CATALOG.md), and the 2.0 apps from a phoenix-default-apps checkout (`--from` or `PHOENIX_DEFAULT_APPS`; skipped without one). Downloads go to a cache outside the repository (`--cache`, `PHOENIX_WEB_APPS_CACHE`). `--software-gl` for WebGL 2 apps on a machine without a GPU.
+
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/server/marketplace/bin/web-apps.py:28-45,655-680 · bin/marketplace.php:26,177 · README.md "Open-source web apps and the 2.0 apps"`
+
+The manifest, offline; also list:
+
+```sh
+python3 -I server/marketplace/bin/web-apps.py check
+```
+
+Every app, or IDs; also fetch, pack:
+
+```sh
+python3 -I server/marketplace/bin/web-apps.py publish
+```
+
+Screenshots for the listing:
+
+```sh
+python3 -I server/marketplace/bin/web-apps.py shoot photocraft --software-gl
+```
+
+The 2.0 apps:
+
+```sh
+python3 -I server/marketplace/bin/web-apps.py default-apps --from ../phoenix-default-apps --publish
 ```
 
 ### Update feed

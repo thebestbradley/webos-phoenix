@@ -261,6 +261,9 @@ Item {
                  removable: a.dynamic ? a.removable !== false : !!a.installed, version: a.version || "",
                  page: a.page || "", dynamic: !!a.dynamic, category: a.category || "", keywords: a.keywords || "",
                  installed: !!a.installed,
+                 // An update of a built-in app (docs/APP-STORE.md): the
+                 // built-in version removing it brings back, else "".
+                 builtinVersion: a.builtinVersion || "",
                  // appinfo.json exhibitionMode (dockMode): it can be an
                  // exhibition in dock mode, under exhibitionTitle.
                  exhibition: !!a.exhibition, exhibitionTitle: a.exhibitionTitle || a.title,
@@ -286,7 +289,7 @@ Item {
         return { page: "", dynamic: false, category: "", keywords: "", installed: false,
                  installState: "", progress: -1, pending: false, installReason: "",
                  exhibition: false, exhibitionTitle: "", tapToShare: false,
-                 multipleInstances: false, size: 0, scope: "", developer: "" };
+                 multipleInstances: false, size: 0, scope: "", developer: "", builtinVersion: "" };
     }
 
     // Apps that run in several windows at once whose appinfo.json cannot
@@ -830,6 +833,16 @@ Item {
             bannerRequested(appId, payload.message || "", _iconUrl(payload.icon, appId),
                             bp === undefined || bp === null ? "" : typeof bp === "string" ? bp : JSON.stringify(bp),
                             bs[0], bs[1], bs[2], payload.id ? String(payload.id) : "");
+        } else if (type === "webDownload") {
+            // A file of the web a site downloads (WebAppWindow._download):
+            // a site has no runtime, so the system UI's page has the
+            // download manager fetch it into Downloads (runtime/phoenix-runtime.js,
+            // "A web page's own files": webDownload).
+            var dlPage = _headless["com.palm.systemui"] || _webPages().filter(function (w) { return !w.site; })[0] || null;
+            if (dlPage && payload && /^https?:/i.test(String(payload.url || "")))
+                dlPage.runScript("window.__phoenixRuntime && __phoenixRuntime.webDownload && __phoenixRuntime.webDownload("
+                                 + JSON.stringify({ url: String(payload.url), name: String(payload.name || ""),
+                                                    mimeType: String(payload.mimeType || "") }) + ")");
         } else if (type === "removeBanner") {
             // PalmSystem.removeBannerMessage(id) / clearBannerMessages().
             bannerRemoved(appId, payload.id ? String(payload.id) : "");
@@ -1974,7 +1987,11 @@ Item {
     // lunaCall(uri, params, callback): one reply, from the simulated services
     // in a runtime page (the always-running system UI page when there is one),
     // so the shell and the apps see the same state. callback(null) when no
-    // page is running. The device source calls the bus directly.
+    // page is running, or the page has no runtime (a site). A call made while
+    // the page is still loading (the system UI page at start: the shell's
+    // first notifications reach NotificationFeed's announce before it has
+    // loaded) goes to it once it has. The device source calls the bus
+    // directly.
     property var _lunaCallbacks: ({})
     property int _nextLunaCall: 1
     function lunaCall(uri, params, callback) {
@@ -1985,11 +2002,11 @@ Item {
         }
         var id = _nextLunaCall++;
         _lunaCallbacks[id] = callback;
-        page.runScript("(function () { var id = " + id + ", done = false;"
+        _lunaSend(page, id, "(function () { var id = " + id + ", done = false;"
+            + " if (!window.__phoenixRuntime) return false;"
             + " function back(r) { if (done) return; done = true; phoenixHost.postToHost('lunaReply', { id: id, reply: r }); }"
-            + " if (!window.__phoenixRuntime) return back(null);"
             + " __phoenixRuntime.dispatch(" + JSON.stringify(uri) + ", " + JSON.stringify(params || {}) + ", back,"
-            + " { cancelled: function () { return done; }, onCancel: null }); })()");
+            + " { cancelled: function () { return done; }, onCancel: null }); return true; })()");
     }
 
     // A subscription ({subscribe: true}): callback hears every reply.
@@ -2001,11 +2018,40 @@ Item {
         }
         var id = _nextLunaCall++;
         _lunaCallbacks[id] = callback;
-        page.runScript("(function () { var id = " + id + ";"
-            + " function back(r) { if (window.phoenixHost) phoenixHost.postToHost('lunaReply', { id: id, reply: r, keep: true }); }"
-            + " if (!window.__phoenixRuntime) return back(null);"
+        _lunaSend(page, id, "(function () { var id = " + id + ";"
+            + " if (!window.__phoenixRuntime) return false;"
+            + " function back(r) { phoenixHost.postToHost('lunaReply', { id: id, reply: r, keep: true }); }"
             + " __phoenixRuntime.dispatch(" + JSON.stringify(uri) + ", " + JSON.stringify(params || {}) + ", back,"
-            + " { cancelled: function () { return false; }, onCancel: null }); })()");
+            + " { cancelled: function () { return false; }, onCancel: null }); return true; })()");
+    }
+
+    // Run a call's script in the page: it returns true once the runtime has
+    // the call (the reply comes as a lunaReply message). Without the runtime
+    // there is no phoenixHost to reply with: the call goes again once a
+    // loading page has loaded, else callback(null).
+    function _lunaSend(page, id, js) {
+        var loading = page.ready === false;
+        page.runScript(js, function (sent) {
+            if (sent === true)
+                return;
+            if (loading && !page.ready) {
+                var again = function () {
+                    page.loaded.disconnect(again);
+                    _lunaSend(page, id, js);
+                };
+                page.loaded.connect(again);
+                return;
+            }
+            if (loading) {
+                // It loaded meanwhile.
+                _lunaSend(page, id, js);
+                return;
+            }
+            var cb = _lunaCallbacks[id];
+            delete _lunaCallbacks[id];
+            if (cb)
+                cb(null);
+        });
     }
 
     function _webPages() {

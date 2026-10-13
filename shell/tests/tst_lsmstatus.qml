@@ -34,6 +34,11 @@ TestCase {
         compare(t.gridDensity, "dense");
         compare(t.keyboardButtonY, 0.25);
         compare(t.keyboardStyle, "auto");
+        // The number row: true, false, or unset (null, the form factor's own).
+        compare(d.numberRow, null);
+        compare(LsmStatus.tweaks({ keyboardNumberRow: true }).numberRow, true);
+        compare(LsmStatus.tweaks({ keyboardNumberRow: false }).numberRow, false);
+        compare(LsmStatus.tweaks({ keyboardNumberRow: "on" }).numberRow, null);
         // Every tweak the shell has a default for is read (Shell.tweakDefaults).
         compare(Object.keys(d).length, LsmStatus.tweakKeys.length);
     }

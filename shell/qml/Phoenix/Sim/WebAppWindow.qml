@@ -14,6 +14,7 @@ import QtWebEngine
 import Phoenix.Shell
 import Phoenix.Native
 import "Links.js" as Links
+import "PageBridge.js" as PageBridge
 
 Item {
     id: win
@@ -202,9 +203,122 @@ Item {
         target.userScripts.insert(script);
     }
 
+    // ---- A script of the app's in its page view (PageBridge.js) ----------------------
+    // The runtime's setPageBridge (BrowserAdapter, Phoenix's): the app's
+    // script in the pages of one origin the view shows, and messages both
+    // ways ("pageMessage" to the app; "bridgePost" to the page). Home
+    // Assistant's external bus and external authentication run on it.
+    function _setBridge(v, p) {
+        if (!PageBridge.validOrigin(p.origin) || !PageBridge.validNonce(p.nonce) || typeof p.script !== "string")
+            return;
+        v.bridge = { origin: p.origin, nonce: p.nonce, script: p.script };
+        _installBridge(v);
+    }
+    function _installBridge(v) {
+        const old = v.userScripts.find("phoenix-bridge");
+        for (let i = 0; i < old.length; ++i)
+            v.userScripts.remove(old[i]);
+        if (!v.bridge)
+            return;
+        const script = WebEngine.script();
+        script.name = "phoenix-bridge";
+        script.worldId = WebEngineScript.MainWorld;
+        script.injectionPoint = WebEngineScript.DocumentCreation;
+        script.runsOnSubFrames = false;
+        script.sourceCode = PageBridge.wrap(v.bridge.script, v.bridge.origin, v.bridge.nonce);
+        v.userScripts.insert(script);
+    }
+    function _bridgeShown(v) {
+        return !!v.bridge && PageBridge.originOf(v.url) === v.bridge.origin;
+    }
+    function _bridgeMessage(v, text) {
+        const json = v.bridge ? PageBridge.message(text, v.bridge.nonce) : null;
+        if (json !== null && _bridgeShown(v))
+            _webViewEvent(v.viewId, "pageMessage", [json]);
+    }
+    function _bridgePost(v, json) {
+        const js = PageBridge.deliverScript(json);
+        if (js && _bridgeShown(v))
+            v.runJavaScript(js);
+    }
+
     // Let a window opened by another page load into this view.
     function adopt(request) {
         request.openIn(view);
+    }
+
+    // ---- Files: file pickers and downloads ------------------------------------------
+    // A page that asks for a file (an <input type=file>, showOpenFilePicker,
+    // showSaveFilePicker) or saves one by downloading it gets Phoenix's
+    // pickers from its runtime before Chromium sees anything
+    // (runtime/phoenix-runtime.js, "A web page's own files"). What still
+    // reaches Chromium never gets Qt WebEngine's own dialogs, which show this
+    // computer's disk:
+    //   - a file chooser (from a page without the runtime: a site, a page
+    //     view, a frame of another origin; or for a click the runtime could
+    //     not stop, whose picker is up already) is refused, and unless the
+    //     runtime's picker is up the shell says so, as OSE's app runtime
+    //     refuses it with a toast (webosose/chromium120 src/neva/app_runtime/
+    //     browser/app_runtime_web_contents_delegate.cc:43-57);
+    //   - access to a path of this computer (File System Access) is refused:
+    //     Phoenix's pickers never hand Chromium one;
+    //   - a download Chromium starts (a navigation to a blob: URL, an
+    //     attachment) is taken from it and handed to the runtime
+    //     (webDownload: the save picker for the page's own files, the
+    //     download manager into Downloads for the web's), as WebAppMgr
+    //     handed what a page could not show to the application manager,
+    //     which had the download manager fetch a remote file
+    //     (WebAppManager::mimeHandoffUrl, webappmanager Src/webbase/
+    //     WebAppManager.cpp:1747-1773; ApplicationManagerService.cpp:1343-1393).
+    //     A site's (no runtime) goes to the download manager through the
+    //     system UI's page ("webDownload", SimWindowSource); its own Blobs
+    //     cannot be saved, and OSE's toast says so ("Download is not
+    //     supported.", app_runtime_download_manager_delegate.cc:39-57).
+    // tools/test-webfiles.cjs covers the runtime's side.
+    readonly property string _noFileSelection: "File selection is not supported."
+    readonly property string _noDownload: "Download is not supported."
+    readonly property bool _runtimePage: !site && !(signInCard && _remotePage)
+
+    function _fileDialog(page, request) {
+        request.accepted = true;
+        request.dialogReject();
+        if (page !== view || !_runtimePage) {
+            hostMessage("banner", { message: _noFileSelection });
+            return;
+        }
+        view.runJavaScript("!!(window.__phoenixRuntime && __phoenixRuntime.webFiles && __phoenixRuntime.webFiles.busy())", (busy) => {
+            if (busy !== true)
+                win.hostMessage("banner", { message: win._noFileSelection });
+        });
+    }
+
+    function _fileSystemAccess(request) {
+        request.reject();
+    }
+
+    function _download(download) {
+        const d = { url: download.url.toString(), name: download.suggestedFileName || "", mimeType: download.mimeType || "" };
+        download.cancel();
+        if (!_runtimePage) {
+            if (Links.isWeb(d.url))
+                hostMessage("webDownload", d);
+            else
+                hostMessage("banner", { message: _noDownload });
+            return;
+        }
+        view.runJavaScript("!!(window.__phoenixRuntime && __phoenixRuntime.webDownload && __phoenixRuntime.webDownload("
+                           + JSON.stringify(d) + "))", (handled) => {
+            if (handled !== true)
+                win.hostMessage("banner", { message: win._noDownload });
+        });
+    }
+
+    Connections {
+        target: view.profile
+        function onDownloadRequested(download) {
+            if (download.view === view)
+                win._download(download);
+        }
     }
 
     // ---- Editing: Cut, Copy, Paste, Select All ----------------------------------------
@@ -408,11 +522,13 @@ Item {
             if (!!p.on === v.privateMode)
                 break;
             _webViews[p.id] = _makeView(p.id, p.on, { x: v.x, y: v.y, width: v.width, height: v.height, visible: v.visible,
-                                                      redirects: v.redirects });
+                                                      redirects: v.redirects, bridge: v.bridge });
             if (p.url)
                 _webViews[p.id].url = p.url;
             v.destroy();
             break;
+        case "bridge": _setBridge(v, p); break;
+        case "bridgePost": _bridgePost(v, p.message); break;
         case "edit": edit(p.action, v); break;
         case "print": _print(v, p); break;
         case "destroy":
@@ -434,6 +550,8 @@ Item {
             // runtime): links matching one go back to the page as
             // urlRedirected(url, cookie) instead of loading.
             property var redirects: []
+            // The app's script and its secret ({origin, nonce, script}: _setBridge).
+            property var bridge: null
             function redirected(url) {
                 const cookie = Links.redirectFor(url, redirects);
                 if (cookie === null)
@@ -449,10 +567,17 @@ Item {
             settings.playbackRequiresUserGesture: false
             // Links to other schemes never reach the computer's own apps.
             settings.unknownUrlSchemePolicy: WebEngineSettings.DisallowUnknownUrlSchemes
-            Component.onCompleted: win._addLinkScript(page)
+            Component.onCompleted: {
+                win._addLinkScript(page);
+                if (page.bridge)
+                    win._installBridge(page);
+            }
             touchHandleDelegate: selectionHandle
             onContextMenuRequested: (request) => win._contextMenu(page, request)
             onTouchSelectionMenuRequested: (request) => win._touchMenu(page, request)
+            // Never this computer's disk (Files, above).
+            onFileDialogRequested: (request) => win._fileDialog(page, request)
+            onFileSystemAccessRequested: (request) => win._fileSystemAccess(request)
 
             function report() {
                 win._webViewEvent(viewId, "urlTitleChanged", [page.url.toString(), page.title, page.canGoBack, page.canGoForward]);
@@ -490,6 +615,8 @@ Item {
             onJavaScriptConsoleMessage: (level, message) => {
                 if (message.indexOf(Links.LINK_PREFIX) === 0)
                     page.redirected(message.substring(Links.LINK_PREFIX.length));
+                else if (PageBridge.isBridgeMessage(message))
+                    win._bridgeMessage(page, message);
             }
             // Links that open a new window stay in this view, unless the
             // app takes them.
@@ -600,6 +727,9 @@ Item {
         touchHandleDelegate: selectionHandle
         onContextMenuRequested: (request) => win._contextMenu(view, request)
         onTouchSelectionMenuRequested: (request) => win._touchMenu(view, request)
+        // Phoenix's pickers, never this computer's disk (Files, above).
+        onFileDialogRequested: (request) => win._fileDialog(view, request)
+        onFileSystemAccessRequested: (request) => win._fileSystemAccess(request)
         // Camera and microphone for the Camera app, as an app's
         // requiredPermissions would grant them on a device. Nothing else.
         onFeaturePermissionRequested: (securityOrigin, feature) => {

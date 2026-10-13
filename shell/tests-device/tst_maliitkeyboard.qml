@@ -133,7 +133,9 @@ Item {
             compare(c.params.subscribe, true);
             verify(c.params.keys.indexOf("x_palm_virtualkeyboard_prefs") >= 0);
             verify(c.params.keys.indexOf("x_palm_textinput") >= 0);
-            compare(kb.numberRow, false);
+            compare(kb.numberRow, null, "unset: the form factor's own");
+            compare(kb.numberRowShown, false, "a phone's: none");
+            compare(kb.keyboardSize, 0);
             compare(kb.keyboardStyle, "auto");
             compare(kb.textSuggestions, true);
             compare(kb.keyboardId, "classic");
@@ -271,6 +273,52 @@ Item {
             FakeBus.clear();
             tapKey("a");
             compare(FakeBus.last("com.webos.service.audio", "/playSound"), null);
+        }
+
+        // A tablet's screen: the TouchPad's keyboard, its number row its own
+        // unless the setting says (the owner, 12 October 2026), its size
+        // the system's ("keyboard size" in x_palm_virtualkeyboard_settings,
+        // VirtualKeyboardPreferences.cpp:178-197): a size chosen on the
+        // keyboard is written there, the keyboard in use kept beside it.
+        function test_tabletNumberRowAndSize() {
+            make({ x_palm_virtualkeyboard_settings: JSON.stringify({ layout: "qwerty", language: "en", keyboardId: "classic", "keyboard size": 1 }) });
+            im.screenWidth = 2560;
+            im.screenHeight = 1600;
+            tryCompare(host, "tablet", true, 1000);
+            compare(kb.numberRow, null);
+            compare(kb.numberRowShown, true, "a tablet's own");
+            compare(kb.keymap.rows, 5);
+            compare(kb.keyboardSize, 1);
+            show();
+            var withRow = kb.keysHeight;
+            compare(withRow, 393 * kb.pixelScale, "Large, from the start");
+            // Settings > Text Assist > Number row off.
+            FakeBus.reply("com.webos.service.systemservice", "/getPreferences", { returnValue: true, keyboardNumberRow: false });
+            compare(kb.numberRow, false);
+            compare(kb.keymap.rows, 4);
+            compare(kb.keysHeight, Math.round(393 * 285 / 340) * kb.pixelScale);
+            tryCompare(im, "panelHeight", Math.ceil(kb.keyboardHeight), 1000);
+            // The hide key's long press picks Small: written at once, the rest kept.
+            FakeBus.clear();
+            kb.keyboardSizeSelected(-1);
+            var c = FakeBus.last("com.webos.service.systemservice", "/setPreferences");
+            compare(JSON.parse(c.params.x_palm_virtualkeyboard_settings)["keyboard size"], -1);
+            compare(JSON.parse(c.params.x_palm_virtualkeyboard_settings).layout, "qwerty");
+            compare(kb.keyboardSize, -1);
+            compare(kb.keysHeight, Math.round(291 * 285 / 340) * kb.pixelScale);
+            // The same again: nothing to write.
+            FakeBus.clear();
+            kb.keyboardSizeSelected(-1);
+            compare(FakeBus.last("com.webos.service.systemservice", "/setPreferences"), null);
+            // The language key keeps the size.
+            kb.keyboardSelected({ layout: "qwerty", language: "en" });
+            c = FakeBus.last("com.webos.service.systemservice", "/setPreferences");
+            compare(JSON.parse(c.params.x_palm_virtualkeyboard_settings)["keyboard size"], -1);
+            // Settings > Text Assist > Keyboard size: Medium.
+            FakeBus.reply("com.webos.service.systemservice", "/getPreferences",
+                          { returnValue: true, x_palm_virtualkeyboard_settings: JSON.stringify({ layout: "qwerty", language: "en", "keyboard size": 0 }) });
+            compare(kb.keyboardSize, 0);
+            compare(kb.keysHeight, 285 * kb.pixelScale);
         }
 
         // What it writes back: the keyboard in use, a word added, the

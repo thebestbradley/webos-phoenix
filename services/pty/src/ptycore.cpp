@@ -155,8 +155,23 @@ std::string latin1ToUtf8(const std::string &bytes)
 
 Session::~Session()
 {
-    if (m_pid > 0 && !m_reaped) {
+    if (m_pid > 0 && !m_reaped)
         hangup(SIGHUP);
+    // Close the PTY before waiting for the shell: until it is closed, or its
+    // output read, a shell may be unable to exit at all. On macOS (as in the
+    // BSDs) a session leader's exit drains its controlling terminal before it
+    // revokes it (XNU bsd/kern/kern_exit.c, proc_exit: "drain controlling
+    // terminal", ttywait()), with no time limit (t_timeout is 0), and an
+    // exiting process takes no more signals, SIGKILL included (kern_sig.c,
+    // psignal_internal: P_LEXIT). Closing the master is a hang-up: the
+    // output queue is flushed and the drain ends (tty_dev.c, ptcclose ->
+    // ttymodem(tp, 0)). Waiting with the PTY still open and unread blocked
+    // forever there (pty-test on the macOS runner).
+    if (m_fd >= 0) {
+        ::close(m_fd);
+        m_fd = -1;
+    }
+    if (m_pid > 0 && !m_reaped) {
         int code, sig;
         // Give it a moment to go, then make sure it does not linger as a zombie.
         for (int i = 0; i < 20 && !reap(&code, &sig); ++i)
@@ -166,8 +181,6 @@ Session::~Session()
             ::waitpid(m_pid, nullptr, 0);
         }
     }
-    if (m_fd >= 0)
-        ::close(m_fd);
 }
 
 static std::string envOr(const char *name, const std::string &fallback)

@@ -360,6 +360,36 @@ data use "Phoenix Account".
   is the developer's.
 - **Preware feeds**: read like Preware does; off until switched on.
   Packages keep their own licenses.
+- **Open-source web apps the catalog hosts** (13 October 2026; docs/APP-STORE.md
+  3.12, docs/WEB-APP-CATALOG.md): only under permissive licences (MIT,
+  Apache-2.0, BSD, ISC, Zlib, CC0; `bin/web-apps.py check` refuses any
+  other), from the upstream's own release, unmodified, each package carrying
+  the release's licence files and, fetched from the release's tag, its
+  `NOTICE`, attribution list, the icon's licence and the licence texts of
+  what it bundles (fonts under the SIL OFL 1.1, icon sets, word lists):
+  what MIT, Apache-2.0 (section 4: the licence and the NOTICE) and the OFL
+  ask of a redistribution. The app's name and icon identify it as upstream
+  ships them, with upstream as the developer, and are their owners' (the
+  ArtCraft name and logos are the ArtCraft Team's trademarks, outside their
+  code's licence; the catalog uses only each app's own name and icon to
+  identify it). DeckCraft includes the Symphonia decoders unmodified under
+  MPL-2.0; its `NOTICE`, in the package, says where their source is (MPL-2.0
+  3.2). GPL and AGPL apps (Kiwix JS, Element, Cinny, FluffyChat) are not
+  hosted: they are links to their official sites, as curated web apps, so
+  no source offer is owed. Nothing upstream made is in this repository; the
+  downloads live in a cache outside it.
+- **webOS Phoenix 2.0's apps** (phoenix-default-apps, Apache-2.0, the
+  project's own, in a private repository): the catalog hosts their builds,
+  read from a checkout at publish time and never committed here. Their
+  bundles include their npm dependencies (React, Enact and others, MIT and
+  Apache-2.0); a public download of them should carry those packages'
+  notices, which their `dist/` does not yet (an open item for that
+  repository's build). Home, the 2.0 companion for Home Assistant offered
+  in the Marketplace only, names Home Assistant only to say what it works
+  with: its listing says it is not affiliated with the Open Home
+  Foundation, whose trademark "Home Assistant" is, and its icon is
+  Phoenix's own art, never Home Assistant's logo (CC BY-NC-SA 4.0 art, not
+  for commercial use; the app's `PROVENANCE.md`).
 
 ## Text Assist (the keyboard)
 

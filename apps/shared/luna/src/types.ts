@@ -174,6 +174,8 @@ export interface SystemPreferences {
     systemSounds?: boolean;
     /** The virtual keyboard's preferences, a JSON string (see keyboardPrefs). */
     x_palm_virtualkeyboard_prefs?: string;
+    /** The keyboard in use and the tablet keyboard's size, a JSON string (see keyboardSettings). */
+    x_palm_virtualkeyboard_settings?: string;
     /** Rotation lock: off (false), or the orientation the UI is locked in (true: on, the shell picks how the UI is turned now), as LunaSysMgr kept it. */
     rotationLock?: boolean | "up" | "down" | "left" | "right";
     showAlertsWhenLocked?: boolean;
@@ -223,8 +225,8 @@ export interface SystemPreferences {
     launcherGridDensity?: "normal" | "dense";
     /** Phoenix: the battery's percentage beside its icon in the status bar. */
     showBatteryPercent?: boolean;
-    /** Phoenix: a row of numbers above the keyboard's letters. */
-    keyboardNumberRow?: boolean;
+    /** Phoenix: a row of numbers above the keyboard's letters; unset (null): the form factor's own, on for a tablet, off for a phone. */
+    keyboardNumberRow?: boolean | null;
     /** Phoenix: the keyboard's look: "auto" (phone: black, tablet: TouchPad), "black" or "touchpad". */
     keyboardStyle?: "auto" | "black" | "touchpad";
     /** Phoenix: the start-up animation: "phoenix" (the bird's story) or "classic" (the logo's glow). */
@@ -327,6 +329,17 @@ export interface VirtualKeyboardPrefs {
     installed?: string[];
 }
 
+/** x_palm_virtualkeyboard_settings, parsed (LunaSysMgr VirtualKeyboardPreferences.cpp:189-197). */
+export interface VirtualKeyboardSettings {
+    /** The keyboard in use: its layout and language (the language key's choice). */
+    layout?: string;
+    language?: string;
+    /** Phoenix (GAPS V7): the whole keyboard in use. */
+    keyboardId?: string;
+    /** The tablet keyboard's size, -2 to 1: XS, S, M (0, the default), L. */
+    "keyboard size"?: number;
+}
+
 export interface SystemTime {
     utc: number;
     localtime: { year: number; month: number; day: number; hour: number; minute: number; second: number };
@@ -387,6 +400,8 @@ export interface SystemStatus {
     gestureArea?: boolean;
     /** Phoenix: the words the keyboard learned that its word list lacks. */
     learnedWords?: string[];
+    /** Phoenix: the shell's layout, "phone" or "tablet" ("" until the shell says). */
+    formFactor?: "phone" | "tablet" | "";
 }
 
 // ---- The map -----------------------------------------------------------------------

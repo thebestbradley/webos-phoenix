@@ -135,7 +135,7 @@ FocusScope {
     readonly property var tweaks: shell.system && shell.system.tweaks ? shell.system.tweaks : ({})
     readonly property var tweakDefaults: ({ infiniteCardCycling: false, maximizeEdges: false, waveLauncher: true, tapRipple: true,
                                             animationSpeed: "normal", gestureSensitivity: "normal", haptics: false,
-                                            gridDensity: "normal", batteryPercent: false, numberRow: false,
+                                            gridDensity: "normal", batteryPercent: false, numberRow: null,
                                             keyboardStyle: "auto", startupAnimation: "phoenix",
                                             keyboardButton: true, keyboardButtonSide: "right",
                                             keyboardButtonY: 1, keyboardButtonHintShown: false })
@@ -1591,8 +1591,10 @@ FocusScope {
         return out;
     }
     function _dialogKey(event) {
+        // A popup alert's keys, but not Just Type's (alertKeys): the shell
+        // holds what is typed while Just Type's page takes its first letter.
         var host = deleteDialog.appId !== "" ? deleteDialog
-            : notes.alertShown && notes.alertKey !== "" && source && source.windowFor ? source.windowFor(notes.alertKey) : null;
+            : notes.alertShown && notes.alertKey !== "" && !justType.open && source && source.windowFor ? source.windowFor(notes.alertKey) : null;
         if (!host) {
             _setKeyButton(null);
             return false;
@@ -1725,9 +1727,16 @@ FocusScope {
     // A popup alert in front takes the navigation keys, whatever had the
     // focus (the app's page under it takes every key): Tab and the arrows
     // ring its buttons, Enter or Space presses one (_dialogKey; GAPS V8 (3)).
+    // Not while Just Type is open: every key typed then is its search's
+    // (Space a space, Enter its top result, the arrows its cursor), as the
+    // original passed the keys it did not use on to the page
+    // (SystemUiController::handleKeyEvent, SystemUiController.cpp:353-365).
+    // Typing in card view starts it, and the first time in card view the
+    // "Dismissing Cards" tutorial is up: the first space typed pressed its
+    // OK instead ("how do" came out "howdo").
     SystemKeys {
         id: alertKeys
-        enabled: notes.alertShown && !shell.locked
+        enabled: notes.alertShown && !shell.locked && !justType.open
         keys: [Qt.Key_Tab, Qt.Key_Backtab, Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right,
                Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space]
         onPressed: (key, autoRepeat) => shell._dialogKey({ key: key })
@@ -3237,7 +3246,9 @@ FocusScope {
                             var i = info();
                             return i && i.reason ? qsTr("%1: %2").arg(e.title).arg(i.reason) : e.title;
                         }
-                        return e.version ? qsTr("%1 - v.%2").arg(e.title).arg(e.version) : e.title;
+                        var text = e.version ? qsTr("%1 - v.%2").arg(e.title).arg(e.version) : e.title;
+                        // An update of a built-in app: removing it brings the built-in one back.
+                        return e.builtinVersion ? text + "\n" + qsTr("The built-in version %1 comes back.").arg(e.builtinVersion) : text;
                     }
                     function remove() {
                         var id = deleteDialog.appId;
@@ -3247,8 +3258,11 @@ FocusScope {
                                 shell.source.dismissInstall(id);
                             return;
                         }
-                        shell.setLauncherLayout(mode === "shortcut" ? LauncherLayout.drop(shell.launcherLayout, id)
-                                                                    : LauncherLayout.remove(shell.launcherLayout, id));
+                        // An update of a built-in app keeps its place: the built-in one comes back.
+                        var e = iconDrag.entry(id);
+                        if (!(e && e.builtinVersion))
+                            shell.setLauncherLayout(mode === "shortcut" ? LauncherLayout.drop(shell.launcherLayout, id)
+                                                                        : LauncherLayout.remove(shell.launcherLayout, id));
                         if (shell.source && typeof shell.source.removeApp === "function")
                             shell.source.removeApp(id);
                     }
@@ -3703,15 +3717,31 @@ FocusScope {
                 objectName: "virtualKeyboard"
                 dictation: shell.dictation
                 tablet: shell.tablet
-                // Settings > Text Assist > Number row (the phone keyboard).
+                // Settings > Text Assist > Number row: true, false, or null
+                // (unset: the form factor's own, on for the tablet).
                 numberRow: shell.tweak("numberRow")
+                // The tablet's keyboard size (Settings > Text Assist >
+                // Keyboard size, or the hide key's long press): kept by the
+                // system (x_palm_virtualkeyboard_settings "keyboard size").
+                keyboardSize: shell.system && typeof shell.system.keyboardSize === "number" ? shell.system.keyboardSize : 0
+                onKeyboardSizeSelected: (size) => { if (shell.system && shell.system.keyboardSize !== undefined) shell.system.keyboardSize = size; }
                 // Settings > Text Assist > Keyboard style: "auto", "black", "touchpad".
                 keyboardStyle: shell.tweak("keyboardStyle")
                 pixelScale: Theme.keyboardScale
                 availableWidth: ui.width
                 availableHeight: ui.height
                 y: ui.height - notes.negativeSpace
-                visible: shell.virtualKeyboard && shell._imeOwnsSpace && notes.negativeSpace > 0 && !notes.alertShown
+                // Out of the way of a popup alert only where the alert has
+                // the negative space: the phone's takes it (DWMStateAlertOpen::
+                // onEntry, DashboardWindowManagerStates.cpp:103-107). The
+                // tablet's is drawn at the top right (:97) and leaves the
+                // space to the keyboard, which shows whenever it has some
+                // (InputWindowManager::slotNegativeSpaceChanged,
+                // InputWindowManager.cpp:107-114): hidden there, it left its
+                // space empty under Just Type and the apps. (Over the lock
+                // screen, whose alert is centred, it still gives way.)
+                visible: shell.virtualKeyboard && shell._imeOwnsSpace && notes.negativeSpace > 0
+                         && !(notes.alertShown && (!notes.overlay || notes.locked))
                 acceptingInput: shell._imeOpened
                 // The simulator's host (KeyboardHost; on a device the Maliit
                 // input method is the keyboard's): the field is in this

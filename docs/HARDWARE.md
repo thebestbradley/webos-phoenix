@@ -1493,7 +1493,7 @@ keyboard calls the bus, appId `com.webos.service.ime.phoenixKeyboard`):
 
 | Need | How | Permission |
 | --- | --- | --- |
-| Settings: layouts, Text Assist, number row, style, sounds | `com.webos.service.systemservice/getPreferences` (subscribed): `x_palm_virtualkeyboard_prefs`, `x_palm_virtualkeyboard_settings`, `x_palm_textinput`, `keyboardNumberRow`, `keyboardStyle`, `systemSounds`, read by the runtime's rules (`DeviceKeyboard.js`) | `systemsettings.query` |
+| Settings: layouts, Text Assist, number row, size, style, sounds | `com.webos.service.systemservice/getPreferences` (subscribed): `x_palm_virtualkeyboard_prefs`, `x_palm_virtualkeyboard_settings`, `x_palm_textinput`, `keyboardNumberRow`, `keyboardStyle`, `systemSounds`, read by the runtime's rules (`DeviceKeyboard.js`) | `systemsettings.query` |
 | The keyboard in use, "Add" to the dictionary | `setPreferences` | `systemsettings.management` |
 | Key sounds | `com.webos.service.audio/playSound`, the file's PCM twin on `pfeedback` (as `LsmWindowSource.playSound`) | `audio.management` |
 | Dictation (V2) | Phoenix.Native's `Dictation`: the microphone and `luna-send` to `org.webosphoenix.transcriber` (whisper.cpp). The microphone needs Qt Multimedia, and OSE's `qtmultimedia` recipe is skipped (it fails to build against OSE's Qt), so on a device the keyboard has no microphone key yet (OPEN-QUESTIONS Q35) | luna-send's own |

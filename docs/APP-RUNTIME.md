@@ -669,7 +669,11 @@ WebAppMgr:
   (subscribable) answers `{ime: {visible}, orientation: {ui, device}}` as the
   shell last reported (`orientation` in `applyHostStatus`), and Phoenix's
   `gestureArea` (the device has the strip below the screen; Settings offers
-  Advanced gestures by it).
+  Advanced gestures by it), and `formFactor`, the shell's layout, `"phone"` or
+  `"tablet"` (`""` until the shell says; host status `formFactor`, which the
+  adaptive simulator changes as its window is resized; on a device the shell
+  reports it to `services/systemmanager`): Settings > Text Assist shows the
+  keyboard's number row and size by it.
 
 `tools/test-orientation.cjs` checks all three with the original Calculator.
 
@@ -1007,7 +1011,7 @@ same request and reply shapes:
 | Screen & Lock | `com.webos.settingsservice` `get/setSystemSettings {category: "picture", backlight}`; `com.webos.service.systemservice` `get/setPreferences` (`screenTimeout`, `rotationLock`, `wallpaper`, `showAlertsWhenLocked`, `blinkNotifications`) | `settingsservice` `inc/SettingsServiceApi.h`; `luna-sysservice` `Src/PrefsFactory.cpp` (stores any key) |
 | Screen & Lock (PIN) | `com.palm.systemmanager` `getDeviceLockMode`, `setDevicePasscode`, `matchDevicePasscode` (and `getSecurityPolicy`: a security policy's rules; see [Device security](#device-security-erase-usb-drive-mode-and-debugging)): the legacy webOS API; OSE has none, so Phoenix will have to provide it | `openwebos/luna-sysmgr` `Src/base/SystemService.cpp` |
 | Sounds | `com.webos.service.audio` `master/getVolume`, `master/setVolume`, `master/muteVolume`, `getInputVolume` / `setInputVolume` (`streamType` `pringtones`, `palerts`, `pfeedback`, `pmedia`), `playFeedback`, `playSound`, `controlPlayback`; system service `ringtone`, `alerttone`, `notificationtone` (`{name, fullPath}`: Open webOS's alert.wav and notification.wav or any ringtone; the shell plays them for alerts, alarms and reminders, and for notifications, that name no sound of their own, as LunaSysMgr's `AlertWindow` and `BannerMessageHandler` did), `systemSounds`, `x_palm_virtualkeyboard_prefs` (`TapSounds`: Keyboard clicks), `ringtone/listRingtones` | `audiod-pro` `src/modules/masterVolumeManager`, `audioPolicyManager`, `systemSoundsManager`; `luna-sysmgr` `conf/defaultPreferences.txt`, `Src/base/settings/Preferences.cpp` |
-| Text Assist | system service `get/setPreferences`: `x_palm_virtualkeyboard_prefs` (`WordSuggestions`, `AutoCorrect`, `SwipeTyping`, `spaces2period`, `ForgetWords`, `keyboards`), `keyboardShortcuts`, `keyboardNumberRow`, `keyboardStyle` (Phoenix: the keys' look, `"auto"` = black on a phone and the TouchPad's on a tablet, `"black"`, `"touchpad"`; systemStatus `tweaks.keyboardStyle`), and `x_palm_textinput` (`shortcutChecking` `"autoCorrect"` / `"off"`; Phoenix adds `shortcuts: [{shortcut, text}]`, the user's text replacements). The runtime gives the shell's keyboard `systemStatus` `textAssist` (`suggestions`, `autoCorrect`, `swipe`, `spaces2period`, `forgetWords`, `shortcuts` as `{typed: text}`, `shortcutsOn`); the space bar puts a shortcut's text in (`TextAssist.js` `shortcut()`), in any keyboard language, and backspace puts the shortcut back. Personal Dictionary (Phoenix): `x_palm_textinput.userWords` (the words added) and `removedWords` (`{word: ms}`, learned words deleted, which the keyboard drops once) reach the keyboard as `textAssist.userWords` / `removedWords`; the shell reports the words it learned that its list lacks as host status `learnedWords` (getSystemStatus `learnedWords`), and its "Add" after an undone correction as `dictionaryWordAdded`, which the writer page adds to `userWords` | `luna-sysmgr` `conf/defaultPreferences.txt` (`x_palm_textinput`), `Src/ime/VirtualKeyboardPreferences.cpp` |
+| Text Assist | system service `get/setPreferences`: `x_palm_virtualkeyboard_prefs` (`WordSuggestions`, `AutoCorrect`, `SwipeTyping`, `spaces2period`, `ForgetWords`, `keyboards`), `keyboardShortcuts`, `keyboardNumberRow` (Phoenix: the number row, `true`, `false` or unset, `null`: the form factor's own, on for the tablet keyboard, which had one, off for the phone's, the owner, 12 October 2026; one choice for both form factors once set; systemStatus `tweaks.numberRow`, `null` when unset), `x_palm_virtualkeyboard_settings` `"keyboard size"` (the tablet keyboard's size, -2 to 1, XS to L, 0 the default, where `VirtualKeyboardPreferences.cpp:178-197` kept it beside the keyboard in use; Settings > Text Assist > Keyboard size on tablet layouts writes it, and so does the keyboard's hide key held, the shell's host status `keyboardSize`; every writer of the preference keeps the other keys; systemStatus `keyboardSize`), `keyboardStyle` (Phoenix: the keys' look, `"auto"` = black on a phone and the TouchPad's on a tablet, `"black"`, `"touchpad"`; systemStatus `tweaks.keyboardStyle`), and `x_palm_textinput` (`shortcutChecking` `"autoCorrect"` / `"off"`; Phoenix adds `shortcuts: [{shortcut, text}]`, the user's text replacements). The runtime gives the shell's keyboard `systemStatus` `textAssist` (`suggestions`, `autoCorrect`, `swipe`, `spaces2period`, `forgetWords`, `shortcuts` as `{typed: text}`, `shortcutsOn`); the space bar puts a shortcut's text in (`TextAssist.js` `shortcut()`), in any keyboard language, and backspace puts the shortcut back. Personal Dictionary (Phoenix): `x_palm_textinput.userWords` (the words added) and `removedWords` (`{word: ms}`, learned words deleted, which the keyboard drops once) reach the keyboard as `textAssist.userWords` / `removedWords`; the shell reports the words it learned that its list lacks as host status `learnedWords` (getSystemStatus `learnedWords`), and its "Add" after an undone correction as `dictionaryWordAdded`, which the writer page adds to `userWords` | `luna-sysmgr` `conf/defaultPreferences.txt` (`x_palm_textinput`), `Src/ime/VirtualKeyboardPreferences.cpp` |
 | Date & Time | system service `get/setPreferences` (`timeFormat`, `useNetworkTime`, `useNetworkTimeZone`, `timeZone`), `getPreferenceValues {key: "timeZone"}`, `time/getSystemTime`, `time/setSystemTime {utc}` | `luna-sysservice` `Src/TimePrefsHandler.cpp` |
 | Language & Region | `com.webos.settingsservice` `get/setSystemSettings {keys: ["localeInfo"]}` (`locales.UI`, `locales.FMT`) | `settingsservice` |
 | Device Info | system service `deviceInfo/query`, `osInfo/query`; `com.palm.power` `batteryStatusQuery` (legacy); `com.palm.telephony` `platformQuery` (IMEI/MEID, carrier), `subscriberIdQuery` (`msisdn`: the phone number), `simStatusQuery`, `networkStatusQuery`; settings service `resetSystemSettings`; `org.webosphoenix.service.reset` `eraseUserData` (apps' data and settings; the user's files on the USB drive are kept, as legacy webOS's "Erase Apps & Data") and `fullErase` (everything, files too) (Phoenix, simulator only so far); "Help and tips" and "Run setup again" launch Help and First Use (`{rerun: true}`) | `luna-sysservice` `Src/DeviceInfoService.cpp`, `OsInfoService.cpp` |
@@ -1307,6 +1311,28 @@ BrowserAdapter's `addUrlRedirect` and `urlRedirected`, with the patterns of
 `/usr/palm/command-resource-handlers.json`). `tools/test-browser.cjs` browses
 with it end to end, tapping a real `mailto:` link.
 
+**A script of the app's in its page view** (Phoenix's; BrowserAdapter had
+none). What Android's WebView (`addJavascriptInterface`,
+`evaluateJavascript`) and iOS's WKWebView (`WKUserScript`,
+`WKScriptMessageHandler`) give an app for its own web views, which Home
+Assistant's companion apps build their external bus and external
+authentication on: the object's `setPageBridge(script, origin)` runs
+`script` in the page's own world as each page of `origin` starts (the top
+frame only), as the body of a function of `bridge`; `bridge.post(value)`
+sends JSON to the app, which hears it as the callback `pageMessage(json)`,
+and `bridge.onMessage(fn)` hears what the app sends with
+`postToPage(json)`. The shell keeps the rules (`shell/qml/Phoenix/Sim/
+PageBridge.js`, `WebAppWindow.qml`): each message carries a secret the
+runtime made for that view, which the script keeps in a closure, so a frame
+of another site in the page cannot speak for it; messages pass either way
+only while the view shows a page of that origin; what the app sends must be
+JSON, and becomes a literal in the page, never code. Only the native view
+can (`pageBridgeAvailable()`): an `<iframe>` of another origin cannot be
+reached before its scripts run. On a device, WebAppMgr's page views will
+need the same. Phoenix's Home app (phoenix-default-apps
+`apps/homeassistant`) uses it. Tests: `shell/tests/tst_pagebridge.qml`,
+`apps/shared/luna/src/pagebridge.test.ts`.
+
 **Downloads.** A file the page view does not show (a PDF, a link with
 `download`) is not downloaded by Chromium: phoenix-sim's view hands it
 back to the page as BrowserAdapter did, with the plugin's
@@ -1330,6 +1356,13 @@ mediaapps.test.ts` check it; the native view's hand-back was checked in
 phoenix-sim. The drawer (`enyo.Toaster`) flies in over the page: the native
 view keeps to the part it leaves uncovered (on a phone, none), since
 nothing in the page can draw over it.
+
+A page view's own file chooser (an upload on a web page) is refused,
+never Qt WebEngine's dialog on the computer's disk; the shell says "File
+selection is not supported." An app's own page (any web app) that opens
+or saves files, or downloads one, gets Phoenix's file and save pickers
+from the runtime instead: [SHARE-AND-FILES.md](SHARE-AND-FILES.md), "A
+web page's own files".
 
 **The page views' profile and the community's features** (docs/M6-PLAN.md
 F4 item 7). In phoenix-sim the page views use a web profile of their own
@@ -2625,7 +2658,11 @@ which runs unchanged in the simulator:
     (`lib/ipk.js`) whose `appinfo.json` "main" is the site, with the site's
     icons: its own launcher icon and cards;
   - a Phoenix app: the `.ipk`, checked against the size and SHA-256 the
-    catalog signed;
+    catalog signed (also the open-source web apps the catalog packs from
+    their upstreams' releases and the 2.0 apps, [APP-STORE.md](APP-STORE.md)
+    3.12-3.13; one with a built-in app's id is an update in its place,
+    offered only when newer and removable back to the built-in version,
+    3.14);
   - a Classic: the App Museum's package (`lib/appmuseum.js`), or a Preware
     feed's (`lib/preware.js`, MD5 checked).
   Every package is read first and refused when it is native or a Mojo app
@@ -3277,7 +3314,8 @@ add to the runtime and the original apps:
   `sysUiEnableMaximizeEdges`, `sysUiEnableWaveLauncher`,
   `showReticleAnimation`; Phoenix's `animationSpeed`, `gestureSensitivity`,
   `hapticFeedback`, `launcherGridDensity`, `showBatteryPercent`,
-  `keyboardNumberRow`, `emailDashboardCycling`; Settings > Text Assist's
+  `keyboardNumberRow` (true, false or unset: on for a tablet, off for a
+  phone), `emailDashboardCycling`; Settings > Text Assist's
   `keyboardStyle`, `"auto"`, `"black"` or `"touchpad"`), and the shell gets
   them as the systemStatus `tweaks` (the keyboard changes its look at once). Settings > Sounds & Ringtones > Repeat alerts
   is `notificationRepeat` {enabled, minutes, apps}; Screen & Lock > Show

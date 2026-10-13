@@ -84,6 +84,9 @@ Item {
         readonly property var kb: shell.keyboard
 
         function init() {
+            // No popup alert left by a test (test_popupAlertComesFirst).
+            windows.closeAlert(windows.dismissCardTutorialKey);
+            windows.dismissedFirstCard = true;
             sys.deviceOrientation = "up";
             tryCompare(shell, "uiOrientation", "up", 3000);
             tryVerify(function() { return !shell.rotator.rotating; }, 3000);
@@ -141,6 +144,24 @@ Item {
             fuzzyCompare(kb.y, shell.uiRoot.height - kb.keyboardHeight, 0.01);
             // Apps end where it begins.
             fuzzyCompare(shell.cardView.windowHeight, shell.uiRoot.height - Theme.statusBarHeight - kb.keyboardHeight, 0.01);
+        }
+
+        // The phone's popup alert takes the negative space from the
+        // keyboard (DashboardWindowManagerStates.cpp:103-107): the keyboard
+        // gives way while it is up and comes back after.
+        function test_popupAlertComesFirst() {
+            showKeyboard();
+            verify(kb.visible);
+            windows.dismissedFirstCard = false;
+            windows.firstCardAlert();
+            tryCompare(shell.notifications, "alertShown", true, 2000);
+            tryCompare(shell.notifications, "negativeSpace", shell.notifications.alertHeight, 2000);
+            verify(!kb.visible);
+            windows.closeAlert(windows.dismissCardTutorialKey);
+            windows.dismissedFirstCard = true;
+            tryCompare(shell.notifications, "alertShown", false, 2000);
+            tryCompare(shell.notifications, "negativeSpace", kb.keyboardHeight, 2000);
+            verify(kb.visible);
         }
 
         // A hardware keyboard attached (GAPS V8 (1)): a field taking the
@@ -315,11 +336,13 @@ Item {
 
         // Settings > Text Assist > Number row (docs/M6-PLAN.md F4): a row
         // of digits above the letters, three quarters of a letter row; the
-        // keyboard grows by it and the letter keys keep their size. Off by
-        // default.
+        // keyboard grows by it and the letter keys keep their size. Unset,
+        // the phone's own: none (the owner, 12 October 2026).
         function test_numberRow() {
             showKeyboard();
             var q = kb.keyRect("q"), height = kb.keysHeight;
+            compare(kb.numberRow, null);
+            compare(kb.numberRowShown, false);
             verify(kb.keyRect("1") === null, "no number row by default");
             field.focus = false;
             shell.forceActiveFocus();
@@ -340,6 +363,11 @@ Item {
             showKeyboard();
             fuzzyCompare(kb.keysHeight, height, 0.01);
             verify(kb.keyRect("1") === null);
+            // Off: the same as unset on a phone.
+            sys.tweaks = { numberRow: false };
+            compare(kb.numberRowShown, false);
+            compare(kb.keymap.rows, 4);
+            fuzzyCompare(kb.keysHeight, height, 0.01);
         }
 
         // Changed while the keyboard is up, or after it has been (Settings >
@@ -374,6 +402,22 @@ Item {
             k.numberRow = false;
             verify(k._km === km);
             compare(km.rows, 4);
+            // The tablet's: its own number row unset, taken away and back,
+            // in place too.
+            var t = createTemporaryObject(freshKeyboard, root, { tablet: true, availableWidth: 1024, availableHeight: 768 });
+            verify(t);
+            var tkm = t._km;
+            compare(tkm.rows, 5);
+            compare(t.keysHeight, 340);
+            t.numberRow = false;
+            verify(t._km === tkm, "the same keymap");
+            compare(tkm.rows, 4);
+            compare(t.keysHeight, 285);
+            verify(tkm.rect.width > 0, "still laid out");
+            t.numberRow = null;
+            verify(t._km === tkm);
+            compare(tkm.rows, 5);
+            compare(t.keysHeight, 340);
         }
 
         function test_symbols() {

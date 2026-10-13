@@ -382,7 +382,15 @@ dark and light themes go to 2.0.
       no Linux/Wayland app layer: the frontend is a web page, which the app
       runtime already shows (the Wayland layer would be needed only for a
       native Linux app). Home Assistant has no official Linux app to port;
-      its companion apps are Android and iOS only
+      its companion apps are Android and iOS only. 🟡 Started (13 October
+      2026): Home (phoenix-default-apps `apps/homeassistant`, from the
+      Marketplace) has the server signed in once, its dashboards with the
+      companion apps' external bus over the page view's bridge
+      ([APP-RUNTIME.md](APP-RUNTIME.md), "A script of the app's in its page
+      view"), the device and its battery reported, and its notifications;
+      to do: mDNS discovery, the quick toggles, Just Type and the Assistant
+      (which has its own Smart Home settings with a long-lived token), the
+      bridge on a device, a background service
 - [x] Community features for 1.x, as picked by the owner on 7 October 2026
       ([M6-PLAN.md](M6-PLAN.md) F4; in the simulator, see M6)
 
@@ -400,7 +408,7 @@ Agreed with the owner on 7 October 2026; [M6-PLAN.md](M6-PLAN.md) has the detail
   - [x] System: the power menu (hold Power), a Flashlight row in the system menu, battery percentage (in the simulator)
   - [x] Notifications: repeat until seen, private lock screen previews, the cycling email dashboard, per-contact tones (in the simulator)
   - [x] Settings > Advanced (animation speed, tap ripple, gesture sensitivity, haptics and the options above) (in the simulator)
-  - [x] Keyboard: a number row, off by default (in the simulator)
+  - [x] Keyboard: a number row, off by default on a phone, and off on a tablet's if the user chooses (in the simulator)
   - [x] Browser: private browsing, find on page, a content blocker, mobile or desktop sites, more search engines and a custom one, a system proxy (in the simulator)
   - [x] Sharing and sync: DropShare, subscribed .ics calendars, game controllers, a USB (OTG) page, tethering on phones (in the simulator)
   - [x] Health: temperature warnings, a battery usage pane (in the simulator)
