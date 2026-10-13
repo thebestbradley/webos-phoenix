@@ -18,8 +18,13 @@
 //       provider's page), "401_UNAUTHORIZED" (the code was not accepted),
 //       "TIMEOUT" (nothing came back for ten minutes), "BAD_PARAMS" (a
 //       redirect this device cannot receive)
-//   token {keyId}           -> {accessToken, tokenType, expiresAt} (refreshed
-//                              when it has expired and a refresh token is kept)
+//   token {keyId, refresh?} -> {accessToken, tokenType, expiresAt} (refreshed
+//                              when it has expired and a refresh token is kept;
+//                              refresh: true renews it now, when the provider
+//                              refused the one kept before it expired here: a
+//                              clock that differs, a token revoked; Home
+//                              Assistant's frontend asks so, getExternalAuth
+//                              {force})
 //   forget {keyId}          revokes the token (RFC 7009, when the provider
 //                           has an endpoint) and deletes the key
 //   client {name, value?}   a client registration the caller keeps here
@@ -219,7 +224,8 @@ function createOAuthService(env) {
 
         token: function (p, caller) {
             return wrap(owned(p, caller).then(function (rec) {
-                if (!rec.expiresAt || rec.expiresAt - 60000 > now() || !rec.refreshToken)
+                var fresh = !rec.expiresAt || rec.expiresAt - 60000 > now();
+                if (!rec.refreshToken || (fresh && p.refresh !== true))
                     return ok({ accessToken: rec.accessToken, tokenType: rec.tokenType, expiresAt: rec.expiresAt });
                 return postToken(rec.tokenEndpoint, { grant_type: "refresh_token", refresh_token: rec.refreshToken,
                                                       client_id: rec.clientId, client_secret: rec.clientSecret }).then(function (body) {
