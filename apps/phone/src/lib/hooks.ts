@@ -29,14 +29,21 @@ export function clearMissedCalls(): void {
     removeNotificationGroup(PHONE_APP_ID, MISSED_CALLS_GROUP);
 }
 
-/** Calls, mute and speaker (com.palm.telephony/callStatusQuery). */
-export function useCallStatus(): CallStatus {
-    const [s, setS] = useState<CallStatus>({ calls: [], muted: false, speaker: false });
+const NO_CALLS: CallStatus = { calls: [], muted: false, speaker: false };
+
+/** Calls, mute and speaker (com.palm.telephony/callStatusQuery); null until the service first answers. */
+export function useCallStatusReply(): CallStatus | null {
+    const [s, setS] = useState<CallStatus | null>(null);
     useEffect(() => {
-        const sub = telephony.watchCalls(setS);
+        const sub = telephony.watchCalls(setS, () => setS(NO_CALLS));
         return () => sub.cancel();
     }, []);
     return s;
+}
+
+/** Calls, mute and speaker (com.palm.telephony/callStatusQuery); none until the service answers. */
+export function useCallStatus(): CallStatus {
+    return useCallStatusReply() ?? NO_CALLS;
 }
 
 export function useVoicemail(): VoicemailStatus | null {
