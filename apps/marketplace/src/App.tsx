@@ -277,6 +277,10 @@ function AppPage({ sourceId, id, seed, onRemoved, catalogVersion }: {
     const [app, setApp] = useState<MarketApp | null>(seed ?? null);
     const [progress, setProgress] = useState<InstallProgress | null>(null);
     const [error, setError] = useState<string | null>(null);
+    // Reading the entry failed: kept apart from what Download or Remove said, so a read
+    // that works (the catalogs read again) takes it away. A page opened by a launch looks
+    // before the Marketplace has read the catalogs: an app published since is not there yet.
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [confirmRemove, setConfirmRemove] = useState(false);
     const sub = useRef<{ cancel(): void } | null>(null);
     // The way to Developer Mode once Just Type's Konami code revealed it
@@ -284,11 +288,14 @@ function AppPage({ sourceId, id, seed, onRemoved, catalogVersion }: {
     const devModeShown = useDevModeShown() === true;
 
     const load = useCallback(() => {
-        marketplace.app(sourceId, id).then((a) => setApp((old) => ({
-            // The App Museum's details lack the summary's fields.
-            ...a, title: a.title || old?.title || "", icon: a.icon || old?.icon || "", summary: a.summary || old?.summary || "",
-            developer: a.developer.name ? a.developer : old?.developer ?? a.developer, rating: a.rating ?? old?.rating ?? null,
-        })), (e) => setError(errorText(e)));
+        marketplace.app(sourceId, id).then((a) => {
+            setLoadError(null);
+            setApp((old) => ({
+                // The App Museum's details lack the summary's fields.
+                ...a, title: a.title || old?.title || "", icon: a.icon || old?.icon || "", summary: a.summary || old?.summary || "",
+                developer: a.developer.name ? a.developer : old?.developer ?? a.developer, rating: a.rating ?? old?.rating ?? null,
+            }));
+        }, (e) => setLoadError(errorText(e)));
     }, [sourceId, id]);
     useEffect(() => { load(); return () => sub.current?.cancel(); }, [load]);
     // Read again once the catalogs are (an install going on is not interrupted).
@@ -316,7 +323,7 @@ function AppPage({ sourceId, id, seed, onRemoved, catalogVersion }: {
         } catch (e) { setError(errorText(e)); }
     }
 
-    if (!app) return error ? <ErrorText>{error}</ErrorText> : <Row title="Loading…"><Spinner /></Row>;
+    if (!app) return loadError ? <ErrorText>{loadError}</ErrorText> : <Row title="Loading…"><Spinner /></Row>;
     const busy = !!progress && progress.state !== "installed" && progress.state !== "failed";
     const appId = progress?.appId ?? app.appId ?? app.id;
     const label = progress?.state === "downloading" ? "Downloading…" : progress?.state === "checking" ? "Checking…"
@@ -366,7 +373,7 @@ function AppPage({ sourceId, id, seed, onRemoved, catalogVersion }: {
                             : `Built into this device (${builtin.version}), the same as or newer than this one.`}
                 </Note>
             )}
-            {error && <ErrorText testId="install-error">{error}</ErrorText>}
+            {(error ?? loadError) && <ErrorText testId="install-error">{error ?? loadError}</ErrorText>}
             {progress?.errorCode === "NEEDS_DEVMODE" && devModeShown && (
                 <Button variant="dark" data-testid="open-devmode"
                         onClick={() => void apps.launch("org.webosphoenix.settings", { page: "devmode" })}>Developer Mode Settings</Button>

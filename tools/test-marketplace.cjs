@@ -226,6 +226,19 @@ async function main() {
         const back = (await apps()).find((a) => a.id === "org.webosphoenix.flashlight");
         check(back && !back.removable && back.version === builtinBefore.version, "removing the update brings the built-in app back");
 
+        // ---- An app's page opened by a launch before the catalogs are read again ----------------------------------
+        // (a link to an app published since the device last read its catalog): the first look finds
+        // nothing; once the Marketplace has read the catalogs the page shows the app, not that error.
+        const late = await catalog.api("POST", "/api/apps/packages", await servers.webApp("com.example.late", "1.0.0", { title: "Late Arrival" }), catalog.admin);
+        await catalog.api("POST", `/api/admin/releases/${late.release.id}/approve`, {}, catalog.admin);
+        const lateSource = (await luna(P + "getSources", {})).sources.find((s) => s.kind === "phoenix" && !s.builtin);
+        await page.goto(appUrl("org.webosphoenix.marketplace", { sourceId: lateSource.id, id: "com.example.late" }));
+        await page.waitForSelector("[data-testid=app-title]", { timeout: 15000 });
+        await page.waitForSelector("[data-testid=install-app]", { timeout: 15000 });
+        check((await page.textContent("[data-testid=app-title]")) === "Late Arrival" && await page.locator("[data-testid=install-error]").count() === 0,
+              "a page opened by a launch shows an app published since the last read once the catalogs are read, without the first look's error");
+        await shot("5c-late-app");
+
         // ---- Search -------------------------------------------------------------------------------------------------
         await page.goto(appUrl("org.webosphoenix.marketplace"));
         await page.fill("[data-testid=search]", "tide tables");
