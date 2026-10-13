@@ -82,5 +82,43 @@ Item {
             compare(field.text, "x.com");
             verify(!KeyInjector.commitText(null, ".com"));
         }
+
+        // The text around the cursor, as an input method asks the field
+        // with the focus (ImSurroundingText, ImCursorPosition): the field
+        // itself, or the one inside the client (a web view and its page).
+        function test_surroundingText() {
+            field.text = "Hello world";
+            field.cursorPosition = 5;
+            field.forceActiveFocus();
+            var s = KeyInjector.surroundingText(field);
+            compare(s.text, "Hello world");
+            compare(s.cursor, 5);
+            inner.text = "Dear Sir";
+            inner.cursorPosition = 4;
+            // Asking moves no focus: the view's field has none yet.
+            compare(Object.keys(KeyInjector.surroundingText(view)).length, 0);
+            verify(field.activeFocus);
+            inner.forceActiveFocus();
+            s = KeyInjector.surroundingText(view);
+            compare(s.text, "Dear Sir");
+            compare(s.cursor, 4);
+            // Only the client's own: not a field elsewhere in the window.
+            compare(Object.keys(KeyInjector.surroundingText(field)).length, 0);
+            compare(Object.keys(KeyInjector.surroundingText(target)).length, 0);
+            compare(Object.keys(KeyInjector.surroundingText(null)).length, 0);
+        }
+    }
+
+    // A view with a field inside it, as a web view has its page's.
+    FocusScope {
+        id: view
+        y: 140
+        width: 200
+        height: 20
+        TextInput {
+            id: inner
+            anchors.fill: parent
+            focus: true
+        }
     }
 }
