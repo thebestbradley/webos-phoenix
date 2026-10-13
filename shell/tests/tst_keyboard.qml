@@ -65,6 +65,9 @@ Item {
         readonly property var kb: shell.keyboard
 
         function init() {
+            // No popup alert left by a test (test_popupAlertComesFirst).
+            windows.closeAlert(windows.dismissCardTutorialKey);
+            windows.dismissedFirstCard = true;
             sys.deviceOrientation = "up";
             tryCompare(shell, "uiOrientation", "up", 3000);
             tryVerify(function() { return !shell.rotator.rotating; }, 3000);
@@ -122,6 +125,24 @@ Item {
             fuzzyCompare(kb.y, shell.uiRoot.height - kb.keyboardHeight, 0.01);
             // Apps end where it begins.
             fuzzyCompare(shell.cardView.windowHeight, shell.uiRoot.height - Theme.statusBarHeight - kb.keyboardHeight, 0.01);
+        }
+
+        // The phone's popup alert takes the negative space from the
+        // keyboard (DashboardWindowManagerStates.cpp:103-107): the keyboard
+        // gives way while it is up and comes back after.
+        function test_popupAlertComesFirst() {
+            showKeyboard();
+            verify(kb.visible);
+            windows.dismissedFirstCard = false;
+            windows.firstCardAlert();
+            tryCompare(shell.notifications, "alertShown", true, 2000);
+            tryCompare(shell.notifications, "negativeSpace", shell.notifications.alertHeight, 2000);
+            verify(!kb.visible);
+            windows.closeAlert(windows.dismissCardTutorialKey);
+            windows.dismissedFirstCard = true;
+            tryCompare(shell.notifications, "alertShown", false, 2000);
+            tryCompare(shell.notifications, "negativeSpace", kb.keyboardHeight, 2000);
+            verify(kb.visible);
         }
 
         // A hardware keyboard attached (GAPS V8 (1)): a field taking the

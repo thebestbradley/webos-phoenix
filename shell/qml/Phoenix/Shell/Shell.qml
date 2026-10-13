@@ -3726,7 +3726,17 @@ FocusScope {
                 availableWidth: ui.width
                 availableHeight: ui.height
                 y: ui.height - notes.negativeSpace
-                visible: shell.virtualKeyboard && shell._imeOwnsSpace && notes.negativeSpace > 0 && !notes.alertShown
+                // Out of the way of a popup alert only where the alert has
+                // the negative space: the phone's takes it (DWMStateAlertOpen::
+                // onEntry, DashboardWindowManagerStates.cpp:103-107). The
+                // tablet's is drawn at the top right (:97) and leaves the
+                // space to the keyboard, which shows whenever it has some
+                // (InputWindowManager::slotNegativeSpaceChanged,
+                // InputWindowManager.cpp:107-114): hidden there, it left its
+                // space empty under Just Type and the apps. (Over the lock
+                // screen, whose alert is centred, it still gives way.)
+                visible: shell.virtualKeyboard && shell._imeOwnsSpace && notes.negativeSpace > 0
+                         && !(notes.alertShown && (!notes.overlay || notes.locked))
                 acceptingInput: shell._imeOpened
                 // The simulator's host (KeyboardHost; on a device the Maliit
                 // input method is the keyboard's): the field is in this

@@ -56,6 +56,9 @@ Item {
         readonly property var kb: shell.keyboard
 
         function init() {
+            // No popup alert left by a test (test_keyboardStaysUnderAPopupAlert).
+            windows.closeAlert(windows.dismissCardTutorialKey);
+            windows.dismissedFirstCard = true;
             sys.deviceOrientation = "up";
             tryCompare(shell, "uiOrientation", "up", 3000);
             tryVerify(function() { return !shell.rotator.rotating; }, 3000);
@@ -424,6 +427,32 @@ Item {
         function test_keyboardOpenForTheBezelFlick() {
             showKeyboard();
             verify(shell.keyboardOpen);
+        }
+
+        // A popup alert on the tablet is drawn at the top right and leaves
+        // the negative space to the keyboard (DashboardWindowManagerStates.
+        // cpp:97, 103-107): the keyboard stays up in it rather than hiding
+        // and leaving the space empty (the "Dismissing Cards" tutorial up
+        // while the user types into Just Type the first time).
+        function test_keyboardStaysUnderAPopupAlert() {
+            showKeyboard();
+            verify(kb.visible);
+            windows.dismissedFirstCard = false;
+            windows.firstCardAlert();
+            tryCompare(shell.notifications, "alertShown", true, 2000);
+            var alert = findChild(shell, "dismissCardTutorial");
+            tryCompare(alert, "visible", true, 2000);
+            wait(100);
+            verify(shell.keyboardOpen);
+            compare(shell.notifications.negativeSpace, kb.keyboardHeight, "the keyboard keeps its space");
+            verify(kb.visible, "and shows in it");
+            // Clear of the alert, which is at the top right.
+            var a = alert.mapToItem(root, 0, 0);
+            verify(a.y + alert.height <= kb.mapToItem(root, 0, 0).y);
+            windows.closeAlert(windows.dismissCardTutorialKey);
+            windows.dismissedFirstCard = true;
+            tryCompare(shell.notifications, "alertShown", false, 2000);
+            verify(kb.visible);
         }
     }
 }
