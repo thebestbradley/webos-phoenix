@@ -80,6 +80,21 @@ public:
     void forgetSeeded(const QString &appId) const;
     bool isInstalled(const QString &appId) const { return m_installed.contains(appId); }
     bool hasApp(const QString &appId) const { return m_appDirs.contains(appId); }
+    // An installed app with a built-in app's id is an update of it
+    // (docs/APP-STORE.md "Updating a built-in app"): newer than the built-in
+    // one, it takes its place, installed and removable; removed, the
+    // built-in one is back. Older or the same, the built-in one stays (the
+    // installer refuses such a package). As webOS OSE's application manager
+    // does (sam AppDescriptionList::add and compare, AppDescriptionList.cpp:
+    // 24-54, 228-263; scanApp, :72-113, after each install and removal), and
+    // as luna-sysmgr's installApp updated a registered app in place
+    // (ApplicationManager.cpp:600-662).
+    // The version of the built-in app with this id, also while an installed
+    // update takes its place; "" when no built-in app has the id.
+    QString builtinVersion(const QString &appId) const;
+    // SAM's order of versions (AppDescription::getIntVersion: major, minor
+    // and micro as numbers; what follows a number is ignored): < 0, 0, > 0.
+    static int compareVersions(const QString &a, const QString &b);
     void rescan();
 
     // The device's writable /var/luna/ (the simulator's data folder):
@@ -142,6 +157,8 @@ private:
     QString m_installedDir;
     QString m_dataDir;
     QStringList m_installed;                   // ids of installed apps
+    QHash<QString, QString> m_versions;        // app id -> its version (appinfo.json)
+    QHash<QString, QString> m_updatedBuiltins; // built-in app an installed update replaces -> the built-in's version
     QHash<QString, QVariantMap> m_dynamic;     // launch points apps added, by id
     QVariantList m_apps;
     QList<QVariantMap> m_launchPoints;

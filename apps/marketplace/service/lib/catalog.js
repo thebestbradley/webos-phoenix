@@ -13,8 +13,9 @@
 //
 // An entry: {id, kind: "pwa" | "ipk" | "connector", title, developer: {name, url?},
 // summary, description, categories, icon (URL), screenshots, license,
-// homepage, donation, featured, rating: {stars, count}, version,
-// pwa: {manifest (URL), origin} | release: {url, size, sha256}}. A
+// homepage, source (its source code, optional), donation, featured,
+// rating: {stars, count}, version, pwa: {manifest (URL), origin} |
+// release: {url, size, sha256}}. A
 // "connector" (a Synergy connector package, docs/SYNERGY-CONNECTORS.md C4)
 // has a release as an "ipk" has; Connections installs it. An
 // account type (Synergy, docs/SYNERGY-CONNECTORS.md 2.1): lib/accounts.js;
@@ -67,6 +68,8 @@ function normalize(e, sourceId) {
         categories: Array.isArray(e.categories) ? e.categories.filter(function (c) { return typeof c === "string"; }).slice(0, 5) : [],
         icon: url(e.icon), screenshots: Array.isArray(e.screenshots) ? e.screenshots.map(url).filter(Boolean).slice(0, 8) : [],
         license: str(e.license, 80), homepage: url(e.homepage), donation: url(e.donation), featured: !!e.featured,
+        // Where its source code is (an open-source app the catalog hosts).
+        source: url(e.source),
         rating: e.rating && typeof e.rating.stars === "number" ? { stars: e.rating.stars, count: e.rating.count | 0 } : null,
         version: str(e.version, 40) || "1.0.0"
     };

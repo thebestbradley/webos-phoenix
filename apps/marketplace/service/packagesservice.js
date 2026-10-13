@@ -19,6 +19,18 @@
 // install scripts, services, files outside its app, native code it cannot
 // run, or (Classics) needs the Mojo framework, which Phoenix cannot ship.
 //
+// A catalog app whose id is a built-in app's (the 2.0 apps on a 1.0 device,
+// a newer Calculator) is an update of it, as the App Catalog updated the
+// apps a webOS device came with: offered only when newer than the built-in
+// version, it takes the built-in app's place (OSE's application manager
+// keeps the newer copy: sam AppDescriptionList::add and compare,
+// AppDescriptionList.cpp:24-54, 228-263; luna-sysmgr updated a registered
+// app in place, ApplicationManager::installApp, ApplicationManager.cpp:
+// 600-662), and removing it brings back the version the device came with
+// (sam scanApp after the removal, AppDescriptionList.cpp:72-113). Its
+// entries say so: builtin {version, replaced}; docs/APP-STORE.md "Updating
+// a built-in app".
+//
 // Synergy connectors (kind "connector": an app with its service; Connections
 // installs them, docs/SYNERGY-CONNECTORS.md C4) need Developer Mode, as the
 // owner decided, until the connector trust tier (C5); except the first-party
@@ -47,15 +59,18 @@
 //                                          each template once; capability (a
 //                                          template capability or a list of
 //                                          them) keeps those with any of them
-//   getApp {sourceId, id}               -> {app} with installed, update, verdicts
+//   getApp {sourceId, id}               -> {app} with installed, update, verdicts,
+//                                          builtin {version, replaced} for a
+//                                          built-in app's id
 //   install {sourceId, id, subscribe}   (also an ongoing activity in the
 //                                       notification area while it runs)
 //                                       progress {state: "downloading" |
 //                                          "checking" | "installing" | "installed"
 //                                          | "failed", progress, errorCode, errorText}
-//   remove {id}
+//   remove {id}                         an update of a built-in app: the
+//                                          built-in one is back ({builtin})
 //   listInstalled {}                    -> {apps: [{id, title, icon, version,
-//                                          sourceId, kind, update}]}
+//                                          sourceId, kind, update, builtin}]}
 //   updateAll {}                        installs every update there is
 //   scheduled {$activity}               the daily check (an activity)
 //
@@ -524,6 +539,12 @@ function createPackagesService(deps) {
         if (found) o.appId = found.appId;
         if (found && ownIcons[found.appId]) o.ownIcon = ownIcons[found.appId];
         o.update = inst && inst.sourceId === e.sourceId && e.version && !e.rolloutWaiting && version.compare(e.version, inst.version) > 0 ? e.version : null;
+        // A built-in app's id: an update of it (installed: in its place).
+        var shipped = builtinFor(s, e);
+        if (shipped !== null) {
+            o.builtin = { version: shipped, replaced: !!inst };
+            if (!inst) o.update = e.version && !e.rolloutWaiting && version.compare(e.version, shipped) > 0 ? e.version : null;
+        }
         var rv = revokedFor(s, e.id, found && found.appId);
         if (rv) {
             o.revoked = { reason: rv.reason, text: rv.text, date: rv.date };
@@ -534,6 +555,16 @@ function createPackagesService(deps) {
             o.verdict = { ok: false, text: "Not for this device yet: " + nativeText(e.architecture) };
         return o;
     }
+    // The version of the built-in app a catalog entry would update ("" for
+    // one without a version), or null: the installed update's record, else
+    // a built-in app on the device with the entry's id (reconcile).
+    function builtinFor(s, e) {
+        if (e.kind !== "ipk") return null;
+        var rec = s.installed[e.id];
+        if (rec && typeof rec.builtin === "string") return rec.builtin;
+        return rec || !Object.prototype.hasOwnProperty.call(builtinApps, e.id) ? null : builtinApps[e.id];
+    }
+
     function catalogApps(s, kinds) {
         var out = [];
         s.sources.forEach(function (src) {
@@ -547,7 +578,12 @@ function createPackagesService(deps) {
         return src ? appMuseum.createAppMuseum({ request: deps.request, url: src.url, sourceId: src.id }) : null;
     }
 
+    // Browsing and searching know the built-in apps first (reconcile), for
+    // the entries that would update one.
     function browse(p) {
+        return reconcile().then(function () { return browseNow(p); });
+    }
+    function browseNow(p) {
         p = p || {};
         var s = load(), page = Math.max(0, p.page | 0);
         if (p.section === "classics") {
@@ -605,6 +641,9 @@ function createPackagesService(deps) {
     }
 
     function search(p) {
+        return reconcile().then(function () { return searchNow(p); });
+    }
+    function searchNow(p) {
         var words = String((p && p.query) || "").toLowerCase().trim();
         if (!words) return Promise.resolve({ returnValue: true, apps: [], accountTypes: [] });
         var s = load();
@@ -839,8 +878,17 @@ function createPackagesService(deps) {
             pending(st);
             push(Object.assign({ returnValue: true, id: p.id }, st));
         };
-        return findApp(s, p.sourceId, p.id).then(function (e) {
+        var shipped = null;
+        return reconcile().then(function () {
+            s = load();
+            return findApp(s, p.sourceId, p.id);
+        }).then(function (e) {
             entry = e;
+            // A built-in app's id: only a newer version, which takes its place.
+            shipped = builtinFor(s, entry);
+            if (shipped !== null && !(entry.version && version.compare(entry.version, shipped) > 0))
+                throw err("UNSUPPORTED", (entry.title || entry.id) + " " + (shipped || "") + " is built into this device; the Marketplace's "
+                          + (entry.version || "version") + " is not newer");
             var rv = revokedFor(s, entry.id, entry.appId);
             if (rv) throw err("REVOKED", "Withdrawn from the Marketplace: " + (REASON_TEXT[rv.reason] || "withdrawn") + (rv.text ? " (" + rv.text + ")" : ""));
             if (entry.verdict && !entry.verdict.ok) throw err("UNSUPPORTED", entry.verdict.text);
@@ -868,6 +916,8 @@ function createPackagesService(deps) {
                         icon: entry.icon || "", version: entry.kind === "pwa" ? entry.version : (c.app.appinfo.version || c.pkg.control.Version || entry.version || ""),
                         museumId: entry.museumId || null, installedAt: now().toISOString()
                     };
+                    // An update of a built-in app: the version removing it brings back.
+                    if (shipped !== null && appId === entry.id) s2.installed[appId].builtin = shipped;
                     save(s2);
                     if (entry.kind === "classic") {
                         var am = museum(s2);
@@ -913,6 +963,8 @@ function createPackagesService(deps) {
         }).then(function (r) {
             if (r.returnValue) {
                 var s = load();
+                // An update of a built-in app: the built-in one is back.
+                if (s.installed[p.id] && typeof s.installed[p.id].builtin === "string") r.builtin = s.installed[p.id].builtin;
                 delete s.installed[p.id];
                 save(s);
             }
@@ -926,8 +978,12 @@ function createPackagesService(deps) {
     // details name none) or out of reach (a feed's server); the app's own is
     // on the device.
     var ownIcons = {};
+    // The built-in apps on the device (not removable), by id: their versions.
+    var builtinApps = {};
 
-    // Apps removed some other way (the launcher) are forgotten here too.
+    // Apps removed some other way (the launcher) are forgotten here too; an
+    // update of a built-in app removed so is gone once the app is no longer
+    // removable (the built-in one is back).
     function reconcile() {
         // Every app, the hidden ones too (a connector's app is hidden: not a launch point).
         var all = Promise.resolve(deps.luna.call("luna://com.webos.applicationManager/listApps", {})).then(function (r) {
@@ -936,19 +992,32 @@ function createPackagesService(deps) {
         return Promise.all([deps.luna.call("luna://com.webos.applicationManager/listLaunchPoints", {}), all]).then(function (got) {
             var r = got[0];
             if (!r || !Array.isArray(r.launchPoints)) return;
-            var present = {};
+            var present = {}, removable = {};
             ownIcons = {};
+            builtinApps = {};
             r.launchPoints.forEach(function (lp) {
                 present[lp.id] = true;
-                if (lp.icon && (!lp.launchPointId || lp.launchPointId === lp.id + "_default")) ownIcons[lp.id] = String(lp.icon);
+                var own = !lp.launchPointId || lp.launchPointId === lp.id + "_default";
+                if (lp.icon && own) ownIcons[lp.id] = String(lp.icon);
+                if (own && !lp.dynamic && typeof lp.removable === "boolean") {
+                    removable[lp.id] = lp.removable;
+                    if (!lp.removable) builtinApps[lp.id] = String(lp.version || "");
+                }
             });
+            // SAM's listApps: every app, hidden ones too; "removable": false
+            // for the system's (AppDescription::scan, sam AppDescription.cpp:387-390).
             (got[1] || []).forEach(function (a) {
                 present[a.id] = true;
                 if (a.icon && !ownIcons[a.id]) ownIcons[a.id] = String(a.icon);
+                if (!(a.id in removable) && typeof a.removable === "boolean") {
+                    removable[a.id] = a.removable;
+                    if (!a.removable) builtinApps[a.id] = String(a.version || "");
+                }
             });
             var s = load(), changed = false;
             Object.keys(s.installed).forEach(function (id) {
-                if (!present[id]) { delete s.installed[id]; changed = true; }
+                var updateGone = typeof s.installed[id].builtin === "string" && removable[id] === false;
+                if (!present[id] || updateGone) { delete s.installed[id]; changed = true; }
             });
             if (changed) save(s);
         }, function () {});
@@ -977,6 +1046,7 @@ function createPackagesService(deps) {
                 return { id: id, catalogId: i.catalogId || id, title: i.title, icon: ownIcons[id] || i.icon || "", catalogIcon: i.icon || "",
                          version: i.version, sourceId: i.sourceId,
                          kind: i.kind, installedAt: i.installedAt, update: ups[id] || null,
+                         builtin: typeof i.builtin === "string" ? i.builtin : null,
                          revoked: rv ? { reason: rv.reason, text: rv.text, date: rv.date } : null };
             }) };
         });

@@ -167,7 +167,31 @@ def add_extra_rootfs(folder):
     APPS.update(BUILTIN_APPS)
 INSTALLED_DIR = None
 INSTALLED = set()
+UPDATED_BUILTINS = {}   # a built-in app an installed update replaces -> the built-in's version
 APP_ID_RE = re.compile(r"^[A-Za-z0-9]+([._-][A-Za-z0-9]+)+$")
+
+
+def compare_versions(a, b):
+    """SAM's order of versions, as shell/sim/rootfs.cpp Rootfs::compareVersions:
+    the first three dot-separated parts as numbers (the digits each starts with)."""
+    def parts(v):
+        out = []
+        for i, p in enumerate((str(v or "").split(".") + ["", "", ""])[:3]):
+            m = re.match(r"\s*(\d+)", p)
+            out.append(int(m.group(1)) if m else 0)
+        return out
+    x, y = parts(a), parts(b)
+    return (x > y) - (x < y)
+
+
+def builtin_version(app_id):
+    """The version of the built-in app with this id, also while an installed
+    update takes its place; "" when none has it (Rootfs::builtinVersion)."""
+    if app_id in UPDATED_BUILTINS:
+        return UPDATED_BUILTINS[app_id]
+    if app_id in BUILTIN_APPS:
+        return BUILTIN_APPS[app_id][1].get("version") or "0"
+    return ""
 
 
 def installed_apps_dir():
@@ -175,22 +199,30 @@ def installed_apps_dir():
 
 
 def rescan_installed():
-    """The apps in INSTALLED_DIR join the built-in ones (which keep their ids)."""
+    """The apps in INSTALLED_DIR join the built-in ones. One with a built-in
+    app's id is an update of it: newer, it takes that app's place; else the
+    built-in one stays (shell/sim/rootfs.cpp Rootfs::rescan, as SAM)."""
     APPS.clear()
     APPS.update(BUILTIN_APPS)
     INSTALLED.clear()
+    UPDATED_BUILTINS.clear()
     base = installed_apps_dir() if INSTALLED_DIR else None
     if not base or not os.path.isdir(base):
         return
     for name in sorted(os.listdir(base)):
         info_path = os.path.join(base, name, "appinfo.json")
-        if name.endswith((".new", ".old")) or name in APPS or not os.path.isfile(info_path):
+        if name.endswith((".new", ".old")) or not os.path.isfile(info_path):
             continue
         try:
             with open(info_path, encoding="utf-8-sig") as f:
                 info = json.load(f)
         except ValueError:
             continue
+        if name in BUILTIN_APPS:
+            shipped = BUILTIN_APPS[name][1].get("version") or "0"
+            if compare_versions(info.get("version"), shipped) <= 0:
+                continue
+            UPDATED_BUILTINS[name] = shipped
         APPS[name] = (os.path.join(base, name), info)
         INSTALLED.add(name)
 
@@ -235,8 +267,8 @@ def install_app(app_id, files):
     """What SimInstaller::install does: "" when done, else what is wrong."""
     if not APP_ID_RE.match(app_id or "") or len(app_id) > 128:
         return "Not a valid app id: %s" % app_id
-    if app_id in BUILTIN_APPS:
-        return "A built-in app has the id %s" % app_id
+    # A built-in app's id: an update of it, when newer (rescan_installed).
+    builtin = builtin_version(app_id)
     dest = os.path.join(installed_apps_dir(), app_id)
     temp, old = dest + ".new", dest + ".old"
     shutil.rmtree(temp, ignore_errors=True)
@@ -250,11 +282,15 @@ def install_app(app_id, files):
         data = base64.b64decode(f.get("data", ""))
         if rel == "appinfo.json":
             try:
-                if json.loads(data.decode("utf-8-sig")).get("id") != app_id:
+                info = json.loads(data.decode("utf-8-sig"))
+                if info.get("id") != app_id:
                     raise ValueError
             except ValueError:
                 shutil.rmtree(temp, ignore_errors=True)
                 return "appinfo.json does not have the id %s" % app_id
+            if builtin and compare_versions(info.get("version"), builtin) <= 0:
+                shutil.rmtree(temp, ignore_errors=True)
+                return "%s is built in (version %s); this package (version %s) is not newer" % (app_id, builtin, info.get("version") or "none")
             has_info = True
         path = os.path.join(temp, rel)
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -401,6 +437,13 @@ def resolve(path):
     path = re.sub(r"/{2,}", "/", path)
     if ".." in path.split("/") or path in EXCLUDE:
         return None
+    # An installed app is served from its own folder alone, as on a device: an
+    # update of a built-in app gets neither an extra rootfs' files of its id
+    # nor the overlay's fixes for the original (Rootfs::resolve).
+    if INSTALLED and path.startswith("/usr/palm/applications/"):
+        app_id, _, sub_path = path[len("/usr/palm/applications/"):].partition("/")
+        if app_id in INSTALLED:
+            return os.path.join(APPS[app_id][0], sub_path)
     # An extra rootfs' files win over everything; an app it holds is served
     # from its own folder alone (not the overlay's fixes for the original).
     for extra in EXTRA_ROOTFS:
@@ -533,6 +576,9 @@ def launch_points():
             "removable": a.get("removable", True) if a.get("dynamic") else (app_id in INSTALLED and "appId" not in a),
             "version": info.get("version", ""),
         }
+        if "appId" not in a and app_id in UPDATED_BUILTINS:
+            # The built-in version an installed update replaces (Phoenix's).
+            rec["builtinVersion"] = UPDATED_BUILTINS[app_id]
         if a.get("dynamic"):
             rec["dynamic"] = True
         main = info.get("main", "")

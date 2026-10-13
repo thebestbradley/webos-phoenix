@@ -24,10 +24,13 @@ public:
         : QObject(parent), m_rootfs(rootfs) {}
 
     // files: [{path (relative to the app's folder), data (base64)}], with
-    // appinfo.json saying the same id. Replaces an installed app of that id;
-    // never a built-in one. "" when done, else what is wrong.
+    // appinfo.json saying the same id. Replaces an installed app of that id.
+    // A built-in app's id is an update of it, which takes its place when its
+    // version is newer and is refused otherwise (Rootfs::builtinVersion).
+    // "" when done, else what is wrong.
     Q_INVOKABLE QString install(const QString &appId, const QVariantList &files);
-    // Removes an installed app. "" when done, else what is wrong.
+    // Removes an installed app (an update of a built-in one: the built-in one
+    // is back). "" when done, else what is wrong.
     Q_INVOKABLE QString remove(const QString &appId);
     // The apps as Rootfs::apps() has them now.
     Q_INVOKABLE QVariantList apps() const;

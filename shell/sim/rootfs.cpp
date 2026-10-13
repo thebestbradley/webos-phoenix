@@ -211,6 +211,40 @@ qint64 Rootfs::dirSize(const QString &dir)
     return total;
 }
 
+int Rootfs::compareVersions(const QString &a, const QString &b)
+{
+    // AppDescription::scan (sam src/base/AppDescription.cpp): the first three
+    // dot-separated parts as numbers (stoi reads the digits a part starts
+    // with), a missing part 0.
+    const auto parts = [](const QString &v) {
+        const QStringList p = v.split(QLatin1Char('.'));
+        QList<long long> out;
+        for (int i = 0; i < 3; ++i) {
+            const QString s = i < p.size() ? p.at(i).trimmed() : QString();
+            int n = 0;
+            while (n < s.size() && s.at(n).isDigit())
+                ++n;
+            out.append(n ? s.left(n).toLongLong() : 0);
+        }
+        return out;
+    };
+    const auto x = parts(a), y = parts(b);
+    for (int i = 0; i < 3; ++i)
+        if (x.at(i) != y.at(i))
+            return x.at(i) < y.at(i) ? -1 : 1;
+    return 0;
+}
+
+QString Rootfs::builtinVersion(const QString &appId) const
+{
+    if (m_updatedBuiltins.contains(appId))
+        return m_updatedBuiltins.value(appId);
+    if (!hasApp(appId) || isInstalled(appId))
+        return QString();
+    const QString v = m_versions.value(appId);
+    return v.isEmpty() ? QStringLiteral("0") : v;
+}
+
 // A PNG's width, from its header (0 if it is not a PNG). The simulator's
 // tests link Qt Core only, so no QImageReader.
 int Rootfs::pngSide(const QString &file)
@@ -256,7 +290,29 @@ void Rootfs::rescan()
     m_launchPoints.clear();
     m_installed.clear();
     m_dynamic.clear();
+    m_versions.clear();
+    m_updatedBuiltins.clear();
     QHash<QString, QVariantMap> appEntries;   // app id -> its launcher entry
+    // The installed apps' versions, by id: one newer than a built-in app of
+    // its id takes that app's place (builtinVersion, rootfs.h), as SAM's
+    // AppDescriptionList::add keeps the newer of two copies.
+    QHash<QString, QString> installedVersions;
+    if (!m_installedDir.isEmpty()) {
+        QDir base(QDir(m_installedDir).filePath(QStringLiteral("usr/palm/applications")));
+        const auto entries = base.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+        for (const QString &name : entries) {
+            if (name.endsWith(QLatin1String(".new")) || name.endsWith(QLatin1String(".old")))
+                continue;
+            QFile info(base.filePath(name) + QStringLiteral("/appinfo.json"));
+            if (!info.open(QIODevice::ReadOnly))
+                continue;
+            QByteArray json = info.readAll();
+            if (json.startsWith("\xEF\xBB\xBF"))
+                json.remove(0, 3);
+            const QJsonObject app = QJsonDocument::fromJson(json).object();
+            installedVersions.insert(app.value(QStringLiteral("id")).toString(name), app.value(QStringLiteral("version")).toString());
+        }
+    }
     // systemApps are always hidden from the launcher (Just Type, the system UI).
     auto addApp =[&](QString appDir, const QString &name, bool system, bool installed, bool extra = false) {
         // Built apps (e.g. React) keep their installable output in dist/.
@@ -270,9 +326,20 @@ void Rootfs::rescan()
             json.remove(0, 3);
         const QJsonObject app = QJsonDocument::fromJson(json).object();
         const QString id = app.value(QStringLiteral("id")).toString(name);
-        if (m_appDirs.contains(id))
+        // The first app of an id wins; a built-in one an update replaces
+        // still holds its id against the ones after it.
+        if (m_appDirs.contains(id) || (!installed && m_updatedBuiltins.contains(id)))
             return;
+        const QString version = app.value(QStringLiteral("version")).toString();
+        // A built-in app an installed update replaces: the update is listed
+        // in its place (installed below), and this one only remembered.
+        if (!installed && installedVersions.contains(id) && compareVersions(installedVersions.value(id), version) > 0) {
+            if (!m_updatedBuiltins.contains(id))
+                m_updatedBuiltins.insert(id, version);
+            return;
+        }
         m_appDirs.insert(id, appDir);
+        m_versions.insert(id, version);
         if (extra)
             m_extraApps.append(id);
         const QString root = QString::fromLatin1(kAppsPrefix) + id + QLatin1Char('/');
@@ -375,8 +442,9 @@ void Rootfs::rescan()
         // them; here the icon is read from the app's own folder, so the
         // biggest one the overlay adds is the large icon when it beats the
         // splashicon (the splashicon, beside the icon, is still found).
-        // (Not for an app from an extra rootfs: the overlay's are the original's.)
-        const QString overlayIcon = extra ? QString() : overlayLargestIcon(id, icon);
+        // (Not for an app from an extra rootfs, nor an installed one: the
+        // overlay's are the original's, installed in its folder on a device.)
+        const QString overlayIcon = extra || installed ? QString() : overlayLargestIcon(id, icon);
         if (!overlayIcon.isEmpty() && pngSide(overlayIcon) > (largeFile.isEmpty() ? 0 : pngSide(largeFile)))
             largeFile = overlayIcon;
         entry[QStringLiteral("largeIcon")] = largeFile.isEmpty() ? QString() : QUrl::fromLocalFile(largeFile).toString();
@@ -405,6 +473,9 @@ void Rootfs::rescan()
         entry[QStringLiteral("multipleInstances")] = app.value(QStringLiteral("multipleInstances")).toBool(false);
         // Installed by the user: the launcher may delete it (uninstall).
         entry[QStringLiteral("installed")] = installed;
+        // An update of a built-in app: removing it brings back this version.
+        const QString replaced = installed ? m_updatedBuiltins.value(id) : QString();
+        entry[QStringLiteral("builtinVersion")] = replaced;
         // The app's files (getSizeOfApps, getUserInstalledAppSizes).
         const qint64 size = dirSize(appDir);
         entry[QStringLiteral("size")] = size;
@@ -428,6 +499,9 @@ void Rootfs::rescan()
             record[QStringLiteral("assistant")] = app.value(QStringLiteral("assistant")).toVariant();
         record[QStringLiteral("removable")] = installed;
         record[QStringLiteral("version")] = app.value(QStringLiteral("version")).toString();
+        // The built-in version an installed update replaces (Phoenix's).
+        if (!replaced.isEmpty())
+            record[QStringLiteral("builtinVersion")] = replaced;
         // LaunchPoint::toJSON (LaunchPoint.cpp:262-310): the vendor, the
         // package, its size (user-installed apps; 0 for the built-in ones).
         record[QStringLiteral("vendor")] = app.value(QStringLiteral("vendor")).toString();
@@ -616,7 +690,7 @@ QList<QPair<QString, QString>> Rootfs::twinDirectories() const
     // An app's own directory, served at /usr/palm/applications/<id>/: the
     // shell draws pictures it names (dashboard and banner icons) from there.
     for (auto it = m_appDirs.constBegin(); it != m_appDirs.constEnd(); ++it)
-        if (!m_extraApps.contains(it.key()))   // the overlay's are the original app's
+        if (!m_extraApps.contains(it.key()) && !m_installed.contains(it.key()))   // the overlay's are the original app's
             add(QString::fromLatin1(kAppsPrefix) + it.key(), it.value());
     return pairs;
 }
@@ -632,6 +706,15 @@ QString Rootfs::resolve(const QString &devicePath) const
     if (path.split(QLatin1Char('/')).contains(QStringLiteral("..")) || m_excluded.contains(path))
         return {};
     const QString appsPrefix = QString::fromLatin1(kAppsPrefix);
+    // An installed app is served from its own folder alone, as on a device
+    // (/media/cryptofs/apps): an update of a built-in app gets neither the
+    // extra rootfs' files of its id nor the overlay's fixes for the original.
+    if (path.startsWith(appsPrefix) && !m_installed.isEmpty()) {
+        const QString rest = path.mid(appsPrefix.size());
+        const QString id = rest.section(QLatin1Char('/'), 0, 0);
+        if (m_installed.contains(id))
+            return m_appDirs.value(id) + rest.mid(id.size());
+    }
     // An extra rootfs' files win over everything; an app it holds is served
     // from its own folder alone (not the overlay's fixes for the original).
     for (const QString &extra : m_extraRootfs) {
