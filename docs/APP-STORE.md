@@ -43,6 +43,20 @@
 > with a bot check from the cloud network it ran on, so the owner refreshes
 > the list from a home connection (`server/marketplace/README.md`,
 > "Refreshing the list"), and `seed` then `publish` put it in the catalog.
+>
+> **Open-source web apps and the 2.0 apps (13 October 2026, the owner):**
+> "all of these apps in the catalog for installation [ArtCraft's] ... a list
+> of all major web built popular apps from linux ... in our app feed in the
+> marketplace. we will also host all the updated versions of 2.0 apps there
+> in case someone wants to redownload or add them to 1.0." Done in the
+> simulator: twelve open-source web apps hosted from their upstreams'
+> releases (the ten ArtCraft apps, KeeWeb, Phanpy), four more linked as
+> curated web apps, the rest of the list decided with reasons
+> ([WEB-APP-CATALOG.md](WEB-APP-CATALOG.md); [3.12](#312-open-source-web-apps));
+> the 41 apps of webOS Phoenix 2.0 published from a phoenix-default-apps
+> checkout ([3.13](#313-the-20-apps)); and a catalog app with a built-in
+> app's id installs as an update in its place, removable back to the
+> built-in version, as webOS did ([3.14](#314-updating-a-built-in-app)).
 
 How people will find, install and update apps on Phoenix: installable web
 apps (PWAs) as first-class cards, the original webOS `.ipk` apps from the
@@ -100,6 +114,9 @@ catalog app with three sources" is the starting point.
 2. [Legacy webOS apps](#2-legacy-webos-apps)
 3. [The store](#3-the-store)
    - [3.11 Streaming apps and DRM](#311-streaming-apps-and-drm)
+   - [3.12 Open-source web apps](#312-open-source-web-apps)
+   - [3.13 The 2.0 apps](#313-the-20-apps)
+   - [3.14 Updating a built-in app](#314-updating-a-built-in-app)
 4. [Roadmap](#4-roadmap)
 5. [Risks](#5-risks)
 6. [Open questions](#6-open-questions)
@@ -720,6 +737,150 @@ would then run LG's software, not Phoenix.
 
 Services without DRM (YouTube's free tier, most news and social sites,
 podcasts) work as PWAs today.
+
+### 3.12 Open-source web apps
+
+Next to the curated websites (PWAs, which open the site), the Marketplace
+hosts open-source apps whose web build runs entirely in the browser: their
+makers' own release, packed as an `.ipk` and installed like any app, so
+they work offline and keep their files on the device. Which apps, and why
+each is hosted, a link or left out: [WEB-APP-CATALOG.md](WEB-APP-CATALOG.md).
+
+- **Only what may be hosted.** A permissive licence (MIT, Apache-2.0, BSD,
+  ISC, Zlib, CC0) and a static release build. A copyleft app (GPL, AGPL) is
+  listed as a link to its official instance instead, as a curated web app,
+  so Phoenix hosts none of it and owes no source offer; the tool refuses to
+  pack one (docs/LEGAL.md "Marketplace").
+- **Upstream's own release, unmodified, pinned.**
+  `server/marketplace/catalog/web-apps.json` pins each app: its download
+  and SHA-256 (also checked against upstream's `SHA256SUMS.txt` where there
+  is one), its licence (SPDX), source and homepage, its icon and licence
+  files at the release's tag (each pinned), its category, and a summary and
+  description in our own words. Nothing upstream made is in this
+  repository.
+- **Their names and icons, their vendor.** The listing names the app and
+  shows its icon as upstream ships them, with upstream as the developer
+  (`appinfo.json`'s `vendor`), says it is upstream's release packed by the
+  Marketplace, and links its source. Phoenix never presents them as its
+  own. Their ids are upstream's own reverse-DNS ids (`ai.storyteller.
+  photocraft`, `net.antelle.keeweb`), never `org.webosphoenix.*`.
+- **The package:** the release's files under
+  `usr/palm/applications/<id>/`, an `appinfo.json` written by the tool
+  (`type: web`, upstream's title and vendor, `removable`, the launcher's
+  Downloads tab), `icon.png`, and the licence files in `licenses/`, made
+  the same byte for byte each time (sorted, one time stamp), within the
+  catalog's 64 MB.
+- **`server/marketplace/bin/web-apps.py`** (run with `python3 -I`) does it:
+  `fetch`, `pack`, `publish` (into the catalog through `bin/marketplace.php
+  upload --phoenix --listing`, the admin's upload, which approves it and
+  lists it with its listing; a version already published only gets its
+  listing again, so a re-run is safe), `shoot` (screenshots in phoenix-sim,
+  which the listing shows), `check` and `list`. Downloads go to a cache
+  outside the repository, each into a new empty folder, and are unpacked by
+  the script with every path checked. Updating an app is new pins, then
+  `publish` ([server/marketplace/README.md](../server/marketplace/README.md)
+  "Open-source web apps").
+- **The catalog side:** an admin's listing (`Catalog::applyListing`) sets
+  what the index says of a hosted package beyond the package: title,
+  developer, summary, description, categories, licence, homepage, a new
+  `source` field (the index's entries gain `source`; the device shows it as
+  Source code), the icon and screenshots, published with the catalog
+  (`/v1/icons/<id>.png`, `/v1/screenshots/<id>/`).
+
+### 3.13 The 2.0 apps
+
+The catalog also hosts webOS Phoenix 2.0's built-in apps, the 41 apps of
+phoenix-default-apps (Enact): someone can download one again, or install
+the 2.0 version on a 1.0 device, where it is an update of the 1.0 app of
+its id ([3.14](#314-updating-a-built-in-app)).
+
+phoenix-default-apps is a private repository and webos-phoenix a public
+one, so none of its files or builds is ever in this repository. The
+publish step reads a checkout given by `--from PATH` or
+`PHOENIX_DEFAULT_APPS`, packs each built app's `dist/` (its `appinfo.json`
+with `removable: true`: installed, it is a removable update of the
+built-in one; OSE's application manager reads that key for the apps in its
+store folder), and publishes it as Phoenix's own (`upload --phoenix`),
+under the category "Phoenix 2.0", its summary from the app's
+`package.json`, naming the checkout's commit. Without a checkout it says
+so and skips them:
+
+    python3 -I server/marketplace/bin/web-apps.py default-apps --from ../phoenix-default-apps --publish
+
+An app that is not built is skipped with the command that builds it.
+
+### 3.14 Updating a built-in app
+
+A catalog app with the id of an app the device came with (a 2.0 app on a
+1.0 device; a newer Calculator) is an **update** of it: offered only when
+its version is newer than the built-in one, it takes that app's place, and
+removing it brings back the version the device came with. This is what
+webOS did, in its two application managers:
+
+- **webOS 1.x-3.x (luna-sysmgr).** Installing an app whose id is already
+  registered, a ROM app's included, updates it in place:
+  `ApplicationManager::installApp` (Open webOS luna-sysmgr,
+  `Src/base/application/ApplicationManager.cpp:600-662`) logs "(U)",
+  locks and closes the running app, and `ApplicationDescription::update`
+  (`ApplicationDescription.cpp:869-908`) points the existing description at
+  the installed copy in `/media/cryptofs/apps` (its folder, entry point,
+  version, icon and title), keeping the ROM app's `removable: false`
+  (`ApplicationManager.cpp:1496`); the launch point is "updated", not
+  added. A ROM app could be removed only when its `appinfo.json` said
+  `removable` (user-hideable): the installer then skipped opkg ("ro
+  partition apps"; `ApplicationInstaller::lunasvcRemove`,
+  `ApplicationInstaller.cpp:655-672, 711-718`) and the app manager hid it
+  (`ApplicationManager::removeApp`, `hideApp`, `/var/luna/data/.hidden-apps.json`),
+  so a later scan skipped the ROM copy (`scanApplicationsFolders`, `:1486`).
+  HP's App Catalog app itself (enyo-findapps) was never released, so how it
+  presented these updates is not known from source; the system side is.
+- **webOS OSE (SAM, what Phoenix runs on a device).** Built-in and store
+  apps live in separate folders (`files/conf/sam-conf.json.in`
+  ApplicationPaths: `system_builtin`, then `store`,
+  `/media/cryptofs/apps/usr/palm/applications`), and of two apps with one
+  id the newer version wins (`AppDescriptionList::add` and `compare`,
+  `src/base/AppDescriptionList.cpp:24-54, 228-263`: a copy in another
+  folder replaces the registered one only when its version is higher, as
+  major.minor.micro numbers). After every install and removal SAM scans the
+  app again (`AppInstallService.cpp`, statuses 30 and 31), walking the
+  folders from the last to the first (`scanApp`, `:72-113`), so removing
+  the store copy brings the built-in one back. A built-in app is never
+  removable (`AppDescription.cpp:387-390`); the store copy is, by its
+  `appinfo.json`. appinstalld2 itself has no check against a system app's
+  id (read at commit 938ffd7).
+
+Phoenix follows them:
+
+- **The Marketplace** (`apps/marketplace/service/packagesservice.js`)
+  knows the device's built-in apps (`listLaunchPoints`, `listApps`: not
+  removable) and marks an entry with a built-in app's id
+  `builtin {version, replaced}`. Newer, it offers **Update to X** with
+  "This device came with Calculator 3.0.1300. 4.0.0 installs in its place;
+  removing it later brings back 3.0.1300."; the same or older, **Open** and
+  "Built in", and installing is refused before anything is downloaded.
+  Installed, the app page has **Remove Update** ("Remove the Calculator
+  update? Calculator goes back to 3.0.1300, the version this device came
+  with. Its data stays."), Installed Apps says "in place of the built-in
+  3.0.1300", and Update All never touches a built-in app nobody updated.
+  An update removed in the launcher is forgotten once the app is not
+  removable again (the built-in one back).
+- **The simulator's installer** (`shell/sim/siminstaller.cpp`, `Rootfs`)
+  does what SAM does: an installed app newer than the built-in one of its
+  id (from the checkout, or an `--extra-rootfs`) is listed in its place,
+  installed and removable, its launch point saying `builtinVersion`; one
+  not newer is refused ("... is built in (version 3.0.1300); this package
+  (version 3.0.0) is not newer"); removing it brings the built-in one back.
+  An installed app is served from its own folder alone, never with the
+  compat overlay's fixes for the original or an extra rootfs' files of its
+  id, as on a device. `tools/serve-rootfs.py` (the browser tests) does the
+  same.
+- **The launcher** keeps an updated built-in app's place when the update is
+  removed, and its Remove Application? dialog adds "The built-in version
+  3.0.1300 comes back."
+- **On a device** appinstalld2 installs the package into
+  `/media/cryptofs/apps` and SAM picks the newer copy, as above; the
+  package's `appinfo.json` must say `removable: true` (the 2.0 apps' do, as
+  packed). Not run on a device yet.
 
 ## 4. Roadmap
 

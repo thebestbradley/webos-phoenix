@@ -1,0 +1,680 @@
+{
+  "//": [
+    "The open-source web apps the Marketplace hosts, each from its upstream's own release, pinned by SHA-256.",
+    "server/marketplace/bin/web-apps.py fetches, checks, packs and publishes them; docs/WEB-APP-CATALOG.md says why",
+    "each app is here (or a link, or left out). Only permissive licences are hosted (the script checks it). The",
+    "summary and description are our own words; the title, icon and developer are the upstream's. Update an app by",
+    "changing its version and pins here, then: python3 -I server/marketplace/bin/web-apps.py publish ID."
+  ],
+  "apps": [
+    {
+      "id": "ai.storyteller.photocraft",
+      "title": "PhotoCraft",
+      "version": "0.8.2",
+      "developer": "ArtCraft Team",
+      "developerUrl": "https://getartcraft.com/",
+      "license": "MIT OR Apache-2.0",
+      "homepage": "https://github.com/storytold/photocraft",
+      "source": "https://github.com/storytold/photocraft/tree/v0.8.2",
+      "categories": [
+        "Photography",
+        "Graphics"
+      ],
+      "summary": "Photo editing with layers, masks and adjustment layers.",
+      "description": "An image editor in the manner of the big desktop photo editors: layers and masks, adjustment layers, layer styles, live type, vector shapes, brushes and selections, and Photoshop (PSD) files opened and saved. Written in Rust and running here as WebAssembly, offline: pictures open from and save to the device.",
+      "download": {
+        "url": "https://github.com/storytold/photocraft/releases/download/v0.8.2/photocraft-web-0.8.2.zip",
+        "sha256": "490e4f3c242f2eee42f58446db8e7d468ac7abae3548b31a477e7fd43a7e92f4",
+        "sums": "https://github.com/storytold/photocraft/releases/download/v0.8.2/SHA256SUMS.txt",
+        "root": "photocraft-web-0.8.2/"
+      },
+      "main": "index.html",
+      "icon": {
+        "url": "https://raw.githubusercontent.com/storytold/photocraft/v0.8.2/assets/app-icon/hicolor/256x256/apps/ai.storyteller.photocraft.png",
+        "sha256": "fa5aee91a09ccd7954e7a4279ed2a348d7447d45f2179d9a21cd702551ac3a69"
+      },
+      "notices": [
+        {
+          "url": "https://raw.githubusercontent.com/storytold/photocraft/v0.8.2/NOTICE",
+          "sha256": "fb7d6f0e57c396b6c94f6315d3dba13048a296d81e7546d33e2b7c77c71ea147",
+          "as": "NOTICE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/photocraft/v0.8.2/ATTRIBUTION.md",
+          "sha256": "c2d65c534cbb0841a4496c4e5727c8f4dd6624caa6a6d8abc91e764e386fb535",
+          "as": "ATTRIBUTION.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/photocraft/v0.8.2/assets/app-icon/LICENSE.txt",
+          "sha256": "a5cf25f3f3c2fe2c6d294db04f1bfea7259ac21e8edde5c7fabaa4c379e94795",
+          "as": "LICENSE-icon.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/photocraft/v0.8.2/assets/dict/LICENSE-SCOWL.txt",
+          "sha256": "e2a852424fe4ee684225a6a8a34c73f8944f11ad825b7fc3a58ddcee617ed23d",
+          "as": "LICENSE-SCOWL.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/photocraft/v0.8.2/assets/fonts/OFL-Inter.txt",
+          "sha256": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a",
+          "as": "OFL-Inter.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/photocraft/v0.8.2/assets/fonts/OFL-JetBrainsMono.txt",
+          "sha256": "a76abf002c49097d146e86740a3105a5d00450b1592e820a1109a8c5680cd697",
+          "as": "OFL-JetBrainsMono.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/photocraft/v0.8.2/assets/icons/LICENSE-lucide.txt",
+          "sha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+          "as": "LICENSE-lucide.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/photocraft/v0.8.2/assets/icons/LICENSE-noun-magnetic-lasso.txt",
+          "sha256": "667185ed8a375d40aff0d19f02ce880e786e355253b7c5adba2be7471b70c36a",
+          "as": "LICENSE-noun-magnetic-lasso.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/photocraft/v0.8.2/assets/icons/LICENSE-symmetry-axes.txt",
+          "sha256": "d43c48d168983b4d2a48e3d0d1b3c8f3ff662e8161da2d91d229b587f5e421ec",
+          "as": "LICENSE-symmetry-axes.txt"
+        }
+      ],
+      "needs": [
+        "WebGL 2"
+      ]
+    },
+    {
+      "id": "ai.storyteller.vectorcraft",
+      "title": "VectorCraft",
+      "version": "0.10.0",
+      "developer": "ArtCraft Team",
+      "developerUrl": "https://getartcraft.com/",
+      "license": "MIT OR Apache-2.0",
+      "homepage": "https://github.com/storytold/vectorcraft",
+      "source": "https://github.com/storytold/vectorcraft/tree/v0.10.0",
+      "categories": [
+        "Graphics"
+      ],
+      "summary": "Vector illustration: paths, shapes, type and artboards.",
+      "description": "A vector drawing app for illustrations, logos and layouts: the pen and shape tools, paths, gradients, type, layers and artboards, with SVG and PDF in and out. Written in Rust, running here as WebAssembly, offline.",
+      "download": {
+        "url": "https://github.com/storytold/vectorcraft/releases/download/v0.10.0/vectorcraft-web-0.10.0.zip",
+        "sha256": "aaf1136d4e76606085294942563207111ab7f57cbe6d5f97f03573fa14d37968",
+        "sums": "https://github.com/storytold/vectorcraft/releases/download/v0.10.0/SHA256SUMS.txt",
+        "root": "vectorcraft-web-0.10.0/"
+      },
+      "main": "index.html",
+      "icon": {
+        "url": "https://raw.githubusercontent.com/storytold/vectorcraft/v0.10.0/assets/app-icon/hicolor/256x256/apps/ai.storyteller.vectorcraft.png",
+        "sha256": "440a9a0d31ea3e098a6bd2806046ea936005a008742e4cc97c0adba2574a0825"
+      },
+      "notices": [
+        {
+          "url": "https://raw.githubusercontent.com/storytold/vectorcraft/v0.10.0/NOTICE",
+          "sha256": "6f7d5ee568de2b9f269af2ca4de11230eaaf1d16d3e6e817a13a17e5a669035f",
+          "as": "NOTICE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/vectorcraft/v0.10.0/ASSETS.md",
+          "sha256": "0def99635db0183f71883303dc3df3a0113c257fd3d2898b6e8bcc2a56760ca3",
+          "as": "ASSETS.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/vectorcraft/v0.10.0/assets/app-icon/LICENSE.txt",
+          "sha256": "7323e2ad58efcf69f0871f419531f707ae6bee61d00c7d84de6f8300d7ad19f7",
+          "as": "LICENSE-icon.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/vectorcraft/v0.10.0/assets/fonts/OFL-Inter.txt",
+          "sha256": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a",
+          "as": "OFL-Inter.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/vectorcraft/v0.10.0/assets/fonts/OFL-JetBrainsMono.txt",
+          "sha256": "a76abf002c49097d146e86740a3105a5d00450b1592e820a1109a8c5680cd697",
+          "as": "OFL-JetBrainsMono.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/vectorcraft/v0.10.0/assets/fonts/OFL-SourceSans3.txt",
+          "sha256": "56af9b9c6715597e458284a474dc118a50a4150e9d547c70f7b4a33c3e6a9328",
+          "as": "OFL-SourceSans3.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/vectorcraft/v0.10.0/assets/fonts/OFL-SourceSerif4.txt",
+          "sha256": "c21d7293d87b6d7ab1d0229a2f55b77f33a7613a6a4e66f6693d68d7d8d09464",
+          "as": "OFL-SourceSerif4.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/vectorcraft/v0.10.0/assets/icons/LICENSE-lucide.txt",
+          "sha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+          "as": "LICENSE-lucide.txt"
+        }
+      ],
+      "needs": [
+        "WebGL 2"
+      ]
+    },
+    {
+      "id": "ai.storyteller.filmcraft",
+      "title": "FilmCraft",
+      "version": "0.7.2",
+      "developer": "ArtCraft Team",
+      "developerUrl": "https://getartcraft.com/",
+      "license": "MIT OR Apache-2.0",
+      "homepage": "https://github.com/storytold/filmcraft",
+      "source": "https://github.com/storytold/filmcraft/tree/v0.7.2",
+      "categories": [
+        "Entertainment",
+        "Graphics"
+      ],
+      "summary": "Video editing on a timeline, in the browser.",
+      "description": "A video editor with a multi-track timeline: cuts, trims, transitions, titles and audio, and its own decoders and encoders for the common video formats. Written in Rust, running here as WebAssembly.",
+      "download": {
+        "url": "https://github.com/storytold/filmcraft/releases/download/v0.7.2/filmcraft-web-0.7.2.zip",
+        "sha256": "48d4f48728fa6b5c028612a4b7f59a5832ff38d430c6a7bd417a2c77d75ae4f9",
+        "sums": "https://github.com/storytold/filmcraft/releases/download/v0.7.2/SHA256SUMS.txt",
+        "root": "filmcraft-web-0.7.2/"
+      },
+      "main": "index.html",
+      "icon": {
+        "url": "https://raw.githubusercontent.com/storytold/filmcraft/v0.7.2/assets/app-icon/hicolor/256x256/apps/ai.storyteller.filmcraft.png",
+        "sha256": "f07f1390c0467ab7e357f7bc102658caed40ec931e3614b255031c6adf555a2b"
+      },
+      "notices": [
+        {
+          "url": "https://raw.githubusercontent.com/storytold/filmcraft/v0.7.2/NOTICE",
+          "sha256": "5761787313b9d6c13dd5f03da2e04209ad7bd08eff8920edfd184141d791195c",
+          "as": "NOTICE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/filmcraft/v0.7.2/ATTRIBUTION.md",
+          "sha256": "b9ee3e4ca33ad41028f03a5e4ca9ed7cbe2e4927feaecbe4d9e219108a633e58",
+          "as": "ATTRIBUTION.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/filmcraft/v0.7.2/assets/app-icon/LICENSE.txt",
+          "sha256": "79d32f0c9576355f9eaedf8ba8727a149cf3e42ed753ff5d25ac882bf072e27a",
+          "as": "LICENSE-icon.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/filmcraft/v0.7.2/assets/fonts/OFL-Inter.txt",
+          "sha256": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a",
+          "as": "OFL-Inter.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/filmcraft/v0.7.2/assets/fonts/OFL-JetBrainsMono.txt",
+          "sha256": "a76abf002c49097d146e86740a3105a5d00450b1592e820a1109a8c5680cd697",
+          "as": "OFL-JetBrainsMono.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/filmcraft/v0.7.2/assets/fonts/OFL-NotoSerif.txt",
+          "sha256": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a",
+          "as": "OFL-NotoSerif.txt"
+        }
+      ],
+      "needs": [
+        "WebGL 2"
+      ]
+    },
+    {
+      "id": "ai.storyteller.lightcraft",
+      "title": "LightCraft",
+      "version": "0.7.1",
+      "developer": "ArtCraft Team",
+      "developerUrl": "https://getartcraft.com/",
+      "license": "MIT OR Apache-2.0",
+      "homepage": "https://github.com/storytold/lightcraft",
+      "source": "https://github.com/storytold/lightcraft/tree/v0.7.1",
+      "categories": [
+        "Photography"
+      ],
+      "summary": "Raw photo development and a photo library.",
+      "description": "Develop raw camera files and keep a photo library: exposure, colour and tone, curves, local adjustments and retouching, then export. Written in Rust, running here as WebAssembly.",
+      "download": {
+        "url": "https://github.com/storytold/lightcraft/releases/download/v0.7.1/lightcraft-web-0.7.1.zip",
+        "sha256": "cc1c33a23e82d5e7e9e34f75b46fa5de333fcfd3b852f57d9a051fe2e3f22fa9",
+        "sums": "https://github.com/storytold/lightcraft/releases/download/v0.7.1/SHA256SUMS.txt",
+        "root": "lightcraft-web-0.7.1/"
+      },
+      "main": "index.html",
+      "icon": {
+        "url": "https://raw.githubusercontent.com/storytold/lightcraft/v0.7.1/assets/app-icon/hicolor/256x256/apps/ai.storyteller.lightcraft.png",
+        "sha256": "57e58898ea1a1012ebafe1472e2438db2f02886a0e022c6abf88bcb71b690fc3"
+      },
+      "notices": [
+        {
+          "url": "https://raw.githubusercontent.com/storytold/lightcraft/v0.7.1/NOTICE",
+          "sha256": "00a7cfc350859e56cb36d28d6e91e997dc1f67137496a1a4a299dd014ff74a56",
+          "as": "NOTICE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/lightcraft/v0.7.1/assets/ATTRIBUTION.md",
+          "sha256": "4b1497c3ea1afbf162c360708f0377896227b44d7a4141105f8a51dd0b9d6a0d",
+          "as": "ATTRIBUTION.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/lightcraft/v0.7.1/assets/app-icon/LICENSE.txt",
+          "sha256": "6426c23f529938deddfbaed543e7135e08b514fa6a75b330734331d877c78faf",
+          "as": "LICENSE-icon.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/lightcraft/v0.7.1/assets/fonts/OFL-Inter.txt",
+          "sha256": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a",
+          "as": "OFL-Inter.txt"
+        }
+      ],
+      "needs": [
+        "WebGL 2"
+      ]
+    },
+    {
+      "id": "ai.storyteller.pdfcraft",
+      "title": "PdfCraft",
+      "version": "0.7.1",
+      "developer": "ArtCraft Team",
+      "developerUrl": "https://getartcraft.com/",
+      "license": "MIT OR Apache-2.0",
+      "homepage": "https://github.com/storytold/pdfcraft",
+      "source": "https://github.com/storytold/pdfcraft/tree/v0.7.1",
+      "categories": [
+        "Productivity"
+      ],
+      "summary": "Read, organize, combine and split PDFs.",
+      "description": "A PDF app: read documents, reorder, rotate and delete pages, combine several files into one or split one apart, and protect them with a password. Written in Rust, running here as WebAssembly.",
+      "download": {
+        "url": "https://github.com/storytold/pdfcraft/releases/download/v0.7.1/pdfcraft-web-0.7.1.zip",
+        "sha256": "2e58067125b2c14d92d50888a6a03351302065ff4b99c0914892a078f05dfd66",
+        "sums": "https://github.com/storytold/pdfcraft/releases/download/v0.7.1/SHA256SUMS.txt",
+        "root": "pdfcraft-web-0.7.1/"
+      },
+      "main": "index.html",
+      "icon": {
+        "url": "https://raw.githubusercontent.com/storytold/pdfcraft/v0.7.1/assets/app-icon/hicolor/256x256/apps/ai.storyteller.pdfcraft.png",
+        "sha256": "cde7ee8c5ee38f9fc40a429fd9e6d99a035bcd321701fce331bb13bac126614d"
+      },
+      "notices": [
+        {
+          "url": "https://raw.githubusercontent.com/storytold/pdfcraft/v0.7.1/NOTICE",
+          "sha256": "496946cff190a3fec32fe0241ea60d40539c73a9da1865073eb0c73ee822c8d5",
+          "as": "NOTICE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/pdfcraft/v0.7.1/ATTRIBUTION.md",
+          "sha256": "e43456a06a7f2abeaecf68aa8e94e504e180262b6782ee9b32c20000b2941f1a",
+          "as": "ATTRIBUTION.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/pdfcraft/v0.7.1/assets/app-icon/LICENSE.txt",
+          "sha256": "b768acafe6cbad8247eedf86b5b5381feefcd4ee0f8c7808b86811bc687cf37b",
+          "as": "LICENSE-icon.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/pdfcraft/v0.7.1/assets/fonts/OFL-DancingScript.txt",
+          "sha256": "6f090277c00af96651ce6dbcc38ff1591047a3bffef486e80b6a32e8276a8201",
+          "as": "OFL-DancingScript.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/pdfcraft/v0.7.1/assets/fonts/OFL-Inter.txt",
+          "sha256": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a",
+          "as": "OFL-Inter.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/pdfcraft/v0.7.1/assets/fonts/OFL-JetBrainsMono.txt",
+          "sha256": "a76abf002c49097d146e86740a3105a5d00450b1592e820a1109a8c5680cd697",
+          "as": "OFL-JetBrainsMono.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/pdfcraft/v0.7.1/assets/icons/LICENSE-lucide.txt",
+          "sha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+          "as": "LICENSE-lucide.txt"
+        }
+      ],
+      "needs": [
+        "WebGL 2"
+      ]
+    },
+    {
+      "id": "ai.storyteller.effectcraft",
+      "title": "EffectCraft",
+      "version": "0.9.2",
+      "developer": "ArtCraft Team",
+      "developerUrl": "https://getartcraft.com/",
+      "license": "MIT OR Apache-2.0",
+      "homepage": "https://github.com/storytold/effectcraft",
+      "source": "https://github.com/storytold/effectcraft/tree/v0.9.2",
+      "categories": [
+        "Graphics",
+        "Entertainment"
+      ],
+      "summary": "Motion graphics and compositing with keyframes and effects.",
+      "description": "A compositor for motion graphics: compositions and layers, keyframes, hundreds of effects, layer styles, expressions, 3D cameras and lights, and a render queue. Written in Rust, running here as WebAssembly.",
+      "download": {
+        "url": "https://github.com/storytold/effectcraft/releases/download/v0.9.2/effectcraft-web-0.9.2.zip",
+        "sha256": "09e4a278652fb389725f991c12ea4fb667599c19d0b2b3d2fded31d662bc1ad9",
+        "sums": "https://github.com/storytold/effectcraft/releases/download/v0.9.2/SHA256SUMS.txt",
+        "root": "effectcraft-web-0.9.2/"
+      },
+      "main": "index.html",
+      "icon": {
+        "url": "https://raw.githubusercontent.com/storytold/effectcraft/v0.9.2/assets/app-icon/hicolor/256x256/apps/ai.storyteller.effectcraft.png",
+        "sha256": "186a1d869a4602ec86cd03f6e5e288ebbd328e0c3d8a17c205329829392f9add"
+      },
+      "notices": [
+        {
+          "url": "https://raw.githubusercontent.com/storytold/effectcraft/v0.9.2/NOTICE",
+          "sha256": "d0bf841555c56b6136745a61ec529c9a558c9dd7404d377d82f86d10e0e9b530",
+          "as": "NOTICE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/effectcraft/v0.9.2/ATTRIBUTION.md",
+          "sha256": "f995c5142c9ffdefca079d349f6c6e6bd70166e84e5d45eff246d47ef1680d44",
+          "as": "ATTRIBUTION.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/effectcraft/v0.9.2/assets/app-icon/LICENSE.txt",
+          "sha256": "6f7a100b47da67df0c9e8e06397a7222766932c36cdebeff2e89cb2cd2917b85",
+          "as": "LICENSE-icon.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/effectcraft/v0.9.2/assets/fonts/OFL-Inter.txt",
+          "sha256": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a",
+          "as": "OFL-Inter.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/effectcraft/v0.9.2/assets/fonts/OFL-JetBrainsMono.txt",
+          "sha256": "a76abf002c49097d146e86740a3105a5d00450b1592e820a1109a8c5680cd697",
+          "as": "OFL-JetBrainsMono.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/effectcraft/v0.9.2/assets/fonts/OFL-NotoSerif.txt",
+          "sha256": "cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a",
+          "as": "OFL-NotoSerif.txt"
+        }
+      ],
+      "needs": [
+        "WebGL 2"
+      ]
+    },
+    {
+      "id": "ai.storyteller.designcraft",
+      "title": "DesignCraft",
+      "version": "0.7.1",
+      "developer": "ArtCraft Team",
+      "developerUrl": "https://getartcraft.com/",
+      "license": "MIT OR Apache-2.0",
+      "homepage": "https://github.com/storytold/designcraft",
+      "source": "https://github.com/storytold/designcraft/tree/v0.7.1",
+      "categories": [
+        "Graphics",
+        "Productivity"
+      ],
+      "summary": "Page layout and desktop publishing.",
+      "description": "Lay out books, magazines and flyers: text frames that flow from page to page, paragraph and character styles, master pages, hyphenation and print-ready PDF. Written in Rust, running here as WebAssembly.",
+      "download": {
+        "url": "https://github.com/storytold/designcraft/releases/download/v0.7.1/designcraft-web-0.7.1.zip",
+        "sha256": "863b32bcdbcbb481cd07151e728578331e86b013e7a0643e2f46e754cbc8c58f",
+        "sums": "https://github.com/storytold/designcraft/releases/download/v0.7.1/SHA256SUMS.txt",
+        "root": "designcraft-web-0.7.1/"
+      },
+      "main": "index.html",
+      "icon": {
+        "url": "https://raw.githubusercontent.com/storytold/designcraft/v0.7.1/assets/app-icon/hicolor/256x256/apps/ai.storyteller.designcraft.png",
+        "sha256": "b8407dae4f43d6f0503ec6c1df619cca34b358d8bb230c6b0d18c992aa5a7f61"
+      },
+      "notices": [
+        {
+          "url": "https://raw.githubusercontent.com/storytold/designcraft/v0.7.1/NOTICE",
+          "sha256": "fea14d16b1342882002f5bb67d88dd71705d56e419d8cb98d09939da48013436",
+          "as": "NOTICE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/designcraft/v0.7.1/ASSETS.md",
+          "sha256": "e0ef96525996e350e6d23792658adbabd03847a775e36698f0e93b81cede2952",
+          "as": "ASSETS.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/designcraft/v0.7.1/assets/app-icon/LICENSE.txt",
+          "sha256": "eb3f3cfc6437fd370e31ca8449c7312314c191d15347bd70934d9ce2df5331bd",
+          "as": "LICENSE-icon.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/designcraft/v0.7.1/assets/fonts/OFL-Inter.txt",
+          "sha256": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a",
+          "as": "OFL-Inter.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/designcraft/v0.7.1/assets/fonts/OFL-JetBrainsMono.txt",
+          "sha256": "a76abf002c49097d146e86740a3105a5d00450b1592e820a1109a8c5680cd697",
+          "as": "OFL-JetBrainsMono.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/designcraft/v0.7.1/assets/fonts/OFL-SourceSans3.txt",
+          "sha256": "56af9b9c6715597e458284a474dc118a50a4150e9d547c70f7b4a33c3e6a9328",
+          "as": "OFL-SourceSans3.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/designcraft/v0.7.1/assets/fonts/OFL-SourceSerif4.txt",
+          "sha256": "c21d7293d87b6d7ab1d0229a2f55b77f33a7613a6a4e66f6693d68d7d8d09464",
+          "as": "OFL-SourceSerif4.txt"
+        }
+      ],
+      "needs": [
+        "WebGL 2"
+      ]
+    },
+    {
+      "id": "ai.storyteller.wordcraft",
+      "title": "WordCraft",
+      "version": "0.6.1",
+      "developer": "ArtCraft Team",
+      "developerUrl": "https://getartcraft.com/",
+      "license": "MIT OR Apache-2.0",
+      "homepage": "https://github.com/storytold/wordcraft",
+      "source": "https://github.com/storytold/wordcraft/tree/v0.6.1",
+      "categories": [
+        "Productivity"
+      ],
+      "summary": "A word processor that reads and writes Word files.",
+      "description": "Write letters, reports and books with the word-processor tools people know: the ribbon, styles, tables, track changes, references and mail merge, with .docx files opened and saved. Written in Rust, running here as WebAssembly, offline.",
+      "download": {
+        "url": "https://github.com/storytold/wordcraft/releases/download/v0.6.1/wordcraft-web-0.6.1.zip",
+        "sha256": "85e458cb5adaa75afa871a9858c735ef7fd1e05741c6bf5d444dc09a1eb29e0a",
+        "sums": "https://github.com/storytold/wordcraft/releases/download/v0.6.1/SHA256SUMS.txt",
+        "root": "wordcraft-web-0.6.1/"
+      },
+      "main": "index.html",
+      "icon": {
+        "url": "https://raw.githubusercontent.com/storytold/wordcraft/v0.6.1/assets/app-icon/hicolor/256x256/apps/ai.storyteller.wordcraft.png",
+        "sha256": "7c1791408282d01e8c5d0cb1f4080971eaa412c60518694a1cec1e60b23c7406"
+      },
+      "notices": [
+        {
+          "url": "https://raw.githubusercontent.com/storytold/wordcraft/v0.6.1/NOTICE",
+          "sha256": "950b26ace0a5aa34c33358a287a22989dd40c5f4eb943be1e0f51ae3944192cc",
+          "as": "NOTICE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/wordcraft/v0.6.1/ATTRIBUTION.md",
+          "sha256": "80304fbd8d249b80cf6951eec5c1f23d63df3674ee7ba96ee54b486b4530e2cb",
+          "as": "ATTRIBUTION.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/wordcraft/v0.6.1/assets/fonts/OFL-Inter.txt",
+          "sha256": "262481e844521b326f5ecd053e59b98c8b2da78c8ee1bdbb6e8174305e54935a",
+          "as": "OFL-Inter.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/wordcraft/v0.6.1/assets/fonts/OFL-JetBrainsMono.txt",
+          "sha256": "a76abf002c49097d146e86740a3105a5d00450b1592e820a1109a8c5680cd697",
+          "as": "OFL-JetBrainsMono.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/wordcraft/v0.6.1/assets/fonts/OFL-SourceSans3.txt",
+          "sha256": "56af9b9c6715597e458284a474dc118a50a4150e9d547c70f7b4a33c3e6a9328",
+          "as": "OFL-SourceSans3.txt"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/wordcraft/v0.6.1/assets/fonts/OFL-SourceSerif4.txt",
+          "sha256": "c21d7293d87b6d7ab1d0229a2f55b77f33a7613a6a4e66f6693d68d7d8d09464",
+          "as": "OFL-SourceSerif4.txt"
+        }
+      ],
+      "needs": [
+        "WebGL 2"
+      ]
+    },
+    {
+      "id": "ai.storyteller.gridcraft",
+      "title": "GridCraft",
+      "version": "0.6.1",
+      "developer": "ArtCraft Team",
+      "developerUrl": "https://getartcraft.com/",
+      "license": "MIT OR Apache-2.0",
+      "homepage": "https://github.com/storytold/gridcraft",
+      "source": "https://github.com/storytold/gridcraft/tree/v0.6.1",
+      "categories": [
+        "Productivity",
+        "Finance"
+      ],
+      "summary": "Spreadsheets with formulas and charts.",
+      "description": "A spreadsheet for budgets, lists and number work: formulas and functions, sorting and filters, charts, and Excel files opened and saved. Written in Rust, running here as WebAssembly.",
+      "download": {
+        "url": "https://github.com/storytold/gridcraft/releases/download/v0.6.1/gridcraft-web-0.6.1.zip",
+        "sha256": "86048ba175689ff852c141d6115e5491f0856f891300c3e1f91274b9c2709a42",
+        "sums": "https://github.com/storytold/gridcraft/releases/download/v0.6.1/SHA256SUMS.txt",
+        "root": "gridcraft-web-0.6.1/"
+      },
+      "main": "index.html",
+      "icon": {
+        "url": "https://raw.githubusercontent.com/storytold/gridcraft/v0.6.1/assets/app-icon/hicolor/256x256/apps/ai.storyteller.gridcraft.png",
+        "sha256": "3d8cb180ae9ea3691051e8d2309e79baf6f69e0a86276bf50265b5867ff26e41"
+      },
+      "notices": [
+        {
+          "url": "https://raw.githubusercontent.com/storytold/gridcraft/v0.6.1/NOTICE",
+          "sha256": "7c948d5b56639a6d53c362ce0b54a79badd6f272c542f0fc0f22e9ec31c61c2b",
+          "as": "NOTICE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/gridcraft/v0.6.1/ATTRIBUTION.md",
+          "sha256": "56b465eebb50e1b424c33291119529e45c8636b806d4432199ba7d57bc555c50",
+          "as": "ATTRIBUTION.md"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/gridcraft/v0.6.1/assets/app-icon/LICENSE.txt",
+          "sha256": "9596de48b5e42fbf727c924bb3863f0e28fcd9e38c47cca284e1174bd06481ce",
+          "as": "LICENSE-icon.txt"
+        }
+      ],
+      "needs": [
+        "WebGL 2"
+      ]
+    },
+    {
+      "id": "ai.storyteller.deckcraft",
+      "title": "DeckCraft",
+      "version": "0.6.1",
+      "developer": "ArtCraft Team",
+      "developerUrl": "https://getartcraft.com/",
+      "license": "MIT OR Apache-2.0",
+      "homepage": "https://github.com/storytold/deckcraft",
+      "source": "https://github.com/storytold/deckcraft/tree/v0.6.1",
+      "categories": [
+        "Productivity"
+      ],
+      "summary": "Presentations with themes, layouts and transitions.",
+      "description": "Make slide decks with themes and layouts, shapes, pictures, tables and charts, transitions and animations, open and save PowerPoint files, and present full screen. Written in Rust, running here as WebAssembly.",
+      "download": {
+        "url": "https://github.com/storytold/deckcraft/releases/download/v0.6.1/deckcraft-web-0.6.1.zip",
+        "sha256": "dd76659f643fa98ff79c86bf439bcaeeaaf6bd3a4037a1dc6628c97366862ba1",
+        "sums": "https://github.com/storytold/deckcraft/releases/download/v0.6.1/SHA256SUMS.txt",
+        "root": "deckcraft-web-0.6.1/"
+      },
+      "main": "index.html",
+      "icon": {
+        "url": "https://raw.githubusercontent.com/storytold/deckcraft/v0.6.1/assets/app-icon/hicolor/256x256/apps/ai.storyteller.deckcraft.png",
+        "sha256": "66343901b993332bceadf13277e6a028b80b2fb3a1e215b841c855be731e5130"
+      },
+      "notices": [
+        {
+          "url": "https://raw.githubusercontent.com/storytold/deckcraft/v0.6.1/NOTICE",
+          "sha256": "77b755b4c3c7c2076076547580001a2ecdefd270dcd6536ed8a7da1b64960a45",
+          "as": "NOTICE"
+        },
+        {
+          "url": "https://raw.githubusercontent.com/storytold/deckcraft/v0.6.1/ATTRIBUTION.md",
+          "sha256": "66d91e91286edf2a85a49045df92e8f0f460f4ba9f9a78173dcb66bc089039ae",
+          "as": "ATTRIBUTION.md"
+        }
+      ],
+      "needs": [
+        "WebGL 2"
+      ]
+    },
+    {
+      "id": "net.antelle.keeweb",
+      "title": "KeeWeb",
+      "version": "1.18.9",
+      "developer": "Antelle",
+      "developerUrl": "https://antelle.net/",
+      "license": "MIT",
+      "homepage": "https://keeweb.info/",
+      "source": "https://github.com/keeweb/keeweb/tree/v1.18.9",
+      "categories": [
+        "Utilities",
+        "Productivity"
+      ],
+      "summary": "A password manager for KeePass (.kdbx) files.",
+      "description": "Keep passwords, notes and files in KeePass databases (.kdbx): search, generate passwords, group and tag entries, and open the same file in KeePass and KeePassXC on a computer. Everything is in the page; nothing goes to a server unless you open a file from a cloud drive.",
+      "download": {
+        "url": "https://github.com/keeweb/keeweb/releases/download/v1.18.9/KeeWeb-1.18.9.html.zip",
+        "sha256": "f974789f33722287574ba897e13b62379ca6bf89ca0759c4d795f44e41a5e9a9",
+        "root": ""
+      },
+      "main": "index.html",
+      "icon": {
+        "path": "icons/android-chrome-512x512.png"
+      },
+      "notices": [
+        {
+          "url": "https://raw.githubusercontent.com/keeweb/keeweb/v1.18.9/LICENSE",
+          "sha256": "038e1daf91e4a6fc4cacabc46ce507628f2ebc15fd9fe70295dbb042ef0906c4",
+          "as": "LICENSE"
+        }
+      ]
+    },
+    {
+      "id": "social.phanpy",
+      "title": "Phanpy",
+      "version": "2026.10.9",
+      "upstreamVersion": "2026.10.09.febb38d",
+      "developer": "Lim Chee Aun",
+      "developerUrl": "https://cheeaun.com/",
+      "license": "MIT",
+      "homepage": "https://phanpy.social/",
+      "source": "https://github.com/cheeaun/phanpy/tree/2026.10.09.febb38d",
+      "categories": [
+        "Social"
+      ],
+      "summary": "A minimalistic client for Mastodon and the Fediverse.",
+      "description": "Read and post on Mastodon and other Fediverse servers: home, lists, hashtags and notifications, a catch-up view, threads that nest, and several accounts at once. Signs in to the server you use; it has no server of its own.",
+      "download": {
+        "url": "https://github.com/cheeaun/phanpy/releases/download/2026.10.09.febb38d/phanpy-dist.zip",
+        "sha256": "2283b490f28f01928d7e9afd861f3139a62a58bb59684f61d7ace71ed2b16502",
+        "root": ""
+      },
+      "main": "index.html",
+      "icon": {
+        "path": "logo-512.png"
+      },
+      "notices": [
+        {
+          "url": "https://raw.githubusercontent.com/cheeaun/phanpy/2026.10.09.febb38d/LICENSE",
+          "sha256": "822fb8f22d7bd911f3fef9c7a3e6d13e94bd40fb90a410b5ed040f89bf1fefc6",
+          "as": "LICENSE"
+        }
+      ]
+    }
+  ]
+}

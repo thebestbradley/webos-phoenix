@@ -75,6 +75,13 @@ final class Db
         if ($this->driver === 'mysql') {
             $this->pdo->exec('ALTER TABLE apps MODIFY kind VARCHAR(16) NOT NULL');
         }
+        // apps.source (where an app's source code is: the open-source apps Phoenix hosts,
+        // bin/web-apps.py) came later: a catalog made before gets it now.
+        try {
+            $this->pdo->query('SELECT source FROM apps LIMIT 1');
+        } catch (\PDOException) {
+            $this->pdo->exec("ALTER TABLE apps ADD COLUMN source VARCHAR(500) NOT NULL DEFAULT ''");
+        }
     }
 
     public function one(string $sql, array $args = []): ?array

@@ -603,6 +603,85 @@ check($s === 200 && $fediApp && $fediApp['kind'] === 'connector' && count($fediT
       'the Fediverse, Phoenix\'s own (an admin\'s upload, its namespaces): in the index to install again, its account type once, '
       . 'catalog/accounts.json\'s (pre-installed, featured)' . ($s === 200 ? '' : " ($r[error])"));
 
+// ---- Packages Phoenix hosts: an upstream's open-source web app, listed by an admin ---------------
+// (bin/web-apps.py packs it and runs `upload --phoenix --listing`.)
+$adminAccount = $app->db->one("SELECT * FROM accounts WHERE role = 'admin' ORDER BY id");
+$hosted = $app->catalog->submitPackage($adminAccount, ipk($tmp, 'ai.example.paint', '0.8.2', [], [], ['vendor' => 'Example Team']));
+$hostedRelease = $hosted['release']['state'] === 'pending' ? $app->catalog->decideRelease((int) $hosted['release']['id'], true, $adminAccount) : $hosted['release'];
+$lst = "$tmp/listing";
+@mkdir("$lst/shots", 0755, true);
+file_put_contents("$lst/icon.png", $png);
+file_put_contents("$lst/shots/1.png", $png . 'one');
+file_put_contents("$lst/shots/2.jpg", "\xff\xd8\xff\xe0" . str_repeat("\0", 20));
+file_put_contents("$lst/bad.svg", '<svg onload="x"/>');
+$listed = $app->catalog->applyListing('ai.example.paint', [
+    'title' => 'Paint', 'developer' => 'Example Team', 'developerUrl' => 'https://example.org/team', 'summary' => 'Paint pictures',
+    'description' => 'Our words about it.', 'categories' => ['Graphics'], 'license' => 'MIT OR Apache-2.0',
+    'homepage' => 'https://example.org/paint', 'source' => 'https://example.org/paint/src/v0.8.2',
+    'icon' => 'icon.png', 'screenshots' => ['shots/1.png', 'shots/2.jpg'],
+], $lst);
+$pubH = $app->catalog->publish();
+$idxH = json_decode((string) file_get_contents("$tmp/data/public/v1/index.json"), true);
+$paint = array_values(array_filter($idxH['apps'], fn ($a) => $a['id'] === 'ai.example.paint'))[0] ?? null;
+check($hostedRelease['state'] === 'approved' && $paint && $paint['kind'] === 'ipk' && $paint['title'] === 'Paint'
+      && $paint['developer'] === ['name' => 'Example Team', 'url' => 'https://example.org/team'] && $paint['license'] === 'MIT OR Apache-2.0'
+      && $paint['source'] === 'https://example.org/paint/src/v0.8.2' && $paint['homepage'] === 'https://example.org/paint'
+      && $paint['categories'] === ['Graphics'] && $paint['description'] === 'Our words about it.' && $paint['version'] === '0.8.2',
+      'a hosted package\'s listing: its upstream as the developer, its licence, source and homepage, our description');
+check(str_starts_with($paint['icon'], 'http://127.0.0.1:9999/v1/icons/ai.example.paint.png?') && is_file("$tmp/data/public/v1/icons/ai.example.paint.png")
+      && count($paint['screenshots']) === 2 && str_starts_with($paint['screenshots'][1], 'http://127.0.0.1:9999/v1/screenshots/ai.example.paint/2.jpg?')
+      && file_get_contents("$tmp/data/public/v1/screenshots/ai.example.paint/1.png") === $png . 'one',
+      '... its icon and screenshots are published with the catalog, each address changing with its picture');
+$threw = function (callable $f): string {
+    try { $f(); } catch (Phoenix\Marketplace\CheckFailed $e) { return $e->getMessage(); }
+    return '';
+};
+check(str_contains($threw(fn () => $app->catalog->applyListing('ai.example.paint', ['icon' => 'bad.svg'], $lst)), 'not a PNG, JPEG or WebP')
+      && str_contains($threw(fn () => $app->catalog->applyListing('ai.example.paint', ['source' => 'http://example.org/'], $lst)), 'https://')
+      && str_contains($threw(fn () => $app->catalog->applyListing('ai.example.paint', ['owner' => 'x'], $lst)), 'unknown fields')
+      && str_contains($threw(fn () => $app->catalog->applyListing('ai.example.none', ['title' => 'x'], $lst)), 'No app'),
+      'a listing: pictures by their own bytes (no SVG), https addresses, known fields, a listed app');
+$app->catalog->applyListing('ai.example.paint', ['screenshots' => ['shots/1.png']], $lst);
+check(!is_file("$tmp/data/public/v1/screenshots/ai.example.paint/2.jpg") && count($app->catalog->app('ai.example.paint')['screenshots']) === 1
+      && $app->catalog->app('ai.example.paint')['title'] === 'Paint',
+      '... a new list of screenshots replaces the old one; what it leaves out stays as it was');
+// The CLI: upload --phoenix --listing, again with the same bytes (a re-run): the listing only.
+$bytesH = ipk($tmp, 'ai.example.draw', '1.0.0');
+file_put_contents("$tmp/draw.ipk", $bytesH);
+file_put_contents("$lst/draw.json", json_encode(['title' => 'Draw', 'developer' => 'Draw Folk', 'license' => 'MIT', 'source' => 'https://example.org/draw']));
+$cli = fn (array $args) => proc_close(proc_open(['php', __DIR__ . '/../bin/marketplace.php', ...$args], [1 => ['file', '/dev/null', 'w'], 2 => ['file', "$tmp/cli.err", 'w']], $pp,
+                                               null, ['MARKETPLACE_DATA' => getenv('MARKETPLACE_DATA'), 'MARKETPLACE_BASE_URL' => 'http://127.0.0.1:9999/v1/', 'PATH' => getenv('PATH')]));
+$first = $cli(['upload', '--phoenix', '--listing', "$lst/draw.json", "$tmp/draw.ipk"]);
+file_put_contents("$lst/draw.json", json_encode(['summary' => 'Diagrams']));
+$again = $cli(['upload', '--phoenix', '--listing', "$lst/draw.json", "$tmp/draw.ipk"]);
+$other = $cli(['upload', '--phoenix', '--listing', "$lst/draw.json", "$tmp/d.ipk"]);
+$drawApp = (new App(marketplace_config()))->catalog->app('ai.example.draw');
+check($first === 0 && $again === 0 && $other !== 0 && $drawApp && $drawApp['developer_name'] === 'Draw Folk' && $drawApp['summary'] === 'Diagrams'
+      && $drawApp['source'] === 'https://example.org/draw' && count($drawApp['releases']) === 1 && $drawApp['releases'][0]['state'] === 'approved',
+      'upload --phoenix --listing: approved and listed; the same version again only lists it again');
+file_put_contents("$tmp/draw2.ipk", ipk($tmp, 'ai.example.draw', '1.0.0', ["usr/palm/applications/ai.example.draw/x.js" => 'changed']));
+check($cli(['upload', '--phoenix', '--listing', "$lst/draw.json", "$tmp/draw2.ipk"]) !== 0
+      && str_contains((string) file_get_contents("$tmp/cli.err"), 'uploaded already'),
+      '... but other bytes under a version uploaded already are refused');
+
+// ---- bin/web-apps.py: its own tests, and its packages as the catalog reads them -------------------------
+$wat = "$tmp/web-apps";
+exec('python3 -I ' . escapeshellarg(__DIR__ . '/web-apps-test.py') . ' ' . escapeshellarg($wat) . ' 2>&1', $watOut, $watCode);
+foreach ($watOut as $line) {
+    if (str_starts_with($line, 'FAIL')) {
+        echo "$line (web-apps-test.py)\n";
+    }
+}
+check($watCode === 0, 'bin/web-apps.py: ' . (end($watOut) ?: 'no output') . ' (tests/web-apps-test.py)');
+$hostedIpk = is_file("$wat/sample.ipk") ? Phoenix\Marketplace\Ipk::check((string) file_get_contents("$wat/sample.ipk")) : null;
+check($hostedIpk && $hostedIpk['appId'] === 'org.example.paint' && $hostedIpk['version'] === '1.2.3' && $hostedIpk['appinfo']['vendor'] === 'Example'
+      && in_array('usr/palm/applications/org.example.paint/licenses/LICENSE', $hostedIpk['files'], true)
+      && $hostedIpk['control']['Source'] === 'https://example.org/src',
+      'a package web-apps.py packs passes the catalog\'s checks: the upstream as vendor, its licence files, its source');
+$twoIpk = is_file("$wat/default-app.ipk") ? Phoenix\Marketplace\Ipk::check((string) file_get_contents("$wat/default-app.ipk")) : null;
+check($twoIpk && $twoIpk['appId'] === 'com.example.calc' && $twoIpk['appinfo']['removable'] === true,
+      '... and so does a 2.0 app it packs from a checkout, removable');
+
 // ---- The system update feed (served at /updates/, published by the admin API) ----------------
 $bundle = str_repeat("\x00\x01raucb", 64);
 $q = ['compatible' => 'phoenix-pinephonepro', 'version' => '1.1.0', 'build' => '110', 'notes' => ['Faster cards', 'Share everywhere']];
