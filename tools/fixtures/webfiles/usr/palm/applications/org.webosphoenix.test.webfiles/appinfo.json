@@ -1,0 +1,10 @@
+{
+    "//": "A plain web page asking for files the web's way (a file input, the File System Access API, a Blob download): what a third party's web app does. Not part of Phoenix: tools/test-webfiles.cjs and phoenix-sim --extra-rootfs tools/fixtures/webfiles serve it.",
+    "id": "org.webosphoenix.test.webfiles",
+    "version": "1.0.0",
+    "vendor": "webOS Phoenix tests",
+    "type": "web",
+    "main": "index.html",
+    "title": "Web Files Test",
+    "icon": "icon.svg"
+}

@@ -382,7 +382,15 @@ dark and light themes go to 2.0.
       no Linux/Wayland app layer: the frontend is a web page, which the app
       runtime already shows (the Wayland layer would be needed only for a
       native Linux app). Home Assistant has no official Linux app to port;
-      its companion apps are Android and iOS only
+      its companion apps are Android and iOS only. 🟡 Started (13 October
+      2026): Home (phoenix-default-apps `apps/homeassistant`, from the
+      Marketplace) has the server signed in once, its dashboards with the
+      companion apps' external bus over the page view's bridge
+      ([APP-RUNTIME.md](APP-RUNTIME.md), "A script of the app's in its page
+      view"), the device and its battery reported, and its notifications;
+      to do: mDNS discovery, the quick toggles, Just Type and the Assistant
+      (which has its own Smart Home settings with a long-lived token), the
+      bridge on a device, a background service
 - [x] Community features for 1.x, as picked by the owner on 7 October 2026
       ([M6-PLAN.md](M6-PLAN.md) F4; in the simulator, see M6)
 

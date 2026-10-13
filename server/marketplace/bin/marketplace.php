@@ -23,12 +23,21 @@
 //                                             data/developer.token (made the first
 //                                             time), which `phoenix-connector
 //                                             publish --local` uses
-//   php bin/marketplace.php upload [--phoenix] FILE.ipk
+//   php bin/marketplace.php upload [--phoenix] [--listing LISTING.json] FILE.ipk
 //                                             a package, as that developer (on a
 //                                             development catalog: approved and
 //                                             published at once); --phoenix: one
-//                                             of Phoenix's own (the connectors it
-//                                             comes with), as the admin
+//                                             of the packages Phoenix hosts itself
+//                                             (the connectors it comes with, the
+//                                             open-source web apps and the 2.0
+//                                             apps of bin/web-apps.py), as the
+//                                             admin, approved at once; --listing:
+//                                             what the index says of it
+//                                             (Catalog::applyListing), and a
+//                                             version uploaded already with the
+//                                             same bytes is kept as it is
+//   php bin/marketplace.php listing ID LISTING.json
+//                                             an app's listing again, published
 
 declare(strict_types=1);
 
@@ -112,20 +121,45 @@ switch ($cmd) {
         echo local_developer($app)['token'], "\n";
         break;
     case 'upload':
-        $phoenix = ($argv[2] ?? '') === '--phoenix';
-        $bytes = @file_get_contents($argv[$phoenix ? 3 : 2] ?? '');
-        if (!is_string($bytes)) {
-            fwrite(STDERR, "usage: php bin/marketplace.php upload [--phoenix] FILE.ipk\n");
+        $args = array_slice($argv, 2);
+        $phoenix = false;
+        $listingFile = null;
+        while ($args && str_starts_with($args[0], '--')) {
+            $opt = array_shift($args);
+            if ($opt === '--phoenix') {
+                $phoenix = true;
+            } elseif ($opt === '--listing' && $args) {
+                $listingFile = array_shift($args);
+            } else {
+                $args = [];
+            }
+        }
+        $bytes = @file_get_contents($args[0] ?? '');
+        $listing = $listingFile === null ? null : json_decode((string) @file_get_contents($listingFile), true);
+        if (!is_string($bytes) || ($listingFile !== null && !is_array($listing)) || ($listingFile !== null && !$phoenix)) {
+            fwrite(STDERR, "usage: php bin/marketplace.php upload [--phoenix [--listing LISTING.json]] FILE.ipk\n");
             exit(2);
         }
         if ($phoenix) {
-            // Phoenix's own package, as the catalog's first admin (the one init made).
+            // A package Phoenix hosts, as the catalog's first admin (the one init made):
+            // approved at once, as an admin's decision.
             $owner = $app->db->one("SELECT * FROM accounts WHERE role = 'admin' ORDER BY id");
             try {
-                $r = $app->catalog->submitPackage($owner, $bytes);
-                if ($r['release']['state'] === 'approved') {
-                    $r['publish'] = $app->catalog->publish();
+                $pkg = \Phoenix\Marketplace\Ipk::check($bytes, true);
+                $same = $app->db->one("SELECT * FROM releases WHERE app_id = ? AND version = ? AND state != 'rejected'", [$pkg['appId'], $pkg['version']]);
+                if ($same && $listing !== null && $same['sha256'] === hash('sha256', $bytes)) {
+                    // This version is there already (a re-run): only its listing again.
+                    $r = ['app' => $app->catalog->app($pkg['appId']), 'release' => $same];
+                } else {
+                    $r = $app->catalog->submitPackage($owner, $bytes);
+                    if ($r['release']['state'] === 'pending') {
+                        $r['release'] = $app->catalog->decideRelease((int) $r['release']['id'], true, $owner, 'Hosted by Phoenix (upload --phoenix)');
+                    }
                 }
+                if ($listing !== null) {
+                    $r['app'] = $app->catalog->applyListing($pkg['appId'], $listing, dirname(realpath($listingFile)));
+                }
+                $r['publish'] = $app->catalog->publish();
                 $status = 200;
             } catch (\Phoenix\Marketplace\CheckFailed $e) {
                 [$status, $r] = [400, ['error' => $e->getMessage()]];
@@ -140,10 +174,25 @@ switch ($cmd) {
         echo "{$r['app']['id']} {$r['release']['version']}: {$r['release']['state']}"
             . (isset($r['publish']) ? ". Published build {$r['publish']['build']}" : '') . "\n";
         break;
+    case 'listing':
+        $listing = json_decode((string) @file_get_contents($argv[3] ?? ''), true);
+        if (!isset($argv[2]) || !is_array($listing)) {
+            fwrite(STDERR, "usage: php bin/marketplace.php listing ID LISTING.json\n");
+            exit(2);
+        }
+        try {
+            $a = $app->catalog->applyListing($argv[2], $listing, dirname(realpath($argv[3])));
+        } catch (\Phoenix\Marketplace\CheckFailed $e) {
+            fwrite(STDERR, "Refused: {$e->getMessage()}\n");
+            exit(1);
+        }
+        $p = $app->catalog->publish();
+        echo "{$a['id']}: listed. Published build {$p['build']}\n";
+        break;
     case 'key':
         echo base64_encode($app->signer->public), "\n", $app->signer->fingerprint(), "\n";
         break;
     default:
-        fwrite(STDERR, "usage: php bin/marketplace.php init|seed|publish|admin|queue|approve|reject|key|developer|upload\n");
+        fwrite(STDERR, "usage: php bin/marketplace.php init|seed|publish|admin|queue|approve|reject|key|developer|upload|listing\n");
         exit(2);
 }

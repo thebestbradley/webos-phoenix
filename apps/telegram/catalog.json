@@ -4,7 +4,7 @@
         {
             "templateId": "com.webosphoenix.telegram",
             "title": "Unofficial Telegram",
-            "provider": "Your Telegram account, through Telegram's own library (TDLib); not made by Telegram",
+            "provider": "Your Telegram account, via TDLib; not made by Telegram",
             "summary": "Private chats, groups and secret chats in Messaging, pictures included, read receipts both ways, and the people you chat with in Contacts. Chats other than secret chats are kept on Telegram's servers, which can read them. Channels are not shown.",
             "capabilities": [
                 { "capability": "CONTACTS", "direction": "read-only" },

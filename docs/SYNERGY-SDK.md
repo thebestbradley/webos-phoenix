@@ -359,7 +359,7 @@ rest of it is C3):
 | Method | |
 | --- | --- |
 | `authorize {authorizationEndpoint, tokenEndpoint, clientId, clientSecret?, scope, redirectUri?, revocationEndpoint?}` | Shows the provider's page in the **system's browser sheet** over the card (its address visible; your code cannot read the page), with PKCE (S256) and `state`; exchanges the code; keeps the tokens under a new key -> `{keyId, scope}`; `CANCELED`, `ACCESS_DENIED` |
-| `token {keyId}` | `{accessToken, expiresAt}`, refreshed when it can be. Only the service that owns the key may ask |
+| `token {keyId, refresh?}` | `{accessToken, expiresAt}`, refreshed when it can be; `refresh: true` renews it now (the provider refused the one kept: a clock that differs, a revoked token). Only the service that owns the key may ask |
 | `forget {keyId}` | Revokes (RFC 7009) and deletes |
 | `client {name, value?}` | A client registration you keep here (a per-server client id and secret) |
 | `redirectUri {}` | The address this device's sign-ins come back to (for registering a client) |
@@ -689,7 +689,10 @@ The fields are those of the catalog's own account types
 the title, the provider and the capabilities default to the template's
 `loc_name`, your app's `vendor` and its capability providers (`readOnlyData`:
 read-only), the status to `experimental`, `push` to `poll`; the icon is the
-template's (`loc_48x48`, its `@2x`). Only Phoenix features a type.
+template's (`loc_48x48`, its `@2x`). Only Phoenix features a type. The
+title and the provider are a line each in Connections, at most 80
+characters, and the summary at most 300: `publish` says so before it
+uploads, and the catalog refuses a package whose `catalog.json` has more.
 
 `--local` is the catalog on this computer (`server/marketplace/bin/serve.sh`,
 which the simulator starts: `http://127.0.0.1:8088/`, or `PHOENIX_CATALOG`).

@@ -1940,6 +1940,63 @@
       "origin": "https://apnews.com",
       "icon": "https://assets.apnews.com/4f/85/c7bfcd884788ad50e6ec57acc8ef/android-app-icon-197.png",
       "manifestName": "AP News"
+    },
+    {
+      "id": "org.webosphoenix.pwa.cinny",
+      "title": "Cinny",
+      "developer": "Cinny",
+      "categories": [
+        "Communication"
+      ],
+      "featured": false,
+      "summary": "A Matrix chat client with a clean, simple look.",
+      "manifest": "https://app.cinny.in/manifest.json",
+      "origin": "https://app.cinny.in",
+      "icon": "https://app.cinny.in/public/android/android-chrome-192x192.png",
+      "manifestName": "Cinny"
+    },
+    {
+      "id": "org.webosphoenix.pwa.fluffychat",
+      "title": "FluffyChat",
+      "developer": "FluffyChat",
+      "categories": [
+        "Communication"
+      ],
+      "featured": false,
+      "summary": "A friendly Matrix messenger with end-to-end encryption.",
+      "manifest": "https://fluffychat.im/web/manifest.json",
+      "origin": "https://fluffychat.im",
+      "icon": "https://fluffychat.im/web/icons/Icon-192.png",
+      "manifestName": "FluffyChat"
+    },
+    {
+      "id": "org.webosphoenix.pwa.jupyterlite",
+      "title": "JupyterLite",
+      "developer": "Project Jupyter",
+      "categories": [
+        "Developer",
+        "Education"
+      ],
+      "featured": false,
+      "summary": "Jupyter notebooks with Python running in the browser itself.",
+      "manifest": "https://jupyterlite.github.io/demo/manifest.webmanifest",
+      "origin": "https://jupyterlite.github.io",
+      "icon": "https://jupyterlite.github.io/demo/icon-512x512.png",
+      "manifestName": "JupyterLite"
+    },
+    {
+      "id": "org.webosphoenix.pwa.jspaint",
+      "title": "JS Paint",
+      "developer": "Isaiah Odhner",
+      "categories": [
+        "Graphics"
+      ],
+      "featured": false,
+      "summary": "The classic paint program, remade for the web.",
+      "manifest": "https://jspaint.app/manifest.webmanifest",
+      "origin": "https://jspaint.app",
+      "icon": "https://jspaint.app/images/icons/192x192.png",
+      "manifestName": "Paint"
     }
   ],
   "notFound": [
@@ -2066,6 +2123,21 @@
     {
       "title": "Evernote",
       "url": "https://www.evernote.com/client/web",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "Elk",
+      "url": "https://elk.zone/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "Wavacity",
+      "url": "https://wavacity.com/",
+      "why": "no web app manifest found"
+    },
+    {
+      "title": "CyberChef",
+      "url": "https://gchq.github.io/CyberChef/",
       "why": "no web app manifest found"
     }
   ]

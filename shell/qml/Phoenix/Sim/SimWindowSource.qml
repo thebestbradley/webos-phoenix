@@ -261,6 +261,9 @@ Item {
                  removable: a.dynamic ? a.removable !== false : !!a.installed, version: a.version || "",
                  page: a.page || "", dynamic: !!a.dynamic, category: a.category || "", keywords: a.keywords || "",
                  installed: !!a.installed,
+                 // An update of a built-in app (docs/APP-STORE.md): the
+                 // built-in version removing it brings back, else "".
+                 builtinVersion: a.builtinVersion || "",
                  // appinfo.json exhibitionMode (dockMode): it can be an
                  // exhibition in dock mode, under exhibitionTitle.
                  exhibition: !!a.exhibition, exhibitionTitle: a.exhibitionTitle || a.title,
@@ -286,7 +289,7 @@ Item {
         return { page: "", dynamic: false, category: "", keywords: "", installed: false,
                  installState: "", progress: -1, pending: false, installReason: "",
                  exhibition: false, exhibitionTitle: "", tapToShare: false,
-                 multipleInstances: false, size: 0, scope: "", developer: "" };
+                 multipleInstances: false, size: 0, scope: "", developer: "", builtinVersion: "" };
     }
 
     // Apps that run in several windows at once whose appinfo.json cannot
@@ -830,6 +833,16 @@ Item {
             bannerRequested(appId, payload.message || "", _iconUrl(payload.icon, appId),
                             bp === undefined || bp === null ? "" : typeof bp === "string" ? bp : JSON.stringify(bp),
                             bs[0], bs[1], bs[2], payload.id ? String(payload.id) : "");
+        } else if (type === "webDownload") {
+            // A file of the web a site downloads (WebAppWindow._download):
+            // a site has no runtime, so the system UI's page has the
+            // download manager fetch it into Downloads (runtime/phoenix-runtime.js,
+            // "A web page's own files": webDownload).
+            var dlPage = _headless["com.palm.systemui"] || _webPages().filter(function (w) { return !w.site; })[0] || null;
+            if (dlPage && payload && /^https?:/i.test(String(payload.url || "")))
+                dlPage.runScript("window.__phoenixRuntime && __phoenixRuntime.webDownload && __phoenixRuntime.webDownload("
+                                 + JSON.stringify({ url: String(payload.url), name: String(payload.name || ""),
+                                                    mimeType: String(payload.mimeType || "") }) + ")");
         } else if (type === "removeBanner") {
             // PalmSystem.removeBannerMessage(id) / clearBannerMessages().
             bannerRemoved(appId, payload.id ? String(payload.id) : "");

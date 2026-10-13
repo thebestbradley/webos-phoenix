@@ -75,7 +75,8 @@ function kindText(a: MarketApp): string {
 }
 
 function AppRow({ a, onOpen }: { a: MarketApp; onOpen: () => void }) {
-    const right = a.update ? "Update" : a.installed ? "Installed" : a.verdict && !a.verdict.ok ? "" : "Free";
+    // A built-in app's id: "Update" when the catalog's is newer, else "Built In".
+    const right = a.update ? "Update" : a.installed ? "Installed" : a.builtin ? "Built In" : a.verdict && !a.verdict.ok ? "" : "Free";
     return (
         <Row testId={`app-${a.id}`} onClick={onOpen} icon={<Icon src={[a.ownIcon, a.icon]} title={a.title || a.id} />} chevron
              title={a.title || a.id}
@@ -268,10 +269,18 @@ function Home({ section, setSection, open, ctx, connections }: {
 
 // ---- An app's page -------------------------------------------------------------------------
 
-function AppPage({ sourceId, id, seed, onRemoved }: { sourceId: string; id: string; seed?: MarketApp; onRemoved: () => void }) {
+function AppPage({ sourceId, id, seed, onRemoved, catalogVersion }: {
+    sourceId: string; id: string; seed?: MarketApp; onRemoved: () => void;
+    /** Changes each time the catalogs were read again: the page shows the new entry (a page opened by a launch shows the entry kept from before until the refresh comes). */
+    catalogVersion: number;
+}) {
     const [app, setApp] = useState<MarketApp | null>(seed ?? null);
     const [progress, setProgress] = useState<InstallProgress | null>(null);
     const [error, setError] = useState<string | null>(null);
+    // Reading the entry failed: kept apart from what Download or Remove said, so a read
+    // that works (the catalogs read again) takes it away. A page opened by a launch looks
+    // before the Marketplace has read the catalogs: an app published since is not there yet.
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [confirmRemove, setConfirmRemove] = useState(false);
     const sub = useRef<{ cancel(): void } | null>(null);
     // The way to Developer Mode once Just Type's Konami code revealed it
@@ -279,13 +288,19 @@ function AppPage({ sourceId, id, seed, onRemoved }: { sourceId: string; id: stri
     const devModeShown = useDevModeShown() === true;
 
     const load = useCallback(() => {
-        marketplace.app(sourceId, id).then((a) => setApp((old) => ({
-            // The App Museum's details lack the summary's fields.
-            ...a, title: a.title || old?.title || "", icon: a.icon || old?.icon || "", summary: a.summary || old?.summary || "",
-            developer: a.developer.name ? a.developer : old?.developer ?? a.developer, rating: a.rating ?? old?.rating ?? null,
-        })), (e) => setError(errorText(e)));
+        marketplace.app(sourceId, id).then((a) => {
+            setLoadError(null);
+            setApp((old) => ({
+                // The App Museum's details lack the summary's fields.
+                ...a, title: a.title || old?.title || "", icon: a.icon || old?.icon || "", summary: a.summary || old?.summary || "",
+                developer: a.developer.name ? a.developer : old?.developer ?? a.developer, rating: a.rating ?? old?.rating ?? null,
+            }));
+        }, (e) => setLoadError(errorText(e)));
     }, [sourceId, id]);
     useEffect(() => { load(); return () => sub.current?.cancel(); }, [load]);
+    // Read again once the catalogs are (an install going on is not interrupted).
+    const firstVersion = useRef(catalogVersion);
+    useEffect(() => { if (catalogVersion !== firstVersion.current) load(); }, [catalogVersion, load]);
 
     function install() {
         setError(null);
@@ -308,11 +323,15 @@ function AppPage({ sourceId, id, seed, onRemoved }: { sourceId: string; id: stri
         } catch (e) { setError(errorText(e)); }
     }
 
-    if (!app) return error ? <ErrorText>{error}</ErrorText> : <Row title="Loading…"><Spinner /></Row>;
+    if (!app) return loadError ? <ErrorText>{loadError}</ErrorText> : <Row title="Loading…"><Spinner /></Row>;
     const busy = !!progress && progress.state !== "installed" && progress.state !== "failed";
     const appId = progress?.appId ?? app.appId ?? app.id;
     const label = progress?.state === "downloading" ? "Downloading…" : progress?.state === "checking" ? "Checking…"
         : progress?.state === "installing" ? "Installing…" : progress?.state === "queued" ? "Waiting…" : "";
+    // A built-in app's id (docs/APP-STORE.md "Updating a built-in app"): the
+    // device's own version, the update in its place, or only Open.
+    const builtin = app.builtin;
+    const builtinOnly = !!builtin && !app.installed && !app.update;
     return (
         <div className="mk-app" data-testid="app-page">
             <div className="mk-app-head">
@@ -332,8 +351,12 @@ function AppPage({ sourceId, id, seed, onRemoved }: { sourceId: string; id: stri
                 ) : app.installed && !app.update ? (
                     <>
                         <Button variant="affirmative" data-testid="open-app" onClick={() => void apps.launch(appId)}>Open</Button>
-                        <Button variant="negative" data-testid="remove-app" onClick={() => setConfirmRemove(true)}>Remove</Button>
+                        <Button variant="negative" data-testid="remove-app" onClick={() => setConfirmRemove(true)}>
+                            {builtin?.replaced ? "Remove Update" : "Remove"}
+                        </Button>
                     </>
+                ) : builtinOnly ? (
+                    <Button variant="affirmative" data-testid="open-app" onClick={() => void apps.launch(appId)}>Open</Button>
                 ) : (
                     <Button variant="affirmative" data-testid="install-app" disabled={!!app.verdict && !app.verdict.ok} onClick={install}>
                         {app.update ? `Update to ${app.update}` : app.kind === "pwa" ? "Add to Launcher" : "Download"}
@@ -341,7 +364,16 @@ function AppPage({ sourceId, id, seed, onRemoved }: { sourceId: string; id: stri
                 )}
             </div>
             {app.verdict && !app.verdict.ok && <Note>{app.verdict.text}</Note>}
-            {error && <ErrorText testId="install-error">{error}</ErrorText>}
+            {builtin && (
+                <Note testId="builtin-note">
+                    {builtin.replaced
+                        ? `This version takes the place of the ${app.title} this device came with (${builtin.version}). Removing the update brings that version back.`
+                        : app.update
+                            ? `This device came with ${app.title} ${builtin.version}. ${app.update} installs in its place; removing it later brings back ${builtin.version}.`
+                            : `Built into this device (${builtin.version}), the same as or newer than this one.`}
+                </Note>
+            )}
+            {(error ?? loadError) && <ErrorText testId="install-error">{error ?? loadError}</ErrorText>}
             {progress?.errorCode === "NEEDS_DEVMODE" && devModeShown && (
                 <Button variant="dark" data-testid="open-devmode"
                         onClick={() => void apps.launch("org.webosphoenix.settings", { page: "devmode" })}>Developer Mode Settings</Button>
@@ -361,16 +393,20 @@ function AppPage({ sourceId, id, seed, onRemoved }: { sourceId: string; id: stri
                 <Row title="Kind" value={kindText(app)} />
                 {app.version && <Row title="Version" value={app.version} />}
                 {app.installed && <Row title="Installed" value={app.installed.version || "Yes"} />}
+                {builtin && <Row title="Built in" value={builtin.version || "Yes"} />}
                 {app.license && <Row title="License" value={app.license} />}
                 {app.categories.length > 0 && <Row title="Category" value={app.categories.join(", ")} />}
                 {app.devices && app.devices.length > 0 && <Row title="Made for" value={app.devices.join(", ")} />}
                 {app.homepage && <Row title="Website" value={new URL(app.homepage).host} onClick={() => void apps.open(app.homepage)} />}
+                {app.source && <Row title="Source code" value={new URL(app.source).host} testId="app-source" onClick={() => void apps.open(app.source!)} />}
                 {app.donation && <Row title="Support the developer" chevron onClick={() => void apps.open(app.donation)} />}
             </Group>
             {app.kind === "pwa" && <Note>A web app opens the site in its own card, with its own launcher icon. The site keeps your data.</Note>}
             {(app.kind === "classic" || app.kind === "preware") && <Note>From the webOS Archive, as it was. Phoenix checks the package before installing it.</Note>}
-            <Dialog open={confirmRemove} title={`Remove ${app.title}?`} onClose={() => setConfirmRemove(false)} testId="remove-dialog"
-                    message="The app and its data on this device are removed.">
+            <Dialog open={confirmRemove} title={builtin?.replaced ? `Remove the ${app.title} update?` : `Remove ${app.title}?`}
+                    onClose={() => setConfirmRemove(false)} testId="remove-dialog"
+                    message={builtin?.replaced ? `${app.title} goes back to ${builtin.version}, the version this device came with. Its data stays.`
+                                                : "The app and its data on this device are removed."}>
                 <Button variant="negative" data-testid="remove-confirm" onClick={() => void remove()}>Remove</Button>
                 <Button variant="dark" onClick={() => setConfirmRemove(false)}>Cancel</Button>
             </Dialog>
@@ -405,7 +441,8 @@ function Installed({ open }: { open: (sourceId: string, id: string) => void }) {
                     : list.length === 0 ? <Row title="Nothing yet" />
                     : list.map((a) => (
                         <Row key={a.id} testId={`installed-${a.id}`} icon={<Icon src={[a.icon, a.catalogIcon]} title={a.title} />} chevron title={a.title}
-                             subtitle={a.update ? `${a.version} → ${a.update}` : a.version} value={a.update ? "Update" : ""}
+                             subtitle={(a.update ? `${a.version} → ${a.update}` : a.version) + (a.builtin ? ` · in place of the built-in ${a.builtin}` : "")}
+                             value={a.update ? "Update" : ""}
                              onClick={() => open(a.sourceId, a.catalogId)} />
                     ))}
             </Group>
@@ -514,7 +551,7 @@ function Marketplace() {
                 )}
                 {view.kind === "account" && <AccountTypePage key={view.type.templateId} t={view.type} added={added.has(view.type.templateId)} />}
                 {view.kind === "app" && <AppPage key={view.sourceId + view.id} sourceId={view.sourceId} id={view.id} seed={view.seed}
-                                                 onRemoved={() => void ctx.reload()} />}
+                                                 onRemoved={() => void ctx.reload()} catalogVersion={ctx.version} />}
                 {view.kind === "search" && (
                     <>
                         {(results === null || results.apps.length > 0 || results.accountTypes.length === 0) && (

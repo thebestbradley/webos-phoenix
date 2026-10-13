@@ -305,6 +305,19 @@ describe("tokens", () => {
         expect((await world.m.token({ keyId: r.keyId }, OWNER)).errorCode).toBe("401_UNAUTHORIZED");
     });
 
+    it("renews a token before it expires when asked (refresh: the provider refused the one kept)", async () => {
+        const r = await world.m.authorize(authorizeParams(), OWNER);
+        const first = await world.m.token({ keyId: r.keyId }, OWNER);
+        const same = await world.m.token({ keyId: r.keyId }, OWNER);
+        expect(same.accessToken).toBe(first.accessToken);
+        const renewed = await world.m.token({ keyId: r.keyId, refresh: true }, OWNER);
+        expect(renewed.returnValue).toBe(true);
+        expect(renewed.accessToken).not.toBe(first.accessToken);
+        expect(provider.state().tokenRequests.at(-1).grant_type).toBe("refresh_token");
+        // Only its owner.
+        expect((await world.m.token({ keyId: r.keyId, refresh: true }, "org.webosphoenix.someoneelse")).errorCode).toBe("PERMISSION_DENIED");
+    });
+
     it("forget revokes the token at the provider and deletes the key", async () => {
         const r = await world.m.authorize(authorizeParams(), OWNER);
         const t = await world.m.token({ keyId: r.keyId }, OWNER);
