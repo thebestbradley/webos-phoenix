@@ -702,6 +702,13 @@ check($hostedIpk && $hostedIpk['appId'] === 'org.example.paint' && $hostedIpk['v
 $twoIpk = is_file("$wat/default-app.ipk") ? Phoenix\Marketplace\Ipk::check((string) file_get_contents("$wat/default-app.ipk")) : null;
 check($twoIpk && $twoIpk['appId'] === 'com.example.calc' && $twoIpk['appinfo']['removable'] === true,
       '... and so does a 2.0 app it packs from a checkout, removable');
+// Home, a 2.0 app offered in the Marketplace only, uploaded with the listing web-apps.py writes for it.
+$homeUp = is_file("$wat/home.ipk") ? $cli(['upload', '--phoenix', '--listing', "$wat/home-listing.json", "$wat/home.ipk"]) : -1;
+$homeApp = (new App(marketplace_config()))->catalog->app('org.webosphoenix.home');
+check($homeUp === 0 && $homeApp && $homeApp['title'] === 'Home' && $homeApp['categories'] === ['Phoenix 2.0', 'Utilities']
+      && str_contains($homeApp['summary'], 'not affiliated with the Open Home Foundation') && $homeApp['releases'][0]['state'] === 'approved',
+      'a Marketplace-only 2.0 app (Home) is published with its listing: not affiliated with the Open Home Foundation, under Utilities'
+      . ($homeUp === 0 ? '' : ' (' . trim((string) @file_get_contents("$tmp/cli.err")) . ')'));
 
 // ---- The system update feed (served at /updates/, published by the admin API) ----------------
 $bundle = str_repeat("\x00\x01raucb", 64);

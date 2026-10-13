@@ -384,7 +384,12 @@ data use "Phoenix Account".
   bundles include their npm dependencies (React, Enact and others, MIT and
   Apache-2.0); a public download of them should carry those packages'
   notices, which their `dist/` does not yet (an open item for that
-  repository's build).
+  repository's build). Home, the 2.0 companion for Home Assistant offered
+  in the Marketplace only, names Home Assistant only to say what it works
+  with: its listing says it is not affiliated with the Open Home
+  Foundation, whose trademark "Home Assistant" is, and its icon is
+  Phoenix's own art, never Home Assistant's logo (CC BY-NC-SA 4.0 art, not
+  for commercial use; the app's `PROVENANCE.md`).
 
 ## Text Assist (the keyboard)
 

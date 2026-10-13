@@ -792,7 +792,8 @@ each is hosted, a link or left out: [WEB-APP-CATALOG.md](WEB-APP-CATALOG.md).
 The catalog also hosts webOS Phoenix 2.0's built-in apps, the 41 apps of
 phoenix-default-apps (Enact): someone can download one again, or install
 the 2.0 version on a 1.0 device, where it is an update of the 1.0 app of
-its id ([3.14](#314-updating-a-built-in-app)).
+its id ([3.14](#314-updating-a-built-in-app)). It hosts the 2.0 apps
+offered in the Marketplace only too (Home, below).
 
 phoenix-default-apps is a private repository and webos-phoenix a public
 one, so none of its files or builds is ever in this repository. The
@@ -808,6 +809,20 @@ so and skips them:
     python3 -I server/marketplace/bin/web-apps.py default-apps --from ../phoenix-default-apps --publish
 
 An app that is not built is skipped with the command that builds it.
+
+An app phoenix-default-apps offers in the Marketplace only, left out of
+the 2.0 image (`"phoenix": {"catalogOnly": true}` in its `appinfo.json`;
+that repository's `docs/APP-GUIDE.md`, "An app from the Marketplace only"),
+is packed and published with the rest: Home (`org.webosphoenix.home`), a
+companion for Home Assistant, under "Phoenix 2.0" and Utilities (the
+catalog has no Smart Home category). No device comes with it, so on any
+device it is a new app, not an update of a built-in one, and its listing
+says so. Where an app's `package.json` summary is not what the catalog
+should say, `DEFAULT_LISTINGS` in `bin/web-apps.py` has our own words:
+Home's says it is a companion for Home Assistant, not affiliated with the
+Open Home Foundation (whose trademark "Home Assistant" is), and its icon
+is Phoenix's own art, never Home Assistant's logo (the app's
+`PROVENANCE.md`).
 
 ### 3.14 Updating a built-in app
 

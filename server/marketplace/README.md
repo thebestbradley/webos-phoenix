@@ -238,8 +238,13 @@ publishes them; run it isolated (`python3 -I`; it restarts itself so):
 - **default-apps** packs each built app of the checkout (`--from PATH` or
   `PHOENIX_DEFAULT_APPS`; none given: it says the 2.0 apps are skipped and
   why), its `dist/` with `removable: true`, and with `--publish` publishes
-  it as Phoenix's own under "Phoenix 2.0". The checkout is private: nothing
-  of it is ever committed here.
+  it as Phoenix's own under "Phoenix 2.0". The apps offered in the
+  Marketplace only (`phoenix.catalogOnly`: Home) are packed with the rest
+  and listed as new apps, not updates; `DEFAULT_LISTINGS` holds our own
+  words for a listing where the app's `package.json` summary is not what
+  the catalog should say (Home: a companion for Home Assistant, not
+  affiliated with the Open Home Foundation). The checkout is private:
+  nothing of it is ever committed here.
 
 `php bin/marketplace.php listing ID LISTING.json` sets an app's listing
 again (and publishes). On a server the same commands run there, with the

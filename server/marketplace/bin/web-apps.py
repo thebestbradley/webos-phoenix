@@ -10,10 +10,12 @@ Two kinds (docs/APP-STORE.md "Open-source web apps" and "The 2.0 apps"):
     download and SHA-256, its licence, source and homepage, its icon and
     licence files, our own description of it; docs/WEB-APP-CATALOG.md says
     why each app is in it, a link or left out);
-  * webOS Phoenix 2.0's built-in apps, from a phoenix-default-apps checkout
-    (--from PATH or PHOENIX_DEFAULT_APPS; skipped, saying so, without one),
-    which a 1.0 device installs as updates of its own (docs/APP-STORE.md
-    "Updating a built-in app").
+  * webOS Phoenix 2.0's apps, from a phoenix-default-apps checkout (--from
+    PATH or PHOENIX_DEFAULT_APPS; skipped, saying so, without one): its
+    built-in apps, which a 1.0 device installs as updates of its own
+    (docs/APP-STORE.md "Updating a built-in app"), and the apps it offers in
+    the Marketplace only (appinfo.json's phoenix.catalogOnly: Home), a new
+    app on any device.
 
 Nothing of either is in this repository: downloads and packages go to a
 cache outside it (--cache, PHOENIX_WEB_APPS_CACHE, else
@@ -40,7 +42,8 @@ are updated: change the pins in web-apps.json, then publish again.
                  without a GPU
   python3 -I server/marketplace/bin/web-apps.py default-apps [ID ...] [--from PATH] [--publish]
                  the 2.0 apps of a phoenix-default-apps checkout, each built
-                 app's dist/, packed (and published)
+                 app's dist/ (the Marketplace-only ones too), packed (and
+                 published)
 
 Options: --cache DIR; --data DIR (the catalog's data folder, as
 MARKETPLACE_DATA; default the catalog's own); --php PHP.
@@ -515,7 +518,8 @@ def shoot(a, cache, opts):
     if opts.get("software_gl"):
         # No GPU here: WebGL 2 in software (not needed with a real GPU).
         env["QTWEBENGINE_CHROMIUM_FLAGS"] = (env.get("QTWEBENGINE_CHROMIUM_FLAGS", "") + " --ignore-gpu-blocklist --enable-unsafe-swiftshader").strip()
-    cmd = [sim, "--" + (opts.get("size") or "tablet"), "--extra-rootfs", rootfs, "--launch", a["id"],
+    # --no-marketplace: the screenshot needs no catalog (and another one may be on its port).
+    cmd = [sim, "--" + (opts.get("size") or "tablet"), "--no-marketplace", "--extra-rootfs", rootfs, "--launch", a["id"],
            "--screenshot", out, "--delay", str(opts.get("delay") or 15000)]
     if not env.get("DISPLAY") and not env.get("WAYLAND_DISPLAY") and sys.platform.startswith("linux"):
         env["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
@@ -540,6 +544,28 @@ DEFAULT_CATEGORIES = {
     "maps": "Navigation", "weather": "Weather", "browser": "Utilities", "calculator": "Utilities", "clock": "Utilities",
     "files": "Utilities", "docview": "Productivity", "pdfview": "Productivity", "passwords": "Utilities",
     "authenticator": "Utilities", "terminal": "Developer", "help": "Reference", "assistant": "Productivity",
+    "homeassistant": "Utilities",
+}
+
+# A 2.0 app's listing where the app's package.json summary is not what the catalog should say,
+# by id: our own words, and its categories (after "Phoenix 2.0").
+DEFAULT_LISTINGS = {
+    # Home's name and words follow its PROVENANCE.md and the checkout's docs/DECISIONS.md:
+    # "Home Assistant" only to say what it works with (a trademark of the Open Home Foundation,
+    # which neither made nor endorses it), and its own icon, never Home Assistant's logo.
+    "org.webosphoenix.home": {
+        "summary": "A companion for Home Assistant, not affiliated with the Open Home Foundation: "
+                   "your own server's dashboards in a card, and its notifications as webOS ones.",
+        "description": "Home is a companion for Home Assistant, not affiliated with or endorsed by the Open Home "
+                       "Foundation, which owns the Home Assistant trademark. It shows your own Home Assistant "
+                       "server's dashboards in a card, signs in once through webOS Phoenix's accounts and key "
+                       "store, keeps several servers, registers this device with Home Assistant's Mobile App "
+                       "integration (with its battery's sensors), and shows Home Assistant's notifications, with "
+                       "their actions, as webOS notifications. Its icon is webOS Phoenix's own art, not Home "
+                       "Assistant's logo.\n\nNeeds: a Home Assistant server of your own, which it talks to "
+                       "and nothing else.",
+        "categories": ["Utilities"],
+    },
 }
 
 
@@ -568,6 +594,31 @@ def checkout_commit(d):
         return head[:7]
     except OSError:
         return ""
+
+
+def default_listing(name, built, pkg, commit):
+    """A 2.0 app's listing (all but its icon and screenshots). A built-in app of 2.0 is, on a 1.0
+    device that came with the app of its id, an update of it; one the Marketplace offers only
+    (appinfo.json's phoenix.catalogOnly) is a new app on any device, never one built in."""
+    app_id, title = built["id"], built.get("title", built["id"])
+    own = DEFAULT_LISTINGS.get(app_id, {})
+    summary = re.sub(r"^[^:]{1,80}\([^)]*\):\s*", "", pkg.get("description") or "").strip() or title
+    if summary[:1].islower() and not summary.startswith("webOS"):
+        summary = summary[0].upper() + summary[1:]
+    summary = own.get("summary") or summary
+    if (built.get("phoenix") or {}).get("catalogOnly") is True:
+        about = "A webOS Phoenix 2.0 app offered in the Marketplace only: no device comes with it."
+    else:
+        about = ("The webOS Phoenix 2.0 version of %s, rebuilt on Enact. On a device that came with %s it installs "
+                 "in place of that version; removing it brings that version back." % (title, title))
+    if commit:
+        about += " Built from phoenix-default-apps %s." % commit
+    return {
+        "title": title, "developer": "webOS Phoenix", "developerUrl": "https://github.com/thebestbradley/webos-phoenix",
+        "summary": summary[:300], "description": "%s\n\n%s" % (own.get("description") or summary, about),
+        "categories": ["Phoenix 2.0"] + (own.get("categories") or [DEFAULT_CATEGORIES.get(name, "Utilities")]),
+        "license": pkg.get("license") or "Apache-2.0", "homepage": "https://github.com/thebestbradley/webos-phoenix",
+    }
 
 
 def default_apps(opts, ids):
@@ -600,17 +651,15 @@ def default_apps(opts, ids):
             if not APP_ID.match(app_id):
                 raise ValueError("not a valid app id: " + app_id)
             files = files_under(dist)
-            # Installed, it is an update of the built-in app of its id: removable, so the
-            # built-in one can come back (OSE's SAM reads "removable" for its store apps).
+            # Installed, it is removable: an update of the built-in app of its id, so the
+            # built-in one can come back (OSE's SAM reads "removable" for its store apps), or a
+            # Marketplace-only app (phoenix.catalogOnly), which says so itself.
             built["removable"] = True
             files["appinfo.json"] = (json.dumps(built, indent=4, ensure_ascii=False) + "\n").encode()
             try:
                 pkg = json.load(open(os.path.join(src, "package.json"), encoding="utf-8"))
             except (OSError, ValueError):
                 pkg = {}
-            summary = re.sub(r"^[^:]{1,80}\([^)]*\):\s*", "", pkg.get("description") or "").strip() or built.get("title", app_id)
-            if summary[:1].islower() and not summary.startswith("webOS"):
-                summary = summary[0].upper() + summary[1:]
             title = built.get("title", app_id)
             control = {"Maintainer": "webOS Phoenix", "Description": "%s (webOS Phoenix 2.0)" % title,
                        "License": pkg.get("license") or "Apache-2.0"}
@@ -624,18 +673,11 @@ def default_apps(opts, ids):
                 f.write(body)
             icon_name = next((n for n in ("icon-256x256.png", built.get("largeIcon") or "", built.get("icon") or "icon.png")
                               if n and n in files and files[n].startswith(b"\x89PNG")), None)
-            say("%s %s: %s (%.1f MB)" % (app_id, version, path, len(body) / 1048576))
+            say("%s %s: %s (%.1f MB%s)" % (app_id, version, path, len(body) / 1048576,
+                                            ", Marketplace only" if (built.get("phoenix") or {}).get("catalogOnly") is True else ""))
             if not opts.get("publish"):
                 continue
-            listing = {
-                "title": title, "developer": "webOS Phoenix", "developerUrl": "https://github.com/thebestbradley/webos-phoenix",
-                "summary": summary[:300],
-                "description": ("%s\n\nThe webOS Phoenix 2.0 version of %s, rebuilt on Enact. On a 1.0 device it installs in place "
-                                "of the %s it came with; removing it brings that version back.%s")
-                               % (summary, title, title, (" Built from phoenix-default-apps %s." % commit) if commit else ""),
-                "categories": ["Phoenix 2.0", DEFAULT_CATEGORIES.get(name, "Utilities")],
-                "license": pkg.get("license") or "Apache-2.0", "homepage": "https://github.com/thebestbradley/webos-phoenix",
-            }
+            listing = default_listing(name, built, pkg, commit)
             if icon_name:
                 with open(os.path.join(vd, "icon.png"), "wb") as f:
                     f.write(files[icon_name])
