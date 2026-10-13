@@ -17,7 +17,7 @@
 import { useEffect, useRef, useState } from "react";
 import { matchNumber, phoneTypeLabel, ringingCall, primaryCall, subscribe, telephony, type Call, type Person } from "@phoenix/luna";
 import { Button, formatNumber, phoneArt, srcSet } from "@phoenix/ui";
-import { callerName, useCallStatus, usePeople } from "../lib/hooks";
+import { callerName, useCallStatusReply, usePeople } from "../lib/hooks";
 
 /** Height of the alert, in legacy pixels. */
 export const INCOMING_ALERT_HEIGHT = 150;
@@ -81,11 +81,11 @@ export function useIncomingAlert(calls: readonly Call[], people: readonly Person
 }
 
 export function IncomingAlert() {
-    const status = useCallStatus();
+    const reply = useCallStatusReply();
+    const calls = reply?.calls ?? [];
     const people = usePeople();
     const [pulse, setPulse] = useState(false);
-    const seen = useRef(false);
-    const call = ringingCall(status.calls);
+    const call = ringingCall(calls);
     useEffect(() => {
         const t = setInterval(() => setPulse((p) => !p), 700);
         return () => clearInterval(t);
@@ -106,14 +106,15 @@ export function IncomingAlert() {
         }, () => { /* no lock service: nothing to watch */ });
         return () => sub.cancel();
     }, []);
-    // Close once the call stops ringing (answered, ignored or hung up).
+    // Close once the service says no call rings: answered, ignored, hung up, or stopped ringing
+    // before this page was up to hear it (a caller who gave up while a busy device loaded the
+    // alert: waiting to see it ring first left an empty alert open for good).
     useEffect(() => {
-        if (call) seen.current = true;
-        else if (seen.current) window.close();
-    }, [call]);
+        if (reply && !call) window.close();
+    }, [reply, call]);
     if (!call)
         return <div className="incoming-alert" />;
-    const waiting = !!primaryCall(status.calls);
+    const waiting = !!primaryCall(calls);
     const match = matchNumber(people, call.number);
     const name = callerName(call, people);
     const answer = () => telephony.answer(call.id).catch(() => {});
