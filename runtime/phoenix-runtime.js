@@ -10802,12 +10802,17 @@
             if (ro) return fail(E.PERMISSION, "Read-only: " + ro);
             return null;
         }
+        // A media file's bytes go too, and the path is no longer "seen": a
+        // file written there later (the save picker's Replace, the same
+        // download again) is picked up as new (syncMedia), as localFiles.remove
+        // does. Kept seen, it stayed in the media store and out of every list.
         function dropTree(v, p) {
             subtree(v, p).forEach(function (k) {
                 var n = v.nodes[k];
                 if (n.media && runtime.mediaFiles) runtime.mediaFiles.remove(k);
                 if (n.t === "f") forgetMedia(k);
                 delete v.nodes[k];
+                delete v.mediaSeen[k];
             });
         }
 
