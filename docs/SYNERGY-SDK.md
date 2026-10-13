@@ -359,7 +359,7 @@ rest of it is C3):
 | Method | |
 | --- | --- |
 | `authorize {authorizationEndpoint, tokenEndpoint, clientId, clientSecret?, scope, redirectUri?, revocationEndpoint?}` | Shows the provider's page in the **system's browser sheet** over the card (its address visible; your code cannot read the page), with PKCE (S256) and `state`; exchanges the code; keeps the tokens under a new key -> `{keyId, scope}`; `CANCELED`, `ACCESS_DENIED` |
-| `token {keyId}` | `{accessToken, expiresAt}`, refreshed when it can be. Only the service that owns the key may ask |
+| `token {keyId, refresh?}` | `{accessToken, expiresAt}`, refreshed when it can be; `refresh: true` renews it now (the provider refused the one kept: a clock that differs, a revoked token). Only the service that owns the key may ask |
 | `forget {keyId}` | Revokes (RFC 7009) and deletes |
 | `client {name, value?}` | A client registration you keep here (a per-server client id and secret) |
 | `redirectUri {}` | The address this device's sign-ins come back to (for registering a client) |

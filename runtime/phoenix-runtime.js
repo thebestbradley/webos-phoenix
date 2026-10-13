@@ -3347,6 +3347,34 @@
                 this.privateMode = on;
                 if (nativeWebViews && this.connected && !this.destroyed) this.post("private", { on: on, url: this.url || "" });
             },
+            // Phoenix: a script of the app's in the pages of one origin this
+            // view shows, run in the page's own world as each starts (top
+            // frame only), with messages both ways: what Android's WebView
+            // (addJavascriptInterface) and iOS's WKWebView (WKUserScript,
+            // WKScriptMessageHandler) give an app for its own web views, which
+            // Home Assistant's companion apps build their external bus on
+            // (phoenix-default-apps apps/homeassistant). The script is the
+            // body of a function of `bridge`: bridge.post(value) sends JSON to
+            // the app, which hears it as the callback pageMessage(json);
+            // bridge.onMessage(fn) hears what the app sends with
+            // postToPage(json). The shell keeps the rules
+            // (shell/qml/Phoenix/Sim/PageBridge.js): the messages carry a
+            // secret made here for this view, and pass only while the view
+            // shows that origin. Only the native view can: an <iframe> of
+            // another origin cannot be reached before its scripts run, so
+            // pageBridgeAvailable() is false there and setPageBridge does
+            // nothing.
+            pageBridgeAvailable: function () { return nativeWebViews; },
+            setPageBridge: function (script, origin) {
+                if (!nativeWebViews) return false;
+                var b = global.crypto.getRandomValues(new Uint8Array(18)), nonce = "";
+                for (var i = 0; i < b.length; i++) nonce += ("0" + b[i].toString(16)).slice(-2);
+                this.post("bridge", { script: String(script || ""), origin: String(origin || ""), nonce: nonce });
+                return true;
+            },
+            postToPage: function (json) {
+                if (nativeWebViews) this.post("bridgePost", { message: typeof json === "string" ? json : toJson(json) });
+            },
             clearHistory: function () { this.back = []; this.forward = []; },
             setVisibleSize: function () {},
             pageFocused: function () {},
@@ -3453,7 +3481,8 @@
 
     // Native view events from phoenix-sim: name is a BrowserAdapter callback
     // (urlTitleChanged, loadStarted, loadProgressChanged, loadStopped,
-    // documentLoadFinished, mainDocumentLoadFailed).
+    // documentLoadFinished, mainDocumentLoadFailed), or Phoenix's
+    // pageMessage(json) (setPageBridge).
     // A page going away takes its views along: a frame removed from the card
     // (the sign-in sheet) runs no more animation frames, so track() would
     // never see its object go and the shell would keep showing the view.

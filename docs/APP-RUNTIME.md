@@ -1311,6 +1311,28 @@ BrowserAdapter's `addUrlRedirect` and `urlRedirected`, with the patterns of
 `/usr/palm/command-resource-handlers.json`). `tools/test-browser.cjs` browses
 with it end to end, tapping a real `mailto:` link.
 
+**A script of the app's in its page view** (Phoenix's; BrowserAdapter had
+none). What Android's WebView (`addJavascriptInterface`,
+`evaluateJavascript`) and iOS's WKWebView (`WKUserScript`,
+`WKScriptMessageHandler`) give an app for its own web views, which Home
+Assistant's companion apps build their external bus and external
+authentication on: the object's `setPageBridge(script, origin)` runs
+`script` in the page's own world as each page of `origin` starts (the top
+frame only), as the body of a function of `bridge`; `bridge.post(value)`
+sends JSON to the app, which hears it as the callback `pageMessage(json)`,
+and `bridge.onMessage(fn)` hears what the app sends with
+`postToPage(json)`. The shell keeps the rules (`shell/qml/Phoenix/Sim/
+PageBridge.js`, `WebAppWindow.qml`): each message carries a secret the
+runtime made for that view, which the script keeps in a closure, so a frame
+of another site in the page cannot speak for it; messages pass either way
+only while the view shows a page of that origin; what the app sends must be
+JSON, and becomes a literal in the page, never code. Only the native view
+can (`pageBridgeAvailable()`): an `<iframe>` of another origin cannot be
+reached before its scripts run. On a device, WebAppMgr's page views will
+need the same. Phoenix's Home app (phoenix-default-apps
+`apps/homeassistant`) uses it. Tests: `shell/tests/tst_pagebridge.qml`,
+`apps/shared/luna/src/pagebridge.test.ts`.
+
 **Downloads.** A file the page view does not show (a PDF, a link with
 `download`) is not downloaded by Chromium: phoenix-sim's view hands it
 back to the page as BrowserAdapter did, with the plugin's
