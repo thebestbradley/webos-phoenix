@@ -48,6 +48,54 @@ Files, in a folder the user picks).
 > posts (the Fediverse) is in the sheet once per signed-in account, and not
 > at all without one; see "Accounts in the sheet" below
 > (`tools/test-sharing.cjs`, `test-fediverse.cjs`).
+>
+> **13 October 2026: a web page's own files.** Any web app (a third
+> party's web build too) that opens or saves files the web's way, with a
+> file input, `showOpenFilePicker` / `showSaveFilePicker` or a download,
+> gets these pickers instead of Chromium's dialogs, which showed the
+> computer's own disk in phoenix-sim; see "A web page's own files" below
+> (`tools/test-webfiles.cjs`; checked in phoenix-sim with ArtCraft's
+> WordCraft 0.6.1 and VectorCraft 0.10.0 web builds).
+
+### A web page's own files
+
+A web page asks for a file in the web's ways; Chromium would answer with
+dialogs of its own: in phoenix-sim Qt WebEngine's, on the computer's disk
+(any web app could read it), on a device none at all (OSE's app runtime
+cancels every file chooser and refuses every download with a toast,
+webosose/chromium120 `src/neva/app_runtime/browser/
+app_runtime_web_contents_delegate.cc:43-57`,
+`app_runtime_download_manager_delegate.cc:39-57`). The runtime (block "A
+web page's own files", on a device too) answers first, in every page that
+has it:
+
+| The page | Phoenix |
+| --- | --- |
+| `<input type=file>`: tapped, behind a label, `input.click()` or `dispatchEvent` (in the page or not), `showPicker()` | The file picker (SF2) with kinds from `accept`: pictures, videos and music as the original's kinds, any other type as Documents (every file of its extensions) and Files (by folder, those extensions); nothing said: every kind. `multiple`: several files. The files picked become the input's (`File`s with their bytes, name, type, date), then `input` and `change`; Cancel fires `cancel`. The page's own `preventDefault()` keeps the picker shut. A folder (`webkitdirectory`) cannot be picked: `cancel` |
+| `showOpenFilePicker({types, multiple})` | The file picker; a `FileSystemFileHandle` for each file (`getFile`, `createWritable` with `keepExistingData`, `isSameEntry`, `remove`, `move(name)`; permission granted) |
+| `showSaveFilePicker({suggestedName, types, startIn})` | The save picker (SF3) with the name (`startIn`'s Documents, Downloads, Music or Pictures, else the last folder; Replace asks first); the handle's writable writes the file on `close()`, as Chromium moves its swap file over the file; saving again through the handle asks nothing |
+| `showDirectoryPicker` | Not there (no folder picker): pages go on without it |
+| A download: a link with `download` to a Blob of the page, a `data:` URL or a file of the app (FileSaver.js's uncancelable click too) | The save picker with its name; "Saved *name* to *folder*" |
+| A download Chromium starts (a navigation to a Blob, an attachment) | phoenix-sim's window hands it to the page's runtime (`webDownload`): the page's own file to the save picker; a file of the web to the download manager, into Downloads with its ongoing activity, then "Finished downloading", which opens Files there, as the original application manager had the download manager fetch a remote file (`ApplicationManagerService.cpp:1343-1393`; the browser's words, Isis `BrowserApp.js:460-466`) |
+
+What is saved is written as the save picker writes (the media store here,
+the file manager's service on a device, a drive's upload), so Files, Photos
+and the other apps see it at once.
+
+What still reaches Chromium never gets its own dialogs (phoenix-sim's
+`WebAppWindow.qml`): a file chooser from a page without the runtime (a
+site, a frame of another origin, a browser page) is refused and the shell
+says "File selection is not supported.", as OSE's toast does; access to a
+path of the computer (File System Access) is refused; a site's download
+of the web goes to the download manager through the system UI's page, its
+own Blobs cannot be saved ("Download is not supported.").
+
+Not yet: sites (web apps whose main is an `https://` address), frames of
+another origin and the browser's pages get no picker (they have no runtime
+to fill an input with the user's files); a handle kept in IndexedDB comes
+back without its methods (a copy is `{kind, name}`); no folder handles
+(`showDirectoryPicker`, `webkitdirectory`). On a device written, not run
+(GAPS E5).
 
 ### Accounts in the sheet
 

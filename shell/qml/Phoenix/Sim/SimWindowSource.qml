@@ -830,6 +830,16 @@ Item {
             bannerRequested(appId, payload.message || "", _iconUrl(payload.icon, appId),
                             bp === undefined || bp === null ? "" : typeof bp === "string" ? bp : JSON.stringify(bp),
                             bs[0], bs[1], bs[2], payload.id ? String(payload.id) : "");
+        } else if (type === "webDownload") {
+            // A file of the web a site downloads (WebAppWindow._download):
+            // a site has no runtime, so the system UI's page has the
+            // download manager fetch it into Downloads (runtime/phoenix-runtime.js,
+            // "A web page's own files": webDownload).
+            var dlPage = _headless["com.palm.systemui"] || _webPages().filter(function (w) { return !w.site; })[0] || null;
+            if (dlPage && payload && /^https?:/i.test(String(payload.url || "")))
+                dlPage.runScript("window.__phoenixRuntime && __phoenixRuntime.webDownload && __phoenixRuntime.webDownload("
+                                 + JSON.stringify({ url: String(payload.url), name: String(payload.name || ""),
+                                                    mimeType: String(payload.mimeType || "") }) + ")");
         } else if (type === "removeBanner") {
             // PalmSystem.removeBannerMessage(id) / clearBannerMessages().
             bannerRemoved(appId, payload.id ? String(payload.id) : "");

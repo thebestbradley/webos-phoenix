@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Drawn for this test page (webOS Phoenix, Apache-2.0): a sheet with a folded corner. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <path d="M16 6h22l12 12v40H16z" fill="#f4f4f4" stroke="#5a5a5a" stroke-width="2"/>
+  <path d="M38 6v12h12" fill="#d6d6d6" stroke="#5a5a5a" stroke-width="2"/>
+  <path d="M22 30h22M22 38h22M22 46h14" stroke="#3a7bd5" stroke-width="3" stroke-linecap="round"/>
+</svg>

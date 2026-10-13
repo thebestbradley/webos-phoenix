@@ -1335,6 +1335,13 @@ phoenix-sim. The drawer (`enyo.Toaster`) flies in over the page: the native
 view keeps to the part it leaves uncovered (on a phone, none), since
 nothing in the page can draw over it.
 
+A page view's own file chooser (an upload on a web page) is refused,
+never Qt WebEngine's dialog on the computer's disk; the shell says "File
+selection is not supported." An app's own page (any web app) that opens
+or saves files, or downloads one, gets Phoenix's file and save pickers
+from the runtime instead: [SHARE-AND-FILES.md](SHARE-AND-FILES.md), "A
+web page's own files".
+
 **The page views' profile and the community's features** (docs/M6-PLAN.md
 F4 item 7). In phoenix-sim the page views use a web profile of their own
 ("phoenix-web"), apart from the apps' pages, as BrowserServer kept its

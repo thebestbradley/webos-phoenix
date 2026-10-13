@@ -479,6 +479,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `node tools/test-files.cjs` | Files |
 | `node tools/test-media-index.cjs` | The simulated media indexer's EXIF date and place for a picture (`getImageMetadata`), as OSE's indexer gives them |
 | `node tools/test-filepicker.cjs` | The file pickers: luna-systemui's for Clock, Email and Contacts; `org.webosphoenix.filepicker/pick` |
+| `node tools/test-webfiles.cjs` | A web page's own files (any web app, `tools/fixtures/webfiles`): file inputs, `showOpenFilePicker` / `showSaveFilePicker` and downloads go to Phoenix's pickers, never Chromium's dialogs |
 | `node tools/test-tasks.cjs` | Tasks and reminders |
 | `node tools/test-db8-pages.cjs` | Db8 shared by pages writing at once |
 | `node tools/test-alarm.cjs` | A Clock alarm rings as a popup alert; one due when the Clock is opened rings after its card opens |

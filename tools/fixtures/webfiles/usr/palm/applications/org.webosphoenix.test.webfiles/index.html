@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<!--
+  Copyright (c) 2026 webOS Phoenix contributors
+  SPDX-License-Identifier: Apache-2.0
+
+  A plain web page that asks for files the web's way, as a third party's
+  web app does: file inputs (in the page, behind a label, made by script),
+  showOpenFilePicker / showSaveFilePicker, and downloads (a Blob through a
+  link made by script, a link in the page, a data: URL, FileSaver.js's
+  uncancelable click). What happens is listed below the buttons and in
+  window.results (tools/test-webfiles.cjs reads it).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web Files Test</title>
+<style>
+  body { font: 15px sans-serif; margin: 0; padding: 10px 14px; background: #fafafa; color: #222; }
+  h1 { font-size: 20px; margin: 4px 0 8px; }
+  h2 { font-size: 15px; margin: 10px 0 4px; color: #555; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  button, .btn { font: inherit; padding: 6px 10px; border: 1px solid #888; border-radius: 6px; background: #fff; color: #222;
+                 text-decoration: none; cursor: pointer; display: inline-block; }
+  textarea { width: 100%; box-sizing: border-box; height: 44px; font: inherit; }
+  #log { white-space: pre-wrap; font: 12px monospace; background: #fff; border: 1px solid #ccc; padding: 6px; margin-top: 10px;
+         max-height: 260px; overflow: auto; }
+</style>
+</head>
+<body>
+<h1>Web Files Test</h1>
+<h2>Open</h2>
+<div class="row">
+  <input type="file" id="image-input" accept="image/*">
+  <label class="btn" id="text-label">Open Text Files&hellip;<input type="file" id="text-input" accept=".txt,.md,text/plain" multiple hidden></label>
+  <button id="detached-open">Open (made by script)</button>
+  <button id="fsa-open">Open (File System Access)</button>
+</div>
+<h2>Save</h2>
+<textarea id="text">Hello from a web page.</textarea>
+<div class="row">
+  <button id="fsa-save-as">Save As&hellip; (File System Access)</button>
+  <button id="fsa-save">Save Again</button>
+  <button id="fsa-write-back">Write to Opened File</button>
+</div>
+<div class="row" style="margin-top: 6px">
+  <button id="download-blob">Download Blob</button>
+  <a class="btn" id="download-link" download="linked.txt" href="#">Download Link</a>
+  <button id="download-data">Download data: URL</button>
+  <button id="download-filesaver">Download (FileSaver.js)</button>
+</div>
+<pre id="log"></pre>
+<script>
+"use strict";
+var results = window.results = [];
+var $ = function (id) { return document.getElementById(id); };
+function log(kind, data) {
+    var r = Object.assign({ kind: kind }, data || {});
+    results.push(r);
+    $("log").textContent = results.map(function (x) { return JSON.stringify(x); }).join("\n");
+}
+function hex(bytes) {
+    return Array.prototype.map.call(bytes, function (b) { return (b < 16 ? "0" : "") + b.toString(16); }).join("");
+}
+function describe(list) {
+    return Promise.all(Array.prototype.map.call(list || [], function (f) {
+        return f.arrayBuffer().then(function (buf) {
+            var b = new Uint8Array(buf);
+            var d = { name: f.name, size: f.size, type: f.type, lastModified: f.lastModified, head: hex(b.subarray(0, 8)) };
+            if (/^text\//.test(f.type) || /\.(txt|md)$/.test(f.name)) d.text = new TextDecoder().decode(b);
+            return d;
+        });
+    }));
+}
+function watchInput(input, id) {
+    input.addEventListener("input", function () { log("input", { id: id }); });
+    input.addEventListener("change", function () {
+        describe(input.files).then(function (files) { log("change", { id: id, files: files }); });
+    });
+    input.addEventListener("cancel", function () { log("cancel", { id: id }); });
+}
+watchInput($("image-input"), "image-input");
+watchInput($("text-input"), "text-input");
+
+$("detached-open").addEventListener("click", function () {
+    var input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".txt,.md";
+    watchInput(input, "detached");
+    input.click();
+});
+
+function fail(kind) { return function (e) { log(kind + "-error", { name: e && e.name, message: e && e.message }); }; }
+
+var openHandle = null, saveHandle = null;
+$("fsa-open").addEventListener("click", function () {
+    window.showOpenFilePicker({ types: [{ description: "Text", accept: { "text/plain": [".txt", ".md"] } }] }).then(function (handles) {
+        openHandle = window.openHandle = handles[0];
+        return openHandle.getFile();
+    }).then(function (f) {
+        return f.text().then(function (t) { log("fsa-open", { name: f.name, size: f.size, text: t, handleKind: openHandle.kind }); });
+    }).catch(fail("fsa-open"));
+});
+function write(handle, text) {
+    return handle.createWritable().then(function (w) {
+        return w.write(text).then(function () { return w.close(); });
+    });
+}
+$("fsa-save-as").addEventListener("click", function () {
+    window.showSaveFilePicker({ suggestedName: "note.txt", types: [{ description: "Text", accept: { "text/plain": [".txt"] } }] }).then(function (h) {
+        saveHandle = window.saveHandle = h;
+        return write(h, $("text").value);
+    }).then(function () { log("fsa-saved", { name: saveHandle.name }); }).catch(fail("fsa-save"));
+});
+$("fsa-save").addEventListener("click", function () {
+    if (!saveHandle) return $("fsa-save-as").click();
+    write(saveHandle, $("text").value).then(function () { log("fsa-saved-again", { name: saveHandle.name }); }).catch(fail("fsa-save"));
+});
+$("fsa-write-back").addEventListener("click", function () {
+    if (!openHandle) return log("fsa-write-back-error", { message: "Open a file first" });
+    openHandle.getFile().then(function (f) {
+        return openHandle.createWritable({ keepExistingData: true }).then(function (w) {
+            return w.write({ type: "write", position: f.size, data: "\nAppended." }).then(function () { return w.close(); });
+        });
+    }).then(function () { return openHandle.getFile(); }).then(function (f) { return f.text(); }).then(function (t) {
+        log("fsa-written-back", { name: openHandle.name, text: t });
+    }).catch(fail("fsa-write-back"));
+});
+
+// Downloads.
+$("download-blob").addEventListener("click", function () {
+    var url = URL.createObjectURL(new Blob([$("text").value], { type: "text/plain" }));
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "download.txt";
+    a.click();
+    URL.revokeObjectURL(url);
+    log("download-clicked", { how: "blob" });
+});
+var linkUrl = "";
+function updateLink() {
+    if (linkUrl) URL.revokeObjectURL(linkUrl);
+    linkUrl = URL.createObjectURL(new Blob([$("text").value], { type: "text/plain" }));
+    $("download-link").href = linkUrl;
+}
+$("text").addEventListener("input", updateLink);
+updateLink();
+$("download-link").addEventListener("click", function () { log("download-clicked", { how: "link" }); });
+$("download-data").addEventListener("click", function () {
+    var a = document.createElement("a");
+    a.href = "data:text/plain;base64," + btoa(unescape(encodeURIComponent($("text").value)));
+    a.download = "data.txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    log("download-clicked", { how: "data" });
+});
+// FileSaver.js 2.0.5 (src/FileSaver.js:63-71, 89-100): a link not in the
+// page, clicked with an uncancelable synthetic event, the URL revoked later.
+$("download-filesaver").addEventListener("click", function () {
+    var a = document.createElement("a");
+    a.download = "filesaver.txt";
+    a.rel = "noopener";
+    a.href = URL.createObjectURL(new Blob([$("text").value], { type: "text/plain" }));
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 40000);
+    setTimeout(function () { a.dispatchEvent(new MouseEvent("click")); }, 0);
+    log("download-clicked", { how: "filesaver" });
+});
+
+log("ready", { showOpenFilePicker: typeof window.showOpenFilePicker, showSaveFilePicker: typeof window.showSaveFilePicker,
+               showDirectoryPicker: "showDirectoryPicker" in window });
+</script>
+</body>
+</html>
