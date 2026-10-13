@@ -423,15 +423,17 @@ Item {
             isOpen = true;
             opened();
         }
+        // instant: shut at once (the menu closing, dock mode restricting
+        // it). With the height's Behavior disabled the new height is written
+        // as it is, and an opening still under way stops with it: a write
+        // the Behavior lets through stops its animation (the animation
+        // itself is the Behavior's: stop() on it is refused, "setRunning()
+        // cannot be used on non-root animation nodes").
         function close(instant) {
             if (!isOpen)
                 return;
-            _toggling = true;
             _instant = !!instant;
-            // An opening still under way would carry on to the open height:
-            // disabling the Behavior only affects changes from now on.
-            if (_instant)
-                bodyAnim.stop();
+            _toggling = !_instant;
             isOpen = false;
             _instant = false;
             closed();
@@ -468,13 +470,16 @@ Item {
         }
         Item {
             id: body
+            objectName: "systemMenuDrawerBody"
             width: parent.width
             height: drawer.isOpen ? bodyColumn.height : 0
             clip: true
+            // Opening and closing 350 ms OutCubic (the drawer's state
+            // Transition, Drawer.qml:97-102), the list's resizes 200 ms
+            // (its Behavior on height, Drawer.qml:77).
             Behavior on height {
                 enabled: !drawer._instant
                 NumberAnimation {
-                    id: bodyAnim
                     duration: drawer._toggling ? Theme.systemMenuDrawerDuration : Theme.systemMenuDrawerResizeDuration
                     easing.type: drawer._toggling ? Easing.OutCubic : Easing.Linear
                     onRunningChanged: if (!running) drawer._toggling = false

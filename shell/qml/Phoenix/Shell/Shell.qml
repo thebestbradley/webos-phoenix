@@ -1591,8 +1591,10 @@ FocusScope {
         return out;
     }
     function _dialogKey(event) {
+        // A popup alert's keys, but not Just Type's (alertKeys): the shell
+        // holds what is typed while Just Type's page takes its first letter.
         var host = deleteDialog.appId !== "" ? deleteDialog
-            : notes.alertShown && notes.alertKey !== "" && source && source.windowFor ? source.windowFor(notes.alertKey) : null;
+            : notes.alertShown && notes.alertKey !== "" && !justType.open && source && source.windowFor ? source.windowFor(notes.alertKey) : null;
         if (!host) {
             _setKeyButton(null);
             return false;
@@ -1725,9 +1727,16 @@ FocusScope {
     // A popup alert in front takes the navigation keys, whatever had the
     // focus (the app's page under it takes every key): Tab and the arrows
     // ring its buttons, Enter or Space presses one (_dialogKey; GAPS V8 (3)).
+    // Not while Just Type is open: every key typed then is its search's
+    // (Space a space, Enter its top result, the arrows its cursor), as the
+    // original passed the keys it did not use on to the page
+    // (SystemUiController::handleKeyEvent, SystemUiController.cpp:353-365).
+    // Typing in card view starts it, and the first time in card view the
+    // "Dismissing Cards" tutorial is up: the first space typed pressed its
+    // OK instead ("how do" came out "howdo").
     SystemKeys {
         id: alertKeys
-        enabled: notes.alertShown && !shell.locked
+        enabled: notes.alertShown && !shell.locked && !justType.open
         keys: [Qt.Key_Tab, Qt.Key_Backtab, Qt.Key_Up, Qt.Key_Down, Qt.Key_Left, Qt.Key_Right,
                Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space]
         onPressed: (key, autoRepeat) => shell._dialogKey({ key: key })
@@ -3717,7 +3726,17 @@ FocusScope {
                 availableWidth: ui.width
                 availableHeight: ui.height
                 y: ui.height - notes.negativeSpace
-                visible: shell.virtualKeyboard && shell._imeOwnsSpace && notes.negativeSpace > 0 && !notes.alertShown
+                // Out of the way of a popup alert only where the alert has
+                // the negative space: the phone's takes it (DWMStateAlertOpen::
+                // onEntry, DashboardWindowManagerStates.cpp:103-107). The
+                // tablet's is drawn at the top right (:97) and leaves the
+                // space to the keyboard, which shows whenever it has some
+                // (InputWindowManager::slotNegativeSpaceChanged,
+                // InputWindowManager.cpp:107-114): hidden there, it left its
+                // space empty under Just Type and the apps. (Over the lock
+                // screen, whose alert is centred, it still gives way.)
+                visible: shell.virtualKeyboard && shell._imeOwnsSpace && notes.negativeSpace > 0
+                         && !(notes.alertShown && (!notes.overlay || notes.locked))
                 acceptingInput: shell._imeOpened
                 // The simulator's host (KeyboardHost; on a device the Maliit
                 // input method is the keyboard's): the field is in this
