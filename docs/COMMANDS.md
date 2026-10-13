@@ -1395,6 +1395,12 @@ Weather, with recorded Open-Meteo replies:
 NODE_PATH="$(npm root -g)" node tools/test-weather.cjs
 ```
 
+A web page's own files: file inputs, the File System Access API, downloads:
+
+```sh
+NODE_PATH="$(npm root -g)" node tools/test-webfiles.cjs
+```
+
 Two simulators at once with --instance, each with its own data:
 
 ```sh

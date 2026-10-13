@@ -207,6 +207,80 @@ Item {
         request.openIn(view);
     }
 
+    // ---- Files: file pickers and downloads ------------------------------------------
+    // A page that asks for a file (an <input type=file>, showOpenFilePicker,
+    // showSaveFilePicker) or saves one by downloading it gets Phoenix's
+    // pickers from its runtime before Chromium sees anything
+    // (runtime/phoenix-runtime.js, "A web page's own files"). What still
+    // reaches Chromium never gets Qt WebEngine's own dialogs, which show this
+    // computer's disk:
+    //   - a file chooser (from a page without the runtime: a site, a page
+    //     view, a frame of another origin; or for a click the runtime could
+    //     not stop, whose picker is up already) is refused, and unless the
+    //     runtime's picker is up the shell says so, as OSE's app runtime
+    //     refuses it with a toast (webosose/chromium120 src/neva/app_runtime/
+    //     browser/app_runtime_web_contents_delegate.cc:43-57);
+    //   - access to a path of this computer (File System Access) is refused:
+    //     Phoenix's pickers never hand Chromium one;
+    //   - a download Chromium starts (a navigation to a blob: URL, an
+    //     attachment) is taken from it and handed to the runtime
+    //     (webDownload: the save picker for the page's own files, the
+    //     download manager into Downloads for the web's), as WebAppMgr
+    //     handed what a page could not show to the application manager,
+    //     which had the download manager fetch a remote file
+    //     (WebAppManager::mimeHandoffUrl, webappmanager Src/webbase/
+    //     WebAppManager.cpp:1747-1773; ApplicationManagerService.cpp:1343-1393).
+    //     A site's (no runtime) goes to the download manager through the
+    //     system UI's page ("webDownload", SimWindowSource); its own Blobs
+    //     cannot be saved, and OSE's toast says so ("Download is not
+    //     supported.", app_runtime_download_manager_delegate.cc:39-57).
+    // tools/test-webfiles.cjs covers the runtime's side.
+    readonly property string _noFileSelection: "File selection is not supported."
+    readonly property string _noDownload: "Download is not supported."
+    readonly property bool _runtimePage: !site && !(signInCard && _remotePage)
+
+    function _fileDialog(page, request) {
+        request.accepted = true;
+        request.dialogReject();
+        if (page !== view || !_runtimePage) {
+            hostMessage("banner", { message: _noFileSelection });
+            return;
+        }
+        view.runJavaScript("!!(window.__phoenixRuntime && __phoenixRuntime.webFiles && __phoenixRuntime.webFiles.busy())", (busy) => {
+            if (busy !== true)
+                win.hostMessage("banner", { message: win._noFileSelection });
+        });
+    }
+
+    function _fileSystemAccess(request) {
+        request.reject();
+    }
+
+    function _download(download) {
+        const d = { url: download.url.toString(), name: download.suggestedFileName || "", mimeType: download.mimeType || "" };
+        download.cancel();
+        if (!_runtimePage) {
+            if (Links.isWeb(d.url))
+                hostMessage("webDownload", d);
+            else
+                hostMessage("banner", { message: _noDownload });
+            return;
+        }
+        view.runJavaScript("!!(window.__phoenixRuntime && __phoenixRuntime.webDownload && __phoenixRuntime.webDownload("
+                           + JSON.stringify(d) + "))", (handled) => {
+            if (handled !== true)
+                win.hostMessage("banner", { message: win._noDownload });
+        });
+    }
+
+    Connections {
+        target: view.profile
+        function onDownloadRequested(download) {
+            if (download.view === view)
+                win._download(download);
+        }
+    }
+
     // ---- Editing: Cut, Copy, Paste, Select All ----------------------------------------
     // The page's Edit commands run in Chromium (as WebAppMgr ran PalmSystem's
     // paste on webOS), on the system clipboard every app shares. The edit
@@ -453,6 +527,9 @@ Item {
             touchHandleDelegate: selectionHandle
             onContextMenuRequested: (request) => win._contextMenu(page, request)
             onTouchSelectionMenuRequested: (request) => win._touchMenu(page, request)
+            // Never this computer's disk (Files, above).
+            onFileDialogRequested: (request) => win._fileDialog(page, request)
+            onFileSystemAccessRequested: (request) => win._fileSystemAccess(request)
 
             function report() {
                 win._webViewEvent(viewId, "urlTitleChanged", [page.url.toString(), page.title, page.canGoBack, page.canGoForward]);
@@ -600,6 +677,9 @@ Item {
         touchHandleDelegate: selectionHandle
         onContextMenuRequested: (request) => win._contextMenu(view, request)
         onTouchSelectionMenuRequested: (request) => win._touchMenu(view, request)
+        // Phoenix's pickers, never this computer's disk (Files, above).
+        onFileDialogRequested: (request) => win._fileDialog(view, request)
+        onFileSystemAccessRequested: (request) => win._fileSystemAccess(request)
         // Camera and microphone for the Camera app, as an app's
         // requiredPermissions would grant them on a device. Nothing else.
         onFeaturePermissionRequested: (securityOrigin, feature) => {

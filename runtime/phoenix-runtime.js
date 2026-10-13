@@ -864,7 +864,7 @@
         // ---- The page's own features ------------------------------------------------
         // Each on its own: one that fails on a page leaves the others.
         [legacyAnimationFrames, aliasPreludeFonts, cardActivation, fixLegacyBorderImages, backdropBlur,
-         enyoListSelectorWidth, hidpiArt, installEditing, watchLinks, shareSheet, dictationServices].forEach(function (feature) {
+         enyoListSelectorWidth, hidpiArt, installEditing, watchLinks, shareSheet, webPageFiles, dictationServices].forEach(function (feature) {
             try { feature(); }
             catch (e) { console.error("[phoenix-runtime] " + feature.name + " failed on this page", e); }
         });
@@ -10802,12 +10802,17 @@
             if (ro) return fail(E.PERMISSION, "Read-only: " + ro);
             return null;
         }
+        // A media file's bytes go too, and the path is no longer "seen": a
+        // file written there later (the save picker's Replace, the same
+        // download again) is picked up as new (syncMedia), as localFiles.remove
+        // does. Kept seen, it stayed in the media store and out of every list.
         function dropTree(v, p) {
             subtree(v, p).forEach(function (k) {
                 var n = v.nodes[k];
                 if (n.media && runtime.mediaFiles) runtime.mediaFiles.remove(k);
                 if (n.t === "f") forgetMedia(k);
                 delete v.nodes[k];
+                delete v.mediaSeen[k];
             });
         }
 
@@ -16790,6 +16795,7 @@
                 return bytesP.then(function (bytes) { return lf.write(temp, bytes, false); }).then(function () { return upload(temp); })
                     .then(function () { return lf.remove(temp); }, function (e) { return lf.remove(temp).then(function () { throw e; }); });
             }
+            if (req.blob) return viaTemp(bytesOfBlob(req.blob));
             if (req.data !== undefined) {
                 var bin = atob(String(req.data).replace(/^data:[^,]*,/, "")), bytes = new Uint8Array(bin.length);
                 for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -16805,17 +16811,34 @@
             });
         }
 
+        function bytesOfBlob(blob) {
+            return blob.arrayBuffer().then(function (b) { return new Uint8Array(b); });
+        }
+        function base64Of(bytes) {
+            var s = "";
+            for (var i = 0; i < bytes.length; i += 0x8000)
+                s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+            return global.btoa(s);
+        }
+
+        // req: {data (base64)}, {blob} (a web page's own file: block "A web
+        // page's own files") or {from} (a path).
         function writeTo(dest, req, overwrite) {
             if (dest.indexOf(DRIVES) === 0) return writeToDrive(dest, req, overwrite);
             var mf = runtime.mediaFiles;
             var before = overwrite ? callP("luna://org.webosphoenix.filemanager/remove", { path: dest }) : Promise.resolve();
             return before.then(function () {
-                if (req.data !== undefined && runtime.onDevice) {
-                    return callP("luna://org.webosphoenix.filemanager/write", {
-                        path: dest, data: String(req.data).replace(/^data:[^,]*,/, ""), encoding: "base64"
+                if ((req.data !== undefined || req.blob) && runtime.onDevice) {
+                    var data = req.blob ? bytesOfBlob(req.blob).then(base64Of) : Promise.resolve(String(req.data).replace(/^data:[^,]*,/, ""));
+                    return data.then(function (b64) {
+                        return callP("luna://org.webosphoenix.filemanager/write", { path: dest, data: b64, encoding: "base64" });
                     }).then(function (r) {
                         if (!r || r.returnValue === false) throw new Error(r && r.errorText || "Could not write " + dest);
                     });
+                }
+                if (req.blob) {
+                    if (!mf) throw new Error("No media store");
+                    return mf.write(dest, req.blob);
                 }
                 if (req.data !== undefined) {
                     if (!mf) throw new Error("No media store");
@@ -16841,15 +16864,28 @@
             });
         }
 
-        function save(req) {
-            return showSheet("save", { name: req.name || "Untitled", title: req.title || "Save to Files",
-                                       folder: store.get(LAST_FOLDER, MEDIA + "/Documents") }).then(function (r) {
-                if (!r || r.action !== "save" || !r.folder) return { canceled: true };
-                var dest = r.folder.replace(/\/$/, "") + "/" + r.name;
+        // The save picker: a folder (folder, else the last one used) and a
+        // name -> {path, overwrite} (Replace was confirmed), or null.
+        function chooseSaveTarget(name, title, folder) {
+            return showSheet("save", { name: name || "Untitled", title: title || "Save to Files",
+                                       folder: folder || store.get(LAST_FOLDER, MEDIA + "/Documents") }).then(function (r) {
+                if (!r || r.action !== "save" || !r.folder) return null;
                 store.set(LAST_FOLDER, r.folder);
-                return writeTo(dest, req, !!r.overwrite).then(function () { return { path: dest }; });
+                return { path: r.folder.replace(/\/$/, "") + "/" + r.name, overwrite: !!r.overwrite };
             });
         }
+        function save(req) {
+            return chooseSaveTarget(req.name, req.title).then(function (t) {
+                if (!t) return { canceled: true };
+                return writeTo(t.path, req, t.overwrite).then(function () { return { path: t.path }; });
+            });
+        }
+        // For a web page's own Save (block "A web page's own files"), which
+        // asks where first and writes later (showSaveFilePicker), or a Blob
+        // it downloads: runtime.saveTarget({name, title, folder}) -> {path,
+        // overwrite} | null; runtime.writeFile(path, blob, overwrite).
+        runtime.saveTarget = function (o) { return chooseSaveTarget(o && o.name, o && o.title, o && o.folder); };
+        runtime.writeFile = function (path, blob, overwrite) { return writeTo(path, { blob: blob }, !!overwrite); };
 
         function inPhotos(path) {
             return /^\/media\/internal\//.test(path) && !/\/\./.test(path) && /\.(jpe?g|png|gif|webp|bmp|heic|mp4|m4v|mov|webm)$/i.test(path);
@@ -16996,6 +17032,634 @@
         });
     }
     shareSheet();
+
+    // ================================================================================
+    // A web page's own files: <input type=file>, the File System Access API, downloads
+    // ================================================================================
+    //
+    // A web app (Phoenix's own, or a third party's web build installed as an
+    // app) asks for files the web's way, and Chromium would answer with
+    // dialogs of its own: in phoenix-sim Qt WebEngine's, on this computer's
+    // disk; on a device none at all, as OSE's app runtime cancels every file
+    // chooser and refuses every download with a toast ("File selection is
+    // not supported.", "Download is not supported.": webosose/chromium120
+    // src/neva/app_runtime/browser/app_runtime_web_contents_delegate.cc:43-57,
+    // app_runtime_download_manager_delegate.cc:39-57). Here they go to
+    // Phoenix's own pickers (block "Share sheet and save picker",
+    // docs/SHARE-AND-FILES.md), on the user's files, before Chromium sees them:
+    //
+    //   <input type=file>  a click on it (a tap, its label, input.click() or
+    //       dispatchEvent, in the page or not) or input.showPicker() opens the
+    //       file picker (org.webosphoenix.filepicker/pick) with kinds and
+    //       extensions from its accept, several files for multiple. The files
+    //       chosen become its files (File objects with the bytes, name, type
+    //       and date), then "input" and "change"; "cancel" when the user
+    //       cancels, as Chromium fires them (blink file_input_type.cc
+    //       SetFilesAndDispatchEvents). The page's own preventDefault() on the
+    //       click still keeps the picker shut, and it reads defaultPrevented as
+    //       if nobody else had prevented it. A folder (webkitdirectory) cannot
+    //       be picked: "cancel".
+    //   showOpenFilePicker({types, multiple}) -> handles of the files picked;
+    //       showSaveFilePicker({suggestedName, types, startIn}) -> a handle of
+    //       the name and folder chosen in the save picker (Replace asks
+    //       first). A handle reads (getFile), writes (createWritable: write,
+    //       seek, truncate, then close writes the file, as Chromium moves its
+    //       swap file over the file on close), compares (isSameEntry), removes
+    //       and renames itself (remove, move(name)), and has its permission
+    //       (the user chose it). It cannot be kept in IndexedDB: a copy comes
+    //       back as {kind, name}, without its methods. showDirectoryPicker is
+    //       taken away (there is no folder picker): pages that look for it do
+    //       without it.
+    //   downloads  a link with download (tapped, or clicked by the page,
+    //       in the page or not) to a Blob of the page, a data: URL or a file
+    //       of the app opens the save picker with its name, and "Saved <name>
+    //       to <folder>" when it is written. webDownload({url, name,
+    //       mimeType}) does the same for a download Chromium started itself
+    //       (a navigation to a blob: URL, an attachment; phoenix-sim's
+    //       WebAppWindow hands it over), and gives one from the web (http,
+    //       https) to the download manager, into Downloads with its ongoing
+    //       activity and the browser's "finished downloading" (Isis
+    //       BrowserApp.js:460-466), as the original application manager had
+    //       the download manager fetch a remote file
+    //       (ApplicationManagerService.cpp:1343-1393).
+    //
+    // What is saved is written as the save picker writes (the media store
+    // here, the file manager's service on a device, a drive's upload), so
+    // Files, Photos and the other apps see it.
+    //
+    //   __phoenixRuntime.webFiles: busy() (a picker of the page's is open
+    //       or about to be: phoenix-sim then refuses Chromium's own chooser
+    //       silently), pickRequest(accept, multiple) (for the tests).
+    // tools/test-webfiles.cjs, with the page tools/fixtures/webfiles.
+    function webPageFiles() {
+        var doc = global.document;
+        if (!doc || !global.HTMLInputElement || !global.HTMLAnchorElement || runtime.webFiles) return;
+        var MEDIA = "/media/internal";
+        var DOWNLOADS = MEDIA + "/Downloads";
+        var MAX_READ = 256 * 1024 * 1024;
+        var ALL_KINDS = ["image", "video", "audio", "document", "file"];
+        var KIND_EXTS = {
+            image: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic", "avif", "ico", "tif", "tiff"],
+            video: ["mp4", "m4v", "mov", "webm", "mkv", "ogv", "avi", "3gp"],
+            audio: ["mp3", "m4a", "aac", "ogg", "oga", "opus", "wav", "flac", "amr"]
+        };
+        // MIME types whose extensions are not the subtype's name.
+        var MIME_EXTS = {
+            "image/jpeg": ["jpg", "jpeg"], "image/svg+xml": ["svg"], "image/x-icon": ["ico"], "image/tiff": ["tif", "tiff"],
+            "video/quicktime": ["mov"], "video/x-matroska": ["mkv"], "video/ogg": ["ogv"], "video/3gpp": ["3gp"],
+            "audio/mpeg": ["mp3"], "audio/mp4": ["m4a"], "audio/ogg": ["ogg", "oga", "opus"], "audio/x-wav": ["wav"],
+            "text/plain": ["txt", "text"], "text/markdown": ["md", "markdown"], "text/html": ["html", "htm"],
+            "text/javascript": ["js"], "application/json": ["json"], "application/pdf": ["pdf"], "application/zip": ["zip"],
+            "application/rtf": ["rtf"], "application/epub+zip": ["epub"], "application/msword": ["doc"],
+            "application/vnd.ms-excel": ["xls"], "application/vnd.ms-powerpoint": ["ppt"],
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ["docx"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ["xlsx"],
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation": ["pptx"],
+            "application/vnd.oasis.opendocument.text": ["odt"], "application/vnd.oasis.opendocument.spreadsheet": ["ods"],
+            "application/vnd.oasis.opendocument.presentation": ["odp"], "application/xml": ["xml"], "text/xml": ["xml"]
+        };
+
+        function callP(url, params) {
+            return new Promise(function (resolve) {
+                dispatch(url, params || {}, resolve, { cancelled: function () { return false; }, onCancel: null });
+            });
+        }
+        function baseName(p) { return String(p).replace(/^.*\//, ""); }
+        function extOf(name) { var m = /\.([a-z0-9]+)$/i.exec(name || ""); return m ? m[1].toLowerCase() : ""; }
+        function mimeOfName(name) {
+            var e = extOf(name);
+            if (!e) return "";
+            for (var m in MIME_EXTS) if (MIME_EXTS[m].indexOf(e) >= 0) return m;
+            for (var k in KIND_EXTS) if (KIND_EXTS[k].indexOf(e) >= 0) return k + "/" + e;
+            return "";
+        }
+        function kindOfExt(e) {
+            for (var k in KIND_EXTS) if (KIND_EXTS[k].indexOf(e) >= 0) return k;
+            return "";
+        }
+        function extsOfMime(t) {
+            if (MIME_EXTS[t]) return MIME_EXTS[t];
+            var m = /^(image|video|audio)\/([a-z0-9]+)$/.exec(t);
+            return m ? [m[2]] : null;
+        }
+        function abortError() { return new DOMException("The user aborted a request.", "AbortError"); }
+        function banner(message) { host.postToHost("banner", { message: message }); }
+        function folderName(path) {
+            var dir = String(path).replace(/\/[^\/]*$/, "");
+            return dir === MEDIA ? "Internal Storage" : baseName(dir);
+        }
+
+        // ---- What the picker shows ------------------------------------------------------
+
+        // An accept list (a file input's accept: MIME types, "image/*" and
+        // the like, extensions) -> the picker's request: pictures, videos and
+        // music as the original picker's kinds, anything else as Documents
+        // (every file of those extensions) and Files (by folder), showing
+        // only those extensions; with nothing said, or any file, every kind.
+        // A MIME type nothing here knows the extensions of is left out of
+        // the filter, unless it is all there is.
+        function pickRequest(accept, multiple) {
+            var tokens = String(accept || "").split(",").map(function (t) { return t.trim().toLowerCase(); }).filter(Boolean);
+            var kinds = {}, exts = [], other = false, any = !tokens.length, unknown = false;
+            tokens.forEach(function (t) {
+                var family = /^(image|video|audio)\//.exec(t);
+                if (t.charAt(0) === ".") {
+                    var e = t.slice(1);
+                    if (!e) return;
+                    exts.push(e);
+                    var k = kindOfExt(e);
+                    if (k) kinds[k] = true; else other = true;
+                } else if (t === "*" || t === "*/*") {
+                    any = true;
+                } else if (family && /\/\*$/.test(t)) {
+                    kinds[family[1]] = true;
+                    exts = exts.concat(KIND_EXTS[family[1]]);
+                } else if (t.indexOf("/") > 0) {
+                    var es = extsOfMime(t);
+                    if (!es) { unknown = true; return; }
+                    exts = exts.concat(es);
+                    if (family) kinds[family[1]] = true; else other = true;
+                }
+            });
+            if (unknown && !exts.length) any = true;
+            if (any) return { kinds: ALL_KINDS.slice(), multiple: !!multiple, extensions: [] };
+            var list = ["image", "video", "audio"].filter(function (k) { return kinds[k]; });
+            if (other) list.push("document", "file");
+            var seen = {};
+            return { kinds: list, multiple: !!multiple,
+                     extensions: other ? exts.filter(function (e) { return seen[e] ? false : (seen[e] = true); }) : [] };
+        }
+        // The File System Access API's types ([{description, accept:
+        // {mime: [".ext"]}}]) as an accept list: a type's extensions where it
+        // has them (its MIME type is only their name), else its MIME type.
+        function typesAccept(types) {
+            var out = [];
+            (Array.isArray(types) ? types : []).forEach(function (t) {
+                var acc = t && t.accept;
+                if (!acc || typeof acc !== "object") return;
+                Object.keys(acc).forEach(function (mime) {
+                    var e = acc[mime];
+                    e = Array.isArray(e) ? e : e ? [e] : [];
+                    if (e.length) out = out.concat(e.map(String)); else out.push(mime);
+                });
+            });
+            return out.join(",");
+        }
+
+        var pickerOpen = 0, lastTake = 0;
+        // -> the files chosen [{fullPath, mimeType, name}] or null (cancelled).
+        function pickFiles(req) {
+            pickerOpen++;
+            return callP("luna://org.webosphoenix.filepicker/pick", req).then(function (r) {
+                pickerOpen--;
+                if (!r || r.returnValue === false) throw new Error(r && r.errorText || "The file picker failed");
+                return r.canceled || !r.files || !r.files.length ? null : r.files;
+            }, function (e) { pickerOpen--; throw e; });
+        }
+
+        // ---- Reading a file -------------------------------------------------------------
+
+        function fromB64(s) {
+            var bin = global.atob(s), out = new Uint8Array(bin.length);
+            for (var i = 0; i < bin.length; ++i) out[i] = bin.charCodeAt(i);
+            return out;
+        }
+        // A file's bytes as a Blob: the simulator's file store (the media
+        // store, the files it keeps itself, the system's over HTTP), the file
+        // manager's service on a device.
+        function readBlob(path, type) {
+            var lf = runtime.fileManager && runtime.fileManager.localFiles;
+            var bytes = lf ? lf.size(path).then(function (n) { return lf.read(path, 0, n); })
+                : callP("luna://org.webosphoenix.filemanager/read", { path: path, encoding: "base64", maxBytes: MAX_READ }).then(function (r) {
+                    if (!r || r.returnValue === false) throw new Error(r && r.errorText || "Cannot read " + path);
+                    return fromB64(r.data || "");
+                });
+            return bytes.then(null, function (e) {
+                // A file of the system image (a ringtone): where the system serves it.
+                if (runtime.onDevice || !global.fetch) throw e;
+                return global.fetch(path).then(function (res) {
+                    if (!res.ok) throw e;
+                    return res.arrayBuffer();
+                }).then(function (b) { return new Uint8Array(b); });
+            }).then(function (b) { return new Blob([b], { type: type || "" }); });
+        }
+        function fileOf(path, name, type) {
+            type = type || mimeOfName(name || path);
+            return Promise.all([
+                readBlob(path, type),
+                callP("luna://org.webosphoenix.filemanager/stat", { path: path })
+            ]).then(function (x) {
+                var mtime = x[1] && x[1].returnValue !== false && x[1].entry ? x[1].entry.mtime : 0;
+                return new File([x[0]], name || baseName(path), { type: type, lastModified: mtime || Date.now() });
+            });
+        }
+
+        // ---- Taking a click from Chromium ---------------------------------------------------
+
+        // Chromium acts on a click (opens its file chooser, starts a
+        // download) once the click's listeners have run, unless one prevented
+        // it. This takes it first and prevents it, then acts itself unless
+        // the page prevents it too; the page reads defaultPrevented as its
+        // own. A click that cannot be prevented (a script's new
+        // MouseEvent("click"), as FileSaver.js sends) goes on in Chromium
+        // too: phoenix-sim drops what it starts (WebAppWindow: busy() and
+        // webDownload's "taken").
+        function takeOver(e, act) {
+            if (!e || e.__phoenixTaken || e.defaultPrevented) return;
+            var prevented = false;
+            try { Object.defineProperty(e, "__phoenixTaken", { value: true }); } catch (x) { /* frozen */ }
+            if (e.cancelable) {
+                try {
+                    Object.defineProperty(e, "preventDefault", { configurable: true, value: function () { prevented = true; } });
+                    Object.defineProperty(e, "defaultPrevented", { configurable: true, get: function () { return prevented; } });
+                    Object.defineProperty(e, "returnValue", { configurable: true, get: function () { return !prevented; },
+                                                              set: function (v) { if (v === false) prevented = true; } });
+                } catch (x) { /* the page cannot keep it shut then */ }
+                Event.prototype.preventDefault.call(e);
+            }
+            act.now && act.now();
+            setTimeout(function () { if (!prevented) act.then(); }, 0);
+        }
+
+        function isFileInput(el) {
+            return !!el && el instanceof global.HTMLInputElement && String(el.type).toLowerCase() === "file";
+        }
+        // The link a click follows, when it is one with download that Phoenix
+        // saves: a Blob of the page, a data: URL, a file of the app's own
+        // origin (one of the web goes where Chromium sends it: a link
+        // leaving the app).
+        function downloadLink(el) {
+            if (!el || el.nodeType !== 1 || !(el.localName === "a" || el.localName === "area") || !el.hasAttribute("download")) return null;
+            var href = String(el.href || "");
+            if (!href) return null;
+            if (/^(blob|data):/i.test(href)) return el;
+            try { return new URL(href).origin === global.location.origin ? el : null; } catch (x) { return null; }
+        }
+        // The element a click is for: the file input clicked, or the nearest
+        // link around what was clicked (in the page's shadow trees too).
+        function targetOf(e) {
+            var path = e.composedPath ? e.composedPath() : [e.target];
+            if (isFileInput(path[0])) return path[0];
+            for (var i = 0; i < path.length; ++i) {
+                var n = path[i];
+                if (!n || n === doc || n === global) break;
+                if (n.nodeType === 1 && (n.localName === "a" || n.localName === "area")) return downloadLink(n);
+            }
+            return null;
+        }
+        function onClick(e) {
+            if (e.type !== "click") return;
+            var el = targetOf(e);
+            if (!el) return;
+            if (isFileInput(el)) {
+                if (el.disabled) return;
+                lastTake = Date.now();
+                takeOver(e, { then: function () { chooseFor(el); } });
+                return;
+            }
+            // The link's Blob now: pages revoke its URL as soon as they have clicked it.
+            var url = String(el.href), blob = blobs[url] || null, name = el.getAttribute("download");
+            takeOver(e, {
+                now: function () {
+                    var now = Date.now();
+                    Object.keys(taken).forEach(function (k) { if (now - taken[k] > 10000) delete taken[k]; });
+                    taken[url] = now;
+                },
+                then: function () { saveDownload(url, name, blob, ""); }
+            });
+        }
+        global.addEventListener("click", onClick, true);
+
+        // An element not in the page (made by script and clicked: the
+        // pickers of most web frameworks, FileSaver.js's link) is not on the
+        // window's way: the click is watched on the element itself, first.
+        function watch(el) {
+            var once = function (e) {
+                el.removeEventListener("click", once, true);
+                if (e.target === el) onClick(e);
+            };
+            el.addEventListener("click", once, true);
+        }
+        function detached(el) { return !el.isConnected && (isFileInput(el) || !!downloadLink(el)); }
+        function wrap(proto, name, make) {
+            var orig = proto && proto[name];
+            if (typeof orig !== "function") return;
+            try { Object.defineProperty(proto, name, { configurable: true, writable: true, value: make(orig) }); } catch (e) { /* kept */ }
+        }
+        [global.HTMLInputElement.prototype, global.HTMLAnchorElement.prototype,
+         global.HTMLAreaElement && global.HTMLAreaElement.prototype].forEach(function (proto) {
+            wrap(proto, "click", function (click) {
+                return function () {
+                    if (detached(this)) watch(this);
+                    return click.apply(this, arguments);
+                };
+            });
+        });
+        if (global.EventTarget) wrap(global.EventTarget.prototype, "dispatchEvent", function (dispatchEv) {
+            return function (ev) {
+                if (ev && ev.type === "click" && this && this.nodeType === 1 && detached(this)) watch(this);
+                return dispatchEv.apply(this, arguments);
+            };
+        });
+        // showPicker() opens a picker without a click (and, unlike Chromium's,
+        // without the user's gesture: Phoenix's picker is the user's to
+        // answer).
+        wrap(global.HTMLInputElement.prototype, "showPicker", function (show) {
+            return function () {
+                if (!isFileInput(this)) return show.apply(this, arguments);
+                if (this.disabled) throw new DOMException("HTMLInputElement::showPicker() cannot be used on immutable controls.", "InvalidStateError");
+                lastTake = Date.now();
+                chooseFor(this);
+            };
+        });
+
+        // ---- <input type=file> ----------------------------------------------------------
+
+        var choosing = typeof WeakSet === "function" ? new WeakSet() : null;
+        function fire(el, type) { el.dispatchEvent(new Event(type, { bubbles: true })); }
+        function chooseFor(input) {
+            // One picker at a time for an input, as Chromium has one chooser.
+            if (choosing && choosing.has(input)) return;
+            if (input.webkitdirectory) {
+                console.warn("[phoenix-runtime] a folder cannot be picked (webkitdirectory): no folder picker");
+                return fire(input, "cancel");
+            }
+            if (choosing) choosing.add(input);
+            var done = function () { if (choosing) choosing.delete(input); };
+            pickFiles(pickRequest(input.accept, input.multiple)).then(function (picked) {
+                return picked ? Promise.all(picked.map(function (f) { return fileOf(f.fullPath, f.name, f.mimeType); })) : null;
+            }).then(function (files) {
+                done();
+                if (!files) return fire(input, "cancel");
+                var dt = new DataTransfer();
+                files.forEach(function (f) { dt.items.add(f); });
+                input.files = dt.files;
+                input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+                input.dispatchEvent(new Event("change", { bubbles: true }));
+            }, function (e) {
+                done();
+                console.warn("[phoenix-runtime] the file could not be picked: " + (e && e.message || e));
+                banner("The file could not be opened");
+                fire(input, "cancel");
+            });
+        }
+
+        // ---- The File System Access API -------------------------------------------------
+
+        var FSH = global.FileSystemFileHandle, FSW = global.FileSystemWritableFileStream;
+        function own(o, k, v, enumerable) {
+            Object.defineProperty(o, k, { configurable: true, enumerable: !!enumerable, writable: !enumerable, value: v });
+        }
+        // A file of the device's, as a FileSystemFileHandle: kind and name its
+        // own (what a copy keeps), the path hidden.
+        function FileHandle(path, fresh) {
+            own(this, "kind", "file", true);
+            own(this, "name", baseName(path), true);
+            own(this, "__phoenixPath", path);
+            // Just chosen in the save picker: empty until written, as
+            // Chromium's chosen file is.
+            own(this, "__phoenixFresh", !!fresh);
+        }
+        FileHandle.prototype = Object.create(FSH ? FSH.prototype : Object.prototype);
+        own(FileHandle.prototype, "constructor", FileHandle);
+        function notFound() { return new DOMException("A requested file or directory could not be found at the time an operation was processed.", "NotFoundError"); }
+        own(FileHandle.prototype, "getFile", function () {
+            var h = this;
+            if (h.__phoenixFresh) return Promise.resolve(new File([], h.name, { type: mimeOfName(h.name), lastModified: Date.now() }));
+            return fileOf(h.__phoenixPath, h.name, "").then(null, function () { throw notFound(); });
+        });
+        own(FileHandle.prototype, "createWritable", function (opts) {
+            return Promise.resolve(writableFor(this, !!(opts && opts.keepExistingData)));
+        });
+        own(FileHandle.prototype, "isSameEntry", function (other) {
+            return Promise.resolve(!!other && other.__phoenixPath === this.__phoenixPath);
+        });
+        own(FileHandle.prototype, "queryPermission", function () { return Promise.resolve("granted"); });
+        own(FileHandle.prototype, "requestPermission", function () { return Promise.resolve("granted"); });
+        own(FileHandle.prototype, "remove", function () {
+            return callP("luna://org.webosphoenix.filemanager/remove", { path: this.__phoenixPath }).then(function (r) {
+                if (!r || r.returnValue === false) throw notFound();
+            });
+        });
+        // move(name), or move(folder handle, name): only a new name (there
+        // are no folder handles).
+        own(FileHandle.prototype, "move", function (a, b) {
+            var h = this, name = typeof a === "string" ? a : b;
+            if (typeof a !== "string" && a) return Promise.reject(new DOMException("Moving to another folder is not supported", "NotSupportedError"));
+            if (!name || /[\/\\]/.test(name)) return Promise.reject(new TypeError("Name is not allowed."));
+            var to = h.__phoenixPath.replace(/[^\/]*$/, "") + name;
+            return callP("luna://org.webosphoenix.filemanager/move", { from: h.__phoenixPath, to: to }).then(function (r) {
+                if (!r || r.returnValue === false) throw new DOMException(r && r.errorText || "The file could not be renamed", "InvalidModificationError");
+                own(h, "__phoenixPath", to);
+                own(h, "name", name, true);
+            });
+        });
+
+        // A FileSystemWritableFileStream: a WritableStream (so pipeTo and
+        // getWriter work) of the file's new bytes, written on close.
+        function writableFor(handle, keep) {
+            var data = new Uint8Array(0), size = 0, pos = 0;
+            function room(n) {
+                if (n <= data.length) return;
+                var d = new Uint8Array(Math.max(n, data.length * 2, 4096));
+                d.set(data.subarray(0, size));
+                data = d;
+            }
+            function put(bytes, at) {
+                if (at > size) { room(at); data.fill(0, size, at); size = at; }
+                room(at + bytes.length);
+                data.set(bytes, at);
+                size = Math.max(size, at + bytes.length);
+                pos = at + bytes.length;
+            }
+            function bytesOf(d) {
+                if (typeof d === "string") return Promise.resolve(new TextEncoder().encode(d));
+                if (d instanceof ArrayBuffer) return Promise.resolve(new Uint8Array(d.slice(0)));
+                if (ArrayBuffer.isView(d)) return Promise.resolve(new Uint8Array(d.buffer, d.byteOffset, d.byteLength).slice());
+                if (global.Blob && d instanceof Blob) return d.arrayBuffer().then(function (b) { return new Uint8Array(b); });
+                return Promise.reject(new TypeError("The provided value is not of type '(ArrayBuffer or ArrayBufferView or Blob or USVString or WriteParams)'"));
+            }
+            function syntax(m) { return new DOMException(m, "SyntaxError"); }
+            var sink = {
+                start: function () {
+                    if (!keep || handle.__phoenixFresh) return;
+                    return readBlob(handle.__phoenixPath, "").then(function (b) { return b.arrayBuffer(); })
+                        .then(function (b) { put(new Uint8Array(b), 0); pos = 0; }, function () { /* a new file */ });
+                },
+                write: function (chunk) {
+                    var plain = typeof chunk === "string" || chunk instanceof ArrayBuffer || ArrayBuffer.isView(chunk) ||
+                                (global.Blob && chunk instanceof Blob);
+                    if (!plain && chunk && typeof chunk === "object" && typeof chunk.type === "string") {
+                        if (chunk.type === "seek") {
+                            if (typeof chunk.position !== "number") throw syntax("Invalid params passed. seek requires a position argument");
+                            pos = chunk.position;
+                            return;
+                        }
+                        if (chunk.type === "truncate") {
+                            if (typeof chunk.size !== "number") throw syntax("Invalid params passed. truncate requires a size argument");
+                            if (chunk.size > size) { room(chunk.size); data.fill(0, size, chunk.size); }
+                            size = chunk.size;
+                            if (pos > size) pos = size;
+                            return;
+                        }
+                        if (chunk.type === "write") {
+                            if (chunk.data === undefined || chunk.data === null) throw syntax("Invalid params passed. write requires a data argument");
+                            var at = typeof chunk.position === "number" ? chunk.position : pos;
+                            return bytesOf(chunk.data).then(function (b) { put(b, at); });
+                        }
+                        throw new TypeError("Unknown write type: " + chunk.type);
+                    }
+                    return bytesOf(chunk).then(function (b) { put(b, pos); });
+                },
+                close: function () {
+                    var blob = new Blob([data.subarray(0, size)], { type: mimeOfName(handle.name) });
+                    return runtime.writeFile(handle.__phoenixPath, blob, true).then(function () { own(handle, "__phoenixFresh", false); });
+                },
+                abort: function () { data = new Uint8Array(0); size = 0; }
+            };
+            var ws = new WritableStream(sink);
+            function writeVia(chunk) {
+                var w = ws.getWriter(), p = w.write(chunk);
+                w.releaseLock();
+                return p;
+            }
+            if (FSW) try { Object.setPrototypeOf(ws, FSW.prototype); } catch (e) { /* a plain WritableStream then */ }
+            own(ws, "write", function (d) { return writeVia(d); });
+            own(ws, "seek", function (position) { return writeVia({ type: "seek", position: position }); });
+            own(ws, "truncate", function (s) { return writeVia({ type: "truncate", size: s }); });
+            return ws;
+        }
+
+        // startIn's well-known folders: those /media/internal has.
+        var START_IN = { documents: MEDIA + "/Documents", downloads: DOWNLOADS, music: MEDIA + "/Music", pictures: MEDIA + "/Pictures" };
+        function startFolder(s) {
+            if (s && s.__phoenixPath) return s.__phoenixPath.replace(/\/[^\/]*$/, "");
+            return typeof s === "string" ? START_IN[s] || "" : "";
+        }
+        function defineGlobal(name, fn) {
+            try { Object.defineProperty(global, name, { configurable: true, enumerable: true, writable: true, value: fn }); }
+            catch (e) { global[name] = fn; }
+        }
+        defineGlobal("showOpenFilePicker", function showOpenFilePicker(o) {
+            o = o || {};
+            return pickFiles(pickRequest(typesAccept(o.types), o.multiple)).then(function (picked) {
+                if (!picked) throw abortError();
+                return picked.map(function (f) { return new FileHandle(f.fullPath, false); });
+            });
+        });
+        defineGlobal("showSaveFilePicker", function showSaveFilePicker(o) {
+            o = o || {};
+            var name = String(o.suggestedName || "").replace(/[\/\\]/g, "-").trim();
+            if (!name) {
+                var first = typesAccept(o.types).split(",").filter(function (t) { return t.charAt(0) === "."; })[0];
+                name = "Untitled" + (first || "");
+            }
+            pickerOpen++;
+            return runtime.saveTarget({ name: name, title: "Save", folder: startFolder(o.startIn) }).then(function (t) {
+                pickerOpen--;
+                if (!t) throw abortError();
+                return new FileHandle(t.path, true);
+            }, function (e) { pickerOpen--; throw e; });
+        });
+        // No folder picker: not there, so pages go on without it.
+        try { delete global.showDirectoryPicker; } catch (e) { /* ignore */ }
+        try { if (global.Window && global.Window.prototype) delete global.Window.prototype.showDirectoryPicker; } catch (e) { /* ignore */ }
+
+        // ---- Downloads ------------------------------------------------------------------
+
+        // The Blobs behind the page's blob: URLs, while it has them: a link's
+        // Blob is read when it is clicked, whatever the page revokes next.
+        var blobs = {}, taken = {};
+        var U = global.URL;
+        if (U && typeof U.createObjectURL === "function") {
+            var createURL = U.createObjectURL, revokeURL = U.revokeObjectURL;
+            U.createObjectURL = function (obj) {
+                var url = createURL.apply(this, arguments);
+                if (global.Blob && obj instanceof Blob) blobs[url] = obj;
+                return url;
+            };
+            U.revokeObjectURL = function (url) {
+                delete blobs[url];
+                return revokeURL.apply(this, arguments);
+            };
+        }
+        function cleanName(name) {
+            return String(name || "").replace(/[\/\\\u0000-\u001f]/g, "-").replace(/^\.+/, "").trim();
+        }
+        // A name from the URL of a file (not of a Blob or a data: URL).
+        function urlName(url) {
+            if (/^(blob|data):/i.test(url)) return "";
+            var n = String(url).replace(/[?#].*$/, "").replace(/^.*\//, "");
+            try { return decodeURIComponent(n); } catch (e) { return n; }
+        }
+        // The page's own file: the save picker, then written there.
+        function saveDownload(url, name, blob, type) {
+            var got = blob ? Promise.resolve(blob) : global.fetch(url).then(function (res) {
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                return res.blob();
+            });
+            name = cleanName(name) || cleanName(urlName(url)) || "download";
+            var file;
+            pickerOpen++;
+            return got.then(function (b) {
+                file = type && !b.type ? b.slice(0, b.size, type) : b;
+                return runtime.saveTarget({ name: name, title: "Save" });
+            }).then(function (t) {
+                pickerOpen--;
+                if (!t) return null;
+                return runtime.writeFile(t.path, file, t.overwrite).then(function () {
+                    banner("Saved " + baseName(t.path) + " to " + folderName(t.path));
+                    return t.path;
+                });
+            }, function (e) { pickerOpen--; throw e; }).then(null, function (e) {
+                console.warn("[phoenix-runtime] " + name + " could not be saved: " + (e && e.message || e));
+                banner("There was a problem saving " + name);
+                return null;
+            });
+        }
+        // A file of the web: the download manager, into Downloads.
+        function downloadFromWeb(url, name) {
+            var p = { target: url, subscribe: true };
+            name = cleanName(name);
+            if (name) p.targetFilename = name;
+            var done = false;
+            dispatch("luna://com.palm.downloadmanager/download", p, function (r) {
+                if (done || !r) return;
+                var file = String(r.destFile || name || baseName(url)).replace(/%20/g, " ");
+                if (r.returnValue === false || r.completed) done = true;
+                if (r.returnValue === false || (r.completed && (r.completionStatusCode !== 200 || r.interrupted || r.aborted))) {
+                    if (!r.aborted) banner("There was a problem downloading " + file);
+                } else if (r.completed) {
+                    // A tap opens Files where it is.
+                    host.postToHost("notification", { appId: "org.webosphoenix.files", title: file, body: "Finished downloading",
+                                                      params: { path: String(r.destPath || DOWNLOADS + "/").replace(/\/$/, "") } });
+                }
+            }, { cancelled: function () { return done; }, onCancel: null });
+        }
+
+        runtime.webDownload = function (d) {
+            var url = String(d && d.url || "");
+            if (!url) return false;
+            // Already the runtime's (a click it could not keep from Chromium).
+            if (taken[url] && Date.now() - taken[url] < 10000) return true;
+            var origin = null;
+            try { origin = new URL(url).origin; } catch (e) { /* not a URL */ }
+            if (/^(blob|data):/i.test(url) || origin === global.location.origin) {
+                saveDownload(url, d.name, blobs[url] || null, d.mimeType || "");
+                return true;
+            }
+            if (/^https?:/i.test(url)) {
+                downloadFromWeb(url, d.name);
+                return true;
+            }
+            return false;
+        };
+        runtime.webFiles = {
+            busy: function () { return pickerOpen > 0 || Date.now() - lastTake < 2000; },
+            pickRequest: pickRequest
+        };
+    }
+    webPageFiles();
 
     // ================================================================================
     // DropShare (org.webosphoenix.dropshare; apps/dropshare)
