@@ -9,8 +9,11 @@
 // / install / status mark-active / mark-good), which talks to the RAUC
 // daemon over D-Bus.
 //
-// The running system's version is /etc/os-release (VERSION_ID, BUILD_ID: the
-// build number the image was made with); RAUC says which slot is running
+// The running system's version is the product's (/usr/share/phoenix/product.json,
+// which the image installs from the checkout's product.json; else
+// /etc/os-release VERSION_ID), its build /etc/os-release BUILD_ID (the build
+// number the image was made with), its release notes
+// /usr/share/phoenix/release-notes.json; RAUC says which slot is running
 // and which one starts next. Downloads go to /var/lib/phoenix/updates on the
 // data partition, so an update can be installed later, offline, and a
 // stopped download continues. The feed's address, its channels and keys:
@@ -27,6 +30,7 @@ var node = require("./lib/node");
 var platformDevice = require("@phoenix/platform/src/device");
 
 var STATE = "/var/lib/phoenix/updates/state.json";
+var RELEASE_NOTES = "/usr/share/phoenix/release-notes.json";
 var DOWNLOADS = "/var/lib/phoenix/updates";
 
 var service = new Service(updates.SERVICE);
@@ -65,6 +69,7 @@ var methods = updates.createUpdatesService({
             fs.renameSync(STATE + ".new", STATE);
         }
     },
+    releaseNotes: function () { return readJson(RELEASE_NOTES); },
     log: function (msg) { console.log("[updates] " + msg); }
 });
 

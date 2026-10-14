@@ -117,6 +117,7 @@ catalog app with three sources" is the starting point.
    - [3.12 Open-source web apps](#312-open-source-web-apps)
    - [3.13 The 2.0 apps](#313-the-20-apps)
    - [3.14 Updating a built-in app](#314-updating-a-built-in-app)
+   - [3.15 Update logs](#315-update-logs)
 4. [Roadmap](#4-roadmap)
 5. [Risks](#5-risks)
 6. [Open questions](#6-open-questions)
@@ -784,7 +785,9 @@ each is hosted, a link or left out: [WEB-APP-CATALOG.md](WEB-APP-CATALOG.md).
   what the index says of a hosted package beyond the package: title,
   developer, summary, description, categories, licence, homepage, a new
   `source` field (the index's entries gain `source`; the device shows it as
-  Source code), the icon and screenshots, published with the catalog
+  Source code), `releaseNotesUrl` (the upstream's release notes for the
+  pinned version, shown as Release notes; [3.15](#315-update-logs)), the
+  icon and screenshots, published with the catalog
   (`/v1/icons/<id>.png`, `/v1/screenshots/<id>/`).
 
 ### 3.13 The 2.0 apps
@@ -801,7 +804,8 @@ publish step reads a checkout given by `--from PATH` or
 `PHOENIX_DEFAULT_APPS`, packs each built app's `dist/` (its `appinfo.json`
 with `removable: true`: installed, it is a removable update of the
 built-in one; OSE's application manager reads that key for the apps in its
-store folder), and publishes it as Phoenix's own (`upload --phoenix`),
+store folder; its update log, `changelog.json`, without `unreleased`:
+[3.15](#315-update-logs)), and publishes it as Phoenix's own (`upload --phoenix`),
 under the category "Phoenix 2.0", its summary from the app's
 `package.json`, naming the checkout's commit. Without a checkout it says
 so and skips them:
@@ -896,6 +900,108 @@ Phoenix follows them:
   `/media/cryptofs/apps` and SAM picks the newer copy, as above; the
   package's `appinfo.json` must say `removable: true` (the 2.0 apps' do, as
   packed). Not run on a device yet.
+
+### 3.15 Update logs
+
+Every app Phoenix rebuilt keeps an update log, and the catalog shows it,
+so people know what each version brings before they install or update
+(the owner, 14 October 2026). The system keeps one in the same format.
+
+**The file.** An app's log is `changelog.json` beside its `appinfo.json`
+(in `public/` where Vite copies that folder), so it is in the built app,
+in the `.ipk` (`usr/palm/applications/<id>/changelog.json`) and in the
+installed app's folder. No `appinfo.json` key names it.
+
+```json
+{
+  "format": 1,
+  "unreleased": { "new": [], "improved": [], "fixed": [] },
+  "versions": [
+    { "version": "2.1.0", "date": "2026-11-02", "summary": "Reminders for tasks with a due time.",
+      "new": ["Set a reminder on any task with a due time."],
+      "improved": ["Lists with hundreds of tasks scroll smoothly."],
+      "fixed": ["A task moved to another list no longer shows in both."], "known": [] },
+    { "version": "2.0.0", "date": "2026-10-12", "rebuild": true, "replaces": "Tasks 1.0 (webOS 3.0.5)",
+      "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.", "new": ["..."] }
+  ]
+}
+```
+
+- `format` is 1; `versions` newest first, each version (x.y.z, as
+  `appinfo.json`'s) strictly lower than the one above it and its date
+  (YYYY-MM-DD, a real day) not later. The first entry's version is the
+  app's (the package's): that is what makes "the notes of this version"
+  exact.
+- Each entry: a `summary` (one sentence, at most 140 characters) and at
+  least one item in `new`, `improved` or `fixed`; `known` (known problems)
+  is optional. Items are plain sentences the user reads, at most 200
+  characters: no Markdown or HTML, commit hashes, issue numbers, file
+  paths, internal names (app or service ids, code identifiers) or AI
+  models' names.
+- `rebuild: true` marks the version where a rebuilt app starts (its last,
+  oldest entry), `replaces` (optional) the original it replaces.
+- `unreleased` collects items for the next version while work goes on. It
+  is never shipped: packing drops it, and the catalog never shows it.
+- The rules are checked by one validator per language, with the same
+  messages in the same order: phoenix-default-apps' `tools/lib/changelog.mjs`
+  and the catalog's `server/marketplace/src/Changelog.php`. Both run the
+  same cases (phoenix-default-apps' `tools/changelog-cases.json`, copied to
+  `server/marketplace/tests/changelog-cases.json`).
+
+**Versions.** A rebuilt app's log starts at its rebuild version (its
+`appinfo.json` version when the log began); from then on every
+user-visible change ships as a new version with an entry: patch for
+fixes, minor for new features, major for a redesign.
+phoenix-default-apps' tooling keeps the books (`npm run changelog`).
+
+**The catalog** (`server/marketplace`):
+
+- On upload `Ipk::check` reads the package's `changelog.json` (optional
+  for a developer's package), checks it with `Changelog`, and refuses a
+  malformed one, or one whose newest version is not the package's, with
+  the validator's message (`changelog.json: versions[0].version: 2.1.0 does
+  not match the version 2.2.0`). The log is kept with the release, without
+  `unreleased`.
+- A listed app whose listed (newest approved) release has a log carries
+  `whatsNew` in the signed index and in the API: that version's entry,
+  `{version, date, summary, new, improved, fixed, known}`.
+- `versionHistory`, every entry newest first (the rebuild with `rebuild`
+  and `replaces`), is in the detail only, so the signed index stays
+  small: `GET /api/apps/{id}`, and for devices a file published beside
+  the index, `/v1/apps/<id>-<hash>.json` (`{id, version, versionHistory}`),
+  which the index entry names with its SHA-256: `"detail": {url, sha256}`.
+  A device checks the detail against that hash, so it is as trusted as
+  the index, and a mirror serves it as any other file. A detail no index
+  names any more is removed once every index that may have named it has
+  expired.
+- A hosted open-source web app (3.12) has no log of ours; its listing may
+  name its upstream's release notes, `releaseNotesUrl` (https, in
+  `catalog/web-apps.json` and the index), shown as a link. Each one in
+  `web-apps.json` is the GitHub release of the pinned version.
+- The 2.0 apps (3.13) carry their logs: `bin/web-apps.py default-apps`
+  packs `dist/changelog.json` without `unreleased`.
+
+**On the device** (`apps/marketplace/service`): the catalog reader keeps
+an entry's `whatsNew` (only when it is the listed version's), `detail` and
+`releaseNotesUrl`; `getApp` reads the detail, checks its SHA-256 and
+answers `versionHistory` (left out when it cannot be read, or is not the
+one signed); `listInstalled` gives each update its `whatsNew`. Both
+Marketplaces read these through the service. The 1.0 Marketplace shows,
+on an app's page, **What's New** under the description (the version and
+its date, the summary, the items under New, Improved, Fixed and Known
+Issues, three items then More), then **Version History** (each version a
+row that opens its notes); Installed Apps lists each update with its What's
+New. An app without a log shows neither. `@phoenix/ui`'s `ReleaseNotes`
+and `VersionHistory` draw them.
+
+**The system.** `release-notes.json` at the top of the checkout, the same
+format without `rebuild`, is the system's log; `product.json` names it
+and holds the version the system reports. Settings shows it, the update
+feed carries a release's entry, and `docs/RELEASE-NOTES.md` is made from
+it: [APP-RUNTIME.md, System updates](APP-RUNTIME.md#system-updates).
+
+Translations later: `changelog.<locale>.json`, the same shape, readers
+falling back to `changelog.json`.
 
 ## 4. Roadmap
 

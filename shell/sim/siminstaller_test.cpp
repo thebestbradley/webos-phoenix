@@ -46,6 +46,32 @@ int main(int argc, char **argv)
     Rootfs rootfs(QStringLiteral(PHOENIX_REPO_DIR));
     check(rootfs.isValid(), "the checkout's rootfs loads");
     check(rootfs.missing().isEmpty(), qPrintable(QStringLiteral("nothing it names is missing (%1)").arg(rootfs.missing().join(QStringLiteral(", ")))));
+    // The product (rootfs.json "product"): product.json, and the release notes it names.
+    check(rootfs.resolve(QStringLiteral("/usr/share/phoenix/product.json")) == QDir(QStringLiteral(PHOENIX_REPO_DIR)).filePath(QStringLiteral("product.json"))
+              && rootfs.resolve(QStringLiteral("/usr/share/phoenix/release-notes.json"))
+                     == QDir(QStringLiteral(PHOENIX_REPO_DIR)).filePath(QStringLiteral("release-notes.json")),
+          "the product file and its release notes are served at /usr/share/phoenix/");
+    {
+        // Another product (2.0) names its own notes: the device path stays, the file changes.
+        QTemporaryDir repo;
+        QDir(repo.path()).mkpath(QStringLiteral("runtime"));
+        QFile cfg(repo.filePath(QStringLiteral("runtime/rootfs.json")));
+        cfg.open(QIODevice::WriteOnly);
+        cfg.write(R"({"product": "product.json", "mounts": {}, "applicationDirs": []})");
+        cfg.close();
+        QFile product(repo.filePath(QStringLiteral("product.json")));
+        product.open(QIODevice::WriteOnly);
+        product.write(R"({"name": "webOS Phoenix", "version": "2.0.0", "releaseNotes": "release-notes-2.json"})");
+        product.close();
+        QFile notes(repo.filePath(QStringLiteral("release-notes-2.json")));
+        notes.open(QIODevice::WriteOnly);
+        notes.write("{}");
+        notes.close();
+        const Rootfs other(repo.path());
+        check(other.resolve(QStringLiteral("/usr/share/phoenix/release-notes.json")) == repo.filePath(QStringLiteral("release-notes-2.json"))
+                  && other.missing().isEmpty(),
+              "... the file the product names, so 2.0 ships its own notes without changing 1.0's");
+    }
     {
         // A checkout without its submodules: their folders are there, empty.
         QTemporaryDir repo;

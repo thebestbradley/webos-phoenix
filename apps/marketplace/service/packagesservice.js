@@ -61,7 +61,15 @@
 //                                          them) keeps those with any of them
 //   getApp {sourceId, id}               -> {app} with installed, update, verdicts,
 //                                          builtin {version, replaced} for a
-//                                          built-in app's id
+//                                          built-in app's id, and its update log
+//                                          (docs/APP-STORE.md "Update logs"):
+//                                          whatsNew (the listed version's notes,
+//                                          as every entry has it) and
+//                                          versionHistory (every version's, newest
+//                                          first: the catalog's detail file,
+//                                          checked against the SHA-256 the signed
+//                                          index gives; left out when it cannot be
+//                                          read)
 //   install {sourceId, id, subscribe}   (also an ongoing activity in the
 //                                       notification area while it runs)
 //                                       progress {state: "downloading" |
@@ -70,7 +78,8 @@
 //   remove {id}                         an update of a built-in app: the
 //                                          built-in one is back ({builtin})
 //   listInstalled {}                    -> {apps: [{id, title, icon, version,
-//                                          sourceId, kind, update, builtin}]}
+//                                          sourceId, kind, update, builtin,
+//                                          whatsNew (the update's notes)}]}
 //   updateAll {}                        installs every update there is
 //   scheduled {$activity}               the daily check (an activity)
 //
@@ -121,6 +130,7 @@ var METHODS = ["getSources", "addSource", "trustSource", "setSource", "removeSou
 var ACTIVITY = "org.webosphoenix.marketplace.updates";
 var PAGE = 20;
 var MAX_PACKAGE = 64 * 1024 * 1024;
+var MAX_DETAIL = 1024 * 1024;   // an app's detail file (its version history)
 
 function fail(code, text) {
     return { returnValue: false, errorCode: code, errorText: text };
@@ -535,6 +545,8 @@ function createPackagesService(deps) {
     function withState(s, e) {
         var found = installedFor(s, e), inst = found && found.rec;
         var o = clone(e);
+        // Where the history is: getApp reads it (versionHistory).
+        delete o.detail;
         o.installed = inst ? { version: inst.version, sourceId: inst.sourceId } : null;
         if (found) o.appId = found.appId;
         if (found && ownIcons[found.appId]) o.ownIcon = ownIcons[found.appId];
@@ -679,6 +691,28 @@ function createPackagesService(deps) {
         var idx = s.indexes[src.id];
         var e = idx && idx.apps.filter(function (a) { return a.id === id; })[0];
         return e ? Promise.resolve(e) : Promise.reject(err("NOT_FOUND", "The catalog has no app " + id));
+    }
+
+    // An entry's version history (docs/APP-STORE.md "Update logs"): the
+    // catalog's detail file the signed index names, checked against its
+    // SHA-256 (lib/catalog.js verifyDetail), kept by that hash; null for an
+    // app without one, or when it cannot be read now (the page shows the
+    // index's whatsNew without the history).
+    var histories = {};
+    function versionHistory(e) {
+        if (!e.detail) return Promise.resolve(null);
+        var key = e.detail.sha256;
+        if (histories[key]) return Promise.resolve(clone(histories[key]));
+        return getBytes(e.detail.url, MAX_DETAIL).then(function (bytes) {
+            return catalog.verifyDetail(bytes, e, deps.crypto.sha256);
+        }).then(function (list) {
+            if (Object.keys(histories).length >= 64) histories = {};
+            histories[key] = list;
+            return clone(list);
+        }, function (x) {
+            log("version history of " + e.id + ": " + x.message);
+            return null;
+        });
     }
 
     // ---- Installing --------------------------------------------------------------------------
@@ -1038,14 +1072,14 @@ function createPackagesService(deps) {
     function listInstalled() {
         return reconcile().then(function () {
             var s = load();
-            var ups = {};
-            updatesOf(s).forEach(function (u) { ups[u.id] = u.entry.version; });
+            var ups = {}, notes = {};
+            updatesOf(s).forEach(function (u) { ups[u.id] = u.entry.version; notes[u.id] = u.entry.whatsNew || null; });
             return { returnValue: true, apps: Object.keys(s.installed).sort().map(function (id) {
                 var i = s.installed[id];
                 var rv = revokedFor(s, id, i.catalogId);
                 return { id: id, catalogId: i.catalogId || id, title: i.title, icon: ownIcons[id] || i.icon || "", catalogIcon: i.icon || "",
                          version: i.version, sourceId: i.sourceId,
-                         kind: i.kind, installedAt: i.installedAt, update: ups[id] || null,
+                         kind: i.kind, installedAt: i.installedAt, update: ups[id] || null, whatsNew: notes[id] || null,
                          builtin: typeof i.builtin === "string" ? i.builtin : null,
                          revoked: rv ? { reason: rv.reason, text: rv.text, date: rv.date } : null };
             }) };
@@ -1148,7 +1182,11 @@ function createPackagesService(deps) {
             return reconcile().then(function () {
                 var s = load();
                 return findApp(s, p && p.sourceId, p && p.id).then(function (e) {
-                    return { returnValue: true, app: withState(s, e) };
+                    return versionHistory(e).then(function (history) {
+                        var app = withState(s, e);
+                        if (history) app.versionHistory = history;
+                        return { returnValue: true, app: app };
+                    });
                 }, errorReply);
             });
         },

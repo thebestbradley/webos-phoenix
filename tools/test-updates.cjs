@@ -6,7 +6,9 @@
 // dist/) in headless Chromium, with runtime/phoenix-runtime.js running the
 // device's com.palm.update service over the simulated RAUC, against an
 // update feed made by server/updates/bin/updates.php and served by PHP's
-// built-in server. Covers: up to date, an update found with its notes,
+// built-in server. Covers: up to date with What's New in This Version (the
+// system's release notes, the file product.json names), an update found
+// with its release notes,
 // downloaded and prepared (an ongoing activity in the notification area
 // meanwhile), what luna-systemui hears (Available, Countdown), Install
 // later and the next charge, a low battery, Install now and the restart
@@ -37,6 +39,11 @@ function loadPlaywright() {
 }
 
 const REPO = path.resolve(__dirname, "..");
+// The product: the version the system reports and its release notes (product.json).
+const PRODUCT = JSON.parse(fs.readFileSync(path.join(REPO, "product.json"), "utf8"));
+const SYSTEM_NOTES = JSON.parse(fs.readFileSync(path.join(REPO, PRODUCT.releaseNotes), "utf8"));
+// The update the test publishes: the next minor version, with its notes on top of the system's.
+const NEXT = PRODUCT.version.replace(/^(\d+)\.(\d+)\.\d+$/, (m, a, b) => `${a}.${Number(b) + 1}.0`);
 const args = process.argv.slice(2);
 const tablet = args.includes("--tablet");
 const outIdx = args.indexOf("--out");
@@ -125,19 +132,34 @@ async function main() {
 
         // ---- Up to date: nothing published for the simulator yet --------------------------------
         await page.waitForSelector("[data-testid=check-updates]");
-        check((await page.textContent("[data-testid=update-current]")).includes("0.1.0"), "the running system: 0.1.0");
+        check((await page.textContent("[data-testid=update-current]")).includes(PRODUCT.version), `the running system: ${PRODUCT.version}`);
+        const whatsNew = await page.textContent("[data-testid=update-whats-new]");
+        check(whatsNew.includes(SYSTEM_NOTES.versions[0].summary) && whatsNew.includes(SYSTEM_NOTES.versions[0].new[0]),
+              "What's New in This Version: the running version's release notes");
+        await page.click("[data-testid=update-history]");
+        await page.waitForSelector(`[data-testid="release-notes-history-${PRODUCT.version}"]`);
+        check(true, "... and its Version History");
+        await shot("0-whats-new-history");
+        await page.keyboard.press("Escape");
+        await page.waitForSelector("[data-testid=check-updates]");
         await page.click("[data-testid=check-updates]");
         await page.waitForFunction(() => !/Never|Now/.test(document.querySelector("[data-testid=update-last-checked]").textContent));
         check(/up to date/.test(await status()), "nothing on the feed: up to date");
         await shot("1-up-to-date");
 
         // ---- An update ----------------------------------------------------------------------------
-        publish("simulator", "--version", "0.2.0", "--build", "2", "--note", "Faster card switching", "--note", "The Marketplace");
+        const notesFile = path.join(feed, "..", path.basename(feed) + "-notes.json");
+        fs.writeFileSync(notesFile, JSON.stringify({ format: 1, versions: [
+            { version: NEXT, date: "2026-11-02", summary: "Faster card switching.", new: ["The Marketplace shows what is new in each app."],
+              fixed: ["Banners no longer show twice."] }, ...SYSTEM_NOTES.versions] }));
+        publish("simulator", "--version", NEXT, "--build", "2", "--release-notes", notesFile);
+        fs.rmSync(notesFile);
         await page.click("[data-testid=check-updates]");
         await page.waitForSelector("[data-testid=update-download]");
         check(/available/.test(await status()), "the update is found");
-        const notes = await page.textContent("[data-testid=update-notes]");
-        check(/Faster card switching/.test(notes) && /The Marketplace/.test(notes), "its notes show");
+        const notes = await page.textContent("[data-testid=update-release-notes]");
+        check(notes.includes(`Version ${NEXT}`) && /Faster card switching/.test(notes) && /what is new in each app/.test(notes)
+              && /Banners no longer show twice/.test(notes), "its release notes show, before Download");
         await shot("2-available");
 
         await listenPalm();
@@ -146,12 +168,12 @@ async function main() {
         await page.waitForSelector("[data-testid=update-install]", { timeout: 20000 });
         check(/Ready to install/.test(await status()), "downloaded and prepared: ready to install");
         const ongoing = host.filter((m) => m.type === "ongoing");
-        check(ongoing.some((m) => m.payload.title === "Downloading webOS Phoenix 0.2.0") &&
+        check(ongoing.some((m) => m.payload.title === "Downloading webOS Phoenix " + NEXT) &&
               ongoing.some((m) => /^Preparing/.test(m.payload.title || "") && m.payload.progress === 100),
               "the download and the preparing are an ongoing activity, with progress");
         check(ongoing.length > 0 && ongoing[ongoing.length - 1].payload.clear === true, "the ongoing activity ends with them");
         const slots = await page.evaluate(() => JSON.parse(localStorage.getItem("phoenix:updates:slots")));
-        check(slots.slots["rootfs.1"].version === "0.2.0" && slots.primary === "rootfs.0",
+        check(slots.slots["rootfs.1"].version === NEXT && slots.primary === "rootfs.0",
               "written to the other slot; this one stays the one that starts");
         check((await palm()).includes("Available"), "luna-systemui hears Available (its \"Update Available\" alert)");
         await shot("3-ready");
@@ -164,7 +186,7 @@ async function main() {
         await page.evaluate(() => window.__phoenixRuntime.setPower({ charger: "wall" }));
         await page.waitForFunction(() => window.__palm.some((r) => r.status === "Countdown"), null, { timeout: 5000 });
         const countdown = await page.evaluate(() => window.__palm.find((r) => r.status === "Countdown"));
-        check(countdown.version === "webOS Phoenix 0.2.0" && countdown.showLaterButton === true && countdown.countdownTime > 0,
+        check(countdown.version === "webOS Phoenix " + NEXT && countdown.showLaterButton === true && countdown.countdownTime > 0,
               "the charger: luna-systemui hears Countdown (its countdown alert)");
         await shot("4-later");
 
@@ -178,15 +200,15 @@ async function main() {
         host.length = 0;
         await Promise.all([page.waitForNavigation({ timeout: 15000 }), page.click("[data-testid=update-install]")]);
         await page.waitForSelector("[data-testid=update-current]");
-        await page.waitForFunction(() => /0\.2\.0/.test(document.querySelector("[data-testid=update-current]").textContent));
-        check(true, "restarted into the new system: 0.2.0");
+        await page.waitForFunction((v) => document.querySelector("[data-testid=update-current]").textContent.includes(v), NEXT);
+        check(true, "restarted into the new system: " + NEXT);
         const os2 = await luna("luna://com.webos.service.systemservice/osInfo/query", { parameters: ["webos_release", "webos_build_id"] });
-        check(os2.webos_release === "0.2.0" && os2.webos_build_id === "2", "osInfo says 0.2.0, build 2");
+        check(os2.webos_release === NEXT && os2.webos_build_id === "2", `osInfo says ${NEXT}, build 2`);
         await page.waitForFunction(() => /up to date/.test(document.querySelector("[data-testid=update-status]").textContent));
         check(true, "and it is up to date");
         await page.waitForTimeout(500);
         // From Settings itself, a banner for Settings; from another page, a notification.
-        const told = host.find((m) => /Updated to webOS Phoenix 0.2.0/.test(m.payload.message || m.payload.title || ""));
+        const told = host.find((m) => (m.payload.message || m.payload.title || "").includes("Updated to webOS Phoenix " + NEXT));
         const toldParams = told && (typeof told.payload.params === "string" ? JSON.parse(told.payload.params) : told.payload.params);
         check(!!told && toldParams && toldParams.page === "updates", "it says it was updated (and opens Updates)");
         await shot("5-updated");

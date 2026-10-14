@@ -32,11 +32,43 @@
         return;
 
     var runtime = global.__phoenixRuntime = {
-        version: "0.1.0",
         onDevice: typeof global.PalmServiceBridge === "function" && !!global.PalmSystem,
         services: {},
         log: []
     };
+
+    // ---- The product ----------------------------------------------------------------
+    //
+    // What this system is: product.json at the top of the checkout, at
+    // /usr/share/phoenix/product.json (runtime/rootfs.json "product"): its
+    // name, the version it reports (osInfo, /etc/os-release, the update
+    // slots) and its release notes' file, /usr/share/phoenix/release-notes.json
+    // (com.palm.update's releaseNotes and getReleaseNotes). Read once, when
+    // first asked; without it (a page served without the rootfs) the version
+    // is "" and the console says why.
+    var productInfo = null;
+    function readJsonFile(path) {
+        try {
+            var req = new XMLHttpRequest();
+            req.open("GET", path, false);
+            req.send(null);
+            return req.status >= 200 && req.status < 300 ? JSON.parse(req.responseText) : null;
+        } catch (e) {
+            return null;
+        }
+    }
+    runtime.product = function () {
+        if (productInfo) return productInfo;
+        var p = typeof XMLHttpRequest === "function" ? readJsonFile("/usr/share/phoenix/product.json") : null;
+        if (!p || typeof p.version !== "string") console.warn("phoenix-runtime: no product file at /usr/share/phoenix/product.json");
+        productInfo = { name: (p && typeof p.name === "string" && p.name) || "webOS Phoenix", version: (p && typeof p.version === "string" && p.version) || "" };
+        return productInfo;
+    };
+    // The system's release notes (release-notes.json): {format, versions}, or null.
+    runtime.releaseNotes = function () {
+        return typeof XMLHttpRequest === "function" ? readJsonFile("/usr/share/phoenix/release-notes.json") : null;
+    };
+    Object.defineProperty(runtime, "version", { enumerable: true, get: function () { return runtime.product().version; } });
 
     // ---- Prototype.js and the standard array methods ---------------------------
     //
@@ -7469,7 +7501,9 @@
             core_os_kernel_version: "6.6.0", core_os_name: "Rockhopper", core_os_release: "2.0.0",
             core_os_release_codename: "rockhopper", webos_api_version: "2.0.0", webos_build_id: "1",
             webos_build_datetime: "20260928000000", webos_imagename: "webos-phoenix-image", webos_name: "webOS Phoenix",
-            webos_prerelease: "", webos_release: "0.1.0", webos_release_codename: "phoenix", webos_manufacturing_version: "0.1.0",
+            // webos_release, webos_manufacturing_version: the product's version (product.json),
+            // read when first asked; webos_release is then the running slot's (System updates).
+            webos_prerelease: "", webos_release: "", webos_release_codename: "phoenix", webos_manufacturing_version: "",
             encryption_key_type: ""
         };
         function pick(all, params) {
@@ -7487,6 +7521,7 @@
             reply(r);
         };
         sys["/osInfo/query"] = function (p, reply) {
+            if (!osInfo.webos_manufacturing_version) osInfo.webos_release = osInfo.webos_manufacturing_version = runtime.product().version;
             // The running system: the booted slot (System updates, below).
             var b = runtime.updateSlots && runtime.updateSlots.booted();
             if (b) { osInfo.webos_release = b.version; osInfo.webos_build_id = String(b.build); }
@@ -10532,8 +10567,10 @@
 
             text("/etc/hostname", "webos-phoenix\n", T0, true);
             text("/etc/hosts", "127.0.0.1\tlocalhost\n127.0.1.1\twebos-phoenix\n::1\t\tlocalhost ip6-localhost\n", T0, true);
-            text("/etc/os-release", "ID=webos-phoenix\nNAME=\"webOS Phoenix\"\nVERSION=\"0.1.0 (simulator)\"\n" +
-                 "PRETTY_NAME=\"webOS Phoenix 0.1.0\"\nID_LIKE=webos\nHOME_URL=\"https://github.com/thebestbradley/webos-phoenix\"\n", T0, true);
+            var product = runtime.product();
+            text("/etc/os-release", "ID=webos-phoenix\nNAME=\"" + product.name + "\"\nVERSION=\"" + product.version + " (simulator)\"\n" +
+                 "VERSION_ID=" + product.version + "\nPRETTY_NAME=\"" + product.name + " " + product.version + "\"\nID_LIKE=webos\n" +
+                 "HOME_URL=\"https://github.com/thebestbradley/webos-phoenix\"\n", T0, true);
             text("/etc/palm/device-info.json", toJson({ modelName: "Phoenix Simulator", platformVersion: "3.0.5" }, null, 2) + "\n", T0, true);
             text("/var/log/messages", "Jan 15 09:00:01 webos-phoenix kernel: Booting webOS Phoenix (simulator)\n" +
                  "Jan 15 09:00:03 webos-phoenix LunaSysMgr: Phoenix shell started\n", T0, true);
@@ -10580,7 +10617,7 @@
             text(MEDIA_ROOT + "/Documents/Trip notes.md",
                  "# Harbor weekend\n\n* Ferry leaves 8:15\n* Pack the camera\n* Dinner at the pier\n", when("2026-09-12T20:10:00Z"));
             text(MEDIA_ROOT + "/Downloads/release-notes.txt",
-                 "webOS Phoenix 0.1.0\n\nNew: Files, a file manager for the whole device.\n", when("2026-09-25T12:00:00Z"));
+                 product.name + " " + product.version + "\n\nNew: Files, a file manager for the whole device.\n", when("2026-09-25T12:00:00Z"));
             // A real (tiny) app package to install: apps/media-samples/media/packages,
             // made by apps/media-samples/tools/make-sample-ipk.cjs.
             ref(MEDIA_ROOT + "/Downloads/org.example.hello_1.0.0_all.ipk",
@@ -16409,7 +16446,7 @@
         function slots() {
             var st = store.get(SLOTS, null);
             if (!st) st = { compatible: "phoenix-sim", booted: "rootfs.0", primary: "rootfs.0",
-                            slots: { "rootfs.0": { version: "0.1.0", build: 1 }, "rootfs.1": null } };
+                            slots: { "rootfs.0": { version: runtime.product().version, build: 1 }, "rootfs.1": null } };
             return st;
         }
         function otherOf(st) { return st.booted === "rootfs.0" ? "rootfs.1" : "rootfs.0"; }
@@ -16526,6 +16563,9 @@
                     load: function () { return store.get("updates:state", null); },
                     save: function (o) { store.set("updates:state", o); }
                 },
+                // The system's release notes (/usr/share/phoenix/release-notes.json, the
+                // file product.json names): every version's, newest first.
+                releaseNotes: runtime.releaseNotes,
                 log: function (m) { console.info("[updates] " + m); }
             });
             // What this page's service says goes to every page's subscribers.

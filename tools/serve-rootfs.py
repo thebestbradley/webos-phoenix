@@ -100,10 +100,27 @@ def load_preinstalled(cfg):
         return {p["id"]: os.path.join(REPO, p["from"]) for p in json.load(f).get("packages", []) if p.get("id") and p.get("from")}
 
 
+def product_mounts(cfg):
+    """rootfs.json "product" (product.json): the product file and the release notes it names, at
+    their device paths (as phoenix-sim's Rootfs and tools/install-rootfs.py put them)."""
+    rel = cfg.get("product")
+    if not rel:
+        return {}
+    out = {"/usr/share/phoenix/product.json": rel}
+    try:
+        with open(os.path.join(REPO, rel), encoding="utf-8") as f:
+            notes = json.load(f).get("releaseNotes")
+    except (OSError, ValueError):
+        notes = None
+    if notes:
+        out["/usr/share/phoenix/release-notes.json"] = os.path.join(os.path.dirname(rel), notes)
+    return out
+
+
 def load_rootfs():
     with open(os.path.join(REPO, "runtime", "rootfs.json")) as f:
         cfg = json.load(f)
-    mounts = sorted(cfg["mounts"].items(), key=lambda kv: -len(kv[0]))
+    mounts = sorted(list(cfg["mounts"].items()) + list(product_mounts(cfg).items()), key=lambda kv: -len(kv[0]))
     overlays = [os.path.join(REPO, o) for o in cfg.get("overlays", [])]
     apps = {}
     # systemApps (Just Type, the system UI) are single app directories that

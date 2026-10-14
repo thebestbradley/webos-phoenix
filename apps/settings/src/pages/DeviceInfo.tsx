@@ -1,7 +1,7 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Device Info: model, software version, the phone (number, carrier,
+// Device Info: model, software version (with its release notes), the phone (number, carrier,
 // network, IMEI, SIM), battery, storage, memory, open source licenses, help,
 // setup (First Use) again, and the legacy reset options: Reset All
 // Settings, Erase Apps & Data (keeps the files on the USB drive), Full Erase.
@@ -22,6 +22,7 @@ import notice from "../../../../NOTICE?raw";
 import license from "../../../../LICENSE?raw";
 import { LICENSES } from "../licenses";
 import { FirmwareLicenses } from "./Hardware";
+import { SystemReleaseNotes } from "./ReleaseNotes";
 
 type Reset = "settings" | "erase" | "full";
 
@@ -83,11 +84,13 @@ export function DeviceInfoPage() {
     const battery = useBattery();
     const phone = usePhone();
     const [licenses, setLicenses] = useState(false);
+    const [notes, setNotes] = useState(false);
     const [reset, setReset] = useState<Reset | null>(null);
     const [resetting, setResetting] = useState(false);
     const [done, setDone] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     useBack(() => { setLicenses(false); return true; }, licenses);
+    useBack(() => { setNotes(false); return true; }, notes);
 
     useEffect(() => {
         system.deviceInfo().then(setDev).catch(() => setDev({}));
@@ -95,6 +98,7 @@ export function DeviceInfoPage() {
     }, []);
 
     if (licenses) return <Licenses />;
+    if (notes) return <SystemReleaseNotes name={os?.webos_name ?? "webOS Phoenix"} />;
 
     const size = parseSize(dev?.storage_size), free = parseSize(dev?.storage_free);
     const used = size !== null && free !== null ? Math.max(0, Math.min(1, (size - free) / size)) : null;
@@ -135,6 +139,7 @@ export function DeviceInfoPage() {
                     </Group>
                     <Group label="Software">
                         <Row title={os.webos_name ?? "webOS"} value={os.webos_release ?? "—"} />
+                        <Row title="What's New" chevron testId="release-notes" onClick={() => setNotes(true)} />
                         <Row title="Build" value={os.webos_build_id ?? "—"} />
                         <Row title="Platform" value={[os.core_os_name, os.core_os_release].filter(Boolean).join(" ") || "—"} />
                         <Row title="Kernel" value={os.core_os_kernel_version ?? "—"} />
