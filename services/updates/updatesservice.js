@@ -184,8 +184,7 @@ function releaseNotes(n) {
 }
 // The system's release notes (release-notes.json) -> its versions, newest first.
 function notesHistory(doc) {
-    var list = doc && Array.isArray(doc.versions) ? doc.versions.map(releaseNotes) : [];
-    return list.every(Boolean) ? list : list.filter(Boolean);
+    return doc && Array.isArray(doc.versions) ? doc.versions.map(releaseNotes).filter(Boolean) : [];
 }
 
 function parseRelease(r) {
@@ -304,11 +303,15 @@ function createUpdatesService(deps) {
             });
         });
     }
-    // The running system's release notes, every version (deps.releaseNotes).
+    // The running system's release notes, every version (deps.releaseNotes):
+    // read once, as they change only with the system (a restart).
+    var notesRead = null;
     function systemNotes() {
+        if (notesRead) return notesRead;
         var doc = null;
         try { doc = deps.releaseNotes ? deps.releaseNotes() : null; } catch (e) { log("release notes: " + e.message); }
-        return notesHistory(doc);
+        notesRead = notesHistory(doc);
+        return notesRead;
     }
 
     function changed() {

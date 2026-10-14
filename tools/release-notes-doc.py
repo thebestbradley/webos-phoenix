@@ -3,11 +3,16 @@
 # SPDX-License-Identifier: Apache-2.0
 """docs/RELEASE-NOTES.md, for people reading the repository, from the system's
 release notes: the file product.json names (release-notes.json; the format of
-docs/APP-STORE.md "Update logs"), which the system ships and Settings > Updates
-shows. Edit the JSON, then run this.
+docs/APP-STORE.md 3.15, "Update logs"), which the system ships and Settings >
+Updates shows. Edit the JSON, then run this.
 
-  python3 tools/release-notes-doc.py            rewrite docs/RELEASE-NOTES.md
-  python3 tools/release-notes-doc.py --check    fail if docs/RELEASE-NOTES.md is stale
+The page is named after the notes file (release-notes.json:
+docs/RELEASE-NOTES.md; webOS Phoenix 2.0's release-notes-2.json:
+docs/RELEASE-NOTES-2.md), so a product that names its own notes has its own
+page, and this repository's merges into it unchanged.
+
+  python3 tools/release-notes-doc.py            rewrite the page
+  python3 tools/release-notes-doc.py --check    fail if the page is stale
 """
 
 import datetime
@@ -16,7 +21,6 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DOC = os.path.join(ROOT, "docs", "RELEASE-NOTES.md")
 KINDS = [("new", "New"), ("improved", "Improved"), ("fixed", "Fixed"), ("known", "Known issues")]
 
 
@@ -27,6 +31,11 @@ def load():
     with open(os.path.join(ROOT, notes_file), encoding="utf-8") as f:
         notes = json.load(f)
     return product, notes_file, notes
+
+
+def doc_path(notes_file):
+    """The page of a notes file: docs/<ITS NAME IN CAPITALS>.md."""
+    return os.path.join(ROOT, "docs", os.path.splitext(os.path.basename(notes_file))[0].upper() + ".md")
 
 
 def day(date):
@@ -52,20 +61,21 @@ def markdown():
 
 
 def main(argv):
+    doc = doc_path(load()[1])
     if argv == ["--check"]:
         try:
-            with open(DOC, encoding="utf-8") as f:
+            with open(doc, encoding="utf-8") as f:
                 current = f.read()
         except OSError:
             current = None
         if current != markdown():
-            print("docs/RELEASE-NOTES.md is stale: run python3 tools/release-notes-doc.py", file=sys.stderr)
+            print("%s is stale: run python3 tools/release-notes-doc.py" % os.path.relpath(doc, ROOT), file=sys.stderr)
             return 1
         return 0
     if argv:
         print(__doc__, file=sys.stderr)
         return 2
-    with open(DOC, "w", encoding="utf-8") as f:
+    with open(doc, "w", encoding="utf-8") as f:
         f.write(markdown())
     return 0
 

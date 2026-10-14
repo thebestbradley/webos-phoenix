@@ -236,8 +236,9 @@ describe("release notes (docs/APP-STORE.md \"Update logs\")", () => {
         expect(await svc.getReleaseNotes({})).toEqual({ returnValue: true, versions: [] });
         // Notes without the running version's entry: the history, but nothing for this version.
         systemNotes = { format: 1, versions: [v090] };
-        expect((await svc.getStatus({})).current.releaseNotes).toBeUndefined();
-        expect((await svc.getReleaseNotes({})).versions).toEqual([full(v090)]);
+        const other = service();
+        expect((await other.getStatus({})).current.releaseNotes).toBeUndefined();
+        expect((await other.getReleaseNotes({})).versions).toEqual([full(v090)]);
     });
 
     it("an update carries its own notes when the feed has them (only that version's)", async () => {
