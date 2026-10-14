@@ -302,11 +302,15 @@ or adaptive; in the adaptive simulator Phone, Tablet and Device Size resize
 the window and the layout follows live, otherwise they, the scale and a demo
 scene restart it) and the developer overlays, **Services** what it runs on
 this computer for the device (the Marketplace's catalog, below), **Window**
-the open apps: their cards in card view's order (a window an app opened in
-its stack, under its card), the one in front checked; choosing one brings
-it to the front, maximized, as a tap on it in card view does (locked, it
-is the card in front once you unlock), and Card View, Launcher, **Next
-Card** (Ctrl+Shift+]) and **Previous Card** (Ctrl+Shift+[) are there too.
+the simulators running on this computer (each `--instance`, from any
+checkout or build: its layout and size, look and checkout; this one
+checked; the one chosen comes to the front, as does the next with **Next
+Simulator**, Ctrl+Shift+\) and the open apps: their cards in card view's
+order (a window an app opened in its stack, under its card), the one in
+front checked; choosing one brings it to the front, maximized, as a tap on
+it in card view does (locked, it is the card in front once you unlock), and
+Card View, Launcher, **Next Card** (Ctrl+Shift+]) and **Previous Card**
+(Ctrl+Shift+[) are there too.
 **Help > Keyboard Shortcuts…** lists every key below
 in a window. Each menu item shows its key, so the menus teach them; they are
 made from one list in `shell/qml/sim.qml` (`simActions`), as the keys are.
@@ -535,6 +539,7 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `node tools/test-runtime-device.cjs` | The runtime on a device, in a stand-in for WebAppMgr's page (plain Node): the window properties the device shell reads (orientation, full screen, status bar colour, the caller to return to, a Back the page did not take), `{returnToCaller}` as `$caller`, copies sent to the clipboard service |
 | `python3 tools/test-sounds-pcm.py` | The system sounds' raw PCM twins for OSE's audiod (`tools/sounds-to-pcm.py`) |
 | `xvfb-run -a node tools/test-instance-sim.cjs` | Two simulators at once with `--instance`: both run, each keeps its own data and web storage |
+| `build/siminstances-test` | The simulators' registry behind Window > Simulators: two find each other (in one process and in two), one brings the other forward, a crashed one's entry is dropped |
 
 The table has the main ones. [docs/COMMANDS.md](docs/COMMANDS.md) lists every
 test (Chromium, C++, Python, shell and PHP), each as a command to copy. CMake

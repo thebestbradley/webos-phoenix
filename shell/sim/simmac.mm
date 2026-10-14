@@ -29,3 +29,30 @@ bool SimMac::isActive()
 {
     return NSRunningApplication.currentApplication.active;
 }
+
+bool SimMac::activateProcess(qint64 pid)
+{
+    NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:(pid_t)pid];
+    if (!app)
+        return false;
+    if (@available(macOS 14.0, *)) {
+        [NSApp yieldActivationToApplication:app];
+        return [app activateWithOptions:NSApplicationActivateAllWindows];
+    }
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    return [app activateWithOptions:NSApplicationActivateAllWindows | NSApplicationActivateIgnoringOtherApps];
+#pragma clang diagnostic pop
+}
+
+void SimMac::activateSelf()
+{
+    if (@available(macOS 14.0, *)) {
+        [NSApp activate];
+        return;
+    }
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    [NSApp activateIgnoringOtherApps:YES];
+#pragma clang diagnostic pop
+}
