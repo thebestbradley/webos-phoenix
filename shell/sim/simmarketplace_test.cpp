@@ -141,8 +141,10 @@ static SimMarketplace *g_sim = nullptr;
 static int simulator(QCoreApplication &app, const QString &repo, quint16 port, const QString &instancesDir, const QString &name)
 {
     std::signal(SIGTERM, [](int) { terminated = true; });
+    // "-": a simulator that does not list itself (a screenshot's run).
     SimInstances instances(instancesDir, name);
-    instances.start({});
+    if (name != QLatin1String("-"))
+        instances.start({});
     SimMarketplace m(repo, port);
     m.setInstancesDir(instancesDir);
     QObject::connect(&m, &SimMarketplace::stateChanged, [&m]() {
@@ -522,6 +524,17 @@ int main(int argc, char **argv)
         waitFor([] { return false; }, 4000);
         check(refused(port) && c.out.indexOf("state starting", at) < 0, "... and stays gone (the simulator does not start it again)");
         check(c.quit(), "the simulator quits");
+    }
+    {
+        // A simulator that does not list itself (a screenshot's run) started it: it counts while it runs.
+        Sim d;
+        d.start(repo2, port, instancesDir, QStringLiteral("-"));
+        check(d.said("state running here", 20000), "a simulator that does not list itself starts it");
+        waitFor([] { return false; }, 4000);
+        check(answers(port) && !QFile::exists(instancesDir + QStringLiteral("/phoenix-sim--.json")),
+              "... and it goes on past the grace while that simulator runs, unlisted");
+        d.crash();
+        check(waitFor([&] { return refused(port); }, 10000), "... and stops when it is gone");
     }
     {
         // One an older simulator runs (no server.json of this folder): used as it is, its key unknown.

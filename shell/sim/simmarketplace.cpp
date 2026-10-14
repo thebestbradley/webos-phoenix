@@ -3,6 +3,7 @@
 
 #include "simmarketplace.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
@@ -287,8 +288,13 @@ void SimMarketplace::launch()
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert(QStringLiteral("MARKETPLACE_BASE_URL"), url() + QStringLiteral("v1/"));
     env.insert(QStringLiteral("MARKETPLACE_DATA"), m_folder);
-    if (shared())
+    if (shared()) {
         env.insert(QStringLiteral("PHOENIX_SIM_INSTANCES"), m_instancesDir);
+        // This simulator counts while it runs, listed in that folder or not
+        // yet (it lists itself once its window is up; a screenshot's run never does).
+        env.insert(QStringLiteral("PHOENIX_SIM_PID"), QString::number(QCoreApplication::applicationPid()));
+        env.insert(QStringLiteral("PHOENIX_SIM_EXE"), QFileInfo(QCoreApplication::applicationFilePath()).fileName());
+    }
     if (!m_defaultAppsDir.isEmpty())
         env.insert(QStringLiteral("PHOENIX_DEFAULT_APPS"), m_defaultAppsDir);
     m_process.setProcessEnvironment(env);

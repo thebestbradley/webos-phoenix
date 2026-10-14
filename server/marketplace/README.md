@@ -12,36 +12,70 @@ PHP 8 with PDO: MySQL/MariaDB on a server (LAMP), SQLite on one computer.
 sets itself up the first time (`bin/marketplace.php init`: the database, the
 signing key, the curated web apps, an admin account, a first publish) and
 serves at <http://127.0.0.1:8088/>, which is where the simulator's
-Marketplace looks (`apps/marketplace/service/etc/palm/marketplace/sources.json`).
-Or let the simulator do it: **Services > Marketplace Catalog** in its menu
+Marketplace looks (`/etc/palm/phoenix/servers.json`). It needs PHP 8 with
+sodium and pdo_sqlite, which `./phoenix` installs (Homebrew's `php`; apt's
+`php-cli` and `php-sqlite3`, whose `php-common` has sodium).
+
+**One catalog per user** (docs/APP-STORE.md 3.16), shared by every simulator
+of every checkout (1.0's webos-phoenix, 2.0's phoenix-ember-glass-ui): its
+folder is outside the checkouts, `~/.local/share/phoenix/catalog`
+(`$XDG_DATA_HOME/phoenix/catalog`), on a Mac `~/Library/Application
+Support/Phoenix/catalog`; `MARKETPLACE_DATA` names another, for every tool
+(`serve.sh`, `bin/marketplace.php`, `bin/web-apps.py`, `phoenix-connector
+publish --local`, phoenix-sim). The folder holds the database, the signing
+key, the uploads, the published catalog (`public/v1`), the update feed
+(`updates`), the log (`simulator.log`), the fills' state (`fill/`) and, while
+it runs, `server.json` (its process, port and checkout). The first start
+imports the checkout's old `server/marketplace/data` when the folder has no
+catalog yet (the log says so; the old folder is left as it was). **Keep a
+copy of its `signing.key`**: with a new key every device has to trust the
+catalog again.
+
+**The simulator starts it**: **Services > Marketplace Catalog** in its menu
 bar (or **Start Local Catalog** on the Marketplace's "Can't reach" card, or
 `./phoenix run --marketplace`, or `./build/phoenix-sim --marketplace`)
 starts `serve.sh` without blocking the simulator (`shell/sim/simmarketplace.h`),
-setting it up the first time; the menu item shows it starting, running or
-failed with the reason, and the Marketplace opens once it answers. It stops
-on quitting (one already running, another simulator's, is used as it is);
-its log is `data/simulator.log` (Services > Show Catalog Log). **Services >
-Start Catalog with the Simulator** starts it with every run where PHP is,
-and is on unless turned off (`--no-marketplace` for one run). It needs PHP 8
-with sodium and pdo_sqlite, which `./phoenix` installs (Homebrew's `php`;
-apt's `php-cli` and `php-sqlite3`, whose `php-common` has sodium).
+setting it up the first time; the menu item shows it starting, running
+(started here, by another simulator, or by an older one, used as it is) or
+failed with the reason, and the Marketplace opens once it answers. **Services
+> Start Catalog with the Simulator** starts it with every run where PHP is,
+and is on unless turned off (`--no-marketplace` for one run). Started by a
+simulator, `serve.sh` leaves PHP's server running under a watch of its own,
+which keeps it while any simulator runs, whichever started it (the one that
+started it, and those listed in the simulators' registry,
+`shell/sim/siminstances.h`, older builds' too), and stops it a few seconds
+after the last one quits or crashes (`PHOENIX_CATALOG_GRACE`, 5). A
+simulator whose catalog went away starts it again, unless it was stopped from
+the menu (for every simulator). Run by hand, `serve.sh` serves until it is
+stopped.
+
+**It fills itself.** Each start publishes the curated web apps (`seed`,
+`publish`), then, in the background, `bin/web-apps.py fill`: the open-source
+web apps of `catalog/web-apps.json` when that file changed since the last
+fill that worked (the network: offline, it says so and the next start tries
+again) and the 2.0 apps of a built phoenix-default-apps checkout
+(`PHOENIX_DEFAULT_APPS`, the simulator's setting `marketplace/defaultApps`, or
+a sibling `../phoenix-default-apps` with built apps) whose version is newer
+than the catalog's. One fill runs at a time; `fill/status.json` says what it
+does and did, and Services > **Refill Catalog** runs one now (`fill
+--force`); `serve.sh --no-fill` skips it.
 
 The simulator's Marketplace trusts this catalog without the fingerprint
-step: phoenix-sim reads the public key from the catalog's data folder
-(`data/public/v1/key.json`, which every publish writes) and gives it as the
-key of the sources file's `phoenix` catalog, as a device's sources file
-gives a catalog's key. Whatever answers at 127.0.0.1:8088 must sign its
-index with that key. A catalog elsewhere (another data folder, another
-address) shows its fingerprint (`php server/marketplace/bin/marketplace.php
-key` prints it) and asks to trust it.
+step: phoenix-sim reads the public key from the catalog's folder
+(`public/v1/key.json`, which every publish writes) and gives it as the key
+of the sources file's `phoenix` catalog, as a device's sources file gives a
+catalog's key. Whatever answers at 127.0.0.1:8088 must sign its index with
+that key; one an older simulator runs from its own checkout's data is used,
+and the Marketplace shows its fingerprint (`php
+server/marketplace/bin/marketplace.php key` prints it) and asks to trust it.
 
 **A development catalog.** `serve.sh` runs it with `MARKETPLACE_DEV=1`
 (unless set): a developer's upload is approved and published at once, with
-no review. It keeps a local developer (`data/developer.token`, made by
-`bin/marketplace.php developer`) for `phoenix-connector publish --local`
+no review. It keeps a local developer (`developer.token` in the folder, made
+by `bin/marketplace.php developer`) for `phoenix-connector publish --local`
 and `bin/marketplace.php upload FILE.ipk`, and once per catalog
-(`data/seed/done`) it publishes the connector kit's News Feed example, as
-that developer, and the connector packages Phoenix comes with
+(`seed/done`) it publishes the connector kit's News Feed example, as that
+developer, and the connector packages Phoenix comes with
 (`apps/marketplace/service/etc/palm/marketplace/preinstalled.json`: the
 Fediverse) as Phoenix's own (`upload --phoenix`, the admin, in Phoenix's
 namespaces), so the simulator can install one again after removing it.
@@ -50,17 +84,14 @@ Packing them needs the connector kit built (the build does it). Never set
 
 - Catalog: `/v1/key.json`, `/v1/index.json`, `/v1/index.json.sig`, `/v1/packages/`
 - API: `/api/` (see `src/Api.php`)
-- Review queue: <http://127.0.0.1:8088/admin> with the token in `data/admin.token`
-
-Everything it keeps is in `data/` (git-ignored). **Keep a copy of
-`data/signing.key`**: with a new key every device has to trust the catalog
-again.
+- Review queue: <http://127.0.0.1:8088/admin> (Services > Open Catalog in
+  Browser) with the token in `admin.token` in the catalog's folder
 
 ## System updates
 
 The same server serves the system update feed devices read
 (`com.palm.update`, `services/updates`): `/updates/<compatible>/<channel>.json`
-next to its RAUC bundles, in `data/updates` (`MARKETPLACE_UPDATES`
+next to its RAUC bundles, in `updates` in the catalog's folder (`MARKETPLACE_UPDATES`
 elsewhere), written by `server/updates/src/UpdateFeed.php`. An admin
 publishes a release with the bundle as the request body:
 
@@ -206,6 +237,7 @@ publishes them; run it isolated (`python3 -I`; it restarts itself so):
     python3 -I server/marketplace/bin/web-apps.py publish [ID ...]   fetch, check, pack, publish
     python3 -I server/marketplace/bin/web-apps.py shoot ID ...       screenshots for the listing
     python3 -I server/marketplace/bin/web-apps.py default-apps --from ../phoenix-default-apps --publish
+    python3 -I server/marketplace/bin/web-apps.py fill [--force]     what changed of both (serve.sh runs it)
 
 - **fetch** downloads an app's release, its icon and its licence files into
   a cache outside the repository (`--cache`, `PHOENIX_WEB_APPS_CACHE`, else
@@ -335,9 +367,36 @@ Phoenix's own that are only in the catalog, not pre-installed (that file's
 which `Catalog.php` allows for the `org.webosphoenix` / `com.webosphoenix`
 ids only). `bin/serve.sh` puts those packages into a development catalog.
 
+## Device classes and kinds
+
+Which apps each kind of device is offered (docs/APP-STORE.md 3.17; the lists
+are `apps/marketplace/service/lib/availability.json`, `src/Availability.php`).
+Each app has a kind, `phoenix`, `legacy`, `web`, `native` or `local`, assigned
+when it is published (a website is `web`; an id in Phoenix's namespaces
+`phoenix`; a development catalog's local developer's upload `local`; a
+package with a service `native`; the rest `web`), and the device classes it
+is offered on, `phone`, `tablet`, `desktop`: its package's (`appinfo.json`
+`"phoenix": {"deviceClasses": [...]}`, an unknown class refused), else all.
+The admin can set both for an app, and switch a kind or a whole feed
+(`catalog`, `connectors`, `appmuseum`, `preware`) off per class; each change
+publishes. The index says each entry's `appKind` and `deviceClasses` and the
+switches as `availability: {deviceClasses, appKinds, feeds, off: {kinds:
+{kind: [class]}, feeds: {feed: [class]}}}`, staying version 1; devices filter
+(`apps/marketplace/service/lib/availability.js`).
+
+- The admin page's **Devices and Kinds**: a box per kind, feed and app and class.
+- `GET /api/admin/availability`, `POST /api/admin/availability {off}`,
+  `POST /api/admin/apps/{id}/availability {appKind?, deviceClasses?}` (null:
+  the assigned kind, the package's classes).
+- `php bin/marketplace.php availability` (JSON), `availability off|on kind|feed
+  NAME CLASS...`, `availability app ID classes CLASS,...|package`,
+  `availability app ID kind KIND|assigned`.
+
 ## Tests
 
     php server/marketplace/tests/run.php
 
 and, for the device's side against this server,
-`apps/marketplace/service/service.test.ts` and `tools/test-marketplace.cjs`.
+`apps/marketplace/service/service.test.ts` and `tools/test-marketplace.cjs`;
+for the simulator's side (the shared catalog's lifetime across simulators,
+with this `bin/serve.sh`), `build/simmarketplace-test`.

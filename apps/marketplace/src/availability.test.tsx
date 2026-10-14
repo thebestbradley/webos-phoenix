@@ -135,7 +135,7 @@ describe("the Marketplace offers each device what is on for it", () => {
         render(<App />);
         fireEvent.click(await screen.findByTestId("nav-settings"));
         expect((await screen.findByTestId("device-class")).textContent).toContain("Phone");
-        expect(screen.getByTestId("kind-legacy").textContent).toContain("The Marketplace does not offer these on phones");
+        expect(screen.getByTestId("kind-legacy").textContent).toContain("Not offered on phones");
         const web = screen.getByTestId("kind-toggle-web");
         expect(web.getAttribute("aria-checked")).toBe("true");
         fireEvent.click(web);

@@ -25,7 +25,8 @@
 // on its page and does not download (installed, it stays, with its updates).
 //
 // Launch params: {section: "updates"} (the update notification) opens the
-// installed apps; {sourceId, id} opens an app's page; the Accounts app's
+// installed apps; {section: "catalogs"} the catalogs and Kinds of Apps;
+// {sourceId, id} opens an app's page; the Accounts app's
 // "Find More..." ({common: {sceneType: "search", params: {type:
 // "connector", connectorInfo}}}) opens Connections with its capabilities.
 
@@ -125,7 +126,7 @@ function useSources() {
 // simulator as its window is resized, a docked phone): when it changes, the
 // lists are read again.
 
-function useAvailability(bump: () => void) {
+function useAvailability(bump: () => void, version: number) {
     const [av, setAv] = useState<Availability | null>(null);
     const bumpRef = useRef(bump);
     bumpRef.current = bump;
@@ -145,6 +146,9 @@ function useAvailability(bump: () => void) {
         }, () => {});
         return () => sub.cancel();
     }, [load]);
+    // The catalogs read again: the catalog's switches may have changed.
+    const firstVersion = useRef(version);
+    useEffect(() => { if (version !== firstVersion.current) void load(); }, [version, load]);
     const setKind = useCallback(async (kind: string, enabled: boolean) => {
         try { setAv(valid(await marketplace.setKind(kind, enabled))); } finally { bumpRef.current(); }
     }, []);
@@ -599,7 +603,7 @@ function Settings({ ctx, avail }: { ctx: ReturnType<typeof useSources>; avail: A
                     <Group label="Kinds of Apps">
                         {av.kinds.map((k) => (
                             <Row key={k.id} testId={`kind-${k.id}`} title={k.name}
-                                 subtitle={k.offByCatalog ? `The Marketplace does not offer these on ${plural}` : k.about}>
+                                 subtitle={k.offByCatalog ? `Not offered on ${plural}` : k.about}>
                                 <ToggleButton value={!k.hidden} label={k.name} testId={`kind-toggle-${k.id}`}
                                               onChange={(on) => void avail.setKind(k.id, on)} />
                             </Row>
@@ -644,7 +648,7 @@ function Marketplace() {
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<{ apps: MarketApp[]; accountTypes: AccountType[] } | null>(null);
     const ctx = useSources();
-    const avail = useAvailability(ctx.bump);
+    const avail = useAvailability(ctx.bump, ctx.version);
     const accountTypes = useAccountTypes(ctx.version);
     const added = useAddedTemplates();
     const view = stack[stack.length - 1];
@@ -657,6 +661,8 @@ function Marketplace() {
 
     useEffect(() => {
         if (params?.section === "updates") setStack([{ kind: "home" }, { kind: "installed" }]);
+        // Catalogs, with this device's Kinds of Apps (docs/APP-STORE.md 3.17).
+        else if (params?.section === "catalogs") setStack([{ kind: "home" }, { kind: "settings" }]);
         else if (params?.sourceId && params?.id) setStack([{ kind: "home" }, { kind: "app", sourceId: params.sourceId, id: params.id }]);
     }, [params?.section, params?.sourceId, params?.id]);
     // "Find More..." from the Accounts app, on each launch and relaunch:

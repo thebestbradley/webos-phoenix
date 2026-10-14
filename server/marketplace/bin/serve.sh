@@ -34,8 +34,9 @@
 #
 # Run by hand it serves until stopped. Started by a simulator
 # (PHOENIX_SIM_INSTANCES: the folder the simulators list themselves in,
-# shell/sim/siminstances.h), it sets the catalog up, leaves PHP's server
-# running under a watch of its own and returns: the server goes on while any
+# shell/sim/siminstances.h; PHOENIX_SIM_PID and PHOENIX_SIM_EXE: the
+# simulator itself), it sets the catalog up, leaves PHP's server running
+# under a watch of its own and returns: the server goes on while any
 # simulator runs, whichever started it, and stops a few seconds
 # (PHOENIX_CATALOG_GRACE, 5) after the last one is gone, quit or crashed.
 # While it runs, server.json in the folder says so: {pid (the watch, or the
@@ -92,30 +93,38 @@ fill() {
     fi
 }
 
-# Whether a simulator is running: one listed in the simulators' folder whose
-# process is alive and is the program it says it is ("exe", else phoenix-sim:
-# simulators of older builds do not say), so a crashed one's entry, its
-# process id now another program's, does not count, nor one that crashed
-# and whose parent has not collected it yet (a zombie, state Z, which
-# kill -0 still finds). The kernel keeps 15 letters of a program's name
-# (Linux); a Mac's ps gives its path.
+# Whether process PID is alive and is the program EXE: not a crashed one's
+# process id now another program's, nor one that crashed and whose parent
+# has not collected it yet (a zombie, state Z, which kill -0 still finds).
+# The kernel keeps 15 letters of a program's name (Linux); a Mac's ps gives
+# its path. Without ps, alive is enough.
+alive_as() {
+    [ -n "$1" ] && kill -0 "$1" 2>/dev/null || return 1
+    command -v ps >/dev/null 2>&1 || return 0
+    st=$(ps -o stat= -p "$1" 2>/dev/null) || return 1
+    case "$st" in
+        *Z*) return 1 ;;
+    esac
+    comm=$(ps -o comm= -p "$1" 2>/dev/null) || return 1
+    comm=${comm##*/}
+    case "$comm" in
+        "$(printf '%.15s' "$2")"*) return 0 ;;
+    esac
+    return 1
+}
+
+# Whether a simulator is running: the one that started this catalog
+# (PHOENIX_SIM_PID, PHOENIX_SIM_EXE: counted while it starts, before it lists
+# itself, and when it is a run that does not list itself, a screenshot's), or
+# one listed in the simulators' folder ("exe", else phoenix-sim: simulators
+# of older builds do not say).
 simulator_running() {
+    alive_as "$PHOENIX_SIM_PID" "${PHOENIX_SIM_EXE:-phoenix-sim}" && return 0
     for f in "$PHOENIX_SIM_INSTANCES"/phoenix-sim*.json; do
         [ -f "$f" ] || continue
         pid=$(sed -n 's/.*"pid":\([0-9][0-9]*\).*/\1/p' "$f")
-        [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || continue
         exe=$(sed -n 's/.*"exe":"\([^"]*\)".*/\1/p' "$f")
-        [ -n "$exe" ] || exe=phoenix-sim
-        command -v ps >/dev/null 2>&1 || return 0
-        st=$(ps -o stat= -p "$pid" 2>/dev/null) || continue
-        case "$st" in
-            *Z*) continue ;;
-        esac
-        comm=$(ps -o comm= -p "$pid" 2>/dev/null) || continue
-        comm=${comm##*/}
-        case "$comm" in
-            "$(printf '%.15s' "$exe")"*) return 0 ;;
-        esac
+        alive_as "$pid" "${exe:-phoenix-sim}" && return 0
     done
     return 1
 }

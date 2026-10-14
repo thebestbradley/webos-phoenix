@@ -24,8 +24,13 @@ unsigned, as a development feed; the platform writes format 2, signed.
 
 ## On this computer
 
+The catalog's folder, the one local catalog every simulator shares
+(docs/APP-STORE.md 3.16): `~/.local/share/phoenix/catalog`, on a Mac
+`~/Library/Application Support/Phoenix/catalog`, or `MARKETPLACE_DATA`.
+
 ```sh
-UPDATES_FEED=server/marketplace/data/updates \
+CATALOG="${MARKETPLACE_DATA:-$HOME/.local/share/phoenix/catalog}"
+UPDATES_FEED="$CATALOG/updates" \
     php server/updates/bin/updates.php simulator --version 0.2.0 --build 2 --note "What changed"
 server/marketplace/bin/serve.sh        # http://127.0.0.1:8088/updates/, where the simulator looks
 ```
@@ -33,7 +38,7 @@ server/marketplace/bin/serve.sh        # http://127.0.0.1:8088/updates/, where t
 or the same with the admin API:
 
 ```sh
-curl -X POST -H "Authorization: Bearer $(cat server/marketplace/data/admin.token)" \
+curl -X POST -H "Authorization: Bearer $(cat "$CATALOG/admin.token")" \
     "http://127.0.0.1:8088/api/admin/updates?compatible=phoenix-sim&version=0.2.0&build=2&note=What%20changed"
 ```
 

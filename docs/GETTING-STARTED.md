@@ -252,24 +252,37 @@ A new name is also a new device, the Mac's way to a clean start
 **The Marketplace's catalog.** The Marketplace app reads the Phoenix
 catalog from a service on this computer for now (`server/marketplace`, PHP 8
 with sodium and pdo_sqlite, which `./phoenix` installs), at
-`http://127.0.0.1:8088/`. The simulator starts it with every run where PHP
-is (**Services > Start Catalog with the Simulator**, on unless you turn it
-off; `--no-marketplace` for one run), and **Services > Marketplace Catalog**
-starts or stops it. The first time it sets itself up (its database, its
-signing key, the curated web apps, the News Feed example connector and the
-Fediverse package), which takes a moment; the menu item says "setting up",
-then "running at 127.0.0.1:8088". The simulator's Marketplace trusts this
-catalog without asking: phoenix-sim reads the catalog's key from its data
-folder (`server/marketplace/data/public/v1/key.json`), so any other catalog
-still shows its key to check. Other ways in: **Start Local Catalog** on the
-Marketplace's "Can't reach Phoenix Marketplace" card, or
-`./phoenix run --marketplace` (waits for it and opens the Marketplace).
-Connector developers publish to it with `phoenix-connector publish --local`
-(`docs/SYNERGY-SDK.md`, "Testing in the simulator"). If it fails, a box says why (most often PHP missing or without
-sodium) with **Show Log** (`server/marketplace/data/simulator.log`; the menu
-has **Show Catalog Log** too). **Open Catalog in Browser** opens its review
-page, `/admin`, whose token is in `server/marketplace/data/admin.token`. It
-stops with the simulator; if another simulator already runs one, it is used.
+`http://127.0.0.1:8088/`. There is one for all your simulators, whatever
+checkout each runs from (1.0's and 2.0's alike), kept outside the checkouts:
+`~/.local/share/phoenix/catalog` (on a Mac `~/Library/Application
+Support/Phoenix/catalog`; `MARKETPLACE_DATA` puts it elsewhere). The
+simulator starts it with every run where PHP is (**Services > Start Catalog
+with the Simulator**, on unless you turn it off; `--no-marketplace` for one
+run), and **Services > Marketplace Catalog** starts or stops it (for every
+simulator). It runs while any simulator does, whichever started it, and
+stops a few seconds after the last one quits. The first time it sets itself
+up (its database, its signing key, the curated web apps, the News Feed
+example connector and the Fediverse package), or takes over a checkout's
+older `server/marketplace/data`, which takes a moment; the menu item says
+"setting up", then "running at 127.0.0.1:8088". Then it fills itself in the
+background: the open-source web apps (from their makers, over the network)
+and the 2.0 apps of a built phoenix-default-apps checkout next to this one
+(or `PHOENIX_DEFAULT_APPS`); **Refill Catalog** in the Services menu does it
+again now, and shows how far it got. The simulator's Marketplace trusts this
+catalog without asking: phoenix-sim reads the catalog's key from its folder
+(`public/v1/key.json`), so any other catalog still shows its key to check.
+Other ways in: **Start Local Catalog** on the Marketplace's "Can't reach
+Phoenix Marketplace" card, or `./phoenix run --marketplace` (waits for it and
+opens the Marketplace). Connector developers publish to it with
+`phoenix-connector publish --local` (`docs/SYNERGY-SDK.md`, "Testing in the
+simulator"). If it fails, a box says why (most often PHP missing or without
+sodium) with **Show Log** (`simulator.log` in the catalog's folder: **Show
+Catalog Folder** opens it; the menu has **Show Catalog Log** too). **Open
+Catalog in Browser** opens its review page, `/admin` (its token is
+`admin.token` in that folder), where **Devices and Kinds** turns kinds of
+app, feeds and single apps on or off for phones, tablets and desktops
+(docs/APP-STORE.md 3.17); the Marketplace's **Catalogs** has the kinds this
+device shows.
 
 ### 4. Voice and the assistant
 

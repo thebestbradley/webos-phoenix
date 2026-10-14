@@ -57,6 +57,17 @@
 > checkout ([3.13](#313-the-20-apps)); and a catalog app with a built-in
 > app's id installs as an update in its place, removable back to the
 > built-in version, as webOS did ([3.14](#314-updating-a-built-in-app)).
+>
+> **One local catalog, and feeds by device and kind (14 October 2026, the
+> owner):** "build the shared local catalog ... make the feeds more dynamic,
+> so we can specify mobile, tablet, desktop, legacy, phoenix, native, local,
+> web app, etc, so we can turn off and on certain apps for specific
+> devices." Done in the simulator: one catalog per user for every simulator
+> of every checkout, running while any of them runs and filling itself
+> ([3.16](#316-one-local-catalog-for-every-simulator)); device classes and
+> kinds of app, switched by the catalog's admin per class and by the user
+> per device ([3.17](#317-device-classes-kinds-and-feeds)). Not run on a
+> Mac or a device yet.
 
 How people will find, install and update apps on Phoenix: installable web
 apps (PWAs) as first-class cards, the original webOS `.ipk` apps from the
@@ -1037,8 +1048,11 @@ using it. Now:
   folder. Every other simulator finds it answering at 127.0.0.1:8088 and
   uses it. The watch reads the simulators' own registry, the per-user
   folder each phoenix-sim lists itself in (`shell/sim/siminstances.h`,
-  which simulators of older builds write too), every second: while one of
-  them is alive it keeps serving, and a few seconds (5) after the last one
+  which simulators of older builds write too), every second, and counts
+  the simulator that started it besides (it lists itself only once its
+  window is up, and a screenshot's run never does): while one of them is
+  alive (and is still that program: not a process id reused, nor a crashed
+  one's zombie) it keeps serving, and a few seconds (5) after the last one
   is gone, quit or crashed, it stops the server and removes `server.json`.
   A simulator restarting (View > Device) comes back within that time, so
   the catalog does not stop under it. A simulator whose catalog went away
@@ -1126,8 +1140,10 @@ it does not list); a new class or kind is a line there.
    publishes the index again.
 2. *The device* knows its class and offers only what is on for it.
 3. *The user* switches kinds on or off for this device in the
-   Marketplace's settings (Catalogs > **Kinds of Apps**: hide the classic
-   apps, say). Kept by the device's service.
+   Marketplace's settings (Catalogs > **Kinds of Apps**, also the link under
+   the tabs and the launch `{section: "catalogs"}`: hide the classic apps,
+   say). Kept by the device's service. The line under the tabs says which
+   device the lists are for ("Apps for this phone · Web apps hidden").
 
 An app that is off for this device is not listed, searched or installed
 (`OFF_HERE`), and is not offered in Connections. Opened anyway (a link,
