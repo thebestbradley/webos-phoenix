@@ -31,8 +31,7 @@
 //   4. With an expected version (the package's, the system's): the first entry's.
 //
 // Text is plain and user-facing: no Markdown or HTML, commit hashes, issue numbers,
-// file paths, internal names (app or service ids, code identifiers) or AI models'
-// names. The patterns are JavaScript's (ASCII \w, \d and \b; JavaScript's \s), written
+// file paths or internal names (app or service ids, code identifiers). The patterns are JavaScript's (ASCII \w, \d and \b; JavaScript's \s), written
 // out so PCRE reads them the same.
 //
 // The document is checked as json_decode gives it without $associative (objects as
@@ -148,9 +147,6 @@ final class Changelog
             if (preg_match($re, $words)) {
                 return "$path: has an internal name";
             }
-        }
-        if (preg_match("/{$b}(claude|chatgpt|gpt-?[0-9][{$w}.]*|gemini|llama|copilot|mistral|grok){$b}/iu", $s)) {
-            return "$path: names an AI model";
         }
         if ($sentence && !preg_match("/[.!?][\"'\\x{201D}\\x{2019})]*$/uD", $s)) {
             return "$path: must end with . ! or ?";

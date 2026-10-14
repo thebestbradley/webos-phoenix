@@ -2976,45 +2976,6 @@
       "error": "versions[0].new[0]: has an internal name"
     },
     {
-      "name": "an AI model's name",
-      "changelog": {
-        "format": 1,
-        "unreleased": {
-          "new": [],
-          "improved": [],
-          "fixed": []
-        },
-        "versions": [
-          {
-            "version": "2.1.0",
-            "date": "2026-11-02",
-            "summary": "Reminders for tasks with a due time.",
-            "new": [
-              "Written with ChatGPT."
-            ],
-            "improved": [
-              "Lists with hundreds of tasks scroll smoothly."
-            ],
-            "fixed": [
-              "A task moved to another list no longer shows in both."
-            ],
-            "known": []
-          },
-          {
-            "version": "2.0.0",
-            "date": "2026-10-12",
-            "rebuild": true,
-            "replaces": "Tasks 1.0 (webOS 3.0.5)",
-            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
-            "new": [
-              "Subtasks, flags and tags."
-            ]
-          }
-        ]
-      },
-      "error": "versions[0].new[0]: names an AI model"
-    },
-    {
       "name": "an item without a full stop",
       "changelog": {
         "format": 1,
