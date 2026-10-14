@@ -346,17 +346,18 @@ check($notes['version'] === '1.0.0', '... at 1.0.0');
 check($s === 400 && str_contains($r['error'], 'another developer'), 'nobody else can upload to an app');
 
 // ---- Update logs (changelog.json beside appinfo.json; docs/APP-STORE.md "Update logs") ---------------
-// The rules: the same cases as phoenix-default-apps' validator (its tools/changelog-cases.json),
-// each with the same first message.
-$cases = json_decode((string) file_get_contents(__DIR__ . '/changelog-cases.json'));
+// The rules: the same cases as phoenix-default-apps' validator (a copy of its
+// tools/changelog-cases.json: {cases: [{name, changelog, version?, error: null | the first
+// problem's message}]}), each with the same first message.
+$cases = json_decode((string) file_get_contents(__DIR__ . '/changelog-cases.json'))->cases ?? [];
 $wrong = [];
 foreach ($cases as $c) {
-    $p = Phoenix\Marketplace\Changelog::problems($c->doc, $c->appVersion ?? null);
-    if (($p === []) !== $c->ok || (!$c->ok && $p[0] !== $c->error)) {
+    $p = Phoenix\Marketplace\Changelog::problems($c->changelog, $c->version ?? null);
+    if (($p[0] ?? null) !== $c->error) {
         $wrong[] = "$c->name: " . ($p[0] ?? 'accepted');
     }
 }
-check(is_array($cases) && count($cases) >= 50 && !$wrong, 'the update log rules: ' . count((array) $cases) . ' cases shared with phoenix-default-apps'
+check(count($cases) >= 50 && !$wrong, 'the update log rules: ' . count($cases) . ' cases shared with phoenix-default-apps'
       . ($wrong ? ' (' . implode('; ', $wrong) . ')' : ''));
 $sysNotes = json_decode('{"format": 1, "versions": [{"version": "1.0.0", "date": "2026-10-14", "rebuild": true, "summary": "Cards.", "new": ["Cards."]}]}');
 check(Phoenix\Marketplace\Changelog::problems($sysNotes, '1.0.0', true) === ["versions[0].rebuild: the system's release notes have no rebuild"]
