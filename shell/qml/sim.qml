@@ -898,14 +898,25 @@ Item {
         alert: typeof simChrome !== "undefined" && simChrome ? function (text) { simChrome.alert(text, "", ""); } : null
     }
 
+    // Window: the device's open cards, to choose the one to view, and the
+    // shell's views (SimWindowMenu.qml). phoenix-sim lists simWindows,
+    // rebuilt as it changes, and calls simShowWindow(uid).
+    SimWindowMenu {
+        id: simWindowMenu
+        shell: shell
+    }
+    readonly property var simWindows: simWindowMenu.cards
+    function simShowWindow(uid) { return simWindowMenu.show(uid); }
+
     // ---- The simulator's functions ------------------------------------------------------
     // Every key and command the simulator adds, once: the keyboard shortcuts
     // below are made from this list, and phoenix-sim builds its menus,
     // toolbar and Help > Keyboard Shortcuts from it (simActionList(),
     // simTrigger(), simActionChecked(); shell/sim/simchrome.cpp). An entry:
     //   id        its name (simTrigger(id), the toolbar's simToolbar)
-    //   menu      "device", "simulate" or "view"; "" for Help > Keyboard
-    //             Shortcuts only; submenu: the submenu it goes in
+    //   menu      "device", "simulate", "view", "services" or "window"; ""
+    //             for Help > Keyboard Shortcuts only; submenu: the submenu
+    //             it goes in
     //   text      what it is called; tip: what it does, if the name does not say
     //   keys      its key sequences (Qt's portable text); the first is shown
     //             in the menu. keyText: a key chord no sequence can say
@@ -1245,8 +1256,10 @@ Item {
           run: function () {
               if (typeof simSettings !== "undefined")
                   simSettings.setValue("marketplace/autostart", simSettings.value("marketplace/autostart") !== "0" ? "0" : "1");
-          } },
-
+          } }
+    // Window: card view, the launcher, the next and previous card; the
+    // cards themselves are phoenix-sim's, from simWindows.
+    ]).concat(simWindowMenu.actions).concat([
         // Keys of the shell's own, for Help > Keyboard Shortcuts.
         { id: "justType", menu: "", text: qsTr("Just Type"), keyText: qsTr("Type in card view, or the Search key") },
         { id: "cardView", menu: "", text: qsTr("Card View"), keyText: Qt.platform.os === "osx" ? "" : qsTr("Super, on its own") }

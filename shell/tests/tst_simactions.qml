@@ -254,6 +254,57 @@ Item {
             compare(sim.item.simStatus.temperature, 31);
         }
 
+        // Window: phoenix-sim's list of the open cards (simWindows,
+        // SimWindowMenu.qml; tst_simwindowmenu.qml has the rest), the card
+        // chosen shown (simShowWindow), and Next Card and Previous Card on
+        // keys of their own.
+        function test_windowMenu() {
+            var w = ["windowCardView", "windowLauncher", "nextCard", "previousCard"].map(entry);
+            for (var i = 0; i < w.length; ++i) {
+                verify(w[i] && w[i].menu === "window" && w[i].run && w[i].dynamic, "in the Window menu: " + i);
+            }
+            compare(entry("nextCard").keys, ["Ctrl+Shift+]"]);
+            compare(entry("previousCard").keys, ["Ctrl+Shift+["]);
+
+            var shell = null;
+            (function walk(o) {
+                for (var i = 0; i < o.children.length && !shell; ++i) {
+                    if (o.children[i].hasOwnProperty("justTypeOpen"))
+                        shell = o.children[i];
+                    else
+                        walk(o.children[i]);
+                }
+            })(sim.item);
+            var cv = shell.cardView;
+            shell.unlock();
+            // Without a scene the simulator starts with three cards.
+            compare(sim.item.simWindows.length, shell.source.cards.count);
+            while (shell.source.cards.count > 0)
+                shell.source.close(shell.source.cards.get(0).uid);
+            compare(sim.item.simWindows.length, 0);
+            verify(!sim.item.simActionState("nextCard").enabled, "nothing to switch to");
+            var a = shell.launch("org.webosphoenix.email");
+            var b = shell.launch("org.webosphoenix.messaging");
+            var c = shell.launch("org.webosphoenix.calendar");
+            tryVerify(function () { return sim.item.simWindows.length === 3 && cv.maximized && cv.currentUid === c; }, 5000);
+            compare(sim.item.simWindows.map(function (x) { return x.title; }), ["Email", "Messaging", "Calendar"]);
+            compare(sim.item.simWindows.map(function (x) { return x.checked; }), [false, false, true], "a check on the card in front");
+            verify(sim.item.simActionState("nextCard").enabled);
+
+            sim.item.simShowWindow(a);
+            tryVerify(function () { return cv.maximized && cv.currentUid === a; }, 3000, "the card chosen in front");
+            keyClick(Qt.Key_BracketRight, Qt.ControlModifier | Qt.ShiftModifier);
+            tryVerify(function () { return cv.maximized && cv.currentUid === b; }, 3000, "Next Card's key");
+            keyClick(Qt.Key_BracketLeft, Qt.ControlModifier | Qt.ShiftModifier);
+            tryVerify(function () { return cv.maximized && cv.currentUid === a; }, 3000, "Previous Card's key");
+            sim.item.simTrigger("windowCardView");
+            tryCompare(cv, "maximizeProgress", 0);
+
+            [a, b, c].forEach(function (uid) { shell.source.close(uid); });
+            compare(sim.item.simWindows.length, 0);
+            shell.lock();
+        }
+
         function test_turn() {
             // The window turns with the device (no phoenix-sim window here).
             var w = root.Window.window;

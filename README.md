@@ -301,7 +301,13 @@ button, the play/pause key, the light), **View** the device (phone, tablet
 or adaptive; in the adaptive simulator Phone, Tablet and Device Size resize
 the window and the layout follows live, otherwise they, the scale and a demo
 scene restart it) and the developer overlays, **Services** what it runs on
-this computer for the device (the Marketplace's catalog, below), and **Help > Keyboard Shortcuts…** lists every key below
+this computer for the device (the Marketplace's catalog, below), **Window**
+the open apps: their cards in card view's order (a window an app opened in
+its stack, under its card), the one in front checked; choosing one brings
+it to the front, maximized, as a tap on it in card view does (locked, it
+is the card in front once you unlock), and Card View, Launcher, **Next
+Card** (Ctrl+Shift+]) and **Previous Card** (Ctrl+Shift+[) are there too.
+**Help > Keyboard Shortcuts…** lists every key below
 in a window. Each menu item shows its key, so the menus teach them; they are
 made from one list in `shell/qml/sim.qml` (`simActions`), as the keys are.
 The toolbar has icons for the most used: Power, Home, Back, the hardware
