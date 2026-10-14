@@ -70,7 +70,11 @@ describe("Settings > Assistant: Home & Work", () => {
     it("sets home to where the phone is, as Maps' saved Home, which the Assistant's reminders use", async () => {
         render(<HomeAndWork off={false} />);
         const home = await screen.findByTestId("as-place-home");
-        await waitFor(() => expect(home.textContent).toContain("Not set"));
+        // The row takes a tap once the saved places are read: until then it is
+        // disabled (HomeAndWork: disabled={!places}) and says "Not set" either
+        // way, so wait for the tap, not the words (on a busy machine the read is late).
+        await waitFor(() => expect(home.getAttribute("aria-disabled")).toBeNull(), { timeout: 5000 });
+        expect(home.textContent).toContain("Not set");
         fireEvent.click(home);
         fireEvent.click(await screen.findByRole("option", { name: "Set to Where I Am Now" }));
         // A fix first (the simulated GPS answers after 250 ms, runtime getLocationUpdates), then the
