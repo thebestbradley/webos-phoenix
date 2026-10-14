@@ -7,6 +7,7 @@
 // II and Preware feeds as add-on catalogs of Classics.
 
 import { call, subscribe, LunaError, type Subscription } from "./bridge";
+import type { ReleaseNotes } from "./releasenotes";
 
 const SERVICE = "luna://org.webosphoenix.service.packages/";
 
@@ -74,6 +75,12 @@ export interface MarketApp {
      * version is offered (update).
      */
     builtin?: { version: string; replaced: boolean };
+    /** The listed version's notes (its update log's newest entry), when the catalog has them. */
+    whatsNew?: ReleaseNotes | null;
+    /** Every version's notes, newest first: getApp only (app()), from the catalog's detail. */
+    versionHistory?: ReleaseNotes[];
+    /** A hosted web app's upstream release notes page (https), where it has no log of ours. */
+    releaseNotesUrl?: string;
 }
 
 export interface InstalledApp {
@@ -91,6 +98,8 @@ export interface InstalledApp {
     update: string | null;
     /** An update of a built-in app: the built-in version removing it brings back. */
     builtin?: string | null;
+    /** The update's notes (what `update` brings), when the catalog has them. */
+    whatsNew?: ReleaseNotes | null;
 }
 
 export interface InstallProgress {

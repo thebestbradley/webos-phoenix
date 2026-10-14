@@ -776,6 +776,27 @@ body.pui-app, .pui-app {
     padding-left: 25px;
 }
 
+/* ---- Update logs (releasenotes.tsx) ---------------------------------------------- */
+
+.pui-notes { padding: 8px 12px 10px; line-height: 1.35; -webkit-user-select: text; user-select: text; }
+.pui-notes-meta { font-size: 14px; color: var(--pui-text-dim); }
+.pui-notes-summary { font-size: 16px; font-weight: bold; margin: 2px 0 4px; }
+.pui-notes-section { margin-top: 6px; }
+.pui-notes-head {
+    /* the caption of an Enyo Divider (Divider.css), small */
+    font-size: 13px; font-weight: bold; text-transform: uppercase; color: var(--pui-divider);
+}
+.pui-notes ul { margin: 2px 0 0; padding-left: 20px; font-size: 16px; }
+.pui-notes li { margin: 2px 0; }
+.pui-notes-more {
+    display: block; margin: 6px 0 0 auto; padding: 4px 0; border: 0; background: none; cursor: pointer;
+    font: inherit; font-size: 15px; font-weight: bold; color: var(--pui-label); text-shadow: none;
+}
+.pui-notes-row .pui-row-chevron { transition: transform calc(0.15s * var(--pui-motion)); }
+.pui-notes-row.open .pui-row-chevron { transform: rotate(90deg); }
+.pui-notes-row + .pui-notes { border-bottom: 1px solid silver; }
+.pui-notes-row + .pui-notes:last-child { border-bottom: 0; }
+
 /* ---- High contrast (Settings > Accessibility; the runtime sets the class) -------- */
 
 html.phoenix-high-contrast {
