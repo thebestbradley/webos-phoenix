@@ -164,6 +164,52 @@ async function main() {
               && host.filter((m) => m.type === "notification").length === notes,
               `a capture not stored: no notification, the shell told (${failedSave})`);
 
+        // ---- Ember Glass's capture pills (docs/SYSTEM-UI-2.md 12) ----------------------------------
+        // The shell gives the notification Share, Edit and Delete: on it, with the Screenshot
+        // app's uri and the capture (the shell does them: Shell.qml _notificationAction).
+        const when3 = new Date(2026, 9, 1, 21, 6, 30).getTime();
+        const pills = { items: [{ id: "share", label: "Share" }, { id: "edit", label: "Edit" }, { id: "delete", label: "Delete" }] };
+        const withPills = await page.evaluate(([d, t, a]) => window.__phoenixRuntime.saveScreenshot({ data: d, app: "Email", time: t, capture: "capture-9", actions: a }),
+                                              [data, when3, pills]);
+        const note3 = host.filter((m) => m.type === "notification" && m.payload.appId === APP).pop();
+        const acts = note3 && note3.payload.actions;
+        check(acts && acts.items.map((a) => a.id + ":" + a.label).join() === "share:Share,edit:Edit,delete:Delete"
+              && acts.uri === "luna://" + APP + "/action" && acts.params.path === withPills && acts.params.capture === "capture-9",
+              "Ember Glass: the notification's Share, Edit and Delete, with its capture");
+        check(note && !("actions" in note.payload) && note2 && !("actions" in note2.payload), "... and none when the shell gives none (classic)");
+        // Its whole page (the thumbnail's Full Page: Shell.qml _fullPage): stored beside it, in Photos with it.
+        const tall = await page.evaluate(() => {
+            const c = document.createElement("canvas");
+            c.width = 320; c.height = 1200;
+            const ctx = c.getContext("2d");
+            ctx.fillStyle = "#1e4a8a"; ctx.fillRect(0, 0, 320, 1200);
+            ctx.fillStyle = "#c0392b"; ctx.fillRect(0, 1100, 320, 100);
+            return c.toDataURL("image/png");
+        });
+        const fp = await luna("luna://org.webosphoenix.screenshot/saveFullPage", { path: withPills, data: tall });
+        const wantFull = withPills.replace(/\.png$/, "") + " (Full Page).png";
+        check(fp.returnValue === true && fp.fullPage === wantFull, `its whole page stored beside it (${fp.fullPage || fp.errorText})`);
+        const fpPic = await picture(wantFull, 10, 1150);
+        check(fpPic && fpPic.width === 320 && fpPic.height === 1200 && fpPic.pixel[0] > 150, `... the tall picture (${fpPic && fpPic.width}x${fpPic && fpPic.height})`);
+        const list3 = await luna("luna://com.webos.service.mediaindexer/getImageList", { uri: "storage:///media/internal" });
+        check(list3.imageList.results.some((i) => i.file_path === wantFull), "... in Photos with it");
+        const notCapture = await luna("luna://org.webosphoenix.screenshot/saveFullPage", { path: "/media/internal/DCIM/x.png", data: tall });
+        check(notCapture.returnValue === false, "only beside a screen capture");
+        // Dropped on an app's card (Shell.qml _dropOnCard): shared to it as the sheet shares, without the sheet.
+        const launches = () => host.filter((m) => m.type === "launch").length;
+        const before = launches();
+        const to = await luna("luna://org.webosphoenix.share/shareTo", { appId: "org.webosphoenix.messaging", title: "Email 2026-10-01 at 21.06.30",
+                                                                         files: [{ path: withPills, mimeType: "image/png" }] });
+        const sent = host.filter((m) => m.type === "launch").pop();
+        check(to.returnValue === true && launches() === before + 1 && sent.payload.id === "org.webosphoenix.messaging"
+              && sent.payload.params.share.files[0].path === withPills, "dropped on Messaging's card: Messaging opens with it, as Share > Messaging");
+        const mailTo = await luna("luna://org.webosphoenix.share/shareTo", { appId: "com.palm.app.email", files: [{ path: withPills, mimeType: "image/png" }] });
+        const mail = host.filter((m) => m.type === "launch").pop();
+        check(mailTo.returnValue === true && mail.payload.id === "com.palm.app.email" && mail.payload.params.attachments[0].fullPath === withPills,
+              "... on Email's: attached, as Share > Email");
+        const calc = await luna("luna://org.webosphoenix.share/shareTo", { appId: "com.palm.app.calculator", files: [{ path: withPills, mimeType: "image/png" }] });
+        check(calc.returnValue === false && calc.errorCode === "notATarget" && launches() === before + 2, "... on an app that takes no pictures: nothing opens (notATarget)");
+
         // ---- Opened before it is stored --------------------------------------------------------------
         // A tap on the thumbnail can open the preview on a capture another page is still storing (a
         // big one takes a moment): the preview waits for it instead of saying it is gone.
