@@ -2889,8 +2889,9 @@ system back.
 In the simulator the service runs unchanged over a simulated RAUC: two slots in
 the shared store; osInfo's `webos_release` and `webos_build_id` are the running
 slot's. A simulator bundle is only a RAUC manifest
-(`UPDATES_FEED=server/marketplace/data/updates php server/updates/bin/updates.php
-simulator --version 0.2.0 --build 2`, or the catalog server's admin API).
+(`UPDATES_FEED=~/.local/share/phoenix/catalog/updates php server/updates/bin/updates.php
+simulator --version 0.2.0 --build 2`: the updates of the one local catalog every
+simulator shares, docs/APP-STORE.md 3.16; or the catalog server's admin API).
 
 **The feed is built into Phoenix's own catalog server** (the owner, 10
 October 2026: our own API and catalog, not a third party's host): the

@@ -400,8 +400,8 @@ export interface SystemStatus {
     gestureArea?: boolean;
     /** Phoenix: the words the keyboard learned that its word list lacks. */
     learnedWords?: string[];
-    /** Phoenix: the shell's layout, "phone" or "tablet" ("" until the shell says). */
-    formFactor?: "phone" | "tablet" | "";
+    /** Phoenix: the shell's layout, "phone" or "tablet" ("" until the shell says; "desktop": the docked desktop mode to come). */
+    formFactor?: "phone" | "tablet" | "desktop" | "";
 }
 
 // ---- The map -----------------------------------------------------------------------

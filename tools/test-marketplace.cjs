@@ -11,7 +11,9 @@
 // its key, browsing, a web app and a developer's package installed (and
 // served, and listed), an update, removing, the Classics with a Mojo app
 // refused, search, the update notification's launch, an app's update log
-// (What's New, the Version History, an update's notes in Installed Apps), and in the simulator
+// (What's New, the Version History, an update's notes in Installed Apps), device classes and
+// kinds (an app the admin offers on the other class is not listed and says why; the user hides
+// the classic apps), and in the simulator
 // (its host.json) the offline card's Start Local Catalog, its own catalog trusted without the
 // fingerprint step, and connector packages: Connections installs a third-party one in Developer
 // Mode only, adds its account, and removes and installs again the pre-installed Fediverse.
@@ -438,6 +440,60 @@ async function main() {
         check(removed.returnValue && !(await apps()).some((a) => a.id === "com.example.classicnotes"), "com.webos.appInstallService remove");
         const nope = await luna("luna://com.webos.appInstallService/remove", { id: "org.webosphoenix.settings" });
         check(nope.returnValue === false && nope.errorText === "No such id", "built-in apps are not removable");
+
+        // ---- Device classes and kinds (docs/APP-STORE.md 3.17) ------------------------------------------
+        // The shell says its layout (this test's viewport: a phone, or --tablet a tablet); the catalog's
+        // admin offers Tides only on the other class; the user hides the classic apps here.
+        {
+            const cls = tablet ? "tablet" : "phone", other = tablet ? "phone" : "tablet";
+            await page.evaluate((c) => window.__phoenixRuntime.applyHostStatus({ formFactor: c }, { writer: false }), cls);
+            const added = (await luna(P + "getSources", {})).sources.find((x) => x.url === catalog.catalogUrl);
+            await catalog.api("POST", "/api/admin/apps/org.webosphoenix.pwa.tides/availability", { deviceClasses: [other] }, catalog.admin);
+            await luna(P + "refresh", {});
+            await page.goto(appUrl("org.webosphoenix.marketplace"));
+            await page.waitForSelector("[data-testid=device-line]", { timeout: 15000 });
+            check((await page.textContent("[data-testid=device-line]")).includes(`Apps for this ${cls}`), `the lists say they are for this ${cls}`);
+            await page.click("[data-testid=tab-web]");
+            await page.waitForSelector("[data-testid^='app-']", { timeout: 15000 });
+            check(await page.locator("[data-testid='app-org.webosphoenix.pwa.tides']").count() === 0,
+                  `the admin offers Tides on ${other}s only: not listed on this ${cls}`);
+            await page.goto(appUrl("org.webosphoenix.marketplace", { sourceId: added.id, id: "org.webosphoenix.pwa.tides" }));
+            await page.waitForSelector("[data-testid=off-here]", { timeout: 15000 });
+            // Tides was installed above: it stays, and opens.
+            const offText = await page.textContent("[data-testid=off-here]");
+            check(offText.startsWith(`Not offered on ${cls}s: made for ${other}s`) && offText.includes("It stays installed on this device")
+                  && await page.locator("[data-testid=open-app]").count() === 1,
+                  "opened anyway, its page says why; installed already, it stays and opens");
+            await page.goto(appUrl("org.webosphoenix.marketplace"));
+            await page.click("[data-testid=nav-installed]", { timeout: 15000 });
+            check(/not offered on this /.test(await page.textContent("[data-testid='installed-org.webosphoenix.pwa.tides']", { timeout: 15000 })),
+                  "Installed Apps says it is not offered on this device now");
+            await luna(P + "remove", { id: (await luna(P + "listInstalled", {})).apps.find((a) => a.catalogId === "org.webosphoenix.pwa.tides").id });
+            await page.goto(appUrl("org.webosphoenix.marketplace", { sourceId: added.id, id: "org.webosphoenix.pwa.tides" }));
+            await page.waitForSelector("[data-testid=install-app]", { timeout: 15000 });
+            check(await page.locator("[data-testid=install-app]").isDisabled(), "removed, it does not download again on this device");
+            await shot("10-off-here");
+            await catalog.api("POST", "/api/admin/apps/org.webosphoenix.pwa.tides/availability", { deviceClasses: null }, catalog.admin);
+            await luna(P + "refresh", {});
+            // The user hides the classic webOS apps on this device.
+            await page.goto(appUrl("org.webosphoenix.marketplace"));
+            await page.click("[data-testid=device-settings]", { timeout: 15000 });
+            await page.waitForSelector("[data-testid=kind-toggle-legacy]");
+            check((await page.textContent("[data-testid=device-class]")).includes(tablet ? "Tablet" : "Phone"), "Catalogs says this device's class");
+            await page.click("[data-testid=kind-toggle-legacy]");
+            await page.waitForSelector("[data-testid=kind-toggle-legacy][aria-checked=false]");
+            await shot("10b-kinds");
+            await page.click("[data-testid=back]");
+            check((await page.textContent("[data-testid=device-line]")).includes("Classic webOS apps hidden"), "the line under the tabs says which kinds are hidden");
+            await page.click("[data-testid=tab-classics]");
+            await page.waitForSelector("[data-testid=classics-off-here]", { timeout: 15000 });
+            check(/You hid classic webOS apps on this device/.test(await page.textContent("[data-testid=classics-off-here]")),
+                  "Classics says they are hidden here");
+            await shot("10c-classics-hidden");
+            await page.click("[data-testid=classics-show]");
+            await page.waitForSelector("[data-testid='app-appmuseum.9001']", { timeout: 15000 });
+            check(true, "... and shows them again");
+        }
 
         // ---- In the simulator: Start Local Catalog --------------------------------------------------------
         // phoenix-sim's host.json says it can start the catalog

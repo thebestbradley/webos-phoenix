@@ -20,6 +20,11 @@
 //                                    ("detail": {url, sha256}), so the index stays
 //                                    small and the detail is as trusted as the index
 //
+// Each entry also says its kind and the device classes it is offered on, and the index
+// the admin's switches of kinds and feeds per device class (docs/APP-STORE.md 3.17,
+// Availability): "appKind", "deviceClasses", and "availability": {deviceClasses, appKinds,
+// feeds, off: {kinds: {kind: [class]}, feeds: {feed: [class]}}}. Devices filter.
+//
 // An app whose listed release carries an update log (changelog.json, Changelog)
 // has "whatsNew" in the index: that version's entry, {version, date, summary,
 // new, improved, fixed, known}. GET /api/apps/{id} has both, whatsNew and
@@ -126,8 +131,10 @@ final class Catalog
         file_put_contents($this->uploadDir() . '/' . $file, $bytes);
         // Its update log (checked by Ipk::check), kept with the release.
         $log = $pkg['changelog'] === null ? null : json_encode($pkg['changelog'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        $this->db->run('INSERT INTO releases (app_id, version, file, size, sha256, state, notes, created, changelog) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [$id, $pkg['version'], $file, strlen($bytes), hash('sha256', $bytes), 'pending', '', Db::now(), $log]);
+        $this->db->run('INSERT INTO releases (app_id, version, file, size, sha256, state, notes, created, changelog, device_classes)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [$id, $pkg['version'], $file, strlen($bytes), hash('sha256', $bytes), 'pending', '', Db::now(), $log,
+             $pkg['deviceClasses'] === null ? null : json_encode($pkg['deviceClasses'])]);
         $release = $this->db->one('SELECT * FROM releases WHERE id = ?', [$this->db->lastId()]);
         if (!empty($this->config['dev'])) {
             $release = $this->decideRelease((int) $release['id'], true, $owner, 'Approved on upload: a development catalog (MARKETPLACE_DEV)');
@@ -169,6 +176,17 @@ final class Catalog
         unset($a['release_notes_url']);
         $a['rating'] = $this->rating($id);
         $a['releases'] = $this->db->all("SELECT id, version, size, sha256, state, created, decided FROM releases WHERE app_id = ? ORDER BY id DESC", [$id]);
+        // Its kind and device classes (docs/APP-STORE.md 3.17): the admin's, else assigned
+        // (the kind) and the listed release's package's (the classes; all when it says none).
+        $owner = $a['owner_id'] !== null ? $this->db->one('SELECT role FROM accounts WHERE id = ?', [$a['owner_id']]) : null;
+        $a['appKindAssigned'] = Availability::kindFor($id, (string) $a['kind'], $owner['role'] ?? null, !empty($this->config['dev']));
+        $a['appKindAdmin'] = $a['app_kind'] ?? null;
+        $a['appKind'] = $a['appKindAdmin'] ?: $a['appKindAssigned'];
+        $listed = $this->db->one("SELECT device_classes FROM releases WHERE app_id = ? AND state = 'approved' ORDER BY id DESC", [$id]);
+        $a['packageClasses'] = $listed && $listed['device_classes'] !== null ? json_decode((string) $listed['device_classes'], true) : null;
+        $a['deviceClassesAdmin'] = $a['device_classes'] !== null && $a['device_classes'] !== '' ? json_decode((string) $a['device_classes'], true) : null;
+        $a['deviceClasses'] = $a['deviceClassesAdmin'] ?? $a['packageClasses'] ?? Availability::ids('deviceClasses');
+        unset($a['app_kind'], $a['device_classes']);
         $log = $this->listedLog($id);
         if ($log !== null) {
             $a['whatsNew'] = Changelog::whatsNew($log);
@@ -936,6 +954,68 @@ final class Catalog
         return $out;
     }
 
+    // ---- Device classes and kinds (docs/APP-STORE.md 3.17) ------------------------------------
+
+    /** The admin's switches: what is off where, {kinds: {kind: [class]}, feeds: {feed: [class]}}. */
+    public function availabilityOff(): array
+    {
+        return Availability::off(json_decode($this->db->setting('availability') ?? '{}', true));
+    }
+
+    /** The admin's new switches (the whole set; checked). */
+    public function setAvailabilityOff(mixed $off): array
+    {
+        $checked = Availability::checkOff($off);
+        $this->db->setSetting('availability', json_encode($checked));
+        return $checked;
+    }
+
+    /**
+     * An app's kind and device classes as the admin sets them. A key left out is left as it is;
+     * null puts back the one the catalog assigns (the kind) or the package's (the classes).
+     */
+    public function setAppAvailability(string $id, array $p): array
+    {
+        if (!$this->db->one('SELECT id FROM apps WHERE id = ?', [$id])) {
+            throw new CheckFailed("No app $id");
+        }
+        if ($extra = array_diff(array_keys($p), ['appKind', 'deviceClasses'])) {
+            throw new CheckFailed('unknown fields: ' . implode(', ', $extra));
+        }
+        if (array_key_exists('appKind', $p)) {
+            $kind = $p['appKind'] === null ? null : Availability::kind($p['appKind'], 'appKind');
+            $this->db->run('UPDATE apps SET app_kind = ?, updated = ? WHERE id = ?', [$kind, Db::now(), $id]);
+        }
+        if (array_key_exists('deviceClasses', $p)) {
+            $classes = Availability::classes($p['deviceClasses'], 'deviceClasses');
+            $this->db->run('UPDATE apps SET device_classes = ?, updated = ? WHERE id = ?', [$classes === null ? null : json_encode($classes), Db::now(), $id]);
+        }
+        return $this->app($id, false);
+    }
+
+    /** What the admin page shows: the lists, the switches, and every app's kind and classes. */
+    public function availability(): array
+    {
+        $lists = Availability::lists();
+        $apps = [];
+        foreach ($this->db->all("SELECT id FROM apps WHERE status IN ('listed', 'pending') ORDER BY title") as $r) {
+            $a = $this->app($r['id'], false);
+            $apps[] = ['id' => $a['id'], 'title' => $a['title'], 'kind' => $a['kind'], 'status' => $a['status'],
+                       'appKind' => $a['appKind'], 'appKindAssigned' => $a['appKindAssigned'], 'appKindAdmin' => $a['appKindAdmin'],
+                       'deviceClasses' => $a['deviceClasses'], 'packageClasses' => $a['packageClasses'],
+                       'deviceClassesAdmin' => $a['deviceClassesAdmin']];
+        }
+        $pick = fn (array $list, array $keys) => array_map(fn ($x) => array_intersect_key($x, array_flip($keys)), $list);
+        return ['deviceClasses' => $pick($lists['deviceClasses'], ['id', 'name']), 'appKinds' => $pick($lists['appKinds'], ['id', 'name', 'about']),
+                'feeds' => $pick($lists['feeds'], ['id', 'name']), 'off' => self::offJson($this->availabilityOff()), 'apps' => $apps];
+    }
+
+    /** The switches as JSON objects (an empty part is {}, not []). */
+    public static function offJson(array $off): object
+    {
+        return (object) array_map(fn ($o) => (object) $o, $off);
+    }
+
     // ---- Publishing ---------------------------------------------------------------------------
 
     public function publish(): array
@@ -956,6 +1036,8 @@ final class Catalog
                 'summary' => $a['summary'], 'description' => (string) $a['description'], 'categories' => $a['categories'],
                 'icon' => $this->publishedIcon($a), 'screenshots' => $this->publishedScreenshots($a), 'license' => $a['license'], 'homepage' => $a['homepage'],
                 'donation' => $a['donation'], 'featured' => $a['featured'], 'rating' => $a['rating'], 'version' => $a['version'],
+                // Its kind and the device classes it is offered on (docs/APP-STORE.md 3.17).
+                'appKind' => $a['appKind'], 'deviceClasses' => $a['deviceClasses'],
             ];
             // Where its source code is (an open-source app Phoenix hosts: applyListing).
             if (($a['source'] ?? '') !== '') {
@@ -1003,6 +1085,9 @@ final class Catalog
             'source' => ['id' => 'phoenix', 'name' => $this->config['name']],
             'categories' => array_keys($categories), 'apps' => $apps,
             'accounts' => array_merge(array_column($accountTypes, 0), array_column($connectorTypes, 0)),
+            // What the admin switched off where, by kind and by feed; devices filter.
+            'availability' => ['deviceClasses' => Availability::ids('deviceClasses'), 'appKinds' => Availability::ids('appKinds'),
+                               'feeds' => Availability::ids('feeds'), 'off' => self::offJson($this->availabilityOff())],
         ];
         $json = json_encode($index, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n";
         $dir = $this->publicDir();

@@ -31,7 +31,10 @@ final class Ipk
      * or null when it has none; a malformed one, or one whose newest version is not the
      * package's, is refused with the validator's message.
      *
-     * @return array{control: array, appinfo: array, appId: string, version: string, files: string[], connector: bool, changelog: ?array}
+     * deviceClasses: the device classes its appinfo.json's "phoenix" says it is made for
+     * (docs/APP-STORE.md 3.17), null for all; an unknown class is refused.
+     *
+     * @return array{control: array, appinfo: array, appId: string, version: string, files: string[], connector: bool, changelog: ?array, deviceClasses: ?array}
      */
     public static function check(string $bytes, bool $connectors = false): array
     {
@@ -106,9 +109,11 @@ final class Ipk
         // there, its newest version the package's.
         $log = $data[$dir . 'changelog.json'] ?? null;
         $changelog = $log && $log['type'] === 'file' ? Changelog::parse($log['data'], $version) : null;
+        // The device classes it is made for (docs/APP-STORE.md 3.17; optional: all).
+        $classes = Availability::classes($info['phoenix']['deviceClasses'] ?? null, 'appinfo.json phoenix.deviceClasses');
         return ['control' => $fields, 'appinfo' => $info, 'appId' => $appId, 'version' => $version,
                 'files' => array_keys(array_filter($data, fn ($f) => $f['type'] === 'file')), 'connector' => $connector,
-                'changelog' => $changelog];
+                'changelog' => $changelog, 'deviceClasses' => $classes];
     }
 
     // readAr, readTar and parseControl are also server/drivers' .ipk reader.

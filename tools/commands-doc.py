@@ -354,18 +354,21 @@ it("Check a bundle against UTM's own source", "`--qemu` takes `macos`, `ios` or 
    ["python3 tools/check-utm-bundle.py out/Phoenix-pinetab2.utm --qemu ios"])
 
 sec("Local servers")
-it("Marketplace catalog", "PHP 8 with sodium and pdo_sqlite, on port 8088. The simulator starts it itself. Its review page is `/admin`; the token is in `server/marketplace/data/admin.token`.", B, WP,
-   "webos-phoenix/server/marketplace/bin/serve.sh:20 · bin/marketplace.php:118,147 · README.md:170-181",
-   ["server/marketplace/bin/serve.sh", ("php server/marketplace/bin/marketplace.php seed", "also init, publish, admin, queue, approve, reject, key, developer"),
-    ("php server/marketplace/bin/marketplace.php upload FILE.ipk", "--phoenix for a Phoenix app, with --listing LISTING.json"), "python3 server/marketplace/bin/probe-pwas.py"])
+it("Marketplace catalog", "PHP 8 with sodium and pdo_sqlite, on port 8088. One for every simulator of every checkout, in `~/.local/share/phoenix/catalog` (on a Mac `~/Library/Application Support/Phoenix/catalog`; `MARKETPLACE_DATA` elsewhere; the first start imports a checkout's old `server/marketplace/data`). The simulator starts it itself, and it runs while any simulator does; `serve.sh` by hand serves until stopped (`--no-fill`: without filling itself). Its review page is `/admin`; the token is `admin.token` in that folder. `availability` turns kinds of app, feeds and apps on or off per device class (docs/APP-STORE.md 3.17).", B, WP,
+   "webos-phoenix/server/marketplace/bin/serve.sh:9-16,35-43,135-185 · bin/marketplace.php:43-52,207-245 · README.md \"On this computer (for now)\", \"Device classes and kinds\"",
+   ["server/marketplace/bin/serve.sh", ("php server/marketplace/bin/marketplace.php seed", "also init, publish, admin, queue, approve, reject, key, developer, versions"),
+    ("php server/marketplace/bin/marketplace.php upload FILE.ipk", "--phoenix for a Phoenix app, with --listing LISTING.json"),
+    ("php server/marketplace/bin/marketplace.php availability off kind legacy phone", "what is on where: also on, feed NAME, app ID classes CLASS,..., app ID kind KIND; alone, prints it"),
+    "python3 server/marketplace/bin/probe-pwas.py"])
 it("The Marketplace's hosted apps", "Open-source web apps from their upstreams' releases (pinned in `server/marketplace/catalog/web-apps.json`; docs/WEB-APP-CATALOG.md), and the 2.0 apps from a phoenix-default-apps checkout (`--from` or `PHOENIX_DEFAULT_APPS`; skipped without one). Downloads go to a cache outside the repository (`--cache`, `PHOENIX_WEB_APPS_CACHE`). `--software-gl` for WebGL 2 apps on a machine without a GPU.", B, WP,
-   "webos-phoenix/server/marketplace/bin/web-apps.py:28-45,655-680 · bin/marketplace.php:26,177 · README.md \"Open-source web apps and the 2.0 apps\"",
+   "webos-phoenix/server/marketplace/bin/web-apps.py:28-58,738-975 · bin/marketplace.php:26,177 · README.md \"Open-source web apps and the 2.0 apps\"",
    [("python3 -I server/marketplace/bin/web-apps.py check", "the manifest, offline; also list"),
     ("python3 -I server/marketplace/bin/web-apps.py publish", "every app, or IDs; also fetch, pack"),
     ("python3 -I server/marketplace/bin/web-apps.py shoot photocraft --software-gl", "screenshots for the listing"),
-    ("python3 -I server/marketplace/bin/web-apps.py default-apps --from ../phoenix-default-apps --publish", "the 2.0 apps")])
-it("Update feed", "The catalog server also serves `/updates/`; alone, the feed runs on port 8089. `--release-notes FILE` takes the release's notes from a release notes file (its entry for the version).", B, WP, "webos-phoenix/server/updates/README.md:28-30,46-50 · bin/serve.sh:9 · bin/updates.php:20-33",
-   ["UPDATES_FEED=server/marketplace/data/updates php server/updates/bin/updates.php simulator --version 0.2.0 --build 2 --note \"What changed\"",
+    ("python3 -I server/marketplace/bin/web-apps.py default-apps --from ../phoenix-default-apps --publish", "the 2.0 apps"),
+    ("python3 -I server/marketplace/bin/web-apps.py fill --force", "the local catalog fills itself (serve.sh runs it; Services > Refill Catalog)")])
+it("Update feed", "The catalog server also serves `/updates/` (from the catalog's folder); alone, the feed runs on port 8089. `--release-notes FILE` takes the release's notes from a release notes file (its entry for the version).", B, WP, "webos-phoenix/server/updates/README.md:28-30,46-50 · bin/serve.sh:9 · bin/updates.php:20-33",
+   ["UPDATES_FEED=~/.local/share/phoenix/catalog/updates php server/updates/bin/updates.php simulator --version 0.2.0 --build 2 --note \"What changed\"",
     "server/updates/bin/serve.sh", ("php server/updates/bin/updates.php show", "also publish, withdraw")])
 it("Driver catalog", "Port 8090. `DRIVERS_DATA=sample` serves the simulator's sample catalog.", B, WP, "webos-phoenix/server/drivers/bin/serve.sh:5-9 · README.md:36-41",
    ["server/drivers/bin/serve.sh", ("php server/drivers/bin/drivers.php init", "also add, remove, publish, show, verify, reports, sample, keygen, pubkey, build, sign, attach, handover")])

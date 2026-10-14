@@ -2315,15 +2315,15 @@ python3 tools/check-utm-bundle.py out/Phoenix-pinetab2.utm --qemu ios
 
 ### Marketplace catalog
 
-PHP 8 with sodium and pdo_sqlite, on port 8088. The simulator starts it itself. Its review page is `/admin`; the token is in `server/marketplace/data/admin.token`.
+PHP 8 with sodium and pdo_sqlite, on port 8088. One for every simulator of every checkout, in `~/.local/share/phoenix/catalog` (on a Mac `~/Library/Application Support/Phoenix/catalog`; `MARKETPLACE_DATA` elsewhere; the first start imports a checkout's old `server/marketplace/data`). The simulator starts it itself, and it runs while any simulator does; `serve.sh` by hand serves until stopped (`--no-fill`: without filling itself). Its review page is `/admin`; the token is `admin.token` in that folder. `availability` turns kinds of app, feeds and apps on or off per device class (docs/APP-STORE.md 3.17).
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/server/marketplace/bin/serve.sh:20 · bin/marketplace.php:118,147 · README.md:170-181`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/server/marketplace/bin/serve.sh:9-16,35-43,135-185 · bin/marketplace.php:43-52,207-245 · README.md "On this computer (for now)", "Device classes and kinds"`
 
 ```sh
 server/marketplace/bin/serve.sh
 ```
 
-Also init, publish, admin, queue, approve, reject, key, developer:
+Also init, publish, admin, queue, approve, reject, key, developer, versions:
 
 ```sh
 php server/marketplace/bin/marketplace.php seed
@@ -2335,6 +2335,12 @@ php server/marketplace/bin/marketplace.php seed
 php server/marketplace/bin/marketplace.php upload FILE.ipk
 ```
 
+What is on where: also on, feed NAME, app ID classes CLASS,..., app ID kind KIND; alone, prints it:
+
+```sh
+php server/marketplace/bin/marketplace.php availability off kind legacy phone
+```
+
 ```sh
 python3 server/marketplace/bin/probe-pwas.py
 ```
@@ -2343,7 +2349,7 @@ python3 server/marketplace/bin/probe-pwas.py
 
 Open-source web apps from their upstreams' releases (pinned in `server/marketplace/catalog/web-apps.json`; docs/WEB-APP-CATALOG.md), and the 2.0 apps from a phoenix-default-apps checkout (`--from` or `PHOENIX_DEFAULT_APPS`; skipped without one). Downloads go to a cache outside the repository (`--cache`, `PHOENIX_WEB_APPS_CACHE`). `--software-gl` for WebGL 2 apps on a machine without a GPU.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/server/marketplace/bin/web-apps.py:28-45,655-680 · bin/marketplace.php:26,177 · README.md "Open-source web apps and the 2.0 apps"`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/server/marketplace/bin/web-apps.py:28-58,738-975 · bin/marketplace.php:26,177 · README.md "Open-source web apps and the 2.0 apps"`
 
 The manifest, offline; also list:
 
@@ -2369,14 +2375,20 @@ The 2.0 apps:
 python3 -I server/marketplace/bin/web-apps.py default-apps --from ../phoenix-default-apps --publish
 ```
 
+The local catalog fills itself (serve.sh runs it; Services > Refill Catalog):
+
+```sh
+python3 -I server/marketplace/bin/web-apps.py fill --force
+```
+
 ### Update feed
 
-The catalog server also serves `/updates/`; alone, the feed runs on port 8089. `--release-notes FILE` takes the release's notes from a release notes file (its entry for the version).
+The catalog server also serves `/updates/` (from the catalog's folder); alone, the feed runs on port 8089. `--release-notes FILE` takes the release's notes from a release notes file (its entry for the version).
 
 Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/server/updates/README.md:28-30,46-50 · bin/serve.sh:9 · bin/updates.php:20-33`
 
 ```sh
-UPDATES_FEED=server/marketplace/data/updates php server/updates/bin/updates.php simulator --version 0.2.0 --build 2 --note "What changed"
+UPDATES_FEED=~/.local/share/phoenix/catalog/updates php server/updates/bin/updates.php simulator --version 0.2.0 --build 2 --note "What changed"
 ```
 
 ```sh

@@ -1235,25 +1235,49 @@ Item {
           } },
 
         // Services: what the simulator runs on this computer for the
-        // device. The Marketplace's catalog (SimMarketplace): checked while
-        // it runs or starts; its state in the item's text.
+        // device. The Marketplace's catalog (SimMarketplace): one for every
+        // simulator of this user (docs/APP-STORE.md 3.16); checked while it
+        // runs or starts; its state, and whose it is, in the item's text.
         { id: "marketplaceCatalog", menu: "services", text: qsTr("Marketplace Catalog"),
           tip: qsTr("The Phoenix Marketplace's catalog service on this computer (server/marketplace, PHP 8), "
-                    + "where the simulator's Marketplace reads it; it stops with the simulator"),
+                    + "where the simulator's Marketplace reads it: one for every simulator, whatever its checkout. "
+                    + "It runs while any simulator does; stopping it here stops it for all of them"),
           checked: function () { return root.catalogState === "running" || root.catalogState === "starting"; },
           label: function () { return root.catalogMenuText(); },
-          tipNow: function () { return root.catalogState === "failed" ? root.catalog.error : ""; },
+          tipNow: function () {
+              if (root.catalogState === "failed")
+                  return root.catalog.error;
+              return root.catalogState === "running" && root.catalog.origin === "older"
+                  ? qsTr("A simulator of an older build started it, from its own checkout's catalog: it is used as it is, "
+                         + "and the Marketplace asks to check its key") : "";
+          },
           enabled: function () { return root.catalog !== null; },
           run: function () { root.toggleCatalog(); } },
         { id: "marketplaceCatalogBrowser", menu: "services", text: qsTr("Open Catalog in Browser"),
-          tip: qsTr("The catalog's review page (/admin; its token is server/marketplace/data/admin.token) in this computer's browser"),
+          tip: qsTr("The catalog's review page (/admin; its token is admin.token in the catalog's folder) in this computer's browser"),
           enabled: function () { return root.catalogState === "running"; },
           run: function () { Qt.openUrlExternally(root.catalog.url + "admin"); } },
+        { id: "marketplaceCatalogRefill", menu: "services", text: qsTr("Refill Catalog"),
+          tip: qsTr("Publish the open-source web apps (from their upstreams: the network) and the 2.0 apps of a built "
+                    + "phoenix-default-apps checkout into the catalog now, in the background (bin/web-apps.py fill); "
+                    + "each start does it when something changed"),
+          label: function () { return root.refillMenuText(); },
+          tipNow: function () { return root.catalog && root.catalog.fillText ? root.catalog.fillText : ""; },
+          enabled: function () {
+              return root.catalog !== null && root.catalog.origin !== "older"
+                  && root.catalog.fillState !== "running" && root.catalog.fillState !== "starting";
+          },
+          run: function () { root.catalog.refill(); } },
+        { id: "marketplaceCatalogFolder", menu: "services", text: qsTr("Show Catalog Folder"),
+          tip: qsTr("Where the catalog keeps its database, signing key, packages and published files"),
+          tipNow: function () { return root.catalog ? root.catalog.folder : ""; },
+          enabled: function () { return root.catalog !== null; },
+          run: function () { Qt.openUrlExternally("file://" + root.catalog.folder); } },
         { id: "marketplaceCatalogLog", menu: "services", text: qsTr("Show Catalog Log"),
-          tip: qsTr("server/marketplace/data/simulator.log"),
+          tip: qsTr("simulator.log in the catalog's folder: its start, its requests, and its fills"),
           enabled: function () {
               return root.catalogState === "starting" || root.catalogState === "failed"
-                  || (root.catalogState === "running" && root.catalog.ownsServer);
+                  || (root.catalogState === "running" && root.catalog.origin !== "older");
           },
           run: function () { Qt.openUrlExternally("file://" + root.catalog.logFile); } },
         { separator: true, menu: "services" },
@@ -1383,13 +1407,38 @@ Item {
             return catalog.settingUp ? qsTr("Marketplace Catalog: setting up (the first time)…")
                                      : qsTr("Marketplace Catalog: starting…");
         case "running":
-            return catalog.ownsServer ? qsTr("Marketplace Catalog: running at %1").arg(where)
-                                      : qsTr("Marketplace Catalog: running at %1 (started elsewhere)").arg(where);
+            if (catalog.origin === "older")
+                return qsTr("Marketplace Catalog: running at %1 (an older simulator's, used as it is)").arg(where);
+            return catalog.origin === "shared" ? qsTr("Marketplace Catalog: running at %1 (shared, another simulator started it)").arg(where)
+                                               : qsTr("Marketplace Catalog: running at %1").arg(where);
         case "failed":
             var why = catalog.error.split("\n")[0].replace(/:$/, "");
             return qsTr("Marketplace Catalog: failed (%1)").arg(why.length > 70 ? why.slice(0, 69) + "…" : why);
         }
         return qsTr("Marketplace Catalog");
+    }
+    // Refill Catalog: the fill's progress, or how the last one went.
+    function refillMenuText() {
+        if (!catalog)
+            return qsTr("Refill Catalog");
+        var text = catalog.fillText || "";
+        var shortText = text.length > 60 ? text.slice(0, 59) + "…" : text;
+        var at = catalog.fillFinished ? new Date(catalog.fillFinished) : null;
+        var when = at && !isNaN(at.getTime()) ? Qt.formatTime(at, "hh:mm") : "";
+        switch (catalog.fillState) {
+        case "starting":
+        case "running":
+            return shortText ? qsTr("Refill Catalog: filling (%1)…").arg(shortText) : qsTr("Refill Catalog: filling…");
+        case "done":
+            return when ? qsTr("Refill Catalog (filled at %1)").arg(when) : qsTr("Refill Catalog (filled)");
+        case "offline":
+            return qsTr("Refill Catalog (offline last time: tried again at the next start)");
+        case "failed":
+            return qsTr("Refill Catalog (the last fill failed: see the log)");
+        case "stopped":
+            return qsTr("Refill Catalog (the last fill stopped before it finished)");
+        }
+        return qsTr("Refill Catalog");
     }
     function toggleCatalog() {
         if (!catalog)

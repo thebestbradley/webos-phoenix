@@ -70,6 +70,13 @@
 //                                          checked against the SHA-256 the signed
 //                                          index gives; left out when it cannot be
 //                                          read)
+//   getAvailability {}                  -> {deviceClass, deviceClasses: [{id, name}],
+//                                          kinds: [{id, name, about, hidden,
+//                                          offByCatalog}], feeds: [{id, name,
+//                                          offByCatalog}]}: which apps this device
+//                                          is offered (docs/APP-STORE.md 3.17)
+//   setKind {kind, enabled}             shows or hides a kind of app on this
+//                                          device -> as getAvailability
 //   install {sourceId, id, subscribe}   (also an ongoing activity in the
 //                                       notification area while it runs)
 //                                       progress {state: "downloading" |
@@ -83,11 +90,21 @@
 //   updateAll {}                        installs every update there is
 //   scheduled {$activity}               the daily check (an activity)
 //
+// Which apps are offered here (docs/APP-STORE.md 3.17, lib/availability.js):
+// the device's class (the shell's layout: com.palm.systemmanager
+// getSystemStatus formFactor), each entry's kind and device classes, the
+// switches of the catalog the device ships with (for every feed) and of
+// each catalog for its own apps, each source's deviceClasses (the sources
+// file), and the kinds the user hid here (setKind). browse, search and
+// listAccountTypes leave out what is off here; getApp and listInstalled
+// say why (offHere {reason: "app" | "kind" | "feed" | "hidden", text});
+// install refuses it (OFF_HERE), but an installed app keeps its updates.
+//
 // Errors: {returnValue: false, errorCode, errorText}: NOT_FOUND, UNTRUSTED,
 // BAD_SIGNATURE, NO_DELEGATION, REVOKED_KEY, EXPIRED, ROLLBACK, BAD_INDEX,
 // BAD_SERVER, CONNECTION_FAILED, DOWNLOAD_FAILED, BAD_PACKAGE, UNSUPPORTED,
 // NEEDS_DEVMODE, NEEDS_MOJO, BAD_MANIFEST, REVOKED, INSTALL_FAILED, BUSY,
-// BAD_PARAMS, NOT_SET_UP.
+// BAD_PARAMS, NOT_SET_UP, OFF_HERE.
 //
 // The Phoenix catalog's address and keys (the built-in "phoenix" source)
 // and the revocation list's address come from /etc/palm/phoenix/servers.json
@@ -120,13 +137,15 @@ var pwa = require("./lib/pwa");
 var appMuseum = require("./lib/appmuseum");
 var preware = require("./lib/preware");
 var accountTypes = require("./lib/accounts");
+var availability = require("./lib/availability");
 var version = require("./lib/version");
 var md5 = require("./lib/md5");
 var b64 = require("./lib/b64");
 
 var SERVICE = "org.webosphoenix.service.packages";
 var METHODS = ["getSources", "addSource", "trustSource", "setSource", "removeSource", "refresh", "browse", "search",
-               "getApp", "install", "remove", "listInstalled", "updateAll", "scheduled", "listAccountTypes"];
+               "getApp", "install", "remove", "listInstalled", "updateAll", "scheduled", "listAccountTypes",
+               "getAvailability", "setKind"];
 var ACTIVITY = "org.webosphoenix.marketplace.updates";
 var PAGE = 20;
 var MAX_PACKAGE = 64 * 1024 * 1024;
@@ -155,7 +174,9 @@ function clone(o) { return JSON.parse(JSON.stringify(o)); }
 //   gzip: {gzip, gunzip}
 //   state.load() / state.save(obj)       the service's own settings and caches
 //   temp.write(name, bytes) -> path; temp.remove(path)
-//   defaultSources() -> [{id, name, kind, url, key?, enabled}]
+//   defaultSources() -> [{id, name, kind, url, key?, enabled, appKinds?, deviceClasses?}]
+//   deviceClass() (optional) -> "phone" | "tablet" | "desktop" | "": this
+//            device's class (default: getSystemStatus's formFactor)
 //   servers() (optional) -> Promise<the resolved servers.json>: its
 //            "catalog" {url, key, root} is the "phoenix" source's, its
 //            "revocations" {url} the revocation list
@@ -217,15 +238,25 @@ function createPackagesService(deps) {
         s.sources = s.sources || [];
         s.indexes = s.indexes || {};
         s.installed = s.installed || {};
-        // Sources the device ships with join once, and stay as the user sets them.
+        // The kinds of app the user hid on this device (setKind).
+        s.hiddenKinds = s.hiddenKinds || [];
+        // Sources the device ships with join once, and stay as the user sets them;
+        // the kinds they bring and the classes they serve follow the sources file.
         var known = {};
         s.sources.forEach(function (x) { known[x.id] = true; });
         shippedSources().forEach(function (d) {
-            if (known[d.id]) return adoptKey(s, sourceOf(s, d.id), d);
+            if (known[d.id]) {
+                var src = sourceOf(s, d.id);
+                if (src && src.builtin) {
+                    src.appKinds = d.appKinds || null;
+                    src.deviceClasses = d.deviceClasses || null;
+                }
+                return adoptKey(s, src, d);
+            }
             if ((s.removedDefaults || []).indexOf(d.id) >= 0) return;
             s.sources.push({ id: d.id, name: d.name, kind: d.kind, url: d.url, key: d.key || null, root: d.root || null, enabled: !!d.enabled,
                              builtin: true, lastBuild: null, refreshed: null, error: null, fingerprint: null,
-                             keyFromDevice: !!(d.key || d.root) });
+                             keyFromDevice: !!(d.key || d.root), appKinds: d.appKinds || null, deviceClasses: d.deviceClasses || null });
         });
         // The connector packages the device came with: installed from their
         // catalog, once (removed, they stay removed).
@@ -294,7 +325,10 @@ function createPackagesService(deps) {
         return { id: x.id, name: x.name, kind: x.kind, url: x.url, enabled: x.enabled, builtin: !!x.builtin,
                  trusted: x.kind !== "phoenix" || !!x.key || !!x.root, pinned: !!(x.builtin && x.keyFromDevice), insecure: insecure,
                  notSetUp: !x.url, fingerprint: x.fingerprint || null,
-                 refreshed: x.refreshed || null, error: x.error || null, count: x.count || 0 };
+                 refreshed: x.refreshed || null, error: x.error || null, count: x.count || 0,
+                 // The kinds of app it brings and the device classes it serves (null: all).
+                 appKinds: Array.isArray(x.appKinds) ? x.appKinds.filter(function (k) { return availability.KINDS.indexOf(k) >= 0; }) : null,
+                 deviceClasses: availability.classesOf(x.deviceClasses) };
     }
 
     // ---- Reading the catalogs ------------------------------------------------------------
@@ -526,6 +560,60 @@ function createPackagesService(deps) {
         });
     }
 
+    // ---- Which apps are offered here (docs/APP-STORE.md 3.17) ------------------------------
+
+    // This device's class: the shell's layout (getSystemStatus formFactor:
+    // the device profile's, the simulator's --phone/--tablet/--device, the
+    // adaptive simulator's as its window changes), "" until it has said.
+    function deviceClass() {
+        function known(c) { return availability.CLASSES.indexOf(c) >= 0 ? c : ""; }
+        if (deps.deviceClass) return Promise.resolve(deps.deviceClass()).then(known, function () { return ""; });
+        var asked = Promise.resolve(deps.luna.call("luna://com.palm.systemmanager/getSystemStatus", {}))
+            .then(function (r) { return r && r.formFactor; }, function () { return ""; });
+        // A system manager that does not answer is no reason to show nothing.
+        var late = new Promise(function (resolve) { setTimeout(function () { resolve(""); }, 1500); });
+        return Promise.race([asked, late]).then(known);
+    }
+    // The switches of the catalog the device ships with (the built-in
+    // Phoenix catalog, its key the device's or the one the user checked):
+    // they apply to every feed.
+    function shippedPolicy(s) {
+        var src = sourceOf(s, "phoenix");
+        var idx = src && src.enabled && src.builtin && src.kind === "phoenix" && (src.key || src.root) ? s.indexes[src.id] : null;
+        return idx && idx.availability ? idx.availability : null;
+    }
+    function offContext(s, cls) {
+        return { deviceClass: cls || "", hidden: s.hiddenKinds || [], policy: shippedPolicy(s) };
+    }
+    // Why an entry is not offered here, or null: its own catalog's switches
+    // count for it too (another Phoenix-format catalog's), and its source's
+    // device classes.
+    function offHere(s, ctx, e) {
+        if (!ctx) return null;
+        var src = sourceOf(s, e.sourceId), idx = src && s.indexes[src.id];
+        var own = src && src.kind === "phoenix" && idx && idx.availability && idx.availability !== ctx.policy ? idx.availability : null;
+        return availability.offFor(e, Object.assign({}, ctx, {
+            own: own, sourceClasses: src ? availability.classesOf(src.deviceClasses) : null, sourceName: src ? src.name : ""
+        }));
+    }
+    function withClass(s, then) {
+        return deviceClass().then(function (cls) { return then(offContext(load(), cls)); });
+    }
+    function availabilityNow() {
+        return syncServers().then(deviceClass).then(function (cls) {
+            var s = load(), policy = shippedPolicy(s);
+            var offBy = function (part, id) { return !!(cls && policy && (policy.off[part][id] || []).indexOf(cls) >= 0); };
+            return {
+                returnValue: true, deviceClass: cls,
+                deviceClasses: availability.LISTS.deviceClasses.map(function (c) { return { id: c.id, name: c.name }; }),
+                kinds: availability.LISTS.appKinds.map(function (k) {
+                    return { id: k.id, name: k.name, about: k.about, hidden: s.hiddenKinds.indexOf(k.id) >= 0, offByCatalog: offBy("kinds", k.id) };
+                }),
+                feeds: availability.LISTS.feeds.map(function (f) { return { id: f.id, name: f.name, offByCatalog: offBy("feeds", f.id) }; })
+            };
+        });
+    }
+
     // ---- Browsing ------------------------------------------------------------------------
 
     // What is installed for a catalog entry: by its id, or (Classics, whose
@@ -542,9 +630,14 @@ function createPackagesService(deps) {
         return "it is a native webOS app" + (arch && arch !== "all" ? ", compiled for " + arch + " processors" : "") +
             ". Phoenix runs webOS web apps (Enyo); running native apps is planned, not here yet";
     }
-    function withState(s, e) {
+    function withState(s, e, ctx) {
         var found = installedFor(s, e), inst = found && found.rec;
         var o = clone(e);
+        // Its kind (the index's, else by where it comes from), and why it is
+        // not offered here (docs/APP-STORE.md 3.17).
+        o.appKind = availability.kindOf(e);
+        var off = offHere(s, ctx, e);
+        if (off) o.offHere = off;
         // Where the history is: getApp reads it (versionHistory).
         delete o.detail;
         o.installed = inst ? { version: inst.version, sourceId: inst.sourceId } : null;
@@ -593,20 +686,27 @@ function createPackagesService(deps) {
     // Browsing and searching know the built-in apps first (reconcile), for
     // the entries that would update one.
     function browse(p) {
-        return reconcile().then(function () { return browseNow(p); });
+        return reconcile().then(deviceClass).then(function (cls) { return browseNow(p, cls); });
     }
-    function browseNow(p) {
+    function browseNow(p, cls) {
         p = p || {};
-        var s = load(), page = Math.max(0, p.page | 0);
+        var s = load(), page = Math.max(0, p.page | 0), ctx = offContext(s, cls);
+        var here = function (e) { return !offHere(s, ctx, e); };
         if (p.section === "classics") {
             var am = museum(s);
-            var pw = catalogApps(s, ["preware"]);
+            // The original apps hidden here, or not offered on this class: none, saying why.
+            var amSource = s.sources.filter(function (x) { return x.kind === "appmuseum" && x.enabled; })[0];
+            var classicsOff = offHere(s, ctx, { id: "", kind: "classic", sourceId: amSource ? amSource.id : "" });
+            if (classicsOff && classicsOff.reason !== "feed") {
+                return Promise.resolve({ returnValue: true, apps: [], categories: [], more: false, offHere: classicsOff });
+            }
+            var pw = catalogApps(s, ["preware"]).filter(here);
             var fromFeeds = pw.filter(function (e) { return !p.category || e.categories.indexOf(p.category) >= 0; });
             var first = fromFeeds.slice(page * PAGE, (page + 1) * PAGE);
-            var museumPage = am ? am.browse({ category: p.category, page: page, count: PAGE }) : Promise.resolve([]);
+            var museumPage = am && !classicsOff ? am.browse({ category: p.category, page: page, count: PAGE }) : Promise.resolve([]);
             return museumPage.then(function (apps) {
-                var all = apps.concat(first);
-                return { returnValue: true, apps: all.map(function (e) { return withState(s, e); }),
+                var all = apps.filter(here).concat(first);
+                return { returnValue: true, apps: all.map(function (e) { return withState(s, e, ctx); }),
                          categories: ["Books", "Business", "Education", "Entertainment", "Finance", "Food", "Games", "Health & Fitness",
                                       "Lifestyle", "Music", "Navigation", "News", "Photography", "Productivity", "Reference", "Social Networking",
                                       "Sports", "Travel", "Utilities", "Weather"],
@@ -614,26 +714,34 @@ function createPackagesService(deps) {
             }, errorReply);
         }
         var kinds = p.section === "web" ? ["pwa"] : p.section === "apps" ? ["ipk"] : ["pwa", "ipk"];
-        var apps = catalogApps(s, kinds);
+        var apps = catalogApps(s, kinds).filter(here);
         if (p.section === "featured" || !p.section) apps = apps.filter(function (e) { return e.featured; }).concat(apps.filter(function (e) { return !e.featured; }));
         var cats = {};
         apps.forEach(function (e) { e.categories.forEach(function (c) { cats[c] = true; }); });
         if (p.category) apps = apps.filter(function (e) { return e.categories.indexOf(p.category) >= 0; });
         if (p.section !== "featured" && p.section) apps.sort(function (a, b) { return a.title.localeCompare(b.title); });
-        return Promise.resolve({ returnValue: true, apps: apps.slice(page * PAGE, (page + 1) * PAGE).map(function (e) { return withState(s, e); }),
+        return Promise.resolve({ returnValue: true, apps: apps.slice(page * PAGE, (page + 1) * PAGE).map(function (e) { return withState(s, e, ctx); }),
                                  categories: Object.keys(cats).sort(), more: apps.length > (page + 1) * PAGE });
     }
 
     // The account types of the Phoenix catalogs switched on, each template
     // once (the first catalog's). A catalog read before C0, or an old index,
     // has none.
-    function catalogAccountTypes(s) {
+    function catalogAccountTypes(s, ctx) {
         var out = [], seen = {};
         s.sources.forEach(function (src) {
             var idx = s.indexes[src.id];
             if (!src.enabled || src.kind !== "phoenix" || !idx) return;
             (idx.accounts || []).forEach(function (t) {
                 if (seen[t.templateId]) return;
+                // A connector package not offered on this device (its kind, the
+                // connectors' feed, its classes) is not offered here either,
+                // unless it is installed; the built-in account types always are.
+                if (ctx && t.package && !t.package.builtin && !s.installed[t.package.id]) {
+                    var pkg = idx.apps.filter(function (a) { return a.id === t.package.id; })[0]
+                        || { id: t.package.id, kind: "connector", sourceId: src.id };
+                    if (offHere(s, ctx, pkg)) return;
+                }
                 seen[t.templateId] = true;
                 // Phoenix's own connector from the catalog the device ships with
                 // (pre-installed or preinstalled.json "firstParty": the drives, Jabber, ...):
@@ -648,26 +756,29 @@ function createPackagesService(deps) {
     }
     function listAccountTypes(p) {
         var caps = p && p.capability !== undefined ? [].concat(p.capability).filter(function (c) { return typeof c === "string"; }) : null;
-        var list = catalogAccountTypes(load()).filter(function (t) { return accountTypes.hasCapability(t, caps); });
-        return Promise.resolve({ returnValue: true, accountTypes: clone(list) });
+        return withClass(load(), function (ctx) {
+            var list = catalogAccountTypes(load(), ctx).filter(function (t) { return accountTypes.hasCapability(t, caps); });
+            return { returnValue: true, accountTypes: clone(list) };
+        });
     }
 
     function search(p) {
-        return reconcile().then(function () { return searchNow(p); });
+        return reconcile().then(deviceClass).then(function (cls) { return searchNow(p, cls); });
     }
-    function searchNow(p) {
+    function searchNow(p, cls) {
         var words = String((p && p.query) || "").toLowerCase().trim();
         if (!words) return Promise.resolve({ returnValue: true, apps: [], accountTypes: [] });
-        var s = load();
+        var s = load(), ctx = offContext(s, cls);
+        var here = function (e) { return !offHere(s, ctx, e); };
         var terms = words.split(/\s+/);
-        var types = catalogAccountTypes(s).filter(function (t) { return accountTypes.matches(t, terms); });
-        var hits = catalogApps(s, ["pwa", "ipk", "preware"]).filter(function (e) {
+        var types = catalogAccountTypes(s, ctx).filter(function (t) { return accountTypes.matches(t, terms); });
+        var hits = catalogApps(s, ["pwa", "ipk", "preware"]).filter(here).filter(function (e) {
             var hay = (e.title + " " + e.summary + " " + e.developer.name + " " + e.categories.join(" ")).toLowerCase();
             return terms.every(function (t) { return hay.indexOf(t) >= 0; });
         });
         var am = museum(s);
         return (am ? am.search(words).then(null, function () { return []; }) : Promise.resolve([])).then(function (classics) {
-            return { returnValue: true, apps: hits.concat(classics.slice(0, 30)).map(function (e) { return withState(s, e); }),
+            return { returnValue: true, apps: hits.concat(classics.filter(here).slice(0, 30)).map(function (e) { return withState(s, e, ctx); }),
                      accountTypes: clone(types) };
         });
     }
@@ -912,12 +1023,17 @@ function createPackagesService(deps) {
             pending(st);
             push(Object.assign({ returnValue: true, id: p.id }, st));
         };
-        var shipped = null;
-        return reconcile().then(function () {
+        var shipped = null, cls = "";
+        return reconcile().then(deviceClass).then(function (c) {
+            cls = c;
             s = load();
             return findApp(s, p.sourceId, p.id);
         }).then(function (e) {
             entry = e;
+            // Not offered on this device (docs/APP-STORE.md 3.17): not
+            // installed; one installed already still takes its updates.
+            var off = installedFor(s, entry) ? null : offHere(s, offContext(s, cls), entry);
+            if (off) throw err("OFF_HERE", off.text);
             // A built-in app's id: only a newer version, which takes its place.
             shipped = builtinFor(s, entry);
             if (shipped !== null && !(entry.version && version.compare(entry.version, shipped) > 0))
@@ -1070,18 +1186,25 @@ function createPackagesService(deps) {
     }
 
     function listInstalled() {
-        return reconcile().then(function () {
-            var s = load();
+        return reconcile().then(deviceClass).then(function (cls) {
+            var s = load(), ctx = offContext(s, cls);
             var ups = {}, notes = {};
             updatesOf(s).forEach(function (u) { ups[u.id] = u.entry.version; notes[u.id] = u.entry.whatsNew || null; });
             return { returnValue: true, apps: Object.keys(s.installed).sort().map(function (id) {
                 var i = s.installed[id];
                 var rv = revokedFor(s, id, i.catalogId);
+                // Its kind and whether it would be offered here now (an
+                // installed app is never removed for it: it keeps its updates).
+                var idx = s.indexes[i.sourceId];
+                var e = (idx && idx.apps.filter(function (a) { return a.id === (i.catalogId || id); })[0])
+                    || { id: i.catalogId || id, kind: i.kind || "ipk", sourceId: i.sourceId };
+                var off = offHere(s, ctx, e);
                 return { id: id, catalogId: i.catalogId || id, title: i.title, icon: ownIcons[id] || i.icon || "", catalogIcon: i.icon || "",
                          version: i.version, sourceId: i.sourceId,
                          kind: i.kind, installedAt: i.installedAt, update: ups[id] || null, whatsNew: notes[id] || null,
                          builtin: typeof i.builtin === "string" ? i.builtin : null,
-                         revoked: rv ? { reason: rv.reason, text: rv.text, date: rv.date } : null };
+                         revoked: rv ? { reason: rv.reason, text: rv.text, date: rv.date } : null,
+                         appKind: availability.kindOf(e), offHere: off };
             }) };
         });
     }
@@ -1182,8 +1305,9 @@ function createPackagesService(deps) {
             return reconcile().then(function () {
                 var s = load();
                 return findApp(s, p && p.sourceId, p && p.id).then(function (e) {
-                    return versionHistory(e).then(function (history) {
-                        var app = withState(s, e);
+                    return Promise.all([versionHistory(e), deviceClass()]).then(function (got) {
+                        var history = got[0];
+                        var app = withState(s, e, offContext(s, got[1]));
                         if (history) app.versionHistory = history;
                         return { returnValue: true, app: app };
                     });
@@ -1195,7 +1319,16 @@ function createPackagesService(deps) {
         listInstalled: listInstalled,
         updateAll: updateAll,
         scheduled: scheduled,
-        listAccountTypes: listAccountTypes
+        listAccountTypes: listAccountTypes,
+        getAvailability: function () { return availabilityNow(); },
+        setKind: function (p) {
+            if (!p || availability.KINDS.indexOf(p.kind) < 0) return Promise.resolve(fail("BAD_PARAMS", "kind: one of " + availability.KINDS.join(", ")));
+            var s = load();
+            s.hiddenKinds = s.hiddenKinds.filter(function (k) { return k !== p.kind; });
+            if (p.enabled === false) s.hiddenKinds.push(p.kind);
+            save(s);
+            return availabilityNow();
+        }
     };
 }
 

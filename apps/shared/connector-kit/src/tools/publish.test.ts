@@ -9,7 +9,7 @@
 
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { catalogDetailsProblem, catalogRoot, isLocal, publish } from "./publish";
+import { catalogDetailsProblem, catalogRoot, isLocal, localCatalogFolder, publish } from "./publish";
 import { main } from "./cli";
 import { pack } from "./package";
 import { scaffold, squarePng } from "./scaffold";
@@ -23,6 +23,15 @@ const REPO = path.resolve(__dirname, "../../../../..");
 const SERVER = path.join(REPO, "server/marketplace");
 const FEEDS = path.join(REPO, "apps/shared/connector-kit/examples/feeds");
 const hasPhp = cp.spawnSync("php", ["-r", "exit(PHP_MAJOR_VERSION >= 8 && extension_loaded('sodium') && extension_loaded('pdo_sqlite') ? 0 : 1);"]).status === 0;
+
+describe("the local catalog's folder", () => {
+    it("one per user, outside the checkouts, as serve.sh and the simulator say (docs/APP-STORE.md 3.16)", () => {
+        expect(localCatalogFolder({}, "linux", "/home/ada")).toBe("/home/ada/.local/share/phoenix/catalog");
+        expect(localCatalogFolder({ XDG_DATA_HOME: "/data/ada" }, "linux", "/home/ada")).toBe("/data/ada/phoenix/catalog");
+        expect(localCatalogFolder({}, "darwin", "/Users/ada")).toBe("/Users/ada/Library/Application Support/Phoenix/catalog");
+        expect(localCatalogFolder({ MARKETPLACE_DATA: "/srv/catalog" }, "darwin", "/Users/ada")).toBe("/srv/catalog");
+    });
+});
 
 describe("catalog addresses", () => {
     it("a catalog's root from its address or its /v1/", () => {

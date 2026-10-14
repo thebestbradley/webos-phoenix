@@ -24,6 +24,8 @@
 
 "use strict";
 
+var availability = require("./availability");
+
 var DEFAULT_URL = "https://appcatalog.webosarchive.org/";
 
 function createAppMuseum(opts) {
@@ -69,8 +71,16 @@ function createAppMuseum(opts) {
             license: "", homepage: "", donation: "", featured: !!a.inCuratorsChoice,
             rating: typeof a.starRating === "number" ? { stars: a.starRating, count: a.reviewCount | 0 } : null,
             version: "", adult: !!a.Adult,
-            devices: ["Pixi", "Pre", "Pre2", "Pre3", "Veer", "TouchPad", "LuneOS"].filter(function (d) { return a[d]; })
+            devices: ["Pixi", "Pre", "Pre2", "Pre3", "Veer", "TouchPad", "LuneOS"].filter(function (d) { return a[d]; }),
+            // docs/APP-STORE.md 3.17: the original apps are "legacy"; the
+            // devices it was made for as device classes (null: all).
+            appKind: "legacy"
         };
+    }
+    function withClasses(e) {
+        var dc = availability.classesFromDevices(e.devices);
+        if (dc) e.deviceClasses = dc;
+        return e;
     }
 
     return {
@@ -80,11 +90,11 @@ function createAppMuseum(opts) {
             var q = "WebService/getMuseumMaster.php?key=" + session + "&count=" + (p.count || 20) + "&page=" + (p.page || 0) +
                 "&sort=recommended&adult=" + (p.adult ? "true" : "false") +
                 (p.category ? "&category=" + encodeURIComponent(p.category) : "");
-            return get(q).then(function (r) { return (r.data || []).map(summaryOf); });
+            return get(q).then(function (r) { return (r.data || []).map(summaryOf).map(withClasses); });
         },
         search: function (words, adult) {
             return get("WebService/getSearchResults.php?app=" + encodeURIComponent(words)).then(function (r) {
-                return (r.data || []).filter(function (a) { return adult || !a.Adult; }).map(summaryOf);
+                return (r.data || []).filter(function (a) { return adult || !a.Adult; }).map(summaryOf).map(withClasses);
             });
         },
         details: function (museumId) {
