@@ -898,15 +898,24 @@ Item {
         alert: typeof simChrome !== "undefined" && simChrome ? function (text) { simChrome.alert(text, "", ""); } : null
     }
 
-    // Window: the device's open cards, to choose the one to view, and the
-    // shell's views (SimWindowMenu.qml). phoenix-sim lists simWindows,
-    // rebuilt as it changes, and calls simShowWindow(uid).
+    // Window: the simulators running (phoenix-sim's own), the device's
+    // open cards, to choose the one to view, and the shell's views
+    // (SimWindowMenu.qml). phoenix-sim lists simWindows, rebuilt as it
+    // changes, and calls simShowWindow(uid).
     SimWindowMenu {
         id: simWindowMenu
         shell: shell
+        chrome: typeof simChrome !== "undefined" ? simChrome : null
     }
     readonly property var simWindows: simWindowMenu.cards
     function simShowWindow(uid) { return simWindowMenu.show(uid); }
+    // What this simulator is, for the others' Window menus (SimChrome,
+    // SimInstances): its layout and size, a --device's name, its look.
+    readonly property var simInstanceInfo: ({
+        mode: shell.tablet ? "tablet" : "phone", adaptive: adaptive, width: screenWidth, height: screenHeight,
+        device: simDeviceProfile ? simDeviceProfile.name : "",
+        look: typeof shell.effectiveLook === "string" ? shell.effectiveLook : "classic"
+    })
 
     // ---- The simulator's functions ------------------------------------------------------
     // Every key and command the simulator adds, once: the keyboard shortcuts
@@ -1257,8 +1266,9 @@ Item {
               if (typeof simSettings !== "undefined")
                   simSettings.setValue("marketplace/autostart", simSettings.value("marketplace/autostart") !== "0" ? "0" : "1");
           } }
-    // Window: card view, the launcher, the next and previous card; the
-    // cards themselves are phoenix-sim's, from simWindows.
+    // Window: Next Simulator, card view, the launcher, the next and
+    // previous card; the simulators and the cards themselves are
+    // phoenix-sim's (simWindows).
     ]).concat(simWindowMenu.actions).concat([
         // Keys of the shell's own, for Help > Keyboard Shortcuts.
         { id: "justType", menu: "", text: qsTr("Just Type"), keyText: qsTr("Type in card view, or the Search key") },

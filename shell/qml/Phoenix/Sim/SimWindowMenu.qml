@@ -1,11 +1,16 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// phoenix-sim's Window menu: the cards open on the simulated device, to
-// choose the one to view, and the shell's views around them. It belongs to
-// the simulator's window, as a desktop app's Window menu, not to the
-// device, so there is no webOS original to follow; what it does on the
-// device is the shell's own (below).
+// phoenix-sim's Window menu: the simulators running on this computer
+// (each --instance), to bring another to the front; and the cards open on
+// the simulated device, to choose the one to view, and the shell's views
+// around them. It belongs to the simulator's window, as a desktop app's
+// Window menu, not to the device, so there is no webOS original to follow;
+// what it does on the device is the shell's own (below).
+//
+// The simulators are phoenix-sim's (SimChrome, SimInstances: a per-user
+// folder every simulator lists itself in, whatever checkout or build it
+// came from); here are only Next Simulator and the section titles.
 //
 // The cards are card view's, in its order and stacks (CardView.groups):
 // each stack's first card, then the cards stacked on it (a window the app
@@ -42,6 +47,8 @@ QtObject {
 
     // The shell (Shell.qml): its card view and its window source.
     property var shell: null
+    // phoenix-sim's window (SimChrome), null without one (the tests).
+    property var chrome: null
     readonly property var cardView: shell ? shell.cardView : null
     readonly property var windows: shell ? shell.source : null
 
@@ -113,8 +120,20 @@ QtObject {
         shell.shortcut(action);
     }
 
-    // For sim.qml's simActions (menu "window").
+    // For sim.qml's simActions (menu "window"). A separator with a text is
+    // a section's title. The simulators go after Simulators, before Next
+    // Simulator (SimChrome::refreshInstances).
     readonly property var actions: [
+        { separator: true, menu: "window", text: qsTr("Simulators") },
+        // Keys the shell and the simulator leave free, as Next Card's.
+        { id: "nextInstance", menu: "window", text: qsTr("Next Simulator"), keys: ["Ctrl+Shift+\\"],
+          tip: qsTr("The next simulator running on this computer (--instance) in front"),
+          enabled: function () { return !!menu.chrome && menu.chrome.hasOtherInstances(); },
+          run: function () {
+              if (menu.chrome)
+                  menu.chrome.showNextInstance();
+          } },
+        { separator: true, menu: "window", text: qsTr("Cards") },
         { id: "windowCardView", menu: "window", text: qsTr("Card View"),
           tip: qsTr("The open cards side by side, as the gesture up from an app shows them"),
           enabled: function () { return menu.commandsAllowed; },

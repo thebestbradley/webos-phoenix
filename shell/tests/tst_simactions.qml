@@ -259,12 +259,24 @@ Item {
         // chosen shown (simShowWindow), and Next Card and Previous Card on
         // keys of their own.
         function test_windowMenu() {
-            var w = ["windowCardView", "windowLauncher", "nextCard", "previousCard"].map(entry);
+            var w = ["nextInstance", "windowCardView", "windowLauncher", "nextCard", "previousCard"].map(entry);
             for (var i = 0; i < w.length; ++i) {
                 verify(w[i] && w[i].menu === "window" && w[i].run && w[i].dynamic, "in the Window menu: " + i);
             }
             compare(entry("nextCard").keys, ["Ctrl+Shift+]"]);
             compare(entry("previousCard").keys, ["Ctrl+Shift+["]);
+            compare(entry("nextInstance").keys, ["Ctrl+Shift+\\"]);
+            // Its sections: Simulators (phoenix-sim's list, then Next
+            // Simulator), then Cards.
+            var sections = entries().filter(function (e) { return e.separator && e.menu === "window" && e.text !== ""; })
+                                    .map(function (e) { return e.text; });
+            compare(sections, ["Simulators", "Cards"]);
+            // What this simulator is, for the others' menus.
+            var info = sim.item.simInstanceInfo;
+            verify(info.mode === "phone" || info.mode === "tablet");
+            verify(info.width > 0 && info.height > 0);
+            compare(info.look, "classic");
+            verify(!sim.item.simActionState("nextInstance").enabled, "no other simulator (none without phoenix-sim)");
 
             var shell = null;
             (function walk(o) {

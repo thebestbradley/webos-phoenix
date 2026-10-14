@@ -13,6 +13,7 @@
 #include <QDialogButtonBox>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QHeaderView>
 #include <QImageReader>
@@ -38,11 +39,17 @@
 #include <QVBoxLayout>
 #include <QWindow>
 
+#include <algorithm>
 #include <cstdio>
 #include <memory>
 
 #ifdef Q_OS_MACOS
 #include "simmac.h"
+#endif
+#ifdef PHOENIX_HAVE_XCB
+#include <QtGui/qguiapplication_platform.h>
+#include <xcb/xcb.h>
+#include <cstdlib>
 #endif
 
 namespace {
@@ -56,6 +63,41 @@ QVariant plain(const QVariant &v)
 }
 
 const char *const kToolbarSetting = "simulator/toolbar";
+
+#ifdef PHOENIX_HAVE_XCB
+// X11: the window manager asked to bring another simulator's window
+// forward, as a taskbar or pager asks (_NET_ACTIVE_WINDOW from source 2,
+// EWMH "Source indication in requests"). A window manager keeps a program
+// from taking the focus by itself (focus stealing prevention), but does
+// what a pager asks for the user. Without one (Xvfb) nothing hears it, and
+// the simulator asked raises itself (SimChrome::bringToFront).
+void askWindowManagerToActivate(quint32 window)
+{
+    auto *x11 = qGuiApp->nativeInterface<QNativeInterface::QX11Application>();
+    if (!x11 || !x11->connection() || !window)
+        return;
+    xcb_connection_t *c = x11->connection();
+    static const char name[] = "_NET_ACTIVE_WINDOW";
+    xcb_intern_atom_reply_t *reply = xcb_intern_atom_reply(c, xcb_intern_atom(c, 0, sizeof(name) - 1, name), nullptr);
+    if (!reply)
+        return;
+    const xcb_atom_t atom = reply->atom;
+    std::free(reply);
+    const xcb_screen_t *screen = xcb_setup_roots_iterator(xcb_get_setup(c)).data;
+    if (!screen)
+        return;
+    xcb_client_message_event_t event = {};
+    event.response_type = XCB_CLIENT_MESSAGE;
+    event.format = 32;
+    event.window = window;
+    event.type = atom;
+    event.data.data32[0] = 2;                   // a pager: the user's choice
+    event.data.data32[1] = XCB_CURRENT_TIME;
+    xcb_send_event(c, 0, screen->root, XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY | XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT,
+                   reinterpret_cast<const char *>(&event));
+    xcb_flush(c);
+}
+#endif
 
 #ifdef Q_OS_MACOS
 constexpr bool kMac = true;
@@ -77,6 +119,9 @@ SimChrome::SimChrome(QQuickView *view, bool toolbar)
     , m_toolbar(new QToolBar(tr("Simulator"), this))
     , m_refresh(new QTimer(this))
     , m_windowsLater(new QTimer(this))
+    , m_instancesPoll(new QTimer(this))
+    , m_instancesLater(new QTimer(this))
+    , m_instanceInfoLater(new QTimer(this))
 {
     setWindowTitle(displayName());
 #ifdef Q_OS_MACOS
@@ -131,6 +176,17 @@ SimChrome::SimChrome(QQuickView *view, bool toolbar)
     m_windowsLater->setSingleShot(true);
     m_windowsLater->setInterval(0);
     connect(m_windowsLater, &QTimer::timeout, this, &SimChrome::refreshWindows);
+    // The simulators: once a burst of changes to their folder is over, and
+    // every second while the menu is open (one that crashed leaves its
+    // entry behind; SimInstances::instances drops it).
+    m_instancesLater->setSingleShot(true);
+    m_instancesLater->setInterval(100);
+    connect(m_instancesLater, &QTimer::timeout, this, &SimChrome::refreshInstances);
+    m_instancesPoll->setInterval(1000);
+    connect(m_instancesPoll, &QTimer::timeout, this, &SimChrome::refreshInstances);
+    m_instanceInfoLater->setSingleShot(true);
+    m_instanceInfoLater->setInterval(250);
+    connect(m_instanceInfoLater, &QTimer::timeout, this, &SimChrome::updateInstanceInfo);
 }
 
 SimChrome::~SimChrome()
@@ -181,7 +237,11 @@ void SimChrome::build()
             continue;
         QMenu *menu = menuFor(e.menu, e.separator ? QString() : e.submenu);
         if (e.separator) {
-            menu->addSeparator();
+            // With a name: a section's title (Window's Simulators, Cards).
+            if (e.text.isEmpty())
+                menu->addSeparator();
+            else
+                menu->addSection(e.text);
             continue;
         }
         const QString keys = menuKeys(e);
@@ -221,6 +281,13 @@ void SimChrome::build()
     if (root->metaObject()->indexOfSignal("simWindowsChanged()") >= 0)
         connect(root, SIGNAL(simWindowsChanged()), m_windowsLater, SLOT(start()));
     refreshWindows();
+    // Its simulators go before Next Simulator (setInstances).
+    m_instancesBefore = m_actions.value(QStringLiteral("nextInstance"));
+    connect(m_windowMenu, &QMenu::aboutToShow, this, [this]() {
+        refreshInstances();
+        m_instancesPoll->start();
+    });
+    connect(m_windowMenu, &QMenu::aboutToHide, m_instancesPoll, &QTimer::stop);
 
     QMenu *help = m_menuBar->addMenu(tr("Help"));
     QAction *sheet = help->addAction(tr("Keyboard Shortcuts…"));
@@ -506,6 +573,166 @@ void SimChrome::refreshWindows()
     }
 }
 
+void SimChrome::setInstances(SimInstances *instances, const QVariantMap &base, bool list)
+{
+    m_instances = instances;
+    m_instanceBase = base;
+    if (!m_instances)
+        return;
+    QQuickItem *root = m_view->rootObject();
+    // As it changes; once a resize of the window is over, not at every step.
+    if (root && root->metaObject()->indexOfSignal("simInstanceInfoChanged()") >= 0)
+        connect(root, SIGNAL(simInstanceInfoChanged()), m_instanceInfoLater, SLOT(start()));
+    updateInstanceInfo();
+    // Its name another's (the simulator this restarts, quitting) is waited for.
+    if (list && !m_instances->start(m_instances->info()) && !m_instances->waiting())
+        std::fprintf(stderr, "phoenix-sim: not listed in the other simulators' Window menu (%s cannot be written)\n",
+                     qPrintable(m_instances->dir()));
+    connect(m_instances, &SimInstances::raiseRequested, this, &SimChrome::bringToFront);
+    connect(m_instances, &SimInstances::changed, m_instancesLater, QOverload<>::of(&QTimer::start));
+    refreshInstances();
+}
+
+// What this simulator is now (sim.qml simInstanceInfo: its layout, size,
+// look) and where it came from (base), in its entry.
+void SimChrome::updateInstanceInfo()
+{
+    if (!m_instances)
+        return;
+    QVariantMap info = m_instanceBase;
+    if (QQuickItem *root = m_view->rootObject()) {
+        const QVariantMap qml = plain(root->property("simInstanceInfo")).toMap();
+        for (auto it = qml.cbegin(); it != qml.cend(); ++it)
+            info.insert(it.key(), it.value());
+    }
+    // X11: the window a pager would bring forward (askWindowManagerToActivate).
+    if (QGuiApplication::platformName() == QLatin1String("xcb") && windowHandle())
+        info.insert(QStringLiteral("x11Window"), static_cast<qulonglong>(winId()));
+    m_instances->setInfo(info);
+    refreshInstances();
+}
+
+QString SimChrome::instanceLabel(const SimInstances::Instance &instance)
+{
+    const QVariantMap &info = instance.info;
+    QStringList parts;
+    parts << info.value(QStringLiteral("device")).toString();
+    const QString mode = info.value(QStringLiteral("mode")).toString();
+    QString screen = mode == QLatin1String("tablet") ? tr("tablet") : mode == QLatin1String("phone") ? tr("phone") : mode;
+    const int width = info.value(QStringLiteral("width")).toInt(), height = info.value(QStringLiteral("height")).toInt();
+    if (width > 0 && height > 0)
+        screen += QStringLiteral(" %1x%2").arg(width).arg(height);
+    if (info.value(QStringLiteral("adaptive")).toBool())
+        screen += tr(" (adaptive)");
+    parts << screen.trimmed();
+    const QString look = info.value(QStringLiteral("look")).toString();
+    parts << (look == QLatin1String("classic") ? tr("Classic") : look == QLatin1String("ember-glass") ? tr("Ember Glass") : look);
+    parts << info.value(QStringLiteral("checkout")).toString();
+    parts.removeAll(QString());
+    const QString name = instance.name.isEmpty() ? tr("Default") : instance.name;
+    QString text = parts.isEmpty() ? name : tr("%1: %2").arg(name, parts.join(QStringLiteral(", ")));
+    // "&" is the item's own (a mnemonic) in a menu's text.
+    return text.replace(QLatin1Char('&'), QStringLiteral("&&"));
+}
+
+// Window > Simulators: one item each, in SimInstances' order, a check
+// mark on this one; made again when one comes, goes or changes.
+void SimChrome::refreshInstances()
+{
+    if (!m_instances || !m_windowMenu)
+        return;
+    const QList<SimInstances::Instance> list = m_instances->instances();
+    QStringList labels;
+    for (const SimInstances::Instance &i : list)
+        labels << i.key + QLatin1Char('\n') + instanceLabel(i) + (i.self ? QStringLiteral("\n*") : QString());
+    m_instanceList = list;
+    m_otherInstances = int(std::count_if(list.cbegin(), list.cend(), [](const SimInstances::Instance &i) { return !i.self; }));
+    if (labels == m_instanceLabels && !m_instanceActions.isEmpty()) {
+        for (QAction *a : std::as_const(m_instanceActions))
+            a->setChecked(a->data().toBool());
+        return;
+    }
+    m_instanceLabels = labels;
+    for (QAction *a : std::as_const(m_instanceActions)) {
+        m_windowMenu->removeAction(a);
+        a->deleteLater();
+    }
+    m_instanceActions.clear();
+    for (const SimInstances::Instance &i : list) {
+        auto *a = new QAction(instanceLabel(i), m_windowMenu);
+        a->setCheckable(true);
+        a->setChecked(i.self);
+        a->setData(i.self);
+        a->setMenuRole(QAction::NoRole);
+        const QString where = i.info.value(QStringLiteral("checkoutPath")).toString();
+        a->setStatusTip(where.isEmpty() ? QString() : tr("From %1").arg(where));
+        const QString key = i.key;
+        connect(a, &QAction::triggered, this, [this, a, key]() {
+            // This one: nothing to do (the click unchecked it).
+            a->setChecked(a->data().toBool());
+            for (const SimInstances::Instance &other : std::as_const(m_instanceList)) {
+                if (other.key == key && !other.self) {
+                    // Once this window has had the focus back from its
+                    // menu (the screen's, focusWindowChanged's): handed
+                    // over before that, X11 gave it straight back here.
+                    QMetaObject::invokeMethod(this, [this, other]() { showInstance(other); }, Qt::QueuedConnection);
+                    break;
+                }
+            }
+        });
+        m_windowMenu->insertAction(m_instancesBefore, a);
+        m_instanceActions << a;
+    }
+}
+
+void SimChrome::showInstance(const SimInstances::Instance &instance)
+{
+    if (!m_instances || instance.self)
+        return;
+#ifdef Q_OS_MACOS
+    // Another app: this one, active, hands it the activation.
+    SimMac::activateProcess(instance.pid);
+#endif
+#ifdef PHOENIX_HAVE_XCB
+    if (QGuiApplication::platformName() == QLatin1String("xcb"))
+        askWindowManagerToActivate(instance.info.value(QStringLiteral("x11Window")).toUInt());
+#endif
+    // And it brings itself forward (bringToFront); gone meanwhile, it
+    // leaves the menu.
+    if (!m_instances->raise(instance.key))
+        refreshInstances();
+}
+
+void SimChrome::showNextInstance()
+{
+    if (!m_instances)
+        return;
+    refreshInstances();
+    const int n = int(m_instanceList.size());
+    for (int i = 0; i < n; ++i) {
+        if (!m_instanceList.at(i).self)
+            continue;
+        if (n > 1)
+            showInstance(m_instanceList.at((i + 1) % n));
+        return;
+    }
+}
+
+void SimChrome::bringToFront()
+{
+    if (isMinimized())
+        showNormal();
+    show();
+    raise();
+    activateWindow();
+#ifdef Q_OS_MACOS
+    SimMac::activateSelf();
+#endif
+    // The keyboard on the screen, as after a click on it.
+    m_view->requestActivate();
+    m_container->setFocus();
+}
+
 // An app's icon (a file: or qrc: URL, as the launcher's), or none.
 QIcon SimChrome::cardIcon(const QString &url)
 {
@@ -547,7 +774,11 @@ void SimChrome::showWithScreen(const QSize &screen)
     // after the Show Virtual Keyboard button, got no keyboard. The focus
     // goes straight back to the screen, once the window system is done.
     connect(qApp, &QGuiApplication::focusWindowChanged, this, [this](QWindow *focus) {
-        if (focus && focus == windowHandle())
+        // Still so, once the window system is done: a focus this window
+        // had only for a moment is not taken back. Its menu closing gives
+        // it the focus a moment (X11), after another simulator was brought
+        // forward from it (Window > Simulators), which then lost it again.
+        if (focus && focus == windowHandle() && QGuiApplication::focusWindow() == windowHandle())
             m_view->requestActivate();
     }, Qt::QueuedConnection);
     resizeScreen(screen.width(), screen.height());

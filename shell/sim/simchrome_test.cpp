@@ -5,14 +5,19 @@
 // sim.qml. The Window menu: its own items from the list, then the device's
 // open cards (simWindows), "No Open Cards" without any, a check mark on the
 // card in front, the cards' titles and icons, the menu made again as cards
-// open and close, and the card chosen handed to simShowWindow. With the
-// device's screen off, the menu bar and its menus still take the pointer:
-// only the screen itself is dark (UserActivity). The list itself:
-// shell/tests/tst_simwindowmenu.qml.
+// open and close, and the card chosen handed to simShowWindow. Its
+// Simulators: this one and another (SimInstances), what each is, a check
+// mark on this one, the other asked to come forward when chosen or by
+// Next Simulator, this one coming forward when asked, the list following
+// the other as it quits. With the device's screen off, the menu bar and
+// its menus still take the pointer: only the screen itself is dark
+// (UserActivity). The lists themselves: shell/tests/tst_simwindowmenu.qml,
+// build/siminstances-test.
 //
 //   QT_QPA_PLATFORM=offscreen build/simchrome-test
 
 #include "simchrome.h"
+#include "siminstances.h"
 
 #include <QAction>
 #include <QApplication>
@@ -25,10 +30,15 @@
 #include <QQuickView>
 #include <QScopeGuard>
 #include <QTemporaryDir>
+#include <QWidget>
+#include <QWindow>
 #include <QTest>
 #include <QUrl>
 
+#include <QElapsedTimer>
+
 #include <cstdio>
+#include <functional>
 
 #ifndef PHOENIX_QML_BUILD_DIR
 #define PHOENIX_QML_BUILD_DIR ""
@@ -57,6 +67,7 @@ Item {
     width: 320
     height: 480
     property var simWindows: []
+    readonly property var simInstanceInfo: ({ mode: "phone", adaptive: false, width: 320, height: 480, device: "", look: "classic" })
     property var shown: []
     property var triggered: []
     readonly property var simToolbar: []
@@ -69,6 +80,9 @@ Item {
     }
     function simActionList() {
         return [
+            { separator: true, menu: "window", text: "Simulators" },
+            { id: "nextInstance", menu: "window", text: "Next Simulator", keys: ["Ctrl+Shift+\\"], run: true, dynamic: true },
+            { separator: true, menu: "window", text: "Cards" },
             { id: "windowCardView", menu: "window", text: "Card View", run: true, dynamic: true },
             { separator: true, menu: "window" },
             { id: "nextCard", menu: "window", text: "Next Card", keys: ["Ctrl+Shift+]"], run: true, dynamic: true }
@@ -118,6 +132,28 @@ static QString checks(const QList<QAction *> &actions)
 }
 
 // A QML list property's strings (a var: a JS array).
+// The Window menu as it reads: [a section], ---, an item (* checked).
+static QStringList layout(QMenu *menu)
+{
+    QStringList out;
+    for (QAction *a : menu->actions()) {
+        if (a->isSeparator())
+            out << (a->text().isEmpty() ? QStringLiteral("---") : QLatin1Char('[') + a->text() + QLatin1Char(']'));
+        else
+            out << a->text() + (a->isChecked() ? QStringLiteral(" *") : QString());
+    }
+    return out;
+}
+
+static bool waitFor(const std::function<bool()> &done, int ms = 4000)
+{
+    QElapsedTimer clock;
+    clock.start();
+    while (!done() && clock.elapsed() < ms)
+        QTest::qWait(20);
+    return done();
+}
+
 static QStringList strings(QQuickItem *root, const char *name)
 {
     QVariant v = root->property(name);
@@ -186,10 +222,15 @@ int main(int argc, char **argv)
             own << a->text();
 #ifdef Q_OS_MACOS
     const QString next = QStringLiteral("Next Card  (%1)").arg(SimChrome::keyLabel(QStringLiteral("Ctrl+Shift+]")));
+    const QString nextSim = QStringLiteral("Next Simulator  (%1)").arg(SimChrome::keyLabel(QStringLiteral("Ctrl+Shift+\\")));
 #else
     const QString next = QStringLiteral("Next Card\tCtrl+Shift+]");
+    const QString nextSim = QStringLiteral("Next Simulator\tCtrl+Shift+\\");
 #endif
-    check(own.mid(0, 2) == QStringList({ QStringLiteral("Card View"), next }),
+    const QStringList start = { QStringLiteral("[Simulators]"), nextSim, QStringLiteral("[Cards]"), QStringLiteral("Card View"),
+                                QStringLiteral("---"), next, QStringLiteral("---"), QStringLiteral("No Open Cards") };
+    check(layout(window) == start, QStringLiteral("the Window menu: Simulators, Cards, then the cards (") + layout(window).join(QStringLiteral(" | ")) + QLatin1Char(')'));
+    check(own.mid(1, 2) == QStringList({ QStringLiteral("Card View"), next }),
           QStringLiteral("its own items first, keys in the shortcut column (") + own.join(QStringLiteral(" | ")) + QLatin1Char(')'));
 
     QList<QAction *> items = cardItems(window);
@@ -236,6 +277,60 @@ int main(int argc, char **argv)
     root->setProperty("simWindows", QVariantList({ card(QStringLiteral("w1"), QStringLiteral("Email"), icon, true, false) }));
     QTest::qWait(0);
     check(texts(cardItems(window)) == QStringList({ QStringLiteral("Email") }), QStringLiteral("closed cards leave the menu"));
+
+    // Window > Simulators: this one (a) and another (b), each its own
+    // registry in one folder, as two phoenix-sim processes would have.
+    QTemporaryDir instancesDir;
+    SimInstances mine(instancesDir.filePath(QStringLiteral("instances")), QStringLiteral("a"));
+    chrome.setInstances(&mine, { { QStringLiteral("checkout"), QStringLiteral("webos-phoenix") },
+                                 { QStringLiteral("checkoutPath"), QStringLiteral("/src/webos-phoenix") } }, true);
+    check(mine.registered() && mine.info().value(QStringLiteral("width")).toInt() == 320
+              && mine.info().value(QStringLiteral("checkout")).toString() == QLatin1String("webos-phoenix"),
+          QStringLiteral("this simulator lists itself: sim.qml's simInstanceInfo and its checkout"));
+    const QString aLabel = QStringLiteral("a: phone 320x480, Classic, webos-phoenix");
+    check(layout(window).mid(0, 3) == QStringList({ QStringLiteral("[Simulators]"), aLabel + QStringLiteral(" *"), nextSim }),
+          QStringLiteral("alone: itself, checked (") + layout(window).mid(0, 3).join(QStringLiteral(" | ")) + QLatin1Char(')'));
+    check(!chrome.hasOtherInstances(), QStringLiteral("and Next Simulator has none to go to"));
+    auto *other = new SimInstances(mine.dir(), QStringLiteral("b"));
+    bool otherRaised = false;
+    QObject::connect(other, &SimInstances::raiseRequested, [&otherRaised]() { otherRaised = true; });
+    other->start({ { QStringLiteral("mode"), QStringLiteral("tablet") }, { QStringLiteral("width"), 1024 }, { QStringLiteral("height"), 768 },
+                   { QStringLiteral("adaptive"), true }, { QStringLiteral("look"), QStringLiteral("ember-glass") },
+                   { QStringLiteral("checkout"), QStringLiteral("phoenix-ember-glass-ui") } });
+    const QString bLabel = QStringLiteral("b: tablet 1024x768 (adaptive), Ember Glass, phoenix-ember-glass-ui");
+    const bool joined = waitFor([&]() { return layout(window).mid(0, 4) == QStringList({ QStringLiteral("[Simulators]"), aLabel + QStringLiteral(" *"), bLabel, nextSim }); });
+    check(joined, QStringLiteral("another starts: it joins the menu, live (") + layout(window).mid(0, 4).join(QStringLiteral(" | ")) + QLatin1Char(')'));
+    check(chrome.hasOtherInstances(), QStringLiteral("Next Simulator has one to go to"));
+    QList<QAction *> sims;
+    for (QAction *a : window->actions())
+        if (a->text() == aLabel || a->text() == bLabel)
+            sims << a;
+    if (sims.size() == 2) {
+        sims.at(0)->trigger();
+        QTest::qWait(50);
+        check(!otherRaised && sims.at(0)->isChecked(), QStringLiteral("choosing this one does nothing, its check mark stays"));
+        sims.at(1)->trigger();
+        check(waitFor([&otherRaised]() { return otherRaised; }), QStringLiteral("choosing the other asks it to come forward"));
+        check(!sims.at(1)->isChecked() && sims.at(0)->isChecked(), QStringLiteral("the check mark stays on this one"));
+    }
+    otherRaised = false;
+    QMetaObject::invokeMethod(&chrome, "showNextInstance");
+    check(waitFor([&otherRaised]() { return otherRaised; }), QStringLiteral("Next Simulator asks the next one, b"));
+
+    // Asked by the other: this window in front, the screen with the focus.
+    QWidget elsewhere;
+    elsewhere.show();
+    elsewhere.activateWindow();
+    waitFor([&elsewhere]() { return QGuiApplication::focusWindow() == elsewhere.windowHandle(); }, 1000);
+    other->raise(mine.key());
+    check(waitFor([&view]() { return QGuiApplication::focusWindow() == &view; }),
+          QStringLiteral("asked by the other, this one comes forward with the focus on its screen"));
+    elsewhere.hide();
+
+    delete other;
+    const bool left = waitFor([&]() { return layout(window).mid(0, 3) == QStringList({ QStringLiteral("[Simulators]"), aLabel + QStringLiteral(" *"), nextSim }); });
+    check(left, QStringLiteral("the other quits: it leaves the menu (") + layout(window).mid(0, 3).join(QStringLiteral(" | ")) + QLatin1Char(')'));
+    check(!chrome.hasOtherInstances(), QStringLiteral("and Next Simulator has none again"));
 
     // The screen off: a click on the menu bar opens the menu, and one in the
     // menu chooses the card, without waking the screen; a click on the

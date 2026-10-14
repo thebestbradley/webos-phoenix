@@ -4,11 +4,13 @@
 // What AppKit says about phoenix-sim on a Mac (simmac.mm), for
 // --check-chrome (SimChrome::checkChrome): the menus the menu bar at
 // the top of the screen shows, and whether the program is a foreground
-// app (a Dock icon, a menu bar of its own) and the active one.
+// app (a Dock icon, a menu bar of its own) and the active one; and
+// another simulator brought forward (Window > Simulators).
 
 #pragma once
 
 #include <QStringList>
+#include <QtGlobal>
 
 namespace SimMac {
 // The titles of NSApp.mainMenu's menus, the application menu first,
@@ -20,4 +22,11 @@ QStringList mainMenuTitles();
 bool isForegroundApp();
 // The active app, whose menus the menu bar shows.
 bool isActive();
+// Window > Simulators: each simulator is an app of its own. The active one
+// (whose menu was used) hands the activation to the one chosen, by its
+// process id (macOS 14's cooperative activation: yieldActivationTo...);
+// false if there is no such app.
+bool activateProcess(qint64 pid);
+// The one chosen brings itself forward too, once asked (SimInstances).
+void activateSelf();
 }
