@@ -795,6 +795,78 @@ check($homeUp === 0 && $homeApp && $homeApp['title'] === 'Home' && $homeApp['cat
       'a Marketplace-only 2.0 app (Home) is published with its listing: not affiliated with the Open Home Foundation, under Utilities'
       . ($homeUp === 0 ? '' : ' (' . trim((string) @file_get_contents("$tmp/cli.err")) . ')'));
 
+// ---- Device classes and kinds (docs/APP-STORE.md 3.17) -----------------------------------------
+$lists = Phoenix\Marketplace\Availability::lists();
+check(array_column($lists['deviceClasses'], 'id') === ['phone', 'tablet', 'desktop']
+      && array_column($lists['appKinds'], 'id') === ['phoenix', 'legacy', 'web', 'native', 'local']
+      && array_column($lists['feeds'], 'id') === ['catalog', 'connectors', 'appmuseum', 'preware'],
+      'one list of device classes, kinds and feeds: the device\'s own (apps/marketplace/service/lib/availability.json)');
+$app->catalog->publish();
+$idx = json_decode((string) file_get_contents("$tmp/data/public/v1/index.json"), true);
+$byId = array_column($idx['apps'], null, 'id');
+$aPwa = array_values(array_filter($idx['apps'], fn ($e) => $e['kind'] === 'pwa'))[0];
+check(array_filter($idx['apps'], fn ($e) => !isset($e['appKind'], $e['deviceClasses'])) === []
+      && $aPwa['appKind'] === 'web' && $aPwa['deviceClasses'] === ['phone', 'tablet', 'desktop'],
+      'every entry says its kind and the device classes it is offered on: a curated web app is "web", on every class');
+check($idx['availability']['deviceClasses'] === ['phone', 'tablet', 'desktop'] && $idx['availability']['appKinds'][1] === 'legacy'
+      && str_contains($index = (string) file_get_contents("$tmp/data/public/v1/index.json"), '"off": {' . "\n" . '            "kinds": {},'),
+      'the index says the lists and what is off where (nothing yet: {} for each)');
+check(($byId['com.example.notes']['appKind'] ?? '') === 'web' && ($byId['org.webosphoenix.home']['appKind'] ?? '') === 'phoenix',
+      'a developer\'s packaged web app is "web"; a 2.0 app (Phoenix\'s namespace) "phoenix"');
+$devIdx = json_decode((string) file_get_contents("$tmp/dev/public/v1/index.json"), true);
+$devById = array_column($devIdx['apps'], null, 'id');
+check(($devById['org.example.feeds']['appKind'] ?? '') === 'local' && ($devById['org.example.foo']['appKind'] ?? '') === 'local'
+      && ($devById['org.webosphoenix.fediverse']['appKind'] ?? '') === 'phoenix',
+      'on a development catalog the local developer\'s uploads are "local" (sideloaded); Phoenix\'s own connector "phoenix"');
+// A package says the classes it is made for (appinfo.json phoenix.deviceClasses).
+$tabletIpk = ipk($tmp, 'org.example.sketch', '1.0.0', [], [], ['phoenix' => ['deviceClasses' => ['desktop', 'tablet']]]);
+[$s, $r] = $call('POST', '/api/apps/packages', $tabletIpk, $dev['token']);
+[$s2] = $call('POST', "/api/admin/releases/{$r['release']['id']}/approve", [], $admin);
+$idx = json_decode((string) file_get_contents("$tmp/data/public/v1/index.json"), true);
+$sketch = array_column($idx['apps'], null, 'id')['org.example.sketch'] ?? null;
+check($s === 200 && $s2 === 200 && $sketch && $sketch['deviceClasses'] === ['tablet', 'desktop'] && $sketch['appKind'] === 'web',
+      'a package made for tablets and desktops (appinfo.json phoenix.deviceClasses) is offered on those, in the list\'s order');
+[$s, $r] = $call('POST', '/api/apps/packages', ipk($tmp, 'org.example.watchface', '1.0.0', [], [], ['phoenix' => ['deviceClasses' => ['watch']]]), $dev['token']);
+check($s === 400 && str_contains($r['error'], 'phoenix.deviceClasses') && str_contains($r['error'], 'phone, tablet, desktop'),
+      '... a class the list does not have is refused, saying which there are');
+// The admin: a kind and a whole feed off per class.
+[$s, $r] = $call('POST', '/api/admin/availability', ['off' => ['kinds' => ['legacy' => ['phone']], 'feeds' => ['appmuseum' => ['desktop', 'phone']]]], $admin);
+$idx = json_decode((string) file_get_contents("$tmp/data/public/v1/index.json"), true);
+check($s === 200 && $idx['availability']['off'] === ['kinds' => ['legacy' => ['phone']], 'feeds' => ['appmuseum' => ['phone', 'desktop']]]
+      && $idx['build'] === $r['publish']['build'],
+      'the admin switches classic apps off on phones and the App Museum off on phones and desktops: published in the index');
+[$s] = $call('POST', '/api/admin/availability', ['off' => ['kinds' => ['android' => ['phone']]]], $admin);
+[$s2] = $call('POST', '/api/admin/availability', ['off' => ['kinds' => ['web' => ['watch']]]], $admin);
+[$s3] = $call('POST', '/api/admin/availability', ['off' => []], $dev['token']);
+check($s === 400 && $s2 === 400 && $s3 === 403, '... a kind or class the list does not have is refused; only an admin switches');
+// The admin: one app's classes and kind.
+[$s, $r] = $call('POST', '/api/admin/apps/org.example.sketch/availability', ['deviceClasses' => ['phone'], 'appKind' => 'native'], $admin);
+$idx = json_decode((string) file_get_contents("$tmp/data/public/v1/index.json"), true);
+$sketch = array_column($idx['apps'], null, 'id')['org.example.sketch'];
+check($s === 200 && $sketch['deviceClasses'] === ['phone'] && $sketch['appKind'] === 'native', 'the admin sets an app\'s classes and kind in place of its package\'s and the assigned one');
+[$s, $r] = $call('GET', '/api/admin/availability', null, $admin);
+$r = json_decode(json_encode($r), true);   // as the admin page reads it
+$listed = array_column($r['apps'], null, 'id')['org.example.sketch'];
+check($s === 200 && $listed['packageClasses'] === ['tablet', 'desktop'] && $listed['deviceClassesAdmin'] === ['phone']
+      && $listed['appKindAssigned'] === 'web' && $listed['appKindAdmin'] === 'native' && $r['off']['kinds']['legacy'] === ['phone']
+      && count($r['appKinds']) === 5 && $r['appKinds'][0]['name'] === 'Phoenix apps',
+      'the admin page reads the lists, the switches and each app\'s package, assigned and admin values');
+[$s, $r] = $call('POST', '/api/admin/apps/org.example.sketch/availability', ['deviceClasses' => null, 'appKind' => null], $admin);
+check($s === 200 && $r['app']['deviceClasses'] === ['tablet', 'desktop'] && $r['app']['appKind'] === 'web', '... and puts the package\'s and the assigned ones back');
+[$s] = $call('POST', '/api/admin/apps/org.example.sketch/availability', ['deviceClasses' => []], $admin);
+[$s2] = $call('POST', '/api/admin/apps/org.example.sketch/availability', ['appKind' => 'android'], $admin);
+check($s === 400 && $s2 === 400, '... an app offered on no class, or a kind the list does not have, is refused');
+// From the command line.
+$off = $cli(['availability', 'off', 'kind', 'web', 'desktop']);
+$on = $cli(['availability', 'on', 'feed', 'appmuseum', 'phone']);
+$cls = $cli(['availability', 'app', 'org.example.sketch', 'classes', 'tablet']);
+$idx = json_decode((string) file_get_contents("$tmp/data/public/v1/index.json"), true);
+check($off === 0 && $on === 0 && $cls === 0 && $idx['availability']['off']['kinds']['web'] === ['desktop']
+      && $idx['availability']['off']['feeds']['appmuseum'] === ['desktop']
+      && array_column($idx['apps'], null, 'id')['org.example.sketch']['deviceClasses'] === ['tablet'],
+      'bin/marketplace.php availability: a kind off, a feed on again, an app\'s classes; each publishes');
+check($cli(['availability', 'off', 'kind', 'android', 'phone']) === 1, '... refusing a kind the list does not have');
+
 // ---- The system update feed (served at /updates/, published by the admin API) ----------------
 $bundle = str_repeat("\x00\x01raucb", 64);
 $q = ['compatible' => 'phoenix-pinephonepro', 'version' => '1.1.0', 'build' => '110', 'notes' => ['Faster cards', 'Share everywhere']];

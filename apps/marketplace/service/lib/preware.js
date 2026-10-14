@@ -7,13 +7,15 @@
 // JSON "Source" field Preware added (Title, Icon, Homepage, License,
 // FullDescription, Category, Type, Screenshots, MinWebOSVersion,
 // DeviceCompatibility). parse(text, feedUrl, sourceId) -> catalog entries of
-// kind "preware". Only packages for any architecture ("all") can run here:
+// kind "preware", app kind "legacy" (docs/APP-STORE.md 3.17), their device
+// classes from DeviceCompatibility. Only packages for any architecture ("all") can run here:
 // the others are 2011 ARM binaries.
 
 "use strict";
 
 var ipk = require("./ipk");
 var version = require("./version");
+var availability = require("./availability");
 
 // An address in the feed (an icon), absolute or relative to the feed: an
 // http(s) address, or "".
@@ -45,6 +47,8 @@ function parse(text, feedUrl, sourceId) {
             license: String(src.License || ""), homepage: typeof src.Homepage === "string" && /^https?:/.test(src.Homepage) ? src.Homepage : "",
             donation: "", featured: false, rating: null, version: c.Version || "",
             architecture: c.Architecture || "", type: String(src.Type || ""),
+            // The original devices it was for, as device classes (null: all).
+            appKind: "legacy", deviceClasses: availability.classesFromDevices(src.DeviceCompatibility),
             release: { url: base + c.Filename, size: parseInt(c.Size, 10) || 0, md5: String(c.MD5Sum || "").toLowerCase() }
         };
         // The newest version of each package.

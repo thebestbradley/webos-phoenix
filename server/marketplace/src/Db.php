@@ -66,6 +66,9 @@ final class Db
                 state VARCHAR(16) NOT NULL, created VARCHAR(32) NOT NULL)$engine",
             "CREATE TABLE IF NOT EXISTS index_builds (
                 build INTEGER PRIMARY KEY, generated VARCHAR(32) NOT NULL, sha256 CHAR(64) NOT NULL)$engine",
+            // The catalog's own settings, by name: "availability", the admin's switches of
+            // kinds and feeds per device class (docs/APP-STORE.md 3.17).
+            "CREATE TABLE IF NOT EXISTS settings (name VARCHAR(64) PRIMARY KEY, value $text)$engine",
         ];
         foreach ($tables as $sql) {
             $this->pdo->exec($sql);
@@ -94,6 +97,33 @@ final class Db
             $this->pdo->query('SELECT release_notes_url FROM apps LIMIT 1');
         } catch (\PDOException) {
             $this->pdo->exec("ALTER TABLE apps ADD COLUMN release_notes_url VARCHAR(500) NOT NULL DEFAULT ''");
+        }
+        // Device classes and kinds (docs/APP-STORE.md 3.17): the admin's kind and classes for
+        // an app (NULL: the ones assigned, the package's), and each release's package's classes
+        // (appinfo.json phoenix.deviceClasses; NULL: all).
+        foreach (['apps' => ['app_kind' => 'VARCHAR(16) NULL', 'device_classes' => 'VARCHAR(200) NULL'],
+                  'releases' => ['device_classes' => 'VARCHAR(200) NULL']] as $table => $columns) {
+            foreach ($columns as $column => $type) {
+                try {
+                    $this->pdo->query("SELECT $column FROM $table LIMIT 1");
+                } catch (\PDOException) {
+                    $this->pdo->exec("ALTER TABLE $table ADD COLUMN $column $type");
+                }
+            }
+        }
+    }
+
+    /** A setting (the settings table), or null. */
+    public function setting(string $name): ?string
+    {
+        $r = $this->one('SELECT value FROM settings WHERE name = ?', [$name]);
+        return $r ? (string) $r['value'] : null;
+    }
+
+    public function setSetting(string $name, string $value): void
+    {
+        if (!$this->run('UPDATE settings SET value = ? WHERE name = ?', [$value, $name])) {
+            $this->run('INSERT INTO settings (name, value) VALUES (?, ?)', [$name, $value]);
         }
     }
 

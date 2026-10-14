@@ -317,7 +317,9 @@ function createSystemManager(deps) {
         },
         // The shell's state: {deviceLocked, dockMode, orientation: {ui,
         // device}, ime: {visible}, formFactor: "phone" | "tablet" (its
-        // layout, Phoenix)}, any of them.
+        // layout, Phoenix; "desktop", the docked desktop mode to come, is a
+        // device class the Marketplace knows already: docs/APP-STORE.md
+        // 3.17)}, any of them.
         "phoenix/report": function (p, sender) {
             if (!deps.isShell(sender))
                 return Promise.resolve(fail(-1, "Only the shell reports its state"));
@@ -343,7 +345,7 @@ function createSystemManager(deps) {
                 shell.ime.visible = p.ime.visible;
                 changed.system = true;
             }
-            if ((p.formFactor === "phone" || p.formFactor === "tablet") && p.formFactor !== shell.formFactor) {
+            if ((p.formFactor === "phone" || p.formFactor === "tablet" || p.formFactor === "desktop") && p.formFactor !== shell.formFactor) {
                 shell.formFactor = p.formFactor;
                 changed.system = true;
             }

@@ -1,6 +1,6 @@
 <!doctype html>
 <!-- Copyright (c) 2026 webOS Phoenix contributors. SPDX-License-Identifier: Apache-2.0 -->
-<!-- The review queue: new apps, releases, reports and opt-outs; publishing. Uses the admin API with an admin token. -->
+<!-- The review queue: new apps, releases, reports and opt-outs; publishing; and which apps each device class is offered (kinds, feeds and apps per class: docs/APP-STORE.md 3.17). Uses the admin API with an admin token. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -19,13 +19,20 @@
   button.go { background: var(--accent); color: #fff; border-color: var(--accent); }
   code { font-size: 13px; word-break: break-all; }
   .muted { opacity: .7; }
+  table { border-collapse: collapse; width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 8px; }
+  th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+  th.c, td.c { text-align: center; width: 76px; }
+  tr:last-child td { border-bottom: 0; }
+  td small { display: block; opacity: .7; }
+  select { padding: 4px; }
+  .hidden { display: none; }
 </style>
 </head>
 <body>
 <main>
   <h1>Marketplace Admin</h1>
   <div class="row">
-    <input id="token" type="password" placeholder="Admin token (data/admin.token)">
+    <input id="token" type="password" placeholder="Admin token (admin.token in the catalog's folder)">
     <button class="go" id="load">Load Queue</button>
     <button id="publish">Publish Now</button>
   </div>
@@ -34,6 +41,14 @@
   <h2>Releases</h2><div id="releases"></div>
   <h2>Reports</h2><div id="reports"></div>
   <h2>Opt-outs</h2><div id="optouts"></div>
+  <h2 id="devices">Devices and kinds</h2>
+  <p class="muted">Which apps each kind of device is offered. A box off: not offered on that class of device. Devices
+     filter by their class (their layout); an app already installed stays. Each change publishes the catalog again.</p>
+  <h3>Kinds of app</h3><table id="kinds"></table>
+  <h3>Feeds</h3><table id="feeds"></table>
+  <h3>Apps</h3>
+  <div class="row"><input id="appFilter" placeholder="Find an app (title, id or kind)"></div>
+  <table id="appClasses"></table>
 </main>
 <script>
 "use strict";
@@ -78,7 +93,113 @@ async function load() {
   fill("optouts", q.optouts, (o) => card(`<b>${esc(o.origin)}</b> asks not to be listed<br>${esc(o.text)}<br><span class="muted">${esc(o.contact)}</span>`,
     [["Accept", () => api("POST", `/api/admin/optouts/${o.id}/accept`), "go"]]));
 }
-$("load").onclick = () => load().catch((e) => { $("status").textContent = e.message; });
+// ---- Devices and kinds (GET/POST /api/admin/availability, POST /api/admin/apps/{id}/availability) ----
+let av = null;
+function cell(tag, text, cls) {
+  const c = document.createElement(tag);
+  if (text !== undefined) c.textContent = text;
+  if (cls) c.className = cls;
+  return c;
+}
+function head(first) {
+  const tr = document.createElement("tr");
+  tr.append(cell("th", first), ...av.deviceClasses.map((d) => cell("th", d.name, "c")));
+  return tr;
+}
+async function saveOff() {
+  const r = await api("POST", "/api/admin/availability", { off: av.off });
+  av.off = { kinds: Object.assign({}, r.off.kinds), feeds: Object.assign({}, r.off.feeds) };
+  $("status").textContent = `Published build ${r.publish.build}`;
+  showAvailability();
+}
+function offRows(tableId, part, list) {
+  const rows = list.map((k) => {
+    const tr = document.createElement("tr");
+    const name = cell("td", k.name);
+    if (k.about) name.append(cell("small", k.about));
+    tr.append(name);
+    for (const d of av.deviceClasses) {
+      const td = cell("td", undefined, "c");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.dataset.testid = `${part}-${k.id}-${d.id}`;
+      box.title = `${k.name} on ${d.name}`;
+      box.checked = !(av.off[part][k.id] || []).includes(d.id);
+      box.onchange = () => {
+        const off = new Set(av.off[part][k.id] || []);
+        if (box.checked) off.delete(d.id); else off.add(d.id);
+        av.off[part][k.id] = [...off];
+        saveOff().catch((e) => { $("status").textContent = e.message; });
+      };
+      td.append(box);
+      tr.append(td);
+    }
+    return tr;
+  });
+  $(tableId).replaceChildren(head(part === "kinds" ? "Kind" : "Feed"), ...rows);
+}
+function appRows() {
+  const q = $("appFilter").value.trim().toLowerCase();
+  const tr0 = head("App");
+  tr0.append(cell("th", "Kind"));
+  const rows = av.apps.filter((a) => !q || (a.title + " " + a.id + " " + a.appKind).toLowerCase().includes(q)).slice(0, 200).map((a) => {
+    const tr = document.createElement("tr");
+    const name = cell("td", a.title);
+    name.append(cell("small", a.id + (a.deviceClassesAdmin ? " · classes set here" : a.packageClasses ? " · classes from its package" : "")));
+    tr.append(name);
+    const post = async (body) => {
+      const r = await api("POST", `/api/admin/apps/${encodeURIComponent(a.id)}/availability`, body);
+      Object.assign(a, r.app);
+      $("status").textContent = `${a.title}: published build ${r.publish.build}`;
+      appRows();
+    };
+    for (const d of av.deviceClasses) {
+      const td = cell("td", undefined, "c");
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.dataset.testid = `app-${a.id}-${d.id}`;
+      box.title = `${a.title} on ${d.name}`;
+      box.checked = a.deviceClasses.includes(d.id);
+      box.onchange = () => {
+        const set = new Set(a.deviceClasses);
+        if (box.checked) set.add(d.id); else set.delete(d.id);
+        if (!set.size) { box.checked = true; $("status").textContent = "An app is offered on one class at least: pull it to take it out"; return; }
+        post({ deviceClasses: av.deviceClasses.map((c) => c.id).filter((c) => set.has(c)) }).catch((e) => { $("status").textContent = e.message; });
+      };
+      td.append(box);
+      tr.append(td);
+    }
+    const td = cell("td");
+    const sel = document.createElement("select");
+    sel.dataset.testid = `kind-${a.id}`;
+    sel.append(Object.assign(document.createElement("option"), { value: "", textContent: `${a.appKindAssigned} (assigned)` }),
+               ...av.appKinds.map((k) => Object.assign(document.createElement("option"), { value: k.id, textContent: k.id })));
+    sel.value = a.appKindAdmin || "";
+    sel.onchange = () => post({ appKind: sel.value || null }).catch((e) => { $("status").textContent = e.message; });
+    td.append(sel);
+    if (a.deviceClassesAdmin) {
+      const back = cell("button", "Package's");
+      back.title = "The classes its package says (all when it says none)";
+      back.onclick = () => post({ deviceClasses: null }).catch((e) => { $("status").textContent = e.message; });
+      td.append(" ", back);
+    }
+    tr.append(td);
+    return tr;
+  });
+  $("appClasses").replaceChildren(tr0, ...rows);
+}
+function showAvailability() {
+  offRows("kinds", "kinds", av.appKinds);
+  offRows("feeds", "feeds", av.feeds);
+  appRows();
+}
+async function loadAvailability() {
+  av = await api("GET", "/api/admin/availability");
+  av.off = { kinds: Object.assign({}, av.off.kinds), feeds: Object.assign({}, av.off.feeds) };
+  showAvailability();
+}
+$("appFilter").oninput = () => { if (av) appRows(); };
+$("load").onclick = () => Promise.all([load(), loadAvailability()]).catch((e) => { $("status").textContent = e.message; });
 $("publish").onclick = async () => {
   try { const r = await api("POST", "/api/admin/publish"); $("status").textContent = `Published build ${r.publish.build}: ${r.publish.apps} apps`; }
   catch (e) { $("status").textContent = e.message; }

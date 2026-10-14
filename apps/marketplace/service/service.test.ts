@@ -34,11 +34,14 @@ function makeService(sources: Any[], preinstalled?: Any[]) {
     const temp = fs.mkdtempSync(path.join(os.tmpdir(), "phoenix-mkt-"));
     const world = { state: null as Any, installed: {} as Record<string, Any>, installs: [] as Any[], toasts: [] as Any[], fail: null as string | null,
                     devMode: false, noIcons: false, pending: [] as Any[],
+                    // The shell's layout (getSystemStatus formFactor): the device's class; "" until it says.
+                    formFactor: "",
                     // The apps the device came with (not removable), by id: their versions.
                     builtins: {} as Record<string, string> };
     const luna = {
         call: async (uri: string, params: Any) => {
             if (uri.endsWith("/getDevMode")) return { returnValue: true, status: world.devMode ? "enabled" : "disabled" };
+            if (uri.endsWith("/getSystemStatus")) return { returnValue: true, formFactor: world.formFactor };
             // As the launcher has them: the app's own icon, on the device (none when world.noIcons).
             // A built-in app is not removable; an installed update of one is, in its place.
             if (uri.endsWith("/listLaunchPoints")) return { returnValue: true, launchPoints: [
@@ -474,5 +477,69 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         await other.service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
         const added = (await other.service.getSources()).sources.find((x: Any) => x.url === catalog.catalogUrl);
         expect(await other.service.install({ sourceId: added.id, id: "org.example.feeds" })).toMatchObject({ errorCode: "NEEDS_DEVMODE" });
+    });
+
+    it("offers each device what is on for its class, says why the rest is not, and hides the kinds the user hides (docs/APP-STORE.md 3.17)", async () => {
+        const dev = await catalog.api("POST", "/api/accounts", { name: "Tess", email: "tess@example.com", role: "developer" });
+        // A package made for tablets and desktops (appinfo.json phoenix.deviceClasses).
+        const up = await catalog.api("POST", "/api/apps/packages", await servers.webApp("com.example.sketchpad", "1.0.0",
+            { title: "Sketchpad", appinfo: { phoenix: { deviceClasses: ["tablet", "desktop"] } } }), dev.token);
+        await catalog.api("POST", `/api/admin/releases/${up.release.id}/approve`, {}, catalog.admin);
+        const { service, world } = makeService(defaults());
+        await service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
+        await service.setSource({ id: "appmuseum", enabled: true });
+        const ids = async (section: string) => (await service.browse({ section })).apps.map((a: Any) => a.id);
+
+        world.formFactor = "tablet";
+        const onTablet = (await service.browse({ section: "apps" })).apps.find((a: Any) => a.id === "com.example.sketchpad");
+        expect(onTablet).toMatchObject({ appKind: "web", deviceClasses: ["tablet", "desktop"] });
+        expect(onTablet.offHere).toBeUndefined();
+        // The App Museum's own flags: Mojo Clock was for the Pre 3 only, a phone.
+        expect(await ids("classics")).toEqual(["appmuseum.9001", "appmuseum.9003"]);
+
+        world.formFactor = "phone";
+        expect(await ids("apps")).not.toContain("com.example.sketchpad");
+        expect((await service.search({ query: "sketchpad" })).apps).toEqual([]);
+        expect(await ids("classics")).toEqual(["appmuseum.9001", "appmuseum.9002", "appmuseum.9003"]);
+        expect((await service.getApp({ sourceId: "phoenix", id: "com.example.sketchpad" })).app.offHere)
+            .toEqual({ reason: "app", text: "Not offered on phones: made for tablets and desktops" });
+        expect(await service.install({ sourceId: "phoenix", id: "com.example.sketchpad" }))
+            .toMatchObject({ returnValue: false, errorCode: "OFF_HERE", errorText: "Not offered on phones: made for tablets and desktops" });
+
+        // The catalog's admin switches classic webOS apps off on phones: the App Museum's, every feed's.
+        await catalog.api("POST", "/api/admin/availability", { off: { kinds: { legacy: ["phone"] } } }, catalog.admin);
+        await service.refresh({});
+        const classics = await service.browse({ section: "classics" });
+        expect(classics.apps).toEqual([]);
+        expect(classics.offHere).toEqual({ reason: "kind", text: "The Marketplace does not offer classic webOS apps on phones" });
+        expect((await service.search({ query: "mojo clock" })).apps).toEqual([]);
+        const onPhone = await service.getAvailability();
+        expect(onPhone).toMatchObject({ deviceClass: "phone" });
+        expect(onPhone.kinds.find((k: Any) => k.id === "legacy")).toMatchObject({ name: "Classic webOS apps", hidden: false, offByCatalog: true });
+        expect(onPhone.deviceClasses.map((c: Any) => c.id)).toEqual(["phone", "tablet", "desktop"]);
+        world.formFactor = "tablet";
+        expect(await ids("classics")).toEqual(["appmuseum.9001", "appmuseum.9003"]);
+
+        // Installed on the tablet, then the device is a phone: it stays, its page and Installed Apps say why it is not offered.
+        expect(await service.install({ sourceId: "phoenix", id: "com.example.sketchpad" })).toMatchObject({ returnValue: true });
+        world.formFactor = "phone";
+        expect((await service.listInstalled()).apps.find((a: Any) => a.id === "com.example.sketchpad"))
+            .toMatchObject({ appKind: "web", offHere: { reason: "app" } });
+        expect((await service.getApp({ sourceId: "phoenix", id: "com.example.sketchpad" })).app)
+            .toMatchObject({ installed: { version: "1.0.0" }, offHere: { reason: "app" } });
+
+        // The user hides web apps on this device.
+        const hidden = await service.setKind({ kind: "web", enabled: false });
+        expect(hidden.kinds.find((k: Any) => k.id === "web")).toMatchObject({ hidden: true });
+        expect(await ids("web")).toEqual([]);
+        expect((await service.getApp({ sourceId: "phoenix", id: "org.webosphoenix.pwa.tides" })).app.offHere)
+            .toEqual({ reason: "hidden", text: "You hid web apps on this device (Catalogs > Kinds of Apps)" });
+        expect((await service.setKind({ kind: "android", enabled: false }))).toMatchObject({ returnValue: false, errorCode: "BAD_PARAMS" });
+        await service.setKind({ kind: "web", enabled: true });
+        expect((await service.search({ query: "tide tables" })).apps.map((a: Any) => a.id)).toEqual(["org.webosphoenix.pwa.tides"]);
+        // A device that has not said its class yet is offered everything.
+        world.formFactor = "";
+        expect(await ids("apps")).toContain("com.example.sketchpad");
+        await catalog.api("POST", "/api/admin/availability", { off: {} }, catalog.admin);
     });
 });

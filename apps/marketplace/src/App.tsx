@@ -17,6 +17,13 @@
 //   Connections  the accounts Phoenix can connect to (Synergy), from the
 //              catalog's account types (Connections.tsx)
 //
+// Each device is offered the apps that are on for its class (phone,
+// tablet, desktop: its layout, followed as it changes) and the kinds of
+// app the user did not hide (Catalogs > Kinds of Apps), the catalog's
+// switches applied by the service (docs/APP-STORE.md 3.17): a line under
+// the tabs says for which device; an app that is not offered here says why
+// on its page and does not download (installed, it stays, with its updates).
+//
 // Launch params: {section: "updates"} (the update notification) opens the
 // installed apps; {sourceId, id} opens an app's page; the Accounts app's
 // "Find More..." ({common: {sceneType: "search", params: {type:
@@ -24,8 +31,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-    apps, localCatalog, LunaError, marketplace,
-    type AccountType, type CatalogSource, type InstalledApp, type InstallProgress, type LocalCatalogStatus, type MarketApp, type PendingKey, type Section,
+    apps, localCatalog, LunaError, marketplace, systemStatus,
+    type AccountType, type Availability, type CatalogSource, type InstalledApp, type InstallProgress, type LocalCatalogStatus, type MarketApp,
+    type OffHere, type PendingKey, type Section,
 } from "@phoenix/luna";
 import { useDevModeShown, useLaunchParams } from "@phoenix/luna/react";
 import { AccountTypePage, AccountTypeRow, ConnectionsFiltered, ConnectionsHome, useAccountTypes, useAddedTemplates } from "./Connections";
@@ -106,7 +114,57 @@ function useSources() {
         setVersion((v) => v + 1);
     }, []);
     useEffect(() => { void reload(); }, [reload]);
-    return { sources, pending, problems, version, reload };
+    // The lists again, without reading the catalogs again (the device's class or kinds changed).
+    const bump = useCallback(() => setVersion((v) => v + 1), []);
+    return { sources, pending, problems, version, reload, bump };
+}
+
+// ---- Which apps this device is offered (docs/APP-STORE.md 3.17) -------------------------------
+//
+// Its class follows its layout (getSystemStatus formFactor: the adaptive
+// simulator as its window is resized, a docked phone): when it changes, the
+// lists are read again.
+
+function useAvailability(bump: () => void) {
+    const [av, setAv] = useState<Availability | null>(null);
+    const bumpRef = useRef(bump);
+    bumpRef.current = bump;
+    // A service from before device classes (or none) answers without them: nothing to show.
+    const valid = (r: Availability | null) => (r && Array.isArray(r.deviceClasses) && Array.isArray(r.kinds) ? r : null);
+    const load = useCallback(() => marketplace.availability().then((r) => setAv(valid(r)), () => setAv(null)), []);
+    useEffect(() => {
+        void load();
+        let last: string | undefined;
+        const sub = systemStatus.watch((st) => {
+            const now = st.formFactor ?? "";
+            if (last !== undefined && last !== now) {
+                void load();
+                bumpRef.current();
+            }
+            last = now;
+        }, () => {});
+        return () => sub.cancel();
+    }, [load]);
+    const setKind = useCallback(async (kind: string, enabled: boolean) => {
+        try { setAv(valid(await marketplace.setKind(kind, enabled))); } finally { bumpRef.current(); }
+    }, []);
+    return { av, setKind };
+}
+type AvailabilityCtx = ReturnType<typeof useAvailability>;
+
+const className = (av: Availability | null) => av?.deviceClasses.find((c) => c.id === av.deviceClass)?.name ?? "";
+const kindName = (av: Availability | null, id?: string) => av?.kinds.find((k) => k.id === id)?.name ?? "";
+
+// "Apps for this phone", and the kinds hidden here: under the tabs.
+function DeviceLine({ av, open }: { av: Availability | null; open: () => void }) {
+    if (!av || !av.deviceClass) return null;
+    const hidden = av.kinds.filter((k) => k.hidden);
+    return (
+        <div className="mk-device" data-testid="device-line">
+            <span>Apps for this {className(av).toLowerCase()}{hidden.length ? ` · ${hidden.map((k) => k.name).join(", ")} hidden` : ""}</span>
+            <button type="button" data-testid="device-settings" onClick={open}>Kinds of Apps</button>
+        </div>
+    );
 }
 
 function TrustCard({ pending, onDone, bare }: { pending: PendingKey; onDone: () => void; bare?: boolean }) {
@@ -176,12 +234,15 @@ function LocalCatalog({ local }: { local: ReturnType<typeof useLocalCatalog> }) 
     );
 }
 
-function Home({ section, setSection, open, ctx, connections }: {
+function Home({ section, setSection, open, ctx, connections, avail, openSettings }: {
     section: Tab; setSection: (s: Tab) => void; open: (a: MarketApp) => void; ctx: ReturnType<typeof useSources>;
     connections: { types: AccountType[] | null; added: Set<string>; open: (t: AccountType) => void };
+    avail: AvailabilityCtx; openSettings: () => void;
 }) {
     const [category, setCategory] = useState<string | null>(null);
     const [list, setList] = useState<MarketApp[] | null>(null);
+    // The whole section not offered here (Classics with classic apps hidden, or off on this class).
+    const [sectionOff, setSectionOff] = useState<OffHere | null>(null);
     const [categories, setCategories] = useState<string[]>([]);
     const [more, setMore] = useState(false);
     const [page, setPage] = useState(0);
@@ -194,6 +255,7 @@ function Home({ section, setSection, open, ctx, connections }: {
         setList(null);
         setPage(0);
         setError(null);
+        setSectionOff(null);
         // Connections has its own list (Connections.tsx).
         if (section === "connections") { setCategories([]); setMore(false); return; }
         marketplace.browse(section, category ?? undefined, 0).then((r) => {
@@ -201,6 +263,7 @@ function Home({ section, setSection, open, ctx, connections }: {
             setList(r.apps);
             setCategories(r.categories);
             setMore(r.more);
+            setSectionOff(r.offHere ?? null);
         }, (e) => { if (live) { setList([]); setError(errorText(e)); } });
         return () => { live = false; };
     }, [section, category, ctx.version]);
@@ -224,6 +287,7 @@ function Home({ section, setSection, open, ctx, connections }: {
                             data-testid={`tab-${s.id}`} onClick={() => setSection(s.id)}>{s.label}</button>
                 ))}
             </div>
+            <DeviceLine av={avail.av} open={openSettings} />
             {ctx.pending.map((p) => <TrustCard key={p.url} pending={p} onDone={() => void ctx.reload()} />)}
             {section !== "classics" && phoenix && phoenix.enabled && phoenix.error && phoenix.error.errorCode !== "UNTRUSTED" && (
                 <div className="mk-card" data-testid="catalog-offline">
@@ -235,7 +299,18 @@ function Home({ section, setSection, open, ctx, connections }: {
                     <Button onClick={() => void ctx.reload()} data-testid="catalog-retry">Try Again</Button>
                 </div>
             )}
-            {section === "classics" && !classicsOn && (
+            {section === "classics" && sectionOff && (
+                <div className="mk-card" data-testid="classics-off-here">
+                    <div className="mk-card-title">The original webOS apps</div>
+                    <p>{sectionOff.text}.</p>
+                    {sectionOff.reason === "hidden" && (
+                        <Button variant="affirmative" data-testid="classics-show" onClick={() => void avail.setKind("legacy", true)}>
+                            Show Classic webOS Apps
+                        </Button>
+                    )}
+                </div>
+            )}
+            {section === "classics" && !classicsOn && !sectionOff && (
                 <div className="mk-card" data-testid="classics-off">
                     <div className="mk-card-title">The original webOS apps</div>
                     <p>The webOS Archive keeps the HP App Catalog's apps in its App Museum II, and the homebrew of the Preware days.
@@ -256,7 +331,7 @@ function Home({ section, setSection, open, ctx, connections }: {
                     ))}
                 </div>
             )}
-            {section !== "connections" && (
+            {section !== "connections" && !sectionOff && (
                 <Group>
                     {list === null ? <Row title="Loading…"><Spinner /></Row>
                         : list.length === 0 ? <Row title={error ? "Could not load" : "Nothing here yet"} subtitle={error ?? undefined} />
@@ -270,8 +345,10 @@ function Home({ section, setSection, open, ctx, connections }: {
 
 // ---- An app's page -------------------------------------------------------------------------
 
-function AppPage({ sourceId, id, seed, onRemoved, catalogVersion }: {
+function AppPage({ sourceId, id, seed, onRemoved, catalogVersion, av }: {
     sourceId: string; id: string; seed?: MarketApp; onRemoved: () => void;
+    /** This device's class and the kinds' names. */
+    av: Availability | null;
     /** Changes each time the catalogs were read again: the page shows the new entry (a page opened by a launch shows the entry kept from before until the refresh comes). */
     catalogVersion: number;
 }) {
@@ -333,6 +410,10 @@ function AppPage({ sourceId, id, seed, onRemoved, catalogVersion }: {
     // device's own version, the update in its place, or only Open.
     const builtin = app.builtin;
     const builtinOnly = !!builtin && !app.installed && !app.update;
+    // Not offered on this device (docs/APP-STORE.md 3.17): it does not
+    // download; installed, it stays, with its updates.
+    const offHere = app.offHere ?? null;
+    const offered = av?.deviceClasses.filter((c) => !app.deviceClasses || app.deviceClasses.includes(c.id)).map((c) => c.name) ?? [];
     return (
         <div className="mk-app" data-testid="app-page">
             <div className="mk-app-head">
@@ -359,12 +440,19 @@ function AppPage({ sourceId, id, seed, onRemoved, catalogVersion }: {
                 ) : builtinOnly ? (
                     <Button variant="affirmative" data-testid="open-app" onClick={() => void apps.launch(appId)}>Open</Button>
                 ) : (
-                    <Button variant="affirmative" data-testid="install-app" disabled={!!app.verdict && !app.verdict.ok} onClick={install}>
+                    <Button variant="affirmative" data-testid="install-app" disabled={(!!app.verdict && !app.verdict.ok) || (!!offHere && !app.installed)}
+                            onClick={install}>
                         {app.update ? `Update to ${app.update}` : app.kind === "pwa" ? "Add to Launcher" : "Download"}
                     </Button>
                 )}
             </div>
             {app.verdict && !app.verdict.ok && <Note>{app.verdict.text}</Note>}
+            {offHere && (
+                <Note testId="off-here">
+                    {offHere.text}.{app.installed ? " It stays installed on this device, and gets its updates." : ""}
+                    {offHere.reason === "hidden" ? " Kinds of Apps in Catalogs shows them again." : ""}
+                </Note>
+            )}
             {builtin && (
                 <Note testId="builtin-note">
                     {builtin.replaced
@@ -404,6 +492,10 @@ function AppPage({ sourceId, id, seed, onRemoved, catalogVersion }: {
             )}
             <Group label="Details">
                 <Row title="Kind" value={kindText(app)} />
+                {app.appKind && kindName(av, app.appKind) && <Row title="Kind of App" value={kindName(av, app.appKind)} testId="app-kind" />}
+                {av && offered.length > 0 && (
+                    <Row title="Offered On" value={offered.length === av.deviceClasses.length ? "Every device" : offered.join(", ")} testId="app-classes" />
+                )}
                 {app.version && <Row title="Version" value={app.version} />}
                 {app.installed && <Row title="Installed" value={app.installed.version || "Yes"} />}
                 {builtin && <Row title="Built in" value={builtin.version || "Yes"} />}
@@ -433,7 +525,7 @@ function AppPage({ sourceId, id, seed, onRemoved, catalogVersion }: {
 
 // ---- Installed apps and updates --------------------------------------------------------------
 
-function Installed({ open }: { open: (sourceId: string, id: string) => void }) {
+function Installed({ open, av }: { open: (sourceId: string, id: string) => void; av: Availability | null }) {
     const [list, setList] = useState<InstalledApp[] | null>(null);
     const [busy, setBusy] = useState(false);
     const [result, setResult] = useState<string | null>(null);
@@ -442,7 +534,10 @@ function Installed({ open }: { open: (sourceId: string, id: string) => void }) {
     const updates = list?.filter((a) => a.update) ?? [];
     const row = (a: InstalledApp) => (
         <Row key={a.id} testId={`installed-${a.id}`} icon={<Icon src={[a.icon, a.catalogIcon]} title={a.title} />} chevron title={a.title}
-             subtitle={(a.update ? `${a.version} → ${a.update}` : a.version) + (a.builtin ? ` · in place of the built-in ${a.builtin}` : "")}
+             subtitle={(a.update ? `${a.version} → ${a.update}` : a.version) + (a.builtin ? ` · in place of the built-in ${a.builtin}` : "")
+                       // Installed, but not offered here now: it stays (docs/APP-STORE.md 3.17).
+                       + (a.offHere ? (a.offHere.reason === "hidden" ? " · its kind is hidden here"
+                                                                       : ` · not offered on this ${className(av).toLowerCase() || "device"}`) : "")}
              value={a.update ? "Update" : ""}
              onClick={() => open(a.sourceId, a.catalogId)} />
     );
@@ -483,18 +578,40 @@ function Installed({ open }: { open: (sourceId: string, id: string) => void }) {
 
 // ---- Settings: the catalogs --------------------------------------------------------------------
 
-function Settings({ ctx }: { ctx: ReturnType<typeof useSources> }) {
+function Settings({ ctx, avail }: { ctx: ReturnType<typeof useSources>; avail: AvailabilityCtx }) {
     const [url, setUrl] = useState("");
+    const av = avail.av;
+    const plural = className(av).toLowerCase() ? `${className(av).toLowerCase()}s` : "this device";
     const [checking, setChecking] = useState(false);
     const [pending, setPending] = useState<PendingKey | null>(null);
     const [error, setError] = useState<string | null>(null);
-    const kindName = { phoenix: "Phoenix catalog", appmuseum: "App Museum II", preware: "Preware feed" } as const;
+    const sourceKind = { phoenix: "Phoenix catalog", appmuseum: "App Museum II", preware: "Preware feed" } as const;
     return (
         <>
+            {/* Which apps this device is offered (docs/APP-STORE.md 3.17): its class, from its
+                layout, and the kinds the user shows or hides here. */}
+            {av && (
+                <>
+                    <Group label="This Device">
+                        <Row title="Kind of device" value={className(av) || "Not known yet"} testId="device-class"
+                             subtitle="From its layout: the Marketplace offers the apps made for it" />
+                    </Group>
+                    <Group label="Kinds of Apps">
+                        {av.kinds.map((k) => (
+                            <Row key={k.id} testId={`kind-${k.id}`} title={k.name}
+                                 subtitle={k.offByCatalog ? `The Marketplace does not offer these on ${plural}` : k.about}>
+                                <ToggleButton value={!k.hidden} label={k.name} testId={`kind-toggle-${k.id}`}
+                                              onChange={(on) => void avail.setKind(k.id, on)} />
+                            </Row>
+                        ))}
+                    </Group>
+                    <Note>A kind turned off here is not listed or offered on this device. Apps you installed stay, with their updates.</Note>
+                </>
+            )}
             <Group label="Catalogs">
                 {(ctx.sources ?? []).map((s) => (
                     <Row key={s.id} testId={`source-${s.id}`} title={s.name}
-                         subtitle={s.error ? s.error.errorText : s.fingerprint ? `Key ${s.fingerprint}` : `${kindName[s.kind]} · ${s.url}`}>
+                         subtitle={s.error ? s.error.errorText : s.fingerprint ? `Key ${s.fingerprint}` : `${sourceKind[s.kind]} · ${s.url}`}>
                         <ToggleButton value={s.enabled} label={s.name} testId={`source-toggle-${s.id}`}
                                       onChange={async (on) => { await marketplace.setSource(s.id, on); void ctx.reload(); }} />
                     </Row>
@@ -527,6 +644,7 @@ function Marketplace() {
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<{ apps: MarketApp[]; accountTypes: AccountType[] } | null>(null);
     const ctx = useSources();
+    const avail = useAvailability(ctx.bump);
     const accountTypes = useAccountTypes(ctx.version);
     const added = useAddedTemplates();
     const view = stack[stack.length - 1];
@@ -574,7 +692,8 @@ function Marketplace() {
                 </form>
             </header>
             <main className="mk-main" ref={main}>
-                {view.kind === "home" && <Home section={section} setSection={setSection} open={openApp} ctx={ctx}
+                {view.kind === "home" && <Home section={section} setSection={setSection} open={openApp} ctx={ctx} avail={avail}
+                                               openSettings={() => push({ kind: "settings" })}
                                                connections={{ types: accountTypes, added, open: openType }} />}
                 {view.kind === "connections" && (
                     <ConnectionsFiltered filter={view.filter} types={accountTypes} added={added} open={openType}
@@ -582,7 +701,7 @@ function Marketplace() {
                 )}
                 {view.kind === "account" && <AccountTypePage key={view.type.templateId} t={view.type} added={added.has(view.type.templateId)} />}
                 {view.kind === "app" && <AppPage key={view.sourceId + view.id} sourceId={view.sourceId} id={view.id} seed={view.seed}
-                                                 onRemoved={() => void ctx.reload()} catalogVersion={ctx.version} />}
+                                                 onRemoved={() => void ctx.reload()} catalogVersion={ctx.version} av={avail.av} />}
                 {view.kind === "search" && (
                     <>
                         {(results === null || results.apps.length > 0 || results.accountTypes.length === 0) && (
@@ -603,8 +722,8 @@ function Marketplace() {
                         )}
                     </>
                 )}
-                {view.kind === "installed" && <Installed open={(sourceId, id) => push({ kind: "app", sourceId, id })} />}
-                {view.kind === "settings" && <Settings ctx={ctx} />}
+                {view.kind === "installed" && <Installed open={(sourceId, id) => push({ kind: "app", sourceId, id })} av={avail.av} />}
+                {view.kind === "settings" && <Settings ctx={ctx} avail={avail} />}
             </main>
             {view.kind === "home" && (
                 <nav className="mk-footer">

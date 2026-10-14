@@ -1,0 +1,21 @@
+{
+    "//": "The device classes, kinds of app and feeds the Marketplace knows (docs/APP-STORE.md 3.17): the one list, read by the device's service (lib/availability.js) and by the catalog (server/marketplace/src/Availability.php, which refuses an id it does not list). A new class, kind or feed is an entry here. plural/lower: the words the Marketplace uses in a sentence.",
+    "deviceClasses": [
+        { "id": "phone", "name": "Phone", "plural": "phones", "about": "A phone (mobile): the phone layout" },
+        { "id": "tablet", "name": "Tablet", "plural": "tablets", "about": "A tablet: the tablet layout" },
+        { "id": "desktop", "name": "Desktop", "plural": "desktops", "about": "A phone or tablet docked to a monitor (2.0's desktop mode)" }
+    ],
+    "appKinds": [
+        { "id": "phoenix", "name": "Phoenix apps", "lower": "Phoenix apps", "about": "Made by webOS Phoenix: its 1.0 and 2.0 apps and its own connectors" },
+        { "id": "legacy", "name": "Classic webOS apps", "lower": "classic webOS apps", "about": "The original webOS apps, from the App Museum II and the Preware feeds" },
+        { "id": "web", "name": "Web apps", "lower": "web apps", "about": "Websites and progressive web apps, and the open-source web apps the Marketplace hosts" },
+        { "id": "native", "name": "Native apps", "lower": "native apps", "about": "Packages with native code: services, programs, Linux apps" },
+        { "id": "local", "name": "Your own apps", "lower": "apps uploaded on this computer", "about": "Uploaded by the local developer to a development catalog (sideloaded)" }
+    ],
+    "feeds": [
+        { "id": "catalog", "name": "The catalog's apps", "lower": "the catalog's apps" },
+        { "id": "connectors", "name": "The catalog's connectors", "lower": "the catalog's connectors" },
+        { "id": "appmuseum", "name": "App Museum II", "lower": "apps from the App Museum II" },
+        { "id": "preware", "name": "Preware feeds", "lower": "apps from the Preware feeds" }
+    ]
+}

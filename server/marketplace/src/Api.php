@@ -26,6 +26,15 @@
 //   POST /api/admin/releases/{n}/{approve|reject}  (admin) {notes}
 //   POST /api/admin/optouts/{n}/accept             (admin)
 //   POST /api/admin/publish                        (admin)
+//   GET  /api/admin/availability                   (admin) device classes, kinds and feeds
+//                                                  (docs/APP-STORE.md 3.17): the lists, what
+//                                                  is off where, and each app's kind and classes
+//   POST /api/admin/availability {off: {kinds: {kind: [class]}, feeds: {feed: [class]}}}
+//                                                  (admin) a kind or a whole feed off per device
+//                                                  class (the whole set), and publishes
+//   POST /api/admin/apps/{id}/availability {appKind?, deviceClasses?}  (admin) an app's kind
+//                                                  and the classes it is offered on (null: the
+//                                                  assigned kind, the package's classes); publishes
 //   GET  /api/updates                              the system update feed: every
 //                                                  device type's channels
 //   POST /api/admin/updates?compatible=C&version=V&build=N[&channel=stable|beta]
@@ -188,6 +197,19 @@ final class Api
             }
             if ($m === 'POST' && $p === '/api/admin/publish') {
                 return ['publish' => $this->catalog->publish()];
+            }
+            if ($m === 'GET' && $p === '/api/admin/availability') {
+                return $this->catalog->availability();
+            }
+            if ($m === 'POST' && $p === '/api/admin/availability') {
+                $off = $this->catalog->setAvailabilityOff($this->json($body)['off'] ?? null);
+                return ['off' => Catalog::offJson($off), 'publish' => $this->catalog->publish()];
+            }
+            if ($m === 'POST' && preg_match('#^/api/admin/apps/([^/]+)/availability$#', $p, $x)) {
+                $app = $this->catalog->setAppAvailability(rawurldecode($x[1]), $this->json($body));
+                return ['app' => ['id' => $app['id'], 'appKind' => $app['appKind'], 'deviceClasses' => $app['deviceClasses'],
+                                  'appKindAdmin' => $app['appKindAdmin'], 'deviceClassesAdmin' => $app['deviceClassesAdmin']],
+                        'publish' => $this->catalog->publish()];
             }
             // A system update: the bundle as the body (RAUC signed it; the
             // device checks that against its keyring), the release in the query.
