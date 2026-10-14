@@ -22,7 +22,7 @@ plan, milestone by milestone. Every gap still open, by area and priority:
 | M4: core apps and services | 12 | 11 |
 | M5: modernize, within 1.x | 2 | 3 |
 | M6: the last 1.0 features | 13 | 1 |
-| 1.0 release | 7 | 11 |
+| 1.0 release | 7 | 18 |
 | 2.0: modern webOS | 1 | 20 |
 
 ## Two lines: 1.x and 2.0
@@ -505,6 +505,32 @@ every day. The app sources come towards the end of 1.0 (owner, 29 September
       and hosting the platform (its addresses and keys in
       `/etc/palm/phoenix/servers.json`, meta-phoenix's `PHOENIX_*` settings;
       the device side is ready: [PLATFORM-CLIENT.md](PLATFORM-CLIENT.md))
+
+### 1.0 backlog: from 2.0, in the classic style
+
+Built first in 2.0's Ember Glass shell (phoenix-ember-glass-ui,
+SYSTEM-UI-2.md parts 9 and 11), and put in 1.0's backlog by the owner on
+14 October 2026: wanted in 1.0, not scheduled yet. Each is drawn in 1.0's
+own art when it is built, as if Palm had shipped it ("Two lines" above).
+Not in this list, because they are Ember Glass's drawing: the clip strip's
+kind glyphs, floor light, fade and counts, and Just Type's counts and
+contact rings.
+
+- [ ] The keyboard's clip strip: swipe a clip up to delete it, with Undo
+      ("Deleted · Undo" for a few seconds), as card view throws a card away
+- [ ] The clip strip: search the clips, typed on the keys, as the emoji
+      page's search
+- [ ] The clip strip: an Open Clipboard button beside the tabs (today the
+      hold menu's last item)
+- [ ] Just Type: recent searches when the field is empty, each with an x and
+      a Clear, and Settings > Just Type > "Remember recent searches"
+- [ ] Just Type: the arrow keys and Tab move through the results, Enter
+      opens the marked one (with the hardware keyboard work, GAPS K-rows)
+- [ ] Just Type: every content kind's first two results under its row, as
+      the original showed Email's (`DbSearch.js`)
+- [ ] Just Type: an "Ask the Assistant" first row, answered at once without
+      the model or the network for sums, units, times and definitions
+      (the Assistant service's `quickAnswer`, already in 2.0)
 
 ## 2.0: modern webOS
 
