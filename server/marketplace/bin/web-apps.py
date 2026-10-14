@@ -132,7 +132,7 @@ def check_entry(a):
     if bad:
         errs.append("license %s: not one the Marketplace hosts (%s); list it as a link to its official site instead"
                     % (a["license"], ", ".join(bad)))
-    for k in ("homepage", "source", "developerUrl"):
+    for k in ("homepage", "source", "developerUrl", "releaseNotesUrl"):
         if k in a and not str(a[k]).startswith("https://"):
             errs.append(k + ": an https:// address")
     if not isinstance(a["categories"], list) or not 1 <= len(a["categories"]) <= 5:
@@ -479,6 +479,10 @@ def listing_for(a, cache):
            "icon": os.path.join(version_dir(cache, a), "icon.png"), "screenshots": screenshots_of(cache, a["id"])}
     if a.get("developerUrl"):
         out["developerUrl"] = a["developerUrl"]
+    # The upstream's notes for this version, a link on the app's page (its package carries no
+    # update log of ours).
+    if a.get("releaseNotesUrl"):
+        out["releaseNotesUrl"] = a["releaseNotesUrl"]
     return out
 
 
@@ -621,6 +625,20 @@ def default_listing(name, built, pkg, commit):
     }
 
 
+def shipped_changelog(data):
+    """An app's changelog.json as a package carries it: without "unreleased" (never shipped)."""
+    try:
+        log = json.loads(data.decode("utf-8-sig"))
+    except (UnicodeDecodeError, ValueError):
+        raise ValueError("changelog.json is not valid JSON")
+    if not isinstance(log, dict):
+        raise ValueError("changelog.json: must be a JSON object")
+    if "unreleased" not in log:
+        return data
+    log.pop("unreleased")
+    return (json.dumps(log, indent=2, ensure_ascii=False) + "\n").encode()
+
+
 def default_apps(opts, ids):
     d, why = default_apps_dir(opts)
     if not d:
@@ -656,6 +674,11 @@ def default_apps(opts, ids):
             # Marketplace-only app (phoenix.catalogOnly), which says so itself.
             built["removable"] = True
             files["appinfo.json"] = (json.dumps(built, indent=4, ensure_ascii=False) + "\n").encode()
+            # Its update log (changelog.json, beside appinfo.json; docs/APP-STORE.md "Update
+            # logs"), which the catalog reads and checks on upload: as it ships, without the
+            # notes kept for the next version ("unreleased").
+            if "changelog.json" in files:
+                files["changelog.json"] = shipped_changelog(files["changelog.json"])
             try:
                 pkg = json.load(open(os.path.join(src, "package.json"), encoding="utf-8"))
             except (OSError, ValueError):

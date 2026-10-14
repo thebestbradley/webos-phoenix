@@ -7,8 +7,11 @@
 //   POST /api/accounts {name, email, role: developer|user}  -> {id, token}
 //        (on this computer anyone may register; a public server needs email
 //        or forge sign-in first, docs/APP-STORE.md 3.4)
-//   GET  /api/apps                        listed apps
-//   GET  /api/apps/{id}                   one app, its releases and rating
+//   GET  /api/apps                        listed apps (with whatsNew: the listed
+//                                         version's update log entry, when it has one)
+//   GET  /api/apps/{id}                   one app, its releases and rating, and its
+//                                         update log: whatsNew and versionHistory
+//                                         (every entry, newest first)
 //   POST /api/apps            (developer) {kind: "pwa", id, manifest, title, ...}
 //   POST /api/apps/packages   (developer) the .ipk as the request body: an app,
 //                             or a Synergy connector (Catalog::connectorTypes);
@@ -111,7 +114,7 @@ final class Api
             return $this->createAccount((string) ($j['name'] ?? ''), (string) ($j['email'] ?? ''), $role);
         }
         if ($m === 'GET' && $p === '/api/apps') {
-            return ['apps' => array_map(fn ($r) => $this->catalog->app($r['id']),
+            return ['apps' => array_map(fn ($r) => $this->catalog->app($r['id'], false),
                 $this->db->all("SELECT id FROM apps WHERE status = 'listed' ORDER BY title"))];
         }
         if ($m === 'POST' && $p === '/api/apps') {

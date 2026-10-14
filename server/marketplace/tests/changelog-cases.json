@@ -1,0 +1,1028 @@
+[
+    {
+        "name": "the spec's example",
+        "doc": {
+            "format": 1,
+            "unreleased": {
+                "new": [],
+                "improved": [],
+                "fixed": []
+            },
+            "versions": [
+                {
+                    "version": "2.1.0",
+                    "date": "2026-11-02",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ],
+                    "improved": [
+                        "Lists with hundreds of tasks scroll smoothly."
+                    ],
+                    "fixed": [
+                        "A task moved to another list no longer shows in both."
+                    ],
+                    "known": []
+                },
+                {
+                    "version": "2.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ],
+                    "rebuild": true,
+                    "replaces": "Tasks 1.0 (webOS 3.0.5)"
+                }
+            ]
+        },
+        "appVersion": "2.1.0",
+        "ok": true
+    },
+    {
+        "name": "a rebuild alone",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "2.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ],
+                    "rebuild": true
+                }
+            ]
+        },
+        "appVersion": "2.0.0",
+        "ok": true
+    },
+    {
+        "name": "not an object",
+        "doc": [],
+        "ok": false,
+        "error": "changelog: must be a JSON object"
+    },
+    {
+        "name": "format 2",
+        "doc": {
+            "format": 2,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "format: must be 1"
+    },
+    {
+        "name": "an unknown top-level field",
+        "doc": {
+            "format": 1,
+            "notes": [],
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "notes: not a field of a changelog"
+    },
+    {
+        "name": "unreleased is a list",
+        "doc": {
+            "format": 1,
+            "unreleased": [],
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "unreleased: must be an object"
+    },
+    {
+        "name": "unreleased with Markdown",
+        "doc": {
+            "format": 1,
+            "unreleased": {
+                "new": [
+                    "Adds **bold** text."
+                ]
+            },
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "unreleased.new[0]: has Markdown"
+    },
+    {
+        "name": "no versions",
+        "doc": {
+            "format": 1
+        },
+        "ok": false,
+        "error": "versions: must be a list"
+    },
+    {
+        "name": "versions empty",
+        "doc": {
+            "format": 1,
+            "versions": []
+        },
+        "ok": false,
+        "error": "versions: must list at least one version"
+    },
+    {
+        "name": "an entry that is not an object",
+        "doc": {
+            "format": 1,
+            "versions": [
+                "1.0.0"
+            ]
+        },
+        "ok": false,
+        "error": "versions[0]: must be an object"
+    },
+    {
+        "name": "an unknown entry field",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ],
+                    "changes": []
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].changes: not a field of a version"
+    },
+    {
+        "name": "a two-part version",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].version: must be a version such as 1.2.3"
+    },
+    {
+        "name": "a leading zero",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.02.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].version: must be a version such as 1.2.3"
+    },
+    {
+        "name": "a day that does not exist",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-02-30",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].date: must be a date such as 2026-10-14"
+    },
+    {
+        "name": "a leap day",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2028-02-29",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": true
+    },
+    {
+        "name": "no summary",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "new": [
+                        "Set a reminder."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].summary: must be a sentence"
+    },
+    {
+        "name": "a summary of two sentences",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders. Faster lists.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].summary: must be one sentence"
+    },
+    {
+        "name": "a summary without a full stop",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].summary: must end with . ! or ?"
+    },
+    {
+        "name": "a summary of 141 characters",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].summary: is 141 characters long; at most 140"
+    },
+    {
+        "name": "nothing new, improved or fixed",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [],
+                    "known": [
+                        "Sync can be slow."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0]: lists nothing new, improved or fixed"
+    },
+    {
+        "name": "a list that is not a list",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ],
+                    "fixed": "Crashes."
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].fixed: must be a list"
+    },
+    {
+        "name": "versions out of order",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                },
+                {
+                    "version": "1.1.0",
+                    "date": "2026-10-01",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[1].version: 1.1.0 must be lower than 1.0.0 above it"
+    },
+    {
+        "name": "a version listed twice",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.1.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                },
+                {
+                    "version": "1.1.0",
+                    "date": "2026-10-01",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[1].version: 1.1.0 is listed twice"
+    },
+    {
+        "name": "versions compared as numbers",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.10.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                },
+                {
+                    "version": "1.9.0",
+                    "date": "2026-10-01",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": true
+    },
+    {
+        "name": "a date later than the one above",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.1.0",
+                    "date": "2026-10-01",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                },
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[1].date: 2026-10-12 is later than 2026-10-01 above it"
+    },
+    {
+        "name": "the same date twice",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.1.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                },
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": true
+    },
+    {
+        "name": "rebuild not on the oldest",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "2.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ],
+                    "rebuild": true
+                },
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-01",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].rebuild: only the last (oldest) version can be the rebuild"
+    },
+    {
+        "name": "rebuild false",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ],
+                    "rebuild": false
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].rebuild: must be true when it is there"
+    },
+    {
+        "name": "replaces without rebuild",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ],
+                    "replaces": "Tasks 1.0"
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].replaces: only the rebuild names what it replaces"
+    },
+    {
+        "name": "the top version is not the app's",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Set a reminder on any task with a due time."
+                    ]
+                }
+            ]
+        },
+        "appVersion": "1.0.1",
+        "ok": false,
+        "error": "versions[0].version: 1.0.0 does not match the version 1.0.1"
+    },
+    {
+        "name": "an item of 201 characters",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: is 201 characters long; at most 200"
+    },
+    {
+        "name": "an item of 200 characters",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA."
+                    ]
+                }
+            ]
+        },
+        "ok": true
+    },
+    {
+        "name": "an empty item",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        ""
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: is empty"
+    },
+    {
+        "name": "an item with spaces around it",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        " Faster. "
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: has spaces at its start or end"
+    },
+    {
+        "name": "an item on two lines",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Faster\nlists."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: must be one line"
+    },
+    {
+        "name": "an item with a Markdown link",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "See [the guide](https://example.com)."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: has Markdown"
+    },
+    {
+        "name": "an item with a list bullet",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "- Faster lists."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: has Markdown"
+    },
+    {
+        "name": "an item with HTML",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Lists are <b>faster</b>."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: has HTML"
+    },
+    {
+        "name": "an item with an HTML entity",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Fish &amp; chips."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: has HTML"
+    },
+    {
+        "name": "an item with a commit hash",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Fixed in 3f9a2c1."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: has a commit hash"
+    },
+    {
+        "name": "an item with a number that is not a hash",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Holds 1234567 songs."
+                    ]
+                }
+            ]
+        },
+        "ok": true
+    },
+    {
+        "name": "an item with an issue number",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Fixes #42."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: has an issue number"
+    },
+    {
+        "name": "an item with a file path",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Settings are kept in /media/internal now."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: has a file path"
+    },
+    {
+        "name": "an item with a file name",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Reads appinfo.json again."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: has a file path"
+    },
+    {
+        "name": "an item with km/h",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Shows speed in km/h."
+                    ]
+                }
+            ]
+        },
+        "ok": true
+    },
+    {
+        "name": "an item with a web address",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Opens https://example.com/a/b/c.html in the browser."
+                    ]
+                }
+            ]
+        },
+        "ok": true
+    },
+    {
+        "name": "an item with an app id",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Opens com.palm.app.notes."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: has an internal name"
+    },
+    {
+        "name": "an item with a camelCase name",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "The launchParams work again."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: has an internal name"
+    },
+    {
+        "name": "an item naming webOS, iOS and iPhone",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Imports contacts from webOS, iOS and iPhone backups."
+                    ]
+                }
+            ]
+        },
+        "ok": true
+    },
+    {
+        "name": "an item with a snake_case name",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "The open_file call works."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: has an internal name"
+    },
+    {
+        "name": "an item with a function",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Calling open() works."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: has an internal name"
+    },
+    {
+        "name": "an item naming an AI model",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Answers like Claude."
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: names an AI model"
+    },
+    {
+        "name": "an item without a full stop",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Faster lists"
+                    ]
+                }
+            ]
+        },
+        "ok": false,
+        "error": "versions[0].new[0]: must end with . ! or ?"
+    },
+    {
+        "name": "an item ending in a closing quote",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Says “Hello.”"
+                    ]
+                }
+            ]
+        },
+        "ok": true
+    },
+    {
+        "name": "an item in another script",
+        "doc": {
+            "format": 1,
+            "versions": [
+                {
+                    "version": "1.0.0",
+                    "date": "2026-10-12",
+                    "summary": "Reminders for tasks with a due time.",
+                    "new": [
+                        "Café et crème brûlée."
+                    ]
+                }
+            ]
+        },
+        "ok": true
+    }
+]
