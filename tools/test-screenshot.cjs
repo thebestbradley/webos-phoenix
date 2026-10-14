@@ -154,6 +154,15 @@ async function main() {
         await page.evaluate(([d, t]) => window.__phoenixRuntime.saveScreenshot({ data: d, app: "Email", time: t, capture: "capture-7" }), [data, when2]);
         const note2 = host.filter((m) => m.type === "notification" && m.payload.appId === APP).pop();
         check(note2 && note2.payload.params.capture === "capture-7", "the notification names the shell's capture");
+        // Not stored (not a PNG): no notification, and the shell is told, so a tap on the
+        // capture's thumbnail stops waiting for it (Shell.qml onCaptureSaveFailed).
+        const notes = host.filter((m) => m.type === "notification").length;
+        const failedSave = await page.evaluate(() => window.__phoenixRuntime.saveScreenshot({ data: "@@not a png@@", app: "Email", capture: "capture-8" })
+            .then(() => "saved", (e) => "failed: " + e.message));
+        const failure = host.find((m) => m.type === "captureFailed");
+        check(failedSave.startsWith("failed") && failure && failure.payload.capture === "capture-8"
+              && host.filter((m) => m.type === "notification").length === notes,
+              `a capture not stored: no notification, the shell told (${failedSave})`);
 
         // ---- Opened before it is stored --------------------------------------------------------------
         // A tap on the thumbnail can open the preview on a capture another page is still storing (a

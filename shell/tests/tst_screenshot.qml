@@ -241,6 +241,70 @@ Item {
             compare(previewOpened.count, 1);
         }
 
+        // Tapped before it is stored, and the store is slow (at start-up the
+        // system UI page that stores it may still be loading: 13 to 30 s in
+        // phoenix-sim under xvfb): the preview still opens on it, not on the
+        // newest capture stored before it (or on none: "No screen captures
+        // yet") after a fixed wait.
+        function test_thumbnailTappedWhileTheSaveIsSlow() {
+            var thumb = findChild(shell, "screenCaptureThumbnail");
+            previewOpened.clear();
+            keyClick(Qt.Key_F9);
+            tryCompare(taken, "count", 1, 2000);
+            tryCompare(thumb, "x", Theme.px(16), 1000);
+            var id = thumb.capture;
+            mouseClick(findChild(thumb, "screenCaptureThumbnailArea"));
+            verify(!thumb.shown);
+            wait(10500);
+            compare(previewOpened.count, 0, "still waiting for it");
+            var path = "/media/internal/screencaptures/Card View 2026-10-14 at 19.00.36.png";
+            windows.notify("org.webosphoenix.screenshot", "Screen captured", "Card View 2026-10-14 at 19.00.36",
+                           { path: path, capture: id });
+            compare(previewOpened.count, 1);
+            compare(previewOpened.signalArguments[0][0], path);
+        }
+
+        // open(): what a tap does (sim.qml's capturepreview scene taps so).
+        function test_thumbnailOpenIsATap() {
+            var thumb = findChild(shell, "screenCaptureThumbnail");
+            thumbTapped.target = thumb;
+            thumbTapped.clear();
+            previewOpened.clear();
+            keyClick(Qt.Key_F9);
+            tryCompare(taken, "count", 1, 2000);
+            tryCompare(thumb, "x", Theme.px(16), 1000);
+            var id = thumb.capture;
+            thumb.open();
+            verify(!thumb.shown);
+            compare(thumbTapped.count, 1);
+            compare(thumbTapped.signalArguments[0][0], "");
+            compare(thumbTapped.signalArguments[0][1], id);
+            compare(previewOpened.count, 0, "it waits for the capture to be stored");
+        }
+
+        // Not stored after all (the runtime's "captureFailed"): the wait
+        // ends, on the preview's newest capture (no path), as before; another
+        // capture's failure does not end it.
+        function test_thumbnailTappedAndTheSaveFails() {
+            var thumb = findChild(shell, "screenCaptureThumbnail");
+            previewOpened.clear();
+            keyClick(Qt.Key_F9);
+            tryCompare(taken, "count", 1, 2000);
+            tryCompare(thumb, "x", Theme.px(16), 1000);
+            var id = thumb.capture;
+            mouseClick(findChild(thumb, "screenCaptureThumbnailArea"));
+            compare(previewOpened.count, 0);
+            windows._hostMessage("com.palm.systemui", "", "captureFailed", { capture: "capture-other" });
+            compare(previewOpened.count, 0, "not this capture's");
+            windows._hostMessage("com.palm.systemui", "", "captureFailed", { capture: id });
+            compare(previewOpened.count, 1);
+            compare(previewOpened.signalArguments[0][0], "");
+            // Its notification, should one come after all, opens nothing more.
+            windows.notify("org.webosphoenix.screenshot", "Screen captured", "late",
+                           { path: "/media/internal/screencaptures/late.png", capture: id });
+            compare(previewOpened.count, 1);
+        }
+
         // The page that saves a capture has the runtime: never a site (an
         // https:// web app, whose page has none), and the next page when
         // the first turns out not to have it.
@@ -248,6 +312,7 @@ Item {
             id: fakePage
             QtObject {
                 property bool site: false
+                property var ready
                 property var scripts: []
                 property var answer: true
                 function runScript(js, done) {
@@ -275,6 +340,44 @@ Item {
                 delete windows._windows["fake-site"];
                 delete windows._windows["fake-loading"];
                 delete windows._windows["fake-app"];
+            }
+        }
+
+        // The system UI page stores captures, once it has loaded; while it
+        // is still loading (start-up), a page that has loaded stores it at
+        // once, then the loading pages are tried.
+        function test_captureSavedOnALoadedPageWhileTheSystemUiLoads() {
+            var systemUi = createTemporaryObject(fakePage, root, { ready: false });
+            var loading = createTemporaryObject(fakePage, root, { ready: false });
+            var app = createTemporaryObject(fakePage, root, { ready: true });
+            var was = windows._systemUiPage;
+            windows._windows["fake-loading"] = loading;
+            windows._windows["fake-app"] = app;
+            windows._headless["fake-systemui"] = systemUi;
+            windows._systemUiPage = systemUi;
+            try {
+                var order = windows._capturePages();
+                compare(order.indexOf(app), 0, "the loaded page first");
+                verify(order.indexOf(systemUi) < order.indexOf(loading), "then the system UI page");
+                windows.saveScreenshot("iVBORw0KGgo=", "Card View", "capture-y");
+                compare(app.scripts.length, 1);
+                compare(systemUi.scripts.length, 0, "not waiting for the system UI page");
+                // None loaded yet: the first page to load stores it.
+                app.ready = false;
+                windows.saveScreenshot("iVBORw0KGgo=", "Card View", "capture-z");
+                compare(app.scripts.length + systemUi.scripts.length + loading.scripts.length, 1, "kept");
+                loading.ready = true;
+                windows._pageLoaded(loading);
+                compare(loading.scripts.filter(function (js) { return /"capture":"capture-z"/.test(js); }).length, 1);
+                compare(windows._pendingCaptures.length, 0);
+                // Loaded: the system UI page stores them again.
+                systemUi.ready = true;
+                compare(windows._capturePages()[0], systemUi);
+            } finally {
+                windows._systemUiPage = was;
+                delete windows._windows["fake-loading"];
+                delete windows._windows["fake-app"];
+                delete windows._headless["fake-systemui"];
             }
         }
 

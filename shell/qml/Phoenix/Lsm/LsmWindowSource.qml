@@ -793,6 +793,8 @@ Item {
         return safe + " " + d.getFullYear() + "-" + two(d.getMonth() + 1) + "-" + two(d.getDate())
             + " at " + two(d.getHours()) + "." + two(d.getMinutes()) + "." + two(d.getSeconds()) + ".png";
     }
+    // A capture that could not be stored: the shell stops waiting to open it.
+    signal captureSaveFailed(string capture)
     function saveScreenshot(png, appTitle, captureId) {
         var path = captureDir + "/" + captureFileName(appTitle, new Date());
         var fm = "luna://org.webosphoenix.filemanager";
@@ -800,6 +802,7 @@ Item {
             source.lunaCall(fm + "/write", { path: path, data: String(png).replace(/^data:image\/png;base64,/, ""), encoding: "base64" }, function(r) {
                 if (!r || r.returnValue === false) {
                     console.warn("phoenix: the screen capture could not be saved: " + JSON.stringify(r));
+                    source.captureSaveFailed(String(captureId || ""));
                     return;
                 }
                 var params = { path: path };

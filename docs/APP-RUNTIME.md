@@ -3133,7 +3133,7 @@ launcher; without a path it shows the newest capture). There: Crop,
 Markup, Share (Email, Messaging), Delete, and Save over the capture.
 Tests: `shell/tests/tst_screenshot.qml` (the keys, the flash, the hand
 over), `apps/screenshot/src/editor.test.ts`, `tools/test-screenshot.cjs`;
-`phoenix-sim --scene capture` / `capturepreview` (with `--delay`).
+`phoenix-sim --scene capture` / `capturepreview` (with `--delay`; the latter then taps the thumbnail, and the preview opens on that capture once it is stored).
 Plan and later features: [SCREENSHOTS.md](SCREENSHOTS.md).
 
 ## Exhibitions (dock mode)

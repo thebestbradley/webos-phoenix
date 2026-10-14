@@ -45,6 +45,13 @@ Item {
         dismissTimer.stop();
         state = "";
     }
+    // What a tap does: put away, and open the capture (its file, or its
+    // id while it is still being saved).
+    function open() {
+        var p = path;
+        hide();
+        activated(p, capture);
+    }
 
     // The screen's proportions, a fifth of its width on a tablet and a
     // quarter on a phone held upright.
@@ -124,9 +131,7 @@ Item {
             onClicked: {
                 if (Math.abs(swipe.x) > Theme.px(6))
                     return;
-                var p = thumb.path;
-                thumb.hide();
-                thumb.activated(p, thumb.capture);
+                thumb.open();
             }
         }
         NumberAnimation { id: back; target: swipe; property: "x"; to: 0; duration: Theme.motion(200); easing.type: Easing.OutCubic }
