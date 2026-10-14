@@ -9,6 +9,8 @@
 // they cannot drift apart. An item runs the entry (simTrigger) or, for the
 // keys the shell handles itself (Power, Home, the volume, the chords),
 // presses and lets go of them in the screen's window, as the keyboard would.
+// The Window menu also lists the device's open cards (sim.qml simWindows,
+// SimWindowMenu.qml), live, and shows the one chosen (simShowWindow).
 //
 // The screen stays the size it was without the window: the menus and the
 // toolbar are around it (resizeScreen), and --screenshot grabs the screen
@@ -17,10 +19,12 @@
 #pragma once
 
 #include <QHash>
+#include <QIcon>
 #include <QList>
 #include <QMainWindow>
 #include <QPointer>
 #include <QStringList>
+#include <QVariantList>
 
 class QAction;
 class QDialog;
@@ -95,6 +99,9 @@ private:
     QMenu *menuFor(const QString &menu, const QString &submenu);
     void showShortcuts();
     void showAbout();
+    // Window: the cards after the menu's own items, from simWindows.
+    void refreshWindows();
+    QIcon cardIcon(const QString &url);
 
     QQuickView *m_view;
     QWidget *m_container;
@@ -109,4 +116,11 @@ private:
     QHash<QString, QMenu *> m_menus;
     QList<int> m_held;
     QPointer<QDialog> m_shortcuts;
+    // The Window menu, its cards' items (or the one saying there are none)
+    // and the list they were made from; rebuilt once the list changes.
+    QMenu *m_windowMenu = nullptr;
+    QList<QAction *> m_windowActions;
+    QVariantList m_windowList;
+    QTimer *m_windowsLater;
+    QHash<QString, QIcon> m_cardIcons;
 };

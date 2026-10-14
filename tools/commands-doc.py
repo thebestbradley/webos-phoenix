@@ -146,6 +146,9 @@ it("Open apps at start-up", "Repeat `--launch` for several apps.", B, WP, "webos
     ("./build/phoenix-sim --launch org.webosphoenix.settings.wifi", ""),
     ("./build/phoenix-sim --launch 'com.palm.app.clock:{\"action\": \"edit\"}'", "with launch params, as the application manager's {id, params}"),
     ("./build/phoenix-sim --open https://example.com", "a web page in the browser")])
+it("Choose the open app to view", "The menu bar's **Window** menu lists the open cards, in card view's order with the windows stacked on a card under it, and brings the one you choose to the front, maximized; a check mark is on the card in front. It also has Card View, Launcher, Next Card (Ctrl+Shift+], ⇧⌘] on a Mac) and Previous Card (Ctrl+Shift+[). Locked, the card chosen is the one in front once you unlock.", B, WP,
+   "webos-phoenix/shell/sim/simchrome.cpp:216-223,437-527 · shell/qml/Phoenix/Sim/SimWindowMenu.qml · shell/qml/sim.qml:901-909",
+   [("./build/phoenix-sim --tablet --launch org.webosphoenix.settings --launch org.webosphoenix.weather --launch org.webosphoenix.tasks", "three cards to choose from")])
 it("Use apps built in another checkout", "`--extra-rootfs` can be repeated. `--installed-dir DIR` changes where installed apps go.", B, WP, "webos-phoenix/shell/sim/main.cpp:194-195 · docs/APP-RUNTIME.md:72",
    ["./phoenix run tablet --extra-rootfs ../phoenix-default-apps/build/rootfs --launch com.palm.app.notes"])
 it("Take a screenshot", "Saves a PNG and exits. The default delay is 1500 ms.", B, WP, "webos-phoenix/CLAUDE.md:60-61 · shell/sim/main.cpp:190-191",
@@ -175,7 +178,8 @@ it("Run the QML tests", "", B, WP, "webos-phoenix/.github/workflows/ci.yml:180,4
     ("QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -import shell/tests-device/fakes -input shell/tests-device", "the device shell over fake modules"),
     ("QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -input shell/tests/tst_hidpi.qml", "HiDPI at 2x")])
 it("Run the C++ tests", "There's nothing for `ctest` to find: run each test program by name after a build.", B, WP, "webos-phoenix/.github/workflows/ci.yml:185-252,510-518 · shell/CMakeLists.txt:67-73,121-150",
-   ["build/pty/pty-test", "QT_QPA_PLATFORM=offscreen build/keyboard/keyboard-test", "build/siminstaller-test", "build/simlaunch-test", "build/dictation-test",
+   ["build/pty/pty-test", "QT_QPA_PLATFORM=offscreen build/keyboard/keyboard-test", "build/siminstaller-test", "build/simlaunch-test",
+    ("QT_QPA_PLATFORM=offscreen build/simchrome-test", "the menu bar and its Window menu"), "build/dictation-test",
     ("python3 tools/get-wakeword.py && build/wakeword-test", "fetches the wake-word model first"), "build/simnet-test", "build/simmarketplace-test", "build/localmodels-test",
     ("python3 tools/get-kitten.py && build/tts-test", "fetches the voice first"),
     ("./build/phoenix-sim --check-chrome --no-boot-animation --quiet", "the simulator's own start-up check"),
