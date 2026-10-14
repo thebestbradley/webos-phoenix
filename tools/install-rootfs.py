@@ -14,6 +14,8 @@ Produces the same layout the simulator serves, for a device image:
                                      the @phoenix packages it needs)
     /usr/palm/frameworks/...         Enyo 1.0, MojoLoader, foundation frameworks
     /usr/share/phoenix/runtime/      phoenix-runtime.js
+    /usr/share/phoenix/product.json  the product: the version the system reports
+    /usr/share/phoenix/release-notes.json   the release notes product.json names
     /etc/palm/db/kinds, permissions  db8 kinds the apps declare
     /usr/palm/services/<id>/         Node.js services apps carry in service/, and services/*/
                                      (run by run-js-service), with their
@@ -47,6 +49,26 @@ SKIP_NAMES = {".git", ".gitignore", ".gitmodules", "node_modules", "spec", "spec
 def load_config():
     with open(os.path.join(REPO, "runtime", "rootfs.json")) as f:
         return json.load(f)
+
+
+def product_files(cfg):
+    """rootfs.json "product" (product.json): {device path: file in the checkout} of the product
+    file and the release notes it names, which the image gets at /usr/share/phoenix/ (as
+    phoenix-sim and tools/serve-rootfs.py serve them). The notes must be there: an image
+    without them would have no "What's New in This Version"."""
+    rel = cfg.get("product")
+    if not rel:
+        return {}
+    path = os.path.join(REPO, rel)
+    try:
+        with open(path, encoding="utf-8") as f:
+            product = json.load(f)
+    except (OSError, ValueError) as e:
+        sys.exit("install-rootfs: %s: %s" % (rel, e))
+    notes = os.path.join(os.path.dirname(rel), product.get("releaseNotes") or "")
+    if not product.get("releaseNotes") or not os.path.isfile(os.path.join(REPO, notes)):
+        sys.exit("install-rootfs: %s names no release notes file there is (releaseNotes)" % rel)
+    return {"/usr/share/phoenix/product.json": rel, "/usr/share/phoenix/release-notes.json": notes}
 
 
 def load_preinstalled(cfg):
@@ -393,6 +415,9 @@ def build_plan():
         if prefix in SHELL_OWNS:
             continue
         copy_tree(os.path.join(REPO, target), prefix.rstrip("/"), plan)
+    # The product file and its release notes (product.json).
+    for device_path, target in product_files(cfg).items():
+        copy_tree(os.path.join(REPO, target), device_path, plan)
     for app_id, app_dir in find_apps(cfg):
         # An app's service/ is installed on its own, below (apps/dav keeps
         # its appinfo.json at the top, so its whole folder is the app).

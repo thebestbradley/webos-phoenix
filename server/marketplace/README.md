@@ -250,6 +250,32 @@ publishes them; run it isolated (`python3 -I`; it restarts itself so):
 again (and publishes). On a server the same commands run there, with the
 server's `MARKETPLACE_*` settings.
 
+## Update logs
+
+A package's `changelog.json`, beside its `appinfo.json`, is its update log
+(docs/APP-STORE.md 3.15: the format, the rules, the Marketplace's What's
+New and Version History). On upload `Ipk::check` checks it with
+`src/Changelog.php` (the rules of phoenix-default-apps'
+`tools/lib/changelog.mjs`, with the same messages; both run
+`tests/changelog-cases.json`, a copy of that repository's cases) and
+refuses a malformed one, or one whose newest version is not the package's;
+it is optional. The log is kept with the release (`releases.changelog`),
+without `unreleased`. A listed app's index entry has `whatsNew`, its
+listed version's entry, and `detail: {url, sha256}`, a file published
+beside the index (`/v1/apps/<id>-<hash>.json`: `{id, version,
+versionHistory}`), which keeps the signed index small and is as trusted as
+it; `GET /api/apps/{id}` has `whatsNew` and `versionHistory`, `GET
+/api/apps` `whatsNew`. A hosted web app's listing may name
+`releaseNotesUrl`, its upstream's release notes (`catalog/web-apps.json`).
+`bin/web-apps.py default-apps` packs a 2.0 app's `changelog.json` without
+`unreleased`.
+
+The system's release notes travel in the update feed: `POST
+/api/admin/updates?...&releaseNotes=release-notes.json` takes the
+version's entry from a notes file at the top of this checkout (the one
+`product.json` names) and writes it as the release's `releaseNotes`, with
+its lines as `notes` when no `note=` is given (server/updates README).
+
 ## Account types (Connections)
 
 The index also lists the **account types** Phoenix can connect to, for the

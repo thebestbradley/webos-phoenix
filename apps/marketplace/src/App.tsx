@@ -32,7 +32,8 @@ import { AccountTypePage, AccountTypeRow, ConnectionsFiltered, ConnectionsHome, 
 import { findMoreFilter, type ConnectorFilter } from "./accountTypes";
 import { Screenshots } from "./Gallery";
 import { Icon } from "./Icon";
-import { AppMenu, BackProvider, Button, Dialog, ErrorText, Group, Note, Row, Spinner, TextField, ToggleButton, useBack } from "@phoenix/ui";
+import { AppMenu, BackProvider, Button, Dialog, ErrorText, Group, Note, ReleaseNotes, Row, Spinner, TextField, ToggleButton, VersionHistory,
+         useBack } from "@phoenix/ui";
 
 const errorText = (e: unknown) => (e instanceof LunaError ? e.errorText : e instanceof Error ? e.message : String(e));
 
@@ -389,6 +390,18 @@ function AppPage({ sourceId, id, seed, onRemoved, catalogVersion }: {
             )}
             <Screenshots urls={app.screenshots} />
             {(app.description || app.summary) && <p className="mk-desc">{app.description || app.summary}</p>}
+            {/* Its update log (docs/APP-STORE.md "Update logs"): the listed version's notes, then
+                every version's; an app without a log has neither. */}
+            {app.whatsNew && (
+                <Group label="What's New">
+                    <ReleaseNotes notes={app.whatsNew} testId="whats-new" />
+                </Group>
+            )}
+            {app.versionHistory && app.versionHistory.length > 0 && (
+                <Group label="Version History">
+                    <VersionHistory versions={app.versionHistory} testId="version-history" />
+                </Group>
+            )}
             <Group label="Details">
                 <Row title="Kind" value={kindText(app)} />
                 {app.version && <Row title="Version" value={app.version} />}
@@ -399,6 +412,10 @@ function AppPage({ sourceId, id, seed, onRemoved, catalogVersion }: {
                 {app.devices && app.devices.length > 0 && <Row title="Made for" value={app.devices.join(", ")} />}
                 {app.homepage && <Row title="Website" value={new URL(app.homepage).host} onClick={() => void apps.open(app.homepage)} />}
                 {app.source && <Row title="Source code" value={new URL(app.source).host} testId="app-source" onClick={() => void apps.open(app.source!)} />}
+                {app.releaseNotesUrl && (
+                    <Row title="Release notes" value={new URL(app.releaseNotesUrl).host} testId="app-release-notes"
+                         onClick={() => void apps.open(app.releaseNotesUrl!)} />
+                )}
                 {app.donation && <Row title="Support the developer" chevron onClick={() => void apps.open(app.donation)} />}
             </Group>
             {app.kind === "pwa" && <Note>A web app opens the site in its own card, with its own launcher icon. The site keeps your data.</Note>}
@@ -423,6 +440,12 @@ function Installed({ open }: { open: (sourceId: string, id: string) => void }) {
     const load = () => marketplace.installed().then(setList, () => setList([]));
     useEffect(() => { void load(); }, []);
     const updates = list?.filter((a) => a.update) ?? [];
+    const row = (a: InstalledApp) => (
+        <Row key={a.id} testId={`installed-${a.id}`} icon={<Icon src={[a.icon, a.catalogIcon]} title={a.title} />} chevron title={a.title}
+             subtitle={(a.update ? `${a.version} → ${a.update}` : a.version) + (a.builtin ? ` · in place of the built-in ${a.builtin}` : "")}
+             value={a.update ? "Update" : ""}
+             onClick={() => open(a.sourceId, a.catalogId)} />
+    );
     return (
         <>
             {updates.length > 0 && (
@@ -436,16 +459,24 @@ function Installed({ open }: { open: (sourceId: string, id: string) => void }) {
                 }}>Update All ({updates.length})</Button>
             )}
             {result && <Note>{result}</Note>}
-            <Group label="Installed from the Marketplace">
-                {list === null ? <Row title="Loading…"><Spinner /></Row>
-                    : list.length === 0 ? <Row title="Nothing yet" />
-                    : list.map((a) => (
-                        <Row key={a.id} testId={`installed-${a.id}`} icon={<Icon src={[a.icon, a.catalogIcon]} title={a.title} />} chevron title={a.title}
-                             subtitle={(a.update ? `${a.version} → ${a.update}` : a.version) + (a.builtin ? ` · in place of the built-in ${a.builtin}` : "")}
-                             value={a.update ? "Update" : ""}
-                             onClick={() => open(a.sourceId, a.catalogId)} />
+            {/* Each update with what it brings (its What's New, when the catalog has it). */}
+            {updates.length > 0 && (
+                <Group label="Updates">
+                    {updates.map((a) => (
+                        <div key={a.id} className="mk-update" data-testid={`update-${a.id}`}>
+                            {row(a)}
+                            {a.whatsNew && <ReleaseNotes notes={a.whatsNew} testId={`update-notes-${a.id}`} />}
+                        </div>
                     ))}
-            </Group>
+                </Group>
+            )}
+            {(list === null || list.length > updates.length || list.length === 0) && (
+                <Group label="Installed from the Marketplace">
+                    {list === null ? <Row title="Loading…"><Spinner /></Row>
+                        : list.length === 0 ? <Row title="Nothing yet" />
+                        : list.filter((a) => !a.update).map(row)}
+                </Group>
+            )}
         </>
     );
 }

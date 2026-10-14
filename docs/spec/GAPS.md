@@ -196,6 +196,17 @@ the simulator's does), cross-origin isolation for apps that need
 SharedArrayBuffer (Godot's web editor), packages over 64 MB (CyberChef),
 and the 2.0 apps' bundled packages' notices in their builds.
 
+**Update logs** (14 October 2026, the owner's request; not luna-sysmgr's, so
+not a row here): every rebuilt app's `changelog.json` and the system's
+`release-notes.json` (`product.json` names it with the version), checked by
+the catalog, shown in the Marketplace (What's New, Version History, an
+update's notes), Settings > Updates and Device Info, and carried by the
+update feed (docs/APP-STORE.md 3.15, APP-RUNTIME.md "System updates"). Done
+in the simulator. Left: a device's `/etc/os-release` still says OSE's
+version (com.palm.update reads the product file instead), translations
+(`changelog.<locale>.json`), and the owner's call on the release's number
+(0.1.0 today; "1.0" in the owner's words).
+
 **The platform's clients** (11 October 2026; not luna-sysmgr's, so not a
 row here): the device side of Palm's update, App Catalog and Palm Profile
 servers' successors is done against a mock platform: one

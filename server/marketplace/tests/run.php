@@ -345,6 +345,87 @@ check($notes['version'] === '1.0.0', '... at 1.0.0');
 [$s, $r] = $call('POST', '/api/apps/packages', ipk($tmp, 'com.example.notes', '2.0.0'), $other['token']);
 check($s === 400 && str_contains($r['error'], 'another developer'), 'nobody else can upload to an app');
 
+// ---- Update logs (changelog.json beside appinfo.json; docs/APP-STORE.md "Update logs") ---------------
+// The rules: the same cases as phoenix-default-apps' validator (a copy of its
+// tools/changelog-cases.json: {cases: [{name, changelog, version?, error: null | the first
+// problem's message}]}), each with the same first message.
+$cases = json_decode((string) file_get_contents(__DIR__ . '/changelog-cases.json'))->cases ?? [];
+$wrong = [];
+foreach ($cases as $c) {
+    $p = Phoenix\Marketplace\Changelog::problems($c->changelog, $c->version ?? null);
+    if (($p[0] ?? null) !== $c->error) {
+        $wrong[] = "$c->name: " . ($p[0] ?? 'accepted');
+    }
+}
+check(count($cases) >= 50 && !$wrong, 'the update log rules: ' . count($cases) . ' cases shared with phoenix-default-apps'
+      . ($wrong ? ' (' . implode('; ', $wrong) . ')' : ''));
+$sysNotes = json_decode('{"format": 1, "versions": [{"version": "1.0.0", "date": "2026-10-14", "rebuild": true, "summary": "Cards.", "new": ["Cards."]}]}');
+check(Phoenix\Marketplace\Changelog::problems($sysNotes, '1.0.0', true) === ["versions[0].rebuild: the system's release notes have no rebuild"]
+      && Phoenix\Marketplace\Changelog::problems($sysNotes, '1.0.0') === [],
+      "the system's release notes are the same format, without rebuild");
+$tasksLog = ['format' => 1, 'unreleased' => ['new' => ['Subtasks under any task.']], 'versions' => [
+    ['version' => '2.1.0', 'date' => '2026-11-02', 'summary' => 'Reminders for tasks with a due time.',
+     'new' => ['Set a reminder on any task with a due time.'], 'improved' => ['Lists with hundreds of tasks scroll smoothly.'],
+     'fixed' => ['A task moved to another list no longer shows in both.'], 'known' => []],
+    ['version' => '2.0.0', 'date' => '2026-10-12', 'rebuild' => true, 'replaces' => 'Tasks 1.0 (webOS 3.0.5)',
+     'summary' => 'Tasks, rebuilt for webOS Phoenix.', 'new' => ['Lists sync with your calendar accounts.'], 'fixed' => ['Dates no longer shift a day.']]]];
+$tasksPkg = fn (string $version, $log) => ipk($tmp, 'com.example.tasks', $version,
+                                             ['usr/palm/applications/com.example.tasks/changelog.json' => is_string($log) ? $log : json_encode($log)]);
+[$s, $r] = $call('POST', '/api/apps/packages', $tasksPkg('2.2.0', $tasksLog), $dev['token']);
+check($s === 400 && $r['error'] === 'changelog.json: versions[0].version: 2.1.0 does not match the version 2.2.0',
+      'a package whose log does not start at its own version is refused, with the validator\'s message');
+[$s, $r] = $call('POST', '/api/apps/packages', $tasksPkg('2.1.0', '{"format": 1,'), $dev['token']);
+[$s2, $r2] = $call('POST', '/api/apps/packages', $tasksPkg('2.1.0', ['versions' => [['new' => ['**Bold**']] + $tasksLog['versions'][0]]] + $tasksLog), $dev['token']);
+check($s === 400 && $r['error'] === 'changelog.json is not valid JSON' && $s2 === 400 && $r2['error'] === 'changelog.json: versions[0].new[0]: has Markdown',
+      '... and so is a malformed one');
+check(Phoenix\Marketplace\Ipk::check(ipk($tmp, 'com.example.nolog', '1.0.0'))['changelog'] === null, '... a log is optional');
+[$s, $r] = $call('POST', '/api/apps/packages', $tasksPkg('2.1.0', $tasksLog), $dev['token']);
+$trid = (int) ($r['release']['id'] ?? 0);
+$stored = json_decode((string) $app->db->one('SELECT changelog FROM releases WHERE id = ?', [$trid])['changelog'], true);
+check($s === 200 && $stored['versions'][0]['version'] === '2.1.0' && !isset($stored['unreleased']), 'the log is kept with the release, without "unreleased"');
+[$s, $r] = $call('GET', '/api/apps/com.example.tasks');
+check($s === 404, '... and nothing of it is served before the release is approved');
+$call('POST', "/api/admin/releases/$trid/approve", [], $admin);
+$idx = json_decode(file_get_contents("$tmp/data/public/v1/index.json"), true);
+$tasks = array_values(array_filter($idx['apps'], fn ($a) => $a['id'] === 'com.example.tasks'))[0] ?? [];
+$whatsNew = ['version' => '2.1.0', 'date' => '2026-11-02', 'summary' => 'Reminders for tasks with a due time.',
+             'new' => ['Set a reminder on any task with a due time.'], 'improved' => ['Lists with hundreds of tasks scroll smoothly.'],
+             'fixed' => ['A task moved to another list no longer shows in both.'], 'known' => []];
+$history = [$whatsNew, ['version' => '2.0.0', 'date' => '2026-10-12', 'summary' => 'Tasks, rebuilt for webOS Phoenix.',
+                        'new' => ['Lists sync with your calendar accounts.'], 'improved' => [], 'fixed' => ['Dates no longer shift a day.'], 'known' => [],
+                        'rebuild' => true, 'replaces' => 'Tasks 1.0 (webOS 3.0.5)']];
+check(($tasks['whatsNew'] ?? null) === $whatsNew && !isset($tasks['versionHistory']),
+      'the index carries the listed version\'s whatsNew {version, date, summary, new, improved, fixed, known}, not the history');
+$detailFile = "$tmp/data/public/v1/apps/" . basename((string) parse_url($tasks['detail']['url'] ?? '', PHP_URL_PATH));
+$detail = json_decode((string) @file_get_contents($detailFile), true);
+check(str_starts_with($tasks['detail']['url'] ?? '', 'http://127.0.0.1:9999/v1/apps/com.example.tasks-') && is_file($detailFile)
+      && hash_file('sha256', $detailFile) === $tasks['detail']['sha256'] && $detail === ['id' => 'com.example.tasks', 'version' => '2.1.0', 'versionHistory' => $history],
+      '... and names its detail (apps/<id>-<hash>.json, every version) with its SHA-256, signed with the index');
+[$s, $r] = $call('GET', '/api/apps/com.example.tasks');
+check($s === 200 && $r['app']['whatsNew'] === $whatsNew && $r['app']['versionHistory'] === $history,
+      'GET /api/apps/{id}: whatsNew and versionHistory, newest first, the rebuild saying what it replaces');
+[$s, $r] = $call('GET', '/api/apps');
+$listedTasks = array_values(array_filter($r['apps'], fn ($a) => $a['id'] === 'com.example.tasks'))[0] ?? [];
+check(($listedTasks['whatsNew'] ?? null) === $whatsNew && !isset($listedTasks['versionHistory']), 'GET /api/apps: whatsNew, the history only in the detail');
+check(!str_contains(file_get_contents("$tmp/data/public/v1/index.json") . file_get_contents($detailFile), 'Subtasks'),
+      'what the log keeps for the next version is never published');
+check(!isset($notes['whatsNew']) && !isset($notes['detail']) && !isset($notes['releaseNotesUrl']), 'an app without a log has neither');
+// A new release: a new detail; the old one stays while an index that names it may be read.
+$tasksLog2 = $tasksLog;
+array_unshift($tasksLog2['versions'], ['version' => '2.1.1', 'date' => '2026-11-09', 'summary' => 'Fixes for reminders.',
+                                       'fixed' => ['A reminder set for midnight goes off on the right day.']]);
+[$s, $r] = $call('POST', '/api/apps/packages', $tasksPkg('2.1.1', $tasksLog2), $dev['token']);
+$call('POST', "/api/admin/releases/{$r['release']['id']}/approve", [], $admin);
+$idx = json_decode(file_get_contents("$tmp/data/public/v1/index.json"), true);
+$tasks2 = array_values(array_filter($idx['apps'], fn ($a) => $a['id'] === 'com.example.tasks'))[0] ?? [];
+check($tasks2['whatsNew']['version'] === '2.1.1' && $tasks2['whatsNew']['improved'] === [] && $tasks2['detail']['url'] !== $tasks['detail']['url']
+      && is_file($detailFile) && count(glob("$tmp/data/public/v1/apps/com.example.tasks-*.json")) === 2,
+      'a new release has a new detail; the one an index a device has may still name stays');
+touch($detailFile, time() - (Phoenix\Marketplace\Catalog::EXPIRES_DAYS + 1) * 86400);
+$app->catalog->publish();
+check(!is_file($detailFile) && count(glob("$tmp/data/public/v1/apps/com.example.tasks-*.json")) === 1,
+      '... until every index that named it has expired');
+
 // ---- A developer's web app ----------------------------------------------------------------------
 [$s, $r] = $call('POST', '/api/apps', ['kind' => 'pwa', 'id' => 'com.example.weather', 'manifest' => 'http://weather.example.com/m.json'], $dev['token']);
 check($s === 400, 'a web app needs an https manifest');
@@ -639,6 +720,7 @@ $listed = $app->catalog->applyListing('ai.example.paint', [
     'title' => 'Paint', 'developer' => 'Example Team', 'developerUrl' => 'https://example.org/team', 'summary' => 'Paint pictures',
     'description' => 'Our words about it.', 'categories' => ['Graphics'], 'license' => 'MIT OR Apache-2.0',
     'homepage' => 'https://example.org/paint', 'source' => 'https://example.org/paint/src/v0.8.2',
+    'releaseNotesUrl' => 'https://example.org/paint/releases/tag/v0.8.2',
     'icon' => 'icon.png', 'screenshots' => ['shots/1.png', 'shots/2.jpg'],
 ], $lst);
 $pubH = $app->catalog->publish();
@@ -647,8 +729,9 @@ $paint = array_values(array_filter($idxH['apps'], fn ($a) => $a['id'] === 'ai.ex
 check($hostedRelease['state'] === 'approved' && $paint && $paint['kind'] === 'ipk' && $paint['title'] === 'Paint'
       && $paint['developer'] === ['name' => 'Example Team', 'url' => 'https://example.org/team'] && $paint['license'] === 'MIT OR Apache-2.0'
       && $paint['source'] === 'https://example.org/paint/src/v0.8.2' && $paint['homepage'] === 'https://example.org/paint'
-      && $paint['categories'] === ['Graphics'] && $paint['description'] === 'Our words about it.' && $paint['version'] === '0.8.2',
-      'a hosted package\'s listing: its upstream as the developer, its licence, source and homepage, our description');
+      && $paint['categories'] === ['Graphics'] && $paint['description'] === 'Our words about it.' && $paint['version'] === '0.8.2'
+      && $paint['releaseNotesUrl'] === 'https://example.org/paint/releases/tag/v0.8.2' && !isset($paint['whatsNew']),
+      'a hosted package\'s listing: its upstream as the developer, its licence, source, homepage and release notes, our description');
 check(str_starts_with($paint['icon'], 'http://127.0.0.1:9999/v1/icons/ai.example.paint.png?') && is_file("$tmp/data/public/v1/icons/ai.example.paint.png")
       && count($paint['screenshots']) === 2 && str_starts_with($paint['screenshots'][1], 'http://127.0.0.1:9999/v1/screenshots/ai.example.paint/2.jpg?')
       && file_get_contents("$tmp/data/public/v1/screenshots/ai.example.paint/1.png") === $png . 'one',
@@ -659,6 +742,7 @@ $threw = function (callable $f): string {
 };
 check(str_contains($threw(fn () => $app->catalog->applyListing('ai.example.paint', ['icon' => 'bad.svg'], $lst)), 'not a PNG, JPEG or WebP')
       && str_contains($threw(fn () => $app->catalog->applyListing('ai.example.paint', ['source' => 'http://example.org/'], $lst)), 'https://')
+      && str_contains($threw(fn () => $app->catalog->applyListing('ai.example.paint', ['releaseNotesUrl' => 'http://example.org/'], $lst)), 'releaseNotesUrl, an https:// address')
       && str_contains($threw(fn () => $app->catalog->applyListing('ai.example.paint', ['owner' => 'x'], $lst)), 'unknown fields')
       && str_contains($threw(fn () => $app->catalog->applyListing('ai.example.none', ['title' => 'x'], $lst)), 'No app'),
       'a listing: pictures by their own bytes (no SVG), https addresses, known fields, a listed app');
@@ -700,8 +784,9 @@ check($hostedIpk && $hostedIpk['appId'] === 'org.example.paint' && $hostedIpk['v
       && $hostedIpk['control']['Source'] === 'https://example.org/src',
       'a package web-apps.py packs passes the catalog\'s checks: the upstream as vendor, its licence files, its source');
 $twoIpk = is_file("$wat/default-app.ipk") ? Phoenix\Marketplace\Ipk::check((string) file_get_contents("$wat/default-app.ipk")) : null;
-check($twoIpk && $twoIpk['appId'] === 'com.example.calc' && $twoIpk['appinfo']['removable'] === true,
-      '... and so does a 2.0 app it packs from a checkout, removable');
+check($twoIpk && $twoIpk['appId'] === 'com.example.calc' && $twoIpk['appinfo']['removable'] === true
+      && ($twoIpk['changelog']['versions'][0]['version'] ?? null) === '4.0.0' && !isset($twoIpk['changelog']['unreleased']),
+      '... and so does a 2.0 app it packs from a checkout, removable, with its update log');
 // Home, a 2.0 app offered in the Marketplace only, uploaded with the listing web-apps.py writes for it.
 $homeUp = is_file("$wat/home.ipk") ? $cli(['upload', '--phoenix', '--listing', "$wat/home-listing.json", "$wat/home.ipk"]) : -1;
 $homeApp = (new App(marketplace_config()))->catalog->app('org.webosphoenix.home');
@@ -730,8 +815,22 @@ check($s === 400 && str_contains($r['error'], 'higher build number'), 'updates: 
 check($s === 400, 'updates: device types are names, not paths');
 [$s, $r] = $api->handle('POST', '/api/admin/updates', '', "Bearer $admin", ['compatible' => 'phoenix-sim', 'version' => '0.2.0', 'build' => '2', 'channel' => 'beta']);
 check($s === 200 && $r['feed']['release']['url'] === 'phoenix-sim-0.2.0-2.raucb', "updates: the simulator's stand-in bundle when none is sent");
+// The release's notes from the checkout's release notes (the file product.json names).
+$product = json_decode((string) file_get_contents(dirname(__DIR__, 3) . '/product.json'), true);
+[$s, $r] = $api->handle('POST', '/api/admin/updates', '', "Bearer $admin",
+                        ['compatible' => 'phoenix-sim', 'version' => $product['version'], 'build' => '3', 'channel' => 'dev',
+                         'releaseNotes' => $product['releaseNotes'], 'notes' => []]);
+check($s === 200 && ($r['feed']['release']['releaseNotes']['version'] ?? null) === $product['version']
+      && $r['feed']['release']['notes'][0] === $r['feed']['release']['releaseNotes']['summary'],
+      'updates: releaseNotes=FILE, the release\'s entry of a notes file in the checkout, and its lines as the notes');
+[$s, $r] = $api->handle('POST', '/api/admin/updates', '', "Bearer $admin",
+                        ['compatible' => 'phoenix-sim', 'version' => '9.0.0', 'build' => '4', 'channel' => 'dev', 'releaseNotes' => '../product.json']);
+[$s2, $r2] = $api->handle('POST', '/api/admin/updates', '', "Bearer $admin",
+                          ['compatible' => 'phoenix-sim', 'version' => '9.0.0', 'build' => '4', 'channel' => 'dev', 'releaseNotes' => $product['releaseNotes']]);
+check($s === 400 && str_contains($r['error'], 'at the top of the checkout') && $s2 === 400 && str_contains($r2['error'], 'has no notes for 9.0.0'),
+      '... only a file at the top of the checkout, which has the version\'s notes');
 [$s, $r] = $call('GET', '/api/updates');
-check($s === 200 && array_map(fn ($f) => $f['compatible'] . '/' . $f['channel'], $r['feeds']) === ['phoenix-pinephonepro/stable', 'phoenix-sim/beta'],
+check($s === 200 && array_map(fn ($f) => $f['compatible'] . '/' . $f['channel'], $r['feeds']) === ['phoenix-pinephonepro/stable', 'phoenix-sim/beta', 'phoenix-sim/dev'],
       'updates: GET /api/updates lists every channel');
 [$s, $r] = $call('POST', '/api/admin/updates/withdraw', ['compatible' => 'phoenix-pinephonepro', 'channel' => 'stable'], $admin);
 check($s === 200 && $r['feed']['release'] === null && $r['feed']['withdrawn']['build'] === 110, 'updates: withdrawn');

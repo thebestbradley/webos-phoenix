@@ -45,10 +45,19 @@ for a feed apart from the catalog.
 
 ```sh
 php server/updates/bin/updates.php publish phoenix.raucb \
-    --compatible phoenix-pinephonepro --version 1.1.0 --build 110 [--channel beta] --note "..."
+    --compatible phoenix-pinephonepro --version 1.1.0 --build 110 [--channel beta] --note "..." \
+    [--release-notes release-notes.json]
 php server/updates/bin/updates.php withdraw --compatible phoenix-pinephonepro [--channel beta]
 php server/updates/bin/updates.php show
 ```
+
+`--release-notes FILE` (and the admin API's `releaseNotes=FILE`, a file at
+the top of the server's checkout) takes the version's entry from the
+system's release notes (`release-notes.json`, or the file `product.json`
+names; docs/APP-STORE.md 3.15), checked with the catalog's validator, and
+writes it as the release's `releaseNotes`, which Settings > Updates shows
+before Install; the `notes` lines stay for older readers, and are the
+entry's summary and items when no `--note` is given.
 
 A release needs a higher build number than any before it on its channel.
 When RAUC is installed where you publish, the bundle's own manifest must

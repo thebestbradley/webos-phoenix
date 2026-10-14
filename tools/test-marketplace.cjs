@@ -10,7 +10,8 @@
 // (apps/marketplace/service/test/servers.cjs). Covers trusting a catalog by
 // its key, browsing, a web app and a developer's package installed (and
 // served, and listed), an update, removing, the Classics with a Mojo app
-// refused, search, the update notification's launch, and in the simulator
+// refused, search, the update notification's launch, an app's update log
+// (What's New, the Version History, an update's notes in Installed Apps), and in the simulator
 // (its host.json) the offline card's Start Local Catalog, its own catalog trusted without the
 // fingerprint step, and connector packages: Connections installs a third-party one in Developer
 // Mode only, adds its account, and removes and installs again the pre-installed Fediverse.
@@ -166,23 +167,36 @@ async function main() {
         check(host.some((m) => m.type === "launch" && m.payload.id === "org.webosphoenix.pwa.tides"), "Open launches it");
 
         // ---- A developer's package, then an update -------------------------------------------------------
+        // Each with its update log (changelog.json beside appinfo.json; docs/APP-STORE.md "Update logs").
+        const v100 = { version: "1.0.0", date: "2026-10-12", summary: "Notes for your day.", new: ["Write a note.", "Pin a note to the top."] };
+        const v110 = { version: "1.1.0", date: "2026-11-02", summary: "Reminders on notes.", new: ["Set a reminder on a note."],
+                       improved: ["Long notes scroll smoothly."], fixed: ["A pinned note stays pinned after a restart."], known: ["Reminders do not repeat yet."] };
+        const withLog = (...versions) => ({ title: "Example Notes", files: [{ path: "usr/palm/applications/com.example.notes/changelog.json",
+                                                                               data: JSON.stringify({ format: 1, versions }) }] });
         const dev = await catalog.api("POST", "/api/accounts", { name: "Dana", email: "dana@example.com", role: "developer" });
-        const up = await catalog.api("POST", "/api/apps/packages", await servers.webApp("com.example.notes", "1.0.0", { title: "Example Notes" }), dev.token);
+        const up = await catalog.api("POST", "/api/apps/packages", await servers.webApp("com.example.notes", "1.0.0", withLog(v100)), dev.token);
         await catalog.api("POST", `/api/admin/releases/${up.release.id}/approve`, {}, catalog.admin);
         await page.goto(appUrl("org.webosphoenix.marketplace"));
         await page.click("[data-testid=tab-apps]");
         await page.waitForSelector("[data-testid='app-com.example.notes']", { timeout: 15000 });
         await page.click("[data-testid='app-com.example.notes']");
+        await page.waitForSelector('[data-testid="version-history-1.0.0"]', { timeout: 15000 });
+        check(/Notes for your day\./.test(await page.textContent("[data-testid=whats-new]")) && /Pin a note/.test(await page.textContent("[data-testid=whats-new]")),
+              "an app's page: What's New, from its update log");
+        await shot("5b-whats-new");
         await page.click("[data-testid=install-app]");
         await page.waitForSelector("[data-testid=open-app]", { timeout: 20000 });
         const served = await fetch(origin + "/usr/palm/applications/com.example.notes/index.html");
         check(served.status === 200 && (await served.text()).includes("com.example.notes 1.0.0"), "a package installed: its app is served");
-        const v2 = await catalog.api("POST", "/api/apps/packages", await servers.webApp("com.example.notes", "1.1.0", { title: "Example Notes" }), dev.token);
+        const v2 = await catalog.api("POST", "/api/apps/packages", await servers.webApp("com.example.notes", "1.1.0", withLog(v110, v100)), dev.token);
         await catalog.api("POST", `/api/admin/releases/${v2.release.id}/approve`, {}, catalog.admin);
         await luna(P + "refresh", {});
         await page.goto(appUrl("org.webosphoenix.marketplace", { section: "updates" }));
         await page.waitForSelector("[data-testid=update-all]", { timeout: 15000 });
         check(/1\.0\.0 → 1\.1\.0/.test(await page.textContent("[data-testid='installed-com.example.notes']")), "the update notification opens the installed apps, with the update");
+        const upNotes = await page.textContent("[data-testid='update-notes-com.example.notes']");
+        check(/Version 1\.1\.0/.test(upNotes) && /Reminders on notes\./.test(upNotes) && /Set a reminder on a note/.test(upNotes),
+              "... and what the update brings (its What's New)");
         await shot("6-updates");
         await page.click("[data-testid=update-all]");
         await page.waitForFunction(() => /Updated 1 app/.test(document.body.innerText), null, { timeout: 20000 });
@@ -190,6 +204,11 @@ async function main() {
 
         // ---- Remove -------------------------------------------------------------------------------------------
         await page.click("[data-testid='installed-com.example.notes']");
+        await page.waitForSelector('[data-testid="version-history-1.0.0"]', { timeout: 15000 });
+        await page.click('[data-testid="version-history-1.0.0"]');
+        check(/Pin a note to the top/.test(await page.textContent('[data-testid="version-history-1.0.0-notes"]'))
+              && await page.locator('[data-testid="version-history-1.1.0"]').count() === 1,
+              "its page: the Version History, each version opening its notes");
         await page.click("[data-testid=remove-app]");
         await page.click("[data-testid=remove-confirm]");
         await page.waitForSelector("[data-testid=install-app]", { timeout: 15000 });

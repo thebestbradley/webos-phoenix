@@ -14,6 +14,17 @@
 //   <data>/public/v1/icons/accounts/ the account types' icons
 //   <data>/public/v1/icons/<id>.png  icons of packages Phoenix lists itself (applyListing)
 //   <data>/public/v1/screenshots/<id>/  their screenshots
+//   <data>/public/v1/apps/<id>-<hash>.json  an app's detail beyond the index: its
+//                                    versionHistory (every entry of its update log),
+//                                    named in its index entry with its SHA-256
+//                                    ("detail": {url, sha256}), so the index stays
+//                                    small and the detail is as trusted as the index
+//
+// An app whose listed release carries an update log (changelog.json, Changelog)
+// has "whatsNew" in the index: that version's entry, {version, date, summary,
+// new, improved, fixed, known}. GET /api/apps/{id} has both, whatsNew and
+// versionHistory. A hosted web app with no log of ours may name its upstream's
+// release notes page ("releaseNotesUrl", applyListing).
 //
 // Each publish is a new build number; the index expires after 14 days, so
 // a mirror cannot serve an old one forever, and devices refuse a build
@@ -113,8 +124,10 @@ final class Catalog
         $file = sprintf('%s_%s_all.ipk', $id, preg_replace('/[^A-Za-z0-9.+~-]/', '_', $pkg['version']));
         @mkdir($this->uploadDir(), 0700, true);
         file_put_contents($this->uploadDir() . '/' . $file, $bytes);
-        $this->db->run('INSERT INTO releases (app_id, version, file, size, sha256, state, notes, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [$id, $pkg['version'], $file, strlen($bytes), hash('sha256', $bytes), 'pending', '', Db::now()]);
+        // Its update log (checked by Ipk::check), kept with the release.
+        $log = $pkg['changelog'] === null ? null : json_encode($pkg['changelog'], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        $this->db->run('INSERT INTO releases (app_id, version, file, size, sha256, state, notes, created, changelog) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [$id, $pkg['version'], $file, strlen($bytes), hash('sha256', $bytes), 'pending', '', Db::now(), $log]);
         $release = $this->db->one('SELECT * FROM releases WHERE id = ?', [$this->db->lastId()]);
         if (!empty($this->config['dev'])) {
             $release = $this->decideRelease((int) $release['id'], true, $owner, 'Approved on upload: a development catalog (MARKETPLACE_DEV)');
@@ -138,7 +151,11 @@ final class Catalog
         );
     }
 
-    public function app(string $id): ?array
+    /**
+     * An app as the API gives it. Its listed release's update log: whatsNew, and with $detail
+     * (GET /api/apps/{id}, not the list) versionHistory; neither without a log.
+     */
+    public function app(string $id, bool $detail = true): ?array
     {
         $a = $this->db->one('SELECT * FROM apps WHERE id = ?', [$id]);
         if (!$a) {
@@ -148,9 +165,26 @@ final class Catalog
         $a['screenshots'] = json_decode($a['screenshots'] ?: '[]', true);
         $a['featured'] = (bool) $a['featured'];
         $a['curated'] = (bool) $a['curated'];
+        $a['releaseNotesUrl'] = (string) ($a['release_notes_url'] ?? '');
+        unset($a['release_notes_url']);
         $a['rating'] = $this->rating($id);
         $a['releases'] = $this->db->all("SELECT id, version, size, sha256, state, created, decided FROM releases WHERE app_id = ? ORDER BY id DESC", [$id]);
+        $log = $this->listedLog($id);
+        if ($log !== null) {
+            $a['whatsNew'] = Changelog::whatsNew($log);
+            if ($detail) {
+                $a['versionHistory'] = Changelog::history($log);
+            }
+        }
         return $a;
+    }
+
+    /** The update log of $id's listed (newest approved) release, or null when it carries none. */
+    private function listedLog(string $id): ?array
+    {
+        $r = $this->db->one("SELECT changelog FROM releases WHERE app_id = ? AND state = 'approved' ORDER BY id DESC", [$id]);
+        $log = $r && $r['changelog'] !== null ? json_decode((string) $r['changelog'], true) : null;
+        return is_array($log) && !empty($log['versions']) ? $log : null;
     }
 
     private function rating(string $id): ?array
@@ -163,7 +197,9 @@ final class Catalog
 
     /** The fields a listing may set (applyListing). */
     private const LISTING_TEXT = ['title' => 80, 'developer' => 80, 'summary' => 300, 'description' => 8000, 'license' => 80];
-    private const LISTING_URLS = ['developerUrl', 'homepage', 'source', 'donation'];
+    private const LISTING_URLS = ['developerUrl', 'homepage', 'source', 'donation', 'releaseNotesUrl'];
+    /** The database's names of the listing's fields where they differ. */
+    private const LISTING_COLUMNS = ['developer' => 'developer_name', 'developerUrl' => 'developer_url', 'releaseNotesUrl' => 'release_notes_url'];
     /** Pictures a listing names: at most this many screenshots, of at most this size each. */
     private const LISTING_SCREENSHOTS = 8;
     private const LISTING_PICTURE_MAX = 8 * 1024 * 1024;
@@ -173,8 +209,9 @@ final class Catalog
      * (`bin/marketplace.php upload --phoenix --listing FILE`; bin/web-apps.py writes the file): an
      * open-source web app from its upstream release, under its upstream's name, icon and vendor, or
      * one of Phoenix's own (the 2.0 apps). $l: {title, developer, developerUrl, summary, description,
-     * categories (up to 5), license (SPDX), homepage, source, donation (https addresses), featured,
-     * icon, screenshots}. icon and screenshots are files on this computer (relative to $baseDir) of
+     * categories (up to 5), license (SPDX), homepage, source, donation, releaseNotesUrl (https
+     * addresses; releaseNotesUrl: the upstream's release notes, for an app whose package carries
+     * no update log of its own), featured, icon, screenshots}. icon and screenshots are files on this computer (relative to $baseDir) of
      * PNG, JPEG or WebP, copied into the published files (icons/<id>.<ext>, screenshots/<id>/<n>.<ext>),
      * or https addresses (copied when first asked for, mediaCopy). A field left out is left as it was.
      */
@@ -195,7 +232,7 @@ final class Catalog
             if (!is_string($l[$k]) || mb_strlen($l[$k]) > $max || ($k === 'title' && trim($l[$k]) === '')) {
                 throw new CheckFailed("listing: $k, a text of at most $max characters");
             }
-            $set[$k === 'developer' ? 'developer_name' : $k] = $l[$k];
+            $set[self::LISTING_COLUMNS[$k] ?? $k] = $l[$k];
         }
         foreach (self::LISTING_URLS as $k) {
             if (!array_key_exists($k, $l)) {
@@ -204,7 +241,7 @@ final class Catalog
             if (!is_string($l[$k]) || ($l[$k] !== '' && !preg_match('#^https://[^\s]{1,490}$#i', $l[$k]))) {
                 throw new CheckFailed("listing: $k, an https:// address");
             }
-            $set[$k === 'developerUrl' ? 'developer_url' : $k] = $l[$k];
+            $set[self::LISTING_COLUMNS[$k] ?? $k] = $l[$k];
         }
         if (array_key_exists('categories', $l)) {
             $cats = $l['categories'];
@@ -910,6 +947,7 @@ final class Catalog
         $connectorTypes = $this->listedConnectorTypes(array_column(array_column($accountTypes, 0), 'templateId'));
         $apps = [];
         $categories = [];
+        $details = [];
         foreach ($this->db->all("SELECT id FROM apps WHERE status = 'listed' ORDER BY featured DESC, title") as $row) {
             $a = $this->app($row['id']);
             $e = [
@@ -922,6 +960,10 @@ final class Catalog
             // Where its source code is (an open-source app Phoenix hosts: applyListing).
             if (($a['source'] ?? '') !== '') {
                 $e['source'] = $a['source'];
+            }
+            // Its upstream's release notes (a hosted web app: applyListing).
+            if ($a['releaseNotesUrl'] !== '') {
+                $e['releaseNotesUrl'] = $a['releaseNotesUrl'];
             }
             if ($a['kind'] === 'pwa') {
                 $e['pwa'] = ['manifest' => $a['manifest'], 'origin' => $a['origin']];
@@ -937,6 +979,15 @@ final class Catalog
                 $e['version'] = $r['version'];
                 $e['release'] = ['url' => $this->config['base_url'] . 'packages/' . rawurlencode($r['file']), 'size' => (int) $r['size'],
                                  'sha256' => $r['sha256']];
+                // The listed version's update log: its entry here, every entry in the detail.
+                if (isset($a['whatsNew'], $a['versionHistory'])) {
+                    $e['whatsNew'] = $a['whatsNew'];
+                    $detail = json_encode(['id' => $a['id'], 'version' => $r['version'], 'versionHistory' => $a['versionHistory']],
+                                          JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n";
+                    $name = preg_replace('/[^A-Za-z0-9._-]/', '_', $a['id']) . '-' . substr(hash('sha256', $detail), 0, 16) . '.json';
+                    $details[$name] = $detail;
+                    $e['detail'] = ['url' => $this->config['base_url'] . 'apps/' . $name, 'sha256' => hash('sha256', $detail)];
+                }
             }
             foreach ($a['categories'] as $c) {
                 $categories[$c] = true;
@@ -967,6 +1018,7 @@ final class Catalog
             @mkdir("$dir/icons/accounts", 0755, true);
             file_put_contents("$dir/icons/accounts/{$entry['templateId']}.png", $png);
         }
+        $this->writeDetails($details);
         // The signature first, then the index: a reader never sees an index without its signature.
         file_put_contents("$dir/index.json.sig.new", base64_encode($this->signer->sign($json)) . "\n");
         file_put_contents("$dir/index.json.new", $json);
@@ -976,5 +1028,29 @@ final class Catalog
                                                          'fingerprint' => $this->signer->fingerprint()], JSON_UNESCAPED_SLASHES) . "\n");
         $this->db->run('INSERT INTO index_builds (build, generated, sha256) VALUES (?, ?, ?)', [$build, $index['generated'], hash('sha256', $json)]);
         return ['build' => $build, 'apps' => count($apps), 'accounts' => count($accountTypes) + count($connectorTypes)];
+    }
+
+    /**
+     * The apps' details (apps/<id>-<hash>.json), before the index that names them. A detail is
+     * named by its contents, so an index a device already has keeps finding the one it names;
+     * one no index names any more goes once every index that may have named it has expired
+     * (its time is the last publish that named it).
+     */
+    private function writeDetails(array $details): void
+    {
+        $dir = $this->publicDir() . '/apps';
+        @mkdir($dir, 0755, true);
+        foreach ($details as $name => $bytes) {
+            if (!is_file("$dir/$name") || file_get_contents("$dir/$name") !== $bytes) {
+                file_put_contents("$dir/$name.new", $bytes);
+                rename("$dir/$name.new", "$dir/$name");
+            }
+            touch("$dir/$name");
+        }
+        foreach (glob("$dir/*.json") ?: [] as $old) {
+            if (!isset($details[basename($old)]) && filemtime($old) < time() - self::EXPIRES_DAYS * 86400) {
+                @unlink($old);
+            }
+        }
     }
 }

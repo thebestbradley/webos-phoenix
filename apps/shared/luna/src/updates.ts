@@ -8,6 +8,7 @@
 // background; installing it is switching slots and restarting.
 
 import { call, subscribe, LunaError, type Subscription } from "./bridge";
+import type { ReleaseNotes } from "./releasenotes";
 
 const SERVICE = "luna://com.palm.update/";
 
@@ -18,6 +19,8 @@ export interface SystemRelease {
     date: string;
     notes: string[];
     size: number;
+    /** This release's notes (its entry of the system's release-notes.json), when the feed carries them. */
+    releaseNotes?: ReleaseNotes;
 }
 
 export type UpdateErrorCode =
@@ -29,7 +32,8 @@ export type UpdateChannel = "stable" | "beta" | "dev";
 export interface UpdateStatus {
     /** ready: downloaded and prepared; installing it restarts the device. */
     state: "idle" | "checking" | "downloading" | "preparing" | "ready" | "restarting";
-    current: { name: string; version: string; build: number };
+    /** releaseNotes: the running version's notes, when the system has them. */
+    current: { name: string; version: string; build: number; releaseNotes?: ReleaseNotes };
     available: SystemRelease | null;
     /** 0-100 while downloading and preparing. */
     progress: number | null;
@@ -87,5 +91,10 @@ export const systemUpdates = {
     },
     setPreferences(p: { autoDownload?: boolean; channel?: UpdateChannel }): Promise<UpdateStatus> {
         return call(SERVICE + "setPreferences", p).then(status);
+    },
+    /** The running system's release notes, every version, newest first ([] when it has none; an older system lacks the method). */
+    async releaseNotes(): Promise<ReleaseNotes[]> {
+        const r = (await call(SERVICE + "getReleaseNotes", {})) as unknown as { versions?: ReleaseNotes[] };
+        return Array.isArray(r.versions) ? r.versions : [];
     },
 };

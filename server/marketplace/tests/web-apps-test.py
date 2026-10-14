@@ -72,8 +72,14 @@ check(any("not one the Marketplace hosts" in e for e in w.check_entry(dict(good,
 check(any("never Phoenix's" in e for e in w.check_entry(dict(good, id="org.webosphoenix.paint"))), "Phoenix's ids are not upstream's")
 check(any("major.minor.micro" in e for e in w.check_entry(dict(good, version="2026.10.09.febb38d"))), "versions as SAM reads them")
 check(any("https" in e for e in w.check_entry(dict(good, source="http://example.org/"))), "https addresses only")
+check(any("releaseNotesUrl" in e for e in w.check_entry(dict(good, releaseNotesUrl="http://example.org/releases"))),
+      "... the upstream's release notes too")
 real = w.load_manifest()
 check(len(real) >= 12 and all(w.check_entry(a) == [] for a in real), "catalog/web-apps.json passes (%d apps)" % len(real))
+notes_urls = [a.get("releaseNotesUrl", "") for a in real]
+check(all(u.startswith("https://github.com/") and "/releases/tag/" in u for u in notes_urls)
+      and all(w.listing_for(a, tmp).get("releaseNotesUrl") == a["releaseNotesUrl"] for a in real),
+      "each hosted app links its upstream's release notes for the pinned version, in its listing")
 
 # ---- Unpacking an untrusted archive ----
 data = zip_of({"app-1/index.html": "<h1>x</h1>", "app-1/js/a.js": "1", "app-1/LICENSE": "MIT", "other/x": "y"})
@@ -120,6 +126,10 @@ for rel, body in {"package.json": "{}", "apps/calc/public/appinfo.json": '{"id":
                   "apps/calc/package.json": '{"description": "Calc (com.example.calc): sums, rebuilt", "license": "Apache-2.0"}',
                   "apps/calc/dist/appinfo.json": '{"id": "com.example.calc", "version": "4.0.0", "title": "Calc", "removable": false, "main": "index.html"}',
                   "apps/calc/dist/index.html": "<h1>calc</h1>", "apps/unbuilt/public/appinfo.json": '{"id": "com.example.unbuilt"}',
+                  # Its update log (Vite copies public/ into dist/), with notes for the next version.
+                  "apps/calc/dist/changelog.json": json.dumps({"format": 1, "unreleased": {"new": ["Percentages."]}, "versions": [
+                      {"version": "4.0.0", "date": "2026-10-12", "rebuild": True, "replaces": "Calculator (webOS 3.0.5)",
+                       "summary": "Calculator, rebuilt for webOS Phoenix.", "new": ["A history of your sums."]}]}),
                   # A Marketplace-only app (Home): left out of the 2.0 image, offered in the catalog.
                   "apps/homeassistant/public/appinfo.json": '{"id": "org.webosphoenix.home"}',
                   "apps/homeassistant/package.json": '{"description": "Home (org.webosphoenix.home): a companion for Home Assistant, '
@@ -141,6 +151,11 @@ check(code == 0 and os.path.isfile(packed) and "unbuilt: skipped, not built" in 
 calc = w.package_rootfs(packed, os.path.join(tmp, "calc"))
 check(json.load(open(os.path.join(calc, "usr/palm/applications/com.example.calc/appinfo.json")))["removable"] is True,
       "... its appinfo.json removable: installed, it is an update of the built-in app")
+calc_log = json.load(open(os.path.join(calc, "usr/palm/applications/com.example.calc/changelog.json")))
+check("unreleased" not in calc_log and calc_log["versions"][0]["version"] == "4.0.0" and calc_log["versions"][0]["rebuild"] is True,
+      "... its update log beside it, as it ships: without the notes for the next version")
+check("not valid JSON" in raises(lambda: w.shipped_changelog(b"{")) and w.shipped_changelog(b'{"format": 1}') == b'{"format": 1}',
+      "... a log that is not JSON stops the app's packing; one without unreleased is packed as it is")
 os.replace(packed, os.path.join(out_dir, "default-app.ipk"))
 home = os.path.join(tmp, "cache", "phoenix-2.0", "org.webosphoenix.home", "1.0.0", "org.webosphoenix.home_1.0.0_all.ipk")
 check(os.path.isfile(home) and "org.webosphoenix.home 1.0.0" in buf.getvalue() and "Marketplace only" in buf.getvalue(),

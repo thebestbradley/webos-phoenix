@@ -48,14 +48,16 @@ let ranges: string[] = [];
 function bundle(version: string, build: number, compatible = COMPATIBLE) {
     return `[update]\ncompatible=${compatible}\nversion=${version}\nbuild=${build}\n\n[image.rootfs]\nfilename=rootfs.ext4\n`;
 }
-function publish(version: string, build: number, opts: { bundleText?: string; sha256?: string; compatible?: string; channel?: string } = {}) {
+function publish(version: string, build: number,
+                 opts: { bundleText?: string; sha256?: string; compatible?: string; channel?: string; releaseNotes?: Any } = {}) {
     const text = opts.bundleText ?? bundle(version, build);
     const name = `phoenix-${version}.raucb`;
     files[`/${COMPATIBLE}/${name}`] = { body: text };
     files[`/${COMPATIBLE}/${opts.channel ?? "stable"}.json`] = { body: JSON.stringify({
         format: 1, compatible: opts.compatible ?? COMPATIBLE, channel: opts.channel ?? "stable",
         release: { name: "webOS Phoenix", version, build, date: "2026-10-01", notes: ["Faster cards"], url: name,
-                   size: Buffer.byteLength(text), sha256: opts.sha256 ?? crypto.createHash("sha256").update(text).digest("hex") },
+                   size: Buffer.byteLength(text), sha256: opts.sha256 ?? crypto.createHash("sha256").update(text).digest("hex"),
+                   ...(opts.releaseNotes ? { releaseNotes: opts.releaseNotes } : {}) },
     }) };
 }
 
@@ -102,11 +104,13 @@ function restart(fails = false) {
 let state: Any;
 let calls: { uri: string; params: Any }[];
 let wifi: boolean;
+// The running system's release notes (/usr/share/phoenix/release-notes.json); none by default.
+let systemNotes: Any = null;
 
 function service() {
     const downloads = path.join(dir, "downloads");
     return updates.createUpdatesService({
-        rauc: node.createRauc({ command: FAKE_RAUC, osRelease: path.join(dir, "os-release") }),
+        rauc: node.createRauc({ command: FAKE_RAUC, osRelease: path.join(dir, "os-release"), product: path.join(dir, "product.json") }),
         request: node.request,
         download: node.download,
         files: {
@@ -131,6 +135,7 @@ function service() {
         // /etc/palm/phoenix/servers.json, resolved (@phoenix/platform).
         servers: async () => platform.servers.resolve({ feeds: base, updates: Object.assign({ url: "./", channel: "stable" }, pins) }, null, false),
         state: { load: () => state && JSON.parse(JSON.stringify(state)), save: (o: Any) => { state = JSON.parse(JSON.stringify(o)); } },
+        releaseNotes: () => systemNotes,
         now: () => clock,
     });
 }
@@ -176,6 +181,8 @@ beforeEach(() => {
     state = null;
     calls = [];
     wifi = true;
+    systemNotes = null;
+    fs.rmSync(path.join(dir, "product.json"), { force: true });
     fs.rmSync(path.join(dir, "downloads"), { recursive: true, force: true });
     device();
 });
@@ -207,6 +214,49 @@ describe("the feed", () => {
         expect((await svc.getStatus({})).error).toMatchObject({ errorCode: "BAD_FEED" });
         files[`/${COMPATIBLE}/stable.json`] = { status: 500, body: "oops" };
         expect(await svc.check({})).toMatchObject({ errorCode: "CONNECTION_FAILED" });
+    });
+});
+
+describe("release notes (docs/APP-STORE.md \"Update logs\")", () => {
+    const v100 = { version: "1.0.0", date: "2026-10-14", summary: "Cards and Just Type.", new: ["Every app runs in its own card."] };
+    const v090 = { version: "0.9.0", date: "2026-09-01", summary: "A preview.", new: ["The launcher."], known: ["No phone calls yet."] };
+    const v110 = { version: "1.1.0", date: "2026-11-02", summary: "Reminders.", new: ["Set a reminder."], fixed: ["Banners no longer stack twice."] };
+    const full = (n: Any) => ({ new: [], improved: [], fixed: [], known: [], ...n });
+
+    it("says what the running version brings, and gives every version's notes", async () => {
+        systemNotes = { format: 1, versions: [v100, v090] };
+        const svc = service();
+        expect((await svc.getStatus({})).current).toEqual({ name: "webOS Phoenix", version: "1.0.0", build: 100, releaseNotes: full(v100) });
+        expect(await svc.getReleaseNotes({})).toEqual({ returnValue: true, versions: [full(v100), full(v090)] });
+    });
+
+    it("a system without release notes has none, and says so to neither reader", async () => {
+        const svc = service();
+        expect((await svc.getStatus({})).current.releaseNotes).toBeUndefined();
+        expect(await svc.getReleaseNotes({})).toEqual({ returnValue: true, versions: [] });
+        // Notes without the running version's entry: the history, but nothing for this version.
+        systemNotes = { format: 1, versions: [v090] };
+        const other = service();
+        expect((await other.getStatus({})).current.releaseNotes).toBeUndefined();
+        expect((await other.getReleaseNotes({})).versions).toEqual([full(v090)]);
+    });
+
+    it("an update carries its own notes when the feed has them (only that version's)", async () => {
+        const svc = service();
+        publish("1.1.0", 110, { releaseNotes: v110 });
+        const st = await svc.check({});
+        expect(st.available).toMatchObject({ version: "1.1.0", notes: ["Faster cards"], releaseNotes: full(v110) });
+        publish("1.2.0", 120, { releaseNotes: v110 });
+        expect((await svc.check({})).available.releaseNotes).toBeUndefined();
+        publish("1.3.0", 130);
+        expect((await svc.check({})).available).not.toHaveProperty("releaseNotes");
+    });
+
+    it("on a device the running version is the product's, not the OSE release os-release names", async () => {
+        fs.writeFileSync(path.join(dir, "os-release"), "NAME=\"webOS OSE\"\nVERSION_ID=2.27.0\nBUILD_ID=100\n");
+        expect((await service().getStatus({})).current).toMatchObject({ name: "webOS OSE", version: "2.27.0", build: 100 });
+        fs.writeFileSync(path.join(dir, "product.json"), JSON.stringify({ name: "webOS Phoenix", version: "1.0.0", releaseNotes: "release-notes.json" }));
+        expect((await service().getStatus({})).current).toMatchObject({ name: "webOS Phoenix", version: "1.0.0", build: 100 });
     });
 });
 

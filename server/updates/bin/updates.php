@@ -21,9 +21,14 @@
 //                                [--channel stable|beta|dev] [--name NAME]
 //                                [--rollout PERCENT [--seed TEXT]]
 //                                [--date YYYY-MM-DD] [--note TEXT]...
+//                                [--release-notes FILE]
 //       copies the bundle in and makes it the channel's release; with RAUC
-//       installed here, the bundle's own manifest must say the same
+//       installed here, the bundle's own manifest must say the same.
+//       --release-notes: the system's release notes (release-notes.json, or
+//       the file product.json names), whose entry for the version becomes the
+//       release's releaseNotes, and its notes lines when no --note is given
 //   php bin/updates.php simulator --version V --build N [--channel C] [--note TEXT]...
+//                                [--release-notes FILE]
 //       the same for the simulator: its stand-in bundle (the manifest only),
 //       compatible "phoenix-sim"
 //   php bin/updates.php withdraw --compatible C [--channel C]
@@ -33,6 +38,9 @@
 declare(strict_types=1);
 
 require dirname(__DIR__) . '/src/UpdateFeed.php';
+// The update log rules, for --release-notes (server/marketplace's, one validator).
+require dirname(__DIR__, 2) . '/marketplace/src/CheckFailed.php';
+require dirname(__DIR__, 2) . '/marketplace/src/Changelog.php';
 
 use Phoenix\Updates\UpdateFeed;
 
@@ -81,6 +89,9 @@ function rauc_info(string $bundle): ?array
 $cmd = array_shift($args) ?? 'help';
 
 try {
+    if (isset($o['release-notes'])) {
+        $o['releaseNotes'] = UpdateFeed::releaseNotes($o['release-notes'], (string) ($o['version'] ?? fail('--version is required')));
+    }
     switch ($cmd) {
         case 'publish':
             $bundle = $args[0] ?? fail('publish BUNDLE: the .raucb file');

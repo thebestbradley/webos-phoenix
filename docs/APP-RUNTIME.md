@@ -2827,8 +2827,40 @@ and the luna-systemui Phoenix runs still listens to it
 show the "Update Available" alert, the download dashboard and the countdown
 alert, which answer with `InstallLater`, `InstallNow` and `AlertDisplayed`. The
 service keeps that API and adds Phoenix's own (`getStatus`, `check`,
-`download`, `cancel`, `installNow`, `setPreferences`) for Settings > Updates,
-which is `com.palm.app.updates` (the alerts open it).
+`download`, `cancel`, `installNow`, `setPreferences`, `getReleaseNotes`) for
+Settings > Updates, which is `com.palm.app.updates` (the alerts open it).
+
+**The version and the release notes.** `product.json` at the top of the
+checkout is the product: its name, the version the system reports (0.1.0
+now; renumbering is that line and the notes' top entry, which a test
+checks agree) and the release notes it ships, `release-notes.json` (the
+update log format of [APP-STORE.md 3.15](APP-STORE.md#315-update-logs),
+without `rebuild`; its first entry is the version the system reports).
+`runtime/rootfs.json` `"product"` puts both on the device, at
+`/usr/share/phoenix/product.json` and `/usr/share/phoenix/release-notes.json`
+(phoenix-sim's Rootfs, `tools/serve-rootfs.py`, and `tools/install-rootfs.py`
+for the image, packaged by phoenix-apps). The simulator's runtime reads the
+version from it (osInfo, `/etc/os-release`, the simulated slots); a device's
+`com.palm.update` reads it from the product file rather than
+`/etc/os-release` `VERSION_ID`, which is OSE's. 2.0 (phoenix-ember-glass-ui,
+which merges this repository) names its own notes file in `product.json`,
+so 1.0's merges in unchanged. `docs/RELEASE-NOTES.md` is made from the
+notes by `tools/release-notes-doc.py` (CI checks it is current).
+
+`com.palm.update` passes them on, and readers treat each as optional (an
+older system or feed has none): the status's `current.releaseNotes` is the
+running version's entry; `available.releaseNotes` is the release's own,
+when the feed carries it (only that version's); `getReleaseNotes {}`
+answers `{versions}`, every entry of the running system's notes, newest
+first. The feed's release carries `releaseNotes` next to its `notes` lines,
+which stay for older readers: `server/updates/bin/updates.php ...
+--release-notes FILE` and the admin API's `releaseNotes=FILE` (a notes
+file at the top of the server's checkout) take the version's entry from a
+notes file, checked with the catalog's validator, and fill the lines from
+it when none are given. Settings > Updates shows an available update's
+notes before Download and Install (its lines from an older feed), **What's
+New in This Version** for the running system and its **Version History**;
+Device Info's **What's New**, under the version, opens the same notes.
 
 The system is installed with RAUC into two root slots, so:
 

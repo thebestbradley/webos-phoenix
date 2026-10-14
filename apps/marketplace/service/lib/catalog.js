@@ -15,7 +15,12 @@
 // summary, description, categories, icon (URL), screenshots, license,
 // homepage, source (its source code, optional), donation, featured,
 // rating: {stars, count}, version, pwa: {manifest (URL), origin} |
-// release: {url, size, sha256}}. A
+// release: {url, size, sha256}, and optionally (docs/APP-STORE.md "Update
+// logs") whatsNew: the listed version's notes {version, date, summary, new,
+// improved, fixed, known}, detail: {url, sha256} (a file with every
+// version's notes, versionHistory, checked against that SHA-256 when an
+// app's page reads it: packagesservice.js getApp), releaseNotesUrl (https:
+// a hosted web app's upstream release notes)}. A
 // "connector" (a Synergy connector package, docs/SYNERGY-CONNECTORS.md C4)
 // has a release as an "ipk" has; Connections installs it. An
 // account type (Synergy, docs/SYNERGY-CONNECTORS.md 2.1): lib/accounts.js;
@@ -56,6 +61,25 @@ function fingerprint(keyBytes, sha256) {
 function str(v, max) { return typeof v === "string" ? v.slice(0, max || 4000) : ""; }
 function url(v) { return typeof v === "string" && /^https?:\/\//i.test(v) ? v : ""; }
 
+// One version's notes from an update log (the catalog checked the log when
+// the package came: server/marketplace src/Changelog.php), as the
+// Marketplace shows them; null when it is not one. In a history (withRebuild)
+// the rebuild entry keeps rebuild and replaces.
+var NOTE_LISTS = ["new", "improved", "fixed", "known"];
+function releaseNotes(n, withRebuild) {
+    if (!n || typeof n !== "object" || Array.isArray(n)) return null;
+    if (!/^\d{1,9}\.\d{1,9}\.\d{1,9}$/.test(n.version || "") || !/^\d{4}-\d{2}-\d{2}$/.test(n.date || "") || typeof n.summary !== "string") return null;
+    var out = { version: n.version, date: n.date, summary: str(n.summary, 140) };
+    NOTE_LISTS.forEach(function (k) {
+        out[k] = Array.isArray(n[k]) ? n[k].filter(function (t) { return typeof t === "string" && t; }).slice(0, 100).map(function (t) { return t.slice(0, 200); }) : [];
+    });
+    if (withRebuild && n.rebuild === true) {
+        out.rebuild = true;
+        if (typeof n.replaces === "string" && n.replaces) out.replaces = str(n.replaces, 140);
+    }
+    return out;
+}
+
 // One entry as the client uses it; null when it is not usable.
 function normalize(e, sourceId) {
     if (!e || typeof e.id !== "string" || !/^[A-Za-z0-9]+([._-][A-Za-z0-9]+)+$/.test(e.id)) return null;
@@ -73,6 +97,14 @@ function normalize(e, sourceId) {
         rating: e.rating && typeof e.rating.stars === "number" ? { stars: e.rating.stars, count: e.rating.count | 0 } : null,
         version: str(e.version, 40) || "1.0.0"
     };
+    // Its update log: the listed version's notes (only when they are that
+    // version's), where the whole history is, or a hosted web app's
+    // upstream release notes.
+    var wn = releaseNotes(e.whatsNew, false);
+    if (wn && wn.version === out.version) out.whatsNew = wn;
+    if (e.detail && url(e.detail.url) && /^[0-9a-f]{64}$/i.test(e.detail.sha256 || ""))
+        out.detail = { url: e.detail.url, sha256: e.detail.sha256.toLowerCase() };
+    if (typeof e.releaseNotesUrl === "string" && /^https:\/\/\S+$/i.test(e.releaseNotesUrl)) out.releaseNotesUrl = e.releaseNotesUrl.slice(0, 500);
     if (kind === "pwa") {
         if (!e.pwa || !url(e.pwa.manifest)) return null;
         out.pwa = { manifest: e.pwa.manifest, origin: url(e.pwa.origin) || new URL(e.pwa.manifest).origin };
@@ -123,4 +155,20 @@ function verifyIndex(indexBytes, signatureB64, keyB64, opts) {
     });
 }
 
-module.exports = { verifyIndex: verifyIndex, fingerprint: fingerprint, normalize: normalize };
+// An app's detail (the index's detail.url; Catalog.php writeDetails): its
+// bytes, checked against the index's SHA-256 (hex), -> its versionHistory,
+// newest first, starting at the entry's version; throws BAD_INDEX otherwise.
+function verifyDetail(bytes, entry, sha256) {
+    return Promise.resolve(sha256(bytes)).then(function (h) {
+        var hex = Array.prototype.map.call(new Uint8Array(h), function (b) { return (b < 16 ? "0" : "") + b.toString(16); }).join("");
+        if (!entry.detail || hex !== entry.detail.sha256) throw fail("BAD_INDEX", "The app's details are not the ones the catalog signed");
+        var d;
+        try { d = JSON.parse(archive.fromUtf8(bytes)); } catch (e) { throw fail("BAD_INDEX", "The app's details are not valid JSON"); }
+        var list = d && d.id === entry.id && Array.isArray(d.versionHistory) ? d.versionHistory.map(function (n) { return releaseNotes(n, true); }) : [];
+        if (!list.length || list.some(function (n) { return !n; }) || list[0].version !== entry.version)
+            throw fail("BAD_INDEX", "The app's details are not this version's");
+        return list;
+    });
+}
+
+module.exports = { verifyIndex: verifyIndex, verifyDetail: verifyDetail, fingerprint: fingerprint, normalize: normalize, releaseNotes: releaseNotes };

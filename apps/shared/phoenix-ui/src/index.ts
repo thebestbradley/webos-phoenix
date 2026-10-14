@@ -23,6 +23,8 @@ export { formatNumber, dialable, formatDuration, formatTime, daysAgo, dayLabel, 
 export { Glyph, Toolbar, ToolSpacer, IconToolButton, GroupedToolButtons, formatSeconds } from "./media";
 export type { GlyphName, ToolbarProps, IconToolButtonProps, GroupedToolButtonsProps } from "./media";
 export { PrintDialog } from "./print";
+export { ReleaseNotes, VersionHistory, releaseDate, RELEASE_NOTE_KINDS } from "./releasenotes";
+export type { ReleaseNotesEntry, ReleaseNotesProps, VersionHistoryProps } from "./releasenotes";
 export type { PrintDialogProps, PrintDialogPrinter } from "./print";
 export { SlidingPanes, GrabButton, PaneHeader, PaneToolbar, Swipeable, ContextMenu, useMultiView, useLongPress,
          MULTI_VIEW_MIN_WIDTH, LIST_PANE_WIDTH, LONG_PRESS_MS } from "./panes";

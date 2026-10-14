@@ -7,7 +7,9 @@
 // reviews it: one web app, under usr/palm/applications/<id>/, its
 // appinfo.json valid and saying the same id and version as the control
 // file, no maintainer scripts, no services, no files elsewhere, no
-// symlinks, under the size limit. The device runs the same checks again
+// symlinks, under the size limit; its update log (changelog.json beside
+// appinfo.json, optional) valid and starting at the package's version
+// (Changelog). The device runs the same checks again
 // (apps/marketplace/service/packagesservice.js). A Synergy connector (a
 // service in the app's service/ folder) passes only with $connectors, and
 // then Connector::checkIpk has the last word (Catalog::submitPackage).
@@ -25,7 +27,11 @@ final class Ipk
      * $connectors: a package with a service in its app's service/ folder is a connector
      * ('connector' => true), for Connector::checkIpk; without it, it is refused.
      *
-     * @return array{control: array, appinfo: array, appId: string, version: string, files: string[], connector: bool}
+     * changelog: the package's update log as it ships (Changelog::parse: without "unreleased"),
+     * or null when it has none; a malformed one, or one whose newest version is not the
+     * package's, is refused with the validator's message.
+     *
+     * @return array{control: array, appinfo: array, appId: string, version: string, files: string[], connector: bool, changelog: ?array}
      */
     public static function check(string $bytes, bool $connectors = false): array
     {
@@ -96,8 +102,13 @@ final class Ipk
         if (($fields['Architecture'] ?? '') !== 'all') {
             throw new CheckFailed('Only packages for any architecture ("Architecture: all") are accepted');
         }
+        // The app's update log (docs/APP-STORE.md "Update logs"): optional, but checked when
+        // there, its newest version the package's.
+        $log = $data[$dir . 'changelog.json'] ?? null;
+        $changelog = $log && $log['type'] === 'file' ? Changelog::parse($log['data'], $version) : null;
         return ['control' => $fields, 'appinfo' => $info, 'appId' => $appId, 'version' => $version,
-                'files' => array_keys(array_filter($data, fn ($f) => $f['type'] === 'file')), 'connector' => $connector];
+                'files' => array_keys(array_filter($data, fn ($f) => $f['type'] === 'file')), 'connector' => $connector,
+                'changelog' => $changelog];
     }
 
     // readAr, readTar and parseControl are also server/drivers' .ipk reader.
