@@ -209,7 +209,7 @@ int main(int argc, char *argv[])
     QCommandLineOption noTcpOpt(QStringLiteral("no-tcp-relay"), QStringLiteral("Do not open TCP connections for the pages' connectors (the drives' SFTP reaches only the demo server, files.example)."));
     QCommandLineOption llamaServerOpt(QStringLiteral("llama-server"), QStringLiteral("llama.cpp's llama-server program for the Assistant's on-device model (default: llama-server on the PATH)."), QStringLiteral("path"));
     QCommandLineOption noMarketplaceOpt(QStringLiteral("no-marketplace"), QStringLiteral("Do not start the Marketplace's catalog service with the simulator this time (it starts with every run where PHP is, unless Services > Start Catalog with the Simulator is off)."));
-    QCommandLineOption marketplaceOpt(QStringLiteral("marketplace"), QStringLiteral("Start the Marketplace's catalog service on this computer (server/marketplace/bin/serve.sh: PHP 8; set up the first time) where the simulator's Marketplace reads it, http://127.0.0.1:8088/, and open the Marketplace. It stops with the simulator; one already running is used. The Services menu starts and stops it too."));
+    QCommandLineOption marketplaceOpt(QStringLiteral("marketplace"), QStringLiteral("Start the Marketplace's catalog service on this computer (server/marketplace/bin/serve.sh: PHP 8; set up the first time) where the simulator's Marketplace reads it, http://127.0.0.1:8088/, and open the Marketplace. One catalog for every simulator of this user (its folder: ~/.local/share/phoenix/catalog, on a Mac ~/Library/Application Support/Phoenix/catalog, or MARKETPLACE_DATA); it runs while any simulator does, and one already running is used. The Services menu starts and stops it too."));
     QCommandLineOption speechCommandOpt(QStringLiteral("speech-command"), QStringLiteral("The program (and arguments, %l for the language, %v for the voice) that speaks the Assistant's answers, given the text on its input (default: Kitten TTS, phoenix-tts; else espeak-ng, say or Flite)."), QStringLiteral("command"));
     QCommandLineOption wakeModelOpt(QStringLiteral("wake-model"), QStringLiteral("The wake word's Vosk model folder (default: wakeword/vosk-model-small-en-us-0.15 beside phoenix-sim, which tools/get-wakeword.py fetches)."), QStringLiteral("dir"));
     QCommandLineOption voskLibraryOpt(QStringLiteral("vosk-library"), QStringLiteral("libvosk for the wake word (default: wakeword/libvosk.so, or .dylib, beside phoenix-sim)."), QStringLiteral("file"));
@@ -451,7 +451,14 @@ int main(int argc, char *argv[])
         launchParams << l.params;
     }
 #ifdef PHOENIX_HAVE_WEBENGINE
+    // One catalog for every simulator of this user, whatever its checkout
+    // (docs/APP-STORE.md 3.16): it runs while any simulator does, whichever
+    // started it (the simulators' folder, SimInstances).
     auto marketplace = std::make_unique<SimMarketplace>(repoDir);
+    marketplace->setInstancesDir(SimInstances::defaultDir());
+    // The 2.0 apps it fills itself with: this setting, else PHOENIX_DEFAULT_APPS
+    // or a sibling checkout ../phoenix-default-apps with built apps.
+    marketplace->setDefaultAppsDir(SimSettings().value(QStringLiteral("marketplace/defaultApps")));
     if (!parser.isSet(marketplaceOpt) && !parser.isSet(noMarketplaceOpt)
         && SimSettings().value(QStringLiteral("marketplace/autostart")) != QLatin1String("0")) {
         if (SimMarketplace::phpAvailable()) {
@@ -463,8 +470,11 @@ int main(int argc, char *argv[])
     }
     if (parser.isSet(marketplaceOpt)) {
         if (marketplace->start())
-            qInfo("phoenix-sim: the Marketplace's catalog at %s%s", qPrintable(marketplace->url()),
-                  marketplace->ownsServer() ? qPrintable(QStringLiteral(" (log: ") + marketplace->logFile() + QLatin1Char(')')) : " (already running)");
+            qInfo("phoenix-sim: the Marketplace's catalog at %s, %s", qPrintable(marketplace->url()),
+                  marketplace->origin() == QLatin1String("older")
+                      ? "started by an older simulator, used as it is (its folder is its own checkout's)"
+                      : qPrintable(QStringLiteral("from %1 (%2; log: %3)").arg(marketplace->folder(),
+                            marketplace->ownsServer() ? QStringLiteral("started now") : QStringLiteral("already running"), marketplace->logFile())));
         else
             qWarning("phoenix-sim: --marketplace: %s", qPrintable(marketplace->error()));
         if (!launch.contains(QStringLiteral("org.webosphoenix.marketplace"))) {

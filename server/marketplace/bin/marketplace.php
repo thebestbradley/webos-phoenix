@@ -38,6 +38,18 @@
 //                                             same bytes is kept as it is
 //   php bin/marketplace.php listing ID LISTING.json
 //                                             an app's listing again, published
+//   php bin/marketplace.php versions          {app id: its newest approved version},
+//                                             JSON (bin/web-apps.py fill)
+//   php bin/marketplace.php availability      device classes, kinds and feeds
+//                                             (docs/APP-STORE.md 3.17): what is off
+//                                             where, each app's kind and classes (JSON)
+//   php bin/marketplace.php availability off|on kind|feed NAME CLASS...
+//                                             a kind or a whole feed off (or on again)
+//                                             for those device classes; publishes
+//   php bin/marketplace.php availability app ID classes CLASS,...|package
+//   php bin/marketplace.php availability app ID kind KIND|assigned
+//                                             an app's classes or kind (package,
+//                                             assigned: the catalog's again); publishes
 
 declare(strict_types=1);
 
@@ -192,7 +204,48 @@ switch ($cmd) {
     case 'key':
         echo base64_encode($app->signer->public), "\n", $app->signer->fingerprint(), "\n";
         break;
+    case 'availability':
+        $args = array_slice($argv, 2);
+        try {
+            if (!$args) {
+                echo json_encode($app->catalog->availability(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES), "\n";
+                break;
+            }
+            if (in_array($args[0], ['off', 'on'], true) && count($args) >= 4 && in_array($args[1], ['kind', 'feed'], true)) {
+                $off = $app->catalog->availabilityOff();
+                $part = $args[1] === 'kind' ? 'kinds' : 'feeds';
+                $classes = $off[$part][$args[2]] ?? [];
+                $named = array_slice($args, 3);
+                $classes = $args[0] === 'off' ? array_values(array_unique([...$classes, ...$named])) : array_values(array_diff($classes, $named));
+                $off[$part][$args[2]] = $classes;
+                $now = $app->catalog->setAvailabilityOff($off);
+                $p = $app->catalog->publish();
+                echo json_encode($now, JSON_UNESCAPED_SLASHES), "\nPublished build {$p['build']}\n";
+                break;
+            }
+            if ($args[0] === 'app' && count($args) === 4 && in_array($args[2], ['classes', 'kind'], true)) {
+                $set = $args[2] === 'classes'
+                    ? ['deviceClasses' => $args[3] === 'package' ? null : explode(',', $args[3])]
+                    : ['appKind' => $args[3] === 'assigned' ? null : $args[3]];
+                $a = $app->catalog->setAppAvailability($args[1], $set);
+                $p = $app->catalog->publish();
+                echo "{$a['id']}: {$a['appKind']}, " . implode(', ', $a['deviceClasses']) . ". Published build {$p['build']}\n";
+                break;
+            }
+        } catch (\Phoenix\Marketplace\CheckFailed $e) {
+            fwrite(STDERR, "Refused: {$e->getMessage()}\n");
+            exit(1);
+        }
+        fwrite(STDERR, "usage: php bin/marketplace.php availability [off|on kind|feed NAME CLASS... | app ID classes CLASS,...|package | app ID kind KIND|assigned]\n");
+        exit(2);
+    case 'versions':
+        $out = [];
+        foreach ($app->db->all("SELECT app_id, version FROM releases WHERE state = 'approved' ORDER BY id") as $r) {
+            $out[$r['app_id']] = $r['version'];
+        }
+        echo json_encode((object) $out, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT), "\n";
+        break;
     default:
-        fwrite(STDERR, "usage: php bin/marketplace.php init|seed|publish|admin|queue|approve|reject|key|developer|upload|listing\n");
+        fwrite(STDERR, "usage: php bin/marketplace.php init|seed|publish|admin|queue|approve|reject|key|developer|upload|listing|versions|availability\n");
         exit(2);
 }

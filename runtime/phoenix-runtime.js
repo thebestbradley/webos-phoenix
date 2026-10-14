@@ -8481,8 +8481,10 @@
             }
             // The shell's layout, "phone" or "tablet" (getSystemStatus
             // formFactor): the adaptive simulator switches it as its window
-            // is resized.
-            if ((st.formFactor === "phone" || st.formFactor === "tablet") && st.formFactor !== store.get("formFactor", "")) {
+            // is resized. "desktop" is the docked desktop mode to come
+            // (docs/APP-STORE.md 3.17: the Marketplace's device classes).
+            if ((st.formFactor === "phone" || st.formFactor === "tablet" || st.formFactor === "desktop")
+                && st.formFactor !== store.get("formFactor", "")) {
                 store.set("formFactor", st.formFactor);
                 changed();
             }

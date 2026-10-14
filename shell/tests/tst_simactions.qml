@@ -79,13 +79,20 @@ Item {
             property string state: "stopped"
             property string error: ""
             property bool settingUp: false
-            property bool ownsServer: state === "running"
+            property string origin: state === "running" ? "here" : ""
+            property bool ownsServer: origin === "here"
             readonly property string url: "http://127.0.0.1:8088/"
-            readonly property string logFile: "/tmp/simulator.log"
+            readonly property string folder: "/home/someone/.local/share/phoenix/catalog"
+            readonly property string logFile: folder + "/simulator.log"
+            property string fillState: ""
+            property string fillText: ""
+            property string fillFinished: ""
             property int starts: 0
             property int stops: 0
+            property int refills: 0
             function startAsync() { starts++; }
             function stop() { stops++; }
+            function refill() { refills++; fillState = "starting"; fillText = "starting"; return true; }
         }
         function test_servicesMenu() {
             var e = entry("marketplaceCatalog");
@@ -110,6 +117,37 @@ Item {
             fakeCatalog.state = "running";
             compare(sim.item.simActionState("marketplaceCatalog").text, "Marketplace Catalog: running at 127.0.0.1:8088");
             verify(sim.item.simActionState("marketplaceCatalogBrowser").enabled && sim.item.simActionState("marketplaceCatalogLog").enabled);
+            // The one catalog every simulator shares: whose it is.
+            fakeCatalog.origin = "shared";
+            compare(sim.item.simActionState("marketplaceCatalog").text,
+                    "Marketplace Catalog: running at 127.0.0.1:8088 (shared, another simulator started it)");
+            verify(sim.item.simActionState("marketplaceCatalogLog").enabled, "its log is the shared folder's");
+            fakeCatalog.origin = "older";
+            compare(sim.item.simActionState("marketplaceCatalog").text, "Marketplace Catalog: running at 127.0.0.1:8088 (an older simulator's, used as it is)");
+            verify(/older build/.test(sim.item.simActionState("marketplaceCatalog").tip), "the tip says what that means");
+            verify(!sim.item.simActionState("marketplaceCatalogLog").enabled && !sim.item.simActionState("marketplaceCatalogRefill").enabled,
+                   "an older simulator's catalog: its log and its fill are not this folder's");
+            fakeCatalog.origin = "here";
+
+            // Refill Catalog: a fill now; its progress and how it went in the item.
+            compare(sim.item.simActionState("marketplaceCatalogRefill").text, "Refill Catalog");
+            verify(sim.item.simActionState("marketplaceCatalogFolder").enabled);
+            compare(sim.item.simActionState("marketplaceCatalogFolder").tip, fakeCatalog.folder, "the folder in its tip");
+            sim.item.simTrigger("marketplaceCatalogRefill");
+            compare(fakeCatalog.refills, 1, "Refill Catalog fills it");
+            fakeCatalog.fillState = "running";
+            fakeCatalog.fillText = "web apps: KeeWeb (11 of 12)";
+            compare(sim.item.simActionState("marketplaceCatalogRefill").text, "Refill Catalog: filling (web apps: KeeWeb (11 of 12))…");
+            verify(!sim.item.simActionState("marketplaceCatalogRefill").enabled, "not twice at once");
+            fakeCatalog.fillState = "offline";
+            fakeCatalog.fillText = "web apps: offline; the next start tries again";
+            compare(sim.item.simActionState("marketplaceCatalogRefill").text, "Refill Catalog (offline last time: tried again at the next start)");
+            compare(sim.item.simActionState("marketplaceCatalogRefill").tip, fakeCatalog.fillText);
+            fakeCatalog.fillState = "done";
+            fakeCatalog.fillFinished = "2026-10-14T12:05:00Z";
+            verify(/^Refill Catalog \(filled at \d\d:05\)$/.test(sim.item.simActionState("marketplaceCatalogRefill").text));
+            verify(sim.item.simActionState("marketplaceCatalogRefill").enabled);
+
             sim.item.simTrigger("marketplaceCatalog");
             compare(fakeCatalog.stops, 1, "and stops it");
 

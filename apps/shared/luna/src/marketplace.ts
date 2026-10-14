@@ -13,6 +13,31 @@ const SERVICE = "luna://org.webosphoenix.service.packages/";
 
 export type CatalogKind = "phoenix" | "appmuseum" | "preware";
 export type AppKind = "pwa" | "ipk" | "connector" | "classic" | "preware";
+/**
+ * What kind of app it is by where it comes from (docs/APP-STORE.md 3.17;
+ * apps/marketplace/service/lib/availability.json): "phoenix", "legacy",
+ * "web", "native", "local", or one a newer catalog adds.
+ */
+export type KindOfApp = string;
+/** A device class: "phone", "tablet", "desktop" (or one added later). */
+export type DeviceClass = string;
+
+/** Why an app is not offered on this device; it is not listed, nor installed (an installed one stays). */
+export interface OffHere {
+    /** app: not made for this class; kind or feed: the catalog does not offer them here; hidden: the user hid its kind here. */
+    reason: "app" | "kind" | "feed" | "hidden";
+    text: string;
+}
+
+/** Which apps this device is offered (getAvailability). */
+export interface Availability {
+    /** This device's class (its layout), "" until it has said: then everything is offered. */
+    deviceClass: DeviceClass;
+    deviceClasses: { id: DeviceClass; name: string }[];
+    /** Each kind: hidden by the user here; offByCatalog: the catalog does not offer it on this class. */
+    kinds: { id: KindOfApp; name: string; about: string; hidden: boolean; offByCatalog: boolean }[];
+    feeds: { id: string; name: string; offByCatalog: boolean }[];
+}
 
 export interface CatalogSource {
     id: string;
@@ -27,6 +52,9 @@ export interface CatalogSource {
     refreshed: string | null;
     error: { errorCode: string; errorText: string } | null;
     count: number;
+    /** The kinds of app it brings and the device classes it serves (null: all). */
+    appKinds?: KindOfApp[] | null;
+    deviceClasses?: DeviceClass[] | null;
 }
 
 /** A catalog's key, for the user to check before trusting it. */
@@ -57,7 +85,14 @@ export interface MarketApp {
     rating: { stars: number; count: number } | null;
     version: string;
     adult?: boolean;
+    /** The original devices it was for (the App Museum's: Pre3, TouchPad, ...). */
     devices?: string[];
+    /** Its kind (docs/APP-STORE.md 3.17). */
+    appKind?: KindOfApp;
+    /** The device classes it is offered on; missing: all. */
+    deviceClasses?: DeviceClass[];
+    /** Not offered on this device, and why. */
+    offHere?: OffHere;
     pwa?: { manifest: string; origin: string };
     installed: { version: string; sourceId: string } | null;
     /** The newer version there is, if installed. */
@@ -100,6 +135,9 @@ export interface InstalledApp {
     builtin?: string | null;
     /** The update's notes (what `update` brings), when the catalog has them. */
     whatsNew?: ReleaseNotes | null;
+    appKind?: KindOfApp;
+    /** It would not be offered on this device now (it stays installed, with its updates). */
+    offHere?: OffHere | null;
 }
 
 export interface InstallProgress {
@@ -171,9 +209,10 @@ export const marketplace = {
     removeSource(id: string): Promise<unknown> {
         return call(SERVICE + "removeSource", { id });
     },
-    async browse(section: Section, category?: string, page = 0): Promise<{ apps: MarketApp[]; categories: string[]; more: boolean }> {
+    /** A section's apps on this device; offHere: the whole section is not offered here (Classics, with classic apps hidden or off). */
+    async browse(section: Section, category?: string, page = 0): Promise<{ apps: MarketApp[]; categories: string[]; more: boolean; offHere?: OffHere }> {
         return (await call(SERVICE + "browse", { section, page, ...(category ? { category } : {}) })) as unknown as
-            { apps: MarketApp[]; categories: string[]; more: boolean };
+            { apps: MarketApp[]; categories: string[]; more: boolean; offHere?: OffHere };
     },
     async search(query: string): Promise<MarketApp[]> {
         return ((await call(SERVICE + "search", { query })) as unknown as { apps: MarketApp[] }).apps;
@@ -206,6 +245,14 @@ export const marketplace = {
     },
     updateAll(): Promise<{ updated: string[]; failed: { id: string; errorText: string }[] }> {
         return call(SERVICE + "updateAll", {}) as unknown as Promise<{ updated: string[]; failed: { id: string; errorText: string }[] }>;
+    },
+    /** This device's class and which kinds of app it is offered (docs/APP-STORE.md 3.17). */
+    async availability(): Promise<Availability> {
+        return (await call(SERVICE + "getAvailability", {})) as unknown as Availability;
+    },
+    /** Shows or hides a kind of app on this device. */
+    async setKind(kind: KindOfApp, enabled: boolean): Promise<Availability> {
+        return (await call(SERVICE + "setKind", { kind, enabled })) as unknown as Availability;
     },
 };
 

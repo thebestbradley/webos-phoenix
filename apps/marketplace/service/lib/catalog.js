@@ -11,7 +11,9 @@
 //                     "apps": [entry, ...], "accounts": [account type, ...]}
 //   index.json.sig   base64 Ed25519 signature of index.json's bytes
 //
-// An entry: {id, kind: "pwa" | "ipk" | "connector", title, developer: {name, url?},
+// An entry: {id, kind: "pwa" | "ipk" | "connector", appKind ("phoenix" |
+// "legacy" | "web" | "native" | "local"; lib/availability.json), deviceClasses
+// (the device classes it is offered on; all when missing), title, developer: {name, url?},
 // summary, description, categories, icon (URL), screenshots, license,
 // homepage, source (its source code, optional), donation, featured,
 // rating: {stars, count}, version, pwa: {manifest (URL), origin} |
@@ -33,7 +35,11 @@
 // signed.js), and then takes only indexes signed with it, not expired, and
 // not older than the last one it took (no rollback to an index with a
 // pulled app). Optional additions inside version 1: "revoked" (entries as
-// the revocation list's) and a release's "rollout" {percent, seed}.
+// the revocation list's), a release's "rollout" {percent, seed}, and
+// (docs/APP-STORE.md 3.17) the entries' appKind and deviceClasses and the
+// index's "availability" {deviceClasses, appKinds, feeds, off: {kinds:
+// {kind: [class]}, feeds: {feed: [class]}}}: what the catalog's admin
+// switched off where (lib/availability.js).
 
 "use strict";
 
@@ -41,6 +47,7 @@ var ed25519 = require("./ed25519");
 var archive = require("./b64");
 var accounts = require("./accounts");
 var revocations = require("@phoenix/platform").revocations;
+var availability = require("./availability");
 
 function fail(code, text, extra) {
     var e = new Error(text);
@@ -97,6 +104,12 @@ function normalize(e, sourceId) {
         rating: e.rating && typeof e.rating.stars === "number" ? { stars: e.rating.stars, count: e.rating.count | 0 } : null,
         version: str(e.version, 40) || "1.0.0"
     };
+    // Its kind and the device classes it is for (docs/APP-STORE.md 3.17):
+    // an index from before them says neither (the kind is then by where it
+    // comes from; all classes).
+    out.appKind = availability.kindOf({ id: e.id, kind: kind, appKind: e.appKind });
+    var dc = availability.classesOf(e.deviceClasses);
+    if (dc) out.deviceClasses = dc;
     // Its update log: the listed version's notes (only when they are that
     // version's), where the whole history is, or a hosted web app's
     // upstream release notes.
@@ -148,6 +161,8 @@ function verifyIndex(indexBytes, signatureB64, keyB64, opts) {
                 return true;
             }),
             accounts: accounts.normalizeList(idx.accounts, opts.baseUrl, sourceId),
+            // What its admin switched off where (by kind and by feed).
+            availability: availability.normalize(idx.availability),
             // Apps and connectors the catalog withdrew for cause, signed with
             // the index (the same entries as the revocation list's).
             revoked: Array.isArray(idx.revoked) ? idx.revoked.map(revocations.normalizeEntry).filter(Boolean) : []

@@ -207,6 +207,22 @@ version (com.palm.update reads the product file instead), translations
 (`changelog.<locale>.json`), and the owner's call on the release's number
 (0.1.0 today; "1.0" in the owner's words).
 
+**One local catalog, feeds by device and kind** (14 October 2026, the
+owner's request; not luna-sysmgr's, so not a row here): one catalog per user
+outside the checkouts, shared by every simulator of every checkout, running
+while any of them runs and stopping a few seconds after the last one quits
+or crashes, importing a checkout's old catalog, filling itself (the
+open-source web apps, the 2.0 apps; Services > Refill Catalog); device
+classes (phone, tablet, desktop) and kinds of app (phoenix, legacy, web,
+native, local), switched per class by the catalog's admin (an app, a kind, a
+feed) and per device by the user (Kinds of Apps), filtered on the device
+from fields of the signed index (docs/APP-STORE.md 3.16, 3.17). Done in the
+simulator. Left: a run on a Mac (the folder under Application Support, ps
+and PHP from Homebrew: written, not run), a device reporting `desktop` (the
+docked mode is 2.0's), the 2.0 Marketplace (phoenix-default-apps) using the
+new fields, and a port of its own for a second user's catalog on one
+computer (every catalog is at 127.0.0.1:8088).
+
 **The platform's clients** (11 October 2026; not luna-sysmgr's, so not a
 row here): the device side of Palm's update, App Catalog and Palm Profile
 servers' successors is done against a mock platform: one

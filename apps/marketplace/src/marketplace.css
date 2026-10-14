@@ -41,6 +41,9 @@
 .mk-stars-off { color: #c8c8c6; }
 .mk-stars-n { color: #888; letter-spacing: 0; }
 .mk-muted { color: #777; }
+/* Which device the lists are for (docs/APP-STORE.md 3.17). */
+.mk-device { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -4px 2px 8px; font-size: 13px; color: #666; }
+.mk-device button { flex: none; border: 0; background: none; color: #2f6fb3; font: inherit; font-size: 13px; cursor: pointer; padding: 2px 0; }
 .mk-card {
     background: #fff; border: 1px solid #b9b9b7; border-radius: 10px; padding: 10px 12px; margin: 0 0 10px;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);

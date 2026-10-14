@@ -6,9 +6,14 @@
 // plain PHP 8 with PDO, MySQL/MariaDB in production and SQLite for running
 // it on one computer. Configuration from the environment:
 //
-//   MARKETPLACE_DATA      data folder (default: server/marketplace/data):
-//                         the SQLite database, the signing key, uploaded
-//                         packages and the published catalog (public/v1)
+//   MARKETPLACE_DATA      data folder: the SQLite database, the signing key,
+//                         uploaded packages and the published catalog
+//                         (public/v1). Default: the one local catalog of this
+//                         user, shared by every checkout and simulator
+//                         (docs/APP-STORE.md 3.16): on a Mac ~/Library/
+//                         Application Support/Phoenix/catalog, elsewhere
+//                         $XDG_DATA_HOME/phoenix/catalog (~/.local/share/...);
+//                         a server sets its own
 //   MARKETPLACE_DSN       PDO DSN (default: sqlite:<data>/marketplace.sqlite),
 //                         e.g. mysql:host=localhost;dbname=marketplace;charset=utf8mb4
 //   MARKETPLACE_DB_USER, MARKETPLACE_DB_PASS
@@ -40,9 +45,19 @@ spl_autoload_register(function (string $class): void {
 // The system update feed (server/updates), which this server serves and publishes.
 require_once dirname(__DIR__, 2) . '/updates/src/UpdateFeed.php';
 
+/** The user's one local catalog (bin/serve.sh, phoenix-sim and bin/web-apps.py say the same). */
+function marketplace_default_data(): string
+{
+    $home = getenv('HOME') ?: (function_exists('posix_getpwuid') ? (posix_getpwuid(posix_getuid())['dir'] ?? '') : '');
+    if (PHP_OS_FAMILY === 'Darwin') {
+        return $home . '/Library/Application Support/Phoenix/catalog';
+    }
+    return (getenv('XDG_DATA_HOME') ?: $home . '/.local/share') . '/phoenix/catalog';
+}
+
 function marketplace_config(): array
 {
-    $data = getenv('MARKETPLACE_DATA') ?: dirname(__DIR__) . '/data';
+    $data = getenv('MARKETPLACE_DATA') ?: marketplace_default_data();
     return [
         'data' => rtrim($data, '/'),
         'dsn' => getenv('MARKETPLACE_DSN') ?: 'sqlite:' . rtrim($data, '/') . '/marketplace.sqlite',

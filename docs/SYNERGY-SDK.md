@@ -701,8 +701,12 @@ uploads, and the catalog refuses a package whose `catalog.json` has more.
 which the simulator starts: `http://127.0.0.1:8088/`, or `PHOENIX_CATALOG`).
 It is a **development catalog** (`MARKETPLACE_DEV=1`): an upload is approved
 and published at once, as its local developer, whose token is
-`server/marketplace/data/developer.token` (a local catalog without one gets a
-developer account registered, its token kept in
+`developer.token` in the catalog's folder (the one local catalog every
+simulator shares: `~/.local/share/phoenix/catalog`, on a Mac
+`~/Library/Application Support/Phoenix/catalog`, or `MARKETPLACE_DATA`;
+docs/APP-STORE.md 3.16), else a checkout's own
+`server/marketplace/data/developer.token` (a catalog an older simulator
+runs); a local catalog without one gets a developer account registered, its token kept in
 `~/.config/phoenix-connector/tokens.json`). On any other catalog a person
 reviews it first; `--token` (or `PHOENIX_CATALOG_TOKEN`) is your developer
 account's. The same version twice is refused: raise `version` in
@@ -743,8 +747,9 @@ once (the key comes from the catalog's own data folder, not the network).
    go with it, then deletes them (each capability's `onDelete`) and removes
    the package. Publish a new version (raise `version`) and install it again.
 
-`server/marketplace/data/` holds the catalog (delete it to start over: the
-next start sets it up again); `tools/test-marketplace.cjs` runs this whole
+The catalog's folder (`~/.local/share/phoenix/catalog`, Services > Show
+Catalog Folder) holds the catalog (delete it, with no simulator running, to
+start over: the next start sets it up again); `tools/test-marketplace.cjs` runs this whole
 path in Chromium, `node tools/test-fediverse.cjs` a connector's sync.
 
 **Without the Marketplace.** A built-in connector, and a connector package

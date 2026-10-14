@@ -342,9 +342,14 @@ on the Marketplace's "Can't reach" card, or start the simulator with
 `--marketplace` (`./phoenix run --marketplace`). **Services > Start Catalog
 with the Simulator** starts it with every run where PHP is (on unless you
 turn it off; `--no-marketplace` for one run), and **Open
-Catalog in Browser** opens its review page. It stops with the simulator;
-one another simulator started is used as it is. It needs PHP 8 with sodium
-and pdo_sqlite, which `./phoenix` installs.
+Catalog in Browser** opens its review page. There is one catalog for all
+your simulators, of any checkout, in `~/.local/share/phoenix/catalog` (on a
+Mac `~/Library/Application Support/Phoenix/catalog`; **Show Catalog
+Folder**): it runs while any simulator does and stops a few seconds after
+the last one quits, and fills itself with the open-source web apps and the
+2.0 apps of a built phoenix-default-apps next to this checkout (**Refill
+Catalog**; docs/APP-STORE.md 3.16). It needs PHP 8 with sodium and
+pdo_sqlite, which `./phoenix` installs.
 
 Controls: drag with the mouse as you would with a finger. In card view a
 two-finger trackpad swipe sideways moves between cards and a swipe up throws

@@ -57,6 +57,17 @@
 > checkout ([3.13](#313-the-20-apps)); and a catalog app with a built-in
 > app's id installs as an update in its place, removable back to the
 > built-in version, as webOS did ([3.14](#314-updating-a-built-in-app)).
+>
+> **One local catalog, and feeds by device and kind (14 October 2026, the
+> owner):** "build the shared local catalog ... make the feeds more dynamic,
+> so we can specify mobile, tablet, desktop, legacy, phoenix, native, local,
+> web app, etc, so we can turn off and on certain apps for specific
+> devices." Done in the simulator: one catalog per user for every simulator
+> of every checkout, running while any of them runs and filling itself
+> ([3.16](#316-one-local-catalog-for-every-simulator)); device classes and
+> kinds of app, switched by the catalog's admin per class and by the user
+> per device ([3.17](#317-device-classes-kinds-and-feeds)). Not run on a
+> Mac or a device yet.
 
 How people will find, install and update apps on Phoenix: installable web
 apps (PWAs) as first-class cards, the original webOS `.ipk` apps from the
@@ -118,6 +129,8 @@ catalog app with three sources" is the starting point.
    - [3.13 The 2.0 apps](#313-the-20-apps)
    - [3.14 Updating a built-in app](#314-updating-a-built-in-app)
    - [3.15 Update logs](#315-update-logs)
+   - [3.16 One local catalog for every simulator](#316-one-local-catalog-for-every-simulator)
+   - [3.17 Device classes, kinds and feeds](#317-device-classes-kinds-and-feeds)
 4. [Roadmap](#4-roadmap)
 5. [Risks](#5-risks)
 6. [Open questions](#6-open-questions)
@@ -1002,6 +1015,180 @@ it: [APP-RUNTIME.md, System updates](APP-RUNTIME.md#system-updates).
 
 Translations later: `changelog.<locale>.json`, the same shape, readers
 falling back to `changelog.json`.
+
+### 3.16 One local catalog for every simulator
+
+Until the catalog runs on a server, it runs on the developer's computer
+(the owner, 14 October 2026: "build the shared local catalog, I thought
+that is how we had it the whole time"). Before, each checkout kept its own
+catalog in `server/marketplace/data`, the first simulator to start ran it,
+and it stopped when that simulator quit, even under another one still
+using it. Now:
+
+- **One folder per user, outside every checkout.** On a Mac
+  `~/Library/Application Support/Phoenix/catalog`, on Linux
+  `$XDG_DATA_HOME/phoenix/catalog` (`~/.local/share/phoenix/catalog`):
+  the database, the signing key, the uploads, the published catalog
+  (`public/v1`), the update feed, the log (`simulator.log`) and the fill's
+  state (`fill/`). Every tool takes it as its default: `bin/serve.sh`,
+  `bin/marketplace.php` (`src/bootstrap.php`), `bin/web-apps.py`,
+  `phoenix-connector publish --local` and phoenix-sim, from any checkout
+  (1.0's webos-phoenix and 2.0's phoenix-ember-glass-ui, which merges this
+  one). `MARKETPLACE_DATA`, the catalog service's existing setting, points
+  all of them elsewhere; a server sets it as before.
+- **The first start imports.** When the folder has no signing key yet and
+  the checkout `serve.sh` runs from has a `server/marketplace/data` with
+  one, `serve.sh` copies it into the folder and says so in the log, so
+  devices that trusted that catalog's key keep trusting it. The old folder
+  is never changed or deleted.
+- **It runs while any simulator runs, whichever started it.** The first
+  simulator that wants it starts `serve.sh`, which sets the catalog up and
+  then leaves PHP's server running on its own, under a small watch of its
+  own, and writes `server.json` (its process, port and checkout) in the
+  folder. Every other simulator finds it answering at 127.0.0.1:8088 and
+  uses it. The watch reads the simulators' own registry, the per-user
+  folder each phoenix-sim lists itself in (`shell/sim/siminstances.h`,
+  which simulators of older builds write too), every second, and counts
+  the simulator that started it besides (it lists itself only once its
+  window is up, and a screenshot's run never does): while one of them is
+  alive (and is still that program: not a process id reused, nor a crashed
+  one's zombie) it keeps serving, and a few seconds (5) after the last one
+  is gone, quit or crashed, it stops the server and removes `server.json`.
+  A simulator restarting (View > Device) comes back within that time, so
+  the catalog does not stop under it. A simulator whose catalog went away
+  while it ran (stopped by the watch as another started, or killed) starts
+  it again, unless someone stopped it from the Services menu.
+  `serve.sh` run by hand serves until it is stopped, as before.
+- **One from an older build is used as it is.** A catalog answering at
+  8088 with no `server.json` of this folder was started by an older
+  simulator (its own checkout's data, its own lifetime). The simulator uses
+  it and says so in the Services menu; as it cannot know that catalog's
+  key, the Marketplace asks to check its fingerprint.
+- **It fills itself.** At each start `serve.sh` publishes the curated web
+  apps as before (`seed`, `publish`), then, in the background, so the
+  simulator never waits, `bin/web-apps.py fill`: the open-source web apps
+  of `catalog/web-apps.json` and the 2.0 apps of a built
+  phoenix-default-apps checkout (`PHOENIX_DEFAULT_APPS`, the simulator's
+  setting `marketplace/defaultApps`, else a sibling checkout
+  `../phoenix-default-apps` with built apps). It publishes only what
+  changed since the last fill that worked: a new `web-apps.json`, or a 2.0
+  app whose version is newer than the catalog's (which then shows in
+  Updates). The web apps need the network: offline it says so and tries
+  again at the next start. Its state is `fill/status.json`, its lines are
+  in the catalog's log, and only one fill runs at a time.
+- **The Services menu** shows the catalog (starting, running here, running
+  from another simulator, from an older build, failed), **Refill Catalog**
+  (a fill now, whatever changed; its progress and last result in the item),
+  **Show Catalog Folder**, **Show Catalog Log**, **Open Catalog in
+  Browser**, and **Start Catalog with the Simulator**; `--marketplace`,
+  `--no-marketplace` and the Marketplace's **Start Local Catalog** work as
+  before.
+
+### 3.17 Device classes, kinds and feeds
+
+The owner (14 October 2026): "make the feeds more dynamic, so we can
+specify mobile, tablet, desktop, legacy, phoenix, native, local, web app,
+etc, so we can turn off and on certain apps for specific devices." This is
+how.
+
+**Device classes.** `phone` (mobile), `tablet` and `desktop` (the docked
+desktop mode of 2.0, CONVERGENCE.md; no device reports it yet, the class
+exists so catalogs can already say it). A device's class is its layout: the
+shell's `formFactor` (`com.palm.systemmanager/getSystemStatus`), which a
+device takes from its `device.json` profile, the simulator from
+`--phone`/`--tablet`/`--device`, and the adaptive simulator from its
+window's size as it changes; `desktop` when the shell says so. A device
+that has not said yet is shown everything.
+
+**Which classes an app is for.** Each catalog entry has `deviceClasses`,
+the classes it is offered on. From the package: Phoenix reads no
+`appinfo.json` key for a device class today (`requestedWindowOrientation`
+is an orientation, not a class), so there is a new optional one,
+`"phoenix": {"deviceClasses": ["tablet", "desktop"]}`; without it, all.
+The catalog admin can set an app's classes in place of the package's
+(per app, for any kind). The App Museum's own per-device flags (Pre, Pixi,
+Veer, Pre 2, Pre 3: phone; TouchPad: tablet) give a classic app's; a
+Preware package's `DeviceCompatibility` the same way.
+
+**Kinds.** One per app, by where it comes from, so a kind can be switched
+off as a whole:
+
+| Kind | What | Assigned |
+| --- | --- | --- |
+| `phoenix` | Phoenix-built packages: the 1.0 and 2.0 apps, Phoenix's own connectors | an id in `org.webosphoenix.` / `com.webosphoenix.` |
+| `legacy` | The original webOS apps | every App Museum II and Preware entry (on the device) |
+| `web` | Hosted and progressive web apps, the open-source web apps, a developer's packaged web app | a PWA; any other package without native code |
+| `native` | Packages with native code: services (a third-party connector), binaries, Linux apps | a package with a service or not for any architecture |
+| `local` | Uploaded by the local developer to a development catalog (sideloaded) | the development catalog's local developer's uploads (`MARKETPLACE_DEV`) |
+
+The catalog assigns the kind when an app comes (in that order), and the
+admin can set another. The list of classes and kinds is one file,
+`apps/marketplace/service/lib/availability.json` (ids, names, what each
+is), read by the device's service and by the catalog (which refuses an id
+it does not list); a new class or kind is a line there.
+
+**Turning apps on and off per device class.**
+
+1. *The catalog admin* (the admin page's **Devices and Kinds**, or the
+   admin API, `GET/POST /api/admin/availability` and
+   `POST /api/admin/apps/{id}/availability`; `bin/marketplace.php
+   availability`) switches, per device class: an app (its
+   `deviceClasses`), a kind (all its apps, from every feed), or a whole
+   feed: the catalog's own apps (`catalog`), its connectors (`connectors`:
+   the connector packages and their account types in Connections), the
+   App Museum (`appmuseum`) or the Preware feeds (`preware`). Each change
+   publishes the index again.
+2. *The device* knows its class and offers only what is on for it.
+3. *The user* switches kinds on or off for this device in the
+   Marketplace's settings (Catalogs > **Kinds of Apps**, also the link under
+   the tabs and the launch `{section: "catalogs"}`: hide the classic apps,
+   say). Kept by the device's service. The line under the tabs says which
+   device the lists are for ("Apps for this phone · Web apps hidden").
+
+An app that is off for this device is not listed, searched or installed
+(`OFF_HERE`), and is not offered in Connections. Opened anyway (a link,
+Installed Apps), its page says why ("Not offered on phones: made for
+tablets and desktops", "The catalog does not offer classic webOS apps on
+phones", "You hid classic webOS apps on this device") with Download
+turned off. One already installed is never removed: Installed Apps lists
+it with the same note, Open and Remove work, and it keeps getting its
+updates (an update is a fix for something the user chose to have).
+
+**The feeds.** The device's sources (`/etc/palm/marketplace/sources.json`)
+each say which kinds they bring and which classes they serve
+(`appKinds`, `deviceClasses`): the Phoenix catalog (`phoenix`, `web`,
+`native`, `local`; all classes), the App Museum and the Preware feeds
+(`legacy`; all classes). The Settings list of catalogs shows them. The
+switches of the catalog the device ships with (the built-in Phoenix
+catalog, its key pinned or checked) apply to every feed on the device;
+another Phoenix-format catalog's switches apply only to its own apps.
+
+**The signed index grows by fields** (format 1; a device that does not
+know them ignores them, as it ignored `whatsNew`), not by a copy per
+device: filtering is on the device, which is where the class is known and
+changes (the adaptive simulator, a docked phone).
+
+- each entry: `"appKind": "web"`, `"deviceClasses": ["phone", "tablet",
+  "desktop"]` (the package's or the admin's);
+- the index: `"availability": {"deviceClasses": [...], "appKinds": [...],
+  "off": {"kinds": {"legacy": ["phone"]}, "feeds": {"appmuseum":
+  ["phone"]}}}`, the admin's switches as what is off where (a class added
+  later is on until switched off).
+
+One index for every class keeps one signature, one cache and one build
+number for mirrors; per-class indexes would multiply them and still need
+the device to know its class. The cost is a few dozen bytes per entry.
+
+**The service's calls** (`org.webosphoenix.service.packages`): `browse`,
+`search` and `listAccountTypes` leave out what is off here; `getApp`
+answers `appKind`, `deviceClasses` and, when off here, `offHere: {reason:
+"app" | "kind" | "feed" | "hidden", text}`; `install` refuses with
+`OFF_HERE` (an update of an installed app still installs);
+`listInstalled` gives each app `appKind` and `offHere`;
+`getAvailability {}` answers `{deviceClass, deviceClasses: [{id, name}],
+kinds: [{id, name, about, hidden, offByCatalog}], feeds: [{id, name,
+offByCatalog}]}`, and `setKind {kind, enabled}` hides or shows a kind on
+this device.
 
 ## 4. Roadmap
 

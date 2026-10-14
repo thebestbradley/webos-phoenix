@@ -19,11 +19,11 @@ plan, milestone by milestone. Every gap still open, by area and priority:
 | M1: running on webOS OSE | 0 | 10 |
 | M2: legacy UI parity | 18 | 2 |
 | M3: phones and tablets | 0 | 8 |
-| M4: core apps and services | 12 | 10 |
+| M4: core apps and services | 12 | 11 |
 | M5: modernize, within 1.x | 2 | 3 |
 | M6: the last 1.0 features | 13 | 1 |
 | 1.0 release | 7 | 11 |
-| 2.0: modern webOS | 0 | 18 |
+| 2.0: modern webOS | 1 | 20 |
 
 ## Two lines: 1.x and 2.0
 
@@ -60,6 +60,7 @@ Phoenix UI, PixiOS with Bennu UI, an XR bird) are in [BRANDING.md](BRANDING.md).
 | [HARDWARE.md](HARDWARE.md) | Device tiers (mainline, Halium, x86, keyboard phones, Linux phones, small tablets for local AI), drivers, installing like a Linux distro, OTA, Phoenix Ready | M1, M3, 1.0 |
 | [APP-GAPS.md](APP-GAPS.md), [APP-RUNTIME.md](APP-RUNTIME.md) | Every app a modern phone ships, which ones Phoenix has, and how the apps run | M4 |
 | [SYNERGY.md](SYNERGY.md), [SYNERGY-MODERN.md](SYNERGY-MODERN.md) | Accounts and sync: DAV, Google, Microsoft, mail, messaging networks, RCS, the Fediverse, cloud drives | M4 |
+| [SYNERGY-MEDIA.md](SYNERGY-MEDIA.md) | Music, podcasts and books in Synergy: Subsonic servers, Jellyfin, Plex and drives in Music; gPodder sync in Podcasts; a Books app with OPDS, Audiobookshelf and KOReader sync | M4, 2.0 |
 | [APP-STORE.md](APP-STORE.md) | Web apps as webOS apps, the Phoenix Catalog, App Museum II and Preware, streaming apps and DRM | 1.0, 2.0 |
 | [ANDROID.md](ANDROID.md) | Android apps through Waydroid, as webOS cards | 1.0 |
 | [AI-AND-MCP.md](AI-AND-MCP.md) | The voice assistant (1.0), the MCP layer and the AI agent (2.0) | 1.0, 2.0 |
@@ -91,6 +92,7 @@ detail. Open questions are listed in [STATUS.md](STATUS.md#decisions-for-the-own
 | App sources | Curated PWA catalog shown as apps, an Android catalog, App Museum II and Preware as add-on catalogs; all towards the end of 1.0 | [APP-STORE.md](APP-STORE.md) |
 | Browser | Fix Share > Add to Launcher; "Install Web App" with a coloured dot when a page has a manifest (1.x); a Chromium-based browser for 2.0 | M4, 2.0 below |
 | Synergy | Add cloud drives, the Fediverse and Bluesky; RCS is required; WhatsApp through the EU DMA to be explored | [SYNERGY-MODERN.md](SYNERGY-MODERN.md) |
+| Synergy media | Music and books join Synergy where the service has an open API (14 October 2026); commercial stores stay out (no API, or DRM). Order: music sources, then podcast sync, then a Books app for the default apps | [SYNERGY-MEDIA.md](SYNERGY-MEDIA.md) |
 | Assistant | On by default, with settings to turn it off. 1.0 (revised 7 October 2026): commands first, an optional on-device model, then a cloud model (Anthropic, OpenAI, Google, any OpenAI-compatible URL) or a web search; cloud models act only with permission; an Assistant app with threads. The MCP agent is 2.0 | [M6-PLAN.md](M6-PLAN.md), [AI-AND-MCP.md](AI-AND-MCP.md) |
 | Clipboard | A history like Paste on macOS in the webOS style: a keyboard strip, a Clipboard app, sensitive clips masked and encrypted | [M6-PLAN.md](M6-PLAN.md) |
 | Community features | Phoenix's own customizations come first; the owner is asked about clashes | [M6-PLAN.md](M6-PLAN.md) |
@@ -319,6 +321,12 @@ Still to do:
       provider presets, the shared sync layer, OAuth with Microsoft and
       Google, mail, messaging Synergy (SMS, Matrix, XMPP, bridges), RCS,
       cloud drives, the Fediverse and Bluesky, push
+- [ ] Synergy for music and podcasts (the owner, 14 October 2026), in both
+      lines' apps: MB1 music sources in Music (Subsonic-compatible servers
+      such as Navidrome, Jellyfin, Plex, your drives), then MB2 podcast sync
+      in Podcasts (gpodder.net, Nextcloud gPodder Sync), on the shared
+      `MEDIA` and `PODCASTS` capabilities (MB0)
+      ([SYNERGY-MEDIA.md](SYNERGY-MEDIA.md))
 - [ ] Synergy on a device: the accounts service and contacts linker on OSE,
       the key store, the activity manager for periodic sync
 - [ ] 🟡 Phone and Messaging on a device: telephony service, MMS, IM transports
@@ -542,6 +550,9 @@ supported alongside it.
       framework, run on the device profiles, connector tests, the catalog's
       checks, publishing. The brief for the agent that builds it:
       [DEV-EXTENSION-PROMPT.md](DEV-EXTENSION-PROMPT.md)
+- [ ] A Books app in the default apps (the owner, 14 October 2026): EPUB,
+      PDF, comics and audiobooks, with OPDS catalogs, Audiobookshelf and
+      KOReader sync as its sources (MB3 in [SYNERGY-MEDIA.md](SYNERGY-MEDIA.md))
 - [ ] Screenshots on a par with iOS and Android: preview, markup, full
       page, recording, text in screenshots, Ask and circle to look up
       ([SCREENSHOTS.md](SCREENSHOTS.md) SC3-SC8)

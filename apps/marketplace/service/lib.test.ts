@@ -23,6 +23,8 @@ const ed25519 = require("./lib/ed25519.js") as Any;
 const ipkLib = require("./lib/ipk.js") as Any;
 const { compare } = require("./lib/version.js") as Any;
 const pwa = require("./lib/pwa.js") as Any;
+const availability = require("./lib/availability.js") as Any;
+const catalogLib = require("./lib/catalog.js") as Any;
 
 const sha512 = async (b: Uint8Array) => new Uint8Array(crypto.createHash("sha512").update(b).digest());
 const gzip = { gzip: async (b: Uint8Array) => new Uint8Array(zlib.gzipSync(b)), gunzip: async (b: Uint8Array) => new Uint8Array(zlib.gunzipSync(b)) };
@@ -161,5 +163,54 @@ describe("web app manifests", () => {
             .toBe("https://app.box.com/");
         expect(pwa.parseManifest({ name: "Tides", start_url: "https://evil.example/" }, "https://tides.example/app/m.json").startUrl)
             .toBe("https://tides.example/");
+    });
+});
+
+describe("which apps a device is offered (lib/availability.js, docs/APP-STORE.md 3.17)", () => {
+    it("knows the device classes, kinds and feeds from one list", () => {
+        expect(availability.CLASSES).toEqual(["phone", "tablet", "desktop"]);
+        expect(availability.KINDS).toEqual(["phoenix", "legacy", "web", "native", "local"]);
+        expect(availability.FEEDS).toEqual(["catalog", "connectors", "appmuseum", "preware"]);
+    });
+    it("gives an entry a kind by where it comes from when its index says none", () => {
+        expect(availability.kindOf({ id: "com.example.x", kind: "ipk", appKind: "local" })).toBe("local");
+        expect(availability.kindOf({ id: "com.example.x", kind: "ipk", appKind: "android" })).toBe("web");
+        expect(availability.kindOf({ id: "org.webosphoenix.pwa.abc", kind: "pwa" })).toBe("web");
+        expect(availability.kindOf({ id: "org.webosphoenix.calculator", kind: "ipk" })).toBe("phoenix");
+        expect(availability.kindOf({ id: "appmuseum.9001", kind: "classic" })).toBe("legacy");
+        expect(availability.kindOf({ id: "org.example.lib", kind: "preware" })).toBe("legacy");
+        expect(availability.kindOf({ id: "org.example.feeds", kind: "connector" })).toBe("native");
+    });
+    it("reads the original devices' names as device classes", () => {
+        expect(availability.classesFromDevices(["Pre3", "Veer"])).toEqual(["phone"]);
+        expect(availability.classesFromDevices(["TouchPad", "Pixi"])).toEqual(["phone", "tablet"]);
+        expect(availability.classesFromDevices(["LuneOS"])).toBeNull();
+        expect(availability.classesOf(["desktop", "watch", "tablet"])).toEqual(["tablet", "desktop"]);
+        expect(availability.classesOf(["watch"])).toBeNull();
+    });
+    it("says why an app is not offered, in the order: hidden here, its feed, its kind, its classes", () => {
+        const policy = availability.normalize({ off: { kinds: { legacy: ["phone"], android: ["phone"] }, feeds: { appmuseum: ["desktop", "tv"] } } });
+        expect(policy).toEqual({ off: { kinds: { legacy: ["phone"] }, feeds: { appmuseum: ["desktop"] } } });
+        const museumApp = { id: "appmuseum.1", kind: "classic", deviceClasses: ["tablet"] };
+        expect(availability.offFor(museumApp, { deviceClass: "phone", policy, hidden: ["legacy"] }))
+            .toEqual({ reason: "hidden", text: "You hid classic webOS apps on this device (Catalogs > Kinds of Apps)" });
+        expect(availability.offFor(museumApp, { deviceClass: "desktop", policy }))
+            .toEqual({ reason: "feed", text: "The Marketplace does not offer apps from the App Museum II on desktops" });
+        expect(availability.offFor(museumApp, { deviceClass: "phone", policy }))
+            .toEqual({ reason: "kind", text: "The Marketplace does not offer classic webOS apps on phones" });
+        expect(availability.offFor({ id: "com.example.x", kind: "ipk", deviceClasses: ["phone"] }, { deviceClass: "tablet", policy }))
+            .toEqual({ reason: "app", text: "Not offered on tablets: made for phones" });
+        expect(availability.offFor(museumApp, { deviceClass: "tablet", policy })).toBeNull();
+        expect(availability.offFor(museumApp, { deviceClass: "", policy })).toBeNull();
+        expect(availability.offFor({ id: "com.example.x", kind: "ipk" }, { deviceClass: "phone", sourceClasses: ["tablet"], sourceName: "Tablet Apps" }))
+            .toEqual({ reason: "feed", text: "Tablet Apps is not offered on phones" });
+    });
+    it("keeps an index's kinds, classes and switches (an older device ignores them: the index stays version 1)", () => {
+        const e = catalogLib.normalize({ id: "com.example.x", kind: "ipk", title: "X", appKind: "native", deviceClasses: ["desktop"],
+                                         release: { url: "https://x/y.ipk", sha256: "a".repeat(64), size: 1 } }, "phoenix");
+        expect(e).toMatchObject({ appKind: "native", deviceClasses: ["desktop"] });
+        const old = catalogLib.normalize({ id: "com.example.y", kind: "pwa", title: "Y", pwa: { manifest: "https://y/m.json" } }, "phoenix");
+        expect(old.appKind).toBe("web");
+        expect(old.deviceClasses).toBeUndefined();
     });
 });

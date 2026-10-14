@@ -44,18 +44,30 @@ are updated: change the pins in web-apps.json, then publish again.
                  the 2.0 apps of a phoenix-default-apps checkout, each built
                  app's dist/ (the Marketplace-only ones too), packed (and
                  published)
+  python3 -I server/marketplace/bin/web-apps.py fill [--force] [--from PATH]
+                 the local catalog fills itself (bin/serve.sh runs this in the
+                 background at each start; the simulator's Services > Refill
+                 Catalog with --force): the web apps when web-apps.json changed
+                 since the last fill that worked (the network: offline, it says
+                 so and the next fill tries again), the 2.0 apps whose version
+                 is newer than the catalog's, from --from, PHOENIX_DEFAULT_APPS
+                 or a sibling checkout ../phoenix-default-apps with built apps.
+                 One at a time; its state in <catalog>/fill/status.json
 
 Options: --cache DIR; --data DIR (the catalog's data folder, as
-MARKETPLACE_DATA; default the catalog's own); --php PHP.
+MARKETPLACE_DATA; default the user's one local catalog, docs/APP-STORE.md
+3.16); --php PHP. PHOENIX_WEB_APPS_MANIFEST: another web-apps.json (tests).
 """
 
 import gzip
 import hashlib
+import http.client
 import io
 import json
 import os
 import re
 import shutil
+import socket
 import stat
 import subprocess
 import sys
@@ -105,8 +117,12 @@ def sha256(data):
 
 # ---- The manifest ------------------------------------------------------------------------
 
+def manifest_path():
+    return os.environ.get("PHOENIX_WEB_APPS_MANIFEST") or MANIFEST
+
+
 def load_manifest():
-    with open(MANIFEST, encoding="utf-8") as f:
+    with open(manifest_path(), encoding="utf-8") as f:
         return json.load(f)["apps"]
 
 
@@ -639,7 +655,8 @@ def shipped_changelog(data):
     return (json.dumps(log, indent=2, ensure_ascii=False) + "\n").encode()
 
 
-def default_apps(opts, ids):
+def default_apps(opts, ids, newer_than=None):
+    """newer_than: {id: version} (the catalog's): an app whose version is not newer is left as it is."""
     d, why = default_apps_dir(opts)
     if not d:
         say("The 2.0 apps are skipped: " + why + ".")
@@ -663,6 +680,9 @@ def default_apps(opts, ids):
             continue
         if not os.path.isfile(os.path.join(dist, built.get("main", "index.html"))):
             say("%s: skipped, its build has no %s" % (name, built.get("main", "index.html")))
+            continue
+        if newer_than is not None and built.get("id") in newer_than \
+                and version_key(str(built.get("version", ""))) <= version_key(newer_than[built["id"]]):
             continue
         try:
             app_id, version = built["id"], built["version"]
@@ -715,6 +735,243 @@ def default_apps(opts, ids):
     return 1 if failed else 0
 
 
+# ---- Filling the local catalog (docs/APP-STORE.md 3.16) ----------------------------------------
+
+# A new way of filling fills again.
+FILL_VERSION = 1
+
+
+def data_dir(opts):
+    """The catalog's folder: --data, MARKETPLACE_DATA, else the user's one local catalog (the same
+    as src/bootstrap.php's marketplace_default_data, bin/serve.sh's and phoenix-sim's)."""
+    d = opts.get("data") or os.environ.get("MARKETPLACE_DATA")
+    if not d:
+        if sys.platform == "darwin":
+            d = os.path.join(os.path.expanduser("~"), "Library", "Application Support", "Phoenix", "catalog")
+        else:
+            d = os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share"),
+                             "phoenix", "catalog")
+    return os.path.abspath(d)
+
+
+def version_key(v):
+    """major.minor.micro as numbers, for comparing versions as SAM does."""
+    return tuple(int(x) if x.isdigit() else 0 for x in (re.findall(r"\d+", v) + ["0", "0", "0"])[:3])
+
+
+def built_default_apps(d):
+    """[(folder, id, version)] of a phoenix-default-apps checkout's built apps (dist/appinfo.json)."""
+    out = []
+    apps = os.path.join(d, "apps")
+    if not os.path.isdir(apps):
+        return out
+    for name in sorted(os.listdir(apps)):
+        try:
+            with open(os.path.join(apps, name, "dist", "appinfo.json"), encoding="utf-8-sig") as f:
+                built = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if isinstance(built, dict) and isinstance(built.get("id"), str) and built.get("version"):
+            out.append((name, built["id"], str(built["version"])))
+    return out
+
+
+def fill_default_apps_dir(opts):
+    """Where the 2.0 apps come from: --from, PHOENIX_DEFAULT_APPS, else a sibling checkout
+    ../phoenix-default-apps with built apps; None when there is none."""
+    d = opts.get("from") or os.environ.get("PHOENIX_DEFAULT_APPS")
+    if d:
+        return os.path.realpath(os.path.expanduser(d))
+    sibling = os.path.join(os.path.dirname(REPO), "phoenix-default-apps")
+    return os.path.realpath(sibling) if built_default_apps(sibling) else None
+
+
+def catalog_versions(opts):
+    """{app id: the newest version it has approved} (bin/marketplace.php versions)."""
+    env = dict(os.environ, MARKETPLACE_DATA=opts["data"])
+    r = subprocess.run([opts.get("php") or "php", os.path.join(HERE, "marketplace.php"), "versions"],
+                       env=env, capture_output=True, text=True)
+    if r.returncode:
+        raise ValueError("the catalog's versions: " + (r.stderr or r.stdout).strip())
+    return json.loads(r.stdout or "{}")
+
+
+def is_offline(e):
+    """The network could not be reached (not: a server answered with an error)."""
+    if isinstance(e, urllib.error.HTTPError):
+        return False
+    return isinstance(e, (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, http.client.HTTPException))
+
+
+class FillState:
+    """<catalog>/fill/: state.json (what the last fills that worked published, by part) and
+    status.json (this fill, for the simulator's Services menu), each written whole."""
+
+    def __init__(self, folder):
+        self.dir = os.path.join(folder, "fill")
+        os.makedirs(self.dir, exist_ok=True)
+        self.state = self._read("state.json") or {}
+        self.status = {"state": "running", "started": now_iso(), "finished": None, "now": "", "parts": {}, "text": "",
+                       "pid": os.getpid()}
+
+    def _read(self, name):
+        try:
+            with open(os.path.join(self.dir, name), encoding="utf-8") as f:
+                v = json.load(f)
+            return v if isinstance(v, dict) else None
+        except (OSError, ValueError):
+            return None
+
+    def _write(self, name, value):
+        path = os.path.join(self.dir, name)
+        with open(path + ".new", "w", encoding="utf-8") as f:
+            json.dump(value, f, indent=1, ensure_ascii=False)
+        os.replace(path + ".new", path)
+
+    def now(self, text):
+        self.status["now"] = text
+        self._write("status.json", self.status)
+        say("fill: " + text)
+
+    def part(self, name, state, text):
+        self.status["parts"][name] = {"state": state, "text": text}
+        self._write("status.json", self.status)
+        say("fill: " + text)
+
+    def remember(self, name, value):
+        self.state[name] = value
+        self._write("state.json", self.state)
+
+    def finish(self):
+        states = [p["state"] for p in self.status["parts"].values()]
+        self.status["state"] = "failed" if "failed" in states else "offline" if "offline" in states else "done"
+        self.status["finished"] = now_iso()
+        self.status["now"] = ""
+        self.status["text"] = "; ".join(p["text"] for p in self.status["parts"].values())
+        self._write("status.json", self.status)
+        say("fill: " + self.status["state"] + ": " + self.status["text"])
+
+
+def now_iso():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def fill_lock(folder):
+    """One fill at a time: fill/lock holds the process id of the one running; None when another runs."""
+    path = os.path.join(folder, "fill", "lock")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    for _ in range(2):
+        try:
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+        except FileExistsError:
+            try:
+                pid = int(open(path).read().strip() or 0)
+                os.kill(pid, 0)
+                return None
+            except (ValueError, OSError):
+                # Its fill is gone (stopped, the computer restarted): taken over.
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+                continue
+        os.write(fd, str(os.getpid()).encode())
+        os.close(fd)
+        return path
+    return None
+
+
+def fill_web_apps(opts, fs, force):
+    apps = load_manifest()
+    errs = [e for a in apps for e in check_entry(a)]
+    if errs:
+        fs.part("webApps", "failed", "web apps: %s is not right (%s)" % (os.path.basename(manifest_path()), errs[0]))
+        return
+    with open(manifest_path(), "rb") as f:
+        stamp = sha256(f.read() + b"fill %d" % FILL_VERSION)
+    last = fs.state.get("webApps") or {}
+    if not force and last.get("stamp") == stamp:
+        fs.part("webApps", "done", "%d web apps, up to date" % len(apps))
+        return
+    cache = cache_dir(opts)
+    offline, failed = [], []
+    for n, a in enumerate(apps, 1):
+        fs.now("web apps: %s (%d of %d)" % (a["title"], n, len(apps)))
+        try:
+            path = pack(a, cache)
+            say("  " + upload(opts, path, listing_for(a, cache), version_dir(cache, a)))
+        except Exception as e:  # each app on its own: one that fails does not stop the others
+            (offline if is_offline(e) else failed).append(a["title"])
+            say("fill: %s: %s" % (a["id"], e))
+            if is_offline(e) and len(offline) == n:
+                # The first could not reach its upstream: the rest would not either.
+                offline += [x["title"] for x in apps[n:]]
+                break
+    if offline:
+        fs.part("webApps", "offline", "web apps: offline (%s could not be reached); the next start tries again"
+                % (", ".join(offline[:3]) + (" and %d more" % (len(offline) - 3) if len(offline) > 3 else "")))
+    elif failed:
+        fs.part("webApps", "failed", "web apps: %d of %d published; failed: %s (see the log)" % (len(apps) - len(failed), len(apps), ", ".join(failed)))
+    else:
+        fs.remember("webApps", {"stamp": stamp, "count": len(apps), "at": now_iso()})
+        fs.part("webApps", "done", "%d web apps published" % len(apps))
+
+
+def fill_default_apps(opts, fs, force):
+    d = fill_default_apps_dir(opts)
+    built = built_default_apps(d) if d else []
+    if not built:
+        fs.part("defaultApps", "done", "2.0 apps: none here (a built phoenix-default-apps: PHOENIX_DEFAULT_APPS, the simulator's "
+                                       "setting, or ../phoenix-default-apps)" if not d else "2.0 apps: none built in %s" % d)
+        return
+    stamp = sha256(json.dumps([d, built, FILL_VERSION]).encode())
+    last = fs.state.get("defaultApps") or {}
+    if not force and last.get("stamp") == stamp:
+        fs.part("defaultApps", "done", "%d 2.0 apps, up to date" % len(built))
+        return
+    try:
+        have = catalog_versions(opts)
+    except (OSError, ValueError) as e:
+        fs.part("defaultApps", "failed", "2.0 apps: %s" % e)
+        return
+    todo = [b for b in built if b[1] not in have or version_key(b[2]) > version_key(have[b[1]])]
+    if not todo:
+        fs.remember("defaultApps", {"stamp": stamp, "checkout": d, "count": len(built), "at": now_iso()})
+        fs.part("defaultApps", "done", "%d 2.0 apps, all published" % len(built))
+        return
+    fs.now("2.0 apps: %d to publish from %s" % (len(todo), d))
+    code = default_apps(dict(opts, **{"from": d, "publish": True}), [b[0] for b in todo], newer_than=have)
+    if code:
+        fs.part("defaultApps", "failed", "2.0 apps: some could not be published (see the log)")
+    else:
+        fs.remember("defaultApps", {"stamp": stamp, "checkout": d, "count": len(built), "at": now_iso()})
+        fs.part("defaultApps", "done", "%d 2.0 apps published (%d new)" % (len(built), len(todo)))
+
+
+def fill(opts):
+    opts = dict(opts, data=data_dir(opts))
+    if not os.path.isfile(os.path.join(opts["data"], "signing.key")):
+        say("fill: no catalog at %s yet (bin/serve.sh sets it up)" % opts["data"])
+        return 1
+    lock = fill_lock(opts["data"])
+    if not lock:
+        say("fill: another fill is running; it publishes what changed")
+        return 0
+    try:
+        fs = FillState(opts["data"])
+        fs.now("starting")
+        force = bool(opts.get("force"))
+        fill_web_apps(opts, fs, force)
+        fill_default_apps(opts, fs, force)
+        fs.finish()
+        return 0 if fs.status["state"] != "failed" else 1
+    finally:
+        try:
+            os.remove(lock)
+        except OSError:
+            pass
+
+
 # ---- Commands ----------------------------------------------------------------------------------
 
 def parse(argv):
@@ -727,7 +984,7 @@ def parse(argv):
             opts[takes[a]] = argv[i + 1]
             i += 2
             continue
-        if a in ("--publish", "--software-gl"):
+        if a in ("--publish", "--software-gl", "--force"):
             opts[a[2:].replace("-", "_")] = True
         elif a in ("-h", "--help"):
             print(__doc__)
@@ -748,6 +1005,8 @@ def main(argv):
     cmd, ids = args[0], args[1:]
     if cmd == "default-apps":
         return default_apps(opts, ids)
+    if cmd == "fill":
+        return fill(opts)
     apps = load_manifest()
     seen, errs = set(), []
     for a in apps:
@@ -756,7 +1015,7 @@ def main(argv):
             errs.append("%s: listed twice" % a["id"])
         seen.add(a.get("id"))
     if errs:
-        die("catalog/web-apps.json:\n  " + "\n  ".join(errs))
+        die(os.path.basename(manifest_path()) + ":\n  " + "\n  ".join(errs))
     if cmd == "check":
         say("catalog/web-apps.json: %d apps, all hosted under permissive licences" % len(apps))
         return 0
@@ -782,7 +1041,7 @@ def main(argv):
             elif cmd == "shoot":
                 shoot(a, cache, opts)
             else:
-                die("unknown command %s (list, check, fetch, pack, publish, shoot, default-apps)" % cmd)
+                die("unknown command %s (list, check, fetch, pack, publish, shoot, default-apps, fill)" % cmd)
         except (OSError, ValueError, zipfile.BadZipFile, tarfile.TarError, urllib.error.URLError) as e:
             failed += 1
             say("%s: failed: %s" % (a["id"], e))

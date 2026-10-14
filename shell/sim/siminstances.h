@@ -9,8 +9,10 @@
 // the user's runtime folder (QStandardPaths::RuntimeLocation:
 // $XDG_RUNTIME_DIR on Linux, ~/Library/Application Support on a Mac) /
 // phoenix-sim-instances. There each has
-//   KEY.json  what it is: {name, pid, socket, info: {mode, adaptive, width,
-//             height, device, look, checkout, ...}}, rewritten as it changes
+//   KEY.json  what it is: {name, pid, exe (its program's file name), socket,
+//             info: {mode, adaptive, width, height, device, look, checkout,
+//             ...}}, rewritten as it changes. The Marketplace's local catalog
+//             runs while one of them does (server/marketplace/bin/serve.sh)
 //   KEY.sock  a local socket it listens on; "raise\n" asks it to come to
 //             the front (raiseRequested). In a folder too deep for a
 //             socket's path, in the temporary folder instead
