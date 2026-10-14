@@ -28,17 +28,24 @@ Item {
         property int retriesLeft: 3
         property bool wiped: false
         property var setCalls: []
+        // The PIN's length, as the service tells the shell (0: not told).
+        property int pinLength: 0
+        property int matchCalls: 0
         function policy() {
             return { password: { enabled: true, minLength: minLength, maxRetries: maxRetries, alphaNumeric: alphaNumeric },
                      inactivityInSeconds: 0, id: "eas", status: { enforced: policyState === "active", retriesLeft: retriesLeft } };
         }
         function lunaCall(uri, params, callback) {
             if (/getDeviceLockMode$/.test(uri)) {
-                callback({ returnValue: true, lockMode: lockMode, policyState: policyState,
-                           retriesLeft: policyState === "active" ? retriesLeft : 0 });
+                var r = { returnValue: true, lockMode: lockMode, policyState: policyState,
+                          retriesLeft: policyState === "active" ? retriesLeft : 0 };
+                if (lockMode === "pin" && pinLength > 0)
+                    r.pinLength = pinLength;
+                callback(r);
             } else if (/getSecurityPolicy$/.test(uri)) {
                 callback({ returnValue: true, policy: policy() });
             } else if (/matchDevicePasscode$/.test(uri)) {
+                matchCalls++;
                 if (params.passCode === passcode) {
                     retriesLeft = maxRetries;
                     callback({ returnValue: true, succeeded: true });
@@ -87,6 +94,8 @@ Item {
             svc.retriesLeft = 3;
             svc.wiped = false;
             svc.setCalls = [];
+            svc.pinLength = 0;
+            svc.matchCalls = 0;
             lock.locked = true;
             lock.unlockPanel.shown = false;
             lock._resetSecurityStates();
@@ -137,6 +146,52 @@ Item {
             verify(!button(1).shown);
             verify(svc.wiped);
             compare(unlocked.count, 0);
+        }
+
+        // Without Done (the PIN's length known; the owner, 14 October
+        // 2026), a wrong PIN as long as the right one costs one of the
+        // policy's tries, as Done did: the tries left, then the warning,
+        // then the wipe.
+        function test_pinWithoutDoneCostsATryAtItsLength() {
+            svc.pinLength = 4;
+            lock.requestUnlock();
+            tryCompare(findChild(lock, "unlockPanel"), "opacity", 1, 1000);
+            verify(!findChild(lock, "unlockDone").visible);
+            var tap = function (text) {
+                for (var i = 0; i < text.length; ++i)
+                    mouseClick(findChild(lock, "pinKey" + text.charAt(i)));
+            };
+            tap("111");
+            compare(svc.matchCalls, 0);
+            tap("1");
+            compare(svc.matchCalls, 1);
+            compare(lock.unlockPanel.title, "PIN Incorrect");
+            compare(lock.unlockPanel.hint, "2 Tries Remaining");
+            compare(lock.unlockPanel.enteredText, "");
+            tap("1111");
+            compare(svc.matchCalls, 2);
+            compare(lock.dialogState, "lastTry");
+            clickButton(1);
+            tryCompare(findChild(lock, "unlockPanel"), "opacity", 1, 1000);
+            compare(lock.unlockPanel.hint, "Final Try");
+            tap("1111");
+            compare(lock.dialogState, "wipe");
+            verify(svc.wiped);
+            compare(svc.matchCalls, 3);
+        }
+
+        // A new PIN the policy asks for: its length is the user's, so Done.
+        function test_newPinKeepsDone() {
+            svc.policyState = "pending";
+            svc.lockMode = "pin";
+            svc.pinLength = 4;
+            svc.minLength = 6;
+            lock.requestUnlock();
+            compare(lock.dialogState, "newPin");
+            clickButton(1);
+            verify(lock.pinEntry);
+            compare(lock.unlockPanel.autoSubmitLength, 0);
+            verify(findChild(lock, "unlockDone").visible);
         }
 
         function test_rightPinUnlocksAndResetsTheTries() {

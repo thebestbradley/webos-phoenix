@@ -102,6 +102,15 @@ Item {
             // The buttons in a column at the left, the keypad to their right.
             verify(rectIn(cancel, panel).right <= rectIn(key1, panel).x, "buttons left of the keypad");
             verify(rectIn(done, panel).y >= rectIn(cancel, panel).bottom, "Done under Cancel");
+            // A PIN of a known length has no Done (the owner, 14 October
+            // 2026): Cancel alone in the column, the panel still fitting.
+            panel.autoSubmitLength = 4;
+            verify(!done.visible);
+            verifyInside(rectIn(panel, lock), lock.width, lock.height, Theme.statusBarHeight, "the panel without Done");
+            verifyInside(rectIn(cancel, lock), lock.width, lock.height, Theme.statusBarHeight, "Cancel without Done");
+            verify(rectIn(cancel, panel).right <= rectIn(key1, panel).x, "Cancel left of the keypad");
+            panel.autoSubmitLength = 0;
+            verify(done.visible);
             // The clock steps back behind it.
             tryCompare(findChild(lock, "lockDate"), "opacity", 0, 2000);
 

@@ -18,11 +18,14 @@ Item {
         id: lockService
         property string lockMode: "none"
         property string passcode: ""
+        // The PIN's length, as the service tells the shell (0: not told).
+        property int pinLength: 0
         property var calls: []
         function lunaCall(uri, params, callback) {
             calls.push(uri);
             if (/getDeviceLockMode$/.test(uri))
-                callback({ returnValue: true, lockMode: lockMode });
+                callback(pinLength > 0 ? { returnValue: true, lockMode: lockMode, pinLength: pinLength }
+                                       : { returnValue: true, lockMode: lockMode });
             else if (/matchDevicePasscode$/.test(uri))
                 callback({ returnValue: true, succeeded: params.passCode === passcode });
             else
@@ -50,6 +53,7 @@ Item {
             lock.unlockPanel.shown = false;
             unlocked.clear();
             lockService.calls = [];
+            lockService.pinLength = 0;
             tryCompare(findChild(lock, "unlockPanel"), "opacity", 0, 1000);
         }
 
@@ -272,6 +276,53 @@ Item {
             compare(unlocked.count, 1);
             compare(panel.keyItem, null);
             lock.emergencyAvailable = false;
+        }
+
+        // The owner's change (14 October 2026): a PIN whose length the
+        // service knows has no Done; tapping its last digit checks it. A
+        // wrong one is one try: "PIN Incorrect", a shake, an empty field.
+        function test_pinPadWithoutDone() {
+            lockService.lockMode = "pin";
+            lockService.passcode = "2468";
+            lockService.pinLength = 4;
+            lock.requestUnlock();
+            var panel = findChild(lock, "unlockPanel");
+            tryCompare(panel, "opacity", 1, 1000);
+            verify(!findChild(lock, "unlockDone").visible);
+            var matches = function () { return lockService.calls.filter(function (u) { return /match/.test(u); }).length; };
+            tapKey("1"); tapKey("3"); tapKey("5");
+            compare(matches(), 0);
+            tapKey("7");
+            compare(matches(), 1);
+            compare(panel.title, "PIN Incorrect");
+            compare(panel.enteredText, "");
+            verify(panel.shaking);
+            verify(lock.pinEntry);
+            // Delete, then the right one: unlocked at its last digit.
+            tapKey("2"); tapKey("9"); tapKey("Delete");
+            tapKey("4"); tapKey("6");
+            compare(matches(), 1);
+            tapKey("8");
+            compare(matches(), 2);
+            compare(unlocked.count, 1);
+        }
+
+        // A new PIN (a security policy's: the length is the user's to
+        // choose) and a password keep Done.
+        function test_doneStaysForPasswordsAndNewPins() {
+            lockService.lockMode = "password";
+            lockService.pinLength = 4;
+            lock.requestUnlock();
+            verify(findChild(lock, "unlockDone").visible);
+            lock.unlockPanel.shown = false;
+            lock.setupNew = "pin";
+            lock._lockMode = "pin";
+            lock._pinLength = 4;
+            lock._showPinPanel();
+            verify(lock.unlockPanel.isPINEntry);
+            compare(lock.unlockPanel.autoSubmitLength, 0);
+            verify(findChild(lock, "unlockDone").visible);
+            lock._resetSecurityStates();
         }
 
         function test_doneNeedsAKey() {
