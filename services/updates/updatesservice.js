@@ -31,6 +31,9 @@
 //
 //   {"format": 1 | 2, "compatible": "...", "channel": "stable",
 //    "release": {"name", "version", "build", "date", "notes": [...],
+//                "releaseNotes"?: the release's entry of the system's
+//                    release-notes.json ({version, date, summary, new,
+//                    improved, fixed, known}; docs/APP-STORE.md "Update logs"),
 //                "url" (relative to the feed file), "size", "sha256",
 //                "rollout"?: {"percent", "seed"}} | null,
 //    and in format 2: "sequence" (never lower than one taken), "generated",
@@ -79,8 +82,9 @@
 // Phoenix's methods (Settings > Updates):
 //   getStatus {subscribe?}   -> status, again after every change:
 //       {state: "idle" | "checking" | "downloading" | "preparing" | "ready" |
-//        "restarting", current: {name, version, build}, available: release
-//        | null, progress (0-100, downloading and preparing), lastChecked,
+//        "restarting", current: {name, version, build, releaseNotes?: the
+//        running version's entry of the system's release notes}, available:
+//        release (with releaseNotes when the feed carries them) | null, progress (0-100, downloading and preparing), lastChecked,
 //        error: {errorCode, errorText} | null, autoDownload, channel,
 //        channels (the ones servers.json offers), configured (an update
 //        feed is set), verified (the last feed's signature was checked),
@@ -93,6 +97,9 @@
 //   cancel {}                stops a download (what came is kept)
 //   installNow {}            = InstallNow
 //   setPreferences {autoDownload?, channel?}
+//   getReleaseNotes {}       -> {versions: [...]}: the running system's release
+//                            notes (/usr/share/phoenix/release-notes.json), every
+//                            version, newest first ([] without them)
 //   scheduled {$activity}    the daily check (an activity): reads the feed,
 //                            downloads over Wi-Fi when autoDownload is on
 //   charging {$activity}     the charger is connected (an activity with
@@ -114,7 +121,7 @@ var platform = require("@phoenix/platform");
 
 var SERVICE = "com.palm.update";
 var METHODS = ["GetStatus", "InstallLater", "InstallNow", "AlertDisplayed",
-               "getStatus", "check", "download", "cancel", "installNow", "setPreferences", "scheduled", "charging"];
+               "getStatus", "check", "download", "cancel", "installNow", "setPreferences", "scheduled", "charging", "getReleaseNotes"];
 var CHECK_ACTIVITY = "com.palm.update.check";
 var CHARGE_ACTIVITY = "com.palm.update.install";
 var CHANNELS = platform.servers.CHANNELS;   // stable, beta, dev (Q56)
@@ -161,6 +168,26 @@ function parseFeed(text, compatible) {
     return parseFeedDocument(text, compatible, { now: new Date(0) }).release;
 }
 
+// One version's release notes (an entry of release-notes.json, checked when
+// it was written: server/marketplace src/Changelog.php), as Settings shows
+// them; null when it is not one. Readers treat them as optional.
+var NOTE_LISTS = ["new", "improved", "fixed", "known"];
+function releaseNotes(n) {
+    if (!n || typeof n !== "object" || Array.isArray(n) || typeof n.version !== "string" || !n.version ||
+        typeof n.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(n.date) || typeof n.summary !== "string")
+        return null;
+    var out = { version: n.version, date: n.date, summary: n.summary.slice(0, 140) };
+    NOTE_LISTS.forEach(function (k) {
+        out[k] = Array.isArray(n[k]) ? n[k].filter(function (t) { return typeof t === "string" && t; }).slice(0, 100).map(function (t) { return t.slice(0, 200); }) : [];
+    });
+    return out;
+}
+// The system's release notes (release-notes.json) -> its versions, newest first.
+function notesHistory(doc) {
+    var list = doc && Array.isArray(doc.versions) ? doc.versions.map(releaseNotes) : [];
+    return list.every(Boolean) ? list : list.filter(Boolean);
+}
+
 function parseRelease(r) {
     if (r === null || r === undefined) return null;
     if (typeof r !== "object" || typeof r.version !== "string" || !r.version ||
@@ -168,7 +195,7 @@ function parseRelease(r) {
         typeof r.url !== "string" || !r.url || typeof r.size !== "number" || r.size < 1 ||
         !/^[0-9a-f]{64}$/.test(String(r.sha256)))
         throw err("BAD_FEED", "The update feed's release is incomplete");
-    return {
+    var out = {
         name: typeof r.name === "string" && r.name ? r.name : "webOS Phoenix",
         version: r.version, build: r.build,
         date: typeof r.date === "string" ? r.date : "",
@@ -178,6 +205,10 @@ function parseRelease(r) {
             ? { percent: Math.max(0, Math.min(100, r.rollout.percent)), seed: typeof r.rollout.seed === "string" ? r.rollout.seed : "" }
             : null
     };
+    // Its notes (optional: an older feed has none), only when they are this version's.
+    var notes = releaseNotes(r.releaseNotes);
+    if (notes && notes.version === out.version) out.releaseNotes = notes;
+    return out;
 }
 
 // deps:
@@ -206,6 +237,8 @@ function parseRelease(r) {
 //   servers() -> Promise<the resolved servers.json> (@phoenix/platform
 //       load(): its "updates" {url, channel, channels, key, root} or null)
 //   state.load() / state.save(obj)
+//   releaseNotes() (optional) -> the running system's release notes, as
+//       release-notes.json has them ({format, versions}), or null
 //   now(), log(msg) (optional)
 function createUpdatesService(deps) {
     var log = deps.log || function () {};
@@ -256,6 +289,8 @@ function createUpdatesService(deps) {
             return Promise.all([deps.rauc.status(), deps.power().then(null, function () { return null; })]).then(function (r) {
                 var rs = r[0];
                 var current = { name: rs.name || "webOS Phoenix", version: rs.booted.version, build: rs.booted.build };
+                var notes = systemNotes().filter(function (n) { return n.version === current.version; })[0];
+                if (notes) current.releaseNotes = notes;
                 var available = s.available && s.available.build > current.build ? s.available : null;
                 var ready = !!(available && s.prepared && s.prepared.build === available.build && s.prepared.slot === rs.other);
                 var feed = s.feeds[rs.compatible + "/" + s.channel] || {};
@@ -269,6 +304,13 @@ function createUpdatesService(deps) {
             });
         });
     }
+    // The running system's release notes, every version (deps.releaseNotes).
+    function systemNotes() {
+        var doc = null;
+        try { doc = deps.releaseNotes ? deps.releaseNotes() : null; } catch (e) { log("release notes: " + e.message); }
+        return notesHistory(doc);
+    }
+
     function changed() {
         return status().then(function (st) {
             watchers.forEach(function (w) { w(st); });
@@ -696,7 +738,8 @@ function createUpdatesService(deps) {
             });
         }),
         scheduled: wrap(scheduled),
-        charging: wrap(charging)
+        charging: wrap(charging),
+        getReleaseNotes: wrap(function () { return { returnValue: true, versions: systemNotes() }; })
     };
 }
 

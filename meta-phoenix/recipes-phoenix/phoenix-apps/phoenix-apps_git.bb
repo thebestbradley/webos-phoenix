@@ -13,8 +13,10 @@ line to the pages, the legacy application manager, DropShare and the \
 accessories, and Open webOS's app services, with luna-service2 role and \
 permission files), db8 kinds and activities (/etc/palm), account templates \
 (/usr/palm/public/accounts), phoenix-runtime.js and the system sounds \
-(/usr/palm/sounds from Open webOS, /usr/share/phoenix/sounds), using \
-tools/install-rootfs.py."
+(/usr/palm/sounds from Open webOS, /usr/share/phoenix/sounds), and the \
+product file and its release notes (/usr/share/phoenix/product.json, \
+release-notes.json: the version the system reports and what it brings), \
+using tools/install-rootfs.py."
 HOMEPAGE = "https://github.com/thebestbradley/webos-phoenix"
 SECTION = "webos/apps"
 LICENSE = "Apache-2.0"
@@ -107,7 +109,9 @@ do_install() {
 # the services' and apps' luna-service2 files (with each app's generated
 # role and permissions); their /etc/palm configuration (db8 kinds, backup
 # registrations, the Marketplace and Hardware sources, and
-# /etc/palm/phoenix/servers.json: the platform's servers and keys).
+# /etc/palm/phoenix/servers.json: the platform's servers and keys); the
+# product (product.json: the version com.palm.update reports) and the
+# release notes it names, which Settings > Updates and Device Info show.
 FILES:${PN} = " \
     /media/cryptofs/apps \
     /media/internal/ringtones \
@@ -116,6 +120,8 @@ FILES:${PN} = " \
     ${prefix}/lib/luna \
     ${datadir}/phoenix/runtime \
     ${datadir}/phoenix/sounds \
+    ${datadir}/phoenix/product.json \
+    ${datadir}/phoenix/release-notes.json \
     ${datadir}/luna-service2 \
     ${sysconfdir}/palm \
 "

@@ -29,9 +29,12 @@
 //   GET  /api/updates                              the system update feed: every
 //                                                  device type's channels
 //   POST /api/admin/updates?compatible=C&version=V&build=N[&channel=stable|beta]
-//        [&name=NAME][&date=YYYY-MM-DD]            (admin) the .raucb as the
-//        request body; notes as repeated note=... the channel's release from
-//        now on, served at /updates/<compatible>/<channel>.json
+//        [&name=NAME][&date=YYYY-MM-DD][&releaseNotes=FILE]   (admin) the .raucb
+//        as the request body; notes as repeated note=...; releaseNotes: a
+//        release notes file at the top of this server's checkout (release-notes.json,
+//        or the one product.json names), whose entry for the version is the
+//        release's releaseNotes (and its notes, when no note= is given). The
+//        channel's release from now on, served at /updates/<compatible>/<channel>.json
 //   POST /api/admin/updates/withdraw {compatible, channel}  (admin)
 //
 // Accounts send "Authorization: Bearer <token>"; only a hash of the token
@@ -43,7 +46,9 @@ namespace Phoenix\Marketplace;
 
 final class Api
 {
-    public function __construct(private Db $db, private Catalog $catalog, private ?\Phoenix\Updates\UpdateFeed $updates = null)
+    /** $repo: the checkout the server runs from (release notes files for the update feed). */
+    public function __construct(private Db $db, private Catalog $catalog, private ?\Phoenix\Updates\UpdateFeed $updates = null,
+                                private ?string $repo = null)
     {
     }
 
@@ -188,6 +193,15 @@ final class Api
             // device checks that against its keyring), the release in the query.
             if ($m === 'POST' && $p === '/api/admin/updates' && $this->updates) {
                 $compatible = (string) ($query['compatible'] ?? '');
+                $notesFile = (string) ($query['releaseNotes'] ?? '');
+                unset($query['releaseNotes']);
+                if ($notesFile !== '') {
+                    // Only a notes file at the top of the checkout, by its plain name.
+                    if (!preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,80}\.json$/', $notesFile) || $this->repo === null) {
+                        throw new \InvalidArgumentException('releaseNotes: the name of a release notes file at the top of the checkout');
+                    }
+                    $query['releaseNotes'] = \Phoenix\Updates\UpdateFeed::releaseNotes($this->repo . '/' . $notesFile, (string) ($query['version'] ?? ''));
+                }
                 $rel = \Phoenix\Updates\UpdateFeed::release($query + ['notes' => []]);
                 $simulator = $compatible === 'phoenix-sim';
                 $bytes = $simulator && $body === '' ? \Phoenix\Updates\UpdateFeed::simulatorBundle($rel) : $body;

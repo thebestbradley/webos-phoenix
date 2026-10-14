@@ -814,8 +814,22 @@ check($s === 400 && str_contains($r['error'], 'higher build number'), 'updates: 
 check($s === 400, 'updates: device types are names, not paths');
 [$s, $r] = $api->handle('POST', '/api/admin/updates', '', "Bearer $admin", ['compatible' => 'phoenix-sim', 'version' => '0.2.0', 'build' => '2', 'channel' => 'beta']);
 check($s === 200 && $r['feed']['release']['url'] === 'phoenix-sim-0.2.0-2.raucb', "updates: the simulator's stand-in bundle when none is sent");
+// The release's notes from the checkout's release notes (the file product.json names).
+$product = json_decode((string) file_get_contents(dirname(__DIR__, 3) . '/product.json'), true);
+[$s, $r] = $api->handle('POST', '/api/admin/updates', '', "Bearer $admin",
+                        ['compatible' => 'phoenix-sim', 'version' => $product['version'], 'build' => '3', 'channel' => 'dev',
+                         'releaseNotes' => $product['releaseNotes'], 'notes' => []]);
+check($s === 200 && ($r['feed']['release']['releaseNotes']['version'] ?? null) === $product['version']
+      && $r['feed']['release']['notes'][0] === $r['feed']['release']['releaseNotes']['summary'],
+      'updates: releaseNotes=FILE, the release\'s entry of a notes file in the checkout, and its lines as the notes');
+[$s, $r] = $api->handle('POST', '/api/admin/updates', '', "Bearer $admin",
+                        ['compatible' => 'phoenix-sim', 'version' => '9.0.0', 'build' => '4', 'channel' => 'dev', 'releaseNotes' => '../product.json']);
+[$s2, $r2] = $api->handle('POST', '/api/admin/updates', '', "Bearer $admin",
+                          ['compatible' => 'phoenix-sim', 'version' => '9.0.0', 'build' => '4', 'channel' => 'dev', 'releaseNotes' => $product['releaseNotes']]);
+check($s === 400 && str_contains($r['error'], 'at the top of the checkout') && $s2 === 400 && str_contains($r2['error'], 'has no notes for 9.0.0'),
+      '... only a file at the top of the checkout, which has the version\'s notes');
 [$s, $r] = $call('GET', '/api/updates');
-check($s === 200 && array_map(fn ($f) => $f['compatible'] . '/' . $f['channel'], $r['feeds']) === ['phoenix-pinephonepro/stable', 'phoenix-sim/beta'],
+check($s === 200 && array_map(fn ($f) => $f['compatible'] . '/' . $f['channel'], $r['feeds']) === ['phoenix-pinephonepro/stable', 'phoenix-sim/beta', 'phoenix-sim/dev'],
       'updates: GET /api/updates lists every channel');
 [$s, $r] = $call('POST', '/api/admin/updates/withdraw', ['compatible' => 'phoenix-pinephonepro', 'channel' => 'stable'], $admin);
 check($s === 200 && $r['feed']['release'] === null && $r['feed']['withdrawn']['build'] === 110, 'updates: withdrawn');

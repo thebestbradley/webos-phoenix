@@ -190,7 +190,8 @@ it("Python, shell and PHP tests", "", B, WP, "webos-phoenix/.github/workflows/ci
 it("Art and generated-file checks", "`hidpi-art.py` needs Pillow and NumPy (on a Mac, from `.venv`); `make-feedback-sounds.py` needs ffmpeg.", B, WP, "webos-phoenix/CLAUDE.md:86 · .github/workflows/ci.yml:255-278",
    [("python3 tools/hidpi-art.py --check", "whenever art or stylesheets change"), "python3 tools/keyboard-charcoal.py --check", "node tools/render-app-icons.cjs --check",
     "python3 tools/upscale-app-icons.py --check", "python3 tools/make-feedback-sounds.py --check", "python3 tools/gen-assistant-bird.py --check",
-    "python3 tools/debrand-overlays.py --check", ("node tools/check-launch-contracts.cjs", "every app-to-app launch")])
+    "python3 tools/debrand-overlays.py --check", ("node tools/check-launch-contracts.cjs", "every app-to-app launch"),
+    ("python3 tools/release-notes-doc.py --check", "docs/RELEASE-NOTES.md against the release notes")])
 
 sec("Test: apps")
 it("Typecheck and unit tests", "On a Mac, turn on `.venv` first: the DAV tests need Radicale.", B, AP, "webos-phoenix/CLAUDE.md:83 · apps/package.json:55-58",
@@ -358,7 +359,7 @@ it("The Marketplace's hosted apps", "Open-source web apps from their upstreams' 
     ("python3 -I server/marketplace/bin/web-apps.py publish", "every app, or IDs; also fetch, pack"),
     ("python3 -I server/marketplace/bin/web-apps.py shoot photocraft --software-gl", "screenshots for the listing"),
     ("python3 -I server/marketplace/bin/web-apps.py default-apps --from ../phoenix-default-apps --publish", "the 2.0 apps")])
-it("Update feed", "The catalog server also serves `/updates/`; alone, the feed runs on port 8089.", B, WP, "webos-phoenix/server/updates/README.md:28-30,46-50 · bin/serve.sh:9",
+it("Update feed", "The catalog server also serves `/updates/`; alone, the feed runs on port 8089. `--release-notes FILE` takes the release's notes from a release notes file (its entry for the version).", B, WP, "webos-phoenix/server/updates/README.md:28-30,46-50 · bin/serve.sh:9 · bin/updates.php:20-33",
    ["UPDATES_FEED=server/marketplace/data/updates php server/updates/bin/updates.php simulator --version 0.2.0 --build 2 --note \"What changed\"",
     "server/updates/bin/serve.sh", ("php server/updates/bin/updates.php show", "also publish, withdraw")])
 it("Driver catalog", "Port 8090. `DRIVERS_DATA=sample` serves the simulator's sample catalog.", B, WP, "webos-phoenix/server/drivers/bin/serve.sh:5-9 · README.md:36-41",
@@ -377,7 +378,8 @@ it("Evaluate the assistant", "`laya-server.py` needs `pip install laya`.", B, WP
 sec("Maintenance")
 it("Regenerate files", "Each has a `--check` twin under Test.", B, WP, "webos-phoenix/tools/hidpi-art.py:715-719 · tools/render-app-icons.cjs:27-30 · tools/check-launch-contracts.cjs:24-27",
    [("python3 tools/hidpi-art.py --missing", "write only the missing @2x/@3x art; --only PATH limits it"), ("node tools/render-app-icons.cjs", "app IDs to pick; --svg DIR also writes the SVGs"),
-    ("node tools/check-launch-contracts.cjs --write-doc", "rewrite the table in docs/LAUNCH-CONTRACTS.md"), "python3 tools/make-feedback-sounds.py"])
+    ("node tools/check-launch-contracts.cjs --write-doc", "rewrite the table in docs/LAUNCH-CONTRACTS.md"), "python3 tools/make-feedback-sounds.py",
+    ("python3 tools/release-notes-doc.py", "docs/RELEASE-NOTES.md from the release notes product.json names")])
 it("Convert assistant models", "", B, WP, "webos-phoenix/tools/convert-model.sh:13 · tools/models-converted.py:8-11",
    ["tools/convert-model.sh --id <id> --repo Qwen/<name> --revision <sha> --quant Q8_0 --out <folder>", ("tools/models-converted.py wanted", "also add, official")])
 

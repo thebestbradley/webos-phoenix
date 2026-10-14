@@ -260,6 +260,9 @@ jobs:
       - name: docs/COMMANDS.md matches tools/commands-doc.py
         run: python3 tools/commands-doc.py --check
 
+      - name: docs/RELEASE-NOTES.md matches the release notes (tools/release-notes-doc.py)
+        run: python3 tools/release-notes-doc.py --check
+
       - name: HiDPI art present and true to its 1x art
         run: |
           python3 -m pip install pillow numpy

@@ -24,6 +24,6 @@ final class App
         $this->signer = new Signer($config['data']);
         $this->catalog = new Catalog($this->db, $this->signer, $config);
         $this->updates = new \Phoenix\Updates\UpdateFeed($config['updates']);
-        $this->api = new Api($this->db, $this->catalog, $this->updates);
+        $this->api = new Api($this->db, $this->catalog, $this->updates, $config['repo'] ?? dirname(__DIR__, 3));
     }
 }

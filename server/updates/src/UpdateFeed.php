@@ -8,8 +8,15 @@
 //
 //   <feed>/<compatible>/<channel>.json   {"format": 1, "compatible", "channel",
 //                                         "release": {name, version, build, date,
-//                                         notes, url, size, sha256}}
+//                                         notes, releaseNotes?, url, size, sha256}}
 //   <feed>/<compatible>/<bundle>.raucb
+//
+// notes are lines, for every reader; releaseNotes is the release's entry of
+// the system's release notes (release-notes.json, the update log format of
+// docs/APP-STORE.md "Update logs", checked by server/marketplace's
+// Changelog): {version, date, summary, new, improved, fixed, known}, which
+// Settings > Updates shows before Install. A publish takes it from a notes
+// file (releaseNotes()), and fills notes from it when it is given none.
 //
 // The feed is not signed: the bundles are (RAUC checks them against the
 // keyring in the running system), and the device installs only a bundle
@@ -19,6 +26,9 @@
 declare(strict_types=1);
 
 namespace Phoenix\Updates;
+
+use Phoenix\Marketplace\Changelog;
+use Phoenix\Marketplace\CheckFailed;
 
 final class UpdateFeed
 {
@@ -47,8 +57,33 @@ final class UpdateFeed
     }
 
     /**
+     * $version's entry of the system's release notes $file (release-notes.json), the file
+     * checked as Changelog checks the system's notes (no rebuild).
+     */
+    public static function releaseNotes(string $file, string $version): array
+    {
+        $json = is_file($file) ? file_get_contents($file) : false;
+        if ($json === false) {
+            throw new \InvalidArgumentException("No release notes at $file");
+        }
+        try {
+            $log = Changelog::parse($json, null, true, basename($file));
+        } catch (CheckFailed $e) {
+            throw new \InvalidArgumentException($e->getMessage());
+        }
+        foreach ($log['versions'] as $e) {
+            if ($e['version'] === $version) {
+                return Changelog::entry($e, false);
+            }
+        }
+        throw new \InvalidArgumentException(basename($file) . " has no notes for $version");
+    }
+
+    /**
      * A release from what was asked: version, build (required), channel
-     * (stable), name ("webOS Phoenix"), date (today), notes (lines).
+     * (stable), name ("webOS Phoenix"), date (today), notes (lines),
+     * releaseNotes (the version's entry: releaseNotes(); notes are its
+     * summary and items when none are given).
      */
     public static function release(array $o): array
     {
@@ -72,6 +107,17 @@ final class UpdateFeed
         }
         $rel = ['name' => $name, 'version' => $version, 'build' => (int) $build,
                 'date' => $date, 'notes' => array_values($notes), 'channel' => $channel];
+        if (isset($o['releaseNotes'])) {
+            $rn = $o['releaseNotes'];
+            if (!is_array($rn) || ($rn['version'] ?? null) !== $version) {
+                throw new \InvalidArgumentException("releaseNotes: the notes of $version");
+            }
+            $rel['releaseNotes'] = $rn;
+            // For the readers that know only the lines (and an older Settings).
+            if (!$notes) {
+                $rel['notes'] = array_values(array_merge([$rn['summary']], $rn['new'], $rn['improved'], $rn['fixed']));
+            }
+        }
         // A staged rollout (docs/PLATFORM-CLIENT.md, "Staged rollout"): devices
         // whose bucket for the seed is below the percentage take it.
         if (isset($o['rollout']) && $o['rollout'] !== '' && $o['rollout'] !== null) {

@@ -74,6 +74,41 @@ check("the simulator's stand-in bundle", $code === 0 && $m === "[update]\ncompat
     && $f['release']['sha256'] === hash('sha256', $m));
 check('show lists them', str_contains(run('show'), 'phoenix-sim'));
 
-exec('rm -rf ' . escapeshellarg($feed) . ' ' . escapeshellarg($bundle));
+// Release notes (docs/APP-STORE.md "Update logs"): the release's entry of the system's notes.
+$notes = "$feed-notes.json";
+file_put_contents($notes, json_encode(['format' => 1, 'versions' => [
+    ['version' => '2.0.0', 'date' => '2026-11-02', 'summary' => 'Faster cards.', 'new' => ['Cards open faster.'],
+     'fixed' => ['The clock keeps time after a restart.']],
+    ['version' => '1.9.0', 'date' => '2026-10-14', 'summary' => 'The first release.', 'new' => ['Cards.'], 'known' => ['No calls yet.']]]]));
+run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinetab2 --version 2.0.0 --build 200 --release-notes " . escapeshellarg($notes), $code);
+$r = feedOf('phoenix-pinetab2')['release'] ?? [];
+check('--release-notes: the version\'s entry is the release\'s releaseNotes', $code === 0 && ($r['releaseNotes'] ?? null) === [
+    'version' => '2.0.0', 'date' => '2026-11-02', 'summary' => 'Faster cards.', 'new' => ['Cards open faster.'], 'improved' => [],
+    'fixed' => ['The clock keeps time after a restart.'], 'known' => []]);
+check('... and its lines the notes, for older readers, when no --note is given',
+    ($r['notes'] ?? null) === ['Faster cards.', 'Cards open faster.', 'The clock keeps time after a restart.']);
+run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinetab2 --version 1.9.0 --build 201 --channel beta --note 'Our own words' --release-notes " . escapeshellarg($notes), $code);
+$r = feedOf('phoenix-pinetab2', 'beta')['release'] ?? [];
+check('... the --note lines stay the notes when given', $code === 0 && $r['notes'] === ['Our own words'] && $r['releaseNotes']['known'] === ['No calls yet.']);
+$out = run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinetab2 --version 2.1.0 --build 210 --release-notes " . escapeshellarg($notes), $code);
+check('... a version the notes do not have is refused', $code !== 0 && str_contains($out, 'has no notes for 2.1.0'));
+file_put_contents($notes, json_encode(['format' => 1, 'versions' => [
+    ['version' => '2.1.0', 'date' => '2026-11-09', 'rebuild' => true, 'summary' => 'Faster cards.', 'new' => ['Cards open faster.']]]]));
+$out = run("publish " . escapeshellarg($bundle) . " --compatible phoenix-pinetab2 --version 2.1.0 --build 210 --release-notes " . escapeshellarg($notes), $code);
+check('... and notes the rules refuse, with their message', $code !== 0
+    && str_contains($out, "-notes.json: versions[0].rebuild: the system's release notes have no rebuild"));
+// The checkout's own: the file product.json names, its newest version the product's.
+$repo = dirname(__DIR__, 3);
+$product = json_decode((string) file_get_contents("$repo/product.json"), true);
+run('simulator --version ' . escapeshellarg($product['version']) . ' --build 300 --channel dev --release-notes '
+    . escapeshellarg("$repo/{$product['releaseNotes']}"), $code);
+$sim = feedOf('phoenix-sim', 'dev')['release'] ?? [];
+require_once "$repo/server/marketplace/src/CheckFailed.php";
+require_once "$repo/server/marketplace/src/Changelog.php";
+$own = Phoenix\Marketplace\Changelog::problems(json_decode((string) file_get_contents("$repo/{$product['releaseNotes']}")), $product['version'], true);
+check("the checkout's release notes ({$product['releaseNotes']}) pass the rules and start at product.json's version ({$product['version']})"
+      . ($own ? ': ' . $own[0] : ''), !$own && $code === 0 && ($sim['releaseNotes']['version'] ?? null) === $product['version']);
+
+exec('rm -rf ' . escapeshellarg($feed) . ' ' . escapeshellarg($bundle) . ' ' . escapeshellarg($notes));
 echo $failed ? "$failed failed\n" : "all passed\n";
 exit($failed ? 1 : 0);
