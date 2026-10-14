@@ -8,7 +8,7 @@
 #include <QMouseEvent>
 #include <QTouchEvent>
 #include <QLineF>
-#include <QWindow>
+#include <QQuickWindow>
 
 UserActivity::UserActivity(QObject *parent)
     : QObject(parent)
@@ -106,8 +106,13 @@ void UserActivity::trackTap(QEvent *event)
 bool UserActivity::eventFilter(QObject *watched, QEvent *event)
 {
     // Each input event reaches the window first, then the item: count it
-    // once, at the window.
-    if (!qobject_cast<QWindow *>(watched))
+    // once, at the window. Only the device's: the Qt Quick window the shell
+    // draws in (and a web page's popup, its own). phoenix-sim's window
+    // around the screen, its menu bar, menus, toolbar and dialogs, are
+    // widgets: using them is not touching the device, and with the screen
+    // off a click on the menu bar or in a menu went no further than here
+    // (it woke the screen instead of opening the menu).
+    if (!qobject_cast<QQuickWindow *>(watched))
         return false;
     bool move = false;
     switch (event->type()) {

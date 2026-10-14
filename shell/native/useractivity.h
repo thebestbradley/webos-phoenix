@@ -9,6 +9,10 @@
 // While asleep (the screen is off) the touch panel and keyboard are off
 // too: their events stop here, except the keys in passKeys (Power, Home),
 // which wake the screen.
+//
+// Only the device's own windows count, the Qt Quick ones; phoenix-sim's
+// window around the screen (its menu bar, menus, toolbar and dialogs:
+// widgets) is the desktop's.
 
 #pragma once
 

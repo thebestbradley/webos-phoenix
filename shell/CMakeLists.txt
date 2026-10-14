@@ -133,6 +133,18 @@ if(PHOENIX_BUILD_SIM)
     # --launch's values, an app id or appId:{json} (CI: build/simlaunch-test).
     add_executable(simlaunch-test sim/simlaunch_test.cpp sim/simlaunch.h)
     target_link_libraries(simlaunch-test PRIVATE Qt6::Core)
+    # The menu bar around the screen, its Window menu's cards, with the
+    # screen off too (CI: QT_QPA_PLATFORM=offscreen build/simchrome-test).
+    find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Test)
+    add_executable(simchrome-test sim/simchrome_test.cpp sim/simchrome.cpp sim/simchrome.h)
+    target_link_libraries(simchrome-test PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets Qt6::Test)
+    target_compile_definitions(simchrome-test PRIVATE PHOENIX_QML_BUILD_DIR="${PHOENIX_QML_BUILD_DIR}" PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
+    # Its stand-in for sim.qml imports Phoenix.Native (UserActivity).
+    add_dependencies(simchrome-test phoenix-native)
+    if(APPLE)
+        target_sources(simchrome-test PRIVATE sim/simmac.mm sim/simmac.h)
+        target_link_libraries(simchrome-test PRIVATE "-framework AppKit")
+    endif()
     # The colour emoji font's fontconfig setup (CI: build/simfonts-test).
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_executable(simfonts-test sim/simfonts_test.cpp sim/simfonts.cpp sim/simfonts.h)

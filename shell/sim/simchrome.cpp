@@ -76,6 +76,7 @@ SimChrome::SimChrome(QQuickView *view, bool toolbar)
     , m_menuBar(nullptr)
     , m_toolbar(new QToolBar(tr("Simulator"), this))
     , m_refresh(new QTimer(this))
+    , m_windowsLater(new QTimer(this))
 {
     setWindowTitle(displayName());
 #ifdef Q_OS_MACOS
@@ -125,6 +126,11 @@ SimChrome::SimChrome(QQuickView *view, bool toolbar)
     // What the check boxes show changes with the keys too.
     m_refresh->setInterval(500);
     connect(m_refresh, &QTimer::timeout, this, &SimChrome::refreshChecks);
+    // The Window menu's cards once the event that changed them is done (an
+    // item's own trigger among them: its action is not deleted under it).
+    m_windowsLater->setSingleShot(true);
+    m_windowsLater->setInterval(0);
+    connect(m_windowsLater, &QTimer::timeout, this, &SimChrome::refreshWindows);
 }
 
 SimChrome::~SimChrome()
@@ -168,6 +174,7 @@ void SimChrome::build()
     menuFor(QStringLiteral("simulate"), QString());
     menuFor(QStringLiteral("view"), QString());
     menuFor(QStringLiteral("services"), QString());
+    menuFor(QStringLiteral("window"), QString());
     QHash<QString, QActionGroup *> groups;
     for (const Entry &e : std::as_const(m_entries)) {
         if (e.menu.isEmpty())
@@ -206,6 +213,15 @@ void SimChrome::build()
     view->addSeparator();
     view->addAction(m_toolbarAction);
 
+    // Window: after its own items, the device's open cards, as they open,
+    // close and come to the front (sim.qml simWindows; refreshWindows).
+    m_windowMenu = menuFor(QStringLiteral("window"), QString());
+    m_windowMenu->addSeparator();
+    connect(m_windowMenu, &QMenu::aboutToShow, this, &SimChrome::refreshWindows);
+    if (root->metaObject()->indexOfSignal("simWindowsChanged()") >= 0)
+        connect(root, SIGNAL(simWindowsChanged()), m_windowsLater, SLOT(start()));
+    refreshWindows();
+
     QMenu *help = m_menuBar->addMenu(tr("Help"));
     QAction *sheet = help->addAction(tr("Keyboard Shortcuts…"));
     connect(sheet, &QAction::triggered, this, &SimChrome::showShortcuts);
@@ -241,7 +257,8 @@ QMenu *SimChrome::menuFor(const QString &menu, const QString &submenu)
         const QString title = menu == QLatin1String("device") ? tr("Device")
                             : menu == QLatin1String("simulate") ? tr("Simulate")
                             : menu == QLatin1String("view") ? tr("View")
-                            : menu == QLatin1String("services") ? tr("Services") : menu;
+                            : menu == QLatin1String("services") ? tr("Services")
+                            : menu == QLatin1String("window") ? tr("Window") : menu;
         m = m_menuBar->addMenu(title);
     } else {
         m = menuFor(menu, QString())->addMenu(submenu);
@@ -257,7 +274,7 @@ bool SimChrome::checkChrome()
     m_view->requestActivate();
     m_container->setFocus();
     QCoreApplication::processEvents();
-    const QStringList expected = { tr("Device"), tr("Simulate"), tr("View"), tr("Services"), tr("Help") };
+    const QStringList expected = { tr("Device"), tr("Simulate"), tr("View"), tr("Services"), tr("Window"), tr("Help") };
     QWindow *focus = QGuiApplication::focusWindow();
     const QString focusName = !focus ? QStringLiteral("none")
                             : focus == m_view ? QStringLiteral("the device's screen")
@@ -417,6 +434,98 @@ void SimChrome::refreshChecks()
     }
 }
 
+// The Window menu's cards: sim.qml's simWindows ({uid, title, icon, checked,
+// child}, card view's order; SimWindowMenu.qml), after the menu's own
+// items. Made again when a card opens, closes, moves or is renamed; the
+// check mark (the card in front, maximized) follows without that, so the
+// item under the pointer stays while the menu is open.
+void SimChrome::refreshWindows()
+{
+    QQuickItem *root = m_view->rootObject();
+    if (!root || !m_windowMenu)
+        return;
+    const QVariantList list = plain(root->property("simWindows")).toList();
+    const auto withoutChecks = [](const QVariantList &l) {
+        QVariantList out;
+        for (const QVariant &v : l) {
+            QVariantMap m = v.toMap();
+            m.remove(QStringLiteral("checked"));
+            out << m;
+        }
+        return out;
+    };
+    if (m_windowActions.isEmpty() || withoutChecks(list) != withoutChecks(m_windowList)) {
+        for (QAction *a : std::as_const(m_windowActions)) {
+            m_windowMenu->removeAction(a);
+            a->deleteLater();
+        }
+        m_windowActions.clear();
+        if (list.isEmpty()) {
+            QAction *none = m_windowMenu->addAction(tr("No Open Cards"));
+            none->setEnabled(false);
+            none->setMenuRole(QAction::NoRole);
+            m_windowActions << none;
+        }
+        for (const QVariant &v : list) {
+            const QVariantMap card = v.toMap();
+            const QString uid = card.value(QStringLiteral("uid")).toString();
+            // "&" is the item's own (a mnemonic) in a menu's text.
+            QString text = card.value(QStringLiteral("title")).toString();
+            text.replace(QLatin1Char('&'), QStringLiteral("&&"));
+            // A card stacked on another: under it, indented, as in its stack.
+            if (card.value(QStringLiteral("child")).toBool())
+                text = QStringLiteral("\u2003\u2003") + text;
+            QAction *a = m_windowMenu->addAction(cardIcon(card.value(QStringLiteral("icon")).toString()), text);
+            a->setCheckable(true);
+            a->setIconVisibleInMenu(true);
+            a->setMenuRole(QAction::NoRole);
+            a->setData(uid);
+            connect(a, &QAction::triggered, this, [this, uid]() {
+                // The screen's window takes the keyboard again first (trigger()).
+                m_container->setFocus();
+                if (QQuickItem *r = m_view->rootObject())
+                    QMetaObject::invokeMethod(r, "simShowWindow", Q_ARG(QVariant, uid));
+                m_container->setFocus();
+                // Its check mark as the card comes forward (a click toggled it).
+                m_windowsLater->start();
+            });
+            m_windowActions << a;
+        }
+    }
+    m_windowList = list;
+    for (int i = 0; i < list.size() && i < m_windowActions.size(); ++i) {
+        QAction *a = m_windowActions.at(i);
+        const bool front = list.at(i).toMap().value(QStringLiteral("checked")).toBool();
+        a->setChecked(front);
+        // A menu the style draws (Fusion: not the Mac's, nor a desktop's
+        // global menu bar) has one column for the check mark and the icon,
+        // where a checked item's icon is only drawn sunken: the card in
+        // front shows its check mark there instead.
+        if (!m_menuBar->isNativeMenuBar())
+            a->setIconVisibleInMenu(!front);
+    }
+}
+
+// An app's icon (a file: or qrc: URL, as the launcher's), or none.
+QIcon SimChrome::cardIcon(const QString &url)
+{
+    if (url.isEmpty())
+        return QIcon();
+    const auto cached = m_cardIcons.constFind(url);
+    if (cached != m_cardIcons.constEnd())
+        return cached.value();
+    const QUrl u(url);
+    const QString path = u.isLocalFile() ? u.toLocalFile()
+                       : u.scheme() == QLatin1String("qrc") ? QLatin1Char(':') + u.path()
+                       : u.scheme().isEmpty() ? url : QString();
+    // Not there yet (an app still installing): looked for again next time.
+    if (path.isEmpty() || !QFile::exists(path))
+        return QIcon();
+    const QIcon icon(path);
+    m_cardIcons.insert(url, icon);
+    return icon;
+}
+
 void SimChrome::showWithScreen(const QSize &screen)
 {
     // A first guess from the bars' sizes, then exact once laid out.
@@ -569,7 +678,7 @@ void SimChrome::showShortcuts()
     dialog->setWindowTitle(tr("Keyboard Shortcuts"));
     auto *layout = new QVBoxLayout(dialog);
     QString note = tr("The keys work wherever the keyboard focus is on the device's screen, in an app too. "
-                      "Each is in the Device or Simulate menu as well.");
+                      "Each is in the Device, Simulate or Window menu as well.");
     if (kMac)
         note += QLatin1Char(' ')
               + tr("On a Mac, F1 to F12 need fn (macOS keeps them for itself), Home is fn+Left Arrow, "
@@ -596,7 +705,8 @@ void SimChrome::showShortcuts()
             section = e.menu;
             const QString title = section == QLatin1String("device") ? tr("Device")
                                 : section == QLatin1String("simulate") ? tr("Simulate")
-                                : section == QLatin1String("view") ? tr("View") : tr("The shell");
+                                : section == QLatin1String("view") ? tr("View")
+                                : section == QLatin1String("window") ? tr("Window") : tr("The shell");
             group = new QTreeWidgetItem(tree, { title });
             group->setFirstColumnSpanned(true);
             QFont bold = group->font(0);

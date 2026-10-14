@@ -227,6 +227,10 @@ jobs:
         timeout-minutes: 10
         run: build/simlaunch-test
 
+      - name: The simulator's menu bar and its Window menu (SimChrome)
+        timeout-minutes: 10
+        run: QT_QPA_PLATFORM=offscreen build/simchrome-test
+
       - name: The keyboard's dictation (recording format, transcriber replies)
         timeout-minutes: 10
         run: build/dictation-test
@@ -520,6 +524,7 @@ jobs:
           build/pty/pty-test
           build/siminstaller-test
           build/simlaunch-test
+          QT_QPA_PLATFORM=offscreen build/simchrome-test
           build/dictation-test
           python3 tools/get-wakeword.py && build/wakeword-test
           build/localmodels-test

@@ -577,6 +577,18 @@ A web page in the browser:
 ./build/phoenix-sim --open https://example.com
 ```
 
+### Choose the open app to view
+
+The menu bar's **Window** menu lists the open cards, in card view's order with the windows stacked on a card under it, and brings the one you choose to the front, maximized; a check mark is on the card in front. It also has Card View, Launcher, Next Card (Ctrl+Shift+], ⇧⌘] on a Mac) and Previous Card (Ctrl+Shift+[). Locked, the card chosen is the one in front once you unlock.
+
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/simchrome.cpp:216-223,437-527 · shell/qml/Phoenix/Sim/SimWindowMenu.qml · shell/qml/sim.qml:901-909`
+
+Three cards to choose from:
+
+```sh
+./build/phoenix-sim --tablet --launch org.webosphoenix.settings --launch org.webosphoenix.weather --launch org.webosphoenix.tasks
+```
+
 ### Use apps built in another checkout
 
 `--extra-rootfs` can be repeated. `--installed-dir DIR` changes where installed apps go.
@@ -727,6 +739,12 @@ build/siminstaller-test
 
 ```sh
 build/simlaunch-test
+```
+
+The menu bar and its Window menu:
+
+```sh
+QT_QPA_PLATFORM=offscreen build/simchrome-test
 ```
 
 ```sh

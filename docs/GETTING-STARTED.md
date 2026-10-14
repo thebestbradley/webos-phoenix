@@ -192,7 +192,9 @@ menu bar at the top of the screen) do everything the simulator can: **Device**
 **Simulate** (calls, messages, notifications, battery, chargers, USB,
 Touchstone, Touch to Share, headset, light), **View** (phone, tablet or adaptive, device sizes, scale,
 demo scenes, developer overlays), **Services** (the Marketplace's catalog,
-below) and **Help > Keyboard Shortcuts…**, a window listing every key. The toolbar beside the screen has the most used ones as
+below), **Window** (the open apps' cards: choose one to bring it to the
+front; Card View, Launcher, Next Card Ctrl+Shift+], Previous Card
+Ctrl+Shift+[) and **Help > Keyboard Shortcuts…**, a window listing every key. The toolbar beside the screen has the most used ones as
 icons (hover for the key); **View > Hide Toolbar** or `--no-toolbar` hides it.
 Its two keyboard buttons say what they do: **Attach / Detach Hardware
 Keyboard** (Ctrl+Shift+K) and **Show / Hide Virtual Keyboard** (Ctrl+Shift+O).
@@ -200,7 +202,7 @@ Keyboard** (Ctrl+Shift+K) and **Show / Hide Virtual Keyboard** (Ctrl+Shift+O).
 On a Mac the simulator is started from a terminal, which keeps the menu bar
 until the simulator's window comes to the front (macOS shows the active
 app's menus). Click the simulator's window if its menus (Device, Simulate,
-View, Services, Help) are not at the top of the screen; they then stay
+View, Services, Window, Help) are not at the top of the screen; they then stay
 whatever you click in it. `./build/phoenix-sim --check-chrome` prints what
 the menu bar has and whether the simulator is the active app.
 
