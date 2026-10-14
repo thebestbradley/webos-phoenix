@@ -233,6 +233,15 @@ export interface PackResult { file: string; size: number; check: CheckResult; wr
 // vendor: false leaves the kit out (tests; a package must carry it to run on a device).
 // The service's own npm dependencies always go in (service/node_modules).
 // writeAppinfo: false packs appinfo.json and the templates as they are (still checked, C14, C16).
+/** An update log's bytes without "unreleased" (never shipped); a log that is not JSON is the catalog's to refuse. */
+export function shippedChangelog(data: Uint8Array): Uint8Array {
+    let log: unknown;
+    try { log = JSON.parse(Buffer.from(data).toString("utf8").replace(/^\uFEFF/, "")); } catch (e) { return data; }
+    if (!log || typeof log !== "object" || Array.isArray(log) || !("unreleased" in log)) return data;
+    const { unreleased: _, ...shipped } = log as Record<string, unknown>;
+    return new Uint8Array(Buffer.from(JSON.stringify(shipped, null, 2) + "\n"));
+}
+
 export function pack(dir: string, outDir: string, options?: { namespaces?: string[]; force?: boolean; vendor?: boolean; writeAppinfo?: boolean }): PackResult {
     const p = path(), f = fs();
     // The share target and the sign-up link from the definition, into the folder's files first.
@@ -244,6 +253,9 @@ export function pack(dir: string, outDir: string, options?: { namespaces?: strin
     const vendored = (options && options.vendor === false ? [] : vendoredFiles()).concat(dependencyFiles(dir));
     const info = JSON.parse(Buffer.from(files["appinfo.json"]).toString("utf8").replace(/^﻿/, ""));
     const prefix = "usr/palm/applications/" + info.id + "/";
+    // Its update log (changelog.json beside appinfo.json; docs/APP-STORE.md 3.15) as it ships:
+    // the notes kept for the next version ("unreleased") stay out. The catalog checks the rest.
+    if (files["changelog.json"]) files["changelog.json"] = shippedChangelog(files["changelog.json"]);
     const list: IpkFile[] = Object.keys(files).sort().map((rel) => ({ path: prefix + rel, data: files[rel] }));
     vendored.forEach((v) => list.push({ path: prefix + v.rel, data: v.data }));
     const bytes = writeIpk({

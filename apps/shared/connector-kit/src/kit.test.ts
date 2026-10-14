@@ -376,6 +376,13 @@ describe("phoenix-connector", () => {
             expect(pkg.control).toMatchObject({ Package: "org.example.weather", Version: "0.1.0", Architecture: "all" });
             expect(pkg.files.every((f) => f.path.indexOf("usr/palm/applications/org.example.weather/") === 0)).toBe(true);
             expect(pkg.files.some((f) => f.path.endsWith("/service/sysbus/org.example.service.weather.role.json"))).toBe(true);
+            // Its update log ships beside appinfo.json, without the notes kept for the next version.
+            writeFileSync(join(dir, "w", "changelog.json"), JSON.stringify({ format: 1, unreleased: { new: ["Radar maps."] }, versions: [
+                { version: "0.1.0", date: "2026-10-14", summary: "Weather for your town.", new: ["The forecast for the week."] }] }));
+            const logged = readIpk(new Uint8Array(readFileSync(pack(join(dir, "w"), dir, { vendor: false }).file)))
+                .files.find((f) => f.path === "usr/palm/applications/org.example.weather/changelog.json");
+            const shipped = JSON.parse(Buffer.from(logged!.data).toString("utf8"));
+            expect(shipped).toEqual({ format: 1, versions: [expect.objectContaining({ version: "0.1.0" })] });
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

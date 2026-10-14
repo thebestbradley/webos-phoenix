@@ -608,9 +608,33 @@ the share sheet, Just Type and the Assistant read `appinfo.json`:
   are read back to the user first.
 - `requestedWindowOrientation`, and `app.setOrientation()` at run time.
 
+**Its update log.** Beside `appinfo.json`, `changelog.json` says what each
+version brings, newest first; its first entry is the version
+`appinfo.json` gives. The Marketplace shows it on the app's page (What's
+New, Version History) and with an update; the catalog refuses a package
+whose log is malformed or does not start at the package's version
+([APP-STORE.md 3.15](APP-STORE.md#315-update-logs) has the format and the
+rules). It is optional for your app, and worth keeping:
+
+```json
+{
+    "format": 1,
+    "versions": [
+        { "version": "1.1.0", "date": "2026-11-02", "summary": "Reminders on notes.",
+          "new": ["Set a reminder on a note."], "fixed": ["A pinned note stays pinned after a restart."] },
+        { "version": "1.0.0", "date": "2026-10-12", "summary": "Notes for your day.", "new": ["Write a note."] }
+    ]
+}
+```
+
+Items are plain sentences for the people using the app (no Markdown,
+file names or issue numbers); `known` lists known problems; `unreleased`
+(`{new, improved, fixed}`) gathers the next version's while you work and
+is left out of the package.
+
 Build the app (Enact: `enact pack`; Vite; `flutter build web`, with
 `--no-web-resources-cdn` so nothing is fetched from Google's CDN) and put
-`appinfo.json` and the icons next to its `index.html`. In this repository,
+`appinfo.json`, `changelog.json` and the icons next to its `index.html`. In this repository,
 apps under `apps/` are found by the simulator by their `appinfo.json`; on a
 device an app installs as an ipk (Developer Mode, Settings > Developer, or
 Files opening the ipk; see APP-RUNTIME.md, Installing apps).
