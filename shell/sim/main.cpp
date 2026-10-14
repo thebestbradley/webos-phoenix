@@ -62,6 +62,7 @@
 #include "simdevices.h"
 #include "simfonts.h"
 #include "siminstaller.h"
+#include "siminstances.h"
 #include "simlaunch.h"
 #include "simsnapshots.h"
 #include "simpty.h"
@@ -222,7 +223,7 @@ int main(int argc, char *argv[])
     QCommandLineOption bootAnimOpt(QStringLiteral("boot-animation"), QStringLiteral("Show the boot animation at start-up (it shows anyway unless --screenshot or an offscreen platform)."));
     QCommandLineOption noBootAnimOpt(QStringLiteral("no-boot-animation"), QStringLiteral("Start without the boot animation."));
     QCommandLineOption checkChromeOpt(QStringLiteral("check-chrome"), QStringLiteral("Check that the menu bar shows its menus with the keyboard focus on the screen (on a Mac: the menu bar at the top of the screen) and that the focus goes back to the screen from the window around it, print what it found, and exit: 0 if so (CI)."));
-    QCommandLineOption instanceOpt(QStringLiteral("instance"), QStringLiteral("Be another simulated device, NAME, with its own data, installed apps, web storage and settings (kept under phoenix-sim-NAME beside the usual phoenix-sim): two simulators can run at once, e.g. webOS Phoenix 1.0 and 2.0 side by side. Letters, digits, '.', '_' and '-'. Its restarts (an update, Full Erase) stay that device."), QStringLiteral("name"));
+    QCommandLineOption instanceOpt(QStringLiteral("instance"), QStringLiteral("Be another simulated device, NAME, with its own data, installed apps, web storage and settings (kept under phoenix-sim-NAME beside the usual phoenix-sim): two simulators can run at once, e.g. webOS Phoenix 1.0 and 2.0 side by side; each one's Window menu lists the others and brings one to the front. Letters, digits, '.', '_' and '-'. Its restarts (an update, Full Erase) stay that device."), QStringLiteral("name"));
     QCommandLineOption noToolbarOpt(QStringLiteral("no-toolbar"), QStringLiteral("Start without the toolbar beside the screen (View > Show Toolbar shows it again)."));
     // Set by phoenix-sim itself when it restarts (SimProcess).
     QCommandLineOption updatingOpt(QStringLiteral("updating"), QStringLiteral("Boot as after a system update: \"Updating the system\" first."));
@@ -727,6 +728,9 @@ int main(int argc, char *argv[])
     view.setResizeMode(QQuickView::SizeRootObjectToView);
     view.resize(size);
     view.setTitle(SimChrome::displayName());
+    // The simulators running for this user, whatever checkout and build
+    // each came from (Window > Simulators; siminstances.h).
+    SimInstances instances(SimInstances::defaultDir(), parser.value(instanceOpt));
     // The window with the menus and the toolbar, around the screen; not
     // on the offscreen platforms, where no one sees it.
     SimChrome *chrome = platform != QLatin1String("offscreen") && platform != QLatin1String("minimal")
@@ -749,6 +753,17 @@ int main(int argc, char *argv[])
     if (chrome) {
         chrome->build();
         chrome->showWithScreen(size);
+        // The checkout it came from (its QML's: CHECKOUT/shell/qml), for
+        // the other simulators' menus. A run that only takes a screenshot
+        // or checks the menu bar, and quits, is not listed.
+        QVariantMap base;
+        const QString qmlPath = QDir::cleanPath(QDir(qmlDir).absolutePath());
+        const QString checkout = QDir::cleanPath(qmlPath + QStringLiteral("/../.."));
+        if (qmlPath == checkout + QStringLiteral("/shell/qml")) {
+            base.insert(QStringLiteral("checkout"), QFileInfo(checkout).fileName());
+            base.insert(QStringLiteral("checkoutPath"), checkout);
+        }
+        chrome->setInstances(&instances, base, !parser.isSet(shotOpt) && !parser.isSet(checkChromeOpt));
     } else {
         view.show();
     }

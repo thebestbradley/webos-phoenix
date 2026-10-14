@@ -72,8 +72,20 @@ if(PHOENIX_BUILD_SIM)
     # (SimChrome).
     find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Widgets)
     add_executable(phoenix-sim sim/main.cpp sim/rootfs.cpp sim/rootfs.h sim/simfonts.cpp sim/simfonts.h sim/simsettings.h sim/simprocess.h sim/simpty.cpp sim/simpty.h sim/siminstaller.cpp sim/siminstaller.h sim/simsnapshots.cpp sim/simsnapshots.h
-                               sim/simchrome.cpp sim/simchrome.h sim/simdevices.h sim/simlaunch.h)
-    target_link_libraries(phoenix-sim PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets phoenix-pty-core)
+                               sim/simchrome.cpp sim/simchrome.h sim/simdevices.h sim/simlaunch.h sim/siminstances.cpp sim/siminstances.h)
+    # Network: the other simulators' sockets (SimInstances, QLocalSocket).
+    find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Network)
+    target_link_libraries(phoenix-sim PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets Qt6::Network phoenix-pty-core)
+    # X11: Window > Simulators asks the window manager, as a pager does, to
+    # bring the simulator chosen forward (simchrome.cpp). libxcb's headers
+    # come with the OpenGL ones Qt asks for (libgl-dev); without them the
+    # simulator chosen only raises itself.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(PHOENIX_XCB QUIET IMPORTED_TARGET xcb)
+        endif()
+    endif()
     # --device ID: the first targets' profiles and the device.json each
     # image installs (meta-phoenix's phoenix-device-config), compiled in
     # (sim/simdevices.h; docs/HARDWARE.md, "Device profiles").
@@ -136,8 +148,8 @@ if(PHOENIX_BUILD_SIM)
     # The menu bar around the screen, its Window menu's cards, with the
     # screen off too (CI: QT_QPA_PLATFORM=offscreen build/simchrome-test).
     find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Test)
-    add_executable(simchrome-test sim/simchrome_test.cpp sim/simchrome.cpp sim/simchrome.h)
-    target_link_libraries(simchrome-test PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets Qt6::Test)
+    add_executable(simchrome-test sim/simchrome_test.cpp sim/simchrome.cpp sim/simchrome.h sim/siminstances.cpp sim/siminstances.h)
+    target_link_libraries(simchrome-test PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Widgets Qt6::Network Qt6::Test)
     target_compile_definitions(simchrome-test PRIVATE PHOENIX_QML_BUILD_DIR="${PHOENIX_QML_BUILD_DIR}" PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
     # Its stand-in for sim.qml imports Phoenix.Native (UserActivity).
     add_dependencies(simchrome-test phoenix-native)
@@ -145,6 +157,16 @@ if(PHOENIX_BUILD_SIM)
         target_sources(simchrome-test PRIVATE sim/simmac.mm sim/simmac.h)
         target_link_libraries(simchrome-test PRIVATE "-framework AppKit")
     endif()
+    if(PHOENIX_XCB_FOUND)
+        foreach(_target phoenix-sim simchrome-test)
+            target_link_libraries(${_target} PRIVATE PkgConfig::PHOENIX_XCB)
+            target_compile_definitions(${_target} PRIVATE PHOENIX_HAVE_XCB)
+        endforeach()
+    endif()
+    # The simulators' registry, in one process and across two (CI:
+    # build/siminstances-test).
+    add_executable(siminstances-test sim/siminstances_test.cpp sim/siminstances.cpp sim/siminstances.h)
+    target_link_libraries(siminstances-test PRIVATE Qt6::Core Qt6::Network)
     # The colour emoji font's fontconfig setup (CI: build/simfonts-test).
     if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         add_executable(simfonts-test sim/simfonts_test.cpp sim/simfonts.cpp sim/simfonts.h)

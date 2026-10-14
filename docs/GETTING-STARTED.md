@@ -192,9 +192,10 @@ menu bar at the top of the screen) do everything the simulator can: **Device**
 **Simulate** (calls, messages, notifications, battery, chargers, USB,
 Touchstone, Touch to Share, headset, light), **View** (phone, tablet or adaptive, device sizes, scale,
 demo scenes, developer overlays), **Services** (the Marketplace's catalog,
-below), **Window** (the open apps' cards: choose one to bring it to the
-front; Card View, Launcher, Next Card Ctrl+Shift+], Previous Card
-Ctrl+Shift+[) and **Help > Keyboard Shortcuts…**, a window listing every key. The toolbar beside the screen has the most used ones as
+below), **Window** (the simulators running, and the open apps' cards:
+choose one to bring it to the front; Next Simulator Ctrl+Shift+\, Card
+View, Launcher, Next Card Ctrl+Shift+], Previous Card Ctrl+Shift+[) and
+**Help > Keyboard Shortcuts…**, a window listing every key. The toolbar beside the screen has the most used ones as
 icons (hover for the key); **View > Hide Toolbar** or `--no-toolbar` hides it.
 Its two keyboard buttons say what they do: **Attach / Detach Hardware
 Keyboard** (Ctrl+Shift+K) and **Show / Hide Virtual Keyboard** (Ctrl+Shift+O).
@@ -233,6 +234,17 @@ two processes. To run 1.0 and 2.0 side by side, start each with its own name:
 ./build/phoenix-sim --tablet --instance v1
 ../phoenix-ember-glass-ui/build/phoenix-sim --tablet --instance v2 -- --look ember-glass
 ```
+
+Each simulator's **Window** menu lists every simulator running for you on
+this computer, whichever checkout and build it came from: its name
+(Default without `--instance`), its layout and size, its look and its
+checkout, a check mark on its own. Choose another to bring its window to
+the front; **Next Simulator** (Ctrl+Shift+\) goes to the next. They find
+each other in your runtime folder (`$XDG_RUNTIME_DIR/phoenix-sim-instances`
+on Linux, `~/Library/Application Support/phoenix-sim-instances` on a Mac),
+where each lists itself while it runs; one that crashed is dropped. On
+Linux the window manager is asked, as a taskbar asks, to bring it forward
+(X11); under Wayland the compositor may only flag it.
 
 A new name is also a new device, the Mac's way to a clean start
 (`--instance try1`); delete its `phoenix-sim-NAME` folder when done.

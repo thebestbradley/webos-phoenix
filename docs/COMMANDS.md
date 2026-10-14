@@ -433,9 +433,9 @@ HOME=$(mktemp -d) ./build/phoenix-sim --tablet
 
 ### Run two simulators at once
 
-Each `--instance` is a device of its own: its own data, installed apps, web storage and settings. Without it, two simulators would share one device and one web storage.
+Each `--instance` is a device of its own: its own data, installed apps, web storage and settings. Without it, two simulators would share one device and one web storage. Each one's **Window** menu lists every simulator running for you, from any checkout or build (its layout and size, look and checkout), and brings the one you choose to the front; **Next Simulator** (Ctrl+Shift+\) goes to the next.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:225-256 · docs/GETTING-STARTED.md:224-238`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:225-256,733-766 · shell/sim/siminstances.h · shell/sim/simchrome.cpp:572-729 · docs/GETTING-STARTED.md:227-250`
 
 1.0:
 
@@ -579,9 +579,9 @@ A web page in the browser:
 
 ### Choose the open app to view
 
-The menu bar's **Window** menu lists the open cards, in card view's order with the windows stacked on a card under it, and brings the one you choose to the front, maximized; a check mark is on the card in front. It also has Card View, Launcher, Next Card (Ctrl+Shift+], ⇧⌘] on a Mac) and Previous Card (Ctrl+Shift+[). Locked, the card chosen is the one in front once you unlock.
+The menu bar's **Window** menu lists the simulators running on this computer first (as in Run two simulators at once), then the open cards, in card view's order with the windows stacked on a card under it, and brings the one you choose to the front, maximized; a check mark is on the card in front. It also has Card View, Launcher, Next Card (Ctrl+Shift+], ⇧⌘] on a Mac) and Previous Card (Ctrl+Shift+[). Locked, the card chosen is the one in front once you unlock.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/simchrome.cpp:216-223,437-527 · shell/qml/Phoenix/Sim/SimWindowMenu.qml · shell/qml/sim.qml:901-909`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/simchrome.cpp:272-286,499-570,731-749 · shell/qml/Phoenix/Sim/SimWindowMenu.qml · shell/qml/sim.qml:901-911`
 
 Three cards to choose from:
 
@@ -745,6 +745,12 @@ The menu bar and its Window menu:
 
 ```sh
 QT_QPA_PLATFORM=offscreen build/simchrome-test
+```
+
+The simulators' registry: Window > Simulators:
+
+```sh
+build/siminstances-test
 ```
 
 ```sh

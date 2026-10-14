@@ -10,7 +10,9 @@
 // keys the shell handles itself (Power, Home, the volume, the chords),
 // presses and lets go of them in the screen's window, as the keyboard would.
 // The Window menu also lists the device's open cards (sim.qml simWindows,
-// SimWindowMenu.qml), live, and shows the one chosen (simShowWindow).
+// SimWindowMenu.qml), live, and shows the one chosen (simShowWindow); and
+// the simulators running on this computer (SimInstances, --instance), the
+// one chosen brought to the front.
 //
 // The screen stays the size it was without the window: the menus and the
 // toolbar are around it (resizeScreen), and --screenshot grabs the screen
@@ -25,6 +27,8 @@
 #include <QPointer>
 #include <QStringList>
 #include <QVariantList>
+
+#include "siminstances.h"
 
 class QAction;
 class QDialog;
@@ -61,6 +65,19 @@ public:
     // A line of text asked for (sim.qml: Simulate > Location > Custom...);
     // "" when cancelled.
     Q_INVOKABLE QString askText(const QString &title, const QString &label, const QString &text);
+
+    // Window > Simulators: the simulators running for this user, this one
+    // among them, listed (start) unless list is false (a run that only
+    // takes a screenshot or checks the menu bar, then quits). base: what
+    // the others show of it beyond sim.qml's simInstanceInfo (checkout).
+    void setInstances(SimInstances *instances, const QVariantMap &base, bool list);
+    // Next Simulator (sim.qml): the next one after this, in the menu's
+    // order, to the front; whether there is another.
+    Q_INVOKABLE void showNextInstance();
+    Q_INVOKABLE bool hasOtherInstances() const { return m_otherInstances > 0; }
+    // What the menu says of one: "v2: phone 320x480 (adaptive), Ember
+    // Glass, phoenix-ember-glass-ui".
+    static QString instanceLabel(const SimInstances::Instance &instance);
 
     // --check-chrome: whether the menu bar has its menus with the keyboard
     // focus on the device's screen, as people use it (on a Mac: the menu
@@ -102,6 +119,13 @@ private:
     // Window: the cards after the menu's own items, from simWindows.
     void refreshWindows();
     QIcon cardIcon(const QString &url);
+    // Window > Simulators: the list, before Next Simulator.
+    void refreshInstances();
+    // sim.qml's simInstanceInfo, in this one's entry.
+    void updateInstanceInfo();
+    void showInstance(const SimInstances::Instance &instance);
+    // Asked by another simulator: this window in front, with the focus.
+    void bringToFront();
 
     QQuickView *m_view;
     QWidget *m_container;
@@ -123,4 +147,17 @@ private:
     QVariantList m_windowList;
     QTimer *m_windowsLater;
     QHash<QString, QIcon> m_cardIcons;
+    // The simulators: the registry, what this one adds to its entry, the
+    // items made and the list they show; the item they go before (Next
+    // Simulator); polled while the menu is open, for one that crashed.
+    SimInstances *m_instances = nullptr;
+    QVariantMap m_instanceBase;
+    QList<QAction *> m_instanceActions;
+    QList<SimInstances::Instance> m_instanceList;
+    QStringList m_instanceLabels;
+    QAction *m_instancesBefore = nullptr;
+    QTimer *m_instancesPoll;
+    QTimer *m_instancesLater;
+    QTimer *m_instanceInfoLater;
+    int m_otherInstances = 0;
 };

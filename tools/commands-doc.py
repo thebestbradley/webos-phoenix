@@ -115,8 +115,8 @@ it("Start as a new device", "", B, WP, "webos-phoenix/shell/sim/main.cpp:189,225
    [("./build/phoenix-sim --first-use", "run First Use again"),
     ("./build/phoenix-sim --tablet --instance try1", "another device with its own data: a clean start on a Mac too; delete its phoenix-sim-try1 folder after"),
     ("HOME=$(mktemp -d) ./build/phoenix-sim --tablet", "a fresh home folder: a clean device (documented for Linux)", {"os": L})])
-it("Run two simulators at once", "Each `--instance` is a device of its own: its own data, installed apps, web storage and settings. Without it, two simulators would share one device and one web storage.", B, WP,
-   "webos-phoenix/shell/sim/main.cpp:225-256 · docs/GETTING-STARTED.md:224-238",
+it("Run two simulators at once", "Each `--instance` is a device of its own: its own data, installed apps, web storage and settings. Without it, two simulators would share one device and one web storage. Each one's **Window** menu lists every simulator running for you, from any checkout or build (its layout and size, look and checkout), and brings the one you choose to the front; **Next Simulator** (Ctrl+Shift+\\) goes to the next.", B, WP,
+   "webos-phoenix/shell/sim/main.cpp:225-256,733-766 · shell/sim/siminstances.h · shell/sim/simchrome.cpp:572-729 · docs/GETTING-STARTED.md:227-250",
    [("./build/phoenix-sim --tablet --instance v1", "1.0"),
     ("./build/phoenix-sim --tablet --instance v2 --extra-rootfs ../phoenix-default-apps/build/rootfs -- --look ember-glass", "2.0, with the rebuilt apps", {"r": "phoenix-ember-glass-ui"})])
 it("Run without a display", "SSH sessions and containers. `./phoenix run` does this itself when xvfb-run is installed.", L, WP, "webos-phoenix/docs/GETTING-STARTED.md:305-306 · phoenix:638-650",
@@ -146,8 +146,8 @@ it("Open apps at start-up", "Repeat `--launch` for several apps.", B, WP, "webos
     ("./build/phoenix-sim --launch org.webosphoenix.settings.wifi", ""),
     ("./build/phoenix-sim --launch 'com.palm.app.clock:{\"action\": \"edit\"}'", "with launch params, as the application manager's {id, params}"),
     ("./build/phoenix-sim --open https://example.com", "a web page in the browser")])
-it("Choose the open app to view", "The menu bar's **Window** menu lists the open cards, in card view's order with the windows stacked on a card under it, and brings the one you choose to the front, maximized; a check mark is on the card in front. It also has Card View, Launcher, Next Card (Ctrl+Shift+], ⇧⌘] on a Mac) and Previous Card (Ctrl+Shift+[). Locked, the card chosen is the one in front once you unlock.", B, WP,
-   "webos-phoenix/shell/sim/simchrome.cpp:216-223,437-527 · shell/qml/Phoenix/Sim/SimWindowMenu.qml · shell/qml/sim.qml:901-909",
+it("Choose the open app to view", "The menu bar's **Window** menu lists the simulators running on this computer first (as in Run two simulators at once), then the open cards, in card view's order with the windows stacked on a card under it, and brings the one you choose to the front, maximized; a check mark is on the card in front. It also has Card View, Launcher, Next Card (Ctrl+Shift+], ⇧⌘] on a Mac) and Previous Card (Ctrl+Shift+[). Locked, the card chosen is the one in front once you unlock.", B, WP,
+   "webos-phoenix/shell/sim/simchrome.cpp:272-286,499-570,731-749 · shell/qml/Phoenix/Sim/SimWindowMenu.qml · shell/qml/sim.qml:901-911",
    [("./build/phoenix-sim --tablet --launch org.webosphoenix.settings --launch org.webosphoenix.weather --launch org.webosphoenix.tasks", "three cards to choose from")])
 it("Use apps built in another checkout", "`--extra-rootfs` can be repeated. `--installed-dir DIR` changes where installed apps go.", B, WP, "webos-phoenix/shell/sim/main.cpp:194-195 · docs/APP-RUNTIME.md:72",
    ["./phoenix run tablet --extra-rootfs ../phoenix-default-apps/build/rootfs --launch com.palm.app.notes"])
@@ -179,7 +179,8 @@ it("Run the QML tests", "", B, WP, "webos-phoenix/.github/workflows/ci.yml:180,4
     ("QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -input shell/tests/tst_hidpi.qml", "HiDPI at 2x")])
 it("Run the C++ tests", "There's nothing for `ctest` to find: run each test program by name after a build.", B, WP, "webos-phoenix/.github/workflows/ci.yml:185-252,510-518 · shell/CMakeLists.txt:67-73,121-150",
    ["build/pty/pty-test", "QT_QPA_PLATFORM=offscreen build/keyboard/keyboard-test", "build/siminstaller-test", "build/simlaunch-test",
-    ("QT_QPA_PLATFORM=offscreen build/simchrome-test", "the menu bar and its Window menu"), "build/dictation-test",
+    ("QT_QPA_PLATFORM=offscreen build/simchrome-test", "the menu bar and its Window menu"),
+    ("build/siminstances-test", "the simulators' registry: Window > Simulators"), "build/dictation-test",
     ("python3 tools/get-wakeword.py && build/wakeword-test", "fetches the wake-word model first"), "build/simnet-test", "build/simmarketplace-test", "build/localmodels-test",
     ("python3 tools/get-kitten.py && build/tts-test", "fetches the voice first"),
     ("./build/phoenix-sim --check-chrome --no-boot-animation --quiet", "the simulator's own start-up check"),
