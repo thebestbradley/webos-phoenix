@@ -19,6 +19,13 @@ Item {
     property bool keyFocused: false
     signal action()
 
+    // A button to a screen reader, by its caption (pressed by it only when
+    // active, as by a finger).
+    Accessible.role: Accessible.Button
+    Accessible.name: caption
+    Accessible.focusable: true
+    Accessible.onPressAction: if (actionButton.active) actionButton.action()
+
     ArtBorderImage {
         anchors.fill: parent
         source: Theme.asset(actionButton.affirmative

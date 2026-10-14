@@ -2979,10 +2979,10 @@ Phoenix will have to provide them. `tools/test-security.cjs` tests them.
 
 | Method | Phoenix |
 | --- | --- |
-| `getDeviceLockMode {subscribe}` | `{lockMode: "none" \| "pin" \| "password", policyState: "none" \| "active" \| "pending", retriesLeft}` (the policy's tries left; 0 without one) |
+| `getDeviceLockMode {subscribe}` | `{lockMode: "none" \| "pin" \| "password", policyState: "none" \| "active" \| "pending", retriesLeft, pinLength?}` (the policy's tries left; 0 without one). `pinLength` (Phoenix; the owner, 14 October 2026): a PIN's length, for the lock screen's PIN pad without Done; left out when not known (a PIN kept before its length was, until it next unlocks the device); on a device only the shell hears it |
 | `getSecurityPolicy {}` | `{policy: {password: {enabled, minLength, maxRetries, alphaNumeric, allowSimplePassword?}, inactivityInSeconds, id, status: {enforced, retriesLeft}}}`; `returnValue: false` without a policy |
 | `setDevicePasscode {lockMode, passCode, oldPasscode}` | the old passcode when one is set, except while the policy is pending (the lock screen sets the new one it asks for); against a policy, the original's checks: `errorCode` -1 empty, -2 too short, -3 / -4 not alphanumeric, -5 not digits, -8 repeating, -9 sequential, with its texts ("No sequential numbers (1234)") |
-| `matchDevicePasscode {passCode}` | `{succeeded}`, and when wrong `{lockedOut, retriesLeft}` (the original answered `returnValue: false`) |
+| `matchDevicePasscode {passCode}` | `{succeeded}`, and when wrong `{lockedOut, retriesLeft}` (the original answered `returnValue: false`); the right PIN of a lock kept without its length records it |
 
 A policy is what an Exchange account puts in db8: `com.palm.securitypolicy:1`
 objects with EAS's fields (`devicePasswordEnabled`, `minDevicePasswordLength`,

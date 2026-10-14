@@ -7532,7 +7532,18 @@
         //
         // luna-sysmgr's Security.cpp and EASPolicyManager.cpp, ported:
         //   getDeviceLockMode {subscribe} -> {lockMode: "none" | "pin" | "password",
-        //       policyState: "none" | "active" | "pending", retriesLeft}
+        //       policyState: "none" | "active" | "pending", retriesLeft,
+        //       pinLength?}
+        //       pinLength (Phoenix; the owner, 14 October 2026): a PIN's
+        //       length, for the lock screen, which unlocks as soon as that
+        //       many digits are in and counts a wrong PIN of that length as
+        //       a failed try, with no Done (LockScreen.qml). Left out when
+        //       the length is not known: a PIN set before it was kept
+        //       (its traits, below) until it next unlocks the device
+        //       (matchDevicePasscode records it then). The device's service
+        //       gives it to the shell alone (services/systemmanager); the
+        //       simulator's pages share this runtime and cannot be told
+        //       apart, so here every caller hears it.
         //   getSecurityPolicy {} -> {policy: {password: {enabled, minLength,
         //       maxRetries, alphaNumeric, allowSimplePassword?}, inactivityInSeconds,
         //       id, status: {enforced, retriesLeft}}}, or returnValue false
@@ -7548,7 +7559,9 @@
         //   matchDevicePasscode {passCode} -> {succeeded}, and when it is not
         //       {lockedOut, retriesLeft} (Security::matchPasscode, :325-385).
         //       Phoenix answers returnValue true with succeeded; the original
-        //       answered returnValue false for a wrong passcode.
+        //       answered returnValue false for a wrong passcode. The right
+        //       PIN of a lock kept without its traits records them (its
+        //       length for pinLength).
         //
         // The security policy (EAS: an Exchange account asks the device for a
         // passcode) is what the accounts put in db8 as com.palm.securitypolicy:1
@@ -7701,6 +7714,11 @@
         function easRetriesLeft(st) {
             return validMaxRetries(st.a) && !st.pending ? st.l.policy.retriesLeft : 0;
         }
+        // The PIN's length, 0 when there is no PIN or it is not known (a
+        // lock kept before its traits were).
+        function pinLength(l) {
+            return l.lockMode === "pin" && l.traits && l.traits.mode === "pin" && l.traits.length > 0 ? l.traits.length : 0;
+        }
 
         var stub = runtime.services["com.palm.systemmanager"] || { "*": function (p, reply) { reply(ok()); } };
         register(["com.palm.systemmanager"], {
@@ -7744,7 +7762,9 @@
             "/getDeviceLockMode": function (p, reply, ctx) {
                 watch(p, reply, ctx, function () {
                     var st = lockState(load());
-                    return ok({ lockMode: st.l.lockMode, policyState: policyState(st), retriesLeft: easRetriesLeft(st) });
+                    var r = ok({ lockMode: st.l.lockMode, policyState: policyState(st), retriesLeft: easRetriesLeft(st) });
+                    if (pinLength(st.l) > 0) r.pinLength = pinLength(st.l);
+                    return r;
                 });
             },
             "/getSecurityPolicy": function (p, reply) {
@@ -7803,6 +7823,10 @@
                 } else {
                     l.numRetries = DEFAULT_RETRIES;
                 }
+                // A PIN kept without its traits (set before they were): the
+                // right one records them, its length for pinLength.
+                if (good && l.lockMode === "pin" && !pinLength(l))
+                    l.traits = traits("pin", String(p.passCode || ""));
                 save(s);
                 reply(good ? ok({ succeeded: true }) : ok({ succeeded: false, lockedOut: false, retriesLeft: l.numRetries }));
                 // Boom (Security::eraseDevice, :420-432).

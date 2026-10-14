@@ -114,6 +114,18 @@ async function main() {
         });
         r = await luna(SM + "matchDevicePasscode", { passCode: "2580" });
         check(r.succeeded === true, "after 15 s the right one unlocks");
+        // The PIN's length, for the lock screen's PIN pad without Done (the
+        // owner, 14 October 2026); a lock kept without it (a PIN set before
+        // it was kept) learns it when the right PIN next unlocks.
+        check((await luna(SM + "getDeviceLockMode", {})).pinLength === 4, "the PIN's length");
+        await page.evaluate(() => {
+            const k = "phoenix:settings:state", s = JSON.parse(localStorage.getItem(k));
+            delete s.lock.traits;
+            localStorage.setItem(k, JSON.stringify(s));
+        });
+        check((await luna(SM + "getDeviceLockMode", {})).pinLength === undefined, "a PIN kept without its length: none told");
+        check((await luna(SM + "matchDevicePasscode", { passCode: "2580" })).succeeded, "... it unlocks");
+        check((await luna(SM + "getDeviceLockMode", {})).pinLength === 4, "... and its length is known from then on");
 
         // ---- An EAS policy that the PIN does not satisfy -------------------------------
         const policy = { _kind: "com.palm.securitypolicy:1", devicePasswordEnabled: true, minDevicePasswordLength: 6,
