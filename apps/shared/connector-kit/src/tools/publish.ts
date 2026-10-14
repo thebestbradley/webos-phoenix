@@ -9,9 +9,12 @@
 //
 // --local is the catalog on this computer (server/marketplace/bin/serve.sh,
 // which the simulator starts: http://127.0.0.1:8088/), a development catalog
-// that approves and publishes an upload at once. Its developer token is the
-// checkout's server/marketplace/data/developer.token (serve.sh makes it;
-// MARKETPLACE_DATA elsewhere); a local catalog without one gets a developer
+// that approves and publishes an upload at once. Its developer token is
+// developer.token in the user's one local catalog's folder (serve.sh makes
+// it; docs/APP-STORE.md 3.16: ~/.local/share/phoenix/catalog, on a Mac
+// ~/Library/Application Support/Phoenix/catalog, or MARKETPLACE_DATA), else
+// a checkout's own server/marketplace/data/developer.token (an older
+// simulator's catalog); a local catalog without one gets a developer
 // account registered here, its token kept in ~/.config/phoenix-connector.
 // Any other catalog needs --token (or PHOENIX_CATALOG_TOKEN), and a human
 // reviews the upload there.
@@ -33,7 +36,7 @@ export interface PublishOptions {
     namespaces?: string[];
     /** false: the kit is not packed into service/node_modules (tests). */
     vendor?: boolean;
-    /** Where a local catalog's developer token is (default: the checkout's server/marketplace/data/developer.token). */
+    /** Where a local catalog's developer token is (default: the local catalog's folder's developer.token, localCatalogFolder()). */
     tokenFile?: string;
     /** Where tokens registered here are kept (default: ~/.config/phoenix-connector/tokens.json). */
     tokenCache?: string;
@@ -109,10 +112,26 @@ async function api(root: string, method: string, p: string, body: unknown, token
     return { status: res.status, json };
 }
 
-/** A developer token for a local catalog: its own (data/developer.token), else one registered here and kept. */
+/**
+ * The user's one local catalog's folder, as serve.sh, src/bootstrap.php and
+ * phoenix-sim say it: MARKETPLACE_DATA, else ~/Library/Application
+ * Support/Phoenix/catalog on a Mac, $XDG_DATA_HOME/phoenix/catalog
+ * (~/.local/share/phoenix/catalog) elsewhere.
+ */
+export function localCatalogFolder(env: Record<string, string | undefined> = process.env, platform: string = process.platform,
+                                   home: string = os().homedir()): string {
+    const p = path();
+    if (env.MARKETPLACE_DATA) return p.resolve(env.MARKETPLACE_DATA);
+    if (platform === "darwin") return p.join(home, "Library", "Application Support", "Phoenix", "catalog");
+    return p.join(env.XDG_DATA_HOME || p.join(home, ".local", "share"), "phoenix", "catalog");
+}
+
+/** A developer token for a local catalog: its own (developer.token in its folder), else one registered here and kept. */
 async function localToken(root: string, opts: PublishOptions, again: boolean): Promise<string> {
     const p = path(), f = fs();
-    const own = opts.tokenFile || p.join(process.env.MARKETPLACE_DATA || p.join(checkout(), "server", "marketplace", "data"), "developer.token");
+    // The shared catalog's; a checkout's own catalog's for one an older simulator runs.
+    const own = opts.tokenFile || [p.join(localCatalogFolder(), "developer.token"), p.join(checkout(), "server", "marketplace", "data", "developer.token")]
+        .find((t) => readToken(t)) || p.join(localCatalogFolder(), "developer.token");
     const fromCatalog = readToken(own);
     if (fromCatalog && !again) return fromCatalog;
     const cacheFile = opts.tokenCache || p.join(os().homedir(), ".config", "phoenix-connector", "tokens.json");

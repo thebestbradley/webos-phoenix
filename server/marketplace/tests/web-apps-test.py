@@ -2,7 +2,9 @@
 # Copyright (c) 2026 webOS Phoenix contributors
 # SPDX-License-Identifier: Apache-2.0
 """bin/web-apps.py without the network: the manifest's rules, unpacking an
-untrusted archive, deterministic packages, the 2.0 apps from a checkout.
+untrusted archive, deterministic packages, the 2.0 apps from a checkout, and
+the local catalog filling itself (fill: offline, up to date, a newer 2.0 app,
+one fill at a time), into a catalog of its own (php bin/marketplace.php init).
 tests/run.php runs it (python3 -I) and checks the package it writes with
 the catalog's own reader (Ipk::check):
 
@@ -181,6 +183,90 @@ check(calc_listing["summary"] == "Sums, rebuilt" and "in place of that version" 
 os.replace(home, os.path.join(out_dir, "home.ipk"))
 with open(os.path.join(out_dir, "home-listing.json"), "w", encoding="utf-8") as f:
     json.dump(home_listing, f)
+
+# ---- The local catalog fills itself (docs/APP-STORE.md 3.16) ----
+check(w.version_key("2.10.0") > w.version_key("2.9.9") and w.version_key("1.0") == (1, 0, 0) and w.version_key("4.0.0") == w.version_key("4.0.0"),
+      "versions compare as numbers")
+check([b[1:] for b in w.built_default_apps(pda)] == [("com.example.calc", "4.0.0"), ("org.webosphoenix.home", "1.0.0")],
+      "a checkout's built 2.0 apps, by their dist/appinfo.json (one not built is not one)")
+env_before = dict(os.environ)
+os.environ.pop("XDG_DATA_HOME", None)
+os.environ.pop("MARKETPLACE_DATA", None)
+os.environ["HOME"] = "/home/ada"
+check(w.data_dir({}) == ("/home/ada/Library/Application Support/Phoenix/catalog" if sys.platform == "darwin"
+                         else "/home/ada/.local/share/phoenix/catalog"),
+      "the catalog's folder: the user's one local catalog, as serve.sh and the simulator say")
+os.environ.clear()
+os.environ.update(env_before)
+data = os.path.join(tmp, "catalog")
+os.environ["MARKETPLACE_DATA"] = data
+os.environ["MARKETPLACE_BASE_URL"] = "http://127.0.0.1:9/v1/"
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    code = w.fill({"cache": os.path.join(tmp, "cache")})
+check(code == 1 and "no catalog" in buf.getvalue(), "fill without a catalog set up: says so")
+init = __import__("subprocess").run(["php", os.path.join(HERE, "..", "bin", "marketplace.php"), "init"], capture_output=True, text=True)
+check(init.returncode == 0, "a catalog of its own (marketplace.php init)" + ("" if init.returncode == 0 else ": " + init.stderr[-300:]))
+# The web apps, from an upstream that cannot be reached: offline, tried again next time.
+offline_manifest = os.path.join(tmp, "web-apps.json")
+with open(offline_manifest, "w") as f:
+    json.dump({"apps": [dict(good, download={"url": "https://127.0.0.1:9/paint.zip", "sha256": "0" * 64})]}, f)
+os.environ["PHOENIX_WEB_APPS_MANIFEST"] = offline_manifest
+os.environ["PHOENIX_DEFAULT_APPS"] = pda
+opts = {"cache": os.path.join(tmp, "cache")}
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    code = w.fill(opts)
+status = json.load(open(os.path.join(data, "fill", "status.json")))
+state = json.load(open(os.path.join(data, "fill", "state.json")))
+check(code == 0 and status["state"] == "offline" and status["parts"]["webApps"]["state"] == "offline"
+      and "next start" in status["parts"]["webApps"]["text"] and "webApps" not in state,
+      "offline: the web apps' part says so, and is not remembered as done (the next start tries again)")
+versions = json.loads(__import__("subprocess").run(["php", os.path.join(HERE, "..", "bin", "marketplace.php"), "versions"],
+                                                   capture_output=True, text=True).stdout)
+check(status["parts"]["defaultApps"]["state"] == "done" and versions.get("com.example.calc") == "4.0.0"
+      and versions.get("org.webosphoenix.home") == "1.0.0" and "2 new" in status["parts"]["defaultApps"]["text"],
+      "the 2.0 apps of the checkout are published, whatever the network")
+check(status["finished"] and status["text"] and not os.path.exists(os.path.join(data, "fill", "lock")),
+      "... the fill's end and what it did in fill/status.json; its lock gone")
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    w.fill(opts)
+check("2 2.0 apps, up to date" in buf.getvalue(), "the next fill: nothing changed, nothing published")
+# A newer build of one 2.0 app: published, so devices offer it as an update.
+calc_info = os.path.join(pda, "apps", "calc", "dist", "appinfo.json")
+info = json.load(open(calc_info))
+info["version"] = "4.1.0"
+with open(calc_info, "w") as f:
+    json.dump(info, f)
+log = json.load(open(os.path.join(pda, "apps", "calc", "dist", "changelog.json")))
+log["versions"].insert(0, {"version": "4.1.0", "date": "2026-10-14", "summary": "Percentages.", "new": ["Percentages."]})
+with open(os.path.join(pda, "apps", "calc", "dist", "changelog.json"), "w") as f:
+    json.dump(log, f)
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    w.fill(opts)
+versions = json.loads(__import__("subprocess").run(["php", os.path.join(HERE, "..", "bin", "marketplace.php"), "versions"],
+                                                   capture_output=True, text=True).stdout)
+status = json.load(open(os.path.join(data, "fill", "status.json")))
+check(versions.get("com.example.calc") == "4.1.0" and "1 new" in status["parts"]["defaultApps"]["text"],
+      "a 2.0 app's newer version is published (it shows in Updates); the others are left as they are")
+# One fill at a time.
+with open(os.path.join(data, "fill", "lock"), "w") as f:
+    f.write(str(os.getpid()))
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    code = w.fill(opts)
+check(code == 0 and "another fill is running" in buf.getvalue(), "one fill at a time: a second one says so and leaves it")
+with open(os.path.join(data, "fill", "lock"), "w") as f:
+    f.write("999999999")
+buf = io.StringIO()
+with contextlib.redirect_stdout(buf):
+    w.fill(opts)
+check("another fill" not in buf.getvalue(), "... a lock whose fill is gone is taken over")
+for k in ("MARKETPLACE_DATA", "MARKETPLACE_BASE_URL", "PHOENIX_WEB_APPS_MANIFEST", "PHOENIX_DEFAULT_APPS"):
+    os.environ.pop(k, None)
+os.environ.update({k: v for k, v in env_before.items() if k in ("MARKETPLACE_DATA", "MARKETPLACE_BASE_URL")})
 
 shutil.rmtree(tmp, ignore_errors=True)
 print("%d failed" % failures if failures else "all passed")

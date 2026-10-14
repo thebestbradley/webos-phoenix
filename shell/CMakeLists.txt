@@ -179,9 +179,13 @@ if(PHOENIX_BUILD_SIM)
     target_link_libraries(simnet-test PRIVATE Qt6::Core Qt6::Network)
     target_compile_definitions(simnet-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
     # The Marketplace's catalog service started, stopped and failing, with
-    # a stand-in serve.sh (CI: build/simmarketplace-test).
-    add_executable(simmarketplace-test sim/simmarketplace_test.cpp sim/simmarketplace.cpp sim/simmarketplace.h)
+    # a stand-in serve.sh, and the one catalog every simulator shares, with
+    # the checkout's serve.sh and a stand-in PHP (CI: build/simmarketplace-test).
+    add_executable(simmarketplace-test sim/simmarketplace_test.cpp sim/simmarketplace.cpp sim/simmarketplace.h
+                                       sim/siminstances.cpp sim/siminstances.h)
     target_link_libraries(simmarketplace-test PRIVATE Qt6::Core Qt6::Network)
+    # The shared catalog's half runs the checkout's own server/marketplace/bin/serve.sh.
+    target_compile_definitions(simmarketplace-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
     target_compile_definitions(phoenix-sim PRIVATE
         PHOENIX_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
         PHOENIX_QML_BUILD_DIR="${PHOENIX_QML_BUILD_DIR}"

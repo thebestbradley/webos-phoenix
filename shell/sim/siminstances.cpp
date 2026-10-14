@@ -173,6 +173,9 @@ bool SimInstances::writeEntry()
     QJsonObject entry {
         { QStringLiteral("name"), m_name },
         { QStringLiteral("pid"), QCoreApplication::applicationPid() },
+        // Its program's name: the catalog's watch (server/marketplace/bin/
+        // serve.sh) checks that the process of this id is still it.
+        { QStringLiteral("exe"), QFileInfo(QCoreApplication::applicationFilePath()).fileName() },
         { QStringLiteral("socket"), socketPath() },
         { QStringLiteral("info"), QJsonObject::fromVariantMap(m_info) },
     };

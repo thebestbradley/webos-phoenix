@@ -38,6 +38,8 @@
 //                                             same bytes is kept as it is
 //   php bin/marketplace.php listing ID LISTING.json
 //                                             an app's listing again, published
+//   php bin/marketplace.php versions          {app id: its newest approved version},
+//                                             JSON (bin/web-apps.py fill)
 
 declare(strict_types=1);
 
@@ -192,7 +194,14 @@ switch ($cmd) {
     case 'key':
         echo base64_encode($app->signer->public), "\n", $app->signer->fingerprint(), "\n";
         break;
+    case 'versions':
+        $out = [];
+        foreach ($app->db->all("SELECT app_id, version FROM releases WHERE state = 'approved' ORDER BY id") as $r) {
+            $out[$r['app_id']] = $r['version'];
+        }
+        echo json_encode((object) $out, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT), "\n";
+        break;
     default:
-        fwrite(STDERR, "usage: php bin/marketplace.php init|seed|publish|admin|queue|approve|reject|key|developer|upload|listing\n");
+        fwrite(STDERR, "usage: php bin/marketplace.php init|seed|publish|admin|queue|approve|reject|key|developer|upload|listing|versions|availability\n");
         exit(2);
 }
