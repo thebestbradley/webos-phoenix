@@ -495,8 +495,8 @@ function AppPage({ sourceId, id, seed, onRemoved, catalogVersion, av }: {
                 </Group>
             )}
             <Group label="Details">
-                <Row title="Kind" value={kindText(app)} />
-                {app.appKind && kindName(av, app.appKind) && <Row title="Kind of App" value={kindName(av, app.appKind)} testId="app-kind" />}
+                {/* One row: a web app's or a classic's own kind says more than its kind of app; a package's is its kind of app. */}
+                <Row title="Kind" value={app.kind === "pwa" || app.kind === "classic" || app.kind === "preware" ? kindText(app) : kindName(av, app.appKind) || kindText(app)} testId="app-kind" />
                 {av && offered.length > 0 && (
                     <Row title="Offered On" value={offered.length === av.deviceClasses.length ? "Every device" : offered.join(", ")} testId="app-classes" />
                 )}
