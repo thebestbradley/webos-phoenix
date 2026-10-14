@@ -143,7 +143,7 @@ the earlier pages.
 | **new** SFTP (any SSH server: NAS, Raspberry Pi, VPS, a Phoenix device) | SSH-2 + SFTP v3 over `ctx.net` (binary TCP) | PW / Key (Ed25519 made on the device, or imported) | none | Host key trusted on first use and pinned; Phoenix's own SSH client on `@noble` (MIT); built (`apps/connectors/drives`, SHARE-AND-FILES.md "Drives") | P1 |
 | **new** PhotoPrism, Nextcloud Memories | REST / WebDAV | Key / PW | none | Same PHOTO provider shape as Immich | P3 |
 | **new** Flickr | Flickr API | OAuth 1.0a + API key | key | Non-commercial key terms *(check)*; a nod to webOS's photo accounts | P3 |
-| **new** Jellyfin, Navidrome / Subsonic, Plex | Jellyfin REST, Subsonic API, Plex API | PW / Key (Plex: account sign-in) | none (Plex: product id) | A new `MEDIA` capability so Music, Videos and Podcasts see the user's own library (APP-GAPS.md lists these). Plex terms *(check)* | P2 |
+| **new** Jellyfin, Navidrome / Subsonic, Plex | Jellyfin REST, Subsonic API, Plex API | PW / Key (Plex: account sign-in) | none (Plex: product id) | A new `MEDIA` capability so Music, Videos and Podcasts see the user's own library (APP-GAPS.md lists these). Plex terms *(check)*. Planned in [SYNERGY-MEDIA.md](SYNERGY-MEDIA.md) MB1 (the owner, 14 October 2026) | P2 |
 
 ### Tasks, notes, bookmarks, podcasts, passwords
 
@@ -154,7 +154,7 @@ the earlier pages.
 | **new** Todoist, Vikunja | REST | Key (Todoist: OAuth or personal token) | Todoist app *(optional)* | Todoist's API terms *(check)*; Vikunja is self-hosted (AGPL server, separate program). *Todoist built (section 8), working with the personal token* | P3 |
 | **new** Notes: Nextcloud Notes, Joplin (WebDAV/Joplin Server), Standard Notes | REST, WebDAV, E2EE API | PW / Key | none | `MEMOS` (legacy name; Notes uses `com.palm.note:1`). Standard Notes is end-to-end encrypted: keys stay on the device (section 4) | P2 |
 | **new** Bookmarks: Nextcloud Bookmarks, Floccus (WebDAV/Git file), xBrowserSync | REST, WebDAV | PW / LF | none | A new `BOOKMARKS` capability for the browser | P3 |
-| **new** Podcasts: gpodder.net, Nextcloud gPodder Sync | gpodder API v2 | PW | none | A new `PODCASTS` capability: subscriptions and episode progress for `apps/podcasts`, which already reads OPML | P2 |
+| **new** Podcasts: gpodder.net, Nextcloud gPodder Sync | gpodder API v2 | PW | none | A new `PODCASTS` capability: subscriptions and episode progress for `apps/podcasts`, which already reads OPML. Planned in [SYNERGY-MEDIA.md](SYNERGY-MEDIA.md) MB2 | P2 |
 | **new** Passwords: KeePass file over WebDAV/Nextcloud | WebDAV (the file stays encrypted) | PW / LF | none | Not a db8 capability: a DOCUMENTS root that Passwords opens (its listed "still to do") | P2 |
 | **new** Bitwarden / Vaultwarden | Bitwarden API (E2EE) | PW + 2FA | client id *(check terms)* | Possible later; review security first (SECURITY-APPS.md) | P3 |
 
