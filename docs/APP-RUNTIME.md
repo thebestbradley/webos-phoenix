@@ -2831,7 +2831,7 @@ service keeps that API and adds Phoenix's own (`getStatus`, `check`,
 Settings > Updates, which is `com.palm.app.updates` (the alerts open it).
 
 **The version and the release notes.** `product.json` at the top of the
-checkout is the product: its name, the version the system reports (0.1.0
+checkout is the product: its name, the version the system reports (1.0.0
 now; renumbering is that line and the notes' top entry, which a test
 checks agree) and the release notes it ships, `release-notes.json` (the
 update log format of [APP-STORE.md 3.15](APP-STORE.md#315-update-logs),

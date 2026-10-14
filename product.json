@@ -6,6 +6,6 @@
         "runtime/rootfs.json \"product\" puts both on the device, at /usr/share/phoenix/product.json and /usr/share/phoenix/release-notes.json: phoenix-sim, tools/serve-rootfs.py and tools/install-rootfs.py (the image) read it. tools/release-notes-doc.py writes docs/RELEASE-NOTES.md from the notes."
     ],
     "name": "webOS Phoenix",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "releaseNotes": "release-notes.json"
 }

@@ -2,9 +2,9 @@
 
 # webOS Phoenix release notes
 
-What each version of webOS Phoenix brings, newest first. The system shows the same notes in Settings > Updates ("What's New in This Version") and Device Info. The version the system reports is product.json's (0.1.0 now); the notes' format is [APP-STORE.md, "Update logs"](APP-STORE.md#315-update-logs).
+What each version of webOS Phoenix brings, newest first. The system shows the same notes in Settings > Updates ("What's New in This Version") and Device Info. The version the system reports is product.json's (1.0.0 now); the notes' format is [APP-STORE.md, "Update logs"](APP-STORE.md#315-update-logs).
 
-## webOS Phoenix 0.1.0
+## webOS Phoenix 1.0.0
 
 *14 October 2026*
 
