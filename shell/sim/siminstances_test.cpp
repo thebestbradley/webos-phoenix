@@ -26,6 +26,7 @@
 
 #include <cstdio>
 #include <functional>
+#include <optional>
 
 static int failures = 0;
 static void check(bool ok, const QString &what)
@@ -54,12 +55,14 @@ static QString names(const QList<SimInstances::Instance> &list)
     return out.join(QStringLiteral(", "));
 }
 
-static const SimInstances::Instance *find(const QList<SimInstances::Instance> &list, const QString &name)
+// A copy: instances() returns a new list each time, gone once the
+// statement that asked for it ends.
+static std::optional<SimInstances::Instance> find(const QList<SimInstances::Instance> &list, const QString &name)
 {
     for (const SimInstances::Instance &i : list)
         if (i.name == name)
-            return &i;
-    return nullptr;
+            return i;
+    return std::nullopt;
 }
 
 static void writeEntry(const QString &dir, const QString &key, const QByteArray &json)
@@ -133,8 +136,17 @@ int main(int argc, char **argv)
     auto *b = new SimInstances(dir, QStringLiteral("v2"));
     check(a->start({ { QStringLiteral("mode"), QStringLiteral("phone") }, { QStringLiteral("width"), 320 } }),
           QStringLiteral("the default instance lists itself"));
-    check(QFile::exists(QDir(dir).filePath(QStringLiteral("phoenix-sim.json"))) && QFile::exists(QDir(dir).filePath(QStringLiteral("phoenix-sim.sock"))),
-          QStringLiteral("its entry and its socket, in the folder"));
+    // The socket beside the entry, unless the folder's path leaves a socket
+    // no room (a Mac's temporary folder is deep): then in the temporary
+    // folder, as the entry says (SimInstances::socketPath).
+    const QString besideIt = QDir(dir).filePath(QStringLiteral("phoenix-sim.sock"));
+    QFile entryFile(QDir(dir).filePath(QStringLiteral("phoenix-sim.json")));
+    const QString socket = entryFile.open(QIODevice::ReadOnly)
+        ? QJsonDocument::fromJson(entryFile.readAll()).object().value(QStringLiteral("socket")).toString()
+        : QString();
+    check(QFile::exists(socket)
+              && (QFile::encodeName(besideIt).size() < 100 ? socket == besideIt : socket.startsWith(QDir::tempPath() + QLatin1Char('/'))),
+          QStringLiteral("its entry in the folder, its socket beside it (or in the temporary folder, for a deep folder): ") + socket);
     const QFile::Permissions others = QFile::ReadGroup | QFile::WriteGroup | QFile::ExeGroup
                                       | QFile::ReadOther | QFile::WriteOther | QFile::ExeOther;
     check(!(QFile(dir).permissions() & others), QStringLiteral("the folder is the user's alone"));
@@ -143,7 +155,7 @@ int main(int argc, char **argv)
           QStringLiteral("a second, v2, lists itself"));
     check(names(a->instances()) == QLatin1String("Default*, v2") && names(b->instances()) == QLatin1String("Default, v2*"),
           QStringLiteral("each sees both, the default first, itself marked (") + names(a->instances()) + QStringLiteral(" / ") + names(b->instances()) + QLatin1Char(')'));
-    const SimInstances::Instance *v2 = find(a->instances(), QStringLiteral("v2"));
+    std::optional<SimInstances::Instance> v2 = find(a->instances(), QStringLiteral("v2"));
     check(v2 && v2->info.value(QStringLiteral("look")).toString() == QLatin1String("ember-glass") && v2->pid == QCoreApplication::applicationPid(),
           QStringLiteral("what the other is (its look, its process)"));
 
@@ -218,7 +230,7 @@ int main(int argc, char **argv)
     check(other != nullptr, QStringLiteral("another process lists itself as two"));
     if (other) {
         check(names(a->instances()) == QLatin1String("Default*, two"), QStringLiteral("this one sees it (") + names(a->instances()) + QLatin1Char(')'));
-        const SimInstances::Instance *two = find(a->instances(), QStringLiteral("two"));
+        const std::optional<SimInstances::Instance> two = find(a->instances(), QStringLiteral("two"));
         check(two && two->pid == other->processId(), QStringLiteral("with its process id"));
         check(a->raise(QStringLiteral("phoenix-sim-two")), QStringLiteral("and asks it to come forward"));
         check(other->waitForFinished(5000) && other->exitCode() == 0, QStringLiteral("it heard (it quits when asked, exit 0)"));
