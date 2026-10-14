@@ -2300,11 +2300,16 @@ Item {
                 previewTimer.start();
         }
     }
-    // "capturepreview": then the notification's preview (the newest capture).
+    // "capturepreview": then its thumbnail is tapped, which opens the
+    // preview on this capture as soon as it is stored (Shell.openCapture).
+    // Not the preview without a capture ("the newest"): that is the newest
+    // the media index holds when the preview's page loads, and at start-up
+    // this capture is not in it yet (the system UI page that stores it is
+    // still loading), so it said "No screen captures yet".
     Timer {
         id: previewTimer
         interval: 2500
-        onTriggered: shell.launch("org.webosphoenix.screenshot")
+        onTriggered: shell.captureThumbnail.open()
     }
 
     // Once luna-systemui is up and listening (its page loads after the

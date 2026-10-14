@@ -10286,12 +10286,19 @@
         runtime.saveScreenshot = function (p) {
             p = p || {};
             var path = CAPTURE_DIR + "/" + captureName(p.app, p.time ? new Date(p.time) : new Date());
+            // Not stored: the shell is told ("captureFailed" {capture}), so
+            // a tap on its thumbnail stops waiting for it (Shell.qml
+            // onCaptureSaveFailed).
+            function failed(e) {
+                host.postToHost("captureFailed", { capture: String(p.capture || ""), error: String((e && e.message) || e) });
+                throw e;
+            }
             var blob;
             try { blob = b64ToBlob(String(p.data || "").replace(/^data:image\/png;base64,/, ""), "image/png"); }
-            catch (e) { return Promise.reject(new Error("not a PNG")); }
+            catch (e) { return Promise.reject(new Error("not a PNG")).then(null, failed); }
             return files.write(path, blob).then(function () {
                 return scan(CAPTURE_DIR);
-            }).then(function () {
+            }).then(null, failed).then(function () {
                 // capture: the shell's id for it, so its thumbnail opens
                 // this file and no other. Tagged with its file, so deleting
                 // it takes the notification back (captureRemoved below).

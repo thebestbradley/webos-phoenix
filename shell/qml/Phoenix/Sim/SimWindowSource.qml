@@ -976,6 +976,9 @@ Item {
             mediaKeyRequested(String(payload.key || ""));
         } else if (type === "takeScreenshot") {
             screenshotRequested();
+        } else if (type === "captureFailed") {
+            // runtime.saveScreenshot could not store a capture.
+            captureSaveFailed(String(payload.capture || ""));
         } else if (type === "erase") {
             // The device was erased (com.palm.storage erase/EraseAll, Wipe;
             // Settings' Full Erase): it restarts into First Use.
@@ -2123,20 +2126,34 @@ Item {
     // page that turns out not to have it (still loading) passes it on.
     // With none running it waits for the next page that loads.
     property var _pendingCaptures: []
+    // A capture the runtime could not store (its "captureFailed"): the
+    // shell stops waiting to open it.
+    signal captureSaveFailed(string capture)
     function saveScreenshot(dataUrl, appTitle, captureId) {
         var js = "!!(window.__phoenixRuntime && __phoenixRuntime.saveScreenshot && (__phoenixRuntime.saveScreenshot("
             + JSON.stringify({ data: String(dataUrl), app: appTitle || "", time: Date.now(), capture: captureId || "" })
             + "), true))";
-        return _saveCaptureOn(_capturePages(), js);
+        var pages = _capturePages();
+        if (pages.length > 0 && pages[0].ready === false) {
+            _pendingCaptures.push(js);
+            return true;
+        }
+        return _saveCaptureOn(pages, js);
     }
+    // The system UI page first once it has loaded; while it is still
+    // loading (at start-up luna-systemui's page takes a while: 13 to 30 s in
+    // phoenix-sim under xvfb) it would store the capture only then, so a
+    // page that has loaded stores it first, at once, and the loading pages
+    // come after. None loaded yet: the first page to load stores it
+    // (_pageLoaded), as when none is running.
     function _capturePages() {
         var pages = _webPages().filter(function(p) { return !p.site; });
         var writer = _writerPage();
-        if (writer && pages.indexOf(writer) > 0) {
-            pages.splice(pages.indexOf(writer), 1);
-            pages.unshift(writer);
-        }
-        return pages;
+        var loaded = function(p) { return p.ready !== false; };
+        var first = writer && pages.indexOf(writer) >= 0 && loaded(writer) ? [writer] : [];
+        var rest = pages.filter(function(p) { return first.indexOf(p) < 0; });
+        return first.concat(rest.filter(loaded), rest.filter(function(p) { return p === writer && !loaded(p); }),
+                            rest.filter(function(p) { return p !== writer && !loaded(p); }));
     }
     function _saveCaptureOn(pages, js) {
         if (pages.length === 0) {

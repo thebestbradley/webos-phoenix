@@ -2058,8 +2058,9 @@ FocusScope {
     // The runtime's "Screen captured" notification names the file and the
     // capture (params {path, capture}): the thumbnail opens that file. A
     // tap on the thumbnail before it is saved (a big capture takes a
-    // moment to encode and store) opens it once it is, rather than the
-    // newest capture saved before it.
+    // moment to encode and store; at start-up the page that stores it may
+    // still be loading) opens it once it is, however long that takes,
+    // rather than the newest capture saved before it.
     property string _openWhenSaved: ""
     readonly property string screenshotAppId: "org.webosphoenix.screenshot"
     Connections {
@@ -2076,7 +2077,6 @@ FocusScope {
                     continue;
                 if (p.capture && p.capture === shell._openWhenSaved) {
                     shell._openWhenSaved = "";
-                    openWhenSavedTimer.stop();
                     shell._openPreview(p.path);
                 } else if (captureThumbnail.shown && (!p.capture || p.capture === captureThumbnail.capture)) {
                     captureThumbnail.path = p.path;
@@ -2084,11 +2084,16 @@ FocusScope {
             }
         }
     }
-    // Not saved after all (no page could): the preview's newest capture.
-    Timer {
-        id: openWhenSavedTimer
-        interval: 10000
-        onTriggered: {
+    // Not saved after all (the window source says so: the runtime could not
+    // store it, the device's file manager refused it): the preview's newest
+    // capture. Not after a fixed time: a save that is slow is not a save
+    // that failed (the preview opened on another capture, or on none).
+    Connections {
+        target: shell.source
+        ignoreUnknownSignals: true
+        function onCaptureSaveFailed(capture) {
+            if (capture === "" || capture !== shell._openWhenSaved)
+                return;
             shell._openWhenSaved = "";
             shell._openPreview("");
         }
@@ -2104,7 +2109,6 @@ FocusScope {
             _openPreview(path);
         } else {
             _openWhenSaved = capture;
-            openWhenSavedTimer.restart();
         }
     }
     function takeScreenshot() {
@@ -4120,6 +4124,7 @@ FocusScope {
 
     // The capture's thumbnail, in the corner above the gesture area; a tap
     // opens it in the preview.
+    readonly property alias captureThumbnail: captureThumbnail
     ScreenCaptureThumbnail {
         id: captureThumbnail
         anchors.bottom: parent.bottom
