@@ -1,0 +1,3174 @@
+{
+  "description": [
+    "Test cases for an update log (changelog.json, and the OS's release-notes.json in the same format).",
+    "phoenix-default-apps tools/lib/changelog.mjs and webos-phoenix's catalog server both run them.",
+    "Each case: changelog (the parsed document), version (when given: the version its first entry must be),",
+    "error (null: valid; else the first problem's message, exactly). A validator lists the problems in the",
+    "order of its checks (tools/lib/changelog.mjs says the order), so the first is the same everywhere.",
+    "Lengths are in Unicode code points. Regular expressions are ASCII (\\w, \\b, \\d) as JavaScript's and",
+    "PCRE's without UCP are."
+  ],
+  "cases": [
+    {
+      "name": "the spec's example",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "version": "2.1.0",
+      "error": null
+    },
+    {
+      "name": "no expected version given",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "a rebuild alone, without replaces (a new app)",
+      "changelog": {
+        "format": 1,
+        "versions": [
+          {
+            "version": "1.0.0",
+            "date": "2026-10-13",
+            "rebuild": true,
+            "summary": "Home, new in webOS Phoenix.",
+            "new": [
+              "Control your home's lights, switches and scenes."
+            ]
+          }
+        ]
+      },
+      "version": "1.0.0",
+      "error": null
+    },
+    {
+      "name": "no unreleased, and lists left out",
+      "changelog": {
+        "format": 1,
+        "versions": [
+          {
+            "version": "1.0.1",
+            "date": "2026-10-14",
+            "summary": "A fix.",
+            "fixed": [
+              "The list no longer jumps to the top."
+            ]
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "unreleased with items, known included",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [
+            "Share a list."
+          ],
+          "known": [
+            "Sharing needs an account."
+          ]
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "the same date twice",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-11-02",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "versions compared as numbers: 2.10.0 above 2.9.0",
+      "changelog": {
+        "format": 1,
+        "versions": [
+          {
+            "version": "2.10.0",
+            "date": "2026-12-01",
+            "summary": "Ten.",
+            "new": [
+              "Ten."
+            ]
+          },
+          {
+            "version": "2.9.0",
+            "date": "2026-11-01",
+            "summary": "Nine.",
+            "new": [
+              "Nine."
+            ]
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "only known problems besides one fix",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [],
+            "improved": [],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": [
+              "Printing is slow."
+            ]
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "a 200-character item",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "an item counted in code points: 199 emoji and a full stop",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "a question and an exclamation end a sentence; a closing quote or parenthesis may follow",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Ready?",
+              "It works!",
+              "Says “Done.”",
+              "A (small) fix (at last.)"
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "webOS, iOS, iPhone and TouchPad are not internal names",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Works as on webOS, iOS, an iPhone and a TouchPad."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "km/h and and/or are not file paths",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Wind in km/h and/or mph."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "a web address is not a file path",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Checks passwords with https://api.pwnedpasswords.com/range/ when asked."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "a summary with a decimal number",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Works with version 2024.1 and later.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "a lone asterisk and numbers with a hash-free count",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Multiply with * and see 12 results."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "not an object: a list",
+      "changelog": [],
+      "error": "changelog: must be a JSON object"
+    },
+    {
+      "name": "not an object: text",
+      "changelog": "changelog",
+      "error": "changelog: must be a JSON object"
+    },
+    {
+      "name": "not an object: null",
+      "changelog": null,
+      "error": "changelog: must be a JSON object"
+    },
+    {
+      "name": "format missing",
+      "changelog": {
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "format: must be 1"
+    },
+    {
+      "name": "format 2",
+      "changelog": {
+        "format": 2,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "format: must be 1"
+    },
+    {
+      "name": "format as text",
+      "changelog": {
+        "format": "1",
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "format: must be 1"
+    },
+    {
+      "name": "an unknown top-level field",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ],
+        "title": "Tasks",
+        "app": "x"
+      },
+      "error": "app: not a field of a changelog"
+    },
+    {
+      "name": "unreleased not an object",
+      "changelog": {
+        "format": 1,
+        "unreleased": [],
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "unreleased: must be an object"
+    },
+    {
+      "name": "unreleased with an unknown field",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": [],
+          "summary": "Next."
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "unreleased.summary: not a field of unreleased"
+    },
+    {
+      "name": "unreleased with a list that is not a list",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": "A fix."
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "unreleased.fixed: must be a list"
+    },
+    {
+      "name": "unreleased with a bad item",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [
+            "Uses `code`."
+          ],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "unreleased.new[0]: has Markdown"
+    },
+    {
+      "name": "versions missing",
+      "changelog": {
+        "format": 1
+      },
+      "error": "versions: must be a list"
+    },
+    {
+      "name": "versions empty",
+      "changelog": {
+        "format": 1,
+        "versions": []
+      },
+      "error": "versions: must list at least one version"
+    },
+    {
+      "name": "an entry that is not an object",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          "2.0.0"
+        ]
+      },
+      "error": "versions[1]: must be an object"
+    },
+    {
+      "name": "an unknown field in an entry",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": [],
+            "improve": [
+              "Faster."
+            ]
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].improve: not a field of a version"
+    },
+    {
+      "name": "version missing",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].version: must be a version such as 1.2.3"
+    },
+    {
+      "name": "version with two parts",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].version: must be a version such as 1.2.3"
+    },
+    {
+      "name": "version with a leading zero",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.01.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].version: must be a version such as 1.2.3"
+    },
+    {
+      "name": "version with a pre-release",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0-beta.1",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].version: must be a version such as 1.2.3"
+    },
+    {
+      "name": "version as a number",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": 2,
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].version: must be a version such as 1.2.3"
+    },
+    {
+      "name": "date missing",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[1].date: must be a date such as 2026-10-14"
+    },
+    {
+      "name": "date not a real day",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-02-30",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].date: must be a date such as 2026-10-14"
+    },
+    {
+      "name": "29 February in a leap year",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2028-02-29",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "29 February in 2100 (not a leap year)",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2100-02-29",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].date: must be a date such as 2026-10-14"
+    },
+    {
+      "name": "date with a time",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02T10:00:00Z",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].date: must be a date such as 2026-10-14"
+    },
+    {
+      "name": "versions out of order",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "1.9.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[1].version: 2.0.0 must be lower than 1.9.0 above it"
+    },
+    {
+      "name": "a version listed twice",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.0.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[1].version: 2.0.0 is listed twice"
+    },
+    {
+      "name": "dates increasing down the list",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-12-01",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[1].date: 2026-12-01 is later than 2026-11-02 above it"
+    },
+    {
+      "name": "the first version is not the expected one",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "version": "2.1.1",
+      "error": "versions[0].version: 2.1.0 does not match the version 2.1.1"
+    },
+    {
+      "name": "summary missing",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].summary: must be a sentence"
+    },
+    {
+      "name": "summary not text",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": [
+              "One."
+            ],
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].summary: must be a sentence"
+    },
+    {
+      "name": "summary empty",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].summary: is empty"
+    },
+    {
+      "name": "summary too long",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].summary: is 141 characters long; at most 140"
+    },
+    {
+      "name": "summary of two sentences",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders. And more.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].summary: must be one sentence"
+    },
+    {
+      "name": "summary without a full stop",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].summary: must end with . ! or ?"
+    },
+    {
+      "name": "rebuild false",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": false,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[1].rebuild: must be true when it is there"
+    },
+    {
+      "name": "rebuild not on the last entry",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": [],
+            "rebuild": true
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].rebuild: only the last (oldest) version can be the rebuild"
+    },
+    {
+      "name": "replaces without rebuild",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": [],
+            "replaces": "Tasks 1.0"
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].replaces: only the rebuild names what it replaces"
+    },
+    {
+      "name": "replaces not text",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": 1,
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[1].replaces: must be text"
+    },
+    {
+      "name": "replaces too long",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[1].replaces: is 141 characters long; at most 140"
+    },
+    {
+      "name": "a list that is not a list",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": "A fix.",
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].fixed: must be a list"
+    },
+    {
+      "name": "an entry with nothing new, improved or fixed",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [],
+            "improved": [],
+            "fixed": [],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0]: lists nothing new, improved or fixed"
+    },
+    {
+      "name": "only known problems",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [],
+            "improved": [],
+            "fixed": [],
+            "known": [
+              "Slow."
+            ]
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0]: lists nothing new, improved or fixed"
+    },
+    {
+      "name": "an item that is not text",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              42
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: must be text"
+    },
+    {
+      "name": "an empty item",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "   "
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: is empty"
+    },
+    {
+      "name": "an item with a space at its end",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Faster. "
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has spaces at its start or end"
+    },
+    {
+      "name": "an item on two lines",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Faster.\nSmoother."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: must be one line"
+    },
+    {
+      "name": "an item with a tab",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Faster\tnow."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: must be one line"
+    },
+    {
+      "name": "an item too long",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: is 201 characters long; at most 200"
+    },
+    {
+      "name": "Markdown: strong",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "A **bold** change."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has Markdown"
+    },
+    {
+      "name": "Markdown: emphasis",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "An *important* change."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has Markdown"
+    },
+    {
+      "name": "Markdown: a link",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "See [the help](help)."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has Markdown"
+    },
+    {
+      "name": "Markdown: a bullet",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "- A change."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has Markdown"
+    },
+    {
+      "name": "Markdown: a heading",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "# Changes."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has Markdown"
+    },
+    {
+      "name": "HTML: a tag",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "A <b>bold</b> change."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has HTML"
+    },
+    {
+      "name": "HTML: an entity",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Tom &amp; Jerry."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has HTML"
+    },
+    {
+      "name": "a commit hash",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Fixed in 29ce0d9."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has a commit hash"
+    },
+    {
+      "name": "an issue number",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Fixes #42."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has an issue number"
+    },
+    {
+      "name": "a file path from the root",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Saved in /media/internal/screenshots now."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has a file path"
+    },
+    {
+      "name": "a source path",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Moved to apps/tasks/src for speed."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has a file path"
+    },
+    {
+      "name": "a file name",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Reads appinfo.json again."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has a file path"
+    },
+    {
+      "name": "an app id",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Opens com.palm.app.notes faster."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has an internal name"
+    },
+    {
+      "name": "a service address",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Calls luna://settings less often."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has an internal name"
+    },
+    {
+      "name": "a camelCase identifier",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "The launchParams are read again."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has an internal name"
+    },
+    {
+      "name": "a snake_case identifier",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Keeps keyboard_size as before."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has an internal name"
+    },
+    {
+      "name": "a function",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Calls open() once."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: has an internal name"
+    },
+    {
+      "name": "an AI model's name",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Written with ChatGPT."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: names an AI model"
+    },
+    {
+      "name": "an item without a full stop",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Faster scrolling"
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].new[0]: must end with . ! or ?"
+    },
+    {
+      "name": "an item may be two sentences",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Lists scroll faster. Long ones too."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": null
+    },
+    {
+      "name": "the first problem is the message: the summary before the items",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "2026-11-02",
+            "summary": "No stop",
+            "new": [
+              "No stop"
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "2.0.0",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].summary: must end with . ! or ?"
+    },
+    {
+      "name": "the first problem is the message: the first entry before the second",
+      "changelog": {
+        "format": 1,
+        "unreleased": {
+          "new": [],
+          "improved": [],
+          "fixed": []
+        },
+        "versions": [
+          {
+            "version": "2.1.0",
+            "date": "x",
+            "summary": "Reminders for tasks with a due time.",
+            "new": [
+              "Set a reminder on any task with a due time."
+            ],
+            "improved": [
+              "Lists with hundreds of tasks scroll smoothly."
+            ],
+            "fixed": [
+              "A task moved to another list no longer shows in both."
+            ],
+            "known": []
+          },
+          {
+            "version": "y",
+            "date": "2026-10-12",
+            "rebuild": true,
+            "replaces": "Tasks 1.0 (webOS 3.0.5)",
+            "summary": "Tasks, rebuilt for webOS Phoenix with Ember Glass.",
+            "new": [
+              "Subtasks, flags and tags."
+            ]
+          }
+        ]
+      },
+      "error": "versions[0].date: must be a date such as 2026-10-14"
+    }
+  ]
+}

@@ -165,7 +165,8 @@ function updates(serversFn, compatible) {
     osRelease({ version: "1.0.0", build: 100 });
     const world = { state: null, calls: [] };
     const make = () => updatesLib.createUpdatesService({
-        rauc: node.createRauc({ command: path.join(REPO, "services/updates/test/fake-rauc.cjs"), osRelease: path.join(dir, "os-release") }),
+        rauc: node.createRauc({ command: path.join(REPO, "services/updates/test/fake-rauc.cjs"), osRelease: path.join(dir, "os-release"),
+                                product: path.join(dir, "product.json") }),
         request: node.request, requestBytes: node.requestBytes, download: node.download, crypto: cryptoDeps,
         files: { path: (n) => path.join(dir, "downloads", n), exists: (f) => fs.existsSync(f), remove: (f) => fs.rmSync(f, { force: true }) },
         power: async () => ({ percent: 90, charging: false }),

@@ -654,7 +654,10 @@ there), the service's own npm dependencies (its `package.json`'s
 sources of a build left out. A dependency must be plain CommonJS
 JavaScript: one with native code fails C12, and its ES-module copies,
 source maps and type files are left out (the drives' SFTP carries
-`@noble/hashes`, `@noble/curves` and `@noble/ciphers` this way).
+`@noble/hashes`, `@noble/curves` and `@noble/ciphers` this way). A
+`changelog.json` beside `appinfo.json`, the connector's update log, is packed
+without its `unreleased` notes; the catalog checks it and the Marketplace
+shows its What's New and Version History ([APP-STORE.md 3.15](APP-STORE.md#315-update-logs)).
 
 ### Publishing
 

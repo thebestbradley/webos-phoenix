@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // com.palm.update on a device (service.js): RAUC's command line, the
-// running system's version (/etc/os-release), HTTP, streamed downloads with
+// running system's version (the product file, /etc/os-release), HTTP, streamed downloads with
 // their SHA-256, and the battery. Tested in ../updatesservice.test.ts.
 
 "use strict";
@@ -25,6 +25,16 @@ function osRelease(file) {
     return out;
 }
 
+// The product the image was built as (product.json at the top of the checkout,
+// installed at /usr/share/phoenix/product.json: tools/install-rootfs.py):
+// {name, version}, or {} without it.
+function productFile(file) {
+    try {
+        var p = JSON.parse(fs.readFileSync(file || "/usr/share/phoenix/product.json", "utf8"));
+        return p && typeof p === "object" ? p : {};
+    } catch (e) { return {}; }
+}
+
 function raucCli(command, args) {
     return new Promise(function (resolve, reject) {
         childProcess.execFile(command, args, { maxBuffer: 4 * 1024 * 1024 }, function (e, stdout, stderr) {
@@ -36,10 +46,14 @@ function raucCli(command, args) {
 
 // RAUC through its command line (the RAUC daemon underneath), as
 // updatesservice.js wants it. options: {command ("rauc"), osRelease (the
-// running system's version, "/etc/os-release")}.
+// running system's build, "/etc/os-release"), product (its name and
+// version, "/usr/share/phoenix/product.json"; os-release's NAME and
+// VERSION_ID without one: OSE's own on an image, so the product's is the
+// one Phoenix reports)}.
 function createRauc(options) {
     var command = (options && options.command) || "rauc";
     var osReleaseFile = options && options.osRelease;
+    var productPath = options && options.product;
     var raucApi = {
         status: function () {
             return raucCli(command, ["status", "--output-format=json"]).then(function (out) {
@@ -52,10 +66,10 @@ function createRauc(options) {
                         else other = name;
                     });
                 });
-                var os = osRelease(osReleaseFile);
+                var os = osRelease(osReleaseFile), product = productFile(productPath);
                 return {
-                    compatible: st.compatible, name: os.NAME || "webOS Phoenix", primary: primary, other: other,
-                    booted: { slot: booted, version: os.VERSION_ID || "", build: parseInt(os.BUILD_ID, 10) || 0 }
+                    compatible: st.compatible, name: product.name || os.NAME || "webOS Phoenix", primary: primary, other: other,
+                    booted: { slot: booted, version: product.version || os.VERSION_ID || "", build: parseInt(os.BUILD_ID, 10) || 0 }
                 };
             });
         },

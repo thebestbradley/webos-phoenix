@@ -244,6 +244,59 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         expect((await service.listInstalled()).apps).toEqual([]);
     });
 
+    it("reads an app's update log: What's New from the signed index, the history from the detail it signs, an update's notes", async () => {
+        const dev = await catalog.api("POST", "/api/accounts", { name: "Tess", email: "tess@example.com", role: "developer" });
+        const rebuild = { version: "2.0.0", date: "2026-10-12", rebuild: true, replaces: "Tasks 1.0 (webOS 3.0.5)",
+                          summary: "Tasks, rebuilt for webOS Phoenix.", new: ["Lists sync with your calendar accounts."] };
+        const minor = { version: "2.1.0", date: "2026-11-02", summary: "Reminders for tasks with a due time.",
+                        new: ["Set a reminder on any task with a due time."], fixed: ["A task moved to another list no longer shows in both."] };
+        const pkg = (version: string, versions: Any[]) => servers.webApp("com.example.tasks", version, { files: [{
+            path: "usr/palm/applications/com.example.tasks/changelog.json",
+            data: JSON.stringify({ format: 1, unreleased: { new: ["Subtasks under any task."] }, versions }) }] });
+        const publish = async (bytes: Uint8Array) => {
+            const up = await catalog.api("POST", "/api/apps/packages", bytes, dev.token);
+            expect(up.status).toBe(200);
+            await catalog.api("POST", `/api/admin/releases/${up.release.id}/approve`, {}, catalog.admin);
+        };
+        await publish(await pkg("2.0.0", [rebuild]));
+        const { service } = makeService(defaults());
+        await service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
+        const notes = (n: Any) => ({ improved: [], fixed: [], known: [], ...n });
+        const { rebuild: _r, replaces: _p, ...rebuildNotes } = rebuild;
+        const listed = (await service.browse({ section: "apps" })).apps.find((a: Any) => a.id === "com.example.tasks");
+        expect(listed.whatsNew).toEqual(notes(rebuildNotes));
+        expect(listed.versionHistory).toBeUndefined();
+        expect(listed.detail).toBeUndefined();
+        const app = (await service.getApp({ sourceId: "phoenix", id: "com.example.tasks" })).app;
+        expect(app.whatsNew).toEqual(notes(rebuildNotes));
+        expect(app.versionHistory).toEqual([notes(rebuild)]);
+        expect(JSON.stringify(app)).not.toContain("Subtasks");
+
+        // Installed, then an update: Installed Apps shows what the update brings.
+        await service.install({ sourceId: "phoenix", id: "com.example.tasks" });
+        await publish(await pkg("2.1.0", [minor, rebuild]));
+        await service.refresh({});
+        const mine = (await service.listInstalled()).apps.find((a: Any) => a.id === "com.example.tasks");
+        expect(mine).toMatchObject({ version: "2.0.0", update: "2.1.0", whatsNew: notes(minor) });
+        expect((await service.getApp({ sourceId: "phoenix", id: "com.example.tasks" })).app.versionHistory).toEqual([notes(minor), notes(rebuild)]);
+
+        // A detail that is not the one the index signed: no history, What's New as signed.
+        const idx = JSON.parse(fs.readFileSync(catalog.indexFile, "utf8"));
+        const detail = path.join(catalog.data, "public/v1/apps", path.basename(idx.apps.find((a: Any) => a.id === "com.example.tasks").detail.url));
+        const keep = fs.readFileSync(detail);
+        fs.writeFileSync(detail, keep.toString().replace("Set a reminder", "Pay to set a reminder"));
+        const other = makeService(defaults()).service;
+        await other.trustSource({ url: catalog.catalogUrl, key: catalog.key });
+        const forged = (await other.getApp({ sourceId: "phoenix", id: "com.example.tasks" })).app;
+        expect(forged.whatsNew).toEqual(notes(minor));
+        expect(forged.versionHistory).toBeUndefined();
+        fs.writeFileSync(detail, keep);
+
+        // An app without a log has neither.
+        const plain = (await service.browse({ section: "apps" })).apps.find((a: Any) => a.id === "com.example.notes");
+        expect(plain === undefined || (plain.whatsNew === undefined && plain.versionHistory === undefined)).toBe(true);
+    });
+
     it("installs a newer version of a built-in app in its place, and removing it brings the built-in one back", async () => {
         const dev = await catalog.api("POST", "/api/accounts", { name: "Cal", email: "cal@example.com", role: "developer" });
         for (const [id, v] of [["com.example.calc", "2.0.0"], ["com.example.clock", "1.0.0"]]) {

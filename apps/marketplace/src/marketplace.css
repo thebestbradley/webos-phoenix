@@ -117,3 +117,7 @@
 @media (max-width: 480px) {
     .mk-tabs button { flex: 1 1 auto; padding: 7px 3px; font-size: 13px; }
 }
+/* Installed Apps: an update and what it brings, between rules as the list's rows. */
+.mk-update { border-bottom: 1px solid silver; }
+.mk-update:last-child { border-bottom: 0; }
+.mk-update .pui-row { border-bottom: 0; }

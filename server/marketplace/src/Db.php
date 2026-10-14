@@ -82,6 +82,19 @@ final class Db
         } catch (\PDOException) {
             $this->pdo->exec("ALTER TABLE apps ADD COLUMN source VARCHAR(500) NOT NULL DEFAULT ''");
         }
+        // Update logs (docs/APP-STORE.md "Update logs") came later too: a release's
+        // changelog.json as the package carried it (JSON, without "unreleased"; NULL
+        // without one), and a hosted web app's upstream release notes page.
+        try {
+            $this->pdo->query('SELECT changelog FROM releases LIMIT 1');
+        } catch (\PDOException) {
+            $this->pdo->exec("ALTER TABLE releases ADD COLUMN changelog $text NULL");
+        }
+        try {
+            $this->pdo->query('SELECT release_notes_url FROM apps LIMIT 1');
+        } catch (\PDOException) {
+            $this->pdo->exec("ALTER TABLE apps ADD COLUMN release_notes_url VARCHAR(500) NOT NULL DEFAULT ''");
+        }
     }
 
     public function one(string $sql, array $args = []): ?array

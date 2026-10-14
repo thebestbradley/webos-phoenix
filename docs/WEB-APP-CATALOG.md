@@ -26,7 +26,10 @@ Three outcomes, by its licence and how it is distributed (docs/LEGAL.md
   names; the summary and description are ours. Each one is pinned in
   `server/marketplace/catalog/web-apps.json` (its download and SHA-256,
   checked again against upstream's own `SHA256SUMS.txt` where it publishes
-  one; its icon and licence files at the release's tag, each pinned), and
+  one; its icon and licence files at the release's tag, each pinned; its
+  `releaseNotesUrl`, the GitHub release of the pinned version, which the
+  app's page links as Release notes, as the package has no update log of
+  ours: APP-STORE.md 3.15), and
   `server/marketplace/bin/web-apps.py` fetches, checks, packs and publishes
   it ([server/marketplace/README.md](../server/marketplace/README.md)
   "Open-source web apps"). Nothing of it is in this repository.

@@ -57,6 +57,19 @@ Rootfs::Rootfs(const QString &repoDir)
     const QJsonObject mounts = cfg.value(QStringLiteral("mounts")).toObject();
     for (auto it = mounts.begin(); it != mounts.end(); ++it)
         m_mounts.append({ it.key(), QDir(repoDir).filePath(it.value().toString()) });
+    // The product (rootfs.json "product": product.json): the version the system
+    // reports and the release notes it ships, at their device paths. The notes are
+    // the file product.json names, so another product (2.0) names its own there.
+    const QString productFile = cfg.value(QStringLiteral("product")).toString();
+    if (!productFile.isEmpty()) {
+        const QString product = QDir(repoDir).filePath(productFile);
+        m_mounts.append({ QStringLiteral("/usr/share/phoenix/product.json"), product });
+        QFile pf(product);
+        const QString notes = pf.open(QIODevice::ReadOnly)
+            ? QJsonDocument::fromJson(pf.readAll()).object().value(QStringLiteral("releaseNotes")).toString() : QString();
+        if (!notes.isEmpty())
+            m_mounts.append({ QStringLiteral("/usr/share/phoenix/release-notes.json"), QFileInfo(product).dir().filePath(notes) });
+    }
     std::sort(m_mounts.begin(), m_mounts.end(), [](const auto &a, const auto &b) {
         return a.first.size() > b.first.size();
     });

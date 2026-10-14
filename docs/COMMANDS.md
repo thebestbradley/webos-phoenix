@@ -915,6 +915,12 @@ Every app-to-app launch:
 node tools/check-launch-contracts.cjs
 ```
 
+Docs/RELEASE-NOTES.md against the release notes:
+
+```sh
+python3 tools/release-notes-doc.py --check
+```
+
 ## Test: apps
 
 ### Typecheck and unit tests
@@ -2365,9 +2371,9 @@ python3 -I server/marketplace/bin/web-apps.py default-apps --from ../phoenix-def
 
 ### Update feed
 
-The catalog server also serves `/updates/`; alone, the feed runs on port 8089.
+The catalog server also serves `/updates/`; alone, the feed runs on port 8089. `--release-notes FILE` takes the release's notes from a release notes file (its entry for the version).
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/server/updates/README.md:28-30,46-50 · bin/serve.sh:9`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/server/updates/README.md:28-30,46-50 · bin/serve.sh:9 · bin/updates.php:20-33`
 
 ```sh
 UPDATES_FEED=server/marketplace/data/updates php server/updates/bin/updates.php simulator --version 0.2.0 --build 2 --note "What changed"
@@ -2493,6 +2499,12 @@ node tools/check-launch-contracts.cjs --write-doc
 
 ```sh
 python3 tools/make-feedback-sounds.py
+```
+
+Docs/RELEASE-NOTES.md from the release notes product.json names:
+
+```sh
+python3 tools/release-notes-doc.py
 ```
 
 ### Convert assistant models

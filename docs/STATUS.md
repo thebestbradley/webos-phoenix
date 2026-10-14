@@ -46,6 +46,11 @@ in the documents linked from each item.
   SF2, SF5); Open in New Card in Messaging and Email; the Assistant listening
   on after "Hey Phoenix" and Answer aloud when you type / when you speak;
   Synergy C0 (Connections in the Marketplace).
+- 14 October 2026: update logs. Each rebuilt app's `changelog.json` and
+  the system's `release-notes.json` (the version in `product.json`), checked
+  by the catalog and shown in the Marketplace (What's New, Version History,
+  each update's notes), Settings > Updates and Device Info
+  ([APP-STORE.md 3.15](APP-STORE.md#315-update-logs), [RELEASE-NOTES.md](RELEASE-NOTES.md)).
 - In progress (10 October 2026): Synergy C1-C2 (the connector kit and the
   Fediverse account), and the device side of the gaps (the device window
   source, its system status, the WAV sounds, the lock service, the

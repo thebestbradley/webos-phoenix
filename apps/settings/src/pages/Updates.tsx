@@ -11,12 +11,19 @@
 // Launch params {page: "updates"}; luna-systemui's update alerts open
 // com.palm.app.updates, which is this page, with {installNow: true} after
 // "Install now".
+//
+// Release notes (docs/APP-STORE.md "Update logs"): an available update's
+// own (the feed's releaseNotes, else its lines) before Download and Install,
+// "What's New in This Version" for the running system (status.current's),
+// and its Version History (ReleaseNotes.tsx).
 
 import { useEffect, useRef, useState } from "react";
 import { systemUpdates, updateErrorCode, type UpdateChannel, type UpdateStatus } from "@phoenix/luna";
 import { useLaunchParams, useLuna } from "@phoenix/luna/react";
-import { Button, ErrorText, Group, ListSelector, Note, Page, PageHeader, Row, Spinner, ToggleButton } from "@phoenix/ui";
+import { Button, ErrorText, Group, ListSelector, Note, Page, PageHeader, ReleaseNotes, Row, Spinner, ToggleButton } from "@phoenix/ui";
+import { useBack } from "../nav";
 import { errorText, size, when } from "./Backup";
+import { SystemReleaseNotes } from "./ReleaseNotes";
 
 const CHANNEL_LABELS: Record<string, string> = { stable: "Stable", beta: "Beta", dev: "Development" };
 
@@ -24,7 +31,9 @@ export function UpdatesPage() {
     const status = useLuna<UpdateStatus>((cb, err) => systemUpdates.watchStatus(cb, err), []).value;
     const params = useLaunchParams<{ installNow?: boolean }>();
     const [error, setError] = useState<string | null>(null);
+    const [history, setHistory] = useState(false);
     const asked = useRef(false);
+    useBack(() => { setHistory(false); return true; }, history);
 
     async function run(fn: () => Promise<unknown>) {
         setError(null);
@@ -45,6 +54,7 @@ export function UpdatesPage() {
     }, [params.installNow, status?.state]);
 
     if (!status) return <Page><PageHeader title="Updates" icon="icons/updates.png" /><Row title="Loading…"><Spinner /></Row></Page>;
+    if (history) return <SystemReleaseNotes name={status.current.name} />;
     const rel = status.available;
     const busy = status.state === "checking" || status.state === "downloading" || status.state === "preparing" || status.state === "restarting";
 
@@ -68,11 +78,13 @@ export function UpdatesPage() {
                 {rel && status.state !== "restarting" && (
                     <>
                         <Row title="Size" value={size(rel.size)} />
-                        {rel.notes.length > 0 && (
-                            <ul className="update-notes" data-testid="update-notes">
-                                {rel.notes.map((n) => <li key={n}>{n}</li>)}
-                            </ul>
-                        )}
+                        {/* What the update brings: its notes, else the feed's lines (an older feed). */}
+                        {rel.releaseNotes ? <ReleaseNotes notes={rel.releaseNotes} testId="update-release-notes" />
+                            : rel.notes.length > 0 && (
+                                <ul className="update-notes" data-testid="update-notes">
+                                    {rel.notes.map((n) => <li key={n}>{n}</li>)}
+                                </ul>
+                            )}
                     </>
                 )}
                 {status.state === "idle" && !rel && status.rollout?.waiting && (
@@ -110,6 +122,13 @@ export function UpdatesPage() {
                 <Row title="Last checked" value={status.state === "checking" ? "Now" : when(status.lastChecked)} testId="update-last-checked" />
             </Group>
             {(error || status.error) && <ErrorText testId="update-error">{error ?? status.error?.errorText}</ErrorText>}
+
+            {status.current.releaseNotes && (
+                <Group label="What's New in This Version">
+                    <ReleaseNotes notes={status.current.releaseNotes} testId="update-whats-new" />
+                    <Row title="Version History" chevron testId="update-history" onClick={() => setHistory(true)} />
+                </Group>
+            )}
 
             <Group label="Settings">
                 <Row title="Download updates automatically" subtitle="Over Wi-Fi">
