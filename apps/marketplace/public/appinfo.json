@@ -20,6 +20,7 @@
     "requiredPermissions": ["phoenix.appservices.accounts", 
         "application.launcher",
         "application.operation",
-        "marketplace.management"
+        "marketplace.management",
+        "systemmanager.query"
     ]
 }
