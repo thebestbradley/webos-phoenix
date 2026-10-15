@@ -240,6 +240,26 @@ if [ "$WATCH" = 1 ]; then
 fi
 
 mkdir -p "$DATA"
+# One setup at a time per catalog: two simulators starting it together
+# would set one database up twice at once (two signing keys; the curated
+# apps looked for, then inserted, by both: "UNIQUE constraint failed" for
+# one, which then fails). The second waits for the first, then finds it set
+# up. A lock whose setup was killed before it could remove it is taken over.
+SETUP_LOCK="$DATA/setup.lock"
+waiting=0
+while ! mkdir "$SETUP_LOCK" 2>/dev/null; do
+    owner=$(cat "$SETUP_LOCK/pid" 2>/dev/null || true)
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+        rm -rf "$SETUP_LOCK"
+        continue
+    fi
+    [ "$waiting" = 1 ] || echo "Waiting for the setup that runs (process ${owner:-?}) to finish"
+    waiting=1
+    sleep 0.1
+done
+echo $$ > "$SETUP_LOCK/pid"
+trap 'rm -rf "$SETUP_LOCK"' EXIT
+trap 'exit 143' HUP INT TERM
 # The first start after the catalog moved out of the checkouts: this
 # checkout's catalog, its key and everything it published, so devices that
 # trusted it go on trusting it.
@@ -306,6 +326,9 @@ if [ "$MARKETPLACE_DEV" = 1 ]; then
     fi
 fi
 echo "Phoenix Marketplace at http://127.0.0.1:$PORT/ (catalog: /v1/, admin: /admin), from $DATA"
+# Set up: the next setup may run.
+rm -rf "$SETUP_LOCK"
+trap - EXIT HUP INT TERM
 if [ -n "$PHOENIX_SIM_INSTANCES" ]; then
     # Started by a simulator: the server goes on by itself, under its watch,
     # while any simulator runs; this returns. Not for a simulator gone
