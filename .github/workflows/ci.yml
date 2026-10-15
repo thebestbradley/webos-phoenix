@@ -47,7 +47,11 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             libgl-dev libegl-dev libxkbcommon-dev libxcb-cursor0 libnss3 libxkbfile1 \
             xvfb xauth libgl1-mesa-dri fonts-dejavu-core \
-            pkg-config libglib2.0-dev openssh-server
+            pkg-config libglib2.0-dev openssh-server \
+            xdotool imagemagick
+          # xdotool and ImageMagick's import: tools/test-useragent-sim.cjs finds
+          # the simulator's window, resizes it (the live phone-to-tablet switch)
+          # and saves its screenshots with them.
 
       - uses: actions/setup-node@v4
         with:

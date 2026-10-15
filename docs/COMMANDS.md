@@ -357,7 +357,7 @@ cmake --build build --parallel
 
 CMake switches: `PHOENIX_BUILD_SIM`, `PHOENIX_BUILD_KEYBOARD` and `PHOENIX_BUILD_APPS`, all on by default.
 
-Run in `webos-phoenix` · Mac · Source: `webos-phoenix/shell/CMakeLists.txt:11,51,166 · .github/workflows/ci.yml:162`
+Run in `webos-phoenix` · Mac · Source: `webos-phoenix/shell/CMakeLists.txt:11,51,166 · .github/workflows/ci.yml:166`
 
 ```sh
 cmake -S shell -B build -DCMAKE_BUILD_TYPE=Release -DPHOENIX_BUILD_APPS=OFF -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
@@ -711,7 +711,7 @@ export QMLTEST=/opt/Qt/6.11.3/gcc_64/bin/qmltestrunner
 
 ### Run the QML tests
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:186,561-571 · README.md:466`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:190,565-575 · README.md:466`
 
 **Mac:** All of them, as CI runs them on the Mac (offscreen Metal stalls animations):
 
@@ -747,7 +747,7 @@ QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen "$QMLTEST" -import shell/qml -import
 
 There's nothing for `ctest` to find: run each test program by name after a build.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:191-274,609-623 · shell/CMakeLists.txt:69-75,127-197`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:195-278,613-627 · shell/CMakeLists.txt:69-75,127-197`
 
 ```sh
 build/pty/pty-test
@@ -861,7 +861,7 @@ Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:33-38,75
 
 ### Python, shell and PHP tests
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:78,81,106-110,222 · tools/test-make-utm.py:10-11`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:82,85,110-114,226 · tools/test-make-utm.py:10-11`
 
 ```sh
 sh tools/test-phoenix-script.sh
@@ -917,7 +917,7 @@ php server/drivers/tests/run.php
 
 `hidpi-art.py` needs Pillow and NumPy (on a Mac, from `.venv`); `make-feedback-sounds.py` needs ffmpeg.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:93 · .github/workflows/ci.yml:265-288`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:93 · .github/workflows/ci.yml:269-292`
 
 Whenever art or stylesheets change:
 
@@ -1545,7 +1545,7 @@ npm run dev -w settings
 
 Separate npm projects, in `apps/enact-notes-limestone` and `apps/enact-notes-agate`.
 
-Run in `webos-phoenix/apps/enact-notes-limestone` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:120`
+Run in `webos-phoenix/apps/enact-notes-limestone` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:124`
 
 ```sh
 npm ci --no-audit --no-fund && npm run typecheck && npm run build
@@ -1561,7 +1561,7 @@ npm run serve
 
 Needs Flutter.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:135-145 · apps/flutter-notes/README.md:55-58`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:139-149 · apps/flutter-notes/README.md:55-58`
 
 ```sh
 (cd apps/shared/phoenix_services && dart pub get && dart analyze --fatal-infos && dart test)
