@@ -236,6 +236,7 @@ phoenix check --no-assistant
 check "a build on an older Qt moves to the simulator's" '[ $status = 0 ]' \
     'has "note     Qt 6.8.1 ($T/qtprefix/6.8.1/gcc_64) is older than the simulator.s 6.11.3"' \
     'has "install  Qt 6.11.3 into $T/qtprefix (aqtinstall)"' 'has "would run: rm -f $BUILD/CMakeCache.txt"' \
+    'has "would run: find $BUILD -type d -name \*_autogen -prune -exec rm -rf {} +"' \
     'has "would run: cmake -S .* -G Ninja -DCMAKE_BUILD_TYPE=Release -DPHOENIX_BUILD_APPS=OFF  *-DCMAKE_PREFIX_PATH=$T/qtprefix/6.11.3/gcc_64"'
 phoenix check --no-assistant --offline
 check "... offline: built with the older one, and says so" '[ $status = 0 ]' \

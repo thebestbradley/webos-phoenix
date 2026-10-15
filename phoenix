@@ -706,6 +706,14 @@ build() {
         type=$(sed -n 's/^CMAKE_BUILD_TYPE:STRING=//p' "$cache")
         switches=$(sed -n 's/^\(PHOENIX_[A-Z_]*\):BOOL=\([A-Za-z0-9]*\)$/-D\1=\2/p' "$cache" | tr '\n' ' ')
         run rm -f "$cache"
+        # And AUTOGEN's moc output: Ninja runs the moc again only when its
+        # stamp is missing or older than its inputs, and neither shows the
+        # switch (its command, cmake -E cmake_autogen <info>, is the same;
+        # the new Qt's moc was installed before the last build), so the old
+        # Qt's moc files would stay and the new Qt's headers refuse them
+        # ("This file was generated using the moc from 6.8.1"). Without the
+        # stamps the moc runs, sees its settings changed and makes them all.
+        run find "$BUILD_DIR" -type d -name '*_autogen' -prune -exec rm -rf {} +
         # shellcheck disable=SC2086
         run cmake -S "$REPO_DIR/shell" -B "$BUILD_DIR" ${gen:+-G "$gen"} -DCMAKE_BUILD_TYPE="${type:-RelWithDebInfo}" $switches -DCMAKE_PREFIX_PATH="$QT_DIR"
     else
