@@ -209,7 +209,11 @@ if [ "$WATCH" = 1 ]; then
     trap '' HUP INT
     PHOENIX_CATALOG_SERVING=$$ php -S "127.0.0.1:$PORT" public/router.php </dev/null &
     PHP=$!
-    trap 'stop_php; unclaim; echo "Catalog watch $$: stopped (asked to)"; exit 0' TERM
+    # However this ends (asked to, no simulator left, a stop from a menu, a
+    # command that failed under set -e), PHP's server ends with it: it is
+    # never left serving with nothing to stop it.
+    trap 'stop_php; unclaim' EXIT
+    trap 'echo "Catalog watch $$: stopped (asked to)"; exit 0' TERM
     claim_when_serving
     echo "Catalog watch $$: serving 127.0.0.1:$PORT (PHP's server: process $PHP)"
     fill </dev/null &
@@ -217,13 +221,17 @@ if [ "$WATCH" = 1 ]; then
     idle=0
     while kill -0 "$PHP" 2>/dev/null; do
         sleep 1
+        # The catalog's folder deleted (a test's or a simulator's own HOME
+        # removed while it ran): nothing left to serve.
+        if [ ! -d "$DATA" ]; then
+            echo "Catalog watch $$: its folder is gone ($DATA): the catalog stops"
+            exit 0
+        fi
         # Stopped from a simulator's menu (shell/sim/simmarketplace.cpp,
         # stop): for every simulator, whichever watch serves it (one the
         # simulator could not reach, whose server.json another removed,
         # stops all the same).
         if [ -f "$DATA/server.stopped" ]; then
-            stop_php
-            unclaim
             echo "Catalog watch $$: stopped from a simulator's menu"
             exit 0
         fi
@@ -234,8 +242,6 @@ if [ "$WATCH" = 1 ]; then
         else
             idle=$((idle + 1))
             if [ "$idle" -ge "$GRACE" ]; then
-                stop_php
-                unclaim
                 echo "No simulator is running any more: the catalog stops"
                 exit 0
             fi
@@ -243,7 +249,6 @@ if [ "$WATCH" = 1 ]; then
     done
     code=0
     wait "$PHP" || code=$?
-    unclaim
     echo "PHP's server stopped (exit code $code)"
     exit "$code"
 fi
@@ -360,9 +365,9 @@ fi
 fill </dev/null &
 PHOENIX_CATALOG_SERVING=$$ php -S "127.0.0.1:$PORT" public/router.php </dev/null &
 PHP=$!
-trap 'stop_php; unclaim; exit 0' INT TERM HUP
+trap 'stop_php; unclaim' EXIT
+trap 'exit 0' INT TERM HUP
 claim_when_serving
 code=0
 wait "$PHP" || code=$?
-unclaim
 exit "$code"
