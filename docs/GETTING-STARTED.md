@@ -365,6 +365,8 @@ script put in `.venv` before the DAV and backup tests:
 
 | What | Command |
 | --- | --- |
+| The quick checks CI runs first (generated docs and art, lockfiles, the tool and PHP tests, typecheck, unit tests; no build, about 5 minutes) | `./phoenix test --quick` (`--list` names them; `./phoenix test --quick typecheck` runs one) |
+| Every web app test in headless Chromium, as CI runs them (build the apps first) | `./phoenix test --web` (`--shard 2/4`: CI's second shard; `settings`: one test file's) |
 | Shell behaviour tests (QML) | `QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -input shell/tests` |
 | One QML test file | the same with `-input shell/tests/tst_launcher.qml` |
 | Web apps: typecheck and unit tests | `cd apps && npm run typecheck && npx vitest run` |
@@ -378,8 +380,12 @@ script put in `.venv` before the DAV and backup tests:
 `./phoenix`) `/opt/Qt/6.11.3/gcc_64/bin/qmltestrunner`. CI also runs them on
 the device's Qt 6.8.1 (its `qt-6-8` job), where the QML must keep working.
 
-CI runs all of this on every push (`.github/workflows/ci.yml`); what passes
-there should pass locally, and the reverse.
+CI runs all of this on every push (`.github/workflows/ci.yml`), on Linux as
+jobs side by side: the quick checks (a slip shows within about 6 minutes),
+the apps' build, the QML tests, the web tests in four shards
+(`tools/web-tests.txt` lists them), and the simulator's C++ tests and runs;
+its `test` check passes when all of them have. What passes there should pass
+locally, and the reverse.
 
 ## Deploying to devices
 

@@ -92,6 +92,12 @@ Run what covers the change before committing; CI runs all of it.
   README lists them; `test-apps.cjs` covers every app).
 - Art: `python3 tools/hidpi-art.py --check` whenever art or stylesheets change; every
   picture needs exact @2x/@3x variants listed in `tools/hidpi-art.json`.
+- Quick checks: `./phoenix test --quick` (`tools/ci-checks.sh`, CI's first job): everything
+  checked without a build (generated docs and art, lockfiles, the tool, PHP and `./phoenix`
+  tests, typecheck, vitest) in about 5 minutes; `--list` names them, an ID runs one.
+- Every web test, as CI shards them: `./phoenix test --web [--shard I/N] [NAME...]`
+  (`tools/run-web-tests.cjs`). A new `tools/test-*.cjs` goes in `tools/web-tests.txt`, the
+  list CI runs; a new quick check goes in `tools/ci-checks.sh`.
 
 ## Rules
 
