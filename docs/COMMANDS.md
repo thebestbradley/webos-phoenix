@@ -357,7 +357,7 @@ cmake --build build --parallel
 
 CMake switches: `PHOENIX_BUILD_SIM`, `PHOENIX_BUILD_KEYBOARD` and `PHOENIX_BUILD_APPS`, all on by default.
 
-Run in `webos-phoenix` · Mac · Source: `webos-phoenix/shell/CMakeLists.txt:11,49,164 · .github/workflows/ci.yml:156`
+Run in `webos-phoenix` · Mac · Source: `webos-phoenix/shell/CMakeLists.txt:11,49,164 · .github/workflows/ci.yml:157`
 
 ```sh
 cmake -S shell -B build -DCMAKE_BUILD_TYPE=Release -DPHOENIX_BUILD_APPS=OFF -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
@@ -711,7 +711,7 @@ export QMLTEST=/opt/Qt/6.8.1/gcc_64/bin/qmltestrunner
 
 ### Run the QML tests
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:180,487-497 · README.md:465`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:181,488-498 · README.md:465`
 
 **Mac:** All of them, as CI runs them on the Mac (offscreen Metal stalls animations):
 
@@ -747,7 +747,7 @@ QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen "$QMLTEST" -import shell/qml -import
 
 There's nothing for `ctest` to find: run each test program by name after a build.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:185-264,535-548 · shell/CMakeLists.txt:67-73,125-192`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:186-265,536-549 · shell/CMakeLists.txt:67-73,125-192`
 
 ```sh
 build/pty/pty-test
@@ -855,7 +855,7 @@ Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:33-38,74
 
 ### Python, shell and PHP tests
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:73,76,101-104,216 · tools/test-make-utm.py:10-11`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:73,76,101-105,217 · tools/test-make-utm.py:10-11`
 
 ```sh
 sh tools/test-phoenix-script.sh
@@ -871,6 +871,10 @@ python3 tools/test-device-firmware.py
 
 ```sh
 python3 tools/test-device-profiles.py
+```
+
+```sh
+python3 tools/test-wam-user-agent.py
 ```
 
 ```sh
@@ -907,7 +911,7 @@ php server/drivers/tests/run.php
 
 `hidpi-art.py` needs Pillow and NumPy (on a Mac, from `.venv`); `make-feedback-sounds.py` needs ffmpeg.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:86 · .github/workflows/ci.yml:255-278`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:86 · .github/workflows/ci.yml:256-279`
 
 Whenever art or stylesheets change:
 
@@ -1529,7 +1533,7 @@ npm run dev -w settings
 
 Separate npm projects, in `apps/enact-notes-limestone` and `apps/enact-notes-agate`.
 
-Run in `webos-phoenix/apps/enact-notes-limestone` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:114`
+Run in `webos-phoenix/apps/enact-notes-limestone` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:115`
 
 ```sh
 npm ci --no-audit --no-fund && npm run typecheck && npm run build
@@ -1545,7 +1549,7 @@ npm run serve
 
 Needs Flutter.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:129-139 · apps/flutter-notes/README.md:55-58`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:130-140 · apps/flutter-notes/README.md:55-58`
 
 ```sh
 (cd apps/shared/phoenix_services && dart pub get && dart analyze --fatal-infos && dart test)
@@ -2135,11 +2139,31 @@ in `build-webos-phoenix`: One machine:
 MACHINE=fairphone-fp6 bitbake webos-phoenix-image
 ```
 
+### Build an image on LuneOS's layers
+
+Where device images are moving: Yocto wrynose, Qt 6.12, Chromium 151 (docs/DECISIONS.md, 15 October 2026). The layers' pins are in `scripts/luneos-layers.txt`; `PHOENIX_LUNEOS_COMMAND=configure` only writes the configuration; your own settings go in `phoenix-local.conf` in the build directory.
+
+Run in `webos-phoenix` · Linux · Source: `webos-phoenix/scripts/setup-build-luneos.sh:10-31 · docs/HARDWARE.md, "The web runtime: Chromium 151 on LuneOS's layers"`
+
+```sh
+scripts/setup-build-luneos.sh ../build-phoenix-luneos qemux86-64 fairphone-fp6
+```
+
+```sh
+cd ../build-phoenix-luneos && . ./setup-env && bitbake webos-phoenix-image
+```
+
+in `build-phoenix-luneos`: One machine:
+
+```sh
+MACHINE=fairphone-fp6 bitbake webos-phoenix-image
+```
+
 ### Parse check
 
-About 12 minutes per machine, not as root. `PHOENIX_PARSE_DIR`, `PHOENIX_PARSE_TARGET` and `PHOENIX_PARSE_COMPRESS` adjust it.
+About 12 minutes per machine, not as root. `PHOENIX_PARSE_STACK` (`ose` or `luneos`), `PHOENIX_PARSE_DIR`, `PHOENIX_PARSE_TARGET` and `PHOENIX_PARSE_COMPRESS` adjust it.
 
-Run in `webos-phoenix` · Linux · Source: `webos-phoenix/scripts/parse-check.sh:8,22-36 · docs/HARDWARE.md:1672-1683`
+Run in `webos-phoenix` · Linux · Source: `webos-phoenix/scripts/parse-check.sh:8,22-39 · docs/HARDWARE.md, "Build"`
 
 ```sh
 sudo apt-get install -y --no-install-recommends gawk diffstat chrpath cpio zstd lz4
@@ -2151,6 +2175,12 @@ scripts/parse-check.sh
 
 ```sh
 scripts/parse-check.sh fairphone-fp6 phoenix-vm-arm64
+```
+
+On LuneOS's layers:
+
+```sh
+PHOENIX_PARSE_STACK=luneos scripts/parse-check.sh qemux86-64
 ```
 
 When you are root:

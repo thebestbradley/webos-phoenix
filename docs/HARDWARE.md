@@ -60,7 +60,7 @@ announced), so the next one is a natural target when it exists.
   checked against each tree.
 - **Boot artefacts:** `phoenix-bootimg` (an Android boot image, header v2,
   made by AOSP's `mkbootimg`, `recipes-devtools/mkbootimg`, Apache-2.0,
-  tag `android-16.0.0_r1`) for the Fairphone; `wic/phoenix-extlinux.wks.in`
+  tag `android-16.0.0_r1`) for the Fairphone; `files/wic/phoenix-extlinux.wks.in`
   (GPT: a FAT boot partition with the kernel, the device trees and the
   machine's `extlinux.conf`, then the ext4 root, found by
   `root=PARTLABEL=phoenix-root` without an initramfs) for the others.
@@ -1012,15 +1012,20 @@ only. Sources: [system requirements](https://www.webosose.org/docs/guides/setup/
 [2.28.0 release](https://www.webosose.org/blog/2025/03/27/webos-ose-2-28-0-release/),
 [build-webos releases](https://github.com/webosose/build-webos/releases).
 
-**Risk: OSE has been quiet for 18 months.** There has been no release, blog
-post or build-webos commit since March 2025. Scarthgap is supported until
-April 2028, so we have time, but LuneOS has already moved its layers to
-Yocto 6.0 "wrynose" (May 2026, supported to April 2030,
+**Decided (15 October 2026): device images leave `build-webos`.** OSE has
+been quiet for 18 months (no release, blog post or build-webos commit
+since March 2025), and its web runtime, Chromium 120, is 35 versions
+behind Chrome. This was the largest open question in this plan: stay on
+`build-webos`, or build on LuneOS's layer stack, which moved to Yocto 6.0
+"wrynose" (May 2026, supported to April 2030,
 [announcement](https://www.yoctoproject.org/blog/2026/05/13/yocto-project-6-0-wrynose-is-here/))
-with OSE 2.28 components rebased on top. If OSE does not move by the time
-M3 starts, we should decide whether to build device images on LuneOS's
-layer stack (`meta-webos-ports`) instead of `build-webos`. This is the
-single largest open question in this plan.
+with OSE 2.28's components rebased on top and its own port of the web
+runtime to Chromium 151. The owner chose the newest web engine for
+devices, so device images move to LuneOS's layers, `qemux86-64` and the
+Raspberry Pi 4 included ([DECISIONS.md](DECISIONS.md#15-october-2026-the-newest-web-engine-on-every-system)).
+The plan, step by step: [The web runtime: Chromium 151 on LuneOS's layers](#the-web-runtime-chromium-151-on-luneoss-layers).
+Until each machine builds there, `scripts/setup-build.sh` and the OSE parse
+jobs stay.
 
 ### (b) Mainline Linux phones and tablets
 
@@ -1659,15 +1664,20 @@ Verizon Pixels) cannot be unlocked and are out.
 
 ## Build
 
-- **Layers:** `meta-phoenix` on OSE's `build-webos`, plus per-family BSP
-  layers:
-  - [`meta-raspberrypi`](https://github.com/agherzan/meta-raspberrypi) (already in OSE)
+- **Layers:** `meta-phoenix` on LuneOS's layer stack (wrynose,
+  `scripts/setup-build-luneos.sh`, pins in `scripts/luneos-layers.txt`;
+  decided 15 October 2026, [below](#the-web-runtime-chromium-151-on-luneoss-layers)),
+  and on OSE's `build-webos` (scarthgap, `scripts/setup-build.sh`) until
+  every machine builds on the new stack; plus per-family BSP layers:
+  - [`meta-raspberrypi`](https://github.com/agherzan/meta-raspberrypi) (in both stacks; LuneOS adds `meta-rpi-luneos`)
   - [`meta-pine64-luneos`](https://github.com/webOS-ports/meta-pine64-luneos) (PinePhone, PinePhone Pro, PineTab2; has a scarthgap branch) and [`meta-pine64`](https://github.com/alistair23/meta-pine64) (PineTab2 and boards; now declares styhead to wrynose only)
   - [`meta-qcom`](https://github.com/qualcomm-linux/meta-qcom) for Qualcomm firmware and tooling, with SDM845/SM7225/QCM6490 kernels taken from the postmarketOS device packages. **Not used for the first targets** (11 October 2026): the Fairphone 6 and Odin 2 Portal need only a kernel recipe, `mkbootimg` and the phone's own firmware, which meta-phoenix carries itself ([First targets](#first-targets))
   - [`meta-smartphone`](https://github.com/shr-distribution/meta-smartphone) (`meta-android` for Halium, and vendor layers `meta-google`, `meta-xiaomi`, `meta-blackberry`, ...) and LuneOS's `meta-luneos` recipes for libhybris, ofono-binder-plugin, droidmedia, gst-droid, pulseaudio-modules-droid
-- **Layer series:** OSE is scarthgap; several of these layers have moved to
-  wrynose. Pin scarthgap branches where they exist, and carry backports in a
-  `meta-phoenix-bsp` layer where they do not.
+- **Layer series:** wrynose, LuneOS's and these BSP layers' current
+  branches. `meta-phoenix` declares both scarthgap and wrynose while the
+  OSE path lasts; what only one stack has goes in
+  `meta-phoenix/dynamic-layers/<collection>/` (`BBFILES_DYNAMIC`), so neither
+  stack sees an append without its recipe.
 - **Build host:** x86-64 only, as today (see [BUILDING-MAC.md](BUILDING-MAC.md)).
 - **Parse check, no build host needed:** `scripts/parse-check.sh [MACHINE...]`
   (default `qemux86-64 raspberrypi4-64`) sets up `build-webos` at the pinned
@@ -1688,7 +1698,173 @@ Verizon Pixels) cannot be unlocked and are out.
   `sysctl kernel.apparmor_restrict_unprivileged_userns=0` on its throwaway
   runner, as the Yocto manual suggests. **To harden later:** an AppArmor
   profile that grants `userns` to BitBake alone, and the same for build hosts
-  that aren't throwaway.
+  that aren't throwaway. `PHOENIX_PARSE_STACK=luneos` does the same on
+  LuneOS's layers (`scripts/setup-build-luneos.sh`; build directory
+  `${TMPDIR:-/tmp}/webos-phoenix-parse-luneos`): about 200 MB of layers, and
+  about 350 MB of bitbake caches and logs per machine.
+
+### The web runtime: Chromium 151 on LuneOS's layers
+
+Decided 15 October 2026 ([DECISIONS.md](DECISIONS.md#15-october-2026-the-newest-web-engine-on-every-system)):
+devices get the newest web runtime there is, so device images move from
+OSE's `build-webos` to the layer stack LuneOS builds on, with `meta-phoenix`
+on top. Researched the same day from the sources (meta-webos-ports
+`ec5e878`, webos-ports-setup `4cdfad0`, WebOS-ports' wam `2e6fcb6`,
+`webos-ports/chromium151` `cacb244`; meta-webosose `d7ed46c`, webosose/wam
+`a486711`).
+
+| | OSE's `build-webos` (until now) | LuneOS's layers (from now) |
+| --- | --- | --- |
+| Set up by | `scripts/setup-build.sh` | `scripts/setup-build-luneos.sh`, pins in `scripts/luneos-layers.txt` |
+| Yocto | 5.0 scarthgap, supported to April 2028 | 6.0 wrynose, supported to April 2030 |
+| Web runtime | Chromium 120 (`webosose/chromium120`) | Chromium 151.0.7922.108 (`webos-ports/chromium151`: Chromium, then LG's neva port forward-ported from 120, meta-browser's OE fixes, LuneOS's patches) |
+| Its toolchain | meta-clang LLVM 18.1.6, Rust 1.75.0 | oe-core's LLVM 22.1.8, Rust 1.94.1, Node 24 |
+| Qt | 6.8.1 | 6.12.0 |
+| Mesa | 24.0.7 | 26.0.5 (Adreno gen 8: the Fairphone 6, OPEN-QUESTIONS Q82) |
+| OSE components | 2.28 | 2.28, rebased and patched by LuneOS (luna-surfacemanager, WAM, SAM, ...) |
+| Last change | 27 March 2025 (v2.28.0) | 13 October 2026 |
+
+**Why not the runtime alone, on scarthgap.** `webruntime-clang_151.bb`
+builds with oe-core's `clang-native`, `lld-native`, `compiler-rt` (whose
+per-triple layout it relies on), `rust-native` and `libstd-rs`,
+`bindgen-cli-native` and meta-luneos's `nodejs24-native`
+(`chromium-host-llvm.inc:21`, `webruntime-clang_151.bb:42, 66-85`,
+`webruntime-repo_151.inc:109-114`); Rust is required by Chromium 151.
+Scarthgap has none of these at the versions needed (no clang in oe-core;
+OSE takes LLVM 18 from meta-clang; Rust 1.75). Backporting that toolchain
+and keeping a Chromium port building on it is the work LuneOS has done on
+wrynose.
+
+**The layers** (`scripts/luneos-layers.txt`): webos-ports-setup's
+`conf/layers.txt` (wrynose) with the layers it tracks at HEAD pinned to
+the commits read on 15 October 2026: bitbake 2.18, openembedded-core and
+meta-openembedded wrynose, meta-qt6 6.12 (`7d6c5a2`, as LuneOS pins it),
+meta-webos-ports (`meta-luneos`, `meta-luneui`, the backports and
+holdbacks layers), meta-smartphone's `meta-android` and
+`meta-qualcomm-modems` (meta-luneos depends on both), meta-raspberrypi and
+meta-rpi-luneos. Not meta-pine64-luneos (its `pinephonepro` and `pinetab2`
+machines would shadow meta-phoenix's own; it also needs meta-arm and
+meta-rockchip), meta-mecha-luneos, or meta-smartphone's vendor layers.
+The distro is LuneOS's `luneos`; the image is `webos-phoenix-image`, which
+on this stack takes `luneos-image.inc` without its `luneos-extended`
+feature (luna-next-cardshell, the LuneOS apps, Preware).
+
+**Done (15 October 2026, branch `wp/device-web-runtime`):**
+
+1. `scripts/setup-build-luneos.sh [BUILD_DIR] [MACHINE...]`: clones the
+   pinned layers without history (only the sub-directories that are
+   layers), adds `meta-phoenix`, writes `conf/bblayers.conf`,
+   `conf/local.conf` (your own settings go in `phoenix-local.conf`) and a
+   `setup-env`. Our own script (Apache-2.0); webos-ports-setup's Makefile
+   (GPL-2.0-or-later) is not used, only the list of layers.
+2. `meta-phoenix` on both stacks: `LAYERSERIES_COMPAT` scarthgap and
+   wrynose; `LAYERDEPENDS` on `meta-webos` or `meta-luneos`, whichever the
+   build has; `dynamic-layers/meta-luneos/` for appends to LuneOS's own
+   recipes; the image's base per stack; the wic files moved from `wic/` to
+   `files/wic/` (wrynose's sanity check refuses a layer's `wic/`,
+   `sanity.bbclass:843-847`) and named by full path, which both stacks'
+   wic find; `phoenix-tdjson`'s `S = "${UNPACKDIR}"` (wrynose refuses
+   `S = "${WORKDIR}"` while parsing, `insane.bbclass:1563-1564`); LuneOS's
+   Mojo framework (`LICENSE = "CLOSED"`) left out of the image.
+3. The user agent, on both stacks (the same policy as the simulator's;
+   [APP-RUNTIME.md](APP-RUNTIME.md#the-user-agent)): `phoenix-wam-conf`
+   (`/etc/wam/plugins/conf.sh`, computed at each WebAppMgr start), a WAM
+   patch and start-line edit (`recipes-webos/wam`), and on LuneOS's
+   layers a neva patch so the client hints agree
+   (`dynamic-layers/meta-luneos/recipes-webos-ose/chromium`).
+   `tools/test-wam-user-agent.py` tests the script and the start line.
+4. `scripts/parse-check.sh` with `PHOENIX_PARSE_STACK=luneos`, and the CI
+   job `parse-luneos` (`.github/workflows/parse.yml`) for every machine,
+   allowed to fail until it passes; the OSE jobs still decide.
+
+**Checked (15 October 2026).** On LuneOS's layers,
+`PHOENIX_PARSE_STACK=luneos scripts/parse-check.sh qemux86-64` passes:
+every recipe parses and `webos-phoenix-image` (with `torchd`,
+`whisper-cpp` and `phoenix-driver-feed`) resolves, 9764 tasks, without an
+error or a warning. `bitbake-layers show-appends` shows meta-phoenix's
+appends applied there (`wam-clang`, `webruntime-clang_151`,
+`packagegroup-webos-extended`, `imemanager`, `maliit-framework-webos`),
+`bitbake -e` the patch in WAM's `SRC_URI` and the image's features
+without `luneos-extended`; the task graph has no cardshell, LuneOS app,
+Preware or Mojo. It has LuneOS's Atlas browser and its Open webOS
+packages (step 3 below). Two things only wrynose refused, both fixed: the
+layer's `wic/` directory and `phoenix-tdjson`'s `S = "${WORKDIR}"`. On
+OSE's layers the existing jobs see no change: `scripts/parse-check.sh
+pinephonepro` (a meta-phoenix machine, with the wic paths) parses with
+these changes and its dry run resolves the image's 11423 tasks;
+`bitbake -e` finds the `.wks` template and the `extlinux.conf` at their
+new paths, `LAYERDEPENDS` resolves to `meta-webos`, and the WAM append
+applies to OSE's `wam-clang` too. The other machines, on both stacks, run
+in CI.
+
+**Still to do, in order** (effort for one person who knows Yocto; machine
+time apart):
+
+| Step | What | Effort |
+| --- | --- | --- |
+| 1 | Every machine parses and dry-runs on the new stack (`parse-luneos` green for all seven; fix what it finds) | 2-3 days |
+| 2 | `S` for wrynose: 20 recipes set `S` under `${WORKDIR}` (`${WORKDIR}/git[/sub]` in most), which wrynose stops at `do_unpack` (`insane.bbclass:1440-1449`); the form that works on both: `;destsuffix=${BP}` on the git URL and `S = "${UNPACKDIR}/${BP}[/sub]"`, and `tools/devicecheck/recipes.py`'s `source_dir` taught it | 1 day |
+| 3 | What the image installs twice: LuneOS's `packagegroup-webos-extended` brings Open webOS's `core-apps`, `luna-systemui`, `luna-applauncher`, `app-services`, `enyo-1.0`, the foundation and loadable frameworks and `underscore`, which `phoenix-apps` installs itself at the same paths (`runtime/rootfs.json`), and `mojomail-*` (Email's transports, which Phoenix needs). Per component: reuse LuneOS's build, or drop it from the packagegroup. With PRE-IMAGE-CHECKLIST F3 (OSE's and LuneOS's own UI apps: Atlas, the status bar, notification and volume apps) | 2 days |
+| 4 | Qt 6.12: `phoenix-shell`, `Phoenix.Native`, `phoenix-keyboard`'s Maliit plugin against LuneOS's luna-surfacemanager and qml-webos-* (the simulator's move to Qt 6.12 tests the QML first); the `imemanager` and `maliit-framework-webos` bbappends against LuneOS's recipes (its IME is `webos-keyboard`) | 2-3 days |
+| 5 | First image: `qemux86-64` built and booted in QEMU (M1's first item), then `navigator.userAgent`, `navigator.userAgentData` and the `Sec-CH-UA*` headers checked against a page that echoes them. The runtime is most of the build: LuneOS's recipe sets `PARALLEL_MAKE = "-j 64"` and `concurrent_links=1` for its own 64-thread host (`webruntime-clang_151.bb:248-249`); set `PARALLEL_MAKE:pn-webruntime-clang` in `phoenix-local.conf` for yours | 2 days, plus a day of build time |
+| 6 | The device services Phoenix calls, from LuneOS's recipes (battery, display manager, haptics, telephonyd, sensorfw; [LUNEOS.md](LUNEOS.md#next-steps) step 3), in a Phoenix packagegroup | with M1/M3 |
+| 7 | The other machines: `raspberrypi4-64` (meta-raspberrypi and meta-rpi-luneos), `phoenix-vm-arm64`, then the first targets (table below) | with M3 |
+| 8 | Switch: `parse-luneos` required, the OSE jobs and `scripts/setup-build.sh` removed, `scripts/mac-build.sh` and BUILDING-MAC.md on the new script, `meta-phoenix`'s scarthgap compatibility dropped | 1 day |
+
+Total about two to three weeks of work before the first image, against
+the alternative of carrying LLVM 22, Rust 1.94 and a Chromium port on
+scarthgap ourselves.
+
+| Machine | On LuneOS's layers | Layers beyond the core |
+| --- | --- | --- |
+| `qemux86-64` | LuneOS builds it (its emulator appliance) | none |
+| `raspberrypi4-64` | LuneOS's Pi machine | meta-raspberrypi, meta-rpi-luneos |
+| `phoenix-vm-arm64` | meta-phoenix's (OE's `qemuarm64`) | none |
+| `fairphone-fp6`, `ayn-odin2portal` | meta-phoenix's, with their own kernels | none. wrynose's Mesa 26 has the Adreno 810 (Q82) and 740 drivers OSE's lacked |
+| `pinephonepro`, `pinetab2` | meta-phoenix's, with their own kernels (megi's, DanctNIX's) | none. LuneOS has machines of the same names in meta-pine64-luneos, not added; whether to take its BSP instead is a later choice |
+
+The distro stays LuneOS's `luneos` at first: WAM's build takes its
+platform from the distro's name (`-DPLATFORM=PLATFORM_${DISTRO}`,
+meta-luneos `wam.inc:50`), so a `phoenix` distro of our own would need
+`PLATFORM_LUNEOS` kept. A distro of our own comes when Phoenix needs its
+own distro features or name in the image.
+
+**Following LuneOS's runtime, and going past 151.** The pins move by
+hand: each month (or when LuneOS's `webruntime` recipe changes version),
+compare `scripts/luneos-layers.txt` with webos-ports-setup's
+`conf/layers.txt` and meta-luneos's `recipes-webos-ose/chromium`, bump,
+and let `parse-luneos`, then a `qemux86-64` build and boot, decide. LuneOS
+keeps its port as separate patch layers (neva, OE, LuneOS, bring-up) so
+that "when Chromium 152 lands, each layer can be rebased on its own"
+(`webruntime-repo_151.inc:21-22`). Beyond what LuneOS ships: contribute
+to their next uprev (their `chromium-port` tooling generates the patch
+layers), or, if they stall, carry the uprev in a Phoenix fork of
+`webos-ports/chromium151`; one major uprev of the neva port is weeks of
+work (LuneOS's 120-to-151 port is 49 patches over Chromium: 15 neva, 15
+OE, 13 LuneOS, 6 bring-up). Between uprevs the user agent keeps naming
+the current Chrome, so sites that check the version keep working.
+
+**Risks.**
+
+- LuneOS is a few people. If they stop, the layers we use become ours to
+  maintain: the cost the OSE path has today.
+- Chromium 151 on webOS is LuneOS's port, not LG's, and young: its recipe
+  has "VERIFY ON DEVICE" notes (`webruntime_151.bb:76-95`), turns
+  BackupRefPtr off, a use-after-free mitigation stock Chromium 151 has
+  (`webruntime_151.bb:142-157`, as M120 had it), and per-app V8 snapshots
+  stay off (`luneos-preferred-versions.inc`).
+- Security fixes: Chromium patches only its current and extended stable
+  releases, so 151 gets no more upstream fixes; the devices' engine is as
+  current as LuneOS's uprevs (OSE's 120 is from December 2023). Following
+  them promptly, or doing uprevs ourselves, is part of shipping a browser.
+- The engine is older than the version the user agent names (151 against
+  155 today, the gap growing until the next uprev): a site may use a
+  feature 151 lacks. Chrome's own users lag by weeks too; the gap is far
+  smaller than OSE's 120.
+- `meta-phoenix` must parse on both stacks until the switch (step 8);
+  dynamic layers and the portable `S` keep that cheap.
+- The build: Chromium 151 wants a large host (LuneOS's is 64 threads and
+  125 GB).
 
 ### Device CI matrix
 
@@ -1768,16 +1944,18 @@ assume a small volunteer team.
 | 3a | **M3** first phone | Q2 – Q3 2027 | OnePlus 6 and Pixel 3a on mainline: display, touch, backlight, battery, sensors, haptics, suspend; CI builds nightly |
 | 3b | M3 telephony | Q3 – Q4 2027 | webos-telephonyd on oFono, call audio (audiod + callaudiod), SMS, mobile data through ConnMan; PinePhone Pro |
 | 3c | M3 Halium | Q4 2027 – Q1 2028 | Generic `halium-arm64` image from LuneOS's work; Pixel 3a (Halium), Fairphone 5, Pixel 6a/7; camera through gst-droid |
-| 4 | M3 reach | 2028 | Installer (UBports config + WebUSB), porting guide, device table, hardware CI rig; decision on scarthgap vs. wrynose before scarthgap's April 2028 end of life |
+| 4 | M3 reach | 2028 | Installer (UBports config + WebUSB), porting guide, device table, hardware CI rig; LuneOS's next Yocto release and web runtime ([The web runtime](#the-web-runtime-chromium-151-on-luneoss-layers): scarthgap vs. wrynose was decided on 15 October 2026) |
 
 ## Open questions
 
-- Stay on `build-webos` (scarthgap, quiet since March 2025) or follow
-  LuneOS's wrynose layer stack for devices?
+- ~~Stay on `build-webos` (scarthgap, quiet since March 2025) or follow
+  LuneOS's wrynose layer stack for devices?~~ Decided 15 October 2026:
+  LuneOS's layers, for Chromium 151 ([The web runtime](#the-web-runtime-chromium-151-on-luneoss-layers)).
 - oFono on SDM845's QRTR modem: good enough, or do mainline phones need the
   ModemManager backend from the start?
-- Chromium (web runtime) GPU acceleration on libhybris: does it work with
-  OSE's Chromium 120 as it does with LuneOS's?
+- Chromium (web runtime) GPU acceleration on libhybris: LuneOS's Chromium
+  151 has its Halium patches (`webruntime-repo_151.inc`, the DRI and
+  low-4 GB patches); does it hold on the Halium devices Phoenix targets?
 - Can we share one Luna service implementation with LuneOS instead of
   keeping two?
 - How low can the light profile go: the minimum RAM for the classic UI with

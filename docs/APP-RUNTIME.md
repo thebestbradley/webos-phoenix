@@ -709,6 +709,55 @@ menu, Just Type, edit commands). The legacy names `com.palm.systemservice`,
 `com.palm.applicationManager` is Phoenix's own service over SAM
 (`services/appmanager`). docs/DEVICE-AUDIT.md lists every item.
 
+### The user agent
+
+The owner's decision of 15 October 2026 ([DECISIONS.md](DECISIONS.md#15-october-2026-the-newest-web-engine-on-every-system)):
+every web app, in the simulator and on a device, sends what Chrome on
+Android sends today, whatever engine is underneath:
+
+    Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36
+
+- Chrome's reduced user agent: the platform frozen at `Linux; Android 10;
+  K`, the version `<major>.0.0.0`.
+- `<major>` is the current Chrome stable major, from the date: Chrome 155's
+  stable release on 6 October 2026, then one more every 28 days (Chrome's
+  cadence); never lower than 155, so a device whose clock is not set yet
+  still names a current Chrome.
+- `Mobile` on a phone; not on a tablet (as Chrome on an Android tablet).
+- No `webOS`, `Web0S`, `WebAppManager` or `QtWebEngine` token: sites read
+  them as LG's TVs or Palm's 2011 browser and refuse the page (the
+  browser's Mobile Site setting found that first, M6-PLAN F4).
+- The client hints agree: brands Chromium `<major>` and Chromium's GREASE
+  brand for that major, platform `Android`, mobile by form factor.
+
+**On a device** WebAppMgr's start script sources `/etc/wam/plugins/conf.sh`
+just before it starts WebAppMgr, at every start (meta-webosose
+`webapp-mgr.sh.in:243-247`; meta-luneos `:278-282`). Phoenix's
+(`meta-phoenix/recipes-phoenix/phoenix-wam-conf/files/phoenix-wam.sh`)
+computes the user agent from the date and `/etc/phoenix/device.json`'s
+form factor (`phone` is mobile; `tablet` and `auto` are not) and sets
+`PHOENIX_USER_AGENT`. The runtime takes the whole user agent from its
+`--user-agent` switch, for pages and for its network's default (neva
+`user_agent.cc:36-46`); WebAppMgr's start line gets that one argument
+(meta-phoenix's wam bbappend: the line splits its other variables at
+spaces), and a WAM patch stops WebAppMgr adding ` WebAppManager`
+(`WAM_NAME`, `web_page_blink.cc`). On LuneOS's layers the runtime's client
+hints are on, with a neva patch that gives them the brand version, the
+platform and the mobile bit (`--neva-user-agent-client-hints-*`); neva
+alone would say `webOS` and Chromium 151. On OSE's Chromium 120 the
+client hints stay off, and none are sent rather than wrong ones.
+`tools/test-wam-user-agent.py` checks the script for dates and form
+factors in every POSIX shell on the host, and the start line's edit on
+both stacks' scripts. *Written against WAM's and neva's sources (the
+patches apply to both stacks' trees); not yet run on a device.*
+
+The major is fixed for as long as WebAppMgr runs: a device that runs four
+weeks without a reboot keeps the older major until WebAppMgr starts again.
+The browser's page view on a device (still to come, see the roadmap) needs
+the same switches: on LuneOS's layers that is `browser_shell`, started by
+its own `run_browser_shell`, which meta-luneos already edits
+(`webruntime.inc:250-267`).
+
 ## Status of the original apps
 
 See `tools/app-expectations.json` for the current list.
