@@ -14,11 +14,33 @@
 // AirPods is with you"; the DULT drafts' non-owner finding and
 // disablement, draft-ietf-dult-accessory-protocol-00 §3.13-3.14), in
 // Phoenix's words.
+//
+// Sensitivity (the owner, 15 October 2026; the IETF's threat model,
+// draft-ietf-dult-threat-model-05 §4.1.2, recommends it): how soon a
+// tracker that travels with you is alerted, Low, Medium (the default) or
+// High, each level's rule stated beside it. SENSITIVITY_RULES is the
+// service's table (services/accessories/lib/trackerdetect.js SENSITIVITY,
+// where each value's source is; Trackers.test.tsx checks they agree).
 
 import { useState } from "react";
-import { trackers, type LunaError, type TrackerInfo, type TrackerStatus } from "@phoenix/luna";
+import { trackers, type LunaError, type TrackerInfo, type TrackerSensitivity, type TrackerStatus } from "@phoenix/luna";
 import { useLuna } from "@phoenix/luna/react";
-import { Button, Divider, ErrorText, Group, Note, Page, PageHeader, Row, shortWhen, ToggleButton } from "@phoenix/ui";
+import { Button, Checkmark, Divider, ErrorText, Group, Note, Page, PageHeader, Row, shortWhen, ToggleButton } from "@phoenix/ui";
+
+const MIN = 60000, HOUR = 60 * MIN;
+export const SENSITIVITY_RULES: Record<TrackerSensitivity, { minDuration: number; minSightings: number; minDistance: number; realertAfter: number }> = {
+    low: { minDuration: 120 * MIN, minSightings: 4, minDistance: 840, realertAfter: 8 * HOUR },
+    medium: { minDuration: 30 * MIN, minSightings: 3, minDistance: 400, realertAfter: 7 * HOUR },
+    high: { minDuration: 10 * MIN, minSightings: 2, minDistance: 200, realertAfter: 2 * HOUR },
+};
+const SENSITIVITY_LABELS: Record<TrackerSensitivity, string> = { low: "Low", medium: "Medium", high: "High" };
+
+/** A level's rule in words: "After 30 min and 400 m, seen 3 times · again after 7 h". */
+export function sensitivityRule(l: TrackerSensitivity): string {
+    const r = SENSITIVITY_RULES[l];
+    const times = r.minSightings === 2 ? "twice" : `${r.minSightings} times`;
+    return `After ${minutes(r.minDuration)} and ${metres(r.minDistance)}, seen ${times} · again after ${minutes(r.realertAfter)}`;
+}
 
 /** "35 min", "2 h 10 min". */
 export function minutes(ms: number): string {
@@ -155,6 +177,17 @@ export function TrackersPage({ onOpen }: { onOpen: (id: string) => void }) {
             {status.enabled && status.bluetooth && !status.location && (
                 <Note testId="tr-no-location">Turn on Location Services so Phoenix can tell a tracker that follows you from one that is only nearby.</Note>
             )}
+            <Divider caption="Sensitivity" />
+            <Group>
+                {(["low", "medium", "high"] as TrackerSensitivity[]).map((l) => (
+                    <Row key={l} title={l === "medium" ? "Medium (Default)" : SENSITIVITY_LABELS[l]} subtitle={sensitivityRule(l)}
+                         className="wrap-row" testId={`tr-sensitivity-${l}`} disabled={!status.enabled}
+                         onClick={() => { if (l !== status.sensitivity) void trackers.setSensitivity(l); }}>
+                        {status.sensitivity === l && <Checkmark />}
+                    </Row>
+                ))}
+            </Group>
+            <Note>High tells you sooner, and may also alert for a tracker that only goes the same way as you, on a bus or a train. Low alerts less often and later.</Note>
             <Divider caption="Trackers seen" />
             <Group>
                 {status.trackers.length === 0 && <Row title="None seen" className="dim-row" testId="tr-none" />}

@@ -390,7 +390,7 @@ where the runtime sends the original id ("same": no alias).
 | `runtime/phoenix-runtime.js:17832` | open descriptor | `org.webosphoenix.files` | same | `path` | ✅ |
 | `runtime/phoenix-runtime.js:17993` | open descriptor | `org.webosphoenix.files` | same | `path` | ✅ |
 | `runtime/phoenix-runtime.js:18286` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
-| `runtime/phoenix-runtime.js:18730` | open descriptor | `org.webosphoenix.settings` | same | `page`, `view`, `id` | ✅ |
+| `runtime/phoenix-runtime.js:18784` | open descriptor | `org.webosphoenix.settings` | same | `page`, `view`, `id` | ✅ |
 | `shell/qml/Phoenix/Lsm/LsmWindowSource.qml:861` | launch | `com.palm.launcher` | same | none | ✅ |
 | `shell/qml/Phoenix/Lsm/LsmWindowSource.qml:873` | launch | `com.palm.launcher` | same | none | ✅ |
 | `shell/qml/Phoenix/Shell/Shell.qml:257` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
@@ -399,12 +399,12 @@ where the runtime sends the original id ("same": no alias).
 | `shell/qml/Phoenix/Shell/Shell.qml:3569` | launch | `org.webosphoenix.assistant` | same | `threadId` | ✅ |
 | `shell/qml/Phoenix/Shell/Shell.qml:4032` | launch | `org.webosphoenix.clipboard` | same | none | ✅ |
 | `shell/qml/Phoenix/Sim/SimWindowSource.qml:700` | launch | `com.palm.app.browser` | same | `target` | ✅ |
-| `shell/qml/Phoenix/Sim/SimWindowSource.qml:2344` | open | `com.palm.app.browser` | same | `target` | ✅ |
-| `shell/qml/Phoenix/Sim/SimWindowSource.qml:2471` | launch | `org.webosphoenix.phone` | same | (variable) | ✅ |
-| `shell/qml/Phoenix/Sim/SimWindowSource.qml:2511` | launch | `org.webosphoenix.messaging` | same | (variable) | ✅ |
+| `shell/qml/Phoenix/Sim/SimWindowSource.qml:2351` | open | `com.palm.app.browser` | same | `target` | ✅ |
+| `shell/qml/Phoenix/Sim/SimWindowSource.qml:2478` | launch | `org.webosphoenix.phone` | same | (variable) | ✅ |
+| `shell/qml/Phoenix/Sim/SimWindowSource.qml:2518` | launch | `org.webosphoenix.messaging` | same | (variable) | ✅ |
 | `shell/qml/sim.qml:535` | launch | `org.webosphoenix.assistant` | same | `followUp` | ✅ |
-| `shell/qml/sim.qml:1548` | launch | `org.webosphoenix.marketplace` | same | none | ✅ |
-| `shell/qml/sim.qml:2553` | launch | `org.webosphoenix.settings` | same | `page`, `view`, `address` | ✅ |
+| `shell/qml/sim.qml:1552` | launch | `org.webosphoenix.marketplace` | same | none | ✅ |
+| `shell/qml/sim.qml:2557` | launch | `org.webosphoenix.settings` | same | `page`, `view`, `address` | ✅ |
 | `third_party/app-services/com.palm.service.calendar.reminders/on-autoclose-handler.js:165` | launch | `com.palm.app.calendar` | same | `alarmClose` | ✅ |
 | `third_party/app-services/com.palm.service.calendar.reminders/on-db-changed-handler.js:362` | launch | `com.palm.app.calendar` | same | `alarmDeleted` | ✅ |
 | `third_party/app-services/com.palm.service.calendar.reminders/on-db-changed-handler.js:526` | launch | `com.palm.app.calendar` | same | `alarmUpdated` | ✅ |

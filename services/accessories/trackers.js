@@ -15,12 +15,22 @@
 // or maker's servers (the DULT drafts' AccessoryInfo service is not used).
 //
 //   getStatus {subscribe} -> {enabled, bluetooth, location, scanning,
+//       sensitivity ("low", "medium", "high"), thresholds: {minDuration,
+//       minSightings, minDistance, realertAfter} (ms, m), scanMode
+//       ("saver", "balanced", "performance"), scanWindows: {screenOn,
+//       screenOff} (each null: the scan runs, or {window, every} in ms),
 //       trackers: [{id, type, network, name, firstSeen, lastSeen,
 //       sightings, duration, distance, alertedAt, ignored, points: [{t,
 //       lat?, lon?}], canPlaySound}], sound: {id, state ("connecting",
 //       "playing", "done", "failed"), error} | null}
-//   setEnabled {enabled}, playSound {id}, stopSound {id}, ignore {id,
-//       ignored?}, clear {}
+//   setEnabled {enabled}, setSensitivity {sensitivity}, setScanMode
+//       {mode}, playSound {id}, stopSound {id}, ignore {id, ignored?},
+//       clear {}
+//
+// The sensitivity (trackerdetect.js SENSITIVITY) and the scan's mode
+// (scanner.js MODES: the AirPods' card's scan too, which this service
+// keeps because the scan with the screen off is the tracker alerts') are
+// the user's choice (the owner, 15 October 2026), kept in the store.
 //
 // createTrackers({call, subscribe, scanner, store, notify(n), now?, timers?})
 // STATUS: written against bluetooth2's and the location service's
@@ -31,11 +41,16 @@
 var continuity = require("./lib/continuity");
 var detect = require("./lib/trackerdetect");
 var dult = require("./lib/dult");
+var scanner = require("./scanner");
 
 var BT = "luna://com.webos.service.bluetooth2";
 var LOCATION = "luna://com.webos.service.location";
 var SETTINGS = "org.webosphoenix.settings";
 var FIX_EVERY = 2 * 60 * 1000;
+// The alert's own sound (tools/make-feedback-sounds.py "tracker-alert":
+// chirps and a ping, unlike every other alert), in the Settings app whose
+// notification it is (SoundPolicy.js resolve: a path in the app).
+var ALERT_SOUND = "sounds/tracker-alert.mp3";
 
 function ok(extra) { return Object.assign({ returnValue: true }, extra || {}); }
 function fail(text) { return { returnValue: false, errorCode: -1, errorText: text }; }
@@ -52,7 +67,8 @@ function alertText(t) {
 function createTrackers(opts) {
     var now = opts.now || function () { return Date.now(); };
     var timers = opts.timers || { setTimeout: setTimeout, clearTimeout: clearTimeout };
-    var detector = detect.createDetector({ now: now });
+    var kept = ((opts.store && opts.store.load()) || {}).trackers || {};
+    var detector = detect.createDetector({ now: now, sensitivity: kept.sensitivity });
     var watchers = [];
     var cancels = [];
     var bluetooth = false;
@@ -62,15 +78,19 @@ function createTrackers(opts) {
 
     function store() { return (opts.store && opts.store.load()) || {}; }
     function saved() { return store().trackers || {}; }
-    function save() {
+    function save(changes) {
         if (!opts.store) return;
         var s = store();
-        s.trackers = { enabled: enabled(), state: detector.state() };
+        s.trackers = Object.assign({}, s.trackers || {}, changes || {}, { state: detector.state() });
         opts.store.save(s);
     }
     function enabled() { return saved().enabled !== false; }
+    function scanMode() { return opts.scanner ? opts.scanner.mode() : saved().scanMode || "balanced"; }
     detector.load(saved().state);
-    if (opts.scanner) opts.scanner.setBackground(enabled());
+    if (opts.scanner) {
+        if (saved().scanMode) opts.scanner.setMode(saved().scanMode);
+        opts.scanner.setBackground(enabled());
+    }
 
     function status() {
         var list = detector.list().map(function (t) {
@@ -79,8 +99,14 @@ function createTrackers(opts) {
             t.canPlaySound = t.type !== "tile" && t.type !== "smarttag";
             return t;
         });
+        var T = detector.thresholds;
         return ok({ enabled: enabled(), bluetooth: bluetooth, location: !locationOff && !!lastFix,
-                    scanning: !!(opts.scanner && opts.scanner.running()), trackers: list, sound: sound });
+                    scanning: !!(opts.scanner && opts.scanner.running()),
+                    sensitivity: detector.sensitivity(),
+                    thresholds: { minDuration: T.minDuration, minSightings: T.minSightings, minDistance: T.minDistance,
+                                  realertAfter: T.realertAfter },
+                    scanMode: scanMode(), scanWindows: opts.scanner ? opts.scanner.windows() : null,
+                    trackers: list, sound: sound });
     }
     var firing = false;
     function fire() {
@@ -140,7 +166,7 @@ function createTrackers(opts) {
             alerts.forEach(function (t) {
                 var text = alertText(t);
                 if (opts.notify)
-                    opts.notify({ appId: SETTINGS, title: text.title, body: text.body, soundClass: "alerts",
+                    opts.notify({ appId: SETTINGS, title: text.title, body: text.body, soundClass: "alerts", soundFile: ALERT_SOUND,
                                   params: { page: "bluetooth", view: "tracker", id: t.id }, tag: "tracker-" + t.id });
             });
             save();
@@ -207,10 +233,22 @@ function createTrackers(opts) {
             return function () { watchers = watchers.filter(function (w) { return w !== respond; }); };
         },
         setEnabled: function (p, caller, respond) {
-            var s = store();
-            s.trackers = Object.assign({}, s.trackers || {}, { enabled: p.enabled !== false, state: detector.state() });
-            if (opts.store) opts.store.save(s);
+            save({ enabled: p.enabled !== false });
             if (opts.scanner) opts.scanner.setBackground(p.enabled !== false);
+            fire();
+            respond(ok());
+        },
+        setSensitivity: function (p, caller, respond) {
+            if (!detector.setSensitivity(String(p.sensitivity || ""))) return respond(fail("The sensitivity is low, medium or high"));
+            save({ sensitivity: detector.sensitivity() });
+            fire();
+            respond(ok());
+        },
+        setScanMode: function (p, caller, respond) {
+            var m = String(p.mode || "");
+            if (!scanner.MODES[m]) return respond(fail("The scan's mode is saver, balanced or performance"));
+            if (opts.scanner) opts.scanner.setMode(m);
+            save({ scanMode: m });
             fire();
             respond(ok());
         },
@@ -249,6 +287,6 @@ function createTrackers(opts) {
     };
 }
 
-var METHODS = ["getStatus", "setEnabled", "playSound", "stopSound", "ignore", "clear"];
+var METHODS = ["getStatus", "setEnabled", "setSensitivity", "setScanMode", "playSound", "stopSound", "ignore", "clear"];
 
-module.exports = { createTrackers: createTrackers, METHODS: METHODS, alertText: alertText };
+module.exports = { createTrackers: createTrackers, METHODS: METHODS, alertText: alertText, ALERT_SOUND: ALERT_SOUND };

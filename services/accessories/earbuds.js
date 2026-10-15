@@ -25,18 +25,38 @@
 // vendor ID): what needs that (Hearing Aid, Customize Transparency Mode,
 // switching between devices) is not offered.
 //
-// Which advertisement is which paired AirPods: the advertisement's address
-// is random and its identifying part encrypted, so Phoenix matches by model:
-// the one paired AirPods of that model is taken to be the ones nearby.
+// Which advertisement is which paired AirPods (the owner, 15 October
+// 2026): once connected, the AirPods give their keys over the control
+// channel (aap.js requestProximityKeys), and the identity resolving key
+// tells their advertisements from anyone else's (lib/keys.js resolves).
+// Without keys (before the first connection, or if the AirPods do not
+// answer), or before a key has ever matched (keys.js: its byte order is
+// UNVERIFIED), Phoenix falls back to the model: the one paired AirPods of
+// that model are taken to be the ones nearby. With the encryption key the
+// advertisement's encrypted part opens; where the batteries are in it is
+// learned from the AirPods' own reports (keys.js createLearner), and from
+// then on the card shows them to 1 % before the AirPods connect.
+//
+// Renaming (rename {address, name}): Phoenix's own name for them at once,
+// and the AirPods' own through the control channel (aap.js rename,
+// UNVERIFIED), taken as done when the AirPods report the new name; if they
+// do not within RENAME_WAIT ("failed"), or are not connected ("offline":
+// tried again when they connect), Phoenix keeps its name and Settings says
+// so.
 //
 //   getStatus {subscribe} -> {bluetooth, nearby: [{id, model, modelName,
 //       kind, color, battery: {left, right, case}, charging, lidOpen,
-//       lidOpenCount, rssi, paired: address | ""}], devices: [{address,
-//       name, model, kind, modelNumber, connected, aap, battery: {left,
-//       right, case, single}, charging, inEar: {left, right}, noiseMode,
-//       noiseModes, earDetection, conversationAwareness (null: the model
-//       has none)}], pairing: null | {id, state ("searching", "pairing",
-//       "connecting", "failed"), address, error}}
+//       lidOpenCount, rssi, paired: address | "", match ("key", "model"
+//       or ""), exact (the batteries read from the encrypted part)}],
+//       devices: [{address, name, model, kind, modelNumber, connected,
+//       aap, battery: {left, right, case, single}, charging, inEar: {left,
+//       right}, noiseMode, noiseModes, earDetection, conversationAwareness
+//       (null: the model has none), keys (the AirPods gave their keys),
+//       recognition ("key": a key has matched their advertisements, or
+//       "model"), exactBattery (the encrypted part's layout is learned),
+//       renamed ("", "pending", "done", "failed", "offline")}], pairing:
+//       null | {id, state ("searching", "pairing", "connecting", "failed"),
+//       address, error}}
 //   connect {id}, cancelConnect {}, setNoiseMode {address, mode ("off",
 //       "transparency", "adaptive", "anc")}, setEarDetection {address,
 //       enabled}, setConversationAwareness {address, enabled}, rename
@@ -57,11 +77,13 @@
 var continuity = require("./lib/continuity");
 var aap = require("./lib/aap");
 var models = require("./lib/models");
+var keys = require("./lib/keys");
 
 var BT = "luna://com.webos.service.bluetooth2";
 var NEARBY_FOR = 15 * 1000;        // an advertisement heard this recently is "near"
 var PAIR_TIMEOUT = 60 * 1000;
 var RETRY_AAP = 30 * 1000;
+var RENAME_WAIT = 10 * 1000;       // the AirPods report a new name within this, or it did not take
 
 function ok(extra) { return Object.assign({ returnValue: true }, extra || {}); }
 function fail(text) { return { returnValue: false, errorCode: -1, errorText: text }; }
@@ -80,6 +102,8 @@ function createEarbuds(opts) {
     var pairing = null;
     var pairTimer = null;
     var cancels = [];
+    var learners = {};         // address -> keys.createLearner
+    var renameTimers = {};     // address -> timer
 
     function store() { return (opts.store && opts.store.load()) || {}; }
     function saved() { return store().earbuds || {}; }
@@ -112,22 +136,67 @@ function createEarbuds(opts) {
                 inEar: s ? { left: s.inEar.left, right: s.inEar.right } : { left: "", right: "" },
                 noiseMode: s && s.listeningMode ? s.listeningMode : "", noiseModes: modes,
                 earDetection: keep.earDetection !== false,
-                conversationAwareness: ca ? (s && s.conversationAwareness !== null ? !!s.conversationAwareness : true) : null
+                conversationAwareness: ca ? (s && s.conversationAwareness !== null ? !!s.conversationAwareness : true) : null,
+                keys: !!(keep.keys && keep.keys.irk), recognition: keep.keyWorks ? "key" : "model",
+                exactBattery: !!(keep.learn && keep.learn.layout), renamed: keep.renamed || ""
             };
         });
+    }
+
+    // The paired AirPods an advertisement is: {address, match} or null.
+    // By key first; else by model, leaving out AirPods whose key has
+    // matched before (their advertisements would have matched it).
+    function owner(id, n, devs) {
+        var mine = saved();
+        for (var i = 0; i < devs.length; ++i) {
+            var k = (mine[devs[i].address] || {}).keys;
+            if (k && k.irk && keys.resolves(k.irk, id)) return { address: devs[i].address, match: "key" };
+        }
+        var same = devs.filter(function (d) {
+            if ((mine[d.address] || {}).keyWorks) return false;
+            return n.kind ? d.kind === n.kind || (!d.kind && n.modelName && d.name.indexOf(n.modelName) >= 0) : true;
+        });
+        return same.length === 1 ? { address: same[0].address, match: "model" } : null;
     }
 
     function nearbyList() {
         var t = now(), devs = deviceList();
         return Object.keys(nearby).filter(function (id) { return t - nearby[id].seenAt <= NEARBY_FOR; }).map(function (id) {
             var n = nearby[id];
-            // The paired AirPods these are, by model (see above).
-            var same = devs.filter(function (d) {
-                return n.kind ? d.kind === n.kind || (!d.kind && n.modelName && d.name.indexOf(n.modelName) >= 0) : true;
-            });
+            var o = owner(id, n, devs);
+            var battery = n.battery, exact = false;
+            if (o && o.match === "key") {
+                var keep = saved()[o.address] || {};
+                var b = keep.learn && keep.learn.layout && keep.keys.encKey
+                    ? keys.batteries(keys.decrypt(keep.keys.encKey, n.encrypted), keep.learn.layout) : null;
+                if (b) {
+                    exact = true;
+                    // The case's level only while its lid is open (as the tenths).
+                    battery = { left: b.left, right: b.right, case: n.lidOpen ? b.case : -1 };
+                }
+            }
             return { id: id, model: n.model, modelName: n.modelName || "AirPods", kind: n.kind, color: n.color,
-                     battery: n.battery, charging: n.charging, lidOpen: n.lidOpen, lidOpenCount: n.lidOpenCount, rssi: n.rssi,
-                     paired: same.length === 1 ? same[0].address : "" };
+                     battery: battery, charging: n.charging, lidOpen: n.lidOpen, lidOpenCount: n.lidOpenCount, rssi: n.rssi,
+                     paired: o ? o.address : "", match: o ? o.match : "", exact: exact };
+        });
+    }
+
+    // An advertisement of AirPods with keys: the key has matched (from now
+    // on they are known by it), and, while they are connected, a sample for
+    // the encrypted part's layout.
+    function learn(id, n) {
+        var mine = saved();
+        Object.keys(mine).forEach(function (address) {
+            var keep = mine[address];
+            if (!keep.keys || !keep.keys.irk || !keys.resolves(keep.keys.irk, id)) return;
+            if (!keep.keyWorks) save(function (e) { e[address].keyWorks = true; });
+            if (!keep.keys.encKey || (keep.learn && keep.learn.layout)) return;
+            var s = sessions[address] ? sessions[address].state : null;
+            if (!s || !s.connected || !s.battery) return;
+            var l = learners[address] = learners[address] || keys.createLearner(keep.learn);
+            var before = JSON.stringify(l.state());
+            l.sample(keys.decrypt(keep.keys.encKey, n.encrypted), s.battery);
+            if (JSON.stringify(l.state()) !== before) save(function (e) { e[address].learn = l.state(); });
         });
     }
 
@@ -162,12 +231,27 @@ function createEarbuds(opts) {
             sessions[d.address] = entry;
             entry.session = aap.session(t, function (st) {
                 entry.state = st;
-                // Ear detection as the user set it here, once connected.
+                // Ear detection as the user set it here, once connected; a
+                // name given while they were away.
                 if (st.connected && !entry.told) {
                     entry.told = true;
-                    var want = (saved()[d.address] || {}).earDetection;
-                    if (want === false) entry.session.setEarDetection(false);
+                    var keep = saved()[d.address] || {};
+                    if (keep.earDetection === false) entry.session.setEarDetection(false);
+                    if (keep.renamed === "offline" && keep.name) sendName(d.address, keep.name);
                 }
+                // Their keys (kept; a new pairing gives new ones).
+                if (st.keys) {
+                    var k = { irk: keys.hex(st.keys.irk), encKey: keys.hex(st.keys.encKey) };
+                    var had = (saved()[d.address] || {}).keys;
+                    if (!had || had.irk !== k.irk || had.encKey !== k.encKey) {
+                        delete learners[d.address];
+                        save(function (e) {
+                            e[d.address] = Object.assign({}, e[d.address] || {}, { keys: k, keyWorks: false, learn: null });
+                        });
+                    }
+                }
+                // The new name, as the AirPods report it.
+                renamedIf(d.address, st.name);
                 fire();
             });
             t.onPacket(function (bytes) { entry.session.receive(bytes); });
@@ -193,6 +277,7 @@ function createEarbuds(opts) {
     cancels.push(opts.subscribe(BT + "/device/getStatus", { subscribe: true }, function (r) {
         if (!r || r.returnValue === false || !Array.isArray(r.devices)) return;
         btDevices = r.devices;
+        btDevices.forEach(function (d) { renamedIf(d.address, d.name); });
         pairingProgress();
         openSessions();
         fire();
@@ -206,7 +291,8 @@ function createEarbuds(opts) {
         var was = nearby[id];
         nearby[id] = { model: "0x" + ("000" + c.model.toString(16)).slice(-4), modelName: c.modelName, kind: c.family, color: c.color,
                        battery: c.battery, charging: c.charging, lidOpen: c.lidOpen, lidOpenCount: c.lidOpenCount,
-                       rssi: typeof dev.rssi === "number" ? dev.rssi : 0, seenAt: now() };
+                       encrypted: c.encrypted || [], rssi: typeof dev.rssi === "number" ? dev.rssi : 0, seenAt: now() };
+        learn(id, nearby[id]);
         if (!was || JSON.stringify(Object.assign({}, was, { seenAt: 0, rssi: 0 })) !== JSON.stringify(Object.assign({}, nearby[id], { seenAt: 0, rssi: 0 })))
             fire();
     }
@@ -255,6 +341,33 @@ function createEarbuds(opts) {
     function deviceFor(address) {
         return deviceList().filter(function (d) { return d.address === address; })[0] || null;
     }
+    // ---- Renaming the AirPods themselves -----------------------------------------------
+    function setRenamed(address, state) {
+        if ((saved()[address] || {}).renamed === state) return;
+        save(function (e) { e[address] = Object.assign({}, e[address] || {}, { renamed: state }); });
+        fire();
+    }
+    function sendName(address, name) {
+        var s = sessions[address];
+        if (!s || !s.state || !s.state.connected) return setRenamed(address, "offline");
+        try { s.session.rename(name); } catch (e) { return setRenamed(address, "failed"); }
+        setRenamed(address, "pending");
+        if (renameTimers[address]) timers.clearTimeout(renameTimers[address]);
+        renameTimers[address] = timers.setTimeout(function () {
+            delete renameTimers[address];
+            if ((saved()[address] || {}).renamed === "pending") setRenamed(address, "failed");
+        }, RENAME_WAIT);
+    }
+    // The AirPods (or bluetooth2, from their Bluetooth name) report a name:
+    // the one asked for, so the rename took.
+    function renamedIf(address, reported) {
+        var keep = saved()[address];
+        if (!keep || !keep.name || !reported || keep.renamed === "done" || keep.renamed === "") return;
+        if (String(reported) !== keep.name) return;
+        if (renameTimers[address]) { timers.clearTimeout(renameTimers[address]); delete renameTimers[address]; }
+        setRenamed(address, "done");
+    }
+
     function sessionFor(address, respond) {
         var s = sessions[address];
         if (!s || !s.state || !s.state.connected) { respond(fail("These AirPods are not connected")); return null; }
@@ -320,7 +433,10 @@ function createEarbuds(opts) {
             var name = String(p.name || "").trim();
             if (!d) return respond(fail("No such AirPods"));
             if (!name || name.length > 32) return respond(fail("The name has 1 to 32 characters"));
-            save(function (e) { e[d.address] = Object.assign({}, e[d.address] || {}, { name: name }); });
+            save(function (e) { e[d.address] = Object.assign({}, e[d.address] || {}, { name: name, renamed: "" }); });
+            // Already their name (bluetooth2's): nothing to send.
+            if (d.btName === name) setRenamed(d.address, "done");
+            else sendName(d.address, name);
             fire();
             respond(ok());
         },
@@ -350,6 +466,7 @@ function createEarbuds(opts) {
             if (gone) fire();
         },
         close: function () {
+            Object.keys(renameTimers).forEach(function (a) { timers.clearTimeout(renameTimers[a]); });
             cancels.forEach(function (c) { if (typeof c === "function") c(); });
             Object.keys(sessions).forEach(function (a) { sessions[a].transport.close(); });
         }

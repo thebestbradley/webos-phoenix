@@ -9,15 +9,29 @@
 // is reported once it has stayed with the device long enough, often enough
 // and far enough:
 //
-//   - seen for at least 30 minutes (first to last sighting), at least 3
-//     times, over at least 400 m (the farthest two places it was seen),
-//     and at most one alert per tracker in 7 hours: AirGuard's published
-//     rule (Heinrich, Bittner & Hollick, WiSec 2022, §4.1.2), a simplified
-//     form of iOS's (§3.4.1: 10 minutes and 840 m by default; §3.4.2, at a
-//     visit: 5 minutes and 420 m). Apple and Google do not publish their
-//     current values; the IETF threat model (draft-ietf-dult-threat-model
-//     §4.1.2) recommends letting the user choose the sensitivity, which
-//     Phoenix leaves for later (docs/ACCESSORIES.md).
+//   - seen for long enough (first to last sighting), often enough and
+//     over a long enough way (the farthest two places it was seen), with
+//     at most one alert per tracker in a while, by the sensitivity the
+//     user chose (Settings > Bluetooth > Tracker Alerts; the owner, 15
+//     October 2026; the IETF threat model, draft-ietf-dult-threat-model-05
+//     §4.1.2, recommends letting the user set how often alerts come and the
+//     detection radius, and §4.2.1.2 points to AirGuard's three levels).
+//     Apple and Google do not publish their current values. SENSITIVITY
+//     below; where each value comes from:
+//       medium (the default): 30 minutes, 3 sightings, 400 m, one alert in
+//         7 hours: AirGuard's published rule (Heinrich, Bittner & Hollick,
+//         WiSec 2022, §4.1.2), a simplified form of iOS's (§3.4.1: 10
+//         minutes and 840 m by default; §3.4.2, at a visit: 5 minutes and
+//         420 m);
+//       low (fewer alerts): 120 minutes, 4 sightings and one alert in 8
+//         hours, AirGuard's own "low" level today (seemoo-lab/AirGuard,
+//         Apache-2.0, RiskLevelEvaluator.kt: MINUTES_AT_LEAST_TRACKED_
+//         BEFORE_ALARM_LOW, NUMBER_OF_LOCATIONS_BEFORE_ALARM_LOW,
+//         HOURS_BETWEEN_NOTIFICATIONS_LOW; its locations taken as
+//         sightings), and 840 m, iOS's default distance (AirGuard §3.4.1);
+//       high (sooner): 10 minutes, iOS's default time (AirGuard §3.4.1); 2
+//         sightings and one alert in 2 hours, AirGuard's "high" level
+//         (the same file); 200 m is Phoenix's own choice, half of medium's.
 //   - A tracker is known by its address: separated trackers keep one
 //     address for 24 hours (draft-ietf-dult-accessory-protocol-00 §3.5.1;
 //     Find My accessories change key once a day, AirGuard §4.1.2; Find Hub
@@ -32,8 +46,12 @@
 "use strict";
 
 var MIN = 60 * 1000, HOUR = 60 * MIN, DAY = 24 * HOUR;
-var DEFAULTS = { minDuration: 30 * MIN, minSightings: 3, minDistance: 400, realertAfter: 7 * HOUR,
-                 sightingGap: 2 * MIN, keepFor: 7 * DAY, maxPoints: 200 };
+var SENSITIVITY = {
+    low: { minDuration: 120 * MIN, minSightings: 4, minDistance: 840, realertAfter: 8 * HOUR },
+    medium: { minDuration: 30 * MIN, minSightings: 3, minDistance: 400, realertAfter: 7 * HOUR },
+    high: { minDuration: 10 * MIN, minSightings: 2, minDistance: 200, realertAfter: 2 * HOUR }
+};
+var DEFAULTS = Object.assign({ sightingGap: 2 * MIN, keepFor: 7 * DAY, maxPoints: 200 }, SENSITIVITY.medium);
 
 // Metres between two {lat, lon} (haversine, a sphere of 6371 km).
 function distance(a, b) {
@@ -55,14 +73,15 @@ function spread(points) {
 var NAMES = { airtag: "AirTag", findmy: "Find My accessory", airpods: "AirPods", dult: "Tracker", findhub: "Find Hub tracker",
               tile: "Tile tracker", smarttag: "Samsung SmartTag" };
 
-// createDetector({now?, thresholds?}) -> {sighting(s) -> [trackers newly
-// alerted], list() -> [tracker], get(id), ignore(id), forget(), state(),
-// load(state)}. A sighting: {id, type, network, separated (true, false or
+// createDetector({now?, thresholds?, sensitivity?}) -> {sighting(s) ->
+// [trackers newly alerted], list() -> [tracker], get(id), ignore(id),
+// forget(), state(), load(state), setSensitivity(level), sensitivity()}. A sighting: {id, type, network, separated (true, false or
 // null: does not say), at (ms), location: {lat, lon} | null, rssi}.
 function createDetector(opts) {
     opts = opts || {};
     var now = opts.now || function () { return Date.now(); };
-    var T = Object.assign({}, DEFAULTS, opts.thresholds || {});
+    var level = SENSITIVITY[opts.sensitivity] ? opts.sensitivity : "medium";
+    var T = Object.assign({}, DEFAULTS, SENSITIVITY[level], opts.thresholds || {});
     var trackers = {};
 
     function prune() {
@@ -91,6 +110,15 @@ function createDetector(opts) {
 
     return {
         thresholds: T,
+        sensitivity: function () { return level; },
+        // A new level applies to the next sighting (a tracker already
+        // alerted keeps its alert time).
+        setSensitivity: function (l) {
+            if (!SENSITIVITY[l]) return false;
+            level = l;
+            Object.assign(T, SENSITIVITY[l]);
+            return true;
+        },
         sighting: function (s) {
             if (!s || !s.id) return [];
             // Near its owner it is not following anyone (and it changes
@@ -130,4 +158,4 @@ function createDetector(opts) {
     };
 }
 
-module.exports = { createDetector: createDetector, distance: distance, NAMES: NAMES, DEFAULTS: DEFAULTS };
+module.exports = { createDetector: createDetector, distance: distance, NAMES: NAMES, DEFAULTS: DEFAULTS, SENSITIVITY: SENSITIVITY };

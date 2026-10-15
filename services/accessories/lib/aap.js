@@ -36,6 +36,23 @@
 //               Awareness, on or off; Hearing Aid, Customize Transparency
 //               Mode and multipoint connection need the host to present
 //               Apple's Bluetooth vendor ID, which Phoenix does not do.
+//   [keys]      The AirPods' keys (lib/keys.js uses them): asked for with
+//               04 00 04 00 30 00 05 00, which the AirPods answer once the
+//               channel is connected [AAP-defs FINDINGS.md, "request magic
+//               cloud keys"]; the answer is opcode 0x31: a count, then each
+//               key as its type (0x01 the identity resolving key, 0x04 the
+//               encryption key), a byte, its length, a byte, and the key
+//               (CAPod's wiki, "AirPod Keys", d4rken-org/capod: facts only;
+//               the project is GPL-3.0 and none of its code is used).
+//   [rename]    Renaming the AirPods themselves: opcode 0x1A, then 0x01,
+//               the name's length in bytes, 0x00 and the name in UTF-8
+//               (LibrePods' docs/AAP Definitions.md, "Renaming AirPods":
+//               the message's bytes only; LibrePods is GPL-3.0 and none of
+//               its code or text is used). UNVERIFIED: no capture or second
+//               source confirms it, and the AirPods give no answer to it,
+//               so earbuds.js takes it as done only when they report the
+//               new name (their version information, or their Bluetooth
+//               name).
 //
 // Marked UNVERIFIED below: values those sources do not give, taken as the
 // community reports them and not yet checked against a capture or a pair
@@ -50,7 +67,10 @@ var PSM = 0x1001;
 var SERVICE = 4;
 var KIND = { connect: 0, connectResponse: 1, disconnect: 2, message: 4 };
 var OP = { readCapabilities: 0x01, capabilities: 0x02, battery: 0x04, getInEar: 0x05, inEar: 0x06, role: 0x08,
-           setting: 0x09, notificationFilter: 0x0f, version: 0x1d };
+           setting: 0x09, notificationFilter: 0x0f, rename: 0x1a /* UNVERIFIED */, version: 0x1d,
+           keysRequest: 0x30, keys: 0x31 };
+// The keys' types in the 0x31 answer [keys].
+var KEY_TYPES = { 0x01: "irk", 0x04: "encKey" };
 var SETTING = { listeningMode: 0x0d, earDetection: 0x0a, conversationAwareness: 0x28 };
 
 var LISTENING_MODES = { off: 0x01, anc: 0x02, transparency: 0x03, adaptive: 0x04 /* UNVERIFIED */ };
@@ -82,6 +102,20 @@ function setEarDetection(on) { return setting(SETTING.earDetection, on ? EAR_DET
 function setConversationAwareness(on) {
     return setting(SETTING.conversationAwareness, on ? CONVERSATION_AWARENESS.on : CONVERSATION_AWARENESS.off);
 }
+// [keys]: 05 asks for both keys (types 0x01 and 0x04, as a mask).
+function requestProximityKeys() { return message(OP.keysRequest, [0x05, 0x00]); }
+// [rename], UNVERIFIED. At most 32 characters (Phoenix's limit, as the
+// Settings page's) and 255 bytes (one length byte).
+function rename(name) {
+    var bytes = toUtf8(String(name || ""));
+    if (!bytes.length || bytes.length > 255) throw new Error("rename: 1 to 255 bytes of UTF-8");
+    return message(OP.rename, [0x01, bytes.length, 0x00].concat(bytes));
+}
+function toUtf8(str) {
+    var enc = unescape(encodeURIComponent(str)), out = [];
+    for (var i = 0; i < enc.length; ++i) out.push(enc.charCodeAt(i));
+    return out;
+}
 
 // ---- Packets we receive ---------------------------------------------------------------
 
@@ -94,7 +128,8 @@ function nameOf(table, v) {
 // "battery" {battery: {left, right, case, single}, charging: {...}},
 // "inEar" {primary, secondary}, "role" {primary}, "setting" {id, value,
 // listeningMode?, earDetection?, conversationAwareness?}, "version"
-// {name, modelNumber, manufacturer, serial, firmware}, or "other" {op}.
+// {name, modelNumber, manufacturer, serial, firmware}, "keys" {irk,
+// encKey} (byte arrays, [] if not sent), or "other" {op}.
 function parse(bytes) {
     var b = Array.prototype.slice.call(bytes || []);
     if (b.length < 4) return null;
@@ -148,6 +183,19 @@ function parse(bytes) {
         return { kind: "version", name: strs[0] || "", modelNumber: strs[1] || "", manufacturer: strs[2] || "",
                  serial: strs[3] || "", firmware: strs[4] || "" };
     }
+    case OP.keys: {
+        // [keys]: a count, then [type, ?, length, ?, key...] each.
+        var keys = { kind: "keys", irk: [], encKey: [] };
+        var count = d[0] || 0, at = 1;
+        for (var q = 0; q < count && at + 4 <= d.length; ++q) {
+            var type = d[at], len = d[at + 2];
+            var key = d.slice(at + 4, at + 4 + len);
+            if (key.length !== len) break;
+            if (KEY_TYPES[type]) keys[KEY_TYPES[type]] = key;
+            at += 4 + len;
+        }
+        return keys;
+    }
     default:
         return { kind: "other", op: op };
     }
@@ -163,11 +211,12 @@ function utf8(bytes) {
 // each packet that comes (receive), and closed() when the channel goes.
 // onState(state) after every change: {connected, battery, charging, inEar:
 // {left, right}, listeningMode, earDetection, conversationAwareness,
-// modelNumber, name, firmware}.
+// modelNumber, name, firmware, keys: {irk, encKey} | null}.
 
 function session(transport, onState) {
     var st = { connected: false, battery: {}, charging: {}, inEar: { left: "", right: "" }, primary: "",
-               listeningMode: "", earDetection: null, conversationAwareness: null, modelNumber: "", name: "", firmware: "" };
+               listeningMode: "", earDetection: null, conversationAwareness: null, modelNumber: "", name: "", firmware: "",
+               keys: null };
     var raw = { primary: "", secondary: "" };
     function emit() { if (onState) onState(JSON.parse(JSON.stringify(st))); }
     function ears() {
@@ -187,6 +236,8 @@ function session(transport, onState) {
                 st.connected = true;
                 transport.send(notificationFilter());
                 transport.send(getInEar());
+                // The keys, to know these AirPods' advertisements (keys.js).
+                transport.send(requestProximityKeys());
             } else if (p.kind === "disconnect") {
                 st.connected = false;
                 transport.close();
@@ -206,6 +257,9 @@ function session(transport, onState) {
                 st.modelNumber = p.modelNumber;
                 st.name = p.name;
                 st.firmware = p.firmware;
+            } else if (p.kind === "keys") {
+                if (p.irk.length !== 16 && p.encKey.length !== 16) return;
+                st.keys = { irk: p.irk.length === 16 ? p.irk : [], encKey: p.encKey.length === 16 ? p.encKey : [] };
             } else {
                 return;
             }
@@ -217,6 +271,7 @@ function session(transport, onState) {
         setConversationAwareness: function (on) {
             transport.send(setConversationAwareness(on)); st.conversationAwareness = !!on; emit();
         },
+        rename: function (name) { transport.send(rename(name)); },
         close: function () { transport.close(); }
     };
 }
@@ -225,5 +280,6 @@ module.exports = {
     PSM: PSM, OP: OP, SETTING: SETTING, LISTENING_MODES: LISTENING_MODES,
     connectPacket: connectPacket, notificationFilter: notificationFilter, getInEar: getInEar,
     setListeningMode: setListeningMode, setEarDetection: setEarDetection, setConversationAwareness: setConversationAwareness,
+    requestProximityKeys: requestProximityKeys, rename: rename,
     parse: parse, session: session
 };

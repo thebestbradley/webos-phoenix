@@ -18452,21 +18452,30 @@
     //
     //   org.webosphoenix.earbuds/getStatus {subscribe} -> {bluetooth,
     //       nearby: [{id, model, modelName, kind, color, battery: {left,
-    //       right, case}, charging, lidOpen, lidOpenCount, rssi, paired}],
-    //       devices: [{address, name, model, kind, modelNumber, connected,
-    //       aap, battery: {left, right, case, single}, charging, inEar: {left,
-    //       right}, noiseMode, noiseModes, earDetection,
-    //       conversationAwareness}], pairing: null | {id, state, address,
+    //       right, case}, charging, lidOpen, lidOpenCount, rssi, paired,
+    //       match, exact}], devices: [{address, name, model, kind,
+    //       modelNumber, connected, aap, battery: {left, right, case,
+    //       single}, charging, inEar: {left, right}, noiseMode, noiseModes,
+    //       earDetection, conversationAwareness, keys, recognition,
+    //       exactBattery, renamed}], pairing: null | {id, state, address,
     //       error}}; connect {id}, cancelConnect, setNoiseMode {address,
     //       mode}, setEarDetection {address, enabled},
     //       setConversationAwareness {address, enabled}, rename {address,
     //       name}, forget {address}. Batteries in percent, -1: no reading.
     //   org.webosphoenix.trackers/getStatus {subscribe} -> {enabled,
-    //       bluetooth, location, scanning, trackers: [{id, type, network,
-    //       name, firstSeen, lastSeen, sightings, duration, distance,
-    //       alertedAt, ignored, points: [{t, lat?, lon?}], canPlaySound}],
-    //       sound}; setEnabled {enabled}, playSound {id}, stopSound {id},
-    //       ignore {id, ignored?}, clear {}.
+    //       bluetooth, location, scanning, sensitivity, thresholds,
+    //       scanMode, scanWindows, trackers: [{id, type, network, name,
+    //       firstSeen, lastSeen, sightings, duration, distance, alertedAt,
+    //       ignored, points: [{t, lat?, lon?}], canPlaySound}], sound};
+    //       setEnabled {enabled}, setSensitivity {sensitivity}, setScanMode
+    //       {mode}, playSound {id}, stopSound {id}, ignore {id, ignored?},
+    //       clear {}.
+    //
+    // The simulated AirPods give their keys on their first connection (on
+    // a device: aap.js requestProximityKeys) and from then on are known by
+    // them, their batteries to 1 % (on a device only once the encrypted
+    // part's layout is learned: keys.js). They take a new name (aap.js
+    // rename) unless simAirPods.rejectRename says they refuse it.
     //
     // The shell hears the AirPods' status as systemStatus {earbuds} (its
     // card when a case opens, the system menu's batteries and noise control,
@@ -18482,7 +18491,9 @@
                      modelNumber: "A2931", kind: "airpodspro", code: "0x1420", classOfDevice: 0x240418,
                      modes: ["off", "transparency", "adaptive", "anc"], ca: true };
         var hw = { present: false, lidOpen: false, left: "case", right: "case", battery: { left: 100, right: 100, case: 80 },
-                   charging: { left: false, right: false, case: false }, lidOpenCount: 0, stem: 0 };
+                   charging: { left: false, right: false, case: false }, lidOpenCount: 0, stem: 0, rejectRename: false };
+        // As earbuds.js RENAME_WAIT: the AirPods report a new name within it, or it did not take.
+        var RENAME_WAIT = 10000, renameTimer = null;
         var lastStem = 0;
         var pairing = null, pairTimers = [];
         var watchers = [];
@@ -18514,19 +18525,23 @@
                       inEar: c ? { left: ear("left"), right: ear("right") } : { left: "", right: "" },
                       noiseMode: c ? s.noiseMode || "anc" : "", noiseModes: PODS.modes,
                       earDetection: s.earDetection !== false,
-                      conversationAwareness: PODS.ca ? s.conversationAwareness !== false : null }];
+                      conversationAwareness: PODS.ca ? s.conversationAwareness !== false : null,
+                      keys: !!s.keys, recognition: s.keys ? "key" : "model", exactBattery: !!s.keys, renamed: s.renamed || "" }];
         }
         function nearbyList() {
             var b = bt();
             if (!b.powered || !hw.present || !(hw.lidOpen || out("left") || out("right"))) return [];
             var paired = deviceList().length ? PODS.address : "";
-            var level = function (v, shown) { return shown ? Math.round(v / 10) * 10 : -1; };
+            var keyed = !!paired && !!(mine(settings()) || {}).keys;
+            // The advertisement's tenths, or with the keys its encrypted part's exact levels.
+            var level = function (v, shown) { return shown ? (keyed ? v : Math.round(v / 10) * 10) : -1; };
             return [{ id: PODS.le, model: PODS.code, modelName: "AirPods", kind: "", color: "white",
                       battery: { left: level(hw.battery.left, true), right: level(hw.battery.right, true),
                                  case: level(hw.battery.case, hw.lidOpen) },
                       charging: { left: hw.left === "case" && hw.charging.left, right: hw.right === "case" && hw.charging.right,
                                   case: hw.charging.case },
-                      lidOpen: hw.lidOpen, lidOpenCount: hw.lidOpenCount, rssi: -42, paired: paired }];
+                      lidOpen: hw.lidOpen, lidOpenCount: hw.lidOpenCount, rssi: -42, paired: paired,
+                      match: paired ? (keyed ? "key" : "model") : "", exact: keyed }];
         }
         function status() {
             return ok({ bluetooth: bt().powered, nearby: nearbyList(), devices: deviceList(), pairing: pairing });
@@ -18570,7 +18585,7 @@
                     pairing = Object.assign({}, pairing, { state: "pairing", address: PODS.address });
                     fire(true);
                     step(1000, function () {
-                        setSettings(function (s) { s[PODS.address] = Object.assign({ noiseMode: "anc" }, s[PODS.address] || {}, { disconnected: false }); });
+                        setSettings(function (s) { s[PODS.address] = Object.assign({ noiseMode: "anc" }, s[PODS.address] || {}, { disconnected: false, keys: true }); });
                         if (runtime.bluetoothSim) runtime.bluetoothSim.addPaired(PODS.address);
                         pairing = Object.assign({}, pairing, { state: "connecting" });
                         fire(true);
@@ -18607,6 +18622,7 @@
                 if (!deviceList().length || p.address !== PODS.address) return reply(fail(-1, "No such AirPods"));
                 if (!name || name.length > 32) return reply(fail(-1, "The name has 1 to 32 characters"));
                 setSettings(function (s) { s[PODS.address].name = name; });
+                sendName();
                 if (runtime.bluetoothSim) runtime.bluetoothSim.changed();
                 fire(true);
                 reply(ok());
@@ -18630,10 +18646,25 @@
         };
         register(["org.webosphoenix.earbuds"], methods);
 
+        // The AirPods' own name (earbuds.js sendName): taken by the simulated
+        // AirPods, or never (rejectRename); not connected, it waits for them.
+        function setRenamed(state) { setSettings(function (s) { if (s[PODS.address]) s[PODS.address].renamed = state; }); fire(true); }
+        function sendName() {
+            if (renameTimer) clearTimeout(renameTimer);
+            renameTimer = null;
+            if (!connected()) return setRenamed("offline");
+            setRenamed("pending");
+            renameTimer = setTimeout(function () {
+                renameTimer = null;
+                setRenamed(hw.rejectRename ? "failed" : "done");
+            }, hw.rejectRename ? RENAME_WAIT : 1200);
+        }
+
         hooks.push(function (st, writer) {
             if (st.simAirPods && typeof st.simAirPods === "object") {
                 var a = st.simAirPods, wasOpen = hw.lidOpen;
-                hw = { present: !!a.present, lidOpen: !!a.lidOpen, left: a.left || "case", right: a.right || "case",
+                var wasConnected = connected();
+                hw = { present: !!a.present, lidOpen: !!a.lidOpen, left: a.left || "case", right: a.right || "case", rejectRename: !!a.rejectRename,
                        battery: Object.assign({ left: 100, right: 100, case: 80 }, a.battery || {}),
                        charging: Object.assign({ left: false, right: false, case: false }, a.charging || {}),
                        lidOpenCount: hw.lidOpenCount + (a.lidOpen && !wasOpen ? 1 : 0), stem: a.stem || 0 };
@@ -18650,6 +18681,12 @@
                     setSettings(function (s) { s[PODS.address].noiseMode = next; });
                 }
                 lastStem = hw.stem;
+                // Connected again: their keys (the first time), a name given while away.
+                if (writer && connected() && !wasConnected) {
+                    var m = mine(settings());
+                    if (m && !m.keys) setSettings(function (x) { x[PODS.address].keys = true; });
+                    if (m && m.renamed === "offline") sendName();
+                }
                 fire(writer);
             }
             if (st.earbudsRequest && writer) {
@@ -18662,7 +18699,21 @@
         // ---- Tracker alerts ------------------------------------------------------------
         // The same rule as a device (services/accessories/lib/trackerdetect.js):
         // seen for 30 minutes, 3 times, over 400 m, one alert in 7 hours.
-        var MIN = 60000, T = { minDuration: 30 * MIN, minSightings: 3, minDistance: 400, realertAfter: 7 * 60 * MIN };
+        // The levels and the scan's modes, as trackerdetect.js SENSITIVITY
+        // and scanner.js MODES (where each value comes from is there).
+        var MIN = 60000, HOUR = 60 * MIN;
+        var SENSITIVITY = {
+            low: { minDuration: 120 * MIN, minSightings: 4, minDistance: 840, realertAfter: 8 * HOUR },
+            medium: { minDuration: 30 * MIN, minSightings: 3, minDistance: 400, realertAfter: 7 * HOUR },
+            high: { minDuration: 10 * MIN, minSightings: 2, minDistance: 200, realertAfter: 2 * HOUR }
+        };
+        var SCAN_MODES = {
+            saver: { screenOn: { window: 10000, every: 30000 }, screenOff: { window: 20000, every: 15 * MIN } },
+            balanced: { screenOn: null, screenOff: { window: 10000, every: 3 * MIN } },
+            performance: { screenOn: null, screenOff: { window: 10000, every: MIN } }
+        };
+        function level() { var l = tstate().sensitivity; return SENSITIVITY[l] ? l : "medium"; }
+        function scanMode() { var m = tstate().scanMode; return SCAN_MODES[m] ? m : "balanced"; }
         var trackerWatchers = [];
         var sound = null, soundTimers = [];
         function tstate() { return store.get("trackers:sim", { enabled: true, trackers: {} }); }
@@ -18690,6 +18741,8 @@
             var list = Object.keys(s.trackers).map(function (id) { return summary(s.trackers[id]); })
                 .sort(function (a, b) { return b.lastSeen - a.lastSeen; });
             return ok({ enabled: s.enabled !== false, bluetooth: bt().powered, location: !!loc, scanning: s.enabled !== false && bt().powered,
+                        sensitivity: level(), thresholds: Object.assign({}, SENSITIVITY[level()]),
+                        scanMode: scanMode(), scanWindows: JSON.parse(JSON.stringify(SCAN_MODES[scanMode()])),
                         trackers: list, sound: sound });
         }
         function fireTrackers() {
@@ -18720,6 +18773,7 @@
             r.points.sort(function (a, b) { return a.t - b.t; });
             r.firstSeen = r.points[0].t;
             r.lastSeen = r.points[r.points.length - 1].t;
+            var T = SENSITIVITY[level()];
             var due = !r.ignored && (!r.alertedAt || now - r.alertedAt >= T.realertAfter) && r.lastSeen - r.firstSeen >= T.minDuration
                 && r.points.length >= T.minSightings && spread(r.points) >= T.minDistance;
             if (due) r.alertedAt = now;
@@ -18729,7 +18783,8 @@
                 var what = r.type === "airtag" ? "AirTag" : "tracker";
                 host.postToHost("notification", { appId: "org.webosphoenix.settings", title: "Unknown " + what + " found moving with you",
                     body: "Its owner may be able to see where you are. Tap to find it or learn how to disable it.",
-                    params: { page: "bluetooth", view: "tracker", id: id }, tag: "tracker-" + id, soundClass: "alerts" });
+                    params: { page: "bluetooth", view: "tracker", id: id }, tag: "tracker-" + id, soundClass: "alerts",
+                    soundFile: "sounds/tracker-alert.mp3" });
             }
             fireTrackers();
         }
@@ -18742,6 +18797,18 @@
                 if (p.subscribe) trackerWatchers.push({ reply: reply, ctx: ctx, last: toJson(trackerStatus()) });
             },
             "/setEnabled": function (p, reply) { setTstate(function (s) { s.enabled = p.enabled !== false; }); fireTrackers(); reply(ok()); },
+            "/setSensitivity": function (p, reply) {
+                if (!SENSITIVITY[p.sensitivity]) return reply(fail(-1, "The sensitivity is low, medium or high"));
+                setTstate(function (s) { s.sensitivity = p.sensitivity; });
+                fireTrackers();
+                reply(ok());
+            },
+            "/setScanMode": function (p, reply) {
+                if (!SCAN_MODES[p.mode]) return reply(fail(-1, "The scan's mode is saver, balanced or performance"));
+                setTstate(function (s) { s.scanMode = p.mode; });
+                fireTrackers();
+                reply(ok());
+            },
             // Its sound (on a device: DULT's Sound_Start over GATT), about 12 s.
             "/playSound": function (p, reply) {
                 var r = tstate().trackers[p.id];

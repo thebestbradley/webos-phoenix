@@ -19,9 +19,14 @@ upside down) and the launcher (SystemUiController.cpp:765-767:
 whose files were not released or cannot be shipped (TONES, MP3 through
 ffmpeg's LAME encoder): Email's new-mail sound (DashboardManager.js:419,
 com.palm.app.email/sounds/emailreceived.mp3) and the Clock's default alarm
-(alarm.js:368, /media/internal/ringtones/Flurry.mp3).
+(alarm.js:368, /media/internal/ringtones/Flurry.mp3). And one of Phoenix's
+own: the unknown tracker alert's (docs/ACCESSORIES.md; webOS had none), in
+the Settings app whose notification it is.
 
-    python3 tools/make-feedback-sounds.py [--out DIR] [--check]
+    python3 tools/make-feedback-sounds.py [--out DIR] [--check] [--only NAME ...]
+
+--only writes just those sounds and tones (the others' MP3s are left as
+they are: another LAME encodes them to other bytes).
 
 --check regenerates in memory and fails if the files in the tree differ
 (needs the same NumPy random stream, PCG64, which NumPy keeps stable). The
@@ -214,6 +219,37 @@ def flurry():
     return x
 
 
+def tracker_alert():
+    """An unknown tracker moving with you (Phoenix's own, the owner's request
+    of 15 October 2026: an alert like no other, that says "a tracker is
+    following you"): two bursts of three quick rising chirps, a beacon's
+    call, the second burst a fourth higher, then a sonar-like ping that
+    rings out (2.2 s). The chirps glide (1.4 to 2.5 kHz, 1.87 to 3.34 kHz,
+    70 ms each, a touch of the third harmonic for edge); the ping is a C6
+    with inharmonic partials (2.76 and 5.4 times, as a struck bar's), so no
+    other Phoenix sound, all bells and clicks, is taken for it."""
+    x = np.zeros(int(2.2 * RATE))
+
+    def chirp(f0, f1):
+        phase, t = sweep(f0, f1, 0.07, 0.7)
+        tone = np.sin(phase) + 0.18 * np.sin(3 * phase)
+        env = envelope(len(t), 0.003, 0.05)
+        # A 12 ms fade at the end, so it does not click off.
+        f = int(0.012 * RATE)
+        env[-f:] *= 0.5 + 0.5 * np.cos(np.linspace(0.0, np.pi, f))
+        return tone * env
+
+    for burst, (f0, f1) in enumerate([(1400.0, 2500.0), (1866.7, 3333.3)]):
+        for i in range(3):
+            c = chirp(f0, f1)
+            at = int((burst * 0.62 + i * 0.115) * RATE)
+            x[at:at + len(c)] += c
+    ping = bell(1046.5, 0.84, 0.32, partials=((1.0, 1.0), (2.76, 0.18), (5.4, 0.05)))
+    at = int(1.36 * RATE)
+    x[at:at + len(ping)] += 0.9 * ping[:len(x) - at]
+    return x
+
+
 SOUNDS = {
     # name: (make, peak level)
     "key": (lambda: click(2300.0, 0.030, 0.0045, 0.55, 0.8, 1), 0.50),
@@ -240,6 +276,8 @@ TONES = {
     "emailreceived": (mail, 0.45, os.path.join(
         "compat", "rootfs", "usr", "palm", "applications", "com.palm.app.email", "sounds", "emailreceived.mp3")),
     "Flurry": (flurry, 0.50, os.path.join("shell", "assets", "sounds", "phoenix", "ringtones", "Flurry.mp3")),
+    # The unknown tracker alert's notification (services/accessories/trackers.js ALERT_SOUND).
+    "tracker-alert": (tracker_alert, 0.50, os.path.join("apps", "settings", "public", "sounds", "tracker-alert.mp3")),
 }
 
 
@@ -304,10 +342,17 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--out", default=OUT)
     ap.add_argument("--check", action="store_true", help="fail if the files in --out differ")
+    ap.add_argument("--only", nargs="+", metavar="NAME", help="only these sounds and tones")
     args = ap.parse_args()
+    if args.only:
+        unknown = [n for n in args.only if n not in SOUNDS and n not in TONES]
+        if unknown:
+            ap.error("no such sound: " + ", ".join(unknown))
     os.makedirs(args.out, exist_ok=True)
     stale = []
     for name in SOUNDS:
+        if args.only and name not in args.only:
+            continue
         data = render(name)
         path = os.path.join(args.out, name + ".wav")
         if args.check:
@@ -322,6 +367,8 @@ def main():
                 f.write(data)
             print("wrote %s (%d bytes)" % (os.path.relpath(path, REPO), len(data)))
     for name, (make, peak, rel) in TONES.items():
+        if args.only and name not in args.only:
+            continue
         pcm = samples(make, peak)
         path = os.path.join(REPO, rel)
         if args.check:

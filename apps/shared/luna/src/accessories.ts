@@ -121,6 +121,10 @@ export interface NearbyEarbuds {
     rssi: number;
     /** The paired AirPods these are taken to be ("" for none). */
     paired: string;
+    /** How: by their key (their own), by model (the one pair of that model), or "" (not ours). */
+    match: "key" | "model" | "";
+    /** The batteries are their encrypted part's, to 1 % (else in tenths). */
+    exact: boolean;
 }
 
 /** Paired AirPods or Beats. */
@@ -142,6 +146,14 @@ export interface EarbudsDevice {
     earDetection: boolean;
     /** null: the model has none. */
     conversationAwareness: boolean | null;
+    /** The AirPods gave Phoenix their keys. */
+    keys: boolean;
+    /** "key": known by their key; "model": the one pair of that model is taken to be them. */
+    recognition: "key" | "model";
+    /** Their advertisement's batteries are read to 1 % (the layout is learned). */
+    exactBattery: boolean;
+    /** Renaming the AirPods themselves: "" (never), sent and waiting, done, refused or not answered, or waiting for them to connect. */
+    renamed: "" | "pending" | "done" | "failed" | "offline";
 }
 
 export interface EarbudsPairing {
@@ -194,12 +206,22 @@ export interface TrackerInfo {
     canPlaySound: boolean;
 }
 
+export type TrackerSensitivity = "low" | "medium" | "high";
+export type ScanMode = "saver" | "balanced" | "performance";
+/** A scan's windows: null, it runs; or `window` ms every `every` ms. */
+export type ScanWindow = { window: number; every: number } | null;
+
 export interface TrackerStatus {
     enabled: boolean;
     bluetooth: boolean;
     /** A location to note sightings with (Location Services on). */
     location: boolean;
     scanning: boolean;
+    sensitivity: TrackerSensitivity;
+    /** The level's rule: ms with you, sightings, metres, ms between alerts. */
+    thresholds: { minDuration: number; minSightings: number; minDistance: number; realertAfter: number };
+    scanMode: ScanMode;
+    scanWindows: { screenOn: ScanWindow; screenOff: ScanWindow } | null;
     trackers: TrackerInfo[];
     sound: { id: string; state: "connecting" | "playing" | "done" | "failed"; error: string } | null;
 }
@@ -211,6 +233,8 @@ export const trackers = {
         return subscribe(`${TRACKERS}/getStatus`, {}, (r) => cb(r as unknown as TrackerStatus), onError);
     },
     setEnabled(enabled: boolean) { return call(`${TRACKERS}/setEnabled`, { enabled }); },
+    setSensitivity(sensitivity: TrackerSensitivity) { return call(`${TRACKERS}/setSensitivity`, { sensitivity }); },
+    setScanMode(mode: ScanMode) { return call(`${TRACKERS}/setScanMode`, { mode }); },
     playSound(id: string) { return call(`${TRACKERS}/playSound`, { id }); },
     stopSound(id: string) { return call(`${TRACKERS}/stopSound`, { id }); },
     ignore(id: string, ignored = true) { return call(`${TRACKERS}/ignore`, { id, ignored }); },

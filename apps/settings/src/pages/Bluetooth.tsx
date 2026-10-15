@@ -8,10 +8,12 @@
 //
 // AirPods and Beats (docs/ACCESSORIES.md; org.webosphoenix.earbuds): a
 // paired pair shows its batteries in the list and opens its own page
-// (Earbuds.tsx) instead of the Forget dialog. Tracker Alerts
-// (org.webosphoenix.trackers) is a row at the bottom that opens its page
-// (Trackers.tsx). Launch params {view: "earbuds", address} and {view:
-// "tracker", id} (the tracker alert's notification) open those pages.
+// (Earbuds.tsx) instead of the Forget dialog. Scanning (how often Phoenix
+// listens for AirPods and trackers: Scanning.tsx) and Tracker Alerts
+// (org.webosphoenix.trackers: Trackers.tsx) are rows at the bottom that
+// open their pages. Launch params {view: "earbuds", address}, {view:
+// "trackers"}, {view: "tracker", id} (the tracker alert's notification)
+// and {view: "scanning"} open those pages.
 
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
@@ -23,6 +25,7 @@ import { useLaunchParams, useLuna } from "@phoenix/luna/react";
 import { Button, Dialog, Divider, ErrorText, Group, Note, Page, PageHeader, Row, Spinner, ToggleButton } from "@phoenix/ui";
 import { useBack } from "../nav";
 import { batteryLine, EarbudsPage } from "./Earbuds";
+import { SCAN_MODE_LABELS, ScanningPage } from "./Scanning";
 import { TrackerDetail, TrackersPage } from "./Trackers";
 
 /** Major device class (Bluetooth assigned numbers, bits 8-12 of the class of device). */
@@ -36,12 +39,13 @@ function kindOf(d: BluetoothDevice): string {
     }
 }
 
-export type BluetoothView = { kind: "earbuds"; address: string } | { kind: "trackers" } | { kind: "tracker"; id: string };
+export type BluetoothView = { kind: "earbuds"; address: string } | { kind: "trackers" } | { kind: "tracker"; id: string } | { kind: "scanning" };
 
-/** The sub-page a launch asks for ({view: "earbuds", address} | {view: "trackers"} | {view: "tracker", id}). */
+/** The sub-page a launch asks for ({view: "earbuds", address} | {view: "trackers"} | {view: "tracker", id} | {view: "scanning"}). */
 export function viewFromParams(p: { view?: unknown; address?: unknown; id?: unknown }): BluetoothView | null {
     if (p.view === "earbuds" && typeof p.address === "string") return { kind: "earbuds", address: p.address };
     if (p.view === "trackers") return { kind: "trackers" };
+    if (p.view === "scanning") return { kind: "scanning" };
     if (p.view === "tracker" && typeof p.id === "string") return { kind: "tracker", id: p.id };
     return null;
 }
@@ -80,6 +84,7 @@ export function BluetoothPage() {
     }
     if (view?.kind === "trackers") return <TrackersPage onOpen={(id) => go({ kind: "tracker", id }, false)} />;
     if (view?.kind === "tracker") return <TrackerDetail id={view.id} />;
+    if (view?.kind === "scanning") return <ScanningPage />;
     return <DevicesPage pods={pods} onOpen={(v) => go(v, false)} />;
 }
 
@@ -162,8 +167,11 @@ function DevicesPage({ pods, onOpen }: { pods: EarbudsStatus | undefined; onOpen
                 </>
             )}
 
-            <Divider caption="Privacy" />
+            <Divider caption="Nearby Accessories" />
             <Group>
+                <Row title="Scanning" value={alerts ? SCAN_MODE_LABELS[alerts.scanMode] : undefined} chevron testId="bt-scanning" className="wrap-row"
+                     subtitle="Listening for AirPods and trackers"
+                     onClick={() => onOpen({ kind: "scanning" })} />
                 <Row title="Tracker Alerts" value={alerts ? (alerts.enabled ? "On" : "Off") : undefined} chevron testId="bt-trackers" className="wrap-row"
                      subtitle="Unknown trackers moving with you"
                      onClick={() => onOpen({ kind: "trackers" })} />

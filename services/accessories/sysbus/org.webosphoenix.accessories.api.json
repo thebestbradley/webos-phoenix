@@ -27,6 +27,8 @@
         "org.webosphoenix.earbuds/rename",
         "org.webosphoenix.earbuds/forget",
         "org.webosphoenix.trackers/setEnabled",
+        "org.webosphoenix.trackers/setSensitivity",
+        "org.webosphoenix.trackers/setScanMode",
         "org.webosphoenix.trackers/playSound",
         "org.webosphoenix.trackers/stopSound",
         "org.webosphoenix.trackers/ignore",
