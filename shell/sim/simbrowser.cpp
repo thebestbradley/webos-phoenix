@@ -6,9 +6,11 @@
 #include <QNetworkProxy>
 #include <QQuickWebEngineProfile>
 #include <QTimer>
+#include <QWebEngineClientHints>
 #include <QWebEngineCookieStore>
 #include <QWebEngineUrlRequestInfo>
 #include <QWebEngineUrlRequestInterceptor>
+#include <QtWebEngineCore/qtwebenginecoreversion.h>
 
 #include "rootfs.h"
 
@@ -43,8 +45,14 @@ SimBrowser::SimBrowser(Rootfs *rootfs, PictureMaker *snapshots, bool phone, QObj
     m_filter.load(m_rootfs->resolve(QStringLiteral("/usr/share/phoenix/runtime/content-blocker/hosts.txt")));
     m_interceptor = new Interceptor(this);
     m_profile = makeProfile(true);
-    m_chromiumUa = m_profile->httpUserAgent();
-    applyUserAgent(m_profile);
+    applyUserAgent(m_profile, formFactor(true));
+}
+
+void SimBrowser::setAppsProfile(QQuickWebEngineProfile *profile)
+{
+    m_apps = profile;
+    if (m_apps)
+        applyUserAgent(m_apps, formFactor(false));
 }
 
 QQuickWebEngineProfile *SimBrowser::makeProfile(bool persistent)
@@ -79,7 +87,7 @@ QObject *SimBrowser::privateProfile()
 {
     if (!m_private) {
         m_private = makeProfile(false);
-        applyUserAgent(m_private);
+        applyUserAgent(m_private, formFactor(true));
     }
     return m_private;
 }
@@ -119,9 +127,7 @@ void SimBrowser::setUserAgent(const QString &mode)
     if (m == m_uaMode)
         return;
     m_uaMode = m;
-    applyUserAgent(m_profile);
-    if (m_private)
-        applyUserAgent(m_private);
+    refreshUserAgents();
     emit userAgentChanged();
 }
 
@@ -130,9 +136,7 @@ void SimBrowser::setPhone(bool phone)
     if (phone == m_phone)
         return;
     m_phone = phone;
-    applyUserAgent(m_profile);
-    if (m_private)
-        applyUserAgent(m_private);
+    refreshUserAgents();
     emit phoneChanged();
 }
 
@@ -141,9 +145,78 @@ QString SimBrowser::httpUserAgent() const
     return m_profile->httpUserAgent();
 }
 
-void SimBrowser::applyUserAgent(QQuickWebEngineProfile *p) const
+void SimBrowser::refreshUserAgents()
 {
-    p->setHttpUserAgent(ContentFilter::userAgent(m_chromiumUa, m_uaMode, m_phone));
+    applyUserAgent(m_profile, formFactor(true));
+    if (m_private)
+        applyUserAgent(m_private, formFactor(true));
+    if (m_apps)
+        applyUserAgent(m_apps, formFactor(false));
+}
+
+UserAgent::FormFactor SimBrowser::formFactor(bool browser) const
+{
+    if (browser && m_uaMode == QLatin1String("desktop"))
+        return UserAgent::FormFactor::Desktop;
+    return m_phone ? UserAgent::FormFactor::Phone : UserAgent::FormFactor::Tablet;
+}
+
+void SimBrowser::applyUserAgent(QQuickWebEngineProfile *p, UserAgent::FormFactor form)
+{
+    // Pages already open read the new one at once (navigator.userAgent,
+    // navigator.userAgentData) and send it from then on; nothing reloads
+    // (tools/test-useragent-sim.cjs, the adaptive switch). Their
+    // navigator.platform, a page script below, changes as they load again
+    // (a phone's and a tablet's are the same).
+    const int major = UserAgent::chromeMajor();
+    p->setHttpUserAgent(UserAgent::userAgent(major, form));
+    const UserAgent::ClientHints h = UserAgent::clientHints(major, form);
+    QWebEngineClientHints *hints = p->clientHints();
+    hints->setAllClientHintsEnabled(true);
+    // The brands: from Qt 6.10 Qt WebEngine makes Sec-CH-UA's list from
+    // this one too (the majors), in an order of its own (sorted, then
+    // permuted by its Chromium's major), where Chrome's puts the GREASE
+    // brand first for an even major; the order means nothing (GREASE is
+    // there to vary it). Qt 6.8 and 6.9 keep their Chromium's brands in
+    // Sec-CH-UA and navigator.userAgentData.brands (Chromium 122 on Qt
+    // 6.8); the rest follows the policy there too.
+    QVariantMap versions;
+    for (const UserAgent::Brand &b : h.fullVersionList)
+        versions.insert(b.name, b.version);
+    hints->setFullVersionList(versions);
+    hints->setFullVersion(h.fullVersion);
+    hints->setPlatform(h.platform);
+    hints->setPlatformVersion(h.platformVersion);
+    hints->setIsMobile(h.mobile);
+    hints->setModel(h.model);
+    hints->setArch(h.arch);
+    hints->setBitness(h.bitness);
+    // Qt WebEngine's version, not Qt's: Homebrew pairs Qt 6.12 with Qt
+    // WebEngine 6.11, and Qt WebEngine ships apart from Qt.
+#if QTWEBENGINECORE_VERSION >= QT_VERSION_CHECK(6, 10, 0)
+    hints->setFormFactors(h.formFactors);
+#endif
+    // navigator.platform: no profile setting has it, so a script in every
+    // page of the profile (its own collection: the views add theirs). Its
+    // class is private; its methods are invokable.
+    QObject *scripts = p->property("userScripts").value<QObject *>();
+    if (!scripts)
+        return;
+    QWebEngineScript script;
+    script.setName(QStringLiteral("phoenix-platform"));
+    script.setSourceCode(UserAgent::platformScript(form));
+    script.setInjectionPoint(QWebEngineScript::DocumentCreation);
+    script.setWorldId(QWebEngineScript::MainWorld);
+    script.setRunsOnSubFrames(true);
+    const auto old = m_platformScripts.constFind(p);
+    if (old != m_platformScripts.constEnd() && *old == script)
+        return;
+    if (old != m_platformScripts.constEnd())
+        QMetaObject::invokeMethod(scripts, "remove", Q_ARG(QWebEngineScript, *old));
+    QMetaObject::invokeMethod(scripts, "insert", Q_ARG(QWebEngineScript, script));
+    if (!m_platformScripts.contains(p))
+        connect(p, &QObject::destroyed, this, [this, p]() { m_platformScripts.remove(p); });
+    m_platformScripts.insert(p, script);
 }
 
 bool SimBrowser::shouldBlock(const QString &host, const QString &firstPartyHost, bool mainFrame)

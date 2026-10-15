@@ -564,6 +564,9 @@ int main(int argc, char *argv[])
         // their own, its settings, the system proxy.
         auto *simBrowser = new SimBrowser(&rootfs, &snapshots, !tablet && qMin(display.width(), display.height()) < 600, &view);
         view.rootContext()->setContextProperty(QStringLiteral("simBrowser"), simBrowser);
+        // The apps' pages are told what the browser's are: Chrome's current
+        // version for the device's form factor (useragent.h).
+        simBrowser->setAppsProfile(profile);
         webEngine = true;
         webApps = rootfs.apps();
     }

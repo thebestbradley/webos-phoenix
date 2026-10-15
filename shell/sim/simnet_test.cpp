@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 // simnet-test: phoenix-sim's network pieces without a window: the
-// browser's content blocker list and user agents (contentfilter.h), and
-// DropShare's web server (simdropshare.h) over real sockets: the page, the
-// token, uploads and their limits, the end of a session, sending.
+// browser's content blocker list (contentfilter.h; the user agents are
+// useragent-test's), and DropShare's web server (simdropshare.h) over real
+// sockets: the page, the token, uploads and their limits, the end of a
+// session, sending.
 //
 //   build/simnet-test
 
@@ -54,21 +55,6 @@ static void contentFilter()
     check(g.load(hosts.fileName()) && g.size() == 2, "a hosts file's lines and comments are read; localhost is not blocked");
     check(g.blocks(QStringLiteral("x.tracker.example")) && g.blocks(QStringLiteral("ads.example.org")), "... both forms");
     check(!g.load(QStringLiteral("/nonexistent/hosts.txt")), "a missing list fails to load");
-}
-
-static void userAgents()
-{
-    const QString chromium = QStringLiteral("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
-                                            "QtWebEngine/6.8.1 Chrome/122.0.6261.171 Safari/537.36");
-    check(ContentFilter::userAgent(chromium, QStringLiteral("desktop"), true) == chromium, "desktop: Chromium's own");
-    const QString phone = ContentFilter::userAgent(chromium, QStringLiteral("mobile"), true);
-    check(phone == QStringLiteral("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) "
-                                  "Chrome/122.0.0.0 Mobile Safari/537.36"), "phone: Chrome on Android, Mobile, no QtWebEngine token");
-    const QString tablet = ContentFilter::userAgent(chromium, QStringLiteral("mobile"), false);
-    check(tablet == QStringLiteral("Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) "
-                                   "Chrome/122.0.0.0 Safari/537.36"), "tablet: Chrome on an Android tablet, not Mobile");
-    check(!phone.contains(QLatin1String("webOS")) && !tablet.contains(QLatin1String("hpwOS")),
-          "no webOS token, which sites turn away as an old or TV browser");
 }
 
 struct Http {
@@ -199,7 +185,6 @@ int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
     contentFilter();
-    userAgents();
     dropShare();
     std::printf("%s\n", failures ? "FAILED" : "PASSED");
     return failures ? 1 : 0;

@@ -182,8 +182,7 @@ if(PHOENIX_BUILD_SIM)
         target_link_libraries(simfonts-test PRIVATE Qt6::Gui)
         target_compile_definitions(simfonts-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
     endif()
-    # The browser's content blocker and user agents, and DropShare's server
-    # (CI: build/simnet-test).
+    # The browser's content blocker and DropShare's server (CI: build/simnet-test).
     add_executable(simnet-test sim/simnet_test.cpp sim/contentfilter.h sim/simdropshare.cpp sim/simdropshare.h)
     target_link_libraries(simnet-test PRIVATE Qt6::Core Qt6::Network)
     target_compile_definitions(simnet-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
