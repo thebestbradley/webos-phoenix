@@ -84,7 +84,10 @@ final class Availability
         if ($packageKind === 'pwa') {
             return 'web';
         }
-        if (preg_match('/^(org|com)\.webosphoenix\./', $id)) {
+        // Phoenix's namespace, and Palm's when Phoenix publishes it: the 2.0 apps that keep their
+        // original ids (com.palm.app.calendar, ...) are Phoenix's rebuilt originals. Palm's ids from
+        // anyone else are no proof of anything.
+        if (preg_match('/^(org|com)\.webosphoenix\./', $id) || (str_starts_with($id, 'com.palm.') && $ownerRole === 'admin')) {
             return 'phoenix';
         }
         if ($devCatalog && $ownerRole === 'developer') {

@@ -10330,12 +10330,39 @@
                 // it takes the notification back (captureRemoved below).
                 var params = { path: path };
                 if (p.capture) params.capture = String(p.capture);
-                host.postToHost("notification", { appId: SCREENSHOT_APP, title: "Screen captured",
-                                                  body: path.slice(CAPTURE_DIR.length + 1).replace(/\.png$/, ""),
-                                                  params: params, tag: "capture:" + path });
+                var note = { appId: SCREENSHOT_APP, title: "Screen captured",
+                             body: path.slice(CAPTURE_DIR.length + 1).replace(/\.png$/, ""),
+                             params: params, tag: "capture:" + path };
+                // Its pills (Ember Glass: Share, Edit, Delete, as the shell
+                // gives them, {actions: {items: [{id, label}]}}): the shell
+                // does them (Shell.qml _notificationAction), so their uri is
+                // the Screenshot app's, as a notification's actions' must be.
+                if (p.actions && Array.isArray(p.actions.items) && p.actions.items.length)
+                    note.actions = { items: p.actions.items.map(function (a) { return { id: String(a.id), label: String(a.label) }; }),
+                                     uri: "luna://" + SCREENSHOT_APP + "/action", params: params };
+                host.postToHost("notification", note);
                 return path;
             });
         };
+
+        // A capture's whole page (a screen capture's Full Page, Ember Glass:
+        // Shell.qml _fullPage), beside it as "<capture> (Full Page).png" and
+        // in Photos with it; the preview opens on both ({path, fullPage}).
+        //   org.webosphoenix.screenshot/saveFullPage {path (the capture's),
+        //       data (a base64 PNG)} -> {fullPage: its path}
+        register([SCREENSHOT_APP], {
+            "/saveFullPage": function (p, reply) {
+                var path = String(p.path || "");
+                if (path.indexOf(CAPTURE_DIR + "/") !== 0 || !/\.png$/i.test(path)) return reply(fail(-1, "Not a screen capture: " + path));
+                var full = path.replace(/\.png$/i, "") + " (Full Page).png";
+                var blob;
+                try { blob = b64ToBlob(String(p.data || "").replace(/^data:image\/png;base64,/, ""), "image/png"); }
+                catch (e) { return reply(fail(-1, "Not a PNG")); }
+                files.write(full, blob).then(function () { return scan(CAPTURE_DIR); }).then(function () {
+                    reply(ok({ fullPage: full }));
+                }, function (e) { reply(fail(-1, "Could not store the whole page: " + ((e && e.message) || e))); });
+            }
+        });
 
         // ---- com.webos.service.camera2 ---------------------------------------------------
 
@@ -17008,6 +17035,32 @@
         };
 
         register(["org.webosphoenix.share"], {
+            // shareTo {appId, title?, text?, url?, files}: shared to that app
+            // as the sheet shares when it is chosen (its launch, its params),
+            // without the sheet: a screen capture's thumbnail dropped on the
+            // app's card (Shell.qml _dropOnCard). An app that does not take
+            // it: {returnValue: false, errorCode: "notATarget"}; a connector
+            // with more than one account, which the sheet would ask about:
+            // "chooseAccount".
+            "/shareTo": function (p, reply) {
+                var appId = String(p.appId || "");
+                var files = (p.files || []).filter(function (f) { return f && f.path; }).map(function (f) {
+                    return { path: String(f.path), mimeType: f.mimeType || "" };
+                });
+                var s = { title: p.title || "", text: p.text || "", url: p.url || "", files: files };
+                if (!appId || (!files.length && !s.text && !s.url)) return reply(fail(-1, "Nothing to share, or no app"));
+                readDeviceApps().then(function () { return targetsFor(shareTypes(s)); }).then(function (t) {
+                    var mine = t.filter(function (x) { return x.appId === appId; });
+                    if (!mine.length) return reply(Object.assign(fail(-1, appId + " does not take this"), { errorCode: "notATarget" }));
+                    if (mine.length > 1) return reply(Object.assign(fail(-1, "Choose the account in the share sheet"), { errorCode: "chooseAccount" }));
+                    var lp = launchParams(appId, s, mine[0].accountId ? mine[0] : null);
+                    if (runtime.onDevice)
+                        callP("luna://com.webos.applicationManager/launch", { id: appId, params: lp });
+                    else
+                        host.postToHost("launch", { id: appId, params: lp });
+                    reply(ok({ appId: appId }));
+                }, function (e) { reply(fail(-1, "Could not read the share targets: " + ((e && e.message) || e))); });
+            },
             "/open": function (p, reply) {
                 var files = (p.files || []).filter(function (f) { return f && f.path; }).map(function (f) {
                     return { path: String(f.path), mimeType: f.mimeType || "" };

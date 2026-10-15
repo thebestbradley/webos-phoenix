@@ -631,6 +631,10 @@ $devApp = new App(['data' => "$tmp/dev", 'dsn' => "sqlite:$tmp/dev/marketplace.s
 $devApp->catalog->publish();
 $localDev = $devApp->api->createAccount('Local developer', 'developer@localhost.localdomain', 'developer');
 [$s, $r] = $devApp->api->handle('POST', '/api/apps/packages', $connector('1.0.0', ['accountTypes' => [$details]]), 'Bearer ' . $localDev['token']);
+check(Phoenix\Marketplace\Availability::kindFor('com.palm.app.calendar', 'ipk', 'admin', false) === 'phoenix'
+      && Phoenix\Marketplace\Availability::kindFor('com.palm.app.calendar', 'ipk', 'developer', false) === 'web'
+      && Phoenix\Marketplace\Availability::kindFor('com.palm.app.calendar', 'ipk', null, false) === 'web',
+      'a 2.0 app that keeps its original id (com.palm.*) is "phoenix" when Phoenix publishes it, and not from anyone else');
 $devIdx = json_decode((string) file_get_contents("$tmp/dev/public/v1/index.json"), true);
 check($s === 200 && $r['release']['state'] === 'approved' && $r['app']['status'] === 'listed' && ($r['publish']['build'] ?? 0) === 2
       && in_array('org.example.foo', array_column($devIdx['accounts'], 'templateId'), true),

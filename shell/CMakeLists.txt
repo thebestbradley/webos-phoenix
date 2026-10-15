@@ -138,6 +138,15 @@ if(PHOENIX_BUILD_SIM)
     add_executable(localmodels-test native/localmodels_test.cpp native/localmodels.cpp native/localmodels.h native/speech.cpp native/speech.h)
     target_link_libraries(localmodels-test PRIVATE Qt6::Core Qt6::Network Qt6::Qml)
     target_compile_definitions(localmodels-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
+    # Which renderers draw on the CPU, where the shell's blur steps down
+    # (RenderInfo; CI: build/renderinfo-test).
+    # Qt6::GuiPrivate (QRhi's headers) is a package of its own from Qt 6.9; a find_package in
+    # native/ does not reach this directory (imported targets are the finding directory's).
+    if(Qt6_VERSION VERSION_GREATER_EQUAL 6.9)
+        find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
+    endif()
+    add_executable(renderinfo-test native/renderinfo_test.cpp native/renderinfo.cpp native/renderinfo.h)
+    target_link_libraries(renderinfo-test PRIVATE Qt6::Gui Qt6::GuiPrivate Qt6::Quick Qt6::Qml)
     # phoenix-sim's installed apps, without a window (CI: build/siminstaller-test).
     add_executable(siminstaller-test sim/siminstaller_test.cpp sim/rootfs.cpp sim/rootfs.h sim/siminstaller.cpp sim/siminstaller.h)
     target_link_libraries(siminstaller-test PRIVATE Qt6::Core)

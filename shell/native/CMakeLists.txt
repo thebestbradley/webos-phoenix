@@ -17,10 +17,17 @@ qt_add_qml_module(phoenix-native
             useractivity.h useractivity.cpp memorymonitor.h memorymonitor.cpp
             keyboardaccess.h keyboardaccess.cpp cornermask.h cornermask.cpp
             localmodels.h localmodels.cpp speech.h speech.cpp
+            renderinfo.h renderinfo.cpp
 )
 # Network: the Assistant's model downloads and llama-server's health check.
 find_package(Qt6 REQUIRED COMPONENTS Network)
-target_link_libraries(phoenix-native PRIVATE Qt6::Quick Qt6::Gui Qt6::Network)
+# RenderInfo asks the scene graph's QRhi (rhi/qrhi.h) which device draws.
+# QRhi's headers come with Qt's private ones, a package of their own from
+# Qt 6.9 (6.8 makes the target with Qt6::Gui).
+if(Qt6_VERSION VERSION_GREATER_EQUAL 6.9)
+    find_package(Qt6 REQUIRED COMPONENTS GuiPrivate)
+endif()
+target_link_libraries(phoenix-native PRIVATE Qt6::Quick Qt6::Gui Qt6::GuiPrivate Qt6::Network)
 # Dictation records with Qt Multimedia; without it the keyboard has no microphone.
 find_package(Qt6 QUIET COMPONENTS Multimedia)
 if(TARGET Qt6::Multimedia)

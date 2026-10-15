@@ -10,10 +10,17 @@
 //   BackdropBlur { anchors.fill: parent; source: shell.backdrop; mask: art }
 // where mask is the surface's artwork (the blur keeps to its shape and
 // alpha) and source the scene behind (Shell.backdrop: wallpaper, cards,
-// launcher). Off with the software renderer, which cannot run the effects.
+// launcher). Off without a GPU (RenderInfo.softwareRendering): Qt Quick's
+// software renderer cannot run the effects, and OpenGL or Vulkan on a
+// software rasteriser (Mesa's llvmpipe in a VM or a container) would draw
+// the scene behind again and blur it on the CPU whenever it changes, which
+// slows every frame. The surface is then drawn over the unblurred scene, as
+// LunaSysMgr drew it. PHOENIX_SOFTWARE_RENDERING (phoenix-sim
+// --software-rendering) forces it either way.
 
 import QtQuick
 import Qt5Compat.GraphicalEffects
+import Phoenix.Native
 
 Item {
     id: blur
@@ -24,7 +31,7 @@ Item {
     property Item mask: null
     property real radius: Theme.px(Theme.backdropBlurRadius)
 
-    visible: source !== null && width > 0 && height > 0 && GraphicsInfo.api !== GraphicsInfo.Software
+    visible: source !== null && width > 0 && height > 0 && !RenderInfo.softwareRendering
 
     // Where this surface sits over the source. Re-evaluated as the surface or
     // its parent moves (the dock slides with the cards).
