@@ -1276,7 +1276,8 @@ Item {
         "/usr/share/phoenix/sounds/feedback/listen.wav", "/usr/share/phoenix/sounds/feedback/carddrag.wav",
         "/usr/share/phoenix/sounds/feedback/birdappclose.wav", "/usr/share/phoenix/sounds/feedback/LauncherOpenApp.wav",
         "/usr/share/phoenix/sounds/feedback/LauncherCloseApp.wav",
-        "/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3"
+        "/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3",
+        "/usr/palm/applications/org.webosphoenix.settings/sounds/tracker-alert.mp3"
     ]
 
     function soundExists(path) {
@@ -1290,9 +1291,15 @@ Item {
         return shippedSounds.indexOf(path) >= 0;
     }
 
+    // An app's folder as a device path, as LsmWindowSource gives it: the
+    // sound policy resolves an app's own sounds in it (SoundPolicy.resolve,
+    // "sounds/x.mp3"), and soundExists and the pages' player take device
+    // paths, which the rootfs maps to the app's files (an installed app's
+    // too: Rootfs::resolve). Its launcher entry's "dir" is a file:// URL,
+    // which no device path matched, so an app's own notification sounds
+    // fell back to the alert tone.
     function appDir(appId) {
-        var info = appInfo(appId);
-        return info && info.dir ? info.dir : "/usr/palm/applications/" + appId;
+        return "/usr/palm/applications/" + appId;
     }
 
     function _soundPage() {

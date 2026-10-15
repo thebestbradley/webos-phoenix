@@ -80,17 +80,19 @@ names LunaSysMgr asked audiod for:
 | `birdappclose.wav` | a whistle sliding up from 600 Hz to 2 kHz over a rush of air, 0.6 s | the angry card let go, upside down, instead of `appclose` (`:2890-2893`) |
 | `LauncherOpenApp.wav`, `LauncherCloseApp.wav` | a short breath of filtered noise, brightening / darkening, 0.18 / 0.16 s | the launcher shown / hidden (`SystemUiController.cpp:760-768`) |
 
-## `phoenix/ringtones/` and the compat overlay: Phoenix tones (CC0 1.0)
+## `phoenix/ringtones/`, the compat overlay and Settings: Phoenix tones (CC0 1.0)
 
 Two tones the original apps name by path, whose files were never released
 or cannot be shipped, are synthesized by the same script (bell-like notes:
-a few sine partials with a fast attack and an exponential decay) and
-encoded as MP3 (LAME through ffmpeg, 128 kbit/s, no tags). CC0 1.0.
+a few sine partials with a fast attack and an exponential decay), and one
+of Phoenix's own, the unknown tracker alert's (gliding chirps and a ping);
+all are encoded as MP3 (LAME through ffmpeg, 128 kbit/s, no tags). CC0 1.0.
 
 | File | What it is | Played by |
 |---|---|---|
 | `phoenix/ringtones/Flurry.mp3` (`/media/internal/ringtones/Flurry.mp3`) | a flurry of marimba-like notes, a pentatonic run down and up in C, four bars, 6.4 s | the Clock's default alarm (`com.palm.app.clock` `utility/alarm.js:368`, `alarmdbmanager.js:100`); the Pre's own `Flurry.mp3` was never open-sourced |
 | `compat/rootfs/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3` | three quick bell notes up (G5, C6, E6) and a held G6, 1.2 s | Email's new-mail sound (`source/DashboardManager.js:419`), in place of the original (see below) |
+| `apps/settings/public/sounds/tracker-alert.mp3` | two bursts of three rising chirps (1.4 to 2.5 kHz, then a fourth higher), then a ping with a struck bar's partials, 2.2 s; Phoenix's own design (the owner, 15 October 2026), not sampled and not modelled on Apple's sounds | the unknown tracker alert's notification (`services/accessories/trackers.js` `ALERT_SOUND`; docs/ACCESSORIES.md); webOS had none |
 
 `python3 tools/make-feedback-sounds.py --check` decodes them and compares
 them with what the script renders.
