@@ -37,6 +37,11 @@ IMAGE_INSTALL:append = " phoenix-shell phoenix-keyboard phoenix-apps phoenix-pty
 # geometry (docs/HARDWARE.md, "Device configuration").
 IMAGE_INSTALL:append = " phoenix-device-config"
 
+# The web apps' user agent: Chrome on Android at the current Chrome stable
+# major, set in WebAppMgr at each start (/etc/wam/plugins/conf.sh;
+# docs/APP-RUNTIME.md, "The user agent").
+IMAGE_INSTALL:append = " phoenix-wam-conf"
+
 # Hardware (docs/HARDWARE.md, "Hardware support and the Hardware app"):
 # every open source kernel module the kernel was built with (the
 # phoenix-hardware*.cfg fragments), loaded by modalias when the hardware is

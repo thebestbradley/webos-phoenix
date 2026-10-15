@@ -1,0 +1,38 @@
+From 0f6e57e91831fc5a161cca0e8bd90cbcda26c640 Mon Sep 17 00:00:00 2001
+From: webOS Phoenix contributors <webos-phoenix@users.noreply.github.com>
+Date: Thu, 15 Oct 2026 15:43:59 +0000
+Subject: [PATCH] WebPageBlink: do not append an empty WAM_NAME to the user
+ agent
+
+WebPageBlink::Init sets the page's user agent to the runtime's default
+user agent, a space and WAM_NAME ("WebAppManager" in webapp-mgr.sh). A
+distro that sets the whole user agent with the runtime's --user-agent
+switch, and so empties WAM_NAME, got a trailing space at the end of it.
+Append WAM_NAME, and its space, only when it is set.
+
+Upstream-Status: Pending
+---
+ src/platform/webengine/web_page_blink.cc | 12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/src/platform/webengine/web_page_blink.cc b/src/platform/webengine/web_page_blink.cc
+index e5f2c9e..f335dbc 100644
+--- a/src/platform/webengine/web_page_blink.cc
++++ b/src/platform/webengine/web_page_blink.cc
+@@ -177,7 +177,13 @@ void WebPageBlink::Init() {
+ 
+   page_private_->page_view_->SetVisible(false);
+-  page_private_->page_view_->SetUserAgent(
+-      page_private_->page_view_->DefaultUserAgent() + " " +
+-      GetWebAppManagerConfig()->GetName());
++  // WAM_NAME is appended to the runtime's user agent ("WebAppManager");
++  // an empty WAM_NAME leaves the user agent as the runtime gives it (its
++  // --user-agent switch, or its default), without a trailing space.
++  std::string user_agent = page_private_->page_view_->DefaultUserAgent();
++  const std::string wam_name = GetWebAppManagerConfig()->GetName();
++  if (!wam_name.empty()) {
++    user_agent += " " + wam_name;
++  }
++  page_private_->page_view_->SetUserAgent(user_agent);
+ 
+   const std::string& privileged_plugin_path =
