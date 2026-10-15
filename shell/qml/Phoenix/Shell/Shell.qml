@@ -981,17 +981,54 @@ FocusScope {
     Connections {
         target: cards
         function onMaximizeProgressChanged() {
-            if (cards.maximizeProgress > 0 && !cards.minimizing)
+            if (cards.maximizeProgress > 0 && !cards.minimizing) {
                 shell.dockShown = false;
+                shell._inCardView = false;
+            } else if (cards.maximizeProgress === 0) {
+                Qt.callLater(shell._checkCardViewEntered);
+            }
         }
         function onMinimizingChanged() {
             if (cards.minimizing)
                 shell._showDock();
         }
+        function onRisingUidChanged() { shell._cardViewStep(cards.risingUid); }
+        function onLoadingUidChanged() { shell._cardViewStep(cards.loadingUid); }
+        function onWaitingUidChanged() { shell._cardViewStep(cards.waitingUid); }
     }
     Connections {
         target: shell.source ? shell.source.cards : null
-        function onRowsInserted() { shell.dockShown = false; }
+        function onRowsInserted() {
+            shell.dockShown = false;
+            shell._inCardView = false;
+        }
+        function onRowsRemoved() { Qt.callLater(shell._checkCardViewEntered); }
+    }
+    // Card view entered by any way, not only by a minimize: the card in
+    // front closed by its app (straight back to card view, no minimize:
+    // CardView._closeInFront; Screenshot's preview closing itself), a card
+    // closed while it waited or rose, a touch that stops a rise, a jump to
+    // a card. Every entry into card view showed the dock
+    // (MinimizeState::onEntry, CardWindowManagerStates.cpp:181-194:
+    // setCardWindowMaximized(false) -> signalShowDock,
+    // SystemUiController.cpp:737-744). Card view is left at once (a card
+    // added, waiting, loading, rising or maximizing) and looked at again
+    // once a step back has finished: a launch's rise starts a moment after
+    // its card is added (launch: Qt.callLater(focusLaunched)).
+    property bool _inCardView: true
+    function _cardViewStep(uid) {
+        if (uid !== "")
+            _inCardView = false;
+        else
+            Qt.callLater(_checkCardViewEntered);
+    }
+    function _checkCardViewEntered() {
+        if (_inCardView || cards.maximizeProgress !== 0 || cards.risingUid !== "" || cards.loadingUid !== "" || cards.waitingUid !== "")
+            return;
+        _inCardView = true;
+        // Not over a phone's dashboard (it owns the negative space).
+        if (Theme.tablet || !notes.dashboardOpen)
+            _showDock();
     }
     Connections {
         target: justType
