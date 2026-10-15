@@ -327,7 +327,34 @@ check "an unknown option: usage error" '[ $status = 2 ]' 'has "unknown command o
 phoenix --help
 check "--help" '[ $status = 0 ]' 'has "./phoenix run \[MODE\]"' 'has "--no-assistant"' 'has "--offline"' \
     'has "./phoenix run --marketplace"' 'has "./phoenix run --no-marketplace"' 'has "Start Catalog with the"' \
+    'has "./phoenix test --quick"' 'has "./phoenix test --web \[--shard I/N\]"' \
     'has "^Environment: PHOENIX_BUILD_DIR"' 'lacks "set -eu"'
+
+# ---- test ----------------------------------------------------------------------------
+# CI's runners, run as they are: nothing is checked, installed or built first.
+computer Linux
+printf 'git\nsed\n' > "$T/dpkg"
+phoenix test --quick --dry-run
+check "test --quick: tools/ci-checks.sh (CI's checks job)" '[ $status = 0 ]' \
+    'has "would run: sh $CHECKOUT/tools/ci-checks.sh$"' 'lacks "==> "' 'lacks "install  "'
+phoenix --dry-run test --quick --fail-fast typecheck
+check "test --quick ARGS: the arguments go to it" '[ $status = 0 ]' \
+    'has "would run: sh $CHECKOUT/tools/ci-checks.sh --fail-fast typecheck$"'
+phoenix test --web --shard 2/4 --dry-run
+check "test --web --shard I/N: tools/run-web-tests.cjs (CI's web jobs)" '[ $status = 0 ]' \
+    'has "would run: node $CHECKOUT/tools/run-web-tests.cjs --shard 2/4$"' 'lacks "==> "'
+mkdir -p "$CHECKOUT/tools"
+printf 'echo "ci-checks $*"\n' > "$CHECKOUT/tools/ci-checks.sh"
+phoenix test --quick --list
+check "test --quick runs it, with nothing installed or built first" '[ $status = 0 ]' \
+    'has "^ci-checks --list$"' 'lacks "==> "' 'lacks "apt-get"' 'lacks "cmake"'
+mock node 'echo "node $*"'
+phoenix test --web settings media
+check "test --web NAME...: the tests named" '[ $status = 0 ]' 'has "^node $CHECKOUT/tools/run-web-tests.cjs settings media$"'
+phoenix test
+check "test without --quick or --web: usage error" '[ $status = 2 ]' 'has "test needs --quick (the quick checks) or --web"'
+phoenix test --quick --web
+check "test --quick --web: usage error" '[ $status = 2 ]' 'has "--quick or --web, not both"'
 
 # ---- macOS ---------------------------------------------------------------------------
 computer Darwin
