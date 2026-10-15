@@ -103,7 +103,7 @@ it("What ./phoenix runs for a new build folder", "", B, WP, "webos-phoenix/phoen
     ("cmake -S shell -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64", "", {"os": L}),
     ("cmake --build build --parallel", "")])
 it("A release build without the npm step", "CMake switches: `PHOENIX_BUILD_SIM`, `PHOENIX_BUILD_KEYBOARD` and `PHOENIX_BUILD_APPS`, all on by default.", M, WP,
-   "webos-phoenix/shell/CMakeLists.txt:11,49,164 · .github/workflows/ci.yml:156",
+   "webos-phoenix/shell/CMakeLists.txt:11,49,164 · .github/workflows/ci.yml:157",
    ["cmake -S shell -B build -DCMAKE_BUILD_TYPE=Release -DPHOENIX_BUILD_APPS=OFF -DCMAKE_PREFIX_PATH=\"$(brew --prefix qt)\""])
 
 sec("Simulator: start")
@@ -177,13 +177,13 @@ sec("Test: shell")
 it("Point QMLTEST at Qt's test runner", "Once per terminal.", B, WP, "webos-phoenix/CLAUDE.md:80-81 · docs/GETTING-STARTED.md:328-330",
    [("export QMLTEST=\"$(brew --prefix qt)/bin/qmltestrunner\"", "", {"os": M}),
     ("export QMLTEST=/opt/Qt/6.8.1/gcc_64/bin/qmltestrunner", "", {"os": L})])
-it("Run the QML tests", "", B, WP, "webos-phoenix/.github/workflows/ci.yml:180,487-497 · README.md:465",
+it("Run the QML tests", "", B, WP, "webos-phoenix/.github/workflows/ci.yml:181,488-498 · README.md:465",
    [("QT_QUICK_BACKEND=software QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -input shell/tests", "all of them, as CI runs them on the Mac (offscreen Metal stalls animations)", {"os": M}),
     ("QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -input shell/tests", "all of them", {"os": L}),
     ("QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -input shell/tests/tst_launcher.qml", "one file"),
     ("QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -import shell/tests-device/fakes -input shell/tests-device", "the device shell over fake modules"),
     ("QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -input shell/tests/tst_hidpi.qml", "HiDPI at 2x")])
-it("Run the C++ tests", "There's nothing for `ctest` to find: run each test program by name after a build.", B, WP, "webos-phoenix/.github/workflows/ci.yml:185-264,535-548 · shell/CMakeLists.txt:67-73,125-192",
+it("Run the C++ tests", "There's nothing for `ctest` to find: run each test program by name after a build.", B, WP, "webos-phoenix/.github/workflows/ci.yml:186-265,536-549 · shell/CMakeLists.txt:67-73,125-192",
    ["build/pty/pty-test", "QT_QPA_PLATFORM=offscreen build/keyboard/keyboard-test", "build/siminstaller-test", "build/simlaunch-test",
     ("QT_QPA_PLATFORM=offscreen build/simchrome-test", "the menu bar and its Window menu"),
     ("build/siminstances-test", "the simulators' registry: Window > Simulators"), "build/dictation-test",
@@ -195,11 +195,11 @@ it("Run the C++ tests", "There's nothing for `ctest` to find: run each test prog
 it("Device-readiness checks", "The static checks a device image would trip on.", B, WP, "webos-phoenix/phoenix:33-38,74-77 · tools/check-device.sh:8-15",
    ["./phoenix check-device", "./phoenix check-device --all", "./phoenix check-device --strict",
     ("./phoenix check-device --parse fairphone-fp6", "also BitBake's parse check of the named machines (Linux, not as root)", {"os": L})])
-it("Python, shell and PHP tests", "", B, WP, "webos-phoenix/.github/workflows/ci.yml:73,76,101-104,216 · tools/test-make-utm.py:10-11",
-   ["sh tools/test-phoenix-script.sh", "python3 tools/test-devicecheck.py", "python3 tools/test-device-firmware.py", "python3 tools/test-device-profiles.py",
+it("Python, shell and PHP tests", "", B, WP, "webos-phoenix/.github/workflows/ci.yml:73,76,101-105,217 · tools/test-make-utm.py:10-11",
+   ["sh tools/test-phoenix-script.sh", "python3 tools/test-devicecheck.py", "python3 tools/test-device-firmware.py", "python3 tools/test-device-profiles.py", "python3 tools/test-wam-user-agent.py",
     "python3 tools/test-make-utm.py", "python3 tools/test-install-rootfs.py", "python3 tools/test-sounds-pcm.py",
     ("php server/marketplace/tests/run.php", "the Marketplace catalog"), ("php server/updates/tests/run.php", "the update feed"), ("php server/drivers/tests/run.php", "the driver catalog")])
-it("Art and generated-file checks", "`hidpi-art.py` needs Pillow and NumPy (on a Mac, from `.venv`); `make-feedback-sounds.py` needs ffmpeg.", B, WP, "webos-phoenix/CLAUDE.md:86 · .github/workflows/ci.yml:255-278",
+it("Art and generated-file checks", "`hidpi-art.py` needs Pillow and NumPy (on a Mac, from `.venv`); `make-feedback-sounds.py` needs ffmpeg.", B, WP, "webos-phoenix/CLAUDE.md:86 · .github/workflows/ci.yml:256-279",
    [("python3 tools/hidpi-art.py --check", "whenever art or stylesheets change"), "python3 tools/keyboard-charcoal.py --check", "node tools/render-app-icons.cjs --check",
     "python3 tools/upscale-app-icons.py --check", "python3 tools/make-feedback-sounds.py --check", "python3 tools/gen-assistant-bird.py --check",
     "python3 tools/debrand-overlays.py --check", ("node tools/check-launch-contracts.cjs", "every app-to-app launch"),
@@ -241,9 +241,9 @@ sec("Apps (webos-phoenix)")
 it("Install, build, typecheck, test", "", B, AP, "webos-phoenix/apps/package.json:54-59 · CLAUDE.md:52",
    ["npm ci --no-audit --no-fund", ("npm run build", "every app"), ("npm run build -w settings", "one app"), "npm run typecheck", "npm test", "npm run check",
     ("npm run dev -w settings", "Vite, without the webOS runtime (undocumented)")])
-it("The Enact demos", "Separate npm projects, in `apps/enact-notes-limestone` and `apps/enact-notes-agate`.", B, "webos-phoenix/apps/enact-notes-limestone", "webos-phoenix/.github/workflows/ci.yml:114",
+it("The Enact demos", "Separate npm projects, in `apps/enact-notes-limestone` and `apps/enact-notes-agate`.", B, "webos-phoenix/apps/enact-notes-limestone", "webos-phoenix/.github/workflows/ci.yml:115",
    ["npm ci --no-audit --no-fund && npm run typecheck && npm run build", ("npm run serve", "enact serve")])
-it("The Flutter demo and the Dart services package", "Needs Flutter.", B, WP, "webos-phoenix/.github/workflows/ci.yml:129-139 · apps/flutter-notes/README.md:55-58",
+it("The Flutter demo and the Dart services package", "Needs Flutter.", B, WP, "webos-phoenix/.github/workflows/ci.yml:130-140 · apps/flutter-notes/README.md:55-58",
    ["(cd apps/shared/phoenix_services && dart pub get && dart analyze --fatal-infos && dart test)",
     "(cd apps/flutter-notes && flutter pub get --enforce-lockfile && dart analyze --fatal-infos && flutter test && tool/build.sh)"])
 it("The connector developer tool", "Build the kit first.", B, AP, "webos-phoenix/apps/shared/connector-kit/src/tools/cli.ts:6-20 · docs/SYNERGY-SDK.md:719",
@@ -331,9 +331,15 @@ it("Build an image on Linux", "x86-64 Ubuntu with about 200 GB free. Naming seve
    ["scripts/setup-build.sh ../build-webos-phoenix qemux86-64 fairphone-fp6",
     ("cd ../build-webos-phoenix && . ./oe-init-build-env && bitbake webos-phoenix-image", ""),
     ("MACHINE=fairphone-fp6 bitbake webos-phoenix-image", "one machine", {"r": "build-webos-phoenix"})])
-it("Parse check", "About 12 minutes per machine, not as root. `PHOENIX_PARSE_DIR`, `PHOENIX_PARSE_TARGET` and `PHOENIX_PARSE_COMPRESS` adjust it.", L, WP, "webos-phoenix/scripts/parse-check.sh:8,22-36 · docs/HARDWARE.md:1672-1683",
+it("Build an image on LuneOS's layers", "Where device images are moving: Yocto wrynose, Qt 6.12, Chromium 151 (docs/DECISIONS.md, 15 October 2026). The layers' pins are in `scripts/luneos-layers.txt`; `PHOENIX_LUNEOS_COMMAND=configure` only writes the configuration; your own settings go in `phoenix-local.conf` in the build directory.", L, WP,
+   "webos-phoenix/scripts/setup-build-luneos.sh:10-31 · docs/HARDWARE.md, \"The web runtime: Chromium 151 on LuneOS's layers\"",
+   ["scripts/setup-build-luneos.sh ../build-phoenix-luneos qemux86-64 fairphone-fp6",
+    ("cd ../build-phoenix-luneos && . ./setup-env && bitbake webos-phoenix-image", ""),
+    ("MACHINE=fairphone-fp6 bitbake webos-phoenix-image", "one machine", {"r": "build-phoenix-luneos"})])
+it("Parse check", "About 12 minutes per machine, not as root. `PHOENIX_PARSE_STACK` (`ose` or `luneos`), `PHOENIX_PARSE_DIR`, `PHOENIX_PARSE_TARGET` and `PHOENIX_PARSE_COMPRESS` adjust it.", L, WP, "webos-phoenix/scripts/parse-check.sh:8,22-39 · docs/HARDWARE.md, \"Build\"",
    ["sudo apt-get install -y --no-install-recommends gawk diffstat chrpath cpio zstd lz4", "scripts/parse-check.sh",
-    "scripts/parse-check.sh fairphone-fp6 phoenix-vm-arm64", ("unshare --user --map-user=1000 --map-group=1000 scripts/parse-check.sh", "when you are root"),
+    "scripts/parse-check.sh fairphone-fp6 phoenix-vm-arm64", ("PHOENIX_PARSE_STACK=luneos scripts/parse-check.sh qemux86-64", "on LuneOS's layers"),
+    ("unshare --user --map-user=1000 --map-group=1000 scripts/parse-check.sh", "when you are root"),
     ("sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0", "Ubuntu 24.04's AppArmor blocks BitBake otherwise (CI does this on a throwaway machine)")])
 it("Run the ARM64 VM as a device", "QEMU 8.2 or later. HVF on Apple silicon, KVM on an ARM64 Linux host, emulation otherwise. Ctrl+A X quits. Options: `--image PATH` `--kernel FILE` `--cpus N` `--memory MIB` `--cap-cpu PCT` `--gl on|off` `--audio virtio|hda|none` `--display SPEC` `--accel hvf|kvm|tcg` `--ssh-port N` `--fresh` and `-- <QEMU options>`.", B, WP,
    "webos-phoenix/scripts/vm.sh:11-44,240,260 · docs/BUILDING-MAC.md:97-131",

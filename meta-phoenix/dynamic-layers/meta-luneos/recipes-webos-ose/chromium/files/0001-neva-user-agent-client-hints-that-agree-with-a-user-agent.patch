@@ -1,0 +1,142 @@
+From b68f87cb3b50d13c419f3fa9a9f5da1481135cb3 Mon Sep 17 00:00:00 2001
+From: webOS Phoenix contributors <webos-phoenix@users.noreply.github.com>
+Date: Thu, 15 Oct 2026 15:47:19 +0000
+Subject: [PATCH] neva: user agent client hints that agree with a --user-agent
+
+With --enable-neva-user-agent-client-hints, the client hints
+(Sec-CH-UA*, navigator.userAgentData) always say Chromium <this build's
+major>, platform webOS, not mobile, whatever --user-agent names. A distro
+that sets --user-agent to another platform and version (webOS Phoenix:
+Chrome on Android, at the current Chrome stable major) needs them to say
+the same, or sites see two different browsers.
+
+Three switches, each optional, the defaults unchanged:
+  --neva-user-agent-client-hints-brand-version=<major>
+      Chromium's brands for that major, as embedder_support makes them
+      (GenerateBrandVersionList, with the GREASE brand for that seed), and
+      <major>.0.0.0 as the full version
+  --neva-user-agent-client-hints-platform=<platform>
+  --neva-user-agent-client-hints-mobile
+With any of them the form factor is Mobile or Desktop by the mobile bit,
+as embedder_support's GetFormFactorsClientHint gives it.
+
+Upstream-Status: Pending
+---
+ src/neva/user_agent/common/user_agent.cc      | 45 ++++++++++++++++++-
+ .../user_agent/common/user_agent_switches.cc  | 16 +++++++
+ .../user_agent/common/user_agent_switches.h   |  3 ++
+ 3 files changed, 62 insertions(+), 2 deletions(-)
+
+diff --git a/src/neva/user_agent/common/user_agent.cc b/src/neva/user_agent/common/user_agent.cc
+index e797ced..9407956 100644
+--- a/src/neva/user_agent/common/user_agent.cc
++++ b/src/neva/user_agent/common/user_agent.cc
+@@ -16,8 +16,12 @@
+ 
+ #include "neva/user_agent/common/user_agent.h"
+ 
++#include <optional>
++#include <string>
++
+ #include "base/command_line.h"
+ #include "base/logging.h"
++#include "base/strings/string_number_conversions.h"
+ #include "components/version_info/version_info.h"
+ #include "components/embedder_support/user_agent_utils.h"
+ #include "net/http/http_util.h"
+@@ -52,8 +56,9 @@ bool IsUserAgentClientHintsEnabled() {
+ }
+ 
+ blink::UserAgentMetadata GetDefaultUserAgentMetadata() {
+-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+-          kEnableNevaUserAgentClientHints)) {
++  const base::CommandLine* command_line =
++      base::CommandLine::ForCurrentProcess();
++  if (!command_line->HasSwitch(kEnableNevaUserAgentClientHints)) {
+     return blink::UserAgentMetadata();
+   }
+ 
+@@ -71,6 +76,42 @@ blink::UserAgentMetadata GetDefaultUserAgentMetadata() {
+   brand_version_list.emplace_back(" Not;A Brand", "99");
+   metadata.brand_version_list = std::move(brand_version_list);
+ 
++  // A --user-agent that names another version, platform or form factor
++  // gets client hints that say the same: Chromium <major>'s brands as
++  // Chromium makes them (with its GREASE brand for that major), the
++  // platform, and the mobile bit with its form factor.
++  bool overridden = false;
++  int brand_major = 0;
++  if (base::StringToInt(command_line->GetSwitchValueASCII(
++                            kNevaUserAgentClientHintsBrandVersion),
++                        &brand_major) &&
++      brand_major > 0) {
++    const std::string major = base::NumberToString(brand_major);
++    const std::string full = major + ".0.0.0";
++    metadata.brand_version_list = embedder_support::GenerateBrandVersionList(
++        brand_major, std::nullopt, major,
++        blink::UserAgentBrandVersionType::kMajorVersion);
++    metadata.brand_full_version_list =
++        embedder_support::GenerateBrandVersionList(
++            brand_major, std::nullopt, full,
++            blink::UserAgentBrandVersionType::kFullVersion);
++    metadata.full_version = full;
++    overridden = true;
++  }
++  if (command_line->HasSwitch(kNevaUserAgentClientHintsPlatform)) {
++    metadata.platform =
++        command_line->GetSwitchValueASCII(kNevaUserAgentClientHintsPlatform);
++    overridden = true;
++  }
++  if (command_line->HasSwitch(kNevaUserAgentClientHintsMobile)) {
++    metadata.mobile = true;
++    overridden = true;
++  }
++  if (overridden) {
++    metadata.form_factors = {metadata.mobile ? blink::kMobileFormFactor
++                                             : blink::kDesktopFormFactor};
++  }
++
+   return metadata;
+ }
+ 
+diff --git a/src/neva/user_agent/common/user_agent_switches.cc b/src/neva/user_agent/common/user_agent_switches.cc
+index 0b150fd..200079b 100644
+--- a/src/neva/user_agent/common/user_agent_switches.cc
++++ b/src/neva/user_agent/common/user_agent_switches.cc
+@@ -22,6 +22,22 @@ namespace neva_user_agent {
+ const char kEnableNevaUserAgentClientHints[] =
+     "enable-neva-user-agent-client-hints";
+ 
++// The major version the user agent client hints give as Chromium's brand
++// version (and <major>.0.0.0 as the full version), instead of this build's.
++// For a --user-agent that names another version.
++const char kNevaUserAgentClientHintsBrandVersion[] =
++    "neva-user-agent-client-hints-brand-version";
++
++// The user agent client hints say mobile (Sec-CH-UA-Mobile ?1, the Mobile
++// form factor). For a --user-agent that names a phone.
++const char kNevaUserAgentClientHintsMobile[] =
++    "neva-user-agent-client-hints-mobile";
++
++// The platform the user agent client hints give (Sec-CH-UA-Platform),
++// instead of "webOS". For a --user-agent that names another platform.
++const char kNevaUserAgentClientHintsPlatform[] =
++    "neva-user-agent-client-hints-platform";
++
+ // A string used to override the default user agent with a custom one.
+ const char kUserAgent[] = "user-agent";
+ 
+diff --git a/src/neva/user_agent/common/user_agent_switches.h b/src/neva/user_agent/common/user_agent_switches.h
+index 34b3963..874893b 100644
+--- a/src/neva/user_agent/common/user_agent_switches.h
++++ b/src/neva/user_agent/common/user_agent_switches.h
+@@ -22,6 +22,9 @@ namespace neva_user_agent {
+ // All switches in alphabetical order. The switches should be documented
+ // alongside the definition of their values in the .cc file.
+ extern const char kEnableNevaUserAgentClientHints[];
++extern const char kNevaUserAgentClientHintsBrandVersion[];
++extern const char kNevaUserAgentClientHintsMobile[];
++extern const char kNevaUserAgentClientHintsPlatform[];
+ extern const char kUserAgent[];
+ 
+ }  // namespace neva_user_agent
