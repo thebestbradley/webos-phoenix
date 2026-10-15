@@ -6,7 +6,7 @@
 # build, run and test the webOS Phoenix simulator: the same as ./phoenix
 # (the one command, at the top of the checkout), which checks what is
 # installed and installs only what is missing. The same Qt and packages as
-# CI (.github/workflows/ci.yml). Kept for the options it has always had.
+# CI (.github/actions/setup/action.yml). Kept for the options it has always had.
 # See docs/GETTING-STARTED.md.
 #
 # Qt is 6.11.3, the simulator's (its Qt WebEngine has the newest Chromium,

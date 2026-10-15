@@ -14,113 +14,77 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# On Linux the tests run as jobs side by side, each set up by
+# .github/actions/setup, and "test" passes when they all have:
+#
+#   checks      tools/ci-checks.sh (./phoenix test --quick): every check that
+#               needs no build, about 6 minutes, so a slip shows early
+#   apps        the apps built (React, Enact, Flutter): for the jobs below
+#               (apps-built) and for an image (apps-dist); the Enact, Dart and
+#               Flutter checks; the device-readiness checkers over them
+#   behaviour   the simulator built; the QML behaviour tests (the longest
+#               job, about 20 minutes)
+#   web         the web app tests in headless Chromium, in four shards
+#               (tools/run-web-tests.cjs, the list in tools/web-tests.txt)
+#   simulator   the simulator built with the apps: the C++ tests, then the
+#               simulator run (its menu bar, the user agent, two at once,
+#               the screenshots)
+#   test        all of the above passed
+#
+# The device's Qt (qt-6-8) and the Mac (macos) have jobs of their own.
 jobs:
-  test:
+  checks:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      # Qt 6.11.3, the simulator's (its Qt WebEngine is Chromium 140 with
-      # security fixes to 153, the newest Qt has: 6.12.0's stop at 147;
-      # docs/APP-RUNTIME.md, "The web engine and the user agent"), as
-      # ./phoenix installs it; Ubuntu's own Qt packages stop at 6.4. The
-      # device's Qt, 6.8.1, has a job of its own below (qt-6-8). The action
-      # also installs the system libraries Qt loads, and caches Qt between
-      # runs.
-      - name: Install Qt 6.11.3
-        uses: jurplel/install-qt-action@v4
+      # ffmpeg: the feedback tones (MP3) are checked by decoding them.
+      - uses: ./.github/actions/setup
         with:
-          version: '6.11.3'
-          host: linux
-          target: desktop
-          arch: linux_gcc_64
-          modules: qtwebengine qtwebchannel qtpositioning qt5compat qtmultimedia qtshadertools
-          cache: true
-          # The aqtinstall ./phoenix uses (3.3), which knows Qt's current repository.
-          aqtversion: '==3.3.*'
+          apt: ffmpeg
 
-      - name: Build and test tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libgl-dev libegl-dev libxkbcommon-dev libxcb-cursor0 libnss3 libxkbfile1 \
-            xvfb xauth libgl1-mesa-dri fonts-dejavu-core \
-            pkg-config libglib2.0-dev openssh-server \
-            xdotool imagemagick
-          # xdotool and ImageMagick's import: tools/test-useragent-sim.cjs finds
-          # the simulator's window, resizes it (the live phone-to-tablet switch)
-          # and saves its screenshots with them.
+      # Each check's result and time is in its summary at the end; a failed
+      # one is also an annotation.
+      - name: The quick checks (tools/ci-checks.sh)
+        run: sh tools/ci-checks.sh
 
-      - uses: actions/setup-node@v4
+  apps:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            apps/package-lock.json
-            apps/enact-notes-limestone/package-lock.json
-            apps/enact-notes-agate/package-lock.json
+          submodules: recursive
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      - uses: ./.github/actions/setup
 
-      - name: Radicale and WsgiDAV (CardDAV / CalDAV and WebDAV servers for the DAV sync and backup tests)
-        run: python3 -m pip install radicale wsgidav cheroot
-
-      # The Marketplace's catalog service (server/marketplace): PHP 8 with
-      # libsodium and SQLite. The web apps' tests use it too (the
-      # Marketplace's device service against the real server).
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.3'
-          extensions: sodium, pdo_sqlite, pdo_mysql, zlib
-          coverage: none
-
-      - name: Marketplace catalog service (PHP) - tests
-        run: php server/marketplace/tests/run.php
-
-      - name: Update feed publisher (server/updates)
-        run: php server/updates/tests/run.php
-
-      - name: Web apps (React + TypeScript) - typecheck, unit tests, build
+      # The typecheck and unit tests are the checks job's.
+      - name: Web apps (React + TypeScript) - build
         working-directory: apps
-        run: |
-          # Every platform's native packages in the lock, or npm ci fails on Macs.
-          node ../tools/check-lockfile.cjs
-          npm ci
-          npm run typecheck
-          npm test
-          npm run build
-          # The device services (Node.js, not bundled): syntax only. The DAV
-          # service's own tests ran above (vitest, against Radicale).
-          for f in files/service/*.js voicememos/service/*.js dav/service/*.js dav/service/lib/*.js \
-                   settings/service/*.js settings/service/lib/*.js marketplace/service/*.js marketplace/service/lib/*.js \
-                   ../services/updates/*.js ../services/updates/lib/*.js; do node --check "$f"; done
+        run: npm run build
 
       # What a device image would trip on that the simulator hides
       # (docs/PRE-IMAGE-CHECKLIST.md): Luna calls against their providers
       # and ACG groups, simulator-only references, the image's contents
-      # against its recipes, the recipes themselves, licences. After the
-      # apps' build, so install-rootfs.py's plan has every app. A finding
-      # not in tools/check-device-allowlist.json fails.
+      # against its recipes, the recipes themselves, licences; and the
+      # checkers' own tests, which run them over this checkout too. After
+      # the apps' build, so install-rootfs.py's plan has every app. A
+      # finding not in tools/check-device-allowlist.json fails.
       - name: Device readiness checkers
         run: |
           python3 tools/test-devicecheck.py
-          python3 tools/test-device-firmware.py
-          python3 tools/test-device-profiles.py
-          python3 tools/test-wam-user-agent.py
-          python3 tools/test-make-utm.py
           tools/check-device.sh
 
       # The Enact demos are npm projects of their own (apps/enact-notes-*/
       # README.md); `npm ci` copies in @phoenix/notes-core as built above.
+      # Their lockfiles are checked in the checks job.
       - name: Enact demo apps - typecheck, build
         working-directory: apps
         run: |
           for app in enact-notes-limestone enact-notes-agate; do
-            node ../tools/check-lockfile.cjs $app/package-lock.json
             (cd $app && npm ci --no-audit --no-fund && npm run typecheck && npm run build)
           done
 
@@ -160,9 +124,40 @@ jobs:
           path: apps-dist.tar.gz
           retention-days: 30
 
+      # Everything the build wrote that the tests read, for the jobs that
+      # need: every dist/ under apps/ (the apps, the Enact and Flutter
+      # demos, the SDK's no-bundler build) and the shared packages' lib/.
+      # Built once here rather than in each of them.
+      - name: Pack the built apps for the test jobs
+        run: |
+          find apps -name node_modules -prune -o -type d \( -name dist -o -path 'apps/shared/*/lib' ! -path 'apps/shared/*/*/*' \) \
+            -print -prune | sort > apps-built.txt
+          tar -czf apps-built.tar.gz -T apps-built.txt
+          echo "$(wc -l < apps-built.txt) folders, $(du -h apps-built.tar.gz | cut -f1)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apps-built
+          path: apps-built.tar.gz
+          retention-days: 1
+          # Already compressed.
+          compression-level: 0
+
+  behaviour:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup
+        with:
+          qt: 'true'
+
+      # Without the apps: no QML test reads them (the qt-6-8 job runs the
+      # same tests without them), so the CMake npm step is skipped. The C++
+      # tests, some of which read them, are the simulator job's.
       - name: Build simulator
         run: |
-          # The apps were built above; skip the CMake npm step.
           cmake -S shell -B build -DCMAKE_BUILD_TYPE=Release -DPHOENIX_BUILD_APPS=OFF -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
           cmake --build build -j
 
@@ -189,6 +184,73 @@ jobs:
       - name: HiDPI art at a device pixel ratio of 2
         run: QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen "$QT_ROOT_DIR/bin/qmltestrunner" -import shell/qml -import build/qml -input shell/tests/tst_hidpi.qml
 
+      - name: The device shell's Phoenix.Lsm types over fake luna-surfacemanager modules
+        timeout-minutes: 10
+        run: QT_QPA_PLATFORM=offscreen "$QT_ROOT_DIR/bin/qmltestrunner" -import shell/qml -import build/qml -import shell/tests-device/fakes -input shell/tests-device
+
+  # The web app tests (original webOS apps and Phoenix's own in headless
+  # Chromium), split into shards of about 11 minutes each by the tests'
+  # weights in tools/web-tests.txt. tools/check-web-tests.cjs (in the checks
+  # job) checks that these shards run every test in the list once. More
+  # shards: the matrix and both /4s below.
+  web:
+    name: web ${{ matrix.shard }}/4
+    needs: apps
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # ffmpeg: the web tests ran with it in the one-job CI (the feedback
+      # sounds' check installed it first); Voice Memos converts with it.
+      - uses: ./.github/actions/setup
+        with:
+          apt: ffmpeg
+          apps-built: 'true'
+          playwright: 'true'
+
+      # Each test's time is in the summary at the end (and on the job's
+      # summary page); a failing test's command and its last lines become
+      # annotations, readable without the log.
+      - name: Web app tests (original webOS apps in headless Chromium)
+        run: node tools/run-web-tests.cjs --shard ${{ matrix.shard }}/4
+
+      # Also when a test fails: the screenshots show what went wrong.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: app-tests-${{ matrix.shard }}
+          path: app-tests
+          if-no-files-found: ignore
+
+  simulator:
+    needs: apps
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup
+        with:
+          qt: 'true'
+          apps-built: 'true'
+
+      # The apps were built by the apps job; skip the CMake npm step.
+      - name: Build simulator
+        run: |
+          cmake -S shell -B build -DCMAKE_BUILD_TYPE=Release -DPHOENIX_BUILD_APPS=OFF -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+          cmake --build build -j
+
+      # The C++ tests. Here rather than with the QML tests: some read the
+      # built apps (siminstaller-test: the built-in apps' versions, the
+      # SDK's dist/ the rootfs mounts).
       - name: Terminal PTY service (core and Luna methods, services/pty)
         # A native test that hangs fails here, with its log, not after the job's limit.
         timeout-minutes: 10
@@ -197,10 +259,6 @@ jobs:
       - name: Device services (display, keys, vibrator, light sensor, orientation; services/devices)
         timeout-minutes: 10
         run: build/devices/devices-test
-
-      - name: The device shell's Phoenix.Lsm types over fake luna-surfacemanager modules
-        timeout-minutes: 10
-        run: QT_QPA_PLATFORM=offscreen "$QT_ROOT_DIR/bin/qmltestrunner" -import shell/qml -import build/qml -import shell/tests-device/fakes -input shell/tests-device
 
       - name: The keyboard as the device's input method (Maliit plugin over a fake host; services/keyboard)
         timeout-minutes: 10
@@ -216,14 +274,6 @@ jobs:
           cmake -S services/keyboard -B build-keyboard-realapi -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
                 -DPHOENIX_KEYBOARD_TESTS=OFF -DPHOENIX_MALIIT_SOURCE_DIR="$RUNNER_TEMP/maliit"
           cmake --build build-keyboard-realapi --target phoenix-keyboard-realapi -j
-
-      - name: The runtime on a device (window properties, Back, the launch's caller, copies)
-        timeout-minutes: 10
-        run: node tools/test-runtime-device.cjs
-
-      - name: The system sounds as audiod plays them (raw PCM twins)
-        timeout-minutes: 10
-        run: python3 tools/test-sounds-pcm.py
 
       - name: The simulator's installed apps (SimInstaller)
         timeout-minutes: 10
@@ -277,163 +327,15 @@ jobs:
         timeout-minutes: 10
         run: python3 tools/get-kitten.py && build/tts-test
 
-      - name: App-to-app launches send what their apps read (docs/LAUNCH-CONTRACTS.md)
-        run: node tools/check-launch-contracts.cjs
-
-      - name: Trademark overlays up to date
-        run: python3 tools/debrand-overlays.py --check
-
-      - name: docs/COMMANDS.md matches tools/commands-doc.py
-        run: python3 tools/commands-doc.py --check
-
-      - name: docs/RELEASE-NOTES.md matches the release notes (tools/release-notes-doc.py)
-        run: python3 tools/release-notes-doc.py --check
-
-      - name: HiDPI art present and true to its 1x art
+      # In the one-job CI the simulator's runs below came after ffmpeg (the
+      # feedback sounds' check) and the system packages Playwright's
+      # Chromium needs (the web tests'; fonts among them: CJK, Thai,
+      # Unifont) were installed, and the C++ tests above before: the same here.
+      - name: ffmpeg and Playwright's system packages
         run: |
-          python3 -m pip install pillow numpy
-          python3 tools/hidpi-art.py --check
-          python3 tools/keyboard-charcoal.py --check
-
-      - name: App icons match their SVG sources; the originals' 512 px icons are present
-        run: |
-          node tools/render-app-icons.cjs --check
-          python3 tools/upscale-app-icons.py --check
-
-      - name: Feedback sounds and tones match their generator
-        run: |
-          # The MP3 tones are checked by decoding them.
-          command -v ffmpeg >/dev/null || sudo apt-get install -y --no-install-recommends ffmpeg
-          python3 tools/make-feedback-sounds.py --check
-
-      - name: The Assistant's bird matches its source (art/assistant-bird/bird.json)
-        run: python3 tools/gen-assistant-bird.py --check
-
-      - name: Web app tests (original webOS apps in headless Chromium)
-        run: |
+          sudo apt-get install -y --no-install-recommends ffmpeg
           npm install -g playwright@1
-          playwright install --with-deps chromium
-          export NODE_PATH="$(npm root -g)"
-          # A failing test's command and its last lines become annotations,
-          # readable without the log.
-          t() {
-            "$@" 2>&1 | tee web-test.log
-            local status=${PIPESTATUS[0]}
-            if [ "$status" -ne 0 ]; then
-              echo "::error title=Web test failed::$*"
-              { grep -E '^(FAIL|not ok|Error)' web-test.log; tail -4 web-test.log; } | head -9 \
-                | while IFS= read -r line; do echo "::error title=Web test output::$line"; done
-              exit "$status"
-            fi
-          }
-          t node tools/test-apps.cjs --out app-tests/phone
-          t node tools/test-apps.cjs --tablet --out app-tests/tablet
-          t node tools/test-hidpi.cjs
-          t node tools/test-settings.cjs --out app-tests/settings-phone
-          t node tools/test-settings.cjs --tablet --out app-tests/settings-tablet
-          t node tools/test-backup.cjs --out app-tests/backup-phone
-          t node tools/test-backup.cjs --tablet --out app-tests/backup-tablet
-          t node tools/test-marketplace.cjs --out app-tests/marketplace-phone
-          t node tools/test-marketplace.cjs --tablet --out app-tests/marketplace-tablet
-          t node tools/test-appmanager.cjs
-          t node tools/test-updates.cjs --out app-tests/updates-phone
-          t node tools/test-updates.cjs --tablet --out app-tests/updates-tablet
-          t node tools/test-platform-client.cjs --ui --out app-tests/platform-client-phone
-          t node tools/test-platform-client.cjs --ui --tablet --out app-tests/platform-client-tablet
-          t node tools/test-phone-messaging.cjs --out app-tests/phone-messaging-phone
-          t node tools/test-phone-messaging.cjs --tablet --out app-tests/phone-messaging-tablet
-          t node tools/test-notification-stacks.cjs --out app-tests/notification-stacks-phone
-          t node tools/test-notification-stacks.cjs --tablet --out app-tests/notification-stacks-tablet
-          t node tools/test-media.cjs --out app-tests/media-phone
-          t node tools/test-media.cjs --tablet --out app-tests/media-tablet
-          t node tools/test-media-index.cjs
-          t node tools/test-justtype.cjs --out app-tests/justtype-phone
-          t node tools/test-justtype.cjs --tablet --out app-tests/justtype-tablet
-          t node tools/test-browser.cjs --out app-tests/browser-phone
-          t node tools/test-browser.cjs --tablet --out app-tests/browser-tablet
-          t node tools/test-links.cjs --out app-tests/links-phone
-          t node tools/test-launch-contracts.cjs --out app-tests/launch-contracts-phone
-          t node tools/test-launch-contracts.cjs --tablet --out app-tests/launch-contracts-tablet
-          t node tools/test-back.cjs
-          t node tools/test-files.cjs --out app-tests/files-phone
-          t node tools/test-files.cjs --tablet --out app-tests/files-tablet
-          t node tools/test-filepicker.cjs --out app-tests/filepicker
-          t node tools/test-webfiles.cjs --out app-tests/webfiles
-          t node tools/test-tasks.cjs --out app-tests/tasks-phone
-          t node tools/test-tasks.cjs --tablet --out app-tests/tasks-tablet
-          t node tools/test-db8-pages.cjs --out app-tests/db8-pages
-          t node tools/test-alarm.cjs --out app-tests/alarm
-          t node tools/test-email.cjs --out app-tests/email-phone
-          t node tools/test-email.cjs --tablet --out app-tests/email-tablet
-          t node tools/test-contacts.cjs --out app-tests/contacts-phone
-          t node tools/test-contacts.cjs --tablet --out app-tests/contacts-tablet
-          t node tools/test-voicememos.cjs --out app-tests/voicememos-phone
-          t node tools/test-voicememos.cjs --tablet --out app-tests/voicememos-tablet
-          t node tools/test-flashlight.cjs --out app-tests/flashlight-phone
-          t node tools/test-flashlight.cjs --tablet --out app-tests/flashlight-tablet
-          t node tools/test-screenshot.cjs --out app-tests/screenshot-phone
-          t node tools/test-screenshot.cjs --tablet --out app-tests/screenshot-tablet
-          t node tools/test-notificationlab.cjs --out app-tests/notificationlab-phone
-          t node tools/test-notificationlab.cjs --tablet --out app-tests/notificationlab-tablet
-          t node tools/test-scanner.cjs --out app-tests/scanner-phone
-          t node tools/test-scanner.cjs --tablet --out app-tests/scanner-tablet
-          t node tools/test-weather.cjs --out app-tests/weather-phone
-          t node tools/test-weather.cjs --tablet --out app-tests/weather-tablet
-          t node tools/test-maps.cjs --out app-tests/maps-phone
-          t node tools/test-maps.cjs --tablet --out app-tests/maps-tablet
-          t node tools/test-assistant-maps.cjs --out app-tests/assistant-maps-phone
-          t node tools/test-assistant-maps.cjs --tablet --out app-tests/assistant-maps-tablet
-          t node tools/test-passwords.cjs --out app-tests/passwords-phone
-          t node tools/test-passwords.cjs --tablet --out app-tests/passwords-tablet
-          t node tools/test-authenticator.cjs --out app-tests/authenticator-phone
-          t node tools/test-authenticator.cjs --tablet --out app-tests/authenticator-tablet
-          t node tools/test-clipboard.cjs --out app-tests/clipboard-phone
-          t node tools/test-clipboard.cjs --tablet --out app-tests/clipboard-tablet
-          t node tools/test-community.cjs --out app-tests/community-phone
-          t node tools/test-community.cjs --tablet --out app-tests/community-tablet
-          t node tools/test-sharing.cjs --out app-tests/sharing-phone
-          t node tools/test-sharing.cjs --tablet --out app-tests/sharing-tablet
-          t node tools/test-assistant.cjs --out app-tests/assistant-phone
-          t node tools/test-assistant.cjs --tablet --out app-tests/assistant-tablet
-          t node tools/test-assistant-followups.cjs --out app-tests/assistant-followups-phone
-          t node tools/test-assistant-followups.cjs --tablet --out app-tests/assistant-followups-tablet
-          t node tools/test-terminal.cjs --out app-tests/terminal-phone
-          t node tools/test-terminal.cjs --tablet --out app-tests/terminal-tablet
-          t node tools/test-videos.cjs --out app-tests/videos-phone
-          t node tools/test-videos.cjs --tablet --out app-tests/videos-tablet
-          t node tools/test-podcasts.cjs --out app-tests/podcasts-phone
-          t node tools/test-podcasts.cjs --tablet --out app-tests/podcasts-tablet
-          t node tools/test-docs.cjs --out app-tests/docs-phone
-          t node tools/test-docs.cjs --tablet --out app-tests/docs-tablet
-          t node tools/test-dav-sync.cjs --out app-tests/dav-phone
-          t node tools/test-dav-sync.cjs --tablet --out app-tests/dav-tablet
-          t node tools/test-accounts.cjs --out app-tests/accounts
-          t node tools/test-runtime-csp.cjs
-          t node tools/test-xmpp.cjs --out app-tests/xmpp-phone
-          t node tools/test-matrix.cjs --out app-tests/matrix-phone
-          t node tools/test-deltachat.cjs --out app-tests/deltachat-phone
-          t node tools/test-telegram.cjs --out app-tests/telegram-phone
-          t node tools/test-xmpp-server.cjs
-          t node tools/test-sftp.cjs --out app-tests/sftp-phone
-          t node tools/test-sftp.cjs --tablet --out app-tests/sftp-tablet
-          t node tools/test-orientation.cjs --out app-tests/orientation-phone
-          t node tools/test-orientation.cjs --tablet --out app-tests/orientation-tablet
-          t node tools/test-keyboard.cjs --out app-tests/keyboard-phone
-          t node tools/test-keyboard.cjs --tablet --out app-tests/keyboard-tablet
-          t node tools/test-editing.cjs --out app-tests/editing-phone
-          t node tools/test-editing.cjs --tablet --out app-tests/editing-tablet
-          t node tools/test-firstuse.cjs --out app-tests/firstuse-phone
-          t node tools/test-firstuse.cjs --tablet --out app-tests/firstuse-tablet
-          t node tools/test-help.cjs --out app-tests/help-phone
-          t node tools/test-help.cjs --tablet --out app-tests/help-tablet
-          t node tools/test-emergency.cjs --out app-tests/emergency-phone
-          t node tools/test-emergency.cjs --tablet --out app-tests/emergency-tablet
-          t node tools/test-location.cjs --out app-tests/location-phone
-          t node tools/test-location.cjs --tablet --out app-tests/location-tablet
-          t node tools/test-enact-notes.cjs --out app-tests/enact-notes
-          t node tools/test-ionic-notes.cjs --out app-tests/ionic-notes
-          t node tools/test-flutter-notes.cjs --out app-tests/flutter-notes
-          t node tools/test-app-sdk.cjs --out app-tests/app-sdk
+          playwright install-deps chromium
 
       # The menus over the screen, with the keyboard focus on the screen.
       - name: The simulator's menu bar
@@ -464,7 +366,8 @@ jobs:
             xvfb-run -a -s "-screen 0 1920x1200x24" build/phoenix-sim --tablet --scene $s --orientation right --screenshot screenshots/tablet-portrait/$s.png
           done
 
-      # Also when a step fails: the app tests' screenshots show what went wrong.
+      # Also when a step fails: the simulator tests' screenshots show what
+      # went wrong. (The web tests' are in the app-tests-N artifacts.)
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -473,13 +376,20 @@ jobs:
             screenshots
             app-tests
 
-      # ./phoenix, the one command, in its dry run on a pretend Linux and
-      # Mac (what it finds, would install and would run). Independent of the
-      # build: it runs even when a step before it failed, and last,
-      # so it hides no other test's result and none hides its own.
-      - name: The one command (./phoenix)
-        if: ${{ !cancelled() }}
-        run: sh tools/test-phoenix-script.sh
+  # "test": every Linux job above passed (it was the one Linux job, and
+  # this keeps its name for what it meant). A job skipped because one it
+  # needs failed counts as failed.
+  test:
+    needs: [checks, apps, behaviour, web, simulator]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Every Linux job passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.value.result)\t\(.key)"'
+          echo "$NEEDS" | jq -e 'all(.[]; .result == "success")' > /dev/null
 
   # The device's Qt (6.8.1: a webOS OSE image's, meta-qt6 scarthgap): the
   # shell's QML must keep running there while the simulator is on a newer
@@ -541,7 +451,7 @@ jobs:
   # (qt 6.12.0, whose qtwebengine formula is 6.11.2: Chromium 140 with
   # security fixes to 151, behind the Linux job's 6.11.3),
   # Apple's compiler and macOS's headers, with the apps built by CMake's npm
-  # step. The Linux job above can't catch code that only builds on Linux.
+  # step. The Linux jobs above can't catch code that only builds on Linux.
 
   macos:
     runs-on: macos-15
@@ -577,7 +487,7 @@ jobs:
           sysctl hw.memsize kern.memorystatus_level
           vm_stat
 
-      # Qt Quick's software renderer, as the Linux job gets with the
+      # Qt Quick's software renderer, as the Linux jobs get with the
       # offscreen platform: its animations move on with the clock. Offscreen
       # on a Mac otherwise renders with Metal, whose animations move on only
       # as frames are drawn, and without a screen it draws a few a second,
@@ -644,8 +554,8 @@ jobs:
           name: screenshots-macos
           path: screenshots-macos
 
-      # ./phoenix's dry runs with macOS's own sh, sed and grep; last, as
-      # in the Linux job.
+      # ./phoenix's dry runs with macOS's own sh, sed and grep (Linux runs
+      # them in its checks job); last, so they hide no other step's result.
       - name: The one command (./phoenix) with macOS's own tools
         if: ${{ !cancelled() }}
         run: sh tools/test-phoenix-script.sh

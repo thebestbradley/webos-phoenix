@@ -1,0 +1,115 @@
+# What every Linux job of .github/workflows/ci.yml starts from, after its
+# checkout: the system packages, Node 22 with the apps' npm packages,
+# Python 3.12 with the test servers and the art checks' packages, PHP 8.3;
+# and, where a job asks, the simulator's Qt, the apps the "apps" job built
+# and Playwright's Chromium. One place for all of it, so the jobs differ
+# only in what they ask for.
+name: Set up a CI job
+description: System packages, Node 22 and npm ci, Python, PHP; Qt 6.11.3, the built apps and Playwright on request
+
+inputs:
+  qt:
+    description: "'true': Qt 6.11.3, the simulator's (sets QT_ROOT_DIR)"
+    default: 'false'
+  apt:
+    description: More apt packages, space-separated
+    default: ''
+  apps-built:
+    description: "'true': the apps the apps job built (its apps-built artifact), unpacked over the checkout"
+    default: 'false'
+  playwright:
+    description: "'true': Playwright and its Chromium with the system libraries and fonts it needs"
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    # Qt 6.11.3, the simulator's (its Qt WebEngine is Chromium 140 with
+    # security fixes to 153, the newest Qt has: 6.12.0's stop at 147;
+    # docs/APP-RUNTIME.md, "The web engine and the user agent"), as
+    # ./phoenix installs it; Ubuntu's own Qt packages stop at 6.4. The
+    # device's Qt, 6.8.1, has a job of its own (qt-6-8). The action also
+    # installs the system libraries Qt loads, and caches Qt between runs.
+    - name: Install Qt 6.11.3
+      if: inputs.qt == 'true'
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: '6.11.3'
+        host: linux
+        target: desktop
+        arch: linux_gcc_64
+        modules: qtwebengine qtwebchannel qtpositioning qt5compat qtmultimedia qtshadertools
+        cache: true
+        # The aqtinstall ./phoenix uses (3.3), which knows Qt's current repository.
+        aqtversion: '==3.3.*'
+
+    # Build tools and the libraries Qt loads; xvfb for the simulator without
+    # a screen; openssh-server for test-sftp.cjs's real sshd; xdotool and
+    # ImageMagick's import: tools/test-useragent-sim.cjs finds the
+    # simulator's window, resizes it (the live phone-to-tablet switch) and
+    # saves its screenshots with them.
+    - name: System packages
+      shell: bash
+      env:
+        MORE: ${{ inputs.apt }}
+      run: |
+        sudo apt-get update
+        # shellcheck disable=SC2086  # MORE is a list of package names
+        sudo apt-get install -y --no-install-recommends \
+          libgl-dev libegl-dev libxkbcommon-dev libxcb-cursor0 libnss3 libxkbfile1 \
+          xvfb xauth libgl1-mesa-dri fonts-dejavu-core \
+          pkg-config libglib2.0-dev openssh-server \
+          xdotool imagemagick $MORE
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+        cache-dependency-path: |
+          apps/package-lock.json
+          apps/enact-notes-limestone/package-lock.json
+          apps/enact-notes-agate/package-lock.json
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    # Radicale and WsgiDAV: the CardDAV / CalDAV and WebDAV servers the DAV
+    # sync and backup tests talk to; Pillow and NumPy: the art checks.
+    - name: Python packages
+      shell: bash
+      run: python3 -m pip install radicale wsgidav cheroot pillow numpy
+
+    # The Marketplace's catalog service (server/marketplace): PHP 8 with
+    # libsodium and SQLite. The simulator starts it, and the web apps'
+    # tests use it (the Marketplace's device service against the real
+    # server).
+    - uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.3'
+        extensions: sodium, pdo_sqlite, pdo_mysql, zlib
+        coverage: none
+
+    - name: The apps' npm packages
+      shell: bash
+      working-directory: apps
+      run: npm ci
+
+    - name: Download the built apps
+      if: inputs.apps-built == 'true'
+      uses: actions/download-artifact@v4
+      with:
+        name: apps-built
+    - name: Unpack the built apps
+      if: inputs.apps-built == 'true'
+      shell: bash
+      run: |
+        tar -xzf apps-built.tar.gz
+        rm apps-built.tar.gz
+
+    - name: Playwright and its Chromium
+      if: inputs.playwright == 'true'
+      shell: bash
+      run: |
+        npm install -g playwright@1
+        playwright install --with-deps chromium
