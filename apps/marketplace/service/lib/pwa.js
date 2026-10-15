@@ -16,6 +16,7 @@
 //       launcher, at least 64 px if there is one; large for dense screens
 //       and the loading card, the biggest)
 //   appinfo(entry, manifest, iconNames) -> appinfo.json's object
+//   icoPng(bytes) -> the PNG an ICO holds as its biggest picture, or null
 
 "use strict";
 
@@ -92,6 +93,26 @@ function extOf(type, src) {
     return "png";
 }
 
+// An icon in the ICO format (a site's favicon.ico) as the launcher can show
+// it: Qt's ICO reader gives the file's first picture, often its 16 px one
+// (Slack's: 16, 32, 48, then 256 px), so the PNG its biggest picture is (a
+// 256 px one in an ICO is a PNG, as Windows Vista made it) is used instead.
+// null for anything else, or an ICO whose biggest picture is a bitmap (then
+// kept as it is).
+function icoPng(bytes) {
+    if (!bytes || bytes.length < 6 || bytes[0] !== 0 || bytes[1] !== 0 || bytes[2] !== 1 || bytes[3] !== 0) return null;
+    var u32 = function (i) { return (bytes[i] | bytes[i + 1] << 8 | bytes[i + 2] << 16 | bytes[i + 3] << 24) >>> 0; };
+    var best = null;
+    for (var n = bytes[4] | bytes[5] << 8, i = 0; i < n && 6 + 16 * i + 16 <= bytes.length; i++) {
+        var d = 6 + 16 * i, size = Math.min(bytes[d] || 256, bytes[d + 1] || 256), len = u32(d + 8), at = u32(d + 12);
+        if (len < 8 || at + len > bytes.length || (best && best.size >= size)) continue;
+        best = { size: size, at: at, len: len };
+    }
+    if (!best) return null;
+    var png = bytes.slice(best.at, best.at + best.len);
+    return png[0] === 0x89 && png[1] === 0x50 && png[2] === 0x4e && png[3] === 0x47 ? png : null;
+}
+
 // entry: the catalog's (id, title, version, developer); iconNames: {icon,
 // large} the files the package carries.
 function appinfo(entry, manifest, iconNames) {
@@ -113,4 +134,4 @@ function appinfo(entry, manifest, iconNames) {
     return info;
 }
 
-module.exports = { parseManifest: parseManifest, pickIcons: pickIcons, appinfo: appinfo, extOf: extOf };
+module.exports = { parseManifest: parseManifest, pickIcons: pickIcons, appinfo: appinfo, extOf: extOf, icoPng: icoPng };

@@ -150,6 +150,7 @@ var ACTIVITY = "org.webosphoenix.marketplace.updates";
 var PAGE = 20;
 var MAX_PACKAGE = 64 * 1024 * 1024;
 var MAX_DETAIL = 1024 * 1024;   // an app's detail file (its version history)
+var MAX_MANIFEST = 256 * 1024;  // a web app manifest the catalog wrote
 
 function fail(code, text) {
     return { returnValue: false, errorCode: code, errorText: text };
@@ -906,11 +907,26 @@ function createPackagesService(deps) {
         return Promise.resolve(deps.crypto.sha256(bytes)).then(function (h) { return b64.hex(new Uint8Array(h)); });
     }
 
+    // A web app's manifest: the site's own, or the one the catalog wrote for
+    // a site that publishes none (Catalog.php writeManifest), which is taken
+    // only as the signed index gives its SHA-256, from wherever it is served.
+    // Either way its start page must be on the site the index names (the
+    // W3C rule, applied against that site: parseManifest's pageUrl).
+    function manifestText(entry) {
+        if (!entry.pwa.sha256) return getText(entry.pwa.manifest);
+        return getBytes(entry.pwa.manifest, MAX_MANIFEST).then(function (bytes) {
+            return sha256Hex(bytes).then(function (h) {
+                if (h !== entry.pwa.sha256) throw err("BAD_MANIFEST", "The web app's manifest is not the one the catalog signed");
+                return b64.fromUtf8(bytes);
+            });
+        });
+    }
+
     // The package for an entry: downloaded and checked, or (a web app) made.
     function packageFor(s, entry, progress) {
         if (entry.kind === "pwa") {
             progress({ state: "downloading", progress: 10 });
-            return getText(entry.pwa.manifest).then(function (text) {
+            return manifestText(entry).then(function (text) {
                 var m = pwa.parseManifest(text, entry.pwa.manifest, entry.pwa.origin + "/");
                 if (new URL(m.startUrl).origin !== entry.pwa.origin)
                     throw err("BAD_MANIFEST", "The site's start page is not on " + entry.pwa.origin);
@@ -925,13 +941,15 @@ function createPackagesService(deps) {
                     progress({ state: "checking", progress: 50 });
                     var dir = ipkLib.APP_ROOT + entry.id + "/";
                     var files = [], names = {};
+                    // A favicon.ico: the PNG its biggest picture is (pwa.icoPng).
+                    var png = [got[0] && pwa.icoPng(got[0]), got[1] && pwa.icoPng(got[1])];
                     if (got[0]) {
-                        names.icon = "icon." + (got[2] ? pwa.extOf("", got[2]) : pwa.extOf(icons.small.type, icons.small.src));
-                        files.push({ path: dir + names.icon, data: got[0] });
+                        names.icon = "icon." + (png[0] ? "png" : got[2] ? pwa.extOf("", got[2]) : pwa.extOf(icons.small.type, icons.small.src));
+                        files.push({ path: dir + names.icon, data: png[0] || got[0] });
                     }
                     if (got[1]) {
-                        names.large = "icon-256x256." + pwa.extOf(icons.large.type, icons.large.src);
-                        files.push({ path: dir + names.large, data: got[1] });
+                        names.large = "icon-256x256." + (png[1] ? "png" : pwa.extOf(icons.large.type, icons.large.src));
+                        files.push({ path: dir + names.large, data: png[1] || got[1] });
                     }
                     var info = pwa.appinfo(entry, m, names);
                     files.unshift({ path: dir + "appinfo.json", data: JSON.stringify(info, null, 4) + "\n" });

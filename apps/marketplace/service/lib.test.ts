@@ -164,6 +164,49 @@ describe("web app manifests", () => {
         expect(pwa.parseManifest({ name: "Tides", start_url: "https://evil.example/" }, "https://tides.example/app/m.json").startUrl)
             .toBe("https://tides.example/");
     });
+
+    it("start on the site the index names when the catalog wrote the manifest and serves it", () => {
+        // Slack publishes none: the catalog's (Catalog.php writeManifest), on the catalog's own host.
+        const m = pwa.parseManifest({ name: "Slack", short_name: "Slack", start_url: "https://app.slack.com/client", scope: "https://app.slack.com/",
+                                      display: "standalone", icons: [{ src: "https://app.slack.com/favicon.ico", sizes: "16x16 32x32 48x48 256x256", type: "image/x-icon" },
+                                                                     { src: "https://app.slack.com/apple-touch-icon-precomposed.png", sizes: "57x57", type: "image/png" }] },
+                                    "https://marketplace.example/v1/manifests/org.webosphoenix.pwa.slack-0123456789abcdef.webmanifest", "https://app.slack.com/");
+        expect(m).toMatchObject({ startUrl: "https://app.slack.com/client", scope: "https://app.slack.com/", display: "standalone", name: "Slack" });
+        expect(pwa.pickIcons(m)).toMatchObject({ small: { src: "https://app.slack.com/favicon.ico", size: 256 }, large: null });
+        // The index keeps its SHA-256 (the device takes only that one); a site's own manifest has none.
+        const e = catalogLib.normalize({ id: "org.webosphoenix.pwa.slack", kind: "pwa", title: "Slack",
+                                         pwa: { manifest: "https://marketplace.example/v1/manifests/x.webmanifest", origin: "https://app.slack.com", sha256: "AB".repeat(32) } }, "phoenix");
+        expect(e.pwa).toEqual({ manifest: "https://marketplace.example/v1/manifests/x.webmanifest", origin: "https://app.slack.com", sha256: "ab".repeat(32) });
+        expect(catalogLib.normalize({ id: "org.webosphoenix.pwa.y", kind: "pwa", title: "Y", pwa: { manifest: "https://y/m.json", sha256: "no" } }, "phoenix").pwa)
+            .toEqual({ manifest: "https://y/m.json", origin: "https://y" });
+    });
+
+    it("takes the PNG an ICO's biggest picture is, for the launcher (Qt draws an ICO's first)", () => {
+        const png256 = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+        const bmp = (n: number) => new Uint8Array(40 + n).fill(7);
+        // An ICO: its directory, then each picture (a width of 0 is 256), as Slack's favicon.ico is: 16, 32, then 256 px.
+        const ico = (pics: [number, Uint8Array][]) => {
+            const head = 6 + 16 * pics.length;
+            const out = new Uint8Array(head + pics.reduce((n, p) => n + p[1].length, 0));
+            const v = new DataView(out.buffer);
+            v.setUint16(2, 1, true);
+            v.setUint16(4, pics.length, true);
+            let at = head;
+            pics.forEach(([size, data], i) => {
+                out[6 + 16 * i] = out[7 + 16 * i] = size % 256;
+                v.setUint32(14 + 16 * i, data.length, true);
+                v.setUint32(18 + 16 * i, at, true);
+                out.set(data, at);
+                at += data.length;
+            });
+            return out;
+        };
+        expect(Array.from(pwa.icoPng(ico([[16, bmp(16)], [32, bmp(32)], [256, png256]])))).toEqual(Array.from(png256));
+        // Its biggest a bitmap (Google Translate's: 64 px first): kept as the ICO it is.
+        expect(pwa.icoPng(ico([[64, bmp(64)], [16, png256]]))).toBeNull();
+        expect(pwa.icoPng(png256)).toBeNull();
+        expect(pwa.icoPng(ico([[256, png256]]).slice(0, 20))).toBeNull();   // cut short
+    });
 });
 
 describe("which apps a device is offered (lib/availability.js, docs/APP-STORE.md 3.17)", () => {

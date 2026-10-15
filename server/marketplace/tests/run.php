@@ -258,6 +258,64 @@ check(str_contains($light, '>AB</text>') && str_contains($light, 'fill="#1a1a1a"
       && str_contains($dark, 'fill="#ffffff"') && !str_contains($bad, '<script') && str_contains($bad, 'fill="#37474f"'),
       'a generated icon: up to three letters, dark on a light colour, escaped, a default colour');
 
+// A site that publishes no web app manifest (Slack): listed with the one Phoenix wrote for it
+// (curated-sites.json "webManifest"), published with the catalog, its SHA-256 in the signed index.
+$sl = array_values(array_filter($idx['apps'], fn ($a) => $a['id'] === 'org.webosphoenix.pwa.slack'))[0] ?? null;
+$slFile = $sl ? "$tmp/data/public/v1/manifests/" . basename($sl['pwa']['manifest']) : '';
+$slM = is_file($slFile) ? json_decode(file_get_contents($slFile), true) : null;
+check($sl && preg_match('#^http://127\.0\.0\.1:9999/v1/manifests/org\.webosphoenix\.pwa\.slack-[0-9a-f]{16}\.webmanifest$#', $sl['pwa']['manifest'])
+      && $sl['pwa']['origin'] === 'https://app.slack.com' && ($sl['pwa']['sha256'] ?? '') === hash_file('sha256', $slFile)
+      && $sl['homepage'] === 'https://app.slack.com/' && $sl['title'] === 'Slack',
+      'a site with no manifest of its own (Slack): listed with the one Phoenix wrote, served by the catalog, its SHA-256 in the signed index');
+check($slM && $slM['name'] === 'Slack' && $slM['start_url'] === 'https://app.slack.com/client' && $slM['scope'] === 'https://app.slack.com/'
+      && $slM['display'] === 'standalone' && $slM['icons']
+      && !array_filter($slM['icons'], fn ($i) => !str_starts_with($i['src'], 'https://app.slack.com/')),
+      '... what a device needs from it: a name, its start page and scope on the site, the site\'s own icons at their addresses there');
+check(str_starts_with($sl['icon'], 'http://127.0.0.1:9999/v1/icons/copy/org.webosphoenix.pwa.slack-') && !isset($sl['iconGenerated'])
+      && !isset($x['pwa']['sha256']),
+      '... its listing icon a copy of the site\'s; a site\'s own manifest has no SHA-256 (the site changes it)');
+// Changes to such a manifest, and one that is not the site's.
+$written = ['id' => 'org.webosphoenix.pwa.harbourchat', 'title' => 'Harbour Chat', 'developer' => 'Harbour Co', 'categories' => ['Communication'],
+            'featured' => false, 'summary' => 'Chat on the quay.', 'manifestBy' => 'phoenix', 'origin' => 'https://chat.harbour.example',
+            'icon' => 'https://chat.harbour.example/favicon.ico', 'manifestName' => 'Harbour Chat',
+            'webManifest' => ['name' => 'Harbour Chat', 'start_url' => 'https://chat.harbour.example/app', 'scope' => 'https://chat.harbour.example/',
+                              'display' => 'standalone',
+                              'icons' => [['src' => 'https://chat.harbour.example/favicon.ico', 'sizes' => '256x256', 'type' => 'image/x-icon']]]];
+$elsewhere = ['id' => 'org.webosphoenix.pwa.elsewhere', 'webManifest' => ['start_url' => 'https://evil.example/']] + $written;
+$elsewhere['webManifest'] += $written['webManifest'];
+file_put_contents("$tmp/written.json", json_encode(['apps' => [$written, $elsewhere]]));
+$seeded = $app->catalog->seedCurated("$tmp/written.json");
+$app->catalog->publish();
+$entry = fn (string $id) => array_values(array_filter(json_decode(file_get_contents("$tmp/data/public/v1/index.json"), true)['apps'],
+                                                      fn ($a) => $a['id'] === $id))[0] ?? null;
+$h1 = $entry('org.webosphoenix.pwa.harbourchat');
+check($seeded === 1 && $h1 && !$entry('org.webosphoenix.pwa.elsewhere') && !$app->catalog->app('org.webosphoenix.pwa.elsewhere'),
+      'a manifest Phoenix wrote whose start page is not on the site is not listed');
+$f1 = "$tmp/data/public/v1/manifests/" . basename($h1['pwa']['manifest']);
+check(preg_match('#^http://127\.0\.0\.1:9999/v1/manifests/org\.webosphoenix\.pwa\.harbourchat-[0-9a-f]{16}\.webmanifest$#', $h1['pwa']['manifest'])
+      && $h1['pwa']['origin'] === 'https://chat.harbour.example' && ($h1['pwa']['sha256'] ?? '') === hash_file('sha256', $f1)
+      && json_decode(file_get_contents($f1), true) === $written['webManifest'],
+      '... one that is: listed, its manifest served by the catalog as written, its SHA-256 in the signed index');
+$written['webManifest']['display'] = 'fullscreen';
+file_put_contents("$tmp/written.json", json_encode(['apps' => [$written]]));
+$app->catalog->seedCurated("$tmp/written.json");
+$app->catalog->publish();
+$h2 = $entry('org.webosphoenix.pwa.harbourchat');
+$f2 = "$tmp/data/public/v1/manifests/" . basename($h2['pwa']['manifest']);
+check($f2 !== $f1 && is_file($f1) && is_file($f2) && $h2['pwa']['sha256'] === hash_file('sha256', $f2)
+      && json_decode(file_get_contents($f2), true)['display'] === 'fullscreen',
+      '... a changed one is a new file, named by its contents; the one older indexes name stays');
+touch($f1, time() - 15 * 86400);
+$app->catalog->publish();
+check(!is_file($f1) && is_file($f2), '... until every index that may have named it has expired');
+unlink($f2);
+$app->catalog->publish();
+$gonePub = !$entry('org.webosphoenix.pwa.harbourchat');
+$app->catalog->seedCurated("$tmp/written.json");
+$pub = $app->catalog->publish();   // the build the review below follows
+check($gonePub && $entry('org.webosphoenix.pwa.harbourchat') && is_file($f2),
+      '... one missing from the published files is not listed (nothing to sign) until the next seed writes it again');
+
 // ---- A developer's package ------------------------------------------------------------------
 [$s, $r] = $call('POST', '/api/apps/packages', ipk($tmp, 'com.example.notes', '1.0.0'));
 check($s === 401, 'uploading needs an account');
