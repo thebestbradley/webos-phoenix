@@ -7,7 +7,11 @@ and origin, checked live. Run it again to refresh the list; sites whose
 manifest is gone are left out (and listed). A site whose manifest is good
 but whose icons are all broken is listed with an icon the catalog service
 makes ("iconGenerated": its initials on its theme colour; Catalog.php
-generatedIcon).
+generatedIcon). A site that publishes no manifest at all but whose entry
+carries one Phoenix wrote for it ("webManifest": Slack's) is listed with
+that one, checked as a site's own is ("manifestBy": "phoenix"; the catalog
+serves it, Catalog.php writeManifest); the site's own manifest, once it has
+one, comes first.
 
     python3 server/marketplace/bin/probe-pwas.py           every site
     python3 server/marketplace/bin/probe-pwas.py ID ...    only these (by id
@@ -259,6 +263,41 @@ def manifest_of(murl, ua, page):
     return m, name, icon, why
 
 
+def written_manifest(s, ua):
+    """The manifest Phoenix writes for a site that publishes none: its entry's
+    "webManifest" (as the browser extensions that make Slack installable add
+    one), with its addresses made absolute against the site's page, since the
+    catalog serves it from its own address, then checked as a site's own is:
+    a name, a start page on the site that answers over HTTPS, a scope that
+    holds it, and icons that are there (the site's own pictures, which the
+    device fetches at install). (manifest, name, icon URL, why), as
+    manifest_of; ValueError when it is not a manifest for the site."""
+    m = dict(s["webManifest"])
+    name = m.get("short_name") or m.get("name")
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("webManifest has no name")
+    start = urllib.parse.urljoin(s["url"], m.get("start_url") or s["url"])
+    if not start.startswith("https://") or origin(start) != origin(s["url"]):
+        raise ValueError("webManifest's start_url %s is not on %s" % (start, origin(s["url"])))
+    scope = urllib.parse.urljoin(start, m.get("scope") or ".")
+    if origin(scope) != origin(start) or not start.startswith(scope):
+        raise ValueError("webManifest's scope %s does not hold its start_url" % scope)
+    try:
+        get(start, ua)
+    except Exception as e:   # noqa: BLE001 - its start page is not there: not listed
+        raise ValueError("webManifest's start page %s: %s%s" % (start, e, bot_check(e))) from e
+    m.update({"start_url": start, "scope": scope, "display": m.get("display") or "standalone"})
+    if isinstance(m.get("id"), str):
+        m["id"] = urllib.parse.urljoin(start, m["id"])
+    m["icons"] = [dict(i, src=urllib.parse.urljoin(s["url"], i["src"])) for i in m.get("icons") or []
+                  if isinstance(i, dict) and isinstance(i.get("src"), str)]
+    icons = usable_icons(m["icons"], s["url"])
+    if not icons:
+        return m, name, None, "webManifest has no usable icon"
+    icon, why = pick_icon(icons, ua)
+    return m, name, icon, why
+
+
 def probe(s):
     """(entry, None) for a site whose manifest is found, (None, why) otherwise."""
     why = "no web app manifest found"
@@ -301,6 +340,7 @@ def probe(s):
                 start = doc
             entry = dict(s)
             entry.pop("url", None)
+            entry.pop("webManifest", None)
             entry.update({"manifest": murl, "origin": origin(start),
                           "icon": icon or "", "manifestName": name})
             if not icon:
@@ -312,6 +352,20 @@ def probe(s):
             return entry, None, m.get("display") or "browser"
     if fallback:
         return fallback[0], None, fallback[1]
+    # None of its own: the one Phoenix wrote for it, if its entry has one.
+    if isinstance(s.get("webManifest"), dict):
+        try:
+            m, name, icon, icon_why = written_manifest(s, UAS[0])
+        except ValueError as e:
+            return None, "%s; %s" % (why, e), None
+        entry = dict(s)
+        for key in ("url", "manifest", "webManifest"):
+            entry.pop(key, None)
+        entry.update({"manifestBy": "phoenix", "webManifest": m, "origin": origin(m["start_url"]),
+                      "icon": icon or "", "manifestName": name})
+        if not icon:
+            entry["iconGenerated"] = generated_icon(m, s["title"], origin(m["start_url"]), icon_why)
+        return entry, None, m["display"]
     return None, why, None
 
 
@@ -345,8 +399,10 @@ def main(only=()):
         if entry:
             out.append(entry)
             gen = entry.get("iconGenerated")
-            print("ok   %-22s %-10s %s%s" % (s["title"], display, entry["manifest"],
-                                          " (icon generated: %s; %s)" % (gen["text"], gen["why"]) if gen else ""))
+            print("ok   %-22s %-10s %s%s%s" % (s["title"], display, entry.get("manifest") or "manifest by Phoenix (webManifest)",
+                                            " (icon generated: %s; %s)" % (gen["text"], gen["why"]) if gen else "",
+                                            " (its own manifest now: its webManifest in curated-sites.json can go)"
+                                            if s.get("webManifest") and entry.get("manifest") else ""))
         else:
             missing.append({"title": s["title"], "url": s["url"], "why": why[:160]})
             print("skip %-22s %s" % (s["title"], why[:120]))

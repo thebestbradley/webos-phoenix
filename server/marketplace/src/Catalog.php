@@ -19,6 +19,10 @@
 //                                    named in its index entry with its SHA-256
 //                                    ("detail": {url, sha256}), so the index stays
 //                                    small and the detail is as trusted as the index
+//   <data>/public/v1/manifests/<id>-<hash>.webmanifest  the web app manifest Phoenix
+//                                    wrote for a curated site that publishes none
+//                                    (writeManifest), its SHA-256 in the app's entry
+//                                    ("pwa": {manifest, origin, sha256})
 //
 // Each entry also says its kind and the device classes it is offered on, and the index
 // the admin's switches of kinds and feeds per device class (docs/APP-STORE.md 3.17,
@@ -421,7 +425,8 @@ final class Catalog
      * catalog/curated-pwas.json (bin/probe-pwas.py) into the catalog, listed; opted-out origins stay
      * out. With $whole (the file is the whole list), a curated web app it no longer has (its
      * manifest gone) is set 'gone', not listed; a later list that has it back lists it again. One
-     * an admin pulled stays pulled.
+     * an admin pulled stays pulled. A site that publishes no manifest of its own is listed with
+     * the one Phoenix wrote for it (writeManifest).
      */
     public function seedCurated(string $file, bool $whole = false): int
     {
@@ -439,6 +444,16 @@ final class Catalog
                 $icon = $this->writeGeneratedIcon($e['id'], (string) ($e['iconGenerated']['text'] ?? ''),
                                                   (string) ($e['iconGenerated']['color'] ?? ''), $e['title']);
             }
+            // A site that publishes no web app manifest (Slack): the one Phoenix wrote for
+            // it (curated-sites.json "webManifest", as the probe checked it, "manifestBy":
+            // "phoenix"), published with the catalog.
+            $manifest = (string) ($e['manifest'] ?? '');
+            if (($e['manifestBy'] ?? '') === 'phoenix') {
+                $manifest = is_array($e['webManifest'] ?? null) ? $this->writeManifest($e['id'], $e['webManifest'], $e['origin']) : '';
+            }
+            if ($manifest === '') {
+                continue;
+            }
             $row = ['title' => $e['title'], 'developer' => $e['developer'] ?? '', 'summary' => $e['summary'] ?? '',
                     'categories' => $e['categories'] ?? [], 'icon' => $icon, 'featured' => !empty($e['featured']),
                     'homepage' => $e['origin'] . '/'];
@@ -447,9 +462,9 @@ final class Catalog
                                 manifest = ?, origin = ?, updated = ?, status = CASE WHEN status = 'gone' THEN 'listed' ELSE status END
                                 WHERE id = ? AND curated = 1",
                     [$row['title'], $row['developer'], $row['summary'], json_encode($row['categories']), $row['icon'],
-                     $row['featured'] ? 1 : 0, $e['manifest'], $e['origin'], Db::now(), $e['id']]);
+                     $row['featured'] ? 1 : 0, $manifest, $e['origin'], Db::now(), $e['id']]);
             } else {
-                $this->insertApp($e['id'], 'pwa', null, $row, 'listed', ['manifest' => $e['manifest'], 'origin' => $e['origin'], 'curated' => 1]);
+                $this->insertApp($e['id'], 'pwa', null, $row, 'listed', ['manifest' => $manifest, 'origin' => $e['origin'], 'curated' => 1]);
             }
             $n++;
         }
@@ -462,6 +477,44 @@ final class Catalog
             }
         }
         return $n;
+    }
+
+    // ---- Manifests Phoenix writes ------------------------------------------------------------
+
+    /**
+     * Publish the web app manifest Phoenix wrote for curated site $id, which publishes none
+     * (as the browser extensions that make Slack installable add one): the probe's, its
+     * addresses absolute, since it is served from here. Its start page must be on the site
+     * ($origin, which the index gives). Named by its contents, as an app's detail is
+     * (manifests/<id>-<hash>.webmanifest), so an index a device already has keeps finding the
+     * one it names; the index gives its SHA-256 (publish). Its URL, or '' for one that is not
+     * a manifest for the site.
+     */
+    private function writeManifest(string $id, array $m, string $origin): string
+    {
+        $start = is_string($m['start_url'] ?? null) ? $m['start_url'] : '';
+        $u = parse_url($start);
+        if (!is_string($m['name'] ?? $m['short_name'] ?? null) || empty($u['scheme']) || empty($u['host'])
+            || strtolower($u['scheme'] . '://' . $u['host'] . (isset($u['port']) ? ':' . $u['port'] : '')) !== strtolower($origin)) {
+            return '';
+        }
+        $json = json_encode($m, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) . "\n";
+        $name = preg_replace('/[^A-Za-z0-9._-]/', '_', $id) . '-' . substr(hash('sha256', $json), 0, 16) . '.webmanifest';
+        $dir = $this->publicDir() . '/manifests';
+        @mkdir($dir, 0755, true);
+        if (!is_file("$dir/$name") || file_get_contents("$dir/$name") !== $json) {
+            file_put_contents("$dir/$name.new", $json);
+            rename("$dir/$name.new", "$dir/$name");
+        }
+        return $this->config['base_url'] . 'manifests/' . $name;
+    }
+
+    /** The published file of a curated web app's manifest Phoenix wrote (writeManifest), else null. */
+    private function writtenManifestFile(array $a): ?string
+    {
+        $prefix = $this->config['base_url'] . 'manifests/';
+        $name = str_starts_with((string) $a['manifest'], $prefix) ? substr((string) $a['manifest'], strlen($prefix)) : '';
+        return $a['curated'] && preg_match('/^[A-Za-z0-9._-]+\.webmanifest$/', $name) ? $this->publicDir() . '/manifests/' . $name : null;
     }
 
     // ---- Generated icons ----------------------------------------------------------------------
@@ -1028,6 +1081,7 @@ final class Catalog
         $apps = [];
         $categories = [];
         $details = [];
+        $manifests = [];
         foreach ($this->db->all("SELECT id FROM apps WHERE status = 'listed' ORDER BY featured DESC, title") as $row) {
             $a = $this->app($row['id']);
             $e = [
@@ -1049,6 +1103,17 @@ final class Catalog
             }
             if ($a['kind'] === 'pwa') {
                 $e['pwa'] = ['manifest' => $a['manifest'], 'origin' => $a['origin']];
+                // A manifest Phoenix wrote (the site publishes none): its SHA-256, so a device
+                // takes only the one the catalog signed, from any mirror. Gone (a data folder
+                // without it): not listed until the next seed writes it again.
+                $written = $this->writtenManifestFile($a);
+                if ($written !== null) {
+                    if (!is_file($written)) {
+                        continue;
+                    }
+                    $e['pwa']['sha256'] = hash_file('sha256', $written);
+                    $manifests[basename($written)] = true;
+                }
                 // Its icon made here (the site's are broken): devices install it.
                 if ($a['icon'] === $this->generatedIconUrl($a['id'])) {
                     $e['iconGenerated'] = true;
@@ -1104,6 +1169,7 @@ final class Catalog
             file_put_contents("$dir/icons/accounts/{$entry['templateId']}.png", $png);
         }
         $this->writeDetails($details);
+        $this->expireUnnamed($dir . '/manifests', '*.webmanifest', $manifests);
         // The signature first, then the index: a reader never sees an index without its signature.
         file_put_contents("$dir/index.json.sig.new", base64_encode($this->signer->sign($json)) . "\n");
         file_put_contents("$dir/index.json.new", $json);
@@ -1130,11 +1196,23 @@ final class Catalog
                 file_put_contents("$dir/$name.new", $bytes);
                 rename("$dir/$name.new", "$dir/$name");
             }
-            touch("$dir/$name");
         }
-        foreach (glob("$dir/*.json") ?: [] as $old) {
-            if (!isset($details[basename($old)]) && filemtime($old) < time() - self::EXPIRES_DAYS * 86400) {
-                @unlink($old);
+        $this->expireUnnamed($dir, '*.json', $details);
+    }
+
+    /**
+     * Published files named by their contents ($dir/$pattern: the apps' details, the manifests
+     * Phoenix wrote) after a publish: those this index names ($named, by file name) take its
+     * time; one no index names any more goes once every index that may have named it has
+     * expired.
+     */
+    private function expireUnnamed(string $dir, string $pattern, array $named): void
+    {
+        foreach (glob("$dir/$pattern") ?: [] as $file) {
+            if (isset($named[basename($file)])) {
+                touch($file);
+            } elseif (filemtime($file) < time() - self::EXPIRES_DAYS * 86400) {
+                @unlink($file);
             }
         }
     }
