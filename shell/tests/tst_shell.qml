@@ -1723,6 +1723,41 @@ Item {
             verify(shell.dockShown);
         }
 
+        // Back in card view by any way, the dock is back (MinimizeState::
+        // onEntry -> setCardWindowMaximized(false) -> signalShowDock,
+        // CardWindowManagerStates.cpp:181-194): the card in front closed by
+        // its app (straight back to card view, no minimize: Screenshot's
+        // preview), a card closed while it rises. A launch hides it once
+        // and never shows it on its way up.
+        function test_dockBackInCardViewAnyWay() {
+            var dock = findChild(shell, "quickLaunch");
+            var cv = shell.cardView;
+            tryCompare(cv, "maximizeProgress", 0, 2000);
+            shell.dockShown = true;
+            tryCompare(dock, "shownProgress", 1, 1500);
+            var changes = [];
+            var watch = function () { changes.push(shell.dockShown); };
+            shell.dockShownChanged.connect(watch);
+            var uid = shell.openApp("org.webosphoenix.email");
+            verify(uid !== "");
+            tryVerify(function () { return shell.maximized; }, 3000);
+            wait(50);
+            compare(changes, [false], "a launch: hidden once, not shown on the way up");
+            // Its app closes it, maximized.
+            windows.cardCloseRequested(uid);
+            tryCompare(cv, "maximizeProgress", 0, 2000);
+            tryVerify(function () { return shell.dockShown; }, 1000, "the app closed its card: the dock is back");
+            tryCompare(dock, "shownProgress", 1, 1500);
+            // Closed before it is up (waiting for its app, or rising).
+            uid = shell.openApp("org.webosphoenix.email");
+            verify(!shell.dockShown);
+            tryVerify(function () { return cv.risingUid === uid || cv.waitingUid === uid || cv.loadingUid === uid; }, 2000);
+            windows.cardCloseRequested(uid);
+            tryVerify(function () { return cv.maximizeProgress === 0 && cv.risingUid === "" && cv.waitingUid === ""; }, 3000);
+            tryVerify(function () { return shell.dockShown; }, 1000, "closed before it was up: the dock is back");
+            shell.dockShownChanged.disconnect(watch);
+        }
+
         // The Home button (SystemUiController.cpp:527-583): one thing per
         // press; a double press from an app reaches the launcher.
         // V8: a Bluetooth keyboard's Search key toggles Just Type, its
