@@ -1,9 +1,20 @@
 # Copyright (c) 2026 webOS Phoenix contributors
 # SPDX-License-Identifier: Apache-2.0
 
-require recipes-core/images/webos-image.bb
+# The base image of the stack this build is on (conf/layer.conf): webOS
+# OSE's webos-image (build-webos), or LuneOS's image (meta-webos-ports;
+# docs/DECISIONS.md, 15 October 2026) without LuneOS's shell and apps: its
+# luneos-extended feature is packagegroup-luneos-extended, which brings
+# luna-next-cardshell, the LuneOS apps and Preware
+# (meta-luneos/classes/luneos_image.bbclass:1, recipes-core/images/luneos-image.inc:6).
+# Both inherit webos_image, whose packagegroup-webos-extended is the webOS
+# platform (WebAppMgr, SAM, luna-surfacemanager, db8 and the services).
+PHOENIX_BASE_IMAGE ?= "recipes-core/images/webos-image.bb"
+PHOENIX_BASE_IMAGE:luneos = "recipes-core/images/luneos-image.inc"
+require ${PHOENIX_BASE_IMAGE}
+IMAGE_FEATURES:remove:luneos = "luneos-extended"
 
-DESCRIPTION = "webOS OSE image with the Phoenix mobile shell"
+DESCRIPTION = "webOS image with the Phoenix mobile shell"
 
 # A production image (docs/PRE-IMAGE-CHECKLIST.md X1, OPEN-QUESTIONS Q66):
 # OSE builds every image as a pre-release unless WEBOS_DISTRO_PRERELEASE is
@@ -14,6 +25,9 @@ DESCRIPTION = "webOS OSE image with the Phoenix mobile shell"
 # Developer Mode is then the way in.
 PHOENIX_PRODUCTION ?= "0"
 IMAGE_FEATURES:remove = "${@'debug-tweaks ssh-server-dropbear ssh-server-openssh' if d.getVar('PHOENIX_PRODUCTION') == '1' else ''}"
+# LuneOS's image has root without a password through debug-tweaks' newer
+# names (LUNEOS_IMAGE_DEFAULT_FEATURES, meta-luneos/classes/luneos_image.bbclass:4).
+IMAGE_FEATURES:remove:luneos = "${@'allow-empty-password empty-root-password allow-root-login' if d.getVar('PHOENIX_PRODUCTION') == '1' else ''}"
 
 IMAGE_INSTALL:append = " phoenix-shell phoenix-keyboard phoenix-apps phoenix-pty phoenix-devices phoenix-diag packagegroup-phoenix-terminal \
     packagegroup-phoenix-assistant packagegroup-phoenix-connectors"

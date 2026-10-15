@@ -19,8 +19,16 @@
 # scripts/setup-build.sh uses. The meta-phoenix recipes take their source
 # revision from this checkout's HEAD, so they parse without asking GitHub.
 #
+# PHOENIX_PARSE_STACK=luneos does the same on LuneOS's layer stack (wrynose,
+# meta-qt6 6.12, Chromium 151; scripts/luneos-layers.txt, set up by
+# scripts/setup-build-luneos.sh), where device images are moving
+# (docs/HARDWARE.md, "The web runtime: Chromium 151 on LuneOS's layers").
+# Its layers are about 200 MB.
+#
 # Environment:
-#   PHOENIX_PARSE_DIR     build directory (default: ${TMPDIR:-/tmp}/webos-phoenix-parse);
+#   PHOENIX_PARSE_STACK   ose (default: build-webos) or luneos
+#   PHOENIX_PARSE_DIR     build directory (default: ${TMPDIR:-/tmp}/webos-phoenix-parse,
+#                         or webos-phoenix-parse-luneos for LuneOS's stack);
 #                         keep it to rerun quickly, delete it to free the space
 #   PHOENIX_PARSE_COMPRESS  firmware compression switches to resolve too, on the
 #                         first MACHINE (default: "xz zstd"; "" for none): the
@@ -38,7 +46,12 @@
 set -eu
 
 REPO_DIR=$(cd "$(dirname "$0")/.." && pwd)
-BUILD_DIR=${PHOENIX_PARSE_DIR:-"${TMPDIR:-/tmp}/webos-phoenix-parse"}
+STACK=${PHOENIX_PARSE_STACK:-ose}
+case $STACK in
+    ose) BUILD_DIR=${PHOENIX_PARSE_DIR:-"${TMPDIR:-/tmp}/webos-phoenix-parse"} ;;
+    luneos) BUILD_DIR=${PHOENIX_PARSE_DIR:-"${TMPDIR:-/tmp}/webos-phoenix-parse-luneos"} ;;
+    *) echo "error: PHOENIX_PARSE_STACK is ose or luneos, not \"$STACK\"" >&2; exit 2 ;;
+esac
 TARGET=${PHOENIX_PARSE_TARGET:-webos-phoenix-image torchd whisper-cpp phoenix-driver-feed}
 [ $# -gt 0 ] || set -- qemux86-64 raspberrypi4-64
 
@@ -48,6 +61,12 @@ if [ "$(id -u)" = 0 ]; then
     exit 1
 fi
 
+if [ "$STACK" = luneos ]; then
+    # 1-3. LuneOS's layers at their pinned commits, meta-phoenix added, the
+    # configuration written (setup-build-luneos.sh).
+    "$REPO_DIR/scripts/setup-build-luneos.sh" "$BUILD_DIR" "$@"
+    LOCAL_CONF=phoenix-local.conf
+else
 # 1. build-webos at the commit setup-build.sh pins, without history.
 BUILD_WEBOS_URL=$(sed -n 's/^BUILD_WEBOS_URL=//p' "$REPO_DIR/scripts/setup-build.sh")
 BUILD_WEBOS_COMMIT=$(sed -n 's/^BUILD_WEBOS_COMMIT=//p' "$REPO_DIR/scripts/setup-build.sh")
@@ -104,11 +123,13 @@ PY
 
 # 3. Add meta-phoenix and write the configuration (no layer updates).
 MCF_COMMAND=configure "$REPO_DIR/scripts/setup-build.sh" "$BUILD_DIR" "$@"
+LOCAL_CONF=webos-local.conf
+fi
 
 # The recipes that build this repository take its HEAD instead of AUTOREV
 # (which asks GitHub for the branch head while parsing). No network: a
 # recipe that wants to fetch while parsing is an error here.
-cat > "$BUILD_DIR/webos-local.conf" <<CONF
+cat > "$BUILD_DIR/$LOCAL_CONF" <<CONF
 # Written by scripts/parse-check.sh
 PHOENIX_SRCREV = "$(git -C "$REPO_DIR" rev-parse HEAD)"
 BB_NO_NETWORK = "1"
@@ -118,7 +139,7 @@ INHERIT:remove = "uninative"
 # The disk space monitor's limits (stop below 1-2 GB free) are for builds; a
 # dry run writes only bitbake's caches, and the monitor would stop it on a
 # full-ish disk with "No new tasks can be executed". (forcevariable: the
-# webos distro sets it after this file.)
+# distro sets it after this file.)
 BB_DISKMON_DIRS:forcevariable = ""
 CONF
 
@@ -127,7 +148,12 @@ cd "$BUILD_DIR"
 bb() (
     # oe-init-build-env reads unset variables.
     m=$1; shift; set +u
-    . ./oe-init-build-env >/dev/null
+    if [ "$STACK" = luneos ]; then
+        # shellcheck disable=SC1091  # written by setup-build-luneos.sh
+        . ./setup-env
+    else
+        . ./oe-init-build-env >/dev/null
+    fi
     MACHINE=$m bitbake "$@"
 )
 COMPRESS=${PHOENIX_PARSE_COMPRESS-xz zstd}

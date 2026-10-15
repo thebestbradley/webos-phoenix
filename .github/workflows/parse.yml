@@ -13,6 +13,8 @@ on:
     paths:
       - meta-phoenix/**
       - scripts/setup-build.sh
+      - scripts/setup-build-luneos.sh
+      - scripts/luneos-layers.txt
       - scripts/parse-check.sh
       - .github/workflows/parse.yml
 
@@ -98,4 +100,71 @@ jobs:
         if: failure()
         with:
           name: parse-check-${{ matrix.machine }}
+          path: ${{ env.PHOENIX_PARSE_DIR }}/parse-check-*.log
+
+  # The same on LuneOS's layer stack (Yocto 6.0 wrynose, meta-qt6 6.12,
+  # Chromium 151), where device images are moving (docs/DECISIONS.md, 15
+  # October 2026; docs/HARDWARE.md, "The web runtime: Chromium 151 on
+  # LuneOS's layers"). Allowed to fail while meta-phoenix is brought over:
+  # its result shows on each run, and the OSE jobs above still decide.
+  # When every machine passes here, these become the required jobs and the
+  # OSE ones go.
+  parse-luneos:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - machine: qemux86-64
+            compress: xz zstd
+          - machine: raspberrypi4-64
+            compress: ""
+          - machine: phoenix-vm-arm64
+            compress: ""
+          - machine: fairphone-fp6
+            compress: ""
+          - machine: ayn-odin2portal
+            compress: ""
+          - machine: pinephonepro
+            compress: ""
+          - machine: pinetab2
+            compress: ""
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Host tools for bitbake
+        run: |
+          echo "PHOENIX_PARSE_DIR=$RUNNER_TEMP/webos-phoenix-parse-luneos" >> "$GITHUB_ENV"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            gawk diffstat chrpath cpio zstd lz4
+
+      # The layers scripts/luneos-layers.txt pins (about 200 MB), not
+      # bitbake's caches.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.PHOENIX_PARSE_DIR }}
+            !${{ env.PHOENIX_PARSE_DIR }}/tmp
+            !${{ env.PHOENIX_PARSE_DIR }}/cache
+            !${{ env.PHOENIX_PARSE_DIR }}/downloads
+            !${{ env.PHOENIX_PARSE_DIR }}/sstate-cache
+            !${{ env.PHOENIX_PARSE_DIR }}/parse-check-*.log
+          key: luneos-layers-${{ hashFiles('scripts/luneos-layers.txt', 'scripts/setup-build-luneos.sh') }}
+
+      - name: Allow user namespaces for BitBake
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Parse and resolve webos-phoenix-image on LuneOS's layers (${{ matrix.machine }})
+        env:
+          PHOENIX_PARSE_STACK: luneos
+          PHOENIX_PARSE_COMPRESS: ${{ matrix.compress }}
+        run: scripts/parse-check.sh ${{ matrix.machine }}
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: parse-check-luneos-${{ matrix.machine }}
           path: ${{ env.PHOENIX_PARSE_DIR }}/parse-check-*.log

@@ -50,3 +50,12 @@ MACHINE_EXTRA_RRECOMMENDS += "kernel-modules"
 # The kernel's device trees are deployed under their own names (no vendor
 # directory) beside the kernel image, for the boot images.
 KERNEL_DTBVENDORED = "0"
+
+# The wic files (the .wks and each machine's extlinux.conf) are in the
+# layer's files/wic, where wrynose's wic looks (WKS_SEARCH_PATH,
+# image_types_wic.bbclass:49) and its sanity check wants them (a layer's
+# wic/ directory is an error, sanity.bbclass:843-847); scarthgap's looks in
+# wic/ (image_types_wic.bbclass:45; scripts/lib/wic/engine.py:50-64 for the
+# configfile). The machines name them by full path, which both find
+# (wks_search; find_canned takes a path that exists).
+PHOENIX_WIC_DIR = "${LAYERDIR_meta-phoenix}/files/wic"
