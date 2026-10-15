@@ -156,7 +156,9 @@ first boot is yours. Steps:
 
 Homebrew's QEMU is built without OpenGL on macOS, so `vm.sh` gives it the
 plain virtio GPU and the image draws with Mesa's software renderer
-(llvmpipe): correct, but slower than the device. For GL, use UTM.
+(llvmpipe): correct, but slower than the device (the shell sees llvmpipe and
+leaves out the blur behind translucent surfaces, as RenderInfo prints at
+start-up). For GL, use UTM.
 
 ### UTM
 

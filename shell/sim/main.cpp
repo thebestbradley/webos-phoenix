@@ -224,6 +224,7 @@ int main(int argc, char *argv[])
     QCommandLineOption noBootAnimOpt(QStringLiteral("no-boot-animation"), QStringLiteral("Start without the boot animation."));
     QCommandLineOption checkChromeOpt(QStringLiteral("check-chrome"), QStringLiteral("Check that the menu bar shows its menus with the keyboard focus on the screen (on a Mac: the menu bar at the top of the screen) and that the focus goes back to the screen from the window around it, print what it found, and exit: 0 if so (CI)."));
     QCommandLineOption instanceOpt(QStringLiteral("instance"), QStringLiteral("Be another simulated device, NAME, with its own data, installed apps, web storage and settings (kept under phoenix-sim-NAME beside the usual phoenix-sim): two simulators can run at once, e.g. webOS Phoenix 1.0 and 2.0 side by side; each one's Window menu lists the others and brings one to the front. Letters, digits, '.', '_' and '-'. Its restarts (an update, Full Erase) stay that device."), QStringLiteral("name"));
+    QCommandLineOption softwareRenderingOpt(QStringLiteral("software-rendering"), QStringLiteral("Whether the screen is drawn without a GPU, where the shell steps down (no blur behind translucent surfaces, which a CPU draws too slowly): auto (the default) tells by the renderer, Qt Quick's software renderer or a software rasteriser such as Mesa's llvmpipe; on or off forces it. Sets PHOENIX_SOFTWARE_RENDERING (RenderInfo)."), QStringLiteral("auto|on|off"));
     QCommandLineOption noToolbarOpt(QStringLiteral("no-toolbar"), QStringLiteral("Start without the toolbar beside the screen (View > Show Toolbar shows it again)."));
     // Set by phoenix-sim itself when it restarts (SimProcess).
     QCommandLineOption updatingOpt(QStringLiteral("updating"), QStringLiteral("Boot as after a system update: \"Updating the system\" first."));
@@ -231,7 +232,7 @@ int main(int argc, char *argv[])
     updatingOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     eraseOpt.setFlags(QCommandLineOption::HiddenFromHelp);
     parser.addOptions({ deviceOpt, zoomOpt, hardwareKeyboardOpt, lowMemoryOpt, touchstoneOpt, stayAwakeOpt, sizeOpt, scaleOpt, tabletOpt, phoneOpt, adaptiveOpt, sceneOpt, firstUseOpt, shotOpt, delayOpt, qmlOpt, repoOpt, installedOpt, extraRootfsOpt, launchOpt, openOpt, orientationOpt, turnOpt, quietOpt, homeButtonOpt,
-                        noHostShellOpt, noTcpOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, instanceOpt, checkChromeOpt, updatingOpt, eraseOpt, microphoneFileOpt,
+                        noHostShellOpt, noTcpOpt, hostShellOpt, policyOpt, usbOpt, usbBusyOpt, touchToShareOpt, bootAnimOpt, noBootAnimOpt, noToolbarOpt, softwareRenderingOpt, instanceOpt, checkChromeOpt, updatingOpt, eraseOpt, microphoneFileOpt,
                         llamaServerOpt, speechCommandOpt, marketplaceOpt, noMarketplaceOpt, wakeModelOpt, voskLibraryOpt, wakeFileOpt });
     parser.process(app);
 
@@ -294,6 +295,17 @@ int main(int argc, char *argv[])
                 policy.insert(QStringLiteral("maxInactivityTimeDeviceLock"), 9998);   // no limit (EASPolicyManager.h:45)
             securityPolicy = QString::fromUtf8(QJsonDocument(policy).toJson(QJsonDocument::Compact));
         }
+    }
+
+    // --software-rendering: RenderInfo (Phoenix.Native) reads it from the
+    // environment when the shell's QML first asks, as on a device.
+    if (parser.isSet(softwareRenderingOpt)) {
+        const QString value = parser.value(softwareRenderingOpt);
+        if (value != QLatin1String("auto") && value != QLatin1String("on") && value != QLatin1String("off")) {
+            qCritical("--software-rendering takes auto, on or off");
+            return 2;
+        }
+        qputenv("PHOENIX_SOFTWARE_RENDERING", value.toLatin1());
     }
 
     const QStringList orientations = { QStringLiteral("up"), QStringLiteral("left"), QStringLiteral("down"), QStringLiteral("right") };

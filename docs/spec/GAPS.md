@@ -44,7 +44,9 @@ device, not yet run"):
   (`scripts/vm.sh <id>`; parsed, not built or booted: the owner's first boot on the Mac;
   HARDWARE.md, "Device profiles", "Device VMs"), also in UTM on an iPad or a Mac
   (`scripts/make-utm.sh <id>`: emulation on an iPad, one pointer for touch; checked against
-  UTM's source, not run in UTM; BUILDING-MAC.md, "Run it on an iPad with UTM").
+  UTM's source, not run in UTM; BUILDING-MAC.md, "Run it on an iPad with UTM"). Without
+  virgl the VM draws with llvmpipe, which the shell now tells from a GPU and leaves out
+  its blur for (RenderInfo, 15 October 2026; run in the simulator under Xvfb's llvmpipe).
 - 🟡 **P0** E1: Edit and the long-press popup written for WebAppMgr (through the pages'
   line to the shell, `services/shellhost`), not run.
 - 🟡 **P0** The one-process audit (docs/DEVICE-AUDIT.md): what a page did by calling the

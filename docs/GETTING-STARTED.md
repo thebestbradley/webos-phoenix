@@ -448,3 +448,8 @@ what its rules are. It is read automatically at the start of each session.
   above.
 - **The window is blank on a Linux VM:** set `QT_QUICK_BACKEND=software` or
   enable 3D acceleration in the VM.
+- **Slow without a GPU (a VM, a container):** the log's `phoenix: renderer`
+  line names what draws. On a software rasteriser (Mesa's llvmpipe,
+  SwiftShader) the shell leaves out the blur behind translucent surfaces by
+  itself; `--software-rendering on` or `off` forces it either way
+  (`PHOENIX_SOFTWARE_RENDERING=1` or `0` on a device).

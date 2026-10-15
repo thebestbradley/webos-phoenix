@@ -665,6 +665,30 @@ WAV files as the microphone, in turn:
 ./build/phoenix-sim --microphone-file call.wav --microphone-file yes.wav
 ```
 
+### Without a GPU
+
+The shell tells by the renderer whether a GPU draws, and prints it (`phoenix: renderer ...`). Without one it leaves out the blur behind translucent surfaces, as it always did with Qt Quick's software renderer: also for OpenGL or Vulkan on a software rasteriser such as Mesa's llvmpipe (a VM, a container, a board without its GPU driver). `PHOENIX_SOFTWARE_RENDERING` (`1`, `0` or `auto`) does the same on a device.
+
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:227,300-309 · shell/native/renderinfo.h`
+
+As without a GPU: no blur:
+
+```sh
+./build/phoenix-sim --software-rendering on
+```
+
+The blur, even on a software rasteriser:
+
+```sh
+./build/phoenix-sim --software-rendering off
+```
+
+The same through the environment:
+
+```sh
+PHOENIX_SOFTWARE_RENDERING=1 ./build/phoenix-sim
+```
+
 ## Test: shell
 
 ### Point QMLTEST at Qt's test runner
@@ -723,7 +747,7 @@ QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen "$QMLTEST" -import shell/qml -import
 
 There's nothing for `ctest` to find: run each test program by name after a build.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:185-252,510-518 · shell/CMakeLists.txt:67-73,121-150`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:185-264,535-548 · shell/CMakeLists.txt:67-73,125-192`
 
 ```sh
 build/pty/pty-test
@@ -773,6 +797,12 @@ build/simmarketplace-test
 
 ```sh
 build/localmodels-test
+```
+
+Which renderers count as no GPU, where the shell's blur steps down:
+
+```sh
+build/renderinfo-test
 ```
 
 Fetches the voice first:

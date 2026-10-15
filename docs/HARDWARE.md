@@ -440,6 +440,12 @@ Linux; UTM on a Mac), `virtio-multitouch-pci` (QEMU 8.0+: a touchscreen,
 `virtio-tablet-pci` for the mouse, virtio-net (ssh on port 2222),
 `virtio-sound-pci` (QEMU 8.2+) or Intel HDA (`--audio hda`), virtio-blk.
 Each device keeps its own disk, a copy-on-write overlay over the image.
+Without virgl the image draws with Mesa's llvmpipe, on the CPU: the shell
+sees that (Phoenix.Native's RenderInfo, from the scene graph's QRhi; its
+`phoenix: renderer` line in the journal) and leaves out the blur behind
+translucent surfaces, as with Qt Quick's software renderer;
+`export PHOENIX_SOFTWARE_RENDERING=1` (or `0`) in `/etc/phoenix/compositor.env`,
+which `product.env` sources, forces it.
 `--cap-cpu PCT` approximates the slower cores: a CPU quota per virtual CPU
 on Linux, the efficiency cores on a Mac. `--dry-run` prints the command;
 `--utm` prints UTM's settings. The procedure on the Mac:

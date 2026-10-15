@@ -167,6 +167,12 @@ it("Services and the assistant", "Also: `--host-shell PATH`, `--no-tcp-relay`, `
     ("./build/phoenix-sim --no-host-shell", "the Terminal app gets no shell on your computer"),
     ("./build/phoenix-sim --microphone-file call.wav --microphone-file yes.wav", "WAV files as the microphone, in turn")])
 
+it("Without a GPU", "The shell tells by the renderer whether a GPU draws, and prints it (`phoenix: renderer ...`). Without one it leaves out the blur behind translucent surfaces, as it always did with Qt Quick's software renderer: also for OpenGL or Vulkan on a software rasteriser such as Mesa's llvmpipe (a VM, a container, a board without its GPU driver). `PHOENIX_SOFTWARE_RENDERING` (`1`, `0` or `auto`) does the same on a device.", B, WP,
+   "webos-phoenix/shell/sim/main.cpp:227,300-309 · shell/native/renderinfo.h",
+   [("./build/phoenix-sim --software-rendering on", "as without a GPU: no blur"),
+    ("./build/phoenix-sim --software-rendering off", "the blur, even on a software rasteriser"),
+    ("PHOENIX_SOFTWARE_RENDERING=1 ./build/phoenix-sim", "the same through the environment")])
+
 sec("Test: shell")
 it("Point QMLTEST at Qt's test runner", "Once per terminal.", B, WP, "webos-phoenix/CLAUDE.md:80-81 · docs/GETTING-STARTED.md:328-330",
    [("export QMLTEST=\"$(brew --prefix qt)/bin/qmltestrunner\"", "", {"os": M}),
@@ -177,11 +183,12 @@ it("Run the QML tests", "", B, WP, "webos-phoenix/.github/workflows/ci.yml:180,4
     ("QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -input shell/tests/tst_launcher.qml", "one file"),
     ("QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -import shell/tests-device/fakes -input shell/tests-device", "the device shell over fake modules"),
     ("QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -input shell/tests/tst_hidpi.qml", "HiDPI at 2x")])
-it("Run the C++ tests", "There's nothing for `ctest` to find: run each test program by name after a build.", B, WP, "webos-phoenix/.github/workflows/ci.yml:185-252,510-518 · shell/CMakeLists.txt:67-73,121-150",
+it("Run the C++ tests", "There's nothing for `ctest` to find: run each test program by name after a build.", B, WP, "webos-phoenix/.github/workflows/ci.yml:185-264,535-548 · shell/CMakeLists.txt:67-73,125-192",
    ["build/pty/pty-test", "QT_QPA_PLATFORM=offscreen build/keyboard/keyboard-test", "build/siminstaller-test", "build/simlaunch-test",
     ("QT_QPA_PLATFORM=offscreen build/simchrome-test", "the menu bar and its Window menu"),
     ("build/siminstances-test", "the simulators' registry: Window > Simulators"), "build/dictation-test",
     ("python3 tools/get-wakeword.py && build/wakeword-test", "fetches the wake-word model first"), "build/simnet-test", "build/simmarketplace-test", "build/localmodels-test",
+    ("build/renderinfo-test", "which renderers count as no GPU, where the shell's blur steps down"),
     ("python3 tools/get-kitten.py && build/tts-test", "fetches the voice first"),
     ("./build/phoenix-sim --check-chrome --no-boot-animation --quiet", "the simulator's own start-up check"),
     ("build/devices/devices-test", "", {"os": L}), ("build/simfonts-test", "", {"os": L})])
