@@ -1,0 +1,32 @@
+# Copyright (c) 2026 webOS Phoenix contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# The layer stack device images build on when they take LuneOS's layers
+# (scripts/setup-build-luneos.sh; docs/HARDWARE.md, "The web runtime:
+# Chromium 151 on LuneOS's layers"): Yocto 6.0 wrynose, meta-qt6 6.12 and
+# meta-webos-ports, whose webruntime is Chromium 151.0.7922.108.
+#
+# The pins are webos-ports-setup's conf/layers.txt (wrynose, 4cdfad0, 14
+# October 2026), with the layers it tracks at HEAD pinned to the commits
+# read on 15 October 2026. Only the layers Phoenix's machines need: not
+# meta-pine64-luneos (its pinephonepro and pinetab2 machines would shadow
+# meta-phoenix's own), meta-mecha-luneos, meta-arm or meta-rockchip, nor
+# meta-smartphone's vendor layers (later devices add theirs).
+#
+# One layer repository per line:
+#   name  branch  commit  url  layers
+# layers: the sub-directories that are layers, in bblayers.conf's order;
+# "." the repository itself; "-" none (bitbake); "+dir" a directory that is
+# checked out too but is not a layer. With sub-directories named, only
+# those (and the files at the top) are checked out. The lines' order is
+# bblayers.conf's, after meta-phoenix (LuneOS's own order: its layers, the
+# BSPs, meta-qt6, meta-openembedded, oe-core last).
+
+bitbake            2.18     51fd94a67fa17650a9ff623492005972bbc7d26f  https://github.com/openembedded/bitbake.git                -
+meta-webos-ports   wrynose  ec5e8787f84aa9c778390230b0b7d0a04f72d943  https://github.com/webOS-ports/meta-webos-ports.git        meta-luneos-holdbacks-5.3 meta-luneos meta-luneui meta-luneos-backports-6.1
+meta-rpi-luneos    wrynose  eee1463889522d97d851f1e30c12c53be597cc5b  https://github.com/webOS-ports/meta-rpi-luneos.git         .
+meta-raspberrypi   wrynose  919588393f41b48cb6c5d832aa35e58a19b6762d  https://github.com/agherzan/meta-raspberrypi.git          .
+meta-smartphone    wrynose  2d686256a3ce864610bf3e23e2631bd1d8d3b686  https://github.com/shr-distribution/meta-smartphone.git   meta-android meta-qualcomm-modems
+meta-qt6           6.12     7d6c5a2b190881960aefb1e2299322b31aa04c5c  https://code.qt.io/yocto/meta-qt6.git                      .
+meta-openembedded  wrynose  f28a144aa0a0ae05ca2ee91e1aef6aa05f6a12db  https://github.com/openembedded/meta-openembedded.git     meta-filesystems meta-multimedia meta-networking meta-python meta-oe
+openembedded-core  wrynose  0f03c732a0a2d0506b41b1abe60b3f368b2300dc  https://github.com/openembedded/openembedded-core.git     meta +scripts

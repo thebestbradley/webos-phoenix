@@ -147,7 +147,11 @@ port forward-ported from 120 to 151, then OpenEmbedded fixes from
 meta-browser, then LuneOS's own patches, each kept as a separate layer. The
 120 and 108 recipes are retired. This is a large piece of work Phoenix would
 otherwise have to do itself, because OSE's last release ships Chromium 120
-([HARDWARE.md](HARDWARE.md#a-webos-ose-targets)).
+([HARDWARE.md](HARDWARE.md#a-webos-ose-targets)). **Phoenix now builds on
+it** (the owner, 15 October 2026: the newest web engine on devices):
+[DECISIONS.md](DECISIONS.md#15-october-2026-the-newest-web-engine-on-every-system),
+and the migration plan in
+[HARDWARE.md](HARDWARE.md#the-web-runtime-chromium-151-on-luneoss-layers).
 
 ### Build system
 
@@ -512,7 +516,14 @@ scratch on OSE's `build-webos`, costs that from day one.
    proposing: Phoenix as an alternative `WebOSCompositor` shell package in
    `meta-webos-ports`, and Phoenix service work sent upstream.
 2. **Answer HARDWARE.md's biggest open question now: build devices on
-   LuneOS's stack.** Add a `meta-phoenix` configuration that sits on
+   LuneOS's stack.** *Decided by the owner on 15 October 2026, for the
+   newest web engine ([DECISIONS.md](DECISIONS.md#15-october-2026-the-newest-web-engine-on-every-system));
+   the first step is done: `scripts/setup-build-luneos.sh` sets up
+   `webos-ports-setup`'s layers (pinned in `scripts/luneos-layers.txt`)
+   with `meta-phoenix` on top, `webos-phoenix-image` takes LuneOS's base
+   image without the cardshell and LuneOS's apps, and CI parses it
+   ([HARDWARE.md](HARDWARE.md#the-web-runtime-chromium-151-on-luneoss-layers)
+   has the rest).* Add a `meta-phoenix` configuration that sits on
    `webos-ports-setup`'s layer list (wrynose, meta-qt6 6.12,
    `meta-webos-ports`, `meta-smartphone`), with a `phoenix` image that is
    `luneos-dev-image` with Phoenix's shell and apps instead of the cardshell.

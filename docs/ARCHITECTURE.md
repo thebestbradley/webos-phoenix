@@ -11,21 +11,25 @@
 │                  lock screen, gesture area, Just Type         │
 │   Phoenix.Lsm    adapter: compositor surfaces -> cards        │
 ├──────────────────────────────────────────────────────────────┤
-│ webOS OSE (unchanged)                                         │
+│ webOS OSE 2.28 (LuneOS's rebase, or OSE's own)                │
 │   luna-surfacemanager  Qt 6 Wayland compositor (QML views)    │
 │   SAM (applicationmanager), WAM (web runtime), luna-service2  │
 │   bus, settings, connection manager, audio, media, ...        │
 ├──────────────────────────────────────────────────────────────┤
-│ Linux, systemd, Yocto scarthgap, device BSP                   │
+│ Linux, systemd, Yocto wrynose (scarthgap on OSE's), BSP       │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 We do **not** fork webOS OSE's hundreds of repositories. OSE is built with
-OpenEmbedded, so Phoenix is a layer (`meta-phoenix`) added to OSE's own
-`build-webos` setup. When an OSE component needs a change, we carry a
-`.bbappend` with a patch in `meta-phoenix`, and fork that one repository only
+OpenEmbedded, so Phoenix is a layer (`meta-phoenix`) added to a webOS
+build: LuneOS's layer stack, which carries OSE 2.28's components rebased on
+Yocto wrynose with Chromium 151 in WAM, where device images are moving
+(docs/DECISIONS.md, 15 October 2026), and OSE's own `build-webos` setup
+(scarthgap, Chromium 120) until each machine builds there. When a webOS
+component needs a change, we carry a `.bbappend` with a patch in
+`meta-phoenix` (WAM's user agent, for one), and fork that one repository only
 if the patch set grows large. This keeps us close to upstream and able to take
-OSE updates.
+its updates.
 
 ## How the shell is loaded on a device
 

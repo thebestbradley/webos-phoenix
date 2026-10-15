@@ -8,3 +8,11 @@
 # make the image unbuildable there. Media plays through Chromium's own
 # pipeline on these machines (phoenix-mobile.inc).
 RDEPENDS:${PN}:remove:phoenix-mobile = "g-media-pipeline"
+
+# LuneOS's packagegroup (meta-luneos recipes-core/packagegroups/
+# packagegroup-webos-extended.bb:75-77, 156) brings the Mojo 1.0 framework,
+# LICENSE = "CLOSED": extracted from a webOS 3.0.5 image
+# (recipes-webos-owo/frameworks/mojo-framework.bb:16). Palm's closed code
+# is not shipped (docs/LEGAL.md); Phoenix runs no Mojo apps. (OSE's
+# packagegroup has no such set; this is empty there either way.)
+WEBOS_PACKAGESET_MOJO_1 = ""

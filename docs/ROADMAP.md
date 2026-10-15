@@ -16,7 +16,7 @@ plan, milestone by milestone. Every gap still open, by area and priority:
 | Source material still to mine | 3 | 1 |
 | Build infrastructure | 1 | 2 |
 | Development devices | 0 | 4 |
-| M1: running on webOS OSE | 0 | 10 |
+| M1: running on webOS OSE | 0 | 12 |
 | M2: legacy UI parity | 18 | 2 |
 | M3: phones and tablets | 0 | 8 |
 | M4: core apps and services | 12 | 11 |
@@ -79,13 +79,15 @@ Phoenix UI, PixiOS with Bennu UI, an XR bird) are in [BRANDING.md](BRANDING.md).
 
 ## Decisions so far
 
-Taken by the owner on 28 and 29 September 2026; each plan records the
-detail. Open questions are listed in [STATUS.md](STATUS.md#decisions-for-the-owner).
+Taken by the owner on 28 and 29 September 2026 and since; each plan records the
+detail, and [DECISIONS.md](DECISIONS.md) the reasons for those from 15
+October 2026 on. Open questions are listed in [STATUS.md](STATUS.md#decisions-for-the-owner).
 
 | Area | Decision | Where |
 | --- | --- | --- |
 | Direction | 1.x classic and never deprecated; 2.0 modern and additive only | above |
 | LuneOS | Stay independent; build device images on LuneOS's Yocto layers without a partnership; outreach on hold | [LUNEOS.md](LUNEOS.md#the-owners-position-28-september-2026) |
+| Web engine | The newest everywhere (15 October 2026): devices on Chromium 151 through LuneOS's layer stack (wrynose, Qt 6.12), leaving OSE's `build-webos` (Chromium 120); the simulator on Qt 6.12's WebEngine; every web app sends Chrome on Android's user agent with the current Chrome major | [DECISIONS.md](DECISIONS.md#15-october-2026-the-newest-web-engine-on-every-system) |
 | Devices | Install like a Linux distro, on as much hardware as possible, so makers build for it again; keyboard phones (Zinwa Q25 first) and Linux phones (FuriLabs, Volla, PinePhone Pro, Fairphone) as targets | [HARDWARE.md](HARDWARE.md) |
 | Gesture bar | On every device unless the maker ships a hardware home button (`device.json`) | [HARDWARE.md](HARDWARE.md#device-configuration) |
 | Screens | Landscape on phones and tablets; the shell resizes to any window or screen | [spec/GAPS.md](spec/GAPS.md) R1 |
@@ -189,9 +191,22 @@ mouse pointer, shows the Mac's menu bar and only reaches as far as the Mac.
 ## M1: running on webOS OSE
 
 Targets: `qemux86-64` (emulator) and Raspberry Pi 4 with the official
-7" touchscreen, both supported by OSE today. Device images for phones
-build on LuneOS's layers ([LUNEOS.md](LUNEOS.md#9-recommendation)).
+7" touchscreen. Device images, these two included, build on LuneOS's
+layers, OSE 2.28's components with Chromium 151 (the owner, 15 October
+2026: [DECISIONS.md](DECISIONS.md#15-october-2026-the-newest-web-engine-on-every-system);
+[HARDWARE.md](HARDWARE.md#the-web-runtime-chromium-151-on-luneoss-layers)
+has the steps); OSE's own `build-webos` stays until each machine builds
+there.
 
+- [ ] 🟡 Device images on LuneOS's layer stack (Chromium 151): the setup
+      script and pins, `meta-phoenix` on both stacks, a CI parse job
+      (done 15 October 2026); then every machine parsing, the recipes'
+      `S` for wrynose, the packages both install, Qt 6.12, the first
+      image (HARDWARE.md, steps 1-8)
+- [ ] 🟡 The modern user agent on devices: Chrome on Android's with the
+      current Chrome major, computed at each WebAppMgr start, and client
+      hints that agree (`phoenix-wam-conf`, WAM and neva patches; written,
+      not yet run on a device; [APP-RUNTIME.md](APP-RUNTIME.md#the-user-agent))
 - [ ] Build `webos-phoenix-image` and boot it in QEMU; fix adapter issues
 - [ ] Positive space: apps sized to the area between status bar and gesture area
 - [ ] Back gesture delivered to apps (`KeyInjector` written; run on hardware)
