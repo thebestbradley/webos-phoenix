@@ -353,6 +353,15 @@ Item {
                                  { appId: "org.webosphoenix.messaging", title: "Sam", body: "Lunch?", soundClass: "notifications" });
             compare(windows.lastSound.path, "/usr/palm/sounds/notification.wav");
             compare(windows.lastSound.duration, 5000);
+            // A sound of the app's own, by a path in its folder: the
+            // unknown tracker alert's (services/accessories/trackers.js),
+            // on the alerts' stream.
+            windows._hostMessage("org.webosphoenix.settings", "", "notification",
+                                 { appId: "org.webosphoenix.settings", title: "Unknown AirTag found moving with you", body: "",
+                                   soundClass: "alerts", soundFile: "sounds/tracker-alert.mp3" });
+            compare(windows.lastSound.path, "/usr/palm/applications/org.webosphoenix.settings/sounds/tracker-alert.mp3");
+            compare(windows.lastSound.stream, "alerts");
+            compare(windows.appDir("org.webosphoenix.settings"), "/usr/palm/applications/org.webosphoenix.settings");
             while (windows.notifications.count > 0)
                 windows.dismissNotification(0);
         }

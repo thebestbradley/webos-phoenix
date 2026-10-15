@@ -48,12 +48,13 @@
 #   -h, --help       this text
 #
 # What it checks and installs, only what is missing:
-#   macOS   Xcode's command line tools, Homebrew, then from Homebrew: qt,
-#           cmake, ninja, node@22, git, python@3.12, php (+ whisper-cpp,
-#           llama.cpp, onnxruntime)
+#   macOS   Xcode's command line tools, Homebrew, then from Homebrew: qt
+#           (upgraded when older than 6.11.3), cmake, ninja, node@22, git,
+#           python@3.12, php (+ whisper-cpp, llama.cpp, onnxruntime)
 #   Ubuntu  apt packages (build tools, the libraries Qt loads, PHP 8 with
-#           SQLite for the Marketplace's catalog), Qt 6.8.1
-#           into /opt/Qt (aqtinstall; Ubuntu's own Qt is too old), Node.js 22
+#           SQLite for the Marketplace's catalog), Qt 6.11.3 (the newest Qt
+#           WebEngine) into /opt/Qt (aqtinstall; Ubuntu's own Qt is too old;
+#           a build on an older Qt is configured again with it), Node.js 22
 #           (NodeSource), whisper-cli and llama-server built from pinned
 #           commits into /usr/local/bin, espeak-ng
 #   Both    git submodules, the apps' npm packages, whisper's base.en model,
@@ -63,9 +64,9 @@
 #           (configured with the Qt it found) and the build.
 #
 # Environment: PHOENIX_BUILD_DIR (default build), PHOENIX_QT_DIR (a Qt 6.8+
-# to use), QT_PREFIX (where Qt is installed on Linux, default /opt/Qt),
-# CMAKE_BUILD_PARALLEL_LEVEL (build jobs). scripts/mac-setup.sh and
-# scripts/linux-setup.sh call this script.
+# to use instead: 6.8.1 is the device's), QT_PREFIX (where Qt is installed
+# on Linux, default /opt/Qt), CMAKE_BUILD_PARALLEL_LEVEL (build jobs).
+# scripts/mac-setup.sh and scripts/linux-setup.sh call this script.
 
 set -eu
 
@@ -77,7 +78,19 @@ if [ "${1:-}" = check-device ]; then
 fi
 BUILD_DIR=${PHOENIX_BUILD_DIR:-$REPO_DIR/build}
 case "$BUILD_DIR" in /*) ;; *) BUILD_DIR=$REPO_DIR/$BUILD_DIR ;; esac
-QT_VERSION=6.8.1          # the release a device's webOS OSE image ships (meta-qt6, scarthgap)
+# The simulator's Qt: the one with the newest Qt WebEngine, for the web the
+# apps and sites run on (the owner's decision of 15 October 2026,
+# docs/DECISIONS.md). 6.11.3's is Chromium 140.0.7339.225 with security
+# fixes to 153.0.8010.52; 6.12.0's, the same base, stops at 147.0.7727.138
+# (built in July), and 6.8.1's is Chromium 122. Move to 6.12.1, or whichever
+# release carries the newest fixes, when it ships: check with
+#   strings lib/libQt6WebEngineCore.so.6.* | grep -E '^1[0-9]{2}\.0\.[0-9]{4}\.[0-9]+$'
+# A build already on a later Qt (6.12.0: newer Qt, older engine) is kept as it
+# is: only an older one is moved (linux_qt, build).
+# QT_MIN: the oldest that builds, the device's (a webOS OSE image ships
+# 6.8.1: meta-qt6, scarthgap), which the QML must keep running on (CI builds
+# and tests it there too).
+QT_VERSION=6.11.3
 QT_MIN=6.8
 QT_PREFIX=${QT_PREFIX:-/opt/Qt}
 # whisper.cpp and llama.cpp at the commits meta-phoenix's recipes pin
@@ -193,6 +206,22 @@ JOBS=${CMAKE_BUILD_PARALLEL_LEVEL:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || sy
 qt_version() {
     sed -n 's/^set(PACKAGE_VERSION "\([0-9.]*\)").*/\1/p' "$1/lib/cmake/Qt6/Qt6ConfigVersionImpl.cmake" "$1/lib/cmake/Qt6/Qt6ConfigVersion.cmake" 2>/dev/null | head -n 1
 }
+# ver_ge A B: version A (6.11.3) is B or later.
+ver_ge() {
+    a=$1; b=$2
+    for _ in 1 2 3; do
+        x=${a%%.*}; y=${b%%.*}
+        [ "${x:-0}" -gt "${y:-0}" ] && return 0
+        [ "${x:-0}" -lt "${y:-0}" ] && return 1
+        case "$a" in *.*) a=${a#*.} ;; *) a=0 ;; esac
+        case "$b" in *.*) b=${b#*.} ;; *) b=0 ;; esac
+    done
+    return 0
+}
+# A Qt at least QT_VERSION, the simulator's (and usable)?
+qt_current() {
+    qt_usable "$1" && ver_ge "$(qt_version "$1")" "$QT_VERSION"
+}
 # A Qt at least QT_MIN, with Qt WebEngine (the web apps)?
 qt_usable() {
     v=$(qt_version "$1")
@@ -268,6 +297,15 @@ mac_prerequisites() {
         # shellcheck disable=SC2086
         run "$BREW" install $missing
     fi
+    # Homebrew's Qt older than the simulator's (its newest Qt WebEngine).
+    if [ -z "${PHOENIX_QT_DIR:-}" ] && qt_usable "$BREW_PREFIX/opt/qt" && ! qt_current "$BREW_PREFIX/opt/qt"; then
+        if [ $OFFLINE = 1 ]; then
+            skip "qt $QT_VERSION (Homebrew's is $(qt_version "$BREW_PREFIX/opt/qt"); --offline: built with it)"
+        else
+            installing "qt $QT_VERSION or newer (Homebrew's is $(qt_version "$BREW_PREFIX/opt/qt"))" "about 1.3 GB with its dependencies"
+            run "$BREW" upgrade qt
+        fi
+    fi
     # Homebrew's llama.cpp older than EmbeddingGemma 2 (Search your phone) needs.
     if [ $ASSISTANT = 1 ] && [ -d "$BREW_PREFIX/opt/llama.cpp" ] && have llama-server; then
         b=$(llama_build)
@@ -286,10 +324,12 @@ mac_prerequisites() {
     PYTHON="$BREW_PREFIX/opt/python@3.12/bin/python3.12"
     [ -x "$PYTHON" ] || PYTHON=python3
     # Homebrew's Qt (opt/qt; or its parts linked into the prefix), unless
-    # one was asked for or the build has one.
+    # one was asked for or the build has one as new.
     cached=$(sed -n 's/^CMAKE_PREFIX_PATH:[A-Z]*=//p' "$BUILD_DIR/CMakeCache.txt" 2>/dev/null || true)
-    for d in ${PHOENIX_QT_DIR:-} $cached "$BREW_PREFIX/opt/qt" "$BREW_PREFIX"; do
-        if [ -z "$QT_DIR" ] && qt_usable "$d"; then QT_DIR=$d; fi
+    if [ -n "${PHOENIX_QT_DIR:-}" ] && qt_usable "$PHOENIX_QT_DIR"; then QT_DIR=$PHOENIX_QT_DIR; fi
+    if [ -z "${PHOENIX_QT_DIR:-}" ] && [ -n "$cached" ] && qt_current "$cached"; then QT_DIR=$cached; fi
+    for d in "$BREW_PREFIX/opt/qt" "$BREW_PREFIX"; do
+        if [ -z "$QT_DIR" ] && [ -z "${PHOENIX_QT_DIR:-}" ] && qt_usable "$d"; then QT_DIR=$d; fi
     done
     QT_DIR=${QT_DIR:-${PHOENIX_QT_DIR:-$BREW_PREFIX/opt/qt}}
 }
@@ -348,19 +388,38 @@ linux_packages() {
 }
 
 linux_qt() {
-    step "Qt $QT_MIN or later"
-    # The one asked for, the build's, the one this script installs, ~/Qt.
+    step "Qt $QT_VERSION or later (any $QT_MIN or later when asked for)"
+    # The one asked for (PHOENIX_QT_DIR, any QT_MIN or later: 6.8.1 is the
+    # device's); else the build's, the one this script installs, others in
+    # its folder or ~/Qt, as long as they are QT_VERSION or later.
+    if [ -n "${PHOENIX_QT_DIR:-}" ]; then
+        qt_usable "$PHOENIX_QT_DIR" || die "PHOENIX_QT_DIR=$PHOENIX_QT_DIR is not a Qt $QT_MIN or later with Qt WebEngine."
+        QT_DIR=$PHOENIX_QT_DIR
+        ok "Qt $(qt_version "$QT_DIR") ($QT_DIR, PHOENIX_QT_DIR)"
+        return
+    fi
     cached=$(sed -n 's/^CMAKE_PREFIX_PATH:[A-Z]*=//p' "$BUILD_DIR/CMakeCache.txt" 2>/dev/null || true)
-    for d in ${PHOENIX_QT_DIR:-} $cached "$QT_PREFIX/$QT_VERSION/gcc_64" "$QT_PREFIX"/6.*/gcc_64 "$HOME"/Qt/6.*/gcc_64; do
-        if [ -z "$QT_DIR" ] && qt_usable "$d"; then QT_DIR=$d; fi
+    for d in $cached "$QT_PREFIX/$QT_VERSION/gcc_64" "$QT_PREFIX"/6.*/gcc_64 "$HOME"/Qt/6.*/gcc_64; do
+        if [ -z "$QT_DIR" ] && qt_current "$d"; then QT_DIR=$d; fi
     done
     if [ -n "$QT_DIR" ]; then
         ok "Qt $(qt_version "$QT_DIR") ($QT_DIR)"
         return
     fi
-    [ -z "${PHOENIX_QT_DIR:-}" ] || die "PHOENIX_QT_DIR=$PHOENIX_QT_DIR is not a Qt $QT_MIN or later with Qt WebEngine."
+    # Only an older one (the build's, say, from before): built with it
+    # offline, else the simulator's is installed and the build moves to it.
+    older=""
+    for d in $cached "$QT_PREFIX"/6.*/gcc_64 "$HOME"/Qt/6.*/gcc_64; do
+        if [ -z "$older" ] && qt_usable "$d"; then older=$d; fi
+    done
+    if [ -n "$older" ] && [ $OFFLINE = 1 ]; then
+        QT_DIR=$older
+        skip "Qt $QT_VERSION (--offline: built with Qt $(qt_version "$older"), $older)"
+        return
+    fi
     QT_DIR="$QT_PREFIX/$QT_VERSION/gcc_64"
-    installing "Qt $QT_VERSION into $QT_PREFIX (aqtinstall)" "about 700 MB download, 2.2 GB on disk"
+    [ -z "$older" ] || echo "  note     Qt $(qt_version "$older") ($older) is older than the simulator's $QT_VERSION (its web engine)"
+    installing "Qt $QT_VERSION into $QT_PREFIX (aqtinstall)" "about 700 MB download, 2.3 GB on disk"
     need_network "Qt $QT_VERSION"
     # --break-system-packages: Ubuntu 24.04 marks its Python as externally
     # managed; aqtinstall is a build tool, not system software.
@@ -592,9 +651,17 @@ build() {
         have ninja && gen="-G Ninja"
         # shellcheck disable=SC2086
         run cmake -S "$REPO_DIR/shell" -B "$BUILD_DIR" $gen -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_PREFIX_PATH="$QT_DIR"
-    elif [ "$cached" != "$QT_DIR" ] && ! qt_usable "$cached"; then
-        # The Qt it was configured with is gone (or none was given).
-        run cmake -S "$REPO_DIR/shell" -B "$BUILD_DIR" -DCMAKE_PREFIX_PATH="$QT_DIR"
+    elif [ "$cached" != "$QT_DIR" ]; then
+        # Another Qt: the one asked for, the simulator's newer one, or the
+        # one it was configured with is gone. Configured again from scratch
+        # (the cache holds every Qt module's folder of the old one), with
+        # the generator, build type and PHOENIX_* switches it had.
+        gen=$(sed -n 's/^CMAKE_GENERATOR:INTERNAL=//p' "$cache")
+        type=$(sed -n 's/^CMAKE_BUILD_TYPE:STRING=//p' "$cache")
+        switches=$(sed -n 's/^\(PHOENIX_[A-Z_]*\):BOOL=\([A-Za-z0-9]*\)$/-D\1=\2/p' "$cache" | tr '\n' ' ')
+        run rm -f "$cache"
+        # shellcheck disable=SC2086
+        run cmake -S "$REPO_DIR/shell" -B "$BUILD_DIR" ${gen:+-G "$gen"} -DCMAKE_BUILD_TYPE="${type:-RelWithDebInfo}" $switches -DCMAKE_PREFIX_PATH="$QT_DIR"
     else
         QT_DIR=${cached:-$QT_DIR}
         ok "configured with Qt $(qt_version "$QT_DIR") ($QT_DIR)"

@@ -18,7 +18,13 @@
 //   - contentBlocker   requests a page makes to the hosts on the block list
 //                      (runtime/content-blocker/hosts.txt) fail; the page
 //                      itself (the address typed) always loads
-//   - userAgent        "mobile" (webOS's, the default) or "desktop"
+//   - userAgent        "mobile" (the device's, the default) or "desktop"
+//                      (the browser's Desktop Site)
+//   - the user agent and client hints of every profile, the apps' too
+//                      (setAppsProfile): Chrome's current version for the
+//                      device's form factor, phone or tablet, switched with
+//                      the layout (useragent.h; docs/APP-RUNTIME.md, "The
+//                      web engine and the user agent")
 //   - setProxy()       the system's proxy (Settings > Wi-Fi > Proxy):
 //                      Chromium takes Qt's application proxy, so it applies
 //                      to every page and to the services' requests
@@ -32,8 +38,11 @@
 #include <QVariantMap>
 
 #include "contentfilter.h"
+#include "useragent.h"
 
+#include <QHash>
 #include <QQuickWebEngineProfile>
+#include <QWebEngineScript>
 class QWebEngineUrlRequestInterceptor;
 class Rootfs;
 class PictureMaker;
@@ -53,6 +62,9 @@ public:
     SimBrowser(Rootfs *rootfs, PictureMaker *snapshots, bool phone, QObject *parent = nullptr);
 
     QQuickWebEngineProfile *profile() const { return m_profile; }
+    // The apps' profile (main.cpp's "phoenix-sim"): the device's user agent
+    // too, never the browser's Desktop Site.
+    void setAppsProfile(QQuickWebEngineProfile *profile);
     QObject *profileObject() const;
     Q_INVOKABLE QObject *privateProfile();
     // A view of the private profile: once all of them are gone, the profile
@@ -70,6 +82,9 @@ public:
     int blockListSize() const { return m_filter.size(); }
     // The user agent the views send now.
     Q_INVOKABLE QString httpUserAgent() const;
+    // Every profile's user agent and client hints again: after
+    // UserAgent::setFeedAnchor, or for a new day's Chrome version.
+    Q_INVOKABLE void refreshUserAgents();
 
     // {type: "none" | "http" | "socks", host, port}.
     Q_INVOKABLE void setProxy(const QVariantMap &proxy);
@@ -92,18 +107,22 @@ signals:
 
 private:
     QQuickWebEngineProfile *makeProfile(bool persistent);
-    void applyUserAgent(QQuickWebEngineProfile *p) const;
+    // The device's form factor, or the browser's Desktop Site for its views.
+    UserAgent::FormFactor formFactor(bool browser) const;
+    void applyUserAgent(QQuickWebEngineProfile *p, UserAgent::FormFactor form);
 
     Rootfs *m_rootfs;
     PictureMaker *m_snapshots;
     bool m_phone;
     QQuickWebEngineProfile *m_profile = nullptr;
     QPointer<QQuickWebEngineProfile> m_private;
+    QPointer<QQuickWebEngineProfile> m_apps;
+    // Each profile's navigator.platform script, replaced at each change.
+    QHash<QObject *, QWebEngineScript> m_platformScripts;
     int m_privateViews = 0;
     QWebEngineUrlRequestInterceptor *m_interceptor = nullptr;
     ContentFilter m_filter;
     bool m_blocking = false;
     QString m_uaMode = QStringLiteral("mobile");
-    QString m_chromiumUa;
     int m_blocked = 0;
 };

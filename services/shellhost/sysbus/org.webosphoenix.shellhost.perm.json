@@ -4,6 +4,7 @@
         "phoenix.shellhost.app",
         "phoenix.shellhost.shell",
         "phoenix.ongoing",
+        "phoenix.system.media",
         "phoenix.system.notifications.publish"
     ],
     "org.webosphoenix.ongoing": [],

@@ -208,8 +208,22 @@ where the runtime sends the original id ("same": no alias).
 | `third_party/luna-systemui/app/SystemServiceAlerts/SystemServiceAlerts.js:126` | launch | `com.palm.app.dateandtime` | `org.webosphoenix.settings` | `launchType`, `page` | ⚠ known: org.webosphoenix.settings does not read launchType (apps/settings/public/appinfo.json): Settings' Date & Time page opens; it has no separate "set the time temporarily" mode to start |
 | `apps/agenda/src/App.tsx:74` | launch | `com.palm.app.calendar` | same | `showEventDetail` | ✅ |
 | `apps/assistant/public/appinfo.json:25` | Just Type action | `org.webosphoenix.assistant` | same | `text` | ✅ |
-| `apps/assistant/service/assistant.js:1833` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
-| `apps/assistant/service/assistant.js:1989` | launch | `org.webosphoenix.settings` | same | `page`, `connect`, `threadId` | ✅ |
+| `apps/assistant/service/assistant.js:1856` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `apps/assistant/service/assistant.js:2012` | launch | `org.webosphoenix.settings` | same | `page`, `connect`, `threadId` | ✅ |
+| `apps/assistant/service/lib/commands-capture.js:58` | open descriptor | `org.webosphoenix.camera` | same | none | ✅ |
+| `apps/assistant/service/lib/commands-capture.js:65` | open descriptor | `org.webosphoenix.voicememos` | same | none | ✅ |
+| `apps/assistant/service/lib/commands-capture.js:78` | open descriptor | `org.webosphoenix.camera` | same | none | ✅ |
+| `apps/assistant/service/lib/commands-capture.js:78` | open descriptor | `org.webosphoenix.voicememos` | same | none | ✅ |
+| `apps/assistant/service/lib/commands-music.js:65` | open descriptor | `org.webosphoenix.music` | same | none | ✅ |
+| `apps/assistant/service/lib/commands-music.js:131` | open descriptor | `org.webosphoenix.podcasts` | same | none | ✅ |
+| `apps/assistant/service/lib/commands-places.js:174` | open descriptor | `org.webosphoenix.maps` | same | `place` | ✅ |
+| `apps/assistant/service/lib/commands-places.js:188` | open descriptor | `org.webosphoenix.maps` | same | `destination`, `travelMode`, `navigate` | ✅ |
+| `apps/assistant/service/lib/commands-places.js:193` | open descriptor | `org.webosphoenix.maps` | same | `place` | ✅ |
+| `apps/assistant/service/lib/commands-places.js:210` | open descriptor | `org.webosphoenix.maps` | same | (variable) | ✅ |
+| `apps/assistant/service/lib/commands-places.js:261` | open descriptor | `org.webosphoenix.tasks` | same | `taskId` | ✅ |
+| `apps/assistant/service/lib/commands-places.js:268` | open descriptor | `org.webosphoenix.settings` | same | `page`, `section` | ✅ |
+| `apps/assistant/service/lib/commands-places.js:282` | open descriptor | `org.webosphoenix.tasks` | same | `taskId` | ✅ |
+| `apps/assistant/service/lib/commands-places.js:353` | launch | `org.webosphoenix.tasks` | same | `reminder` | ✅ |
 | `apps/assistant/service/lib/commands-search.js:111` | open descriptor | `org.webosphoenix.messaging` | same | `threadId` | ✅ |
 | `apps/assistant/service/lib/commands-search.js:129` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
 | `apps/assistant/service/lib/commands-synergy.js:278` | open descriptor | `org.webosphoenix.messaging` | same | (variable) | ✅ |
@@ -226,97 +240,97 @@ where the runtime sends the original id ("same": no alias).
 | `apps/assistant/service/lib/commands-synergy.js:712` | open descriptor | `com.palm.app.email` | same | none | ✅ |
 | `apps/assistant/service/lib/commands-synergy.js:799` | open descriptor | `org.webosphoenix.files` | same | `path` | ✅ |
 | `apps/assistant/service/lib/commands-synergy.js:831` | open descriptor | `org.webosphoenix.files` | same | `path` | ✅ |
-| `apps/assistant/service/lib/commands-synergy.js:904` | open descriptor | `com.palm.app.accounts` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:430` | open descriptor | `com.palm.app.contacts` | same | `launchType`, `id` | ✅ |
-| `apps/assistant/service/lib/commands.js:1009` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
-| `apps/assistant/service/lib/commands.js:1068` | open descriptor | `org.webosphoenix.weather` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:1099` | launch | `org.webosphoenix.weather` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:1134` | open descriptor | `org.webosphoenix.maps` | same | (variable) | ✅ |
-| `apps/assistant/service/lib/commands.js:1149` | launch | `org.webosphoenix.maps` | same | `nearby` | ✅ |
-| `apps/assistant/service/lib/commands.js:1162` | launch | `org.webosphoenix.maps` | same | `nearby` | ✅ |
-| `apps/assistant/service/lib/commands.js:1172` | launch | `org.webosphoenix.maps` | same | `target` | ✅ |
-| `apps/assistant/service/lib/commands.js:1182` | launch | `org.webosphoenix.maps` | same | (variable) | ✅ |
-| `apps/assistant/service/lib/commands.js:1246` | open descriptor | `com.palm.app.calendar` | same | `showEventDetail` | ✅ |
-| `apps/assistant/service/lib/commands.js:1275` | open descriptor | `com.palm.app.calendar` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:1293` | open descriptor | `com.palm.app.calendar` | same | `showEventDetail` | ✅ |
-| `apps/assistant/service/lib/commands.js:1301` | open descriptor | `com.palm.app.calendar` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:1307` | open descriptor | `com.palm.app.calendar` | same | `showEventDetail` | ✅ |
-| `apps/assistant/service/lib/commands.js:1312` | open descriptor | `com.palm.app.calendar` | same | `showEventDetail` | ✅ |
-| `apps/assistant/service/lib/commands.js:1340` | launch | `com.palm.app.clock` | same | `action`, `key`, `setTime` | ✅ |
-| `apps/assistant/service/lib/commands.js:1447` | launch | `org.webosphoenix.tasks` | same | `reminder` | ✅ |
-| `apps/assistant/service/lib/commands.js:1585` | launch | `org.webosphoenix.phone` | same | `number`, `dial` | ✅ |
-| `apps/assistant/service/lib/commands.js:1586` | open descriptor | `org.webosphoenix.phone` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:1589` | launch | `org.webosphoenix.messaging` | same | `to`, `name` | ✅ |
-| `apps/assistant/service/lib/commands.js:1590` | open descriptor | `org.webosphoenix.messaging` | same | `to`, `name` | ✅ |
-| `apps/assistant/service/lib/commands.js:1595` | open descriptor | `org.webosphoenix.messaging` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:1607` | open descriptor | `org.webosphoenix.messaging` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:1612` | open descriptor | `org.webosphoenix.messaging` | same | `threadId` | ✅ |
-| `apps/assistant/service/lib/commands.js:1625` | launch | `com.palm.app.email` | same | `summary`, `text` | ✅ |
-| `apps/assistant/service/lib/commands.js:1626` | open descriptor | `com.palm.app.email` | same | (variable) | ✅ |
-| `apps/assistant/service/lib/commands.js:1629` | launch | `com.palm.app.email` | same | `recipients`, `summary` | ✅ |
-| `apps/assistant/service/lib/commands.js:1631` | open descriptor | `com.palm.app.email` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:1640` | open descriptor | `com.palm.app.email` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:1653` | open descriptor | `com.palm.app.email` | same | `emailId` | ✅ |
-| `apps/assistant/service/lib/commands.js:1656` | open descriptor | `com.palm.app.email` | same | `emailId` | ✅ |
-| `apps/assistant/service/lib/commands.js:1673` | launch | `org.webosphoenix.assistant` | same | `timerDone` | ✅ |
-| `apps/assistant/service/lib/commands.js:1719` | open descriptor | `com.palm.app.clock` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:1731` | open descriptor | `com.palm.app.clock` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:1733` | open descriptor | `com.palm.app.clock` | same | none | ✅ |
+| `apps/assistant/service/lib/commands-synergy.js:913` | open descriptor | `com.palm.app.accounts` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:434` | open descriptor | `com.palm.app.contacts` | same | `launchType`, `id` | ✅ |
+| `apps/assistant/service/lib/commands.js:1018` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `apps/assistant/service/lib/commands.js:1077` | open descriptor | `org.webosphoenix.weather` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:1108` | launch | `org.webosphoenix.weather` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:1143` | open descriptor | `org.webosphoenix.maps` | same | (variable) | ✅ |
+| `apps/assistant/service/lib/commands.js:1158` | launch | `org.webosphoenix.maps` | same | `nearby` | ✅ |
+| `apps/assistant/service/lib/commands.js:1171` | launch | `org.webosphoenix.maps` | same | `nearby` | ✅ |
+| `apps/assistant/service/lib/commands.js:1181` | launch | `org.webosphoenix.maps` | same | `target` | ✅ |
+| `apps/assistant/service/lib/commands.js:1191` | launch | `org.webosphoenix.maps` | same | (variable) | ✅ |
+| `apps/assistant/service/lib/commands.js:1255` | open descriptor | `com.palm.app.calendar` | same | `showEventDetail` | ✅ |
+| `apps/assistant/service/lib/commands.js:1284` | open descriptor | `com.palm.app.calendar` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:1302` | open descriptor | `com.palm.app.calendar` | same | `showEventDetail` | ✅ |
+| `apps/assistant/service/lib/commands.js:1310` | open descriptor | `com.palm.app.calendar` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:1316` | open descriptor | `com.palm.app.calendar` | same | `showEventDetail` | ✅ |
+| `apps/assistant/service/lib/commands.js:1321` | open descriptor | `com.palm.app.calendar` | same | `showEventDetail` | ✅ |
+| `apps/assistant/service/lib/commands.js:1349` | launch | `com.palm.app.clock` | same | `action`, `key`, `setTime` | ✅ |
+| `apps/assistant/service/lib/commands.js:1456` | launch | `org.webosphoenix.tasks` | same | `reminder` | ✅ |
+| `apps/assistant/service/lib/commands.js:1600` | launch | `org.webosphoenix.phone` | same | `number`, `dial` | ✅ |
+| `apps/assistant/service/lib/commands.js:1604` | open descriptor | `org.webosphoenix.phone` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:1609` | launch | `org.webosphoenix.messaging` | same | `to`, `name` | ✅ |
+| `apps/assistant/service/lib/commands.js:1610` | open descriptor | `org.webosphoenix.messaging` | same | `to`, `name` | ✅ |
+| `apps/assistant/service/lib/commands.js:1615` | open descriptor | `org.webosphoenix.messaging` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:1627` | open descriptor | `org.webosphoenix.messaging` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:1632` | open descriptor | `org.webosphoenix.messaging` | same | `threadId` | ✅ |
+| `apps/assistant/service/lib/commands.js:1645` | launch | `com.palm.app.email` | same | `summary`, `text` | ✅ |
+| `apps/assistant/service/lib/commands.js:1646` | open descriptor | `com.palm.app.email` | same | (variable) | ✅ |
+| `apps/assistant/service/lib/commands.js:1649` | launch | `com.palm.app.email` | same | `recipients`, `summary` | ✅ |
+| `apps/assistant/service/lib/commands.js:1651` | open descriptor | `com.palm.app.email` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:1660` | open descriptor | `com.palm.app.email` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:1673` | open descriptor | `com.palm.app.email` | same | `emailId` | ✅ |
+| `apps/assistant/service/lib/commands.js:1676` | open descriptor | `com.palm.app.email` | same | `emailId` | ✅ |
+| `apps/assistant/service/lib/commands.js:1693` | launch | `org.webosphoenix.assistant` | same | `timerDone` | ✅ |
 | `apps/assistant/service/lib/commands.js:1739` | open descriptor | `com.palm.app.clock` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:1744` | open descriptor | `com.palm.app.clock` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:1750` | open descriptor | `org.webosphoenix.tasks` | same | `taskId` | ✅ |
-| `apps/assistant/service/lib/commands.js:1757` | open descriptor | `org.webosphoenix.tasks` | same | `taskId` | ✅ |
-| `apps/assistant/service/lib/commands.js:1771` | open descriptor | `com.palm.app.notes` | same | `memoId` | ✅ |
-| `apps/assistant/service/lib/commands.js:1780` | open descriptor | `com.palm.app.notes` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:1783` | open descriptor | `com.palm.app.notes` | same | `memoId` | ✅ |
-| `apps/assistant/service/lib/commands.js:1814` | open descriptor | `com.palm.app.contacts` | same | `launchType`, `id` | ✅ |
-| `apps/assistant/service/lib/commands.js:1831` | open descriptor | `com.palm.app.contacts` | same | `launchType`, `id` | ✅ |
-| `apps/assistant/service/lib/commands.js:1847` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
-| `apps/assistant/service/lib/commands.js:1889` | open descriptor | `org.webosphoenix.photos` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:1898` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
-| `apps/assistant/service/lib/commands.js:1901` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
-| `apps/assistant/service/lib/commands.js:1902` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
-| `apps/assistant/service/lib/commands.js:1930` | open descriptor | `org.webosphoenix.maps` | same | `target` | ✅ |
-| `apps/assistant/service/lib/commands.js:1962` | open descriptor | `org.webosphoenix.photos` | same | (variable) | ✅ |
-| `apps/assistant/service/lib/commands.js:1974` | launch | `org.webosphoenix.photos` | same | `imageList` | ✅ |
-| `apps/assistant/service/lib/commands.js:1977` | launch | `org.webosphoenix.music` | same | `play` | ✅ |
-| `apps/assistant/service/lib/commands.js:1978` | open descriptor | `org.webosphoenix.music` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:2063` | launch | `org.webosphoenix.phone` | same | `number`, `dial` | ✅ |
-| `apps/assistant/service/lib/commands.js:2064` | open descriptor | `org.webosphoenix.phone` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:2068` | open descriptor | `com.palm.app.email` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:2072` | open descriptor | `com.palm.app.email` | same | `emailId` | ✅ |
-| `apps/assistant/service/lib/commands.js:2076` | open descriptor | `com.palm.app.email` | same | `emailId` | ✅ |
-| `apps/assistant/service/lib/commands.js:2087` | open descriptor | `org.webosphoenix.files` | same | `path` | ✅ |
-| `apps/assistant/service/lib/commands.js:2094` | open descriptor | `org.webosphoenix.files` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:2113` | open descriptor | `org.webosphoenix.phone` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:2124` | open descriptor | `com.palm.app.calendar` | same | `showEventDetail` | ✅ |
-| `apps/assistant/service/lib/commands.js:2151` | open descriptor | `com.palm.app.calendar` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:2156` | open descriptor | `com.palm.app.calendar` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:2162` | open descriptor | `com.palm.app.calendar` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:2176` | open descriptor | `com.palm.app.notes` | same | `memoId` | ✅ |
-| `apps/assistant/service/lib/commands.js:2187` | open descriptor | `org.webosphoenix.tasks` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:2196` | open descriptor | `org.webosphoenix.tasks` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:2198` | open descriptor | `org.webosphoenix.tasks` | same | `taskId` | ✅ |
-| `apps/assistant/service/lib/commands.js:2204` | open descriptor | `org.webosphoenix.tasks` | same | `taskId` | ✅ |
-| `apps/assistant/service/lib/commands.js:2215` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
-| `apps/assistant/service/lib/commands.js:2220` | open descriptor | `org.webosphoenix.marketplace` | same | `sourceId`, `id` | ✅ |
-| `apps/assistant/service/lib/commands.js:2227` | launch | `org.webosphoenix.marketplace` | same | (variable) | ✅ |
-| `apps/assistant/service/lib/commands.js:2230` | open descriptor | `org.webosphoenix.marketplace` | same | none | ✅ |
-| `apps/assistant/service/lib/commands.js:2235` | open descriptor | `org.webosphoenix.help` | same | `topic` | ✅ |
-| `apps/assistant/service/lib/commands.js:2236` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
-| `apps/assistant/service/lib/commands.js:2242` | open descriptor | `org.webosphoenix.help` | same | none | ✅ |
-| `apps/assistant/service/lib/details.js:103` | open descriptor | `com.palm.app.calendar` | same | `showEventDetail` | ✅ |
-| `apps/assistant/service/lib/details.js:121` | open descriptor | `com.palm.app.notes` | same | `memoId` | ✅ |
-| `apps/assistant/service/lib/details.js:130` | open descriptor | `com.palm.app.calendar` | same | `showEventDetail` | ✅ |
-| `apps/assistant/service/lib/details.js:192` | open descriptor | `com.palm.app.notes` | same | `memoId` | ✅ |
-| `apps/assistant/service/lib/details.js:220` | open descriptor | `org.webosphoenix.tasks` | same | `taskId` | ✅ |
-| `apps/assistant/service/lib/details.js:230` | open descriptor | `org.webosphoenix.tasks` | same | none | ✅ |
-| `apps/assistant/service/lib/details.js:257` | open descriptor | `com.palm.app.contacts` | same | `launchType`, `id` | ✅ |
-| `apps/assistant/service/lib/details.js:288` | open descriptor | `com.palm.app.clock` | same | none | ✅ |
-| `apps/assistant/service/lib/details.js:305` | open descriptor | `org.webosphoenix.tasks` | same | `taskId` | ✅ |
+| `apps/assistant/service/lib/commands.js:1751` | open descriptor | `com.palm.app.clock` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:1753` | open descriptor | `com.palm.app.clock` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:1759` | open descriptor | `com.palm.app.clock` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:1764` | open descriptor | `com.palm.app.clock` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:1770` | open descriptor | `org.webosphoenix.tasks` | same | `taskId` | ✅ |
+| `apps/assistant/service/lib/commands.js:1777` | open descriptor | `org.webosphoenix.tasks` | same | `taskId` | ✅ |
+| `apps/assistant/service/lib/commands.js:1794` | open descriptor | `com.palm.app.notes` | same | `memoId` | ✅ |
+| `apps/assistant/service/lib/commands.js:1805` | open descriptor | `com.palm.app.notes` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:1808` | open descriptor | `com.palm.app.notes` | same | `memoId` | ✅ |
+| `apps/assistant/service/lib/commands.js:1839` | open descriptor | `com.palm.app.contacts` | same | `launchType`, `id` | ✅ |
+| `apps/assistant/service/lib/commands.js:1856` | open descriptor | `com.palm.app.contacts` | same | `launchType`, `id` | ✅ |
+| `apps/assistant/service/lib/commands.js:1872` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `apps/assistant/service/lib/commands.js:1914` | open descriptor | `org.webosphoenix.photos` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:1923` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `apps/assistant/service/lib/commands.js:1926` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `apps/assistant/service/lib/commands.js:1927` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `apps/assistant/service/lib/commands.js:1955` | open descriptor | `org.webosphoenix.maps` | same | `target` | ✅ |
+| `apps/assistant/service/lib/commands.js:1987` | open descriptor | `org.webosphoenix.photos` | same | (variable) | ✅ |
+| `apps/assistant/service/lib/commands.js:1999` | launch | `org.webosphoenix.photos` | same | `imageList` | ✅ |
+| `apps/assistant/service/lib/commands.js:2002` | launch | `org.webosphoenix.music` | same | `play` | ✅ |
+| `apps/assistant/service/lib/commands.js:2003` | open descriptor | `org.webosphoenix.music` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:2088` | launch | `org.webosphoenix.phone` | same | `number`, `dial` | ✅ |
+| `apps/assistant/service/lib/commands.js:2089` | open descriptor | `org.webosphoenix.phone` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:2093` | open descriptor | `com.palm.app.email` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:2097` | open descriptor | `com.palm.app.email` | same | `emailId` | ✅ |
+| `apps/assistant/service/lib/commands.js:2101` | open descriptor | `com.palm.app.email` | same | `emailId` | ✅ |
+| `apps/assistant/service/lib/commands.js:2112` | open descriptor | `org.webosphoenix.files` | same | `path` | ✅ |
+| `apps/assistant/service/lib/commands.js:2119` | open descriptor | `org.webosphoenix.files` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:2138` | open descriptor | `org.webosphoenix.phone` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:2149` | open descriptor | `com.palm.app.calendar` | same | `showEventDetail` | ✅ |
+| `apps/assistant/service/lib/commands.js:2176` | open descriptor | `com.palm.app.calendar` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:2181` | open descriptor | `com.palm.app.calendar` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:2187` | open descriptor | `com.palm.app.calendar` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:2203` | open descriptor | `com.palm.app.notes` | same | `memoId` | ✅ |
+| `apps/assistant/service/lib/commands.js:2214` | open descriptor | `org.webosphoenix.tasks` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:2223` | open descriptor | `org.webosphoenix.tasks` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:2225` | open descriptor | `org.webosphoenix.tasks` | same | `taskId` | ✅ |
+| `apps/assistant/service/lib/commands.js:2231` | open descriptor | `org.webosphoenix.tasks` | same | `taskId` | ✅ |
+| `apps/assistant/service/lib/commands.js:2242` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `apps/assistant/service/lib/commands.js:2247` | open descriptor | `org.webosphoenix.marketplace` | same | `sourceId`, `id` | ✅ |
+| `apps/assistant/service/lib/commands.js:2254` | launch | `org.webosphoenix.marketplace` | same | (variable) | ✅ |
+| `apps/assistant/service/lib/commands.js:2257` | open descriptor | `org.webosphoenix.marketplace` | same | none | ✅ |
+| `apps/assistant/service/lib/commands.js:2262` | open descriptor | `org.webosphoenix.help` | same | `topic` | ✅ |
+| `apps/assistant/service/lib/commands.js:2263` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `apps/assistant/service/lib/commands.js:2269` | open descriptor | `org.webosphoenix.help` | same | none | ✅ |
+| `apps/assistant/service/lib/details.js:106` | open descriptor | `com.palm.app.calendar` | same | `showEventDetail` | ✅ |
+| `apps/assistant/service/lib/details.js:124` | open descriptor | `com.palm.app.notes` | same | `memoId` | ✅ |
+| `apps/assistant/service/lib/details.js:133` | open descriptor | `com.palm.app.calendar` | same | `showEventDetail` | ✅ |
+| `apps/assistant/service/lib/details.js:199` | open descriptor | `com.palm.app.notes` | same | `memoId` | ✅ |
+| `apps/assistant/service/lib/details.js:227` | open descriptor | `org.webosphoenix.tasks` | same | `taskId` | ✅ |
+| `apps/assistant/service/lib/details.js:237` | open descriptor | `org.webosphoenix.tasks` | same | none | ✅ |
+| `apps/assistant/service/lib/details.js:264` | open descriptor | `com.palm.app.contacts` | same | `launchType`, `id` | ✅ |
+| `apps/assistant/service/lib/details.js:295` | open descriptor | `com.palm.app.clock` | same | none | ✅ |
+| `apps/assistant/service/lib/details.js:312` | open descriptor | `org.webosphoenix.tasks` | same | `taskId` | ✅ |
 | `apps/assistant/src/App.tsx:529` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
 | `apps/authenticator/src/App.tsx:86` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
-| `apps/camera/src/App.tsx:220` | launch | `org.webosphoenix.photos` | same | `imageList` | ✅ |
+| `apps/camera/src/App.tsx:268` | launch | `org.webosphoenix.photos` | same | `imageList` | ✅ |
 | `apps/clipboard/src/App.tsx:145` | launch | `org.webosphoenix.passwords` | same | `newEntry` | ✅ |
 | `apps/clipboard/src/App.tsx:149` | launch | `org.webosphoenix.authenticator` | same | `otpauth` | ✅ |
 | `apps/clipboard/src/App.tsx:354` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
@@ -331,11 +345,11 @@ where the runtime sends the original id ("same": no alias).
 | `apps/ionic-notes/public/appinfo.json:38` | Just Type action | `org.webosphoenix.ionicnotes` | same | `newNote` | ✅ |
 | `apps/maps/public/appinfo.json:25` | Just Type action | `org.webosphoenix.maps` | same | `query` | ✅ |
 | `apps/maps/public/appinfo.json:25` | Just Type dbsearch | `org.webosphoenix.maps` | same | `placeId` | ✅ |
-| `apps/marketplace/service/packagesservice.js:472` | open descriptor | `org.webosphoenix.marketplace` | same | `section` | ✅ |
-| `apps/marketplace/service/packagesservice.js:1006` | open descriptor | `org.webosphoenix.marketplace` | same | `section` | ✅ |
+| `apps/marketplace/service/packagesservice.js:532` | open descriptor | `org.webosphoenix.marketplace` | same | `section` | ✅ |
+| `apps/marketplace/service/packagesservice.js:1251` | open descriptor | `org.webosphoenix.marketplace` | same | `section` | ✅ |
 | `apps/marketplace/src/accountTypes.ts:172` | launch | `com.palm.app.accounts` | same | `templateId` | ✅ |
 | `apps/marketplace/src/accountTypes.ts:177` | launch | `com.palm.app.accounts` | same | none | ✅ |
-| `apps/marketplace/src/App.tsx:347` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `apps/marketplace/src/App.tsx:472` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
 | `apps/marketplace/src/ConnectorPackage.tsx:198` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
 | `apps/messaging/src/views/Buddies.tsx:75` | launch | `com.palm.app.accounts` | same | none | ✅ |
 | `apps/messaging/src/views/ThreadList.tsx:31` | launch | `org.webosphoenix.messaging` | same | `threadId` | ✅ |
@@ -350,9 +364,9 @@ where the runtime sends the original id ("same": no alias).
 | `apps/scanner/src/App.tsx:185` | launch | `org.webosphoenix.settings` | same | `page`, `join` | ✅ |
 | `apps/scanner/src/App.tsx:190` | launch | `com.palm.app.contacts` | same | `launchType`, `contact` | ✅ |
 | `apps/scanner/src/App.tsx:195` | launch | `org.webosphoenix.authenticator` | same | `otpauth` | ✅ |
-| `apps/settings/src/pages/DeviceInfo.tsx:127` | launch | `com.palm.app.certificate` | `org.webosphoenix.settings` | `page` | ✅ |
-| `apps/settings/src/pages/DeviceInfo.tsx:171` | launch | `org.webosphoenix.help` | same | none | ✅ |
-| `apps/settings/src/pages/DeviceInfo.tsx:173` | launch | `org.webosphoenix.firstuse` | same | `rerun` | ✅ |
+| `apps/settings/src/pages/DeviceInfo.tsx:136` | launch | `com.palm.app.certificate` | `org.webosphoenix.settings` | `page` | ✅ |
+| `apps/settings/src/pages/DeviceInfo.tsx:189` | launch | `org.webosphoenix.help` | same | none | ✅ |
+| `apps/settings/src/pages/DeviceInfo.tsx:191` | launch | `org.webosphoenix.firstuse` | same | `rerun` | ✅ |
 | `apps/settings/src/pages/DevMode.tsx:161` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
 | `apps/settings/src/pages/DropShare.tsx:30` | launch | `org.webosphoenix.dropshare` | same | none | ✅ |
 | `apps/shared/connector-kit/share-page/compose.js:99` | launch | `com.palm.app.accounts` | same | `templateId` | ✅ |
@@ -365,30 +379,32 @@ where the runtime sends the original id ("same": no alias).
 | `apps/voicememos/public/appinfo.json:24` | Just Type dbsearch | `org.webosphoenix.voicememos` | same | `memoId` | ✅ |
 | `compat/rootfs/usr/palm/applications/com.palm.systemui/app/PowerdAlerts/PowerdAlerts.js:118` | launch | `com.palm.app.help` | `org.webosphoenix.help` | `target` | ✅ |
 | `compat/rootfs/usr/palm/frameworks/enyo/0.10/framework/lib/accounts/source/entry-first-launch.js:269` | open | `com.palm.app.enyo-findapps` | `org.webosphoenix.marketplace` | `common` | ✅ |
-| `runtime/phoenix-runtime.js:2390` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
-| `runtime/phoenix-runtime.js:8204` | open descriptor | `org.webosphoenix.messaging` | same | `threadId` | ✅ |
-| `runtime/phoenix-runtime.js:8222` | open descriptor | `org.webosphoenix.messaging` | same | `threadId` | ✅ |
-| `runtime/phoenix-runtime.js:9080` | open descriptor | `org.webosphoenix.screenshot` | same | `path`, `capture` | ✅ |
-| `runtime/phoenix-runtime.js:11733` | launch | `org.webosphoenix.voicedial` | same | `source` | ✅ |
-| `runtime/phoenix-runtime.js:12047` | launch | `org.webosphoenix.signin` | same | (variable) | ✅ |
-| `runtime/phoenix-runtime.js:14060` | launch | `org.webosphoenix.marketplace` | same | `sourceId`, `id` | ✅ |
-| `runtime/phoenix-runtime.js:14525` | open descriptor | `org.webosphoenix.printmanager` | same | `jobID` | ✅ |
-| `runtime/phoenix-runtime.js:15722` | open descriptor | `org.webosphoenix.files` | same | `path` | ✅ |
-| `runtime/phoenix-runtime.js:16015` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
-| `shell/qml/Phoenix/Lsm/LsmWindowSource.qml:825` | launch | `com.palm.launcher` | same | none | ✅ |
-| `shell/qml/Phoenix/Lsm/LsmWindowSource.qml:837` | launch | `com.palm.launcher` | same | none | ✅ |
+| `runtime/phoenix-runtime.js:2467` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `runtime/phoenix-runtime.js:9400` | open descriptor | `org.webosphoenix.messaging` | same | `threadId` | ✅ |
+| `runtime/phoenix-runtime.js:9418` | open descriptor | `org.webosphoenix.messaging` | same | `threadId` | ✅ |
+| `runtime/phoenix-runtime.js:10376` | open descriptor | `org.webosphoenix.screenshot` | same | `path`, `capture` | ✅ |
+| `runtime/phoenix-runtime.js:13278` | launch | `org.webosphoenix.voicedial` | same | `source` | ✅ |
+| `runtime/phoenix-runtime.js:13630` | launch | `org.webosphoenix.signin` | same | (variable) | ✅ |
+| `runtime/phoenix-runtime.js:15643` | launch | `org.webosphoenix.marketplace` | same | `sourceId`, `id` | ✅ |
+| `runtime/phoenix-runtime.js:16108` | open descriptor | `org.webosphoenix.printmanager` | same | `jobID` | ✅ |
+| `runtime/phoenix-runtime.js:17832` | open descriptor | `org.webosphoenix.files` | same | `path` | ✅ |
+| `runtime/phoenix-runtime.js:17993` | open descriptor | `org.webosphoenix.files` | same | `path` | ✅ |
+| `runtime/phoenix-runtime.js:18286` | open descriptor | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `runtime/phoenix-runtime.js:18784` | open descriptor | `org.webosphoenix.settings` | same | `page`, `view`, `id` | ✅ |
+| `shell/qml/Phoenix/Lsm/LsmWindowSource.qml:861` | launch | `com.palm.launcher` | same | none | ✅ |
+| `shell/qml/Phoenix/Lsm/LsmWindowSource.qml:873` | launch | `com.palm.launcher` | same | none | ✅ |
 | `shell/qml/Phoenix/Shell/Shell.qml:257` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
-| `shell/qml/Phoenix/Shell/Shell.qml:2075` | launch | `org.webosphoenix.screenshot` | same | `path` | ✅ |
-| `shell/qml/Phoenix/Shell/Shell.qml:3297` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
-| `shell/qml/Phoenix/Shell/Shell.qml:3374` | launch | `org.webosphoenix.assistant` | same | `threadId` | ✅ |
-| `shell/qml/Phoenix/Shell/Shell.qml:3818` | launch | `org.webosphoenix.clipboard` | same | none | ✅ |
-| `shell/qml/Phoenix/Sim/SimWindowSource.qml:693` | launch | `com.palm.app.browser` | same | `target` | ✅ |
-| `shell/qml/Phoenix/Sim/SimWindowSource.qml:2238` | open | `com.palm.app.browser` | same | `target` | ✅ |
-| `shell/qml/Phoenix/Sim/SimWindowSource.qml:2365` | launch | `org.webosphoenix.phone` | same | (variable) | ✅ |
-| `shell/qml/Phoenix/Sim/SimWindowSource.qml:2405` | launch | `org.webosphoenix.messaging` | same | (variable) | ✅ |
-| `shell/qml/sim.qml:531` | launch | `org.webosphoenix.assistant` | same | `followUp` | ✅ |
-| `shell/qml/sim.qml:1386` | launch | `org.webosphoenix.marketplace` | same | none | ✅ |
-| `shell/qml/sim.qml:2198` | launch | `org.webosphoenix.screenshot` | same | none | ✅ |
+| `shell/qml/Phoenix/Shell/Shell.qml:2200` | launch | `org.webosphoenix.screenshot` | same | `path` | ✅ |
+| `shell/qml/Phoenix/Shell/Shell.qml:3492` | launch | `org.webosphoenix.settings` | same | `page` | ✅ |
+| `shell/qml/Phoenix/Shell/Shell.qml:3569` | launch | `org.webosphoenix.assistant` | same | `threadId` | ✅ |
+| `shell/qml/Phoenix/Shell/Shell.qml:4032` | launch | `org.webosphoenix.clipboard` | same | none | ✅ |
+| `shell/qml/Phoenix/Sim/SimWindowSource.qml:700` | launch | `com.palm.app.browser` | same | `target` | ✅ |
+| `shell/qml/Phoenix/Sim/SimWindowSource.qml:2351` | open | `com.palm.app.browser` | same | `target` | ✅ |
+| `shell/qml/Phoenix/Sim/SimWindowSource.qml:2478` | launch | `org.webosphoenix.phone` | same | (variable) | ✅ |
+| `shell/qml/Phoenix/Sim/SimWindowSource.qml:2518` | launch | `org.webosphoenix.messaging` | same | (variable) | ✅ |
+| `shell/qml/sim.qml:535` | launch | `org.webosphoenix.assistant` | same | `followUp` | ✅ |
+| `shell/qml/sim.qml:1552` | launch | `org.webosphoenix.marketplace` | same | none | ✅ |
+| `shell/qml/sim.qml:2557` | launch | `org.webosphoenix.settings` | same | `page`, `view`, `address` | ✅ |
 | `third_party/app-services/com.palm.service.calendar.reminders/on-autoclose-handler.js:165` | launch | `com.palm.app.calendar` | same | `alarmClose` | ✅ |
 | `third_party/app-services/com.palm.service.calendar.reminders/on-db-changed-handler.js:362` | launch | `com.palm.app.calendar` | same | `alarmDeleted` | ✅ |
 | `third_party/app-services/com.palm.service.calendar.reminders/on-db-changed-handler.js:526` | launch | `com.palm.app.calendar` | same | `alarmUpdated` | ✅ |
@@ -471,5 +487,5 @@ where the runtime sends the original id ("same": no alias).
 | `third_party/luna-systemui/app/TelephonyAlerts/TelephonyAlerts.js:61` | launch | `com.palm.app.phone` | `org.webosphoenix.phone` | `preferences` | ✅ |
 | `third_party/luna-systemui/app/TelephonyAlerts/TelephonyAlerts.js:292` | launch | `com.palm.app.help` | `org.webosphoenix.help` | `target` | ✅ |
 
-274 launches: 264 ✅, 3 ⚠, 7 ❌ (5 of the ❌ go to apps Phoenix does not have; every ⚠ and ❌ has its why in tools/launch-contracts.json).
+290 launches: 280 ✅, 3 ⚠, 7 ❌ (5 of the ❌ go to apps Phoenix does not have; every ⚠ and ❌ has its why in tools/launch-contracts.json).
 <!-- /launch-table -->

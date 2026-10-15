@@ -300,6 +300,15 @@ status (`gamepads`, `usbDrives`, `formFactor`, `usageTick`; the runtime's
   phoenix-temperature-alert.js`). It checks every five minutes, and on each
   signal. Each warning comes once, until the battery cools 2 °C below its
   mark. `--scene hot` shows the alert.
+- **AirPods and tracker alerts** (`org.webosphoenix.earbuds`,
+  `org.webosphoenix.trackers`; `@phoenix/luna` `earbuds`, `trackers`): the
+  AirPods card, batteries, Noise Control and ear detection, your own pair
+  by its keys, renaming, and unknown tracker alerts with their sensitivity
+  and the scan's mode (Settings > Bluetooth > Scanning), in the same
+  service on a device and in the runtime in the simulator (Simulate >
+  AirPods and Trackers, the shell statuses `simAirPods` and
+  `simTracker`). [ACCESSORIES.md](ACCESSORIES.md) has
+  how, the protocol sources and what cannot be done.
 
 ### Editing: Cut, Copy, Paste, Select All
 
@@ -477,10 +486,132 @@ laid out for phones and tablets and sharing the Enact demos' notes in db8:
   readers) is what tests drive. LG's native Flutter embedder for webOS TV
   is the route for native Flutter apps later; the READMEs compare them.
 
+## The web engine and the user agent
+
+Every web page Phoenix shows runs in a Chromium: the apps (the original
+webOS apps, Phoenix's, installed web apps such as Slack), the system pages
+and the browser. Which Chromium depends on where Phoenix runs:
+
+| Where | Engine | Chromium base | Security fixes up to |
+| --- | --- | --- | --- |
+| Simulator, Linux (`./phoenix`, CI) | Qt WebEngine 6.11.3 | 140.0.7339.225 | 153.0.8010.52 |
+| Simulator, Mac (Homebrew's `qt` 6.12.0) | Homebrew's `qtwebengine` 6.11.2 | 140 | 151.0.7922.71 (its source's `CHROMIUM_VERSION`) |
+| A simulator built with Qt 6.12.0 | Qt WebEngine 6.12.0 | 140.0.7339.225 | 147.0.7727.138 |
+| Simulator on Qt 6.8.1 (the oldest it builds with; CI's `qt-6-8` job) | Qt WebEngine 6.8.1 | 122.0.6261.171 | 131.0.6778.70 |
+| Device (webOS OSE's WebAppMgr) | `webosose/chromium120` | 120 | OSE's |
+| Device on LuneOS's layers (the plan; HARDWARE.md) | `webruntime_151` (`webos-ports/chromium151`) | 151.0.7922.108 | LuneOS's uprevs |
+
+Qt 6.11.3 (15 October 2026) is the simulator's Qt: `./phoenix` installs it
+on Linux (and moves a build made with an older Qt to it), and upgrades
+Homebrew's `qt` when it is older. Its Qt WebEngine is the newest Qt has:
+Chromium 140, the newest base, with security fixes to Chromium
+153.0.8010.52 (built 24 September 2026). Qt 6.12.0 is a later Qt with an
+older engine: the same base, but its WebEngine was built in July and stops
+at 147.0.7727.138, six security releases behind; a build already on 6.12.0
+is kept as it is. Move `QT_VERSION` in `./phoenix` and CI to 6.12.1, or to
+whichever release carries the newest security fixes, when it ships; check
+a release's with
+`strings lib/libQt6WebEngineCore.so.6.* | grep -E '^1[0-9]{2}\.0\.[0-9]{4}\.[0-9]+$'`
+(its base and the Chromium its fixes come from; the start-up line below
+says the same). Qt's next Chromium base is due later this year. QML keeps
+running on Qt 6.8 (`QT_MIN`), the device's: CI builds the simulator with
+6.8.1 too and runs the QML tests there. Homebrew's `qt` (6.12.0 today)
+comes with its `qtwebengine` formula at 6.11.2 (fixes to 151), so a Mac
+simulator is a little behind Linux's until Homebrew moves.
+
+The device's engine moves with the device stack: OSE's Chromium 120 now,
+Chromium 151 once the images build on LuneOS's layers (LuneOS's forward
+port of LG's runtime; HARDWARE.md, "The web runtime: Chromium 151 on
+LuneOS's layers"). Its user agent and client hints follow the same policy
+("On a device", below).
+
+**What pages are told** (`shell/sim/useragent.h`, the owner's decision of
+15 October 2026, docs/DECISIONS.md). Sites gate on the browser's version
+by the user agent: Slack serves its client only to Chrome 137 and later
+and tells Chromium 122 "Please update your browser". So every page is told
+Chrome's current stable version, in the form Chrome itself sends:
+
+| Form factor | User-Agent | Client hints |
+| --- | --- | --- |
+| Phone | `Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36` | platform `Android`, mobile `?1`, form factor `Mobile` |
+| Tablet | the same without `Mobile` | platform `Android`, mobile `?0`, form factor `Desktop` |
+| Desktop Site (the browser's preference) | `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36` | platform `Linux`, mobile `?0`, architecture `x86`, bitness `64` |
+
+- **One policy for every profile**: the apps' (phoenix-sim's `phoenix-sim`
+  profile: every card, installed web apps and the Sign In card included)
+  and the browser's page views (normal and private). The apps' pages
+  follow the device's form factor; only the browser's views take its
+  Desktop Site. With the adaptive simulator a switch between phone and
+  tablet switches what every page is told at once, the pages already open
+  included (they read the new one from then on; nothing reloads).
+- **The reduced user agent**, as Chrome sends it: the major version only
+  (`.0.0.0`), Android's frozen `Android 10; K`, Linux's
+  `X11; Linux x86_64` on any computer. No `QtWebEngine`, `webOS` or `Web0S`
+  token: sites read webOS as Palm's 2011 browser or LG's TVs, and some
+  refuse QtWebEngine.
+- **Client hints** (`Sec-CH-UA*`, `navigator.userAgentData`) agree with it:
+  the brands are Chromium's at that version and a GREASE brand made by
+  Chromium's own algorithm (`"Chromium";v="155", "Not(A:Brand";v="24"`;
+  not Google Chrome's brand, which this is not); full version
+  `<major>.0.0.0`; nothing of the computer's (no OS version, model, or a
+  Mac's platform). Qt WebEngine 6.10 and later make `Sec-CH-UA` from the
+  list Phoenix gives (in an order of their own; the order means nothing);
+  6.8 and 6.9 keep their own Chromium's brands there (`Chromium 122` on
+  6.8.1) while the rest follows.
+- **Which version**: Chrome ships a major every four weeks, so it is
+  computed from the date, anchored at Chrome 155's stable release on 6
+  October 2026 (156 from 3 November 2026, and so on), and stays current
+  without a change. Chrome's calendar sometimes leaves an extra week at the
+  turn of the year, so the computed one can run a few days ahead of the
+  real stable one; a new anchor puts it right. `PHOENIX_UA_CHROME_MAJOR=160`
+  overrides it; `UserAgent::setFeedAnchor` is where the update or catalog
+  feed can give the current release later (not wired yet). A clock not set
+  (before the anchor) reports the anchor's version.
+
+**Why the newer version, on an older engine.** The string only gets a page
+past a site's version gate. What the engine can do, a page finds out by
+testing for it (feature detection), as it must in any browser; a feature
+Chromium 140 lacks is missing either way, never wrong. The engine's real
+version is said where people look: phoenix-sim's start-up line
+(`phoenix-sim: web engine: Chromium 140.0.7339.225 (security patches
+153.0.8010.52), Qt WebEngine 6.11.3; pages are told Chrome 155`) and
+Settings > Device Info > Software, "Web engine" and "Sites see" (osInfo's
+`phoenix_web_engine`, `phoenix_web_engine_version` and
+`phoenix_web_engine_security_patches`, Phoenix's keys from host.json; a
+device's OSE osInfo has none yet, so the row is left out there).
+`navigator.platform` agrees as well (`Linux armv81`, as Chrome on
+Android reports it; `Linux x86_64` for the Desktop Site): the engine says
+its computer's (`Linux x86_64`, `MacIntel` on a Mac) and no profile setting
+changes it, so a script in every page of each profile does (at the
+document's creation, in the page's world; workers keep the engine's).
+whatismybrowser.com still notes "Chrome on Linux" beside "Chrome 155 on
+Android 10": it reads any `Linux ...` platform as Linux, which Chrome on a
+real Android phone reports too.
+
+**Slack** (checked 15 October 2026): with a desktop user agent naming
+Chrome 155, `app.slack.com/client` answers 200 with its client, where the
+simulator's old `QtWebEngine/6.8.1 Chrome/122.0.6261.171` got "update your
+browser" (desktop Chrome 136 likewise; 137 and later are served). With the
+phone's and tablet's Android user agent Slack sends the page to `/app` and
+on to its sign-in ("Sign in to your workspace", slack.com), whatever the
+version: Slack treats it as a mobile browser. Installed from the
+Marketplace in phoenix-sim, Slack's card opens on that sign-in page; before,
+it showed "Please update your browser or use the Slack app". Whether Slack's
+client runs in a phone's card once signed in, or sends a mobile browser to
+its app, needs an account to see (open).
+
+**Tests**: `build/useragent-test` (the version on the cadence, the
+override, the feed's anchor, every string per form factor, GREASE against
+the engines' own headers, `navigator.platform`) and
+`tools/test-useragent-sim.cjs` (a local server echoing the headers, in a
+web app's card and the browser's view, on a phone, a tablet with the
+override, and across a live switch; what the page reads; Settings > Device
+Info against the start-up line).
+
 ## Running apps
 
 **In the simulator.** Build `phoenix-sim` with Qt WebEngine (Homebrew's `qt`
-includes it; on Ubuntu `scripts/linux-setup.sh` installs Qt 6.8.1 with it).
+includes it; on Ubuntu `./phoenix` installs Qt 6.11.3 with it).
 The apps then appear in the launcher and quick launch with their original
 icons.
 
@@ -1431,8 +1562,10 @@ overlay of the browser (`source/phoenix-browser.js`) adds:
   the shell as systemStatus `browser`. The profile's request interceptor
   fails a page's requests to the hosts on
   `/usr/share/phoenix/runtime/content-blocker/hosts.txt` (and their
-  subdomains), but never the page itself. The user agent is webOS's (mobile,
-  the default) or Chromium's own (desktop).
+  subdomains), but never the page itself. The user agent is the device's
+  (Chrome on an Android phone or tablet, the default) or Chrome on Linux
+  (Desktop Site), both naming Chrome's current version ("The web engine and
+  the user agent").
 - Clear Cookies and Clear Cache (`com.palm.browserServer`) clear that
   profile.
 The system proxy (Settings > Wi-Fi > Proxy, preference `networkProxy`

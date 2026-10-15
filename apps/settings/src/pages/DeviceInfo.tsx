@@ -1,8 +1,9 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Device Info: model, software version (with its release notes), the phone (number, carrier,
-// network, IMEI, SIM), battery, storage, memory, open source licenses, help,
+// Device Info: model, software version (with its release notes), the web engine and the
+// Chrome version sites are told, the phone (number, carrier, network, IMEI, SIM),
+// battery, storage, memory, open source licenses, help,
 // setup (First Use) again, and the legacy reset options: Reset All
 // Settings, Erase Apps & Data (keeps the files on the USB drive), Full Erase.
 // Services: com.webos.service.systemservice deviceInfo/query, osInfo/query;
@@ -11,7 +12,9 @@
 // modem, as on the TouchPad); com.palm.power batteryStatusQuery (legacy; OSE
 // has no battery service on its reference boards); com.webos.settingsservice
 // resetSystemSettings; org.webosphoenix.service.reset eraseUserData,
-// fullErase (Phoenix, not yet on device).
+// fullErase (Phoenix, not yet on device). The web engine: osInfo's phoenix_web_engine_*
+// keys (Phoenix's, from phoenix-sim; a device's OSE osInfo has none yet, so the row is
+// left out there).
 
 import { useEffect, useState } from "react";
 import { apps, call, LunaError, settings, system, telephony, type DeviceInfo, type NetworkStatus, type OsInfo,
@@ -101,6 +104,8 @@ export function DeviceInfoPage() {
     if (notes) return <SystemReleaseNotes name={os?.webos_name ?? "webOS Phoenix"} />;
 
     const size = parseSize(dev?.storage_size), free = parseSize(dev?.storage_free);
+    // The Chrome version this page's own user agent names, as every site is told it.
+    const reportedChrome = /\bChrome\/(\d+)/.exec(navigator.userAgent)?.[1];
     const used = size !== null && free !== null ? Math.max(0, Math.min(1, (size - free) / size)) : null;
 
     async function doReset(kind: Reset) {
@@ -143,6 +148,14 @@ export function DeviceInfoPage() {
                         <Row title="Build" value={os.webos_build_id ?? "—"} />
                         <Row title="Platform" value={[os.core_os_name, os.core_os_release].filter(Boolean).join(" ") || "—"} />
                         <Row title="Kernel" value={os.core_os_kernel_version ?? "—"} />
+                        {/* The engine as it is, and the version sites are told (docs/APP-RUNTIME.md,
+                            "The web engine and the user agent"). */}
+                        {os.phoenix_web_engine_version && (
+                            <Row title="Web engine" testId="web-engine" className="wrap-subtitle"
+                                 subtitle={`${os.phoenix_web_engine ?? "Chromium"} ${os.phoenix_web_engine_version}` +
+                                           (os.phoenix_web_engine_security_patches ? ` (security patches ${os.phoenix_web_engine_security_patches})` : "")} />
+                        )}
+                        {reportedChrome && <Row title="Sites see" value={`Chrome ${reportedChrome}`} testId="web-user-agent" />}
                     </Group>
                     {phone && (
                         <Group label="Phone">

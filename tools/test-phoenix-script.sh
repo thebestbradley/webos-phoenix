@@ -49,7 +49,8 @@ unmock() { rm -f "$BIN/$1"; }
 # computer Linux|Darwin: a new pretend computer with everything there:
 #   T          its folder          BIN      its PATH (mocks and REAL_BIN)
 #   CHECKOUT   the script's repo   BUILD    the build directory, with models
-#   QT         a Qt 6.8.1          QT_ASK   PHOENIX_QT_DIR for the run ("" none)
+#   QT         a Qt 6.12.0 (later than the simulator's 6.11.3, as Homebrew's)
+#              QT_ASK   PHOENIX_QT_DIR for the run ("" none)
 #   OS         PHOENIX_OS          BREW     Homebrew's prefix (Darwin)
 # Linux: every apt package ($T/dpkg lists them, "all"), node 22,
 # whisper-cli, llama-server. Darwin: the command line tools, Homebrew and
@@ -63,7 +64,7 @@ computer() {
     OS=$1
     QT_ASK=""
     QT=$T/qt
-    fake_qt "$QT" 6.8.1
+    fake_qt "$QT" 6.12.0
 
     # A checkout: the script in an otherwise empty repository, its apps'
     # packages installed after the lock was written.
@@ -109,7 +110,7 @@ fmt=""; for a in "$@"; do case "$a" in -f=*) fmt=${a#-f=} ;; -*) ;; *)
         printf '#!/bin/sh\necho "brew $*"\n' > "$BREW/bin/brew"
         chmod +x "$BREW/bin/brew"
         for f in qt cmake ninja node@22 git python@3.12 php whisper-cpp llama.cpp onnxruntime; do mkdir -p "$BREW/opt/$f"; done
-        fake_qt "$BREW/opt/qt" 6.10.0
+        fake_qt "$BREW/opt/qt" 6.12.0
     fi
 }
 
@@ -145,7 +146,7 @@ computer Linux
 QT_ASK=$QT
 phoenix check
 check "Linux, everything there: nothing to install" \
-    '[ $status = 0 ]' 'has "dry run"' 'has "ok       Qt 6.8.1"' 'has "ok       Node.js v22.11.0"' \
+    '[ $status = 0 ]' 'has "dry run"' 'has "ok       Qt 6.12.0 ($QT, PHOENIX_QT_DIR)"' 'has "ok       Node.js v22.11.0"' \
     'has "ok       whisper-cli"' 'has "ok       whisper base.en model"' 'has "Nothing to install"' \
     'has "ok       voice: Kitten TTS"' 'has "ok       built-in language model: Qwen3 0.6B"' \
     'has "ok       PHP 8.3.6 with sodium and pdo_sqlite"' \
@@ -180,7 +181,7 @@ check "Linux, nothing there: what it would install, with sizes" \
     '[ $status = 0 ]' 'has "install  apt: build-essential cmake ninja-build"' 'has "espeak-ng"' \
     'has "install  apt:.* php-cli php-sqlite3 "' 'has "skipped  PHP: not there yet"' 'lacks "php-mysql"' \
     'has "apt-get install -y --no-install-recommends"' \
-    'has "install  Qt 6.8.1 into $T/qtprefix (aqtinstall) (about"' 'has "aqt install-qt linux desktop 6.8.1"' \
+    'has "install  Qt 6.11.3 into $T/qtprefix (aqtinstall) (about"' 'has "aqt install-qt linux desktop 6.11.3"' \
     'has "install  Node.js 22 (NodeSource)"' 'has "install  whisper-cli"' 'has "install  llama-server"' \
     'has "install  whisper base.en model (148 MB"' 'has "get-whisper-model.py --dest $BUILD/whisper"' \
     'has "get-wakeword.py --dest $BUILD/wakeword"' 'has "Would install:"' \
@@ -193,7 +194,7 @@ rm -rf "$BUILD/whisper" "$BUILD/wakeword" "$BUILD/kitten" "$BUILD/models"
 phoenix check --no-assistant
 check "--no-assistant leaves out the assistant's parts" \
     '[ $status = 0 ]' 'lacks "espeak-ng"' 'lacks "whisper"' 'lacks "llama"' 'lacks "wake word"' 'lacks "Kitten"' 'lacks "Qwen3"' \
-    'has "install  Qt 6.8.1"'
+    'has "install  Qt 6.11.3"'
 
 computer Linux
 phoenix build --offline
@@ -213,15 +214,41 @@ phoenix check --no-assistant
 check "a Qt older than 6.8 asked for: an error" '[ $status = 1 ]' 'has "is not a Qt 6.8 or later"'
 
 computer Linux
-fake_qt "$T/qtprefix/6.8.1/gcc_64" 6.8.1
+fake_qt "$T/qtprefix/6.11.3/gcc_64" 6.11.3
 phoenix check --no-assistant
-check "Qt found where the script installs it" 'has "ok       Qt 6.8.1 ($T/qtprefix/6.8.1/gcc_64)"' 'lacks "  install  "'
+check "Qt found where the script installs it" 'has "ok       Qt 6.11.3 ($T/qtprefix/6.11.3/gcc_64)"' 'lacks "  install  "'
 
-# The build directory already configured: its Qt is kept, no configure.
+# The build directory already configured: its Qt is kept, no configure,
+# a later one than the simulator's too (6.12.0: a newer Qt, an older engine).
 computer Linux
 echo "CMAKE_PREFIX_PATH:UNINITIALIZED=$QT" > "$BUILD/CMakeCache.txt"
 phoenix check --no-assistant
-check "a configured build keeps its Qt" 'has "ok       configured with Qt 6.8.1 ($QT)"' 'lacks "would run: cmake -S"'
+check "a configured build on a later Qt (6.12.0) keeps it" 'has "ok       configured with Qt 6.12.0 ($QT)"' 'lacks "would run: cmake -S"' \
+    'lacks "install  Qt"'
+
+# A build on an older Qt (6.8.1, the simulator's before 15 October 2026):
+# the simulator's Qt installed, the build configured again with it, keeping
+# its generator, build type and switches.
+computer Linux
+fake_qt "$T/qtprefix/6.8.1/gcc_64" 6.8.1
+printf 'CMAKE_PREFIX_PATH:UNINITIALIZED=%s\nCMAKE_GENERATOR:INTERNAL=Ninja\nCMAKE_BUILD_TYPE:STRING=Release\nPHOENIX_BUILD_APPS:BOOL=OFF\n' "$T/qtprefix/6.8.1/gcc_64" > "$BUILD/CMakeCache.txt"
+phoenix check --no-assistant
+check "a build on an older Qt moves to the simulator's" '[ $status = 0 ]' \
+    'has "note     Qt 6.8.1 ($T/qtprefix/6.8.1/gcc_64) is older than the simulator.s 6.11.3"' \
+    'has "install  Qt 6.11.3 into $T/qtprefix (aqtinstall)"' 'has "would run: rm -f $BUILD/CMakeCache.txt"' \
+    'has "would run: cmake -S .* -G Ninja -DCMAKE_BUILD_TYPE=Release -DPHOENIX_BUILD_APPS=OFF  *-DCMAKE_PREFIX_PATH=$T/qtprefix/6.11.3/gcc_64"'
+phoenix check --no-assistant --offline
+check "... offline: built with the older one, and says so" '[ $status = 0 ]' \
+    'has "skipped  Qt 6.11.3 (--offline: built with Qt 6.8.1, $T/qtprefix/6.8.1/gcc_64)"' 'lacks "aqt install-qt"' \
+    'has "ok       configured with Qt 6.8.1"'
+
+# The device's Qt asked for (PHOENIX_QT_DIR): used, older or not.
+computer Linux
+fake_qt "$T/qt681" 6.8.1
+QT_ASK=$T/qt681
+phoenix check --no-assistant
+check "the device's Qt 6.8.1 asked for: used" '[ $status = 0 ]' 'has "ok       Qt 6.8.1 ($T/qt681, PHOENIX_QT_DIR)"' \
+    'lacks "install  Qt"' 'has "-DCMAKE_PREFIX_PATH=$T/qt681"'
 
 # Submodules not checked out yet.
 computer Linux
@@ -320,6 +347,15 @@ phoenix check
 check "Mac, everything there: nothing to install" \
     '[ $status = 0 ]' 'lacks "  install  "' 'has "Nothing to install"' 'lacks "brew install"' \
     'has "-DCMAKE_PREFIX_PATH=$BREW/opt/qt"'
+
+# Homebrew's Qt older than the simulator's: upgraded (offline: used as it is).
+computer Darwin
+fake_qt "$BREW/opt/qt" 6.10.0
+phoenix check --no-assistant
+check "Mac: Homebrew's Qt older than 6.11.3: brew upgrade qt" '[ $status = 0 ]' \
+    'has "install  qt 6.11.3 or newer (Homebrew.s is 6.10.0)"' 'has "brew upgrade qt"' 'has "-DCMAKE_PREFIX_PATH=$BREW/opt/qt"'
+phoenix check --no-assistant --offline
+check "... offline: built with it" '[ $status = 0 ]' 'has "skipped  qt 6.11.3 (Homebrew.s is 6.10.0; --offline: built with it)"' 'lacks "brew upgrade"'
 
 # The voice on a Mac: Homebrew's ONNX Runtime, so no library of its own.
 computer Darwin

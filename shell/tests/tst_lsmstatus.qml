@@ -148,6 +148,18 @@ TestCase {
         compare(devs[1].state, "connecting");
     }
 
+    // org.webosphoenix.earbuds getStatus (services/accessories/earbuds.js).
+    function test_earbuds() {
+        var e = LsmStatus.earbudsStatus({ returnValue: true, subscribed: true, bluetooth: true,
+                                          nearby: [{ id: "5e:aa", lidOpen: true }], devices: [{ address: "a0:b1", connected: true }] });
+        compare(e.bluetooth, true);
+        compare(e.nearby.length, 1);
+        compare(e.devices[0].address, "a0:b1");
+        compare(e.pairing, null);
+        compare(LsmStatus.earbudsStatus({ returnValue: false, errorText: "Service does not exist" }), null);
+        compare(LsmStatus.earbudsStatus(null), null);
+    }
+
     function test_vpn() {
         var p = LsmStatus.vpnProfiles({ returnValue: true, vpnProfiles: [
             { vpnProfileName: "Office", vpnProfileConnectState: "connected" },

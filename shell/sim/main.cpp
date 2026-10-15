@@ -75,6 +75,7 @@
 
 #ifdef PHOENIX_HAVE_WEBENGINE
 #include <QQuickWebEngineProfile>
+#include <QtWebEngineCore/qtwebenginecoreglobal.h>
 #include <QtWebEngineQuick>
 #include "simbrowser.h"
 #include "simdropshare.h"
@@ -187,7 +188,7 @@ int main(int argc, char *argv[])
         .arg([] { QStringList ids; for (const QVariant &e : SimDevices::menuEntries()) ids << e.toMap().value(QStringLiteral("id")).toString(); return ids.join(QStringLiteral(", ")); }()), QStringLiteral("id"));
     QCommandLineOption zoomOpt(QStringLiteral("zoom"), QStringLiteral("Show the screen at this size on the monitor, from 0.1 to 1 (default: 1; with --device, what fits the monitor, and 1 with --screenshot so it saves the panel's exact pixels). The device's pixels and layout do not change."), QStringLiteral("factor"));
     QCommandLineOption adaptiveOpt(QStringLiteral("adaptive"), QStringLiteral("A phone or a tablet by the window's size (the default without --phone or --tablet): resize the window, or pick View > Device Size, and the shell switches between the layouts live, the apps running on."));
-    QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene (sim.qml's scenes): locked, cards, stacks, longstack, reorder, maximized, heldcard, launcher, launcheredit, launchermenu, launchergroup, launchergroupopen, launchertabs, launcherinstall, wave, powermenu, hot, pin, emergency, firstuse, lowbattery, banner, notified, dashboard, notifystacks, notifystacksbar, notifystackslocked, drawer, capture, capturepreview, justtype, keyboard, clipstrip, assistant, assistantbird, assistantbirds, assistantbirdmoves, wakeword, wakewordlocked, modal, systemmenu, empty; followup, followupanswer, followuplater, followupaction, followupchat; and assistant:<ask>|<ask>... to put those questions to the Assistant."), QStringLiteral("name"));
+    QCommandLineOption sceneOpt(QStringLiteral("scene"), QStringLiteral("Demo scene (sim.qml's scenes): locked, cards, stacks, longstack, reorder, maximized, heldcard, launcher, launcheredit, launchermenu, launchergroup, launchergroupopen, launchertabs, launcherinstall, wave, powermenu, hot, pin, emergency, firstuse, lowbattery, banner, notified, dashboard, notifystacks, notifystacksbar, notifystackslocked, drawer, capture, capturepreview, justtype, keyboard, clipstrip, assistant, assistantbird, assistantbirds, assistantbirdmoves, wakeword, wakewordlocked, modal, systemmenu, empty; followup, followupanswer, followuplater, followupaction, followupchat; airpods, airpodsbattery, airpodsmenu, airpodssettings, trackeralert; and assistant:<ask>|<ask>... to put those questions to the Assistant."), QStringLiteral("name"));
     QCommandLineOption firstUseOpt(QStringLiteral("first-use"), QStringLiteral("Start with First Use, as on a new device (without it, First Use runs until it has been done once, unless --scene or --launch is given)."));
     QCommandLineOption shotOpt(QStringLiteral("screenshot"), QStringLiteral("Save a screenshot to FILE and exit."), QStringLiteral("file"));
     QCommandLineOption delayOpt(QStringLiteral("delay"), QStringLiteral("Delay before the screenshot (default 1500 ms)."), QStringLiteral("ms"), QStringLiteral("1500"));
@@ -564,6 +565,21 @@ int main(int argc, char *argv[])
         // their own, its settings, the system proxy.
         auto *simBrowser = new SimBrowser(&rootfs, &snapshots, !tablet && qMin(display.width(), display.height()) < 600, &view);
         view.rootContext()->setContextProperty(QStringLiteral("simBrowser"), simBrowser);
+        // The apps' pages are told what the browser's are: Chrome's current
+        // version for the device's form factor (useragent.h).
+        simBrowser->setAppsProfile(profile);
+        // The engine itself, said as it is (docs/APP-RUNTIME.md, "The web
+        // engine and the user agent"): here, and in Settings > Device Info
+        // (the runtime's osInfo, from host.json).
+        const QString chromium = QString::fromLatin1(qWebEngineChromiumVersion());
+        const QString patches = QString::fromLatin1(qWebEngineChromiumSecurityPatchVersion());
+        qInfo("phoenix-sim: web engine: Chromium %s (security patches %s), Qt WebEngine %s; pages are told Chrome %d",
+              qPrintable(chromium), qPrintable(patches), qWebEngineVersion(), UserAgent::chromeMajor());
+        hostInfo.insert(QStringLiteral("webEngine"), QJsonObject{
+            { QStringLiteral("name"), QStringLiteral("Chromium") },
+            { QStringLiteral("version"), chromium },
+            { QStringLiteral("securityPatches"), patches },
+            { QStringLiteral("qtWebEngine"), QString::fromLatin1(qWebEngineVersion()) } });
         webEngine = true;
         webApps = rootfs.apps();
     }

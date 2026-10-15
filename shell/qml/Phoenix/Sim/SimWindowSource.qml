@@ -1276,7 +1276,8 @@ Item {
         "/usr/share/phoenix/sounds/feedback/listen.wav", "/usr/share/phoenix/sounds/feedback/carddrag.wav",
         "/usr/share/phoenix/sounds/feedback/birdappclose.wav", "/usr/share/phoenix/sounds/feedback/LauncherOpenApp.wav",
         "/usr/share/phoenix/sounds/feedback/LauncherCloseApp.wav",
-        "/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3"
+        "/usr/palm/applications/com.palm.app.email/sounds/emailreceived.mp3",
+        "/usr/palm/applications/org.webosphoenix.settings/sounds/tracker-alert.mp3"
     ]
 
     function soundExists(path) {
@@ -1290,9 +1291,15 @@ Item {
         return shippedSounds.indexOf(path) >= 0;
     }
 
+    // An app's folder as a device path, as LsmWindowSource gives it: the
+    // sound policy resolves an app's own sounds in it (SoundPolicy.resolve,
+    // "sounds/x.mp3"), and soundExists and the pages' player take device
+    // paths, which the rootfs maps to the app's files (an installed app's
+    // too: Rootfs::resolve). Its launcher entry's "dir" is a file:// URL,
+    // which no device path matched, so an app's own notification sounds
+    // fell back to the alert tone.
     function appDir(appId) {
-        var info = appInfo(appId);
-        return info && info.dir ? info.dir : "/usr/palm/applications/" + appId;
+        return "/usr/palm/applications/" + appId;
     }
 
     function _soundPage() {
@@ -1562,6 +1569,21 @@ Item {
         alerts.insert(Policy.insertIndex(queued, "com.palm.systemui", "msmentryfailed"),
                       { key: msmEntryFailedKey, appId: "com.palm.systemui", name: "msmentryfailed", height: 160,
                         sound: "", soundClass: "" });
+    }
+
+    // One of the shell's own popup alerts, as the three above: the AirPods
+    // card (EarbudsMonitor.qml) gives its item and its height in legacy
+    // pixels; it is put in the queue as the system UI's, and closeAlert
+    // (its buttons, the Home button) takes it away and destroys the item.
+    function showShellAlert(key, item, height) {
+        if (_windows[key])
+            _closeSystemWindow(key);
+        _windows[key] = item;
+        var queued = [];
+        for (var i = 0; i < alerts.count; ++i)
+            queued.push({ appId: alerts.get(i).appId, name: alerts.get(i).name });
+        alerts.insert(Policy.insertIndex(queued, "com.palm.systemui", key),
+                      { key: key, appId: "com.palm.systemui", name: key, height: height, sound: "", soundClass: "" });
     }
 
     // The Home button closes the front popup alert
@@ -2072,7 +2094,7 @@ Item {
     // are turned), which every page gets as it loads; unlike the rest it is
     // not the pages' to overrule.
     readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout", "gestureArea", "dockMode",
-                                        "debugOverlays", "usbHost", "gamepads", "usbDrives", "formFactor", "screen",
+                                        "debugOverlays", "usbHost", "gamepads", "usbDrives", "simAirPods", "simTracker", "formFactor", "screen",
                                         "marketplaceCatalog", "learnedWords", "notifications"]
     property var _shellStatus: ({})
 

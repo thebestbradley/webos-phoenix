@@ -56,15 +56,18 @@ int main(int argc, char **argv)
         QTemporaryDir repo;
         QDir(repo.path()).mkpath(QStringLiteral("runtime"));
         QFile cfg(repo.filePath(QStringLiteral("runtime/rootfs.json")));
-        cfg.open(QIODevice::WriteOnly);
+        if (!cfg.open(QIODevice::WriteOnly))
+            check(false, "the test writes its rootfs.json");
         cfg.write(R"({"product": "product.json", "mounts": {}, "applicationDirs": []})");
         cfg.close();
         QFile product(repo.filePath(QStringLiteral("product.json")));
-        product.open(QIODevice::WriteOnly);
+        if (!product.open(QIODevice::WriteOnly))
+            check(false, "the test writes its product.json");
         product.write(R"({"name": "webOS Phoenix", "version": "2.0.0", "releaseNotes": "release-notes-2.json"})");
         product.close();
         QFile notes(repo.filePath(QStringLiteral("release-notes-2.json")));
-        notes.open(QIODevice::WriteOnly);
+        if (!notes.open(QIODevice::WriteOnly))
+            check(false, "the test writes its release notes");
         notes.write("{}");
         notes.close();
         const Rootfs other(repo.path());
@@ -81,10 +84,12 @@ int main(int argc, char **argv)
         QDir(repo.path()).mkpath(QStringLiteral("third_party/isis/isis-browser"));
         QDir(repo.path()).mkpath(QStringLiteral("apps/a"));
         QFile app(repo.filePath(QStringLiteral("apps/a/appinfo.json")));
-        app.open(QIODevice::WriteOnly);
+        if (!app.open(QIODevice::WriteOnly))
+            check(false, "the test writes an app's appinfo.json");
         app.close();
         QFile cfg(repo.filePath(QStringLiteral("runtime/rootfs.json")));
-        cfg.open(QIODevice::WriteOnly);
+        if (!cfg.open(QIODevice::WriteOnly))
+            check(false, "the test writes its rootfs.json");
         cfg.write(R"({"mounts": {"/usr/palm/frameworks/enyo2/enyo/": "third_party/enyo-2/enyo/",
                                  "/usr/palm/frameworks/mojoloader.js": "third_party/mojoloader/mojoloader.js",
                                  "/usr/share/phoenix/runtime/": "runtime/"},
@@ -265,7 +270,8 @@ int main(int argc, char **argv)
         const auto write = [](const QString &path, const QByteArray &data) {
             QDir().mkpath(QFileInfo(path).path());
             QFile f(path);
-            f.open(QIODevice::WriteOnly);
+            if (!f.open(QIODevice::WriteOnly))
+                check(false, "the test writes its files");
             f.write(data);
         };
         const auto read = [](const QString &path) {

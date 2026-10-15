@@ -10,7 +10,8 @@
 //                  "justtype" | "keyboard" | "clipstrip" | "assistant" | "assistant:<request>|<request>|..." |
 //                  "assistantbird" | "assistantbirds" | "assistantbirdmoves" |
 //                  "wakeword" | "wakewordlocked" | "modal" |
-//                  "systemmenu" | "empty"
+//                  "systemmenu" | "empty" |
+//                  "airpods" | "airpodsbattery" | "airpodsmenu" | "airpodssettings" | "trackeralert"
 //   simFirstUse    start with First Use (--first-use); without it First Use
 //                  runs at start-up until it has been done once
 //                  (simSettings "firstuse/done", set when the app reports the
@@ -747,6 +748,9 @@ Item {
     Connections {
         target: status
         function onVpnRequested(request) { windows.pushSystemStatus(request); }
+        // The AirPods card's Connect, the system menu's Noise Control:
+        // org.webosphoenix.earbuds in the pages (the runtime's).
+        function onEarbudsRequested(request) { windows.pushSystemStatus({ earbudsRequest: request }); }
         // ... and a Wi-Fi network's row.
         function onWifiRequested(request) { windows.pushSystemStatus(request); }
     }
@@ -816,6 +820,51 @@ Item {
         status.usbDrives = on ? [{ id: "sda1", label: "PHOENIX", vendor: "SanDisk Cruzer Blade", size: 16008609792, used: 5368709120,
                                    fs: "vfat" }] : [];
         windows.pushSystemStatus({ usbDrives: status.usbDrives });
+    }
+    // AirPods and trackers (docs/ACCESSORIES.md; Simulate > AirPods and
+    // Trackers): the simulated AirPods Pro 2 and their case, told to the
+    // pages (the runtime's org.webosphoenix.earbuds), as a scan and their
+    // control channel would tell a device; a tracker that comes along.
+    function airpods(changes) {
+        var a = JSON.parse(JSON.stringify(status.simAirPods));
+        for (var k in changes)
+            a[k] = changes[k];
+        if (!a.present) {
+            a.lidOpen = false;
+            a.left = a.right = "case";
+        }
+        // In the case the earbuds charge from it.
+        a.charging = { left: a.left === "case" && a.battery.left < 100, right: a.right === "case" && a.battery.right < 100,
+                       case: false };
+        a.at = Date.now();
+        status.simAirPods = a;
+        windows.pushSystemStatus({ simAirPods: a });
+    }
+    // Out of the case, into the ear; out of the ear, into the hand.
+    function airpodNext(side) {
+        var a = status.simAirPods, c = {};
+        if (!a.present)
+            return airpods({ present: true, lidOpen: true, left: side === "left" ? "ear" : "case", right: side === "right" ? "ear" : "case" });
+        c[side] = a[side] === "ear" ? "out" : "ear";
+        airpods(c);
+    }
+    // An item by its objectName, depth first (the scenes' way in).
+    function findByName(item, name) {
+        if (!item)
+            return null;
+        if (item.objectName === name)
+            return item;
+        var kids = item.children || [];
+        for (var i = 0; i < kids.length; ++i) {
+            var f = findByName(kids[i], name);
+            if (f)
+                return f;
+        }
+        return null;
+    }
+    function trackerFollows(kind) {
+        status.simTracker = { follow: status.simTracker.follow + 1, kind: kind, at: Date.now() };
+        windows.pushSystemStatus({ simTracker: status.simTracker });
     }
     readonly property var temperatures: [31, 46, 51]
     function setTemperature(t) {
@@ -1131,6 +1180,46 @@ Item {
               root.setTemperature(root.temperatures[(i + 1) % root.temperatures.length]);
           } },
         { separator: true, menu: "simulate" },
+        // AirPods (docs/ACCESSORIES.md): AirPods Pro 2 near the device, their
+        // case opened (the card), earbuds in and out of the ears (ear
+        // detection pauses and plays), their battery low, the stem pressed
+        // (the next listening mode); and a tracker that follows.
+        { id: "airpodsNearby", menu: "simulate", submenu: qsTr("AirPods and Trackers"), text: qsTr("AirPods Nearby, Case Open"),
+          keys: ["Ctrl+Shift+P"], tip: qsTr("AirPods Pro 2 in their case, the lid opened near the device: the AirPods card"),
+          run: function () { root.airpods(status.simAirPods.present ? { present: false } : { present: true, lidOpen: true }); },
+          checked: function () { return status.simAirPods.present; } },
+        { id: "airpodsLid", menu: "simulate", submenu: qsTr("AirPods and Trackers"), text: qsTr("Case Lid Open"),
+          run: function () { root.airpods({ present: true, lidOpen: !status.simAirPods.lidOpen }); },
+          checked: function () { return status.simAirPods.present && status.simAirPods.lidOpen; } },
+        { id: "airpodsWear", menu: "simulate", submenu: qsTr("AirPods and Trackers"), text: qsTr("Put Both AirPods In (Ears)"),
+          keys: ["Ctrl+Shift+E"],
+          run: function () { root.airpods({ present: true, left: "ear", right: "ear" }); } },
+        { id: "airpodsLeft", menu: "simulate", submenu: qsTr("AirPods and Trackers"), text: qsTr("Left AirPod: Out of the Ear or Back In"),
+          tip: qsTr("Automatic Ear Detection pauses what plays, and plays it again"),
+          run: function () { root.airpodNext("left"); } },
+        { id: "airpodsRight", menu: "simulate", submenu: qsTr("AirPods and Trackers"), text: qsTr("Right AirPod: Out of the Ear or Back In"),
+          run: function () { root.airpodNext("right"); } },
+        { id: "airpodsCase", menu: "simulate", submenu: qsTr("AirPods and Trackers"), text: qsTr("Put AirPods in the Case"),
+          run: function () { root.airpods({ present: true, left: "case", right: "case" }); } },
+        { id: "airpodsStem", menu: "simulate", submenu: qsTr("AirPods and Trackers"), text: qsTr("Press and Hold an AirPod's Stem"),
+          tip: qsTr("The next listening mode, as the AirPods switch it"),
+          run: function () { root.airpods({ stem: status.simAirPods.stem + 1 }); } },
+        { id: "airpodsLow", menu: "simulate", submenu: qsTr("AirPods and Trackers"), text: qsTr("AirPods Battery Low (8%)"),
+          run: function () {
+              var low = status.simAirPods.battery.left <= 10;
+              root.airpods({ battery: { left: low ? 100 : 8, right: low ? 96 : 8, case: status.simAirPods.battery["case"] } });
+          },
+          checked: function () { return status.simAirPods.battery.left <= 10; } },
+        { id: "airpodsRefuseName", menu: "simulate", submenu: qsTr("AirPods and Trackers"), text: qsTr("AirPods Refuse a New Name"),
+          tip: qsTr("Renamed in Settings, the AirPods keep their own name and Phoenix says so (as AirPods that do not take the rename message)"),
+          run: function () { root.airpods({ rejectRename: !status.simAirPods.rejectRename }); },
+          checked: function () { return !!status.simAirPods.rejectRename; } },
+        { id: "trackerFollows", menu: "simulate", submenu: qsTr("AirPods and Trackers"), text: qsTr("Unknown AirTag Following You"),
+          keys: ["Ctrl+Shift+F"], tip: qsTr("An AirTag away from its owner has been with you for 35 minutes and 1.2 km: the alert"),
+          run: function () { root.trackerFollows("airtag"); } },
+        { id: "trackerFollowsDult", menu: "simulate", submenu: qsTr("AirPods and Trackers"), text: qsTr("Unknown Tracker (Find Hub) Following You"),
+          run: function () { root.trackerFollows("dult"); } },
+        { separator: true, menu: "simulate" },
         // A headset (with its microphone) and its button, twice within a
         // second a double click; the play/pause media key; the light on
         // the sensor (com.palm.keys, com.palm.ambientLightSensor).
@@ -1309,7 +1398,8 @@ Item {
                                    "launcher", "launcheredit", "launchermenu", "launchergroup", "launchergroupopen", "launchertabs", "launcherinstall", "wave", "powermenu", "hot", "pin", "emergency", "firstuse",
                                    "lowbattery", "banner", "notified", "dashboard", "notifystacks", "notifystacksbar", "notifystackslocked", "drawer", "capture",
                                    "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "assistantbird", "assistantbirds", "assistantbirdmoves",
-                                   "wakeword", "wakewordlocked", "modal", "systemmenu", "empty"]
+                                   "wakeword", "wakewordlocked", "modal", "systemmenu", "empty",
+                                   "airpods", "airpodsbattery", "airpodsmenu", "airpodssettings", "trackeralert"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
     // --scene modal: once Memos is maximized.
     Timer {
@@ -1889,6 +1979,13 @@ Item {
                 // --scene assistant with --launch: the assistant over that app.
                 if (typeof simScene !== "undefined" && (simScene === "assistant" || simScene.indexOf("assistant:") === 0))
                     root.assistantScene();
+                // An AirPods or tracker scene with --launch: the AirPods and
+                // the tracker under that app (Settings' pages for them).
+                if (typeof simScene !== "undefined" && /^(airpods|airpodsbattery|airpodsmenu|airpodssettings|trackeralert)$/.test(simScene)) {
+                    sceneAirPods.withApp = true;
+                    sceneAirPods.step = 0;
+                    sceneAirPods.start();
+                }
                 root.startOnTouchstone();
             });
             return;
@@ -1991,6 +2088,14 @@ Item {
             shell.cardView.position = 0;
         } else if (scene === "systemmenu") {
             shell.openSystemMenu();
+        } else if (/^(airpods|airpodsbattery|airpodsmenu|airpodssettings|trackeralert)$/.test(scene)) {
+            // AirPods (docs/ACCESSORIES.md), once the system UI's page (the
+            // runtime's services) is up: their case opened nearby (the
+            // card); paired, then opened again (the battery card); in the
+            // ears, the system menu's Noise Control, or Settings' page for
+            // them; an AirTag that followed (its notification).
+            sceneAirPods.step = 0;
+            sceneAirPods.start();
         } else if (scene === "launcher" || scene === "launcheredit") {
             shell.gestureUp();
             if (scene === "launcheredit")
@@ -2363,6 +2468,111 @@ Item {
 
     // Once luna-systemui is up and listening (its page loads after the
     // scene starts on a busy computer), as Simulate > Low Battery does.
+    Timer {
+        id: sceneAirPods
+        property int step: 0
+        // Started with --launch: no menu or dashboard over the app.
+        property bool withApp: false
+        interval: 1200
+        onTriggered: {
+            if (!windows.systemUiLoaded)
+                return restart();
+            var s = root.scene;
+            var monitor = root.findByName(shell, "earbudsMonitor");
+            var card = windows.windowFor("earbudsalert");
+            if (step === 0) {
+                // Bluetooth on (the AirPods' radio), then the case.
+                status.setBluetoothOn(true);
+                windows.pushSystemStatus({ bluetoothOn: true });
+                // The battery card stays for the screenshot.
+                if (monitor)
+                    monitor.batteryCardTime = 60000;
+                if (s === "trackeralert") {
+                    interval = 1500;
+                    step = 10;
+                    return restart();
+                }
+                root.airpods({ present: true, lidOpen: true, left: "case", right: "case" });
+                if (s === "airpods")
+                    return;
+                step = 1;
+                interval = 1500;
+                return restart();
+            }
+            if (step === 1) {
+                // Connect on the card, as a tap; then the pairing.
+                var connect = card ? root.findByName(card, "earbudsAlertConnect") : null;
+                if (!connect)
+                    return restart();
+                console.info("phoenix-sim: scene " + s + ": Connect on the AirPods card");
+                connect.action();
+                step = 2;
+                interval = 5000;
+                return restart();
+            }
+            if (step === 2) {
+                if (card)
+                    windows.closeAlert("earbudsalert");
+                if (s === "airpodsmenu" || s === "airpodssettings") {
+                    root.airpods({ left: "ear", right: "ear", lidOpen: false });
+                    step = s === "airpodsmenu" ? 3 : 6;
+                    interval = 1200;
+                    return restart();
+                }
+                // Closed, then opened again: the battery card.
+                root.airpods({ lidOpen: false });
+                step = 4;
+                interval = 1500;
+                return restart();
+            }
+            if (step === 3) {
+                console.info("phoenix-sim: scene " + s + ": the system menu, " + JSON.stringify(status.earbuds.devices));
+                // The menu, its Noise Control drawer open.
+                shell.openSystemMenu();
+                var drawer = root.findByName(shell, "systemMenuNoiseControl");
+                if (drawer)
+                    drawer.open();
+                step = 5;
+                interval = 900;
+                return restart();
+            }
+            if (step === 5) {
+                // Scrolled down to it, as a finger would.
+                var flick = root.findByName(shell, "systemMenuFlickable");
+                var noise = root.findByName(shell, "systemMenuNoiseControl");
+                if (flick && noise)
+                    flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height,
+                                                          noise.mapToItem(flick.contentItem, 0, 0).y - Theme.px(84)));
+                return;
+            }
+            if (step === 4) {
+                console.info("phoenix-sim: scene " + s + ": the case opened again, paired: " + JSON.stringify(status.earbuds.devices));
+                root.airpods({ lidOpen: true });
+                return;
+            }
+            if (step === 6) {
+                // Settings > Bluetooth > AirPods.
+                var pods = (status.earbuds.devices || [])[0];
+                if (pods)
+                    shell.launch("org.webosphoenix.settings", { page: "bluetooth", view: "earbuds", address: pods.address });
+                return;
+            }
+            if (step === 10) {
+                root.trackerFollows("airtag");
+                if (withApp)
+                    return;
+                step = 11;
+                interval = 2500;
+                return restart();
+            }
+            if (step === 11) {
+                // Its notification in the dashboard.
+                shell.notifications.bannerActive = false;
+                shell.notifications.dashboardOpen = true;
+                return;
+            }
+        }
+    }
     Timer {
         id: lowBatteryTimer
         interval: 3000

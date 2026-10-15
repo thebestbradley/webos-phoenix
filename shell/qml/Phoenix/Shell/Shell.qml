@@ -2401,7 +2401,8 @@ FocusScope {
         locked: shell.locked
         previews: !shell.system || shell.system.lockScreenPreviews !== false
         headphones: !!shell.system && ((shell.system.headset !== undefined && shell.system.headset !== "none")
-                                       || /head(?:set|phone)|ear ?(?:bud|phone)|airpods/i.test(String(shell.system.bluetoothDevice || "")))
+                                       || /head(?:set|phone)|ear ?(?:bud|phone)|airpods/i.test(String(shell.system.bluetoothDevice || ""))
+                                       || (!!shell.system.earbuds && (shell.system.earbuds.devices || []).some(function (d) { return d.connected; })))
         onReplyByVoice: (threadId) => shell.listenForReply(threadId)
     }
     // Put on charge, connected to the car: the Assistant's routines that
@@ -2409,6 +2410,15 @@ FocusScope {
     AssistantMoments {
         source: shell.source
         system: shell.system
+    }
+    // AirPods (docs/ACCESSORIES.md): the card when a case opens nearby,
+    // pausing what plays when an earbud comes out, their low battery.
+    EarbudsMonitor {
+        id: earbudsMonitor
+        objectName: "earbudsMonitor"
+        source: shell.source
+        system: shell.system
+        deviceServices: devices
     }
     // Driving mode: a message read aloud asks "Want to reply?", and the
     // Assistant listens for the answer in that conversation (over the lock

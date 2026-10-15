@@ -267,7 +267,8 @@ static void write(const QString &path, const QByteArray &text, bool executable =
 {
     QDir().mkpath(path.section(QLatin1Char('/'), 0, -2));
     QFile f(path);
-    f.open(QIODevice::WriteOnly);
+    if (!f.open(QIODevice::WriteOnly))
+        check(false, qPrintable(QStringLiteral("the test writes ") + path));
     f.write(text);
     f.close();
     if (executable)
