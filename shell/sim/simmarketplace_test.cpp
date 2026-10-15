@@ -831,8 +831,21 @@ int main(int argc, char **argv)
         d.start(repo2, port, instancesDir, QStringLiteral("-"));
         check(d.said("state running here", 20000), "a simulator that does not list itself starts it");
         waitFor([] { return false; }, 4000);
-        check(answers(port) && !QFile::exists(instancesDir + QStringLiteral("/phoenix-sim--.json")),
-              "... and it goes on past the grace while that simulator runs, unlisted");
+        // Past the grace its watch still runs and still claims the catalog,
+        // which answers. On a Mac (CI) the port now and then takes seconds
+        // to take a connection right after a catalog is started again on
+        // it (7.7 s and 16.4 s before the first answer in two runs that
+        // passed); a look at one moment can fall in that, so the answer is
+        // waited for a while, and how long it took is said.
+        const qint64 dWatch = serverJson().value(QStringLiteral("pid")).toInteger();
+        QElapsedTimer answered;
+        answered.start();
+        const bool dAnswers = waitFor([&] { return answers(port); }, 8000);
+        check(dAnswers && dWatch > 0 && ::kill(static_cast<pid_t>(dWatch), 0) == 0
+                  && serverJson().value(QStringLiteral("pid")).toInteger() == dWatch
+                  && !QFile::exists(instancesDir + QStringLiteral("/phoenix-sim--.json")),
+              qPrintable(QStringLiteral("... and it goes on past the grace while that simulator runs, unlisted (answered after %1 ms)")
+                             .arg(answered.elapsed())));
         d.crash();
         check(waitFor([&] { return refused(port); }, 10000), "... and stops when it is gone");
     }
