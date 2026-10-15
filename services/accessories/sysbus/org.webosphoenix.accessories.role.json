@@ -6,7 +6,9 @@
         "org.webosphoenix.gamepads",
         "org.webosphoenix.usb",
         "org.webosphoenix.tethering",
-        "org.webosphoenix.battery"
+        "org.webosphoenix.battery",
+        "org.webosphoenix.earbuds",
+        "org.webosphoenix.trackers"
     ],
     "permissions": [
         {
@@ -17,7 +19,10 @@
                 "com.webos.service.connectionmanager",
                 "com.webos.applicationManager",
                 "org.webosphoenix.ongoing",
-                "org.webosphoenix.shellhost"
+                "org.webosphoenix.shellhost",
+                "com.webos.service.bluetooth2",
+                "com.webos.service.location",
+                "com.palm.display"
             ]
         },
         {
@@ -28,7 +33,10 @@
                 "com.webos.service.connectionmanager",
                 "com.webos.applicationManager",
                 "org.webosphoenix.ongoing",
-                "org.webosphoenix.shellhost"
+                "org.webosphoenix.shellhost",
+                "com.webos.service.bluetooth2",
+                "com.webos.service.location",
+                "com.palm.display"
             ]
         },
         {
@@ -39,7 +47,10 @@
                 "com.webos.service.connectionmanager",
                 "com.webos.applicationManager",
                 "org.webosphoenix.ongoing",
-                "org.webosphoenix.shellhost"
+                "org.webosphoenix.shellhost",
+                "com.webos.service.bluetooth2",
+                "com.webos.service.location",
+                "com.palm.display"
             ]
         },
         {
@@ -50,7 +61,38 @@
                 "com.webos.service.connectionmanager",
                 "com.webos.applicationManager",
                 "org.webosphoenix.ongoing",
-                "org.webosphoenix.shellhost"
+                "org.webosphoenix.shellhost",
+                "com.webos.service.bluetooth2",
+                "com.webos.service.location",
+                "com.palm.display"
+            ]
+        },
+        {
+            "service": "org.webosphoenix.earbuds",
+            "outbound": [
+                "com.webos.service.pdm",
+                "com.webos.service.wifi",
+                "com.webos.service.connectionmanager",
+                "com.webos.applicationManager",
+                "org.webosphoenix.ongoing",
+                "org.webosphoenix.shellhost",
+                "com.webos.service.bluetooth2",
+                "com.webos.service.location",
+                "com.palm.display"
+            ]
+        },
+        {
+            "service": "org.webosphoenix.trackers",
+            "outbound": [
+                "com.webos.service.pdm",
+                "com.webos.service.wifi",
+                "com.webos.service.connectionmanager",
+                "com.webos.applicationManager",
+                "org.webosphoenix.ongoing",
+                "org.webosphoenix.shellhost",
+                "com.webos.service.bluetooth2",
+                "com.webos.service.location",
+                "com.palm.display"
             ]
         }
     ]

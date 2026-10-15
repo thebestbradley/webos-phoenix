@@ -1,7 +1,9 @@
 {
     "com.webos.surfacemanager": [
         "phoenix.accessories.query",
-        "phoenix.accessories.shell"
+        "phoenix.accessories.shell",
+        "phoenix.earbuds.query",
+        "phoenix.earbuds.management"
     ],
     "org.webosphoenix.gamepads": [
         "physicaldevice.query",
@@ -11,7 +13,12 @@
         "networkconnection.query",
         "application.operation",
         "phoenix.ongoing",
-        "phoenix.shellhost.app"
+        "phoenix.shellhost.app",
+        "bluetooth.query",
+        "bluetooth.operation",
+        "bluetooth.management",
+        "location.query",
+        "devices.display.control"
     ],
     "org.webosphoenix.usb": [
         "physicaldevice.query",
@@ -21,7 +28,12 @@
         "networkconnection.query",
         "application.operation",
         "phoenix.ongoing",
-        "phoenix.shellhost.app"
+        "phoenix.shellhost.app",
+        "bluetooth.query",
+        "bluetooth.operation",
+        "bluetooth.management",
+        "location.query",
+        "devices.display.control"
     ],
     "org.webosphoenix.tethering": [
         "physicaldevice.query",
@@ -31,7 +43,12 @@
         "networkconnection.query",
         "application.operation",
         "phoenix.ongoing",
-        "phoenix.shellhost.app"
+        "phoenix.shellhost.app",
+        "bluetooth.query",
+        "bluetooth.operation",
+        "bluetooth.management",
+        "location.query",
+        "devices.display.control"
     ],
     "org.webosphoenix.battery": [
         "physicaldevice.query",
@@ -41,6 +58,41 @@
         "networkconnection.query",
         "application.operation",
         "phoenix.ongoing",
-        "phoenix.shellhost.app"
+        "phoenix.shellhost.app",
+        "bluetooth.query",
+        "bluetooth.operation",
+        "bluetooth.management",
+        "location.query",
+        "devices.display.control"
+    ],
+    "org.webosphoenix.earbuds": [
+        "physicaldevice.query",
+        "physicaldevice.management",
+        "wifi.query",
+        "wifi.management",
+        "networkconnection.query",
+        "application.operation",
+        "phoenix.ongoing",
+        "phoenix.shellhost.app",
+        "bluetooth.query",
+        "bluetooth.operation",
+        "bluetooth.management",
+        "location.query",
+        "devices.display.control"
+    ],
+    "org.webosphoenix.trackers": [
+        "physicaldevice.query",
+        "physicaldevice.management",
+        "wifi.query",
+        "wifi.management",
+        "networkconnection.query",
+        "application.operation",
+        "phoenix.ongoing",
+        "phoenix.shellhost.app",
+        "bluetooth.query",
+        "bluetooth.operation",
+        "bluetooth.management",
+        "location.query",
+        "devices.display.control"
     ]
 }

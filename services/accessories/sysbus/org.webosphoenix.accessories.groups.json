@@ -3,7 +3,9 @@
         "org.webosphoenix.gamepads",
         "org.webosphoenix.usb",
         "org.webosphoenix.tethering",
-        "org.webosphoenix.battery"
+        "org.webosphoenix.battery",
+        "org.webosphoenix.earbuds",
+        "org.webosphoenix.trackers"
     ],
     "phoenix.accessories.query": [
         "dev"
@@ -13,5 +15,11 @@
     ],
     "phoenix.accessories.shell": [
         "oem"
+    ],
+    "phoenix.earbuds.query": [
+        "dev"
+    ],
+    "phoenix.earbuds.management": [
+        "dev"
     ]
 }

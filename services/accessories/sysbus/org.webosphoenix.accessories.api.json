@@ -13,5 +13,23 @@
     ],
     "phoenix.accessories.shell": [
         "org.webosphoenix.battery/phoenix/usageTick"
+    ],
+    "phoenix.earbuds.query": [
+        "org.webosphoenix.earbuds/getStatus",
+        "org.webosphoenix.trackers/getStatus"
+    ],
+    "phoenix.earbuds.management": [
+        "org.webosphoenix.earbuds/connect",
+        "org.webosphoenix.earbuds/cancelConnect",
+        "org.webosphoenix.earbuds/setNoiseMode",
+        "org.webosphoenix.earbuds/setEarDetection",
+        "org.webosphoenix.earbuds/setConversationAwareness",
+        "org.webosphoenix.earbuds/rename",
+        "org.webosphoenix.earbuds/forget",
+        "org.webosphoenix.trackers/setEnabled",
+        "org.webosphoenix.trackers/playSound",
+        "org.webosphoenix.trackers/stopSound",
+        "org.webosphoenix.trackers/ignore",
+        "org.webosphoenix.trackers/clear"
     ]
 }
