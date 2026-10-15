@@ -99,7 +99,13 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
                       // Its icons all broken: the probe found the manifest good and the catalog makes its icon.
                       { id: "org.webosphoenix.pwa.harbour", title: "Harbour Times", developer: "Harbour Co", summary: "Harbour clocks",
                         categories: ["Travel"], featured: false, manifest: site.manifestUrl, origin: site.url, icon: "",
-                        iconGenerated: { text: "HT", color: "#1d4f7a", why: "manifest's icons are missing" } }]
+                        iconGenerated: { text: "HT", color: "#1d4f7a", why: "manifest's icons are missing" } },
+                      // A site that publishes no manifest (as Slack): the one Phoenix wrote for it, served by the catalog.
+                      { id: "org.webosphoenix.pwa.quay", title: "Quay Chat", developer: "Quay Co", summary: "Chat on the quay",
+                        categories: ["Communication"], featured: false, manifestBy: "phoenix", origin: site.url, icon: site.url + "/favicon.ico",
+                        webManifest: { name: "Quay Chat", short_name: "Quay", start_url: site.url + "/chat/", scope: site.url + "/chat/",
+                                       display: "standalone", theme_color: "#4a154b", background_color: "#ffffff",
+                                       icons: [{ src: site.url + "/favicon.ico", sizes: "16x16 256x256", type: "image/x-icon" }] } }]
         });
         museum = await servers.startMuseum();
         feed = await servers.startFeed();
@@ -201,6 +207,41 @@ describe.skipIf(!servers.phpAvailable())("the Marketplace against the catalog se
         const svg = Buffer.from(pkg.files.find((f: Any) => f.path.endsWith("/icon.svg")).data).toString();
         expect(svg).toMatch(/^<svg [^>]*>.*>HT<\/text><\/svg>/s);
         expect(svg).toContain('fill="#1d4f7a"');
+    });
+
+    it("installs a web app whose site publishes no manifest with the one the catalog wrote, as signed", async () => {
+        const { service, world } = makeService(defaults());
+        await service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
+        const app = (await service.getApp({ sourceId: "phoenix", id: "org.webosphoenix.pwa.quay" })).app;
+        // Served by the catalog, not the site; the index signs its SHA-256.
+        const written = app.pwa.manifest as string;
+        expect(written).toMatch(new RegExp("^" + catalog.catalogUrl + "manifests/org\\.webosphoenix\\.pwa\\.quay-[0-9a-f]{16}\\.webmanifest$"));
+        const file = path.join(catalog.data, "public/v1/manifests", path.basename(written));
+        expect(app.pwa).toEqual({ manifest: written, origin: site.url,
+                                  sha256: crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex") });
+        expect((await fetch(written)).headers.get("content-type")).toBe("application/manifest+json");
+        const r = await service.install({ sourceId: "phoenix", id: "org.webosphoenix.pwa.quay" });
+        expect(r).toMatchObject({ returnValue: true, appId: "org.webosphoenix.pwa.quay", state: "installed" });
+        const pkg = world.installs[0].pkg;
+        // Its start page and scope on the site the index names, though the manifest is on the catalog's host.
+        expect(pkg.apps[0].appinfo).toMatchObject({ id: "org.webosphoenix.pwa.quay", main: site.url + "/chat/", title: "Quay Chat", icon: "icon.png",
+            phoenix: { pwa: { manifest: written, scope: site.url + "/chat/", display: "standalone", themeColor: "#4a154b" } } });
+        // The site's favicon.ico, as the PNG its biggest picture is (Qt would draw its 16 px one).
+        const icon = Buffer.from(pkg.files.find((f: Any) => f.path.endsWith("/icon.png")).data);
+        expect(icon.subarray(0, 4).toString("latin1")).toBe("\x89PNG");
+        expect(icon.subarray(16, 24).readUInt32BE(0)).toBe(256);
+        // A copy that is not the one the index signed (a mirror's, say) is refused.
+        const good = fs.readFileSync(file);
+        fs.writeFileSync(file, good.toString().replace("/chat/\"", "/elsewhere/\""));
+        try {
+            const s2 = makeService(defaults());
+            await s2.service.trustSource({ url: catalog.catalogUrl, key: catalog.key });
+            expect(await s2.service.install({ sourceId: "phoenix", id: "org.webosphoenix.pwa.quay" }))
+                .toMatchObject({ returnValue: false, errorCode: "BAD_MANIFEST", errorText: "The web app's manifest is not the one the catalog signed" });
+            expect(s2.world.installs).toEqual([]);
+        } finally {
+            fs.writeFileSync(file, good);
+        }
     });
 
     it("keeps a web app on its own site when its manifest points elsewhere", async () => {

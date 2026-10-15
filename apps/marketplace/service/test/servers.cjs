@@ -6,7 +6,9 @@
 //   startCatalog()  the real catalog service (server/marketplace, PHP's
 //                   built-in server, SQLite in a temporary folder), set up
 //                   with bin/marketplace.php init and the test web app
-//   startSite()     a web app site: a page, its manifest and icons
+//   startSite()     a web app site: a page, its manifest and icons, and a
+//                   chat page with no manifest (a site the catalog writes one
+//                   for) and its favicon.ico
 //   startMuseum()   an App Museum II stand-in (its web service's shapes, our
 //                   own made-up apps) with a package host: an Enyo app and a
 //                   Mojo app
@@ -134,11 +136,30 @@ async function startCatalog(opts) {
 
 // ---- A web app site ----------------------------------------------------------------
 
+// An ICO of pictures [[size, bytes], ...] (a size of 256 is written 0, as the format has it).
+function ico(pics) {
+    const head = Buffer.alloc(6 + 16 * pics.length);
+    head.writeUInt16LE(1, 2);
+    head.writeUInt16LE(pics.length, 4);
+    let at = head.length;
+    pics.forEach(([size, data], i) => {
+        head[6 + 16 * i] = head[7 + 16 * i] = size % 256;
+        head.writeUInt32LE(data.length, 14 + 16 * i);
+        head.writeUInt32LE(at, 18 + 16 * i);
+        at += data.length;
+    });
+    return Buffer.concat([head].concat(pics.map((p) => p[1])));
+}
+
 async function startSite() {
     const icon192 = png(192, [200, 60, 60]), icon512 = png(512, [200, 60, 60]);
+    // As Slack's favicon.ico: a small bitmap first, then a 256 px PNG.
+    const favicon = ico([[16, Buffer.alloc(40 + 16 * 16 * 4, 9)], [256, png(256, [74, 21, 75])]]);
     let manifest = null;
     const site = await listen((req, res) => {
         const u = req.url.split("?")[0];
+        if (u === "/favicon.ico") { res.writeHead(200, { "Content-Type": "image/x-icon" }); res.end(favicon); return; }
+        if (u === "/chat/") { res.writeHead(200, { "Content-Type": "text/html" }); res.end("<!doctype html><title>Quay Chat</title><h1>Quay Chat</h1>"); return; }
         if (u === "/app/manifest.json") { res.writeHead(200, { "Content-Type": "application/manifest+json" }); res.end(JSON.stringify(manifest)); return; }
         if (u === "/app/icon-192.png") { res.writeHead(200, { "Content-Type": "image/png" }); res.end(icon192); return; }
         if (u === "/app/icon-512.png") { res.writeHead(200, { "Content-Type": "image/png" }); res.end(icon512); return; }
