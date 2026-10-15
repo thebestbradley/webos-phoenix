@@ -250,12 +250,15 @@ Nothing of Slack's is copied into the repository: the icons are fetched
 from Slack when the app is installed, and the listing's from the catalog's
 copy, as for every curated web app. Checked in the simulator the same day:
 Slack is listed, installs with its icon and opens in its own card, where
-Slack answers "Please update your browser or use the Slack app". It serves
-its client only to Chrome 137 or newer, by the user agent (the same request
-naming Chrome/136 is refused with 403, Chrome/137 is served), and Phoenix's
-web runtime names its own Chromium: 122 in the simulator (Qt 6.8), 120 in
-OSE's WAM. Using Slack on Phoenix needs a newer engine or a user agent that
-names a current Chrome for such sites (open).
+Slack answered "Please update your browser or use the Slack app": it serves
+its client only to Chrome 137 or newer, by the user agent, and Phoenix's web
+runtime named its own Chromium (122 in the simulator on Qt 6.8, 120 in OSE's
+WAM). Since 15 October 2026 every page is told Chrome's current version
+(APP-RUNTIME.md, "The web engine and the user agent"), and in phoenix-sim
+Slack's card opens on Slack's sign-in page ("Sign in to your workspace":
+Slack sends a phone's or tablet's Chrome there through `/app`); a desktop
+user agent naming Chrome 155 is served the client itself. The device's web
+runtime gets the same policy with the device stack (open).
 
 ### 1.3 Icons at every density
 

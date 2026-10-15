@@ -14,7 +14,9 @@ include(GNUInstallDirs)
 set(PHOENIX_DATA_DIR "${CMAKE_INSTALL_DATADIR}/phoenix" CACHE STRING "Install location of QML and assets")
 
 # Qt 6.8, the LTS release a device's webOS OSE image ships (meta-qt6,
-# scarthgap: docs/HARDWARE.md); the simulator and CI build with it or newer.
+# scarthgap: docs/HARDWARE.md), is the oldest; the simulator's is 6.11.3
+# (./phoenix; its Qt WebEngine is the newest Qt has, Chromium 140 with
+# security fixes to 153), and CI builds with both.
 set(PHOENIX_QT_MIN 6.8)
 find_package(Qt6 ${PHOENIX_QT_MIN} QUIET COMPONENTS Gui Qml Quick)
 if(NOT Qt6_FOUND)
@@ -27,7 +29,7 @@ if(NOT Qt6_FOUND)
         set(_qt_found "none")
     endif()
     message(FATAL_ERROR "Qt ${PHOENIX_QT_MIN} or newer is needed (found: ${_qt_found}). "
-                        "Pass its location, e.g. -DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64 (scripts/linux-setup.sh "
+                        "Pass its location, e.g. -DCMAKE_PREFIX_PATH=/opt/Qt/6.11.3/gcc_64 (scripts/linux-setup.sh "
                         "installs it there) or -DCMAKE_PREFIX_PATH=\"$(brew --prefix qt)\" on a Mac.")
 endif()
 
@@ -118,7 +120,7 @@ if(PHOENIX_BUILD_SIM)
         # Network: the pages' HTTP proxy (RootfsSchemeHandler, /__phoenix/proxy).
         find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Network)
         target_link_libraries(phoenix-sim PRIVATE Qt6::WebEngineQuick Qt6::Network)
-        target_sources(phoenix-sim PRIVATE sim/simbrowser.cpp sim/simbrowser.h sim/contentfilter.h
+        target_sources(phoenix-sim PRIVATE sim/simbrowser.cpp sim/simbrowser.h sim/contentfilter.h sim/useragent.cpp sim/useragent.h
                                            sim/simdropshare.cpp sim/simdropshare.h
                                            sim/simmarketplace.cpp sim/simmarketplace.h
                                            sim/simtcp.cpp sim/simtcp.h)
@@ -182,11 +184,14 @@ if(PHOENIX_BUILD_SIM)
         target_link_libraries(simfonts-test PRIVATE Qt6::Gui)
         target_compile_definitions(simfonts-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
     endif()
-    # The browser's content blocker and user agents, and DropShare's server
-    # (CI: build/simnet-test).
+    # The browser's content blocker and DropShare's server (CI: build/simnet-test).
     add_executable(simnet-test sim/simnet_test.cpp sim/contentfilter.h sim/simdropshare.cpp sim/simdropshare.h)
     target_link_libraries(simnet-test PRIVATE Qt6::Core Qt6::Network)
     target_compile_definitions(simnet-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
+    # The user agent and client hints every page is shown with, and Chrome's
+    # version on its release cadence (CI: build/useragent-test).
+    add_executable(useragent-test sim/useragent_test.cpp sim/useragent.cpp sim/useragent.h)
+    target_link_libraries(useragent-test PRIVATE Qt6::Core)
     # The Marketplace's catalog service started, stopped and failing, with
     # a stand-in serve.sh, and the one catalog every simulator shares, with
     # the checkout's serve.sh and a stand-in PHP (CI: build/simmarketplace-test).

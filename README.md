@@ -22,7 +22,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md#two-lines-1x-and-20).
 ```
 
 One command installs what is missing (Homebrew's Qt and tools on a Mac; Qt
-6.8.1, Node.js 22 and the packages on Ubuntu; the assistant's models, its
+6.11.3, Node.js 22 and the packages on Ubuntu; the assistant's models, its
 voice, Kitten TTS, and its built-in language model, Qwen3 0.6B),
 builds, and starts the simulator, adaptive: resize its window and it is a
 phone or a tablet by the size, live. `./phoenix run phone` or `tablet` fixes
@@ -240,8 +240,9 @@ switches between its phone and tablet layouts with the apps running on
 ([GETTING-STARTED.md](docs/GETTING-STARTED.md#phone-tablet-or-both-the-adaptive-simulator)).
 What it does, by hand:
 
-Requires Qt 6.8 or newer (6.8 is what a device's webOS OSE image ships)
-with Qt Quick and Qt5Compat. Qt WebEngine is
+Requires Qt 6.8 or newer (6.8 is what a device's webOS OSE image ships;
+the simulator's is 6.11.3, whose Qt WebEngine is the newest Qt has:
+Chromium 140 with security fixes to 153) with Qt Quick and Qt5Compat. Qt WebEngine is
 needed to run the web apps (the original webOS apps and new Phoenix apps);
 without it the simulator shows placeholder apps only. Node.js 22 or 24
 (the LTS lines; 20.19+ also works) builds the Phoenix apps (Settings, Phone,
@@ -286,9 +287,9 @@ cmake --build build
 ./phoenix run
 ```
 
-Ubuntu's own Qt packages stop at 6.4, so `./phoenix` installs Qt 6.8.1 into
+Ubuntu's own Qt packages stop at 6.4, so `./phoenix` installs Qt 6.11.3 into
 `/opt/Qt` with aqtinstall (and Node.js 22, as Ubuntu's nodejs is too old),
-then builds with `-DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64`.
+then builds with `-DCMAKE_PREFIX_PATH=/opt/Qt/6.11.3/gcc_64`.
 
 The window is the **Phoenix WebOS Simulator**: the device's screen under a
 menu bar (on a Mac, the one at the top of the screen) and beside a toolbar.
@@ -545,6 +546,8 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `python3 tools/test-sounds-pcm.py` | The system sounds' raw PCM twins for OSE's audiod (`tools/sounds-to-pcm.py`) |
 | `xvfb-run -a node tools/test-instance-sim.cjs` | Two simulators at once with `--instance`: both run, each keeps its own data and web storage |
 | `build/siminstances-test` | The simulators' registry behind Window > Simulators: two find each other (in one process and in two), one brings the other forward, a crashed one's entry is dropped |
+| `build/useragent-test` | The user agent every page is told (docs/APP-RUNTIME.md, "The web engine and the user agent"): Chrome's current version on its four-week cadence, the override, the strings and client hints per form factor |
+| `xvfb-run -a node tools/test-useragent-sim.cjs` | What a site is sent and its page reads in phoenix-sim (a header-echo site in a web app's card and the browser; phone, tablet, a live switch), and the engine in Settings > Device Info |
 
 The table has the main ones. [docs/COMMANDS.md](docs/COMMANDS.md) lists every
 test (Chromium, C++, Python, shell and PHP), each as a command to copy. CMake

@@ -50,18 +50,25 @@ What it checks, and installs when missing (it prints each one's size first):
 - **Mac:** Xcode's command line tools (Apple's installer opens; run it again
   after), Homebrew (asks for your password), then Homebrew's `qt`, `cmake`,
   `ninja`, `node@22`, `git`, `python@3.12`, `php`, `whisper-cpp`,
-  `llama.cpp` and `onnxruntime`, in one `brew install`.
+  `llama.cpp` and `onnxruntime`, in one `brew install` (and `brew upgrade
+  qt` when Homebrew's is older than 6.11.3).
 - **Ubuntu:** the apt packages (build tools, the libraries Qt loads, and
   `php-cli` and `php-sqlite3` for the Marketplace's catalog),
-  Qt 6.8.1 into `/opt/Qt` with aqtinstall (Ubuntu's own Qt is 6.4),
+  Qt 6.11.3 into `/opt/Qt` with aqtinstall (Ubuntu's own Qt is 6.4; a
+  `build/` made with an older Qt is configured again with it),
   Node.js 22 (NodeSource), espeak-ng, and `whisper-cli` and `llama-server`
   built from the commits meta-phoenix pins into `/usr/local/bin`. It asks
   for sudo when it installs.
 - **Both:** the git submodules, the apps' npm packages, whisper's model
   (148 MB) and the wake word (Vosk, about 90 MB) into `build/`, each
   checked by its SHA-256; then CMake, configured with the Qt it found
-  (`brew --prefix qt`, `/opt/Qt/6.8.1/gcc_64`, `PHOENIX_QT_DIR`, or the one
-  `build/` already has), and the build.
+  (`brew --prefix qt`, `/opt/Qt/6.11.3/gcc_64`, `PHOENIX_QT_DIR`, or the one
+  `build/` already has), and the build. Qt 6.11.3 is the simulator's: its Qt
+  WebEngine is the newest Qt has, Chromium 140 with security fixes to 153
+  (Qt 6.12.0's, the same base, stop at 147; a build already on 6.12.0 is
+  kept; [APP-RUNTIME.md](APP-RUNTIME.md#the-web-engine-and-the-user-agent));
+  `PHOENIX_QT_DIR=/opt/Qt/6.8.1/gcc_64` builds with the device's Qt
+  instead (the oldest it builds with).
 
 At the end it lists what it installed. `scripts/mac-setup.sh` and
 `scripts/linux-setup.sh` still work, with their options: they call
@@ -316,7 +323,7 @@ macOS asks for microphone access the first time. Without a microphone,
 
 | Command | What it does |
 | --- | --- |
-| `./phoenix` | Qt 6.8.1 (into `/opt/Qt`; Ubuntu's own is 6.4), CMake, Node 22; fetch submodules; build; the assistant's parts |
+| `./phoenix` | Qt 6.11.3 (into `/opt/Qt`; Ubuntu's own is 6.4), CMake, Node 22; fetch submodules; build; the assistant's parts |
 | `./phoenix --tests` | Also the test tools |
 | `./phoenix --no-assistant` | Without the assistant's parts |
 
@@ -367,8 +374,9 @@ script put in `.venv` before the DAV and backup tests:
 | Image recipes (parse only) | `scripts/parse-check.sh` (Linux only, about 25 minutes, see [HARDWARE.md](HARDWARE.md#build)) |
 
 `qmltestrunner` is in Qt's `bin` directory: on a Mac
-`"$(brew --prefix qt)/bin/qmltestrunner"`; on Ubuntu (Qt 6.8.1 from
-`./phoenix`) `/opt/Qt/6.8.1/gcc_64/bin/qmltestrunner`.
+`"$(brew --prefix qt)/bin/qmltestrunner"`; on Ubuntu (Qt 6.11.3 from
+`./phoenix`) `/opt/Qt/6.11.3/gcc_64/bin/qmltestrunner`. CI also runs them on
+the device's Qt 6.8.1 (its `qt-6-8` job), where the QML must keep working.
 
 CI runs all of this on every push (`.github/workflows/ci.yml`); what passes
 there should pass locally, and the reverse.
@@ -416,7 +424,7 @@ what its rules are. It is read automatically at the start of each session.
   ```
 
   (`scripts/linux-setup.sh --deps` does the same.) The session then builds
-  with `./phoenix` (or `cmake -S shell -B build -DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64 && cmake --build build`)
+  with `./phoenix` (or `cmake -S shell -B build -DCMAKE_PREFIX_PATH=/opt/Qt/6.11.3/gcc_64 && cmake --build build`)
   and runs the simulator under Xvfb as above.
 - **Agents in parallel:** each works in its own git worktree under
   `.claude/worktrees/`. A worktree needs its own `build/` (CMake) and can
@@ -429,11 +437,11 @@ what its rules are. It is read automatically at the start of each session.
   can't find Homebrew's Qt. Pass `-DCMAKE_PREFIX_PATH="$(brew --prefix qt)"`,
   or delete `build/` and run `./phoenix` again.
 - **Apps show placeholders instead of web apps:** Qt WebEngine wasn't found
-  at configure time. On Ubuntu run `./phoenix` (its Qt 6.8.1
+  at configure time. On Ubuntu run `./phoenix` (its Qt 6.11.3
   includes it); then delete `build/` and configure again.
 - **"Could not find ... Qt6 (requested version 6.8)" on Ubuntu:** Ubuntu's
   own Qt is 6.4. Run `./phoenix`, or configure with
-  `-DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64`.
+  `-DCMAKE_PREFIX_PATH=/opt/Qt/6.11.3/gcc_64`.
 - **"phoenix-apps: npm not found" or the Enact demos are skipped:** Node 22
   isn't on the PATH in the terminal you ran CMake from. Add it (above), then
   run `cmake -S shell -B build` again.

@@ -9,9 +9,11 @@
 # CI (.github/workflows/ci.yml). Kept for the options it has always had.
 # See docs/GETTING-STARTED.md.
 #
-# Qt is 6.8.1, the release a device's webOS OSE image ships (meta-qt6,
-# scarthgap), installed with aqtinstall into /opt/Qt (QT_PREFIX to change
-# it): Ubuntu's own Qt packages stop at 6.4.
+# Qt is 6.11.3, the simulator's (its Qt WebEngine has the newest Chromium,
+# 140 with security fixes to 153; a device's webOS OSE image ships 6.8.1,
+# the oldest the shell builds with),
+# installed with aqtinstall into /opt/Qt (QT_PREFIX to change it): Ubuntu's
+# own Qt packages stop at 6.4.
 #
 #   scripts/linux-setup.sh           install packages (PHP 8 for the
 #                                    Marketplace's catalog among them), fetch

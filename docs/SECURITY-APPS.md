@@ -242,7 +242,7 @@ paths of recently opened `.kdbx` files are the only things the apps put in
   seconds on a phone), recycle bin on, protected password field. Existing
   files keep their settings (AES-KDF, Argon2d, KDBX 3.1 all open). Argon2
   comes from [hash-wasm](https://github.com/Daninet/hash-wasm) 4.12.0 (MIT,
-  WebAssembly); it runs in Chromium 102 (phoenix-sim) and Chromium 120 (OSE)
+  WebAssembly); it runs in phoenix-sim's Chromium (140 on Qt 6.11.3, 122 on Qt 6.8) and Chromium 120 (OSE)
   with `'wasm-unsafe-eval'`, supported since Chromium 97.
 - **Compatibility, checked both ways**: a KDBX 4 / Argon2d file written by
   pykeepass (`apps/passwords/src/fixtures/`) opens, with its `otp` URI and the

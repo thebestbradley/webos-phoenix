@@ -39,7 +39,7 @@ phoenix-ember-glass-ui is webos-phoenix with the 2.0 shell: it takes 1.0's chang
 
 ### Clone webOS Phoenix with its submodules
 
-Run in `parent folder` · Mac + Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:116`
+Run in `parent folder` · Mac + Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:123`
 
 ```sh
 git clone --recurse-submodules https://github.com/thebestbradley/webos-phoenix.git && cd webos-phoenix
@@ -73,7 +73,7 @@ git clone --recurse-submodules https://github.com/thebestbradley/phoenix-ember-g
 
 The original Open webOS apps in `third_party/`. `./phoenix` does this too.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:41 · phoenix:474`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:42 · phoenix:533`
 
 ```sh
 git submodule update --init
@@ -81,7 +81,7 @@ git submodule update --init
 
 ### Update to the latest main
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:122`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:129`
 
 ```sh
 git checkout main && git pull && git submodule update --init
@@ -117,7 +117,7 @@ Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:31`
 
 One command installs Xcode's command line tools, Homebrew, Qt, CMake, Ninja, Node 22, Python 3.12, PHP and the assistant's programs and models, then builds.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:9-10,41-48 · docs/GETTING-STARTED.md:135-144`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:9-10,41-48 · docs/GETTING-STARTED.md:142-151`
 
 Install what's missing, then build:
 
@@ -161,7 +161,7 @@ Show what it would do:
 
 ### Put Node 22 on the PATH for new terminals
 
-Run in `any folder` · Mac · Source: `webos-phoenix/docs/GETTING-STARTED.md:155`
+Run in `any folder` · Mac · Source: `webos-phoenix/docs/GETTING-STARTED.md:162`
 
 ```sh
 echo 'export PATH="$(brew --prefix)/opt/node@22/bin:$PATH"' >> ~/.zprofile
@@ -171,7 +171,7 @@ echo 'export PATH="$(brew --prefix)/opt/node@22/bin:$PATH"' >> ~/.zprofile
 
 Once per terminal, before the DAV, backup and HiDPI tests.
 
-Run in `webos-phoenix` · Mac · Source: `webos-phoenix/docs/GETTING-STARTED.md:314-316`
+Run in `webos-phoenix` · Mac · Source: `webos-phoenix/docs/GETTING-STARTED.md:321-323`
 
 ```sh
 source .venv/bin/activate
@@ -179,7 +179,7 @@ source .venv/bin/activate
 
 ### Set up by hand instead
 
-Run in `webos-phoenix` · Mac · Source: `webos-phoenix/docs/GETTING-STARTED.md:128,161-165`
+Run in `webos-phoenix` · Mac · Source: `webos-phoenix/docs/GETTING-STARTED.md:135,168-172`
 
 ```sh
 xcode-select --install
@@ -207,7 +207,7 @@ cmake --build build
 
 ### Optional extras
 
-Run in `any folder` · Mac · Source: `webos-phoenix/docs/GETTING-STARTED.md:271 · docs/BUILDING-MAC.md:108`
+Run in `any folder` · Mac · Source: `webos-phoenix/docs/GETTING-STARTED.md:278 · docs/BUILDING-MAC.md:108`
 
 To build the Flutter Notes demo:
 
@@ -235,9 +235,9 @@ scripts/mac-setup.sh
 
 ### Install everything and build
 
-It asks for sudo. It installs apt packages, Qt 6.8.1 into `/opt/Qt`, Node 22, and builds `whisper-cli` and `llama-server` into `/usr/local/bin`.
+It asks for sudo. It installs apt packages, Qt 6.11.3 into `/opt/Qt`, Node 22, and builds `whisper-cli` and `llama-server` into `/usr/local/bin`.
 
-Run in `webos-phoenix` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:276-280`
+Run in `webos-phoenix` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:283-287`
 
 ```sh
 ./phoenix
@@ -257,7 +257,7 @@ Also the test tools, xvfb among them:
 
 For a cloud environment's setup script. The two lines do the same thing.
 
-Run in `webos-phoenix` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:374,377 · scripts/linux-setup.sh:48`
+Run in `webos-phoenix` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:382,385 · scripts/linux-setup.sh:50`
 
 ```sh
 ./phoenix setup --tests
@@ -269,17 +269,17 @@ scripts/linux-setup.sh --deps
 
 ### Configure and build by hand with the Qt that ./phoenix installed
 
-Run in `webos-phoenix` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:378`
+Run in `webos-phoenix` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:386`
 
 ```sh
-cmake -S shell -B build -DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64 && cmake --build build
+cmake -S shell -B build -DCMAKE_PREFIX_PATH=/opt/Qt/6.11.3/gcc_64 && cmake --build build
 ```
 
 ### No sound card (containers)
 
 Lets the assistant's voice play into nothing.
 
-Run in `any folder` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:288-290`
+Run in `any folder` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:295-297`
 
 ```sh
 echo 'pcm.!default { type null }' > ~/.asoundrc
@@ -289,7 +289,7 @@ echo 'pcm.!default { type null }' > ~/.asoundrc
 
 It calls `./phoenix`, and takes `--tests`, `--deps` and `--no-assistant`.
 
-Run in `webos-phoenix` · Linux · Source: `webos-phoenix/scripts/linux-setup.sh:16-25`
+Run in `webos-phoenix` · Linux · Source: `webos-phoenix/scripts/linux-setup.sh:18-27`
 
 ```sh
 scripts/linux-setup.sh
@@ -309,7 +309,7 @@ Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:9-10`
 
 ### Start the build over
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:387-400`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:395-408`
 
 ```sh
 rm -rf build && ./phoenix
@@ -317,7 +317,7 @@ rm -rf build && ./phoenix
 
 ### Rebuild only the web apps
 
-Run in `webos-phoenix/apps` · Mac + Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:401-403`
+Run in `webos-phoenix/apps` · Mac + Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:409-411`
 
 ```sh
 npm run build
@@ -325,9 +325,9 @@ npm run build
 
 ### Build into another folder
 
-Other overrides: `PHOENIX_QT_DIR` (a Qt 6.8 or newer), `QT_PREFIX` (Linux, default `/opt/Qt`), `CMAKE_BUILD_PARALLEL_LEVEL`.
+Other overrides: `PHOENIX_QT_DIR` (a Qt 6.8 or newer; 6.11.3 is the simulator's, 6.8.1 the device's), `QT_PREFIX` (Linux, default `/opt/Qt`), `CMAKE_BUILD_PARALLEL_LEVEL`.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:65-67`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:66-68`
 
 ```sh
 PHOENIX_BUILD_DIR=build-other ./phoenix
@@ -335,7 +335,7 @@ PHOENIX_BUILD_DIR=build-other ./phoenix
 
 ### What ./phoenix runs for a new build folder
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:594,602`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:653,669`
 
 **Mac:**:
 
@@ -346,7 +346,7 @@ cmake -S shell -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_PREFI
 **Linux:**:
 
 ```sh
-cmake -S shell -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64
+cmake -S shell -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_PREFIX_PATH=/opt/Qt/6.11.3/gcc_64
 ```
 
 ```sh
@@ -357,7 +357,7 @@ cmake --build build --parallel
 
 CMake switches: `PHOENIX_BUILD_SIM`, `PHOENIX_BUILD_KEYBOARD` and `PHOENIX_BUILD_APPS`, all on by default.
 
-Run in `webos-phoenix` · Mac · Source: `webos-phoenix/shell/CMakeLists.txt:11,49,164 · .github/workflows/ci.yml:157`
+Run in `webos-phoenix` · Mac · Source: `webos-phoenix/shell/CMakeLists.txt:11,51,166 · .github/workflows/ci.yml:162`
 
 ```sh
 cmake -S shell -B build -DCMAKE_BUILD_TYPE=Release -DPHOENIX_BUILD_APPS=OFF -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
@@ -397,7 +397,7 @@ Show the command it would run:
 
 ### Run without building
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:175,185`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:182,192`
 
 ```sh
 ./build/phoenix-sim
@@ -411,7 +411,7 @@ Every option:
 
 ### Start as a new device
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:189,225-256 · CLAUDE.md:73`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:190,226-257 · CLAUDE.md:78`
 
 Run First Use again:
 
@@ -435,7 +435,7 @@ HOME=$(mktemp -d) ./build/phoenix-sim --tablet
 
 Each `--instance` is a device of its own: its own data, installed apps, web storage and settings. Without it, two simulators would share one device and one web storage. Each one's **Window** menu lists every simulator running for you, from any checkout or build (its layout and size, look and checkout), and brings the one you choose to the front; **Next Simulator** (Ctrl+Shift+\) goes to the next.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:225-256,733-766 · shell/sim/siminstances.h · shell/sim/simchrome.cpp:572-729 · docs/GETTING-STARTED.md:227-250`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:226-257,749-782 · shell/sim/siminstances.h · shell/sim/simchrome.cpp:572-729 · docs/GETTING-STARTED.md:234-257`
 
 1.0:
 
@@ -453,7 +453,7 @@ in `phoenix-ember-glass-ui`: 2.0, with the rebuilt apps:
 
 SSH sessions and containers. `./phoenix run` does this itself when xvfb-run is installed.
 
-Run in `webos-phoenix` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:305-306 · phoenix:638-650`
+Run in `webos-phoenix` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:312-313 · phoenix:705-717`
 
 ```sh
 QTWEBENGINE_DISABLE_SANDBOX=1 xvfb-run -a -s "-screen 0 1920x1200x24" ./build/phoenix-sim --tablet --scene cards --screenshot out.png
@@ -463,7 +463,7 @@ QTWEBENGINE_DISABLE_SANDBOX=1 xvfb-run -a -s "-screen 0 1920x1200x24" ./build/ph
 
 ### Phone, tablet or adaptive
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:180-183`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:181-184`
 
 ```sh
 ./build/phoenix-sim --phone
@@ -481,7 +481,7 @@ The layout switches live as you resize the window:
 
 ### A custom screen
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:187,200,285-287`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:188,201,286-288`
 
 A Pre 3:
 
@@ -505,7 +505,7 @@ A hardware Home button instead of the gesture bar:
 
 Device IDs: `fairphone-fp6`, `ayn-odin2portal`, `pinephonepro`, `pinetab2`, `raspberrypi4-64`. Don't add phone or tablet with it.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:16-20,132-139 · shell/sim/main.cpp:184,186`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:16-20,145-152 · shell/sim/main.cpp:185,187`
 
 ```sh
 ./phoenix run --device fairphone-fp6
@@ -519,7 +519,7 @@ Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:16-20,13
 
 ### Orientation
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:198-199 · README.md:408-411`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:199-200 · README.md:409-412`
 
 Up, left, down or right:
 
@@ -539,7 +539,7 @@ Turns the device a second after start-up:
 
 `./build/phoenix-sim --help` lists them all: `locked` `cards` `stacks` `reorder` `maximized` `heldcard` `launcher` `launcheredit` `launchermenu` `launchergroup` `launchergroupopen` `launchertabs` `launcherinstall` `wave` `powermenu` `pin` `emergency` `firstuse` `lowbattery` `banner` `notified` `dashboard` `justtype` `keyboard` `clipstrip` `assistant` `systemmenu` `modal` `empty` `longstack` `hot` `notifystacks` `notifystacksbar` `notifystackslocked` `drawer` `capture` `capturepreview` `assistantbird` `assistantbirds` `assistantbirdmoves` `wakeword` `wakewordlocked` `followup` `followupanswer` `followuplater` `followupaction` `followupchat`.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:188 · shell/qml/sim.qml:522-540,1260-1263,2023-2072`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:189 · shell/qml/sim.qml:522-540,1260-1263,2023-2072`
 
 ```sh
 ./build/phoenix-sim --tablet --scene dashboard --screenshot dash.png
@@ -555,7 +555,7 @@ The assistant, asked one or more questions separated by |:
 
 Repeat `--launch` for several apps.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:196-197 · README.md:400,443-447`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:197-198 · README.md:401,444-448`
 
 ```sh
 ./build/phoenix-sim --launch com.palm.app.notes
@@ -593,7 +593,7 @@ Three cards to choose from:
 
 `--extra-rootfs` can be repeated. `--installed-dir DIR` changes where installed apps go.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:194-195 · docs/APP-RUNTIME.md:72`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:195-196 · docs/APP-RUNTIME.md:72`
 
 ```sh
 ./phoenix run tablet --extra-rootfs ../phoenix-default-apps/build/rootfs --launch com.palm.app.notes
@@ -603,7 +603,7 @@ Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.c
 
 Saves a PNG and exits. The default delay is 1500 ms.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:60-61 · shell/sim/main.cpp:190-191`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:64-65 · shell/sim/main.cpp:191-192`
 
 ```sh
 ./phoenix run tablet --launch org.webosphoenix.settings --screenshot out.png --delay 8000
@@ -619,7 +619,7 @@ Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:60-61 
 
 Also: `--low-memory` `--stay-awake` `--quiet` `--usb` `--usb-busy` `--touch-to-share` `--boot-animation` `--no-boot-animation` `--no-toolbar` `--check-chrome`. `./build/phoenix-sim --help` explains each.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:201-224`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:202-225`
 
 ```sh
 ./build/phoenix-sim --tablet --hardware-keyboard
@@ -639,7 +639,7 @@ A passcode policy; none turns it off:
 
 Also: `--host-shell PATH`, `--no-tcp-relay`, `--llama-server PATH`, `--speech-command CMD`, `--wake-model DIR`, `--vosk-library FILE`, `--wake-file FILE`, `--qml-dir DIR`, `--repo-dir DIR`. Environment: `PHOENIX_WHISPER_CLI`, `PHOENIX_WHISPER_MODEL`, `PHOENIX_TTS_PROGRAM`.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:192-193,206-216 · README.md:357-358`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:193-194,207-217 · README.md:358-359`
 
 Start the catalog and open the Marketplace:
 
@@ -669,7 +669,7 @@ WAV files as the microphone, in turn:
 
 The shell tells by the renderer whether a GPU draws, and prints it (`phoenix: renderer ...`). Without one it leaves out the blur behind translucent surfaces, as it always did with Qt Quick's software renderer: also for OpenGL or Vulkan on a software rasteriser such as Mesa's llvmpipe (a VM, a container, a board without its GPU driver). `PHOENIX_SOFTWARE_RENDERING` (`1`, `0` or `auto`) does the same on a device.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:227,300-309 · shell/native/renderinfo.h`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:228,301-310 · shell/native/renderinfo.h`
 
 As without a GPU: no blur:
 
@@ -695,7 +695,7 @@ PHOENIX_SOFTWARE_RENDERING=1 ./build/phoenix-sim
 
 Once per terminal.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:80-81 · docs/GETTING-STARTED.md:328-330`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:86-87 · docs/GETTING-STARTED.md:335-337`
 
 **Mac:**:
 
@@ -706,12 +706,12 @@ export QMLTEST="$(brew --prefix qt)/bin/qmltestrunner"
 **Linux:**:
 
 ```sh
-export QMLTEST=/opt/Qt/6.8.1/gcc_64/bin/qmltestrunner
+export QMLTEST=/opt/Qt/6.11.3/gcc_64/bin/qmltestrunner
 ```
 
 ### Run the QML tests
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:181,488-498 · README.md:465`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:186,561-571 · README.md:466`
 
 **Mac:** All of them, as CI runs them on the Mac (offscreen Metal stalls animations):
 
@@ -747,7 +747,7 @@ QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen "$QMLTEST" -import shell/qml -import
 
 There's nothing for `ctest` to find: run each test program by name after a build.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:186-265,536-549 · shell/CMakeLists.txt:67-73,125-192`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:191-274,609-623 · shell/CMakeLists.txt:69-75,127-197`
 
 ```sh
 build/pty/pty-test
@@ -789,6 +789,12 @@ python3 tools/get-wakeword.py && build/wakeword-test
 
 ```sh
 build/simnet-test
+```
+
+The user agent policy: Chrome's version on its cadence, the strings per form factor:
+
+```sh
+build/useragent-test
 ```
 
 ```sh
@@ -833,7 +839,7 @@ build/simfonts-test
 
 The static checks a device image would trip on.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:33-38,74-77 · tools/check-device.sh:8-15`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:33-38,75-78 · tools/check-device.sh:8-15`
 
 ```sh
 ./phoenix check-device
@@ -855,7 +861,7 @@ Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:33-38,74
 
 ### Python, shell and PHP tests
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:73,76,101-105,217 · tools/test-make-utm.py:10-11`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:78,81,106-110,222 · tools/test-make-utm.py:10-11`
 
 ```sh
 sh tools/test-phoenix-script.sh
@@ -911,7 +917,7 @@ php server/drivers/tests/run.php
 
 `hidpi-art.py` needs Pillow and NumPy (on a Mac, from `.venv`); `make-feedback-sounds.py` needs ffmpeg.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:86 · .github/workflows/ci.yml:256-279`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:93 · .github/workflows/ci.yml:265-288`
 
 Whenever art or stylesheets change:
 
@@ -961,7 +967,7 @@ python3 tools/release-notes-doc.py --check
 
 On a Mac, turn on `.venv` first: the DAV tests need Radicale.
 
-Run in `webos-phoenix/apps` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:83 · apps/package.json:55-58`
+Run in `webos-phoenix/apps` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:90 · apps/package.json:55-58`
 
 ```sh
 npm run typecheck && npx vitest run
@@ -995,7 +1001,7 @@ node ../tools/check-lockfile.cjs
 
 `./phoenix --tests` does this for you.
 
-Run in `any folder` · Mac + Linux · Source: `webos-phoenix/phoenix:553-557`
+Run in `any folder` · Mac + Linux · Source: `webos-phoenix/phoenix:612-616`
 
 **Mac:**:
 
@@ -1013,7 +1019,7 @@ sudo npm install -g playwright@1 && sudo npx --yes playwright@1 install --with-d
 
 Add `--tablet` for the tablet layout and `--out DIR` to keep the screenshots. Tests ending in `-sim` start phoenix-sim: on Linux without a display, put `xvfb-run -a -s "-screen 0 1920x1200x24"` in front. Search for an app to find its test.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:84 · tools/test-*.cjs (each file's usage line)`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:91-92 · tools/test-*.cjs (each file's usage line)`
 
 Account templates as connectors install and go, Find More, {templateId}:
 
@@ -1423,6 +1429,12 @@ A Telegram account:
 NODE_PATH="$(npm root -g)" node tools/test-telegram.cjs
 ```
 
+What sites are sent and pages read: the user agent and client hints in phoenix-sim:
+
+```sh
+NODE_PATH="$(npm root -g)" node tools/test-useragent-sim.cjs
+```
+
 Terminal: the simulated shell, then /bin/sh:
 
 ```sh
@@ -1493,7 +1505,7 @@ NODE_PATH="$(npm root -g)" node tools/smoke-apps.cjs
 
 ### Install, build, typecheck, test
 
-Run in `webos-phoenix/apps` · Mac + Linux · Source: `webos-phoenix/apps/package.json:54-59 · CLAUDE.md:52`
+Run in `webos-phoenix/apps` · Mac + Linux · Source: `webos-phoenix/apps/package.json:54-59 · CLAUDE.md:56`
 
 ```sh
 npm ci --no-audit --no-fund
@@ -1533,7 +1545,7 @@ npm run dev -w settings
 
 Separate npm projects, in `apps/enact-notes-limestone` and `apps/enact-notes-agate`.
 
-Run in `webos-phoenix/apps/enact-notes-limestone` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:115`
+Run in `webos-phoenix/apps/enact-notes-limestone` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:120`
 
 ```sh
 npm ci --no-audit --no-fund && npm run typecheck && npm run build
@@ -1549,7 +1561,7 @@ npm run serve
 
 Needs Flutter.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:130-140 · apps/flutter-notes/README.md:55-58`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:135-145 · apps/flutter-notes/README.md:55-58`
 
 ```sh
 (cd apps/shared/phoenix_services && dart pub get && dart analyze --fatal-infos && dart test)
@@ -2123,7 +2135,7 @@ container volume delete webos-phoenix-work
 
 x86-64 Ubuntu with about 200 GB free. Naming several machines configures them all; `MCF_COMMAND=configure` only writes the configuration.
 
-Run in `webos-phoenix` · Linux · Source: `webos-phoenix/README.md:533-537 · scripts/setup-build.sh:7-17`
+Run in `webos-phoenix` · Linux · Source: `webos-phoenix/README.md:534-538 · scripts/setup-build.sh:7-17`
 
 ```sh
 scripts/setup-build.sh ../build-webos-phoenix qemux86-64 fairphone-fp6
@@ -2505,7 +2517,7 @@ node tools/platform-mock/server.cjs --port 8099 --seed --write-servers /tmp/serv
 
 `./phoenix` fetches these itself.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:509,519,532,540 · tools/get-whisper-model.py:33-34`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:568,578,591,599 · tools/get-whisper-model.py:33-34`
 
 --model base.en or tiny.en:
 

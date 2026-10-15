@@ -200,7 +200,8 @@ int main(int argc, char **argv)
     // A file as the microphone, ending by itself, with the prompt passed on.
     {
         QTemporaryFile wavFile(QDir::tempPath() + QStringLiteral("/dictation-test-XXXXXX.wav"));
-        wavFile.open();
+        if (!wavFile.open())
+            check(false, "the test writes its recording");
         wavFile.write(Dictation::wav(tone, 16000));
         wavFile.close();
         Dictation d;

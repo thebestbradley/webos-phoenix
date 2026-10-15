@@ -191,7 +191,8 @@ int main(int argc, char **argv)
     const qint64 deadPid = gone.processId();
     gone.waitForFinished();
     const QString ghostSocket = QDir(dir).filePath(QStringLiteral("phoenix-sim-ghost.sock"));
-    QFile(ghostSocket).open(QIODevice::WriteOnly);
+    if (!QFile(ghostSocket).open(QIODevice::WriteOnly))
+        check(false, QStringLiteral("the test writes the crashed one's socket file"));
     writeEntry(dir, QStringLiteral("phoenix-sim-ghost"), entry(QStringLiteral("ghost"), deadPid, ghostSocket));
     writeEntry(dir, QStringLiteral("phoenix-sim-reused"),
                entry(QStringLiteral("reused"), QCoreApplication::applicationPid(), QDir(dir).filePath(QStringLiteral("phoenix-sim-reused.sock"))));
@@ -218,7 +219,8 @@ int main(int argc, char **argv)
 
     // A folder that cannot be made: listed nowhere, but itself.
     QFile blocker(tmp.filePath(QStringLiteral("file")));
-    blocker.open(QIODevice::WriteOnly);
+    if (!blocker.open(QIODevice::WriteOnly))
+        check(false, QStringLiteral("the test writes the file in the folder's way"));
     blocker.close();
     SimInstances lone(tmp.filePath(QStringLiteral("file/instances")), QStringLiteral("lone"));
     check(!lone.start({}) && !lone.waiting() && names(lone.instances()) == QLatin1String("lone*"),

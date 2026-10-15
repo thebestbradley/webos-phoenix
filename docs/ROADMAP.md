@@ -87,7 +87,7 @@ October 2026 on. Open questions are listed in [STATUS.md](STATUS.md#decisions-fo
 | --- | --- | --- |
 | Direction | 1.x classic and never deprecated; 2.0 modern and additive only | above |
 | LuneOS | Stay independent; build device images on LuneOS's Yocto layers without a partnership; outreach on hold | [LUNEOS.md](LUNEOS.md#the-owners-position-28-september-2026) |
-| Web engine | The newest everywhere (15 October 2026): devices on Chromium 151 through LuneOS's layer stack (wrynose, Qt 6.12), leaving OSE's `build-webos` (Chromium 120); the simulator on Qt 6.12's WebEngine; every web app sends Chrome on Android's user agent with the current Chrome major | [DECISIONS.md](DECISIONS.md#15-october-2026-the-newest-web-engine-on-every-system) |
+| Web engine | The newest everywhere (15 October 2026): devices on Chromium 151 through LuneOS's layer stack (wrynose, Qt 6.12), leaving OSE's `build-webos` (Chromium 120); the simulator on Qt 6.11.3's WebEngine (Chromium 140, security fixes to 153); every web app sends Chrome on Android's user agent with the current Chrome major | [DECISIONS.md](DECISIONS.md#15-october-2026-the-newest-web-engine-on-every-system) |
 | Devices | Install like a Linux distro, on as much hardware as possible, so makers build for it again; keyboard phones (Zinwa Q25 first) and Linux phones (FuriLabs, Volla, PinePhone Pro, Fairphone) as targets | [HARDWARE.md](HARDWARE.md) |
 | Gesture bar | On every device unless the maker ships a hardware home button (`device.json`) | [HARDWARE.md](HARDWARE.md#device-configuration) |
 | Screens | Landscape on phones and tablets; the shell resizes to any window or screen | [spec/GAPS.md](spec/GAPS.md) R1 |

@@ -376,6 +376,12 @@ export interface OsInfo {
     core_os_name?: string;
     core_os_release?: string;
     core_os_kernel_version?: string;
+    /** Phoenix's: the web engine the pages run in (phoenix-sim's Qt WebEngine): "Chromium". */
+    phoenix_web_engine?: string;
+    /** Its version ("140.0.7339.225"), the engine's own, not the user agent's. */
+    phoenix_web_engine_version?: string;
+    /** The Chromium release whose security fixes it carries ("153.0.8010.52"). */
+    phoenix_web_engine_security_patches?: string;
     [key: string]: unknown;
 }
 
