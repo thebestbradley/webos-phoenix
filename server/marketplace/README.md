@@ -155,6 +155,28 @@ lettering, not the brand's logo. Its start page is the
 manifest's `start_url` when that is on the site, else the site (as
 browsers do, so a manifest kept on a CDN still starts on the site).
 
+A site that publishes no manifest at all can still be listed with one
+Phoenix writes for it, as browser extensions do for Slack (docs/APP-STORE.md
+1.2, "A site with no manifest"): its line in `curated-sites.json` carries
+`"webManifest"`, a web app manifest with the site's name, its start page
+and scope on the site, `"display": "standalone"`, its colours, and as icons
+the pictures the site publishes for browsers and home screens, at their
+addresses on the site (Slack's `/favicon.ico` and
+`/apple-touch-icon-precomposed.png`; never a copy in the repository). The
+probe uses it only when it finds no manifest of the site's own (when it
+finds one, it says the entry's can go), makes its addresses absolute
+(the catalog serves it from its own address), checks that its start page is
+an https page on the site that answers, that its scope holds it and that an
+icon is there (else the generated icon, as above), and records it in
+`curated-pwas.json` with `"manifestBy": "phoenix"` and no `"manifest"`.
+`seed` publishes it, `/v1/manifests/<id>-<hash>.webmanifest`
+(`Catalog::writeManifest`; a start page off the site is not listed), named by
+its contents as an app's detail is, and `publish` gives its SHA-256 in the
+signed index, `"pwa": {manifest, origin, sha256}`: a device takes that
+manifest only when it matches, and starts the app only on `origin`, as
+for any manifest. A changed manifest is a new file; the old one stays for
+the indexes that name it until they have expired.
+
 Devices get every picture from the catalog itself: the index names an icon
 or screenshot on another site as the catalog's copy,
 `/v1/icons/copy/<id>-<hash of its address>` (`/v1/screenshots/copy/...`).
@@ -182,15 +204,16 @@ proxy the operator trusts (it then resolves the names).
 `bin/serve.sh` publishes the index again at each start, and runs PHP's
 server with several workers, since a first copy waits on its site.
 
-Today 139 of the 167 sites are listed, three of them (Ground News, NYT
+Today 140 of the 168 sites are listed, three of them (Ground News, NYT
 Games, Formula 1) with generated icons, as all the icons their manifests
 name are missing (probed again 9 October 2026; JS Paint, JupyterLite, Cinny
 and FluffyChat, open-source web apps linked rather than hosted, added 13
 October 2026, docs/WEB-APP-CATALOG.md; Elk, Wavacity and CyberChef, added
-then too, have no manifest the probe can find). Of the rest, some show a
+then too, have no manifest the probe can find), and one, Slack (added 15
+October 2026), with the manifest Phoenix writes for it. Of the rest, some show a
 visitor who is not signed in no manifest at all (Bluesky, Discord, Notion,
 Trello, Word, OneDrive, Tuta, Zoho Mail, Yahoo Mail, Evernote, McDonald's,
-trivago), and the others turned the probe away with a bot check from the cloud network it ran
+trivago: each could be given a `webManifest` as Slack was), and the others turned the probe away with a bot check from the cloud network it ran
 on (Canva, The New York Times, Reuters, The Economist, Skyscanner,
 Tripadvisor, DoorDash, Revolut, Stack Overflow, CodePen, Yelp, VSCO,
 Reddit). ChatGPT's Cloudflare check lets the probe through only at times.

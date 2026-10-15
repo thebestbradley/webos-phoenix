@@ -350,7 +350,14 @@ data use "Phoenix Account".
 - **Curated web apps** (`server/marketplace/catalog/curated-*.json`): the
   sites' names, descriptions and icons come from each site's own web app
   manifest, which a site publishes so it can be installed; the app opens the
-  site itself. Phoenix lists them without asking first and removes a site
+  site itself. A site that publishes no manifest (Slack, 15 October 2026) is
+  described by one Phoenix writes (`webManifest`, docs/APP-STORE.md 1.2):
+  its name, and as icons the pictures the site publishes for browsers and
+  home screens (its favicon, its Apple touch icon), named by their addresses
+  on the site and fetched from there when the app is installed (the
+  listing's from the catalog's copy, as for every curated site), never
+  copied into the repository. The descriptions are ours. Phoenix lists them
+  without asking first and removes a site
   that opts out (the opt-out list in the catalog service, decision of
   1 October 2026). Names and logos remain their owners' trademarks.
 - **App Museum II** (webOS Archive): the Marketplace reads its public API
