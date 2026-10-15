@@ -12,7 +12,13 @@
 // methods, replies and errors: runtime/phoenix-runtime.js
 // "com.palm.systemmanager: device lock"):
 //   getDeviceLockMode {subscribe} -> {lockMode: "none" | "pin" | "password",
-//       policyState: "none" | "active" | "pending", retriesLeft}
+//       policyState: "none" | "active" | "pending", retriesLeft, pinLength?}
+//       pinLength (Phoenix; the owner, 14 October 2026): the PIN's length,
+//       to the shell alone (its lock screen unlocks once that many digits
+//       are in, with no Done, and counts a wrong PIN of that length as a
+//       failed try); left out when not known (a lock kept without its
+//       traits, until the right PIN next unlocks the device and
+//       matchDevicePasscode records them)
 //   getSecurityPolicy {} -> {policy: {password: {enabled, minLength,
 //       maxRetries, alphaNumeric, allowSimplePassword?}, inactivityInSeconds,
 //       id, status: {enforced, retriesLeft}}}, or returnValue false without
@@ -222,8 +228,17 @@ function createSystemManager(deps) {
             return fn(s, lockState(s, docs));
         });
     }
-    function lockModeReply(st) {
-        return ok({ lockMode: st.l.lockMode, policyState: policyState(st), retriesLeft: easRetriesLeft(st) });
+    // The PIN's length, 0 when there is no PIN or it is not known.
+    function pinLength(l) {
+        return l.lockMode === "pin" && l.traits && l.traits.mode === "pin" && l.traits.length > 0 ? l.traits.length : 0;
+    }
+    // shell: the shell asked (only it hears the PIN's length; the
+    // subscribers' later replies never carry it).
+    function lockModeReply(st, shell) {
+        var r = ok({ lockMode: st.l.lockMode, policyState: policyState(st), retriesLeft: easRetriesLeft(st) });
+        if (shell && pinLength(st.l) > 0)
+            r.pinLength = pinLength(st.l);
+        return r;
     }
     function notify(kind, reply) {
         watchers[kind].slice().forEach(function (fn) { fn(reply); });
@@ -233,8 +248,8 @@ function createSystemManager(deps) {
     }
 
     var methods = {
-        getDeviceLockMode: function () {
-            return withLock(function (s, st) { return lockModeReply(st); });
+        getDeviceLockMode: function (p, sender) {
+            return withLock(function (s, st) { return lockModeReply(st, deps.isShell(sender)); });
         },
         getSecurityPolicy: function () {
             return withLock(function (s, st) {
@@ -301,6 +316,10 @@ function createSystemManager(deps) {
                 } else {
                     l.numRetries = DEFAULT_RETRIES;
                 }
+                // A PIN kept without its traits: the right one records
+                // them, its length for pinLength.
+                if (good && l.lockMode === "pin" && !pinLength(l))
+                    l.traits = traits("pin", String(p.passCode || ""));
                 save(s);
                 if (counted)
                     notifyLockMode();

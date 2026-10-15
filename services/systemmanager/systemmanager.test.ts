@@ -62,6 +62,39 @@ describe("the device lock", () => {
         expect((await w.call("matchDevicePasscode", { passCode: "secret1" })).succeeded).toBe(true);
     });
 
+    // The lock screen unlocks once the PIN's length is in, with no Done (the
+    // owner, 14 October 2026): the shell alone hears the length.
+    it("tells the shell alone the PIN's length", async () => {
+        const w = world();
+        const SHELL = "com.webos.surfacemanager";
+        await w.call("setDevicePasscode", { lockMode: "pin", passCode: "135790" });
+        expect(await w.call("getDeviceLockMode", {}, SHELL)).toEqual({ returnValue: true, lockMode: "pin", policyState: "none", retriesLeft: 0, pinLength: 6 });
+        expect((await w.call("getDeviceLockMode")).pinLength).toBeUndefined();
+        const heard: Any[] = [];
+        w.m.watch("getDeviceLockMode", (r: Any) => heard.push(r));
+        await w.call("setDevicePasscode", { lockMode: "pin", passCode: "2468", oldPasscode: "135790" });
+        await new Promise((r) => setTimeout(r, 0));
+        expect(heard.at(-1).lockMode).toBe("pin");
+        expect(heard.at(-1).pinLength).toBeUndefined();
+        expect((await w.call("getDeviceLockMode", {}, SHELL)).pinLength).toBe(4);
+        // A password's is never told.
+        await w.call("setDevicePasscode", { lockMode: "password", passCode: "secret1", oldPasscode: "2468" });
+        expect((await w.call("getDeviceLockMode", {}, SHELL)).pinLength).toBeUndefined();
+    });
+
+    it("learns the length of a PIN kept without it when it next unlocks", async () => {
+        // A lock saved before its traits were kept: the hash alone.
+        const w = world({ state: { lock: { lockMode: "pin", hash: fakeKdf.hash("24680") } } });
+        const SHELL = "com.webos.surfacemanager";
+        expect((await w.call("getDeviceLockMode", {}, SHELL)).pinLength).toBeUndefined();
+        expect((await w.call("matchDevicePasscode", { passCode: "1234" })).succeeded).toBe(false);
+        expect((await w.call("getDeviceLockMode", {}, SHELL)).pinLength).toBeUndefined();
+        expect((await w.call("matchDevicePasscode", { passCode: "24680" })).succeeded).toBe(true);
+        expect((await w.call("getDeviceLockMode", {}, SHELL)).pinLength).toBe(5);
+        expect(w.saved().lock.traits).toMatchObject({ mode: "pin", length: 5, digitsOnly: true });
+        expect(JSON.stringify(w.saved().lock.traits)).not.toContain("24680");
+    });
+
     it("holds the next try off for 15 s after three wrong ones (Security.cpp:43-44)", async () => {
         const w = world();
         await w.call("setDevicePasscode", { lockMode: "pin", passCode: "4711" });

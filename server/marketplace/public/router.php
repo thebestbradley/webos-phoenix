@@ -10,6 +10,18 @@
 
 declare(strict_types=1);
 
+// Which PHP server this is, for bin/serve.sh (claim_when_serving): the
+// process that started it, from its environment, so the one answering at
+// the port is told from another program there (an older simulator's
+// catalog) before the catalog is taken for this folder's. Empty elsewhere
+// (Apache, nginx, a server run without serve.sh).
+if (parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) === '/_phoenix/serving') {
+    header('Content-Type: text/plain');
+    header('Cache-Control: no-store');
+    echo (string) getenv('PHOENIX_CATALOG_SERVING'), "\n";
+    return;
+}
+
 require __DIR__ . '/../src/bootstrap.php';
 
 use Phoenix\Marketplace\App;

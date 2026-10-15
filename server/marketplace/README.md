@@ -25,7 +25,10 @@ Support/Phoenix/catalog`; `MARKETPLACE_DATA` names another, for every tool
 publish --local`, phoenix-sim). The folder holds the database, the signing
 key, the uploads, the published catalog (`public/v1`), the update feed
 (`updates`), the log (`simulator.log`), the fills' state (`fill/`) and, while
-it runs, `server.json` (its process, port and checkout). The first start
+it runs, `server.json` (the process serving it, its port, the simulator that
+started it and the checkout), which that process writes once its PHP serves
+the port (`/_phoenix/serving` answers with the process that started it) and
+alone removes. The first start
 imports the checkout's old `server/marketplace/data` when the folder has no
 catalog yet (the log says so; the old folder is left as it was). **Keep a
 copy of its `signing.key`**: with a new key every device has to trust the
@@ -46,8 +49,10 @@ started it, and those listed in the simulators' registry,
 `shell/sim/siminstances.h`, older builds' too), and stops it a few seconds
 after the last one quits or crashes (`PHOENIX_CATALOG_GRACE`, 5). A
 simulator whose catalog went away starts it again, unless it was stopped from
-the menu (for every simulator). Run by hand, `serve.sh` serves until it is
-stopped.
+the menu (for every simulator: every watch stops within a second, and so do
+the worker processes PHP forks, which on a Mac outlive PHP). Two simulators
+starting it at once set it up one after the other. Run by hand, `serve.sh`
+serves until it is stopped (Ctrl+C, or a simulator's menu).
 
 **It fills itself.** Each start publishes the curated web apps (`seed`,
 `publish`), then, in the background, `bin/web-apps.py fill`: the open-source

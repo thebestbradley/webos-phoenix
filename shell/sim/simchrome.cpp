@@ -872,6 +872,20 @@ void SimChrome::changeEvent(QEvent *event)
 bool SimChrome::eventFilter(QObject *watched, QEvent *event)
 {
     if (watched == windowHandle() && (event->type() == QEvent::KeyPress || event->type() == QEvent::KeyRelease)) {
+        // The screen's window is then not the focus window, and Qt Quick
+        // gives a key only to the item with the active focus, which only
+        // the focus window has (QQuickWindow::focusOutEvent takes it away,
+        // QQuickDeliveryAgent's deliverKeyEvent needs it): the key reaches
+        // the shell's window-wide filters there (the system keys; the lock
+        // screen's keys, which wake the screen and open the passcode's
+        // entry), but typed into a field it went nowhere, and so did every
+        // key after it. The hand-back when this window took the focus
+        // (showWithScreen) can come too early: X11 refuses a focus change
+        // older than the last (xdotool's windowfocus, a window manager's).
+        // So the screen asks for the keyboard again with this key's time,
+        // and the next key reaches its focused item.
+        if (event->type() == QEvent::KeyPress && QGuiApplication::focusWindow() != m_view)
+            m_view->requestActivate();
         std::unique_ptr<QEvent> copy(event->clone());
         QCoreApplication::sendEvent(m_view, copy.get());
         return true;

@@ -1044,9 +1044,14 @@ using it. Now:
 - **It runs while any simulator runs, whichever started it.** The first
   simulator that wants it starts `serve.sh`, which sets the catalog up and
   then leaves PHP's server running on its own, under a small watch of its
-  own, and writes `server.json` (its process, port and checkout) in the
-  folder. Every other simulator finds it answering at 127.0.0.1:8088 and
-  uses it. The watch reads the simulators' own registry, the per-user
+  own, which writes `server.json` (its process, port, checkout and the
+  simulator that started it) in the folder once its PHP serves the port
+  (what answers there says it is that PHP: `/_phoenix/serving`, from its
+  environment); only that watch removes it. Every other simulator finds it answering at
+  127.0.0.1:8088 and uses it. Two simulators starting it at once set it up
+  one after the other (one setup at a time per folder), and the one PHP
+  that can listen serves it; the other's watch ends without writing
+  `server.json`. The watch reads the simulators' own registry, the per-user
   folder each phoenix-sim lists itself in (`shell/sim/siminstances.h`,
   which simulators of older builds write too), every second, and counts
   the simulator that started it besides (it lists itself only once its
@@ -1059,9 +1064,23 @@ using it. Now:
   while it ran (stopped by the watch as another started, or killed) starts
   it again, unless someone stopped it from the Services menu.
   `serve.sh` run by hand serves until it is stopped, as before.
+- **A stop holds, on a Mac too.** Stopped from the Services menu, it stops
+  for every simulator: the simulator stops the watch `server.json` names,
+  and leaves `server.stopped` in the folder, which every watch reads each
+  second (one no `server.json` names stops too) and which keeps the
+  simulators from starting it again until one is asked to. Stopping PHP's
+  server stops the worker processes it forks for requests at once
+  (`PHP_CLI_SERVER_WORKERS`): PHP ends them with it only on Linux and
+  FreeBSD, and on a Mac they went on serving the port after every stop.
+  `serve.sh` runs in a process group of its own, so a simulator stopping
+  it while it sets the catalog up stops everything it started; and a
+  simulator gone before the setup is done (killed: on a Mac nothing ends
+  `serve.sh` with it) gets no catalog started for it.
 - **One from an older build is used as it is.** A catalog answering at
   8088 with no `server.json` of this folder was started by an older
-  simulator (its own checkout's data, its own lifetime). The simulator uses
+  simulator (its own checkout's data, its own lifetime); a simulator that
+  started `serve.sh` itself but finds it answering does not take it for its
+  own (its PHP could not listen there). The simulator uses
   it and says so in the Services menu; as it cannot know that catalog's
   key, the Marketplace asks to check its fingerprint.
 - **It fills itself.** At each start `serve.sh` publishes the curated web

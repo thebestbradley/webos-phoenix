@@ -19,8 +19,19 @@
 // while any simulator runs, whichever started it, and stops a few seconds
 // after the last one quits or crashes. One already running is used: this
 // folder's (its server.json), or one an older simulator started (from its
-// own checkout's data; its key is not known here). Without that folder (the
-// tests' first half), the server is this simulator's child and stops with it.
+// own checkout's data; its key is not known here). Whose it is comes from
+// server.json, which the process serving it writes once its PHP serves the
+// port (and only it removes): a simulator that started serve.sh but finds
+// another program answering (its PHP could not listen) does not take that
+// for its own. Without that folder (the tests' first half), the server is
+// this simulator's child and stops with it.
+//
+// serve.sh runs in a process group of its own: stopping it from here stops
+// all it started (a setup's commands, a watch it handed the server to,
+// PHP's server and the worker processes PHP forks, which on a Mac outlive
+// PHP), as Linux's parent-death signal cannot. Its decisions (what answers
+// and whose it is, what it stops) go to the logging category
+// phoenix.sim.catalog (info: QT_LOGGING_RULES="phoenix.sim.catalog.info=true").
 //
 // startAsync() never blocks: the state goes stopped -> starting -> running
 // (or failed, with the reason in error()), stateChanged() each time; sim.qml
@@ -37,6 +48,7 @@
 #pragma once
 
 #include <QDeadlineTimer>
+#include <QElapsedTimer>
 #include <QObject>
 #include <QPointer>
 #include <QProcess>
@@ -59,9 +71,10 @@ class SimMarketplace : public QObject
     Q_PROPERTY(QString logFile READ logFile CONSTANT)
     // Running, and this simulator started it.
     Q_PROPERTY(bool ownsServer READ ownsServer NOTIFY stateChanged)
-    // Running: "here" (this simulator started it), "shared" (this folder's,
-    // started by another simulator or by hand) or "older" (not this
-    // folder's: an older simulator's, used as it is); else "".
+    // Running: "here" (this simulator started it: server.json's "by"),
+    // "shared" (this folder's, started by another simulator or by hand) or
+    // "older" (no server.json of this folder names it: an older
+    // simulator's, used as it is); else "".
     Q_PROPERTY(QString origin READ origin NOTIFY stateChanged)
     // Starting for the first time: serve.sh sets the catalog up first
     // (no signing key yet, nor one to import), which takes longer.
@@ -110,8 +123,9 @@ public:
     // it may take to answer (the first time it sets itself up first).
     Q_INVOKABLE void startAsync(int timeoutMs = 90000);
     // Stops it: the one this simulator's child serves, or the shared one
-    // (for every simulator: they do not start it again until asked). An
-    // older simulator's goes on (it stays running here). Without waiting.
+    // (for every simulator: they do not start it again until asked, and
+    // every watch serving it stops within a second). An older simulator's
+    // goes on (it stays running here). Without waiting.
     Q_INVOKABLE void stop();
     // startAsync, then waits until it answers or fails. False with error().
     bool start(int timeoutMs = 60000);
@@ -142,6 +156,11 @@ signals:
 
 private:
     void setState(State state, const QString &error = QString());
+    // Failed, and what this simulator started stops.
+    void fail(const QString &error);
+    // The serve.sh this simulator started, while it runs, and its process
+    // group: SIGTERM, then SIGKILL after 3 s (or now, waiting: the destructor).
+    void stopLaunched(bool wait = false);
     void probe();
     void launch();
     void onFinished(int exitCode, QProcess::ExitStatus status);
@@ -155,6 +174,8 @@ private:
     // server.json: the process serving this folder's catalog on this port;
     // 0 when none is.
     qint64 serverPid() const;
+    // Whose what answers is now (origin), from server.json.
+    QString originNow() const;
     QString stopMarker() const;
 
     QString m_dir;      // server/marketplace
@@ -178,6 +199,14 @@ private:
     QDeadlineTimer m_deadline;
     int m_timeoutMs = 90000;
     bool m_launched = false;
+    // Starting: since what answers has had no server.json naming it; since
+    // the serve.sh started here handed the server over (its watch claims
+    // it once its PHP serves).
+    QElapsedTimer m_unclaimed;
+    QElapsedTimer m_handedOver;
+    // Running: looks in a row that got no answer while server.json still
+    // named a live process (checkAlive).
+    int m_missed = 0;
     QFileSystemWatcher *m_fillWatch = nullptr;
     QString m_fillState;
     QString m_fillText;

@@ -6,6 +6,11 @@
 // password set, the unlock panel asks for it first (LockWindow.cpp
 // StatePinEntry); the device lock service checks it, so the shell never
 // holds the passcode.
+//
+// Type to unlock (Phoenix; the owner, 14 October 2026): with a PIN or
+// password set, typing on a hardware keyboard opens the panel with what
+// was typed in it (typeKey, below), and a PIN whose length the service
+// knows unlocks as its last digit goes in, with no Done (UnlockPanel).
 
 import QtQuick
 
@@ -27,13 +32,31 @@ Item {
     // restricted mode in its emergency window, over the lock screen.
     property bool emergencyAvailable: false
     signal emergencyRequested
+    // A key typed opened the panel (typeKey): the screen comes on, if it
+    // was off or dimmed, to show it.
+    signal wakeRequested
 
     onLockedChanged: {
         if (locked) {
-            unlockPanel.shown = false;
-            _resetSecurityStates();
+            _relock();
             lockedAt = Date.now();
         }
+    }
+    // Back to the lock screen: the panel and the security dialogs go,
+    // and with them what was typed.
+    function _relock() {
+        unlockPanel.shown = false;
+        _resetSecurityStates();
+        cancelTyping();
+    }
+    // Locked again while locked (the screen turning off, Power): back to
+    // the lock screen from the panel, as the original's display going off
+    // did (DisplayOff::enter locks, DisplayStates.cpp:292-301, and
+    // LockWindow::slotLockStateChanged goes back to StateNormal,
+    // LockWindow.cpp:711-718), so a key typed then opens it afresh.
+    function relock() {
+        if (locked)
+            _relock();
     }
 
     // Dock mode's lock state (LockWindow StateDockMode, LockWindow.h:132):
@@ -46,6 +69,7 @@ Item {
         if (dockMode) {
             unlockPanel.shown = false;
             helpShown = false;
+            cancelTyping();
         }
     }
     // "Lock after" (Screen & Lock; system preference lockTimeout, seconds):
@@ -70,6 +94,9 @@ Item {
     // m_setupNewPassword, with the first entry in _newPasscode).
     property var _policy: null
     property string _lockMode: "none"
+    // The PIN's length as the lock service last told it (getDeviceLockMode
+    // pinLength; 0: not known, or no PIN): the panel then needs no Done.
+    property int _pinLength: 0
     property string dialogState: ""
     property string setupNew: ""
     property string _newPasscode: ""
@@ -225,6 +252,7 @@ Item {
     onIncomingCallChanged: {
         if (incomingCall) {
             unlockPanel.shown = false;
+            cancelTyping();
             if (dialogState !== "wipe")
                 _resetSecurityStates();
             hideHelp.stop();
@@ -242,47 +270,172 @@ Item {
         source.lunaCall("palm://com.palm.systemmanager/" + method, params, callback);
     }
 
+    // The lock as the service has it now: the lock mode, the PIN's length,
+    // the policy's tries left and the policy; then(ok, pending) once known
+    // (ok false: no lock service; pending: a policy waits for a passcode).
+    function _askLock(then) {
+        _call("getDeviceLockMode", {}, function (r) {
+            var ok = !!r && r.returnValue !== false;
+            var mode = ok ? r.lockMode : "none";
+            var pending = ok && r.policyState === "pending";
+            lock._lockMode = mode === "pin" || mode === "password" ? mode : "none";
+            lock._pinLength = ok && lock._lockMode === "pin" && r.pinLength > 0 ? r.pinLength : 0;
+            lock._retriesLeft = ok && r.retriesLeft > 0 ? r.retriesLeft : 0;
+            if (ok && r.policyState && r.policyState !== "none") {
+                lock._call("getSecurityPolicy", {}, function (p) {
+                    lock._policy = p && p.returnValue !== false && p.policy ? p.policy : null;
+                    then(ok, pending);
+                });
+            } else {
+                lock._policy = null;
+                then(ok, pending);
+            }
+        });
+    }
+    // A security policy asks for a new passcode before anything else.
+    function _policyPending(pending) {
+        return pending && !!_policy && !!_policy.password && _policy.password.enabled;
+    }
+
     // The padlock reached the ring: unlock, or ask for the passcode first,
     // or for a new one when a security policy asks for it
     // (LockWindow::tryUnlock, :1257-1287).
     function requestUnlock() {
         if (dockMode)
             return;
-        _call("getDeviceLockMode", {}, function (r) {
+        _askLock(function (ok, pending) {
             if (!lock.locked || lock.dockMode)
                 return;
             // No lock service, no passcode can have been set.
-            if (!r || r.returnValue === false)
+            if (!ok)
                 console.warn("Phoenix: device lock service unavailable; unlocking");
-            var ok = r && r.returnValue !== false;
-            var mode = ok ? r.lockMode : "none";
-            var pending = ok && r.policyState === "pending";
-            lock._lockMode = mode === "pin" || mode === "password" ? mode : "none";
-            lock._retriesLeft = ok && r.retriesLeft > 0 ? r.retriesLeft : 0;
-            var decide = function () {
-                if (!lock.locked)
-                    return;
-                if (pending && lock._policy && lock._policy.password && lock._policy.password.enabled) {
-                    lock._showNewPinDialog();
-                    return;
-                }
-                if (lock._lockMode === "none" || !lock.requiresPasscode()) {
-                    lock.unlockRequested();
-                    return;
-                }
-                lock.setupNew = "";
-                lock._showPinPanel();
-            };
-            if (ok && r.policyState && r.policyState !== "none") {
-                lock._call("getSecurityPolicy", {}, function (p) {
-                    lock._policy = p && p.returnValue !== false && p.policy ? p.policy : null;
-                    decide();
-                });
-            } else {
-                lock._policy = null;
-                decide();
+            if (lock._policyPending(pending)) {
+                lock._showNewPinDialog();
+                return;
             }
+            if (lock._lockMode === "none" || !lock.requiresPasscode()) {
+                lock.unlockRequested();
+                return;
+            }
+            lock.setupNew = "";
+            lock._showPinPanel();
         });
+    }
+
+    // ---- Type to unlock (Phoenix; the owner, 14 October 2026) ------------------
+    // "When using a hardware keyboard on the lock screen typing should
+    // automatically bring up the pin/password modal and allow typing. So if
+    // the screen is locked I should be able to just type my pin." And (15
+    // October 2026): "Two keyboard presses when asleep or locked should
+    // wake and allow immediate pin entering with the keyboard."
+    //
+    // The original: a key down from an external keyboard with the screen
+    // off, dimmed or locked was user activity from external input
+    // (DisplayManager::handleEvent, DisplayManager.cpp:3352-3378,
+    // DisplayEventUserActivityExternalInput): the screen came on and asked
+    // to unlock (DisplayStates.cpp:494-503 from off, :1247-1250 from the
+    // lit lock screen, :1501-1510 dimmed; DisplayOn::enter :807-810 sends
+    // DISPLAY_UNLOCK_SCREEN), and LockWindow asked for the passcode
+    // (slotLockStateChanged -> tryUnlock, LockWindow.cpp:711-748); the key
+    // itself was dropped (m_drop_key). Otherwise LockWindow ate every key
+    // (handleFilteredSceneEvent, :1713-1718) until the panel was up
+    // (UnlockPanel.qml:191-230).
+    //
+    // Here the same, any key but the system's own (keyboardKeys): the
+    // shell watches them at the window, before the keyboard focus (as
+    // DisplayManager saw every key), turns the screen on and calls
+    // keyboardActivity(): with a PIN or password set, the entry opens (also
+    // within "Lock after", where the padlock asks for nothing: what is typed
+    // is the passcode, and the right one unlocks). And the key is typed into
+    // it when it is one the entry takes (Phoenix, "just type my pin": the
+    // original dropped it), as are the keys after it (typeKey): a PIN takes
+    // digits only, the number row's or the keypad's (Qt.Key_0 to Key_9, as
+    // UnlockPanel.qml:150-156); a space opening a password's entry is not
+    // typed into it. Without a passcode the screen only comes on (the
+    // original then unlocked; Phoenix keeps the lock screen and its
+    // padlock), and while a security policy waits for a new one the
+    // padlock's dialog asks for it.
+    //
+    // The lock mode is asked for afresh (it may have changed since the
+    // screen locked); keys typed before the answer wait in _typedAhead.
+    property var _typedAhead: []
+    property bool _typeAsking: false
+    property int _typeAsk: 0
+    // The keys of a keyboard that open the entry (Qt key codes): what
+    // types (ASCII and Latin-1, the space too), Return, Tab, the arrows,
+    // Backspace and Delete, and the modifiers. Not the system's own (Power,
+    // Home, Esc which is Back, the volume, the function keys: SystemKeys
+    // takes them).
+    readonly property var keyboardKeys: {
+        var out = [];
+        for (var k = 0x20; k <= 0x7e; ++k)
+            out.push(k);
+        for (k = 0xa0; k <= 0xff; ++k)
+            out.push(k);
+        return out.concat([Qt.Key_Return, Qt.Key_Enter, Qt.Key_Tab, Qt.Key_Backtab, Qt.Key_Backspace, Qt.Key_Delete,
+                           Qt.Key_Insert, Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down, Qt.Key_PageUp,
+                           Qt.Key_PageDown, Qt.Key_End, Qt.Key_Clear, Qt.Key_Shift, Qt.Key_Control, Qt.Key_Alt,
+                           Qt.Key_AltGr, Qt.Key_Meta, Qt.Key_CapsLock, Qt.Key_NumLock, Qt.Key_Menu]);
+    }
+    // A key of the keyboard went down on the lock screen (whatever has the
+    // focus; the shell, Shell.lockKeys): the entry opens when a passcode is
+    // set.
+    function keyboardActivity() {
+        if (!locked || dockMode || incomingCall || _covered || _typeAsking)
+            return;
+        _typeAsking = true;
+        var ask = ++_typeAsk;
+        _askLock(function (ok, pending) {
+            if (ask !== lock._typeAsk)
+                return;
+            var typed = lock._typedAhead;
+            lock._typedAhead = [];
+            lock._typeAsking = false;
+            if (!lock.locked || lock.dockMode || lock.incomingCall || lock._covered)
+                return;
+            if (lock._lockMode === "none" || lock._policyPending(pending))
+                return;
+            var pin = lock._lockMode === "pin";
+            lock.setupNew = "";
+            lock._showPinPanel();
+            lock.unlockPanel.openedByKey = true;
+            lock.wakeRequested();
+            typed.forEach(function (k) {
+                if (!pin || k.digit)
+                    lock.unlockPanel.typeKey(k.text, k.digit);
+            });
+        });
+    }
+    // A key the lock screen got (the shell's Keys handler, with the
+    // keyboard focus on the lock screen): what it types goes into the
+    // entry once it is open, and it opens it as keyboardActivity (the
+    // window's watch saw it first; this is for keys reaching the lock
+    // screen otherwise). True when it was typing.
+    function typeKey(event) {
+        if (!locked || dockMode || incomingCall || _covered)
+            return false;
+        var typing = false;
+        // Shortcuts are not typing (Just Type's rule, Shell.qml).
+        if (!(event.modifiers & (Qt.ControlModifier | Qt.MetaModifier))) {
+            var text = event.text || "";
+            if (event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete) {
+                typing = _typedAhead.length > 0;
+                _typedAhead.pop();
+            } else if (text.length > 0 && text.charCodeAt(0) >= 32 && !(_typedAhead.length === 0 && text.trim() === "")) {
+                _typedAhead.push({ text: text, digit: event.key >= Qt.Key_0 && event.key <= Qt.Key_9 });
+                typing = true;
+            }
+        }
+        keyboardActivity();
+        return typing;
+    }
+    // Esc, or the lock screen going back to itself: what was typed while
+    // the lock mode was being asked for is dropped, and the answer opens
+    // nothing.
+    function cancelTyping() {
+        _typeAsk++;
+        _typedAhead = [];
+        _typeAsking = false;
     }
 
     // LockWindow::slotPasswordSubmitted (:1341-1534).
@@ -299,6 +452,12 @@ Item {
                 lock.unlockRequested();
                 return;
             }
+            // A wrong one (by Done, Enter, or a PIN of the known length as
+            // its last digit went in: the owner's change, UnlockPanel) is
+            // one failed try: the service counted it (its 15 s hold after
+            // three, or the policy's tries and wipe; Security::matchPasscode,
+            // Security.cpp:325-385), and the panel says so, shakes and
+            // starts empty.
             // The policy's tries left (EASPolicyManager::retriesLeft).
             lock._call("getDeviceLockMode", {}, function (m) {
                 if (!lock.locked || !unlockPanel.shown)
@@ -320,6 +479,7 @@ Item {
                 }
                 unlockPanel.queueUpTitle(qsTr("Device Locked"), isPin ? qsTr("Enter PIN") : qsTr("Enter Password"));
                 unlockPanel.setupDialog(isPin, isPin ? qsTr("PIN Incorrect") : qsTr("Password Incorrect"), message, false, 0);
+                unlockPanel.shake();
             });
         });
     }
@@ -756,9 +916,18 @@ Item {
         opacity: shown ? 1 : 0
         visible: shown || opacity > 0
         enabled: shown
+        // A PIN asked for to unlock, its length known: no Done (the
+        // owner's change, UnlockPanel). Not a new PIN (a policy's).
+        autoSubmitLength: lock.setupNew === "" && lock._lockMode === "pin" ? lock._pinLength : 0
         // Shown, it takes the keys, however it was opened (the original
-        // took the focus as it faded in, UnlockPanel.qml onOpacityChanged).
-        onShownChanged: if (shown) forceActiveFocus()
+        // took the focus as it faded in, UnlockPanel.qml onOpacityChanged);
+        // hidden, what was typed goes.
+        onShownChanged: {
+            if (shown)
+                forceActiveFocus();
+            else
+                clear();
+        }
         Behavior on opacity { NumberAnimation { duration: Theme.lockFadeDuration } }
         emergencyAvailable: lock.emergencyAvailable
         // LockWindow::slotCancelPasswordEntry: locked again, the new

@@ -550,14 +550,23 @@ Item {
             tryVerify(function () { return shell.maximized && cv.currentUid === ph; }, 3000, "Photos maximized");
             compare(cv.restoreUid, a, "launched by the card in front, in its stack");
             root.lowestProgress = 1;
-            var restoredAt = -1, closedAt = Date.now();
-            var watch = function () { if (restoredAt < 0 && cv.maximizeProgress > 0) restoredAt = Date.now() - closedAt; };
+            // Card view settled when the launcher starts to maximize again:
+            // the layout's slide is over (its timer has fired), whatever a
+            // wall clock says (the runner's can step, and QML timers are
+            // coarse: on macOS's runner it read 271 ms for the 300 ms slide).
+            var restoredAt = -1, settledThen = false, closedAt = Date.now();
+            var watch = function () {
+                if (restoredAt < 0 && cv.maximizeProgress > 0) {
+                    restoredAt = Date.now() - closedAt;
+                    settledThen = cv.layoutAnimationDuration === 0;
+                }
+            };
             cv.maximizeProgressChanged.connect(watch);
             windows.cardCloseRequested(ph);
             tryVerify(function () { return shell.maximized && cv.currentUid === a; }, 3000, "the launcher maximized again");
             cv.maximizeProgressChanged.disconnect(watch);
             compare(root.lowestProgress, 0, "through card view");
-            verify(restoredAt >= Theme.cardSlideDuration * 0.95, "once card view settled (" + restoredAt + " ms)");
+            verify(restoredAt >= 0 && settledThen, "once card view settled (" + restoredAt + " ms)");
             compare(cv.restoreUid, "");
             compare(windows.cardIndex(ph), -1);
 

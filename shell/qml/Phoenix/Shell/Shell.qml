@@ -522,6 +522,9 @@ FocusScope {
     function lock() {
         if (firstUse)
             return;
+        // Locked again (the screen turning off, Power) while the PIN panel
+        // is up: back to the lock screen (LockScreen.relock).
+        lockScreen.relock();
         lockScreen.locked = true;
         systemMenu.open = false;
     }
@@ -547,9 +550,15 @@ FocusScope {
     Display {
         id: backlight
         timeout: shell.system && shell.system.screenTimeout > 0 ? shell.system.screenTimeout : 60
-        locked: shell.locked
-        // An app in front keeping the screen on (blockScreenTimeout).
-        blocked: cards.maximized && cards.currentBlocksScreenTimeout
+        // While the lock screen asks for the passcode the screen keeps the
+        // user's timeout, not the lock screen's 5 s: the original asked for
+        // it unlocked to the display (DisplayOn, DisplayStates.cpp:807-810;
+        // LockWindow::slotLockStateChanged, LockWindow.cpp:719-748), and 5 s
+        // without a key turned the screen off and dropped what was typed.
+        locked: shell.locked && !lockScreen.pinEntry
+        // An app in front keeping the screen on (blockScreenTimeout); not
+        // under the lock screen.
+        blocked: !shell.locked && cards.maximized && cards.currentBlocksScreenTimeout
         onTurnedOff: shell.lock()
         // On the Touchstone it waits for dock mode instead of dimming.
         onPuck: shell._exhibitionsOnPuck
@@ -585,11 +594,15 @@ FocusScope {
     // Every touch and key resets its timers; while it is off the touch
     // panel takes nothing and only Power, Home and the volume keys get
     // through.
+    // On the lock screen a keyboard's keys go through too: they wake the
+    // screen and open the passcode's entry (lockKeys, below; type to
+    // unlock, the owner, 14 and 15 October 2026).
     UserActivity {
         id: userActivity
         asleep: !backlight.on
         onWakeRequested: backlight.turnOn()
         passKeys: [Qt.Key_Home, Qt.Key_F3, Qt.Key_PowerOff, Qt.Key_VolumeUp, Qt.Key_VolumeDown, Qt.Key_F10, Qt.Key_F11]
+                  .concat(lockKeys.enabled ? lockScreen.keyboardKeys : [])
         onActivity: backlight.activity()
         tapRadius: Theme.tapRadius
         onTapped: (pos) => {
@@ -1219,9 +1232,12 @@ FocusScope {
             return;
         }
         if (locked) {
-            // The back gesture (or Esc) on the passcode panel cancels it.
+            // The back gesture (or Esc) on the passcode panel cancels it,
+            // and what was typed toward it (type to unlock) goes.
             if (lockScreen.unlockPanel.shown)
                 lockScreen.unlockPanel.entryCanceled();
+            else
+                lockScreen.cancelTyping();
             return;
         }
         // The assistant's view closes (its "Connect model" sheet first).
@@ -1654,6 +1670,14 @@ FocusScope {
             event.accepted = true;
             return;
         }
+        // Typed on the lock screen: with a PIN or password set, it opens
+        // the panel with the key in it (type to unlock, LockScreen.typeKey).
+        // Every other key the lock screen eats (LockWindow.cpp:1713-1718).
+        if (locked && !dockMode) {
+            lockScreen.typeKey(event);
+            event.accepted = true;
+            return;
+        }
         // Typed while Just Type's page is still taking its first letter.
         if (justType.open && event.text.length === 1 && !(event.modifiers & (Qt.ControlModifier | Qt.MetaModifier))
                 && justType.typeAhead(event.text)) {
@@ -1851,14 +1875,49 @@ FocusScope {
                 shell._buttonUp(key === Qt.Key_Home);
         }
         onChord: (index) => {
-            if (index < captureChords.length)
-                shell.takeScreenshot();
-            else if (index >= captureChords.length + shortcuts.length)
-                shell.metaEdit(metaChords[index - captureChords.length - shortcuts.length].action);
-            else if (backlight.on) {
+            // (Off, a chord's keys reach here only because they type toward
+            // the lock screen's passcode, UserActivity's passKeys: as Print
+            // Screen, the capture chord captures nothing then.)
+            if (index < captureChords.length) {
+                if (backlight.on)
+                    shell.takeScreenshot();
+            } else if (index >= captureChords.length + shortcuts.length) {
+                if (backlight.on)
+                    shell.metaEdit(metaChords[index - captureChords.length - shortcuts.length].action);
+            } else if (backlight.on) {
                 backlight.activity();
                 shell.shortcut(shortcuts[index - captureChords.length].action);
             }
+        }
+    }
+
+    // A keyboard's key on the lock screen (type to unlock; the owner, 14 and
+    // 15 October 2026: "Two keyboard presses when asleep or locked should
+    // wake and allow immediate pin entering with the keyboard"): as the
+    // original's DisplayManager took a key down from an external keyboard
+    // with the screen off, dimmed or locked (DisplayManager::handleEvent,
+    // DisplayManager.cpp:3352-3378: user activity from external input), the
+    // screen comes on and the lock screen opens the passcode's entry
+    // (LockScreen.keyboardActivity). Watched at the window, before the
+    // keyboard focus, as DisplayManager saw every key: whatever holds the
+    // focus (an app's page under the lock screen, or nothing, the screen's
+    // window not focused), the key still wakes the screen and opens the
+    // entry; what it types goes on to the focus (LockScreen.typeKey).
+    // Created after the system keys and UserActivity: its filter runs
+    // before theirs (the screen is on before UserActivity sees the key).
+    // Not in dock mode, First Use, or under the emergency window or the
+    // Assistant (whose own fields take the keys).
+    SystemKeys {
+        id: lockKeys
+        enabled: shell.locked && !shell.dockMode && !shell.firstUse && !shell.emergencyShown && !assistantView.open
+        // (Emptied when off: a key held as it turns off is let go of.)
+        watchKeys: enabled ? lockScreen.keyboardKeys : []
+        onHolding: (key, down) => {
+            if (!down)
+                return;
+            if (!backlight.on || backlight.dimmed)
+                backlight.turnOn();
+            lockScreen.keyboardActivity();
         }
     }
 
@@ -2697,12 +2756,36 @@ FocusScope {
         // Sticky keys' latched modifiers do not outlive the lock.
         if (locked)
             keyboardAccess.clearModifiers();
+        _lockFocus();
         _askAfterUnlock();
         var o = maximizedCardOrientation();
         if (!locked && o !== "free")
             uiRotation.setRotationMode(o, true);
         // The lock screen takes the input focus: the keyboard goes.
         Qt.callLater(_updateImeClient);
+    }
+
+    // The lock screen has the keyboard while it shows: LockWindow ate every
+    // key then (LockWindow::handleFilteredSceneEvent, LockWindow.cpp:
+    // 1713-1718). Phoenix left the focus where it was, so an app's page
+    // under the lock screen got what was typed on it (a PIN typed with no
+    // passcode set went into the app's field). Locked, the lock screen
+    // takes the focus (its keys reach the shell's Keys handler: type to
+    // unlock); unlocked, what had it gets it back, unless something else
+    // took it meanwhile.
+    property Item _focusBeforeLock: null
+    function _lockFocus() {
+        var f = Window.activeFocusItem;
+        if (locked) {
+            if (f && f !== shell && !_hasFocusInside(lockScreen))
+                _focusBeforeLock = f;
+            lockScreen.forceActiveFocus();
+            return;
+        }
+        var back = _focusBeforeLock;
+        _focusBeforeLock = null;
+        if (back && back.visible && (!f || f === shell || _hasFocusInside(lockScreen)))
+            back.forceActiveFocus();
     }
 
     // Nothing is moving that a resize would upset (okToResizeUi:
@@ -3481,6 +3564,9 @@ FocusScope {
                     emergencyAvailable: shell.emergencyAvailable
                     onUnlockRequested: shell.unlock()
                     onEmergencyRequested: shell.openEmergency()
+                    // Typing opened the panel (type to unlock): the screen
+                    // comes on to show it, off or dimmed.
+                    onWakeRequested: backlight.turnOn()
                 }
 
                 // Over the lock screen, under the status bar and the alerts. The

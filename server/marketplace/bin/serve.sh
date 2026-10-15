@@ -38,9 +38,15 @@
 # simulator itself), it sets the catalog up, leaves PHP's server running
 # under a watch of its own and returns: the server goes on while any
 # simulator runs, whichever started it, and stops a few seconds
-# (PHOENIX_CATALOG_GRACE, 5) after the last one is gone, quit or crashed.
-# While it runs, server.json in the folder says so: {pid (the watch, or the
-# server run by hand), port, checkout, started}.
+# (PHOENIX_CATALOG_GRACE, 5) after the last one is gone, quit or crashed,
+# or within a second of a stop from a simulator's menu (server.stopped in
+# the folder). A simulator gone before the setup is done (killed, on a Mac,
+# where nothing ends this with it) gets no catalog started for it.
+# server.json in the folder says which process serves the catalog, once
+# its PHP serves it: {pid (the watch, or this run by hand: who to stop),
+# port, by (the simulator that started it; 0 by hand), checkout, started}.
+# Only that process removes it. Stopping PHP's server stops the worker
+# processes it forks too, which on a Mac outlive it.
 
 set -e
 cd "$(dirname "$0")/.."
@@ -76,11 +82,78 @@ json_text() {
     printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
-# server.json: this catalog is running, from this folder (pid: who to stop).
+# server.json: PHP's server under process $1 serves this folder's catalog
+# (who to stop), started by the simulator PHOENIX_SIM_PID (0: by hand).
 write_server_json() {
-    printf '{"format":1,"pid":%s,"port":%s,"checkout":"%s","started":"%s"}\n' "$1" "$PORT" \
-        "$(json_text "$CHECKOUT")" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$DATA/server.json.new"
-    mv -f "$DATA/server.json.new" "$DATA/server.json"
+    printf '{"format":1,"pid":%s,"port":%s,"by":%s,"checkout":"%s","started":"%s"}\n' "$1" "$PORT" "${PHOENIX_SIM_PID:-0}" \
+        "$(json_text "$CHECKOUT")" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$DATA/server.json.$1"
+    mv -f "$DATA/server.json.$1" "$DATA/server.json"
+}
+
+# The process server.json names, if any.
+claimed_by() {
+    sed -n 's/.*"pid":\([0-9][0-9]*\).*/\1/p' "$DATA/server.json" 2>/dev/null || true
+}
+
+# server.json goes, if it is this process's: another's, written since (a
+# watch started as this one ends), stays.
+unclaim() {
+    [ "$(claimed_by)" != "$$" ] || rm -f "$DATA/server.json"
+}
+
+# Whether the server answering at 127.0.0.1:$PORT is the PHP this process
+# started: it says which (public/router.php, /_phoenix/serving, from
+# PHOENIX_CATALOG_SERVING in its environment). Asked of PHP: no other
+# program is needed.
+serves_here() {
+    php -r '$s = @fsockopen("127.0.0.1", (int) $argv[1], $errno, $error, 1);
+        if (!$s) exit(1);
+        stream_set_timeout($s, 2);
+        fwrite($s, "GET /_phoenix/serving HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n");
+        $reply = (string) stream_get_contents($s);
+        $body = substr($reply, (int) strpos($reply, "\r\n\r\n") + 4);
+        exit(str_contains($reply, "\r\n\r\n") && trim($body) === $argv[2] ? 0 : 1);' "$PORT" "$1" 2>/dev/null
+}
+
+# PHP's server is started in the background ($PHP, PHOENIX_CATALOG_SERVING
+# being $$); this claims the catalog for it (server.json, process $$) once
+# it serves it: what answers at the port says it is that PHP. A PHP that
+# cannot listen there (another program has the port: an older simulator's
+# catalog, or the one another simulator started at the same time) ends at
+# once, and so does this, having claimed nothing: what answers is never
+# taken for this folder's catalog on the word of a server that is not
+# serving it.
+claim_when_serving() {
+    tries=0
+    until serves_here $$; do
+        if ! kill -0 "$PHP" 2>/dev/null || [ "$tries" -ge 100 ]; then
+            if kill -0 "$PHP" 2>/dev/null; then
+                stop_php
+            fi
+            code=0
+            wait "$PHP" 2>/dev/null || code=$?
+            echo "PHP's server is not serving 127.0.0.1:$PORT (exit code $code): the catalog is not started"
+            exit 1
+        fi
+        tries=$((tries + 1))
+        sleep 0.1
+    done
+    write_server_json $$
+}
+
+# Stops PHP's server ($PHP) and the worker processes it forked
+# (PHP_CLI_SERVER_WORKERS, below). PHP ends its workers with it only where
+# there is a parent-death signal, Linux and FreeBSD (php-src
+# sapi/cli/php_cli_server.c, php_cli_server_worker_install_pdeathsig); on a
+# Mac they would go on serving the port, the catalog running on with
+# nothing left to stop it. Paused first: it forks none while they are
+# looked for.
+stop_php() {
+    kill -STOP "$PHP" 2>/dev/null || return 0
+    workers=$(ps -A -o pid= -o ppid= 2>/dev/null | while read -r pid parent; do [ "$parent" != "$PHP" ] || echo "$pid"; done)
+    kill $workers "$PHP" 2>/dev/null || true
+    kill -CONT "$PHP" 2>/dev/null || true
+    wait "$PHP" 2>/dev/null || true
 }
 
 # The fill (bin/web-apps.py fill): what changed since the last fill that worked.
@@ -134,37 +207,68 @@ simulator_running() {
 # closed terminal leaves the catalog to the others.
 if [ "$WATCH" = 1 ]; then
     trap '' HUP INT
-    # Said before it answers: a simulator finding it answering knows it is this folder's.
-    write_server_json $$
-    php -S "127.0.0.1:$PORT" public/router.php </dev/null &
+    PHOENIX_CATALOG_SERVING=$$ php -S "127.0.0.1:$PORT" public/router.php </dev/null &
     PHP=$!
-    trap 'kill "$PHP" 2>/dev/null || true; wait "$PHP" 2>/dev/null || true; rm -f "$DATA/server.json"; echo "The catalog stopped (asked to)"; exit 0' TERM
+    trap 'stop_php; unclaim; echo "Catalog watch $$: stopped (asked to)"; exit 0' TERM
+    claim_when_serving
+    echo "Catalog watch $$: serving 127.0.0.1:$PORT (PHP's server: process $PHP)"
     fill </dev/null &
     GRACE="${PHOENIX_CATALOG_GRACE:-5}"
     idle=0
     while kill -0 "$PHP" 2>/dev/null; do
         sleep 1
+        # Stopped from a simulator's menu (shell/sim/simmarketplace.cpp,
+        # stop): for every simulator, whichever watch serves it (one the
+        # simulator could not reach, whose server.json another removed,
+        # stops all the same).
+        if [ -f "$DATA/server.stopped" ]; then
+            stop_php
+            unclaim
+            echo "Catalog watch $$: stopped from a simulator's menu"
+            exit 0
+        fi
+        # Its claim, should another have taken it meanwhile.
+        [ "$(claimed_by)" = "$$" ] || write_server_json $$
         if simulator_running; then
             idle=0
         else
             idle=$((idle + 1))
             if [ "$idle" -ge "$GRACE" ]; then
+                stop_php
+                unclaim
                 echo "No simulator is running any more: the catalog stops"
-                kill "$PHP" 2>/dev/null || true
-                wait "$PHP" 2>/dev/null || true
-                rm -f "$DATA/server.json"
                 exit 0
             fi
         fi
     done
     code=0
     wait "$PHP" || code=$?
-    rm -f "$DATA/server.json"
+    unclaim
     echo "PHP's server stopped (exit code $code)"
     exit "$code"
 fi
 
 mkdir -p "$DATA"
+# One setup at a time per catalog: two simulators starting it together
+# would set one database up twice at once (two signing keys; the curated
+# apps looked for, then inserted, by both: "UNIQUE constraint failed" for
+# one, which then fails). The second waits for the first, then finds it set
+# up. A lock whose setup was killed before it could remove it is taken over.
+SETUP_LOCK="$DATA/setup.lock"
+waiting=0
+while ! mkdir "$SETUP_LOCK" 2>/dev/null; do
+    owner=$(cat "$SETUP_LOCK/pid" 2>/dev/null || true)
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+        rm -rf "$SETUP_LOCK"
+        continue
+    fi
+    [ "$waiting" = 1 ] || echo "Waiting for the setup that runs (process ${owner:-?}) to finish"
+    waiting=1
+    sleep 0.1
+done
+echo $$ > "$SETUP_LOCK/pid"
+trap 'rm -rf "$SETUP_LOCK"' EXIT
+trap 'exit 143' HUP INT TERM
 # The first start after the catalog moved out of the checkouts: this
 # checkout's catalog, its key and everything it published, so devices that
 # trusted it go on trusting it.
@@ -231,13 +335,34 @@ if [ "$MARKETPLACE_DEV" = 1 ]; then
     fi
 fi
 echo "Phoenix Marketplace at http://127.0.0.1:$PORT/ (catalog: /v1/, admin: /admin), from $DATA"
+# Set up: the next setup may run.
+rm -rf "$SETUP_LOCK"
+trap - EXIT HUP INT TERM
 if [ -n "$PHOENIX_SIM_INSTANCES" ]; then
     # Started by a simulator: the server goes on by itself, under its watch,
-    # while any simulator runs; this returns.
+    # while any simulator runs; this returns. Not for a simulator gone
+    # meanwhile (killed while this set the catalog up: Linux's parent-death
+    # signal ends this with it, nothing does on a Mac), nor once the catalog
+    # was stopped from a simulator's menu meanwhile.
+    if [ -n "$PHOENIX_SIM_PID" ] && ! alive_as "$PHOENIX_SIM_PID" "${PHOENIX_SIM_EXE:-phoenix-sim}"; then
+        echo "The simulator that started this (process $PHOENIX_SIM_PID) is gone: the catalog is not started"
+        exit 0
+    fi
+    if [ -f "$DATA/server.stopped" ]; then
+        echo "The catalog was stopped from a simulator's menu meanwhile: it is not started"
+        exit 0
+    fi
     sh "$SELF" "$PORT" --watch $( [ "$FILL" = 1 ] || echo --no-fill ) </dev/null &
     exit 0
 fi
-# By hand: serves until stopped, filling meanwhile.
+# By hand: serves until stopped (Ctrl+C, or a simulator's menu), filling
+# meanwhile.
 fill </dev/null &
-write_server_json $$
-exec php -S "127.0.0.1:$PORT" public/router.php
+PHOENIX_CATALOG_SERVING=$$ php -S "127.0.0.1:$PORT" public/router.php </dev/null &
+PHP=$!
+trap 'stop_php; unclaim; exit 0' INT TERM HUP
+claim_when_serving
+code=0
+wait "$PHP" || code=$?
+unclaim
+exit "$code"

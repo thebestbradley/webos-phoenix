@@ -23,6 +23,17 @@
 // not fit (availableHeight), a PIN panel puts the title, the field and the
 // buttons in a column at the left and the keypad at the right, a little
 // narrower if it must. Upright and on the tablet nothing changes.
+//
+// A PIN without Done (Phoenix; the owner, 14 October 2026: "If it is on pin
+// mode we don't need the done button; that should exist on password only.
+// PIN should just unlock once you enter the correct pin."): the original
+// submitted a PIN with Done (UnlockPanel.qml:126-137) or Enter (:218-230).
+// When the lock screen knows the PIN's length (autoSubmitLength, from the
+// lock service), the pad has no Done: the entry is checked as soon as it
+// is that long, by touch or keyboard alike, and a wrong one counts as a
+// failed try (the lock screen shakes the panel and clears it). Enter still
+// submits. A new PIN (a security policy's) and a PIN whose length the
+// service does not know keep Done; a password always has it.
 
 import QtQuick
 
@@ -40,6 +51,18 @@ FocusScope {
     readonly property alias title: titleText.text
     readonly property alias hint: passwordField.hint
     readonly property alias enteredText: passwordField.enteredText
+    // The PIN's length when known (0: not known, or not a PIN being asked
+    // for to unlock): the entry goes to be checked once it is this long,
+    // and Done is not shown.
+    property int autoSubmitLength: 0
+    readonly property bool doneShown: !isPINEntry || autoSubmitLength <= 0
+    // Opened by a key of the keyboard (LockScreen.keyboardActivity): a space
+    // before anything is typed is the key that woke it, not typed.
+    property bool openedByKey: false
+    // Submitted, waiting for the lock screen's answer: the entry takes no
+    // more keys (a key typed meanwhile is not part of what is checked, and
+    // a second Enter would be a second try).
+    property bool checking: false
 
     // Show the Emergency Call button (the shell has an emergency window to open).
     property bool emergencyAvailable: false
@@ -78,6 +101,26 @@ FocusScope {
         minPassLength = minLen;
         passwordField.clearAll();
         passwordField.hint = hintMessage;
+        checking = false;
+        openedByKey = false;
+    }
+
+    // What was typed goes (the panel hidden, Esc): nothing of a passcode
+    // is kept on screen or in the field.
+    function clear() {
+        passwordField.clearAll();
+        checking = false;
+        openedByKey = false;
+        _setKeyItem(null);
+    }
+
+    // A wrong passcode: the panel shakes from side to side (Phoenix; the
+    // original only changed the title, LockWindow.cpp:1414-1425). Not
+    // with Reduce motion.
+    function shake() {
+        if (Theme.reduceMotion)
+            return;
+        shakeAnim.restart();
     }
 
     function queueUpTitle(newTitle, newHint) {
@@ -97,19 +140,70 @@ FocusScope {
         }
     }
 
-    // A key of the PIN pad pressed (PINPad.qml's keyAction).
+    // A key of the PIN pad pressed (PINPad.qml's keyAction), by a finger
+    // or the keyboard's ring (which stays where it is).
     function _pinKey(text) {
-        if (text === "\b") {
+        if (text === "\b")
+            _deleteOne();
+        else
+            _enter(text, true);
+    }
+
+    // A character typed on a hardware keyboard, or by the lock screen
+    // opening the panel with the keys that opened it (isNumber: a digit
+    // key, the number row's or the keypad's; only those go into a PIN, as
+    // PasswordField.keyInput). Typing takes the ring away.
+    function typeKey(text, isNumber) {
+        _setKeyItem(null);
+        const waking = openedByKey && passwordField.enteredText.length === 0 && text.trim() === "";
+        openedByKey = false;
+        if (!waking)
+            _enter(text, isNumber);
+    }
+    function deleteOne() {
+        _setKeyItem(null);
+        _deleteOne();
+    }
+    function _enter(text, isNumber) {
+        if (checking)
+            return;
+        passwordField.keyInput(text, isNumber);
+        _showQueued();
+        // A PIN of the known length goes to be checked at once (the
+        // owner's change, above).
+        if (isPINEntry && autoSubmitLength > 0 && passwordField.enteredText.length === autoSubmitLength)
+            _submit();
+    }
+    function _deleteOne() {
+        if (!checking)
             passwordField.deleteOne();
-        } else {
-            passwordField.keyInput(text, true);
-            _showQueued();
-        }
     }
 
     function _submit() {
-        if (passwordField.enteredText.length > 0)
-            passwordSubmitted(passwordField.enteredText, isPINEntry);
+        if (checking || passwordField.enteredText.length === 0)
+            return;
+        checking = true;
+        passwordSubmitted(passwordField.enteredText, isPINEntry);
+    }
+
+    // Read out as a dialog: its title ("Device Locked", "PIN Incorrect")
+    // and what it asks for ("Enter PIN", "Try Again"). It has the keyboard
+    // focus whenever it shows, opened by a key or by the padlock, so a
+    // screen reader lands here.
+    Accessible.role: Accessible.Dialog
+    Accessible.name: titleText.text
+    Accessible.description: passwordField.hint
+
+    // The shake (shake()): a few pixels each way, settling.
+    readonly property bool shaking: shakeAnim.running
+    transform: Translate { id: shakeShift }
+    SequentialAnimation {
+        id: shakeAnim
+        NumberAnimation { target: shakeShift; property: "x"; to: -Theme.px(12); duration: Theme.motion(50); easing.type: Easing.OutQuad }
+        NumberAnimation { target: shakeShift; property: "x"; to: Theme.px(10); duration: Theme.motion(80); easing.type: Easing.InOutQuad }
+        NumberAnimation { target: shakeShift; property: "x"; to: -Theme.px(7); duration: Theme.motion(70); easing.type: Easing.InOutQuad }
+        NumberAnimation { target: shakeShift; property: "x"; to: Theme.px(4); duration: Theme.motion(60); easing.type: Easing.InOutQuad }
+        NumberAnimation { target: shakeShift; property: "x"; to: 0; duration: Theme.motion(50); easing.type: Easing.InQuad }
     }
 
     width: sideBySide ? 2 * edgeOffset + sideColumnWidth + margin + keypadWidth : Theme.px(320) + 2 * edgeOffset
@@ -154,9 +248,11 @@ FocusScope {
         x: panel.edgeOffset + Theme.px(3)
         y: titleText.y + titleText.height + (panel.isPINEntry ? 0 : Theme.px(6))
 
+        // A PIN of a known length takes no more than that.
+        readonly property int maxLength: !panel.isPINEntry ? maxPassLength
+            : panel.autoSubmitLength > 0 ? Math.min(panel.autoSubmitLength, maxPINLength) : maxPINLength
         function keyInput(keyText, isNumber) {
-            if (inputField.text.length < (panel.isPINEntry ? maxPINLength : maxPassLength)
-                    && (!panel.isPINEntry || isNumber))
+            if (inputField.text.length < maxLength && (!panel.isPINEntry || isNumber))
                 inputField.text += keyText;
         }
         function clearAll() { inputField.text = ""; }
@@ -188,6 +284,14 @@ FocusScope {
             font.pixelSize: Theme.px(18)
             font.letterSpacing: Theme.px(2)
             font.family: Theme.fontFamily
+            // A screen reader hears what it is and, as the dots show, how
+            // much is in it, never what (a password field to it by its
+            // echoMode; Accessible.passwordEdit would clear the name).
+            Accessible.role: Accessible.EditableText
+            Accessible.name: panel.isPINEntry ? qsTr("PIN") : qsTr("Password")
+            Accessible.description: text.length === 0 ? passwordField.hint
+                : panel.isPINEntry ? qsTr("%n digit(s) entered", "", text.length)
+                : qsTr("%n character(s) entered", "", text.length)
         }
 
         Text {
@@ -275,27 +379,32 @@ FocusScope {
             id: cancelButton
             objectName: "unlockCancel"
             caption: qsTr("Cancel")
-            width: panel.sideBySide ? buttonGrid.width : buttonGrid.width / 2 - panel.margin / 2
+            // Alone (a PIN without Done), the whole row.
+            width: panel.sideBySide || !panel.doneShown ? buttonGrid.width : buttonGrid.width / 2 - panel.margin / 2
             height: Theme.px(52)
             onAction: panel.entryCanceled()
         }
         ActionButton {
             id: doneButton
             objectName: "unlockDone"
+            // Not for a PIN of a known length (the owner's change, above).
+            visible: panel.doneShown
             caption: qsTr("Done")
             affirmative: true
             width: panel.sideBySide ? buttonGrid.width : buttonGrid.width / 2 - panel.margin / 2
             height: Theme.px(52)
-            active: passwordField.enteredText.length >= (panel.enforceMinLength ? panel.minPassLength : 1)
+            active: !panel.checking && passwordField.enteredText.length >= (panel.enforceMinLength ? panel.minPassLength : 1)
             onAction: panel._submit()
         }
     }
 
     // ---- Keyboard entry (UnlockPanel.qml Keys handlers) ------------------------
     // The original's (uiComponents/UnlockPanel/UnlockPanel.qml:191-230): a
-    // digit types into a PIN (anything printable into a password),
-    // Backspace and Delete take one off, Enter and Return submit. Phoenix:
-    // Esc cancels.
+    // digit types into a PIN (anything printable into a password; a digit
+    // is the number row's or the keypad's, Qt.Key_0 to Key_9, isNumber
+    // :150-156), Backspace and Delete take one off, Enter and Return
+    // submit (a PIN too, without Done). Phoenix: Esc cancels; a PIN of a
+    // known length is checked as its last digit goes in (typeKey).
     //
     // Focus navigation (GAPS V8 (3); Phoenix, the original had none): Tab /
     // Shift+Tab and the arrows put a ring on the keypad's keys and the
@@ -332,7 +441,7 @@ FocusScope {
         if (emergencyButton.visible)
             out.push(emergencyButton);
         out.push(cancelButton);
-        if (doneButton.active)
+        if (doneButton.visible && doneButton.active)
             out.push(doneButton);
         return out;
     }
@@ -394,17 +503,14 @@ FocusScope {
         if (_navKey(event))
             return;
         if (event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete) {
-            _setKeyItem(null);
-            passwordField.deleteOne();
+            panel.deleteOne();
         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
             panel._submit();
         } else if (event.key === Qt.Key_Escape) {
             _setKeyItem(null);
             panel.entryCanceled();
         } else if (event.text.length > 0 && event.text.charCodeAt(0) >= 32) {
-            _setKeyItem(null);
-            passwordField.keyInput(event.text, event.key >= Qt.Key_0 && event.key <= Qt.Key_9);
-            panel._showQueued();
+            panel.typeKey(event.text, event.key >= Qt.Key_0 && event.key <= Qt.Key_9);
         }
     }
 
@@ -449,6 +555,12 @@ FocusScope {
             border.color: "#2c8ce0"
             border.width: Theme.px(3)
         }
+        // The blank cell left of 0 is no key.
+        Accessible.ignored: pinButton.caption === ""
+        Accessible.role: Accessible.Button
+        Accessible.name: pinButton.caption === "\b" ? qsTr("Delete") : pinButton.caption
+        Accessible.focusable: true
+        Accessible.onPressAction: if (pinButton.enabled) pinButton.action(pinButton.caption)
         MouseArea {
             objectName: "pinKey" + (pinButton.caption === "\b" ? "Delete" : pinButton.caption)
             anchors.fill: parent
