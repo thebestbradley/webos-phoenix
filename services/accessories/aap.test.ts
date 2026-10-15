@@ -92,7 +92,7 @@ describe("An AAP session", () => {
         const { s, sent, states } = open();
         expect(sent).toEqual([aap.connectPacket()]);
         s.receive(hex("01 00 04 00 00 00 01 00 02 00 05 00 49 4e 05 00 a5 4f"));
-        expect(sent.slice(1)).toEqual([aap.notificationFilter(), aap.getInEar()]);
+        expect(sent.slice(1)).toEqual([aap.notificationFilter(), aap.getInEar(), aap.requestProximityKeys()]);
         s.receive(hex("04 00 04 00 04 00 03 04 01 64 01 01 02 01 64 01 01 08 01 0c 02 01"));
         s.receive(hex("04 00 04 00 08 00 01 02 01 00"));
         // In ear: the community's 0x00 (UNVERIFIED), the secondary in the case.
@@ -104,6 +104,26 @@ describe("An AAP session", () => {
         s.setListeningMode("anc");
         expect(sent[sent.length - 1]).toEqual(aap.setListeningMode("anc"));
         expect(states[states.length - 1].listeningMode).toBe("anc");
+    });
+
+    it("asks for the AirPods' keys and keeps them [AAP-defs FINDINGS.md; CAPod's \"AirPod Keys\"]", () => {
+        // tyalie's request, byte for byte.
+        expect(aap.requestProximityKeys()).toEqual(hex("04 00 04 00 30 00 05 00"));
+        const { s, states } = open();
+        s.receive(hex("01 00 04 00 00 00 01 00 02 00"));
+        const irk = Array.from({ length: 16 }, (_, i) => 0x10 + i), enc = Array.from({ length: 16 }, (_, i) => 0xa0 + i);
+        // Two keys: type, a byte, the length, a byte, the key.
+        s.receive(hex("04 00 04 00 31 00 02 01 00 10 00").concat(irk, [0x04, 0x00, 0x10, 0x00], enc));
+        expect(states[states.length - 1].keys).toEqual({ irk, encKey: enc });
+        // A short or odd answer keeps nothing.
+        expect(aap.parse(hex("04 00 04 00 31 00 01 01 00 10 00 01 02"))).toEqual({ kind: "keys", irk: [], encKey: [] });
+    });
+
+    it("renames the AirPods themselves [rename, UNVERIFIED]", () => {
+        expect(aap.rename("Gym")).toEqual(hex("04 00 04 00 1a 00 01 03 00 47 79 6d"));
+        // The length is the UTF-8 bytes'.
+        expect(aap.rename("Café").slice(6, 9)).toEqual([0x01, 0x05, 0x00]);
+        expect(() => aap.rename("")).toThrow();
     });
 
     it("gives up on a refused connection", () => {
