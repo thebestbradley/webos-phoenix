@@ -51,6 +51,17 @@ in the documents linked from each item.
   by the catalog and shown in the Marketplace (What's New, Version History,
   each update's notes), Settings > Updates and Device Info
   ([APP-STORE.md 3.15](APP-STORE.md#315-update-logs), [RELEASE-NOTES.md](RELEASE-NOTES.md)).
+- 15 October 2026: the web engine and the user agent (the owner's
+  decision, [DECISIONS.md](DECISIONS.md)). The simulator runs on Qt 6.11.3,
+  whose Qt WebEngine is Chromium 140 with security fixes to 153, the newest
+  Qt has (was Qt 6.8.1, Chromium 122; QML still tested on 6.8.1, the
+  device's), and every page, the apps' and the
+  browser's, is told Chrome's current version (155 now, following Chrome's
+  release cadence), as Chrome on an Android phone or tablet, with client
+  hints that agree; the real engine shows in Settings > Device Info. Slack's
+  web app gets past its "update your browser" gate. The device's engine
+  (OSE's Chromium 120) moves with the device stack
+  ([APP-RUNTIME.md](APP-RUNTIME.md#the-web-engine-and-the-user-agent)).
 - In progress (10 October 2026): Synergy C1-C2 (the connector kit and the
   Fediverse account), and the device side of the gaps (the device window
   source, its system status, the WAV sounds, the lock service, the

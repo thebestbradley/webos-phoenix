@@ -73,7 +73,7 @@ git clone --recurse-submodules https://github.com/thebestbradley/phoenix-ember-g
 
 The original Open webOS apps in `third_party/`. `./phoenix` does this too.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:41 · phoenix:474`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:41 · phoenix:533`
 
 ```sh
 git submodule update --init
@@ -235,7 +235,7 @@ scripts/mac-setup.sh
 
 ### Install everything and build
 
-It asks for sudo. It installs apt packages, Qt 6.8.1 into `/opt/Qt`, Node 22, and builds `whisper-cli` and `llama-server` into `/usr/local/bin`.
+It asks for sudo. It installs apt packages, Qt 6.11.3 into `/opt/Qt`, Node 22, and builds `whisper-cli` and `llama-server` into `/usr/local/bin`.
 
 Run in `webos-phoenix` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:276-280`
 
@@ -272,7 +272,7 @@ scripts/linux-setup.sh --deps
 Run in `webos-phoenix` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:378`
 
 ```sh
-cmake -S shell -B build -DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64 && cmake --build build
+cmake -S shell -B build -DCMAKE_PREFIX_PATH=/opt/Qt/6.11.3/gcc_64 && cmake --build build
 ```
 
 ### No sound card (containers)
@@ -325,9 +325,9 @@ npm run build
 
 ### Build into another folder
 
-Other overrides: `PHOENIX_QT_DIR` (a Qt 6.8 or newer), `QT_PREFIX` (Linux, default `/opt/Qt`), `CMAKE_BUILD_PARALLEL_LEVEL`.
+Other overrides: `PHOENIX_QT_DIR` (a Qt 6.8 or newer; 6.11.3 is the simulator's, 6.8.1 the device's), `QT_PREFIX` (Linux, default `/opt/Qt`), `CMAKE_BUILD_PARALLEL_LEVEL`.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:65-67`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:66-68`
 
 ```sh
 PHOENIX_BUILD_DIR=build-other ./phoenix
@@ -335,7 +335,7 @@ PHOENIX_BUILD_DIR=build-other ./phoenix
 
 ### What ./phoenix runs for a new build folder
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:594,602`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:653,669`
 
 **Mac:**:
 
@@ -346,7 +346,7 @@ cmake -S shell -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_PREFI
 **Linux:**:
 
 ```sh
-cmake -S shell -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64
+cmake -S shell -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_PREFIX_PATH=/opt/Qt/6.11.3/gcc_64
 ```
 
 ```sh
@@ -453,7 +453,7 @@ in `phoenix-ember-glass-ui`: 2.0, with the rebuilt apps:
 
 SSH sessions and containers. `./phoenix run` does this itself when xvfb-run is installed.
 
-Run in `webos-phoenix` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:305-306 · phoenix:638-650`
+Run in `webos-phoenix` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:305-306 · phoenix:705-717`
 
 ```sh
 QTWEBENGINE_DISABLE_SANDBOX=1 xvfb-run -a -s "-screen 0 1920x1200x24" ./build/phoenix-sim --tablet --scene cards --screenshot out.png
@@ -505,7 +505,7 @@ A hardware Home button instead of the gesture bar:
 
 Device IDs: `fairphone-fp6`, `ayn-odin2portal`, `pinephonepro`, `pinetab2`, `raspberrypi4-64`. Don't add phone or tablet with it.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:16-20,132-139 · shell/sim/main.cpp:184,186`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:16-20,145-152 · shell/sim/main.cpp:184,186`
 
 ```sh
 ./phoenix run --device fairphone-fp6
@@ -706,7 +706,7 @@ export QMLTEST="$(brew --prefix qt)/bin/qmltestrunner"
 **Linux:**:
 
 ```sh
-export QMLTEST=/opt/Qt/6.8.1/gcc_64/bin/qmltestrunner
+export QMLTEST=/opt/Qt/6.11.3/gcc_64/bin/qmltestrunner
 ```
 
 ### Run the QML tests
@@ -791,6 +791,12 @@ python3 tools/get-wakeword.py && build/wakeword-test
 build/simnet-test
 ```
 
+The user agent policy: Chrome's version on its cadence, the strings per form factor:
+
+```sh
+build/useragent-test
+```
+
 ```sh
 build/simmarketplace-test
 ```
@@ -833,7 +839,7 @@ build/simfonts-test
 
 The static checks a device image would trip on.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:33-38,74-77 · tools/check-device.sh:8-15`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:33-38,75-78 · tools/check-device.sh:8-15`
 
 ```sh
 ./phoenix check-device
@@ -991,7 +997,7 @@ node ../tools/check-lockfile.cjs
 
 `./phoenix --tests` does this for you.
 
-Run in `any folder` · Mac + Linux · Source: `webos-phoenix/phoenix:553-557`
+Run in `any folder` · Mac + Linux · Source: `webos-phoenix/phoenix:612-616`
 
 **Mac:**:
 
@@ -1417,6 +1423,12 @@ A Telegram account:
 
 ```sh
 NODE_PATH="$(npm root -g)" node tools/test-telegram.cjs
+```
+
+What sites are sent and pages read: the user agent and client hints in phoenix-sim:
+
+```sh
+NODE_PATH="$(npm root -g)" node tools/test-useragent-sim.cjs
 ```
 
 Terminal: the simulated shell, then /bin/sh:
@@ -2475,7 +2487,7 @@ node tools/platform-mock/server.cjs --port 8099 --seed --write-servers /tmp/serv
 
 `./phoenix` fetches these itself.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:509,519,532,540 · tools/get-whisper-model.py:33-34`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:568,578,591,599 · tools/get-whisper-model.py:33-34`
 
 --model base.en or tiny.en:
 
