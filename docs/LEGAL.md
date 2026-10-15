@@ -812,6 +812,11 @@ any SSH library. Checked 11 October 2026:
 
 ## AirPods and tracker alerts
 
+> **Draft: not reviewed by a lawyer; not legal advice.** The owner decided
+> (15 October 2026) not to have this section reviewed for now. It records
+> what Phoenix does and the reasoning it rests on, so that a lawyer can
+> check it before Phoenix is distributed widely.
+
 AirPods and Beats support and unknown tracker alerts
 (docs/ACCESSORIES.md) are Phoenix's code, Apache-2.0, written from
 **protocol facts**: what Apple's AirPods and Find My accessories put on
@@ -821,20 +826,34 @@ it (docs/ACCESSORIES.md, "Sources", with each source's licence). Checked
 15 October 2026:
 
 - **No code or text of another project is used.** The open AirPods
-  projects (LibrePods, OpenPods, AirPodsDesktop) and furiousMAC's
-  Wireshark dissector are GPL; they were not used for code, and only
-  facts that independent sources also give (a field's position, a
-  message's number) were taken from furiousMAC's notes. The short wire
-  messages in `services/accessories/aap.test.ts` are captures of AirPods'
-  own messages (tyalie/AAP-Protocol-Defintion's `examples/`), protocol
-  data, not anyone's code; serial numbers are left out.
+  projects (LibrePods, OpenPods, AirPodsDesktop, CAPod) and furiousMAC's
+  Wireshark dissector are GPL; none of their code or text is used. Facts
+  were taken from their documentation, never their code, and each is
+  named where it is used: furiousMAC's notes (a field's position, a
+  message's number, also given by independent sources), CAPod's wiki (the
+  layout of the AirPods' answer with their keys) and LibrePods' protocol
+  notes (the rename message's bytes, the one fact with no other source,
+  marked unverified). A message's bytes are what the AirPods understand,
+  not anyone's expression. The short wire messages in
+  `services/accessories/aap.test.ts` are captures of AirPods' own messages
+  (tyalie/AAP-Protocol-Defintion's `examples/`), protocol data, not
+  anyone's code; serial numbers are left out. AirGuard's (Apache-2.0)
+  detection and scan values are numbers its code uses, credited where
+  Phoenix uses the same (`trackerdetect.js`, `scanner.js`); its code is
+  not copied.
 - **Interoperability.** Speaking a device's protocol so that it works with
   another computer is what the law protects: in the EU, Directive
   2009/24/EC art. 6 (and recital 15) and the Court of Justice's ruling that
   a program's functionality and data formats are not protected by
   copyright (C-406/10, *SAS Institute*); in the US, 17 U.S.C. 1201(f).
-  Phoenix circumvents no protection: the encrypted part of AirPods'
-  advertisement is left encrypted, and features AirPods keep for Apple's
+  Phoenix reads the encrypted part of an AirPods advertisement only for the
+  user's own AirPods, with the key those AirPods give the user's device
+  when it asks over their own channel (as they give it to any device they
+  are paired with): the owner's data, decrypted with the owner's key, so
+  that the owner's device can tell its AirPods from others and show their
+  batteries (interoperability, docs/ACCESSORIES.md, "Your AirPods' keys").
+  It breaks no protection to get the key and reads no one else's
+  AirPods; the keys stay on the device. Features AirPods keep for Apple's
   devices are not unlocked.
 - **Apple's Bluetooth vendor ID is not used.** Some projects make the
   computer claim Apple's vendor ID in its Device ID record to unlock
@@ -854,6 +873,11 @@ it (docs/ACCESSORIES.md, "Sources", with each source's licence). Checked
   `apps/settings/src/pages/Earbuds.tsx`; Apache-2.0); the batteries are Open
   webOS's status bar icons (above). The tracker's route is drawn from the
   sightings, with no map tiles.
+- **The alert's sound** (`apps/settings/public/sounds/tracker-alert.mp3`)
+  is synthesized by `tools/make-feedback-sounds.py`, CC0 1.0 like
+  Phoenix's other generated sounds: chirps and a ping of its own, nothing
+  sampled, and not an imitation of Apple's sounds
+  (`shell/assets/sounds/PROVENANCE.md`).
 - **phoenix-l2cap** (`services/l2cap`) is Phoenix's C (Apache-2.0) over
   Linux's Bluetooth socket interface, with its own copy of the address
   structure, so it needs no BlueZ (GPL) header or library.

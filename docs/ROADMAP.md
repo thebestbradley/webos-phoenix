@@ -20,7 +20,7 @@ plan, milestone by milestone. Every gap still open, by area and priority:
 | M2: legacy UI parity | 18 | 2 |
 | M3: phones and tablets | 0 | 8 |
 | M4: core apps and services | 12 | 11 |
-| M5: modernize, within 1.x | 2 | 3 |
+| M5: modernize, within 1.x | 2 | 4 |
 | M6: the last 1.0 features | 13 | 1 |
 | 1.0 release | 7 | 18 |
 | 2.0: modern webOS | 1 | 20 |
@@ -401,6 +401,24 @@ dark and light themes go to 2.0.
       bridge on a device, a background service
 - [x] Community features for 1.x, as picked by the owner on 7 October 2026
       ([M6-PLAN.md](M6-PLAN.md) F4; in the simulator, see M6)
+- [ ] A system-wide **Low Power Mode** (the owner, 15 October 2026; roadmap
+      only, not built; [spec/GAPS.md](spec/GAPS.md) E9). One switch, in
+      Settings > Battery and the system menu, that can also come on by itself
+      at a battery level the user picks and goes off on the charger, and has
+      the whole system spend less: the accessories' Bluetooth scan drops to
+      Battery Saver ([ACCESSORIES.md](ACCESSORIES.md), "Power": the scan's
+      modes already exist, and will follow it); background sync, refresh and
+      the Assistant's checks less often; animations and the blur reduced (as
+      for llvmpipe, RenderInfo); the brightness capped; a power-saving CPU
+      governor (cpufreq's `powersave` or `conservative`, where the device
+      allows); and a cue in the status bar (the battery icon marked), so it
+      is not left on unawares. What webOS had: no such mode. luna-systemui
+      warned at 20 % and 10 % (banners) and at 5 % (the Low Battery popup,
+      `data/PowerdService.js:65-85`); the community added Govnah's CPU
+      governor profiles, Muffle System Logging and Mode Switcher's modes that
+      change settings when the charger comes and goes
+      ([COMMUNITY-FEATURES.md](COMMUNITY-FEATURES.md) rows 12 and 16, and its
+      patch list). Phoenix's mode would be its own, in the 1.x look
 
 ## M6: the last 1.0 features
 
