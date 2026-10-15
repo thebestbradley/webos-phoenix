@@ -185,7 +185,8 @@ if(PHOENIX_BUILD_SIM)
                                        sim/siminstances.cpp sim/siminstances.h)
     target_link_libraries(simmarketplace-test PRIVATE Qt6::Core Qt6::Network)
     # The shared catalog's half runs the checkout's own server/marketplace/bin/serve.sh.
-    target_compile_definitions(simmarketplace-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
+    # SIMMARKETPLACE_TEST: SimMarketplace takes the test's switch for running a simulator as on a Mac (no parent-death signal).
+    target_compile_definitions(simmarketplace-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}" SIMMARKETPLACE_TEST)
     target_compile_definitions(phoenix-sim PRIVATE
         PHOENIX_QML_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml"
         PHOENIX_QML_BUILD_DIR="${PHOENIX_QML_BUILD_DIR}"
