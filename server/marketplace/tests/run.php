@@ -258,8 +258,23 @@ check(str_contains($light, '>AB</text>') && str_contains($light, 'fill="#1a1a1a"
       && str_contains($dark, 'fill="#ffffff"') && !str_contains($bad, '<script') && str_contains($bad, 'fill="#37474f"'),
       'a generated icon: up to three letters, dark on a light colour, escaped, a default colour');
 
-// A site that publishes no web app manifest: listed with the one Phoenix wrote for it
+// A site that publishes no web app manifest (Slack): listed with the one Phoenix wrote for it
 // (curated-sites.json "webManifest"), published with the catalog, its SHA-256 in the signed index.
+$sl = array_values(array_filter($idx['apps'], fn ($a) => $a['id'] === 'org.webosphoenix.pwa.slack'))[0] ?? null;
+$slFile = $sl ? "$tmp/data/public/v1/manifests/" . basename($sl['pwa']['manifest']) : '';
+$slM = is_file($slFile) ? json_decode(file_get_contents($slFile), true) : null;
+check($sl && preg_match('#^http://127\.0\.0\.1:9999/v1/manifests/org\.webosphoenix\.pwa\.slack-[0-9a-f]{16}\.webmanifest$#', $sl['pwa']['manifest'])
+      && $sl['pwa']['origin'] === 'https://app.slack.com' && ($sl['pwa']['sha256'] ?? '') === hash_file('sha256', $slFile)
+      && $sl['homepage'] === 'https://app.slack.com/' && $sl['title'] === 'Slack',
+      'a site with no manifest of its own (Slack): listed with the one Phoenix wrote, served by the catalog, its SHA-256 in the signed index');
+check($slM && $slM['name'] === 'Slack' && $slM['start_url'] === 'https://app.slack.com/client' && $slM['scope'] === 'https://app.slack.com/'
+      && $slM['display'] === 'standalone' && $slM['icons']
+      && !array_filter($slM['icons'], fn ($i) => !str_starts_with($i['src'], 'https://app.slack.com/')),
+      '... what a device needs from it: a name, its start page and scope on the site, the site\'s own icons at their addresses there');
+check(str_starts_with($sl['icon'], 'http://127.0.0.1:9999/v1/icons/copy/org.webosphoenix.pwa.slack-') && !isset($sl['iconGenerated'])
+      && !isset($x['pwa']['sha256']),
+      '... its listing icon a copy of the site\'s; a site\'s own manifest has no SHA-256 (the site changes it)');
+// Changes to such a manifest, and one that is not the site's.
 $written = ['id' => 'org.webosphoenix.pwa.harbourchat', 'title' => 'Harbour Chat', 'developer' => 'Harbour Co', 'categories' => ['Communication'],
             'featured' => false, 'summary' => 'Chat on the quay.', 'manifestBy' => 'phoenix', 'origin' => 'https://chat.harbour.example',
             'icon' => 'https://chat.harbour.example/favicon.ico', 'manifestName' => 'Harbour Chat',
