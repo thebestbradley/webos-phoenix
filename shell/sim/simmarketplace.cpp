@@ -12,6 +12,7 @@
 #include <QHostAddress>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLoggingCategory>
 #include <QProcessEnvironment>
 #include <QStandardPaths>
 #include <QTcpSocket>
@@ -20,9 +21,17 @@
 #include <cerrno>
 #include <csignal>
 
+#include <sys/types.h>
+#include <unistd.h>
+
 #ifdef Q_OS_LINUX
 #include <sys/prctl.h>
 #endif
+
+// What the catalog finds and does, and why (QT_LOGGING_RULES=
+// "phoenix.sim.catalog.info=true"; simmarketplace-test shows it when a
+// check fails).
+Q_LOGGING_CATEGORY(lcCatalog, "phoenix.sim.catalog", QtWarningMsg)
 
 namespace {
 
@@ -85,15 +94,48 @@ SimMarketplace::~SimMarketplace()
     m_process.disconnect(this);
     // A server left to its watch goes on while other simulators run (the
     // watch stops it once none is left); only one serve.sh still setting up,
-    // or the server this simulator's child is, stops here.
+    // or the server this simulator's child is, stops here, with all it
+    // started.
+    stopLaunched(true);
+}
+
+// serve.sh and all it started are one process group (launch): a setup's
+// commands, a watch it has just handed the server to, and PHP's server
+// (not shared: serve.sh became it) with the worker processes it forks,
+// which on a Mac outlive PHP's server (php-src sapi/cli/php_cli_server.c,
+// php_cli_server_worker_install_pdeathsig: only Linux and FreeBSD end them
+// with it). Only while serve.sh itself runs: the group is this
+// simulator's then, and a watch left the server once serve.sh returned is
+// not stopped from here (it goes on for the other simulators).
+void SimMarketplace::stopLaunched(bool wait)
+{
     if (m_process.state() == QProcess::NotRunning)
         return;
-    m_process.terminate();
-    if (!m_process.waitForFinished(3000)) {
-        m_process.kill();
-        m_process.waitForFinished(1000);
+    const pid_t group = static_cast<pid_t>(m_process.processId());
+    const auto send = [this, group](int sig) {
+        if (group <= 0 || ::kill(-group, sig) != 0) {
+            if (sig == SIGKILL)
+                m_process.kill();
+            else
+                m_process.terminate();
+        }
+    };
+    qCInfo(lcCatalog, "stopping serve.sh (process group %d)", int(group));
+    send(SIGTERM);
+    if (wait) {
+        if (!m_process.waitForFinished(3000)) {
+            send(SIGKILL);
+            m_process.waitForFinished(1000);
+        }
+        return;
     }
+    // PHP's server goes on SIGTERM; should something not, it is killed.
+    QTimer::singleShot(3000, &m_process, [this, send]() {
+        if (m_process.state() != QProcess::NotRunning)
+            send(SIGKILL);
+    });
 }
+
 
 QString SimMarketplace::defaultFolder()
 {
@@ -177,6 +219,19 @@ void SimMarketplace::setState(State state, const QString &error)
     emit stateChanged();
 }
 
+void SimMarketplace::fail(const QString &error)
+{
+    qCInfo(lcCatalog, "failed: %s", qPrintable(error));
+    setState(Failed, error);
+    // What this simulator started stops (a server or a setup that does not
+    // answer); onFinished leaves it failed.
+    if (m_process.state() != QProcess::NotRunning) {
+        m_stopping = true;
+        m_poll->stop();
+        stopLaunched();
+    }
+}
+
 void SimMarketplace::startAsync(int timeoutMs)
 {
     // Already on its way, or this simulator's child serving it. One found
@@ -226,8 +281,7 @@ void SimMarketplace::probe()
         if (!m_launched) {
             launch();
         } else if (m_deadline.hasExpired()) {
-            setState(Failed, QStringLiteral("the catalog service did not answer at %1 in time (see %2)").arg(url(), logFile()));
-            stop();
+            fail(QStringLiteral("the catalog service did not answer at %1 in time (see %2)").arg(url(), logFile()));
         } else {
             m_poll->start();
         }
@@ -298,16 +352,30 @@ void SimMarketplace::launch()
     if (!m_defaultAppsDir.isEmpty())
         env.insert(QStringLiteral("PHOENIX_DEFAULT_APPS"), m_defaultAppsDir);
     m_process.setProcessEnvironment(env);
+    // In a process group of its own, which all it starts joins: stopped
+    // from here (stopLaunched), all of it stops, on every system.
+    // On Linux, besides: without the simulators' folder serve.sh ends by
+    // exec'ing PHP's server, which is then this simulator's: should the
+    // simulator be killed, the server goes too (the parent-death signal
+    // outlives the exec). Shared, serve.sh hands the server to its watch
+    // and returns (the signal is not passed on to its children); killed
+    // while it sets up, it stops. A Mac has no such signal.
 #ifdef Q_OS_LINUX
-    // Without the simulators' folder serve.sh ends by exec'ing PHP's
-    // server, which is then this simulator's: should the simulator be
-    // killed, the server goes too (the parent-death signal outlives the
-    // exec). Shared, serve.sh hands the server to its watch and returns
-    // (the signal is not passed on to its children); killed while it sets
-    // up, it stops.
-    m_process.setChildProcessModifier([] { ::prctl(PR_SET_PDEATHSIG, SIGTERM); });
+    bool parentDeathSignal = true;
+#ifdef SIMMARKETPLACE_TEST
+    // simmarketplace-test runs a simulator as on a Mac.
+    parentDeathSignal = !qEnvironmentVariableIsSet("SIMMARKETPLACE_TEST_NO_PDEATHSIG");
+#endif
+    m_process.setChildProcessModifier([parentDeathSignal] {
+        ::setpgid(0, 0);
+        if (parentDeathSignal)
+            ::prctl(PR_SET_PDEATHSIG, SIGTERM);
+    });
+#else
+    m_process.setChildProcessModifier([] { ::setpgid(0, 0); });
 #endif
     m_process.start(QStringLiteral("/bin/sh"), { serve, QString::number(m_port) });
+    qCInfo(lcCatalog, "started %s %d (process %lld)", qPrintable(serve), int(m_port), m_process.processId());
     // settingUp changed: the menu says so.
     emit stateChanged();
     m_poll->start();
@@ -343,12 +411,7 @@ void SimMarketplace::stop()
     if (!shared() && m_process.state() != QProcess::NotRunning) {
         m_stopping = true;
         m_poll->stop();
-        m_process.terminate();
-        // PHP's server goes on SIGTERM; should it not, it is killed.
-        QTimer::singleShot(3000, &m_process, [this]() {
-            if (m_process.state() != QProcess::NotRunning)
-                m_process.kill();
-        });
+        stopLaunched();
         return;
     }
     // An older simulator's goes on, and is used.
@@ -360,8 +423,8 @@ void SimMarketplace::stop()
         QFile marker(stopMarker());
         if (marker.open(QIODevice::WriteOnly))
             marker.close();
-        if (m_process.state() != QProcess::NotRunning)
-            m_process.terminate();
+        // A serve.sh still setting up here, with what it started.
+        stopLaunched();
         if (const qint64 pid = serverPid())
             ::kill(static_cast<pid_t>(pid), SIGTERM);
     }
@@ -495,9 +558,7 @@ bool SimMarketplace::start(int timeoutMs)
         QTimer::singleShot(timeoutMs + 5000, &loop, &QEventLoop::quit);
         loop.exec();
     }
-    if (m_state == Starting) {
-        setState(Failed, QStringLiteral("the catalog service did not answer at %1 in time (see %2)").arg(url(), logFile()));
-        stop();
-    }
+    if (m_state == Starting)
+        fail(QStringLiteral("the catalog service did not answer at %1 in time (see %2)").arg(url(), logFile()));
     return m_state == Running;
 }

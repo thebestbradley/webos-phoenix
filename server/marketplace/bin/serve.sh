@@ -40,7 +40,8 @@
 # simulator runs, whichever started it, and stops a few seconds
 # (PHOENIX_CATALOG_GRACE, 5) after the last one is gone, quit or crashed.
 # While it runs, server.json in the folder says so: {pid (the watch, or the
-# server run by hand), port, checkout, started}.
+# server run by hand), port, checkout, started}. Stopping PHP's server stops
+# the worker processes it forks too, which on a Mac outlive it.
 
 set -e
 cd "$(dirname "$0")/.."
@@ -81,6 +82,21 @@ write_server_json() {
     printf '{"format":1,"pid":%s,"port":%s,"checkout":"%s","started":"%s"}\n' "$1" "$PORT" \
         "$(json_text "$CHECKOUT")" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$DATA/server.json.new"
     mv -f "$DATA/server.json.new" "$DATA/server.json"
+}
+
+# Stops PHP's server ($PHP) and the worker processes it forked
+# (PHP_CLI_SERVER_WORKERS, below). PHP ends its workers with it only where
+# there is a parent-death signal, Linux and FreeBSD (php-src
+# sapi/cli/php_cli_server.c, php_cli_server_worker_install_pdeathsig); on a
+# Mac they would go on serving the port, the catalog running on with
+# nothing left to stop it. Paused first: it forks none while they are
+# looked for.
+stop_php() {
+    kill -STOP "$PHP" 2>/dev/null || return 0
+    workers=$(ps -A -o pid= -o ppid= 2>/dev/null | while read -r pid parent; do [ "$parent" != "$PHP" ] || echo "$pid"; done)
+    kill $workers "$PHP" 2>/dev/null || true
+    kill -CONT "$PHP" 2>/dev/null || true
+    wait "$PHP" 2>/dev/null || true
 }
 
 # The fill (bin/web-apps.py fill): what changed since the last fill that worked.
@@ -138,7 +154,7 @@ if [ "$WATCH" = 1 ]; then
     write_server_json $$
     php -S "127.0.0.1:$PORT" public/router.php </dev/null &
     PHP=$!
-    trap 'kill "$PHP" 2>/dev/null || true; wait "$PHP" 2>/dev/null || true; rm -f "$DATA/server.json"; echo "The catalog stopped (asked to)"; exit 0' TERM
+    trap 'stop_php; rm -f "$DATA/server.json"; echo "The catalog stopped (asked to)"; exit 0' TERM
     fill </dev/null &
     GRACE="${PHOENIX_CATALOG_GRACE:-5}"
     idle=0
@@ -150,8 +166,7 @@ if [ "$WATCH" = 1 ]; then
             idle=$((idle + 1))
             if [ "$idle" -ge "$GRACE" ]; then
                 echo "No simulator is running any more: the catalog stops"
-                kill "$PHP" 2>/dev/null || true
-                wait "$PHP" 2>/dev/null || true
+                stop_php
                 rm -f "$DATA/server.json"
                 exit 0
             fi
@@ -237,7 +252,14 @@ if [ -n "$PHOENIX_SIM_INSTANCES" ]; then
     sh "$SELF" "$PORT" --watch $( [ "$FILL" = 1 ] || echo --no-fill ) </dev/null &
     exit 0
 fi
-# By hand: serves until stopped, filling meanwhile.
+# By hand: serves until stopped (Ctrl+C, or a simulator's menu), filling
+# meanwhile.
 fill </dev/null &
+php -S "127.0.0.1:$PORT" public/router.php </dev/null &
+PHP=$!
+trap 'stop_php; rm -f "$DATA/server.json"; exit 0' INT TERM HUP
 write_server_json $$
-exec php -S "127.0.0.1:$PORT" public/router.php
+code=0
+wait "$PHP" || code=$?
+rm -f "$DATA/server.json"
+exit "$code"

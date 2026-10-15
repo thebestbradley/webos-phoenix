@@ -22,6 +22,13 @@
 // own checkout's data; its key is not known here). Without that folder (the
 // tests' first half), the server is this simulator's child and stops with it.
 //
+// serve.sh runs in a process group of its own: stopping it from here stops
+// all it started (a setup's commands, a watch it handed the server to,
+// PHP's server and the worker processes PHP forks, which on a Mac outlive
+// PHP), as Linux's parent-death signal cannot. Its decisions go to the
+// logging category phoenix.sim.catalog (info: QT_LOGGING_RULES=
+// "phoenix.sim.catalog.info=true").
+//
 // startAsync() never blocks: the state goes stopped -> starting -> running
 // (or failed, with the reason in error()), stateChanged() each time; sim.qml
 // shows it in the Services menu and passes it to the pages (the runtime's
@@ -142,6 +149,11 @@ signals:
 
 private:
     void setState(State state, const QString &error = QString());
+    // Failed, and what this simulator started stops.
+    void fail(const QString &error);
+    // The serve.sh this simulator started, while it runs, and its process
+    // group: SIGTERM, then SIGKILL after 3 s (or now, waiting: the destructor).
+    void stopLaunched(bool wait = false);
     void probe();
     void launch();
     void onFinished(int exitCode, QProcess::ExitStatus status);
