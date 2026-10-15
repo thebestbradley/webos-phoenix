@@ -7138,6 +7138,15 @@
                          paired: s.bluetooth.paired.indexOf(d.address) >= 0, pairing: pairing === d.address,
                          trusted: false, blocked: false, rssi: -60, connectedProfiles: [], adapterAddress: "00:1d:fe:00:00:01" };
             });
+            // The simulated AirPods once paired (the "AirPods and tracker
+            // alerts" block below), connected while they are out or their
+            // case is open.
+            (runtime.extraBluetoothDevices ? runtime.extraBluetoothDevices() : []).forEach(function (d) {
+                if (s.bluetooth.paired.indexOf(d.address) < 0) return;
+                list.push({ name: d.name, address: d.address, typeOfDevice: "bredr", classOfDevice: d.classOfDevice,
+                            paired: true, pairing: false, trusted: true, blocked: false, rssi: -45,
+                            connectedProfiles: d.connected ? ["a2dp", "hfp"] : [], adapterAddress: "00:1d:fe:00:00:01" });
+            });
             return ok({ adapterAddress: "00:1d:fe:00:00:01", devices: list });
         }
 
@@ -7195,6 +7204,22 @@
             },
             "/device/getStatus": function (p, reply, ctx) { watch(p, reply, ctx, devices); }
         });
+        // For the AirPods block: the radio, what is paired, and pairing or
+        // forgetting the simulated AirPods the ordinary way.
+        runtime.bluetoothSim = {
+            state: function () { var s = load(); return { powered: !!s.bluetooth.powered, paired: s.bluetooth.paired.slice() }; },
+            addPaired: function (address) {
+                var s = load();
+                if (s.bluetooth.paired.indexOf(address) < 0) s.bluetooth.paired.push(address);
+                save(s);
+            },
+            unpair: function (address) {
+                var s = load();
+                s.bluetooth.paired = s.bluetooth.paired.filter(function (a) { return a !== address; });
+                save(s);
+            },
+            changed: function () { changed(); }
+        };
 
         // ---- com.webos.settingsservice ------------------------------------------------
 
@@ -18408,6 +18433,352 @@
         }
         register(["org.webosphoenix.battery"], {
             "/usage": function (p, reply, ctx) { batteryWatch.add(p, reply, ctx, usage); }
+        });
+    })();
+
+    // ================================================================================
+    // AirPods and tracker alerts (docs/ACCESSORIES.md)
+    // ================================================================================
+    //
+    // org.webosphoenix.earbuds and org.webosphoenix.trackers, the same
+    // requests and replies as on a device (services/accessories/earbuds.js,
+    // trackers.js), over simulated hardware: phoenix-sim's Simulate > AirPods
+    // and Trackers (sim.qml) owns where the AirPods are (near, the case's lid,
+    // each earbud in the case, out or in an ear, the batteries, the stem
+    // pressed) and the tracker that follows, and tells the pages as shell
+    // status (simAirPods, simTracker); what the AirPods are set to (the
+    // listening mode, ear detection, Conversation Awareness, the name Phoenix
+    // gives them) and the trackers seen live here, in the shared store.
+    //
+    //   org.webosphoenix.earbuds/getStatus {subscribe} -> {bluetooth,
+    //       nearby: [{id, model, modelName, kind, color, battery: {left,
+    //       right, case}, charging, lidOpen, lidOpenCount, rssi, paired}],
+    //       devices: [{address, name, model, kind, modelNumber, connected,
+    //       aap, battery: {left, right, case, single}, charging, inEar: {left,
+    //       right}, noiseMode, noiseModes, earDetection,
+    //       conversationAwareness}], pairing: null | {id, state, address,
+    //       error}}; connect {id}, cancelConnect, setNoiseMode {address,
+    //       mode}, setEarDetection {address, enabled},
+    //       setConversationAwareness {address, enabled}, rename {address,
+    //       name}, forget {address}. Batteries in percent, -1: no reading.
+    //   org.webosphoenix.trackers/getStatus {subscribe} -> {enabled,
+    //       bluetooth, location, scanning, trackers: [{id, type, network,
+    //       name, firstSeen, lastSeen, sightings, duration, distance,
+    //       alertedAt, ignored, points: [{t, lat?, lon?}], canPlaySound}],
+    //       sound}; setEnabled {enabled}, playSound {id}, stopSound {id},
+    //       ignore {id, ignored?}, clear {}.
+    //
+    // The shell hears the AirPods' status as systemStatus {earbuds} (its
+    // card when a case opens, the system menu's batteries and noise control,
+    // pausing media when an earbud comes out: Earbuds.js), and asks with
+    // shell status {earbudsRequest: {method, params}}.
+    (function earbudsAndTrackers() {
+        var hooks = runtime.hostStatusHooks = runtime.hostStatusHooks || [];
+        // The simulated AirPods: AirPods Pro 2 (model number A2931, Apple's
+        // "Identify your AirPods"); their advertisement's model code is not
+        // one the sources document, so nearby they are "AirPods" until the
+        // control channel names them, as on a device.
+        var PODS = { address: "a0:b1:c2:d3:e4:f5", le: "5e:a1:b2:c3:d4:e5", name: "AirPods Pro", model: "AirPods Pro 2",
+                     modelNumber: "A2931", kind: "airpodspro", code: "0x1420", classOfDevice: 0x240418,
+                     modes: ["off", "transparency", "adaptive", "anc"], ca: true };
+        var hw = { present: false, lidOpen: false, left: "case", right: "case", battery: { left: 100, right: 100, case: 80 },
+                   charging: { left: false, right: false, case: false }, lidOpenCount: 0, stem: 0 };
+        var lastStem = 0;
+        var pairing = null, pairTimers = [];
+        var watchers = [];
+        function bt() { return runtime.bluetoothSim ? runtime.bluetoothSim.state() : { powered: false, paired: [] }; }
+        function settings() { return store.get("earbuds:settings", {}); }
+        function setSettings(fn) { var s = settings(); fn(s); store.set("earbuds:settings", s); }
+        function mine(s) { return s[PODS.address] || null; }
+        function out(side) { return hw[side] !== "case"; }
+        function connected() {
+            var b = bt(), s = mine(settings());
+            return !!s && b.powered && b.paired.indexOf(PODS.address) >= 0 && hw.present && !s.disconnected
+                && (hw.lidOpen || out("left") || out("right"));
+        }
+        runtime.extraBluetoothDevices = function () {
+            var s = mine(settings());
+            return s ? [{ name: s.name || PODS.name, address: PODS.address, classOfDevice: PODS.classOfDevice, connected: connected() }] : [];
+        };
+        function deviceList() {
+            var b = bt(), s = mine(settings());
+            if (!s || !b.powered || b.paired.indexOf(PODS.address) < 0) return [];
+            var c = connected();
+            var ear = function (side) { return hw[side] === "ear" ? "ear" : hw[side] === "out" ? "out" : "case"; };
+            return [{ address: PODS.address, name: s.name || PODS.name, btName: PODS.name, model: c ? PODS.model : "", kind: PODS.kind,
+                      modelNumber: c ? PODS.modelNumber : "", connected: c, aap: c,
+                      battery: { left: c ? hw.battery.left : -1, right: c ? hw.battery.right : -1,
+                                 case: c && hw.lidOpen ? hw.battery.case : -1, single: -1 },
+                      charging: { left: c && hw.left === "case" && hw.charging.left, right: c && hw.right === "case" && hw.charging.right,
+                                  case: c && hw.charging.case, single: false },
+                      inEar: c ? { left: ear("left"), right: ear("right") } : { left: "", right: "" },
+                      noiseMode: c ? s.noiseMode || "anc" : "", noiseModes: PODS.modes,
+                      earDetection: s.earDetection !== false,
+                      conversationAwareness: PODS.ca ? s.conversationAwareness !== false : null }];
+        }
+        function nearbyList() {
+            var b = bt();
+            if (!b.powered || !hw.present || !(hw.lidOpen || out("left") || out("right"))) return [];
+            var paired = deviceList().length ? PODS.address : "";
+            var level = function (v, shown) { return shown ? Math.round(v / 10) * 10 : -1; };
+            return [{ id: PODS.le, model: PODS.code, modelName: "AirPods", kind: "", color: "white",
+                      battery: { left: level(hw.battery.left, true), right: level(hw.battery.right, true),
+                                 case: level(hw.battery.case, hw.lidOpen) },
+                      charging: { left: hw.left === "case" && hw.charging.left, right: hw.right === "case" && hw.charging.right,
+                                  case: hw.charging.case },
+                      lidOpen: hw.lidOpen, lidOpenCount: hw.lidOpenCount, rssi: -42, paired: paired }];
+        }
+        function status() {
+            return ok({ bluetooth: bt().powered, nearby: nearbyList(), devices: deviceList(), pairing: pairing });
+        }
+        var lastPosted = "";
+        function fire(post) {
+            var st = status(), text = toJson(st);
+            watchers = watchers.filter(function (w) { return !w.ctx.cancelled(); });
+            watchers.forEach(function (w) { if (w.last !== text) { w.last = text; w.reply(Object.assign({ subscribed: true }, JSON.parse(text))); } });
+            if (post && text !== lastPosted) {
+                lastPosted = text;
+                host.postToHost("systemStatus", { earbuds: JSON.parse(text) });
+            }
+        }
+        // Another page changed the settings, or the radio changed here.
+        try {
+            global.addEventListener("storage", function (e) {
+                if (e.key === "phoenix:earbuds:settings" || e.key === "phoenix:settings:state") fire(false);
+            });
+        } catch (e) { /* no window */ }
+
+        function endPairing() { pairTimers.forEach(clearTimeout); pairTimers = []; }
+        function step(ms, fn) { pairTimers.push(setTimeout(fn, ms)); }
+        var methods = {
+            "/getStatus": function (p, reply, ctx) {
+                var first = status();
+                if (p.subscribe) first.subscribed = true;
+                reply(first);
+                if (p.subscribe) watchers.push({ reply: reply, ctx: ctx, last: toJson(status()) });
+            },
+            // The card's Connect: the AirPods turn up in the search, pair and
+            // connect (on a device: bluetooth2's discovery, pair, A2DP).
+            "/connect": function (p, reply) {
+                if (!bt().powered) return reply(fail(-1, "Bluetooth is off"));
+                if (!nearbyList().some(function (n) { return n.id === p.id; })) return reply(fail(-1, "Those AirPods are no longer nearby"));
+                endPairing();
+                pairing = { id: String(p.id), state: "searching", address: "", modelName: "AirPods", kind: "", error: "" };
+                fire(true);
+                reply(ok());
+                step(1500, function () {
+                    pairing = Object.assign({}, pairing, { state: "pairing", address: PODS.address });
+                    fire(true);
+                    step(1000, function () {
+                        setSettings(function (s) { s[PODS.address] = Object.assign({ noiseMode: "anc" }, s[PODS.address] || {}, { disconnected: false }); });
+                        if (runtime.bluetoothSim) runtime.bluetoothSim.addPaired(PODS.address);
+                        pairing = Object.assign({}, pairing, { state: "connecting" });
+                        fire(true);
+                        step(800, function () { pairing = null; endPairing(); fire(true); });
+                    });
+                });
+            },
+            "/cancelConnect": function (p, reply) { endPairing(); pairing = null; fire(true); reply(ok()); },
+            "/setNoiseMode": function (p, reply) {
+                var d = deviceList()[0];
+                if (!d || d.address !== p.address) return reply(fail(-1, "No such AirPods"));
+                if (PODS.modes.indexOf(p.mode) < 0) return reply(fail(-1, "These AirPods do not have that listening mode"));
+                if (!d.connected) return reply(fail(-1, "These AirPods are not connected"));
+                setSettings(function (s) { s[PODS.address].noiseMode = p.mode; });
+                fire(true);
+                reply(ok());
+            },
+            "/setEarDetection": function (p, reply) {
+                if (!deviceList().length || p.address !== PODS.address) return reply(fail(-1, "No such AirPods"));
+                setSettings(function (s) { s[PODS.address].earDetection = p.enabled !== false; });
+                fire(true);
+                reply(ok());
+            },
+            "/setConversationAwareness": function (p, reply) {
+                var d = deviceList()[0];
+                if (!d || p.address !== PODS.address) return reply(fail(-1, "No such AirPods"));
+                if (!d.connected) return reply(fail(-1, "These AirPods are not connected"));
+                setSettings(function (s) { s[PODS.address].conversationAwareness = p.enabled !== false; });
+                fire(true);
+                reply(ok());
+            },
+            "/rename": function (p, reply) {
+                var name = String(p.name || "").trim();
+                if (!deviceList().length || p.address !== PODS.address) return reply(fail(-1, "No such AirPods"));
+                if (!name || name.length > 32) return reply(fail(-1, "The name has 1 to 32 characters"));
+                setSettings(function (s) { s[PODS.address].name = name; });
+                if (runtime.bluetoothSim) runtime.bluetoothSim.changed();
+                fire(true);
+                reply(ok());
+            },
+            "/forget": function (p, reply) {
+                if (!deviceList().length || p.address !== PODS.address) return reply(fail(-1, "No such AirPods"));
+                setSettings(function (s) { delete s[PODS.address]; });
+                if (runtime.bluetoothSim) runtime.bluetoothSim.unpair(PODS.address);
+                fire(true);
+                reply(ok());
+            },
+            // The simulator's own (the system menu's Bluetooth row): connect
+            // or disconnect the paired AirPods.
+            "/phoenix/setConnected": function (p, reply) {
+                if (!mine(settings())) return reply(fail(-1, "No such AirPods"));
+                setSettings(function (s) { s[PODS.address].disconnected = p.connected === false; });
+                if (runtime.bluetoothSim) runtime.bluetoothSim.changed();
+                fire(true);
+                reply(ok());
+            }
+        };
+        register(["org.webosphoenix.earbuds"], methods);
+
+        hooks.push(function (st, writer) {
+            if (st.simAirPods && typeof st.simAirPods === "object") {
+                var a = st.simAirPods, wasOpen = hw.lidOpen;
+                hw = { present: !!a.present, lidOpen: !!a.lidOpen, left: a.left || "case", right: a.right || "case",
+                       battery: Object.assign({ left: 100, right: 100, case: 80 }, a.battery || {}),
+                       charging: Object.assign({ left: false, right: false, case: false }, a.charging || {}),
+                       lidOpenCount: hw.lidOpenCount + (a.lidOpen && !wasOpen ? 1 : 0), stem: a.stem || 0 };
+                // The case closed with both earbuds in: a disconnect from the
+                // menu is forgotten, as the AirPods reconnect next time.
+                if (!hw.lidOpen && !out("left") && !out("right") && mine(settings()) && mine(settings()).disconnected && writer)
+                    setSettings(function (s) { s[PODS.address].disconnected = false; });
+                // The stem pressed and held: the next listening mode, as the
+                // AirPods report it (Apple: press and hold the stem).
+                if (hw.stem !== lastStem && writer && connected() && Date.now() - (a.at || 0) < 5000) {
+                    var cur = mine(settings()).noiseMode || "anc";
+                    var cycle = PODS.modes.filter(function (m) { return m !== "off"; });
+                    var next = cycle[(cycle.indexOf(cur) + 1) % cycle.length];
+                    setSettings(function (s) { s[PODS.address].noiseMode = next; });
+                }
+                lastStem = hw.stem;
+                fire(writer);
+            }
+            if (st.earbudsRequest && writer) {
+                var r = st.earbudsRequest, fn = methods["/" + String(r.method || "")];
+                if (fn) fn(r.params || {}, function () {}, { cancelled: function () { return true; } });
+            }
+            if ("bluetoothOn" in st) setTimeout(function () { fire(writer); }, 0);
+        });
+
+        // ---- Tracker alerts ------------------------------------------------------------
+        // The same rule as a device (services/accessories/lib/trackerdetect.js):
+        // seen for 30 minutes, 3 times, over 400 m, one alert in 7 hours.
+        var MIN = 60000, T = { minDuration: 30 * MIN, minSightings: 3, minDistance: 400, realertAfter: 7 * 60 * MIN };
+        var trackerWatchers = [];
+        var sound = null, soundTimers = [];
+        function tstate() { return store.get("trackers:sim", { enabled: true, trackers: {} }); }
+        function setTstate(fn) { var s = tstate(); fn(s); store.set("trackers:sim", s); }
+        function meters(a, b) {
+            var R = 6371000, rad = Math.PI / 180, dLat = (b.lat - a.lat) * rad, dLon = (b.lon - a.lon) * rad;
+            var h = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+        }
+        function spread(pts) {
+            var best = 0;
+            pts = pts.filter(function (p) { return p.lat !== undefined; });
+            for (var i = 0; i < pts.length; ++i) for (var j = i + 1; j < pts.length; ++j) best = Math.max(best, meters(pts[i], pts[j]));
+            return best;
+        }
+        var NAMES = { airtag: "AirTag", findmy: "Find My accessory", dult: "Tracker", findhub: "Find Hub tracker", tile: "Tile tracker" };
+        function summary(r) {
+            return { id: r.id, type: r.type, network: r.network, name: NAMES[r.type] || "Tracker", firstSeen: r.firstSeen, lastSeen: r.lastSeen,
+                     sightings: r.points.length, duration: r.lastSeen - r.firstSeen, distance: Math.round(spread(r.points)),
+                     alertedAt: r.alertedAt || 0, ignored: !!r.ignored, separated: true, points: r.points.slice(),
+                     canPlaySound: r.type !== "tile" };
+        }
+        function trackerStatus() {
+            var s = tstate(), loc = runtime.location ? runtime.location.get() : null;
+            var list = Object.keys(s.trackers).map(function (id) { return summary(s.trackers[id]); })
+                .sort(function (a, b) { return b.lastSeen - a.lastSeen; });
+            return ok({ enabled: s.enabled !== false, bluetooth: bt().powered, location: !!loc, scanning: s.enabled !== false && bt().powered,
+                        trackers: list, sound: sound });
+        }
+        function fireTrackers() {
+            var text = toJson(trackerStatus());
+            trackerWatchers = trackerWatchers.filter(function (w) { return !w.ctx.cancelled(); });
+            trackerWatchers.forEach(function (w) { if (w.last !== text) { w.last = text; w.reply(Object.assign({ subscribed: true }, JSON.parse(text))); } });
+        }
+        try {
+            global.addEventListener("storage", function (e) { if (e.key === "phoenix:trackers:sim") fireTrackers(); });
+        } catch (e) { /* no window */ }
+        // An AirTag that has come along: four sightings over the last 35
+        // minutes, along 1.2 km to where the device is now (heading north),
+        // then the rule decides.
+        function follow(kind) {
+            var s = tstate();
+            if (s.enabled === false || !bt().powered) return;
+            var here = runtime.location ? runtime.location.get() : null, now = Date.now();
+            var id = kind === "dult" ? "c4:10:aa:bb:cc:01" : "f5:3a:9c:21:7e:04";
+            var r = s.trackers[id] || { id: id, type: kind === "dult" ? "dult" : "airtag", network: kind === "dult" ? "google" : "apple",
+                                        firstSeen: now, lastSeen: now, points: [], alertedAt: 0, ignored: false };
+            // (A walk with its turns: north, a little east, west.)
+            var east = [-0.004, 0.0025, -0.0015, 0];
+            [35, 24, 12, 0].forEach(function (ago, i) {
+                var p = { t: now - ago * MIN };
+                if (here) { p.lat = here.latitude - (3 - i) * 0.0036; p.lon = here.longitude + east[i]; }
+                r.points.push(p);
+            });
+            r.points.sort(function (a, b) { return a.t - b.t; });
+            r.firstSeen = r.points[0].t;
+            r.lastSeen = r.points[r.points.length - 1].t;
+            var due = !r.ignored && (!r.alertedAt || now - r.alertedAt >= T.realertAfter) && r.lastSeen - r.firstSeen >= T.minDuration
+                && r.points.length >= T.minSightings && spread(r.points) >= T.minDistance;
+            if (due) r.alertedAt = now;
+            s.trackers[id] = r;
+            store.set("trackers:sim", s);
+            if (due) {
+                var what = r.type === "airtag" ? "AirTag" : "tracker";
+                host.postToHost("notification", { appId: "org.webosphoenix.settings", title: "Unknown " + what + " found moving with you",
+                    body: "Its owner may be able to see where you are. Tap to find it or learn how to disable it.",
+                    params: { page: "bluetooth", view: "tracker", id: id }, tag: "tracker-" + id, soundClass: "alerts" });
+            }
+            fireTrackers();
+        }
+        function endSound() { soundTimers.forEach(clearTimeout); soundTimers = []; }
+        register(["org.webosphoenix.trackers"], {
+            "/getStatus": function (p, reply, ctx) {
+                var first = trackerStatus();
+                if (p.subscribe) first.subscribed = true;
+                reply(first);
+                if (p.subscribe) trackerWatchers.push({ reply: reply, ctx: ctx, last: toJson(trackerStatus()) });
+            },
+            "/setEnabled": function (p, reply) { setTstate(function (s) { s.enabled = p.enabled !== false; }); fireTrackers(); reply(ok()); },
+            // Its sound (on a device: DULT's Sound_Start over GATT), about 12 s.
+            "/playSound": function (p, reply) {
+                var r = tstate().trackers[p.id];
+                if (!r) return reply(fail(-1, "No such tracker"));
+                if (!bt().powered) return reply(fail(-1, "Bluetooth is off"));
+                endSound();
+                sound = { id: p.id, state: "connecting", error: "" };
+                fireTrackers();
+                reply(ok());
+                soundTimers.push(setTimeout(function () {
+                    sound = { id: p.id, state: "playing", error: "" };
+                    console.info("phoenix-sim: the " + (NAMES[r.type] || "tracker") + " plays its sound");
+                    fireTrackers();
+                    soundTimers.push(setTimeout(function () { sound = { id: p.id, state: "done", error: "" }; fireTrackers(); }, 12000));
+                }, 900));
+            },
+            "/stopSound": function (p, reply) {
+                if (sound && sound.id === p.id && sound.state !== "done") { endSound(); sound = { id: p.id, state: "done", error: "" }; fireTrackers(); }
+                reply(ok());
+            },
+            "/ignore": function (p, reply) {
+                if (!tstate().trackers[p.id]) return reply(fail(-1, "No such tracker"));
+                setTstate(function (s) { s.trackers[p.id].ignored = p.ignored !== false; });
+                fireTrackers();
+                reply(ok());
+            },
+            "/clear": function (p, reply) { setTstate(function (s) { s.trackers = {}; }); fireTrackers(); reply(ok()); }
+        });
+        var lastFollow = 0;
+        hooks.push(function (st, writer) {
+            // simTracker {follow: n, kind, at}: n goes up each time one
+            // follows (a page loading later hears the last one, not new).
+            if (st.simTracker && typeof st.simTracker === "object") {
+                var n = st.simTracker.follow || 0;
+                if (n !== lastFollow && writer && Date.now() - (st.simTracker.at || 0) < 5000) follow(st.simTracker.kind || "airtag");
+                lastFollow = n;
+            }
         });
     })();
 

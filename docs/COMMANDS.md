@@ -537,9 +537,9 @@ Turns the device a second after start-up:
 
 ### Open a scene
 
-`./build/phoenix-sim --help` lists them all: `locked` `cards` `stacks` `reorder` `maximized` `heldcard` `launcher` `launcheredit` `launchermenu` `launchergroup` `launchergroupopen` `launchertabs` `launcherinstall` `wave` `powermenu` `pin` `emergency` `firstuse` `lowbattery` `banner` `notified` `dashboard` `justtype` `keyboard` `clipstrip` `assistant` `systemmenu` `modal` `empty` `longstack` `hot` `notifystacks` `notifystacksbar` `notifystackslocked` `drawer` `capture` `capturepreview` `assistantbird` `assistantbirds` `assistantbirdmoves` `wakeword` `wakewordlocked` `followup` `followupanswer` `followuplater` `followupaction` `followupchat`.
+`./build/phoenix-sim --help` lists them all: `locked` `cards` `stacks` `reorder` `maximized` `heldcard` `launcher` `launcheredit` `launchermenu` `launchergroup` `launchergroupopen` `launchertabs` `launcherinstall` `wave` `powermenu` `pin` `emergency` `firstuse` `lowbattery` `banner` `notified` `dashboard` `justtype` `keyboard` `clipstrip` `assistant` `systemmenu` `modal` `empty` `longstack` `hot` `notifystacks` `notifystacksbar` `notifystackslocked` `drawer` `capture` `capturepreview` `assistantbird` `assistantbirds` `assistantbirdmoves` `wakeword` `wakewordlocked` `followup` `followupanswer` `followuplater` `followupaction` `followupchat` `airpods` `airpodsbattery` `airpodsmenu` `airpodssettings` `trackeralert`.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:189 · shell/qml/sim.qml:522-540,1260-1263,2023-2072`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:189 · shell/qml/sim.qml:523-541,1345-1348,2124-2173`
 
 ```sh
 ./build/phoenix-sim --tablet --scene dashboard --screenshot dash.png
@@ -581,7 +581,7 @@ A web page in the browser:
 
 The menu bar's **Window** menu lists the simulators running on this computer first (as in Run two simulators at once), then the open cards, in card view's order with the windows stacked on a card under it, and brings the one you choose to the front, maximized; a check mark is on the card in front. It also has Card View, Launcher, Next Card (Ctrl+Shift+], ⇧⌘] on a Mac) and Previous Card (Ctrl+Shift+[). Locked, the card chosen is the one in front once you unlock.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/simchrome.cpp:272-286,499-570,731-749 · shell/qml/Phoenix/Sim/SimWindowMenu.qml · shell/qml/sim.qml:901-911`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/simchrome.cpp:272-286,499-570,731-749 · shell/qml/Phoenix/Sim/SimWindowMenu.qml · shell/qml/sim.qml:950-960`
 
 Three cards to choose from:
 

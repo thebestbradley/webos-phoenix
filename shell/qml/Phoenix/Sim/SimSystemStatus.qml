@@ -203,6 +203,22 @@ QtObject {
     property var gamepads: []
     property var usbDrives: []
     property int temperature: 31
+    // AirPods (docs/ACCESSORIES.md). simAirPods: the simulated pair, the
+    // simulator's own (Simulate > AirPods and Trackers, sim.qml), told to
+    // the pages: {present, lidOpen, left, right ("case", "out", "ear"),
+    // battery: {left, right, case}, charging: {...}, stem (presses of the
+    // stem), at}. earbuds: org.webosphoenix.earbuds' status as the runtime
+    // reports it ({bluetooth, nearby, devices, pairing}), what the shell
+    // shows (EarbudsMonitor, the system menu); earbudsRequest asks the
+    // service ({method, params}, through the pages: earbudsRequested).
+    property var simAirPods: ({ present: false, lidOpen: false, left: "case", right: "case",
+                                battery: { left: 100, right: 96, case: 80 }, charging: { left: true, right: true, case: false },
+                                stem: 0, at: 0 })
+    property var earbuds: ({ bluetooth: false, nearby: [], devices: [], pairing: null })
+    signal earbudsRequested(var request)
+    function earbudsRequest(method, params) { earbudsRequested({ method: method, params: params || {} }); }
+    // simTracker: {follow (how many times one has followed), kind, at}.
+    property var simTracker: ({ follow: 0, kind: "airtag", at: 0 })
     // A hardware keyboard is attached (phoenix-sim --hardware-keyboard,
     // Ctrl+Shift+K): the virtual keyboard stays down unless asked for.
     property bool hardwareKeyboard: typeof simHardwareKeyboard !== "undefined" && simHardwareKeyboard === true
@@ -356,10 +372,28 @@ QtObject {
 
     // Connect a paired device, or disconnect it when it is connected. One
     // device at a time, as the menu connected audio devices
-    // (SystemMenu.cpp:490-567).
+    // (SystemMenu.cpp:490-567). Paired AirPods are the runtime's: it
+    // connects them (they connect themselves when taken out).
     function connectBluetooth(address) {
+        var pods = bluetoothDevices.filter(function(d) { return d.address === address && d.earbuds; })[0];
+        if (pods) {
+            if (bluetoothOn)
+                earbudsRequest("phoenix/setConnected", { address: address, connected: pods.state !== "connected" });
+            return;
+        }
         bluetoothDevices = _toggle(bluetoothDevices, "address", address, function() { return bluetoothOn; },
                                    function(v) { bluetoothDevices = v; });
+    }
+    // The paired AirPods in the system menu's list, as the runtime reports
+    // them: added, renamed, connected or gone.
+    function _mergeEarbuds(devs) {
+        var keep = bluetoothDevices.filter(function(d) { return !d.earbuds; });
+        (devs || []).forEach(function(d) {
+            if (bluetoothOn)
+                keep.push({ name: d.name, address: d.address, state: d.connected ? "connected" : "disconnected", earbuds: true });
+        });
+        if (JSON.stringify(keep) !== JSON.stringify(bluetoothDevices))
+            bluetoothDevices = keep;
     }
 
     // Connect a VPN profile, or disconnect it when it is connected.
@@ -398,7 +432,10 @@ QtObject {
     }
     onBluetoothOnChanged: {
         if (!bluetoothOn)
-            bluetoothDevices = bluetoothDevices.map(function(d) { return _with(d, { state: "disconnected" }); });
+            bluetoothDevices = bluetoothDevices.filter(function(d) { return !d.earbuds; })
+                .map(function(d) { return _with(d, { state: "disconnected" }); });
+        else
+            _mergeEarbuds(earbuds.devices);
     }
 
     // True while applying a state the apps reported, so it is not sent back.
@@ -413,7 +450,7 @@ QtObject {
     // notificationtone, callForwarding, reduceMotion, keyboardAccess, tweaks, browser, proxy,
     // vpnProfiles, exhibitionApps, devMode, devModeUnlocked, dockModeSound, exhibition {enabled,
     // startAfter, nightMode, nightStart, nightEnd}, dockWallpaperUrl,
-    // automaticBrightness, displayOnWhenConnected.
+    // automaticBrightness, displayOnWhenConnected, earbuds.
     // Missing keys are left alone.
     function applyAppStatus(s) {
         applyingAppStatus = true;
@@ -530,6 +567,10 @@ QtObject {
         }
         if (s.dockWallpaperUrl !== undefined)
             dockWallpaper = s.dockWallpaperUrl;
+        if (s.earbuds && typeof s.earbuds === "object") {
+            earbuds = s.earbuds;
+            _mergeEarbuds(s.earbuds.devices);
+        }
         applyingAppStatus = false;
     }
 

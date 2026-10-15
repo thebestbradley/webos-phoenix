@@ -6,7 +6,8 @@
 // Chromium against the simulated services in runtime/phoenix-runtime.js:
 // toggles Wi-Fi, joins a network with a password, sets a PIN (and the
 // screen and lock timeouts), moves the
-// brightness slider, turns on airplane mode and pairs a Bluetooth device.
+// brightness slider, turns on airplane mode, pairs a Bluetooth device and
+// AirPods (their batteries, Noise Control) and opens Tracker Alerts.
 // Checks both the UI and the "systemStatus" messages the runtime sends the
 // shell (what drives the status bar in phoenix-sim).
 //
@@ -311,6 +312,30 @@ async function main() {
         await page.waitForFunction(() => /My devices[\s\S]*Headset/.test(document.body.innerText), null, { timeout: 5000 });
         check(true, "paired a headset");
         await shot("bluetooth-paired");
+
+        // ---- AirPods and Tracker Alerts (docs/ACCESSORIES.md) -----------------------
+        // The case opens nearby (Simulate > AirPods and Trackers), the card's
+        // Connect pairs them; they show their batteries and open their page.
+        await page.evaluate(() => window.__phoenixRuntime.applyHostStatus({ simAirPods: { present: true, lidOpen: true } }, { writer: true }));
+        const pods = await svc("luna://org.webosphoenix.earbuds/getStatus", {});
+        check(pods.nearby.length === 1 && pods.nearby[0].battery.case === 80, "AirPods nearby with the case open, the case's battery read");
+        await svc("luna://org.webosphoenix.earbuds/connect", { id: pods.nearby[0].id });
+        await page.waitForFunction(() => /AirPods Pro\s*L 100% · R 100% · Case 80%/.test(document.body.innerText), null, { timeout: 8000 });
+        check(true, "paired AirPods show their batteries in My devices");
+        await shot("bluetooth-airpods-list");
+        await page.click("[data-testid='bt-a0:b1:c2:d3:e4:f5']");
+        await page.waitForSelector("[data-testid='ab-mode-anc'] .pui-check", { timeout: 3000 });
+        await page.click("[data-testid='ab-mode-transparency']");
+        await page.waitForSelector("[data-testid='ab-mode-transparency'] .pui-check", { timeout: 3000 });
+        check((await svc("luna://org.webosphoenix.earbuds/getStatus", {})).devices[0].noiseMode === "transparency", "Noise Control sets the listening mode");
+        await shot("bluetooth-airpods");
+        await open("bluetooth");
+        await page.click("[data-testid='bt-trackers']");
+        await page.waitForFunction(() => /Unknown trackers moving with you/.test(document.body.innerText) && /Tracker Alerts/.test(document.querySelector(".pui-header").innerText), null, { timeout: 3000 });
+        check(true, "Tracker Alerts opens its page");
+        await shot("bluetooth-trackers");
+        await svc("luna://org.webosphoenix.earbuds/forget", { address: "a0:b1:c2:d3:e4:f5" });
+        await page.evaluate(() => window.__phoenixRuntime.applyHostStatus({ simAirPods: { present: false } }, { writer: true }));
 
         // ---- The shell flips a toggle (system menu) ----------------------------------
         await open("wifi");

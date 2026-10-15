@@ -137,8 +137,8 @@ it("Orientation", "", B, WP, "webos-phoenix/shell/sim/main.cpp:199-200 · README
     ("./build/phoenix-sim --turn left --screenshot turn.png --delay 1450", "turns the device a second after start-up")])
 
 sec("Simulator: scenes and apps")
-it("Open a scene", "`./build/phoenix-sim --help` lists them all: `locked` `cards` `stacks` `reorder` `maximized` `heldcard` `launcher` `launcheredit` `launchermenu` `launchergroup` `launchergroupopen` `launchertabs` `launcherinstall` `wave` `powermenu` `pin` `emergency` `firstuse` `lowbattery` `banner` `notified` `dashboard` `justtype` `keyboard` `clipstrip` `assistant` `systemmenu` `modal` `empty` `longstack` `hot` `notifystacks` `notifystacksbar` `notifystackslocked` `drawer` `capture` `capturepreview` `assistantbird` `assistantbirds` `assistantbirdmoves` `wakeword` `wakewordlocked` `followup` `followupanswer` `followuplater` `followupaction` `followupchat`.", B, WP,
-   "webos-phoenix/shell/sim/main.cpp:189 · shell/qml/sim.qml:522-540,1260-1263,2023-2072",
+it("Open a scene", "`./build/phoenix-sim --help` lists them all: `locked` `cards` `stacks` `reorder` `maximized` `heldcard` `launcher` `launcheredit` `launchermenu` `launchergroup` `launchergroupopen` `launchertabs` `launcherinstall` `wave` `powermenu` `pin` `emergency` `firstuse` `lowbattery` `banner` `notified` `dashboard` `justtype` `keyboard` `clipstrip` `assistant` `systemmenu` `modal` `empty` `longstack` `hot` `notifystacks` `notifystacksbar` `notifystackslocked` `drawer` `capture` `capturepreview` `assistantbird` `assistantbirds` `assistantbirdmoves` `wakeword` `wakewordlocked` `followup` `followupanswer` `followuplater` `followupaction` `followupchat` `airpods` `airpodsbattery` `airpodsmenu` `airpodssettings` `trackeralert`.", B, WP,
+   "webos-phoenix/shell/sim/main.cpp:189 · shell/qml/sim.qml:523-541,1345-1348,2124-2173",
    [("./build/phoenix-sim --tablet --scene dashboard --screenshot dash.png", ""),
     ("./build/phoenix-sim --scene 'assistant:@notified|what did I miss'", "the assistant, asked one or more questions separated by |")])
 it("Open apps at start-up", "Repeat `--launch` for several apps.", B, WP, "webos-phoenix/shell/sim/main.cpp:197-198 · README.md:401,444-448",
@@ -147,7 +147,7 @@ it("Open apps at start-up", "Repeat `--launch` for several apps.", B, WP, "webos
     ("./build/phoenix-sim --launch 'com.palm.app.clock:{\"action\": \"edit\"}'", "with launch params, as the application manager's {id, params}"),
     ("./build/phoenix-sim --open https://example.com", "a web page in the browser")])
 it("Choose the open app to view", "The menu bar's **Window** menu lists the simulators running on this computer first (as in Run two simulators at once), then the open cards, in card view's order with the windows stacked on a card under it, and brings the one you choose to the front, maximized; a check mark is on the card in front. It also has Card View, Launcher, Next Card (Ctrl+Shift+], ⇧⌘] on a Mac) and Previous Card (Ctrl+Shift+[). Locked, the card chosen is the one in front once you unlock.", B, WP,
-   "webos-phoenix/shell/sim/simchrome.cpp:272-286,499-570,731-749 · shell/qml/Phoenix/Sim/SimWindowMenu.qml · shell/qml/sim.qml:901-911",
+   "webos-phoenix/shell/sim/simchrome.cpp:272-286,499-570,731-749 · shell/qml/Phoenix/Sim/SimWindowMenu.qml · shell/qml/sim.qml:950-960",
    [("./build/phoenix-sim --tablet --launch org.webosphoenix.settings --launch org.webosphoenix.weather --launch org.webosphoenix.tasks", "three cards to choose from")])
 it("Use apps built in another checkout", "`--extra-rootfs` can be repeated. `--installed-dir DIR` changes where installed apps go.", B, WP, "webos-phoenix/shell/sim/main.cpp:195-196 · docs/APP-RUNTIME.md:72",
    ["./phoenix run tablet --extra-rootfs ../phoenix-default-apps/build/rootfs --launch com.palm.app.notes"])

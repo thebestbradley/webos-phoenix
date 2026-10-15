@@ -300,6 +300,13 @@ status (`gamepads`, `usbDrives`, `formFactor`, `usageTick`; the runtime's
   phoenix-temperature-alert.js`). It checks every five minutes, and on each
   signal. Each warning comes once, until the battery cools 2 °C below its
   mark. `--scene hot` shows the alert.
+- **AirPods and tracker alerts** (`org.webosphoenix.earbuds`,
+  `org.webosphoenix.trackers`; `@phoenix/luna` `earbuds`, `trackers`): the
+  AirPods card, batteries, Noise Control and ear detection, and unknown
+  tracker alerts, in the same service on a device and in the runtime in
+  the simulator (Simulate > AirPods and Trackers, the shell statuses
+  `simAirPods` and `simTracker`). [ACCESSORIES.md](ACCESSORIES.md) has
+  how, the protocol sources and what cannot be done.
 
 ### Editing: Cut, Copy, Paste, Select All
 

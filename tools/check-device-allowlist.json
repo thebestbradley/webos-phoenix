@@ -702,6 +702,10 @@
   "owner": "platform (release process)",
   "row": "B6"
  },
+ "recipes:unpinned:phoenix-l2cap_git.bb": {
+  "owner": "platform (release process)",
+  "row": "B6"
+ },
  "recipes:unpinned:phoenix-pdeath_git.bb": {
   "owner": "platform (release process)",
   "row": "B6"

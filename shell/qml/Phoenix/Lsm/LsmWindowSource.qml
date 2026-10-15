@@ -25,6 +25,11 @@ Item {
     property ListModel apps: ListModel {}
     property ListModel cards: ListModel {}
     property ListModel notifications: ListModel {}
+    // Popup alerts: the shell's own (the AirPods card, EarbudsMonitor.qml),
+    // as SimWindowSource's; the system UI's page alerts are WebAppMgr's
+    // windows, which it does not make yet (docs/DEVICE-AUDIT.md).
+    property ListModel alerts: ListModel {}
+    property var _shellAlerts: ({})
 
     // The shell connects to this to maximize a newly mapped card.
     signal cardFocusRequested(string uid)
@@ -238,7 +243,29 @@ Item {
     // ---- Window source interface ------------------------------------------------------
 
     function windowFor(uid) {
-        return _hosts[uid] || null;
+        return _hosts[uid] || _shellAlerts[uid] || null;
+    }
+
+    // The shell's own popup alert: its item and height (legacy pixels), in
+    // front; closeAlert (its buttons, the Home button) destroys it.
+    function showShellAlert(key, item, height) {
+        closeAlert(key);
+        var a = _shellAlerts;
+        a[key] = item;
+        _shellAlerts = a;
+        alerts.insert(0, { key: key, appId: "com.palm.systemui", name: key, height: height, sound: "", soundClass: "" });
+    }
+    function closeAlert(key) {
+        for (var i = alerts.count - 1; i >= 0; --i)
+            if (alerts.get(i).key === key)
+                alerts.remove(i);
+        var item = _shellAlerts[key];
+        if (!item)
+            return;
+        var a = _shellAlerts;
+        delete a[key];
+        _shellAlerts = a;
+        item.destroy();
     }
 
     function runningUid(appId) {

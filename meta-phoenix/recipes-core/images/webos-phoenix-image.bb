@@ -30,7 +30,7 @@ IMAGE_FEATURES:remove = "${@'debug-tweaks ssh-server-dropbear ssh-server-openssh
 IMAGE_FEATURES:remove:luneos = "${@'allow-empty-password empty-root-password allow-root-login' if d.getVar('PHOENIX_PRODUCTION') == '1' else ''}"
 
 IMAGE_INSTALL:append = " phoenix-shell phoenix-keyboard phoenix-apps phoenix-pty phoenix-devices phoenix-diag packagegroup-phoenix-terminal \
-    packagegroup-phoenix-assistant packagegroup-phoenix-connectors"
+    packagegroup-phoenix-assistant packagegroup-phoenix-connectors packagegroup-phoenix-accessories"
 
 # The machine's device configuration: /etc/phoenix/device.json (form
 # factor, density, buttons, the ringer switch) and the compositor's

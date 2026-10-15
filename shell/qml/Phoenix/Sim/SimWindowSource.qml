@@ -1564,6 +1564,21 @@ Item {
                         sound: "", soundClass: "" });
     }
 
+    // One of the shell's own popup alerts, as the three above: the AirPods
+    // card (EarbudsMonitor.qml) gives its item and its height in legacy
+    // pixels; it is put in the queue as the system UI's, and closeAlert
+    // (its buttons, the Home button) takes it away and destroys the item.
+    function showShellAlert(key, item, height) {
+        if (_windows[key])
+            _closeSystemWindow(key);
+        _windows[key] = item;
+        var queued = [];
+        for (var i = 0; i < alerts.count; ++i)
+            queued.push({ appId: alerts.get(i).appId, name: alerts.get(i).name });
+        alerts.insert(Policy.insertIndex(queued, "com.palm.systemui", key),
+                      { key: key, appId: "com.palm.systemui", name: key, height: height, sound: "", soundClass: "" });
+    }
+
     // The Home button closes the front popup alert
     // (DashboardWindowManager::slotCloseAlert: the window is closed).
     function closeAlert(key) {
@@ -2072,7 +2087,7 @@ Item {
     // are turned), which every page gets as it loads; unlike the rest it is
     // not the pages' to overrule.
     readonly property var _shellOwned: ["deviceLocked", "orientation", "ime", "firstUse", "launcherLayout", "gestureArea", "dockMode",
-                                        "debugOverlays", "usbHost", "gamepads", "usbDrives", "formFactor", "screen",
+                                        "debugOverlays", "usbHost", "gamepads", "usbDrives", "simAirPods", "simTracker", "formFactor", "screen",
                                         "marketplaceCatalog", "learnedWords", "notifications"]
     property var _shellStatus: ({})
 

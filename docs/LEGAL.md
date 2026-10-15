@@ -810,6 +810,54 @@ any SSH library. Checked 11 October 2026:
   licences.
 - The SFTP account's pictures are the drives' own (`art/app-icons/PROVENANCE.md`).
 
+## AirPods and tracker alerts
+
+AirPods and Beats support and unknown tracker alerts
+(docs/ACCESSORIES.md) are Phoenix's code, Apache-2.0, written from
+**protocol facts**: what Apple's AirPods and Find My accessories put on
+the air and answer over their own Bluetooth channel, as published papers,
+IETF drafts, Google's specification and independent capture notes describe
+it (docs/ACCESSORIES.md, "Sources", with each source's licence). Checked
+15 October 2026:
+
+- **No code or text of another project is used.** The open AirPods
+  projects (LibrePods, OpenPods, AirPodsDesktop) and furiousMAC's
+  Wireshark dissector are GPL; they were not used for code, and only
+  facts that independent sources also give (a field's position, a
+  message's number) were taken from furiousMAC's notes. The short wire
+  messages in `services/accessories/aap.test.ts` are captures of AirPods'
+  own messages (tyalie/AAP-Protocol-Defintion's `examples/`), protocol
+  data, not anyone's code; serial numbers are left out.
+- **Interoperability.** Speaking a device's protocol so that it works with
+  another computer is what the law protects: in the EU, Directive
+  2009/24/EC art. 6 (and recital 15) and the Court of Justice's ruling that
+  a program's functionality and data formats are not protected by
+  copyright (C-406/10, *SAS Institute*); in the US, 17 U.S.C. 1201(f).
+  Phoenix circumvents no protection: the encrypted part of AirPods'
+  advertisement is left encrypted, and features AirPods keep for Apple's
+  devices are not unlocked.
+- **Apple's Bluetooth vendor ID is not used.** Some projects make the
+  computer claim Apple's vendor ID in its Device ID record to unlock
+  features; Phoenix does not (docs/ACCESSORIES.md, "What is not
+  possible").
+- **No Apple service.** Phoenix does not sign in to Apple's servers or
+  use Find My's network; nothing about AirPods or trackers leaves the
+  device.
+- **Names.** "AirPods", "AirPods Pro", "AirPods Max", "AirTag", "Beats",
+  "Powerbeats" and "Find My" are Apple's trademarks, "Find Hub" Google's,
+  "Tile" Tile's and "SmartTag" Samsung's. Phoenix uses them only to say
+  what works with it and to name a device (as the device names itself),
+  never as its own feature's name or in a logo.
+- **Art.** No Apple logo, icon or product picture is shipped: the earbuds
+  and case are a plain drawing made in code for Phoenix
+  (`shell/qml/Phoenix/Shell/EarbudsArt.qml`, the same shapes in
+  `apps/settings/src/pages/Earbuds.tsx`; Apache-2.0); the batteries are Open
+  webOS's status bar icons (above). The tracker's route is drawn from the
+  sightings, with no map tiles.
+- **phoenix-l2cap** (`services/l2cap`) is Phoenix's C (Apache-2.0) over
+  Linux's Bluetooth socket interface, with its own copy of the address
+  structure, so it needs no BlueZ (GPL) header or library.
+
 ## Fonts
 
 Legacy webOS used **Prelude**, which was made for Palm and is not openly
@@ -821,7 +869,8 @@ open-licensed look-alike is an open task.
 
 "webOS" is a trademark of LG Electronics. "Palm", "Pre", "TouchPad" and
 related marks belong to their owners. We use them only to describe
-compatibility and history. If the project is published or distributed widely,
+compatibility and history. Apple's and others' accessory names: "AirPods and
+tracker alerts" above. If the project is published or distributed widely,
 consider a name that doesn't include "webOS" (for example "Phoenix, a shell
 for webOS OSE"). Naming ideas and the risks found so far (Pre and Pixi are Palm
 product names) are in [BRANDING.md](BRANDING.md).

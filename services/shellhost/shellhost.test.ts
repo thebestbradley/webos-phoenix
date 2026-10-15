@@ -170,6 +170,8 @@ describe("org.webosphoenix.shellhost", () => {
         expect(api["phoenix.system.notifications.publish"]).toEqual(["org.webosphoenix.system/setNotifications"]);
         expect(api["phoenix.system.notifications.read"]).toEqual(["org.webosphoenix.system/getNotifications"]);
         expect(perm["com.webos.surfacemanager"]).toContain("phoenix.system.notifications.publish");
+        // AirPods' ear detection pauses only what plays (EarbudsMonitor.qml asks getNowPlaying).
+        expect(perm["com.webos.surfacemanager"]).toContain("phoenix.system.media");
         const assistantPerm = JSON.parse(fs.readFileSync(path.join(HERE, "../../apps/assistant/service/sysbus/org.webosphoenix.assistant.perm.json"), "utf8"));
         expect(assistantPerm["org.webosphoenix.assistant"]).toContain("phoenix.system.notifications.read");
         expect(fs.readFileSync(path.join(HERE, "sysbus/org.webosphoenix.shellhost.service"), "utf8"))
