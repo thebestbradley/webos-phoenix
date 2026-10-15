@@ -75,6 +75,7 @@
 
 #ifdef PHOENIX_HAVE_WEBENGINE
 #include <QQuickWebEngineProfile>
+#include <QtWebEngineCore/qtwebenginecoreglobal.h>
 #include <QtWebEngineQuick>
 #include "simbrowser.h"
 #include "simdropshare.h"
@@ -567,6 +568,18 @@ int main(int argc, char *argv[])
         // The apps' pages are told what the browser's are: Chrome's current
         // version for the device's form factor (useragent.h).
         simBrowser->setAppsProfile(profile);
+        // The engine itself, said as it is (docs/APP-RUNTIME.md, "The web
+        // engine and the user agent"): here, and in Settings > Device Info
+        // (the runtime's osInfo, from host.json).
+        const QString chromium = QString::fromLatin1(qWebEngineChromiumVersion());
+        const QString patches = QString::fromLatin1(qWebEngineChromiumSecurityPatchVersion());
+        qInfo("phoenix-sim: web engine: Chromium %s (security patches %s), Qt WebEngine %s; pages are told Chrome %d",
+              qPrintable(chromium), qPrintable(patches), qWebEngineVersion(), UserAgent::chromeMajor());
+        hostInfo.insert(QStringLiteral("webEngine"), QJsonObject{
+            { QStringLiteral("name"), QStringLiteral("Chromium") },
+            { QStringLiteral("version"), chromium },
+            { QStringLiteral("securityPatches"), patches },
+            { QStringLiteral("qtWebEngine"), QString::fromLatin1(qWebEngineVersion()) } });
         webEngine = true;
         webApps = rootfs.apps();
     }

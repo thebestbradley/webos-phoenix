@@ -7520,11 +7520,29 @@
             }
             reply(r);
         };
+        // Phoenix's own keys (OsInfoService.cpp has none for it): the web
+        // engine the pages run in, as phoenix-sim says in
+        // /usr/share/phoenix/host.json ({"webEngine": {name, version,
+        // securityPatches}}, its Qt WebEngine's Chromium), for Settings >
+        // Device Info. Without it (a browser) they are left out.
+        var webEngineRead = false;
+        function addWebEngine() {
+            if (webEngineRead) return;
+            webEngineRead = true;
+            var h;
+            try { h = JSON.parse(PalmSystem.getResource("/usr/share/phoenix/host.json") || "{}") || {}; } catch (e) { h = {}; }
+            var w = h.webEngine;
+            if (!w || typeof w.version !== "string" || !w.version) return;
+            osInfo.phoenix_web_engine = String(w.name || "Chromium");
+            osInfo.phoenix_web_engine_version = w.version;
+            osInfo.phoenix_web_engine_security_patches = String(w.securityPatches || "");
+        }
         sys["/osInfo/query"] = function (p, reply) {
             if (!osInfo.webos_manufacturing_version) osInfo.webos_release = osInfo.webos_manufacturing_version = runtime.product().version;
             // The running system: the booted slot (System updates, below).
             var b = runtime.updateSlots && runtime.updateSlots.booted();
             if (b) { osInfo.webos_release = b.version; osInfo.webos_build_id = String(b.build); }
+            addWebEngine();
             reply(pick(osInfo, p.parameters));
         };
 
