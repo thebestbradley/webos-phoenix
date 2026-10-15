@@ -103,8 +103,12 @@ Item {
         }
 
         function type(text) {
-            // Laid out and shown (as a finger would find it).
+            // Laid out and shown (as a finger would find it). Done coming back
+            // (after a test of a PIN without it) moves it in its Grid only at
+            // the next polish; tapped before, it is where the Grid has not put
+            // it yet (on macOS's Qt, over Cancel).
             tryCompare(findChild(lock, "unlockPanel"), "opacity", 1, 1000);
+            waitForItemPolished(findChild(lock, "unlockDone").parent);
             for (var i = 0; i < text.length; ++i)
                 mouseClick(findChild(lock, "pinKey" + text.charAt(i)));
             mouseClick(findChild(lock, "unlockDone"));
