@@ -19,6 +19,7 @@ import QtQuick
 import QtTest
 import Phoenix.Shell
 import Phoenix.Sim
+import Phoenix.Native
 
 Item {
     id: root
@@ -687,6 +688,29 @@ Item {
             tryCompare(overlay, "visible", false, 3000);
             compare(overlay.shown, 0);
             verify(birdSeen.between > 0, "it closed in steps, not at once");
+        }
+
+        // Without a GPU (RenderInfo.softwareRendering) the backdrop is not
+        // blurred, and darker so the conversation still reads; with one,
+        // blurred and lighter. Forced both ways, whatever renders here.
+        function test_backdropWithoutAGpu() {
+            var saved = RenderInfo.mode;
+            openByHold();
+            var backdrop = findChild(overlay, "assistantBackdrop");
+            var blur = backdrop.children[0];
+            var dim = backdrop.children[1];
+            verify(blur.source !== null, "the scene behind");
+            try {
+                RenderInfo.mode = "on";
+                verify(!blur.visible);
+                verify(Qt.colorEqual(dim.color, "#D8101418"), "darker: " + dim.color);
+                RenderInfo.mode = "off";
+                verify(blur.visible);
+                verify(Qt.colorEqual(dim.color, "#80101418"), "lighter over the blur: " + dim.color);
+            } finally {
+                RenderInfo.mode = saved;
+            }
+            keyClick(Qt.Key_Escape);
         }
 
         // ---- The bird ----------------------------------------------------------------
