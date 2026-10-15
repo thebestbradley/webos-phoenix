@@ -9,6 +9,8 @@
 //                                   setstate (webos-connman-adapter)
 //   com.webos.service.bluetooth2    adapter/getStatus, adapter/setState,
 //                                   device/getStatus, a2dp/connect, a2dp/disconnect
+//   org.webosphoenix.earbuds        getStatus (AirPods: system.earbuds), and what
+//                                   the shell asks of it (earbudsRequest)
 //   com.webos.service.vpn           getProfileList, connect, disconnect
 //                                   (LuneOS's luneos-vpn-adapter; OSE has none)
 //   com.palm.telephony, com.palm.wan  a modem's (OSE has none): TTY, HAC,
@@ -324,6 +326,12 @@ QtObject {
     property bool wifiScanning: false
     property var bluetoothDevices: []
     property var vpnProfiles: []
+    // AirPods (docs/ACCESSORIES.md): org.webosphoenix.earbuds' status
+    // (services/accessories/earbuds.js), as SimSystemStatus's.
+    property var earbuds: ({ bluetooth: false, nearby: [], devices: [], pairing: null })
+    function earbudsRequest(method, params) {
+        _call("luna://org.webosphoenix.earbuds/" + method, params || {});
+    }
     readonly property string wifiSsid: _named(wifiNetworks, "ssid", "ipConfigured")
     readonly property string bluetoothDevice: _named(bluetoothDevices, "name", "connected")
     // -1 until bluetooth2 has listed the devices (taken as some, as
@@ -549,6 +557,11 @@ QtObject {
             status._btPending = p;
             status.bluetoothDevices = list;
             status.bluetoothPairedCount = list.length;
+        }, true);
+        _call("luna://org.webosphoenix.earbuds/getStatus", {}, function(r) {
+            var e = LsmStatus.earbudsStatus(r);
+            if (e)
+                status.earbuds = e;
         }, true);
         _call("luna://com.webos.service.vpn/getProfileList", {}, function(r) {
             var list = LsmStatus.vpnProfiles(r);

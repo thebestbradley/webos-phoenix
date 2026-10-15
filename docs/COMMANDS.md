@@ -537,7 +537,7 @@ Turns the device a second after start-up:
 
 ### Open a scene
 
-`./build/phoenix-sim --help` lists them all: `locked` `cards` `stacks` `reorder` `maximized` `heldcard` `launcher` `launcheredit` `launchermenu` `launchergroup` `launchergroupopen` `launchertabs` `launcherinstall` `wave` `powermenu` `pin` `emergency` `firstuse` `lowbattery` `banner` `notified` `dashboard` `justtype` `keyboard` `clipstrip` `assistant` `systemmenu` `modal` `empty` `longstack` `hot` `notifystacks` `notifystacksbar` `notifystackslocked` `drawer` `capture` `capturepreview` `assistantbird` `assistantbirds` `assistantbirdmoves` `wakeword` `wakewordlocked` `followup` `followupanswer` `followuplater` `followupaction` `followupchat`.
+`./build/phoenix-sim --help` lists them all: `locked` `cards` `stacks` `reorder` `maximized` `heldcard` `launcher` `launcheredit` `launchermenu` `launchergroup` `launchergroupopen` `launchertabs` `launcherinstall` `wave` `powermenu` `pin` `emergency` `firstuse` `lowbattery` `banner` `notified` `dashboard` `justtype` `keyboard` `clipstrip` `assistant` `systemmenu` `modal` `empty` `longstack` `hot` `notifystacks` `notifystacksbar` `notifystackslocked` `drawer` `capture` `capturepreview` `assistantbird` `assistantbirds` `assistantbirdmoves` `wakeword` `wakewordlocked` `followup` `followupanswer` `followuplater` `followupaction` `followupchat` `airpods` `airpodsbattery` `airpodsmenu` `trackeralert`.
 
 Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/shell/sim/main.cpp:188 · shell/qml/sim.qml:522-540,1260-1263,2023-2072`
 

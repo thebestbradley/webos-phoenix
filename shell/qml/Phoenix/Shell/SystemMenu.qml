@@ -26,6 +26,7 @@
 // list (commented out in the original too, SystemMenu.qml:182-186).
 
 import QtQuick
+import "Earbuds.js" as EarbudsLogic
 
 Item {
     id: menu
@@ -78,6 +79,14 @@ Item {
         var l = sys && sys.wifiNetworks ? sys.wifiNetworks.slice() : [];
         return l.filter(function(n) { return n.state === "ipConfigured"; })
                 .concat(l.filter(function(n) { return n.state !== "ipConfigured"; }));
+    }
+    // AirPods (docs/ACCESSORIES.md; the system's earbuds: org.webosphoenix.earbuds):
+    // the paired pair by address, and the connected one whose listening
+    // mode the Noise Control drawer sets.
+    function earbudsFor(address) { return EarbudsLogic.deviceFor(sys ? sys.earbuds : null, address); }
+    readonly property var earbudsInUse: {
+        var d = EarbudsLogic.connectedDevice(sys ? sys.earbuds : null);
+        return d && d.aap && EarbudsLogic.modes(d).length > 0 ? d : null;
     }
     readonly property string vpnInUse: {
         var l = sys && sys.vpnProfiles ? sys.vpnProfiles : [];
@@ -229,6 +238,7 @@ Item {
         wifi.close(true);
         bluetooth.close(true);
         vpn.close(true);
+        noise.close(true);
         rotation.delayUpdate = false;
         mute.delayUpdate = false;
         torch.delayUpdate = false;
@@ -1016,11 +1026,15 @@ Item {
                                     objectName: "systemMenuBluetoothDevice"
                                     forceSelected: btRow.modelData.state === "connecting"
                                     onAction: bluetooth.pick(btRow.modelData)
+                                    // AirPods: their batteries under the name while connected.
+                                    readonly property var pods: menu.earbudsFor(btRow.modelData.address)
                                     ListEntry {
+                                        objectName: "systemMenuBluetoothEntry"
                                         name: btRow.modelData.name
                                         connected: btRow.modelData.state === "connected"
                                         status: btRow.modelData.state === "connecting" ? qsTr("Connecting...")
-                                              : btRow.modelData.state === "connectfailed" ? qsTr("Unable to connect") : ""
+                                              : btRow.modelData.state === "connectfailed" ? qsTr("Unable to connect")
+                                              : parent.pods && parent.pods.connected && parent.pods.aap ? EarbudsLogic.batteryText(parent.pods.battery) : ""
                                     }
                                 }
                                 Divider {}
@@ -1035,6 +1049,51 @@ Item {
                         }
                     }
                     Divider {}
+
+                    // ---- Noise Control (Phoenix; docs/ACCESSORIES.md) ----
+                    // While AirPods with listening modes are connected: a
+                    // drawer as Bluetooth's, the mode in its header, the
+                    // modes in it with a check on the one in use (the
+                    // drawers' ListEntry); a pick sets it and closes the menu.
+                    Drawer {
+                        id: noise
+                        objectName: "systemMenuNoiseControl"
+                        visible: menu.earbudsInUse !== null
+                        title: qsTr("Noise Control")
+                        stateText: menu.earbudsInUse ? EarbudsLogic.modeLabel(menu.earbudsInUse.noiseMode) : ""
+                        active: !menu.restricted
+                        Divider {}
+                        Repeater {
+                            model: menu.earbudsInUse ? EarbudsLogic.modes(menu.earbudsInUse) : []
+                            delegate: Column {
+                                id: modeRow
+                                required property var modelData
+                                width: parent ? parent.width : 0
+                                Entry {
+                                    objectName: "systemMenuNoiseMode_" + modeRow.modelData
+                                    onAction: {
+                                        if (menu.earbudsInUse && menu.earbudsInUse.noiseMode !== modeRow.modelData)
+                                            menu.sys.earbudsRequest("setNoiseMode", { address: menu.earbudsInUse.address, mode: modeRow.modelData });
+                                        menu.closeAfter(Theme.systemMenuEntryCloseDelay);
+                                    }
+                                    ListEntry {
+                                        name: EarbudsLogic.modeLabel(modeRow.modelData)
+                                        connected: !!menu.earbudsInUse && menu.earbudsInUse.noiseMode === modeRow.modelData
+                                    }
+                                }
+                                Divider {}
+                            }
+                        }
+                        Entry {
+                            onAction: {
+                                if (menu.earbudsInUse)
+                                    menu.launchRequested(menu.settingsAppId, { page: "bluetooth", view: "earbuds", address: menu.earbudsInUse.address });
+                                menu.closeAfter(Theme.systemMenuRowCloseDelay);
+                            }
+                            Label { x: Theme.systemMenuIndent + Theme.systemMenuSubIndent; text: qsTr("AirPods Settings") }
+                        }
+                    }
+                    Divider { visible: noise.visible }
 
                     // ---- AirplaneModeElement.qml; labels from SystemMenu.cpp:65-70 ----
                     Entry {

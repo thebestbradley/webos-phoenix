@@ -270,6 +270,17 @@ function bluetoothDevices(reply, pending) {
         });
 }
 
+// ---- AirPods (org.webosphoenix.earbuds: services/accessories/earbuds.js) -----------
+// getStatus {subscribe}: {bluetooth, nearby, devices, pairing}, the shape
+// the shell takes as system.earbuds (EarbudsMonitor, the system menu).
+// Returns it with what is missing filled in, or null.
+function earbudsStatus(reply) {
+    if (!reply || reply.returnValue === false || !Array.isArray(reply.devices) || !Array.isArray(reply.nearby))
+        return null;
+    return { bluetooth: !!reply.bluetooth, nearby: reply.nearby, devices: reply.devices,
+             pairing: reply.pairing && typeof reply.pairing === "object" ? reply.pairing : null };
+}
+
 // ---- VPN (com.webos.service.vpn, LuneOS's luneos-vpn-adapter) ---------------------
 // getProfileList {subscribe}: vpnProfiles [{vpnProfileName,
 // vpnProfileConnectState: connected | connecting | disconnecting |
