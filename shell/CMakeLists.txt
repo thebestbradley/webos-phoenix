@@ -118,7 +118,7 @@ if(PHOENIX_BUILD_SIM)
         # Network: the pages' HTTP proxy (RootfsSchemeHandler, /__phoenix/proxy).
         find_package(Qt6 ${PHOENIX_QT_MIN} REQUIRED COMPONENTS Network)
         target_link_libraries(phoenix-sim PRIVATE Qt6::WebEngineQuick Qt6::Network)
-        target_sources(phoenix-sim PRIVATE sim/simbrowser.cpp sim/simbrowser.h sim/contentfilter.h
+        target_sources(phoenix-sim PRIVATE sim/simbrowser.cpp sim/simbrowser.h sim/contentfilter.h sim/useragent.cpp sim/useragent.h
                                            sim/simdropshare.cpp sim/simdropshare.h
                                            sim/simmarketplace.cpp sim/simmarketplace.h
                                            sim/simtcp.cpp sim/simtcp.h)
@@ -187,6 +187,10 @@ if(PHOENIX_BUILD_SIM)
     add_executable(simnet-test sim/simnet_test.cpp sim/contentfilter.h sim/simdropshare.cpp sim/simdropshare.h)
     target_link_libraries(simnet-test PRIVATE Qt6::Core Qt6::Network)
     target_compile_definitions(simnet-test PRIVATE PHOENIX_REPO_DIR="${PHOENIX_REPO_DIR}")
+    # The user agent and client hints every page is shown with, and Chrome's
+    # version on its release cadence (CI: build/useragent-test).
+    add_executable(useragent-test sim/useragent_test.cpp sim/useragent.cpp sim/useragent.h)
+    target_link_libraries(useragent-test PRIVATE Qt6::Core)
     # The Marketplace's catalog service started, stopped and failing, with
     # a stand-in serve.sh, and the one catalog every simulator shares, with
     # the checkout's serve.sh and a stand-in PHP (CI: build/simmarketplace-test).
