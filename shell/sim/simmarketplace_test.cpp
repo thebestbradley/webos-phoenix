@@ -952,6 +952,26 @@ int main(int argc, char **argv)
         write(sharedFolder + QStringLiteral("/fill/status.json"), "{\"state\":\"running\",\"pid\":999999999,\"now\":\"x\"}");
         check(waitFor([&] { return m.fillState() == QLatin1String("stopped"); }, 5000), "a fill that ended before it finished: stopped");
     }
+    {
+        // The catalog's folder deleted while it serves (a simulator's own
+        // HOME removed under it): its watch stops PHP's server and PHP's
+        // workers, rather than dying on a write that fails (set -e) and
+        // leaving them on the port with nothing to stop them.
+        const QString goneFolder = shared + QStringLiteral("/gone/catalog");
+        qputenv("MARKETPLACE_DATA", QFile::encodeName(goneFolder));
+        look.folder = goneFolder;
+        const quint16 gonePort = freePort();
+        look.port = gonePort;
+        Sim g("g");
+        g.start(repo2, gonePort, instancesDir, QStringLiteral("g"));
+        check(g.said("state running here", 20000), "a catalog in a folder of its own");
+        QDir(shared + QStringLiteral("/gone")).removeRecursively();
+        check(waitFor([&] { return refused(gonePort); }, 6000) && g.p.state() == QProcess::Running,
+              "its folder deleted while a simulator still uses it: the catalog stops, PHP's workers too");
+        g.quit();
+        qputenv("MARKETPLACE_DATA", QFile::encodeName(sharedFolder));
+        look.folder = sharedFolder;
+    }
     look.port = port;
     // Every simulator gone, every catalog stopped: nothing the test started
     // goes on (no watch, no PHP, no worker of PHP's).
