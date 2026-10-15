@@ -207,13 +207,13 @@ QtObject {
     // simulator's own (Simulate > AirPods and Trackers, sim.qml), told to
     // the pages: {present, lidOpen, left, right ("case", "out", "ear"),
     // battery: {left, right, case}, charging: {...}, stem (presses of the
-    // stem), at}. earbuds: org.webosphoenix.earbuds' status as the runtime
+    // stem), rejectRename (they refuse a new name), at}. earbuds: org.webosphoenix.earbuds' status as the runtime
     // reports it ({bluetooth, nearby, devices, pairing}), what the shell
     // shows (EarbudsMonitor, the system menu); earbudsRequest asks the
     // service ({method, params}, through the pages: earbudsRequested).
     property var simAirPods: ({ present: false, lidOpen: false, left: "case", right: "case",
                                 battery: { left: 100, right: 96, case: 80 }, charging: { left: true, right: true, case: false },
-                                stem: 0, at: 0 })
+                                stem: 0, rejectRename: false, at: 0 })
     property var earbuds: ({ bluetooth: false, nearby: [], devices: [], pairing: null })
     signal earbudsRequested(var request)
     function earbudsRequest(method, params) { earbudsRequested({ method: method, params: params || {} }); }

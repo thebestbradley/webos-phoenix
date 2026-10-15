@@ -26,6 +26,23 @@ export const NOISE_MODE_LABELS: Record<NoiseMode, string> = {
 // Apple's order (AirPods User Guide, "Switch between listening modes").
 const MODE_ORDER: NoiseMode[] = ["off", "transparency", "adaptive", "anc"];
 
+// Renaming the AirPods themselves (org.webosphoenix.earbuds rename): the
+// name is Phoenix's at once; the AirPods take it, refuse it, or wait until
+// they connect (the owner, 15 October 2026).
+const RENAMED_NOTES: Record<EarbudsDevice["renamed"], string> = {
+    "": "",
+    pending: "Renaming the AirPods…",
+    done: "",
+    failed: "The AirPods kept their own name. Phoenix calls them this.",
+    offline: "The AirPods take this name when they next connect.",
+};
+
+/** What "Recognized By" means for these AirPods. */
+export function recognitionNote(d: Pick<EarbudsDevice, "recognition" | "keys" | "exactBattery">): string {
+    if (d.recognition === "key") return d.exactBattery ? "Their batteries show to 1 % before they connect" : "Told apart from other AirPods by their own key";
+    return d.keys ? "Their key is used once they are heard nearby" : "Another pair of the same model nearby could be taken for them";
+}
+
 /** "80%", or "" with no reading. */
 export function percent(v: number | undefined): string {
     return typeof v === "number" && v >= 0 ? `${Math.round(v)}%` : "";
@@ -162,10 +179,13 @@ export function EarbudsPage({ device, onForgotten }: { device: EarbudsDevice; on
                                       onChange={(on) => { setError(null); void run(earbuds.setConversationAwareness(device.address, on)); }} />
                     </Row>
                 )}
-                <Row title="Name" value={device.name} chevron testId="ab-name" onClick={() => setRenaming(device.name)} />
+                <Row title="Name" value={device.name} chevron testId="ab-name" className="wrap-row"
+                     subtitle={RENAMED_NOTES[device.renamed] || undefined} onClick={() => setRenaming(device.name)} />
                 {device.model && (
                     <Row title="Model" value={device.modelNumber ? `${device.model} (${device.modelNumber})` : device.model} />
                 )}
+                <Row title="Recognized By" value={device.recognition === "key" ? "Their Key" : "Their Model"} testId="ab-recognition"
+                     className="wrap-row" subtitle={recognitionNote(device)} />
             </Group>
 
             <Button variant="negative" data-testid="ab-forget" onClick={() => setForget(true)}>Forget This Device</Button>

@@ -7,7 +7,8 @@
 // toggles Wi-Fi, joins a network with a password, sets a PIN (and the
 // screen and lock timeouts), moves the
 // brightness slider, turns on airplane mode, pairs a Bluetooth device and
-// AirPods (their batteries, Noise Control) and opens Tracker Alerts.
+// AirPods (their batteries, Noise Control, a refused rename), and sets
+// Bluetooth's Scanning and Tracker Alerts' sensitivity.
 // Checks both the UI and the "systemStatus" messages the runtime sends the
 // shell (what drives the status bar in phoenix-sim).
 //
@@ -328,12 +329,38 @@ async function main() {
         await page.click("[data-testid='ab-mode-transparency']");
         await page.waitForSelector("[data-testid='ab-mode-transparency'] .pui-check", { timeout: 3000 });
         check((await svc("luna://org.webosphoenix.earbuds/getStatus", {})).devices[0].noiseMode === "transparency", "Noise Control sets the listening mode");
+        check(/Their Key/.test(await page.textContent("[data-testid='ab-recognition']")), "the AirPods gave their keys and are known by them");
         await shot("bluetooth-airpods");
+        // AirPods that refuse a new name (Simulate > AirPods Refuse a New
+        // Name): Phoenix keeps it and says so, after waiting 10 s for them.
+        await page.evaluate(() => window.__phoenixRuntime.applyHostStatus({ simAirPods: { present: true, lidOpen: true, rejectRename: true } }, { writer: true }));
+        await page.click("[data-testid='ab-name']");
+        await page.fill("input[data-testid='ab-name-field']", "Gym Buds");
+        await page.click("[data-testid='ab-name-done']");
+        await page.waitForFunction(() => /Renaming the AirPods/.test(document.body.innerText), null, { timeout: 3000 });
+        await page.waitForFunction(() => /kept their own name/.test(document.body.innerText), null, { timeout: 13000 });
+        check((await svc("luna://org.webosphoenix.earbuds/getStatus", {})).devices[0].name === "Gym Buds", "a refused rename keeps Phoenix's name, and says so");
+        await shot("bluetooth-airpods-renamed");
+        await page.evaluate(() => window.__phoenixRuntime.applyHostStatus({ simAirPods: { present: true, lidOpen: true } }, { writer: true }));
+        // Scanning: the three modes and their windows; Battery Saver chosen.
+        await open("bluetooth");
+        await page.click("[data-testid='bt-scanning']");
+        await page.waitForSelector("[data-testid='scan-balanced'] .pui-check", { timeout: 3000 });
+        await shot("bluetooth-scanning");
+        await page.click("[data-testid='scan-saver']");
+        await page.waitForSelector("[data-testid='scan-saver-note']", { timeout: 3000 });
+        check((await svc("luna://org.webosphoenix.trackers/getStatus", {})).scanMode === "saver", "Scanning sets the scan's mode");
+        await svc("luna://org.webosphoenix.trackers/setScanMode", { mode: "balanced" });
         await open("bluetooth");
         await page.click("[data-testid='bt-trackers']");
         await page.waitForFunction(() => /Unknown trackers moving with you/.test(document.body.innerText) && /Tracker Alerts/.test(document.querySelector(".pui-header").innerText), null, { timeout: 3000 });
         check(true, "Tracker Alerts opens its page");
+        await page.waitForSelector("[data-testid='tr-sensitivity-medium'] .pui-check", { timeout: 3000 });
         await shot("bluetooth-trackers");
+        await page.click("[data-testid='tr-sensitivity-high']");
+        await page.waitForSelector("[data-testid='tr-sensitivity-high'] .pui-check", { timeout: 3000 });
+        check((await svc("luna://org.webosphoenix.trackers/getStatus", {})).thresholds.minDuration === 10 * 60000, "High sensitivity alerts after 10 minutes");
+        await svc("luna://org.webosphoenix.trackers/setSensitivity", { sensitivity: "medium" });
         await svc("luna://org.webosphoenix.earbuds/forget", { address: "a0:b1:c2:d3:e4:f5" });
         await page.evaluate(() => window.__phoenixRuntime.applyHostStatus({ simAirPods: { present: false } }, { writer: true }));
 

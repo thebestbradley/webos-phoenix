@@ -1210,6 +1210,10 @@ Item {
               root.airpods({ battery: { left: low ? 100 : 8, right: low ? 96 : 8, case: status.simAirPods.battery["case"] } });
           },
           checked: function () { return status.simAirPods.battery.left <= 10; } },
+        { id: "airpodsRefuseName", menu: "simulate", submenu: qsTr("AirPods and Trackers"), text: qsTr("AirPods Refuse a New Name"),
+          tip: qsTr("Renamed in Settings, the AirPods keep their own name and Phoenix says so (as AirPods that do not take the rename message)"),
+          run: function () { root.airpods({ rejectRename: !status.simAirPods.rejectRename }); },
+          checked: function () { return !!status.simAirPods.rejectRename; } },
         { id: "trackerFollows", menu: "simulate", submenu: qsTr("AirPods and Trackers"), text: qsTr("Unknown AirTag Following You"),
           keys: ["Ctrl+Shift+F"], tip: qsTr("An AirTag away from its owner has been with you for 35 minutes and 1.2 km: the alert"),
           run: function () { root.trackerFollows("airtag"); } },

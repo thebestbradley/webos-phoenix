@@ -7,13 +7,21 @@
 // as phoenix-sim's Simulate > AirPods and Trackers sends it.
 
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { bluetooth, call, earbuds, type EarbudsStatus } from "@phoenix/luna";
+import { bluetooth, call, earbuds, trackers, type EarbudsDevice, type EarbudsStatus, type TrackerStatus } from "@phoenix/luna";
 import { BluetoothPage, viewFromParams } from "./Bluetooth";
-import { batteryLine } from "./Earbuds";
-import { disableSteps, metres, minutes, TrackerDetail } from "./Trackers";
+import { batteryLine, EarbudsPage, recognitionNote } from "./Earbuds";
+import { SCAN_MODES, scanModeText } from "./Scanning";
+import { disableSteps, metres, minutes, SENSITIVITY_RULES, sensitivityRule, TrackerDetail } from "./Trackers";
+
+// The device service's tables, which the pages state.
+const requireCjs = createRequire(import.meta.url);
+const serviceSensitivity = (requireCjs("../../../../services/accessories/lib/trackerdetect.js") as { SENSITIVITY: object }).SENSITIVITY;
+const serviceModes = (requireCjs("../../../../services/accessories/scanner.js") as { MODES: object }).MODES;
+const trackerStatus = () => call("luna://org.webosphoenix.trackers/getStatus", {}) as unknown as Promise<TrackerStatus>;
 
 const hostMessages: { type: string; payload: Record<string, unknown> }[] = [];
 type Runtime = { applyHostStatus(st: object, opts?: object): void };
@@ -58,6 +66,10 @@ describe("AirPods", () => {
             battery: { left: 100, right: 96, case: 80, single: -1 }, noiseMode: "anc",
             noiseModes: ["off", "transparency", "adaptive", "anc"], earDetection: true, conversationAwareness: true })]);
         expect(after.nearby[0].paired).toBe("a0:b1:c2:d3:e4:f5");
+        // They gave their keys on connecting: known by them, the
+        // advertisement's batteries to 1 % (before, in tenths: 96 was 100).
+        expect(after.devices[0]).toMatchObject({ keys: true, recognition: "key", exactBattery: true });
+        expect(after.nearby[0]).toMatchObject({ match: "key", exact: true, battery: { left: 100, right: 96, case: 80 } });
 
         render(<BluetoothPage />);
         const row = await screen.findByTestId("bt-a0:b1:c2:d3:e4:f5");
@@ -82,6 +94,26 @@ describe("AirPods", () => {
         fireEvent.change(await screen.findByTestId("ab-name-field"), { target: { value: "Pat's AirPods" } });
         fireEvent.click(screen.getByTestId("ab-name-done"));
         await waitFor(async () => expect((await status()).devices[0].name).toBe("Pat's AirPods"));
+        // Renamed on the AirPods too: sent, then taken.
+        await waitFor(() => expect(screen.getByTestId("ab-name").textContent).toContain("Renaming the AirPods…"));
+        await waitFor(async () => expect((await status()).devices[0].renamed).toBe("done"), { timeout: 3000 });
+        await waitFor(() => expect(screen.getByTestId("ab-name").textContent).not.toContain("Renaming"));
+        expect(screen.getByTestId("ab-recognition").textContent).toContain("Their Key");
+    });
+
+    it("says when the AirPods keep their own name, or take it when they connect", async () => {
+        const device = (await status()).devices[0] as EarbudsDevice;
+        render(<EarbudsPage device={{ ...device, renamed: "failed" }} onForgotten={() => {}} />);
+        expect(screen.getByTestId("ab-name").textContent).toContain("The AirPods kept their own name. Phoenix calls them this.");
+        cleanup();
+        // Not connected (case closed): Phoenix's name now, theirs when they connect.
+        rt().applyHostStatus({ simAirPods: POD({ lidOpen: false }) });
+        await earbuds.rename("a0:b1:c2:d3:e4:f5", "Kitchen");
+        expect((await status()).devices[0]).toMatchObject({ name: "Kitchen", renamed: "offline", connected: false });
+        rt().applyHostStatus({ simAirPods: POD() }, { writer: true });
+        expect((await status()).devices[0].renamed).toBe("pending");
+        await waitFor(async () => expect((await status()).devices[0].renamed).toBe("done"), { timeout: 3000 });
+        expect(recognitionNote({ recognition: "model", keys: false, exactBattery: false })).toMatch(/same model/);
     });
 
     it("follows the AirPods: an earbud out and in an ear, the stem pressed, the case closed", async () => {
@@ -126,7 +158,7 @@ describe("Tracker alerts", () => {
         rt().applyHostStatus({ simTracker: { follow: 1, kind: "airtag", at: Date.now() } });
         const note = hostMessages.find((m) => m.type === "notification");
         expect(note?.payload).toMatchObject({ appId: "org.webosphoenix.settings", title: "Unknown AirTag found moving with you",
-                                              params: { page: "bluetooth", view: "tracker" } });
+                                              params: { page: "bluetooth", view: "tracker" }, soundClass: "alerts", soundFile: "sounds/tracker-alert.mp3" });
         const id = (note!.payload.params as { id: string }).id;
         render(<TrackerDetail id={id} />);
         await screen.findByText("This AirTag has been moving with you");
@@ -142,6 +174,49 @@ describe("Tracker alerts", () => {
             const r = await call("luna://org.webosphoenix.trackers/getStatus", {}) as unknown as { trackers: { ignored: boolean }[] };
             expect(r.trackers[0].ignored).toBe(true);
         });
+    });
+
+    it("states each sensitivity's rule and each scan mode's windows, as the service has them", async () => {
+        expect(SENSITIVITY_RULES).toEqual(serviceSensitivity);
+        expect(SCAN_MODES).toEqual(serviceModes);
+        expect(sensitivityRule("medium")).toBe("After 30 min and 400 m, seen 3 times · again after 7 h");
+        expect(sensitivityRule("high")).toBe("After 10 min and 200 m, seen twice · again after 2 h");
+        expect(sensitivityRule("low")).toBe("After 2 h and 840 m, seen 4 times · again after 8 h");
+        expect(scanModeText("saver")).toBe("Screen on: 10 s in every 30 s · Screen off: 20 s every 15 min");
+        expect(scanModeText("balanced")).toBe("Screen on: always · Screen off: 10 s every 3 min");
+        expect(scanModeText("performance")).toBe("Screen on: always · Screen off: 10 s every minute");
+        // The simulated service reports the same.
+        for (const l of ["low", "high", "medium"] as const) {
+            await trackers.setSensitivity(l);
+            expect((await trackerStatus()).thresholds).toEqual(SENSITIVITY_RULES[l]);
+        }
+        for (const m of ["saver", "performance", "balanced"] as const) {
+            await trackers.setScanMode(m);
+            expect((await trackerStatus()).scanWindows).toEqual(SCAN_MODES[m]);
+        }
+    });
+
+    it("chooses the sensitivity on Tracker Alerts' page and the scan's mode on Bluetooth's", async () => {
+        render(<BluetoothPage />);
+        const scanRow = await screen.findByTestId("bt-scanning");
+        await waitFor(() => expect(scanRow.textContent).toContain("Balanced"));
+        fireEvent.click(scanRow);
+        await screen.findByText("Balanced (Default)");
+        fireEvent.click(screen.getByTestId("scan-saver"));
+        await waitFor(async () => expect((await trackerStatus()).scanMode).toBe("saver"));
+        await screen.findByTestId("scan-saver-note");
+        expect(!!screen.getByTestId("scan-saver").querySelector(".pui-check")).toBe(true);
+        await trackers.setScanMode("balanced");
+        cleanup();
+        render(<BluetoothPage />);
+        fireEvent.click(await screen.findByTestId("bt-trackers"));
+        await screen.findByText("Sensitivity");
+        await waitFor(() => expect(!!screen.getByTestId("tr-sensitivity-medium").querySelector(".pui-check")).toBe(true));
+        expect(screen.getByTestId("tr-sensitivity-high").textContent).toContain("After 10 min and 200 m, seen twice");
+        fireEvent.click(screen.getByTestId("tr-sensitivity-high"));
+        await waitFor(async () => expect((await trackerStatus()).sensitivity).toBe("high"));
+        await trackers.setSensitivity("medium");
+        expect(viewFromParams({ view: "scanning" })).toEqual({ kind: "scanning" });
     });
 
     it("is listed under Bluetooth's Tracker Alerts, which can be turned off", async () => {
