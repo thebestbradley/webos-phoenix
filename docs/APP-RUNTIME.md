@@ -2690,9 +2690,11 @@ app site, an App Museum stand-in and a Preware feed), `tools/test-marketplace.cj
 The catalog service is `server/marketplace` (PHP 8 + PDO; MySQL/MariaDB on a
 server, SQLite on one computer): accounts, submissions with the same
 automatic checks, a review queue (`/admin`), ratings and reviews, reports,
-opt-outs for the curated web apps (135 popular sites' PWAs, found and
+opt-outs for the curated web apps (140 popular sites' PWAs, found and
 checked by `bin/probe-pwas.py`; a site whose icons are all broken gets one
-the catalog generates, `/v1/icons/<id>.svg`), and publishing the signed index (its
+the catalog generates, `/v1/icons/<id>.svg`, and a site that publishes no
+manifest, Slack, the one Phoenix writes for it, `/v1/manifests/`, its
+SHA-256 in the signed index), and publishing the signed index (its
 README).
 
 ### Installing apps

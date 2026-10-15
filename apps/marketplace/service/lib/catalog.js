@@ -16,7 +16,9 @@
 // (the device classes it is offered on; all when missing), title, developer: {name, url?},
 // summary, description, categories, icon (URL), screenshots, license,
 // homepage, source (its source code, optional), donation, featured,
-// rating: {stars, count}, version, pwa: {manifest (URL), origin} |
+// rating: {stars, count}, version, pwa: {manifest (URL), origin, sha256 (only
+// for a manifest the catalog wrote for a site that publishes none, which the
+// device then takes only as signed: packagesservice.js packageFor)} |
 // release: {url, size, sha256}, and optionally (docs/APP-STORE.md "Update
 // logs") whatsNew: the listed version's notes {version, date, summary, new,
 // improved, fixed, known}, detail: {url, sha256} (a file with every
@@ -121,6 +123,7 @@ function normalize(e, sourceId) {
     if (kind === "pwa") {
         if (!e.pwa || !url(e.pwa.manifest)) return null;
         out.pwa = { manifest: e.pwa.manifest, origin: url(e.pwa.origin) || new URL(e.pwa.manifest).origin };
+        if (/^[0-9a-f]{64}$/i.test(e.pwa.sha256 || "")) out.pwa.sha256 = e.pwa.sha256.toLowerCase();
     } else {
         var r = e.release;
         if (!r || !url(r.url) || !/^[0-9a-f]{64}$/i.test(r.sha256 || "") || !(r.size > 0)) return null;

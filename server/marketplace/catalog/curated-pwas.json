@@ -101,6 +101,42 @@
       "manifestName": "Element"
     },
     {
+      "id": "org.webosphoenix.pwa.slack",
+      "title": "Slack",
+      "developer": "Slack",
+      "categories": [
+        "Communication",
+        "Productivity"
+      ],
+      "featured": false,
+      "summary": "Channels, messages and huddles for your workspaces.",
+      "manifestBy": "phoenix",
+      "webManifest": {
+        "name": "Slack",
+        "short_name": "Slack",
+        "start_url": "https://app.slack.com/client",
+        "scope": "https://app.slack.com/",
+        "display": "standalone",
+        "theme_color": "#4a154b",
+        "background_color": "#ffffff",
+        "icons": [
+          {
+            "src": "https://app.slack.com/favicon.ico",
+            "sizes": "16x16 32x32 48x48 256x256",
+            "type": "image/x-icon"
+          },
+          {
+            "src": "https://app.slack.com/apple-touch-icon-precomposed.png",
+            "sizes": "57x57",
+            "type": "image/png"
+          }
+        ]
+      },
+      "origin": "https://app.slack.com",
+      "icon": "https://app.slack.com/favicon.ico",
+      "manifestName": "Slack"
+    },
+    {
       "id": "org.webosphoenix.pwa.whatsapp",
       "title": "WhatsApp",
       "developer": "Meta",

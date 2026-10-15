@@ -32,14 +32,19 @@
 >
 > **Curated web apps (8 October 2026; 9 October: 135, as a site whose
 > manifest is good but whose icons are all broken is listed with an icon the
-> catalog generates, its initials on its theme colour):** 135 of 160 sites in 23 categories
+> catalog generates, its initials on its theme colour; 15 October: 140, with
+> Slack):** 140 of 168 sites in 23 categories
 > (`server/marketplace/catalog/curated-sites.json`; `bin/probe-pwas.py`
 > checks each manifest live and leaves out the ones it cannot find, with the
 > reason, in `curated-pwas.json`): social networks and messaging, Google's and
 > Microsoft's apps, Proton's, task and note apps, streaming video and music,
 > news, maps, shopping, finance, learning, developer tools, games, weather,
 > sports and fitness, AI assistants (ChatGPT, Claude). Sites without a
-> usable manifest are not listed; many of the rest turned the probe away
+> usable manifest are not listed, unless Phoenix writes one for a site that
+> publishes none, as browser extensions do for Slack (the owner, 15 October
+> 2026: "Our catalog doesn't have the Slack web PWA app listed. That most
+> definitely needs to have it listed"; [1.2](#12-from-manifest-to-webos-app),
+> "A site with no manifest"); many of the rest turned the probe away
 > with a bot check from the cloud network it ran on, so the owner refreshes
 > the list from a home connection (`server/marketplace/README.md`,
 > "Refreshing the list"), and `seed` then `publish` put it in the catalog.
@@ -216,6 +221,42 @@ backend's validator and the tests.
 `appinfo.json` keys that OSE does not know are ignored by SAM (the Phoenix
 apps already carry a `phoenix` block this way).
 
+**A site with no manifest (15 October 2026).** Slack's web client
+(`https://app.slack.com/client`, which answers with the real client)
+publishes no web app manifest: its pages link none, `/manifest.json`,
+`/manifest.webmanifest` and `/site.webmanifest` answer 404, and browser
+extensions ("Slack PWA", "Better PWAs") make it installable by adding one.
+The catalog does the same. A curated site's entry in `curated-sites.json`
+may carry `webManifest`, the manifest Phoenix writes for it: the site's
+name, its start page and scope on the site, `display: standalone`, and as
+icons the pictures the site itself publishes for browsers and home screens,
+at their addresses there (Slack's links only a 32 px favicon; its
+`/favicon.ico`, whose biggest picture is a 256 px PNG, and its
+`/apple-touch-icon-precomposed.png`, 57 px, are the conventional addresses
+browsers ask for, and both redirect to its own CDN). `bin/probe-pwas.py`
+uses it only when the site has no manifest of its own (and says when it
+gets one), checks it as it checks a site's own, and marks it
+`"manifestBy": "phoenix"`; `seed` publishes it with the catalog,
+`/v1/manifests/<id>-<hash>.webmanifest`, named by its contents, and the
+signed index gives its SHA-256, `"pwa": {manifest, origin, sha256}`. The
+device fetches it as it fetches any manifest, takes it only when it
+matches that SHA-256 (from the catalog or any mirror), and starts the app
+only on the site the index names: the W3C rule that ignores a start URL on
+another origin is applied against that site (`parseManifest`'s page URL,
+`entry.pwa.origin`), not against the manifest's own host, as for a site's
+manifest kept on a CDN (Spotify's), so a manifest on the catalog's host
+gains no other site. The id stays the catalog's (`org.webosphoenix.pwa.slack`).
+Nothing of Slack's is copied into the repository: the icons are fetched
+from Slack when the app is installed, and the listing's from the catalog's
+copy, as for every curated web app. Checked in the simulator the same day:
+Slack is listed, installs with its icon and opens in its own card, where
+Slack answers "Please update your browser or use the Slack app". It serves
+its client only to Chrome 137 or newer, by the user agent (the same request
+naming Chrome/136 is refused with 403, Chrome/137 is served), and Phoenix's
+web runtime names its own Chromium: 122 in the simulator (Qt 6.8), 120 in
+OSE's WAM. Using Slack on Phoenix needs a newer engine or a user agent that
+names a current Chrome for such sites (open).
+
 ### 1.3 Icons at every density
 
 Legacy webOS drew launcher icons at 64 legacy pixels
@@ -242,6 +283,9 @@ little inside its tile (`AppIcon.qml`, 56 of 64 px with 8 px corners and a
 dark edge), the frame Phoenix gives a page added to the launcher, as the
 Marketplace rounds it. SVG icons are
 rasterised with `resvg` (MPL-2.0, run as a program) or Chromium itself.
+A `favicon.ico` becomes the PNG its biggest picture is (`lib/pwa.js`
+`icoPng`): Qt's ICO reader gives a file's first picture, and Slack's starts
+with its 16 px one; an ICO whose biggest picture is a bitmap stays as it is.
 appinstalld2 copies only files named `icon*`, so every picture the app
 needs must be named that way.
 

@@ -59,7 +59,9 @@ if (str_starts_with($path, '/v1/')) {
         return;
     }
     $types = ['json' => 'application/json', 'sig' => 'text/plain', 'ipk' => 'application/vnd.debian.binary-package',
-              'svg' => 'image/svg+xml', 'png' => 'image/png', 'jpg' => 'image/jpeg', 'webp' => 'image/webp'];
+              'svg' => 'image/svg+xml', 'png' => 'image/png', 'jpg' => 'image/jpeg', 'webp' => 'image/webp',
+              // A manifest Phoenix wrote for a site that publishes none (Catalog::writeManifest).
+              'webmanifest' => 'application/manifest+json'];
     header('Content-Type: ' . ($types[pathinfo($file, PATHINFO_EXTENSION)] ?? 'application/octet-stream'));
     header('Content-Length: ' . filesize($file));
     header('Cache-Control: no-cache');
