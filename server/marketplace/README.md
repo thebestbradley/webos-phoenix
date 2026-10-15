@@ -27,7 +27,8 @@ key, the uploads, the published catalog (`public/v1`), the update feed
 (`updates`), the log (`simulator.log`), the fills' state (`fill/`) and, while
 it runs, `server.json` (the process serving it, its port, the simulator that
 started it and the checkout), which that process writes once its PHP serves
-the port and alone removes. The first start
+the port (`/_phoenix/serving` answers with the process that started it) and
+alone removes. The first start
 imports the checkout's old `server/marketplace/data` when the folder has no
 catalog yet (the log says so; the old folder is left as it was). **Keep a
 copy of its `signing.key`**: with a new key every device has to trust the

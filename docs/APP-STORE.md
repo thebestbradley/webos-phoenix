@@ -1045,8 +1045,9 @@ using it. Now:
   simulator that wants it starts `serve.sh`, which sets the catalog up and
   then leaves PHP's server running on its own, under a small watch of its
   own, which writes `server.json` (its process, port, checkout and the
-  simulator that started it) in the folder once its PHP serves the port;
-  only that watch removes it. Every other simulator finds it answering at
+  simulator that started it) in the folder once its PHP serves the port
+  (what answers there says it is that PHP: `/_phoenix/serving`, from its
+  environment); only that watch removes it. Every other simulator finds it answering at
   127.0.0.1:8088 and uses it. Two simulators starting it at once set it up
   one after the other (one setup at a time per folder), and the one PHP
   that can listen serves it; the other's watch ends without writing

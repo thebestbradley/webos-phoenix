@@ -101,22 +101,31 @@ unclaim() {
     [ "$(claimed_by)" != "$$" ] || rm -f "$DATA/server.json"
 }
 
-# Whether anything answers at 127.0.0.1:$PORT (asked of PHP: no other
-# program is needed).
-port_answers() {
-    php -r 'exit(@fsockopen("127.0.0.1", (int) $argv[1], $errno, $error, 1) ? 0 : 1);' "$PORT" 2>/dev/null
+# Whether the server answering at 127.0.0.1:$PORT is the PHP this process
+# started: it says which (public/router.php, /_phoenix/serving, from
+# PHOENIX_CATALOG_SERVING in its environment). Asked of PHP: no other
+# program is needed.
+serves_here() {
+    php -r '$s = @fsockopen("127.0.0.1", (int) $argv[1], $errno, $error, 1);
+        if (!$s) exit(1);
+        stream_set_timeout($s, 2);
+        fwrite($s, "GET /_phoenix/serving HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n");
+        $reply = (string) stream_get_contents($s);
+        $body = substr($reply, (int) strpos($reply, "\r\n\r\n") + 4);
+        exit(str_contains($reply, "\r\n\r\n") && trim($body) === $argv[2] ? 0 : 1);' "$PORT" "$1" 2>/dev/null
 }
 
-# PHP's server is started in the background ($PHP); this claims the
-# catalog for it (server.json, process $$) once it serves it: the port
-# answers and PHP has stayed up a moment. A PHP that cannot listen there
-# (another program has the port: an older simulator's catalog, or the one
-# another simulator started at the same time) ends at once, and so does
-# this, having claimed nothing: what answers is never taken for this
-# folder's catalog on the word of a server that is not serving it.
+# PHP's server is started in the background ($PHP, PHOENIX_CATALOG_SERVING
+# being $$); this claims the catalog for it (server.json, process $$) once
+# it serves it: what answers at the port says it is that PHP. A PHP that
+# cannot listen there (another program has the port: an older simulator's
+# catalog, or the one another simulator started at the same time) ends at
+# once, and so does this, having claimed nothing: what answers is never
+# taken for this folder's catalog on the word of a server that is not
+# serving it.
 claim_when_serving() {
     tries=0
-    until port_answers && sleep 0.5 && kill -0 "$PHP" 2>/dev/null; do
+    until serves_here $$; do
         if ! kill -0 "$PHP" 2>/dev/null || [ "$tries" -ge 100 ]; then
             if kill -0 "$PHP" 2>/dev/null; then
                 stop_php
@@ -198,7 +207,7 @@ simulator_running() {
 # closed terminal leaves the catalog to the others.
 if [ "$WATCH" = 1 ]; then
     trap '' HUP INT
-    php -S "127.0.0.1:$PORT" public/router.php </dev/null &
+    PHOENIX_CATALOG_SERVING=$$ php -S "127.0.0.1:$PORT" public/router.php </dev/null &
     PHP=$!
     trap 'stop_php; unclaim; echo "Catalog watch $$: stopped (asked to)"; exit 0' TERM
     claim_when_serving
@@ -349,7 +358,7 @@ fi
 # By hand: serves until stopped (Ctrl+C, or a simulator's menu), filling
 # meanwhile.
 fill </dev/null &
-php -S "127.0.0.1:$PORT" public/router.php </dev/null &
+PHOENIX_CATALOG_SERVING=$$ php -S "127.0.0.1:$PORT" public/router.php </dev/null &
 PHP=$!
 trap 'stop_php; unclaim; exit 0' INT TERM HUP
 claim_when_serving

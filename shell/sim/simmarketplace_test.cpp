@@ -68,6 +68,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <string>
 #include <thread>
 
 #include <arpa/inet.h>
@@ -102,8 +103,10 @@ static void check(bool ok, const char *what)
 // php_cli_server_startup_workers). PHP gives its workers a parent-death
 // signal where there is one (php_cli_server_worker_install_pdeathsig: Linux
 // and FreeBSD); these never get one, as on a Mac: whoever stops the server
-// stops them too, or they serve on. Each connection is closed at once. No
-// Qt (it forks); every process ends after a minute whatever happens, so a
+// stops them too, or they serve on. Each connection gets what
+// public/router.php answers at /_phoenix/serving (PHOENIX_CATALOG_SERVING:
+// the process that started it), whatever it asked, and is closed. No Qt
+// (it forks); every process ends after a minute whatever happens, so a
 // failing test leaves nothing behind for long.
 static int fakePhpServer(int port)
 {
@@ -133,18 +136,41 @@ static int fakePhpServer(int port)
     std::printf("listening on %d (process %d%s)\n", port, int(::getpid()), ::getpid() == master ? "" : ", a worker");
     std::fflush(stdout);
     ::alarm(60);
+    const char *serving = std::getenv("PHOENIX_CATALOG_SERVING");
+    char reply[256];
+    const int replyLength = std::snprintf(reply, sizeof reply, "HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\n\r\n%s\n",
+                                          serving ? serving : "");
     for (;;) {
         const int c = ::accept(fd, nullptr, nullptr);
-        if (c >= 0)
-            ::close(c);
-        else if (errno != EINTR)
-            ::usleep(10000);
+        if (c < 0) {
+            if (errno != EINTR)
+                ::usleep(10000);
+            continue;
+        }
+        // The request, if one comes within a moment (a look at the port
+        // only connects), then the answer.
+        char request[512];
+        size_t got = 0;
+        pollfd p { c, POLLIN, 0 };
+        while (got < sizeof request && ::poll(&p, 1, 200) == 1) {
+            const ssize_t n = ::read(c, request + got, sizeof request - got);
+            if (n <= 0)
+                break;
+            got += size_t(n);
+            if (std::search(request, request + got, "\r\n\r\n", "\r\n\r\n" + 4) != request + got)
+                break;
+        }
+        if (got > 0 && ::write(c, reply, size_t(replyLength)) < 0) {
+            // Gone already: nothing to answer.
+        }
+        ::close(c);
     }
 }
 
-// Whether anything answers on the port within a second (for the stand-in
-// php's `php -r '... fsockopen ...' PORT`, serve.sh's look at the port).
-static int fakeAnswers(int port)
+// Whether what answers on the port within a second says it is the server
+// process `serving` started (for the stand-in php's `php -r '... fsockopen
+// ...' PORT ID`, serve.sh's serves_here: GET /_phoenix/serving).
+static int fakeAnswers(int port, const char *serving)
 {
     const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0)
@@ -154,17 +180,32 @@ static int fakeAnswers(int port)
     a.sin_family = AF_INET;
     a.sin_port = htons(quint16(port));
     a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    if (::connect(fd, reinterpret_cast<sockaddr *>(&a), sizeof a) == 0)
-        return 0;
-    if (errno != EINPROGRESS)
+    if (::connect(fd, reinterpret_cast<sockaddr *>(&a), sizeof a) != 0) {
+        if (errno != EINPROGRESS)
+            return 1;
+        pollfd p { fd, POLLOUT, 0 };
+        if (::poll(&p, 1, 1000) != 1)
+            return 1;
+        int err = 0;
+        socklen_t len = sizeof err;
+        ::getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len);
+        if (err != 0)
+            return 1;
+    }
+    static const char request[] = "GET /_phoenix/serving HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n";
+    if (::write(fd, request, sizeof request - 1) != ssize_t(sizeof request - 1))
         return 1;
-    pollfd p { fd, POLLOUT, 0 };
-    if (::poll(&p, 1, 1000) != 1)
-        return 1;
-    int err = 0;
-    socklen_t len = sizeof err;
-    ::getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len);
-    return err == 0 ? 0 : 1;
+    std::string reply;
+    char buffer[256];
+    pollfd p { fd, POLLIN, 0 };
+    while (::poll(&p, 1, 2000) == 1) {
+        const ssize_t n = ::read(fd, buffer, sizeof buffer);
+        if (n <= 0)
+            break;
+        reply.append(buffer, size_t(n));
+    }
+    const size_t body = reply.find("\r\n\r\n");
+    return body != std::string::npos && reply.substr(body + 4) == std::string(serving) + "\n" ? 0 : 1;
 }
 
 // A port nothing listens on.
@@ -483,8 +524,8 @@ int main(int argc, char **argv)
     // before anything of Qt (the server forks).
     if (argc == 3 && std::strcmp(argv[1], "--serve") == 0)
         return fakePhpServer(std::atoi(argv[2]));
-    if (argc == 3 && std::strcmp(argv[1], "--answers") == 0)
-        return fakeAnswers(std::atoi(argv[2]));
+    if (argc == 4 && std::strcmp(argv[1], "--answers") == 0)
+        return fakeAnswers(std::atoi(argv[2]), argv[3]);
     QCoreApplication app(argc, argv);
     if (argc == 6 && qstrcmp(argv[1], "--simulator") == 0)
         return simulator(app, QString::fromLocal8Bit(argv[2]), quint16(QByteArray(argv[3]).toUInt()),
@@ -703,7 +744,8 @@ int main(int argc, char **argv)
     write(repo2 + QStringLiteral("/server/marketplace/data/public/v1/key.json"), "{\"key\": \"" + key + "\"}\n");
     write(repo2 + QStringLiteral("/server/marketplace/data/marketplace.sqlite"), "old apps");
     // PHP: its server is this program (--serve); serve.sh's look at the
-    // port (php -r '... fsockopen ...' PORT) is too (--answers); the
+    // port (php -r '... fsockopen ...' PORT ID: whose server answers) is
+    // too (--answers); the
     // catalog's commands do nothing but the setup's seed, which puts the
     // curated apps in once, as Catalog::seedCurated does: those the
     // database lacks are looked for, then inserted (two seeds at once: the
@@ -715,7 +757,7 @@ int main(int argc, char **argv)
           "#!/bin/sh\n"
           "case \"$1\" in\n"
           "  -S) exec \"$FAKE_CATALOG_SERVER\" --serve \"${2##*:}\" ;;\n"
-          "  -r) case \"$2\" in *fsockopen*) exec \"$FAKE_CATALOG_SERVER\" --answers \"$3\" ;; esac ;;\n"
+          "  -r) case \"$2\" in *fsockopen*) exec \"$FAKE_CATALOG_SERVER\" --answers \"$3\" \"$4\" ;; esac ;;\n"
           "esac\n"
           "[ \"$2\" = seed ] || exit 0\n"
           "[ ! -f \"$MARKETPLACE_DATA/slow\" ] || sleep 2\n"
