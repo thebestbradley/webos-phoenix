@@ -14,7 +14,9 @@ include(GNUInstallDirs)
 set(PHOENIX_DATA_DIR "${CMAKE_INSTALL_DATADIR}/phoenix" CACHE STRING "Install location of QML and assets")
 
 # Qt 6.8, the LTS release a device's webOS OSE image ships (meta-qt6,
-# scarthgap: docs/HARDWARE.md); the simulator and CI build with it or newer.
+# scarthgap: docs/HARDWARE.md), is the oldest; the simulator's is 6.11.3
+# (./phoenix; its Qt WebEngine is the newest Qt has, Chromium 140 with
+# security fixes to 153), and CI builds with both.
 set(PHOENIX_QT_MIN 6.8)
 find_package(Qt6 ${PHOENIX_QT_MIN} QUIET COMPONENTS Gui Qml Quick)
 if(NOT Qt6_FOUND)
@@ -27,7 +29,7 @@ if(NOT Qt6_FOUND)
         set(_qt_found "none")
     endif()
     message(FATAL_ERROR "Qt ${PHOENIX_QT_MIN} or newer is needed (found: ${_qt_found}). "
-                        "Pass its location, e.g. -DCMAKE_PREFIX_PATH=/opt/Qt/6.8.1/gcc_64 (scripts/linux-setup.sh "
+                        "Pass its location, e.g. -DCMAKE_PREFIX_PATH=/opt/Qt/6.11.3/gcc_64 (scripts/linux-setup.sh "
                         "installs it there) or -DCMAKE_PREFIX_PATH=\"$(brew --prefix qt)\" on a Mac.")
 endif()
 

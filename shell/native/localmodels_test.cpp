@@ -233,7 +233,8 @@ int main(int argc, char **argv)
     QDir().mkpath(shipped);
     {
         QFile f(shipped + QStringLiteral("/qwen3-0.6b-q8_0.gguf"));
-        f.open(QIODevice::WriteOnly);
+        if (!f.open(QIODevice::WriteOnly))
+            check(false, "the test writes the built-in model");
         f.write(files.body);
     }
     const QVariantMap builtIn = lm.status().value(QStringLiteral("installed")).toList().value(0).toMap();
@@ -291,7 +292,8 @@ int main(int argc, char **argv)
     const QString kittenLog = dir.filePath(QStringLiteral("kitten.txt")), fliteLog = dir.filePath(QStringLiteral("flite.txt"));
     auto script = [&](const QString &name, const QString &body) {
         QFile f(dir.filePath(QStringLiteral("bin/") + name));
-        f.open(QIODevice::WriteOnly);
+        if (!f.open(QIODevice::WriteOnly))
+            check(false, "the test writes its stand-in scripts");
         f.write((QStringLiteral("#!/bin/sh\n") + body).toUtf8());
         f.close();
         f.setPermissions(f.permissions() | QFileDevice::ExeOwner);
@@ -314,7 +316,8 @@ int main(int argc, char **argv)
     QFile kf(kittenLog);
     check(kf.open(QIODevice::ReadOnly) && kf.readAll().trimmed() == "--voice expr-voice-5-m:The flashlight is on.", "phoenix-tts with the voice");
     kf.close();
-    QFile(dir.filePath(QStringLiteral("no-sound"))).open(QIODevice::WriteOnly);
+    if (!QFile(dir.filePath(QStringLiteral("no-sound"))).open(QIODevice::WriteOnly))
+        check(false, "the test writes the stand-in's no-sound switch");
     kdone = false;
     kit.speak(QStringLiteral("Bluetooth is off."));
     waitFor([&]() { return kdone; }, 5000);
