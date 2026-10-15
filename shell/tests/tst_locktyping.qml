@@ -120,22 +120,31 @@ Item {
             compare(panel.enteredText, "", "nothing of it left in the field");
         }
 
-        // A PIN takes digits only: a letter opens nothing, and in the pad
-        // types nothing.
-        function test_lettersDoNothingForAPin() {
+        // Any key of the keyboard opens the entry (the original's external
+        // keyboard: DisplayManager.cpp:3352-3378); a PIN takes digits only,
+        // so a letter opens it with nothing in it, and in the pad types
+        // nothing.
+        function test_anyKeyOpensAPinTakesDigits() {
             keyClick("a");
+            verify(lock.pinEntry, "a letter opens the PIN pad");
+            compare(panel.enteredText, "");
             keyClick("Q");
-            verify(!lock.pinEntry);
             keyClick(Qt.Key_7);
-            verify(lock.pinEntry);
             keyClick("x");
             compare(panel.enteredText, "7");
-            // Space opens nothing either (pressed to wake the screen).
             keyClick(Qt.Key_Escape);
             verify(!lock.pinEntry);
-            keyClick(Qt.Key_Space);
-            verify(!lock.pinEntry);
+            // Space, Return, an arrow, Shift alone: each opens it too.
+            var keys = [Qt.Key_Space, Qt.Key_Return, Qt.Key_Down, Qt.Key_Shift];
+            for (var i = 0; i < keys.length; ++i) {
+                keyClick(keys[i]);
+                verify(lock.pinEntry, "key " + keys[i]);
+                compare(panel.enteredText, "");
+                keyClick(Qt.Key_Escape);
+                verify(!lock.pinEntry);
+            }
             verify(shell.locked);
+            compare(lockService.matched.length, 0);
         }
 
         // The numeric keypad's digits (Qt.KeypadModifier) are digits.
@@ -230,8 +239,10 @@ Item {
         function test_passwordKeepsDoneAndReturnSubmits() {
             lockService.lockMode = "password";
             lockService.passcode = "Hunter 2";
+            // A space opens it, not typed (pressed to wake the screen).
             keyClick(Qt.Key_Space);
-            verify(!lock.pinEntry, "a space opens nothing");
+            verify(lock.pinEntry);
+            compare(panel.enteredText, "");
             keyClick("H");
             verify(lock.pinEntry);
             verify(!panel.isPINEntry);
@@ -256,8 +267,9 @@ Item {
             verify(panel.shaking);
         }
 
-        // Without a passcode keys do nothing new: no panel, still locked.
-        function test_noPasscodeKeysDoNothing() {
+        // Without a passcode keys open nothing: no panel, still locked (the
+        // original unlocked; the padlock does here).
+        function test_noPasscodeKeysOpenNothing() {
             lockService.lockMode = "none";
             keyClick(Qt.Key_1);
             keyClick("a");
@@ -266,13 +278,11 @@ Item {
             compare(unlocked.count, 0);
         }
 
-        // The screen off: a digit wakes it and goes in; without a passcode
-        // it stays off. A letter, for a PIN, wakes nothing.
+        // The screen off: a digit wakes it and goes in, and the next ones;
+        // a letter wakes it and opens the pad with nothing in it.
         function test_screenOffWakesAndTypes() {
             shell.display.turnOff();
             compare(shell.display.state, "off");
-            keyClick("a");
-            compare(shell.display.state, "off", "a letter is no PIN");
             keyClick(Qt.Key_2);
             compare(shell.display.state, "on");
             verify(lock.pinEntry);
@@ -281,11 +291,81 @@ Item {
             compare(unlocked.count, 1);
 
             shell.lock();
+            shell.display.turnOff();
+            keyClick("a");
+            compare(shell.display.state, "on", "a letter wakes it too");
+            verify(lock.pinEntry);
+            compare(panel.enteredText, "");
+        }
+
+        // The owner (15 October 2026): "Two keyboard presses when asleep or
+        // locked should wake and allow immediate pin entering with the
+        // keyboard." Asleep, any key wakes the screen and opens the PIN pad
+        // (the space bar, Return, Shift alone), and the PIN typed after it
+        // unlocks. The keys typed before had gone nowhere: only a digit
+        // woke it.
+        function test_anyKeyWakesAndOpensThePad() {
+            var keys = [Qt.Key_Space, Qt.Key_Return, Qt.Key_Shift, Qt.Key_Right];
+            for (var i = 0; i < keys.length; ++i) {
+                shell.lock();
+                shell.display.turnOff();
+                compare(shell.display.state, "off");
+                keyClick(keys[i]);
+                compare(shell.display.state, "on", "key " + keys[i] + " wakes it");
+                verify(lock.pinEntry, "key " + keys[i] + " opens the pad");
+                compare(panel.enteredText, "");
+            }
+            "2580".split("").forEach(function (d) { keyClick(d); });
+            compare(unlocked.count, 1);
+        }
+
+        // Without a passcode a key wakes the screen to the lock screen.
+        function test_noPasscodeKeyWakes() {
             lockService.lockMode = "none";
             shell.display.turnOff();
-            keyClick(Qt.Key_2);
-            compare(shell.display.state, "off");
+            keyClick(Qt.Key_Space);
+            compare(shell.display.state, "on");
             verify(!lock.pinEntry);
+            verify(shell.locked);
+            shell.display.turnOff();
+            keyClick(Qt.Key_2);
+            compare(shell.display.state, "on");
+            verify(!lock.pinEntry);
+        }
+
+        // A hardware keyboard attached, and an app's page under the lock
+        // screen holding the keyboard focus (a web view keeping it, or the
+        // screen's window not the focus window: then keys reach no item):
+        // the key is seen at the window all the same, wakes the screen and
+        // opens the pad, which takes the focus; the PIN then goes into it.
+        function test_appHoldingTheFocusAsleep() {
+            status.hardwareKeyboard = true;
+            shell.unlock();
+            appField.forceActiveFocus();
+            shell.lock();
+            appField.forceActiveFocus();
+            verify(appField.activeFocus);
+            shell.display.turnOff();
+            keyClick(Qt.Key_Space);
+            compare(shell.display.state, "on");
+            verify(lock.pinEntry);
+            verify(panel.activeFocus, "the pad has the keyboard");
+            "2580".split("").forEach(function (d) { keyClick(d); });
+            compare(unlocked.count, 1);
+            compare(appField.text, "", "nothing reached the app");
+            status.hardwareKeyboard = false;
+        }
+
+        // While the pad asks for the PIN, the screen keeps the user's timeout,
+        // not the lock screen's 5 s (the original asked with the display
+        // unlocked, DisplayOn).
+        function test_padKeepsTheUsersTimeout() {
+            verify(shell.display.locked);
+            keyClick(Qt.Key_1);
+            verify(lock.pinEntry);
+            verify(!shell.display.locked);
+            keyClick(Qt.Key_Escape);
+            verify(shell.display.locked);
         }
 
         // Dimmed, the key brings it back on and is typed too.

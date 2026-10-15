@@ -56,6 +56,9 @@ FocusScope {
     // and Done is not shown.
     property int autoSubmitLength: 0
     readonly property bool doneShown: !isPINEntry || autoSubmitLength <= 0
+    // Opened by a key of the keyboard (LockScreen.keyboardActivity): a space
+    // before anything is typed is the key that woke it, not typed.
+    property bool openedByKey: false
     // Submitted, waiting for the lock screen's answer: the entry takes no
     // more keys (a key typed meanwhile is not part of what is checked, and
     // a second Enter would be a second try).
@@ -99,6 +102,7 @@ FocusScope {
         passwordField.clearAll();
         passwordField.hint = hintMessage;
         checking = false;
+        openedByKey = false;
     }
 
     // What was typed goes (the panel hidden, Esc): nothing of a passcode
@@ -106,6 +110,7 @@ FocusScope {
     function clear() {
         passwordField.clearAll();
         checking = false;
+        openedByKey = false;
         _setKeyItem(null);
     }
 
@@ -150,7 +155,10 @@ FocusScope {
     // PasswordField.keyInput). Typing takes the ring away.
     function typeKey(text, isNumber) {
         _setKeyItem(null);
-        _enter(text, isNumber);
+        const waking = openedByKey && passwordField.enteredText.length === 0 && text.trim() === "";
+        openedByKey = false;
+        if (!waking)
+            _enter(text, isNumber);
     }
     function deleteOne() {
         _setKeyItem(null);

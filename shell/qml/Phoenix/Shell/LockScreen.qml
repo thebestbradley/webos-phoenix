@@ -325,59 +325,64 @@ Item {
     // ---- Type to unlock (Phoenix; the owner, 14 October 2026) ------------------
     // "When using a hardware keyboard on the lock screen typing should
     // automatically bring up the pin/password modal and allow typing. So if
-    // the screen is locked I should be able to just type my pin." The
-    // original ate every key while the lock screen showed
-    // (LockWindow::handleFilteredSceneEvent, LockWindow.cpp:1713-1718) and
-    // took them only once the panel was up, from the padlock
-    // (UnlockPanel.qml:191-230). Here, with a PIN or password set, a
-    // character typed on the lock screen opens the panel, as the padlock
-    // would, with that character in it, and what follows goes on into it
-    // (also within "Lock after", where the padlock asks for nothing: what
-    // is typed is the passcode, and the right one unlocks).
-    // A PIN takes digits only, the number row's or the keypad's (Qt.Key_0
-    // to Key_9, as UnlockPanel.qml:150-156): other keys open nothing for a
-    // PIN. A space opens nothing either (pressed to wake the screen, it
-    // would start a password with a space). Without a passcode, or while
-    // a security policy waits for a new one (the padlock's dialog asks
-    // for it), keys do nothing, as before. The shell gives this the keys
-    // the lock screen gets, also with the screen off (Shell.qml: the
-    // printable keys go through while it is asleep and locked, typeKeys),
-    // and turns the screen on when the panel opens (wakeRequested).
+    // the screen is locked I should be able to just type my pin." And (15
+    // October 2026): "Two keyboard presses when asleep or locked should
+    // wake and allow immediate pin entering with the keyboard."
+    //
+    // The original: a key down from an external keyboard with the screen
+    // off, dimmed or locked was user activity from external input
+    // (DisplayManager::handleEvent, DisplayManager.cpp:3352-3378,
+    // DisplayEventUserActivityExternalInput): the screen came on and asked
+    // to unlock (DisplayStates.cpp:494-503 from off, :1247-1250 from the
+    // lit lock screen, :1501-1510 dimmed; DisplayOn::enter :807-810 sends
+    // DISPLAY_UNLOCK_SCREEN), and LockWindow asked for the passcode
+    // (slotLockStateChanged -> tryUnlock, LockWindow.cpp:711-748); the key
+    // itself was dropped (m_drop_key). Otherwise LockWindow ate every key
+    // (handleFilteredSceneEvent, :1713-1718) until the panel was up
+    // (UnlockPanel.qml:191-230).
+    //
+    // Here the same, any key but the system's own (keyboardKeys): the
+    // shell watches them at the window, before the keyboard focus (as
+    // DisplayManager saw every key), turns the screen on and calls
+    // keyboardActivity(): with a PIN or password set, the entry opens (also
+    // within "Lock after", where the padlock asks for nothing: what is typed
+    // is the passcode, and the right one unlocks). And the key is typed into
+    // it when it is one the entry takes (Phoenix, "just type my pin": the
+    // original dropped it), as are the keys after it (typeKey): a PIN takes
+    // digits only, the number row's or the keypad's (Qt.Key_0 to Key_9, as
+    // UnlockPanel.qml:150-156); a space opening a password's entry is not
+    // typed into it. Without a passcode the screen only comes on (the
+    // original then unlocked; Phoenix keeps the lock screen and its
+    // padlock), and while a security policy waits for a new one the
+    // padlock's dialog asks for it.
     //
     // The lock mode is asked for afresh (it may have changed since the
     // screen locked); keys typed before the answer wait in _typedAhead.
     property var _typedAhead: []
     property bool _typeAsking: false
     property int _typeAsk: 0
-    // The keys that type something (Qt key codes, printable ASCII and
-    // Latin-1 but the spaces): the shell lets these through while the
-    // screen is off and locked (UserActivity passKeys).
-    readonly property var typeKeys: {
+    // The keys of a keyboard that open the entry (Qt key codes): what
+    // types (ASCII and Latin-1, the space too), Return, Tab, the arrows,
+    // Backspace and Delete, and the modifiers. Not the system's own (Power,
+    // Home, Esc which is Back, the volume, the function keys: SystemKeys
+    // takes them).
+    readonly property var keyboardKeys: {
         var out = [];
-        for (var k = 0x21; k <= 0x7e; ++k)
+        for (var k = 0x20; k <= 0x7e; ++k)
             out.push(k);
-        for (k = 0xa1; k <= 0xff; ++k)
+        for (k = 0xa0; k <= 0xff; ++k)
             out.push(k);
-        return out;
+        return out.concat([Qt.Key_Return, Qt.Key_Enter, Qt.Key_Tab, Qt.Key_Backtab, Qt.Key_Backspace, Qt.Key_Delete,
+                           Qt.Key_Insert, Qt.Key_Left, Qt.Key_Right, Qt.Key_Up, Qt.Key_Down, Qt.Key_PageUp,
+                           Qt.Key_PageDown, Qt.Key_End, Qt.Key_Clear, Qt.Key_Shift, Qt.Key_Control, Qt.Key_Alt,
+                           Qt.Key_AltGr, Qt.Key_Meta, Qt.Key_CapsLock, Qt.Key_NumLock, Qt.Key_Menu]);
     }
-    // A key the lock screen got (from the shell's Keys handler): true when
-    // it is the lock screen's (typed toward the passcode).
-    function typeKey(event) {
-        if (!locked || dockMode || incomingCall || _covered)
-            return false;
-        // Shortcuts are not typing (Just Type's rule, Shell.qml).
-        if (event.modifiers & (Qt.ControlModifier | Qt.MetaModifier))
-            return false;
-        if (_typeAsking && (event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete)) {
-            _typedAhead.pop();
-            return true;
-        }
-        var text = event.text || "";
-        if (text.length === 0 || text.charCodeAt(0) < 32 || (_typedAhead.length === 0 && text.trim() === ""))
-            return false;
-        _typedAhead.push({ text: text, digit: event.key >= Qt.Key_0 && event.key <= Qt.Key_9 });
-        if (_typeAsking)
-            return true;
+    // A key of the keyboard went down on the lock screen (whatever has the
+    // focus; the shell, Shell.lockKeys): the entry opens when a passcode is
+    // set.
+    function keyboardActivity() {
+        if (!locked || dockMode || incomingCall || _covered || _typeAsking)
+            return;
         _typeAsking = true;
         var ask = ++_typeAsk;
         _askLock(function (ok, pending) {
@@ -391,15 +396,38 @@ Item {
             if (lock._lockMode === "none" || lock._policyPending(pending))
                 return;
             var pin = lock._lockMode === "pin";
-            typed = typed.filter(function (k) { return !pin || k.digit; });
-            if (typed.length === 0)
-                return;
             lock.setupNew = "";
             lock._showPinPanel();
+            lock.unlockPanel.openedByKey = true;
             lock.wakeRequested();
-            typed.forEach(function (k) { lock.unlockPanel.typeKey(k.text, k.digit); });
+            typed.forEach(function (k) {
+                if (!pin || k.digit)
+                    lock.unlockPanel.typeKey(k.text, k.digit);
+            });
         });
-        return true;
+    }
+    // A key the lock screen got (the shell's Keys handler, with the
+    // keyboard focus on the lock screen): what it types goes into the
+    // entry once it is open, and it opens it as keyboardActivity (the
+    // window's watch saw it first; this is for keys reaching the lock
+    // screen otherwise). True when it was typing.
+    function typeKey(event) {
+        if (!locked || dockMode || incomingCall || _covered)
+            return false;
+        var typing = false;
+        // Shortcuts are not typing (Just Type's rule, Shell.qml).
+        if (!(event.modifiers & (Qt.ControlModifier | Qt.MetaModifier))) {
+            var text = event.text || "";
+            if (event.key === Qt.Key_Backspace || event.key === Qt.Key_Delete) {
+                typing = _typedAhead.length > 0;
+                _typedAhead.pop();
+            } else if (text.length > 0 && text.charCodeAt(0) >= 32 && !(_typedAhead.length === 0 && text.trim() === "")) {
+                _typedAhead.push({ text: text, digit: event.key >= Qt.Key_0 && event.key <= Qt.Key_9 });
+                typing = true;
+            }
+        }
+        keyboardActivity();
+        return typing;
     }
     // Esc, or the lock screen going back to itself: what was typed while
     // the lock mode was being asked for is dropped, and the answer opens
