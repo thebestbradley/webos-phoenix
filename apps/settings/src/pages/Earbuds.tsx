@@ -42,42 +42,49 @@ export function batteryLine(b: EarbudsBattery): string {
 }
 
 /**
- * Generic earbuds and their case, drawn as plain shapes: two rounded
- * heads on stems over an open (or closed) case. Not Apple's artwork.
+ * Generic earbuds in their case, drawn as plain shapes (the shell's
+ * EarbudsArt.qml draws the same): a rounded case, its lid standing open
+ * behind it, the earbuds' heads in their wells; closed, the lid's seam.
+ * Not Apple's artwork.
  */
 export function EarbudsArt({ lidOpen = true, size = 120, kind = "" }: { lidOpen?: boolean; size?: number; kind?: string }) {
-    const max = kind === "airpodsmax";
-    if (max) {
+    const stroke = { stroke: "#8a8a85", strokeWidth: 1.5 };
+    if (kind === "airpodsmax") {
         return (
             <svg width={size} height={size * 0.8} viewBox="0 0 120 96" aria-hidden className="earbuds-art">
-                <path d="M22 60 C22 18 98 18 98 60" fill="none" stroke="#d9d9d6" strokeWidth="8" strokeLinecap="round" />
-                <rect x="10" y="50" width="26" height="38" rx="11" fill="#f4f4f2" stroke="#9a9a96" strokeWidth="1.5" />
-                <rect x="84" y="50" width="26" height="38" rx="11" fill="#f4f4f2" stroke="#9a9a96" strokeWidth="1.5" />
+                <defs>
+                    <linearGradient id="earbuds-white" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0" stopColor="#ffffff" /><stop offset="1" stopColor="#d4d4cf" />
+                    </linearGradient>
+                </defs>
+                <path d="M26 58 C26 14 94 14 94 58" fill="none" stroke="#d9d9d6" strokeWidth="8" strokeLinecap="round" />
+                <rect x="12" y="46" width="28" height="42" rx="12" fill="url(#earbuds-white)" {...stroke} />
+                <rect x="80" y="46" width="28" height="42" rx="12" fill="url(#earbuds-white)" {...stroke} />
             </svg>
         );
     }
     return (
         <svg width={size} height={size * 0.8} viewBox="0 0 120 96" aria-hidden className="earbuds-art">
             <defs>
-                <linearGradient id="earbuds-shine" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0" stopColor="#ffffff" />
-                    <stop offset="1" stopColor="#dcdcd8" />
+                <linearGradient id="earbuds-white" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stopColor="#ffffff" /><stop offset="1" stopColor="#d4d4cf" />
                 </linearGradient>
             </defs>
-            {/* The case: its lid up when open. */}
-            {lidOpen
-                ? <rect x="30" y="34" width="60" height="16" rx="7" fill="url(#earbuds-shine)" stroke="#9a9a96" strokeWidth="1.5" transform="rotate(-8 30 50)" />
-                : null}
-            <rect x="30" y={lidOpen ? 52 : 46} width="60" height={lidOpen ? 40 : 46} rx="12" fill="url(#earbuds-shine)" stroke="#9a9a96" strokeWidth="1.5" />
-            {!lidOpen && <line x1="31" y1="60" x2="89" y2="60" stroke="#b8b8b4" strokeWidth="1.2" />}
-            {/* The earbuds: a round head on a stem, mirrored. */}
-            {[0, 1].map((i) => (
-                <g key={i} transform={i ? "translate(120 0) scale(-1 1)" : undefined}>
-                    <rect x="31" y="14" width="8" height="30" rx="4" fill="url(#earbuds-shine)" stroke="#9a9a96" strokeWidth="1.2" />
-                    <ellipse cx="30" cy="12" rx="11" ry="10" fill="url(#earbuds-shine)" stroke="#9a9a96" strokeWidth="1.4" />
-                    <ellipse cx="24" cy="12" rx="3.5" ry="4" fill="#5d5d5a" />
-                </g>
-            ))}
+            {lidOpen && (
+                <>
+                    <rect x="24" y="8" width="72" height="40" rx="16" fill="url(#earbuds-white)" {...stroke} />
+                    <rect x="30" y="13" width="60" height="30" rx="12" fill="#c9c9c4" />
+                    {[47, 73].map((cx, i) => (
+                        <g key={cx}>
+                            <ellipse cx={cx} cy="46" rx="10" ry="9" fill="url(#earbuds-white)" {...stroke} />
+                            <ellipse cx={cx + (i === 0 ? -3.5 : 3.5)} cy="44" rx="2.5" ry="3" fill="#4f4f4a" />
+                        </g>
+                    ))}
+                </>
+            )}
+            <rect x="20" y={lidOpen ? 48 : 30} width="80" height={lidOpen ? 44 : 62} rx="18" fill="url(#earbuds-white)" {...stroke} />
+            <line x1={lidOpen ? 28 : 21} y1={lidOpen ? 52 : 50} x2={lidOpen ? 92 : 99} y2={lidOpen ? 52 : 50} stroke="#b0b0aa" strokeWidth="1.5" />
+            <circle cx="60" cy={lidOpen ? 76 : 72} r="2" fill="#9fd88a" />
         </svg>
     );
 }
@@ -91,7 +98,8 @@ function Gauge({ label, level, charging, testId }: { label: string; level: numbe
             <div className="earbuds-gauge-bar">
                 <span className={level >= 0 && level < 20 ? "low" : ""} style={{ width: `${known ? level : 0}%` }} />
             </div>
-            <div className="earbuds-gauge-value">{known ? percent(level) : "—"}{charging && known ? " ⚡" : ""}</div>
+            <div className="earbuds-gauge-value">{known ? percent(level) : "—"}</div>
+            {charging && known && <div className="earbuds-gauge-charging">Charging</div>}
         </div>
     );
 }
@@ -143,12 +151,12 @@ export function EarbudsPage({ device, onForgotten }: { device: EarbudsDevice; on
 
             <Divider caption="Settings" />
             <Group>
-                <Row title="Automatic Ear Detection" subtitle="Pauses when you take an earbud out, plays when you put it back">
+                <Row title="Automatic Ear Detection" subtitle="Pause when an earbud comes out">
                     <ToggleButton value={device.earDetection} label="Automatic Ear Detection" testId="ab-ear-detection"
                                   onChange={(on) => { setError(null); void run(earbuds.setEarDetection(device.address, on)); }} />
                 </Row>
                 {device.conversationAwareness !== null && (
-                    <Row title="Conversation Awareness" subtitle="Lowers your media when you start talking">
+                    <Row title="Conversation Awareness" subtitle="Lower media when you talk">
                         <ToggleButton value={device.conversationAwareness} label="Conversation Awareness" testId="ab-conversation"
                                       disabled={!live}
                                       onChange={(on) => { setError(null); void run(earbuds.setConversationAwareness(device.address, on)); }} />

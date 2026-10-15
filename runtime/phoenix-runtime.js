@@ -18692,9 +18692,11 @@
             var id = kind === "dult" ? "c4:10:aa:bb:cc:01" : "f5:3a:9c:21:7e:04";
             var r = s.trackers[id] || { id: id, type: kind === "dult" ? "dult" : "airtag", network: kind === "dult" ? "google" : "apple",
                                         firstSeen: now, lastSeen: now, points: [], alertedAt: 0, ignored: false };
+            // (A walk with its turns: north, a little east, west.)
+            var east = [-0.004, 0.0025, -0.0015, 0];
             [35, 24, 12, 0].forEach(function (ago, i) {
                 var p = { t: now - ago * MIN };
-                if (here) { p.lat = here.latitude - (3 - i) * 0.0036; p.lon = here.longitude; }
+                if (here) { p.lat = here.latitude - (3 - i) * 0.0036; p.lon = here.longitude + east[i]; }
                 r.points.push(p);
             });
             r.points.sort(function (a, b) { return a.t - b.t; });

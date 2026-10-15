@@ -1,12 +1,13 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Generic earbuds over their case, drawn here (Phoenix's own: plain shapes,
+// Generic earbuds in their case, drawn here (Phoenix's own: plain shapes,
 // no Apple artwork; docs/ACCESSORIES.md, "Art"), for the AirPods card
 // (EarbudsAlert.qml). The same drawing as Settings' (apps/settings
-// Earbuds.tsx EarbudsArt): two round heads on stems, mirrored, over a
-// rounded case whose lid lifts when open. Over-ear headphones (AirPods
-// Max) are a band and two cups.
+// Earbuds.tsx EarbudsArt), in a 120 x 96 box: a rounded case, its lid
+// standing open behind it, the two earbuds' heads showing in their wells;
+// closed, the lid on top with its seam. Over-ear headphones (AirPods Max)
+// are a band and two cups.
 
 import QtQuick
 
@@ -14,15 +15,10 @@ Canvas {
     id: art
     property bool lidOpen: true
     property string kind: ""
-    // Hide one earbud (it is out of the case, in an ear).
-    property bool leftShown: true
-    property bool rightShown: true
     width: Theme.px(120)
     height: Theme.px(96)
     onLidOpenChanged: requestPaint()
     onKindChanged: requestPaint()
-    onLeftShownChanged: requestPaint()
-    onRightShownChanged: requestPaint()
     onWidthChanged: requestPaint()
 
     function _round(c, x, y, w, h, r) {
@@ -38,62 +34,63 @@ Canvas {
         c.arcTo(x, y, x + r, y, r);
         c.closePath();
     }
+    function _white(c, y0, y1) {
+        var g = c.createLinearGradient(0, y0, 0, y1);
+        g.addColorStop(0, "#ffffff");
+        g.addColorStop(1, "#d4d4cf");
+        return g;
+    }
 
     onPaint: {
         var c = getContext("2d");
         c.reset();
         var s = width / 120;
         c.scale(s, s);
-        var shine = c.createLinearGradient(0, 0, 120, 96);
-        shine.addColorStop(0, "#ffffff");
-        shine.addColorStop(1, "#d6d6d2");
-        c.fillStyle = shine;
-        c.strokeStyle = "#8c8c88";
         c.lineWidth = 1.5;
+        c.strokeStyle = "#8a8a85";
         if (kind === "airpodsmax") {
             c.lineWidth = 8;
-            c.strokeStyle = "#d9d9d6";
             c.lineCap = "round";
-            c.beginPath();
-            c.moveTo(22, 60);
-            c.bezierCurveTo(22, 18, 98, 18, 98, 60);
-            c.stroke();
+            c.strokeStyle = "#d9d9d6";
+            c.beginPath(); c.moveTo(26, 58); c.bezierCurveTo(26, 14, 94, 14, 94, 58); c.stroke();
             c.lineWidth = 1.5;
-            c.strokeStyle = "#8c8c88";
-            _round(c, 10, 50, 26, 38, 11); c.fill(); c.stroke();
-            _round(c, 84, 50, 26, 38, 11); c.fill(); c.stroke();
+            c.strokeStyle = "#8a8a85";
+            c.fillStyle = _white(c, 46, 90);
+            _round(c, 12, 46, 28, 42, 12); c.fill(); c.stroke();
+            _round(c, 80, 46, 28, 42, 12); c.fill(); c.stroke();
             return;
         }
-        // The case, its lid tilted up when open.
         if (lidOpen) {
-            c.save();
-            c.translate(30, 50);
-            c.rotate(-8 * Math.PI / 180);
-            _round(c, 0, -16, 60, 16, 7);
-            c.fill(); c.stroke();
-            c.restore();
+            // The lid, open behind: its outside rim and its inside.
+            c.fillStyle = _white(c, 8, 46);
+            _round(c, 24, 8, 72, 40, 16); c.fill(); c.stroke();
+            c.fillStyle = "#c9c9c4";
+            _round(c, 30, 13, 60, 30, 12); c.fill();
+            // The earbuds' heads in their wells, over the case's rim.
+            for (var i = 0; i < 2; ++i) {
+                var cx = i === 0 ? 47 : 73;
+                c.fillStyle = _white(c, 36, 56);
+                c.beginPath(); c.ellipse(cx - 10, 37, 20, 18); c.fill(); c.stroke();
+                c.fillStyle = "#4f4f4a";
+                c.beginPath(); c.ellipse(cx + (i === 0 ? -3.5 : 3.5) - 2.5, 41, 5, 6); c.fill();
+            }
         }
-        _round(c, 30, lidOpen ? 52 : 46, 60, lidOpen ? 40 : 46, 12);
+        // The case.
+        c.fillStyle = _white(c, 46, 92);
+        _round(c, 20, lidOpen ? 48 : 30, 80, lidOpen ? 44 : 62, 18);
         c.fill(); c.stroke();
-        if (!lidOpen) {
-            c.strokeStyle = "#b4b4b0";
-            c.beginPath(); c.moveTo(31, 60); c.lineTo(89, 60); c.stroke();
-            c.strokeStyle = "#8c8c88";
+        c.strokeStyle = "#b0b0aa";
+        c.beginPath();
+        if (lidOpen) {
+            // The wells' edge.
+            c.moveTo(28, 52); c.lineTo(92, 52);
+        } else {
+            // The lid's seam.
+            c.moveTo(21, 50); c.lineTo(99, 50);
         }
-        // The earbuds: a stem, a round head, its dark speaker.
-        for (var i = 0; i < 2; ++i) {
-            if ((i === 0 && !leftShown) || (i === 1 && !rightShown))
-                continue;
-            c.save();
-            if (i === 1) { c.translate(120, 0); c.scale(-1, 1); }
-            c.fillStyle = shine;
-            c.lineWidth = 1.2;
-            _round(c, 31, 14, 8, 30, 4); c.fill(); c.stroke();
-            c.lineWidth = 1.4;
-            c.beginPath(); c.ellipse(19, 2, 22, 20); c.fill(); c.stroke();
-            c.fillStyle = "#55554f";
-            c.beginPath(); c.ellipse(20.5, 8, 7, 8); c.fill();
-            c.restore();
-        }
+        c.stroke();
+        // The status light.
+        c.fillStyle = "#9fd88a";
+        c.beginPath(); c.ellipse(58, lidOpen ? 74 : 70, 4, 4); c.fill();
     }
 }

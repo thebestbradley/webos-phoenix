@@ -115,6 +115,23 @@ Item {
         interval: monitor.batteryCardTime
         onTriggered: monitor._close()
     }
+    // Closed from outside (the Home button closes the front popup alert):
+    // no card any more, so the next opening of a case shows one.
+    Connections {
+        target: monitor.source && monitor.source.alerts ? monitor.source.alerts : null
+        ignoreUnknownSignals: true
+        function onCountChanged() {
+            if (!monitor.card)
+                return;
+            var a = monitor.source.alerts;
+            for (var i = 0; i < a.count; ++i)
+                if (a.get(i).key === monitor.alertKey)
+                    return;
+            batteryTimer.stop();
+            monitor.card = null;
+            monitor._alert = null;
+        }
+    }
     // The card follows the status: the batteries, the pairing, the
     // AirPods paired at last (it becomes their battery card), gone when the
     // AirPods are (the case closed, out of range).
@@ -123,8 +140,8 @@ Item {
             return;
         var n = Logic.nearbyFor(next, card.id);
         var p = next.pairing && next.pairing.id === card.id ? next.pairing : null;
-        if (card.kind === "pair" && _alert.connecting && !p) {
-            // Paired and connected: the battery card.
+        if (card.kind === "pair" && !p && ((n && n.paired) || _alert.connecting)) {
+            // Paired (here, or meanwhile in Settings) and connected: the battery card.
             var dev = n && n.paired ? Logic.deviceFor(next, n.paired) : Logic.connectedDevice(next);
             if (dev) {
                 _alert.connecting = false;

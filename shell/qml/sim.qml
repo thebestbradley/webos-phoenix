@@ -11,7 +11,7 @@
 //                  "assistantbird" | "assistantbirds" | "assistantbirdmoves" |
 //                  "wakeword" | "wakewordlocked" | "modal" |
 //                  "systemmenu" | "empty" |
-//                  "airpods" | "airpodsbattery" | "airpodsmenu" | "trackeralert"
+//                  "airpods" | "airpodsbattery" | "airpodsmenu" | "airpodssettings" | "trackeralert"
 //   simFirstUse    start with First Use (--first-use); without it First Use
 //                  runs at start-up until it has been done once
 //                  (simSettings "firstuse/done", set when the app reports the
@@ -1395,7 +1395,7 @@ Item {
                                    "lowbattery", "banner", "notified", "dashboard", "notifystacks", "notifystacksbar", "notifystackslocked", "drawer", "capture",
                                    "capturepreview", "justtype", "keyboard", "clipstrip", "assistant", "assistantbird", "assistantbirds", "assistantbirdmoves",
                                    "wakeword", "wakewordlocked", "modal", "systemmenu", "empty",
-                                   "airpods", "airpodsbattery", "airpodsmenu", "trackeralert"]
+                                   "airpods", "airpodsbattery", "airpodsmenu", "airpodssettings", "trackeralert"]
     readonly property string scene: typeof simScene !== "undefined" ? simScene : ""
     // --scene modal: once Memos is maximized.
     Timer {
@@ -1975,6 +1975,13 @@ Item {
                 // --scene assistant with --launch: the assistant over that app.
                 if (typeof simScene !== "undefined" && (simScene === "assistant" || simScene.indexOf("assistant:") === 0))
                     root.assistantScene();
+                // An AirPods or tracker scene with --launch: the AirPods and
+                // the tracker under that app (Settings' pages for them).
+                if (typeof simScene !== "undefined" && /^(airpods|airpodsbattery|airpodsmenu|airpodssettings|trackeralert)$/.test(simScene)) {
+                    sceneAirPods.withApp = true;
+                    sceneAirPods.step = 0;
+                    sceneAirPods.start();
+                }
                 root.startOnTouchstone();
             });
             return;
@@ -2077,11 +2084,12 @@ Item {
             shell.cardView.position = 0;
         } else if (scene === "systemmenu") {
             shell.openSystemMenu();
-        } else if (scene === "airpods" || scene === "airpodsbattery" || scene === "airpodsmenu" || scene === "trackeralert") {
+        } else if (/^(airpods|airpodsbattery|airpodsmenu|airpodssettings|trackeralert)$/.test(scene)) {
             // AirPods (docs/ACCESSORIES.md), once the system UI's page (the
             // runtime's services) is up: their case opened nearby (the
             // card); paired, then opened again (the battery card); in the
-            // ears, the system menu's Noise Control; an AirTag that followed.
+            // ears, the system menu's Noise Control, or Settings' page for
+            // them; an AirTag that followed (its notification).
             sceneAirPods.step = 0;
             sceneAirPods.start();
         } else if (scene === "launcher" || scene === "launcheredit") {
@@ -2459,61 +2467,104 @@ Item {
     Timer {
         id: sceneAirPods
         property int step: 0
+        // Started with --launch: no menu or dashboard over the app.
+        property bool withApp: false
         interval: 1200
         onTriggered: {
             if (!windows.systemUiLoaded)
                 return restart();
-            var s = root.scene, near = status.earbuds.nearby || [];
+            var s = root.scene;
+            var monitor = root.findByName(shell, "earbudsMonitor");
+            var card = windows.windowFor("earbudsalert");
             if (step === 0) {
                 // Bluetooth on (the AirPods' radio), then the case.
                 status.setBluetoothOn(true);
                 windows.pushSystemStatus({ bluetoothOn: true });
+                // The battery card stays for the screenshot.
+                if (monitor)
+                    monitor.batteryCardTime = 60000;
                 if (s === "trackeralert") {
                     interval = 1500;
                     step = 10;
                     return restart();
                 }
                 root.airpods({ present: true, lidOpen: true, left: "case", right: "case" });
-                step = s === "airpods" ? 99 : 1;
+                if (s === "airpods")
+                    return;
+                step = 1;
                 interval = 1500;
                 return restart();
             }
             if (step === 1) {
-                // Connect from the card, wait for it to pair.
-                if (!near.length)
+                // Connect on the card, as a tap; then the pairing.
+                var connect = card ? root.findByName(card, "earbudsAlertConnect") : null;
+                if (!connect)
                     return restart();
-                status.earbudsRequest("connect", { id: near[0].id });
+                console.info("phoenix-sim: scene " + s + ": Connect on the AirPods card");
+                connect.action();
                 step = 2;
-                interval = 4500;
+                interval = 5000;
                 return restart();
             }
             if (step === 2) {
-                if (s === "airpodsmenu") {
+                if (card)
+                    windows.closeAlert("earbudsalert");
+                if (s === "airpodsmenu" || s === "airpodssettings") {
                     root.airpods({ left: "ear", right: "ear", lidOpen: false });
-                    step = 3;
+                    step = s === "airpodsmenu" ? 3 : 6;
                     interval = 1200;
                     return restart();
                 }
                 // Closed, then opened again: the battery card.
                 root.airpods({ lidOpen: false });
                 step = 4;
-                interval = 1200;
+                interval = 1500;
                 return restart();
             }
             if (step === 3) {
+                console.info("phoenix-sim: scene " + s + ": the system menu, " + JSON.stringify(status.earbuds.devices));
                 // The menu, its Noise Control drawer open.
                 shell.openSystemMenu();
                 var drawer = root.findByName(shell, "systemMenuNoiseControl");
                 if (drawer)
                     drawer.open();
+                step = 5;
+                interval = 900;
+                return restart();
+            }
+            if (step === 5) {
+                // Scrolled down to it, as a finger would.
+                var flick = root.findByName(shell, "systemMenuFlickable");
+                var noise = root.findByName(shell, "systemMenuNoiseControl");
+                if (flick && noise)
+                    flick.contentY = Math.max(0, Math.min(flick.contentHeight - flick.height,
+                                                          noise.mapToItem(flick.contentItem, 0, 0).y - Theme.px(84)));
                 return;
             }
             if (step === 4) {
+                console.info("phoenix-sim: scene " + s + ": the case opened again, paired: " + JSON.stringify(status.earbuds.devices));
                 root.airpods({ lidOpen: true });
+                return;
+            }
+            if (step === 6) {
+                // Settings > Bluetooth > AirPods.
+                var pods = (status.earbuds.devices || [])[0];
+                if (pods)
+                    shell.launch("org.webosphoenix.settings", { page: "bluetooth", view: "earbuds", address: pods.address });
                 return;
             }
             if (step === 10) {
                 root.trackerFollows("airtag");
+                if (withApp)
+                    return;
+                step = 11;
+                interval = 2500;
+                return restart();
+            }
+            if (step === 11) {
+                // Its notification in the dashboard.
+                shell.notifications.bannerActive = false;
+                shell.notifications.dashboardOpen = true;
                 return;
             }
         }

@@ -193,6 +193,18 @@ Item {
             tryCompare(windows.alerts, "count", 0, 2000);
         }
 
+        // The Home button closes the front popup alert (Shell, the window
+        // source's closeAlert): the next opening shows a card again.
+        function test_closedFromOutside() {
+            report([nearby()], [], null);
+            shownAlert();
+            windows.closeAlert(monitor.alertKey);
+            compare(monitor.card, null);
+            report([nearby({ lidOpen: false })], [], null);
+            report([nearby({ lidOpenCount: 4 })], [], null);
+            tryCompare(windows.alerts, "count", 1, 1000);
+        }
+
         function test_cardGoesWithTheAirPods() {
             report([nearby()], [], null);
             tryCompare(windows.alerts, "count", 1, 1000);

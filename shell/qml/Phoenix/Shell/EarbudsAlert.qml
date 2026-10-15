@@ -84,13 +84,15 @@ Item {
             lidOpen: !card.nearby || card.nearby.lidOpen
         }
 
-        // Each battery: its name, a bar, the level.
+        // Each battery as the status bar shows the device's: its name, the
+        // status bar's battery icon (charging, when it is: StatusBar.qml,
+        // StatusBarBattery.cpp:150-172), the level in its colours.
         Column {
             objectName: "earbudsAlertBatteries"
-            x: art.x + art.width + Theme.px(14)
+            x: art.x + art.width + Theme.px(18)
             width: parent.width - x
             anchors.verticalCenter: parent.verticalCenter
-            spacing: Theme.px(6)
+            spacing: Theme.px(8)
             Repeater {
                 model: [{ key: "left", label: qsTr("Left") }, { key: "right", label: qsTr("Right") }, { key: "case", label: qsTr("Case") }]
                 delegate: Item {
@@ -98,46 +100,42 @@ Item {
                     required property var modelData
                     readonly property real level: card.battery && typeof card.battery[modelData.key] === "number" ? card.battery[modelData.key] : -1
                     readonly property bool charging: !!card.charging && !!card.charging[modelData.key]
+                    readonly property int step: Theme.batteryState(Math.max(0, level))
                     objectName: "earbudsAlertBattery_" + modelData.key
                     width: parent.width
                     height: Theme.px(22)
                     Text {
                         id: label
-                        width: Theme.px(44)
+                        width: Theme.px(52)
                         anchors.verticalCenter: parent.verticalCenter
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.px(14)
+                        font.pixelSize: Theme.px(16)
                         font.bold: true
                         color: "#FFFFFF"
                         text: gauge.modelData.label
                     }
-                    Rectangle {
+                    Image {
+                        id: icon
                         x: label.width
-                        width: parent.width - label.width - value.width - Theme.px(6)
-                        height: Theme.px(8)
-                        radius: height / 2
                         anchors.verticalCenter: parent.verticalCenter
-                        color: "#4a4a48"
-                        Rectangle {
-                            visible: gauge.level >= 0
-                            width: parent.width * Math.max(0, Math.min(100, gauge.level)) / 100
-                            height: parent.height
-                            radius: height / 2
-                            color: gauge.level < 20 ? "#d9442b" : "#6cc04a"
-                        }
+                        source: gauge.level < 0 ? Theme.asset("statusBar/battery-error.png")
+                                : gauge.charging && gauge.step === 12 ? Theme.asset("statusBar/battery-charged.png")
+                                : gauge.charging ? Theme.asset("statusBar/battery-charging-" + gauge.step + ".png")
+                                : Theme.asset("statusBar/battery-" + Math.min(gauge.step, 11) + ".png")
+                        width: Theme.artWidth(source)
+                        height: Theme.artHeight(source)
                     }
                     Text {
-                        id: value
                         objectName: "value"
-                        width: Theme.px(52)
-                        anchors.right: parent.right
+                        x: icon.x + icon.width + Theme.px(8)
                         anchors.verticalCenter: parent.verticalCenter
-                        horizontalAlignment: Text.AlignRight
                         font.family: Theme.fontFamily
-                        font.pixelSize: Theme.px(14)
+                        font.pixelSize: Theme.px(16)
                         font.bold: true
-                        color: gauge.level >= 0 ? "#FFFFFF" : "#8a8a86"
-                        text: gauge.level >= 0 ? Math.round(gauge.level) + "%" + (gauge.charging ? " +" : "") : "--"
+                        color: gauge.level < 0 ? "#8a8a86" : gauge.charging ? "#8CE05A"
+                             : gauge.level <= Theme.batteryChargeLevels[0] ? "#FF4D40"
+                             : gauge.level <= Theme.batteryChargeLevels[1] ? "#FFC21A" : "#FFFFFF"
+                        text: gauge.level >= 0 ? Math.round(gauge.level) + "%" : "--"
                     }
                 }
             }
