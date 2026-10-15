@@ -750,13 +750,15 @@ int main(int argc, char **argv)
     // curated apps in once, as Catalog::seedCurated does: those the
     // database lacks are looked for, then inserted (two seeds at once: the
     // second fails as PHP does, "UNIQUE constraint failed"), and takes two
-    // seconds more while the catalog's folder has a "slow" file (python3
+    // seconds more while the catalog's folder has a "slow" file (and
+    // PHP's server waits a second and a half before it tries the port while
+    // it has a "slow-php" file: PHP starting on a busy computer) (python3
     // and node are not on this PATH: the fill and the connectors say so in
     // the log).
     write(bin + QStringLiteral("/php"),
           "#!/bin/sh\n"
           "case \"$1\" in\n"
-          "  -S) exec \"$FAKE_CATALOG_SERVER\" --serve \"${2##*:}\" ;;\n"
+          "  -S) [ ! -f \"$MARKETPLACE_DATA/slow-php\" ] || sleep 1.5; exec \"$FAKE_CATALOG_SERVER\" --serve \"${2##*:}\" ;;\n"
           "  -r) case \"$2\" in *fsockopen*) exec \"$FAKE_CATALOG_SERVER\" --answers \"$3\" \"$4\" ;; esac ;;\n"
           "esac\n"
           "[ \"$2\" = seed ] || exit 0\n"
@@ -901,8 +903,10 @@ int main(int argc, char **argv)
         // another program (an older simulator's catalog that its first look
         // missed, or that came up meanwhile): its watch's PHP cannot listen
         // there and claims nothing, and what answers is not taken for this
-        // folder's catalog (its key would not be the folder's).
+        // folder's catalog (its key would not be the folder's). Its PHP slow
+        // to start too: what answers meanwhile is not taken for it either.
         write(sharedFolder + QStringLiteral("/slow"), "");
+        write(sharedFolder + QStringLiteral("/slow-php"), "");
         const quint16 olderPort = freePort();
         look.port = olderPort;
         SimMarketplace m(repo2, olderPort);
@@ -920,6 +924,7 @@ int main(int argc, char **argv)
         check(m.state() == SimMarketplace::Running && !QFile::exists(sharedFolder + QStringLiteral("/server.json")),
               "... not stopped from here, and nothing claims it");
         QFile::remove(sharedFolder + QStringLiteral("/slow"));
+        QFile::remove(sharedFolder + QStringLiteral("/slow-php"));
     }
     {
         // One an older simulator runs (no server.json of this folder): used as it is, its key unknown.
