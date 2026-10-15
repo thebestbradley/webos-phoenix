@@ -146,7 +146,7 @@ export function TrackersPage({ onOpen }: { onOpen: (id: string) => void }) {
         <Page>
             <PageHeader title="Tracker Alerts" icon="icons/bluetooth.png" />
             <Group>
-                <Row title="Tracker Alerts" subtitle="Unknown trackers moving with you">
+                <Row title="Tracker Alerts" subtitle="Unknown trackers moving with you" className="wrap-row">
                     <ToggleButton value={status.enabled} label="Tracker Alerts" testId="tr-enabled"
                                   onChange={(on) => void trackers.setEnabled(on)} />
                 </Row>

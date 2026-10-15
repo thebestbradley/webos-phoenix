@@ -460,3 +460,6 @@ div.license-text { font-family: var(--pui-font); font-size: 13px; }
 }
 .tracker-step .pui-row-title { font-weight: normal; font-size: 15px; white-space: normal; }
 .earbuds-gauge-charging { font-size: 12px; color: #3f8f22; }
+/* Long names and lines (AirPods' switches, Tracker Alerts): on a 320 px phone they wrap
+   beside the toggle instead of being cut short. */
+.wrap-row .pui-row-title, .wrap-row .pui-row-subtitle { white-space: normal; }

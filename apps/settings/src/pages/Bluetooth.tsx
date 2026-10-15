@@ -164,7 +164,7 @@ function DevicesPage({ pods, onOpen }: { pods: EarbudsStatus | undefined; onOpen
 
             <Divider caption="Privacy" />
             <Group>
-                <Row title="Tracker Alerts" value={alerts ? (alerts.enabled ? "On" : "Off") : undefined} chevron testId="bt-trackers"
+                <Row title="Tracker Alerts" value={alerts ? (alerts.enabled ? "On" : "Off") : undefined} chevron testId="bt-trackers" className="wrap-row"
                      subtitle="Unknown trackers moving with you"
                      onClick={() => onOpen({ kind: "trackers" })} />
             </Group>

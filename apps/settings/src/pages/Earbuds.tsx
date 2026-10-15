@@ -151,12 +151,12 @@ export function EarbudsPage({ device, onForgotten }: { device: EarbudsDevice; on
 
             <Divider caption="Settings" />
             <Group>
-                <Row title="Automatic Ear Detection" subtitle="Pause when an earbud comes out">
+                <Row title="Automatic Ear Detection" subtitle="Pause when an earbud comes out" className="wrap-row">
                     <ToggleButton value={device.earDetection} label="Automatic Ear Detection" testId="ab-ear-detection"
                                   onChange={(on) => { setError(null); void run(earbuds.setEarDetection(device.address, on)); }} />
                 </Row>
                 {device.conversationAwareness !== null && (
-                    <Row title="Conversation Awareness" subtitle="Lower media when you talk">
+                    <Row title="Conversation Awareness" subtitle="Lower media when you talk" className="wrap-row">
                         <ToggleButton value={device.conversationAwareness} label="Conversation Awareness" testId="ab-conversation"
                                       disabled={!live}
                                       onChange={(on) => { setError(null); void run(earbuds.setConversationAwareness(device.address, on)); }} />
