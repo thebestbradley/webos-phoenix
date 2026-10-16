@@ -336,7 +336,7 @@ PHOENIX_BUILD_DIR=build-other ./phoenix
 
 ### What ./phoenix runs for a new build folder
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:699,715`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:699,723`
 
 **Mac:**:
 
@@ -454,7 +454,7 @@ in `phoenix-ember-glass-ui`: 2.0, with the rebuilt apps:
 
 SSH sessions and containers. `./phoenix run` does this itself when xvfb-run is installed.
 
-Run in `webos-phoenix` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:312-313 · phoenix:751-763`
+Run in `webos-phoenix` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:312-313 · phoenix:759-771`
 
 ```sh
 QTWEBENGINE_DISABLE_SANDBOX=1 xvfb-run -a -s "-screen 0 1920x1200x24" ./build/phoenix-sim --tablet --scene cards --screenshot out.png
