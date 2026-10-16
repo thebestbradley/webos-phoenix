@@ -15,15 +15,17 @@
 //          first. Above Internal Storage, the places: it and each drive
 //          (Synergy accounts with the DOCUMENTS capability, /media/drives;
 //          docs/SHARE-AND-FILES.md "Drives"), where the file is uploaded.
-//          On a tablet or a desktop the folders can be columns (columns.tsx),
-//          the last one the folder the file goes to.
+//          On a tablet or a desktop the folders are columns (columns.tsx;
+//          the list if the user chose it), the last one the folder the file
+//          goes to.
 //   pick   luna-systemui's file picker in this look: the kind first when
 //          there are several, pictures album by album (Camera Roll first),
 //          videos, music, documents, any file by folder (the drives
 //          beside Internal Storage); one file or several; a crop frame for
 //          a picture
-//          (org.webosphoenix.filepicker/pick, SF2). Files by folder can be
-//          columns on a tablet or a desktop, a file's preview after them.
+//          (org.webosphoenix.filepicker/pick, SF2). Files by folder are
+//          columns on a tablet or a desktop (the list if the user chose it),
+//          a file's preview after them.
 //   signin The system's browser sheet for an OAuth sign-in
 //          (org.webosphoenix.service.oauth authorize; docs/SYNERGY-CONNECTORS.md
 //          4.1): the provider's own page in a web view, its address above
@@ -33,9 +35,10 @@
 //
 // It talks to the page under it with postMessage: "ready", then the
 // request; "done" with the choice. The back gesture comes as "back".
-// List or Columns: the request's `view` (what the runtime kept from the
-// last sheet), and the save and pick sheets' answers carry the one shown
-// last (the runtime keeps it with the last folder, filepicker:view).
+// List or Columns: columns on a tablet or a desktop unless the user chose
+// the list; the request's `view` is the user's choice the runtime kept
+// (filepicker:view, beside the last folder), and the save and pick sheets'
+// answers carry a choice made in them for it to keep.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -43,7 +46,9 @@ import {
     mimeOf, parentOf, type AudioItem, type CropInfo, type FileEntry, type ImageItem, type PickKind, type VideoItem,
 } from "@phoenix/luna";
 import { useLaunchParams, useMediaUrl } from "@phoenix/luna/react";
-import { Button, Checkmark, Dialog, FileIcon, Slider, Spinner, TextField, ViewSwitch, type ColumnMove, type FileIconKind, type FolderView } from "@phoenix/ui";
+import {
+    Button, Checkmark, Dialog, FileIcon, shownView, Slider, Spinner, TextField, ViewSwitch, type ColumnMove, type FileIconKind, type FolderView,
+} from "@phoenix/ui";
 import { internalPlace, listError, PickPreview, SheetColumns, useColumnsFit } from "./columns";
 import { MEDIA, PLACES, upOf as placeUp } from "./places";
 
@@ -104,8 +109,10 @@ export function App() {
     const [request, setRequest] = useState<Request | null>(null);
     const [leaving, setLeaving] = useState(false);
     const backHandler = useRef<() => void>(() => {});
-    // List or Columns (save and pick): the one shown last goes back with the answer, kept for the next sheet.
-    const [view, setView] = useState<FolderView>("list");
+    // List or Columns (save and pick): the request's (the runtime's kept
+    // one; columns where they are offered until the user chooses), and the
+    // user's choice here, which goes back with the answer to be kept.
+    const [view, setView] = useState<FolderView | undefined>(undefined);
     const viewRef = useRef<FolderView | undefined>(undefined);
     const chooseView = useCallback((v: FolderView) => { viewRef.current = v; setView(v); }, []);
 
@@ -125,14 +132,14 @@ export function App() {
             if (m.type === "request" && m.request) {
                 setRequest(m.request);
                 const v = (m.request as { view?: unknown }).view;
-                if (v === "list" || v === "columns") chooseView(v);
+                if (v === "list" || v === "columns") setView(v);
             }
             else if (m.type === "back") backHandler.current();
         };
         window.addEventListener("message", onMessage);
         if (window.parent !== window) window.parent.postMessage({ phoenixSheet: params.id, type: "ready" }, "*");
         return () => window.removeEventListener("message", onMessage);
-    }, [params.id, chooseView]);
+    }, [params.id]);
 
     // Escape on a hardware keyboard, as the back gesture.
     useEffect(() => {
@@ -171,8 +178,8 @@ interface SheetProps<R> {
     finish: (r: Result) => void;
     backHandler: React.MutableRefObject<() => void>;
 }
-/** The save and pick sheets: List or Columns (offered on a tablet or a desktop). */
-interface ViewProps { view: FolderView; onView: (v: FolderView) => void }
+/** The save and pick sheets: List or Columns (offered on a tablet or a desktop, and columns there unless the list was chosen). */
+interface ViewProps { view: FolderView | undefined; onView: (v: FolderView) => void }
 
 // ---- Sign in -------------------------------------------------------------------------
 
@@ -347,7 +354,7 @@ function SavePicker({ request, finish, backHandler, view, onView }: SheetProps<S
     drivesRef.current = drives;
     // Columns on a tablet or a desktop, when chosen: the last column is the folder the file goes to.
     const fits = useColumnsFit();
-    const cols = fits && view === "columns";
+    const cols = shownView(view, fits) === "columns";
     const [made, setMade] = useState(0);
 
     const open = useCallback(async (path: string) => {
@@ -502,7 +509,7 @@ function FilePicker({ request, finish, backHandler, view, onView }: SheetProps<P
     // Files by folder in columns (a tablet or a desktop, when chosen): a tap
     // marks a file and shows its preview, a second tap (or OK) picks it.
     const fits = useColumnsFit() && kind === "file" && !cropping;
-    const cols = fits && view === "columns";
+    const cols = shownView(view, fits) === "columns";
     const [peek, setPeek] = useState<FileEntry | null>(null);
     const peeked = cols && peek && parentOf(peek.path) === folder ? peek : null;
     const asPicked = (e: FileEntry): Picked => ({ path: e.path, mimeType: mimeOf(e.name), size: e.size });

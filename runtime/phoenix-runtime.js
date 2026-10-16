@@ -16764,10 +16764,11 @@
     //       folder of /media/internal (the last one used first) and a name;
     //       the file is written there (copied from `from`, or from `data`).
     //
-    // On a tablet or a desktop both sheets offer the folders as columns (the
-    // List / Columns switch in their head): the request carries the view
-    // shown last (`view`), the answer the one the user left it in, kept
-    // as filepicker:view beside the last folder.
+    // On a tablet or a desktop both sheets show the folders as columns
+    // unless the user chose the list (the List / Columns switch in their
+    // head): the request carries the user's kept choice (`view`; columns
+    // until they make one), an answer the choice made in the sheet, kept as
+    // filepicker:view beside the last folder.
     //
     // The page talks to the runtime of the page under it with postMessage.
     //
@@ -16789,11 +16790,12 @@
         var MEDIA = "/media/internal";
         var CAMERA_DIR = MEDIA + "/DCIM/100PHNX";
         var LAST_FOLDER = "filepicker:lastFolder";
-        // List or Columns (the save and pick sheets offer columns on a
-        // tablet or a desktop): the one shown last, kept beside the last
-        // folder, for every app's sheet. The sheet answers with it.
+        // List or Columns (the save and pick sheets show columns on a
+        // tablet or a desktop unless the user chose the list; the owner, 16
+        // October 2026): the user's choice, kept beside the last folder for
+        // every app's sheet. The sheet answers with a choice made in it.
         var VIEW = "filepicker:view";
-        function sheetView() { return store.get(VIEW, "list") === "columns" ? "columns" : "list"; }
+        function sheetView() { return store.get(VIEW, null) === "list" ? "list" : "columns"; }
         function keepView(r) { if (r && (r.view === "list" || r.view === "columns")) store.set(VIEW, r.view); }
         // What the picker picks: the original's kinds (FilePickerApp.js:39-45,
         // ringtones aside), and "file", any file of the USB drive by folder.

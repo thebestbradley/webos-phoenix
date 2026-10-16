@@ -9,9 +9,9 @@
 // the keyboard's row as a held one (Heritage Item.css .enyo-held); and the
 // switch between a list and columns, Enyo's Heritage radio buttons
 // (RadioButton.css, radiobutton-heritage.png). Files and the system's file
-// picker offer it on tablets and desktops: the shell's layout
-// (@phoenix/luna/react useFormFactor) not a phone's, and a card wide enough
-// (useColumnsWidth).
+// picker show it on tablets and desktops unless the user chose the list
+// (columnmodel.ts shownView): the shell's layout (@phoenix/luna/react
+// useFormFactor) not a phone's, and a card wide enough (useColumnsWidth).
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { keyIsForColumns, type FolderView } from "./columnmodel";

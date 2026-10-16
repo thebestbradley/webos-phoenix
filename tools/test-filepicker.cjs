@@ -13,10 +13,12 @@
 //        com.palm.image making the photo, which the contact shows).
 //   SF2  org.webosphoenix.filepicker/pick: several kinds (the kind first),
 //        several files, a crop size (cropInfo and the crop made), and any
-//        file by folder with extensions. On a tablet, the folders in
-//        columns: a file's preview, OK, the keys, several files ticked; the
-//        save sheet in columns (the last column the folder saved to); the
-//        choice kept for the next sheet; and a phone's sheet keeping the list.
+//        file by folder with extensions. On a tablet the folders are in
+//        columns until the user picks the list (kept, the list's checks run
+//        in it); then columns again: a file's preview, OK, the keys, several
+//        files ticked; the save sheet in columns (the last column the folder
+//        saved to); the choice kept for the next sheet; and a phone's sheet
+//        keeping the list.
 //
 //   node tools/test-filepicker.cjs [--out DIR]
 //
@@ -257,6 +259,12 @@ async function main() {
 
             await pick({ kinds: ["file"], extensions: ["txt"] });
             f = await sheet();
+            // A fresh tablet: the folders in columns. The user picks the list (kept, below).
+            await f.waitForSelector("[data-testid='pick-columns'] [data-testid='pick-col-Documents']");
+            check(await f.locator("[data-testid='view-switch-columns'][aria-checked='true']").count() === 1,
+                  "a fresh tablet: any file by folder, in columns");
+            await shot(page, "pick-columns-fresh");
+            await f.click("[data-testid='view-switch-list']");
             await f.click("[data-testid='pick-folder-Documents']");
             await f.waitForSelector("[data-testid='pick-file']");
             const names = await f.$$eval("[data-testid='pick-file'] .ss-pick-row-title", (els) => els.map((e) => e.textContent));
@@ -267,6 +275,7 @@ async function main() {
             await f.click("[data-testid='pick-cancel']");
             r = await picked();
             check(r.canceled === true, "Cancel answers {canceled: true}");
+            check(await page.evaluate(() => localStorage.getItem("phoenix:filepicker:view")) === "\"list\"", "the user's List is kept (filepicker:view)");
 
             const bad = await page.evaluate(() => new Promise((res) => {
                 const b = new PalmServiceBridge();
@@ -280,7 +289,7 @@ async function main() {
             const pcol = (i, name) => `[data-testid='pick-column-${i}'] [data-testid='pick-col-${name}']`;
             await pick({ kinds: ["file"], extensions: ["txt", "md"] });
             f = await sheet();
-            check(await f.locator("[data-testid='view-switch-list'][aria-checked='true']").count() === 1, "a tablet: List / Columns in the sheet's head, on List");
+            check(await f.locator("[data-testid='view-switch-list'][aria-checked='true']").count() === 1, "the next sheet: the list the user chose");
             await f.click("[data-testid='view-switch-columns']");
             await f.waitForSelector("[data-testid='pick-columns']");
             check(await f.getAttribute("[data-testid='pick-column-0']", "data-folder") === "/media/internal", "Columns: Internal Storage first");
@@ -350,19 +359,22 @@ async function main() {
             const page = await context.newPage();
             page.on("pageerror", (e) => errors.push(e.message));
             await page.goto(A + "com.palm.app.calculator/index.html");
-            await page.evaluate(() => localStorage.setItem("phoenix:filepicker:view", JSON.stringify("columns")));
-            await page.reload();
             await page.waitForTimeout(1500);
-            await page.evaluate(() => {
-                const b = new PalmServiceBridge();
-                b.call("luna://org.webosphoenix.filepicker/pick", JSON.stringify({ kinds: ["file"] }));
-            });
-            const f = await (await page.waitForSelector("iframe[data-phoenix-sheet=pick]")).contentFrame();
-            await f.waitForSelector("[data-testid='pick-folder-Documents']");
-            check(await f.locator("[data-testid='view-switch']").count() === 0 && await f.locator("[data-testid='pick-columns']").count() === 0,
-                  "a phone: the list, no List / Columns, though columns were chosen");
-            await page.waitForTimeout(300);
-            await shot(page, "pick-phone");
+            for (const chosen of [null, "columns"]) {
+                if (chosen) await page.evaluate((v) => localStorage.setItem("phoenix:filepicker:view", JSON.stringify(v)), chosen);
+                await page.evaluate(() => {
+                    const b = new PalmServiceBridge();
+                    b.call("luna://org.webosphoenix.filepicker/pick", JSON.stringify({ kinds: ["file"] }));
+                });
+                const f = await (await page.waitForSelector("iframe[data-phoenix-sheet=pick]")).contentFrame();
+                await f.waitForSelector("[data-testid='pick-folder-Documents']");
+                check(await f.locator("[data-testid='view-switch']").count() === 0 && await f.locator("[data-testid='pick-columns']").count() === 0,
+                      chosen ? "a phone: the list, though columns were chosen" : "a phone: the list, no List / Columns");
+                await page.waitForTimeout(300);
+                if (chosen) await shot(page, "pick-phone");
+                await f.click("[data-testid='pick-cancel']");
+                await page.waitForSelector("iframe[data-phoenix-sheet]", { state: "detached" });
+            }
             await context.close();
         }
 

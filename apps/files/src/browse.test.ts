@@ -3,7 +3,7 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { FILE_ERRORS } from "@phoenix/luna";
-import { folderChain } from "@phoenix/ui";
+import { folderChain, shownView } from "@phoenix/ui";
 import { columnRoot, crumbs, DEFAULT_FAVORITES, folderProblem, folderTitle, kindLabel, loadPrefs, planPaste, savePrefs, shortDate } from "./browse";
 
 beforeEach(() => localStorage.clear());
@@ -53,7 +53,7 @@ describe("Files helpers", () => {
     });
 
     it("keeps preferences, with /media/internal and its folders as the first favourites", () => {
-        expect(loadPrefs()).toEqual({ sort: "name", showHidden: false, favorites: DEFAULT_FAVORITES, view: "list" });
+        expect(loadPrefs()).toEqual({ sort: "name", showHidden: false, favorites: DEFAULT_FAVORITES });
         expect(DEFAULT_FAVORITES).toEqual(["/media/internal", "/media/internal/Downloads", "/media/internal/Documents",
                                            "/media/internal/Pictures", "/media/internal/Music"]);
         savePrefs({ sort: "date", showHidden: true, favorites: ["/tmp"], view: "columns" });
@@ -62,13 +62,24 @@ describe("Files helpers", () => {
         expect(loadPrefs().sort).toBe("name");
     });
 
-    it("remembers List or Columns, the list unless columns were chosen (preferences from before columns too)", () => {
+    it("remembers the user's List or Columns; none chosen (preferences from before columns too): columns where offered", () => {
+        expect(loadPrefs().view).toBeUndefined();
+        expect(shownView(loadPrefs().view, true)).toBe("columns");
+        expect(shownView(loadPrefs().view, false)).toBe("list");
         localStorage.setItem("org.webosphoenix.files:prefs", JSON.stringify({ sort: "size", showHidden: false, favorites: [] }));
+        expect(loadPrefs().view).toBeUndefined();
+        expect(shownView(loadPrefs().view, true)).toBe("columns");
+        // 2.0's Files keeps "icons" under the same key: not a choice of 1.0's.
+        localStorage.setItem("org.webosphoenix.files:prefs", JSON.stringify({ view: "icons" }));
+        expect(loadPrefs().view).toBeUndefined();
+        localStorage.setItem("org.webosphoenix.files:prefs", JSON.stringify({ view: "list" }));
         expect(loadPrefs().view).toBe("list");
-        localStorage.setItem("org.webosphoenix.files:prefs", JSON.stringify({ view: "grid" }));
-        expect(loadPrefs().view).toBe("list");
+        expect(shownView(loadPrefs().view, true)).toBe("list");
         localStorage.setItem("org.webosphoenix.files:prefs", JSON.stringify({ view: "columns" }));
         expect(loadPrefs().view).toBe("columns");
+        // Saved with other preferences, no choice stays no choice.
+        savePrefs({ sort: "date", showHidden: false, favorites: [] });
+        expect(JSON.parse(localStorage.getItem("org.webosphoenix.files:prefs")!)).not.toHaveProperty("view");
     });
 
     it("starts the columns at the place a folder is in", () => {

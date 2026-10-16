@@ -9,13 +9,15 @@
 // text file, makes a new file, goes back with the back gesture, shows the
 // info sheet, deletes the folder, views pictures, shares one and two
 // pictures (the system's share sheet), installs an .ipk, opens
-// a song with Music, and opens a read-only system file. On a tablet, the
-// column view: View as Columns, folders opening to the right, a file's
-// preview (Open, Share, Info), a second tap opening it, the arrow keys,
-// Enter and Backspace, hold to select, copy, paste, rename and delete,
-// new folder, the back gesture, the choice kept, and the list again (in
-// the same folder) when the card narrows to a phone's width. On a phone,
-// no columns are offered, whatever was chosen.
+// a song with Music, and opens a read-only system file. On a tablet,
+// Files opens in columns, and the user's List is kept across a restart
+// (the list sections run in it); then the column view: View as Columns,
+// folders opening to the right, a file's preview (Open, Share, Info), a
+// second tap opening it, the arrow keys, Enter and Backspace, hold to
+// select, copy, paste, rename and delete, new folder, the back gesture,
+// the choice kept, and the list again (in the same folder) when the card
+// narrows to a phone's width. On a phone, the list, and no columns
+// offered, whatever was chosen.
 //
 //   node tools/test-files.cjs [--tablet] [--out DIR]
 //
@@ -126,6 +128,28 @@ async function main() {
             r.onsuccess = r.onerror = r.onblocked = () => res();
         }));
         await page.reload();
+
+        // ---- Columns by default on a tablet; the user's List kept ----------------------------
+        if (tablet) {
+            await page.waitForSelector("[data-testid='columns'] [data-testid='column-0'] [data-testid='col-Documents']");
+            check(await page.getAttribute("[data-testid='column-0']", "data-folder") === "/media/internal" &&
+                  await page.locator("[data-testid='view-switch-columns'][aria-checked='true']").count() === 1,
+                  "a fresh tablet: the folders in columns, the switch on Columns");
+            await page.waitForTimeout(200);
+            await shot("columns-fresh");
+            // The user picks the list (what the sections below drive), and it is kept.
+            await page.click("[data-testid='view-switch-list']");
+            await page.waitForSelector(row("Documents"));
+            await page.reload();
+            await page.waitForSelector(row("Documents"));
+            check(await page.locator("[data-testid='columns']").count() === 0 &&
+                  await page.locator("[data-testid='view-switch-list'][aria-checked='true']").count() === 1,
+                  "List chosen: the list again after a restart");
+        } else {
+            await page.waitForSelector(row("Documents"));
+            check(await page.locator("[data-testid='columns']").count() === 0 && await page.locator("[data-testid='view-switch']").count() === 0,
+                  "a fresh phone: the list, no List / Columns switch");
+        }
 
         // ---- Browse ----------------------------------------------------------------
         await page.waitForSelector(row("Documents"));

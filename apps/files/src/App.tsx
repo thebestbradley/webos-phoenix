@@ -17,14 +17,14 @@
 //   adds the folder to the favourites (the star in the command menu).
 // - The back gesture goes back through the folders visited.
 // - On a tablet or a desktop (not a phone, and a card at least 600 px
-//   wide), View as Columns (the header menu, or the switch beside the path
-//   bar) shows the folders in columns, as the Finder's and iPadOS Files'
-//   column views do: each folder opens in a column to the right of its
-//   parent's, a file tapped shows its preview after the last column (a
+//   wide) the folders are in columns, as the Finder's and iPadOS Files'
+//   column views show them: each folder opens in a column to the right of
+//   its parent's, a file tapped shows its preview after the last column (a
 //   second tap opens it), and the arrow keys, Enter and Backspace move
-//   through them (Columns.tsx; @phoenix/ui ColumnView). Remembered with the
-//   other preferences; a card narrowed to a phone's width shows the list,
-//   in the same folder.
+//   through them (Columns.tsx; @phoenix/ui ColumnView). View as List (the
+//   header menu, or the switch beside the path bar) shows the list there
+//   instead; the user's choice is kept with the other preferences. A phone,
+//   or a card narrowed to a phone's width, shows the list, in the same folder.
 //
 // Launch params: {path} opens that folder; {transfer} (a tap on a drive's
 // upload in the notification area) shows the transfers.
@@ -48,7 +48,7 @@ import {
 import { useFormFactor, useLaunchParams } from "@phoenix/luna/react";
 import {
     AppMenu, BackProvider, CheckBox, columnCursor, columnHold, columnKey, columnTap, ColumnNote, ColumnRow, ColumnView, cx, FileIcon, folderChain, Glyph,
-    IconToolButton, PageHeader, PopupMenu, Spinner, Toolbar, ToolSpacer, useBack, useColumnsWidth, ViewSwitch,
+    IconToolButton, PageHeader, PopupMenu, shownView, Spinner, Toolbar, ToolSpacer, useBack, useColumnsWidth, ViewSwitch,
     type ColumnMove, type ColumnState, type FolderView, type Option,
 } from "@phoenix/ui";
 import {
@@ -184,12 +184,13 @@ function Browser() {
     const pathBar = useRef<HTMLDivElement>(null);
     const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-    // Columns: offered on a tablet or a desktop with room for them; a
-    // phone (or a card narrowed to a phone's width) shows the list.
+    // Columns: offered on a tablet or a desktop with room for them, and
+    // shown there unless the user chose the list (the owner, 16 October
+    // 2026); a phone (or a card narrowed to a phone's width) shows the list.
     const formFactor = useFormFactor();
     const roomy = useColumnsWidth();
     const columnsFit = formFactor !== "phone" && roomy;
-    const columns = columnsFit && prefs.view === "columns";
+    const columns = shownView(prefs.view, columnsFit) === "columns";
     // The file marked in the current folder's column (its preview shows;
     // in select mode, the row the keys are on).
     const [peek, setPeek] = useState<string | null>(null);

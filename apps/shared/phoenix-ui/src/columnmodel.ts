@@ -19,6 +19,17 @@
 export type FolderView = "list" | "columns";
 
 /**
+ * The view shown: columns where they are offered (a tablet's or a
+ * desktop's layout, a card wide enough), unless the user chose the list
+ * (the owner, 16 October 2026: columns by default there, the user's choice
+ * kept); the list everywhere else. `chosen` is the user's choice, undefined
+ * until they make one.
+ */
+export function shownView(chosen: FolderView | undefined, offered: boolean): FolderView {
+    return offered && chosen !== "list" ? "columns" : "list";
+}
+
+/**
  * The folders from `root` down to `path`, one column each: ("/a", "/a/b/c")
  * -> ["/a", "/a/b", "/a/b/c"]. A path outside the root: itself alone.
  */

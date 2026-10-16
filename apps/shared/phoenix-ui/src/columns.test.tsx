@@ -11,7 +11,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { columnCursor, columnHold, columnKey, columnTap, folderChain, keyIsForColumns, type ColumnState } from "./columnmodel";
+import { columnCursor, columnHold, columnKey, columnTap, folderChain, keyIsForColumns, shownView, type ColumnState } from "./columnmodel";
 import { ColumnRow, ColumnView, useColumnsWidth, ViewSwitch } from "./columns";
 
 const F = (key: string) => ({ key, folder: true });
@@ -36,6 +36,16 @@ describe("folderChain", () => {
         // Outside the root, or a name that only starts like it: the folder alone.
         expect(folderChain("/media/internal", "/etc")).toEqual(["/etc"]);
         expect(folderChain("/media/internal", "/media/internal2/x")).toEqual(["/media/internal2/x"]);
+    });
+});
+
+describe("shownView", () => {
+    it("is columns where they are offered unless the list was chosen, the list elsewhere", () => {
+        expect(shownView(undefined, true)).toBe("columns");
+        expect(shownView("columns", true)).toBe("columns");
+        expect(shownView("list", true)).toBe("list");
+        expect(shownView(undefined, false)).toBe("list");
+        expect(shownView("columns", false)).toBe("list");
     });
 });
 

@@ -179,6 +179,9 @@ async function main() {
         const page = await context.newPage();
         await page.goto(appUrl("org.webosphoenix.files"));
         await page.evaluate(() => localStorage.clear());
+        // Files' list (a tablet's is columns unless the user chose the list;
+        // the columns: tools/test-files.cjs --tablet).
+        await page.evaluate(() => localStorage.setItem("org.webosphoenix.files:prefs", JSON.stringify({ view: "list" })));
         await page.goto(appUrl("org.webosphoenix.files"));
         await page.waitForFunction(() => !!window.__phoenixRuntime);
         const { pack } = require(path.join(REPO, "apps/shared/connector-kit/lib/tools/package.js"));

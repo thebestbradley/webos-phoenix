@@ -1,8 +1,8 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// The save and pick sheets' column view (on a tablet or a desktop, when
-// chosen): the places, then each folder in a column to the right of its
+// The save and pick sheets' column view (on a tablet or a desktop, unless
+// the user chose the list): the places, then each folder in a column to the right of its
 // parent's, as Files' column view (@phoenix/ui ColumnView). Save shows
 // folders only, the last column the folder the file goes to; pick shows
 // the files it may pick too, and a file tapped shows its preview after the

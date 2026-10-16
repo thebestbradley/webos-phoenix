@@ -31,5 +31,5 @@ export { SlidingPanes, GrabButton, PaneHeader, PaneToolbar, Swipeable, ContextMe
 export type { SlidingPanesProps, PaneView, ContextMenuItem } from "./panes";
 export { ColumnView, ColumnRow, ColumnNote, ColumnPreview, ViewSwitch, useColumnsWidth, COLUMNS_MIN_WIDTH } from "./columns";
 export type { ColumnSpec, ColumnViewProps, ColumnRowProps, ColumnPreviewProps } from "./columns";
-export { folderChain, columnCursor, columnKey, columnTap, columnHold, keyIsForColumns } from "./columnmodel";
+export { folderChain, columnCursor, columnKey, columnTap, columnHold, keyIsForColumns, shownView } from "./columnmodel";
 export type { FolderView, ColumnItem, ColumnState, ColumnMove } from "./columnmodel";

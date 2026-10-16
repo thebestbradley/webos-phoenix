@@ -123,14 +123,15 @@ export interface Prefs {
     sort: SortKey;
     showHidden: boolean;
     favorites: string[];
-    /** Columns on a tablet or a desktop (a phone always shows the list). */
-    view: FolderView;
+    /** The user's List or Columns, undefined until they choose: then columns where they are offered
+     *  (a tablet or a desktop; a phone always shows the list; @phoenix/ui shownView). */
+    view?: FolderView;
 }
 
 const PREFS_KEY = "org.webosphoenix.files:prefs";
 
 export function loadPrefs(): Prefs {
-    const base: Prefs = { sort: "name", showHidden: false, favorites: DEFAULT_FAVORITES, view: "list" };
+    const base: Prefs = { sort: "name", showHidden: false, favorites: DEFAULT_FAVORITES };
     try {
         const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "null") as Partial<Prefs> | null;
         if (!saved) return base;
@@ -138,7 +139,7 @@ export function loadPrefs(): Prefs {
             sort: saved.sort === "size" || saved.sort === "date" ? saved.sort : "name",
             showHidden: !!saved.showHidden,
             favorites: Array.isArray(saved.favorites) ? saved.favorites.filter((f) => typeof f === "string") : base.favorites,
-            view: saved.view === "columns" ? "columns" : "list",
+            view: saved.view === "columns" || saved.view === "list" ? saved.view : undefined,
         };
     } catch {
         return base;

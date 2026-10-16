@@ -17,8 +17,9 @@
 //     picker; the file written on close where Files lists it; saved again
 //     through the same handle without a picker; Cancel is an AbortError);
 //     no showDirectoryPicker.
-//   - in columns (the tablet's List / Columns): an input's file picked in
-//     the column view, and showSaveFilePicker into a folder of the columns.
+//   - in columns (a tablet's sheets without the user's List: the sections
+//     before run with it chosen): an input's file picked in the column view,
+//     and showSaveFilePicker into a folder of the columns.
 //   - downloads: a Blob through a link made by script (its URL revoked at
 //     once), a link in the page, a data: URL, FileSaver.js's uncancelable
 //     click: the save picker with the name, the file written, "Saved ... to
@@ -98,6 +99,8 @@ async function main() {
         });
         await page.goto(`${origin}/usr/palm/applications/${APP}/index.html`);
         await page.waitForFunction(() => window.results && window.results.length > 0);
+        // The sheets' list, the user's choice on this tablet (their columns, the default, are below).
+        await page.evaluate(() => localStorage.setItem("phoenix:filepicker:view", JSON.stringify("list")));
         const shot = (name) => page.screenshot({ path: path.join(outDir, name + ".png") });
         const results = () => page.evaluate(() => window.results);
         const nextResult = async (kind, from) => {
@@ -288,12 +291,14 @@ async function main() {
         res = await nextResult("abort-test", n);
         check(res.name === "AbortError", "Cancel in the save picker: an AbortError");
 
-        // ---- In columns (a tablet: the sheets' List / Columns) -------------------------------------------
+        // ---- In columns (a tablet's sheets, no List chosen) -------------------------------------------
+        await page.evaluate(() => localStorage.removeItem("phoenix:filepicker:view"));
         n = await count();
         await page.click("#detached-open");
         f = await sheet("pick");
         await f.click("[data-testid=pick-kind-file]");
-        await f.click("[data-testid=view-switch-columns]");
+        await f.waitForSelector("[data-testid=pick-columns]");
+        check(await f.locator("[data-testid='view-switch-columns'][aria-checked='true']").count() === 1, "no List chosen: the picker's folders in columns");
         await f.click("[data-testid='pick-column-0'] [data-testid='pick-col-Documents']");
         const welcomeRow = `[data-testid='pick-column-1'] [data-path='${DOCS}/Welcome.txt']`;
         await f.click(welcomeRow);
@@ -307,7 +312,7 @@ async function main() {
         await page.click("#fsa-save-as");
         f = await sheet("save");
         await f.waitForSelector("[data-testid=save-columns]");
-        check(true, "the save picker opens in columns, as the pick sheet was left");
+        check(true, "the save picker in columns too");
         await f.click("[data-testid='save-column-0'] [data-testid='save-col-Music']");
         await f.waitForFunction(() => document.querySelector("[data-testid=save-folder]").textContent.trim() === "Music");
         await shot("3b-save-columns");
