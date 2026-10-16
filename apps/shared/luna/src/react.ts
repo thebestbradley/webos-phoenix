@@ -9,7 +9,8 @@ import { createElement, Fragment, useEffect, useState, type ReactNode } from "re
 import type { LunaError, Subscription } from "./bridge";
 import { fileUrl } from "./files";
 import { mediaUrl } from "./media";
-import { devMode } from "./services";
+import { devMode, systemStatus } from "./services";
+import type { SystemStatus } from "./types";
 
 export interface LunaState<T> {
     value: T | undefined;
@@ -64,6 +65,33 @@ export function useDevModeShown(): boolean | undefined {
     const unlocked = useLuna<boolean>((cb, err) => devMode.watchUnlocked(cb, err), []).value;
     if (on === true || unlocked === true) return true;
     return on === undefined || unlocked === undefined ? undefined : false;
+}
+
+/** The shell's layout: a phone's, a tablet's, or the docked desktop's (to come). */
+export type FormFactor = "phone" | "tablet" | "desktop";
+
+/** A card laid out by the shell's own rule (Theme.tabletLayoutFor: the shorter side at least 600). */
+function cardFormFactor(): FormFactor {
+    return typeof window !== "undefined" && Math.min(window.innerWidth, window.innerHeight) >= 600 ? "tablet" : "phone";
+}
+
+/**
+ * The shell's layout, followed live (the adaptive simulator switches it as
+ * its window is resized, a docked device will be "desktop"):
+ * getSystemStatus formFactor; before the shell has said (and in a desktop
+ * browser), the card's size by the shell's rule. What apps offer only on a
+ * tablet or a desktop (Files' and the file picker's columns) asks this.
+ */
+export function useFormFactor(): FormFactor {
+    const status = useLuna<SystemStatus>((cb, err) => systemStatus.watch(cb, err), []).value;
+    const [card, setCard] = useState(cardFormFactor);
+    useEffect(() => {
+        const on = () => setCard(cardFormFactor());
+        window.addEventListener("resize", on);
+        return () => window.removeEventListener("resize", on);
+    }, []);
+    const ff = status?.formFactor;
+    return ff === "phone" || ff === "tablet" || ff === "desktop" ? ff : card;
 }
 
 /**

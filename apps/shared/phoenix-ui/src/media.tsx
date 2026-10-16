@@ -34,6 +34,8 @@ const GLYPHS: Record<string, ReactNode> = {
     photos: <path d="M3 8h19a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2zm1 3v10l5-5.5 4 4 2.5-2.5L21 22V11zM7 4h21a2 2 0 0 1 2 2v14h-3V7H7z" />,
     grid: <path d="M4 4h7v7H4zm8.5 0h7v7h-7zM21 4h7v7h-7zM4 12.5h7v7H4zm8.5 0h7v7h-7zm8.5 0h7v7h-7zM4 21h7v7H4zm8.5 0h7v7h-7zM21 21h7v7h-7z" />,
     list: <path d="M4 6h4v4H4zm7 0h17v4H11zM4 14h4v4H4zm7 0h17v4H11zM4 22h4v4H4zm7 0h17v4H11z" />,
+    // The column view (Files, the file picker): a window of three columns.
+    columns: <path fillRule="evenodd" d="M3 6h26v20H3zm2.5 2.5v15h5v-15zm7.5 0v15h6v-15zm8.5 0v15h5.5v-15z" />,
     back: <path d="M13 6L3 16l10 10v-6.5h16v-7H13z" />,
     "switch-camera": <path d="M11 8l-2 3H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h22a2 2 0 0 0 2-2V13a2 2 0 0 0-2-2h-4l-2-3zm1.5 11a4 4 0 0 1 6.9-2.8L21 15v4.5h-4.5l1.4-1.4a2 2 0 0 0-3.4 1zm7 1a4 4 0 0 1-6.9 2.8L11 24.5V20h4.5l-1.4 1.4a2 2 0 0 0 3.4-1z" />,
     // File management (Files).

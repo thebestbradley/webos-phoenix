@@ -19,7 +19,7 @@ export { FileIcon } from "./fileicon";
 export type { FileIconKind } from "./fileicon";
 export { AppMenu, useAppMenuToggle } from "./appmenu";
 export type { AppMenuItem, AppMenuProps, ShareContent } from "./appmenu";
-export { formatNumber, dialable, formatDuration, formatTime, daysAgo, dayLabel, shortWhen } from "./format";
+export { formatNumber, dialable, formatDuration, formatTime, daysAgo, dayLabel, shortWhen, longDate } from "./format";
 export { Glyph, Toolbar, ToolSpacer, IconToolButton, GroupedToolButtons, formatSeconds } from "./media";
 export type { GlyphName, ToolbarProps, IconToolButtonProps, GroupedToolButtonsProps } from "./media";
 export { PrintDialog } from "./print";
@@ -29,3 +29,7 @@ export type { PrintDialogProps, PrintDialogPrinter } from "./print";
 export { SlidingPanes, GrabButton, PaneHeader, PaneToolbar, Swipeable, ContextMenu, useMultiView, useLongPress,
          MULTI_VIEW_MIN_WIDTH, LIST_PANE_WIDTH, LONG_PRESS_MS } from "./panes";
 export type { SlidingPanesProps, PaneView, ContextMenuItem } from "./panes";
+export { ColumnView, ColumnRow, ColumnNote, ColumnPreview, ViewSwitch, useColumnsWidth, COLUMNS_MIN_WIDTH } from "./columns";
+export type { ColumnSpec, ColumnViewProps, ColumnRowProps, ColumnPreviewProps } from "./columns";
+export { folderChain, columnCursor, columnKey, columnTap, columnHold, keyIsForColumns } from "./columnmodel";
+export type { FolderView, ColumnItem, ColumnState, ColumnMove } from "./columnmodel";
