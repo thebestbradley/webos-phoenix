@@ -49,7 +49,7 @@ it("Clone the private repos beside it", "They need your GitHub sign-in (a creden
    [("git clone https://github.com/thebestbradley/phoenix-default-apps.git", "the rebuilt built-in apps"),
     ("git clone https://github.com/thebestbradley/ember-glass-ui.git", "the 2.0 UI layer the apps use"),
     ("git clone --recurse-submodules https://github.com/thebestbradley/phoenix-ember-glass-ui.git", "the 2.0 shell")])
-it("Fetch the submodules", "The original Open webOS apps in `third_party/`. `./phoenix` does this too.", B, WP, "webos-phoenix/CLAUDE.md:42 · phoenix:533",
+it("Fetch the submodules", "The original Open webOS apps in `third_party/`. `./phoenix` does this too.", B, WP, "webos-phoenix/CLAUDE.md:42 · phoenix:579",
    ["git submodule update --init"])
 it("Update to the latest main", "", B, WP, "webos-phoenix/docs/GETTING-STARTED.md:129",
    ["git checkout main && git pull && git submodule update --init"])
@@ -60,7 +60,7 @@ it("Bring 1.0's changes into the 2.0 shell", "", B, "phoenix-ember-glass-ui", "p
 sec("Set up a Mac")
 it("See what's installed and what's missing", "A dry run: it changes nothing.", B, WP, "webos-phoenix/phoenix:31", ["./phoenix check"])
 it("Install everything and build", "One command installs Xcode's command line tools, Homebrew, Qt, CMake, Ninja, Node 22, Python 3.12, PHP and the assistant's programs and models, then builds.", B, WP,
-   "webos-phoenix/phoenix:9-10,41-48 · docs/GETTING-STARTED.md:142-151",
+   "webos-phoenix/phoenix:9-10,55-62 · docs/GETTING-STARTED.md:142-151",
    [("./phoenix", "install what's missing, then build"),
     ("./phoenix --tests", "also the test tools: Playwright, plus Radicale, WsgiDAV, Pillow and NumPy in .venv"),
     ("./phoenix --no-assistant", "skip the assistant's models and its two Homebrew packages"),
@@ -96,14 +96,14 @@ sec("Build")
 it("Build", "Incremental. `./phoenix build` is the same.", B, WP, "webos-phoenix/phoenix:9-10", ["./phoenix"])
 it("Start the build over", "", B, WP, "webos-phoenix/docs/GETTING-STARTED.md:395-408", ["rm -rf build && ./phoenix"])
 it("Rebuild only the web apps", "", B, AP, "webos-phoenix/docs/GETTING-STARTED.md:409-411", ["npm run build"])
-it("Build into another folder", "Other overrides: `PHOENIX_QT_DIR` (a Qt 6.8 or newer; 6.11.3 is the simulator's, 6.8.1 the device's), `QT_PREFIX` (Linux, default `/opt/Qt`), `CMAKE_BUILD_PARALLEL_LEVEL`.", B, WP, "webos-phoenix/phoenix:66-68",
+it("Build into another folder", "Other overrides: `PHOENIX_QT_DIR` (a Qt 6.8 or newer; 6.11.3 is the simulator's, 6.8.1 the device's), `QT_PREFIX` (Linux, default `/opt/Qt`), `CMAKE_BUILD_PARALLEL_LEVEL`.", B, WP, "webos-phoenix/phoenix:80-82",
    ["PHOENIX_BUILD_DIR=build-other ./phoenix"])
-it("What ./phoenix runs for a new build folder", "", B, WP, "webos-phoenix/phoenix:653,669",
+it("What ./phoenix runs for a new build folder", "", B, WP, "webos-phoenix/phoenix:699,715",
    [("cmake -S shell -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_PREFIX_PATH=\"$(brew --prefix qt)\"", "", {"os": M}),
     ("cmake -S shell -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_PREFIX_PATH=/opt/Qt/6.11.3/gcc_64", "", {"os": L}),
     ("cmake --build build --parallel", "")])
 it("A release build without the npm step", "CMake switches: `PHOENIX_BUILD_SIM`, `PHOENIX_BUILD_KEYBOARD` and `PHOENIX_BUILD_APPS`, all on by default.", M, WP,
-   "webos-phoenix/shell/CMakeLists.txt:11,51,166 · .github/workflows/ci.yml:166",
+   "webos-phoenix/shell/CMakeLists.txt:11,51,166 · .github/workflows/ci.yml:161,248",
    ["cmake -S shell -B build -DCMAKE_BUILD_TYPE=Release -DPHOENIX_BUILD_APPS=OFF -DCMAKE_PREFIX_PATH=\"$(brew --prefix qt)\""])
 
 sec("Simulator: start")
@@ -119,7 +119,7 @@ it("Run two simulators at once", "Each `--instance` is a device of its own: its 
    "webos-phoenix/shell/sim/main.cpp:226-257,749-782 · shell/sim/siminstances.h · shell/sim/simchrome.cpp:572-729 · docs/GETTING-STARTED.md:234-257",
    [("./build/phoenix-sim --tablet --instance v1", "1.0"),
     ("./build/phoenix-sim --tablet --instance v2 --extra-rootfs ../phoenix-default-apps/build/rootfs -- --look ember-glass", "2.0, with the rebuilt apps", {"r": "phoenix-ember-glass-ui"})])
-it("Run without a display", "SSH sessions and containers. `./phoenix run` does this itself when xvfb-run is installed.", L, WP, "webos-phoenix/docs/GETTING-STARTED.md:312-313 · phoenix:705-717",
+it("Run without a display", "SSH sessions and containers. `./phoenix run` does this itself when xvfb-run is installed.", L, WP, "webos-phoenix/docs/GETTING-STARTED.md:312-313 · phoenix:751-763",
    [X + "./build/phoenix-sim --tablet --scene cards --screenshot out.png"])
 
 sec("Simulator: devices and layouts")
@@ -130,7 +130,7 @@ it("A custom screen", "", B, WP, "webos-phoenix/shell/sim/main.cpp:188,201,286-2
     ("./build/phoenix-sim --tablet --size 2560x1600 --scale 2", "a HiDPI tablet"),
     ("./build/phoenix-sim --home-button", "a hardware Home button instead of the gesture bar")])
 it("Run as one of the target devices", "Device IDs: `fairphone-fp6`, `ayn-odin2portal`, `pinephonepro`, `pinetab2`, `raspberrypi4-64`. Don't add phone or tablet with it.", B, WP,
-   "webos-phoenix/phoenix:16-20,145-152 · shell/sim/main.cpp:185,187",
+   "webos-phoenix/phoenix:16-20,159-166 · shell/sim/main.cpp:185,187",
    [("./phoenix run --device fairphone-fp6", ""), ("./build/phoenix-sim --device pinetab2 --zoom 0.5", "--zoom 0.1 to 1 shrinks the window")])
 it("Orientation", "", B, WP, "webos-phoenix/shell/sim/main.cpp:199-200 · README.md:409-412",
    [("./build/phoenix-sim --size 320x480 --orientation left", "up, left, down or right"),
@@ -173,17 +173,28 @@ it("Without a GPU", "The shell tells by the renderer whether a GPU draws, and pr
     ("./build/phoenix-sim --software-rendering off", "the blur, even on a software rasteriser"),
     ("PHOENIX_SOFTWARE_RENDERING=1 ./build/phoenix-sim", "the same through the environment")])
 
+sec("Test: as CI runs them", "CI (`.github/workflows/ci.yml`) runs these on Linux, beside the QML and C++ tests below. `./phoenix test` builds and installs nothing first.")
+it("The quick checks", "What CI checks without a build, its first job: generated docs and art against their sources, lockfiles, launch contracts, the web tests' list, the tool, PHP and `./phoenix` tests, the apps' typecheck and unit tests. Every check runs, cheapest first; a summary gives each one's result and time. Needs what `./phoenix --tests` installs.", B, WP,
+   "webos-phoenix/phoenix:39-44 · tools/ci-checks.sh:14-17,133-156",
+   [("./phoenix test --quick", "every check (tools/ci-checks.sh)"), ("./phoenix test --quick --list", "their IDs"),
+    ("./phoenix test --quick typecheck unit-tests", "only these"), ("./phoenix test --quick --fail-fast", "stop at the first failure")])
+it("Every web app test, or CI's shard of them", "The tests in `tools/web-tests.txt`, one after another, each one's time in a summary; CI runs them in four shards balanced by the times in the list. Build the apps first (`./phoenix`, or `npm run build` in `apps/` and the demos as their READMEs say) and install Playwright (`./phoenix --tests`).", B, WP,
+   "webos-phoenix/phoenix:45-52 · tools/run-web-tests.cjs:9-14",
+   [("./phoenix test --web", "every web app test (tools/run-web-tests.cjs)"), ("./phoenix test --web --shard 2/4", "CI's second shard"),
+    ("./phoenix test --web settings media", "the tests of test-settings.cjs and test-media.cjs"),
+    ("node tools/run-web-tests.cjs --plan 4", "which tests each of four shards runs"), ("node tools/check-web-tests.cjs", "that the shards together run the list, each test once")])
+
 sec("Test: shell")
 it("Point QMLTEST at Qt's test runner", "Once per terminal.", B, WP, "webos-phoenix/CLAUDE.md:86-87 · docs/GETTING-STARTED.md:335-337",
    [("export QMLTEST=\"$(brew --prefix qt)/bin/qmltestrunner\"", "", {"os": M}),
     ("export QMLTEST=/opt/Qt/6.11.3/gcc_64/bin/qmltestrunner", "", {"os": L})])
-it("Run the QML tests", "", B, WP, "webos-phoenix/.github/workflows/ci.yml:190,565-575 · README.md:466",
+it("Run the QML tests", "", B, WP, "webos-phoenix/.github/workflows/ci.yml:171,185,189,509 · README.md:466",
    [("QT_QUICK_BACKEND=software QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -input shell/tests", "all of them, as CI runs them on the Mac (offscreen Metal stalls animations)", {"os": M}),
     ("QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -input shell/tests", "all of them", {"os": L}),
     ("QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -input shell/tests/tst_launcher.qml", "one file"),
     ("QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -import shell/tests-device/fakes -input shell/tests-device", "the device shell over fake modules"),
     ("QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen \"$QMLTEST\" -import shell/qml -import build/qml -input shell/tests/tst_hidpi.qml", "HiDPI at 2x")])
-it("Run the C++ tests", "There's nothing for `ctest` to find: run each test program by name after a build.", B, WP, "webos-phoenix/.github/workflows/ci.yml:195-278,613-627 · shell/CMakeLists.txt:69-75,127-197",
+it("Run the C++ tests", "There's nothing for `ctest` to find: run each test program by name after a build.", B, WP, "webos-phoenix/.github/workflows/ci.yml:254-328,342,519-535,549 · shell/CMakeLists.txt:69-75,127-197",
    ["build/pty/pty-test", "QT_QPA_PLATFORM=offscreen build/keyboard/keyboard-test", "build/siminstaller-test", "build/simlaunch-test",
     ("QT_QPA_PLATFORM=offscreen build/simchrome-test", "the menu bar and its Window menu"),
     ("build/siminstances-test", "the simulators' registry: Window > Simulators"), "build/dictation-test",
@@ -192,14 +203,14 @@ it("Run the C++ tests", "There's nothing for `ctest` to find: run each test prog
     ("python3 tools/get-kitten.py && build/tts-test", "fetches the voice first"),
     ("./build/phoenix-sim --check-chrome --no-boot-animation --quiet", "the simulator's own start-up check"),
     ("build/devices/devices-test", "", {"os": L}), ("build/simfonts-test", "", {"os": L})])
-it("Device-readiness checks", "The static checks a device image would trip on.", B, WP, "webos-phoenix/phoenix:33-38,75-78 · tools/check-device.sh:8-15",
+it("Device-readiness checks", "The static checks a device image would trip on.", B, WP, "webos-phoenix/phoenix:33-38,89-92 · tools/check-device.sh:8-15",
    ["./phoenix check-device", "./phoenix check-device --all", "./phoenix check-device --strict",
     ("./phoenix check-device --parse fairphone-fp6", "also BitBake's parse check of the named machines (Linux, not as root)", {"os": L})])
-it("Python, shell and PHP tests", "", B, WP, "webos-phoenix/.github/workflows/ci.yml:82,85,110-114,226 · tools/test-make-utm.py:10-11",
+it("Python, shell and PHP tests", "", B, WP, "webos-phoenix/tools/ci-checks.sh:145,147-153 · .github/workflows/ci.yml:78 · tools/test-make-utm.py:10-11",
    ["sh tools/test-phoenix-script.sh", "python3 tools/test-devicecheck.py", "python3 tools/test-device-firmware.py", "python3 tools/test-device-profiles.py", "python3 tools/test-wam-user-agent.py",
     "python3 tools/test-make-utm.py", "python3 tools/test-install-rootfs.py", "python3 tools/test-sounds-pcm.py",
     ("php server/marketplace/tests/run.php", "the Marketplace catalog"), ("php server/updates/tests/run.php", "the update feed"), ("php server/drivers/tests/run.php", "the driver catalog")])
-it("Art and generated-file checks", "`hidpi-art.py` needs Pillow and NumPy (on a Mac, from `.venv`); `make-feedback-sounds.py` needs ffmpeg.", B, WP, "webos-phoenix/CLAUDE.md:93 · .github/workflows/ci.yml:269-292",
+it("Art and generated-file checks", "`hidpi-art.py` needs Pillow and NumPy (on a Mac, from `.venv`); `make-feedback-sounds.py` needs ffmpeg.", B, WP, "webos-phoenix/CLAUDE.md:93 · tools/ci-checks.sh:134-144",
    [("python3 tools/hidpi-art.py --check", "whenever art or stylesheets change"), "python3 tools/keyboard-charcoal.py --check", "node tools/render-app-icons.cjs --check",
     "python3 tools/upscale-app-icons.py --check", "python3 tools/make-feedback-sounds.py --check", "python3 tools/gen-assistant-bird.py --check",
     "python3 tools/debrand-overlays.py --check", ("node tools/check-launch-contracts.cjs", "every app-to-app launch"),
@@ -209,7 +220,7 @@ sec("Test: apps")
 it("Typecheck and unit tests", "On a Mac, turn on `.venv` first: the DAV tests need Radicale.", B, AP, "webos-phoenix/CLAUDE.md:90 · apps/package.json:55-58",
    [("npm run typecheck && npx vitest run", ""), ("npx vitest run --maxWorkers=2", "on a busy machine"), ("npx vitest run marketplace/service/platform.test.ts", "one file"),
     "npm test", "npm run check", "node ../tools/check-lockfile.cjs"])
-it("Install Playwright for the Chromium tests", "`./phoenix --tests` does this for you.", B, "any folder", "webos-phoenix/phoenix:612-616",
+it("Install Playwright for the Chromium tests", "`./phoenix --tests` does this for you.", B, "any folder", "webos-phoenix/phoenix:658-662",
    [("npm install -g playwright@1 && npx --yes playwright@1 install chromium", "", {"os": M}),
     ("sudo npm install -g playwright@1 && sudo npx --yes playwright@1 install --with-deps chromium", "", {"os": L})])
 tests = [("accounts","Account templates as connectors install and go, Find More, {templateId}"),("activities-sim","Activities in phoenix-sim: an alarm with Clock closed, --launch appId:{json}"),
@@ -241,9 +252,9 @@ sec("Apps (webos-phoenix)")
 it("Install, build, typecheck, test", "", B, AP, "webos-phoenix/apps/package.json:54-59 · CLAUDE.md:56",
    ["npm ci --no-audit --no-fund", ("npm run build", "every app"), ("npm run build -w settings", "one app"), "npm run typecheck", "npm test", "npm run check",
     ("npm run dev -w settings", "Vite, without the webOS runtime (undocumented)")])
-it("The Enact demos", "Separate npm projects, in `apps/enact-notes-limestone` and `apps/enact-notes-agate`.", B, "webos-phoenix/apps/enact-notes-limestone", "webos-phoenix/.github/workflows/ci.yml:124",
+it("The Enact demos", "Separate npm projects, in `apps/enact-notes-limestone` and `apps/enact-notes-agate`.", B, "webos-phoenix/apps/enact-notes-limestone", "webos-phoenix/.github/workflows/ci.yml:88",
    ["npm ci --no-audit --no-fund && npm run typecheck && npm run build", ("npm run serve", "enact serve")])
-it("The Flutter demo and the Dart services package", "Needs Flutter.", B, WP, "webos-phoenix/.github/workflows/ci.yml:139-149 · apps/flutter-notes/README.md:55-58",
+it("The Flutter demo and the Dart services package", "Needs Flutter.", B, WP, "webos-phoenix/.github/workflows/ci.yml:103-113 · apps/flutter-notes/README.md:55-58",
    ["(cd apps/shared/phoenix_services && dart pub get && dart analyze --fatal-infos && dart test)",
     "(cd apps/flutter-notes && flutter pub get --enforce-lockfile && dart analyze --fatal-infos && flutter test && tool/build.sh)"])
 it("The connector developer tool", "Build the kit first.", B, AP, "webos-phoenix/apps/shared/connector-kit/src/tools/cli.ts:6-20 · docs/SYNERGY-SDK.md:719",
@@ -390,7 +401,7 @@ it("The apps in a browser", "Port 8765. `--terminal` gives the Terminal app a re
    ["python3 tools/serve-rootfs.py", "python3 tools/serve-rootfs.py --port 8765 --host 127.0.0.1 --terminal"])
 it("Platform mock", "Then set Settings > Developer Mode > Platform Servers to `http://127.0.0.1:8099/api/v1/servers.json`.", B, WP, "webos-phoenix/docs/PLATFORM-CLIENT.md:346 · tools/platform-mock/server.cjs:22-23",
    ["node tools/platform-mock/server.cjs --port 8099 --seed --write-servers /tmp/servers.json"])
-it("The assistant's models", "`./phoenix` fetches these itself.", B, WP, "webos-phoenix/phoenix:568,578,591,599 · tools/get-whisper-model.py:33-34",
+it("The assistant's models", "`./phoenix` fetches these itself.", B, WP, "webos-phoenix/phoenix:614,624,637,645 · tools/get-whisper-model.py:33-34",
    [("python3 tools/get-whisper-model.py", "--model base.en or tiny.en"), "python3 tools/get-wakeword.py", "python3 tools/get-kitten.py", "python3 tools/get-base-model.py"])
 it("Evaluate the assistant", "`laya-server.py` needs `pip install laya`.", B, WP, "webos-phoenix/docs/AI-AND-MCP.md:953-961 · tools/laya-server.py:9-10",
    ["llama-server -m build/models/qwen3-0.6b-q8_0.gguf --port 8091 --jinja -c 4096 -np 1 -fa on -b 512",

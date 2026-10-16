@@ -21,6 +21,7 @@ Every build, run and test command across webos-phoenix, phoenix-ember-glass-ui (
 - [Simulator: devices and layouts](#simulator-devices-and-layouts)
 - [Simulator: scenes and apps](#simulator-scenes-and-apps)
 - [Simulator: more options](#simulator-more-options)
+- [Test: as CI runs them](#test-as-ci-runs-them)
 - [Test: shell](#test-shell)
 - [Test: apps](#test-apps)
 - [Apps (webos-phoenix)](#apps-webos-phoenix)
@@ -73,7 +74,7 @@ git clone --recurse-submodules https://github.com/thebestbradley/phoenix-ember-g
 
 The original Open webOS apps in `third_party/`. `./phoenix` does this too.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:42 · phoenix:533`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:42 · phoenix:579`
 
 ```sh
 git submodule update --init
@@ -117,7 +118,7 @@ Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:31`
 
 One command installs Xcode's command line tools, Homebrew, Qt, CMake, Ninja, Node 22, Python 3.12, PHP and the assistant's programs and models, then builds.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:9-10,41-48 · docs/GETTING-STARTED.md:142-151`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:9-10,55-62 · docs/GETTING-STARTED.md:142-151`
 
 Install what's missing, then build:
 
@@ -327,7 +328,7 @@ npm run build
 
 Other overrides: `PHOENIX_QT_DIR` (a Qt 6.8 or newer; 6.11.3 is the simulator's, 6.8.1 the device's), `QT_PREFIX` (Linux, default `/opt/Qt`), `CMAKE_BUILD_PARALLEL_LEVEL`.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:66-68`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:80-82`
 
 ```sh
 PHOENIX_BUILD_DIR=build-other ./phoenix
@@ -335,7 +336,7 @@ PHOENIX_BUILD_DIR=build-other ./phoenix
 
 ### What ./phoenix runs for a new build folder
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:653,669`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:699,715`
 
 **Mac:**:
 
@@ -357,7 +358,7 @@ cmake --build build --parallel
 
 CMake switches: `PHOENIX_BUILD_SIM`, `PHOENIX_BUILD_KEYBOARD` and `PHOENIX_BUILD_APPS`, all on by default.
 
-Run in `webos-phoenix` · Mac · Source: `webos-phoenix/shell/CMakeLists.txt:11,51,166 · .github/workflows/ci.yml:166`
+Run in `webos-phoenix` · Mac · Source: `webos-phoenix/shell/CMakeLists.txt:11,51,166 · .github/workflows/ci.yml:161,248`
 
 ```sh
 cmake -S shell -B build -DCMAKE_BUILD_TYPE=Release -DPHOENIX_BUILD_APPS=OFF -DCMAKE_PREFIX_PATH="$(brew --prefix qt)"
@@ -453,7 +454,7 @@ in `phoenix-ember-glass-ui`: 2.0, with the rebuilt apps:
 
 SSH sessions and containers. `./phoenix run` does this itself when xvfb-run is installed.
 
-Run in `webos-phoenix` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:312-313 · phoenix:705-717`
+Run in `webos-phoenix` · Linux · Source: `webos-phoenix/docs/GETTING-STARTED.md:312-313 · phoenix:751-763`
 
 ```sh
 QTWEBENGINE_DISABLE_SANDBOX=1 xvfb-run -a -s "-screen 0 1920x1200x24" ./build/phoenix-sim --tablet --scene cards --screenshot out.png
@@ -505,7 +506,7 @@ A hardware Home button instead of the gesture bar:
 
 Device IDs: `fairphone-fp6`, `ayn-odin2portal`, `pinephonepro`, `pinetab2`, `raspberrypi4-64`. Don't add phone or tablet with it.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:16-20,145-152 · shell/sim/main.cpp:185,187`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:16-20,159-166 · shell/sim/main.cpp:185,187`
 
 ```sh
 ./phoenix run --device fairphone-fp6
@@ -689,6 +690,76 @@ The same through the environment:
 PHOENIX_SOFTWARE_RENDERING=1 ./build/phoenix-sim
 ```
 
+## Test: as CI runs them
+
+CI (`.github/workflows/ci.yml`) runs these on Linux, beside the QML and C++ tests below. `./phoenix test` builds and installs nothing first.
+
+### The quick checks
+
+What CI checks without a build, its first job: generated docs and art against their sources, lockfiles, launch contracts, the web tests' list, the tool, PHP and `./phoenix` tests, the apps' typecheck and unit tests. Every check runs, cheapest first; a summary gives each one's result and time. Needs what `./phoenix --tests` installs.
+
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:39-44 · tools/ci-checks.sh:14-17,133-156`
+
+Every check (tools/ci-checks.sh):
+
+```sh
+./phoenix test --quick
+```
+
+Their IDs:
+
+```sh
+./phoenix test --quick --list
+```
+
+Only these:
+
+```sh
+./phoenix test --quick typecheck unit-tests
+```
+
+Stop at the first failure:
+
+```sh
+./phoenix test --quick --fail-fast
+```
+
+### Every web app test, or CI's shard of them
+
+The tests in `tools/web-tests.txt`, one after another, each one's time in a summary; CI runs them in four shards balanced by the times in the list. Build the apps first (`./phoenix`, or `npm run build` in `apps/` and the demos as their READMEs say) and install Playwright (`./phoenix --tests`).
+
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:45-52 · tools/run-web-tests.cjs:9-14`
+
+Every web app test (tools/run-web-tests.cjs):
+
+```sh
+./phoenix test --web
+```
+
+CI's second shard:
+
+```sh
+./phoenix test --web --shard 2/4
+```
+
+The tests of test-settings.cjs and test-media.cjs:
+
+```sh
+./phoenix test --web settings media
+```
+
+Which tests each of four shards runs:
+
+```sh
+node tools/run-web-tests.cjs --plan 4
+```
+
+That the shards together run the list, each test once:
+
+```sh
+node tools/check-web-tests.cjs
+```
+
 ## Test: shell
 
 ### Point QMLTEST at Qt's test runner
@@ -711,7 +782,7 @@ export QMLTEST=/opt/Qt/6.11.3/gcc_64/bin/qmltestrunner
 
 ### Run the QML tests
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:190,565-575 · README.md:466`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:171,185,189,509 · README.md:466`
 
 **Mac:** All of them, as CI runs them on the Mac (offscreen Metal stalls animations):
 
@@ -747,7 +818,7 @@ QT_SCALE_FACTOR=2 QT_QPA_PLATFORM=offscreen "$QMLTEST" -import shell/qml -import
 
 There's nothing for `ctest` to find: run each test program by name after a build.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:195-278,613-627 · shell/CMakeLists.txt:69-75,127-197`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:254-328,342,519-535,549 · shell/CMakeLists.txt:69-75,127-197`
 
 ```sh
 build/pty/pty-test
@@ -839,7 +910,7 @@ build/simfonts-test
 
 The static checks a device image would trip on.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:33-38,75-78 · tools/check-device.sh:8-15`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:33-38,89-92 · tools/check-device.sh:8-15`
 
 ```sh
 ./phoenix check-device
@@ -861,7 +932,7 @@ Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:33-38,75
 
 ### Python, shell and PHP tests
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:82,85,110-114,226 · tools/test-make-utm.py:10-11`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/tools/ci-checks.sh:145,147-153 · .github/workflows/ci.yml:78 · tools/test-make-utm.py:10-11`
 
 ```sh
 sh tools/test-phoenix-script.sh
@@ -917,7 +988,7 @@ php server/drivers/tests/run.php
 
 `hidpi-art.py` needs Pillow and NumPy (on a Mac, from `.venv`); `make-feedback-sounds.py` needs ffmpeg.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:93 · .github/workflows/ci.yml:269-292`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/CLAUDE.md:93 · tools/ci-checks.sh:134-144`
 
 Whenever art or stylesheets change:
 
@@ -1001,7 +1072,7 @@ node ../tools/check-lockfile.cjs
 
 `./phoenix --tests` does this for you.
 
-Run in `any folder` · Mac + Linux · Source: `webos-phoenix/phoenix:612-616`
+Run in `any folder` · Mac + Linux · Source: `webos-phoenix/phoenix:658-662`
 
 **Mac:**:
 
@@ -1545,7 +1616,7 @@ npm run dev -w settings
 
 Separate npm projects, in `apps/enact-notes-limestone` and `apps/enact-notes-agate`.
 
-Run in `webos-phoenix/apps/enact-notes-limestone` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:124`
+Run in `webos-phoenix/apps/enact-notes-limestone` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:88`
 
 ```sh
 npm ci --no-audit --no-fund && npm run typecheck && npm run build
@@ -1561,7 +1632,7 @@ npm run serve
 
 Needs Flutter.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:139-149 · apps/flutter-notes/README.md:55-58`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/.github/workflows/ci.yml:103-113 · apps/flutter-notes/README.md:55-58`
 
 ```sh
 (cd apps/shared/phoenix_services && dart pub get && dart analyze --fatal-infos && dart test)
@@ -2517,7 +2588,7 @@ node tools/platform-mock/server.cjs --port 8099 --seed --write-servers /tmp/serv
 
 `./phoenix` fetches these itself.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:568,578,591,599 · tools/get-whisper-model.py:33-34`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/phoenix:614,624,637,645 · tools/get-whisper-model.py:33-34`
 
 --model base.en or tiny.en:
 

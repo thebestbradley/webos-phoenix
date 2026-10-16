@@ -481,6 +481,8 @@ Tests:
 QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -input shell/tests
 QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -import shell/tests-device/fakes -input shell/tests-device
 (cd apps && npm test && npm run typecheck)
+./phoenix test --quick    # the quick checks CI runs first (tools/ci-checks.sh)
+./phoenix test --web      # every web app test in Chromium, as CI runs them (tools/web-tests.txt)
 ```
 
 | Command | What it does |

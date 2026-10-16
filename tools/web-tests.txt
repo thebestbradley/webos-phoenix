@@ -1,0 +1,125 @@
+# The web app tests: the original webOS apps and Phoenix's own in headless
+# Chromium (Playwright). tools/run-web-tests.cjs runs them (./phoenix test
+# --web), all or CI's shard I of N (.github/workflows/ci.yml, job "web");
+# tools/check-web-tests.cjs checks that the shards together run exactly
+# this list.
+#
+# One test per line: its weight, then the command, run from the
+# repository's root with NODE_PATH set to npm's global modules (where
+# Playwright is). The weight is the seconds the test took on CI's
+# ubuntu-24.04 runner: the mean of two runs of the one-job CI of 15
+# October 2026 (runs 38788038475 and 38808069695), read from their logs'
+# timestamps (where a test prints no last line of its own, from the next
+# one's first). The runner prints each test's time beside its weight, so
+# one that drifts can be set again from a run's log. The shards are
+# balanced by these weights; within a shard the tests run in this order.
+# A new test: its line here (a guess at its weight will do), and a row in
+# the README's table of tests.
+299 node tools/test-apps.cjs --out app-tests/phone
+300 node tools/test-apps.cjs --tablet --out app-tests/tablet
+220 node tools/test-hidpi.cjs
+58 node tools/test-settings.cjs --out app-tests/settings-phone
+51 node tools/test-settings.cjs --tablet --out app-tests/settings-tablet
+7 node tools/test-backup.cjs --out app-tests/backup-phone
+6 node tools/test-backup.cjs --tablet --out app-tests/backup-tablet
+34 node tools/test-marketplace.cjs --out app-tests/marketplace-phone
+35 node tools/test-marketplace.cjs --tablet --out app-tests/marketplace-tablet
+2 node tools/test-appmanager.cjs
+6 node tools/test-updates.cjs --out app-tests/updates-phone
+6 node tools/test-updates.cjs --tablet --out app-tests/updates-tablet
+21 node tools/test-platform-client.cjs --ui --out app-tests/platform-client-phone
+21 node tools/test-platform-client.cjs --ui --tablet --out app-tests/platform-client-tablet
+25 node tools/test-phone-messaging.cjs --out app-tests/phone-messaging-phone
+26 node tools/test-phone-messaging.cjs --tablet --out app-tests/phone-messaging-tablet
+2 node tools/test-notification-stacks.cjs --out app-tests/notification-stacks-phone
+3 node tools/test-notification-stacks.cjs --tablet --out app-tests/notification-stacks-tablet
+23 node tools/test-media.cjs --out app-tests/media-phone
+24 node tools/test-media.cjs --tablet --out app-tests/media-tablet
+1 node tools/test-media-index.cjs
+28 node tools/test-justtype.cjs --out app-tests/justtype-phone
+29 node tools/test-justtype.cjs --tablet --out app-tests/justtype-tablet
+21 node tools/test-browser.cjs --out app-tests/browser-phone
+22 node tools/test-browser.cjs --tablet --out app-tests/browser-tablet
+10 node tools/test-links.cjs --out app-tests/links-phone
+50 node tools/test-launch-contracts.cjs --out app-tests/launch-contracts-phone
+21 node tools/test-launch-contracts.cjs --tablet --out app-tests/launch-contracts-tablet
+25 node tools/test-back.cjs
+43 node tools/test-files.cjs --out app-tests/files-phone
+44 node tools/test-files.cjs --tablet --out app-tests/files-tablet
+20 node tools/test-filepicker.cjs --out app-tests/filepicker
+17 node tools/test-webfiles.cjs --out app-tests/webfiles
+16 node tools/test-tasks.cjs --out app-tests/tasks-phone
+16 node tools/test-tasks.cjs --tablet --out app-tests/tasks-tablet
+7 node tools/test-db8-pages.cjs --out app-tests/db8-pages
+6 node tools/test-alarm.cjs --out app-tests/alarm
+7 node tools/test-email.cjs --out app-tests/email-phone
+7 node tools/test-email.cjs --tablet --out app-tests/email-tablet
+4 node tools/test-contacts.cjs --out app-tests/contacts-phone
+4 node tools/test-contacts.cjs --tablet --out app-tests/contacts-tablet
+18 node tools/test-voicememos.cjs --out app-tests/voicememos-phone
+18 node tools/test-voicememos.cjs --tablet --out app-tests/voicememos-tablet
+4 node tools/test-flashlight.cjs --out app-tests/flashlight-phone
+4 node tools/test-flashlight.cjs --tablet --out app-tests/flashlight-tablet
+16 node tools/test-screenshot.cjs --out app-tests/screenshot-phone
+16 node tools/test-screenshot.cjs --tablet --out app-tests/screenshot-tablet
+7 node tools/test-notificationlab.cjs --out app-tests/notificationlab-phone
+7 node tools/test-notificationlab.cjs --tablet --out app-tests/notificationlab-tablet
+17 node tools/test-scanner.cjs --out app-tests/scanner-phone
+17 node tools/test-scanner.cjs --tablet --out app-tests/scanner-tablet
+5 node tools/test-weather.cjs --out app-tests/weather-phone
+6 node tools/test-weather.cjs --tablet --out app-tests/weather-tablet
+27 node tools/test-maps.cjs --out app-tests/maps-phone
+33 node tools/test-maps.cjs --tablet --out app-tests/maps-tablet
+16 node tools/test-assistant-maps.cjs --out app-tests/assistant-maps-phone
+22 node tools/test-assistant-maps.cjs --tablet --out app-tests/assistant-maps-tablet
+11 node tools/test-passwords.cjs --out app-tests/passwords-phone
+11 node tools/test-passwords.cjs --tablet --out app-tests/passwords-tablet
+15 node tools/test-authenticator.cjs --out app-tests/authenticator-phone
+15 node tools/test-authenticator.cjs --tablet --out app-tests/authenticator-tablet
+9 node tools/test-clipboard.cjs --out app-tests/clipboard-phone
+9 node tools/test-clipboard.cjs --tablet --out app-tests/clipboard-tablet
+11 node tools/test-community.cjs --out app-tests/community-phone
+11 node tools/test-community.cjs --tablet --out app-tests/community-tablet
+11 node tools/test-sharing.cjs --out app-tests/sharing-phone
+12 node tools/test-sharing.cjs --tablet --out app-tests/sharing-tablet
+61 node tools/test-assistant.cjs --out app-tests/assistant-phone
+64 node tools/test-assistant.cjs --tablet --out app-tests/assistant-tablet
+4 node tools/test-assistant-followups.cjs --out app-tests/assistant-followups-phone
+5 node tools/test-assistant-followups.cjs --tablet --out app-tests/assistant-followups-tablet
+12 node tools/test-terminal.cjs --out app-tests/terminal-phone
+12 node tools/test-terminal.cjs --tablet --out app-tests/terminal-tablet
+11 node tools/test-videos.cjs --out app-tests/videos-phone
+11 node tools/test-videos.cjs --tablet --out app-tests/videos-tablet
+8 node tools/test-podcasts.cjs --out app-tests/podcasts-phone
+8 node tools/test-podcasts.cjs --tablet --out app-tests/podcasts-tablet
+11 node tools/test-docs.cjs --out app-tests/docs-phone
+11 node tools/test-docs.cjs --tablet --out app-tests/docs-tablet
+43 node tools/test-dav-sync.cjs --out app-tests/dav-phone
+44 node tools/test-dav-sync.cjs --tablet --out app-tests/dav-tablet
+28 node tools/test-accounts.cjs --out app-tests/accounts
+4 node tools/test-runtime-csp.cjs
+26 node tools/test-xmpp.cjs --out app-tests/xmpp-phone
+24 node tools/test-matrix.cjs --out app-tests/matrix-phone
+26 node tools/test-deltachat.cjs --out app-tests/deltachat-phone
+24 node tools/test-telegram.cjs --out app-tests/telegram-phone
+1 node tools/test-xmpp-server.cjs
+21 node tools/test-sftp.cjs --out app-tests/sftp-phone
+21 node tools/test-sftp.cjs --tablet --out app-tests/sftp-tablet
+2 node tools/test-orientation.cjs --out app-tests/orientation-phone
+3 node tools/test-orientation.cjs --tablet --out app-tests/orientation-tablet
+5 node tools/test-keyboard.cjs --out app-tests/keyboard-phone
+5 node tools/test-keyboard.cjs --tablet --out app-tests/keyboard-tablet
+14 node tools/test-editing.cjs --out app-tests/editing-phone
+15 node tools/test-editing.cjs --tablet --out app-tests/editing-tablet
+38 node tools/test-firstuse.cjs --out app-tests/firstuse-phone
+39 node tools/test-firstuse.cjs --tablet --out app-tests/firstuse-tablet
+12 node tools/test-help.cjs --out app-tests/help-phone
+12 node tools/test-help.cjs --tablet --out app-tests/help-tablet
+16 node tools/test-emergency.cjs --out app-tests/emergency-phone
+16 node tools/test-emergency.cjs --tablet --out app-tests/emergency-tablet
+15 node tools/test-location.cjs --out app-tests/location-phone
+15 node tools/test-location.cjs --tablet --out app-tests/location-tablet
+53 node tools/test-enact-notes.cjs --out app-tests/enact-notes
+47 node tools/test-ionic-notes.cjs --out app-tests/ionic-notes
+48 node tools/test-flutter-notes.cjs --out app-tests/flutter-notes
+1 node tools/test-app-sdk.cjs --out app-tests/app-sdk

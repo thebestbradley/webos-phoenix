@@ -36,6 +36,20 @@
 #                                 simulator-only references, image contents,
 #                                 recipes, licences), with a summary
 #                                 (tools/check-device.sh; docs/PRE-IMAGE-CHECKLIST.md)
+#   ./phoenix test --quick [--fail-fast] [ID...]
+#                                 the quick checks, CI's first job: generated
+#                                 docs and art, lockfiles, the tool and PHP
+#                                 tests, the apps' typecheck and unit tests;
+#                                 no build, a few minutes (tools/ci-checks.sh;
+#                                 --list names them)
+#   ./phoenix test --web [--shard I/N] [NAME...]
+#                                 the web app tests in headless Chromium, as
+#                                 CI runs them: every one, CI's shard I of N,
+#                                 or the named ones (settings: test-settings.cjs)
+#                                 (tools/run-web-tests.cjs; the list,
+#                                 tools/web-tests.txt). Build the apps and
+#                                 install the test tools (--tests) first:
+#                                 ./phoenix test installs and builds nothing
 #
 # Options (anywhere before the simulator's own arguments):
 #   --no-assistant   without the assistant's parts (whisper.cpp, llama.cpp,
@@ -120,7 +134,7 @@ while [ $# -gt 0 ]; do
         --tests) TESTS=1 ;;
         --dry-run) DRY=1 ;;
         -h|--help|help) usage; exit 0 ;;
-        build|run|setup|check)
+        build|run|setup|check|test)
             [ -z "$COMMAND" ] || break
             COMMAND=$1 ;;
         adaptive|phone|tablet)
@@ -128,14 +142,14 @@ while [ $# -gt 0 ]; do
             MODE=$1 ;;
         --) shift; break ;;
         *)
-            [ "$COMMAND" = run ] && break
+            case "$COMMAND" in run|test) break ;; esac
             echo "phoenix: unknown command or option: $1 (./phoenix --help)" >&2
             exit 2 ;;
     esac
     shift
 done
 COMMAND=${COMMAND:-build}
-if [ $# -gt 0 ] && [ "$COMMAND" != run ]; then
+if [ $# -gt 0 ] && [ "$COMMAND" != run ] && [ "$COMMAND" != test ]; then
     echo "phoenix: $1: only ./phoenix run takes the simulator's arguments (./phoenix --help)" >&2
     exit 2
 fi
@@ -194,6 +208,38 @@ run() {
 need_network() {  # need_network WHAT
     [ $OFFLINE = 0 ] || die "$1 is missing and --offline downloads nothing; run ./phoenix without --offline once."
 }
+
+# ./phoenix test: CI's test runners, run here as they are; nothing is
+# installed or built first. --quick or --web; the rest goes to the runner.
+if [ "$COMMAND" = test ]; then
+    kind=""
+    n=$#
+    while [ "$n" -gt 0 ]; do
+        a=$1
+        shift
+        n=$((n - 1))
+        case "$a" in
+            --quick|--web)
+                [ -z "$kind" ] || [ "$kind" = "$a" ] || { echo "phoenix: test takes --quick or --web, not both" >&2; exit 2; }
+                kind=$a ;;
+            --dry-run) DRY=1 ;;
+            *) set -- "$@" "$a" ;;
+        esac
+    done
+    case "$kind" in
+        --quick) set -- sh "$REPO_DIR/tools/ci-checks.sh" "$@" ;;
+        --web) set -- node "$REPO_DIR/tools/run-web-tests.cjs" "$@" ;;
+        *) echo "phoenix: test needs --quick (the quick checks) or --web (the web app tests) (./phoenix --help)" >&2; exit 2 ;;
+    esac
+    if [ $DRY = 1 ]; then
+        printf '           would run: %s\n' "$(words "$@")"
+        exit 0
+    fi
+    # Homebrew's Node 22 is keg-only: where it is, when no node is on the PATH.
+    have node || PATH="$PATH:/opt/homebrew/opt/node@22/bin:/usr/local/opt/node@22/bin"
+    have "$1" || die "$1 is missing (./phoenix installs it)."
+    exec "$@"
+fi
 
 OS=${PHOENIX_OS:-$(uname -s)}
 SUDO=""
@@ -337,7 +383,7 @@ mac_prerequisites() {
 # ---- Linux --------------------------------------------------------------------------
 # The libraries Qt's own (display, fonts, input, sound, Qt WebEngine's
 # Chromium) load from the system, the OpenGL headers its CMake files ask
-# for, and the build tools. The same as CI (.github/workflows/ci.yml).
+# for, and the build tools. The same as CI (.github/actions/setup/action.yml).
 APT_CORE="build-essential cmake ninja-build git curl ca-certificates pkg-config
     libgl-dev libegl-dev libxkbcommon-dev libglib2.0-dev fonts-dejavu-core
     libgl1 libegl1 libgbm1 libfontconfig1 libfreetype6 libdbus-1-3

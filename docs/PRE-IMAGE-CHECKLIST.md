@@ -61,8 +61,8 @@ with root and no password (X1). (Every machine now gets a device.json, H1.)
 
 ## Checkers
 
-Static checks that run in CI (`.github/workflows/ci.yml`, "Device readiness
-checkers", after the apps' build) and locally:
+Static checks that run in CI (`.github/workflows/ci.yml`, the `apps` job's
+"Device readiness checkers", after the apps' build) and locally:
 
 ```sh
 ./phoenix check-device            # all of them, with a summary (tools/check-device.sh)
