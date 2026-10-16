@@ -17,6 +17,9 @@
 //     picker; the file written on close where Files lists it; saved again
 //     through the same handle without a picker; Cancel is an AbortError);
 //     no showDirectoryPicker.
+//   - in columns (a tablet's sheets without the user's List: the sections
+//     before run with it chosen): an input's file picked in the column view,
+//     and showSaveFilePicker into a folder of the columns.
 //   - downloads: a Blob through a link made by script (its URL revoked at
 //     once), a link in the page, a data: URL, FileSaver.js's uncancelable
 //     click: the save picker with the name, the file written, "Saved ... to
@@ -96,6 +99,8 @@ async function main() {
         });
         await page.goto(`${origin}/usr/palm/applications/${APP}/index.html`);
         await page.waitForFunction(() => window.results && window.results.length > 0);
+        // The sheets' list, the user's choice on this tablet (their columns, the default, are below).
+        await page.evaluate(() => localStorage.setItem("phoenix:filepicker:view", JSON.stringify("list")));
         const shot = (name) => page.screenshot({ path: path.join(outDir, name + ".png") });
         const results = () => page.evaluate(() => window.results);
         const nextResult = async (kind, from) => {
@@ -285,6 +290,42 @@ async function main() {
         await f.click("[data-testid=save-cancel]");
         res = await nextResult("abort-test", n);
         check(res.name === "AbortError", "Cancel in the save picker: an AbortError");
+
+        // ---- In columns (a tablet's sheets, no List chosen) -------------------------------------------
+        await page.evaluate(() => localStorage.removeItem("phoenix:filepicker:view"));
+        n = await count();
+        await page.click("#detached-open");
+        f = await sheet("pick");
+        await f.click("[data-testid=pick-kind-file]");
+        await f.waitForSelector("[data-testid=pick-columns]");
+        check(await f.locator("[data-testid='view-switch-columns'][aria-checked='true']").count() === 1, "no List chosen: the picker's folders in columns");
+        await f.click("[data-testid='pick-column-0'] [data-testid='pick-col-Documents']");
+        const welcomeRow = `[data-testid='pick-column-1'] [data-path='${DOCS}/Welcome.txt']`;
+        await f.click(welcomeRow);
+        await f.waitForSelector("[data-testid=pick-preview]");
+        await f.click(welcomeRow);
+        res = await nextResult("change", n);
+        check(res.id === "detached" && res.files.length === 1 && res.files[0].name === "Welcome.txt" && res.files[0].text === welcome,
+              "in columns: a file marked, then a second tap picks it, the input's");
+        await page.fill("#text", "Saved from the columns.");
+        n = await count();
+        await page.click("#fsa-save-as");
+        f = await sheet("save");
+        await f.waitForSelector("[data-testid=save-columns]");
+        check(true, "the save picker in columns too");
+        await f.click("[data-testid='save-column-0'] [data-testid='save-col-Music']");
+        await f.waitForFunction(() => document.querySelector("[data-testid=save-folder]").textContent.trim() === "Music");
+        await shot("3b-save-columns");
+        await f.click("[data-testid=save-confirm]");
+        await sheetGone();
+        res = await nextResult("fsa-saved", n);
+        check(res.kind === "fsa-saved" && await readText("/media/internal/Music/note.txt") === "Saved from the columns.",
+              "showSaveFilePicker in columns: written in the folder of the last column");
+        // The list and Documents again for what follows (the runtime keeps both: filepicker:view, filepicker:lastFolder).
+        await page.evaluate((docs) => {
+            localStorage.setItem("phoenix:filepicker:view", JSON.stringify("list"));
+            localStorage.setItem("phoenix:filepicker:lastFolder", JSON.stringify(docs));
+        }, DOCS);
 
         // ---- Downloads --------------------------------------------------------------------------------
         // What the runtime tells the shell after `from`: the first of a type.

@@ -1,5 +1,10 @@
 {
   "format": 1,
+  "unreleased": {
+    "new": [
+      "On a tablet, Files and the file picker show folders in columns, each beside the one it is in, with a preview of the file you tap; or a list, if you prefer."
+    ]
+  },
   "versions": [
     {
       "version": "1.0.0",

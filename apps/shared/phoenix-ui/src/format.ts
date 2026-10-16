@@ -75,3 +75,9 @@ export function dayLabel(ts: number, now = Date.now()): string {
 export function shortWhen(ts: number, now = Date.now()): string {
     return daysAgo(ts, now) <= 0 ? formatTime(ts) : dayLabel(ts, now);
 }
+
+/** "Sep 3, 2026 4:05 PM": a file's date in full (Files' info sheet, the column view's preview). */
+export function longDate(ts: number): string {
+    const d = new Date(ts);
+    return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} ${formatTime(ts)}`;
+}

@@ -223,3 +223,14 @@ html:has(> body.ss-body), body.pui-app.ss-body { background: transparent; }
     flex: none; font: inherit; font-size: 15px; padding: 6px 12px; border-radius: 6px;
     border: 1px solid rgba(0, 0, 0, 0.35); background: linear-gradient(#fdfdfd, #e2e2e2); color: #333;
 }
+
+/* Columns (a tablet or a desktop, when chosen): the save and pick sheets
+   widen for the folders side by side (@phoenix/ui ColumnView), scrolling
+   sideways when they do not fit; the List / Columns switch in the head. */
+.ss-sheet.ss-wide { width: min(calc(100% - 12px), 960px); height: min(700px, calc(100% - 40px)); }
+.ss-folders-columns { display: flex; padding: 0; overflow: hidden; }
+.ss-columns { flex: 1; min-width: 0; height: auto; --pui-column-width: 220px; --pui-preview-width: 260px; }
+.ss-columns .ss-loading { padding: 16px; }
+.ss-save-head .pui-view-switch { margin-right: 4px; }
+.ss-pick-head { position: relative; }
+.ss-pick-view { position: absolute; right: 0; top: 0; }

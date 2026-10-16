@@ -15,12 +15,17 @@
 //          first. Above Internal Storage, the places: it and each drive
 //          (Synergy accounts with the DOCUMENTS capability, /media/drives;
 //          docs/SHARE-AND-FILES.md "Drives"), where the file is uploaded.
+//          On a tablet or a desktop the folders are columns (columns.tsx;
+//          the list if the user chose it), the last one the folder the file
+//          goes to.
 //   pick   luna-systemui's file picker in this look: the kind first when
 //          there are several, pictures album by album (Camera Roll first),
 //          videos, music, documents, any file by folder (the drives
 //          beside Internal Storage); one file or several; a crop frame for
 //          a picture
-//          (org.webosphoenix.filepicker/pick, SF2).
+//          (org.webosphoenix.filepicker/pick, SF2). Files by folder are
+//          columns on a tablet or a desktop (the list if the user chose it),
+//          a file's preview after them.
 //   signin The system's browser sheet for an OAuth sign-in
 //          (org.webosphoenix.service.oauth authorize; docs/SYNERGY-CONNECTORS.md
 //          4.1): the provider's own page in a web view, its address above
@@ -30,16 +35,23 @@
 //
 // It talks to the page under it with postMessage: "ready", then the
 // request; "done" with the choice. The back gesture comes as "back".
+// List or Columns: columns on a tablet or a desktop unless the user chose
+// the list; the request's `view` is the user's choice the runtime kept
+// (filepicker:view, beside the last folder), and the save and pick sheets'
+// answers carry a choice made in them for it to keep.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-    driveRootOf, DRIVES_ROOT, extensionOf, FILE_ERRORS, fileManager, fileUrl, findFiles, formatSize, joinPath, kindOf, LunaError, mediaIndexer, mediaUrl,
+    driveRootOf, DRIVES_ROOT, extensionOf, fileManager, fileUrl, findFiles, formatSize, joinPath, kindOf, LunaError, mediaIndexer, mediaUrl,
     mimeOf, parentOf, type AudioItem, type CropInfo, type FileEntry, type ImageItem, type PickKind, type VideoItem,
 } from "@phoenix/luna";
 import { useLaunchParams, useMediaUrl } from "@phoenix/luna/react";
-import { Button, Checkmark, Dialog, FileIcon, Slider, Spinner, TextField, type FileIconKind } from "@phoenix/ui";
+import {
+    Button, Checkmark, Dialog, FileIcon, shownView, Slider, Spinner, TextField, ViewSwitch, type ColumnMove, type FileIconKind, type FolderView,
+} from "@phoenix/ui";
+import { internalPlace, listError, PickPreview, SheetColumns, useColumnsFit } from "./columns";
+import { MEDIA, PLACES, upOf as placeUp } from "./places";
 
-const MEDIA = "/media/internal";
 const PHOTOS_ICON = "/usr/palm/applications/org.webosphoenix.photos/icon.png";
 
 interface SharedFile { path: string; mimeType: string }
@@ -50,8 +62,8 @@ interface Share { title: string; text: string; url: string; files: SharedFile[] 
 // service's, shown on two lines under the service's icon.
 interface Target { appId: string; title: string; icon: string; label: string; key?: string; accountId?: string; account?: string; service?: string }
 interface ShareRequest { share: Share; targets: Target[] }
-interface SaveRequest { name: string; title: string; folder: string }
-interface PickRequest { title: string; kinds: PickKind[]; multiple: boolean; crop: { width: number; height: number } | null; extensions: string[] }
+interface SaveRequest { name: string; title: string; folder: string; view?: FolderView }
+interface PickRequest { title: string; kinds: PickKind[]; multiple: boolean; crop: { width: number; height: number } | null; extensions: string[]; view?: FolderView }
 interface SignInRequest { url: string; redirectPrefix: string }
 type Request = ShareRequest | SaveRequest | PickRequest | SignInRequest;
 type Result =
@@ -65,21 +77,16 @@ const baseName = (p: string) => p.replace(/^.*\//, "");
 const isPicture = (f: SharedFile) => /^image\//.test(f.mimeType) || /\.(png|jpe?g|gif|webp|bmp)$/i.test(f.path);
 const isVideo = (f: SharedFile) => /^video\//.test(f.mimeType) || /\.(mp4|m4v|mov|webm)$/i.test(f.path);
 const isAudio = (f: SharedFile) => /^audio\//.test(f.mimeType) || /\.(wav|mp3|ogg|oga|m4a|aac|flac)$/i.test(f.path);
-// The places above the folders: Internal Storage and each drive ("" is the list of them).
-const PLACES = "";
+// The places above the folders: Internal Storage and each drive (PLACES, "", is the list of them).
 const folderTitle = (p: string, drives: FileEntry[] = []) =>
     p === PLACES ? "Places" : p === MEDIA ? "Internal Storage" : drives.find((d) => d.path === p)?.drive?.title ?? baseName(p);
-const internalPlace = { name: "Internal Storage", path: MEDIA, type: "directory", size: 0, mtime: 0, mode: 0o755 } as FileEntry;
 // Up from a folder: the places above Internal Storage and a drive's own folder (when there are drives).
-const upOf = (p: string, drives: FileEntry[]) => (p === MEDIA || driveRootOf(p) === p ? (drives.length ? PLACES : p) : parentOf(p));
+const upOf = (p: string, drives: FileEntry[]) => placeUp(p, drives.length > 0);
 function useDrives(): FileEntry[] {
     const [drives, setDrives] = useState<FileEntry[]>([]);
     useEffect(() => { let live = true; fileManager.drives().then((d) => { if (live) setDrives(d); }); return () => { live = false; }; }, []);
     return drives;
 }
-const listError = (e: unknown) => (e instanceof LunaError && e.errorCode === FILE_ERRORS.OFFLINE ? "Can't reach the drive. Check your connection."
-    : e instanceof LunaError && e.errorCode === FILE_ERRORS.AUTH ? "The drive did not accept the sign-in: sign in again in Accounts."
-    : e instanceof LunaError ? e.errorText : "Could not open the folder");
 
 async function copyText(text: string): Promise<boolean> {
     try {
@@ -102,8 +109,15 @@ export function App() {
     const [request, setRequest] = useState<Request | null>(null);
     const [leaving, setLeaving] = useState(false);
     const backHandler = useRef<() => void>(() => {});
+    // List or Columns (save and pick): the request's (the runtime's kept
+    // one; columns where they are offered until the user chooses), and the
+    // user's choice here, which goes back with the answer to be kept.
+    const [view, setView] = useState<FolderView | undefined>(undefined);
+    const viewRef = useRef<FolderView | undefined>(undefined);
+    const chooseView = useCallback((v: FolderView) => { viewRef.current = v; setView(v); }, []);
 
-    const finish = useCallback((result: Result) => {
+    const finish = useCallback((answer: Result) => {
+        const result = viewRef.current ? { ...answer, view: viewRef.current } : answer;
         setLeaving(true);
         // The page under it lifts its dimming while the sheet slides away,
         // then hears the choice.
@@ -115,7 +129,11 @@ export function App() {
         const onMessage = (e: MessageEvent) => {
             const m = e.data as { phoenixSheet?: string; type?: string; request?: Request };
             if (!m || m.phoenixSheet !== params.id) return;
-            if (m.type === "request" && m.request) setRequest(m.request);
+            if (m.type === "request" && m.request) {
+                setRequest(m.request);
+                const v = (m.request as { view?: unknown }).view;
+                if (v === "list" || v === "columns") setView(v);
+            }
             else if (m.type === "back") backHandler.current();
         };
         window.addEventListener("message", onMessage);
@@ -141,7 +159,7 @@ export function App() {
                 <ShareSheet request={request} finish={finish} backHandler={backHandler} />
             )}
             {request && params.kind === "save" && "folder" in request && (
-                <SavePicker request={request} finish={finish} backHandler={backHandler} />
+                <SavePicker request={request} finish={finish} backHandler={backHandler} view={view} onView={chooseView} />
             )}
             {request && params.kind === "signin" && "redirectPrefix" in request && (
                 <SignInSheet request={request} finish={finish} backHandler={backHandler} />
@@ -149,7 +167,7 @@ export function App() {
             {request && params.kind === "pick" && "kinds" in request && (
                 <FilePicker request={{ ...request, kinds: request.kinds.length ? request.kinds : ["image"], multiple: !!request.multiple,
                                        crop: request.crop ?? null, extensions: request.extensions ?? [] }}
-                            finish={finish} backHandler={backHandler} />
+                            finish={finish} backHandler={backHandler} view={view} onView={chooseView} />
             )}
         </div>
     );
@@ -160,6 +178,8 @@ interface SheetProps<R> {
     finish: (r: Result) => void;
     backHandler: React.MutableRefObject<() => void>;
 }
+/** The save and pick sheets: List or Columns (offered on a tablet or a desktop, and columns there unless the list was chosen). */
+interface ViewProps { view: FolderView | undefined; onView: (v: FolderView) => void }
 
 // ---- Sign in -------------------------------------------------------------------------
 
@@ -322,7 +342,7 @@ function ShareSheet({ request, finish, backHandler }: SheetProps<ShareRequest>) 
 
 // ---- Save to Files -----------------------------------------------------------------------
 
-function SavePicker({ request, finish, backHandler }: SheetProps<SaveRequest>) {
+function SavePicker({ request, finish, backHandler, view, onView }: SheetProps<SaveRequest> & ViewProps) {
     const [folder, setFolder] = useState<string | null>(null);
     const [entries, setEntries] = useState<FileEntry[] | null>(null);
     const [name, setName] = useState(request.name);
@@ -332,6 +352,10 @@ function SavePicker({ request, finish, backHandler }: SheetProps<SaveRequest>) {
     const drives = useDrives();
     const drivesRef = useRef<FileEntry[]>([]);
     drivesRef.current = drives;
+    // Columns on a tablet or a desktop, when chosen: the last column is the folder the file goes to.
+    const fits = useColumnsFit();
+    const cols = shownView(view, fits) === "columns";
+    const [made, setMade] = useState(0);
 
     const open = useCallback(async (path: string) => {
         setEntries(null);
@@ -384,6 +408,7 @@ function SavePicker({ request, finish, backHandler }: SheetProps<SaveRequest>) {
         try {
             await fileManager.mkdir(joinPath(folder, n));
             setNewFolder(null);
+            setMade((k) => k + 1);
             await open(joinPath(folder, n));
         } catch (e) {
             setError(e instanceof LunaError ? e.errorText : "Could not make the folder");
@@ -391,15 +416,24 @@ function SavePicker({ request, finish, backHandler }: SheetProps<SaveRequest>) {
     };
 
     return (
-        <div className="ss-sheet ss-save" role="dialog" aria-label={request.title} data-testid="save-picker">
+        <div className={"ss-sheet ss-save" + (cols ? " ss-wide" : "")} role="dialog" aria-label={request.title} data-testid="save-picker">
             <div className="ss-save-head">
                 <button type="button" className="ss-up" disabled={!canUp} aria-label="Up"
                         data-testid="save-up" onClick={() => folder !== null && void open(upOf(folder, drives))} />
                 <div className="ss-title" data-testid="save-folder">{folder !== null ? folderTitle(folder, drives) : request.title}</div>
+                {fits && <ViewSwitch value={cols ? "columns" : "list"} onChange={onView} />}
                 <button type="button" className="ss-link" data-testid="save-new-folder" disabled={!folder || !!error} onClick={() => setNewFolder("")}>New Folder</button>
             </div>
-            <div className="ss-folders" data-testid="save-folders">
-                {entries === null ? <div className="ss-loading"><Spinner /></div>
+            <div className={"ss-folders" + (cols ? " ss-folders-columns" : "")} data-testid="save-folders">
+                {cols ? (
+                    <SheetColumns name="save" folder={folder ?? MEDIA} drives={drives} files={false} version={made} peek={null}
+                                  seed={folder !== null && entries !== null ? { path: folder, list: entries, error: error || undefined } : null}
+                                  keys={newFolder === null && !replace}
+                                  onMove={(m) => {
+                                      if (m.kind === "open") void open(m.key);
+                                      else if (m.kind === "up" && folder !== null && canUp) void open(upOf(folder, drives));
+                                  }} />
+                ) : entries === null ? <div className="ss-loading"><Spinner /></div>
                     : error ? <div className="ss-empty ss-drive-error" data-testid="save-error">{error}</div>
                     : entries.length === 0 ? <div className="ss-empty">No folders here</div>
                     : entries.map((e) => (
@@ -464,7 +498,7 @@ const newestFirst = <T extends { last_modified_date?: string }>(list: T[]) =>
     [...list].sort((a, b) => Date.parse(b.last_modified_date ?? "") - Date.parse(a.last_modified_date ?? "") || 0);
 const selectedLabel = (n: number) => (n === 0 ? "No Files Selected" : n === 1 ? "1 File Selected" : `${n} Files Selected`);
 
-function FilePicker({ request, finish, backHandler }: SheetProps<PickRequest>) {
+function FilePicker({ request, finish, backHandler, view, onView }: SheetProps<PickRequest> & ViewProps) {
     const kinds = request.kinds;
     const [kind, setKind] = useState<PickKind | null>(kinds.length === 1 ? kinds[0] : null);
     const [selected, setSelected] = useState<Picked[]>([]);
@@ -472,6 +506,13 @@ function FilePicker({ request, finish, backHandler }: SheetProps<PickRequest>) {
     const [folder, setFolder] = useState(MEDIA);
     const drives = useDrives();
     const cropOf = useRef<() => CropInfo | null>(() => null);
+    // Files by folder in columns (a tablet or a desktop, when chosen): a tap
+    // marks a file and shows its preview, a second tap (or OK) picks it.
+    const fits = useColumnsFit() && kind === "file" && !cropping;
+    const cols = shownView(view, fits) === "columns";
+    const [peek, setPeek] = useState<FileEntry | null>(null);
+    const peeked = cols && peek && parentOf(peek.path) === folder ? peek : null;
+    const asPicked = (e: FileEntry): Picked => ({ path: e.path, mimeType: mimeOf(e.name), size: e.size });
 
     const isSelected = (path: string) => selected.some((f) => f.path === path);
     const choose = (f: Picked) => {
@@ -486,9 +527,10 @@ function FilePicker({ request, finish, backHandler }: SheetProps<PickRequest>) {
     // backHandler, FilePickerApp.js:240-247, 268-283): out of the crop,
     // up a folder, to the kinds (the files ticked are let go), then away.
     const folderUp = upOf(folder, drives);
-    const nested = !!cropping || (kind === "file" && folder !== PLACES && folderUp !== folder) || (!!kind && kinds.length > 1);
+    const nested = !!cropping || !!peeked || (kind === "file" && folder !== PLACES && folderUp !== folder) || (!!kind && kinds.length > 1);
     const back = () => {
         if (cropping) setCropping(null);
+        else if (peeked) setPeek(null);
         else if (kind === "file" && folder !== PLACES && folderUp !== folder) setFolder(folderUp);
         else if (kind && kinds.length > 1) { setKind(null); setSelected([]); }
         else finish({ action: "cancel" });
@@ -500,21 +542,40 @@ function FilePicker({ request, finish, backHandler }: SheetProps<PickRequest>) {
             if (info) finish({ action: "pick", files: [{ path: cropping.file_path, mimeType: cropping.mime ?? "image/jpeg", size: cropping.file_size, cropInfo: info }] });
         } else if (selected.length) {
             finish({ action: "pick", files: selected });
+        } else if (peeked && !request.multiple) {
+            finish({ action: "pick", files: [asPicked(peeked)] });
         }
     };
-    const showOk = !!cropping || (request.multiple && !!kind);
+    const showOk = !!cropping || (request.multiple && !!kind) || cols;
+    const okEnabled = !!cropping || selected.length > 0 || (!request.multiple && !!peeked);
+    // A tap or a key in the columns: a folder opens, a file is marked (a
+    // tap also ticks it when several are picked), a second tap or Enter picks it.
+    const move = (m: ColumnMove, entry: FileEntry | undefined, byKey: boolean) => {
+        if (m.kind === "open") { setFolder(m.key); setPeek(null); }
+        else if (m.kind === "peek" && entry) {
+            if (m.folder !== folder) setFolder(m.folder);
+            setPeek(entry);
+            if (request.multiple && !byKey) choose(asPicked(entry));
+        } else if (m.kind === "launch" && entry) choose(asPicked(entry));
+        else if (m.kind === "up" && folderUp !== folder) { setFolder(folderUp); setPeek(null); }
+    };
 
     return (
-        <div className="ss-sheet ss-pick" role="dialog" aria-label={request.title}
+        <div className={"ss-sheet ss-pick" + (cols ? " ss-wide" : "")} role="dialog" aria-label={request.title}
              data-testid={kinds.length === 1 && kinds[0] === "image" ? "picture-picker" : "file-picker"}>
             <div className="ss-pick-head">
                 <div className="ss-title ss-pick-title" data-testid="pick-title">
                     {cropping ? "Preview" : kind && kinds.length > 1 ? KINDS[kind].label : request.title}
                 </div>
                 {request.multiple && kind && !cropping && <div className="ss-subtitle" data-testid="pick-count">{selectedLabel(selected.length)}</div>}
+                {fits && <div className="ss-pick-view"><ViewSwitch value={cols ? "columns" : "list"} onChange={(v) => { onView(v); setPeek(null); }} /></div>}
             </div>
-            <div className="ss-pick-albums">
-                {cropping ? <CropView item={cropping} crop={request.crop!} cropOf={cropOf} />
+            <div className={"ss-pick-albums" + (cols ? " ss-folders-columns" : "")}>
+                {cols ? (
+                    <SheetColumns name="pick" folder={folder} drives={drives} files extensions={request.extensions} peek={peeked}
+                                  isSelected={request.multiple ? isSelected : undefined} keys onMove={move}
+                                  preview={peeked && <PickPreview entry={peeked} place={folderTitle(driveRootOf(peeked.path) ?? "", drives)} />} />
+                ) : cropping ? <CropView item={cropping} crop={request.crop!} cropOf={cropOf} />
                     : !kind ? (
                         <div className="ss-pick-rows" data-testid="pick-kinds">
                             {kinds.map((k) => (
@@ -534,7 +595,7 @@ function FilePicker({ request, finish, backHandler }: SheetProps<PickRequest>) {
             </div>
             <div className="ss-buttons">
                 <Button onClick={back} data-testid="pick-cancel">{nested ? "Back" : "Cancel"}</Button>
-                {showOk && <Button variant="affirmative" disabled={!cropping && !selected.length} onClick={ok} data-testid="pick-ok">OK</Button>}
+                {showOk && <Button variant="affirmative" disabled={!okEnabled} onClick={ok} data-testid="pick-ok">OK</Button>}
             </div>
         </div>
     );

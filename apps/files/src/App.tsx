@@ -16,6 +16,15 @@
 // - The header menu sorts by name, size or date, shows hidden files and
 //   adds the folder to the favourites (the star in the command menu).
 // - The back gesture goes back through the folders visited.
+// - On a tablet or a desktop (not a phone, and a card at least 600 px
+//   wide) the folders are in columns, as the Finder's and iPadOS Files'
+//   column views show them: each folder opens in a column to the right of
+//   its parent's, a file tapped shows its preview after the last column (a
+//   second tap opens it), and the arrow keys, Enter and Backspace move
+//   through them (Columns.tsx; @phoenix/ui ColumnView). View as List (the
+//   header menu, or the switch beside the path bar) shows the list there
+//   instead; the user's choice is kept with the other preferences. A phone,
+//   or a card narrowed to a phone's width, shows the list, in the same folder.
 //
 // Launch params: {path} opens that folder; {transfer} (a tap on a drive's
 // upload in the notification area) shows the transfers.
@@ -33,14 +42,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
-    driveRootOf, DRIVES_ROOT, FILE_ERRORS, fileManager, formatSize, isDrivePath, isHidden, joinPath, kindOf, LunaError, mimeOf, openWith, opensAsText,
+    driveRootOf, DRIVES_ROOT, FILE_ERRORS, fileManager, formatSize, isDrivePath, isHidden, isInside, joinPath, kindOf, LunaError, mimeOf, openWith, opensAsText,
     parentOf, shareSheet, sortEntries, type FileEntry, type SortKey, type Transfer,
 } from "@phoenix/luna";
-import { useLaunchParams } from "@phoenix/luna/react";
+import { useFormFactor, useLaunchParams } from "@phoenix/luna/react";
 import {
-    AppMenu, BackProvider, CheckBox, cx, FileIcon, Glyph, IconToolButton, PageHeader, PopupMenu, Spinner, Toolbar, ToolSpacer, useBack, type Option,
+    AppMenu, BackProvider, CheckBox, columnCursor, columnHold, columnKey, columnTap, ColumnNote, ColumnRow, ColumnView, cx, FileIcon, folderChain, Glyph,
+    IconToolButton, PageHeader, PopupMenu, shownView, Spinner, Toolbar, ToolSpacer, useBack, useColumnsWidth, ViewSwitch,
+    type ColumnMove, type ColumnState, type FolderView, type Option,
 } from "@phoenix/ui";
-import { crumbs, driveNames, folderProblem, folderTitle, HOME, loadPrefs, planPaste, savePrefs, shortDate, type Clipboard, type Prefs } from "./browse";
+import {
+    columnRoot, crumbs, driveNames, folderProblem, folderTitle, HOME, loadPrefs, planPaste, savePrefs, shortDate, type Clipboard, type Prefs,
+} from "./browse";
+import { FilePreview } from "./Columns";
 import { DeleteDialog, InfoDialog, InstallDialog, NameDialog, OpenWithDialog } from "./Dialogs";
 import { ImageViewer, TextEditor } from "./Viewers";
 
@@ -170,7 +184,31 @@ function Browser() {
     const pathBar = useRef<HTMLDivElement>(null);
     const toastTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+    // Columns: offered on a tablet or a desktop with room for them, and
+    // shown there unless the user chose the list (the owner, 16 October
+    // 2026); a phone (or a card narrowed to a phone's width) shows the list.
+    const formFactor = useFormFactor();
+    const roomy = useColumnsWidth();
+    const columnsFit = formFactor !== "phone" && roomy;
+    const columns = shownView(prefs.view, columnsFit) === "columns";
+    // The file marked in the current folder's column (its preview shows;
+    // in select mode, the row the keys are on).
+    const [peek, setPeek] = useState<string | null>(null);
+    // The first column: the place the folder is in, kept while the folders
+    // opened stay inside it (columnRoot), chosen again from a favourite.
+    const [colRoot, setColRoot] = useState(() => columnRoot(launch.path || HOME));
+    const root = isInside(path, colRoot) ? colRoot : columnRoot(path);
+    useEffect(() => { if (root !== colRoot) setColRoot(root); }, [root, colRoot]);
+    const folders = useMemo(() => folderChain(root, path), [root, path]);
+    // The folders' listings: the current folder's as it is read, the
+    // columns before it read once each (again with Refresh).
+    const [listed, setListed] = useState<Record<string, { list: FileEntry[]; error?: string }>>({});
+    const listedRef = useRef(listed);
+    listedRef.current = listed;
+    const [refreshed, setRefreshed] = useState(0);
+
     const setPrefs = (p: Partial<Prefs>) => setPrefsState((old) => { const n = { ...old, ...p }; savePrefs(n); return n; });
+    const setView = (v: FolderView) => { setPrefs({ view: v }); setPeek(null); };
     const say = useCallback((text: string) => {
         setToast(text);
         if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -181,6 +219,7 @@ function Browser() {
         try {
             const list = await fileManager.list(p);
             setEntries(list);
+            setListed((m) => ({ ...m, [p]: { list } }));
             setError("");
             setErrorKind(undefined);
             setErrorWhy(undefined);
@@ -211,23 +250,63 @@ function Browser() {
         const timer = setInterval(poll, 400);
         return () => { live = false; clearInterval(timer); };
     }, [watching]);
-    useEffect(() => { if (launch.path) { setPath(launch.path); setHistory([]); } }, [launch.path]);
+    useEffect(() => { if (launch.path) { setPath(launch.path); setHistory([]); setColRoot(columnRoot(launch.path)); } }, [launch.path]);
     useEffect(() => { pathBar.current?.scrollTo?.({ left: 1e6 }); }, [path]);
 
-    const shown = useMemo(() => {
-        const list = (entries ?? []).filter((e) => prefs.showHidden || !isHidden(e));
-        return sortEntries(list, prefs.sort);
-    }, [entries, prefs.showHidden, prefs.sort]);
+    const visible = useCallback((list: FileEntry[]) => sortEntries(list.filter((e) => prefs.showHidden || !isHidden(e)), prefs.sort),
+                                [prefs.showHidden, prefs.sort]);
+    const shown = useMemo(() => visible(entries ?? []), [entries, visible]);
     const names = useMemo(() => (entries ?? []).map((e) => e.name), [entries]);
     const chosen = shown.filter((e) => selected.has(e.path));
 
-    const endSelect = () => { setSelecting(false); setSelected(new Set()); };
-    const go = (p: string) => {
+    // The columns before the current folder's: each read when it first shows
+    // (and again with Refresh); folders no longer shown are let go.
+    const chainKey = folders.join("\n");
+    const seenRefresh = useRef(refreshed);
+    useEffect(() => {
+        if (!columns) return;
+        let live = true;
+        const force = seenRefresh.current !== refreshed;
+        seenRefresh.current = refreshed;
+        setListed((m) => {
+            const kept: typeof m = {};
+            for (const f of folders) if (m[f]) kept[f] = m[f];
+            return kept;
+        });
+        for (const f of folders.slice(0, -1)) {
+            if (!force && listedRef.current[f]) continue;
+            fileManager.list(f).then((list) => { if (live) setListed((m) => ({ ...m, [f]: { list } })); },
+                                     (e) => { if (live) setListed((m) => ({ ...m, [f]: { list: [], error: errorText(e) } })); });
+        }
+        return () => { live = false; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [columns, chainKey, refreshed]);
+    const last = folders.length - 1;
+    const colEntries = useMemo(() => folders.map((f, i) => (i === last ? (entries === null ? null : shown) : listed[f] ? visible(listed[f].list) : null)),
+                               [folders, last, entries, shown, listed, visible]);
+    const peekEntry = peek !== null && parentOf(peek) === path ? shown.find((e) => e.path === peek) : undefined;
+    // The file previewed (select mode has none).
+    const previewEntry = columns && !selecting && peekEntry?.type === "file" ? peekEntry : undefined;
+    const colState: ColumnState = {
+        folders,
+        items: colEntries.map((l) => (l ?? []).map((e) => ({ key: e.path, folder: e.type === "directory" }))),
+        peek: peekEntry && (selecting || peekEntry.type === "file") ? peekEntry.path : null,
+        selecting,
+    };
+    const cursor = columns ? columnCursor(colState) : null;
+
+    const endSelect = () => { setSelecting(false); setSelected(new Set()); setPeek(null); };
+    // reroot: a favourite, a drive or the path bar picks the first column again.
+    // replace: the arrow keys walking a column of folders are one step back, not one a folder.
+    const go = (p: string, how: { reroot?: boolean; replace?: boolean } = {}) => {
+        if (how.reroot) setColRoot(columnRoot(p));
+        setPeek(null);
         if (p === path) return;
-        setHistory((h) => [...h, path]);
+        if (!how.replace) setHistory((h) => [...h, path]);
         setPath(p);
         endSelect();
     };
+    const goUp = () => go(driveRootOf(path) === path ? DRIVES_ROOT : parentOf(path));
     const toggle = (e: FileEntry) => setSelected((s) => {
         const n = new Set(s);
         if (n.has(e.path)) n.delete(e.path); else n.add(e.path);
@@ -235,12 +314,15 @@ function Browser() {
     });
 
     useBack(() => { endSelect(); return true; }, selecting && !viewer);
+    // Back closes a file's preview first, then goes back through the folders visited.
     useBack(() => {
+        if (previewEntry) { setPeek(null); return true; }
+        if (!history.length) return false;
         const prev = history[history.length - 1];
         setHistory((h) => h.slice(0, -1));
         setPath(prev);
         return true;
-    }, !selecting && !viewer && history.length > 0);
+    }, !selecting && !viewer && (history.length > 0 || !!previewEntry));
 
     // A drive's file: its copy on the device (downloaded, with its progress), as an entry of the device.
     const local = async (e: FileEntry): Promise<FileEntry> => {
@@ -288,6 +370,39 @@ function Browser() {
         }
     };
     const cancelTransfer = (id: string) => { fileManager.cancel(id).catch(() => {}); };
+    // "Open With..." for a file (a drive's: its copy on the device, fetched first, as open does).
+    const openWithSheet = (e: FileEntry) => {
+        if (!e.remote) { setSheet({ kind: "open-with", entry: e }); return; }
+        void run(async () => setSheet({ kind: "open-with", entry: await local(e) }), undefined, false);
+    };
+
+    // A tap, a hold or a key in the columns (@phoenix/ui columnTap, columnHold, columnKey).
+    const move = (m: ColumnMove | null, byKey = false): boolean => {
+        if (!m) return false;
+        const entry = (key: string) => shown.find((e) => e.path === key);
+        switch (m.kind) {
+            case "open":
+                go(m.key, { replace: byKey && m.key !== path && parentOf(m.key) === parentOf(path) });
+                return true;
+            case "peek":
+                if (m.folder !== path) go(m.folder, { replace: byKey });
+                setPeek(m.key);
+                return true;
+            case "launch": { const e = entry(m.key); if (e) open(e); return true; }
+            case "toggle": { const e = entry(m.key); if (e) toggle(e); return true; }
+            case "select":
+                if (m.folder !== path) go(m.folder);
+                setSelecting(true);
+                setSelected(new Set([m.key]));
+                setPeek(m.key);
+                return true;
+            case "up":
+                if (path === "/") return false;
+                goUp();
+                return true;
+        }
+    };
+    const columnItem = (e: FileEntry) => ({ key: e.path, folder: e.type === "directory" });
 
     const paste = () => {
         if (!clip) return;
@@ -317,6 +432,7 @@ function Browser() {
         { label: "Sort by Size", value: "sort:size" },
         { label: "Sort by Date", value: "sort:date" },
         { label: prefs.showHidden ? "Hide Hidden Files" : "Show Hidden Files", value: "hidden" },
+        ...(columnsFit ? [{ label: columns ? "View as List" : "View as Columns", value: "view" }] : []),
         { label: isFavorite ? "Remove from Favorites" : "Add to Favorites", value: "favorite" },
         { label: "Select Items", value: "select" },
         { label: "Folder Info", value: "info" },
@@ -325,12 +441,13 @@ function Browser() {
     const onMain = (v: string) => {
         if (v.startsWith("sort:")) setPrefs({ sort: v.slice(5) as SortKey });
         else if (v === "hidden") setPrefs({ showHidden: !prefs.showHidden });
+        else if (v === "view") setView(columns ? "list" : "columns");
         else if (v === "favorite") {
             setPrefs({ favorites: isFavorite ? prefs.favorites.filter((f) => f !== path) : [...prefs.favorites, path] });
             say(isFavorite ? "Removed from Favorites" : "Added to Favorites");
         } else if (v === "select") setSelecting(true);
         else if (v === "info") showInfo({ path } as FileEntry);
-        else if (v === "refresh") reload();
+        else if (v === "refresh") { reload(); setRefreshed((n) => n + 1); }
     };
     const favOptions: Option<string>[] = prefs.favorites.map((f) => ({ label: title(f), value: f }))
         .concat(drives.map((d) => ({ label: d.drive ? `${d.drive.title} (${d.drive.account})` : d.name, value: d.path })));
@@ -348,22 +465,24 @@ function Browser() {
         else if (v === "all") setSelected(chosen.length === shown.length ? new Set() : new Set(shown.map((e) => e.path)));
     };
     // Share: files only (a folder is not something another app takes). A
-    // drive's files are shared as their copies on the device.
+    // drive's files are shared as their copies on the device. What is
+    // selected, or the file previewed in the columns.
     const shareable = chosen.length > 0 && chosen.every((e) => e.type === "file");
-    const sharedFiles = () => chosen.map((e) => ({ path: e.path, mimeType: mimeOf(e.name) }));
-    const share = async () => {
-        let files = sharedFiles();
+    const sharing = selecting ? chosen : previewEntry ? [previewEntry] : [];
+    const sharedFiles = (items = sharing) => items.map((e) => ({ path: e.path, mimeType: mimeOf(e.name) }));
+    const share = async (items = sharing) => {
+        let files = sharedFiles(items);
         try {
-            if (chosen.some((e) => e.remote)) {
+            if (items.some((e) => e.remote)) {
                 setBusy(true);
-                try { files = await Promise.all(chosen.map(async (e) => ({ path: (await local(e)).path, mimeType: mimeOf(e.name) }))); }
+                try { files = await Promise.all(items.map(async (e) => ({ path: (await local(e)).path, mimeType: mimeOf(e.name) }))); }
                 finally { setBusy(false); }
             }
             const r = await shareSheet.open({ files });
             if (r.action === "cancel") return;
             if (r.action === "photos") say(files.length === 1 ? "Saved to Photos" : `Saved ${files.length} items to Photos`);
             else if (r.action === "files") say(`Saved to ${title(parentOf(r.path))}`);
-            endSelect();
+            if (selecting) endSelect();
             reload();
         } catch (e) {
             say(errorText(e));
@@ -389,20 +508,87 @@ function Browser() {
             <div className="fm-favorites-title">Favorites</div>
             {prefs.favorites.map((f) => (
                 <div key={f} className={cx("fm-favorite", f === path && "current")} role="button" tabIndex={0}
-                     data-testid={`fav-${title(f)}`} onClick={() => go(f)}>
+                     data-testid={`fav-${title(f)}`} onClick={() => go(f, { reroot: true })}>
                     <FileIcon kind="folder" size={24} /> <span>{title(f)}</span>
                 </div>
             ))}
             {drives.length > 0 && <div className="fm-favorites-title" data-testid="drives-title">Drives</div>}
             {drives.map((d) => (
                 <div key={d.path} className={cx("fm-favorite", "fm-drive", driveRootOf(path) === d.path && "current")} role="button" tabIndex={0}
-                     data-testid={`drive-${d.drive?.title ?? d.name}`} title={d.drive?.account} onClick={() => go(d.path)}>
+                     data-testid={`drive-${d.drive?.title ?? d.name}`} title={d.drive?.account} onClick={() => go(d.path, { reroot: true })}>
                     <FileIcon kind="drive" size={24} />
                     <span className="fm-drive-text"><span>{d.drive?.title ?? d.name}</span><small>{d.drive?.account}</small></span>
                 </div>
             ))}
         </nav>
     );
+
+    // The current folder being read, out of reach, empty: the list says so, and so does its column.
+    const folderStatus = (
+        <>
+            {entries === null && <div className="fm-loading"><Spinner large /></div>}
+            {error && (() => {
+                const problem = folderProblem(errorKind, errorWhy, error, title(driveRootOf(path) ?? path));
+                return (
+                <div className={cx("fm-empty", problem.warning && "fm-warning")} role="alert" data-testid="folder-error">
+                    {problem.message}
+                    {isDrivePath(path) && (
+                        <div className="fm-error-buttons">
+                            <button type="button" className="fm-retry" data-testid="retry" onClick={() => { setEntries(null); void reload(); }}>Try Again</button>
+                            {problem.accounts && (
+                                <button type="button" className="fm-retry" data-testid="open-accounts"
+                                        onClick={() => { void openWith.launchApp("com.palm.app.accounts"); }}>Accounts</button>
+                            )}
+                        </div>
+                    )}
+                </div>
+                );
+            })()}
+            {entries !== null && !error && shown.length === 0 && (
+                <div className="fm-empty" data-testid="empty">
+                    {entries.length ? "Only hidden files here. Show them from the menu." : "This folder is empty."}
+                </div>
+            )}
+        </>
+    );
+
+    const pathBarEl = (
+        <div className="fm-path" ref={pathBar} data-testid="path-bar">
+            {crumbs(path, driveLabels).map((c, i, all) => (
+                <button key={c.path} type="button" className={cx("fm-crumb", i === all.length - 1 && "current")}
+                        data-testid={`crumb-${i}`} onClick={() => go(c.path, { reroot: true })}>{c.label}</button>
+            ))}
+        </div>
+    );
+
+    // A column's rows: the folder open beside it marked, the keyboard's row,
+    // select mode's check boxes in the current folder's column.
+    const columnContent = (i: number) => {
+        const list = colEntries[i];
+        const rows = (list ?? []).map((e) => {
+            const here = i === last;
+            return (
+                <ColumnRow key={e.path} testId={`col-${e.name}`} path={e.path}
+                           icon={<FileIcon kind={e.drive ? "drive" : kindOf(e)} size={24} />}
+                           label={e.drive ? e.drive.title : e.name} detail={e.drive?.account}
+                           folder={e.type === "directory"} dim={isHidden(e)}
+                           open={!here && e.path === folders[i + 1]}
+                           cursor={!selecting && cursor?.column === i && cursor.key === e.path}
+                           focus={selecting && cursor?.column === i && cursor.key === e.path}
+                           selected={selecting && here && selected.has(e.path)}
+                           end={selecting && here
+                               ? <CheckBox checked={selected.has(e.path)} onChange={() => toggle(e)} label={`Select ${e.name}`} testId={`check-${e.name}`} />
+                               : undefined}
+                           onTap={() => move(columnTap(colState, i, columnItem(e)))}
+                           onHold={() => move(columnHold(colState, i, columnItem(e)))} />
+            );
+        });
+        if (i === last) return <>{folderStatus}{rows}</>;
+        const l = listed[folders[i]];
+        if (!l) return <div className="fm-loading small"><Spinner /></div>;
+        if (l.error) return <ColumnNote>{l.error}</ColumnNote>;
+        return rows;
+    };
 
     // The app menu: new items, then the folder menu's entries.
     const appMenu = [
@@ -413,40 +599,23 @@ function Browser() {
 
     return (
         <div className={cx("fm-app", wide && "wide")}>
-            <AppMenu items={appMenu} share={selecting && shareable ? () => ({ files: sharedFiles() }) : undefined} onShare={() => void share()} />
+            <AppMenu items={appMenu} share={(selecting && shareable) || previewEntry ? () => ({ files: sharedFiles() }) : undefined} onShare={() => void share()} />
             {wide && favorites}
             <div className="fm-main">
                 {header}
-                <div className="fm-path" ref={pathBar} data-testid="path-bar">
-                    {crumbs(path, driveLabels).map((c, i, all) => (
-                        <button key={c.path} type="button" className={cx("fm-crumb", i === all.length - 1 && "current")}
-                                data-testid={`crumb-${i}`} onClick={() => go(c.path)}>{c.label}</button>
-                    ))}
-                </div>
+                {columnsFit ? <div className="fm-pathrow">{pathBarEl}<ViewSwitch value={columns ? "columns" : "list"} onChange={setView} /></div> : pathBarEl}
+                {columns ? (
+                    <ColumnView className="fm-columns" testId="columns" cursor={cursor?.key}
+                                columns={folders.map((f, i) => ({ key: f, testId: `column-${i}`, content: columnContent(i) }))}
+                                preview={previewEntry && (
+                                    <FilePreview entry={previewEntry} place={title(driveRootOf(previewEntry.path) ?? "")}
+                                                 onOpen={() => open(previewEntry)} onShare={() => void share([previewEntry])}
+                                                 onOpenWith={() => openWithSheet(previewEntry)} onInfo={() => void showInfo(previewEntry)} />
+                                )}
+                                onKey={!sheet && !viewer && !menu ? (key) => move(columnKey(colState, key), true) : undefined} />
+                ) : (
                 <div className="fm-scroll" data-testid="file-list">
-                    {entries === null && <div className="fm-loading"><Spinner large /></div>}
-                    {error && (() => {
-                        const problem = folderProblem(errorKind, errorWhy, error, title(driveRootOf(path) ?? path));
-                        return (
-                        <div className={cx("fm-empty", problem.warning && "fm-warning")} role="alert" data-testid="folder-error">
-                            {problem.message}
-                            {isDrivePath(path) && (
-                                <div className="fm-error-buttons">
-                                    <button type="button" className="fm-retry" data-testid="retry" onClick={() => { setEntries(null); void reload(); }}>Try Again</button>
-                                    {problem.accounts && (
-                                        <button type="button" className="fm-retry" data-testid="open-accounts"
-                                                onClick={() => { void openWith.launchApp("com.palm.app.accounts"); }}>Accounts</button>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                        );
-                    })()}
-                    {entries !== null && !error && shown.length === 0 && (
-                        <div className="fm-empty" data-testid="empty">
-                            {entries.length ? "Only hidden files here. Show them from the menu." : "This folder is empty."}
-                        </div>
-                    )}
+                    {folderStatus}
                     <div className="fm-list">
                         {shown.map((e) => (
                             <FileRow key={e.path} entry={e} selecting={selecting} selected={selected.has(e.path)}
@@ -455,6 +624,7 @@ function Browser() {
                         ))}
                     </div>
                 </div>
+                )}
                 {toast && <div className="fm-toast" data-testid="toast">{toast}</div>}
                 {busy && !transfers.length && <div className="fm-busy"><Spinner /></div>}
                 <TransferBar transfers={transfers} onCancel={cancelTransfer} />
@@ -475,8 +645,7 @@ function Browser() {
                     <Toolbar>
                         {!wide && <IconToolButton icon="star" label="Favorites" testId="favorites"
                                                   onClick={() => { const a = document.querySelector<HTMLElement>("[data-testid='favorites']"); if (a) setMenu({ anchor: a, kind: "favorites" }); }} />}
-                        <IconToolButton icon="up" label="Up" testId="up" disabled={path === "/"}
-                                        onClick={() => go(driveRootOf(path) === path ? DRIVES_ROOT : parentOf(path))} />
+                        <IconToolButton icon="up" label="Up" testId="up" disabled={path === "/"} onClick={goUp} />
                         <ToolSpacer />
                         {clip && <IconToolButton icon="paste" label="Paste" caption={String(clip.paths.length)} testId="paste" onClick={paste} />}
                         <IconToolButton icon="plus" label="New" testId="new"
@@ -487,7 +656,7 @@ function Browser() {
             </div>
 
             {menu?.kind === "main" && <PopupMenu options={mainMenu} value={`sort:${prefs.sort}`} anchor={menu.anchor} onSelect={onMain} onClose={() => setMenu(null)} />}
-            {menu?.kind === "favorites" && <PopupMenu options={favOptions} value={path} anchor={menu.anchor} onSelect={go} onClose={() => setMenu(null)} />}
+            {menu?.kind === "favorites" && <PopupMenu options={favOptions} value={path} anchor={menu.anchor} onSelect={(f) => go(f, { reroot: true })} onClose={() => setMenu(null)} />}
             {menu?.kind === "new" && (
                 <PopupMenu options={[{ label: "New Folder", value: "new-folder" }, { label: "New File", value: "new-file" }]} anchor={menu.anchor}
                            onSelect={(v) => setSheet({ kind: v as "new-folder" | "new-file" })} onClose={() => setMenu(null)} />

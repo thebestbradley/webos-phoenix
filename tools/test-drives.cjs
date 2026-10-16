@@ -134,6 +134,12 @@ async function main() {
         const market = await context.newPage();
         await market.goto(appUrl("org.webosphoenix.marketplace"));
         await market.evaluate(() => localStorage.clear());
+        // Files' and the sheets' lists (a tablet's are columns unless the user
+        // chose the list; the columns: tools/test-files.cjs, test-filepicker.cjs).
+        await market.evaluate(() => {
+            localStorage.setItem("org.webosphoenix.files:prefs", JSON.stringify({ view: "list" }));
+            localStorage.setItem("phoenix:filepicker:view", JSON.stringify("list"));
+        });
         // This build has Phoenix's Dropbox app registered (the test server's), not Box's or the others'.
         await market.evaluate((c) => localStorage.setItem("phoenix:systemConfig:drives/clients.json", JSON.stringify({ dropbox: c.dropbox })), fake.clients());
         await market.goto(appUrl("org.webosphoenix.marketplace"));

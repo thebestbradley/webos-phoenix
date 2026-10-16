@@ -389,6 +389,16 @@ export function mimeOf(name: string): string {
     return KINDS[extensionOf(name)]?.[1] ?? (kindOf({ name, type: "file" }) === "text" ? "text/plain" : "application/octet-stream");
 }
 
+const KIND_LABELS: Record<FileKind, string> = {
+    folder: "Folder", image: "Image", audio: "Audio", video: "Video", text: "Text document", code: "Source code",
+    archive: "Archive", package: "webOS package", pdf: "PDF document", document: "Office document", book: "E-book", file: "File",
+};
+
+/** A kind's name for people (Files' info sheet, the column view's preview). */
+export function kindLabel(entry: Pick<FileEntry, "name" | "type">): string {
+    return KIND_LABELS[kindOf(entry)];
+}
+
 /** Files the built-in editor opens: text and code, and small files of unknown type. */
 export const TEXT_EDIT_LIMIT = 256 * 1024;
 export function opensAsText(entry: Pick<FileEntry, "name" | "type" | "size">): boolean {

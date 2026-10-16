@@ -175,10 +175,16 @@ async function main() {
         await expect(page.waitForFunction(() => document.querySelector("[data-testid='page-label']")?.textContent === "1 / 4", null, { timeout: 10000 }),
             "a PDF at a web address opens (downloaded through the web)");
 
-        // Files' "Open with" offers it.
+        // Files' "Open with" offers it (a tablet's Files is in columns: a
+        // tap shows the file's preview, a second opens it).
         await page.goto(appUrl("org.webosphoenix.files", { path: DIR }));
-        await page.waitForSelector("[data-testid='file-field-guide.pdf']");
-        await page.click("[data-testid='file-field-guide.pdf']");
+        const guide = tablet ? "[data-testid='columns'] [data-testid='col-field-guide.pdf']" : "[data-testid='file-field-guide.pdf']";
+        await page.waitForSelector(guide);
+        await page.click(guide);
+        if (tablet) {
+            await page.waitForSelector("[data-testid='preview']");
+            await page.click(guide);
+        }
         await page.waitForSelector(`[data-testid='open-with-${PDF}']`);
         await shot("files-open-with");
         host.length = 0;

@@ -126,6 +126,9 @@ async function main() {
         // ---- The shell hands the runtime a capture ----------------------------------------------
         await page.goto(appUrl());
         await page.evaluate(() => localStorage.clear());
+        // Save to Files in its list (a tablet's is columns unless the user
+        // chose the list; the columns: tools/test-filepicker.cjs).
+        await page.evaluate(() => localStorage.setItem("phoenix:filepicker:view", JSON.stringify("list")));
         await page.goto(appUrl());
         await page.waitForSelector("[data-testid=no-captures]");
         check(true, "no captures yet: the preview says how to take one");

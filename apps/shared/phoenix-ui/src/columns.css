@@ -1,0 +1,122 @@
+/*
+ * Copyright (c) 2026 webOS Phoenix contributors
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The column view (columns.tsx): columns of Heritage rows (Item.css)
+ * divided as Files' favourites column is from its list, the folder open
+ * beside its column marked as Onyx marked a list's selected item
+ * (Item.css .enyo-item-selected), the keyboard's row as a held item
+ * (Heritage Item.css .enyo-held), and the List / Columns switch drawn with
+ * Enyo's Heritage radio buttons (RadioButton.css).
+ */
+
+.pui-columns {
+    display: flex;
+    height: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+}
+.pui-column {
+    flex: none;
+    box-sizing: border-box;
+    width: var(--pui-column-width, 250px);
+    height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-bottom: var(--pui-column-foot, 0px);
+    border-right: 1px solid #a9a9a7;
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.55);
+}
+/* The preview keeps its width on a wide screen, as the Finder's does: the space after it stays empty. */
+.pui-column-preview { width: var(--pui-preview-width, 300px); border-right: 0; box-shadow: none; }
+
+/* ---- Rows (Item.css: white over silver) --------------------------------------------------------- */
+
+.pui-column-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-sizing: border-box;
+    min-height: 44px;
+    padding: 4px 6px 4px 10px;
+    border-top: 1px solid #fff;
+    border-bottom: 1px solid silver;
+    font-size: 16px;
+    cursor: pointer;
+    touch-action: pan-y;
+    -webkit-user-select: none;
+    user-select: none;
+}
+.pui-column-row:first-child { border-top-color: transparent; }
+.pui-column-row-icon { flex: none; display: flex; align-items: center; }
+.pui-column-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.2; }
+.pui-column-row-label, .pui-column-row-detail { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pui-column-row-detail { font-size: 12px; color: var(--pui-text-dim); }
+.pui-column-row .pui-row-chevron { flex: none; margin-right: -4px; }
+.pui-column-row.dim .pui-column-row-label { color: #8a8a88; }
+/* The folder open in the next column (Onyx Item.css:14-16, .enyo-item-selected). */
+.pui-column-row.open { background: linear-gradient(rgba(218, 235, 251, 0.9), rgba(197, 224, 249, 0.9)); border-top-color: rgba(255, 255, 255, 0.7); }
+/* Ticked in select mode (as Files' list marks a selected row). */
+.pui-column-row.selected { background: rgba(31, 117, 191, 0.14); }
+/* The keyboard's row, and a row held (Heritage Item.css:7-12, .enyo-held). */
+.pui-column-row.cursor, .pui-column-row:active {
+    background: linear-gradient(#555, #888);
+    border-top-color: #555;
+    color: #fff;
+}
+.pui-column-row.cursor .pui-column-row-detail, .pui-column-row:active .pui-column-row-detail,
+.pui-column-row.cursor.dim .pui-column-row-label { color: #ddd; }
+/* Select mode: the keyboard's row ringed (the ticks mark the rows there). */
+.pui-column-row.focus { box-shadow: inset 0 0 0 2px var(--pui-label); }
+.pui-column-note { padding: 24px 14px; text-align: center; font-size: 15px; color: var(--pui-text-dim); }
+
+/* ---- A file's preview ------------------------------------------------------------------------- */
+
+.pui-preview { display: flex; flex-direction: column; align-items: stretch; gap: 10px; padding: 18px 14px 16px; }
+.pui-preview-art { display: flex; align-items: center; justify-content: center; min-height: 120px; }
+.pui-preview-image {
+    max-width: 100%;
+    max-height: 180px;
+    object-fit: contain;
+    border: 3px solid #fff;
+    border-radius: 3px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+    background: #fff;
+}
+.pui-preview-title { font-size: 17px; font-weight: bold; text-align: center; word-break: break-word; line-height: 1.25; }
+.pui-preview-facts { margin: 0; font-size: 14px; border-top: 1px solid silver; }
+.pui-preview-fact { display: flex; gap: 10px; padding: 6px 2px; border-bottom: 1px solid silver; box-shadow: 0 1px 0 #fff; }
+.pui-preview-fact dt { flex: none; color: var(--pui-text-dim); }
+.pui-preview-fact dd { flex: 1; min-width: 0; margin: 0; text-align: right; word-break: break-word; }
+/* Two a row: the preview stays short enough to show its actions above the command menu. */
+.pui-preview-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 4px; }
+.pui-preview-actions .pui-button { width: 100%; min-width: 0; margin: 0; font-size: 16px; }
+
+/* ---- List / Columns (Heritage RadioButton.css: radiobutton-heritage.png, 50 px a state) ------------ */
+
+.pui-view-switch { display: inline-flex; flex: none; }
+.pui-view-switch-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    height: 28px;
+    min-width: 46px;
+    margin: 0;
+    padding: 0 6px;
+    color: #555;
+    background: none;
+    border-style: solid;
+    font: inherit;
+    cursor: pointer;
+    outline: none;
+}
+.pui-view-switch-button .pui-glyph { filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.7)); }
+/* RadioButton.css: first 0 2 550 15 (down 50), last 300 15 250 1 (down 350), drawn at 28 px. */
+.pui-view-switch-button.first { border-width: 0 1px 0 8px; border-image: -webkit-image-set(url(../assets/enyo/radiobutton-heritage.png) 1x, url(../assets/enyo/radiobutton-heritage@2x.png) 2x, url(../assets/enyo/radiobutton-heritage@3x.png) 3x) 0 2 550 15 fill; }
+.pui-view-switch-button.last { border-width: 0 8px 0 1px; border-image: -webkit-image-set(url(../assets/enyo/radiobutton-heritage.png) 1x, url(../assets/enyo/radiobutton-heritage@2x.png) 2x, url(../assets/enyo/radiobutton-heritage@3x.png) 3x) 300 15 250 1 fill; }
+.pui-view-switch-button.first.depressed, .pui-view-switch-button.first:active { border-image-slice: 50 2 500 15 fill; }
+.pui-view-switch-button.last.depressed, .pui-view-switch-button.last:active { border-image-slice: 350 15 200 1 fill; }
+.pui-view-switch-button.depressed, .pui-view-switch-button:active { color: #fff; }
+.pui-view-switch-button.depressed .pui-glyph, .pui-view-switch-button:active .pui-glyph { filter: none; }
