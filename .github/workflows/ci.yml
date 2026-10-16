@@ -28,7 +28,8 @@ concurrency:
 #               (tools/run-web-tests.cjs, the list in tools/web-tests.txt)
 #   simulator   the simulator built with the apps: the C++ tests, then the
 #               simulator run (its menu bar, the user agent, two at once,
-#               the screenshots)
+#               activities, the Sign In card, the Assistant on Synergy,
+#               Search your phone, the screenshots)
 #   test        all of the above passed
 #
 # The device's Qt (qt-6-8) and the Mac (macos) have jobs of their own.
@@ -70,12 +71,15 @@ jobs:
       # (docs/PRE-IMAGE-CHECKLIST.md): Luna calls against their providers
       # and ACG groups, simulator-only references, the image's contents
       # against its recipes, the recipes themselves, licences; and the
-      # checkers' own tests, which run them over this checkout too. After
+      # checkers' own tests, which run them over this checkout too; and what
+      # install-rootfs.py puts in an image (each bus service's files and the
+      # code it runs, db8 kinds, activities: test-install-rootfs.py). After
       # the apps' build, so install-rootfs.py's plan has every app. A
       # finding not in tools/check-device-allowlist.json fails.
       - name: Device readiness checkers
         run: |
           python3 tools/test-devicecheck.py
+          python3 tools/test-install-rootfs.py
           tools/check-device.sh
 
       # The Enact demos are npm projects of their own (apps/enact-notes-*/
@@ -189,7 +193,7 @@ jobs:
         run: QT_QPA_PLATFORM=offscreen "$QT_ROOT_DIR/bin/qmltestrunner" -import shell/qml -import build/qml -import shell/tests-device/fakes -input shell/tests-device
 
   # The web app tests (original webOS apps and Phoenix's own in headless
-  # Chromium), split into shards of about 11 minutes each by the tests'
+  # Chromium), split into shards of about 12 minutes each by the tests'
   # weights in tools/web-tests.txt. tools/check-web-tests.cjs (in the checks
   # job) checks that these shards run every test in the list once. More
   # shards: the matrix and both /4s below.
@@ -351,6 +355,41 @@ jobs:
       # Two simulators at once, each its own device (--instance).
       - name: Two simulators at once
         run: xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-instance-sim.cjs --out app-tests/instance-sim
+
+      # The activity manager with each app a page of its own: an alarm rings
+      # at its minute with the Clock closed, once; activities due together
+      # each fire once; --launch 'appId:{json}'.
+      - name: Activities and alarms in the simulator
+        timeout-minutes: 10
+        run: xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-activities-sim.cjs --out app-tests/activities-sim
+
+      # A device's OAuth sign-in: the provider's page in the Sign In card,
+      # under the shell's bar; Allow, and the card closed (CANCELED).
+      - name: The Sign In card in the simulator
+        timeout-minutes: 10
+        run: xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-signin-card-sim.cjs --out app-tests/signin-card-sim
+
+      # The Assistant on accounts connected through Synergy: the real
+      # Todoist, Bluesky and Jabber connectors against their stand-ins and
+      # the simulator's demo server.
+      - name: The Assistant on Synergy accounts in the simulator
+        timeout-minutes: 10
+        run: xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-assistant-synergy-sim.cjs --out app-tests/assistant-synergy-sim
+
+      # Search your phone (services/index): EmbeddingGemma 2 (310 MB) and
+      # llama.cpp's llama-server, fetched by tools/get-index-model.py into
+      # build/index and kept between runs; the simulator's data indexed,
+      # then found by what it means by the Assistant and Just Type.
+      - name: Search your phone's model and llama-server (kept between runs)
+        uses: actions/cache@v4
+        with:
+          path: build/index
+          key: index-model-${{ hashFiles('tools/get-index-model.py', 'services/index/lib/model.js') }}
+      - name: Search your phone in the simulator (EmbeddingGemma 2 through llama-server)
+        timeout-minutes: 20
+        run: |
+          python3 tools/get-index-model.py
+          xvfb-run -a -s "-screen 0 1920x1200x24" node tools/test-index-sim.cjs --out app-tests/index-sim
 
       - name: Screenshots
         run: |

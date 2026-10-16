@@ -11,7 +11,10 @@
 # October 2026 (runs 38788038475 and 38808069695), read from their logs'
 # timestamps (where a test prints no last line of its own, from the next
 # one's first). The runner prints each test's time beside its weight, so
-# one that drifts can be set again from a run's log. The shards are
+# one that drifts can be set again from a run's log. The tests added on 16
+# October 2026 had never run in CI: their weights are the mean of three
+# runs on a development computer, divided by 1.35 (its times for tests
+# already here were 1.35 times their weights). The shards are
 # balanced by these weights; within a shard the tests run in this order.
 # A new test: its line here (a guess at its weight will do), and a row in
 # the README's table of tests.
@@ -36,6 +39,8 @@
 23 node tools/test-media.cjs --out app-tests/media-phone
 24 node tools/test-media.cjs --tablet --out app-tests/media-tablet
 1 node tools/test-media-index.cjs
+12 node tools/test-exhibition.cjs --out app-tests/exhibition-phone
+12 node tools/test-exhibition.cjs --tablet --out app-tests/exhibition-tablet
 28 node tools/test-justtype.cjs --out app-tests/justtype-phone
 29 node tools/test-justtype.cjs --tablet --out app-tests/justtype-tablet
 21 node tools/test-browser.cjs --out app-tests/browser-phone
@@ -52,12 +57,15 @@
 16 node tools/test-tasks.cjs --tablet --out app-tests/tasks-tablet
 7 node tools/test-db8-pages.cjs --out app-tests/db8-pages
 6 node tools/test-alarm.cjs --out app-tests/alarm
+2 node tools/test-device-services.cjs --out app-tests/device-services
 7 node tools/test-email.cjs --out app-tests/email-phone
 7 node tools/test-email.cjs --tablet --out app-tests/email-tablet
 4 node tools/test-contacts.cjs --out app-tests/contacts-phone
 4 node tools/test-contacts.cjs --tablet --out app-tests/contacts-tablet
 18 node tools/test-voicememos.cjs --out app-tests/voicememos-phone
 18 node tools/test-voicememos.cjs --tablet --out app-tests/voicememos-tablet
+7 node tools/test-voicedial.cjs --out app-tests/voicedial-phone
+7 node tools/test-voicedial.cjs --tablet --out app-tests/voicedial-tablet
 4 node tools/test-flashlight.cjs --out app-tests/flashlight-phone
 4 node tools/test-flashlight.cjs --tablet --out app-tests/flashlight-tablet
 16 node tools/test-screenshot.cjs --out app-tests/screenshot-phone
@@ -97,6 +105,13 @@
 43 node tools/test-dav-sync.cjs --out app-tests/dav-phone
 44 node tools/test-dav-sync.cjs --tablet --out app-tests/dav-tablet
 28 node tools/test-accounts.cjs --out app-tests/accounts
+22 node tools/test-connectors.cjs --out app-tests/connectors-phone
+22 node tools/test-connectors.cjs --tablet --out app-tests/connectors-tablet
+17 node tools/test-fediverse.cjs --out app-tests/fediverse-phone
+18 node tools/test-fediverse.cjs --tablet --out app-tests/fediverse-tablet
+36 node tools/test-drives.cjs --phone --out app-tests/drives-phone
+36 node tools/test-drives.cjs --out app-tests/drives-tablet
+2 node tools/test-signin-card.cjs --out app-tests/signin-card
 4 node tools/test-runtime-csp.cjs
 26 node tools/test-xmpp.cjs --out app-tests/xmpp-phone
 24 node tools/test-matrix.cjs --out app-tests/matrix-phone
@@ -113,12 +128,15 @@
 15 node tools/test-editing.cjs --tablet --out app-tests/editing-tablet
 38 node tools/test-firstuse.cjs --out app-tests/firstuse-phone
 39 node tools/test-firstuse.cjs --tablet --out app-tests/firstuse-tablet
+15 node tools/test-hardware.cjs --out app-tests/hardware-phone
+15 node tools/test-hardware.cjs --tablet --out app-tests/hardware-tablet
 12 node tools/test-help.cjs --out app-tests/help-phone
 12 node tools/test-help.cjs --tablet --out app-tests/help-tablet
 16 node tools/test-emergency.cjs --out app-tests/emergency-phone
 16 node tools/test-emergency.cjs --tablet --out app-tests/emergency-tablet
 15 node tools/test-location.cjs --out app-tests/location-phone
 15 node tools/test-location.cjs --tablet --out app-tests/location-tablet
+2 node tools/test-security.cjs --out app-tests/security
 53 node tools/test-enact-notes.cjs --out app-tests/enact-notes
 47 node tools/test-ionic-notes.cjs --out app-tests/ionic-notes
 48 node tools/test-flutter-notes.cjs --out app-tests/flutter-notes
