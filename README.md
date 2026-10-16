@@ -75,7 +75,7 @@ Photos. The demo photos and chiptunes are generated.*
 
 *Files, a file manager with the feature set of Internalz Pro (the favourite
 Preware file manager), designed anew in the webOS 2.x style, against a
-simulated filesystem service.*
+simulated filesystem service; on a tablet, folders can show in columns too.*
 
 | Tasks | Editor | Reminder | Tablet |
 | --- | --- | --- | --- |
@@ -494,9 +494,9 @@ QT_QPA_PLATFORM=offscreen qmltestrunner -import shell/qml -import build/qml -imp
 | `node tools/test-xmpp-server.cjs` | The Jabber account against a real Prosody it starts (ports 15222, 15280; skipped without `prosody`: apt install prosody) |
 | `node tools/test-voicedial.cjs` | Voice Dial |
 | `node tools/test-media.cjs` | Camera, Photos, Music |
-| `node tools/test-files.cjs` | Files |
+| `node tools/test-files.cjs` | Files (`--tablet`: its column view too) |
 | `node tools/test-media-index.cjs` | The simulated media indexer's EXIF date and place for a picture (`getImageMetadata`), as OSE's indexer gives them |
-| `node tools/test-filepicker.cjs` | The file pickers: luna-systemui's for Clock, Email and Contacts; `org.webosphoenix.filepicker/pick` |
+| `node tools/test-filepicker.cjs` | The file pickers: luna-systemui's for Clock, Email and Contacts; `org.webosphoenix.filepicker/pick`; the pick and save sheets in columns, and a phone's list |
 | `node tools/test-webfiles.cjs` | A web page's own files (any web app, `tools/fixtures/webfiles`): file inputs, `showOpenFilePicker` / `showSaveFilePicker` and downloads go to Phoenix's pickers, never Chromium's dialogs |
 | `node tools/test-tasks.cjs` | Tasks and reminders |
 | `node tools/test-db8-pages.cjs` | Db8 shared by pages writing at once |
