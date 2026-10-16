@@ -1611,10 +1611,13 @@ the Enyo 1.0 art:
   that saves back (and asks before dropping changes; read-only files open
   read-only), `.ipk` packages in an install sheet, anything else in "Open
   with" (the apps that handle the MIME type, or open by type).
-- **Columns** (tablet and desktop; the owner, 14 and 16 October 2026): **View
-  as Columns** in the header menu (and the app menu), or the List / Columns
-  switch at the end of the path bar (Enyo's Heritage radio buttons), shows
-  the folders as the Finder's and iPadOS Files' column views do: the first
+- **Columns** (tablet and desktop; the owner, 14 and 16 October 2026): there
+  the folders are in columns by default, as the Finder's and iPadOS Files'
+  column views show them; **View as List** in the header menu (and the app
+  menu), or the List / Columns switch at the end of the path bar (Enyo's
+  Heritage radio buttons), shows the list instead, and the user's choice is
+  kept (`view` in the preferences: unset until they choose, then "list" or
+  "columns"; preferences from before columns have none, so columns). The first
   column is the place the folder is in (Internal storage, a drive's own
   folder, the drives' folder, else `/`; a favourite, a drive or the path bar
   starts it again), each folder opens in a column to the right of its
@@ -1637,8 +1640,8 @@ the Enyo 1.0 art:
   before the shell says, the card's size by `Theme.tabletLayoutFor`) and the
   card is at least 600 px wide (`useColumnsWidth()`); a phone, or a card the
   adaptive simulator narrows to a phone's width, shows the list, in the same
-  folder, and the columns come back when it widens. The choice is kept with
-  the other preferences (`view`). The column view is `@phoenix/ui`'s
+  folder, and the columns come back when it widens (`shownView()` in
+  `@phoenix/ui`: columns where offered unless "list" was chosen). The column view is `@phoenix/ui`'s
   `ColumnView` (`columns.tsx`; its logic, `columnmodel.ts`, is shared with
   the file picker's, [SHARE-AND-FILES.md](SHARE-AND-FILES.md#columns)).
 
@@ -1681,10 +1684,11 @@ names Photos for pictures and videos and Music for audio.
 makes and renames a folder, copies and pastes a file twice, edits and saves
 text, makes a new file, goes back, shows info, deletes a folder, views
 pictures, installs the `.ipk`, opens a song with Music and opens a read-only
-system file; on a tablet it does the column view's (folders, the preview and
-its actions, the keys, select, copy, paste, rename, delete, the choice kept,
-the list at a phone's width), on a phone it checks no columns are offered;
-screenshots in `build/files-tests/`.
+system file; on a tablet it checks Files opens in columns and the user's List
+is kept across a restart (the list's steps run in it), then does the column
+view's (folders, the preview and its actions, the keys, select, copy, paste,
+rename, delete, the choice kept, the list at a phone's width); on a phone it
+checks the list, and no columns offered; screenshots in `build/files-tests/`.
 
 ## Tasks
 

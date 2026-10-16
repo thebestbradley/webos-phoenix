@@ -59,20 +59,23 @@ Files, in a folder the user picks).
 >
 > **16 October 2026: columns on tablets and desktops** (the owner, 14
 > October: "the file picker gets a column view option on tablet and
-> desktop"). The save sheet and the pick sheet's Files (any file by folder)
-> can show the folders in columns; see "Columns" below
+> desktop"; 16 October: "default to tablet desktop for columns, but also if
+> a user changes it remember their preferences"). The save sheet and the
+> pick sheet's Files (any file by folder) show the folders in columns there,
+> or the list once the user chooses it; see "Columns" below
 > (`tools/test-filepicker.cjs`, `test-webfiles.cjs`). Files has the same
 > view ([APP-RUNTIME.md](APP-RUNTIME.md#files)).
 
 ### Columns
 
 On a tablet or a desktop (the shell's layout, `getSystemStatus formFactor`,
-and a card at least 600 px wide) the save and pick sheets have a List /
-Columns switch in their head (Enyo's Heritage radio buttons). Columns
-widen the sheet (up to 960 px) and show the folders as Files' column view
-does (`@phoenix/ui` `ColumnView`): the places first when there are drives
-(Internal Storage and each drive), then each folder in a column to the
-right of its parent's, scrolling sideways to the newest.
+and a card at least 600 px wide) the save and pick sheets show the folders
+in columns, with a List / Columns switch in their head (Enyo's Heritage
+radio buttons) for the list. Columns widen the sheet (up to 960 px) and
+show the folders as Files' column view does (`@phoenix/ui` `ColumnView`):
+the places first when there are drives (Internal Storage and each drive),
+then each folder in a column to the right of its parent's, scrolling
+sideways to the newest.
 
 - **Save**: folders only; the last column is the folder the file goes to
   (its name in the head, as in the list), New Folder makes one there and
@@ -87,15 +90,18 @@ right of its parent's, scrolling sideways to the newest.
 - **Keys**: as in Files' columns (Up, Down, Right, Left, Enter, Backspace,
   Home, End), unless a field or a dialog has them.
 
-The view shown last is kept for every app's sheet, beside the last folder:
-the runtime sends it with the request (`view`) and keeps the one the sheet
-answers with (`filepicker:view`), whether the sheet was used or cancelled.
-It is the picker's own, not Files' (whose choice is in Files'
-preferences): the picker is one system component over every app, whose
-memory (the last folder) is the runtime's, and on a device Files' storage
-is another app's that the picker cannot read. A phone, or a card the
-adaptive simulator narrows to a phone's width, gets the list whatever was
-chosen.
+The user's choice is kept for every app's sheet, beside the last folder
+(`filepicker:view`): a sheet answers with the view chosen in it, used or
+cancelled, and the runtime sends the kept one with the next request
+(`view`; "columns" until the user chooses, and a request without one is
+columns too). Only a choice is kept, not what was shown, so a choice of
+columns stays columns and no choice follows the default. It is the
+picker's own, not Files' (whose choice is in Files' preferences; the
+owner agreed, 16 October 2026): the picker is one system component over
+every app, whose memory (the last folder) is the runtime's, and on a
+device Files' storage is another app's that the picker cannot read. A
+phone, or a card the adaptive simulator narrows to a phone's width, gets
+the list whatever was chosen.
 
 ### A web page's own files
 

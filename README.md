@@ -75,7 +75,7 @@ Photos. The demo photos and chiptunes are generated.*
 
 *Files, a file manager with the feature set of Internalz Pro (the favourite
 Preware file manager), designed anew in the webOS 2.x style, against a
-simulated filesystem service; on a tablet, folders can show in columns too.*
+simulated filesystem service; on a tablet, folders show in columns (or a list).*
 
 | Tasks | Editor | Reminder | Tablet |
 | --- | --- | --- | --- |
