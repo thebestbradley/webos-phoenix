@@ -3056,7 +3056,9 @@ without `rebuild`; its first entry is the version the system reports).
 `runtime/rootfs.json` `"product"` puts both on the device, at
 `/usr/share/phoenix/product.json` and `/usr/share/phoenix/release-notes.json`
 (phoenix-sim's Rootfs, `tools/serve-rootfs.py`, and `tools/install-rootfs.py`
-for the image, packaged by phoenix-apps). The simulator's runtime reads the
+for the image, packaged by phoenix-apps; the image's copy without the notes'
+`unreleased`, the next version's items while work goes on, which never ship:
+`tools/test-install-rootfs.py` checks it). The simulator's runtime reads the
 version from it (osInfo, `/etc/os-release`, the simulated slots); a device's
 `com.palm.update` reads it from the product file rather than
 `/etc/os-release` `VERSION_ID`, which is OSE's. 2.0 (phoenix-ember-glass-ui,

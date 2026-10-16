@@ -129,6 +129,23 @@ with tempfile.TemporaryDirectory() as tmp:
                         os.path.join(REPO, "services", "account", "etc", "palm", "phoenix", "servers.json")], capture_output=True, text=True)
     check(r.returncode == 0, "servers-json.py --check: the simulator's file")
 
+# The release notes ship without "unreleased", the next version's notes
+# while work goes on (docs/APP-STORE.md 3.15); the versions as they are.
+import importlib.util  # noqa: E402
+spec = importlib.util.spec_from_file_location("install_rootfs", os.path.join(REPO, "tools", "install-rootfs.py"))
+ir = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(ir)
+ir.plan(strict=False)
+shipped = json.loads(ir.GENERATED.get(ir.RELEASE_NOTES, b"{}"))
+product = json.load(open(os.path.join(REPO, "product.json")))
+source = json.load(open(os.path.join(REPO, product["releaseNotes"])))
+check(ir.RELEASE_NOTES in paths and "unreleased" not in shipped and shipped.get("versions") == source["versions"],
+      "release notes: installed without their unreleased notes, the versions as written")
+with tempfile.TemporaryDirectory() as tmp:
+    notes = os.path.join(tmp, "notes.json")
+    json.dump({"format": 1, "unreleased": {"new": ["Next."]}, "versions": source["versions"]}, open(notes, "w"))
+    check(json.loads(ir.shipped_notes(notes)) == {"format": 1, "versions": source["versions"]}, "release notes: unreleased notes dropped")
+
 if failures:
     print("%d failed" % failures)
     sys.exit(1)

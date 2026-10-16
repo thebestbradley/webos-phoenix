@@ -15,7 +15,7 @@ Produces the same layout the simulator serves, for a device image:
     /usr/palm/frameworks/...         Enyo 1.0, MojoLoader, foundation frameworks
     /usr/share/phoenix/runtime/      phoenix-runtime.js
     /usr/share/phoenix/product.json  the product: the version the system reports
-    /usr/share/phoenix/release-notes.json   the release notes product.json names
+    /usr/share/phoenix/release-notes.json   the release notes product.json names (not "unreleased")
     /etc/palm/db/kinds, permissions  db8 kinds the apps declare
     /usr/palm/services/<id>/         Node.js services apps carry in service/, and services/*/
                                      (run by run-js-service), with their
@@ -68,7 +68,21 @@ def product_files(cfg):
     notes = os.path.join(os.path.dirname(rel), product.get("releaseNotes") or "")
     if not product.get("releaseNotes") or not os.path.isfile(os.path.join(REPO, notes)):
         sys.exit("install-rootfs: %s names no release notes file there is (releaseNotes)" % rel)
-    return {"/usr/share/phoenix/product.json": rel, "/usr/share/phoenix/release-notes.json": notes}
+    return {"/usr/share/phoenix/product.json": rel, RELEASE_NOTES: notes}
+
+
+RELEASE_NOTES = "/usr/share/phoenix/release-notes.json"
+
+
+def shipped_notes(src):
+    """The release notes as the image ships them: without "unreleased", the
+    items collected for the next version while work goes on, which never
+    ship (docs/APP-STORE.md 3.15, "Update logs"; a package's changelog.json
+    is packed without them too)."""
+    with open(src, encoding="utf-8") as f:
+        notes = json.load(f)
+    notes.pop("unreleased", None)
+    return (json.dumps(notes, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
 
 
 def load_preinstalled(cfg):
@@ -474,10 +488,14 @@ def build_plan():
     # Files of the original apps we do not redistribute (docs/LEGAL.md).
     for dev in cfg.get("exclude", []):
         final.pop(dev, None)
+    GENERATED.clear()
+    # The release notes without their unreleased notes (shipped_notes).
+    if RELEASE_NOTES in final:
+        GENERATED[RELEASE_NOTES] = shipped_notes(final[RELEASE_NOTES])
+        final[RELEASE_NOTES] = "generated: %s without its unreleased notes" % os.path.relpath(final[RELEASE_NOTES], REPO)
     # Each app's luna-service2 role and client permissions, which an OSE
     # image's own apps get from webos_app_generate_security_files.bbclass
     # (meta-webos): without them luna-hub refuses the app's every call.
-    GENERATED.clear()
     compat_perms = {}
     cp = os.path.join(REPO, "compat", "app-permissions.json")
     if os.path.isfile(cp):

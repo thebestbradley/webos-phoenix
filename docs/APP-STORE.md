@@ -1001,7 +1001,8 @@ installed app's folder. No `appinfo.json` key names it.
 - `rebuild: true` marks the version where a rebuilt app starts (its last,
   oldest entry), `replaces` (optional) the original it replaces.
 - `unreleased` collects items for the next version while work goes on. It
-  is never shipped: packing drops it, and the catalog never shows it.
+  is never shipped: packing drops it, and the catalog never shows it (the
+  system's notes too: `tools/install-rootfs.py` installs them without it).
 - The rules are checked by one validator per language, with the same
   messages in the same order: phoenix-default-apps' `tools/lib/changelog.mjs`
   and the catalog's `server/marketplace/src/Changelog.php`. Both run the
