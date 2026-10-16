@@ -2146,11 +2146,11 @@ Machines: `qemux86-64` and `raspberrypi4-64` (OSE's own); `fairphone-fp6`, `ayn-
 
 ### Build an image on the Mac
 
-Uses Apple's `container` (macOS 26, Apple silicon). Also `PHOENIX_VOLUME_SIZE` (default `300g`).
+Uses Apple's `container` (macOS 26, Apple silicon). `--stack ose|luneos` (or `PHOENIX_STACK`) picks the layers: OSE's (the default; Chromium 120) or LuneOS's (Chromium 151; no image built there yet). Build the apps in the checkout first (`./phoenix`). Also `PHOENIX_VOLUME_SIZE` (default `300g`).
 
-Run in `webos-phoenix` · Mac · Source: `webos-phoenix/scripts/mac-build.sh:8-25,69-76 · docs/BUILDING-MAC.md:40-45,62`
+Run in `webos-phoenix` · Mac · Source: `webos-phoenix/scripts/mac-build.sh:8-23,37-38,113-121 · docs/BUILDING-MAC.md:46-52,72-101`
 
-Always checks qemux86-64:
+Qemux86-64 unless a machine follows:
 
 ```sh
 scripts/mac-build.sh --check
@@ -2176,6 +2176,18 @@ scripts/mac-build.sh fairphone-fp6
 scripts/mac-build.sh raspberrypi4-64
 ```
 
+On LuneOS's layers: Chromium 151:
+
+```sh
+scripts/mac-build.sh --stack luneos phoenix-vm-arm64
+```
+
+Check LuneOS's setup first, in minutes:
+
+```sh
+scripts/mac-build.sh --stack luneos --check phoenix-vm-arm64
+```
+
 A shell inside the build container:
 
 ```sh
@@ -2188,12 +2200,18 @@ PHOENIX_CPUS=8 PHOENIX_MEMORY=24g scripts/mac-build.sh phoenix-vm-arm64
 
 ### Copy images out, or start the build over
 
-Run in `webos-phoenix` · Mac · Source: `webos-phoenix/docs/BUILDING-MAC.md:70,76,353`
+Run in `webos-phoenix` · Mac · Source: `webos-phoenix/docs/BUILDING-MAC.md:104-116,414`
 
 in `build container`: Inside scripts/mac-build.sh --shell:
 
 ```sh
 cp /work/build-webos-phoenix/BUILD/deploy/images/raspberrypi4-64/*.wic* /src/webos-phoenix/out/
+```
+
+in `build container`: The same, built with --stack luneos:
+
+```sh
+cp /work/build-phoenix-luneos/tmp/deploy/images/raspberrypi4-64/*.wic* /src/webos-phoenix/out/
 ```
 
 Deletes the whole build:
@@ -2282,7 +2300,7 @@ sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
 
 QEMU 8.2 or later. HVF on Apple silicon, KVM on an ARM64 Linux host, emulation otherwise. Ctrl+A X quits. Options: `--image PATH` `--kernel FILE` `--cpus N` `--memory MIB` `--cap-cpu PCT` `--gl on|off` `--audio virtio|hda|none` `--display SPEC` `--accel hvf|kvm|tcg` `--ssh-port N` `--fresh` and `-- <QEMU options>`.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/scripts/vm.sh:11-44,240,260 · docs/BUILDING-MAC.md:97-131`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/scripts/vm.sh:11-44,240,260 · docs/BUILDING-MAC.md:123-174`
 
 The devices it can be:
 
@@ -2326,7 +2344,7 @@ phoenix-diag
 
 ### A UTM bundle for the Mac
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/scripts/make-utm.sh:17-46 · docs/BUILDING-MAC.md:168`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/scripts/make-utm.sh:17-46 · docs/BUILDING-MAC.md:213`
 
 ```sh
 scripts/make-utm.sh fairphone-fp6 --for mac
@@ -2406,10 +2424,12 @@ The iPad web build and the native iPad app haven't been started: they are roadma
 
 Build the ARM64 VM image first. pinetab2 is the default device and `ipad` (UTM with JIT) the default target. Copy the bundle with AirDrop or the Finder.
 
-Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/docs/BUILDING-MAC.md:245-249,275 · scripts/make-utm.sh:11-46,89`
+Run in `webos-phoenix` · Mac + Linux · Source: `webos-phoenix/docs/BUILDING-MAC.md:289-303,326 · scripts/make-utm.sh:11-46,89`
+
+Chromium 151 (without --stack: OSE's, Chromium 120):
 
 ```sh
-scripts/mac-build.sh phoenix-vm-arm64
+scripts/mac-build.sh --stack luneos phoenix-vm-arm64
 ```
 
 ```sh

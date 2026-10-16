@@ -467,7 +467,9 @@ that command with a stand-in kernel. The procedure:
 
 **Not booted yet.** No `phoenix-vm-arm64` image has been built: the
 container this was written in cannot build Chromium. The first boot is the
-owner's, on the Mac: `scripts/mac-build.sh phoenix-vm-arm64`, then
+owner's, on the Mac: `scripts/mac-build.sh phoenix-vm-arm64` (with
+`--stack luneos`, on LuneOS's layers with Chromium 151, once they build an
+image: [below](#the-web-runtime-chromium-151-on-luneoss-layers)), then
 `scripts/vm.sh fairphone-fp6`.
 
 **What a VM cannot match**, per device:
@@ -1679,7 +1681,9 @@ Verizon Pixels) cannot be unlocked and are out.
   OSE path lasts; what only one stack has goes in
   `meta-phoenix/dynamic-layers/<collection>/` (`BBFILES_DYNAMIC`), so neither
   stack sees an append without its recipe.
-- **Build host:** x86-64 only, as today (see [BUILDING-MAC.md](BUILDING-MAC.md)).
+- **Build host:** x86-64 only, as today. On a Mac, `scripts/mac-build.sh`
+  runs either stack's build in an x86-64 Linux container (`--stack luneos`
+  for LuneOS's; [BUILDING-MAC.md](BUILDING-MAC.md#which-layers---stack)).
 - **Parse check, no build host needed:** `scripts/parse-check.sh [MACHINE...]`
   (default `qemux86-64 raspberrypi4-64`) sets up `build-webos` at the pinned
   commit, clones its layers without history (about 200 MB), adds `meta-phoenix`, and for each machine runs `bitbake -p`
@@ -1798,6 +1802,44 @@ new paths, `LAYERDEPENDS` resolves to `meta-webos`, and the WAM append
 applies to OSE's `wam-clang` too. The other machines, on both stacks, run
 in CI.
 
+**The Mac's build on these layers (16 October 2026, branch
+`wp/luneos-mac`).** `scripts/mac-build.sh --stack luneos` (or
+`PHOENIX_STACK=luneos`) runs `setup-build-luneos.sh` in the build
+container, in a build directory of its own beside OSE's
+(`/work/build-phoenix-luneos`), builds the shell and apps from the
+checkout as on OSE (`externalsrc`, in `phoenix-local.conf`), and copies the
+ARM64 VM's kernel and root image from `tmp/deploy/images/phoenix-vm-arm64/`
+to `out/phoenix-vm-arm64/` for `scripts/vm.sh` and `scripts/make-utm.sh`,
+under the names OSE's build gives them. OSE stays the default until a
+machine has built and booted here (step 8). Reading what that build
+would do found two things LuneOS's own setup has and ours did not, now in
+the `local.conf` `setup-build-luneos.sh` writes:
+
+- **The build's codename.** LuneOS takes `WEBOS_DISTRO_TOPDIR_BRANCH` from
+  webos-ports-setup's checkout at `${TOPDIR}/../common` (`luneos.inc:60-61`),
+  which this setup has no copy of, so it was git's `<unknown>`, and with it
+  `IMAGE_VERSION_SUFFIX` (`luneos.inc:52`) was `-<unknown>-<date>`: in every
+  image's and kernel's file name, where the generated shell of
+  `do_image_ext4` (`image_types.bbclass:94`) and of the kernel's
+  `do_deploy` (`kernel.bbclass:799`) reads `<` and `>` as redirections, so
+  the first image would have stopped at its last steps. It is now the
+  layers' branch: `-wrynose-<date>`.
+- **Chromium's and V8's jobs:** a job per CPU, step 5.
+
+Checked on the pinned layers (`setup-build-luneos.sh phoenix-vm-arm64`,
+then `bitbake-getvar` after a full parse): the deploy directory is
+`<build>/tmp/deploy/images/phoenix-vm-arm64`; the image's
+`IMAGE_LINK_NAME` is `webos-phoenix-image-phoenix-vm-arm64.rootfs`, its
+`IMAGE_FSTYPES` `ext4`, its `IMAGE_NAME` `...rootfs-wrynose-<date>`; the
+kernel is `linux-yocto` 6.18.52 with `KERNEL_IMAGETYPE` `Image` and the
+`Image` link (`KERNEL_IMAGETYPE_SYMLINK` 1); `PARALLEL_MAKE` is `-j 4` on
+a 4-CPU host for `webruntime-clang` and `mksnapshot-cross-aarch64`.
+`tools/test-mac-build.py` (a quick check, `tools/ci-checks.sh`) runs
+`mac-build.sh` and `container-build.sh` with stand-ins for `container`
+and bitbake. The build container (Ubuntu 22.04) meets wrynose's host
+requirements (`tools/build-container/Containerfile` says how). Not
+checked: a build, which step 2 stops first.
+
 **Still to do, in order** (effort for one person who knows Yocto; machine
 time apart):
 
@@ -1807,10 +1849,10 @@ time apart):
 | 2 | `S` for wrynose: 20 recipes set `S` under `${WORKDIR}` (`${WORKDIR}/git[/sub]` in most), which wrynose stops at `do_unpack` (`insane.bbclass:1440-1449`); the form that works on both: `;destsuffix=${BP}` on the git URL and `S = "${UNPACKDIR}/${BP}[/sub]"`, and `tools/devicecheck/recipes.py`'s `source_dir` taught it | 1 day |
 | 3 | What the image installs twice: LuneOS's `packagegroup-webos-extended` brings Open webOS's `core-apps`, `luna-systemui`, `luna-applauncher`, `app-services`, `enyo-1.0`, the foundation and loadable frameworks and `underscore`, which `phoenix-apps` installs itself at the same paths (`runtime/rootfs.json`), and `mojomail-*` (Email's transports, which Phoenix needs). Per component: reuse LuneOS's build, or drop it from the packagegroup. With PRE-IMAGE-CHECKLIST F3 (OSE's and LuneOS's own UI apps: Atlas, the status bar, notification and volume apps) | 2 days |
 | 4 | Qt 6.12: `phoenix-shell`, `Phoenix.Native`, `phoenix-keyboard`'s Maliit plugin against LuneOS's luna-surfacemanager and qml-webos-* (the simulator, on Qt 6.11.3, runs the QML on a Qt past 6.8 first); the `imemanager` and `maliit-framework-webos` bbappends against LuneOS's recipes (its IME is `webos-keyboard`) | 2-3 days |
-| 5 | First image: `qemux86-64` built and booted in QEMU (M1's first item), then `navigator.userAgent`, `navigator.userAgentData` and the `Sec-CH-UA*` headers checked against a page that echoes them. The runtime is most of the build: LuneOS's recipe sets `PARALLEL_MAKE = "-j 64"` and `concurrent_links=1` for its own 64-thread host (`webruntime-clang_151.bb:248-249`); set `PARALLEL_MAKE:pn-webruntime-clang` in `phoenix-local.conf` for yours | 2 days, plus a day of build time |
+| 5 | First image: `qemux86-64` built and booted in QEMU (M1's first item), then `navigator.userAgent`, `navigator.userAgentData` and the `Sec-CH-UA*` headers checked against a page that echoes them. The runtime is most of the build: LuneOS's recipe sets `PARALLEL_MAKE = "-j 64"` and `concurrent_links=1` for its own 64-thread host (`webruntime-clang_151.bb:248-249`), and `-j 48` for V8's `mksnapshot-cross` (`mksnapshot-cross_151.bb:126`); `scripts/setup-build-luneos.sh` sets both to a job per CPU, as every other recipe has (`phoenix-local.conf` can set them otherwise) | 2 days, plus a day of build time |
 | 6 | The device services Phoenix calls, from LuneOS's recipes (battery, display manager, haptics, telephonyd, sensorfw; [LUNEOS.md](LUNEOS.md#next-steps) step 3), in a Phoenix packagegroup | with M1/M3 |
 | 7 | The other machines: `raspberrypi4-64` (meta-raspberrypi and meta-rpi-luneos), `phoenix-vm-arm64`, then the first targets (table below) | with M3 |
-| 8 | Switch: `parse-luneos` required, the OSE jobs and `scripts/setup-build.sh` removed, `scripts/mac-build.sh` and BUILDING-MAC.md on the new script, `meta-phoenix`'s scarthgap compatibility dropped | 1 day |
+| 8 | Switch: `parse-luneos` required, the OSE jobs and `scripts/setup-build.sh` removed, `scripts/mac-build.sh`'s default stack `luneos` (it builds on both since 16 October 2026: `--stack`) and BUILDING-MAC.md with it, `meta-phoenix`'s scarthgap compatibility dropped | 1 day |
 
 Total about two to three weeks of work before the first image, against
 the alternative of carrying LLVM 22, Rust 1.94 and a Chromium port on

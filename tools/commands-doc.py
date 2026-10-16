@@ -330,12 +330,15 @@ it("2.0 tests and tools", "", B, SYS, "phoenix-ember-glass-ui/tools/gen-ember-gl
     "tools/glass-compare.py screenshots/ember-glass app-tests/glass-sim docs/design-2.0/img/system-ui-2"])
 
 sec("Device images and VMs", "Machines: `qemux86-64` and `raspberrypi4-64` (OSE's own); `fairphone-fp6`, `ayn-odin2portal`, `pinephonepro`, `pinetab2`, and `phoenix-vm-arm64`, one ARM64 VM image that runs as any of them. None of these images has been built or booted yet.")
-it("Build an image on the Mac", "Uses Apple's `container` (macOS 26, Apple silicon). Also `PHOENIX_VOLUME_SIZE` (default `300g`).", M, WP, "webos-phoenix/scripts/mac-build.sh:8-25,69-76 · docs/BUILDING-MAC.md:40-45,62",
-   [("scripts/mac-build.sh --check", "always checks qemux86-64"), ("scripts/mac-build.sh", "qemux86-64, webos-phoenix-image"),
+it("Build an image on the Mac", "Uses Apple's `container` (macOS 26, Apple silicon). `--stack ose|luneos` (or `PHOENIX_STACK`) picks the layers: OSE's (the default; Chromium 120) or LuneOS's (Chromium 151; no image built there yet). Build the apps in the checkout first (`./phoenix`). Also `PHOENIX_VOLUME_SIZE` (default `300g`).", M, WP, "webos-phoenix/scripts/mac-build.sh:8-23,37-38,113-121 · docs/BUILDING-MAC.md:46-52,72-101",
+   [("scripts/mac-build.sh --check", "qemux86-64 unless a machine follows"), ("scripts/mac-build.sh", "qemux86-64, webos-phoenix-image"),
     ("scripts/mac-build.sh phoenix-vm-arm64", "the ARM64 VM: the 1.0 image to try first"), "scripts/mac-build.sh fairphone-fp6", "scripts/mac-build.sh raspberrypi4-64",
+    ("scripts/mac-build.sh --stack luneos phoenix-vm-arm64", "on LuneOS's layers: Chromium 151"),
+    ("scripts/mac-build.sh --stack luneos --check phoenix-vm-arm64", "check LuneOS's setup first, in minutes"),
     ("scripts/mac-build.sh --shell", "a shell inside the build container"), "PHOENIX_CPUS=8 PHOENIX_MEMORY=24g scripts/mac-build.sh phoenix-vm-arm64"])
-it("Copy images out, or start the build over", "", M, WP, "webos-phoenix/docs/BUILDING-MAC.md:70,76,353",
+it("Copy images out, or start the build over", "", M, WP, "webos-phoenix/docs/BUILDING-MAC.md:104-116,414",
    [("cp /work/build-webos-phoenix/BUILD/deploy/images/raspberrypi4-64/*.wic* /src/webos-phoenix/out/", "inside scripts/mac-build.sh --shell", {"r": "build container"}),
+    ("cp /work/build-phoenix-luneos/tmp/deploy/images/raspberrypi4-64/*.wic* /src/webos-phoenix/out/", "the same, built with --stack luneos", {"r": "build container"}),
     ("container volume delete webos-phoenix-work", "deletes the whole build")])
 it("Build an image on Linux", "x86-64 Ubuntu with about 200 GB free. Naming several machines configures them all; `MCF_COMMAND=configure` only writes the configuration.", L, WP,
    "webos-phoenix/README.md:566-571 · scripts/setup-build.sh:7-17",
@@ -353,11 +356,11 @@ it("Parse check", "About 12 minutes per machine, not as root. `PHOENIX_PARSE_STA
     ("unshare --user --map-user=1000 --map-group=1000 scripts/parse-check.sh", "when you are root"),
     ("sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0", "Ubuntu 24.04's AppArmor blocks BitBake otherwise (CI does this on a throwaway machine)")])
 it("Run the ARM64 VM as a device", "QEMU 8.2 or later. HVF on Apple silicon, KVM on an ARM64 Linux host, emulation otherwise. Ctrl+A X quits. Options: `--image PATH` `--kernel FILE` `--cpus N` `--memory MIB` `--cap-cpu PCT` `--gl on|off` `--audio virtio|hda|none` `--display SPEC` `--accel hvf|kvm|tcg` `--ssh-port N` `--fresh` and `-- <QEMU options>`.", B, WP,
-   "webos-phoenix/scripts/vm.sh:11-44,240,260 · docs/BUILDING-MAC.md:97-131",
+   "webos-phoenix/scripts/vm.sh:11-44,240,260 · docs/BUILDING-MAC.md:123-174",
    [("scripts/vm.sh --list", "the devices it can be"), "scripts/vm.sh fairphone-fp6", ("scripts/vm.sh fairphone-fp6 --dry-run", "show the QEMU command"),
     ("ssh -p 2222 root@127.0.0.1", "into the running VM"),
     ("journalctl -u phoenix-device-select", "inside the VM: which device it became", {"r": "inside the VM"}), ("systemd-analyze", "boot time", {"r": "inside the VM"}), ("phoenix-diag", "collect logs", {"r": "inside the VM"})])
-it("A UTM bundle for the Mac", "", B, WP, "webos-phoenix/scripts/make-utm.sh:17-46 · docs/BUILDING-MAC.md:168",
+it("A UTM bundle for the Mac", "", B, WP, "webos-phoenix/scripts/make-utm.sh:17-46 · docs/BUILDING-MAC.md:213",
    ["scripts/make-utm.sh fairphone-fp6 --for mac", ("scripts/make-utm.sh fairphone-fp6 --for mac --force", "replace an existing bundle")])
 it("Flash the Fairphone", "fastboot comes with Android's platform tools. Firmware extraction needs mtools, simg2img, lpunpack and debugfs and hasn't been run against a real factory image yet.", B, "the image's deploy folder",
    "webos-phoenix/docs/HARDWARE.md:200,214-223,239-243 · tools/device-firmware.py:14-16,30-36",
@@ -371,8 +374,8 @@ it("Odin 2 Portal and PINE64 devices", "Write the image to an SD card: `bmaptool
 
 sec("iPad", "The iPad web build and the native iPad app haven't been started: they are roadmap items. UTM is the route that exists.")
 it("A UTM bundle for the iPad", "Build the ARM64 VM image first. pinetab2 is the default device and `ipad` (UTM with JIT) the default target. Copy the bundle with AirDrop or the Finder.", B, WP,
-   "webos-phoenix/docs/BUILDING-MAC.md:245-249,275 · scripts/make-utm.sh:11-46,89",
-   ["scripts/mac-build.sh phoenix-vm-arm64", "brew install qemu", ("scripts/make-utm.sh", "for UTM with JIT"), ("scripts/make-utm.sh --for ipad-se", "for UTM SE"),
+   "webos-phoenix/docs/BUILDING-MAC.md:289-303,326 · scripts/make-utm.sh:11-46,89",
+   [("scripts/mac-build.sh --stack luneos phoenix-vm-arm64", "Chromium 151 (without --stack: OSE's, Chromium 120)"), "brew install qemu", ("scripts/make-utm.sh", "for UTM with JIT"), ("scripts/make-utm.sh --for ipad-se", "for UTM SE"),
     ("scripts/make-utm.sh fairphone-fp6", "as the Fairphone"), ("scripts/make-utm.sh --gl off --force", "if the screen stays black"), ("scripts/make-utm.sh --dry-run", "")])
 it("Check a bundle against UTM's own source", "`--qemu` takes `macos`, `ios` or `ios-se`.", B, WP, "webos-phoenix/tools/check-utm-bundle.py:23-26,200-215",
    ["python3 tools/check-utm-bundle.py out/Phoenix-pinetab2.utm --qemu ios"])
