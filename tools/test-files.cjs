@@ -9,7 +9,13 @@
 // text file, makes a new file, goes back with the back gesture, shows the
 // info sheet, deletes the folder, views pictures, shares one and two
 // pictures (the system's share sheet), installs an .ipk, opens
-// a song with Music, and opens a read-only system file.
+// a song with Music, and opens a read-only system file. On a tablet, the
+// column view: View as Columns, folders opening to the right, a file's
+// preview (Open, Share, Info), a second tap opening it, the arrow keys,
+// Enter and Backspace, hold to select, copy, paste, rename and delete,
+// new folder, the back gesture, the choice kept, and the list again (in
+// the same folder) when the card narrows to a phone's width. On a phone,
+// no columns are offered, whatever was chosen.
 //
 //   node tools/test-files.cjs [--tablet] [--out DIR]
 //
@@ -353,6 +359,168 @@ async function main() {
         await hold(row("hostname"));
         check(await page.locator("[data-testid='delete']").isDisabled(), "system files cannot be deleted");
         await page.keyboard.press("Escape");
+
+        // ---- Columns (tablet and desktop; a phone keeps the list) -------------------------------------------
+        const col = (i, name) => `[data-testid='column-${i}'] [data-testid='col-${name}']`;
+        const menuHas = async (text) => {
+            await page.click("[data-testid='menu']");
+            await page.waitForSelector(".pui-popup");
+            const n = await page.locator(`.pui-popup .pui-menu-item:has-text("${text}")`).count();
+            return n;
+        };
+        if (!tablet) {
+            check(await page.locator("[data-testid='view-switch']").count() === 0, "phone: no List / Columns switch");
+            check(await menuHas("View as Columns") === 0, "phone: no View as Columns in the menu");
+            await page.keyboard.press("Escape");
+            // Columns chosen on a tablet: a phone still shows the list.
+            await page.evaluate(() => {
+                const k = "org.webosphoenix.files:prefs";
+                localStorage.setItem(k, JSON.stringify({ ...JSON.parse(localStorage.getItem(k) || "{}"), view: "columns" }));
+            });
+            await page.reload();
+            await page.waitForSelector(row("Documents"));
+            check(await page.locator("[data-testid='columns']").count() === 0 && await page.locator("[data-testid='file-list']").count() === 1,
+                  "phone: the list, though columns were chosen");
+        } else {
+            await favorite("Internal storage");
+            await page.waitForSelector(row("Documents"));
+            check(await page.locator("[data-testid='view-switch-list'][aria-checked='true']").count() === 1, "tablet: the switch beside the path bar, on List");
+            check(await menuHas("View as Columns") === 1, "tablet: View as Columns in the menu");
+            await menuItem("View as Columns");
+            await page.waitForSelector("[data-testid='columns']");
+            check(await page.locator("[data-testid='view-switch-columns'][aria-checked='true']").count() === 1, "View as Columns: the columns, the switch on Columns");
+            check(await page.getAttribute("[data-testid='column-0']", "data-folder") === "/media/internal", "the first column: Internal storage");
+            await page.click(col(0, "Documents"));
+            await page.waitForSelector(col(1, "Welcome.txt"));
+            check((await title()) === "Documents" && await page.getAttribute(col(0, "Documents"), "data-open") === "true",
+                  "a folder opens in a column to the right of its parent's, marked there");
+            await page.click(col(1, "Welcome.txt"));
+            await page.waitForSelector("[data-testid='preview']");
+            check((await page.textContent("[data-testid='preview-title']")) === "Welcome.txt" &&
+                  /Text document/.test(await page.textContent("[data-testid='preview']")) && /302 B/.test(await page.textContent("[data-testid='preview']")),
+                  "a file: its preview after the last column (name, kind, size)");
+            await page.waitForTimeout(300);
+            await shot("columns-preview");
+            // The second tap opens it, as a tap in the list does.
+            await page.click(col(1, "Welcome.txt"));
+            await page.waitForSelector("[data-testid='editor-text']");
+            check(true, "a second tap on the file opens it (the editor)");
+            await page.keyboard.press("Escape");
+            await page.waitForSelector("[data-testid='text-editor']", { state: "detached" });
+            // The back gesture closes the preview first.
+            await page.keyboard.press("Escape");
+            await page.waitForSelector("[data-testid='preview']", { state: "detached" });
+            check((await title()) === "Documents", "back closes the preview, in the same folder");
+
+            // ---- The keys -----------------------------------------------------------------------------------
+            const cursorOn = () => page.$eval("[data-cursor='true']", (el) => el.getAttribute("data-path")).catch(() => null);
+            check((await cursorOn()) === "/media/internal/Documents", "the keyboard is on the current folder, in its parent's column");
+            await page.keyboard.press("ArrowRight");
+            await page.waitForSelector("[data-testid='preview']");
+            check((await cursorOn()) === "/media/internal/Documents/Shopping list.txt" &&
+                  (await page.textContent("[data-testid='preview-title']")) === "Shopping list.txt", "Right: into the folder, its first file previewed");
+            await page.keyboard.press("ArrowDown");
+            await page.waitForFunction(() => document.querySelector("[data-testid='preview-title']")?.textContent === "Trip notes.md");
+            check(true, "Down: the next file");
+            await page.keyboard.press("Enter");
+            await page.waitForSelector("[data-testid='editor-text']");
+            check(/Harbor weekend/.test(await page.inputValue("[data-testid='editor-text']")), "Enter opens the file");
+            await page.keyboard.press("Escape");
+            await page.waitForSelector("[data-testid='text-editor']", { state: "detached" });
+            await page.keyboard.press("ArrowLeft");
+            await page.waitForSelector("[data-testid='preview']", { state: "detached" });
+            check((await cursorOn()) === "/media/internal/Documents", "Left: back to the folder, in the column before");
+            await page.keyboard.press("ArrowDown");
+            await page.waitForSelector(col(1, "org.example.hello_1.0.0_all.ipk"));
+            check((await title()) === "Downloads" && (await cursorOn()) === "/media/internal/Downloads", "Down on a folder: it opens beside its column");
+            await page.keyboard.press("ArrowUp");
+            await page.waitForSelector(col(1, "Welcome.txt"));
+            await page.keyboard.press("Backspace");
+            await page.waitForSelector("[data-testid='column-1']", { state: "detached" });
+            check((await title()) === "Internal storage", "Backspace in the first column: up a folder");
+            await page.keyboard.press("Backspace");
+            await page.waitForFunction(() => document.querySelector("[data-testid='column-0']")?.getAttribute("data-folder") === "/");
+            check((await title()) === "media" && await page.getAttribute("[data-testid='column-1']", "data-folder") === "/media",
+                  "... and above the first column's folder: the columns from the device's root");
+            await favorite("Documents");
+            await page.waitForSelector(col(1, "Welcome.txt"));
+            check(await page.getAttribute("[data-testid='column-0']", "data-folder") === "/media/internal", "a favourite: the columns from its place again");
+
+            // ---- New folder, select, copy, paste, rename, delete -------------------------------------------
+            await page.click("[data-testid='new']");
+            await menuItem("New Folder");
+            await nameDialog("Column Test");
+            await page.waitForSelector(col(1, "Column Test"));
+            check(true, "new folder: in the current folder's column");
+            await hold(col(1, "Welcome.txt"));
+            await page.waitForSelector("[data-testid='check-Welcome.txt'][aria-checked='true']");
+            check((await title()) === "1 selected", "holding a row selects it, a check box on each row of its column");
+            await shot("columns-select");
+            await page.click("[data-testid='copy']");
+            await page.waitForSelector("[data-testid='paste']");
+            await page.click(col(1, "Column Test"));
+            await page.waitForSelector("[data-testid='column-2'] [data-testid='empty']");
+            await page.click("[data-testid='paste']");
+            await page.waitForSelector(col(2, "Welcome.txt"));
+            check(true, "copy, open the folder in the next column, paste: it is there");
+            await hold(col(2, "Welcome.txt"));
+            await page.click("[data-testid='more']");
+            await menuItem("Rename");
+            await nameDialog("Copied.txt");
+            await page.waitForSelector(col(2, "Copied.txt"));
+            check(await page.locator(col(2, "Welcome.txt")).count() === 0, "rename in a column");
+            await hold(col(1, "Column Test"));
+            check((await title()) === "1 selected" && await page.locator("[data-testid='column-2']").count() === 0,
+                  "holding a row of an earlier column selects in its folder");
+            await page.click("[data-testid='delete']");
+            await page.waitForSelector("[data-testid='delete-dialog']");
+            await page.click("[data-testid='delete-confirm']");
+            await page.waitForSelector(col(1, "Column Test"), { state: "detached" });
+            const removed = await luna("luna://org.webosphoenix.filemanager/stat", { path: "/media/internal/Documents/Column Test" });
+            check(removed.returnValue === false, "delete in a column: the folder and what is in it");
+
+            // ---- The preview's actions ------------------------------------------------------------------------
+            await favorite("Pictures");
+            await page.click(col(1, "aurora.jpg"));
+            await page.waitForFunction(() => document.querySelector("[data-testid='preview-image']")?.naturalWidth > 0);
+            check(true, "a picture's preview shows the picture");
+            await page.waitForTimeout(300);
+            await shot("columns-picture");
+            await page.click("[data-testid='preview-info']");
+            await page.waitForSelector("[data-testid='info-dialog']");
+            check((await page.textContent("[data-testid='info-path']")) === "/media/internal/Pictures/aurora.jpg", "the preview's Info: the info sheet");
+            await page.click("[data-testid='info-close']");
+            await page.click("[data-testid='preview-share']");
+            const shareFrame = await (await page.waitForSelector("iframe[data-phoenix-sheet=share]")).contentFrame();
+            await shareFrame.waitForSelector("[data-testid=share-sheet]");
+            check((await shareFrame.textContent("[data-testid=share-title]")) === "aurora.jpg", "the preview's Share: the share sheet with the file");
+            await page.keyboard.press("Escape");
+            await page.waitForSelector("iframe[data-phoenix-sheet]", { state: "detached" });
+            check(await page.locator("[data-testid='preview']").count() === 1, "... and the preview stays");
+            await page.click("[data-testid='preview-open']");
+            await page.waitForSelector("[data-testid='image-viewer']");
+            check((await page.textContent("[data-testid='viewer-title']")) === "aurora.jpg", "the preview's Open: the picture in the viewer");
+            await page.keyboard.press("Escape");
+            await page.waitForSelector("[data-testid='image-viewer']", { state: "detached" });
+
+            // ---- Kept, and the list at a phone's width ---------------------------------------------------------
+            await page.reload();
+            await page.waitForSelector(col(0, "Documents"));
+            check(true, "Columns is kept: the columns again after a restart");
+            await page.click(col(0, "Music"));
+            await page.waitForSelector(col(1, "morning-boot.ogg"));
+            await page.setViewportSize({ width: 400, height: 740 });
+            await page.waitForSelector(row("morning-boot.ogg"));
+            check(await page.locator("[data-testid='columns']").count() === 0 && await page.locator("[data-testid='view-switch']").count() === 0 &&
+                  (await title()) === "Music", "narrowed to a phone's width: the list, in the same folder, no switch");
+            await shot("columns-narrow");
+            await page.setViewportSize(viewport);
+            await page.waitForSelector(col(1, "morning-boot.ogg"));
+            check((await title()) === "Music", "wide again: the columns, in the same folder");
+            await page.click("[data-testid='view-switch-list']");
+            await page.waitForSelector(row("morning-boot.ogg"));
+            check(await page.locator("[data-testid='columns']").count() === 0, "the switch: back to the list");
+        }
 
         check(errors.length === 0, "no page errors" + (errors.length ? ":\n    " + errors.slice(0, 5).join("\n    ") : ""));
         await browser.close();

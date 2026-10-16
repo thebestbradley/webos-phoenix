@@ -69,6 +69,26 @@ body.pui-app { overflow: hidden; }
 .fm-crumb + .fm-crumb::before { content: "\203a"; margin: 0 8px 0 -6px; color: #8a8a88; }
 .fm-crumb.current { font-weight: bold; color: #1f1f1e; }
 .fm-crumb:active { background: rgba(0, 0, 0, 0.12); }
+/* Tablet and desktop: the path bar with the List / Columns switch at its end. */
+.fm-pathrow {
+    flex: none;
+    display: flex;
+    align-items: center;
+    padding-right: 8px;
+    background: linear-gradient(#d4d4d2, #c6c6c4);
+    border-top: 1px solid #f2f2f0;
+    border-bottom: 1px solid #9a9a98;
+}
+.fm-pathrow > .fm-path { flex: 1; min-width: 0; background: none; border: 0; }
+
+/* ---- Columns (tablet and desktop) ----------------------------------------------------------------- */
+
+/* The columns end above the command menu, as the list does (.fm-scroll). */
+.fm-columns { flex: 1; min-height: 0; height: auto; --pui-column-width: 250px; --pui-preview-width: 300px; --pui-column-foot: 60px; }
+.fm-columns .fm-empty { padding: 24px 12px; font-size: 15px; }
+.fm-columns .fm-empty.fm-warning { margin: 10px 8px; padding: 12px; font-size: 13px; line-height: 1.3; }
+.fm-columns .fm-loading { padding: 40px 0; }
+.fm-columns .fm-loading.small { padding: 16px 0; }
 
 /* ---- List -------------------------------------------------------------------------- */
 

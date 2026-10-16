@@ -3,7 +3,8 @@
 
 import { beforeEach, describe, expect, it } from "vitest";
 import { FILE_ERRORS } from "@phoenix/luna";
-import { crumbs, DEFAULT_FAVORITES, folderProblem, folderTitle, kindLabel, loadPrefs, planPaste, savePrefs, shortDate } from "./browse";
+import { folderChain } from "@phoenix/ui";
+import { columnRoot, crumbs, DEFAULT_FAVORITES, folderProblem, folderTitle, kindLabel, loadPrefs, planPaste, savePrefs, shortDate } from "./browse";
 
 beforeEach(() => localStorage.clear());
 
@@ -52,13 +53,39 @@ describe("Files helpers", () => {
     });
 
     it("keeps preferences, with /media/internal and its folders as the first favourites", () => {
-        expect(loadPrefs()).toEqual({ sort: "name", showHidden: false, favorites: DEFAULT_FAVORITES });
+        expect(loadPrefs()).toEqual({ sort: "name", showHidden: false, favorites: DEFAULT_FAVORITES, view: "list" });
         expect(DEFAULT_FAVORITES).toEqual(["/media/internal", "/media/internal/Downloads", "/media/internal/Documents",
                                            "/media/internal/Pictures", "/media/internal/Music"]);
-        savePrefs({ sort: "date", showHidden: true, favorites: ["/tmp"] });
-        expect(loadPrefs()).toEqual({ sort: "date", showHidden: true, favorites: ["/tmp"] });
+        savePrefs({ sort: "date", showHidden: true, favorites: ["/tmp"], view: "columns" });
+        expect(loadPrefs()).toEqual({ sort: "date", showHidden: true, favorites: ["/tmp"], view: "columns" });
         localStorage.setItem("org.webosphoenix.files:prefs", "{bad json");
         expect(loadPrefs().sort).toBe("name");
+    });
+
+    it("remembers List or Columns, the list unless columns were chosen (preferences from before columns too)", () => {
+        localStorage.setItem("org.webosphoenix.files:prefs", JSON.stringify({ sort: "size", showHidden: false, favorites: [] }));
+        expect(loadPrefs().view).toBe("list");
+        localStorage.setItem("org.webosphoenix.files:prefs", JSON.stringify({ view: "grid" }));
+        expect(loadPrefs().view).toBe("list");
+        localStorage.setItem("org.webosphoenix.files:prefs", JSON.stringify({ view: "columns" }));
+        expect(loadPrefs().view).toBe("columns");
+    });
+
+    it("starts the columns at the place a folder is in", () => {
+        expect(columnRoot("/media/internal")).toBe("/media/internal");
+        expect(columnRoot("/media/internal/Documents/Work")).toBe("/media/internal");
+        expect(columnRoot("/media/drives/acct-1/Photos/2026")).toBe("/media/drives/acct-1");
+        expect(columnRoot("/media/drives/acct-1")).toBe("/media/drives/acct-1");
+        expect(columnRoot("/media/drives")).toBe("/media/drives");
+        expect(columnRoot("/media")).toBe("/");
+        expect(columnRoot("/etc/palm")).toBe("/");
+        expect(columnRoot("/")).toBe("/");
+        // The columns of a folder: the place, then each folder down to it.
+        expect(folderChain(columnRoot("/media/internal/Documents/Work"), "/media/internal/Documents/Work"))
+            .toEqual(["/media/internal", "/media/internal/Documents", "/media/internal/Documents/Work"]);
+        expect(folderChain(columnRoot("/media/drives/acct-1/Photos"), "/media/drives/acct-1/Photos"))
+            .toEqual(["/media/drives/acct-1", "/media/drives/acct-1/Photos"]);
+        expect(folderChain(columnRoot("/etc/palm"), "/etc/palm")).toEqual(["/", "/etc", "/etc/palm"]);
     });
 
     it("says why a drive's folder did not open, loudest for a server whose key changed", () => {

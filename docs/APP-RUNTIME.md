@@ -1611,6 +1611,36 @@ the Enyo 1.0 art:
   that saves back (and asks before dropping changes; read-only files open
   read-only), `.ipk` packages in an install sheet, anything else in "Open
   with" (the apps that handle the MIME type, or open by type).
+- **Columns** (tablet and desktop; the owner, 14 and 16 October 2026): **View
+  as Columns** in the header menu (and the app menu), or the List / Columns
+  switch at the end of the path bar (Enyo's Heritage radio buttons), shows
+  the folders as the Finder's and iPadOS Files' column views do: the first
+  column is the place the folder is in (Internal storage, a drive's own
+  folder, the drives' folder, else `/`; a favourite, a drive or the path bar
+  starts it again), each folder opens in a column to the right of its
+  parent's and is marked there, and the columns scroll sideways to the
+  newest. A file tapped is marked and its **preview** follows the last
+  column: the picture itself (a drive's file shows its kind's icon: it is
+  not downloaded to be previewed), name, kind, size, date, and Open, Share,
+  Open With... and Info; a second tap (or Open) opens it as a tap in the list
+  does. Everything else is the list's: hold a row (or right-click it) to
+  select in its column's folder, tick more, copy, cut, paste, rename,
+  delete; New Folder and New File go to the last column's folder; a drive's
+  folders as places, its errors (out of reach, sign-in refused) in its
+  column. **Keys** (a hardware keyboard): Up and Down move in a column (a
+  folder opens beside it, a file shows its preview), Right or Enter goes
+  into a folder, Enter opens a file, Left and Backspace go back a column
+  (Backspace in the first column: up a folder), Home and End; in select
+  mode they move and Enter or Space ticks. Back closes the preview first.
+  Offered where the shell's layout is a tablet's or a desktop's
+  (`getSystemStatus formFactor`, `useFormFactor()` in `@phoenix/luna/react`;
+  before the shell says, the card's size by `Theme.tabletLayoutFor`) and the
+  card is at least 600 px wide (`useColumnsWidth()`); a phone, or a card the
+  adaptive simulator narrows to a phone's width, shows the list, in the same
+  folder, and the columns come back when it widens. The choice is kept with
+  the other preferences (`view`). The column view is `@phoenix/ui`'s
+  `ColumnView` (`columns.tsx`; its logic, `columnmodel.ts`, is shared with
+  the file picker's, [SHARE-AND-FILES.md](SHARE-AND-FILES.md#columns)).
 
 ### Services
 
@@ -1651,7 +1681,10 @@ names Photos for pictures and videos and Music for audio.
 makes and renames a folder, copies and pastes a file twice, edits and saves
 text, makes a new file, goes back, shows info, deletes a folder, views
 pictures, installs the `.ipk`, opens a song with Music and opens a read-only
-system file, with screenshots in `build/files-tests/`.
+system file; on a tablet it does the column view's (folders, the preview and
+its actions, the keys, select, copy, paste, rename, delete, the choice kept,
+the list at a phone's width), on a phone it checks no columns are offered;
+screenshots in `build/files-tests/`.
 
 ## Tasks
 

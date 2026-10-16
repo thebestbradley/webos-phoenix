@@ -1,12 +1,13 @@
 // Copyright (c) 2026 webOS Phoenix contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// What the Files app works out without the service: the path bar, what a
-// paste does, labels for dates and kinds, and the saved preferences
-// (sort order, hidden files, favourite folders).
+// What the Files app works out without the service: the path bar, the
+// column view's first column, what a paste does, labels for dates and
+// kinds, and the saved preferences (sort order, hidden files, favourite
+// folders, list or columns).
 
-import { baseName, DRIVES_ROOT, FILE_ERRORS, isInside, joinPath, kindOf, parentOf, uniqueName, type FileEntry, type FileKind, type SortKey } from "@phoenix/luna";
-import { formatTime } from "@phoenix/ui";
+import { baseName, driveRootOf, DRIVES_ROOT, FILE_ERRORS, isInside, joinPath, parentOf, uniqueName, type FileEntry, type SortKey } from "@phoenix/luna";
+import { formatTime, type FolderView } from "@phoenix/ui";
 
 export const HOME = "/media/internal";
 
@@ -60,6 +61,18 @@ export function crumbs(path: string, names: DriveNames = {}): { label: string; p
     return out;
 }
 
+/**
+ * The column view's first column for a folder: the place it is in, as the
+ * favourites and the drives name places. Internal storage, the drive's
+ * own folder, the drives' folder, else the device's root.
+ */
+export function columnRoot(path: string): string {
+    if (isInside(path, HOME)) return HOME;
+    const drive = driveRootOf(path);
+    if (drive) return drive;
+    return path === DRIVES_ROOT ? DRIVES_ROOT : "/";
+}
+
 export interface Clipboard {
     mode: "copy" | "cut";
     paths: string[];
@@ -100,20 +113,9 @@ export function shortDate(ms: number, now = Date.now()): string {
     return d.getFullYear() === n.getFullYear() ? md : `${md}, ${d.getFullYear()}`;
 }
 
-/** "Sep 3, 2026 4:05 PM" for the info sheet. */
-export function longDate(ms: number): string {
-    const d = new Date(ms);
-    return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} ${formatTime(ms)}`;
-}
-
-const KIND_LABELS: Record<FileKind, string> = {
-    folder: "Folder", image: "Image", audio: "Audio", video: "Video", text: "Text document", code: "Source code",
-    archive: "Archive", package: "webOS package", pdf: "PDF document", document: "Office document", book: "E-book", file: "File",
-};
-
-export function kindLabel(entry: Pick<FileEntry, "name" | "type">): string {
-    return KIND_LABELS[kindOf(entry)];
-}
+// "Sep 3, 2026 4:05 PM" (the info sheet, the preview) and a kind's name, shared with the file picker.
+export { longDate } from "@phoenix/ui";
+export { kindLabel } from "@phoenix/luna";
 
 // ---- Preferences ------------------------------------------------------------------
 
@@ -121,12 +123,14 @@ export interface Prefs {
     sort: SortKey;
     showHidden: boolean;
     favorites: string[];
+    /** Columns on a tablet or a desktop (a phone always shows the list). */
+    view: FolderView;
 }
 
 const PREFS_KEY = "org.webosphoenix.files:prefs";
 
 export function loadPrefs(): Prefs {
-    const base: Prefs = { sort: "name", showHidden: false, favorites: DEFAULT_FAVORITES };
+    const base: Prefs = { sort: "name", showHidden: false, favorites: DEFAULT_FAVORITES, view: "list" };
     try {
         const saved = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "null") as Partial<Prefs> | null;
         if (!saved) return base;
@@ -134,6 +138,7 @@ export function loadPrefs(): Prefs {
             sort: saved.sort === "size" || saved.sort === "date" ? saved.sort : "name",
             showHidden: !!saved.showHidden,
             favorites: Array.isArray(saved.favorites) ? saved.favorites.filter((f) => typeof f === "string") : base.favorites,
+            view: saved.view === "columns" ? "columns" : "list",
         };
     } catch {
         return base;
