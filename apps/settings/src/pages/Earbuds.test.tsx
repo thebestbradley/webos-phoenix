@@ -201,7 +201,9 @@ describe("Tracker alerts", () => {
         const scanRow = await screen.findByTestId("bt-scanning");
         await waitFor(() => expect(scanRow.textContent).toContain("Balanced"));
         fireEvent.click(scanRow);
-        await screen.findByText("Balanced (Default)");
+        // The rows draw before the service's status comes and take no tap until it has
+        // (Scanning.tsx: disabled={!status}): wait for the mode it reports, as a person sees it.
+        await waitFor(() => expect(!!screen.getByTestId("scan-balanced").querySelector(".pui-check")).toBe(true));
         fireEvent.click(screen.getByTestId("scan-saver"));
         await waitFor(async () => expect((await trackerStatus()).scanMode).toBe("saver"));
         await screen.findByTestId("scan-saver-note");
