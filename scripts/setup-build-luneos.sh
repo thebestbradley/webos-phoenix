@@ -120,14 +120,32 @@ ln -sfn "$REPO_DIR/meta-phoenix" "$BUILD_DIR/meta-phoenix"
 } > "$BUILD_DIR/conf/bblayers.conf"
 
 # 3. conf/local.conf: LuneOS's distro and the first machine. Settings of
-# your own go in phoenix-local.conf beside it (scripts/parse-check.sh
-# writes one); this file is rewritten each time.
+# your own go in phoenix-local.conf beside it (scripts/parse-check.sh and
+# scripts/container-build.sh write one), read last, so they win; this file
+# is rewritten each time. Two settings LuneOS's own setup has otherwise:
+# - The build's codename, which LuneOS reads from the branch of
+#   webos-ports-setup's checkout beside the build directory,
+#   ${TOPDIR}/../common (meta-luneos conf/distro/include/luneos.inc:35,
+#   60-61). There is none here, and git's "<unknown>" would go into every
+#   image's and kernel's file name (IMAGE_VERSION_SUFFIX, luneos.inc:52),
+#   where the shell tasks that write them read its "<" and ">" as
+#   redirections (oe-core image_types.bbclass:94, kernel.bbclass:799). The
+#   branch the layers are pinned on, as webos-ports-setup's would be.
+# - Chromium's and V8's parallel jobs. LuneOS sets them for its own
+#   64-thread, 125 GB build host (webruntime-clang_151.bb:233-249, "-j 64";
+#   mksnapshot-cross_151.bb:120-126, "-j 48"), which a smaller host cannot
+#   hold in memory; here they get what every other recipe gets, a job per
+#   CPU (oe-core bitbake.conf:866).
+codename=$(layer_lines | awk '$1 == "meta-webos-ports" { print $2 }')
 # shellcheck disable=SC2016
 {
     echo "# Written by scripts/setup-build-luneos.sh; put your settings in phoenix-local.conf."
     echo 'CONF_VERSION = "2"'
     echo 'DISTRO ?= "luneos"'
     echo "MACHINE ??= \"$1\""
+    echo "WEBOS_DISTRO_TOPDIR_BRANCH = \"$codename\""
+    echo 'PARALLEL_MAKE:pn-webruntime-clang = "-j ${@oe.utils.cpu_count()}"'
+    echo 'PARALLEL_MAKE:pn-mksnapshot-cross-${TARGET_ARCH} = "-j ${@oe.utils.cpu_count()}"'
     echo 'include phoenix-local.conf'
 } > "$BUILD_DIR/conf/local.conf"
 
