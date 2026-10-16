@@ -165,6 +165,7 @@ async function main() {
         check(!!launched && late < 900, `at its time, the Clock is started (${late} ms after it)`);
         const alert = await until(async () => (await appPages(/com\.palm\.app\.clock\/dashAlarm\.html/))[0], 15000, 100);
         check(!!alert, `... and rings: its alarm alert opens (${Date.now() - due} ms after its time)`);
+        // Once: 3 s on, no second Clock page or alert has come.
         await sleep(3000);
         const alerts = await appPages(/com\.palm\.app\.clock\/dashAlarm\.html/);
         const clocks = await appPages(/com\.palm\.app\.clock\/index\.html/);
@@ -183,10 +184,18 @@ async function main() {
                 callback: { method: "luna://com.palm.db/put", params: { objects: [{ _kind: "org.webosphoenix.test.fired:1", tag: i }] } } } });
         }
         const pages = (await targets()).length;
-        await sleep(Math.max(0, at.getTime() - Date.now()) + 6000);
-        const found = await luna(sys, "luna://com.palm.db/find", { query: { from: "org.webosphoenix.test.fired:1" } });
-        const counts = [0, 0, 0, 0, 0, 0];
-        (found.results || []).forEach((o) => { counts[o.tag]++; });
+        const firedCounts = async () => {
+            const found = await luna(sys, "luna://com.palm.db/find", { query: { from: "org.webosphoenix.test.fired:1" } });
+            const counts = [0, 0, 0, 0, 0, 0];
+            (found.results || []).forEach((o) => { counts[o.tag]++; });
+            return counts;
+        };
+        // Each fires (its object in db8), however long that takes on a loaded
+        // machine; then nothing fires one again: none more by 6 s after their
+        // time, and 2 s at least after the last came.
+        await until(async () => (await firedCounts()).every((n) => n >= 1), Math.max(0, at.getTime() - Date.now()) + 30000);
+        await sleep(Math.max(2000, at.getTime() + 6000 - Date.now()));
+        const counts = await firedCounts();
         check(counts.every((n) => n === 1), `six activities due together, ${pages} pages running: each fires once (${counts.join(", ")})`);
     } catch (e) {
         check(false, "ran to the end: " + e.message);

@@ -105,7 +105,6 @@ async function main() {
         stdio: ["ignore", "pipe", "pipe"]
     });
     simPid = sim.pid;
-    const started = Date.now();
     let simLog = "";
     sim.stdout.on("data", (d) => { simLog += d; });
     sim.stderr.on("data", (d) => { simLog += d; });
@@ -113,8 +112,11 @@ async function main() {
         // The sim's window sits at the display's corner (Xvfb has no window manager).
         const settings = await pageMatching(/org\.webosphoenix\.settings/, 60000);
         if (!check(!!settings, form + ": phoenix-sim runs, Settings' page is up")) throw new Error("no Settings page");
-        // The shell and the system UI settle (no boot animation: --no-boot-animation).
-        await sleep(Math.max(1000, 8000 - (Date.now() - started)));
+        // The system UI up and listening for its events (it hosts the shell's
+        // services), as tools/test-activities-sim.cjs waits for it.
+        const sys = await pageMatching(/com\.palm\.systemui\/index\.html/, 30000);
+        if (!check(!!sys && !!(await until(() => sys.evaluate("Date.now() - JSON.parse(localStorage.getItem('phoenix:systemui:listening') || '0') < 30000"), 30000)),
+                   form + ": the system UI is up")) throw new Error("no system UI");
         await settings.evaluate("__phoenixRuntime.oauthUseCard(true)");
         const ru = await settings.evaluate(`new Promise((resolve) => { var b = new PalmServiceBridge(); b.onservicecallback = (t) => resolve(JSON.parse(t));
                                              b.call("luna://org.webosphoenix.service.oauth/redirectUri", "{}"); })`);
