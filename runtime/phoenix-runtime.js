@@ -16764,6 +16764,11 @@
     //       folder of /media/internal (the last one used first) and a name;
     //       the file is written there (copied from `from`, or from `data`).
     //
+    // On a tablet or a desktop both sheets offer the folders as columns (the
+    // List / Columns switch in their head): the request carries the view
+    // shown last (`view`), the answer the one the user left it in, kept
+    // as filepicker:view beside the last folder.
+    //
     // The page talks to the runtime of the page under it with postMessage.
     //
     // On a device too (installDevice calls shareSheet): the sheet is the
@@ -16784,6 +16789,12 @@
         var MEDIA = "/media/internal";
         var CAMERA_DIR = MEDIA + "/DCIM/100PHNX";
         var LAST_FOLDER = "filepicker:lastFolder";
+        // List or Columns (the save and pick sheets offer columns on a
+        // tablet or a desktop): the one shown last, kept beside the last
+        // folder, for every app's sheet. The sheet answers with it.
+        var VIEW = "filepicker:view";
+        function sheetView() { return store.get(VIEW, "list") === "columns" ? "columns" : "list"; }
+        function keepView(r) { if (r && (r.view === "list" || r.view === "columns")) store.set(VIEW, r.view); }
         // What the picker picks: the original's kinds (FilePickerApp.js:39-45,
         // ringtones aside), and "file", any file of the USB drive by folder.
         var PICK_KINDS = ["image", "video", "audio", "document", "file"];
@@ -17040,7 +17051,8 @@
         // name -> {path, overwrite} (Replace was confirmed), or null.
         function chooseSaveTarget(name, title, folder) {
             return showSheet("save", { name: name || "Untitled", title: title || "Save to Files",
-                                       folder: folder || store.get(LAST_FOLDER, MEDIA + "/Documents") }).then(function (r) {
+                                       folder: folder || store.get(LAST_FOLDER, MEDIA + "/Documents"), view: sheetView() }).then(function (r) {
+                keepView(r);
                 if (!r || r.action !== "save" || !r.folder) return null;
                 store.set(LAST_FOLDER, r.folder);
                 return { path: r.folder.replace(/\/$/, "") + "/" + r.name, overwrite: !!r.overwrite };
@@ -17183,7 +17195,8 @@
                 var exts = (p.extensions || []).map(function (e) { return String(e).replace(/^\./, "").toLowerCase(); });
                 var title = p.title || (kinds.length === 1 && kinds[0] === "image" ? (multiple ? "Choose Pictures" : "Choose a Picture")
                                                                                    : (multiple ? "Choose Files" : "Choose a File"));
-                showSheet("pick", { title: title, kinds: kinds, multiple: multiple, crop: crop, extensions: exts }).then(function (r) {
+                showSheet("pick", { title: title, kinds: kinds, multiple: multiple, crop: crop, extensions: exts, view: sheetView() }).then(function (r) {
+                    keepView(r);
                     if (!r || r.action !== "pick" || !r.files || !r.files.length) return null;
                     // A file of a drive: the app gets the device's copy of it
                     // (the file manager's open: downloaded, or the copy kept
