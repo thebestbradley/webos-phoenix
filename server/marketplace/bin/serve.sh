@@ -290,7 +290,12 @@ else
     # (opted-out origins and apps an admin pulled stay out), then the index
     # as this version of the catalog writes it (a new build), with the
     # account types in catalog/accounts.json (a bad entry stops here).
-    php bin/marketplace.php seed >/dev/null
+    # Added and updated only (`seed FILE`), never taken away: this catalog
+    # is every checkout's (1.0's and 2.0's, of any age), so an older one's
+    # list would otherwise set gone the apps a newer one listed (2.0 before
+    # it took 1.0's Slack hid Slack from both). A site dropped from the list
+    # leaves a local catalog by hand: `php bin/marketplace.php seed`.
+    php bin/marketplace.php seed catalog/curated-pwas.json >/dev/null
     php bin/marketplace.php publish >/dev/null
 fi
 if [ "$MARKETPLACE_DEV" = 1 ]; then

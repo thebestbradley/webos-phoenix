@@ -244,7 +244,11 @@ Certificates.command` once.) Then load it into the catalog and publish:
 
 `seed` updates and lists the curated web apps in the file, sets the ones
 it no longer has to `gone` (listed again when a later list has them back;
-`seed FILE` only adds and updates the apps in FILE),
+`seed FILE` only adds and updates the apps in FILE, which is what
+`serve.sh` does each time it starts: the local catalog is every
+checkout's, and an older checkout's list must not take away what a newer
+one listed, so a site dropped from the list leaves a local catalog only
+with a plain `seed` by hand),
 and leaves opted-out sites and listings an admin pulled alone; `publish`
 signs and writes the catalog devices read. With the server's database
 elsewhere, set `MARKETPLACE_DSN` (and the account) and `MARKETPLACE_DATA`
