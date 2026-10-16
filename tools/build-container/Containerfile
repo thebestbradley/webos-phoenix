@@ -1,19 +1,34 @@
 # Copyright (c) 2026 webOS Phoenix contributors
 # SPDX-License-Identifier: Apache-2.0
 #
-# Build environment for webOS OSE + meta-phoenix.
+# Build environment for meta-phoenix on webOS OSE's layers (build-webos,
+# Yocto 5.0 scarthgap) and on LuneOS's (Yocto 6.0 wrynose):
+# scripts/mac-build.sh --stack ose|luneos.
 #
 # webOS OSE supports Ubuntu 20.04/22.04 on amd64 only (build-webos
 # scripts/prerequisites.sh), and needs gcc-multilib, which does not exist for
 # arm64. On Apple silicon, build and run this image as linux/amd64; Apple's
 # `container` runs it under Rosetta. See docs/BUILDING-MAC.md.
+#
+# Ubuntu 22.04 is a host both stacks test (yocto-docs wrynose
+# ref-manual/system-requirements.rst; meta-luneos luneos.inc,
+# SANITY_TESTED_DISTROS), and its tools are newer than wrynose's minimums
+# (sanity.bbclass): Python 3.10 (3.9; bitbake 2.18 too), gcc 11 with C++20
+# (10.1), tar 1.34 (1.28), git 2.34 (1.8.3.1), make 4.3 (4.0).
+# mac-build.sh tags the image with this file's checksum, so a change here
+# builds a new one.
 
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Package list from build-webos scripts/prerequisites.sh (v2.3.0), plus the
-# tools the Yocto scarthgap sanity checks and our scripts need.
+# tools the Yocto scarthgap sanity checks and our scripts need, plus
+# wrynose's list for Ubuntu (yocto-docs wrynose
+# tools/host_packages_scripts/ubuntu_essential.sh: libacl1, libcrypt-dev;
+# xz, which wrynose's HOSTTOOLS now require, is xz-utils). Not
+# python3-websockets, which is only for Yocto's sstate CDN and too old on
+# 22.04 for it.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential python3-distutils chrpath cpio diffstat file gawk git \
         iputils-ping liblz4-tool locales python3 wget zstd \
@@ -21,6 +36,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         bzip2 gzip tar zip xz-utils unzip \
         ca-certificates curl lz4 python3-pip python3-pexpect python3-git \
         python3-jinja2 python3-subunit socat texinfo debianutils \
+        libacl1 libcrypt-dev \
         rsync sudo less vim-tiny tmux \
     && locale-gen en_US.UTF-8 \
     && git config --system --add safe.directory '*' \

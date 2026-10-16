@@ -43,9 +43,11 @@ jobs:
           submodules: recursive
 
       # ffmpeg: the feedback tones (MP3) are checked by decoding them.
+      # rsync: the Mac's image build copies the checkout with it
+      # (tools/test-mac-build.py).
       - uses: ./.github/actions/setup
         with:
-          apt: ffmpeg
+          apt: ffmpeg rsync
 
       # Each check's result and time is in its summary at the end; a failed
       # one is also an annotation.
