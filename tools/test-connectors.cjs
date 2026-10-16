@@ -195,8 +195,25 @@ async function main() {
             if (!w) throw new Error("no sign-in page for " + templateId);
             await w.waitForSelector(".connector-wizard", { timeout: 10000 }).catch(async (e) => { await shot(accounts, "wizard-failed"); console.log("errors: " + JSON.stringify(errors)); throw e; });
             await w.waitForSelector(".connector-unavailable", { state: "visible", timeout: 8000 }).catch(() => {});
-            await accounts.waitForTimeout(600);
             return w;
+        };
+        // Sign In ends the form, inside Enyo 1.0's scroller, below the fold on
+        // a phone. Playwright's scroll into view moves the DOM, which
+        // BasicScroller undoes at its next scroll event (scrollHandler, enyo-1.0
+        // BasicScroller.js:158-164), so on a loaded runner the tap lands on the
+        // field the scroller puts back there. Scroll to the end as the page
+        // itself does (scrollToBottom) and tap once the button is what is under
+        // the finger, as tools/test-sftp.cjs does.
+        const tapSignIn = async (w, wizard) => {
+            const reachable = await until(() => w.evaluate((id) => {
+                const c = enyo.$[id + "_signInButton"], n = c && c.hasNode();
+                if (!n) return false;
+                for (let s = c.parent; s; s = s.parent) if (typeof s.scrollToBottom === "function") { s.scrollToBottom(); break; }
+                const r = n.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+                return !!hit && n.contains(hit);
+            }, wizard), 15000, 200);
+            if (!reachable) throw new Error("Sign In stays out of reach");
+            await w.getByText("Sign In", { exact: true }).click();
         };
         const createAccount = async (templateId, name, stateKind) => {
             const create = accounts.locator(".enyo-button:visible, .enyo-custom-button:visible", { hasText: "Create Account" }).first();
@@ -220,7 +237,7 @@ async function main() {
         await w.locator("input[type=password]").first().fill(td.token);
         await w.locator("input[type=password]").first().press("Tab");
         await shot(accounts, "3-todoist-sign-in");
-        await w.getByText("Sign In", { exact: true }).click();
+        await tapSignIn(w, "connectorWizard");
         const todo = await createAccount(TODOIST, "4-todoist-create");
         check(todo && todo.username === "anna@example.com", "the Todoist account exists (" + (todo && todo.username) + ")");
         if (!todo) throw new Error("no Todoist account");
@@ -243,7 +260,9 @@ async function main() {
         await tasks.press("[data-testid=quick-add]", "Enter");
         await tasks.waitForSelector("[data-testid='task-Buy eggs']", { timeout: 10000 });
         await tasks.click("[data-testid='check-Buy milk']");
-        await tasks.waitForTimeout(500);
+        // Ticked off once Tasks has written it (db8), not after a while: the sync sends what db8 has.
+        const ticked = await until(async () => (await db(tasks, "com.palm.task.todoist:1")).some((t) => t.summary === "Buy milk" && t.completed), 10000);
+        check(!!ticked, "the task ticked off in Tasks is done in db8");
         const eggs = (await db(tasks, "com.palm.task.todoist:1")).find((t) => t.summary === "Buy eggs");
         check(!!eggs && eggs.accountId === todo._id, "a task added in the list is the Todoist account's (com.palm.task.todoist:1)");
         await syncNow(tasks, "org.webosphoenix.service.todoist", todo._id);
@@ -254,8 +273,9 @@ async function main() {
         // ---- 4. Add to Todoist from the share sheet ------------------------------------------------------------
         const browserPage = await context.newPage();
         await browserPage.goto(appUrl("com.palm.app.browser"));
-        await browserPage.waitForFunction(() => !!window.__phoenixRuntime);
-        await browserPage.waitForTimeout(1500);
+        // The browser drawn: it tells the shell its stage is ready (PalmSystem.stageReady).
+        check(!!(await until(() => host.some((m) => m.type === "stageReady" && m.payload.appId === "com.palm.app.browser"), 15000)),
+              "the browser is up (its stage ready)");
         const shareTo = async (appId, shotName) => {
             host.length = 0;
             const shared = browserPage.evaluate(() => __phoenixRuntime.share({ title: "Phoenix release notes", url: "https://example.org/notes" }));
@@ -290,7 +310,7 @@ async function main() {
         await w.locator("input[type=password]").first().fill(bs.appPassword);
         await w.locator("input[type=password]").first().press("Tab");
         await shot(accounts, "10-bluesky-sign-in");
-        await w.getByText("Sign In", { exact: true }).click();
+        await tapSignIn(w, "connectorWizard");
         const sky = await createAccount(BLUESKY, "11-bluesky-create", "org.webosphoenix.bluesky.state:1");
         check(sky && sky.username === "anna.test" && sky.capabilityProviders.length === 3, "the Bluesky account exists, with contacts, messages and notifications");
         if (!sky) throw new Error("no Bluesky account");
