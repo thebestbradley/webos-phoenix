@@ -15,8 +15,12 @@ containers as lightweight virtual machines.
 
 - A Mac with Apple silicon, running **macOS 26** (required by `container`)
 - `container` installed from its [releases page](https://github.com/apple/container/releases)
-- **16 GB of RAM or more** (Chromium, part of webOS OSE, is a very large build)
+- **16 GB of RAM or more** (Chromium, the web runtime, is a very large build)
 - **About 300 GB of free disk**. The build volume grows as it fills, up to that size.
+  Each layer stack ([below](#which-layers---stack)) has a build tree of its
+  own there: to keep both, make the volume larger before its first run
+  (`PHOENIX_VOLUME_SIZE=600g`), or delete the one you no longer use (in
+  `scripts/mac-build.sh --shell`: `rm -rf /work/build-webos-phoenix`).
 - Rosetta. macOS offers to install it the first time an x86-64 container runs.
 
 ## Why x86-64 (Rosetta)?
@@ -24,12 +28,14 @@ containers as lightweight virtual machines.
 webOS OSE only supports **x86-64 build machines**. Its build scripts check for
 Ubuntu 20.04/22.04 amd64 and need 32-bit compiler packages that don't exist for
 ARM Linux. So the build container runs x86-64 Linux, translated by Rosetta.
-That's slower than native, but it works.
+That's slower than native, but it works. LuneOS's layers build in the same
+container.
 
 This only affects the *build machine*. The OS you build can still target
-ARM64 devices: OSE cross-compiles, and `raspberrypi4-64` (and later phones
+ARM64 devices: the build cross-compiles, and `raspberrypi4-64` (and later phones
 such as the PinePhone Pro, and the ARM64 VM) are ARM64 targets. Making the build itself run natively
-on ARM64 is on the roadmap.
+on ARM64 is on the roadmap (LuneOS's layers do not need OSE's 32-bit
+compilers, but nobody has tried them on an ARM64 build host).
 
 ## Build
 
@@ -37,34 +43,67 @@ From your checkout:
 
 | Command | What it does |
 | --- | --- |
-| `scripts/mac-build.sh --check` | A quick check first: fetch the layers and resolve the whole image without compiling |
+| `scripts/mac-build.sh --check` | A quick check first: fetch the layers and resolve the whole image without compiling (`--check phoenix-vm-arm64` for another machine) |
 | `scripts/mac-build.sh` | The `qemux86-64` emulator image |
 | `scripts/mac-build.sh raspberrypi4-64` | 64-bit Raspberry Pi 4 image |
 | `scripts/mac-build.sh phoenix-vm-arm64` | The ARM64 VM image that runs on this Mac as any first target device ([Run it in a VM](#run-it-in-a-vm)) |
 | `scripts/mac-build.sh fairphone-fp6` (`ayn-odin2portal`, `pinephonepro`, `pinetab2`) | A first target's own image (docs/HARDWARE.md, "First targets") |
+| `scripts/mac-build.sh --stack luneos phoenix-vm-arm64` | Any of these on LuneOS's layers, with Chromium 151 ([Which layers](#which-layers---stack)) |
 | `scripts/mac-build.sh --shell` | Just open a shell in the build container |
+
+Before the first build, build the web apps in your checkout (`./phoenix`,
+or `cd apps && npm ci && npm run build`): the image takes them from there,
+and the build stops at its start, saying so, when they are not built.
 
 The first run:
 
 1. starts the `container` services
-2. builds the `webos-phoenix-build` image (Ubuntu 22.04 with OSE's build tools)
+2. builds the `webos-phoenix-build` image (Ubuntu 22.04 with the build
+   tools of both layer stacks; again whenever
+   `tools/build-container/Containerfile` changes)
 3. creates `webos-phoenix-work`, an ext4 volume for the build. Yocto needs a
    case-sensitive filesystem, and the Mac's default one isn't.
-4. clones webOS OSE `build-webos` at the pinned commit, adds `meta-phoenix`,
-   and runs `bitbake webos-phoenix-image`
+4. clones webOS OSE `build-webos` at the pinned commit (with `--stack
+   luneos`, LuneOS's layers at the commits in `scripts/luneos-layers.txt`),
+   adds `meta-phoenix`, and runs `bitbake webos-phoenix-image`
 
 Your checkout is mounted into the container at `/src/webos-phoenix`, and the
-Phoenix shell is built from it (`externalsrc`). Edit on the Mac, re-run the
+Phoenix shell and apps are built from it (`externalsrc`). Edit on the Mac, re-run the
 script, and the image picks up your changes. Everything the build writes stays
 in the volume, and re-runs only rebuild what changed.
 
 By default the container gets all but two CPU cores and three quarters of your
 RAM. Override with `PHOENIX_CPUS=8 PHOENIX_MEMORY=24g scripts/mac-build.sh`.
 
+### Which layers: `--stack`
+
+| | `--stack ose` (the default) | `--stack luneos` |
+| --- | --- | --- |
+| Layers | webOS OSE's `build-webos` (`scripts/setup-build.sh`) | LuneOS's (`scripts/setup-build-luneos.sh`, pins in `scripts/luneos-layers.txt`) |
+| Yocto, Qt, web runtime | 5.0 scarthgap, 6.8.1, Chromium 120 | 6.0 wrynose, 6.12, Chromium 151 |
+| Build directory in the volume | `/work/build-webos-phoenix` | `/work/build-phoenix-luneos` |
+| Images | `BUILD/deploy/images/<machine>/` | `tmp/deploy/images/<machine>/` |
+
+`PHOENIX_STACK=luneos` does the same as `--stack luneos`. Device images
+are moving to LuneOS's layers (DECISIONS.md, 15 October 2026; the plan:
+[HARDWARE.md, "The web runtime: Chromium 151 on LuneOS's layers"](HARDWARE.md#the-web-runtime-chromium-151-on-luneoss-layers)).
+OSE's stay the default until a machine has built and booted on LuneOS's.
+Each run brings LuneOS's layers to the pins in `scripts/luneos-layers.txt`;
+a layer already there is left alone.
+
+**Not built on LuneOS's layers yet.** The setup and `--stack luneos
+--check` work; the build itself will stop until meta-phoenix's remaining
+wrynose work is done (HARDWARE.md, "Still to do", steps 2-4). First,
+wrynose stops at `do_unpack` any recipe whose `S` is under `${WORKDIR}`
+(oe-core `insane.bbclass:1440-1449`), as `phoenix-keyboard`,
+`phoenix-pty`, `phoenix-devices`, `whisper-cpp` and others in the image
+still are (the shell and the apps are not: `externalsrc` sets theirs).
+
 ## Where the output goes
 
 Images are in `/work/build-webos-phoenix/BUILD/deploy/images/<machine>/`
-inside the volume. To copy them to the Mac:
+inside the volume (on LuneOS's layers,
+`/work/build-phoenix-luneos/tmp/deploy/images/<machine>/`). To copy them to the Mac:
 
 ```sh
 scripts/mac-build.sh --shell
@@ -77,7 +116,8 @@ cp /work/build-webos-phoenix/BUILD/deploy/images/raspberrypi4-64/*.wic* /src/web
 ```
 
 `--check` is worth running first. It sets everything up and has BitBake parse
-all of webOS OSE (about 3,400 recipes) and resolve `webos-phoenix-image`,
+all of webOS OSE (about 3,400 recipes; with `--stack luneos`, all of
+LuneOS's layers) and resolve `webos-phoenix-image`,
 which catches setup problems in minutes instead of hours into a build.
 
 ## Run it in a VM
@@ -94,13 +134,16 @@ first boot is yours. Steps:
 1. Build the image (hours the first time, like any OSE image):
 
    ```sh
-   scripts/mac-build.sh phoenix-vm-arm64
+   scripts/mac-build.sh phoenix-vm-arm64                  # OSE's layers, Chromium 120
+   scripts/mac-build.sh --stack luneos phoenix-vm-arm64   # or LuneOS's, Chromium 151
    ```
 
    When it finishes, the build copies the kernel and the root image to
    `out/phoenix-vm-arm64/` in your checkout (`Image` and
    `webos-phoenix-image-phoenix-vm-arm64.rootfs.ext4`; `out/` is ignored
-   by git).
+   by git). The names are the same on both stacks: what is there is the
+   last build's, and its last line says which layers it was. LuneOS's
+   layers have not built an image yet ([Which layers](#which-layers---stack)).
 
 2. Install QEMU 8.2 or later (it has the multitouch and sound devices):
 
@@ -244,12 +287,20 @@ from taking the first swipe at the screen's edges.
 ### Make the bundle on the Mac
 
 ```sh
-scripts/mac-build.sh phoenix-vm-arm64   # the image, once (hours)
+scripts/mac-build.sh --stack luneos phoenix-vm-arm64   # the image, once (hours): Chromium 151
 brew install qemu                       # qemu-img: a qcow2 disk, smaller to copy
 scripts/make-utm.sh                     # out/Phoenix-pinetab2.utm (UTM with JIT)
 scripts/make-utm.sh --for ipad-se       # out/Phoenix-pinetab2-se.utm (UTM SE)
 scripts/make-utm.sh fairphone-fp6       # the phone: turn the iPad upright
 ```
+
+`--stack luneos` builds the image on LuneOS's layers, whose web runtime is
+Chromium 151, the engine devices are moving to; without it the image is
+OSE's, Chromium 120 ([Which layers](#which-layers---stack): LuneOS's
+layers have not built an image yet). `make-utm.sh` takes whichever image
+the last build copied to `out/phoenix-vm-arm64/`. `scripts/mac-build.sh
+--stack luneos --check phoenix-vm-arm64` first checks the setup in
+minutes.
 
 The PineTab2 is the default: the 10.1" tablet, used in landscape, is the
 nearest profile to an iPad. Its 1280x800 (16:10) shows with bands above
@@ -338,7 +389,10 @@ panel's resolution and the kernel's command line).
 ### What to check first
 
 1. It boots: Serial 0 shows the kernel, then a login; `journalctl -u
-   phoenix-device-select` says `phoenix-device-select: pinetab2`.
+   phoenix-device-select` says `phoenix-device-select: pinetab2`. The
+   image is the one you meant: from `--stack luneos`, `/etc/os-release`
+   names LuneOS and `opkg list-installed | grep webruntime` shows 151
+   (OSE's: webOS OSE, 120).
 2. How long: `systemd-analyze`, and the time from tapping start to the
    lock screen. Note which UTM, which iPad.
 3. The lock screen fills the picture at 1280x800 the right way up.
@@ -350,7 +404,17 @@ panel's resolution and the kernel's command line).
 
 - **The build is killed or Chromium fails to link**: give the container more
   memory (`PHOENIX_MEMORY=28g`), or fewer CPUs (each parallel job needs memory).
+  On LuneOS's layers Chromium and V8 run a job per CPU too, like every
+  other recipe: LuneOS's own recipes ask for 64 and 48 jobs, sized for its
+  64-thread build host, and `scripts/setup-build-luneos.sh` overrides that.
 - **"not a case-sensitive filesystem"**: the build directory must be on the
   `webos-phoenix-work` volume, not your Mac folder.
+- **"the image needs the web apps built in your checkout"**: build them on the
+  Mac (`./phoenix`), then run the build again.
 - **Start over**: `container volume delete webos-phoenix-work` removes the whole
-  build. It's large, so only do this if you mean it.
+  build. It's large, so only do this if you mean it. To start one stack over,
+  delete its build directory instead (`/work/build-webos-phoenix` or
+  `/work/build-phoenix-luneos`, from `scripts/mac-build.sh --shell`).
+- **Old build images**: each change to `tools/build-container/Containerfile`
+  builds a new `webos-phoenix-build` image, tagged with the file's checksum;
+  `container image list` shows the older ones, which can be deleted.

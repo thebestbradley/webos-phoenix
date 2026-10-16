@@ -15,7 +15,7 @@ plan, milestone by milestone. Every gap still open, by area and priority:
 | M0: shell in a simulator (done) | 13 | 0 |
 | Source material still to mine | 3 | 1 |
 | Build infrastructure | 1 | 2 |
-| Development devices | 0 | 4 |
+| Development devices | 0 | 5 |
 | M1: running on webOS OSE | 0 | 12 |
 | M2: legacy UI parity | 18 | 2 |
 | M3: phones and tablets | 0 | 8 |
@@ -182,7 +182,35 @@ mouse pointer, shows the Mac's menu bar and only reaches as far as the Mac.
       (`tools/test-make-utm.py --boot`, 11 October 2026); not run in UTM or
       with the image yet: the owner's first try decides whether it is a
       development route (OPEN-QUESTIONS Q170-Q173)
+- [ ] **Host bridge for the simulator** (owner, 16 October 2026): a plugin
+      for `phoenix-sim` that lets the simulator use the real hardware of the
+      computer it runs on, so things like AirPods and tracker alerts can be
+      tried with real devices. The simulated services stay the default (CI
+      has no hardware, and tests need the same answers every run); each
+      bridge is turned on in its own settings panel (the simulator's menu
+      bar, and `--host-*` options), and the simulator's service then takes
+      its data from the host instead of its stand-ins:
+      - **Through the computer's own radios (macOS, Linux):** Bluetooth Low
+        Energy listening (CoreBluetooth on a Mac, BlueZ on Linux), read only:
+        AirPods' and Beats' broadcasts (model, each bud's and the case's
+        battery, lid, in-ear) into the accessories service, AirTag, Tile and
+        SmartTag broadcasts into Tracker Alerts; the battery and charging
+        (IOKit / UPower); location (CoreLocation / GeoClue); the Wi-Fi
+        networks nearby. Camera, microphone and network already use the
+        host. Pairing, audio routing and AirPods' settings (rename, noise
+        control) cannot go through a Mac's Bluetooth: macOS owns the
+        connection and lets no second program take it over
+      - **A dedicated USB Bluetooth or Wi-Fi dongle**, given wholly to
+        Phoenix, for what the host cannot share: pairing, A2DP/HFP audio,
+        AirPods' controls, joining networks. macOS has no driver interface
+        for a USB Wi-Fi adapter, so the dongles go through Linux: the
+        simulator on Linux drives them with BlueZ and NetworkManager, and on
+        a Mac they are passed through to the ARM64 VM (above; UTM and QEMU
+        pass USB devices to the guest), where the real device services
+        run. The settings panel lists the dongles plugged in and which
+        one Phoenix has
 - [x] **Device profiles in the simulator**: `phoenix-sim --device <id>`
+
       (View > Device) is each first target as its image configures it: exact
       pixels, density, layout, buttons, rounded corners and camera cutout
       (the status bar makes room for the cutout; HARDWARE.md, "Device
